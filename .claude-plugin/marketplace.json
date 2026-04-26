@@ -1,0 +1,15 @@
+{
+  "name": "alegomes-multi-team",
+  "owner": {
+    "name": "alegomes"
+  },
+  "plugins": [
+    {
+      "name": "multi-team",
+      "source": ".",
+      "description": "Multi-team agent topology — orchestrator + 3 leads + 6 workers, with path-lock hook.",
+      "version": "0.1.0",
+      "tags": ["agents", "orchestration", "multi-team"]
+    }
+  ]
+}
