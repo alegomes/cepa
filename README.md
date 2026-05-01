@@ -1,22 +1,26 @@
-# claude-harness — multi-team agent plugin for Claude Code
+# claude-multi-team-plugin
 
-A 9-agent topology for Claude Code: one orchestrator (the main session),
-three leads (Opus, delegate-only), six workers (Sonnet, domain-locked
-via tool allowlists + a path-lock hook).
+A Claude Code plugin that ships a 9-agent topology: one orchestrator (the
+main session), three leads (Opus, delegate-only), six workers (Sonnet,
+domain-locked via tool allowlists + a path-lock hook).
 
 Edit once here, install in any project, version like normal code.
 
 ```
-claude-harness/
+claude-multi-team-plugin/
 ├── .claude-plugin/
 │   ├── plugin.json          # plugin manifest (with hook registration)
 │   └── marketplace.json     # makes this directory a 1-plugin marketplace
 ├── agents/                  # 9 subagent system prompts
 ├── skills/                  # 4 skills (mental-model, etc.)
 ├── commands/                # /plan-build-validate
-├── hooks/path-lock.py       # PreToolUse path enforcement
-├── agent-topology.md        # snippet for host project's CLAUDE.md
-└── README.md                # you are here
+├── hooks/path-lock.py            # PreToolUse path enforcement
+├── multi-team-topology.md        # multi-team orchestrator snippet for host CLAUDE.md
+├── solo-pair/                    # second topology (2-agent dev/reviewer pair)
+│   ├── .claude-plugin/plugin.json
+│   ├── agents/
+│   └── solo-pair-topology.md
+└── README.md                     # you are here
 ```
 
 ---
@@ -28,8 +32,8 @@ claude-harness/
 In any Claude Code session, run:
 
 ```
-/plugin marketplace add ~/coding/harnessing/claude-harness
-/plugin install multi-team@alegomes-multi-team
+/plugin marketplace add ~/coding/harnessing/claude/claude-multi-team-plugin
+/plugin install multi-team@alegomes
 ```
 
 That's it for the plugin install — agents, skills, slash commands, and the
@@ -38,7 +42,7 @@ path-lock hook are now active in this session.
 If `~` doesn't expand for your CC version, use the absolute path:
 
 ```
-/plugin marketplace add /Users/alegomes/coding/harnessing/claude-harness
+/plugin marketplace add /Users/alegomes/coding/harnessing/claude/claude-multi-team-plugin
 ```
 
 ### Per host project: activate orchestrator mode
@@ -48,17 +52,26 @@ behavior comes from the host project's `CLAUDE.md`. Two-line setup in
 each project where you want this:
 
 ```sh
-# from the host project root
+# from the host project root, pick the topology you want:
 mkdir -p .claude
-cp ~/coding/harnessing/claude-harness/agent-topology.md .claude/
+
+# multi-team (3 leads + 6 workers):
+cp ~/coding/harnessing/claude/claude-multi-team-plugin/multi-team-topology.md .claude/
+
+# OR solo-pair (1 dev + 1 reviewer):
+cp ~/coding/harnessing/claude/claude-multi-team-plugin/solo-pair/solo-pair-topology.md .claude/
 ```
 
 Then add one line to the project's `CLAUDE.md` (create it if it doesn't
-exist):
+exist), referencing the snippet you copied:
 
 ```markdown
-@.claude/agent-topology.md
+@.claude/multi-team-topology.md
 ```
+
+Each topology snippet is self-contained, so you can swap between them
+by changing the `@-import` line. Don't import both at once — the
+orchestrator instructions conflict.
 
 If the project already has a `CLAUDE.md`, just append that one `@-import`
 line to the bottom — it composes with whatever else is in there.
@@ -84,7 +97,7 @@ The orchestrator should fan out to `planning-lead`, `engineering-lead`,
 and `validation-lead` in sequence, with each lead delegating to its
 workers. If you see the main session writing code itself instead of
 delegating, the orchestrator instructions need tightening — edit
-`agent-topology.md`, bump the version, and `/plugin update multi-team`.
+`multi-team-topology.md`, bump the version, and `/plugin update multi-team`.
 
 ---
 
@@ -92,7 +105,7 @@ delegating, the orchestrator instructions need tightening — edit
 
 This is the whole point of using a plugin instead of copy-pasting `.claude/`:
 
-1. **Edit centrally** in `~/coding/harnessing/claude-harness/`
+1. **Edit centrally** in `~/coding/harnessing/claude/claude-multi-team-plugin/`
    — agents, skills, commands, hooks, or the topology snippet.
 2. **Bump the version** in two places:
    - `.claude-plugin/plugin.json` → `"version"`
@@ -105,7 +118,7 @@ This is the whole point of using a plugin instead of copy-pasting `.claude/`:
 3. **Commit** the change locally:
 
    ```sh
-   cd ~/coding/harnessing/claude-harness
+   cd ~/coding/harnessing/claude/claude-multi-team-plugin
    git add .
    git commit -m "v0.1.1 — <what changed>"
    ```
@@ -164,12 +177,12 @@ project, the cleanest options are:
 
 **`/plugin marketplace add` says "not found"**
 The path needs to point at the directory containing `.claude-plugin/`.
-Check: `ls ~/coding/harnessing/claude-harness/.claude-plugin/` should
+Check: `ls ~/coding/harnessing/claude/claude-multi-team-plugin/.claude-plugin/` should
 list `plugin.json` and `marketplace.json`.
 
 **`/agents` doesn't show the multi-team agents after install**
 Run `/plugin list` — the plugin should be active. If it's not, try
-`/plugin install multi-team@alegomes-multi-team` again. If the
+`/plugin install multi-team@alegomes` again. If the
 marketplace isn't listed, re-add it with the absolute path (no `~`).
 
 **Hook blocks a legitimate write**
