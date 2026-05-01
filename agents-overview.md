@@ -4,7 +4,7 @@ A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
 is `hooks/path-lock.py` (multi-team only — solo-pair has no enforcement
-hook yet, see indydev-Dan-gaps section below).
+hook yet, by design).
 
 ---
 
@@ -45,13 +45,15 @@ worth it. Sequential dev → reviewer; no leads.
 | Agent | Role | Reports to | Delegates to | Tools | Writes |
 |---|---|---|---|---|---|
 | (orchestrator — main session) | apex | user | dev → reviewer (sequential) | Task | (none) |
-| `pair-dev` | worker | orchestrator | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | host project source (no path-lock yet) |
-| `pair-reviewer` | worker | orchestrator | — | Read, Glob, Grep, Bash | — (read-only) |
+| `pair-dev` | worker | orchestrator | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | host project source (no path-lock) |
+| `pair-reviewer` | worker | orchestrator | — | Read, Glob, Grep, Bash | — (read-only via tool allowlist) |
 
 **Models:** workers = `sonnet`. No leads.
 
-**Hook:** none — solo-pair currently has no enforcement. Documented as a
-known gap in the indydev-Dan-gaps section below.
+**Hook:** none. solo-pair relies on `pair-reviewer`'s tool allowlist
+(no Edit/Write) for read-only enforcement; `pair-dev` is unrestricted by
+design — the topology is for small tasks where domain locks don't earn
+their complexity.
 
 ---
 
@@ -63,28 +65,94 @@ known gap in the indydev-Dan-gaps section below.
 | `active-listener` | Read context (delegation prompt, prior worker output, conversation log) before responding. | every agent |
 | `zero-micromanagement` | You delegate, you don't execute. The urge to fix it yourself is the signal to delegate. | leads + orchestrator only |
 | `conversational-response` | Lead with the answer, bullets for parallels, file:line refs, single next-step close. | every agent that reports verbally |
+| `till-done` | Don't stop until the job is fully complete. "Almost done" is the signal to keep going. | every agent |
 
 The `skills/` directory ships with `multi-team` (at the repo root). When
-both topologies are installed in the same session, all four skills are
+both topologies are installed in the same session, all five skills are
 available globally via CC's session-wide skill namespace. When solo-pair
-is installed *alone*, the skills are missing — one driver of the
-sharing-design proposal.
+is installed *alone*, the skills are missing — one driver of the pending
+sharing-design proposal (separate `common@alegomes` plugin).
 
 ---
 
-## indydev-Dan gaps (audit at last commit)
+## indydev Dan idea audit (against the canonical list)
 
-What's captured ✅ and what's still loose 🟡 / missing ❌:
+Status legend: ✅ captured · 🟢 newly added · 🟡 partial / convention only · 🔴 CC limitation
 
-- ✅ Single-orchestrator pattern (orchestrator = main CC session)
-- ✅ Lead/worker model split (`opus` for reasoning, `sonnet` for execution)
-- ✅ Three-team taxonomy (planning, engineering, validation)
-- ✅ Domain locks via path-lock hook (multi-team)
-- ✅ Four mindset skills present and described
-- ✅ Per-agent expertise file convention (`.claude/expertise/<name>-mental-model.yaml`)
-- ✅ Workflow: plan → build → validate (encoded in `/plan-build-validate`)
-- 🟡 Cost/budget guardrails — Pi config had `max_minutes: 30`, `max_dollars: 15.00`. CC has no budget hook; we mention it as prose in the topology snippet only.
-- 🟡 Skills auto-loading inside subagents — relies on CC's description-match auto-invocation; behavior in subagent context isn't formally documented.
-- ❌ solo-pair has no path-lock enforcement (workers can write anywhere).
-- ❌ solo-pair doesn't ship the four mindset skills — only available if the user also installs multi-team.
-- ❌ `.claude/expertise/` directory isn't stubbed/gitignored anywhere — first-task UX is rough.
+### Mindset and architecture
+
+| Idea | Status | Where / how |
+|---|---|---|
+| Team of agents | ✅ | 9-agent multi-team + 2-agent solo-pair |
+| 3 tiers (orchestrator / leaders / workers) | ✅ | topology snippets, agent files |
+| Thinkers (orchestrator, leads) vs doers (workers) | ✅ | leads have no `Edit`/`Write` tools; workers do |
+| Thinkers don't write code; they understand, refine, organize, delegate, aggregate | ✅ | `zero-micromanagement` skill + lead front-matter tool list |
+| Specific model per agent | ✅ | front-matter `model:` (`opus` for thinkers, `sonnet` for doers) |
+| Only worker agents write code | ✅ | path-lock hook + leads' tool allowlists exclude `Edit`/`Write`/`MultiEdit` |
+| Highly specialized agents | ✅ | 9 distinct roles, each with a tight write-glob domain |
+| Orchestrator must do prompt engineering | 🟢 | new "You are the team's prompt engineer" section in both topology snippets |
+| Till-done — work until job is fully complete | 🟢 | new `skills/till-done/SKILL.md` + topology rule + command instruction |
+| Building a system that will build systems | 🟢 | new framing in README + "Frame" section in both topology snippets |
+| Agents must learn and improve themselves | ✅ | `mental-model` skill + per-agent `expertise/<name>-mental-model.yaml` |
+| Mental model evolves over time | ✅ | `mental-model` skill describes read-at-start / update-at-end |
+
+### Topology config (Pi has machine-readable YAML; we have CC-shaped conventions)
+
+| Idea | Status | Where / how |
+|---|---|---|
+| Topology / multi-team-config concept | 🟡 | We have `*-topology.md` snippets (CC orchestrator instructions). Pi has a YAML config the harness reads; CC has no equivalent. The snippet *is* the topology in CC. |
+| Orchestrator name + path + color | 🟡 | Orchestrator = main CC session (no separate file/path). Color N/A for main session. |
+| Agent paths | ✅ | `agents/` (multi-team) and `solo-pair/agents/` |
+| Session paths | 🔴 | CC manages session storage internally; not exposed |
+| Shared context (files all agents should know) | 🟢 | new "Shared context" section in both topology snippets |
+| Teams[] declaration | 🟡 | Implicit in agent set + `agents-overview.md` matrix |
+
+### Per-team
+
+| Idea | Status | Where / how |
+|---|---|---|
+| `consult-when` (when to activate the team) | 🟡 | In each lead's front-matter `description:` |
+| Lead: name + file + color | ✅ | front-matter `name:`, file path is the agent file, `color:` now present |
+| Members list | ✅ | encoded in topology snippet + each lead's `Delegates to` table row |
+
+### Per-agent header (Pi YAML blocks vs CC front matter + tabular header)
+
+| Idea | Status | Where / how |
+|---|---|---|
+| Agent name | ✅ | front-matter `name:` |
+| Color | 🟢 | front-matter `color:` newly added across all 11 agents |
+| When to use | ✅ | front-matter `description:` |
+| Which model | ✅ | front-matter `model:` |
+| Expertise (path / use-when / updatable / max-lines) | 🟡 | mental-model skill encodes the convention; per-agent expertise paths are documented in the agent's `Writes` row |
+| Skills list with `use-when` per skill | 🟡 | tabular header lists skills by name; CC auto-loads them by description match (no per-agent `use-when` field) |
+| Tools list | ✅ | front-matter `tools:` |
+| Domain (path × read/upsert/delete) | 🟡 | path-lock hook enforces *writes* (Edit/Write/MultiEdit) per glob; doesn't distinguish create vs upsert vs delete |
+
+### Per-agent body
+
+| Idea | Status | Where / how |
+|---|---|---|
+| Purpose section | 🟡 | Operational mission is in the front-matter `description` and the body's prose; not yet a labeled `## Purpose` section. Follow-up to apply if you want strict Pi alignment. |
+| Variables (env vars injected at startup) | 🔴 | CC only injects `${CLAUDE_PLUGIN_ROOT}` for hooks — no per-subagent env-var injection. `{{SESSION_DIR}}` and `{{CONVERSATION_LOG}}` from Pi don't translate. |
+| Instructions section | ✅ | Body of each agent (currently labeled `## Rules` / `## Approach` / `## Workflow`) |
+
+### Commands (slash commands ≈ Pi pre-saved prompts)
+
+| Idea | Status | Where / how |
+|---|---|---|
+| Description + argument-hint | ✅ | front-matter |
+| Purpose | 🟢 | added to `/plan-build-validate` |
+| Variables | 🟢 | added to `/plan-build-validate` (`$ARGUMENTS`) |
+| Instructions | 🟢 | added section to `/plan-build-validate` |
+| Workflow (the most important part — talk-to-orchestrator) | ✅ | already present; now under explicit `## Workflow` heading |
+| Report (back to the user) | 🟢 | added explicit `## Report` section to `/plan-build-validate` |
+
+---
+
+## Outstanding work
+
+- 🟡 Apply explicit `## Purpose` section across all 11 agent bodies (mechanical, deferred).
+- 🟡 If you want to capture the team-topology config more strictly, add a non-driving `topology.yaml` per topology as documentation (CC won't read it; risk of drift). Recommend: skip until needed.
+- 🟡 Consider extending `path-lock.py` to support read/upsert/delete granularity. Modest scope; only worth it if a real workflow demands the distinction.
+- 🟡 Sharing design (Option A: separate `common@alegomes` plugin shipping the 5 skills) — pending sign-off; once done, solo-pair installed alone will have the skills.
+- 🔴 Session env vars (`{{SESSION_DIR}}`, `{{CONVERSATION_LOG}}`) — not implementable in CC without harness changes.

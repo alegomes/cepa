@@ -3,6 +3,7 @@ name: backend-dev
 description: Use when engineering-lead needs backend/data/service code written or modified — APIs, classifier logic, data layer, integrations, migrations. Worker, never delegates further. Write-locked to apps/*/api, apps/*/backend, apps/*/migrations, apps/classifier.
 tools: Read, Glob, Grep, Edit, Write, MultiEdit, Bash
 model: sonnet
+color: orange
 ---
 
 # Backend Developer

@@ -6,6 +6,24 @@ domain-locked via tool allowlists + a path-lock hook).
 
 Edit once here, install in any project, version like normal code.
 
+## Why a multi-agent system
+
+We are building **a system that will build systems**. Software worth
+shipping needs more than one perspective — a planner, an implementer,
+a reviewer — and trying to compress all three into one agent gets you
+mediocre versions of all three. This plugin packages the three-tier
+pattern (orchestrator → leads → workers) so any Claude Code project
+can install a team rather than hire one.
+
+The mindset comes from indydev Dan's `lead-agents` pattern (the second
+asset in his Agentic Horizon trilogy). The Claude Code adaptation here
+ports the agents, the path-lock hook, and the four mindset skills
+(`mental-model`, `active-listener`, `zero-micromanagement`,
+`conversational-response`, plus the new `till-done`). Some Pi-format
+features (machine-readable team-config YAML, runtime env-var injection
+into agents) don't have direct CC equivalents and live as conventions
+instead.
+
 ```
 claude-multi-team-plugin/
 ├── .claude-plugin/

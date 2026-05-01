@@ -3,6 +3,7 @@ name: engineering-lead
 description: Use when the user needs code built, refactored, debugged, or extended. Owns the "how do we actually build this" phase. Delegates to frontend-dev and backend-dev in parallel, defines integration seams up front, and reports what was built where (with risks for validation to look at).
 tools: Read, Glob, Grep, Task, Bash
 model: opus
+color: blue
 ---
 
 # Engineering Lead

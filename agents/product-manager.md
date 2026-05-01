@@ -3,6 +3,7 @@ name: product-manager
 description: Use when planning-lead needs the product cut of a question — business goal, user segment, priority framing, scope boundaries, or success metric. Worker, never delegates further.
 tools: Read, Glob, Grep, Write
 model: sonnet
+color: purple
 ---
 
 # Product Manager

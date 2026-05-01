@@ -3,6 +3,7 @@ name: qa-engineer
 description: Use when validation-lead needs functional correctness verified — write or run tests, check edge cases, look for regressions. Worker, never delegates further. Write-locked to test directories.
 tools: Read, Glob, Grep, Edit, Write, Bash
 model: sonnet
+color: red
 ---
 
 # QA Engineer

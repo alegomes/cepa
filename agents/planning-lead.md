@@ -3,6 +3,7 @@ name: planning-lead
 description: Use when the user needs a spec, scope decision, prioritization, or UX shape for a feature. Owns the "what should we build and why" phase. Delegates to product-manager and ux-researcher in parallel and synthesizes their output into a one-page spec.
 tools: Read, Glob, Grep, Task, Write
 model: opus
+color: cyan
 ---
 
 # Planning Lead

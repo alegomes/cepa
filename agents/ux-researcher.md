@@ -3,6 +3,7 @@ name: ux-researcher
 description: Use when planning-lead needs the UX cut of a question — user task, flow shape, evidence, accessibility, friction risk. Worker, never delegates further.
 tools: Read, Glob, Grep, Write
 model: sonnet
+color: pink
 ---
 
 # UX Researcher

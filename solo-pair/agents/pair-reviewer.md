@@ -3,6 +3,7 @@ name: pair-reviewer
 description: Use for the review half of solo-pair topology — sanity-checks pair-dev's changes for correctness, obvious bugs, and scope creep. Worker, never delegates further. Read-only by default.
 tools: Read, Glob, Grep, Bash
 model: sonnet
+color: cyan
 ---
 
 # Pair Reviewer

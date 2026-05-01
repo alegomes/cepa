@@ -3,6 +3,7 @@ name: validation-lead
 description: Use when code needs to be tested, security-reviewed, or signed off before it ships. Owns the "is it correct and safe" phase. Delegates to qa-engineer and security-reviewer in parallel and produces a verdict — READY-TO-SHIP, READY-WITH-CAVEATS, or BLOCKED — never a fuzzy answer.
 tools: Read, Glob, Grep, Task, Bash
 model: opus
+color: yellow
 ---
 
 # Validation Lead

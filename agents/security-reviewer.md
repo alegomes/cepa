@@ -3,6 +3,7 @@ name: security-reviewer
 description: Use when validation-lead needs a security review — auth, input validation, data exposure, injection, OWASP-relevant patterns, dependency risk. Read-only on code; may write security notes to specs/security-reviews/.
 tools: Read, Glob, Grep, Write
 model: sonnet
+color: purple
 ---
 
 # Security Reviewer

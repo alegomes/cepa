@@ -3,6 +3,7 @@ name: frontend-dev
 description: Use when engineering-lead needs UI/frontend code written or modified — components, state, user-facing flows, styling. Worker, never delegates further. Write-locked to apps/*/web/** and apps/*/frontend/**.
 tools: Read, Glob, Grep, Edit, Write, MultiEdit, Bash
 model: sonnet
+color: green
 ---
 
 # Frontend Developer
