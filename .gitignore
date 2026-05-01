@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# Research scaffold — indydev Dan source material, YouTube transcripts/frames.
+# Useful local context, not part of the plugin.
+multi-agent/
