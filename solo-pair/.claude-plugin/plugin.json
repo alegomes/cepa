@@ -5,6 +5,5 @@
   "author": {
     "name": "alegomes"
   },
-  "keywords": ["agents", "pair-programming", "lightweight"],
-  "agents": "./agents/"
+  "keywords": ["agents", "pair-programming", "lightweight"]
 }
