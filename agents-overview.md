@@ -4,7 +4,7 @@ A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
 is `hooks/path-lock.py` (multi-team only — solo-pair has no enforcement
-hook yet, by design).
+hook, by design).
 
 ---
 
@@ -76,7 +76,7 @@ namespace.
 
 ## indydev Dan idea audit (against the canonical list)
 
-Status legend: ✅ captured · 🟢 newly added · 🟡 partial / convention only · 🔴 CC limitation
+Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitation
 
 ### Mindset and architecture
 
@@ -89,9 +89,9 @@ Status legend: ✅ captured · 🟢 newly added · 🟡 partial / convention onl
 | Specific model per agent | ✅ | front-matter `model:` (`opus` for thinkers, `sonnet` for doers) |
 | Only worker agents write code | ✅ | path-lock hook + leads' tool allowlists exclude `Edit`/`Write`/`MultiEdit` |
 | Highly specialized agents | ✅ | 9 distinct roles, each with a tight write-glob domain |
-| Orchestrator must do prompt engineering | 🟢 | new "You are the team's prompt engineer" section in both topology snippets |
-| Till-done — work until job is fully complete | 🟢 | new `skills/till-done/SKILL.md` + topology rule + command instruction |
-| Building a system that will build systems | 🟢 | new framing in README + "Frame" section in both topology snippets |
+| Orchestrator must do prompt engineering | ✅ | "You are the team's prompt engineer" section in both topology snippets |
+| Till-done — work until job is fully complete | ✅ | `common/skills/till-done/SKILL.md` + topology rule + command instruction |
+| Building a system that will build systems | ✅ | framing in README + "Frame" section in both topology snippets |
 | Agents must learn and improve themselves | ✅ | `mental-model` skill + per-agent `expertise/<name>-mental-model.yaml` |
 | Mental model evolves over time | ✅ | `mental-model` skill describes read-at-start / update-at-end |
 
@@ -103,15 +103,15 @@ Status legend: ✅ captured · 🟢 newly added · 🟡 partial / convention onl
 | Orchestrator name + path + color | 🟡 | Orchestrator = main CC session (no separate file/path). Color N/A for main session. |
 | Agent paths | ✅ | `agents/` (multi-team) and `solo-pair/agents/` |
 | Session paths | 🔴 | CC manages session storage internally; not exposed |
-| Shared context (files all agents should know) | 🟢 | new "Shared context" section in both topology snippets |
-| Teams[] declaration | 🟡 | Implicit in agent set + `agents-overview.md` matrix |
+| Shared context (files all agents should know) | ✅ | "Shared context" section in both topology snippets |
+| Teams[] declaration | 🟡 | Implicit in agent set + this matrix |
 
 ### Per-team
 
 | Idea | Status | Where / how |
 |---|---|---|
 | `consult-when` (when to activate the team) | 🟡 | In each lead's front-matter `description:` |
-| Lead: name + file + color | ✅ | front-matter `name:`, file path is the agent file, `color:` now present |
+| Lead: name + file + color | ✅ | front-matter `name:`, file path is the agent file, `color:` set on every agent |
 | Members list | ✅ | encoded in topology snippet + each lead's `Delegates to` table row |
 
 ### Per-agent header (Pi YAML blocks vs CC front matter + tabular header)
@@ -119,10 +119,10 @@ Status legend: ✅ captured · 🟢 newly added · 🟡 partial / convention onl
 | Idea | Status | Where / how |
 |---|---|---|
 | Agent name | ✅ | front-matter `name:` |
-| Color | 🟢 | front-matter `color:` newly added across all 11 agents |
+| Color | ✅ | front-matter `color:` set on all 11 agents |
 | When to use | ✅ | front-matter `description:` |
 | Which model | ✅ | front-matter `model:` |
-| Expertise (path / use-when / updatable / max-lines) | 🟡 | mental-model skill encodes the convention; per-agent expertise paths are documented in the agent's `Writes` row |
+| Expertise (path / use-when / updatable / max-lines) | 🟡 | `mental-model` skill encodes the convention; per-agent expertise paths are documented in the agent's `Writes` row |
 | Skills list with `use-when` per skill | 🟡 | tabular header lists skills by name; CC auto-loads them by description match (no per-agent `use-when` field) |
 | Tools list | ✅ | front-matter `tools:` |
 | Domain (path × read/upsert/delete) | 🟡 | path-lock hook enforces *writes* (Edit/Write/MultiEdit) per glob; doesn't distinguish create vs upsert vs delete |
@@ -131,7 +131,7 @@ Status legend: ✅ captured · 🟢 newly added · 🟡 partial / convention onl
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Purpose section | 🟡 | Operational mission is in the front-matter `description` and the body's prose; not yet a labeled `## Purpose` section. Follow-up to apply if you want strict Pi alignment. |
+| Purpose section | ✅ | `## Purpose` paragraph in every agent body, after the tabular header |
 | Variables (env vars injected at startup) | 🔴 | CC only injects `${CLAUDE_PLUGIN_ROOT}` for hooks — no per-subagent env-var injection. `{{SESSION_DIR}}` and `{{CONVERSATION_LOG}}` from Pi don't translate. |
 | Instructions section | ✅ | Body of each agent (currently labeled `## Rules` / `## Approach` / `## Workflow`) |
 
@@ -140,18 +140,29 @@ Status legend: ✅ captured · 🟢 newly added · 🟡 partial / convention onl
 | Idea | Status | Where / how |
 |---|---|---|
 | Description + argument-hint | ✅ | front-matter |
-| Purpose | 🟢 | added to `/plan-build-validate` |
-| Variables | 🟢 | added to `/plan-build-validate` (`$ARGUMENTS`) |
-| Instructions | 🟢 | added section to `/plan-build-validate` |
-| Workflow (the most important part — talk-to-orchestrator) | ✅ | already present; now under explicit `## Workflow` heading |
-| Report (back to the user) | 🟢 | added explicit `## Report` section to `/plan-build-validate` |
+| Purpose | ✅ | `## Purpose` section in `/plan-build-validate` |
+| Variables | ✅ | `## Variables` section in `/plan-build-validate` (`$ARGUMENTS`) |
+| Instructions | ✅ | `## Instructions` section in `/plan-build-validate` |
+| Workflow (the most important part — talk-to-orchestrator) | ✅ | `## Workflow` heading in `/plan-build-validate` |
+| Report (back to the user) | ✅ | `## Report` section in `/plan-build-validate` |
+
+### Sharing across topologies
+
+| Idea | Status | Where / how |
+|---|---|---|
+| Shared mindset skills available across topologies | ✅ | `common@alegomes` plugin ships the five skills; required by both `multi-team` and `solo-pair` |
 
 ---
 
 ## Outstanding work
 
-- 🟡 Apply explicit `## Purpose` section across all 11 agent bodies (mechanical, deferred).
-- 🟡 If you want to capture the team-topology config more strictly, add a non-driving `topology.yaml` per topology as documentation (CC won't read it; risk of drift). Recommend: skip until needed.
-- 🟡 Consider extending `path-lock.py` to support read/upsert/delete granularity. Modest scope; only worth it if a real workflow demands the distinction.
-- ✅ Sharing design (Option A: separate `common@alegomes` plugin shipping the 5 skills) — done. Both topologies declare `common` as a required-alongside install in their marketplace descriptions.
-- 🔴 Session env vars (`{{SESSION_DIR}}`, `{{CONVERSATION_LOG}}`) — not implementable in CC without harness changes.
+- 🟡 If you want to capture the team-topology config more strictly,
+  add a non-driving `topology.yaml` per topology as documentation
+  (CC won't read it; risk of drift). Recommend: skip until needed.
+- 🟡 Consider extending `path-lock.py` to support read/upsert/delete
+  granularity. Modest scope; only worth it if a real workflow demands
+  the distinction.
+- 🟡 Versioned changelog (separate `CHANGELOG.md`) — currently the git
+  log fills this role. Worth adding when there are external users.
+- 🔴 Session env vars (`{{SESSION_DIR}}`, `{{CONVERSATION_LOG}}`) — not
+  implementable in CC without harness changes.

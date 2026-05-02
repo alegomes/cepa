@@ -1,8 +1,17 @@
 # claude-multi-team-plugin
 
-A Claude Code plugin that ships a 9-agent topology: one orchestrator (the
-main session), three leads (Opus, delegate-only), six workers (Sonnet,
-domain-locked via tool allowlists + a path-lock hook).
+A Claude Code plugin marketplace shipping a multi-agent setup as three
+composable plugins:
+
+- **`common`** — five shared mindset skills (`mental-model`,
+  `active-listener`, `zero-micromanagement`, `conversational-response`,
+  `till-done`). Required by both topologies below.
+- **`multi-team`** — the full 9-agent topology: orchestrator (the main
+  session) + 3 leads (Opus, delegate-only) + 6 workers (Sonnet,
+  domain-locked via tool allowlists + a path-lock hook). For
+  plan → build → validate workflows.
+- **`solo-pair`** — a lightweight 2-agent topology: dev + reviewer. For
+  small tasks where multi-team's overhead isn't worth it.
 
 Edit once here, install in any project, version like normal code.
 
@@ -17,12 +26,12 @@ can install a team rather than hire one.
 
 The mindset comes from indydev Dan's `lead-agents` pattern (the second
 asset in his Agentic Horizon trilogy). The Claude Code adaptation here
-ports the agents, the path-lock hook, and the four mindset skills
+ports the agents, the path-lock hook, and the five mindset skills
 (`mental-model`, `active-listener`, `zero-micromanagement`,
-`conversational-response`, plus the new `till-done`). Some Pi-format
-features (machine-readable team-config YAML, runtime env-var injection
-into agents) don't have direct CC equivalents and live as conventions
-instead.
+`conversational-response`, `till-done`). Some Pi-format features
+(machine-readable team-config YAML, runtime env-var injection into
+agents) don't have direct CC equivalents and live as conventions
+instead. See `agents-overview.md` for the full audit.
 
 ```
 claude-multi-team-plugin/
@@ -111,11 +120,15 @@ line to the bottom — it composes with whatever else is in there.
 In the host project, in Claude Code:
 
 ```
-/agents          # should list all 9 multi-team agents
-/plugin list     # should show multi-team v0.1.0
+/agents          # should list the agents for your installed topology
+/plugin list     # should show common + your topology plugin(s)
 ```
 
-Then try the canonical workflow:
+For `multi-team`, `/agents` lists all 9 agents (3 leads + 6 workers).
+For `solo-pair`, it lists 2 (`pair-dev` + `pair-reviewer`). Either way
+the five `common` skills should be auto-loaded into the session.
+
+Then try the canonical multi-team workflow:
 
 ```
 /plan-build-validate add a --json output flag to predict
@@ -134,26 +147,37 @@ delegating, the orchestrator instructions need tightening — edit
 This is the whole point of using a plugin instead of copy-pasting `.claude/`:
 
 1. **Edit centrally** in `~/coding/harnessing/claude/claude-multi-team-plugin/`
-   — agents, skills, commands, hooks, or the topology snippet.
-2. **Bump the version** in two places:
-   - `.claude-plugin/plugin.json` → `"version"`
-   - `.claude-plugin/marketplace.json` → the matching entry's `"version"`
+   — agents, skills, commands, hooks, or a topology snippet.
 
-   Semver:
-   - `0.1.0 → 0.1.1` for prompt tweaks (patch)
-   - `0.1.0 → 0.2.0` for new agents/skills/commands (minor)
-   - `0.x → 1.0.0` when stable
+2. **Bump the version** of whichever plugin(s) you changed. Each plugin
+   has *two* places that must match: its own `plugin.json` and its
+   entry in the marketplace's `marketplace.json`.
+
+   | What you touched | Plugin to bump | Both files to update |
+   |---|---|---|
+   | `agents/`, `commands/`, `hooks/`, `multi-team-topology.md` | `multi-team` | `.claude-plugin/plugin.json` + `multi-team` entry in `marketplace.json` |
+   | `solo-pair/` | `solo-pair` | `solo-pair/.claude-plugin/plugin.json` + `solo-pair` entry in `marketplace.json` |
+   | `common/skills/` | `common` | `common/.claude-plugin/plugin.json` + `common` entry in `marketplace.json` |
+   | Cross-cutting | all affected | bump each plugin's two files |
+
+   Semver (currently at `0.2.0`):
+   - `0.2.0 → 0.2.1` — prompt tweaks (patch)
+   - `0.2.0 → 0.3.0` — new agents/skills/commands (minor)
+   - `0.x → 1.0.0` — when stable
+
 3. **Commit** the change locally:
 
    ```sh
    cd ~/coding/harnessing/claude/claude-multi-team-plugin
    git add .
-   git commit -m "v0.1.1 — <what changed>"
+   git commit -m "v0.2.1 — <what changed>"
    ```
-4. **Update each project**: in Claude Code, `/plugin update multi-team`.
+
+4. **Update each project**: in Claude Code, `/plugin update <name>` per
+   plugin you bumped (or `/plugin update` to refresh all installed).
 
 Projects that need a specific version pin to it explicitly:
-`/plugin install multi-team@0.1.0`.
+`/plugin install multi-team@0.2.0`.
 
 ---
 
@@ -208,10 +232,12 @@ The path needs to point at the directory containing `.claude-plugin/`.
 Check: `ls ~/coding/harnessing/claude/claude-multi-team-plugin/.claude-plugin/` should
 list `plugin.json` and `marketplace.json`.
 
-**`/agents` doesn't show the multi-team agents after install**
-Run `/plugin list` — the plugin should be active. If it's not, try
-`/plugin install multi-team@alegomes` again. If the
-marketplace isn't listed, re-add it with the absolute path (no `~`).
+**`/agents` doesn't show your topology's agents after install**
+Run `/plugin list` — the plugins you installed should be active.
+Common cause: you installed a topology but forgot `common@alegomes`,
+which is required-alongside. Re-run the install commands. If the
+marketplace itself isn't listed, re-add it with the absolute path
+(no `~`).
 
 **Hook blocks a legitimate write**
 The `ALLOWED_WRITES` table in `hooks/path-lock.py` is mismatched with
