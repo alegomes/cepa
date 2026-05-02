@@ -6,6 +6,8 @@
     "name": "alegomes"
   },
   "keywords": ["agents", "orchestration", "multi-team", "subagents"],
+  "agents": "./agents/",
+  "commands": "./commands/",
   "hooks": {
     "PreToolUse": [
       {

@@ -5,5 +5,6 @@
   "author": {
     "name": "alegomes"
   },
-  "keywords": ["agents", "skills", "shared"]
+  "keywords": ["agents", "skills", "shared"],
+  "skills": "./skills/"
 }
