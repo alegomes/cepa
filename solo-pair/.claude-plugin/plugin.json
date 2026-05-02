@@ -1,6 +1,6 @@
 {
   "name": "solo-pair",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lightweight 2-agent topology — one dev, one reviewer, no leads. For small tweaks where the multi-team orchestration overhead isn't worth it.",
   "author": {
     "name": "alegomes"
