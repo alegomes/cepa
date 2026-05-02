@@ -1,0 +1,8 @@
+# Mental model — security-reviewer
+# Cross-topology, cross-project: OWASP patterns observed in real code,
+# dep-CVE gotchas, auth-pattern heuristics.
+# This file is shared across every project the plugin is installed in. Write
+# only agent-global knowledge; project-specific facts go in the host project's
+# CLAUDE.md. See common/skills/mental-model/SKILL.md.
+
+last_updated: null

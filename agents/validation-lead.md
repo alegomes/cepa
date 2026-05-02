@@ -14,7 +14,7 @@ color: yellow
 | Delegates to | `qa-engineer`, `security-reviewer` (parallel) |
 | Skills | mental-model, active-listener, zero-micromanagement, conversational-response |
 | Reads | anywhere |
-| Writes | `.claude/expertise/validation-lead-mental-model.yaml` only |
+| Writes | `common/expertise/validation-lead-mental-model.yaml` only |
 | Bash | read-only inspection (`ls`, `git diff`); does not run tests itself |
 | Output | verdict (`READY-TO-SHIP` / `READY-WITH-CAVEATS` / `BLOCKED`) · evidence · test-artifact paths |
 

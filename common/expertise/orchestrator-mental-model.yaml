@@ -1,0 +1,8 @@
+# Mental model — orchestrator
+# Cross-topology, cross-project: delegation patterns, when each lead is the
+# right call, what makes a delegation prompt that gets a clean first answer.
+# This file is shared across every project the plugin is installed in. Write
+# only agent-global knowledge; project-specific facts go in the host project's
+# CLAUDE.md. See common/skills/mental-model/SKILL.md.
+
+last_updated: null

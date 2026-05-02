@@ -1,0 +1,8 @@
+# Mental model — ux-researcher
+# Cross-topology, cross-project: flow patterns that work, accessibility
+# gotchas, evidence-vs-assumption discipline.
+# This file is shared across every project the plugin is installed in. Write
+# only agent-global knowledge; project-specific facts go in the host project's
+# CLAUDE.md. See common/skills/mental-model/SKILL.md.
+
+last_updated: null

@@ -1,0 +1,11 @@
+# Mental model — pair-reviewer
+# Cross-topology, cross-project: fast-review heuristics, what's worth
+# flagging, scope-creep detection.
+#
+# NOTE: pair-reviewer's tool allowlist excludes Edit/Write, so this agent
+# can't update its own expertise file. Insights surface through pair-reviewer
+# replies; if patterns are worth persisting, they get written by curation
+# rather than self-update. Stub kept for completeness.
+# See common/skills/mental-model/SKILL.md.
+
+last_updated: null

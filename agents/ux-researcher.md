@@ -14,7 +14,7 @@ color: pink
 | Delegates to | — (worker, never delegates) |
 | Skills | mental-model, active-listener, conversational-response |
 | Reads | anywhere |
-| Writes | `specs/**`, `.claude/expertise/ux-researcher-mental-model.yaml` |
+| Writes | `specs/**`, `common/expertise/ux-researcher-mental-model.yaml` |
 | Output | 5 fields: User task · Flow · Evidence · Accessibility · Friction risk |
 
 ## Purpose

@@ -1,0 +1,8 @@
+# Mental model — backend-dev
+# Cross-topology, cross-project: API-design heuristics, migration-safety
+# patterns, data-layer and ORM gotchas.
+# This file is shared across every project the plugin is installed in. Write
+# only agent-global knowledge; project-specific facts go in the host project's
+# CLAUDE.md. See common/skills/mental-model/SKILL.md.
+
+last_updated: null

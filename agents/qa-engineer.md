@@ -14,7 +14,7 @@ color: red
 | Delegates to | — (worker, never delegates) |
 | Skills | mental-model, active-listener, conversational-response |
 | Reads | anywhere |
-| Writes | `tests/**`, `apps/*/tests/**`, `apps/*/__tests__/**`, `.claude/expertise/qa-engineer-mental-model.yaml` |
+| Writes | `tests/**`, `apps/*/tests/**`, `apps/*/__tests__/**`, `common/expertise/qa-engineer-mental-model.yaml` |
 | Output | tests added (paths, names) · tests run + outcome · verdict (`PASS` / `PASS-WITH-CONCERNS` / `FAIL`) |
 
 ## Purpose

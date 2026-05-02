@@ -1,0 +1,8 @@
+# Mental model — planning-lead
+# Cross-topology, cross-project: decomposing fuzzy goals into product/UX cuts,
+# spec patterns that lead to clean implementations.
+# This file is shared across every project the plugin is installed in. Write
+# only agent-global knowledge; project-specific facts go in the host project's
+# CLAUDE.md. See common/skills/mental-model/SKILL.md.
+
+last_updated: null

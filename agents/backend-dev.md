@@ -14,7 +14,7 @@ color: orange
 | Delegates to | — (worker, never delegates) |
 | Skills | mental-model, active-listener |
 | Reads | anywhere |
-| Writes | `apps/*/api/**`, `apps/*/backend/**`, `apps/*/migrations/**`, `apps/classifier/**` |
+| Writes | `apps/*/api/**`, `apps/*/backend/**`, `apps/*/migrations/**`, `apps/classifier/**`, `common/expertise/backend-dev-mental-model.yaml` |
 | Output | summary · paths touched · API/contract changes · new deps with reason |
 
 ## Purpose

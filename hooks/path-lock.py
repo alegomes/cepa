@@ -5,8 +5,10 @@ Claude Code invokes this before every Edit / Write / MultiEdit call. We:
   1. Read the JSON payload from stdin.
   2. Identify which agent is calling (subagent name, or "orchestrator" if
      the call comes from the main session).
-  3. Look up the allowed write-glob list for that agent.
-  4. Match the target file_path. If outside, exit 2 (CC blocks the call).
+  3. Allow if the target is the agent's own expertise file (anywhere on disk
+     — see `is_own_expertise_file`).
+  4. Otherwise look up the allowed write-glob list for that agent.
+  5. Match the target file_path. If outside, exit 2 (CC blocks the call).
 
 Exit codes:
   0 — allowed
@@ -19,28 +21,28 @@ import os
 import sys
 from pathlib import Path
 
-# Per-agent write allowlist. Keep these globs identical to the prose in
-# each subagent's .md file's "Domain" section so the prompt and the
+# Per-agent in-project write allowlist. Keep these globs identical to the
+# prose in each subagent's .md file's "Writes" row so the prompt and the
 # physical lock can never drift apart.
+#
+# The agent's *expertise* file (`common/expertise/<agent>-mental-model.yaml`)
+# is NOT listed here — it's allowed via the structural `is_own_expertise_file`
+# check below, which works regardless of where the plugin lives on disk.
 ALLOWED_WRITES = {
-    # leads — no code edits, only their own expertise (and specs for planning)
-    "orchestrator":      [".claude/expertise/orchestrator-mental-model.yaml"],
-    "planning-lead":     ["specs/**", ".claude/expertise/planning-lead-mental-model.yaml"],
-    "engineering-lead":  [".claude/expertise/engineering-lead-mental-model.yaml"],
-    "validation-lead":   [".claude/expertise/validation-lead-mental-model.yaml"],
+    # leads — no code edits
+    "orchestrator":      [],
+    "planning-lead":     ["specs/**"],
+    "engineering-lead":  [],
+    "validation-lead":   [],
 
     # workers — domain-locked
-    "product-manager":   ["specs/**", ".claude/expertise/product-manager-mental-model.yaml"],
-    "ux-researcher":     ["specs/**", ".claude/expertise/ux-researcher-mental-model.yaml"],
-    "frontend-dev":      ["apps/*/web/**", "apps/*/frontend/**",
-                          ".claude/expertise/frontend-dev-mental-model.yaml"],
+    "product-manager":   ["specs/**"],
+    "ux-researcher":     ["specs/**"],
+    "frontend-dev":      ["apps/*/web/**", "apps/*/frontend/**"],
     "backend-dev":       ["apps/*/api/**", "apps/*/backend/**", "apps/*/migrations/**",
-                          "apps/classifier/**",
-                          ".claude/expertise/backend-dev-mental-model.yaml"],
-    "qa-engineer":       ["tests/**", "apps/*/tests/**", "apps/*/__tests__/**",
-                          ".claude/expertise/qa-engineer-mental-model.yaml"],
-    "security-reviewer": ["specs/security-reviews/**",
-                          ".claude/expertise/security-reviewer-mental-model.yaml"],
+                          "apps/classifier/**"],
+    "qa-engineer":       ["tests/**", "apps/*/tests/**", "apps/*/__tests__/**"],
+    "security-reviewer": ["specs/security-reviews/**"],
 }
 
 # Tools we gate. Other tools pass through.
@@ -62,12 +64,28 @@ def detect_agent(payload: dict) -> str:
     return "orchestrator"
 
 
+def is_own_expertise_file(file_path: str, agent: str) -> bool:
+    """An agent's expertise file is allowed regardless of disk location.
+
+    Centralized expertise lives in the plugin (`common/expertise/<agent>-mental-model.yaml`)
+    rather than in the host project, but the on-disk path varies by install method
+    (local-marketplace path, plugin cache, etc.). We identify expertise files by
+    structure, not absolute path: filename matches `<agent>-mental-model.yaml` AND
+    the parent directory is named `expertise`.
+    """
+    p = Path(file_path)
+    return (
+        p.name == f"{agent}-mental-model.yaml"
+        and p.parent.name == "expertise"
+    )
+
+
 def path_matches(file_path: str, globs: list[str], project_root: Path) -> bool:
     """Match against globs interpreted relative to project root."""
     try:
         rel = str(Path(file_path).resolve().relative_to(project_root))
     except ValueError:
-        # Outside the project — never allowed.
+        # Outside the project — never allowed via in-project globs.
         return False
     rel_posix = rel.replace(os.sep, "/")
     for g in globs:
@@ -99,6 +117,13 @@ def main():
         sys.exit(0)
 
     agent = detect_agent(payload)
+
+    # Always allow the agent to write its own expertise file, regardless of
+    # whether the plugin lives in a marketplace cache, a local clone, or anywhere
+    # else on disk. Each agent can only write its own file (filename keyed by name).
+    if is_own_expertise_file(file_path, agent):
+        sys.exit(0)
+
     allowed = ALLOWED_WRITES.get(agent)
 
     # Unknown agent — fail closed. Add it to ALLOWED_WRITES if it's legit.
@@ -119,8 +144,9 @@ def main():
     print(
         f"[path-lock] BLOCKED: agent {agent!r} cannot {tool_name} {file_path}.\n"
         f"  Allowed write globs for {agent!r}:\n  - "
-        + "\n  - ".join(allowed)
-        + "\n  Delegate to the appropriate worker instead.",
+        + "\n  - ".join(allowed or ["(none — only own expertise file)"])
+        + f"\n  Plus its own expertise file: <plugin>/common/expertise/{agent}-mental-model.yaml\n"
+        f"  Delegate to the appropriate worker instead.",
         file=sys.stderr,
     )
     sys.exit(2)

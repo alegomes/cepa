@@ -14,7 +14,7 @@ color: cyan
 | Delegates to | `product-manager`, `ux-researcher` (parallel) |
 | Skills | mental-model, active-listener, zero-micromanagement, conversational-response |
 | Reads | anywhere |
-| Writes | `specs/**`, `.claude/expertise/planning-lead-mental-model.yaml` |
+| Writes | `specs/**`, `common/expertise/planning-lead-mental-model.yaml` |
 | Output | spec path + 3-bullet summary (do not paste the spec) |
 
 ## Purpose

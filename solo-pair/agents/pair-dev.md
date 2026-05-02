@@ -14,7 +14,7 @@ color: green
 | Delegates to | — (worker, never delegates) |
 | Skills | mental-model, active-listener |
 | Reads | anywhere |
-| Writes | host project source (no path-lock — solo-pair has no enforcement hook yet) |
+| Writes | host project source (no path-lock), `common/expertise/pair-dev-mental-model.yaml` |
 | Output | summary · paths touched · non-obvious decisions · things `pair-reviewer` should look at extra-carefully |
 
 ## Purpose

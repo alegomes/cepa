@@ -1,0 +1,8 @@
+# Mental model — engineering-lead
+# Cross-topology, cross-project: integration-seam patterns, fan-out vs serialize
+# heuristics, contract design across frontend/backend.
+# This file is shared across every project the plugin is installed in. Write
+# only agent-global knowledge; project-specific facts go in the host project's
+# CLAUDE.md. See common/skills/mental-model/SKILL.md.
+
+last_updated: null

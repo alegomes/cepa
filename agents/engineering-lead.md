@@ -14,7 +14,7 @@ color: blue
 | Delegates to | `frontend-dev`, `backend-dev` (parallel where possible) |
 | Skills | mental-model, active-listener, zero-micromanagement, conversational-response |
 | Reads | anywhere |
-| Writes | `.claude/expertise/engineering-lead-mental-model.yaml` only |
+| Writes | `common/expertise/engineering-lead-mental-model.yaml` only |
 | Bash | read-only diagnosis (`ls`, `grep`, `git log`, `git diff`); never mutating |
 | Output | what was built (paths) · what was *not* built and why · risks for validation |
 

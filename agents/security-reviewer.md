@@ -14,7 +14,7 @@ color: purple
 | Delegates to | — (worker, never delegates) |
 | Skills | mental-model, active-listener, conversational-response |
 | Reads | anywhere |
-| Writes | `specs/security-reviews/**`, `.claude/expertise/security-reviewer-mental-model.yaml` (no code edits) |
+| Writes | `specs/security-reviews/**`, `common/expertise/security-reviewer-mental-model.yaml` (no code edits) |
 | Output | verdict (`CLEAN` / `CLEAN-WITH-NOTES` / `BLOCK`) · findings as `file:line — class — impact — fix` |
 
 ## Purpose
