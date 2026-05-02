@@ -35,22 +35,23 @@ instead. See `agents-overview.md` for the full audit.
 
 ```
 claude-multi-team-plugin/
-├── .claude-plugin/
-│   ├── plugin.json               # multi-team manifest (with hook registration)
-│   └── marketplace.json          # 3-plugin marketplace: common + multi-team + solo-pair
-├── common/                       # shared mindset skills (required by both topologies)
+├── .claude-plugin/marketplace.json  # 3-plugin marketplace: common + multi-team + solo-pair
+├── common/                          # shared mindset skills (required by both topologies)
 │   ├── .claude-plugin/plugin.json
-│   └── skills/                   # mental-model, active-listener, zero-micromanagement, conversational-response, till-done
-├── agents/                       # 9 multi-team subagent system prompts
-├── commands/                     # /plan-build-validate
-├── hooks/path-lock.py            # PreToolUse path enforcement (multi-team)
-├── multi-team-topology.md        # multi-team orchestrator snippet for host CLAUDE.md
-├── solo-pair/                    # second topology (2-agent dev/reviewer pair)
+│   ├── expertise/                   # per-agent mental-model.yaml stubs (centralized)
+│   └── skills/                      # mental-model, active-listener, zero-micromanagement, conversational-response, till-done
+├── multi-team/                      # multi-team plugin (full 9-agent topology)
+│   ├── .claude-plugin/plugin.json   # plugin manifest (with hook registration)
+│   ├── agents/                      # 9 subagent system prompts
+│   ├── commands/                    # /plan-build-validate
+│   ├── hooks/path-lock.py           # PreToolUse path enforcement
+│   └── multi-team-topology.md       # orchestrator snippet for host CLAUDE.md
+├── solo-pair/                       # solo-pair plugin (2-agent dev/reviewer pair)
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/
 │   └── solo-pair-topology.md
-├── agents-overview.md            # cross-agent matrix + indydev-Dan idea audit
-└── README.md                     # you are here
+├── agents-overview.md               # cross-agent matrix + indydev-Dan idea audit
+└── README.md                        # you are here
 ```
 
 ---
@@ -93,7 +94,7 @@ each project where you want this:
 mkdir -p .claude
 
 # multi-team (3 leads + 6 workers):
-cp ~/coding/harnessing/claude/claude-multi-team-plugin/multi-team-topology.md .claude/
+cp ~/coding/harnessing/claude/claude-multi-team-plugin/multi-team/multi-team-topology.md .claude/
 
 # OR solo-pair (1 dev + 1 reviewer):
 cp ~/coding/harnessing/claude/claude-multi-team-plugin/solo-pair/solo-pair-topology.md .claude/
@@ -138,7 +139,7 @@ The orchestrator should fan out to `planning-lead`, `engineering-lead`,
 and `validation-lead` in sequence, with each lead delegating to its
 workers. If you see the main session writing code itself instead of
 delegating, the orchestrator instructions need tightening — edit
-`multi-team-topology.md`, bump the version, and `/plugin update multi-team`.
+`multi-team/multi-team-topology.md`, bump the version, and `/plugin update multi-team`.
 
 ---
 
@@ -155,9 +156,9 @@ This is the whole point of using a plugin instead of copy-pasting `.claude/`:
 
    | What you touched | Plugin to bump | Both files to update |
    |---|---|---|
-   | `agents/`, `commands/`, `hooks/`, `multi-team-topology.md` | `multi-team` | `.claude-plugin/plugin.json` + `multi-team` entry in `marketplace.json` |
+   | `multi-team/` (agents, commands, hooks, topology) | `multi-team` | `multi-team/.claude-plugin/plugin.json` + `multi-team` entry in `marketplace.json` |
    | `solo-pair/` | `solo-pair` | `solo-pair/.claude-plugin/plugin.json` + `solo-pair` entry in `marketplace.json` |
-   | `common/skills/` | `common` | `common/.claude-plugin/plugin.json` + `common` entry in `marketplace.json` |
+   | `common/skills/` or `common/expertise/` | `common` | `common/.claude-plugin/plugin.json` + `common` entry in `marketplace.json` |
    | Cross-cutting | all affected | bump each plugin's two files |
 
    Semver (currently at `0.2.0`):
@@ -194,7 +195,7 @@ your layout.
 
 ### Adjust the path-lock hook for your project layout
 
-The hook's `ALLOWED_WRITES` table in `hooks/path-lock.py` is the source
+The hook's `ALLOWED_WRITES` table in `multi-team/hooks/path-lock.py` is the source
 of truth for write-glob enforcement. If you need different paths for one
 project, the cleanest options are:
 
@@ -240,7 +241,7 @@ marketplace itself isn't listed, re-add it with the absolute path
 (no `~`).
 
 **Hook blocks a legitimate write**
-The `ALLOWED_WRITES` table in `hooks/path-lock.py` is mismatched with
+The `ALLOWED_WRITES` table in `multi-team/hooks/path-lock.py` is mismatched with
 the agent's prose. Either widen the glob (and bump version) or override
 the agent locally.
 

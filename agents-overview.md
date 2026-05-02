@@ -3,7 +3,7 @@
 A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
-is `hooks/path-lock.py` (multi-team only — solo-pair has no enforcement
+is `multi-team/hooks/path-lock.py` (multi-team only — solo-pair has no enforcement
 hook, by design).
 
 ---
@@ -31,7 +31,7 @@ cost-and-quality the way indydev Dan's source intends (better reasoning
 for delegation/synthesis at the top, faster instruction-following at the
 bottom).
 
-**Hook:** `hooks/path-lock.py` enforces the *Writes* column on every
+**Hook:** `multi-team/hooks/path-lock.py` enforces the *Writes* column on every
 `Edit` / `Write` / `MultiEdit` / `NotebookEdit` call. Drift between this
 file and the hook will silently break things at runtime.
 
