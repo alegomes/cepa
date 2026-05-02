@@ -27,17 +27,20 @@ instead.
 ```
 claude-multi-team-plugin/
 ├── .claude-plugin/
-│   ├── plugin.json          # plugin manifest (with hook registration)
-│   └── marketplace.json     # makes this directory a 1-plugin marketplace
-├── agents/                  # 9 subagent system prompts
-├── skills/                  # 4 skills (mental-model, etc.)
-├── commands/                # /plan-build-validate
-├── hooks/path-lock.py            # PreToolUse path enforcement
+│   ├── plugin.json               # multi-team manifest (with hook registration)
+│   └── marketplace.json          # 3-plugin marketplace: common + multi-team + solo-pair
+├── common/                       # shared mindset skills (required by both topologies)
+│   ├── .claude-plugin/plugin.json
+│   └── skills/                   # mental-model, active-listener, zero-micromanagement, conversational-response, till-done
+├── agents/                       # 9 multi-team subagent system prompts
+├── commands/                     # /plan-build-validate
+├── hooks/path-lock.py            # PreToolUse path enforcement (multi-team)
 ├── multi-team-topology.md        # multi-team orchestrator snippet for host CLAUDE.md
 ├── solo-pair/                    # second topology (2-agent dev/reviewer pair)
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/
 │   └── solo-pair-topology.md
+├── agents-overview.md            # cross-agent matrix + indydev-Dan idea audit
 └── README.md                     # you are here
 ```
 
@@ -51,8 +54,15 @@ In any Claude Code session, run:
 
 ```
 /plugin marketplace add ~/coding/harnessing/claude/claude-multi-team-plugin
-/plugin install multi-team@alegomes
+/plugin install common@alegomes        # required — ships the 5 mindset skills
+/plugin install multi-team@alegomes    # OR /plugin install solo-pair@alegomes
 ```
+
+`common@alegomes` is required by both topologies — it ships the five
+mindset skills (`mental-model`, `active-listener`, `zero-micromanagement`,
+`conversational-response`, `till-done`). The agents reference these
+skills in their bodies; without `common` installed, the references go
+nowhere.
 
 That's it for the plugin install — agents, skills, slash commands, and the
 path-lock hook are now active in this session.

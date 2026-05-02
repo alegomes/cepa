@@ -67,11 +67,10 @@ their complexity.
 | `conversational-response` | Lead with the answer, bullets for parallels, file:line refs, single next-step close. | every agent that reports verbally |
 | `till-done` | Don't stop until the job is fully complete. "Almost done" is the signal to keep going. | every agent |
 
-The `skills/` directory ships with `multi-team` (at the repo root). When
-both topologies are installed in the same session, all five skills are
-available globally via CC's session-wide skill namespace. When solo-pair
-is installed *alone*, the skills are missing — one driver of the pending
-sharing-design proposal (separate `common@alegomes` plugin).
+The five skills ship in the **`common@alegomes` plugin** (`common/skills/`).
+Both topologies require `common`; install it once per project and the
+skills are available to every subagent via CC's session-wide skill
+namespace.
 
 ---
 
@@ -154,5 +153,5 @@ Status legend: ✅ captured · 🟢 newly added · 🟡 partial / convention onl
 - 🟡 Apply explicit `## Purpose` section across all 11 agent bodies (mechanical, deferred).
 - 🟡 If you want to capture the team-topology config more strictly, add a non-driving `topology.yaml` per topology as documentation (CC won't read it; risk of drift). Recommend: skip until needed.
 - 🟡 Consider extending `path-lock.py` to support read/upsert/delete granularity. Modest scope; only worth it if a real workflow demands the distinction.
-- 🟡 Sharing design (Option A: separate `common@alegomes` plugin shipping the 5 skills) — pending sign-off; once done, solo-pair installed alone will have the skills.
+- ✅ Sharing design (Option A: separate `common@alegomes` plugin shipping the 5 skills) — done. Both topologies declare `common` as a required-alongside install in their marketplace descriptions.
 - 🔴 Session env vars (`{{SESSION_DIR}}`, `{{CONVERSATION_LOG}}`) — not implementable in CC without harness changes.
