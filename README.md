@@ -59,24 +59,33 @@ claude-multi-team-plugin/
 
 ## Setup
 
-### Install (one command)
+### Install + per-project setup (one command)
 
-From the repo:
-
-```sh
-./bin/install.sh
-```
-
-That registers this repo as the marketplace (using its absolute path)
-and installs all three plugins (`common` + `multi-team` + `solo-pair`).
-Re-running it after editing the plugin is safe — the marketplace
-re-registration is idempotent.
-
-To install from a different local repo path:
+From inside the host project where you want to use the agents:
 
 ```sh
-./bin/install.sh /path/to/claude-multi-team-plugin
+cd /path/to/your/host-project
+~/coding/harnessing/claude/claude-multi-team-plugin/bin/install.sh
 ```
+
+That single command does **both**:
+
+1. Registers this repo as a Claude Code plugin marketplace and installs
+   the three plugins (`common` + `multi-team` + `solo-pair`).
+2. Sets up the current directory as a host project by creating
+   `.claude/expertise` as a **symlink** to the plugin's centralized
+   expertise directory (so accumulated agent knowledge follows you
+   across projects).
+
+To install for a different host project from anywhere:
+
+```sh
+~/coding/harnessing/claude/claude-multi-team-plugin/bin/install.sh /path/to/host-project
+```
+
+Re-running the script is safe — marketplace re-registration is
+idempotent, plugin installs are no-ops if already current, and the
+symlink check refuses to clobber existing files.
 
 ### Manual install (one slash command per plugin)
 
@@ -89,11 +98,24 @@ If you'd rather see each step, run these in any Claude Code session:
 /plugin install solo-pair@alegomes     # optional — the 2-agent topology
 ```
 
+Then create the expertise symlink manually in your host project:
+
+```sh
+ln -s /path/to/claude-multi-team-plugin/common/expertise \
+      /path/to/host-project/.claude/expertise
+```
+
 `common@alegomes` is required by both topologies — it ships the five
 mindset skills (`mental-model`, `active-listener`, `zero-micromanagement`,
 `conversational-response`, `till-done`). The agents reference these
 skills in their bodies; without `common` installed, the references go
 nowhere.
+
+The expertise symlink is what makes accumulated agent learnings persist
+*across* projects — agents read and write to a single shared location
+inside the plugin, regardless of which host project they're running in.
+See `common/skills/mental-model/SKILL.md` for the agent-global vs
+project-specific guardrail.
 
 ### Per host project: activate orchestrator mode
 

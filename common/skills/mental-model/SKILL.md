@@ -5,17 +5,22 @@ description: Read your per-agent expertise file at task start; update it at task
 
 # Skill: mental-model
 
-You don't get persistent memory across sessions for free. The expertise
-file at `common/expertise/<your-name>-mental-model.yaml` (which lives
-**in the plugin itself**, not in the host project) is the only thing
-that crosses the session boundary. If you don't write to it, the
+You don't get persistent memory across sessions for free. Your expertise
+file at `.claude/expertise/<your-name>-mental-model.yaml` is the only
+thing that crosses the session boundary. If you don't write to it, the
 next-you starts cold and asks questions you've already answered.
 
-## This file is cross-project
+## This file is centralized across projects
 
-The plugin gets installed into many host projects. Your expertise file
-is **shared across all of them**. That has one important consequence:
-write *agent-global* knowledge here, not project-specific facts.
+The path looks host-project-relative, but `.claude/expertise/` is a
+**symlink** that `bin/install.sh` creates at install time, pointing at a
+single shared directory inside the plugin
+(`<plugin>/common/expertise/`). Every host project where the plugin is
+installed reads and writes the same set of files. Your accumulated
+knowledge follows you across topologies *and* across projects.
+
+That has one important consequence: write *agent-global* knowledge here,
+not project-specific facts.
 
 - ✅ "scikit-learn 1.7 dropped `multi_class` kwarg from LogisticRegression"
   — applies to backend-dev work in any Python codebase.
@@ -63,8 +68,9 @@ in `specs/`, or in feature-level docs. Not here.
 YAML. Free-form keys, but a useful skeleton:
 
 ```yaml
-# common/expertise/<your-name>-mental-model.yaml
-last_updated: 2026-05-02
+# .claude/expertise/<your-name>-mental-model.yaml
+# (symlink → <plugin>/common/expertise/<your-name>-mental-model.yaml)
+last_updated: 2026-05-03
 ecosystem_gotchas:
   - "scikit-learn 1.7 dropped multi_class kwarg from LogisticRegression"
   - "starlette 0.27+ requires explicit lifespan handler for asynccontext"

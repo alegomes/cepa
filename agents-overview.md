@@ -122,7 +122,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 | Color | ✅ | front-matter `color:` set on all 11 agents |
 | When to use | ✅ | front-matter `description:` |
 | Which model | ✅ | front-matter `model:` |
-| Expertise (path / use-when / updatable / max-lines) | 🟡 | Stub files ship in `common/expertise/<agent>-mental-model.yaml` (centralized so accumulated knowledge follows the agent across topologies and projects). The path-lock hook allows each agent to write its own expertise file regardless of disk location via a structural filename check. Pi's full schema (`use-when`, `updatable`, `max-lines`) isn't mirrored — CC has no harness layer to act on those fields. |
+| Expertise (path / use-when / updatable / max-lines) | 🟡 | Centralized expertise stubs ship in `common/expertise/<agent>-mental-model.yaml`. Agents reference them as `.claude/expertise/<agent>-mental-model.yaml` (host-relative — what CC subagents can resolve); `bin/install.sh` creates that path as a symlink to the plugin's central directory, so writes from any host project land in one shared location and follow the agent across projects. The path-lock hook allows each agent to write its own expertise file via a structural filename check. Pi's full schema (`use-when`, `updatable`, `max-lines`) isn't mirrored — CC has no harness layer to act on those fields. |
 | Skills list with `use-when` per skill | 🟡 | tabular header lists skills by name; CC auto-loads them by description match (no per-agent `use-when` field) |
 | Tools list | ✅ | front-matter `tools:` |
 | Domain (path × read/upsert/delete) | 🟡 | path-lock hook enforces *writes* (Edit/Write/MultiEdit) per glob; doesn't distinguish create vs upsert vs delete |

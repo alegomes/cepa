@@ -14,7 +14,7 @@ color: cyan
 | Delegates to | — (worker, never delegates) |
 | Skills | mental-model, active-listener, conversational-response |
 | Reads | anywhere |
-| Writes | — (read-only — no Edit/Write tools; cannot self-update its `common/expertise/pair-reviewer-mental-model.yaml`) |
+| Writes | — (read-only — no Edit/Write tools; cannot self-update its `.claude/expertise/pair-reviewer-mental-model.yaml`) |
 | Output | verdict (`OK` / `OK-WITH-NOTES` / `NEEDS-FIX`) · `file:line` for fixes · scope-stayed-tight check |
 
 ## Purpose
