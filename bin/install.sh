@@ -3,32 +3,39 @@
 # host project for centralized expertise (via symlink).
 #
 # Usage:
-#   ./bin/install.sh [--clean] [/path/to/host-project]
+#   ./bin/install.sh [--clean] [--topology=NAME] [/path/to/host-project]
 #
 # Without arguments: installs plugins (idempotent), sets up cwd as host project.
 # With --clean: also uninstalls existing plugins and nukes the marketplace
 #   plugin cache before reinstalling. Use this when you've edited plugin
 #   source without bumping versions and want CC to pick up the changes.
+# With --topology=NAME (multi-team | solo-pair | hex-backend): also copies
+#   that topology's snippet into the host project's .claude/ and appends the
+#   matching @-import line to CLAUDE.md (idempotent, creates CLAUDE.md if
+#   missing). Skip this flag if you want to wire CLAUDE.md yourself.
 # With a path argument: sets up the given path as the host project instead of cwd.
 #
 # Examples:
 #   cd ~/test-multi-team && ~/.../bin/install.sh
 #   ~/.../bin/install.sh ~/some-other-project
 #   ~/.../bin/install.sh --clean              # force-refresh everything
-#   ~/.../bin/install.sh --clean ~/foo        # force-refresh and target ~/foo
+#   ~/.../bin/install.sh --topology=hex-backend ~/foo
+#   ~/.../bin/install.sh --clean --topology=multi-team ~/foo
 
 set -e
 
 # --- Argument parsing ---
 
 CLEAN=0
+TOPOLOGY=""
 HOST_PROJECT_INPUT=""
 
 for arg in "$@"; do
   case "$arg" in
     --clean) CLEAN=1 ;;
+    --topology=*) TOPOLOGY="${arg#--topology=}" ;;
     --help|-h)
-      head -n 20 "$0" | sed -n '2,20p' | sed 's/^# \{0,1\}//'
+      head -n 24 "$0" | sed -n '2,24p' | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     -*)
@@ -38,6 +45,14 @@ for arg in "$@"; do
     *) HOST_PROJECT_INPUT="$arg" ;;
   esac
 done
+
+case "${TOPOLOGY}" in
+  ""|multi-team|solo-pair|hex-backend) ;;
+  *)
+    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, solo-pair, or hex-backend."
+    exit 1
+    ;;
+esac
 
 HOST_PROJECT_INPUT="${HOST_PROJECT_INPUT:-$(pwd)}"
 
@@ -136,6 +151,42 @@ else
   fi
 fi
 
+# --- Per-project setup: topology snippet + CLAUDE.md @-import ---
+
+if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
+  SNIPPET_SRC="${REPO_DIR}/${TOPOLOGY}/${TOPOLOGY}-topology.md"
+  SNIPPET_DST="${HOST_PROJECT}/.claude/${TOPOLOGY}-topology.md"
+  CLAUDE_MD="${HOST_PROJECT}/CLAUDE.md"
+  IMPORT_LINE="@.claude/${TOPOLOGY}-topology.md"
+
+  if [ ! -f "${SNIPPET_SRC}" ]; then
+    echo "  ✗ Topology snippet not found: ${SNIPPET_SRC}"
+    exit 1
+  fi
+
+  echo ""
+  echo "▶ Wiring topology: ${TOPOLOGY}"
+
+  cp "${SNIPPET_SRC}" "${SNIPPET_DST}"
+  echo "  ✔ Copied snippet → ${SNIPPET_DST}"
+
+  if [ -f "${CLAUDE_MD}" ] && grep -qF "${IMPORT_LINE}" "${CLAUDE_MD}"; then
+    echo "  ✔ ${CLAUDE_MD} already imports ${IMPORT_LINE}"
+  else
+    if [ ! -f "${CLAUDE_MD}" ]; then
+      printf '# Project instructions\n\n' > "${CLAUDE_MD}"
+      echo "  ✔ Created ${CLAUDE_MD}"
+    fi
+    printf '\n%s\n' "${IMPORT_LINE}" >> "${CLAUDE_MD}"
+    echo "  ✔ Appended ${IMPORT_LINE} to ${CLAUDE_MD}"
+  fi
+
+  # Sanity warning: jira-flow needs leads, solo-pair has none.
+  if [ "${TOPOLOGY}" = "solo-pair" ]; then
+    echo "  ⚠ solo-pair has no leads. /jira-flow:* commands won't work with this topology."
+  fi
+fi
+
 # --- Final summary ---
 
 echo ""
@@ -151,16 +202,27 @@ echo ""
 if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   echo "Host project setup at ${HOST_PROJECT}:"
   echo "    .claude/expertise/ → centralized plugin expertise (writes shared across projects)"
-  echo ""
-  echo "Final manual step (still needed): copy ONE topology snippet and import it"
-  echo "from the project's CLAUDE.md."
-  echo ""
-  echo "  cp ${REPO_DIR}/hex-backend/hex-backend-topology.md ${HOST_PROJECT}/.claude/"
-  echo "  # OR"
-  echo "  cp ${REPO_DIR}/multi-team/multi-team-topology.md ${HOST_PROJECT}/.claude/"
-  echo "  # OR"
-  echo "  cp ${REPO_DIR}/solo-pair/solo-pair-topology.md ${HOST_PROJECT}/.claude/"
-  echo ""
-  echo "  Then add the matching @-import to ${HOST_PROJECT}/CLAUDE.md:"
-  echo "    @.claude/hex-backend-topology.md   (or multi-team-topology.md / solo-pair-topology.md)"
+  if [ -n "${TOPOLOGY}" ]; then
+    echo "    .claude/${TOPOLOGY}-topology.md + CLAUDE.md @-import → orchestrator wired"
+    echo ""
+    echo "You're ready. Open Claude Code in ${HOST_PROJECT} and try:"
+    case "${TOPOLOGY}" in
+      multi-team)  echo "    /multi-team:plan-build-validate <task>" ;;
+      solo-pair)   echo "    /solo-pair:* (or just describe a small task — 2-agent dev/reviewer)" ;;
+      hex-backend) echo "    /hex-backend:plan-build-validate <task>" ;;
+    esac
+  else
+    echo ""
+    echo "Final manual step: pick ONE topology snippet and import it from CLAUDE.md."
+    echo "(Or re-run with --topology=multi-team|solo-pair|hex-backend to automate.)"
+    echo ""
+    echo "  cp ${REPO_DIR}/hex-backend/hex-backend-topology.md ${HOST_PROJECT}/.claude/"
+    echo "  # OR"
+    echo "  cp ${REPO_DIR}/multi-team/multi-team-topology.md ${HOST_PROJECT}/.claude/"
+    echo "  # OR"
+    echo "  cp ${REPO_DIR}/solo-pair/solo-pair-topology.md ${HOST_PROJECT}/.claude/"
+    echo ""
+    echo "  Then add the matching @-import to ${HOST_PROJECT}/CLAUDE.md:"
+    echo "    @.claude/hex-backend-topology.md   (or multi-team-topology.md / solo-pair-topology.md)"
+  fi
 fi
