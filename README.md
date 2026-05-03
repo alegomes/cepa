@@ -36,6 +36,7 @@ instead. See `agents-overview.md` for the full audit.
 ```
 claude-multi-team-plugin/
 ├── .claude-plugin/marketplace.json  # 3-plugin marketplace: common + multi-team + solo-pair
+├── bin/install.sh                   # one-command installer for all three plugins
 ├── common/                          # shared mindset skills (required by both topologies)
 │   ├── .claude-plugin/plugin.json
 │   ├── expertise/                   # per-agent mental-model.yaml stubs (centralized)
@@ -58,14 +59,32 @@ claude-multi-team-plugin/
 
 ## Setup
 
-### One-time: register this plugin's marketplace in Claude Code
+### Install (one command)
 
-In any Claude Code session, run:
+Once the marketplace is published to GitHub:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/alegomes/claude-multi-team-plugin/main/bin/install.sh | sh
+```
+
+That registers the marketplace and installs all three plugins (`common` +
+`multi-team` + `solo-pair`).
+
+If you cloned the repo, run the same script directly:
+
+```sh
+./bin/install.sh
+```
+
+### Manual install (one slash command per plugin)
+
+In any Claude Code session:
 
 ```
-/plugin marketplace add ~/coding/harnessing/claude/claude-multi-team-plugin
-/plugin install common@alegomes        # required — ships the 5 mindset skills
-/plugin install multi-team@alegomes    # OR /plugin install solo-pair@alegomes
+/plugin marketplace add alegomes/claude-multi-team-plugin
+/plugin install common@alegomes        # required — 5 mindset skills
+/plugin install multi-team@alegomes    # the 9-agent topology
+/plugin install solo-pair@alegomes     # optional — the 2-agent topology
 ```
 
 `common@alegomes` is required by both topologies — it ships the five
@@ -74,13 +93,21 @@ mindset skills (`mental-model`, `active-listener`, `zero-micromanagement`,
 skills in their bodies; without `common` installed, the references go
 nowhere.
 
-That's it for the plugin install — agents, skills, slash commands, and the
-path-lock hook are now active in this session.
+### Local-path install (for hacking on the plugin)
 
-If `~` doesn't expand for your CC version, use the absolute path:
+If the marketplace isn't on GitHub yet, or you're developing the plugin
+locally:
+
+```sh
+./bin/install.sh /path/to/claude-multi-team-plugin
+```
+
+Or manually:
 
 ```
-/plugin marketplace add /Users/alegomes/coding/harnessing/claude/claude-multi-team-plugin
+/plugin marketplace add /path/to/claude-multi-team-plugin
+/plugin install common@alegomes
+/plugin install multi-team@alegomes
 ```
 
 ### Per host project: activate orchestrator mode
