@@ -72,6 +72,33 @@ def detect_agent(payload: dict) -> str:
     return "orchestrator"
 
 
+def debug_log(payload: dict, resolved_agent: str) -> None:
+    """When HEX_PATHLOCK_DEBUG=1, append a JSON line to the debug log so we can
+    see what CC actually sends in the PreToolUse payload. Default log path is
+    /tmp/hex-pathlock-debug.log; override with HEX_PATHLOCK_DEBUG_LOG."""
+    if os.environ.get("HEX_PATHLOCK_DEBUG") != "1":
+        return
+    log_path = os.environ.get("HEX_PATHLOCK_DEBUG_LOG", "/tmp/hex-pathlock-debug.log")
+    identity_keys = ("agent_type", "agent_name", "subagent_name", "agent", "subagent_type")
+    snapshot = {
+        "top_level_keys": sorted(payload.keys()),
+        "identity_fields": {k: payload.get(k) for k in identity_keys},
+        "env_agent_vars": {
+            k: os.environ.get(k)
+            for k in ("CLAUDE_AGENT_NAME", "CLAUDE_SUBAGENT_NAME")
+            if os.environ.get(k)
+        },
+        "resolved_agent": resolved_agent,
+        "tool_name": payload.get("tool_name"),
+        "file_path": (payload.get("tool_input") or {}).get("file_path"),
+    }
+    try:
+        with open(log_path, "a") as f:
+            f.write(json.dumps(snapshot) + "\n")
+    except OSError:
+        pass
+
+
 def is_own_expertise_file(file_path: str, agent: str) -> bool:
     """Each agent can write its own `<agent>-mental-model.yaml` regardless of
     where it lives on disk (host symlink to plugin source, or plugin cache)."""
@@ -119,6 +146,7 @@ def main():
             sys.exit(0)
 
     agent = detect_agent(payload)
+    debug_log(payload, agent)
 
     if is_own_expertise_file(file_path, agent):
         sys.exit(0)
