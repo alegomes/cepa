@@ -74,6 +74,8 @@ if [ "${CLEAN}" -eq 1 ]; then
   claude plugin uninstall "common@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "multi-team@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "solo-pair@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "hex-backend@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "jira-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
 
   if [ -d "${CACHE_DIR}" ]; then
     echo "▶ --clean: removing plugin cache at ${CACHE_DIR}"
@@ -89,14 +91,20 @@ claude plugin marketplace add "${REPO_DIR}"
 
 # --- Plugin install ---
 
-echo "▶ Installing common@alegomes (5 mindset skills — required)"
+echo "▶ Installing common@alegomes (8 mindset skills — required)"
 claude plugin install common@alegomes
 
-echo "▶ Installing multi-team@alegomes (9-agent topology)"
+echo "▶ Installing multi-team@alegomes (9-agent generic topology)"
 claude plugin install multi-team@alegomes
 
-echo "▶ Installing solo-pair@alegomes (2-agent topology)"
+echo "▶ Installing solo-pair@alegomes (2-agent dev/reviewer topology)"
 claude plugin install solo-pair@alegomes
+
+echo "▶ Installing hex-backend@alegomes (13-agent hexagonal-architecture topology)"
+claude plugin install hex-backend@alegomes
+
+echo "▶ Installing jira-flow@alegomes (Jira lifecycle layer)"
+claude plugin install jira-flow@alegomes
 
 # --- Per-project setup: symlink for centralized expertise ---
 
@@ -133,22 +141,26 @@ fi
 echo ""
 echo "✔ Done."
 echo ""
-echo "Three plugins installed:"
-echo "    common       — 5 mindset skills"
-echo "    multi-team   — 9-agent topology + path-lock hook + /plan-build-validate"
+echo "Five plugins installed:"
+echo "    common       — 8 mindset skills (required by every topology)"
+echo "    multi-team   — 9-agent generic topology + /multi-team:plan-build-validate"
 echo "    solo-pair    — 2-agent dev/reviewer topology"
+echo "    hex-backend  — 13-agent hexagonal-architecture topology + per-Task quality loop"
+echo "    jira-flow    — atlassian-expert + Jira-aware commands (pair with multi-team or hex-backend)"
 echo ""
 if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   echo "Host project setup at ${HOST_PROJECT}:"
   echo "    .claude/expertise/ → centralized plugin expertise (writes shared across projects)"
   echo ""
-  echo "Final manual step (still needed): copy the topology snippet you want and"
-  echo "import it from the project's CLAUDE.md."
+  echo "Final manual step (still needed): copy ONE topology snippet and import it"
+  echo "from the project's CLAUDE.md."
   echo ""
+  echo "  cp ${REPO_DIR}/hex-backend/hex-backend-topology.md ${HOST_PROJECT}/.claude/"
+  echo "  # OR"
   echo "  cp ${REPO_DIR}/multi-team/multi-team-topology.md ${HOST_PROJECT}/.claude/"
   echo "  # OR"
   echo "  cp ${REPO_DIR}/solo-pair/solo-pair-topology.md ${HOST_PROJECT}/.claude/"
   echo ""
-  echo "  Then add to ${HOST_PROJECT}/CLAUDE.md:"
-  echo "    @.claude/multi-team-topology.md   (or solo-pair-topology.md)"
+  echo "  Then add the matching @-import to ${HOST_PROJECT}/CLAUDE.md:"
+  echo "    @.claude/hex-backend-topology.md   (or multi-team-topology.md / solo-pair-topology.md)"
 fi

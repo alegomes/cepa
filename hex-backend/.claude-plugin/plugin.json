@@ -1,0 +1,22 @@
+{
+  "name": "hex-backend",
+  "version": "0.1.0",
+  "description": "Hexagonal-architecture backend topology — 13 agents across 3 teams (planning, engineering, validation) with a per-Task quality loop (qa → refactor-advisor → code-reviewer). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. No external tracker integration — pair with jira-flow for Jira lifecycle.",
+  "author": {
+    "name": "alegomes"
+  },
+  "keywords": ["agents", "hexagonal", "java", "quarkus", "backend"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/path-lock.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

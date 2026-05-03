@@ -1,6 +1,6 @@
 {
   "name": "alegomes",
-  "description": "Three-plugin multi-agent setup for Claude Code: shared mindset skills (common), full 9-agent topology (multi-team), and a lightweight 2-agent pair (solo-pair). Adapted from indydev Dan's lead-agents pattern.",
+  "description": "Five-plugin multi-agent marketplace for Claude Code: shared mindset skills (common); three topologies (multi-team — 9-agent generic; solo-pair — 2-agent lightweight; hex-backend — 13-agent hexagonal-architecture); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
   "owner": {
     "name": "alegomes"
   },
@@ -25,6 +25,20 @@
       "description": "Lightweight 2-agent topology — one dev, one reviewer, no leads. For small tweaks where multi-team orchestration overhead isn't worth it. Requires common@alegomes.",
       "version": "0.1.0",
       "tags": ["agents", "pair-programming", "lightweight"]
+    },
+    {
+      "name": "hex-backend",
+      "source": "./hex-backend",
+      "description": "Hexagonal-architecture backend topology — 13 agents across 3 teams (planning, engineering, validation) with a per-Task quality loop (qa → refactor-advisor → code-reviewer). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. Requires common@alegomes. Pair with jira-flow@alegomes for Jira lifecycle.",
+      "version": "0.1.0",
+      "tags": ["agents", "hexagonal", "java", "quarkus", "backend"]
+    },
+    {
+      "name": "jira-flow",
+      "source": "./jira-flow",
+      "description": "Adds atlassian-expert worker plus Jira-aware slash commands (plan-track-build-validate, execute, drain) on top of any topology that ships planning-lead, engineering-lead, and validation-lead subagents. Tested with hex-backend and multi-team. Won't work with solo-pair (no leads). Requires common@alegomes.",
+      "version": "0.1.0",
+      "tags": ["agents", "jira", "atlassian", "tracking", "workflow"]
     }
   ]
 }

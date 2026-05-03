@@ -1,0 +1,9 @@
+{
+  "name": "jira-flow",
+  "version": "0.1.0",
+  "description": "Adds a single atlassian-expert worker plus Jira-aware slash commands (plan-track-build-validate, execute, drain) on top of any topology that ships planning-lead, engineering-lead, and validation-lead subagents. Tested with hex-backend and multi-team. Won't work with solo-pair (no leads).",
+  "author": {
+    "name": "alegomes"
+  },
+  "keywords": ["agents", "jira", "atlassian", "tracking", "workflow"]
+}
