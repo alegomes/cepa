@@ -18,6 +18,8 @@ import os
 import sys
 from pathlib import Path
 
+PLUGIN_NAME = "hex-backend"
+
 ALLOWED_WRITES = {
     # Orchestrator + leads — no source writes; only own expertise file.
     "orchestrator":      [],
@@ -109,6 +111,12 @@ def main():
     file_path = (payload.get("tool_input") or {}).get("file_path", "")
     if not file_path:
         sys.exit(0)
+
+    raw_agent_type = payload.get("agent_type", "") or ""
+    if ":" in raw_agent_type:
+        prefix = raw_agent_type.split(":", 1)[0]
+        if prefix != PLUGIN_NAME:
+            sys.exit(0)
 
     agent = detect_agent(payload)
 
