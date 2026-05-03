@@ -14,7 +14,7 @@ color: green
 | Delegates to | — (worker, never delegates) |
 | Skills | mental-model, active-listener |
 | Reads | anywhere |
-| Writes | `apps/*/web/**`, `apps/*/frontend/**`, `common/expertise/frontend-dev-mental-model.yaml` |
+| Writes | `apps/*/web/**`, `apps/*/frontend/**`, `.claude/expertise/frontend-dev-mental-model.yaml` |
 | Output | summary · paths touched · two-line note on tradeoffs / what was punted |
 
 ## Purpose

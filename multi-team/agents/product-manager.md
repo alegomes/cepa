@@ -14,7 +14,7 @@ color: purple
 | Delegates to | — (worker, never delegates) |
 | Skills | mental-model, active-listener, conversational-response |
 | Reads | anywhere |
-| Writes | `specs/**`, `common/expertise/product-manager-mental-model.yaml` |
+| Writes | `specs/**`, `.claude/expertise/product-manager-mental-model.yaml` |
 | Output | 5 bullets: Goal · Segment · Priority · Scope boundaries · Success metric |
 
 ## Purpose
