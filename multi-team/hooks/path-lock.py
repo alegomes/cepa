@@ -50,17 +50,26 @@ GATED_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 
 def detect_agent(payload: dict) -> str:
-    """Best-effort: figure out which agent triggered this tool call."""
-    # 1. Hook payload may carry it directly (varies by CC version).
+    """Figure out which agent triggered this tool call.
+
+    CC 2.1.x sends `agent_type` in PreToolUse payloads when a subagent is the
+    caller. The value is plugin-namespaced (e.g. "multi-team:backend-dev"); we
+    strip the prefix to match the bare names used in ALLOWED_WRITES.
+
+    When the call comes from the main session (no subagent), `agent_type` is
+    absent and we fall back to "orchestrator".
+    """
+    agent_type = payload.get("agent_type", "")
+    if agent_type:
+        return agent_type.split(":", 1)[1] if ":" in agent_type else agent_type
+    # Legacy / alternate keys (kept defensively for older CC versions).
     for key in ("agent_name", "subagent_name", "agent", "subagent_type"):
         if key in payload and payload[key]:
             return payload[key]
-    # 2. Some CC versions expose via env.
     for env_key in ("CLAUDE_AGENT_NAME", "CLAUDE_SUBAGENT_NAME"):
         v = os.environ.get(env_key)
         if v:
             return v
-    # 3. Fall back: the main session is the orchestrator.
     return "orchestrator"
 
 
@@ -145,7 +154,7 @@ def main():
         f"[path-lock] BLOCKED: agent {agent!r} cannot {tool_name} {file_path}.\n"
         f"  Allowed write globs for {agent!r}:\n  - "
         + "\n  - ".join(allowed or ["(none — only own expertise file)"])
-        + f"\n  Plus its own expertise file: <plugin>/common/expertise/{agent}-mental-model.yaml\n"
+        + f"\n  Plus its own expertise file: .claude/expertise/{agent}-mental-model.yaml\n"
         f"  Delegate to the appropriate worker instead.",
         file=sys.stderr,
     )
