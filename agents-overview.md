@@ -136,6 +136,102 @@ descriptions and surfaces at first delegation if missing.
 
 ---
 
+## Workflow walkthroughs
+
+Turn-by-turn narratives showing what actually happens when you run the
+canonical command for each topology. Useful for predicting cost, spotting
+where a run went off-rails, and onboarding new users.
+
+### multi-team — `/multi-team:plan-build-validate "add a --json flag to predict"`
+
+1. **Orchestrator** (main session) reads the command, decomposes into
+   plan / build / validate phases, calls `planning-lead` via Task.
+2. **planning-lead** (Opus) delegates in parallel:
+   - `product-manager` writes `specs/predict-json-flag.md` (user value, acceptance criteria).
+   - `ux-researcher` writes `specs/predict-json-flag-ux.md` (CLI ergonomics).
+   Synthesizes both into a brief, returns to orchestrator.
+3. **Orchestrator** calls `engineering-lead` with the brief.
+4. **engineering-lead** (Opus) delegates in parallel:
+   - `backend-dev` edits `apps/predict/api/**` — adds the flag, JSON serializer.
+   - `frontend-dev` is a no-op for this task; lead skips delegation.
+   path-lock blocks any cross-domain write attempt with exit 2.
+5. **engineering-lead** synthesizes (possibly: "backend done, no frontend changes needed"), returns to orchestrator.
+6. **Orchestrator** calls `validation-lead`.
+7. **validation-lead** delegates:
+   - `qa-engineer` writes/extends tests in `tests/**`.
+   - `security-reviewer` writes a review note in `specs/security-reviews/**` (e.g., "JSON output doesn't leak secrets").
+8. **Orchestrator** synthesizes a final report for the user.
+
+**Visible cost:** ~9 subagent invocations. **Visible artifacts:** spec
+files, source edits, test files, security note.
+
+### solo-pair — "fix the off-by-one in `pagination.ts:42`"
+
+1. **Orchestrator** sees a small, scoped task → calls `pair-dev` directly.
+2. **pair-dev** edits `pagination.ts`, runs the existing test, reports.
+3. **Orchestrator** calls `pair-reviewer`.
+4. **pair-reviewer** reads the diff (Read/Grep, no Edit), reports
+   approve/concerns.
+5. **Orchestrator** reports to user.
+
+**Visible cost:** 2 subagent invocations. **No path-lock**, no specs,
+no validation phase. If a request grows mid-flight (e.g., "and refactor
+the surrounding pagination logic"), the topology shape is wrong —
+switch to multi-team for that work.
+
+### hex-backend — `/hex-backend:plan-build-validate "expose subscription status via REST"`
+
+1. **Orchestrator** calls `planning-lead`.
+2. **planning-lead** (Opus) delegates in parallel:
+   - `epic-author` decomposes abstract → Epic + 3 Stories in `spec/epics/**`.
+   - `product-manager` adds acceptance criteria.
+   - `integration-analyst` writes the OpenAPI contract sketch in `spec/contracts/**`.
+3. **Orchestrator** calls `engineering-lead` with the Stories.
+4. **engineering-lead** writes `docs/tasks/TASK-001.md` … `TASK-003.md`
+   (one per Story, broken to atomic units), then **for each Task**:
+   - Delegates to the right dev (`domain-dev` for `domain/`+`application/`,
+     `api-dev` for `api-rest/`, `adapter-dev` for `infrastructure/`+`bootstrap/`).
+   - Dev writes `RESULT.md` summarizing what changed.
+   - **`qa-engineer`** scans for gaps. CRITICAL/HIGH → loops back to dev.
+   - **`refactor-advisor`** writes `docs/housekeeping/<task>.md`. Advisory; never blocks.
+   - **`code-reviewer`** verdicts APPROVE / REJECT vs. TASK.md + ACL.
+     REJECT → loops back to dev. APPROVE → next Task.
+5. **engineering-lead** returns "all Tasks APPROVE" to orchestrator.
+6. **Orchestrator** calls `validation-lead`.
+7. **validation-lead** runs `./mvnw verify` directly (it has Bash) and
+   delegates to `security-reviewer`.
+8. **Orchestrator** reports.
+
+**Visible cost:** 13 agents available; per run ≈ planning-lead (3
+workers) + engineering-lead (N Tasks × 4 agents in the loop) +
+validation-lead (1 worker + Bash). Scales with Task count.
+
+**Visible artifacts:** Epic + Stories under `spec/`, TASK-NNN.md files,
+RESULT.md per Task, housekeeping reports, security review, Maven
+build output, source across all 5 modules.
+
+### jira-flow — `/jira-flow:execute WEGO-1234`
+
+(Assumes hex-backend or multi-team also installed.)
+
+1. **Orchestrator** parses the Jira key, calls `atlassian-expert`.
+2. **atlassian-expert** calls `getJiraIssue WEGO-1234`, returns the card body.
+3. **Orchestrator** runs a **detail audit** on the card. If under-specified:
+   - Calls `planning-lead` (from hex-backend or multi-team) to enrich.
+   - Calls `atlassian-expert` again to `editJiraIssue` with the enriched description.
+4. **Orchestrator** calls `atlassian-expert` to `transitionJiraIssue` → `In Progress`.
+5. **Orchestrator** runs the topology's build phase (engineering-lead → workers → quality loop).
+6. **Orchestrator** runs the validation phase.
+7. **Orchestrator** calls `atlassian-expert` to:
+   - `addCommentToJiraIssue` with the verdict + artifact links.
+   - `transitionJiraIssue` → `In Review` (if PASS) or back to `To Do` with BLOCKED reason.
+8. Reports to user.
+
+**Visible cost:** topology cost + ~3-5 Atlassian MCP calls. Drain
+multiplies by N cards; stops at first BLOCKED to cap cost.
+
+---
+
 ## Skills (loaded by description-match in CC)
 
 | Skill | One-liner | Audience |

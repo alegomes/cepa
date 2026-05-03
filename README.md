@@ -85,10 +85,10 @@ From inside the host project where you want to use the agents:
 
 ```sh
 cd /path/to/your/host-project
-~/coding/harnessing/claude/claude-multi-team-plugin/bin/install.sh
+~/coding/harnessing/claude/claude-multi-team-plugin/bin/install.sh --topology=multi-team
 ```
 
-That single command does **both**:
+That single command does **all three** setup steps:
 
 1. Registers this repo as a Claude Code plugin marketplace and installs
    all five plugins (`common` + `multi-team` + `solo-pair` +
@@ -97,6 +97,15 @@ That single command does **both**:
    `.claude/expertise` as a **symlink** to the plugin's centralized
    expertise directory (so accumulated agent knowledge follows you
    across projects).
+3. With `--topology=NAME` (one of `multi-team`, `solo-pair`,
+   `hex-backend`), copies the topology snippet into `.claude/` and
+   appends `@.claude/<topology>-topology.md` to `CLAUDE.md` (creating
+   `CLAUDE.md` if missing). The append is idempotent — re-running
+   doesn't duplicate the line.
+
+If you skip `--topology`, the plugins install but you'll need to wire
+`CLAUDE.md` yourself (see the "Per host project: activate orchestrator
+mode" subsection below).
 
 You only *use* one topology per project (the one you `@-import` from
 your `CLAUDE.md`), but installing all of them is harmless — agents
@@ -224,6 +233,143 @@ and `validation-lead` in sequence, with each lead delegating to its
 workers. If you see the main session writing code itself instead of
 delegating, the orchestrator instructions need tightening — edit the
 relevant `*-topology.md`, bump the version, and `/plugin update <name>`.
+
+---
+
+## How it works
+
+### The three-tier model
+
+Every topology (except solo-pair) follows the same shape:
+
+```
+        ┌─────────────────────────────┐
+        │  orchestrator (main session) │   delegate-only, no Edit/Write
+        └──────────────┬──────────────┘
+                       │ Task tool
+       ┌───────────────┼───────────────┐
+       ▼               ▼               ▼
+  planning-lead   engineering-lead   validation-lead    Opus, delegate-only
+       │               │               │
+       ▼               ▼               ▼
+   PM, UX, …      dev workers      qa, security, …    Sonnet, write code
+```
+
+- **Orchestrator** = the Claude Code session you're typing into. It
+  doesn't write code; it decomposes the request and dispatches leads.
+  Behavior comes from the topology snippet you imported into `CLAUDE.md`.
+- **Leads** are Opus subagents with **no `Edit`/`Write`/`MultiEdit`
+  tools**. They can `Read`, `Grep`, run `Task` (to call workers), and
+  write specs/task docs only. The lack of edit tools is the enforcement —
+  a lead literally cannot write source code.
+- **Workers** are Sonnet subagents with edit tools but **domain-locked
+  write globs**. The `path-lock.py` hook (multi-team, hex-backend)
+  blocks writes outside each worker's allowlist with exit code 2; the
+  agent receives the blocked message on stderr and self-corrects (or
+  delegates to the right peer).
+
+`solo-pair` skips the lead tier — `pair-dev` writes, `pair-reviewer` is
+read-only via tool allowlist (no path-lock hook). It's the right choice
+when fan-out overhead would dwarf the task.
+
+### What's enforced vs. what's convention
+
+| Guarantee | How | Bypassable? |
+|---|---|---|
+| Leads can't write code | tool allowlist (no `Edit`/`Write`/`MultiEdit`) | No — CC enforces tool allowlists |
+| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (multi-team, hex-backend); solo-pair has no hook |
+| Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
+| Plan → build → validate ordering | prompt-only (in command + topology) | Yes — orchestrator can reorder if user pushes |
+| jira-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
+
+If you see the main session writing code, that's a *prompt* failure —
+tighten the topology snippet, bump the version, `/plugin update`. The
+hard guardrails (tool allowlist + path-lock) catch worker misbehavior.
+
+### Per-topology workflow at a glance
+
+**multi-team** — `/multi-team:plan-build-validate <task>`:
+
+```
+orchestrator
+  → planning-lead → product-manager + ux-researcher  (specs/**)
+  → engineering-lead → frontend-dev + backend-dev    (apps/**)
+  → validation-lead → qa-engineer + security-reviewer
+  → orchestrator synthesizes verdict for user
+```
+
+≈9 subagent invocations per run. Use for greenfield features that
+need product/UX framing before code.
+
+**solo-pair** — describe the task in chat:
+
+```
+orchestrator → pair-dev → pair-reviewer → orchestrator reports
+```
+
+2 subagent invocations. Use for one-file tweaks, bug fixes,
+refactors with obvious scope.
+
+**hex-backend** — `/hex-backend:plan-build-validate <task>`:
+
+```
+orchestrator
+  → planning-lead → epic-author + product-manager + integration-analyst (parallel)
+  → engineering-lead, per Task:
+       → domain-dev / api-dev / adapter-dev (the right one for that Task)
+       → qa-engineer (gap scan; CRITICAL/HIGH blocks → back to dev)
+       → refactor-advisor (housekeeping report, advisory only)
+       → code-reviewer (APPROVE/REJECT vs TASK.md → REJECT loops back)
+  → validation-lead → security-reviewer + ./mvnw verify
+  → orchestrator reports
+```
+
+≈13 subagents + a per-Task quality loop that may iterate. Use for
+hexagonal Java/Quarkus backends. Cost scales with Task count, not
+just topology size.
+
+**jira-flow** layers on top of multi-team or hex-backend — its commands
+delegate to `planning-lead`/`engineering-lead`/`validation-lead` by name
+and add Jira lifecycle (Epic + Stories registered, transitions through
+To Do → In Progress → In Review). See `agents-overview.md` §"Workflow
+walkthroughs" for a turn-by-turn narrative.
+
+### Composition rules
+
+- **Pick exactly one topology per project.** Importing two topology
+  snippets gives the orchestrator conflicting instructions.
+- **`common` is required** for every topology. The skills are
+  referenced in agent bodies.
+- **`jira-flow` requires a topology with the standard 3-lead set**
+  (multi-team or hex-backend). solo-pair has no leads → jira-flow
+  commands fail at first delegation.
+- **You can swap topologies** — change the `@-import` line in
+  `CLAUDE.md` and the orchestrator behavior swaps with it. Plugins
+  installed but not imported don't consume context.
+
+### Failure modes you'll actually hit
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Unknown command: /plan-build-validate` | bare command form | use namespaced: `/multi-team:plan-build-validate` |
+| Main session writes code instead of delegating | weak topology snippet for this task class | tighten the snippet or restate the rule in chat |
+| `[hex-backend path-lock] BLOCKED: agent 'X' cannot Edit Y` | worker writing outside its domain | correct — let it delegate, or check `ALLOWED_WRITES` if your layout differs |
+| `[hex-backend path-lock] BLOCKED: unknown agent 'orchestrator'` on a worker tool call | hook can't read `agent_type` (CC version mismatch) | see Troubleshooting §"Hook fails to detect agent name" |
+| `/agents` doesn't list a topology after install | `common@alegomes` missing, or topology not installed | re-run `bin/install.sh` |
+| jira-flow commands hang on solo-pair | no leads exist | switch to multi-team or hex-backend |
+
+### What it can't do
+
+- **Run code on its own infrastructure.** Agents call `Bash` against
+  *your* shell — they can run tests and tools you have installed, but
+  there's no sandbox.
+- **Persist memory between unrelated sessions** beyond what
+  `expertise/<agent>-mental-model.yaml` files capture. Pick up where
+  you left off lives in the host symlink, not magic.
+- **Override CC's own guardrails.** If a tool requires user confirmation
+  in your CC permission mode, the agent will pause for it.
+- **Replace human review.** The `code-reviewer` agent (hex-backend) is
+  an LLM verdict — useful, not authoritative. Treat it as a first pass.
 
 ---
 
