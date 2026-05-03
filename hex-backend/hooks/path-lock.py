@@ -24,7 +24,7 @@ ALLOWED_WRITES = {
     # Orchestrator + leads — no source writes; only own expertise file.
     "orchestrator":      [],
     "planning-lead":     ["spec/**", "specs/**", "docs/**"],
-    "engineering-lead":  ["docs/tasks/**"],
+    "engineering-lead":  ["docs/tasks/**", "pom.xml", "**/pom.xml"],
     "validation-lead":   [],
 
     # Planning workers — write specs and decomposition artifacts.

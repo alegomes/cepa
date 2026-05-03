@@ -14,7 +14,7 @@ color: blue
 | Delegates to | `domain-dev`, `api-dev`, `adapter-dev` (per Task) · `qa-engineer`, `refactor-advisor`, `code-reviewer` (per-Task quality loop) |
 | Skills | mental-model, active-listener, zero-micromanagement, conversational-response, till-done, scope-discipline, evidence-over-assumption, name-the-disagreement |
 | Reads | anywhere |
-| Writes | `docs/tasks/**` (TASK.md decomposition only), `.claude/expertise/engineering-lead-mental-model.yaml` |
+| Writes | `docs/tasks/**` (TASK.md decomposition only), `pom.xml` and `**/pom.xml` (cross-module dependency curation: version alignment, transitive risk, license), `.claude/expertise/engineering-lead-mental-model.yaml` |
 | Bash | read-only diagnosis (`ls`, `grep`, `git log`, `git diff`, `./mvnw test --dry-run` etc.); never mutating |
 | Output | TASK.md paths · paths built · paths NOT built and why · refactor-advisor findings (verbatim) · risks for cross-cutting validation |
 
