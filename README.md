@@ -84,8 +84,16 @@ To install for a different host project from anywhere:
 ```
 
 Re-running the script is safe — marketplace re-registration is
-idempotent, plugin installs are no-ops if already current, and the
-symlink check refuses to clobber existing files.
+idempotent and the symlink check refuses to clobber existing files.
+
+If you've **edited the plugin source without bumping a version** and
+want CC to pick up the changes, add `--clean` to force a full
+teardown + reinstall (uninstalls each plugin, nukes
+`~/.claude/plugins/cache/alegomes/`, then re-registers and installs):
+
+```sh
+~/coding/harnessing/claude/claude-multi-team-plugin/bin/install.sh --clean
+```
 
 ### Manual install (one slash command per plugin)
 
