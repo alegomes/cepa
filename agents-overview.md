@@ -3,8 +3,12 @@
 A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
-is `multi-team/hooks/path-lock.py` (multi-team only — solo-pair has no enforcement
-hook, by design).
+is each topology's own `hooks/path-lock.py` (multi-team and hex-backend
+have one; solo-pair doesn't, by design).
+
+The marketplace ships **five plugins**: `common` (skills + expertise),
+three topologies (`multi-team`, `solo-pair`, `hex-backend`), and a
+cross-cutting layer (`jira-flow`).
 
 ---
 
@@ -60,6 +64,78 @@ their complexity.
 
 ---
 
+## hex-backend
+
+13-agent hexagonal-architecture topology. Three teams, each with one
+Opus lead and 2-4 Sonnet workers. Per-Task quality loop runs inside
+engineering-lead (qa → refactor-advisor → code-reviewer). Cross-cutting
+validation runs through validation-lead. Canonical workflow:
+plan → (per-Task: build → qa → housekeeping → review) → cross-cutting validate.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| (orchestrator — main session) | apex | user | three leads | Task | (none — runs in host CC session) |
+| `planning-lead` | lead (DISCOVERY) | orchestrator | `epic-author`, `product-manager`, `integration-analyst` (parallel) | Read, Glob, Grep, Task, Write | `spec/**`, `specs/**`, `docs/**`, own expertise |
+| `epic-author` | worker | `planning-lead` | — | Read, Glob, Grep, Write | `spec/**`, `specs/**`, `docs/**`, own expertise |
+| `product-manager` | worker | `planning-lead` | — | Read, Glob, Grep, Write | `spec/**`, `specs/**`, `docs/**`, own expertise |
+| `integration-analyst` | worker | `planning-lead` | — | Read, Glob, Grep, Write | `spec/**`, `specs/**`, `docs/**`, own expertise |
+| `engineering-lead` | lead (ARCHITECT + EXECUTOR) | orchestrator | dev workers + per-Task quality loop (qa, refactor-advisor, code-reviewer) | Read, Glob, Grep, Task, Write, Bash (RO) | `docs/tasks/**`, own expertise |
+| `domain-dev` | worker | `engineering-lead` | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | `domain/src/main/**`, `application/src/main/**`, own expertise |
+| `api-dev` | worker | `engineering-lead` | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | `api-rest/src/main/**`, own expertise |
+| `adapter-dev` | worker | `engineering-lead` | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | `infrastructure/src/main/**`, `bootstrap/src/main/**`, own expertise |
+| `validation-lead` | lead (VALIDATION + GATE) | orchestrator | `security-reviewer`; runs `./mvnw verify` directly | Read, Glob, Grep, Task, Bash | own expertise only |
+| `qa-engineer` | worker (Tester) | `engineering-lead` | — | Read, Glob, Grep, Edit, Write, Bash | `*/src/test/**`, own expertise |
+| `refactor-advisor` | worker (Housekeeping, advisory) | `engineering-lead` | — | Read, Glob, Grep, Write | `docs/housekeeping/**`, own expertise (no source edits) |
+| `security-reviewer` | worker | `validation-lead` | — | Read, Glob, Grep, Write | `docs/security-reviews/**`, own expertise |
+| `code-reviewer` | worker (final GATE) | `engineering-lead` | — | Read, Glob, Grep | — (advisory verdict only; no writes) |
+
+**Models:** orchestrator + 3 leads = `opus`; 10 workers = `sonnet`.
+
+**Hook:** `hex-backend/hooks/path-lock.py` enforces the *Writes* column
+on every `Edit` / `Write` / `MultiEdit` / `NotebookEdit` call. Same
+agent-detection mechanism as multi-team (PreToolUse `agent_type` field,
+plugin-namespaced; hook strips the prefix).
+
+**Per-Task quality loop** (inside `engineering-lead`'s phase, mandatory):
+
+```
+dev worker → RESULT.md
+  → qa-engineer (gap scan; CRITICAL/HIGH blocks)
+  → (if gaps) back to dev worker, iterate
+  → refactor-advisor (housekeeping report; advisory, never blocks)
+  → code-reviewer (APPROVE / REJECT vs. TASK.md + ACL compliance)
+  → (if REJECT) back to dev worker, iterate
+  → next Task
+```
+
+---
+
+## jira-flow
+
+Cross-cutting layer. **Not a topology** — adds Jira lifecycle to
+whichever topology is also installed.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `atlassian-expert` | worker (cross-cutting) | orchestrator (called from any Jira-aware command) | — | Atlassian MCP tools (createJiraIssue, getJiraIssue, editJiraIssue, transitionJiraIssue, etc.) + Read, Glob, Grep | Jira state via MCP only; own expertise |
+
+**Commands** (all in `jira-flow/commands/`):
+
+| Command | Purpose |
+|---|---|
+| `/jira-flow:plan-track-build-validate <abstract task>` | Full discovery + Jira lifecycle. Registers Epic + Stories, executes one Story, transitions through To Do → In Progress → In Review. |
+| `/jira-flow:execute <jira-key>` | Single existing card. Runs a detail audit; if under-specified, planning-lead enriches the card description in Jira before build. |
+| `/jira-flow:drain <column> [--max N]` | Bulk-execute up to N cards (default 5) from a column. Stops on first BLOCKED. User confirmation required. |
+
+**Soft requirement:** jira-flow's commands delegate to subagents named
+`planning-lead`, `engineering-lead`, `validation-lead`. Both `multi-team`
+and `hex-backend` ship those names; `solo-pair` doesn't, so jira-flow
+doesn't work with solo-pair-only. CC has no enforced plugin
+dependencies — the soft requirement is documented in the plugin
+descriptions and surfaces at first delegation if missing.
+
+---
+
 ## Skills (loaded by description-match in CC)
 
 | Skill | One-liner | Audience |
@@ -69,11 +145,14 @@ their complexity.
 | `zero-micromanagement` | You delegate, you don't execute. The urge to fix it yourself is the signal to delegate. | leads + orchestrator only |
 | `conversational-response` | Lead with the answer, bullets for parallels, file:line refs, single next-step close. | every agent that reports verbally |
 | `till-done` | Don't stop until the job is fully complete. "Almost done" is the signal to keep going. | every agent |
+| `scope-discipline` | Don't expand the work beyond what was asked. While-I-was-in-there findings are follow-ups, not silent inclusions. | every agent |
+| `evidence-over-assumption` | Distinguish what you verified from what you assumed when reporting. "I checked X by running Y" vs. "I'm assuming X because Z." | every agent |
+| `name-the-disagreement` | When synthesizing reports from multiple sub-agents that disagree, surface the disagreement explicitly — don't average or pick silently. | leads + orchestrator (synthesizers) |
 
-The five skills ship in the **`common@alegomes` plugin** (`common/skills/`).
-Both topologies require `common`; install it once per project and the
-skills are available to every subagent via CC's session-wide skill
-namespace.
+The eight skills ship in the **`common@alegomes` plugin**
+(`common/skills/`). Every topology requires `common`; install it once
+per project and the skills are available to every subagent via CC's
+session-wide skill namespace.
 
 ---
 
@@ -178,16 +257,24 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 ## Outstanding work
 
-- 🟡 **Real-task end-to-end validation** — the architecture is proven
-  but `/plan-build-validate` against a real task has not been run yet.
-  The classifier app at `multi-agent/lead-agents/apps/classifier/` is
-  the canonical test bed.
+- 🟡 **Real-task validation of `multi-team`** — basic delegation flow
+  was observed working (orchestrator → leads → workers → honest BLOCKED
+  reply when target code wasn't present). Not yet exercised against a
+  real codebase end-to-end.
+- 🟡 **Real-task validation of `hex-backend`** — the 13-agent topology
+  was just built. The per-Task quality loop, refactor-advisor's
+  housekeeping report shape, and code-reviewer's APPROVE/REJECT have
+  not been observed live yet.
+- 🟡 **Real-task validation of `jira-flow`** — atlassian-expert and the
+  three Jira-aware commands have not been run against a real Jira
+  project. Atlassian MCP tools are available; the agent prompt is
+  written but unverified.
 - 🟡 If you want to capture the team-topology config more strictly,
   add a non-driving `topology.yaml` per topology as documentation
   (CC won't read it; risk of drift). Recommend: skip until needed.
-- 🟡 Consider extending `path-lock.py` to support read/upsert/delete
-  granularity. Modest scope; only worth it if a real workflow demands
-  the distinction.
+- 🟡 Consider extending the path-lock hooks to support
+  read/upsert/delete granularity. Modest scope; only worth it if a real
+  workflow demands the distinction.
 - 🟡 Versioned changelog (separate `CHANGELOG.md`) — currently the git
   log fills this role. Worth adding before any public release.
 - 🔴 Session env vars (`{{SESSION_DIR}}`, `{{CONVERSATION_LOG}}`) — not

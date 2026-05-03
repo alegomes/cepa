@@ -1,17 +1,25 @@
 # claude-multi-team-plugin
 
-A Claude Code plugin marketplace shipping a multi-agent setup as three
+A Claude Code plugin marketplace shipping a multi-agent setup as five
 composable plugins:
 
-- **`common`** — five shared mindset skills (`mental-model`,
+- **`common`** — eight shared mindset skills (`mental-model`,
   `active-listener`, `zero-micromanagement`, `conversational-response`,
-  `till-done`). Required by both topologies below.
-- **`multi-team`** — the full 9-agent topology: orchestrator (the main
-  session) + 3 leads (Opus, delegate-only) + 6 workers (Sonnet,
-  domain-locked via tool allowlists + a path-lock hook). For
-  plan → build → validate workflows.
-- **`solo-pair`** — a lightweight 2-agent topology: dev + reviewer. For
-  small tasks where multi-team's overhead isn't worth it.
+  `till-done`, `scope-discipline`, `evidence-over-assumption`,
+  `name-the-disagreement`). Required by every topology.
+- **`multi-team`** — the generic 9-agent topology: orchestrator + 3
+  leads (Opus, delegate-only) + 6 workers (Sonnet, domain-locked).
+  For plan → build → validate workflows.
+- **`solo-pair`** — a lightweight 2-agent topology: dev + reviewer.
+  For small tasks where multi-team's overhead isn't worth it.
+- **`hex-backend`** — a 13-agent hexagonal-architecture topology
+  with a per-Task quality loop (qa → refactor-advisor → code-reviewer).
+  Path-lock keyed to the canonical `domain/application/api-rest/
+  infrastructure/bootstrap` Maven layout.
+- **`jira-flow`** — adds an `atlassian-expert` worker plus Jira-aware
+  slash commands (`plan-track-build-validate`, `execute`, `drain`).
+  Layers on top of any topology that ships the standard 3-lead set
+  (multi-team or hex-backend).
 
 Edit once here, install in any project, version like normal code.
 
@@ -26,31 +34,43 @@ can install a team rather than hire one.
 
 The mindset comes from indydev Dan's `lead-agents` pattern (the second
 asset in his Agentic Horizon trilogy). The Claude Code adaptation here
-ports the agents, the path-lock hook, and the five mindset skills
+ports the agents, the path-lock hook, and the eight mindset skills
 (`mental-model`, `active-listener`, `zero-micromanagement`,
-`conversational-response`, `till-done`). Some Pi-format features
-(machine-readable team-config YAML, runtime env-var injection into
-agents) don't have direct CC equivalents and live as conventions
-instead. See `agents-overview.md` for the full audit.
+`conversational-response`, `till-done`, `scope-discipline`,
+`evidence-over-assumption`, `name-the-disagreement`). Some Pi-format
+features (machine-readable team-config YAML, runtime env-var injection
+into agents) don't have direct CC equivalents and live as conventions
+instead. See `agents-overview.md` for the full audit and per-topology
+agent matrices.
 
 ```
 claude-multi-team-plugin/
-├── .claude-plugin/marketplace.json  # 3-plugin marketplace: common + multi-team + solo-pair
-├── bin/install.sh                   # one-command installer for all three plugins
-├── common/                          # shared mindset skills (required by both topologies)
+├── .claude-plugin/marketplace.json  # 5-plugin marketplace: common + multi-team + solo-pair + hex-backend + jira-flow
+├── bin/install.sh                   # one-command installer for all five plugins
+├── common/                          # shared mindset skills + centralized expertise (required by every topology)
 │   ├── .claude-plugin/plugin.json
-│   ├── expertise/                   # per-agent mental-model.yaml stubs (centralized)
-│   └── skills/                      # mental-model, active-listener, zero-micromanagement, conversational-response, till-done
-├── multi-team/                      # multi-team plugin (full 9-agent topology)
-│   ├── .claude-plugin/plugin.json   # plugin manifest (with hook registration)
+│   ├── expertise/                   # per-agent mental-model.yaml stubs (centralized via host symlink)
+│   └── skills/                      # 8 mindset skills
+├── multi-team/                      # generic 9-agent topology (frontend-dev / backend-dev / etc.)
+│   ├── .claude-plugin/plugin.json
 │   ├── agents/                      # 9 subagent system prompts
-│   ├── commands/                    # /plan-build-validate
-│   ├── hooks/path-lock.py           # PreToolUse path enforcement
-│   └── multi-team-topology.md       # orchestrator snippet for host CLAUDE.md
-├── solo-pair/                       # solo-pair plugin (2-agent dev/reviewer pair)
+│   ├── commands/                    # /multi-team:plan-build-validate
+│   ├── hooks/path-lock.py
+│   └── multi-team-topology.md
+├── solo-pair/                       # 2-agent dev/reviewer pair
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/
 │   └── solo-pair-topology.md
+├── hex-backend/                     # 13-agent hexagonal-architecture backend topology
+│   ├── .claude-plugin/plugin.json
+│   ├── agents/                      # planning team (4) + engineering team (4) + validation team (5)
+│   ├── commands/                    # /hex-backend:plan-build-validate
+│   ├── hooks/path-lock.py           # keyed to */src/main and */src/test
+│   └── hex-backend-topology.md
+├── jira-flow/                       # Jira lifecycle layer (pair with multi-team or hex-backend)
+│   ├── .claude-plugin/plugin.json
+│   ├── agents/atlassian-expert.md
+│   └── commands/                    # /jira-flow:{plan-track-build-validate,execute,drain}
 ├── agents-overview.md               # cross-agent matrix + indydev-Dan idea audit
 └── README.md                        # you are here
 ```
@@ -71,11 +91,16 @@ cd /path/to/your/host-project
 That single command does **both**:
 
 1. Registers this repo as a Claude Code plugin marketplace and installs
-   the three plugins (`common` + `multi-team` + `solo-pair`).
+   all five plugins (`common` + `multi-team` + `solo-pair` +
+   `hex-backend` + `jira-flow`).
 2. Sets up the current directory as a host project by creating
    `.claude/expertise` as a **symlink** to the plugin's centralized
    expertise directory (so accumulated agent knowledge follows you
    across projects).
+
+You only *use* one topology per project (the one you `@-import` from
+your `CLAUDE.md`), but installing all of them is harmless — agents
+only consume context when invoked.
 
 To install for a different host project from anywhere:
 
@@ -101,9 +126,11 @@ If you'd rather see each step, run these in any Claude Code session:
 
 ```
 /plugin marketplace add /path/to/claude-multi-team-plugin
-/plugin install common@alegomes        # required — 5 mindset skills
-/plugin install multi-team@alegomes    # the 9-agent topology
-/plugin install solo-pair@alegomes     # optional — the 2-agent topology
+/plugin install common@alegomes        # required by every topology — 8 mindset skills
+/plugin install multi-team@alegomes    # generic 9-agent topology
+/plugin install solo-pair@alegomes     # 2-agent dev/reviewer pair
+/plugin install hex-backend@alegomes   # 13-agent hexagonal-architecture topology
+/plugin install jira-flow@alegomes     # Jira lifecycle layer (pair with a topology)
 ```
 
 Then create the expertise symlink manually in your host project:
@@ -113,11 +140,17 @@ ln -s /path/to/claude-multi-team-plugin/common/expertise \
       /path/to/host-project/.claude/expertise
 ```
 
-`common@alegomes` is required by both topologies — it ships the five
+`common@alegomes` is required by every topology — it ships the eight
 mindset skills (`mental-model`, `active-listener`, `zero-micromanagement`,
-`conversational-response`, `till-done`). The agents reference these
-skills in their bodies; without `common` installed, the references go
-nowhere.
+`conversational-response`, `till-done`, `scope-discipline`,
+`evidence-over-assumption`, `name-the-disagreement`). The agents reference
+these skills in their bodies; without `common` installed, the references
+go nowhere.
+
+**`jira-flow` requires a topology** — its commands delegate to
+`planning-lead`, `engineering-lead`, `validation-lead` by name.
+`hex-backend` and `multi-team` both ship those leads; `solo-pair`
+doesn't, so jira-flow + solo-pair-only would fail.
 
 The expertise symlink is what makes accumulated agent learnings persist
 *across* projects — agents read and write to a single shared location
@@ -132,26 +165,29 @@ behavior comes from the host project's `CLAUDE.md`. Two-line setup in
 each project where you want this:
 
 ```sh
-# from the host project root, pick the topology you want:
+# from the host project root, pick ONE topology:
 mkdir -p .claude
 
-# multi-team (3 leads + 6 workers):
+# OPTION A — multi-team (3 leads + 6 workers, generic):
 cp ~/coding/harnessing/claude/claude-multi-team-plugin/multi-team/multi-team-topology.md .claude/
 
-# OR solo-pair (1 dev + 1 reviewer):
+# OPTION B — solo-pair (1 dev + 1 reviewer, lightweight):
 cp ~/coding/harnessing/claude/claude-multi-team-plugin/solo-pair/solo-pair-topology.md .claude/
+
+# OPTION C — hex-backend (3 teams · 13 agents · per-Task quality loop):
+cp ~/coding/harnessing/claude/claude-multi-team-plugin/hex-backend/hex-backend-topology.md .claude/
 ```
 
 Then add one line to the project's `CLAUDE.md` (create it if it doesn't
 exist), referencing the snippet you copied:
 
 ```markdown
-@.claude/multi-team-topology.md
+@.claude/multi-team-topology.md     # or solo-pair-topology.md, or hex-backend-topology.md
 ```
 
 Each topology snippet is self-contained, so you can swap between them
-by changing the `@-import` line. Don't import both at once — the
-orchestrator instructions conflict.
+by changing the `@-import` line. Don't import more than one at once —
+orchestrator instructions conflict across topologies.
 
 If the project already has a `CLAUDE.md`, just append that one `@-import`
 line to the bottom — it composes with whatever else is in there.
@@ -168,20 +204,26 @@ In the host project, in Claude Code:
 ```
 
 For `multi-team`, `/agents` lists all 9 agents (3 leads + 6 workers).
-For `solo-pair`, it lists 2 (`pair-dev` + `pair-reviewer`). Either way
-the five `common` skills should be auto-loaded into the session.
+For `solo-pair`, 2 agents. For `hex-backend`, all 13. Plus
+`atlassian-expert` from `jira-flow` if installed. Either way the eight
+`common` skills should be auto-loaded into the session.
 
-Then try the canonical multi-team workflow:
+Then try a canonical workflow (use the right namespaced command for
+your installed topology):
 
 ```
-/plan-build-validate add a --json output flag to predict
+/multi-team:plan-build-validate add a --json output flag to predict
+# OR — if jira-flow is also installed:
+/jira-flow:plan-track-build-validate add a --json output flag to predict
+# OR — for hex-backend:
+/hex-backend:plan-build-validate <task>
 ```
 
 The orchestrator should fan out to `planning-lead`, `engineering-lead`,
 and `validation-lead` in sequence, with each lead delegating to its
 workers. If you see the main session writing code itself instead of
-delegating, the orchestrator instructions need tightening — edit
-`multi-team/multi-team-topology.md`, bump the version, and `/plugin update multi-team`.
+delegating, the orchestrator instructions need tightening — edit the
+relevant `*-topology.md`, bump the version, and `/plugin update <name>`.
 
 ---
 
@@ -200,6 +242,8 @@ This is the whole point of using a plugin instead of copy-pasting `.claude/`:
    |---|---|---|
    | `multi-team/` (agents, commands, hooks, topology) | `multi-team` | `multi-team/.claude-plugin/plugin.json` + `multi-team` entry in `marketplace.json` |
    | `solo-pair/` | `solo-pair` | `solo-pair/.claude-plugin/plugin.json` + `solo-pair` entry in `marketplace.json` |
+   | `hex-backend/` (agents, commands, hook, topology) | `hex-backend` | `hex-backend/.claude-plugin/plugin.json` + `hex-backend` entry in `marketplace.json` |
+   | `jira-flow/` (agent, commands) | `jira-flow` | `jira-flow/.claude-plugin/plugin.json` + `jira-flow` entry in `marketplace.json` |
    | `common/skills/` or `common/expertise/` | `common` | `common/.claude-plugin/plugin.json` + `common` entry in `marketplace.json` |
    | Cross-cutting | all affected | bump each plugin's two files |
 
@@ -227,20 +271,22 @@ Projects that need a specific version pin to it explicitly:
 
 ## Per-project overrides
 
-A worker's domain glob (`apps/*/api/**`, etc.) won't match every project.
+A worker's domain glob (`apps/*/api/**` for multi-team, `domain/src/main/**`
+for hex-backend, etc.) won't match every project.
 
 ### Override a subagent locally
 
-Drop a `.claude/agents/backend-dev.md` in the host project. **Project-local
-agents win over plugin-shipped ones** — keep the plugin's prompt as a base,
-just change the `tools:` allowlist or the prose `Domain` block to match
-your layout.
+Drop a `.claude/agents/<agent-name>.md` in the host project. **Project-local
+agents win over plugin-shipped ones** — keep the plugin's prompt as a
+base, just change the `tools:` allowlist or the prose write-globs to
+match your layout.
 
 ### Adjust the path-lock hook for your project layout
 
-The hook's `ALLOWED_WRITES` table in `multi-team/hooks/path-lock.py` is the source
-of truth for write-glob enforcement. If you need different paths for one
-project, the cleanest options are:
+The hook's `ALLOWED_WRITES` table — `multi-team/hooks/path-lock.py` (for
+multi-team) or `hex-backend/hooks/path-lock.py` (for hex-backend) — is
+the source of truth for write-glob enforcement. If you need different
+paths for one project:
 
 1. **Edit centrally** if the new layout should be the new default for
    *all* projects (then bump version + update).
@@ -291,6 +337,15 @@ the agent locally.
 **Hook fails to detect agent name**
 Run `claude --debug` in the host project. The hook prints to stderr;
 check whether it's falling back to `"orchestrator"` for delegated calls.
-If so, the agent identity isn't in the payload format the hook expects
-— inspect the payload by adding a `print(payload, file=sys.stderr)` at
-the top of `path-lock.py`'s `main()` and re-run.
+On CC 2.1.x the agent identity comes from the PreToolUse payload's
+`agent_type` field (plugin-namespaced as `<plugin>:<agent>`); the hook
+strips the prefix. If you're on a different CC version that uses a
+different field name, inspect the payload by adding
+`print(payload, file=sys.stderr)` at the top of `path-lock.py`'s
+`main()` and add the right key to `detect_agent`.
+
+**`/multi-team:plan-build-validate` says "Unknown command"**
+CC plugin commands are namespaced by plugin. Use the namespaced form
+(`/multi-team:plan-build-validate`, `/hex-backend:plan-build-validate`,
+`/jira-flow:execute`, etc.) — the bare form (`/plan-build-validate`)
+won't work.
