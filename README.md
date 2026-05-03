@@ -61,27 +61,29 @@ claude-multi-team-plugin/
 
 ### Install (one command)
 
-Once the marketplace is published to GitHub:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/alegomes/claude-multi-team-plugin/main/bin/install.sh | sh
-```
-
-That registers the marketplace and installs all three plugins (`common` +
-`multi-team` + `solo-pair`).
-
-If you cloned the repo, run the same script directly:
+From the repo:
 
 ```sh
 ./bin/install.sh
 ```
 
+That registers this repo as the marketplace (using its absolute path)
+and installs all three plugins (`common` + `multi-team` + `solo-pair`).
+Re-running it after editing the plugin is safe — the marketplace
+re-registration is idempotent.
+
+To install from a different local repo path:
+
+```sh
+./bin/install.sh /path/to/claude-multi-team-plugin
+```
+
 ### Manual install (one slash command per plugin)
 
-In any Claude Code session:
+If you'd rather see each step, run these in any Claude Code session:
 
 ```
-/plugin marketplace add alegomes/claude-multi-team-plugin
+/plugin marketplace add /path/to/claude-multi-team-plugin
 /plugin install common@alegomes        # required — 5 mindset skills
 /plugin install multi-team@alegomes    # the 9-agent topology
 /plugin install solo-pair@alegomes     # optional — the 2-agent topology
@@ -92,23 +94,6 @@ mindset skills (`mental-model`, `active-listener`, `zero-micromanagement`,
 `conversational-response`, `till-done`). The agents reference these
 skills in their bodies; without `common` installed, the references go
 nowhere.
-
-### Local-path install (for hacking on the plugin)
-
-If the marketplace isn't on GitHub yet, or you're developing the plugin
-locally:
-
-```sh
-./bin/install.sh /path/to/claude-multi-team-plugin
-```
-
-Or manually:
-
-```
-/plugin marketplace add /path/to/claude-multi-team-plugin
-/plugin install common@alegomes
-/plugin install multi-team@alegomes
-```
 
 ### Per host project: activate orchestrator mode
 

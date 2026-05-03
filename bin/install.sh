@@ -1,18 +1,17 @@
 #!/bin/sh
 # Install the alegomes multi-team plugin marketplace and its three plugins into Claude Code.
 #
-# Quick install (after the marketplace is published to GitHub):
-#   curl -fsSL https://raw.githubusercontent.com/alegomes/claude-multi-team-plugin/main/bin/install.sh | sh
-#
-# After cloning the repo:
+# Default usage (registers this repo as the marketplace):
 #   ./bin/install.sh
 #
-# Local-path install (for hacking on the plugin):
+# Override with an explicit local repo path:
 #   ./bin/install.sh /path/to/claude-multi-team-plugin
 
 set -e
 
-MARKETPLACE="${1:-alegomes/claude-multi-team-plugin}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+MARKETPLACE="${1:-${REPO_DIR}}"
 
 if ! command -v claude > /dev/null 2>&1; then
   echo "✗ The 'claude' CLI is not installed. Install Claude Code first:"
@@ -20,7 +19,7 @@ if ! command -v claude > /dev/null 2>&1; then
   exit 1
 fi
 
-echo "▶ Registering marketplace: ${MARKETPLACE}"
+echo "▶ Registering marketplace from: ${MARKETPLACE}"
 claude plugin marketplace add "${MARKETPLACE}" || {
   echo "  (marketplace may already be registered — continuing)"
 }
