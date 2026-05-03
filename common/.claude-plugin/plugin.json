@@ -1,6 +1,6 @@
 {
   "name": "common",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "Shared mindset skills required by the alegomes topology plugins. Ships mental-model, active-listener, zero-micromanagement, conversational-response, and till-done.",
   "author": {
     "name": "alegomes"

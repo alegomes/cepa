@@ -9,21 +9,21 @@
       "name": "common",
       "source": "./common",
       "description": "Shared mindset skills required by the topology plugins (mental-model, active-listener, zero-micromanagement, conversational-response, till-done).",
-      "version": "0.2.0",
+      "version": "0.1.0",
       "tags": ["agents", "skills", "shared"]
     },
     {
       "name": "multi-team",
       "source": "./multi-team",
       "description": "Multi-team agent topology — orchestrator + 3 leads + 6 workers, with path-lock hook. Requires common@alegomes.",
-      "version": "0.2.0",
+      "version": "0.1.0",
       "tags": ["agents", "orchestration", "multi-team"]
     },
     {
       "name": "solo-pair",
       "source": "./solo-pair",
       "description": "Lightweight 2-agent topology — one dev, one reviewer, no leads. For small tweaks where multi-team orchestration overhead isn't worth it. Requires common@alegomes.",
-      "version": "0.2.0",
+      "version": "0.1.0",
       "tags": ["agents", "pair-programming", "lightweight"]
     }
   ]

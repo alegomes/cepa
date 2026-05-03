@@ -32,8 +32,11 @@ for delegation/synthesis at the top, faster instruction-following at the
 bottom).
 
 **Hook:** `multi-team/hooks/path-lock.py` enforces the *Writes* column on every
-`Edit` / `Write` / `MultiEdit` / `NotebookEdit` call. Drift between this
-file and the hook will silently break things at runtime.
+`Edit` / `Write` / `MultiEdit` / `NotebookEdit` call. Identifies the calling
+subagent via the `agent_type` field in CC's PreToolUse payload (sent as
+`<plugin>:<agent>` — the hook strips the prefix). Verified empirically in
+CC 2.1.x. Drift between this file and the hook will silently break things
+at runtime.
 
 ---
 
@@ -154,8 +157,31 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 ---
 
+## Verified end-to-end (live in CC 2.1.126)
+
+- **Plugin install** via `bin/install.sh` (with `--clean` for stale-cache
+  recovery) against a local-path marketplace.
+- **Skill auto-loading** — the five `common:*` mindset skills and the
+  `multi-team:plan-build-validate` slash command are discoverable in CC.
+- **Subagent identity** in PreToolUse hook — CC sends `agent_type` as
+  `<plugin>:<agent-name>` (e.g. `multi-team:backend-dev`); the hook
+  strips the prefix to match `ALLOWED_WRITES`.
+- **Centralized expertise via host symlink** — `backend-dev` (subagent)
+  read AND wrote `.claude/expertise/backend-dev-mental-model.yaml`; the
+  symlink redirected the write to the central plugin source
+  (`common/expertise/backend-dev-mental-model.yaml`), persisting across
+  every project the symlink covers.
+- **Per-agent path-lock enforcement** — the structural
+  `is_own_expertise_file` check approved backend-dev's write to its own
+  expertise file; the broader allowlist check would block writes
+  outside its `apps/*/api/**` etc. domain.
+
 ## Outstanding work
 
+- 🟡 **Real-task end-to-end validation** — the architecture is proven
+  but `/plan-build-validate` against a real task has not been run yet.
+  The classifier app at `multi-agent/lead-agents/apps/classifier/` is
+  the canonical test bed.
 - 🟡 If you want to capture the team-topology config more strictly,
   add a non-driving `topology.yaml` per topology as documentation
   (CC won't read it; risk of drift). Recommend: skip until needed.
@@ -163,6 +189,6 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
   granularity. Modest scope; only worth it if a real workflow demands
   the distinction.
 - 🟡 Versioned changelog (separate `CHANGELOG.md`) — currently the git
-  log fills this role. Worth adding when there are external users.
+  log fills this role. Worth adding before any public release.
 - 🔴 Session env vars (`{{SESSION_DIR}}`, `{{CONVERSATION_LOG}}`) — not
   implementable in CC without harness changes.

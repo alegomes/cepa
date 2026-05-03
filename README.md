@@ -203,24 +203,25 @@ This is the whole point of using a plugin instead of copy-pasting `.claude/`:
    | `common/skills/` or `common/expertise/` | `common` | `common/.claude-plugin/plugin.json` + `common` entry in `marketplace.json` |
    | Cross-cutting | all affected | bump each plugin's two files |
 
-   Semver (currently at `0.2.0`):
-   - `0.2.0 → 0.2.1` — prompt tweaks (patch)
-   - `0.2.0 → 0.3.0` — new agents/skills/commands (minor)
-   - `0.x → 1.0.0` — when stable
+   Semver (currently at `0.1.0` — version stays at `0.1.0` until first
+   public release; the marketplace is local-only for now):
+   - `0.1.0 → 0.1.1` — prompt tweaks (patch), once we start versioning
+   - `0.1.0 → 0.2.0` — new agents/skills/commands (minor)
+   - `0.x → 1.0.0` — when stable and publicly released
 
 3. **Commit** the change locally:
 
    ```sh
    cd ~/coding/harnessing/claude/claude-multi-team-plugin
    git add .
-   git commit -m "v0.2.1 — <what changed>"
+   git commit -m "v0.1.1 — <what changed>"
    ```
 
 4. **Update each project**: in Claude Code, `/plugin update <name>` per
    plugin you bumped (or `/plugin update` to refresh all installed).
 
 Projects that need a specific version pin to it explicitly:
-`/plugin install multi-team@0.2.0`.
+`/plugin install multi-team@0.1.0`.
 
 ---
 
