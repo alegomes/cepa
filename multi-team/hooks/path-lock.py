@@ -132,6 +132,9 @@ def main():
         prefix = raw_agent_type.split(":", 1)[0]
         if prefix != PLUGIN_NAME:
             sys.exit(0)
+    elif not raw_agent_type:
+        # Main session (no subagent caller) — not subject to plugin path-locks.
+        sys.exit(0)
 
     agent = detect_agent(payload)
 
