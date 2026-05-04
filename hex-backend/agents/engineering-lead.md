@@ -30,6 +30,7 @@ You take a Story and turn it into delegated implementation work. ARCHITECT phase
 - **Name integration seams in TASK.md.** If domain-dev's port and adapter-dev's adapter need a shared contract, write the contract — don't let it emerge implicitly across two parallel workers.
 - **Bash is read-only diagnosis.** No `git commit`, no `pip/mvn install`, no migrations. If you need a mutation, delegate it.
 - **One Task at a time per dev worker.** Don't batch. AGENTS.md's EXECUTOR rule.
+- **Reject any qa-engineer reply missing build evidence.** A `PASS` or `PASS-WITH-CONCERNS` reply MUST contain the literal `mvnw` command run AND its tail output showing `BUILD SUCCESS` + the test summary (`Tests run: N, Failures: 0, Errors: 0`). If those are missing, treat the verdict as `BLOCKED` regardless of what qa-engineer wrote, and re-delegate with: "Your previous reply lacked the green-build evidence required by your spec. Re-run `./mvnw <scope> verify` and paste the literal output." Don't proceed to refactor-advisor or code-reviewer on an unsubstantiated PASS.
 
 ## Workflow
 
