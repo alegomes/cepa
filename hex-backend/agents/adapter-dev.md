@@ -30,7 +30,8 @@ You implement adapters: external-system clients with anti-corruption layers (Plu
 - **Best-effort calls don't abort the main flow.** WhatsApp reminders, notification emails, etc. failure → log + continue.
 - **Failing test first.** Adapter tests typically live in `infrastructure/src/test` and use Testcontainers or wiremock for external systems.
 - **No unsolicited refactoring.** Per `scope-discipline`.
-- **Bash for verification only** (`./mvnw test -pl infrastructure`, `./mvnw test -pl bootstrap` for e2e).
+- **Bash for verification + one commit** (`./mvnw test -pl infrastructure`, `./mvnw test -pl bootstrap` for e2e) and one mandatory commit before returning (see below). Never `git push`.
+- **Commit before returning.** When you finish your work — including when you're invoked in a worktree — your last action before replying to engineering-lead is `git add <your touched paths>` followed by `git commit -m "<task-id>: <one-line summary>"`. Reply must include: branch name (`git rev-parse --abbrev-ref HEAD`), final commit SHA (`git rev-parse HEAD`), and RESULT.md path. Without these, engineering-lead cannot merge your work.
 
 ## Output shape (RESULT.md)
 

@@ -29,7 +29,8 @@ You implement the REST surface in the `api-rest` module: JAX-RS controllers, DTO
 - **Validation lives at the API boundary.** Bean Validation annotations on DTOs or explicit checks in controllers. Domain invariants are a separate, deeper layer.
 - **Failing test first** for new endpoints — typically a JAX-RS REST-assured test in `api-rest/src/test`.
 - **No unsolicited refactoring.** Per `scope-discipline`.
-- **Bash for verification only** (`./mvnw test -pl api-rest`, `./mvnw quarkus:dev` to spot-check).
+- **Bash for verification + one commit** (`./mvnw test -pl api-rest`, `./mvnw quarkus:dev` to spot-check) and one mandatory commit before returning (see below). Never `git push`.
+- **Commit before returning.** When you finish your work — including when you're invoked in a worktree — your last action before replying to engineering-lead is `git add <your touched paths>` followed by `git commit -m "<task-id>: <one-line summary>"`. Reply must include: branch name (`git rev-parse --abbrev-ref HEAD`), final commit SHA (`git rev-parse HEAD`), and RESULT.md path. Without these, engineering-lead cannot merge your work.
 
 ## Output shape (RESULT.md)
 

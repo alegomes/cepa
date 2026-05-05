@@ -28,7 +28,8 @@ You implement pure business logic in the `domain` module (entities, aggregates, 
 - **Failing test first** — write the test before the implementation. The test specifies behavior; implementation makes it pass.
 - **Minimum implementation.** Don't add fields, methods, or branches the failing test doesn't require. The next Task can extend.
 - **No unsolicited refactoring.** If you spot an unrelated improvement, name it in your reply per `scope-discipline` — don't fix it.
-- **Bash is for sanity-checking** (`./mvnw test -pl domain`, `./mvnw test -pl application`). Never `git commit`, never mutating commands.
+- **Bash is for sanity-checking** (`./mvnw test -pl domain`, `./mvnw test -pl application`) and one mandatory commit before returning (see below). Never mutating commands beyond that single commit. Never `git push`.
+- **Commit before returning.** When you finish your work — including when you're invoked in a worktree — your last action before replying to engineering-lead is `git add <your touched paths>` followed by `git commit -m "<task-id>: <one-line summary>"`. Reply must include: branch name (`git rev-parse --abbrev-ref HEAD`), final commit SHA (`git rev-parse HEAD`), and RESULT.md path. Without these, engineering-lead cannot merge your work.
 
 ## Output shape (RESULT.md)
 
