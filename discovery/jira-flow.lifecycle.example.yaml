@@ -1,0 +1,51 @@
+# Example lifecycle file for the discovery topology.
+#
+# When --topology=discovery is passed to bin/install.sh, this file is copied
+# to the host project as .claude/jira-flow.lifecycle.yaml. Edit it after
+# install to match your discovery board's project key, status names, and
+# issue type.
+#
+# /jira-flow:advance reads this file to know:
+#   - which lifecycle owns a given card (matched by project_key + current status)
+#   - what the "next" column is
+#   - which on_enter agent runs when the card enters that column
+#   - what enter_gate (if any) must be confirmed first
+#
+# Multiple lifecycles can live in the same file (e.g., one for discovery,
+# one for hex-backend's delivery flow). They're matched by project_key +
+# the card's current status.
+
+schema_version: 1
+
+lifecycles:
+  - topology: discovery
+    project_key: WEGO
+    # Set issue_type to whatever your discovery board uses for opportunity
+    # cards. Common values: Story, Idea, Opportunity, Discovery. Used as
+    # the default for /discovery:capture.
+    issue_type: Story
+    columns:
+      - name: Inbox
+        # Initial status — where /discovery:capture lands the card.
+        status: "To Do"
+      - name: Framing
+        status: "Framing"
+        on_enter: opportunity-framer
+      - name: Researching
+        status: "Researching"
+        on_enter: user-researcher
+      - name: Validating
+        status: "Validating"
+        # The card cannot enter Validating until assumption-tester has
+        # written assumptions.md with pre-declared success criteria.
+        enter_gate: "card has assumption-tester test plan in docs/discovery/<KEY>/assumptions.md"
+      - name: Validated
+        status: "Validated"
+        # The card cannot enter Validated until evidence-auditor has
+        # returned Confirmed across all gating assumptions.
+        enter_gate: "evidence-auditor verdict in docs/discovery/<KEY>/audit.md = Validate (all gating assumptions Confirmed)"
+      - name: Handed off
+        status: "Done"
+        on_enter: epic-briefer
+      - name: Discarded
+        status: "Won't Do"
