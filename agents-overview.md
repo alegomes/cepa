@@ -3,12 +3,12 @@
 A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
-is each topology's own `hooks/path-lock.py` (multi-team and hex-backend
-have one; solo-pair doesn't, by design).
+is each topology's own `hooks/path-lock.py` (multi-team, hex-backend,
+and discovery have one; solo-pair doesn't, by design).
 
-The marketplace ships **five plugins**: `common` (skills + expertise),
-three topologies (`multi-team`, `solo-pair`, `hex-backend`), and a
-cross-cutting layer (`jira-flow`).
+The marketplace ships **six plugins**: `common` (skills + expertise),
+four topologies (`multi-team`, `solo-pair`, `hex-backend`, `discovery`),
+and a cross-cutting layer (`jira-flow`).
 
 ---
 
@@ -110,6 +110,43 @@ dev worker → RESULT.md
 
 ---
 
+## discovery
+
+Continuous product-discovery topology. **Upstream of the build
+topologies** — translates raw signals into validated opportunities, hands
+off to engineering via a delivery brief.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `discovery-lead` | lead (orchestrator) | main session | the 5 workers below | Read, Glob, Grep, Task | nothing except own expertise |
+| `opportunity-framer` | worker (Framing) | discovery-lead | — | Read, Glob, Grep, Write | `docs/discovery/<key>/framing.md` |
+| `user-researcher` | worker (Researching) | discovery-lead | — | Read, Glob, Grep, Write | `docs/discovery/<key>/research.md` |
+| `assumption-tester` | worker (Researching → Validating) | discovery-lead | — | Read, Glob, Grep, Write | `docs/discovery/<key>/assumptions.md` |
+| `evidence-auditor` | worker (Validating → Validated/Discarded) | discovery-lead | — | Read, Glob, Grep, Write | `docs/discovery/<key>/audit.md` |
+| `epic-briefer` | worker (Validated → Handed off) | discovery-lead | atlassian-expert (only for engineer-board card creation) | Read, Glob, Grep, Write, Task | `docs/discovery/<key>/handoff.md` |
+
+**Commands:**
+
+| Command | Purpose |
+|---|---|
+| `/discovery:capture <signal>` | Lightweight: register a raw signal as an Opportunity card on the discovery board, lands in Inbox. No framing or research. |
+
+The lifecycle (Inbox → Framing → Researching → Validating → Validated →
+Handed off / Discarded) is driven by `/jira-flow:advance <KEY>`, which
+reads `.claude/jira-flow.lifecycle.yaml`. There is no
+`/discovery:plan-build-validate` — discovery is continuous, not bounded.
+
+**Path-lock** is keyed to `docs/discovery/**`. Discovery agents cannot
+write code, only research artifacts.
+
+**Hard rule:** Validation evidence is the human's job. Real users, real
+data, real prototypes. The `evidence-auditor` does not synthesize evidence
+— it judges what the human collected against the test plan's pre-declared
+success criteria. The verdict is grounded in the criteria, not in
+post-hoc rationalization.
+
+---
+
 ## jira-flow
 
 Cross-cutting layer. **Not a topology** — adds Jira lifecycle to
@@ -123,9 +160,11 @@ whichever topology is also installed.
 
 | Command | Purpose |
 |---|---|
+| `/jira-flow:capture <description>` | Register a freeform request as a Jira Story (or Epic/Bug/Task via prefix). No planning, no execution. |
 | `/jira-flow:plan-track-build-validate <abstract task>` | Full discovery + Jira lifecycle. Registers Epic + Stories, executes one Story, transitions through To Do → In Progress → In Review. |
 | `/jira-flow:execute <jira-key>` | Single existing card. Runs a detail audit; if under-specified, planning-lead enriches the card description in Jira before build. |
 | `/jira-flow:drain <column> [--max N]` | Bulk-execute up to N cards (default 5) from a column. Stops on first BLOCKED. User confirmation required. |
+| `/jira-flow:advance <jira-key>` | Generic column-by-column transition driven by `.claude/jira-flow.lifecycle.yaml`. Used by discovery (and any topology with a custom lifecycle). For default To Do → In Progress → In Review, prefer `/execute`. |
 
 **Soft requirement:** jira-flow's commands delegate to subagents named
 `planning-lead`, `engineering-lead`, `validation-lead`. Both `multi-team`
@@ -229,6 +268,62 @@ build output, source across all 5 modules.
 
 **Visible cost:** topology cost + ~3-5 Atlassian MCP calls. Drain
 multiplies by N cards; stops at first BLOCKED to cap cost.
+
+### discovery — life of an Opportunity card (continuous)
+
+Discovery is **continuous, not bounded** — there's no single command that
+runs the whole flow. Each `/jira-flow:advance <KEY>` invocation moves the
+card forward one column. A card may take days or weeks across many
+sessions; the timeline is shaped by how fast the human collects evidence.
+
+The narrative below assumes discovery + jira-flow are installed and
+`.claude/jira-flow.lifecycle.yaml` declares the WEGO discovery lifecycle.
+
+1. **Capture.** User runs `/discovery:capture "Patients struggle to figure out which contract to sign first"`.
+   - Orchestrator calls `atlassian-expert` to create a Story on the WEGO discovery board (status `To Do` = Inbox column).
+   - Card lands. No agent runs. ~1 Atlassian MCP call.
+
+2. **Inbox → Framing.** User runs `/jira-flow:advance WEGO-2001`.
+   - Orchestrator reads `.claude/jira-flow.lifecycle.yaml`, matches the discovery lifecycle, identifies next column = Framing.
+   - `atlassian-expert` transitions card to `Framing`.
+   - `discovery-lead` is invoked, routes to `opportunity-framer`.
+   - `opportunity-framer` writes `docs/discovery/WEGO-2001/framing.md` (problem statement, target user, outcome, IN/OUT scope, open questions).
+   - Discovery-lead reports artifact path. Orchestrator updates the card with a comment linking to the brief.
+
+3. **Framing → Researching.** User runs `/jira-flow:advance WEGO-2001`.
+   - Same routing pattern. `user-researcher` reads `framing.md`, inventories `evidence/` (probably empty on first pass), writes `docs/discovery/WEGO-2001/research.md`. On a first pass with no evidence yet, the report is mostly "gaps in evidence" — pointers for the human to go talk to users or pull data.
+
+4. **Human collects evidence.** User runs interviews, drops transcripts in `docs/discovery/WEGO-2001/evidence/`. No agent run. Days may pass.
+
+5. **Re-run user-researcher (loop).** User runs `/jira-flow:advance WEGO-2001` while still in Researching, asking to re-synthesize with new evidence. Discovery-lead routes back to `user-researcher` (the column itself doesn't transition). Updated `research.md` shows patterns now that there's evidence.
+
+6. **Researching → Validating (gated).** User runs `/jira-flow:advance WEGO-2001`.
+   - Orchestrator sees that the next column (Validating) has an `enter_gate`: "card has assumption-tester test plan". The plan doesn't exist yet → orchestrator invokes `assumption-tester` first.
+   - `assumption-tester` writes `docs/discovery/WEGO-2001/assumptions.md` (ranked assumptions + per-assumption test plan + pre-declared success criteria).
+   - Orchestrator confirms the gate is satisfied (test plan now exists), prompts user, then transitions to Validating.
+
+7. **Human runs experiments.** Prototypes, more interviews, fake-door tests. Drops new evidence in `evidence/`. Days–weeks may pass.
+
+8. **Validating → Validated (gated).** User runs `/jira-flow:advance WEGO-2001`.
+   - Next column (Validated) has an `enter_gate`: "evidence-auditor verdict = Validate". The audit doesn't exist yet → orchestrator invokes `evidence-auditor` first.
+   - `evidence-auditor` reads `assumptions.md` (the rubric) + `evidence/` (the data), returns verdicts per assumption (Confirmed / Invalidated / Inconclusive), writes `docs/discovery/WEGO-2001/audit.md`. Recommended next move: Validate, Loop back, or Discard.
+   - If Validate → orchestrator confirms gate, transitions to Validated.
+   - If Loop back → orchestrator does NOT transition; reports back what to test next. The card stays in Validating; the human runs more tests.
+   - If Discard → user runs `/jira-flow:advance` to move to Discarded (terminal).
+
+9. **Validated → Handed off.** User runs `/jira-flow:advance WEGO-2001`.
+   - Discovery-lead routes to `epic-briefer`.
+   - `epic-briefer` reads framing + research + assumptions + audit; writes `docs/discovery/WEGO-2001/handoff.md` (delivery brief: validated assumptions, invalidated paths excluded, boundaries, suggested starter Stories).
+   - `epic-briefer` calls `atlassian-expert` to create a linked Epic on the engineer board with the brief path embedded and a "relates to" link back to the discovery card.
+   - Orchestrator reports the engineer-board Epic key + brief path.
+
+10. **Handoff to build topology (out of discovery's scope).** Engineering's `planning-lead` (e.g., from hex-backend) picks up the linked Epic, reads `handoff.md`, runs `epic-author` to author the Epic's full description and Stories on the engineer board. From here it's the build topology's normal flow (`/jira-flow:execute <Epic-key>` → Stories → code → ship).
+
+**Visible cost:** small per `/advance` invocation (1-2 agents + 1-2 Atlassian
+MCP calls). Total cost across a card's life depends on how many loops the
+Validating column takes — each test cycle is one human round-trip plus one
+auditor pass. The discipline gate (`enter_gate` on Validated) is the
+mechanism that prevents the card from advancing on optimism.
 
 ---
 

@@ -1,6 +1,6 @@
 # claude-multi-team-plugin
 
-A Claude Code plugin marketplace shipping a multi-agent setup as five
+A Claude Code plugin marketplace shipping a multi-agent setup as six
 composable plugins:
 
 - **`common`** — eight shared mindset skills (`mental-model`,
@@ -16,10 +16,17 @@ composable plugins:
   with a per-Task quality loop (qa → refactor-advisor → code-reviewer).
   Path-lock keyed to the canonical `domain/application/api-rest/
   infrastructure/bootstrap` Maven layout.
+- **`discovery`** — a 6-agent continuous product-discovery topology
+  (discovery-lead + opportunity-framer + user-researcher +
+  assumption-tester + evidence-auditor + epic-briefer). Sits *upstream*
+  of the build topologies — translates raw signals into validated
+  opportunities, hands off to engineering via a delivery brief.
 - **`jira-flow`** — adds an `atlassian-expert` worker plus Jira-aware
-  slash commands (`plan-track-build-validate`, `execute`, `drain`).
-  Layers on top of any topology that ships the standard 3-lead set
-  (multi-team or hex-backend).
+  slash commands (`capture`, `plan-track-build-validate`, `execute`,
+  `drain`, `advance`). Layers on top of any topology that ships the
+  standard 3-lead set, OR any topology with a custom lifecycle declared
+  in `.claude/jira-flow.lifecycle.yaml` (used by `/advance` —
+  discovery's column flow rides on this).
 
 Edit once here, install in any project, version like normal code.
 
@@ -45,8 +52,8 @@ agent matrices.
 
 ```
 claude-multi-team-plugin/
-├── .claude-plugin/marketplace.json  # 5-plugin marketplace: common + multi-team + solo-pair + hex-backend + jira-flow
-├── bin/install.sh                   # one-command installer for all five plugins
+├── .claude-plugin/marketplace.json  # 6-plugin marketplace: common + multi-team + solo-pair + hex-backend + discovery + jira-flow
+├── bin/install.sh                   # one-command installer for all six plugins
 ├── common/                          # shared mindset skills + centralized expertise (required by every topology)
 │   ├── .claude-plugin/plugin.json
 │   ├── expertise/                   # per-agent mental-model.yaml stubs (centralized via host symlink)
@@ -67,10 +74,17 @@ claude-multi-team-plugin/
 │   ├── commands/                    # /hex-backend:plan-build-validate
 │   ├── hooks/path-lock.py           # keyed to */src/main and */src/test
 │   └── hex-backend-topology.md
-├── jira-flow/                       # Jira lifecycle layer (pair with multi-team or hex-backend)
+├── discovery/                       # 6-agent continuous product-discovery topology
+│   ├── .claude-plugin/plugin.json
+│   ├── agents/                      # discovery-lead + 5 workers (framer, researcher, tester, auditor, briefer)
+│   ├── commands/                    # /discovery:capture
+│   ├── hooks/path-lock.py           # keyed to docs/discovery/**
+│   ├── jira-flow.lifecycle.example.yaml
+│   └── discovery-topology.md
+├── jira-flow/                       # Jira lifecycle layer (pair with any topology)
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/atlassian-expert.md
-│   └── commands/                    # /jira-flow:{plan-track-build-validate,execute,drain}
+│   └── commands/                    # /jira-flow:{capture,plan-track-build-validate,execute,drain,advance}
 ├── agents-overview.md               # cross-agent matrix + indydev-Dan idea audit
 └── README.md                        # you are here
 ```
@@ -91,16 +105,20 @@ cd /path/to/your/host-project
 That single command does **all three** setup steps:
 
 1. Registers this repo as a Claude Code plugin marketplace and installs
-   all five plugins (`common` + `multi-team` + `solo-pair` +
-   `hex-backend` + `jira-flow`).
+   all six plugins (`common` + `multi-team` + `solo-pair` +
+   `hex-backend` + `discovery` + `jira-flow`).
 2. Sets up the current directory as a host project by creating
    `.claude/expertise` as a **symlink** to the plugin's centralized
    expertise directory (so accumulated agent knowledge follows you
    across projects).
 3. With `--topology=NAME` (one of `multi-team`, `solo-pair`,
-   `hex-backend`), copies the topology snippet into `.claude/` and
-   appends `@.claude/<topology>-topology.md` to `CLAUDE.md` (creating
-   `CLAUDE.md` if missing). The append is idempotent — re-running
+   `hex-backend`, `discovery`), copies the topology snippet into
+   `.claude/` and appends `@.claude/<topology>-topology.md` to
+   `CLAUDE.md` (creating `CLAUDE.md` if missing). For
+   `--topology=discovery`, the lifecycle template is also seeded to
+   `.claude/jira-flow.lifecycle.yaml` (edit project_key, issue_type,
+   and status names to match your discovery board). The append is
+   idempotent — re-running
    doesn't duplicate the line.
 
 If you skip `--topology`, the plugins install but you'll need to wire
@@ -328,21 +346,48 @@ orchestrator
 hexagonal Java/Quarkus backends. Cost scales with Task count, not
 just topology size.
 
-**jira-flow** layers on top of multi-team or hex-backend — its commands
-delegate to `planning-lead`/`engineering-lead`/`validation-lead` by name
-and add Jira lifecycle (Epic + Stories registered, transitions through
-To Do → In Progress → In Review). See `agents-overview.md` §"Workflow
-walkthroughs" for a turn-by-turn narrative.
+**discovery** — continuous, no `plan-build-validate` equivalent. One
+column at a time:
+
+```
+/discovery:capture "raw signal"     → card lands in Inbox
+/jira-flow:advance <KEY>            → discovery-lead routes to opportunity-framer (Framing)
+/jira-flow:advance <KEY>            → user-researcher (Researching)
+... human collects evidence ...
+/jira-flow:advance <KEY>            → assumption-tester writes test plan; gate on Validating
+... human runs tests, drops evidence in docs/discovery/<KEY>/evidence/ ...
+/jira-flow:advance <KEY>            → evidence-auditor returns verdicts
+/jira-flow:advance <KEY>            → epic-briefer writes handoff brief, links to engineer board
+```
+
+6 agents, but each card invokes them sequentially (or loops back). The
+`/jira-flow:advance` command reads `.claude/jira-flow.lifecycle.yaml` to
+know which agent to invoke per column. Use for product-discovery work
+*upstream* of any build topology.
+
+**jira-flow** layers on top of any topology — its commands delegate to
+`planning-lead`/`engineering-lead`/`validation-lead` (for the lead-based
+flows) or to `on_enter` agents declared in `.claude/jira-flow.lifecycle.yaml`
+(for `/advance`). Adds Jira lifecycle: Epic + Stories registered for build
+topologies; column-by-column transitions for discovery (or any custom
+lifecycle). See `agents-overview.md` §"Workflow walkthroughs" for a
+turn-by-turn narrative.
 
 ### Composition rules
 
 - **Pick exactly one topology per project.** Importing two topology
-  snippets gives the orchestrator conflicting instructions.
+  snippets gives the orchestrator conflicting instructions. Exception:
+  `discovery` is *upstream* of build topologies — they don't compete,
+  they hand off via the engineer-board Epic. If you want continuous
+  discovery and code delivery in the same project, install discovery
+  + a build topology + jira-flow, and let the handoff cross the
+  boundary explicitly via `epic-briefer` → `epic-author`.
 - **`common` is required** for every topology. The skills are
   referenced in agent bodies.
-- **`jira-flow` requires a topology with the standard 3-lead set**
-  (multi-team or hex-backend). solo-pair has no leads → jira-flow
-  commands fail at first delegation.
+- **`jira-flow`'s lead-based commands require a 3-lead topology**
+  (multi-team or hex-backend). solo-pair has no leads → those commands
+  fail at first delegation. `/jira-flow:advance` is generic: it works
+  with discovery (or any topology that ships a lifecycle file).
 - **You can swap topologies** — change the `@-import` line in
   `CLAUDE.md` and the orchestrator behavior swaps with it. Plugins
   installed but not imported don't consume context.
