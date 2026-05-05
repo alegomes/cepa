@@ -47,9 +47,9 @@ for arg in "$@"; do
 done
 
 case "${TOPOLOGY}" in
-  ""|multi-team|solo-pair|hex-backend) ;;
+  ""|multi-team|solo-pair|hex-backend|discovery) ;;
   *)
-    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, solo-pair, or hex-backend."
+    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, solo-pair, hex-backend, or discovery."
     exit 1
     ;;
 esac
@@ -90,6 +90,7 @@ if [ "${CLEAN}" -eq 1 ]; then
   claude plugin uninstall "multi-team@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "solo-pair@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "hex-backend@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "discovery@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "jira-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
 
   if [ -d "${CACHE_DIR}" ]; then
@@ -117,6 +118,9 @@ claude plugin install solo-pair@alegomes
 
 echo "▶ Installing hex-backend@alegomes (13-agent hexagonal-architecture topology)"
 claude plugin install hex-backend@alegomes
+
+echo "▶ Installing discovery@alegomes (6-agent continuous product-discovery topology)"
+claude plugin install discovery@alegomes
 
 echo "▶ Installing jira-flow@alegomes (Jira lifecycle layer)"
 claude plugin install jira-flow@alegomes
@@ -192,12 +196,13 @@ fi
 echo ""
 echo "✔ Done."
 echo ""
-echo "Five plugins installed:"
+echo "Six plugins installed:"
 echo "    common       — 8 mindset skills (required by every topology)"
 echo "    multi-team   — 9-agent generic topology + /multi-team:plan-build-validate"
 echo "    solo-pair    — 2-agent dev/reviewer topology"
 echo "    hex-backend  — 13-agent hexagonal-architecture topology + per-Task quality loop"
-echo "    jira-flow    — atlassian-expert + Jira-aware commands (pair with multi-team or hex-backend)"
+echo "    discovery    — 6-agent continuous product-discovery topology"
+echo "    jira-flow    — atlassian-expert + Jira-aware commands (pair with any topology)"
 echo ""
 if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   echo "Host project setup at ${HOST_PROJECT}:"
@@ -210,6 +215,7 @@ if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
       multi-team)  echo "    /multi-team:plan-build-validate <task>" ;;
       solo-pair)   echo "    /solo-pair:* (or just describe a small task — 2-agent dev/reviewer)" ;;
       hex-backend) echo "    /hex-backend:plan-build-validate <task>" ;;
+      discovery)   echo "    /discovery:capture <signal>   (then /jira-flow:advance <KEY> to move forward)" ;;
     esac
   else
     echo ""

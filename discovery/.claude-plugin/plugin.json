@@ -1,0 +1,22 @@
+{
+  "name": "discovery",
+  "version": "0.1.0",
+  "description": "Continuous product-discovery topology — 6 agents (discovery-lead, opportunity-framer, user-researcher, assumption-tester, evidence-auditor, epic-briefer) for translating raw signals into validated opportunities. Pair with jira-flow@alegomes for board lifecycle, and with hex-backend@alegomes (or multi-team@alegomes) for delivery handoff via the engineer-board Epic. Path-lock keyed to docs/discovery/**.",
+  "author": {
+    "name": "alegomes"
+  },
+  "keywords": ["agents", "discovery", "product", "research", "validation"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/path-lock.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

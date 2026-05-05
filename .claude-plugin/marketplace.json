@@ -1,6 +1,6 @@
 {
   "name": "alegomes",
-  "description": "Five-plugin multi-agent marketplace for Claude Code: shared mindset skills (common); three topologies (multi-team — 9-agent generic; solo-pair — 2-agent lightweight; hex-backend — 13-agent hexagonal-architecture); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
+  "description": "Six-plugin multi-agent marketplace for Claude Code: shared mindset skills (common); four topologies (multi-team — 9-agent generic; solo-pair — 2-agent lightweight; hex-backend — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
   "owner": {
     "name": "alegomes"
   },
@@ -34,9 +34,16 @@
       "tags": ["agents", "hexagonal", "java", "quarkus", "backend"]
     },
     {
+      "name": "discovery",
+      "source": "./discovery",
+      "description": "Continuous product-discovery topology — 6 agents (discovery-lead + opportunity-framer + user-researcher + assumption-tester + evidence-auditor + epic-briefer) for translating raw signals into validated opportunities. Path-lock keyed to docs/discovery/**. Pair with jira-flow@alegomes for board lifecycle, and with hex-backend or multi-team for delivery handoff. Requires common@alegomes.",
+      "version": "0.1.0",
+      "tags": ["agents", "discovery", "product", "research", "validation"]
+    },
+    {
       "name": "jira-flow",
       "source": "./jira-flow",
-      "description": "Adds atlassian-expert worker plus Jira-aware slash commands (plan-track-build-validate, execute, drain) on top of any topology that ships planning-lead, engineering-lead, and validation-lead subagents. Tested with hex-backend and multi-team. Won't work with solo-pair (no leads). Requires common@alegomes.",
+      "description": "Adds atlassian-expert worker plus Jira-aware slash commands (capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead/engineering-lead/validation-lead OR declares a custom lifecycle in .claude/jira-flow.lifecycle.yaml (used by /advance). Tested with hex-backend, multi-team, and discovery. Won't work with solo-pair for the lead-based commands. Requires common@alegomes.",
       "version": "0.1.0",
       "tags": ["agents", "jira", "atlassian", "tracking", "workflow"]
     }
