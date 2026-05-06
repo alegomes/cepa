@@ -190,16 +190,29 @@ if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
     echo "  ⚠ solo-pair has no leads. /jira-flow:* commands won't work with this topology."
   fi
 
-  # Discovery: also seed the lifecycle file unless one already exists.
+  # Seed lifecycle yaml with default_topology so jira-flow commands qualify agent names.
+  LIFECYCLE_DST="${HOST_PROJECT}/.claude/jira-flow.lifecycle.yaml"
   if [ "${TOPOLOGY}" = "discovery" ]; then
     LIFECYCLE_SRC="${REPO_DIR}/discovery/jira-flow.lifecycle.example.yaml"
-    LIFECYCLE_DST="${HOST_PROJECT}/.claude/jira-flow.lifecycle.yaml"
     if [ -f "${LIFECYCLE_DST}" ]; then
       echo "  ✔ ${LIFECYCLE_DST} already exists — leaving untouched"
     elif [ -f "${LIFECYCLE_SRC}" ]; then
       cp "${LIFECYCLE_SRC}" "${LIFECYCLE_DST}"
       echo "  ✔ Seeded ${LIFECYCLE_DST} from discovery template"
       echo "    Edit it: set project_key, issue_type, and status names to match your board."
+    fi
+  elif [ "${TOPOLOGY}" = "hex-backend" ] || [ "${TOPOLOGY}" = "multi-team" ]; then
+    if [ -f "${LIFECYCLE_DST}" ]; then
+      echo "  ✔ ${LIFECYCLE_DST} already exists — leaving untouched"
+    else
+      cat > "${LIFECYCLE_DST}" <<EOF
+# jira-flow config for ${TOPOLOGY} topology.
+# Tells /jira-flow:execute and /jira-flow:plan-track-build-validate which
+# topology's leads to delegate to (e.g. ${TOPOLOGY}:engineering-lead).
+schema_version: 1
+default_topology: ${TOPOLOGY}
+EOF
+      echo "  ✔ Seeded ${LIFECYCLE_DST} (default_topology: ${TOPOLOGY})"
     fi
   fi
 fi

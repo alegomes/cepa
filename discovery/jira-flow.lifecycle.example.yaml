@@ -17,6 +17,10 @@
 
 schema_version: 1
 
+# Tells /jira-flow:execute and /jira-flow:plan-track-build-validate which
+# topology's leads to delegate to (e.g. hex-backend:engineering-lead).
+default_topology: discovery
+
 lifecycles:
   - topology: discovery
     project_key: WEGO
