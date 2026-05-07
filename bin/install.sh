@@ -174,6 +174,12 @@ if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   cp "${SNIPPET_SRC}" "${SNIPPET_DST}"
   echo "  ✔ Copied snippet → ${SNIPPET_DST}"
 
+  # Persist active topology for topology-aware common commands
+  # (/common:autonomous-start, /common:autonomous-resume, etc.) to read.
+  TOPOLOGY_MARKER="${HOST_PROJECT}/.claude/topology"
+  printf '%s\n' "${TOPOLOGY}" > "${TOPOLOGY_MARKER}"
+  echo "  ✔ Wrote ${TOPOLOGY_MARKER} (active topology: ${TOPOLOGY})"
+
   if [ -f "${CLAUDE_MD}" ] && grep -qF "${IMPORT_LINE}" "${CLAUDE_MD}"; then
     echo "  ✔ ${CLAUDE_MD} already imports ${IMPORT_LINE}"
   else

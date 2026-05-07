@@ -1,10 +1,23 @@
 {
   "name": "common",
   "version": "0.1.0",
-  "description": "Shared mindset skills required by the alegomes topology plugins. Ships mental-model, active-listener, zero-micromanagement, conversational-response, and till-done.",
+  "description": "Shared mindset skills required by the alegomes topology plugins. Ships mental-model, active-listener, zero-micromanagement, conversational-response, and till-done. Also ships the autonomous-mode skill plus /common:autonomous-start, /common:autonomous-resume, /common:debrief, and a PostToolUse checkpoint hook for unattended runs.",
   "author": {
     "name": "alegomes"
   },
-  "keywords": ["agents", "skills", "shared"],
-  "skills": "./skills/"
+  "keywords": ["agents", "skills", "shared", "autonomous"],
+  "skills": "./skills/",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/autonomous-checkpoint.py\""
+          }
+        ]
+      }
+    ]
+  }
 }
