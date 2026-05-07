@@ -81,10 +81,28 @@ Delegate to `validation-lead`:
 
 ### 7. Transition based on verdict
 
-Delegate to `atlassian-expert`:
+If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Then delegate to `atlassian-expert`:
 
-- If READY-TO-SHIP or READY-WITH-CAVEATS: Transition $ARGUMENTS to "In Review." Add caveats as a comment if any.
-- If BLOCKED: Leave In Progress. Add a comment with the specific block reason and any failing-test paths.
+> Transition $ARGUMENTS to "In Review" with the Implementation Summary below. Post the summary as a comment first, then run the transition.
+>
+> ```markdown
+> ## Implementation summary
+>
+> **Files touched:**
+> - <list from engineering-lead>
+>
+> **Tests added/updated:**
+> - <list from engineering-lead / qa-engineer>
+>
+> **Build verification:** `./mvnw <scope> verify` → BUILD SUCCESS (commit `<SHA from qa-engineer>`)
+>
+> **Caveats / follow-ups:**
+> - <none, or caveats from validation-lead's READY-WITH-CAVEATS verdict>
+> ```
+
+If BLOCKED: Leave In Progress. Delegate to `atlassian-expert`:
+
+> Add a comment to $ARGUMENTS with the specific block reason from validation-lead and any failing-test paths. Do NOT transition.
 
 ## Report
 

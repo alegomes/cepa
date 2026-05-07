@@ -53,6 +53,7 @@ Schema rules:
 - Each lifecycle's `columns` are ordered; "next" means the column immediately after the card's current one.
 - `on_enter` (optional) names a subagent to run when the card enters the column.
 - `enter_gate` (optional) is a human-readable precondition. The orchestrator confirms it with the user before transitioning.
+- `requires_summary` (optional, boolean, default `false`) — if `true`, transitioning into this column requires an Implementation Summary, which is posted as a comment before the transition. Auto-true for any column whose `status` name contains `review` or `qa` (case-insensitive), even if the field is omitted.
 - `status` is the literal Jira status name in the project (case-sensitive).
 
 If `.claude/jira-flow.lifecycle.yaml` is missing → abort with: "No lifecycle file found. Create `.claude/jira-flow.lifecycle.yaml` or use `/jira-flow:execute` for the default flow."
@@ -109,13 +110,37 @@ Show the gate description to the user and ask:
 - If `no` → abort: "Gate not satisfied. Resolve the gate condition before re-running `/jira-flow:advance $ARGUMENTS`."
 - If `show me the card` → display the card content and re-ask.
 
-### 6. Transition the card
+### 6. (Conditional) Collect Implementation Summary
+
+If the next column requires a summary (its `requires_summary` is `true`, OR its status name contains `review`/`qa` case-insensitively):
+
+- If you have artifacts in context from a preceding flow (engineering-lead's report, qa-engineer's BUILD SUCCESS evidence) → assemble the summary using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary").
+- If you don't (this command was invoked standalone, no preceding flow) → ask the user:
+
+> Transitioning $ARGUMENTS into `<next column>` requires an Implementation Summary. Paste it now (free-form text — I'll fit it into the canonical template), or reply `skip` to abort the transition.
+
+If the user replies `skip` → abort. Don't transition without the summary.
+
+### 7. Transition the card
+
+If a summary is required:
+
+Delegate to `atlassian-expert`:
+
+> Transition Jira issue $ARGUMENTS to status `<next column's status>` with the Implementation Summary below. Post the summary as a comment first, then run the transition.
+>
+> ```markdown
+> ## Implementation summary
+> <assembled summary, in the canonical template>
+> ```
+
+If no summary is required:
 
 Delegate to `atlassian-expert`:
 
 > Transition Jira issue $ARGUMENTS to status `<next column's status>`.
 
-### 7. Run on_enter agent (if defined on next column)
+### 8. Run on_enter agent (if defined on next column)
 
 If the next column has an `on_enter` agent:
 
@@ -131,7 +156,7 @@ After the agent reports back, decide whether to:
 
 The agent's prompt should make clear what artifact it produces.
 
-### 8. Report
+### 9. Report
 
 A single concise message to the user:
 
