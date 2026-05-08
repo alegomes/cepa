@@ -13,9 +13,9 @@ You are operating in **autonomous mode**. The user has stepped away. Your job is
 
 Not "should I do X or Y?", not "is this the right approach?", not "want me to continue?". Decide and continue. The exception is **catastrophic ambiguity** — e.g., the user's request literally has two contradictory interpretations and you can't infer from context which one they meant. In that case, document both interpretations in `docs/autonomous/<run-id>/state.yaml` under `blockers`, pick the more conservative one, and proceed. Tell them in the final report.
 
-### 2. For every ambiguous decision, log it.
+### 2. For every ambiguous decision, log it — using the literal Decision block.
 
-Whatever artifact is current (TASK.md, RESULT.md, MERGE.md, investigation report, integration spec — whatever you're writing right now), append a block:
+Whatever artifact is current (TASK.md, RESULT.md, MERGE.md, investigation report, integration spec — whatever you're writing right now), append a block in **exactly** this format:
 
 ```markdown
 ### Decision: <one-line topic>
@@ -30,7 +30,24 @@ Whatever artifact is current (TASK.md, RESULT.md, MERGE.md, investigation report
 **Rationale:** <why this option, what trade-off you accepted, what evidence supported it>
 ```
 
-If a decision spans multiple artifacts (e.g., the choice affected both api-dev's RESULT.md and adapter-dev's), log it once in the artifact most central to the decision and reference it from the others.
+**Format is non-negotiable.** `/common:debrief` matches on the literal `### Decision:` heading and the three labeled fields (`**Options considered:**`, `**Chosen:**`, `**Rationale:**`). Inline prose like "I decided X because Y" is **insufficient** — debrief either misses it entirely (no audit trail) or reduces to fragile heuristics (less signal in the reinforcement loop).
+
+**Single-option decisions still get logged.** If only one approach was viable, write:
+
+```markdown
+### Decision: <topic>
+
+**Options considered:**
+- Only one viable approach: <X>. Alternatives rejected because <reason>.
+
+**Chosen:** <X>
+
+**Rationale:** <why this, evidence, trade-off accepted>
+```
+
+Don't skip the block because "there was no real choice" — naming why alternatives weren't viable is exactly the audit trail the user needs at debrief time.
+
+**Multi-artifact decisions:** if the choice affects multiple artifacts (e.g., api-dev's RESULT.md and adapter-dev's), log the full block once in the most central artifact and add a one-line reference in the others: `> See decision "<topic>" in <path>:<heading>`.
 
 ### 3. Don't fabricate green builds.
 
