@@ -25,7 +25,7 @@ composable plugins:
   slash commands (`capture`, `plan-track-build-validate`, `execute`,
   `drain`, `advance`). Layers on top of any topology that ships the
   standard 3-lead set, OR any topology with a custom lifecycle declared
-  in `.claude/jira-flow.lifecycle.yaml` (used by `/advance` —
+  in `jira-flow.yaml` (used by `/advance` —
   discovery's column flow rides on this).
 
 Edit once here, install in any project, version like normal code.
@@ -116,7 +116,7 @@ That single command does **all three** setup steps:
    `.claude/` and appends `@.claude/<topology>-topology.md` to
    `CLAUDE.md` (creating `CLAUDE.md` if missing). For
    `--topology=discovery`, the lifecycle template is also seeded to
-   `.claude/jira-flow.lifecycle.yaml` (edit project_key, issue_type,
+   `jira-flow.yaml` (edit project_key, issue_type,
    and status names to match your discovery board). The append is
    idempotent — re-running
    doesn't duplicate the line.
@@ -361,13 +361,13 @@ column at a time:
 ```
 
 6 agents, but each card invokes them sequentially (or loops back). The
-`/jira-flow:advance` command reads `.claude/jira-flow.lifecycle.yaml` to
+`/jira-flow:advance` command reads `jira-flow.yaml` to
 know which agent to invoke per column. Use for product-discovery work
 *upstream* of any build topology.
 
 **jira-flow** layers on top of any topology — its commands delegate to
 `planning-lead`/`engineering-lead`/`validation-lead` (for the lead-based
-flows) or to `on_enter` agents declared in `.claude/jira-flow.lifecycle.yaml`
+flows) or to `on_enter` agents declared in `jira-flow.yaml`
 (for `/advance`). Adds Jira lifecycle: Epic + Stories registered for build
 topologies; column-by-column transitions for discovery (or any custom
 lifecycle). See `agents-overview.md` §"Workflow walkthroughs" for a

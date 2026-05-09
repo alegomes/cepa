@@ -133,7 +133,7 @@ off to engineering via a delivery brief.
 
 The lifecycle (Inbox → Framing → Researching → Validating → Validated →
 Handed off / Discarded) is driven by `/jira-flow:advance <KEY>`, which
-reads `.claude/jira-flow.lifecycle.yaml`. There is no
+reads `jira-flow.yaml`. There is no
 `/discovery:plan-build-validate` — discovery is continuous, not bounded.
 
 **Path-lock** is keyed to `docs/discovery/**`. Discovery agents cannot
@@ -164,7 +164,7 @@ whichever topology is also installed.
 | `/jira-flow:plan-track-build-validate <abstract task>` | Full discovery + Jira lifecycle. Registers Epic + Stories, executes one Story, transitions through To Do → In Progress → In Review. |
 | `/jira-flow:execute <jira-key>` | Single existing card. Runs a detail audit; if under-specified, planning-lead enriches the card description in Jira before build. |
 | `/jira-flow:drain <column> [--max N]` | Bulk-execute up to N cards (default 5) from a column. Stops on first BLOCKED. User confirmation required. |
-| `/jira-flow:advance <jira-key>` | Generic column-by-column transition driven by `.claude/jira-flow.lifecycle.yaml`. Used by discovery (and any topology with a custom lifecycle). For default To Do → In Progress → In Review, prefer `/execute`. |
+| `/jira-flow:advance <jira-key>` | Generic column-by-column transition driven by `jira-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). For default To Do → In Progress → In Review, prefer `/execute`. |
 
 **Soft requirement:** jira-flow's commands delegate to subagents named
 `planning-lead`, `engineering-lead`, `validation-lead`. Both `multi-team`
@@ -277,14 +277,14 @@ card forward one column. A card may take days or weeks across many
 sessions; the timeline is shaped by how fast the human collects evidence.
 
 The narrative below assumes discovery + jira-flow are installed and
-`.claude/jira-flow.lifecycle.yaml` declares the WEGO discovery lifecycle.
+`jira-flow.yaml` declares the WEGO discovery lifecycle.
 
 1. **Capture.** User runs `/discovery:capture "Patients struggle to figure out which contract to sign first"`.
    - Orchestrator calls `atlassian-expert` to create a Story on the WEGO discovery board (status `To Do` = Inbox column).
    - Card lands. No agent runs. ~1 Atlassian MCP call.
 
 2. **Inbox → Framing.** User runs `/jira-flow:advance WEGO-2001`.
-   - Orchestrator reads `.claude/jira-flow.lifecycle.yaml`, matches the discovery lifecycle, identifies next column = Framing.
+   - Orchestrator reads `jira-flow.yaml`, matches the discovery lifecycle, identifies next column = Framing.
    - `atlassian-expert` transitions card to `Framing`.
    - `discovery-lead` is invoked, routes to `opportunity-framer`.
    - `opportunity-framer` writes `docs/discovery/WEGO-2001/framing.md` (problem statement, target user, outcome, IN/OUT scope, open questions).

@@ -74,7 +74,7 @@ continuous discovery — each pass burns down risk.
   no research, just tracking.
 - `/jira-flow:advance <card-key>` — move a card to its next column,
   invoking the column's `on_enter` agent. Generic across topologies; reads
-  `.claude/jira-flow.lifecycle.yaml`. (Provided by `jira-flow@alegomes`.)
+  `jira-flow.yaml` (project root). (Provided by `jira-flow@alegomes`.)
 
 ## Composition
 

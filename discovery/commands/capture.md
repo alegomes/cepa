@@ -27,13 +27,13 @@ You are the orchestrator. Don't frame, don't research, don't run discovery-lead.
 
 ### 1. Resolve discovery board project + issue type
 
-Look at `.claude/jira-flow.lifecycle.yaml` for the `discovery` lifecycle entry. Read its `project_key`. That's the target project.
+Read the project Jira config: `jira-flow.yaml` at project root if present, otherwise legacy `.claude/jira-flow.lifecycle.yaml`. Find the `discovery` lifecycle entry. Read its `project_key` (or, if the new-schema `defaults.project_key` is set and matches, use that). That's the target project.
 
 For issue type:
 - If the lifecycle file declares an `issue_type` key on the discovery lifecycle, use it.
-- Otherwise, default to `Story` and ask the user once: "Captured as Story. Your discovery board may use a different type (Idea, Opportunity, Discovery). Add `issue_type: <Type>` to the discovery lifecycle in `.claude/jira-flow.lifecycle.yaml` to set a default."
+- Otherwise, default to `Story` and ask the user once: "Captured as Story. Your discovery board may use a different type (Idea, Opportunity, Discovery). Add `issue_type: <Type>` to the discovery lifecycle in `jira-flow.yaml` to set a default."
 
-If `.claude/jira-flow.lifecycle.yaml` has no `discovery` lifecycle entry → abort with: "No discovery lifecycle declared. Run `/discovery:capture` after writing `.claude/jira-flow.lifecycle.yaml` (see discovery-topology.md)."
+If `jira-flow.yaml` has no `discovery` lifecycle entry → abort with: "No discovery lifecycle declared. Run `/discovery:capture` after writing `jira-flow.yaml` (see discovery-topology.md)."
 
 ### 2. Create the card
 

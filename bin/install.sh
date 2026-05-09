@@ -200,29 +200,67 @@ if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
     echo "  ⚠ solo-pair has no leads. /jira-flow:* commands won't work with this topology."
   fi
 
-  # Seed lifecycle yaml with default_topology so jira-flow commands qualify agent names.
-  LIFECYCLE_DST="${HOST_PROJECT}/.claude/jira-flow.lifecycle.yaml"
+  # Seed jira-flow project config at project root. This is project-team
+  # data (your Jira site, project key, board, etc.) — visible at root, not
+  # hidden under .claude/. atlassian-expert reads it on every invocation.
+  JIRA_FLOW_DST="${HOST_PROJECT}/jira-flow.yaml"
+  LEGACY_DST="${HOST_PROJECT}/.claude/jira-flow.lifecycle.yaml"
+
+  # Backward-compat note: if the legacy file exists at .claude/, leave it
+  # alone but tell the user to migrate. Don't auto-move (avoids surprise on
+  # a project that may have local edits in flight).
+  if [ -f "${LEGACY_DST}" ] && [ ! -f "${JIRA_FLOW_DST}" ]; then
+    echo "  ⚠ Legacy ${LEGACY_DST} found. Move it to ${JIRA_FLOW_DST}"
+    echo "    (project root) when you can — atlassian-expert and the jira-flow"
+    echo "    commands prefer the new location."
+  fi
+
   if [ "${TOPOLOGY}" = "discovery" ]; then
-    LIFECYCLE_SRC="${REPO_DIR}/discovery/jira-flow.lifecycle.example.yaml"
-    if [ -f "${LIFECYCLE_DST}" ]; then
-      echo "  ✔ ${LIFECYCLE_DST} already exists — leaving untouched"
-    elif [ -f "${LIFECYCLE_SRC}" ]; then
-      cp "${LIFECYCLE_SRC}" "${LIFECYCLE_DST}"
-      echo "  ✔ Seeded ${LIFECYCLE_DST} from discovery template"
-      echo "    Edit it: set project_key, issue_type, and status names to match your board."
+    JIRA_FLOW_SRC="${REPO_DIR}/discovery/jira-flow.example.yaml"
+    if [ -f "${JIRA_FLOW_DST}" ]; then
+      echo "  ✔ ${JIRA_FLOW_DST} already exists — leaving untouched"
+    elif [ -f "${JIRA_FLOW_SRC}" ]; then
+      cp "${JIRA_FLOW_SRC}" "${JIRA_FLOW_DST}"
+      echo "  ✔ Seeded ${JIRA_FLOW_DST} from discovery template"
+      echo "    Edit it: set defaults.site, defaults.project_key, defaults.board_id,"
+      echo "    and the lifecycle status names to match your discovery board."
     fi
   elif [ "${TOPOLOGY}" = "hex-backend" ] || [ "${TOPOLOGY}" = "multi-team" ] || [ "${TOPOLOGY}" = "book" ]; then
-    if [ -f "${LIFECYCLE_DST}" ]; then
-      echo "  ✔ ${LIFECYCLE_DST} already exists — leaving untouched"
+    if [ -f "${JIRA_FLOW_DST}" ]; then
+      echo "  ✔ ${JIRA_FLOW_DST} already exists — leaving untouched"
     else
-      cat > "${LIFECYCLE_DST}" <<EOF
-# jira-flow config for ${TOPOLOGY} topology.
-# Tells /jira-flow:execute and /jira-flow:plan-track-build-validate which
-# topology's leads to delegate to (e.g. ${TOPOLOGY}:engineering-lead).
+      cat > "${JIRA_FLOW_DST}" <<EOF
+# jira-flow project config for the ${TOPOLOGY} topology.
+#
+# Two roles for atlassian-expert and the jira-flow commands:
+#
+#   defaults — identity values for every Jira call (site, project, board,
+#     issue types, custom fields). atlassian-expert is FORBIDDEN to infer
+#     these from context; missing values cause BLOCKED, not guesses.
+#
+#   default_topology — which topology's leads /jira-flow:execute and
+#     /jira-flow:plan-track-build-validate delegate to.
+#
+# Edit the defaults below before using jira-flow commands. Sample values
+# shown — replace site, project_key, board_id with YOUR Jira's values.
 schema_version: 1
+
+defaults:
+  site: example.atlassian.net
+  project_key: EXAMPLE
+  board_id: 1
+  issue_types:
+    story: "Story"
+    bug: "Bug"
+    epic: "Epic"
+    task: "Task"
+  required_fields: []
+
 default_topology: ${TOPOLOGY}
 EOF
-      echo "  ✔ Seeded ${LIFECYCLE_DST} (default_topology: ${TOPOLOGY})"
+      echo "  ✔ Seeded ${JIRA_FLOW_DST} (default_topology: ${TOPOLOGY})"
+      echo "    EDIT IT: replace defaults.site, defaults.project_key, defaults.board_id"
+      echo "    with your Jira's values before running any /jira-flow:* command."
     fi
   fi
 fi

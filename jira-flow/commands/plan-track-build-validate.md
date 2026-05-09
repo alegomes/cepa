@@ -27,7 +27,7 @@ You are the orchestrator. Drive the planning, building, validation phases AND ke
 
 ### 0. Resolve topology prefix
 
-Read `.claude/jira-flow.lifecycle.yaml` if it exists. Extract the top-level `default_topology` value (e.g., `hex-backend`, `multi-team`, `discovery`).
+Read the project Jira config: `jira-flow.yaml` at project root if present, otherwise legacy `.claude/jira-flow.lifecycle.yaml`. Extract the top-level `default_topology` value (e.g., `hex-backend`, `multi-team`, `discovery`).
 
 - If found, prefix every topology-agent delegation in this workflow with it: `<default_topology>:planning-lead`, `<default_topology>:engineering-lead`, `<default_topology>:validation-lead`.
 - If the file is absent or `default_topology` is not set, use bare names — backward compatible, but may misroute when multiple topologies are installed.

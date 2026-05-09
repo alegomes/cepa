@@ -1,5 +1,5 @@
 ---
-description: Advance a Jira card to the next column in its topology's lifecycle. Reads `.claude/jira-flow.lifecycle.yaml` to know what "next" means and which agent (if any) runs on entry. Generic across topologies — used by discovery, hex-backend with custom flows, etc. For the default To Do → In Progress → In Review flow, use /jira-flow:execute instead.
+description: Advance a Jira card to the next column in its topology's lifecycle. Reads `jira-flow.yaml` to know what "next" means and which agent (if any) runs on entry. Generic across topologies — used by discovery, hex-backend with custom flows, etc. For the default To Do → In Progress → In Review flow, use /jira-flow:execute instead.
 argument-hint: <jira-key>
 ---
 
@@ -9,7 +9,7 @@ argument-hint: <jira-key>
 
 Move one Jira card forward in its topology's defined lifecycle. The lifecycle file declares the column flow, the agent that runs on entry to each column (if any), and the gate that must be satisfied before entering (if any).
 
-Generic by design — the same command works for discovery's 7-column flow, hex-backend's delivery flow, or any custom lifecycle a topology wants to declare. The lifecycle file at `.claude/jira-flow.lifecycle.yaml` is the source of truth.
+Generic by design — the same command works for discovery's 7-column flow, hex-backend's delivery flow, or any custom lifecycle a topology wants to declare. The lifecycle file at `jira-flow.yaml` is the source of truth.
 
 For the standard To Do → In Progress → In Review flow with planning + build + validate, use `/jira-flow:execute` — it remains the right tool when no custom lifecycle is needed.
 
@@ -19,7 +19,7 @@ For the standard To Do → In Progress → In Review flow with planning + build 
 
 ## Lifecycle file format
 
-`.claude/jira-flow.lifecycle.yaml` (host project, copied or hand-authored from a topology's template):
+`jira-flow.yaml` (host project, copied or hand-authored from a topology's template):
 
 ```yaml
 schema_version: 1
@@ -56,7 +56,7 @@ Schema rules:
 - `requires_summary` (optional, boolean, default `false`) — if `true`, transitioning into this column requires an Implementation Summary, which is posted as a comment before the transition. Auto-true for any column whose `status` name contains `review` or `qa` (case-insensitive), even if the field is omitted.
 - `status` is the literal Jira status name in the project (case-sensitive).
 
-If `.claude/jira-flow.lifecycle.yaml` is missing → abort with: "No lifecycle file found. Create `.claude/jira-flow.lifecycle.yaml` or use `/jira-flow:execute` for the default flow."
+If `jira-flow.yaml` is missing → abort with: "No lifecycle file found. Create `jira-flow.yaml` or use `/jira-flow:execute` for the default flow."
 
 ## Instructions
 
@@ -66,9 +66,9 @@ You are the orchestrator. Don't implement anything yourself; delegate to `atlass
 
 ## Workflow
 
-### 1. Load lifecycle file
+### 1. Load project config
 
-Read `.claude/jira-flow.lifecycle.yaml`. If missing → abort with the message above.
+Read the project Jira config: `jira-flow.yaml` at project root first, falling back to legacy `.claude/jira-flow.lifecycle.yaml` if the new location isn't present (with a one-time deprecation note in your reply: "Note: reading legacy `.claude/jira-flow.lifecycle.yaml` — move to `jira-flow.yaml` at project root."). If neither exists → abort with the message above.
 
 Parse the `lifecycles` list. Hold all of them in mind — the matching one will be picked in step 3.
 
@@ -86,7 +86,7 @@ Find the lifecycle in the file where:
 - `project_key` matches the card's project, AND
 - one of its `columns` has `status` matching the card's current status.
 
-If no match → abort: "Card $ARGUMENTS is in status `<X>` which is not declared in any lifecycle in `.claude/jira-flow.lifecycle.yaml`. Update the file or transition the card manually."
+If no match → abort: "Card $ARGUMENTS is in status `<X>` which is not declared in any lifecycle in `jira-flow.yaml`. Update the file or transition the card manually."
 
 If multiple lifecycles match (same project + same status) → ask the user which lifecycle to use. Don't guess.
 

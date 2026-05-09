@@ -1,26 +1,44 @@
-# Example lifecycle file for the discovery topology.
+# Example jira-flow project config — for the discovery topology.
 #
 # When --topology=discovery is passed to bin/install.sh, this file is copied
-# to the host project as .claude/jira-flow.lifecycle.yaml. Edit it after
-# install to match your discovery board's project key, status names, and
-# issue type.
+# to the host project as `jira-flow.yaml` (at project root). Edit it after
+# install to match YOUR Jira site, project, board, and the discovery board's
+# status names.
 #
-# /jira-flow:advance reads this file to know:
-#   - which lifecycle owns a given card (matched by project_key + current status)
-#   - what the "next" column is
-#   - which on_enter agent runs when the card enters that column
-#   - what enter_gate (if any) must be confirmed first
+# Three sections:
 #
-# Multiple lifecycles can live in the same file (e.g., one for discovery,
-# one for hex-backend's delivery flow). They're matched by project_key +
-# the card's current status.
+# 1. defaults — identity values atlassian-expert reads to fill site/project/
+#    board/etc. on every Jira call. atlassian-expert is FORBIDDEN to infer
+#    or guess any of these from context (repo name, conversation, etc.) —
+#    if a value is missing here, the operation refuses with BLOCKED.
+#
+# 2. default_topology — which topology's leads /jira-flow:execute and
+#    /jira-flow:plan-track-build-validate delegate to.
+#
+# 3. lifecycles — matched by (project_key, current status) when running
+#    /jira-flow:advance. Multiple lifecycles supported in one file.
 
 schema_version: 1
 
+# --- 1. Defaults: identity values for every Jira operation ---
+defaults:
+  site: example.atlassian.net           # YOUR Jira cloud site (e.g. acme.atlassian.net)
+  project_key: WEGO                     # default project for new cards
+  board_id: 766                         # default board (Scrum/Kanban) — used by /jira-flow:drain
+  issue_types:
+    story: "Story"
+    bug: "Bug"
+    epic: "Epic"
+    task: "Task"
+  required_fields: []                   # custom fields with project-mandated defaults, e.g.:
+                                        # - { id: customfield_10010, name: "Team", value: "Engineering" }
+
+# --- 2. Default topology for build/validate flows ---
 # Tells /jira-flow:execute and /jira-flow:plan-track-build-validate which
 # topology's leads to delegate to (e.g. hex-backend:engineering-lead).
 default_topology: discovery
 
+# --- 3. Lifecycles for /jira-flow:advance ---
 lifecycles:
   - topology: discovery
     project_key: WEGO
