@@ -60,11 +60,11 @@ If planning-lead enriched the card, delegate to `atlassian-expert`:
 
 If planning-lead said SUFFICIENT, skip this step.
 
-### 4. Move card to In Progress
+### 4. Move card to "in progress"
 
-Delegate to `atlassian-expert`:
+Read `defaults.status_map.in_progress` from `jira-flow.yaml` (default `"In Progress"`). Delegate to `atlassian-expert`:
 
-> Transition $ARGUMENTS to "In Progress."
+> Transition $ARGUMENTS to status `<defaults.status_map.in_progress>`.
 
 ### 5. Build (per-Task quality loop)
 
@@ -81,9 +81,9 @@ Delegate to `validation-lead`:
 
 ### 7. Transition based on verdict
 
-If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Then delegate to `atlassian-expert`:
+If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Read `defaults.status_map.in_review` from `jira-flow.yaml` (default `"In Review"`). Then delegate to `atlassian-expert`:
 
-> Transition $ARGUMENTS to "In Review" with the Implementation Summary below. Post the summary as a comment first, then run the transition.
+> Transition $ARGUMENTS to status `<defaults.status_map.in_review>` with the Implementation Summary below. Post the summary as a comment first, then run the transition.
 >
 > ```markdown
 > ## Implementation summary
@@ -100,7 +100,7 @@ If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from en
 > - <none, or caveats from validation-lead's READY-WITH-CAVEATS verdict>
 > ```
 
-If BLOCKED: Leave In Progress. Delegate to `atlassian-expert`:
+If BLOCKED: leave the card where it is (in `<defaults.status_map.in_progress>`). If `defaults.status_map.blocked` is set (non-null), optionally also transition into the blocked column — ask the user once at session start which they prefer; default to leaving in `in_progress` with a comment. Delegate to `atlassian-expert`:
 
 > Add a comment to $ARGUMENTS with the specific block reason from validation-lead and any failing-test paths. Do NOT transition.
 

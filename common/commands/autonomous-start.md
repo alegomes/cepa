@@ -78,15 +78,15 @@ Create the directory if it doesn't exist.
 
 Run a Bash command to write the run-id to a session-local marker file at `docs/autonomous/<run-id>/.run-id` AND set `CLAUDE_AUTONOMOUS_RUN_ID=<run-id>` for the rest of this session via `export`. The hook reads the env var; the marker file is a fallback for resume.
 
-### 7. (Conditional) Transition Jira card to "In Progress"
+### 7. (Conditional) Transition Jira card to "in progress"
 
-If `jira_key` is set, delegate to `atlassian-expert`:
+If `jira_key` is set, read `defaults.status_map.in_progress` from `jira-flow.yaml` (default `"In Progress"`). Delegate to `atlassian-expert`:
 
-> Transition Jira issue `<jira_key>` to "In Progress." (Use `getTransitionsForJiraIssue` to find the actual transition ID — names vary across projects.)
+> Transition Jira issue `<jira_key>` to status `<defaults.status_map.in_progress>`. (Use `getTransitionsForJiraIssue` to find the actual transition ID — names vary across projects.)
 >
 > Add a comment: "[automated] Autonomous run `<run-id>` started — `<topology>:<flow>` flow. Description: `<one-line description, ~80 chars>`. State file: `docs/autonomous/<run-id>/state.yaml`."
 
-If `atlassian-expert` returns BLOCKED (e.g., card already in "In Review", or transition not available), record the blocker in state.yaml's `blockers` and continue with the flow anyway. The work is more valuable than the lifecycle ceremony — but the user sees the issue in the final report.
+If `atlassian-expert` returns BLOCKED (e.g., card already past `in_progress`, transition not available, MCP auth dropout), record the blocker in state.yaml's `blockers` and continue with the flow anyway. The work is more valuable than the lifecycle ceremony — but the user sees the issue in the final report.
 
 ### 8. Dispatch
 
@@ -100,11 +100,11 @@ Hand off to the chosen flow's slash command, prefixing the description as if the
 
 The autonomous-mode skill is now in effect; the called command's orchestrator inherits the no-questions discipline. The checkpoint hook captures every subagent call.
 
-### 9. (Conditional) Transition Jira card to "In Review" with Implementation Summary
+### 9. (Conditional) Transition Jira card to "in review" with Implementation Summary
 
 If `jira_key` is set AND the flow returned successfully (not blocked at the topology level):
 
-Assemble the Implementation Summary using the canonical template (from `atlassian-expert`'s "Transition to Review with Implementation Summary" common operation):
+Read `defaults.status_map.in_review` from `jira-flow.yaml` (default `"In Review"`). Assemble the Implementation Summary using the canonical template (from `atlassian-expert`'s "Transition to Review with Implementation Summary" common operation):
 
 ```markdown
 ## Implementation summary
@@ -127,9 +127,9 @@ Assemble the Implementation Summary using the canonical template (from `atlassia
 
 Then delegate to `atlassian-expert`:
 
-> Transition Jira issue `<jira_key>` to "In Review" with the Implementation Summary above. Post the summary as a comment first, then run the transition. (atlassian-expert enforces this ordering — comment first, transition second.)
+> Transition Jira issue `<jira_key>` to status `<defaults.status_map.in_review>` with the Implementation Summary above. Post the summary as a comment first, then run the transition. (atlassian-expert enforces this ordering — comment first, transition second.)
 
-If the flow ended BLOCKED instead, leave the card in "In Progress" and delegate to `atlassian-expert`:
+If the flow ended BLOCKED instead, leave the card where it is (in `<defaults.status_map.in_progress>`; if `defaults.status_map.blocked` is set non-null and your project convention is to move blocked cards to it, transition there) and delegate to `atlassian-expert`:
 
 > Add a comment to `<jira_key>` describing the blocker: "[automated] Autonomous run `<run-id>` blocked. Reason: `<one-line>`. See `docs/autonomous/<run-id>/state.yaml` blockers section. Card left in In Progress."
 

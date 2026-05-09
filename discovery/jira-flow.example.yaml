@@ -25,6 +25,22 @@ defaults:
   site: example.atlassian.net           # YOUR Jira cloud site (e.g. acme.atlassian.net)
   project_key: WEGO                     # default project for new cards
   board_id: 766                         # default board (Scrum/Kanban) — used by /jira-flow:drain
+  status_map:
+    # Literal Jira status names for the four states the canonical flow uses.
+    # /jira-flow:drain pulls cards from `to_do`. /jira-flow:execute and
+    # /common:autonomous-start move cards from `to_do` → `in_progress` →
+    # `in_review`. Cards that hit a blocker stay in `in_progress` (or move
+    # to `blocked` if your project has that column).
+    #
+    # The split between Backlog (unrefined / unprioritized) and `to_do`
+    # (refined and ready for development) is a project convention — drain
+    # only pulls from `to_do`, so unrefined Backlog items stay safe.
+    to_do:       "To Do"          # ready-for-development column /drain pulls from
+    in_progress: "In Progress"    # work in flight
+    in_review:   "In Review"      # done, awaiting human review
+    blocked:     "Blocked"        # optional; if your project doesn't have this status,
+                                  #          set it to null and blocked cards stay in `in_progress`
+                                  #          with a comment.
   issue_types:
     story: "Story"
     bug: "Bug"

@@ -66,29 +66,43 @@ Ask: "Board ID (numeric, e.g., `766`)? Current: `<value or none>`. Find this in 
 
 Don't try to enumerate boards via API — many users have hundreds. Trust the user-provided value but require it to be numeric.
 
-### 5. Resolve issue_types
+### 5. Resolve status_map
+
+These are the literal Jira status names for the four states the canonical flow uses. `/jira-flow:drain` pulls cards from `to_do`. `/jira-flow:execute` and `/common:autonomous-start` move cards through `to_do` → `in_progress` → `in_review`. Blocked cards stay in `in_progress` unless `blocked` is set.
+
+Show current values (or defaults): `to_do: "To Do"`, `in_progress: "In Progress"`, `in_review: "In Review"`, `blocked: "Blocked"`.
+
+Ask: "Use standard status names (To Do / In Progress / In Review / Blocked) or customize? Many projects use 'Doing' / 'Code Review' / 'Done' or different names. (standard / customize)".
+
+If customize:
+- Walk through each: "What's the literal name in your Jira for `<purpose>`? (e.g., `<default>`)".
+- For `blocked`: also offer "null" — meaning "my project doesn't have a Blocked status; commands should leave blocked cards in In Progress with a comment instead."
+
+Optional validation: delegate to `atlassian-expert` to call `getJiraIssue` on a known card and read the available statuses from its `getTransitionsForJiraIssue` output. If a name the user gave isn't reachable from your typical entry points, warn — don't auto-correct.
+
+### 6. Resolve issue_types
 
 Show current values (or defaults): `story: "Story"`, `bug: "Bug"`, `epic: "Epic"`, `task: "Task"`.
 
 Ask: "Use standard issue type names (Story / Bug / Epic / Task) or customize? (standard / customize)". If customize: walk through each and ask. Most projects use the defaults.
 
-### 6. Resolve default_topology
+### 7. Resolve default_topology
 
 Read `.claude/topology` if present. If found: confirm with user: "Default topology for `/jira-flow:execute` and `/jira-flow:plan-track-build-validate`: `<value from .claude/topology>` (matches `.claude/topology`). Keep? (yes / type different)".
 
 If `.claude/topology` is missing: ask "Default topology? Options: `hex-backend`, `multi-team`, `discovery`, `book`. Type one:". Don't write a value the user didn't give.
 
-### 7. Show the proposed file and confirm
+### 8. Show the proposed file and confirm
 
 Display the assembled `jira-flow.yaml` exactly as it'll be written. Ask: "Write this to `<path>`? (yes / cancel / edit field <name>)".
 
 If "edit field <name>" → loop back to that step.
 
-### 8. Write the file
+### 9. Write the file
 
 Write `jira-flow.yaml` at project root. Preserve any existing `lifecycles:` block from the prior config (don't overwrite lifecycles — those are advance-command schema, separate concern). If migrating from legacy AND user confirmed deletion, delete `.claude/jira-flow.lifecycle.yaml` after the new file is written and verified readable.
 
-### 9. Verify
+### 10. Verify
 
 Delegate to `atlassian-expert`:
 
@@ -96,7 +110,7 @@ Delegate to `atlassian-expert`:
 
 This is the smoke test — proves the site + project + auth all line up.
 
-### 10. Final report
+### 11. Final report
 
 A single concise message:
 

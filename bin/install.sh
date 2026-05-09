@@ -249,6 +249,13 @@ defaults:
   site: example.atlassian.net
   project_key: EXAMPLE
   board_id: 1
+  status_map:
+    # Literal Jira status names. Backlog is implicit (where new cards land);
+    # to_do is "refined and ready for dev" — what /jira-flow:drain pulls from.
+    to_do:       "To Do"
+    in_progress: "In Progress"
+    in_review:   "In Review"
+    blocked:     "Blocked"          # set to null if your project lacks a Blocked column
   issue_types:
     story: "Story"
     bug: "Bug"

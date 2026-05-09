@@ -86,9 +86,9 @@ Wait for the verdict.
 
 ### 8. Move Story based on verdict
 
-If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Then delegate to `atlassian-expert`:
+If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Read `defaults.status_map.in_review` from `jira-flow.yaml` (default `"In Review"`). Then delegate to `atlassian-expert`:
 
-> Transition Story <key> to "In Review" with the Implementation Summary below. Post the summary as a comment first, then run the transition.
+> Transition Story <key> to status `<defaults.status_map.in_review>` with the Implementation Summary below. Post the summary as a comment first, then run the transition.
 >
 > ```markdown
 > ## Implementation summary

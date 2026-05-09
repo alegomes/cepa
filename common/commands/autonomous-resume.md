@@ -38,7 +38,7 @@ If `$ARGUMENTS` is a run-id:
 
 From the state file, capture:
 - `topology` and `flow` — these tell you which command to re-enter.
-- `jira_key` — if non-null, the run is Jira-tracked. The card is presumed already in "In Progress" (autonomous-start moved it there); don't re-transition. The In Review transition with Implementation Summary still happens on completion (step 5 below).
+- `jira_key` — if non-null, the run is Jira-tracked. The card is presumed already in `<defaults.status_map.in_progress>` (autonomous-start moved it there); don't re-transition. The transition to `<defaults.status_map.in_review>` with Implementation Summary still happens on completion (step 6 below).
 - `description` — the original task description.
 - `log` (last ~20 entries) — what's been done. Read this carefully.
 - `blockers` — what couldn't proceed and why. Don't try to unblock unless the user has explicitly indicated the blocker is resolved.

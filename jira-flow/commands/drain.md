@@ -1,5 +1,5 @@
 ---
-description: Bulk-execute Jira cards from a column (default "To Do"). Iterates through up to N cards in priority order. Stops on first BLOCKED to avoid wasting budget on a stuck card. Heavy operation — each card runs the full execution flow.
+description: Bulk-execute Jira cards from a column (default = `defaults.status_map.to_do` from `jira-flow.yaml`, fallback "To Do"). Iterates through up to N cards in priority order. Stops on first BLOCKED to avoid wasting budget on a stuck card. Heavy operation — each card runs the full execution flow. The split between Backlog (unrefined) and `to_do` (ready for dev) is intentional: drain only pulls from `to_do`, so unrefined Backlog items stay safe.
 argument-hint: [column] [--max N]
 ---
 
@@ -7,13 +7,15 @@ argument-hint: [column] [--max N]
 
 ## Purpose
 
-Bulk-execute pending Jira cards. Iterates through cards in a column (default `To Do`), running the equivalent of `/jira-flow:execute` on each. Stops on first BLOCKED card.
+Bulk-execute pending Jira cards. Iterates through cards in a column (default = `defaults.status_map.to_do` from `jira-flow.yaml`, fallback `"To Do"`), running the equivalent of `/jira-flow:execute` on each. Stops on first BLOCKED card.
+
+Why `to_do` and not Backlog: the project convention encoded in `status_map` is that Backlog holds unrefined / unprioritized items, and `to_do` holds items refined and ready for development. Drain pulls only from `to_do` so the team's grooming process stays meaningful.
 
 **Heavy operation:** each card runs the full plan-track-build-validate flow. Use `--max` to cap the number of cards processed in a single drain. Default `--max 5`.
 
 ## Variables
 
-- `$ARGUMENTS` — typically the column name followed optionally by `--max N`. If empty, defaults: column = "To Do", max = 5.
+- `$ARGUMENTS` — typically the column name followed optionally by `--max N`. If empty, defaults: column = `defaults.status_map.to_do` from `jira-flow.yaml` (fallback `"To Do"` if no config), max = 5.
 
 ## Instructions
 
@@ -23,7 +25,7 @@ You are the orchestrator. Iterate through pending cards. Stop on first BLOCKED. 
 
 ### 1. Parse arguments
 
-- Column name: `$ARGUMENTS` minus any `--max N` flag. Default: `To Do`.
+- Column name: `$ARGUMENTS` minus any `--max N` flag. If empty, read `defaults.status_map.to_do` from `jira-flow.yaml`; if config missing entirely, fallback to literal `"To Do"`.
 - Max cards: parse `--max N` from `$ARGUMENTS`. Default: 5.
 
 ### 2. List pending cards
