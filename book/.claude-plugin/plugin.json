@@ -1,7 +1,7 @@
 {
   "name": "book",
   "version": "0.1.0",
-  "description": "Book-writing topology — 2 leads + 8 workers for authoring technical books. Inception phase: audience profiling + full chapter map. Per-chapter loop: outline → research → draft → code examples → exercises → technical review → copy edit. Path-lock keyed to manuscript/ and code/. No external tracker integration — standalone.",
+  "description": "Book-writing topology — 2 leads + 10 workers for authoring technical books. Three commands: /book:inception (audience + chapter map), /book:write-chapter (outline→research→draft→code→exercises→review loop), /book:finalize (continuity review + LaTeX compilation). Path-lock keyed to manuscript/ and code/. Standalone — no external tracker.",
   "author": {
     "name": "alegomes"
   },

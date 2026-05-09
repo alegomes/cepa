@@ -33,8 +33,12 @@ ALLOWED_WRITES = {
     "technical-writer":   ["manuscript/*/draft.md"],
     "code-author":        ["code/**"],
     "exercise-designer":  ["manuscript/*/exercises.md"],
-    "technical-reviewer": ["manuscript/*/review-technical.md"],
-    "copy-editor":        ["manuscript/*/review-copy.md"],
+    "technical-reviewer":   ["manuscript/*/review-technical.md"],
+    "copy-editor":          ["manuscript/*/review-copy.md"],
+
+    # Finalization workers.
+    "continuity-reviewer":  ["manuscript/continuity-review.md"],
+    "manuscript-compiler":  ["manuscript/compiled/**"],
 }
 
 GATED_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}

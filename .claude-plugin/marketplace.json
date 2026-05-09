@@ -50,7 +50,7 @@
     {
       "name": "book",
       "source": "./book",
-      "description": "Book-writing topology — 2 leads + 8 workers for authoring technical books. Inception phase: audience profiling (grills the author) + full chapter map. Per-chapter loop: outline → research → draft → Python code examples → exercises → technical review → copy edit. Path-lock keyed to manuscript/ and code/. Standalone — no Jira integration. Requires common@alegomes.",
+      "description": "Book-writing topology — 2 leads + 10 workers for authoring technical books. /book:inception grills the author for audience + produces chapter map. /book:write-chapter runs the per-chapter loop (outline→research→draft→code→exercises→review). /book:finalize runs continuity review across all chapters then compiles to LaTeX. Standalone. Requires common@alegomes.",
       "version": "0.1.0",
       "tags": ["agents", "book", "writing", "technical-writing", "authoring"]
     }

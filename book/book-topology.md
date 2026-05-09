@@ -2,7 +2,7 @@
 
 > When this snippet is loaded into your project's `CLAUDE.md` (via `@-import`
 > or copy-paste), the main `claude` session operates as the orchestrator
-> of a 10-agent team installed by the `book` plugin.
+> of a 12-agent team installed by the `book` plugin.
 
 ## Frame: a system that writes technical books
 
@@ -26,7 +26,7 @@ code/
 
 Two tiers:
 - **Leads** (orchestrator + 2 leads) — design, sequence, review, synthesize. Never write content.
-- **Workers** (8 workers) — produce one artifact type each, in their lane only.
+- **Workers** (10 workers) — produce one artifact type each, in their lane only.
 
 ## Your role: Orchestrator
 
@@ -43,22 +43,24 @@ Two leads, each owning a phase:
 - **writing-lead** — Per-chapter phase. Owns the outline → research → draft →
   code → exercises → review loop. Delegates to the 7 chapter workers.
 
-Eight workers (all called by writing-lead, except audience-profiler):
+Ten workers — called by writing-lead (per-chapter) or directly by the orchestrator (finalization):
 
-| Worker | Writes |
-|---|---|
-| `audience-profiler` | `manuscript/audience.md` |
-| `chapter-outliner` | `manuscript/<slug>/outline.md` |
-| `researcher` | `manuscript/<slug>/research.md`, `references.md` |
-| `technical-writer` | `manuscript/<slug>/draft.md` |
-| `code-author` | `code/<slug>/` |
-| `exercise-designer` | `manuscript/<slug>/exercises.md` |
-| `technical-reviewer` | `manuscript/<slug>/review-technical.md` |
-| `copy-editor` | `manuscript/<slug>/review-copy.md` |
+| Worker | Phase | Writes |
+|---|---|---|
+| `audience-profiler` | Inception | `manuscript/audience.md` |
+| `chapter-outliner` | Per chapter | `manuscript/<slug>/outline.md` |
+| `researcher` | Per chapter | `manuscript/<slug>/research.md`, `references.md` |
+| `technical-writer` | Per chapter | `manuscript/<slug>/draft.md` |
+| `code-author` | Per chapter | `code/<slug>/` |
+| `exercise-designer` | Per chapter | `manuscript/<slug>/exercises.md` |
+| `technical-reviewer` | Per chapter | `manuscript/<slug>/review-technical.md` |
+| `copy-editor` | Per chapter | `manuscript/<slug>/review-copy.md` |
+| `continuity-reviewer` | Finalization | `manuscript/continuity-review.md` |
+| `manuscript-compiler` | Finalization | `manuscript/compiled/book.md`, `book.tex` |
 
 Use the `Task` tool with `subagent_type` set to the agent's name (e.g., `book:book-architect`).
 
-### The two commands
+### The three commands
 
 - **`/book:inception`** — Run once. Interviews you about the audience, then produces
   `manuscript/audience.md` and `manuscript/BOOK.md`. All chapter work depends on these.
@@ -66,6 +68,10 @@ Use the `Task` tool with `subagent_type` set to the agent's name (e.g., `book:bo
 - **`/book:write-chapter <slug>`** — Run per chapter. Drives the full production loop
   and returns file paths + review verdicts. Chapters can be written in any order,
   but check prerequisites in BOOK.md first.
+
+- **`/book:finalize`** — Run after all chapters are written. Continuity review across
+  the whole manuscript, author sign-off on findings, then compilation to
+  `manuscript/compiled/book.md` + `manuscript/compiled/book.tex`.
 
 ### Rules
 
