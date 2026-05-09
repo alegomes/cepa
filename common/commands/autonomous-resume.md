@@ -38,6 +38,7 @@ If `$ARGUMENTS` is a run-id:
 
 From the state file, capture:
 - `topology` and `flow` — these tell you which command to re-enter.
+- `jira_key` — if non-null, the run is Jira-tracked. The card is presumed already in "In Progress" (autonomous-start moved it there); don't re-transition. The In Review transition with Implementation Summary still happens on completion (step 5 below).
 - `description` — the original task description.
 - `log` (last ~20 entries) — what's been done. Read this carefully.
 - `blockers` — what couldn't proceed and why. Don't try to unblock unless the user has explicitly indicated the blocker is resolved.
@@ -79,9 +80,15 @@ Add an entry to the `log` array:
 
 The checkpoint hook will continue from there.
 
-### 6. Final report
+### 6. (Conditional) Transition Jira card on completion
 
-Same shape as `/common:autonomous-start`'s final report — outcome, state file path, decisions made, recommended next step.
+If `jira_key` is non-null AND the resumed flow runs to completion in this session: do the In Review transition exactly as `/common:autonomous-start` step 9 — assemble the Implementation Summary from the artifacts and delegate to `atlassian-expert` (which posts the comment first, then transitions). If the flow ends BLOCKED, leave the card in In Progress and post the blocker comment.
+
+If the resumed flow doesn't reach completion in this session (compaction hits again, or you stop work intentionally), don't transition. The next `/common:autonomous-resume` will pick up from there.
+
+### 7. Final report
+
+Same shape as `/common:autonomous-start`'s final report — outcome, state file path, decisions made, recommended next step. Include the Jira line: card moved to In Review / left in In Progress / not Jira-tracked.
 
 ## Constraints
 
