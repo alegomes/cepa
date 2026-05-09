@@ -22,6 +22,19 @@ feedback:
     user_verdict: keep
     user_reason: "(no reason given — aprovado após explicação de provenance)"
     tag: example
+  - run_id: 2026-05-09-seed-q-filter-status-bugs
+    date: "2026-05-09"
+    topic: format compliance — investigation report decisions
+    user_verdict: overrule
+    user_reason: "Used a markdown table (Verdict per bug / root cause / fix layer) and prose hypotheses instead of the required ### Decision: blocks. Future runs MUST use the formal block — Options considered / Chosen / Rationale — even for single-option decisions or root-cause conclusions. The investigation report is an artifact read by /common:debrief; informal prose makes decisions invisible to the reinforcement loop."
+    tag: principle
+  - run_id: 2026-05-09-seed-q-filter-status-bugs
+    date: "2026-05-09"
+    topic: "WEGO-1655 — q='exem' false positives: NOT-A-BUG vs BUG"
+    original_choice: "Conclusão NOT-A-BUG: todos os pedidos do seed têm @exemplo.com, logo q='exem' bate legitimamente"
+    user_verdict: overrule
+    user_reason: "A conclusão foi prematura. Existem pedidos com signatarios:[] que ainda aparecem no resultado — o match está vindo do campo desnormalizado email_beneficiario na tabela pedido_assinatura, não dos signatários. Isso não foi verificado antes de fechar o ticket. NOT-A-BUG exige verificar o dado desnormalizado, não apenas inferir pelos emails dos signatários."
+    tag: principle
   - run_id: 2026-05-08-api-fixes-features-batch
     date: "2026-05-09"
     topic: "Cobertura do filtro q — unit test vs E2E full-stack"
