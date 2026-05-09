@@ -5,4 +5,37 @@
 # only agent-global knowledge; project-specific facts go in the host project's
 # CLAUDE.md. See common/skills/mental-model/SKILL.md.
 
-last_updated: null
+last_updated: "2026-05-09"
+
+feedback:
+  - run_id: 2026-05-07-api-cleanup-rename
+    date: "2026-05-08"
+    topic: "Rename strategy — big-bang vs deprecation window for breaking API renames"
+    original_choice: "Option C — big-bang for EQUIPE_CLINICA (internal-only), deprecation window for Arquivo→Documento (more consumers)"
+    user_verdict: refine
+    user_reason: "I'd have chosen A. We don't have active clients yet. It's time to keep the house clean"
+    refined_rationale: "When there are no active external clients, prefer big-bang rename over deprecation windows — transitional routes add complexity without protecting anyone. Only choose deprecation window when real clients (confirmed, in production) consume the endpoint."
+    tag: principle
+  - run_id: 2026-05-08-api-fixes-features-batch
+    date: "2026-05-09"
+    topic: "metodoEnvio — atributo do pedido vs do signatário"
+    original_choice: "Deferred — breaking change, aguarda confirmação explícita do usuário"
+    user_verdict: keep
+    user_reason: "Implementar B — mover metodoEnvio para signatário"
+    refined_rationale: "Breaking changes semânticos corretos devem ser implementados mesmo sem clientes externos ativos. Não diferir breaking changes semânticos corretos só por medo de quebrar clientes hipotéticos."
+    tag: principle
+  - run_id: 2026-05-08-api-fixes-features-batch
+    date: "2026-05-09"
+    topic: "Partials em endpoint de assinaturas — implementar agora vs defer"
+    original_choice: "Option A — não implementar agora, sem evidência de necessidade real"
+    user_verdict: refine
+    user_reason: "registre o spike no Jira"
+    refined_rationale: "Correct to defer implementation, but the spike itself should be tracked in Jira so it doesn't get lost. When deferring a feature for lack of demand, always create a Jira spike to capture the investigation need — not a silent backlog item."
+    tag: principle
+  - run_id: 2026-05-08-api-fixes-features-batch
+    date: "2026-05-09"
+    topic: "Coordenadas de assinatura — defaults em TipoDocumento vs always-in-request"
+    original_choice: "Option B — store defaults in TipoDocumento, override optional in request"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example

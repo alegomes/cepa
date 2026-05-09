@@ -5,4 +5,27 @@
 # only agent-global knowledge; project-specific facts go in the host project's
 # CLAUDE.md. See common/skills/mental-model/SKILL.md.
 
-last_updated: null
+last_updated: "2026-05-09"
+
+feedback:
+  - run_id: 2026-05-08-api-fixes-features-batch
+    date: "2026-05-09"
+    topic: "S2 — root cause de q retornando falsos positivos (q=lim sem 'lim' no paciente)"
+    original_choice: "Remover cpf/telefone do escopo de q (diagnóstico: escopo errado causava o falso positivo)"
+    user_verdict: overrule
+    user_reason: "agente fez mudança de escopo não solicitada e identificou root cause errado. O bug era q retornando falsos positivos — 'lim' tampouco estava em cpf/telefone, logo remover esses campos não era o fix do bug. Restringir o escopo de q foi decisão autônoma indevida."
+    tag: principle
+  - run_id: 2026-05-08-api-fixes-features-batch
+    date: "2026-05-09"
+    topic: "S2 — adição autônoma de escape de wildcards SQL no filtro q"
+    original_choice: "Escapar % _ e \\ com LIKE ... ESCAPE '\\' para evitar injeção de pattern"
+    user_verdict: keep
+    user_reason: "(no reason given — aprovado após explicação de provenance)"
+    tag: example
+  - run_id: 2026-05-08-api-fixes-features-batch
+    date: "2026-05-09"
+    topic: "Cobertura do filtro q — unit test vs E2E full-stack"
+    original_choice: "E2E full-stack com Postgres testcontainer (garante JPQL→SQL→Postgres caminho completo)"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
