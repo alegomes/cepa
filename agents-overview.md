@@ -160,6 +160,7 @@ whichever topology is also installed.
 
 | Command | Purpose |
 |---|---|
+| `/jira-flow:configure [--migrate]` | Interactive setup of `jira-flow.yaml` at project root. Validates site against accessible Atlassian sites, asks for project_key / board_id / default_topology, runs a smoke test. Run once after install. |
 | `/jira-flow:capture <description>` | Register a freeform request as a Jira Story (or Epic/Bug/Task via prefix). No planning, no execution. |
 | `/jira-flow:plan-track-build-validate <abstract task>` | Full discovery + Jira lifecycle. Registers Epic + Stories, executes one Story, transitions through To Do → In Progress → In Review. |
 | `/jira-flow:execute <jira-key>` | Single existing card. Runs a detail audit; if under-specified, planning-lead enriches the card description in Jira before build. |

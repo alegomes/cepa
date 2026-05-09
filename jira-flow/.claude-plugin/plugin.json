@@ -1,7 +1,7 @@
 {
   "name": "jira-flow",
   "version": "0.1.0",
-  "description": "Adds a single atlassian-expert worker plus Jira-aware slash commands (capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead, engineering-lead, and validation-lead subagents — or any topology with a custom lifecycle declared in .claude/jira-flow.lifecycle.yaml (used by /advance). Tested with hex-backend, multi-team, and discovery. Won't work with solo-pair for the lead-based commands.",
+  "description": "Adds a single atlassian-expert worker plus Jira-aware slash commands (configure, capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead, engineering-lead, and validation-lead subagents — or any topology with a custom lifecycle declared in jira-flow.yaml (project root, used by /advance). Run /jira-flow:configure once after install to set site/project/board. Tested with hex-backend, multi-team, and discovery. Won't work with solo-pair for the lead-based commands.",
   "author": {
     "name": "alegomes"
   },
