@@ -49,13 +49,32 @@ Delegate to `atlassian-expert`:
 > ```
 >
 > Return: issue key + URL.
+>
+> Apply your read-back verification rule — confirm the card actually exists before reporting success. If `getJiraIssue` doesn't find the key, return BLOCKED.
 
-### 4. Report back
+If `atlassian-expert` returns BLOCKED, do NOT report success to the user. Surface the BLOCKED verdict + the original error verbatim, and stop. The user will fix the underlying cause (auth, required-field, permissions) and re-run.
 
-A single line to the user:
+### 4. Verify before reporting
+
+Even though `atlassian-expert` does its own read-back, run a redundant check at the orchestrator level — capture is the command users are most likely to "fire and forget", so a false positive here means the request is silently lost. Delegate to `atlassian-expert`:
+
+> Confirm Jira issue `<KEY>` exists. Return: status, summary, URL.
+
+If this second `getJiraIssue` doesn't find the key (or returns inconsistent data), reply to the user:
+
+```
+BLOCKED: Capture reported card <KEY> created, but it does not exist on Jira.
+Likely cause: <atlassian-expert's BLOCKED reason, or "MCP response was lying">.
+The card was NOT created. Re-run /jira-flow:capture after fixing the underlying issue.
+```
+
+### 5. Report back
+
+A single line to the user (only if both create AND verification PASS):
 
 ```
 Captured: <KEY> — <summary>  (<URL>)
+Verified: card exists in Jira at status <status>.
 Next: /jira-flow:execute <KEY> to work on it, or leave it in the backlog.
 ```
 
