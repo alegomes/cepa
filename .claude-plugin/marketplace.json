@@ -46,6 +46,13 @@
       "description": "Adds atlassian-expert worker plus Jira-aware slash commands (capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead/engineering-lead/validation-lead OR declares a custom lifecycle in .claude/jira-flow.lifecycle.yaml (used by /advance). Tested with hex-backend, multi-team, and discovery. Won't work with solo-pair for the lead-based commands. Requires common@alegomes.",
       "version": "0.1.0",
       "tags": ["agents", "jira", "atlassian", "tracking", "workflow"]
+    },
+    {
+      "name": "book",
+      "source": "./book",
+      "description": "Book-writing topology — 2 leads + 8 workers for authoring technical books. Inception phase: audience profiling (grills the author) + full chapter map. Per-chapter loop: outline → research → draft → Python code examples → exercises → technical review → copy edit. Path-lock keyed to manuscript/ and code/. Standalone — no Jira integration. Requires common@alegomes.",
+      "version": "0.1.0",
+      "tags": ["agents", "book", "writing", "technical-writing", "authoring"]
     }
   ]
 }

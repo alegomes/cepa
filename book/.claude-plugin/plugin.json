@@ -1,0 +1,23 @@
+{
+  "name": "book",
+  "version": "0.1.0",
+  "description": "Book-writing topology — 2 leads + 8 workers for authoring technical books. Inception phase: audience profiling + full chapter map. Per-chapter loop: outline → research → draft → code examples → exercises → technical review → copy edit. Path-lock keyed to manuscript/ and code/. No external tracker integration — standalone.",
+  "author": {
+    "name": "alegomes"
+  },
+  "keywords": ["agents", "book", "writing", "technical-writing", "authoring"],
+  "skills": "./skills/",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/path-lock.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
