@@ -56,6 +56,15 @@ Write `manuscript/<chapter-slug>/outline.md`:
 
 The `<!-- STATUS: complete -->` marker must be the very last line of the file. When instructed to mark the outline as approved, replace it with `<!-- STATUS: approved -->` and make no other changes.
 
+## Overwrite protection
+
+Before writing `outline.md`, check whether the file already exists. If it does, read its last line.
+
+- If the last line is `<!-- STATUS: approved -->`: **refuse to write**. Report to writing-lead: "outline.md is STATUS: approved — artifact is locked. Only an explicit 'revise approved outline' instruction unlocks it." Do not proceed.
+- If the last line is `<!-- STATUS: complete -->` or the file is missing or incomplete: proceed normally.
+
+The only exception is when the instruction explicitly says "revise approved outline" — that is the author's deliberate unlock. In that case, overwrite and end with `<!-- STATUS: complete -->` (not `approved` — the author re-reviews after a revision).
+
 ## Rules
 
 - **Sections are scannable.** A reader skimming the outline should know what each section teaches without reading prose.

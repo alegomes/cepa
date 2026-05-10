@@ -81,8 +81,11 @@ Show the outline to the author:
 > - **Your feedback** to request changes — I'll revise and show you again
 
 Loop:
-- If approved → delegate to `writing-lead`: "Approve outline for $ARGUMENTS — update `manuscript/$ARGUMENTS/outline.md` STATUS: complete → STATUS: approved." Then advance.
-- If feedback → delegate to `writing-lead`: "Revise outline for $ARGUMENTS based on this feedback: <feedback>. Keep STATUS: complete at the end." Show revised outline. Pause again.
+- If the reply sounds like approval → **confirm before acting**:
+  > I'll mark this outline as approved and move to drafting. Confirm? (yes / no)
+  - **yes** → delegate to `writing-lead`: "Approve outline for $ARGUMENTS — update `manuscript/$ARGUMENTS/outline.md` STATUS: complete → STATUS: approved." Then advance.
+  - **no** → stay in loop, ask what they'd like to change instead.
+- If the reply is feedback → delegate to `writing-lead`: "Revise outline for $ARGUMENTS based on this feedback: <feedback>. Keep STATUS: complete at the end." Show revised outline. Pause again.
 
 ---
 
@@ -113,8 +116,11 @@ Show the draft summary to the author:
 > - **Your feedback** (e.g., "section 2 is too shallow", "remove the sidebar on X") — I'll revise and show you the updated summary
 
 Loop:
-- If approved → delegate to `writing-lead`: "Approve draft for $ARGUMENTS — update `manuscript/$ARGUMENTS/draft.md` STATUS: complete → STATUS: approved." Then advance.
-- If feedback → delegate to `writing-lead`: "Revise draft for $ARGUMENTS: <feedback>. technical-writer should revise draft.md keeping STATUS: complete at the end." Show updated summary. Pause again.
+- If the reply sounds like approval → **confirm before acting**:
+  > I'll mark this draft as approved and move to technical review. Confirm? (yes / no)
+  - **yes** → delegate to `writing-lead`: "Approve draft for $ARGUMENTS — update `manuscript/$ARGUMENTS/draft.md` STATUS: complete → STATUS: approved." Then advance.
+  - **no** → stay in loop, ask what they'd like to change instead.
+- If the reply is feedback → delegate to `writing-lead`: "Revise draft for $ARGUMENTS: <feedback>. technical-writer should revise draft.md keeping STATUS: complete at the end." Show updated summary. Pause again.
 
 ---
 
@@ -169,6 +175,18 @@ Surface findings to the author:
 ## Constraints
 
 - Never skip the outline checkpoint. Never skip the draft checkpoint. Both are mandatory.
-- Approval must be explicit. "That looks fine" counts as approval. Silence does not.
-- Don't advance from a phase if the author gave feedback — iterate until they approve or explicitly say "proceed anyway."
+- Approval requires explicit confirmation ("yes") after the confirm prompt. Silence, ambiguity, and "proceed anyway" do not count — always show the confirm prompt.
+- Don't advance from a phase if the author gave feedback — iterate until they confirm approval.
 - On resume: always tell the author what was found and where you're picking up. Never silently skip a phase.
+
+## Revising an approved artifact
+
+If the author wants to revisit something already approved (e.g., "I changed my mind about the outline"), delegate to `writing-lead`:
+
+> Revise approved outline for $ARGUMENTS: <feedback>. This is an explicit author unlock.
+
+or
+
+> Revise approved draft for $ARGUMENTS: <feedback>. This is an explicit author unlock.
+
+The "explicit author unlock" phrasing signals the worker to overwrite despite the `STATUS: approved` marker. After revision, the artifact returns to `STATUS: complete` and goes through the checkpoint again.

@@ -38,6 +38,15 @@ Write `manuscript/<slug>/draft.md`:
 - **Chapter closing.** A brief summary of what was covered and a one-sentence bridge to the next chapter.
 - **STATUS marker.** `<!-- STATUS: complete -->` must be the very last line of draft.md. When instructed to mark the draft as approved, replace it with `<!-- STATUS: approved -->` and make no other changes. When revising, keep `<!-- STATUS: complete -->` at the end (not `approved` — the author will re-review).
 
+## Overwrite protection
+
+Before writing `draft.md`, check whether the file already exists. If it does, read its last line.
+
+- If the last line is `<!-- STATUS: approved -->`: **refuse to write**. Report to writing-lead: "draft.md is STATUS: approved — artifact is locked. Only an explicit 'revise approved draft' instruction unlocks it." Do not proceed.
+- If the last line is `<!-- STATUS: complete -->` or the file is missing or incomplete: proceed normally.
+
+The only exception is when the instruction explicitly says "revise approved draft" — that is the author's deliberate unlock. In that case, overwrite and end with `<!-- STATUS: complete -->` (not `approved` — the author re-reviews after a revision).
+
 ## Rules
 
 - **Apply `audience-calibration`.** Before writing each section, ask: does this depth match the reader profile? Too shallow → they'll feel patronized. Too dense → they'll feel lost.

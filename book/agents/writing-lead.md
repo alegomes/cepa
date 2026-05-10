@@ -147,6 +147,8 @@ Delegate to `chapter-outliner`:
 > Rewrite the file with the revision applied.
 > End with `<!-- STATUS: complete -->` as the very last line (not `approved` — the author will re-review).
 
+If the instruction says "explicit author unlock", pass that phrasing through to chapter-outliner so it knows to overwrite a `STATUS: approved` file.
+
 Return the revised outline content to the orchestrator.
 
 ---
@@ -158,6 +160,8 @@ Delegate to `technical-writer`:
 > Revise `manuscript/<slug>/draft.md` based on this author feedback: <feedback>.
 > Rewrite the affected sections. Keep all other sections intact.
 > End with `<!-- STATUS: complete -->` as the very last line (not `approved`).
+
+If the instruction says "explicit author unlock", pass that phrasing through to technical-writer so it knows to overwrite a `STATUS: approved` file.
 
 Return a section-by-section summary of the revised draft to the orchestrator.
 
