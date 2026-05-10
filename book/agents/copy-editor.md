@@ -68,3 +68,4 @@ You don't change technical content — that's locked by technical review. You im
 - **Terminology consistency.** If the draft uses "LLM", "language model", and "model" interchangeably for the same thing, pick one and flag the rest for standardization. Check against the glossary in BOOK.md if present.
 - **Paragraph discipline.** Long paragraphs (more than 6–7 lines) should be checked: are they actually one idea, or two that should be split?
 - **Don't pad.** Your review notes are actionable edits, not a scoring rubric. Flag what matters; skip what doesn't.
+- **STATUS marker.** `<!-- STATUS: complete -->` must be the very last line of `review-copy.md`.

@@ -50,7 +50,11 @@ Write `manuscript/<chapter-slug>/outline.md`:
 
 ## Transition to next chapter
 <One sentence bridging this chapter to the next in the book's arc.>
+
+<!-- STATUS: complete -->
 ```
+
+The `<!-- STATUS: complete -->` marker must be the very last line of the file. When instructed to mark the outline as approved, replace it with `<!-- STATUS: approved -->` and make no other changes.
 
 ## Rules
 

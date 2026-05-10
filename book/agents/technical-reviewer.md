@@ -73,3 +73,4 @@ Verdict rules:
 - **Code runs.** If you can read a code snippet and see a syntax error, import error, or logical error, it's a BLOCKER.
 - **Don't rewrite.** You report and suggest; technical-writer makes the changes.
 - **Field is fast-moving.** For AI/LLM topics, claims about model capabilities, benchmarks, and best practices may have a short shelf life. Note any that are likely to become outdated quickly with `<!-- SHELF-LIFE: ... -->`.
+- **STATUS marker.** `<!-- STATUS: complete -->` must be the very last line of `review-technical.md`.

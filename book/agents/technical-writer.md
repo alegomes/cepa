@@ -36,6 +36,7 @@ Write `manuscript/<slug>/draft.md`:
 - **Citations inline.** Carry citations from research.md into the draft where claims land. Format: `[Author Year]` or a Markdown link.
 - **Chapter opening.** A short paragraph that tells the reader what they'll learn and why it matters to them specifically (tie to their goals from audience.md).
 - **Chapter closing.** A brief summary of what was covered and a one-sentence bridge to the next chapter.
+- **STATUS marker.** `<!-- STATUS: complete -->` must be the very last line of draft.md. When instructed to mark the draft as approved, replace it with `<!-- STATUS: approved -->` and make no other changes. When revising, keep `<!-- STATUS: complete -->` at the end (not `approved` — the author will re-review).
 
 ## Rules
 

@@ -1,5 +1,5 @@
 ---
-description: Write one chapter end-to-end — outline, research, draft, code examples, exercises, technical review, copy edit. Argument is the chapter slug from BOOK.md (e.g., ch03-rag-pipelines).
+description: Write one chapter end-to-end with author checkpoints at outline and draft. Resumable — re-running with the same slug detects existing artifacts and picks up where it left off.
 argument-hint: "<chapter-slug>"
 ---
 
@@ -7,7 +7,7 @@ argument-hint: "<chapter-slug>"
 
 ## Purpose
 
-Drive the full per-chapter production loop for one chapter. Delegates everything to `writing-lead`; returns file paths and review verdicts.
+Drive the per-chapter production loop with two author checkpoints: after the outline (before writing) and after the draft (before review). Resumable across sessions via STATUS markers in artifact files.
 
 **Requires** `manuscript/BOOK.md` and `manuscript/audience.md` from `/book:inception`.
 
@@ -15,60 +15,160 @@ Drive the full per-chapter production loop for one chapter. Delegates everything
 
 - `$ARGUMENTS` — the chapter slug (e.g., `ch03-rag-pipelines`). Must match an entry in `manuscript/BOOK.md`.
 
+## STATUS marker system
+
+Each artifact file ends with one of:
+- `<!-- STATUS: complete -->` — agent finished writing; author has not yet reviewed
+- `<!-- STATUS: approved -->` — author reviewed and approved; phase is locked
+
+Phase detection reads these markers to decide where to resume.
+
 ## Workflow
 
 ### 1. Validate
 
-Read `manuscript/BOOK.md`. Confirm `$ARGUMENTS` exists as a chapter slug.
+Read `manuscript/BOOK.md`. Confirm `$ARGUMENTS` exists as a chapter slug. If not found, abort.
+If `manuscript/audience.md` is missing, abort: "Run /book:inception first."
 
-If not found: abort with "Chapter '$ARGUMENTS' not found in manuscript/BOOK.md. Check the slug or run /book:inception first."
+### 2. Prerequisite check
 
-If `manuscript/audience.md` is missing: abort with "manuscript/audience.md not found. Run /book:inception first."
+Read the chapter's `Prerequisites` field from BOOK.md. For each prerequisite slug, check that `manuscript/<prereq-slug>/draft.md` exists and has `STATUS: approved`. If not:
 
-### 2. Check prerequisites
+> Warning: prerequisite chapter <prereq-slug> has not been completed yet.
+> Its draft may be missing or not yet approved. Proceed anyway? (yes/no)
 
-Read the chapter's `Prerequisites` field from BOOK.md. For each prerequisite chapter slug, check whether `manuscript/<prereq-slug>/draft.md` exists. If a prerequisite chapter hasn't been written yet, warn the author:
+Wait for confirmation.
 
-> Warning: chapter $ARGUMENTS lists <prereq-slug> as a prerequisite, but that chapter hasn't been written yet (no draft.md). Concepts from <prereq-slug> may need to be explained inline or the reader may be left without required context. Proceed anyway? (yes/no)
+### 3. Phase detection
 
-Wait for confirmation before continuing.
+Read the following files and their STATUS markers to determine where to resume:
 
-### 3. Delegate to writing-lead
+| Condition | Resume at |
+|---|---|
+| `outline.md` missing or no STATUS marker | **Outline phase** |
+| `outline.md` STATUS: complete | **Outline checkpoint** (show to author) |
+| `outline.md` STATUS: approved + `draft.md` missing or no STATUS marker | **Draft phase** |
+| `outline.md` STATUS: approved + `draft.md` STATUS: complete | **Draft checkpoint** (show to author) |
+| `draft.md` STATUS: approved + `review-technical.md` missing | **Code + exercises + review phase** |
+| `review-technical.md` STATUS: complete | **Review findings** (surface to author) |
+| `review-technical.md` STATUS: complete + author has seen findings | **Chapter complete** |
 
-> Write chapter: **$ARGUMENTS**
+Report to the author where you're resuming from: "Resuming from draft checkpoint — found approved outline, complete draft awaiting your review."
+
+---
+
+### OUTLINE PHASE
+
+Delegate to `writing-lead`:
+
+> Phase: outline
+> Chapter: $ARGUMENTS
+> Book map: `manuscript/BOOK.md`
+> Audience: `manuscript/audience.md`
 >
-> Book map: `manuscript/BOOK.md` (read the entry for $ARGUMENTS)
-> Audience profile: `manuscript/audience.md`
->
-> Run the full per-chapter loop:
-> - chapter-outliner → `manuscript/$ARGUMENTS/outline.md`
-> - researcher → `manuscript/$ARGUMENTS/research.md` + `references.md`
-> - technical-writer → `manuscript/$ARGUMENTS/draft.md`
-> - code-author → `code/$ARGUMENTS/` (if chapter has code examples)
-> - exercise-designer → `manuscript/$ARGUMENTS/exercises.md` (if chapter has exercises)
-> - technical-reviewer → `manuscript/$ARGUMENTS/review-technical.md` (PASS required to advance)
-> - copy-editor → `manuscript/$ARGUMENTS/review-copy.md` (PASS required to advance)
->
-> Iterate until both reviews pass. Reply with files produced, review verdicts, and any open author-decision items.
+> Run chapter-outliner. Write `manuscript/$ARGUMENTS/outline.md` ending with `<!-- STATUS: complete -->`.
+> Return the full outline content.
 
-### 4. Report to author
+#### Outline checkpoint
 
-- **Chapter:** $ARGUMENTS — <title from BOOK.md>
-- **Files produced:**
-  - `manuscript/$ARGUMENTS/outline.md`
-  - `manuscript/$ARGUMENTS/research.md` + `references.md`
-  - `manuscript/$ARGUMENTS/draft.md`
-  - `manuscript/$ARGUMENTS/exercises.md` (if applicable)
-  - `code/$ARGUMENTS/` (if applicable) — list scripts
-  - `manuscript/$ARGUMENTS/review-technical.md` — verdict
-  - `manuscript/$ARGUMENTS/review-copy.md` — verdict
-- **Technical review:** PASS | PASS-WITH-NOTES — <one-line summary>
-- **Copy edit:** PASS | PASS-WITH-EDITS — <one-line summary>
-- **Author decisions needed:** <list from PASS-WITH-NOTES or PASS-WITH-EDITS, or "none">
-- **Next chapter suggestions:** based on BOOK.md prerequisites, which chapters are now unblocked?
+Show the outline to the author:
+
+> **Outline for $ARGUMENTS**
+> <outline content>
+>
+> Reply with:
+> - **"approved"** (or similar) to lock this outline and move to drafting
+> - **Your feedback** to request changes — I'll revise and show you again
+
+Loop:
+- If approved → delegate to `writing-lead`: "Approve outline for $ARGUMENTS — update `manuscript/$ARGUMENTS/outline.md` STATUS: complete → STATUS: approved." Then advance.
+- If feedback → delegate to `writing-lead`: "Revise outline for $ARGUMENTS based on this feedback: <feedback>. Keep STATUS: complete at the end." Show revised outline. Pause again.
+
+---
+
+### DRAFT PHASE
+
+Delegate to `writing-lead`:
+
+> Phase: draft
+> Chapter: $ARGUMENTS
+> Approved outline: `manuscript/$ARGUMENTS/outline.md`
+> Audience: `manuscript/audience.md`
+>
+> Run researcher (→ research.md + references.md) then technical-writer (→ draft.md).
+> draft.md must end with `<!-- STATUS: complete -->`.
+> Return a section-by-section summary of the draft (one sentence per section — do not return the full text).
+
+#### Draft checkpoint
+
+Show the draft summary to the author:
+
+> **Draft summary for $ARGUMENTS**
+> <section-by-section summary>
+>
+> The full draft is at `manuscript/$ARGUMENTS/draft.md` — open it to read the prose.
+>
+> Reply with:
+> - **"approved"** to move to technical review
+> - **Your feedback** (e.g., "section 2 is too shallow", "remove the sidebar on X") — I'll revise and show you the updated summary
+
+Loop:
+- If approved → delegate to `writing-lead`: "Approve draft for $ARGUMENTS — update `manuscript/$ARGUMENTS/draft.md` STATUS: complete → STATUS: approved." Then advance.
+- If feedback → delegate to `writing-lead`: "Revise draft for $ARGUMENTS: <feedback>. technical-writer should revise draft.md keeping STATUS: complete at the end." Show updated summary. Pause again.
+
+---
+
+### CODE + EXERCISES + REVIEW PHASE
+
+No author checkpoint — these are mechanical (code, exercises) and quality-gated (reviews).
+
+Delegate to `writing-lead`:
+
+> Phase: code-exercises-review
+> Chapter: $ARGUMENTS
+> Approved draft: `manuscript/$ARGUMENTS/draft.md`
+> Book map: `manuscript/BOOK.md` (check code-examples and exercises flags)
+>
+> Run in sequence:
+> 1. code-author (if chapter has code examples) → `code/$ARGUMENTS/`
+> 2. exercise-designer (if chapter has exercises) → `manuscript/$ARGUMENTS/exercises.md`
+> 3. technical-reviewer → `manuscript/$ARGUMENTS/review-technical.md` ending with `<!-- STATUS: complete -->`
+>    If FAIL: route back to technical-writer. Iterate until PASS or PASS-WITH-NOTES.
+> 4. copy-editor → `manuscript/$ARGUMENTS/review-copy.md` ending with `<!-- STATUS: complete -->`
+>    If FAIL: route back to technical-writer. Iterate until PASS or PASS-WITH-EDITS.
+>
+> Return: review verdicts + all PASS-WITH-NOTES/EDITS findings verbatim.
+
+#### Review findings
+
+Surface findings to the author:
+
+> **Reviews complete for $ARGUMENTS**
+>
+> Technical review: <verdict> — <one-line summary>
+> <PASS-WITH-NOTES findings if any>
+>
+> Copy edit: <verdict> — <one-line summary>
+> <PASS-WITH-EDITS suggestions if any>
+>
+> These are advisory — apply what you agree with, ignore the rest.
+> The chapter is complete. You can edit `manuscript/$ARGUMENTS/draft.md` directly.
+
+---
+
+### 4. Final report
+
+- **Chapter:** $ARGUMENTS — <title>
+- **Resumed from:** <phase name or "fresh start">
+- **Files produced:** outline.md, research.md, draft.md, exercises.md (if any), review-technical.md, review-copy.md; code/$ARGUMENTS/ (if any)
+- **Technical review:** <verdict + one-line summary>
+- **Copy edit:** <verdict + one-line summary>
+- **Author decisions:** <PASS-WITH-NOTES/EDITS items, or "none">
+- **Now unblocked:** <chapter slugs whose prerequisites are now satisfied>
 
 ## Constraints
 
-- Don't skip prerequisite check. Dependency order matters for content quality.
-- writing-lead owns the quality gate — don't accept a chapter that hasn't passed both reviews.
-- The author's draft is the source of truth. Don't silently apply copy-edit suggestions; surface them so the author decides.
+- Never skip the outline checkpoint. Never skip the draft checkpoint. Both are mandatory.
+- Approval must be explicit. "That looks fine" counts as approval. Silence does not.
+- Don't advance from a phase if the author gave feedback — iterate until they approve or explicitly say "proceed anyway."
+- On resume: always tell the author what was found and where you're picking up. Never silently skip a phase.
