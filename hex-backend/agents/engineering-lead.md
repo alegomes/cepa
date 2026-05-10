@@ -41,7 +41,19 @@ You take a Story and turn it into delegated implementation work. ARCHITECT phase
    - Integration seams: data shapes, API endpoints, shared types, error contracts
    - NFRs: observability hooks, structured logging, security, resilience
    - Risks / dependencies on other Tasks
-2a. **E2E spec authoring** (only when the Task creates or modifies an HTTP endpoint): before delegating to a dev worker, delegate to `integration-analyst` with the Task's endpoint(s) and instruct: "Apply your E2E behavior spec authoring playbook for `<METHOD> <path>`. Mode: write. Spec file: `specs/e2e-assertions.md` (verify the project's actual location). The Task may add a new endpoint (no existing section to replace) or modify an existing one (replace it). Output goes to the spec file; reply with the diff and any open questions." Reference the produced spec section from the TASK.md (`See spec: specs/e2e-assertions.md#<endpoint>`). If `integration-analyst` flags open questions the dev worker would need to know, surface them in TASK.md's "Open questions" subsection rather than burying them — qa-engineer reads TASK.md to drive coverage. For Tasks that don't touch HTTP endpoints (pure domain refactors, adapter migrations, etc.), skip this step entirely.
+2a. **E2E spec authoring (prescriptive)** — only when the Task creates or modifies an HTTP endpoint. Before delegating to a dev worker, delegate to `integration-analyst` in **prescriptive mode** (intent → spec, since the new endpoint doesn't have code yet — or the modified one is about to change). Use this prompt:
+
+> Author E2E behavior spec for `<METHOD> <path>` from INTENT, not from code. Mode: prescriptive. Output mode: write. Spec file: `specs/e2e-assertions.md` (verify the project's actual location).
+>
+> Intent source: TASK.md at `<docs/tasks/<story-slug>/<task-slug>.md>` — full content pasted below. Acceptance criteria, integration seams, and NFRs are authoritative.
+>
+> ```
+> <verbatim TASK.md content>
+> ```
+>
+> Apply your "E2E behavior spec authoring — prescriptive mode" playbook. Use `<TBD>` markers for seed values you can't determine yet — never fabricate. Flag implementation choices the intent didn't specify as open questions. If the endpoint already exists in code and contradicts the intent, surface the divergence loudly.
+
+Reference the produced spec section from the TASK.md (`See spec: specs/e2e-assertions.md#<endpoint>`). If `integration-analyst` returns open questions the dev worker would need to know, surface them in TASK.md's "Open questions" subsection — qa-engineer reads TASK.md to drive coverage. For Tasks that don't touch HTTP endpoints (pure domain refactors, adapter migrations, etc.), skip this step entirely.
 3. **EXECUTOR**: group Tasks by independence (predicted paths don't overlap → parallelizable; shared paths → sequential). For each independent group, fan out dev workers in parallel via `isolation: "worktree"` (one worktree per Task). Each worker commits before returning and reports its branch name + final commit SHA. Then merge all worker branches into a per-Story integration branch (see "Parallel dev workers" below) before running the quality loop.
 4. **Quality loop on the integration branch (main session, no worktree)**:
    - Delegate to `qa-engineer` for coverage gap scan + green-build evidence. If CRITICAL/HIGH gaps OR build failure → route back to the responsible dev worker (whoever wrote the failing module) → iterate.

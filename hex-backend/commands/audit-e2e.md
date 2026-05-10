@@ -7,7 +7,7 @@ argument-hint: [--all] [<METHOD /path/to/endpoint>]   (mutually exclusive — on
 
 ## Purpose
 
-`/hex-backend:spec-e2e` propagates code → spec. `/hex-backend:resync-e2e` propagates spec → tests. This command propagates nothing — it just reports the 3-way diff so you can decide which side is wrong before fixing it.
+`/hex-backend:document-e2e` propagates code → spec (descriptive). `/hex-backend:spec-e2e` propagates intent → spec (prescriptive). `/hex-backend:resync-e2e` propagates spec → tests. This command propagates nothing — it just reports the 3-way diff so you can decide which side is wrong before fixing it.
 
 Three sources, three pairwise comparisons:
 
@@ -73,7 +73,8 @@ A single structured summary:
 - **Major drift:** count + list (each with one-line summary of the worst divergence)
 - **Per-endpoint detail:** for each MINOR or MAJOR endpoint, paste the qa-engineer's three-subsection report verbatim. ALIGNED endpoints get one line each.
 - **Recommended next steps:** for each MAJOR drift, the most natural next command:
-  - Spec stale → `/hex-backend:spec-e2e <endpoint>` (re-author from code).
+  - Spec stale (code is what should be specced) → `/hex-backend:document-e2e <endpoint>` (re-document from code).
+  - Spec stale (spec should describe correct intent, code is wrong or incomplete) → `/hex-backend:spec-e2e <endpoint>` with intent prose to re-author prescriptively.
   - Tests stale → `/hex-backend:resync-e2e <endpoint>` (propagate spec to tests).
   - Code wrong → `/hex-backend:reproduce-fix-verify <description>` (treat as a bug).
   - Undecided → flag for engineering-lead.
@@ -83,4 +84,4 @@ A single structured summary:
 - **Read-only.** No `Edit`, `Write`, `MultiEdit`. No `mvnw`. No `git` mutations. The audit is observation, not action.
 - **Don't pick a fix direction.** When a divergence exists, the human decides whether spec, code, or tests is wrong. The audit names the gap with evidence on each side; that's where its responsibility ends.
 - **Sweep aggregates; don't bail.** Unlike re-sync (which stops on BLOCKED to avoid wasting budget on broken state), audit always walks every endpoint — its output is the list, and incomplete lists are misleading.
-- **Don't audit endpoints not in the spec doc.** Audit's premise is "spec exists, check alignment." For endpoints with no spec, run `/hex-backend:spec-e2e` first to author one — then audit becomes meaningful.
+- **Don't audit endpoints not in the spec doc.** Audit's premise is "spec exists, check alignment." For endpoints with no spec: `/hex-backend:document-e2e <endpoint>` if the implementation exists and is correct (capture current behavior), or `/hex-backend:spec-e2e <endpoint> "<intent>"` if you're designing or want to re-spec from intent. Then audit becomes meaningful.

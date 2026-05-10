@@ -1,54 +1,76 @@
 ---
-description: Author an E2E behavior specification for a single HTTP endpoint. Reads OpenAPI + controller + use case + adapter + seed data, then writes (or previews) a section in specs/e2e-assertions.md following the project's existing style. Use when an endpoint isn't covered in the spec doc yet, or when the implementation drifted from the spec. For new endpoints in flight, integration-analyst will be invoked automatically by engineering-lead during plan-build-validate's ARCHITECT phase — this command is for ad-hoc specification of existing endpoints.
-argument-hint: [--preview] <METHOD /path/to/endpoint>   (e.g., "GET /api/v1/assinaturas/resumo")
+description: Author an E2E behavior spec from INTENT (not from code). You describe what an endpoint should do — in prose, or via a TASK.md path — and integration-analyst produces the spec section in specs/e2e-assertions.md following project style. Use BEFORE implementation, when designing a new endpoint, or when re-specifying expected behavior independent of current code. For documenting an EXISTING endpoint's behavior from its code, use /hex-backend:document-e2e.
+argument-hint: [--preview] [--task <path/to/TASK.md>] <METHOD /path/to/endpoint> ["<freeform intent description>"]
 ---
 
 # /hex-backend:spec-e2e
 
 ## Purpose
 
-Generate an E2E behavior spec for one endpoint, traceable to the actual code + seed (no invented values), in the project's existing style. The spec lives in `specs/e2e-assertions.md` (or wherever the project's E2E spec doc is — the agent verifies on read).
+**Prescriptive E2E spec authoring** — you provide intent (prose, a TASK.md, requirements), `integration-analyst` produces the spec section. The endpoint may not exist in code yet; that's fine. The spec describes what the endpoint **should** do, with the same level of detail (happy path, edge cases, errors, invariants) as the descriptive mode but driven by your description, not by reading existing code.
+
+This is the **intent → spec** direction. For the opposite (existing code → spec, "document what's there"), use `/hex-backend:document-e2e`.
 
 **Use when:**
-- The endpoint exists in code but isn't in the spec doc.
-- The implementation drifted from the spec (rename, schema change) and the spec needs refresh.
-- You want to seed an endpoint's spec before authoring its E2E tests.
+- Designing a new endpoint before implementation. Spec drives dev work.
+- Re-specifying an endpoint whose current behavior is wrong (you want to spec the *correct* behavior, not capture the buggy state).
+- Inside `plan-build-validate`, `engineering-lead`'s ARCHITECT phase invokes this automatically using the TASK.md as intent (the new endpoint doesn't have code yet).
 
 **Don't use when:**
-- The endpoint is being created as part of a Story in flight — `engineering-lead`'s ARCHITECT phase will invoke `integration-analyst` automatically. This command is for ad-hoc spec authoring outside of an active Story.
+- The endpoint exists and works correctly and you just need spec-from-code → use `/hex-backend:document-e2e`.
 
 ## Variables
 
-- `$ARGUMENTS` — the endpoint as `<METHOD> <path>`. Method in uppercase (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`). Path verbatim from OpenAPI / controller. Optional `--preview` flag (default behavior is **write** — adds or replaces the section in the spec file).
+- `$ARGUMENTS` — combination of:
+  - `<METHOD> <path>` — required. The endpoint being specced.
+  - Freeform intent description in quotes — optional. Plain English describing what the endpoint should do.
+  - `--task <path>` — optional. Path to a TASK.md (or any markdown file) treated as authoritative intent. Useful when invoked from a Story flow.
+  - `--preview` — optional. Show the proposed section, don't write.
+
+  At least one of `--task` or freeform description must be present, otherwise there's nothing to spec from.
 
 ## Instructions
 
-You are the orchestrator. Don't implement anything yourself; delegate to `integration-analyst`. Apply `scope-discipline` — one endpoint per invocation. Apply `evidence-over-assumption` — pass through any "open questions" the analyst surfaces; don't paper over them.
+You are the orchestrator. Don't author the spec yourself; delegate to `integration-analyst`. Apply `scope-discipline` (one endpoint per invocation). Apply `evidence-over-assumption` — open questions surface to the user, don't get papered over.
 
 ## Workflow
 
 ### 1. Parse arguments
 
-- Extract `<METHOD>` and `<path>` from `$ARGUMENTS`. If parsing fails (missing method, no leading `/` on path, etc.), reply with the expected format and stop.
-- Detect `--preview` flag. Default mode is **write**.
+- Extract `<METHOD> <path>` (same parsing as `/document-e2e`).
+- Detect `--preview` flag (default = write).
+- Detect `--task <path>` flag — if present, verify the file exists.
+- Capture any quoted freeform string as intent.
+- Validate: at least one source of intent must be present (`--task` OR freeform). If neither, reply: "No intent provided. Pass `--task <path>` to a TASK.md, or describe the endpoint behavior in quotes after the path. The spec needs *something* to be authored from."
 
-### 2. Sanity check
+### 2. Sanity check the spec doc
 
-Confirm that:
-- A spec file exists somewhere obvious (`specs/e2e-assertions.md`, `spec/e2e-assertions.md`, `docs/specs/e2e-assertions.md`). If multiple, ask the user which to extend. If none, ask: "No E2E spec doc found at the usual paths. Create `specs/e2e-assertions.md`? (yes / specify path)" — don't auto-create at a path the user didn't approve.
-- The endpoint exists. Quick `Grep` for the method + path in `api-rest/src/main/**` to confirm there's a matching controller. If zero matches: "Endpoint `<METHOD> <path>` not found in `api-rest/src/main/**`. Verify the spelling and re-run." If multiple matches (e.g., versioned routes): show them and ask which.
+Same as `/document-e2e` step 2 — locate `specs/e2e-assertions.md` (or equivalent), confirm or ask permission to create. Skip the "endpoint exists in code" check — endpoint may not exist yet (that's the whole point of prescriptive mode).
 
-### 3. Delegate to integration-analyst
+If the endpoint DOES exist in code (Grep finds a matching controller), surface a soft note: "Endpoint `<METHOD> <path>` exists in code at `<file:line>`. You're authoring a prescriptive spec — proceed if you intend the spec to describe desired behavior independent of (or differing from) the current implementation. Otherwise, `/hex-backend:document-e2e` would capture what the code does today." Don't block on it; the user picks.
 
-> Author E2E behavior spec for `<METHOD> <path>`. Mode: `<write | preview>`. Spec file: `<resolved path>`.
+### 3. Delegate to integration-analyst (prescriptive mode)
+
+> Author E2E behavior spec for `<METHOD> <path>` from INTENT, not from code. Mode: prescriptive. Output mode: `<write | preview>`. Spec file: `<resolved path>`.
 >
-> Apply your "E2E behavior spec authoring" playbook (in your agent spec): read the spec file's existing style first, then OpenAPI, controller, use case, adapter, seed; produce the section in the project's heading + prose + JSON-example convention. Don't invent values — every value in the JSON example must trace to seed data or a documented derivation. Cite `file:line` for non-obvious assertions. Cover happy path, per-field assertions, cross-endpoint consistency, filters/params, tenant isolation, edge cases, error scenarios, and domain invariants.
+> Intent sources:
+> - **TASK.md (if provided):** `<path to TASK.md>` — full content pasted below. Treat acceptance criteria, integration seams, and NFRs as authoritative.
+>   ```
+>   <verbatim TASK.md content>
+>   ```
+> - **Freeform description (if provided):** `<verbatim quoted string>`
 >
-> If write mode: replace any existing section for the same endpoint; otherwise append. Show the diff in your reply.
+> Apply your "E2E behavior spec authoring — prescriptive mode" playbook (in your agent spec):
 >
-> If preview mode: show the proposed section text only; don't touch the file.
+> 1. Read the existing spec doc to match style (heading levels, prose tone, JSON-example formatting). Style continuity matters even when the content is new.
+> 2. Read the OpenAPI yaml IF this endpoint has a contract entry — the OpenAPI is contract-of-record for shape/validation/codes. If there's no entry yet (greenfield), the spec describes what the OpenAPI WILL define and you note this for the api-dev to align.
+> 3. From the intent, derive: happy path response shape (with placeholder values clearly marked as `<TBD-by-implementation>` if real seed values aren't determinable yet), per-field assertions, filters/params behavior, tenant isolation requirements, edge cases, error scenarios, domain invariants.
+> 4. Where the intent is silent on something the spec needs (e.g., "what should happen on empty `q`?"), include the case but mark it as an "Open question" — don't invent the answer. The user resolves these.
+> 5. NEVER invent seed values. If the intent doesn't specify concrete data, write `<TBD: replace with seed value once seed is updated>` rather than fabricating a number.
 >
-> Open questions (anything you couldn't determine from reading) go at the end of the section under "Open questions" — flag them, don't guess.
+> Output mode handling:
+> - `write` mode: replace any existing section for the same endpoint; otherwise append. Show diff in reply.
+> - `preview` mode: show proposed section text; don't touch the file.
 
 Wait for the analyst's reply.
 
@@ -57,14 +79,16 @@ Wait for the analyst's reply.
 A single concise message:
 
 - **Endpoint:** `<METHOD> <path>`
-- **Mode:** `write` → "Updated `<spec file>` (replaced existing section / appended new section)." OR `preview` → "Preview only — nothing written."
-- **Open questions:** count + summary of each (where the analyst couldn't determine a value from sources). The user should resolve these before relying on the spec.
-- **Adjacent observations:** anything the analyst flagged as out-of-scope-but-worth-noting (e.g., a sibling endpoint with similar issues).
-- **Next step:** if there are open questions, suggest resolving them; if not, suggest authoring the E2E test (the spec is the test author's input).
+- **Intent source:** `--task <path>` / freeform / both.
+- **Mode:** write / preview.
+- **Open questions:** count + summary. Prescriptive specs typically have more open questions than descriptive (intent rarely covers every edge case). Resolve them before authoring tests against this spec.
+- **Code-existence note:** if the endpoint already has an implementation that contradicts the spec, surface the divergence loudly — the user is now committed to changing the code, the spec, or both.
+- **Next step:** if open questions, suggest resolving; if endpoint doesn't exist yet, suggest dispatching to `engineering-lead` to implement against the spec; if code already exists and diverges, suggest `/hex-backend:audit-e2e <endpoint>` for the 3-way diff.
 
 ## Constraints
 
-- **One endpoint per invocation.** Don't batch even if the user supplies multiple — the read-many-files-then-write pattern is heavy; force the user to scope.
-- **Don't invent values.** If the seed doesn't cover the field, the value is an open question — not a placeholder.
-- **No code changes.** This command writes a spec doc, never controller / use case / adapter / test code. Routing test authoring lives elsewhere (qa-engineer, downstream).
-- **No tenant guessing.** If the endpoint has tenant scoping that isn't obvious from controller + adapter, surface it as an open question. Don't fabricate "data from another tenant must not appear" without verifying that tenant filtering actually exists in code.
+- **Intent is required.** No silent fallback to "read the code" if intent is missing — that would silently turn this into descriptive mode. Refuse with the "no intent provided" message.
+- **Don't invent seed values.** Use `<TBD>` markers; the human (or a future Story) supplies real values.
+- **Don't read existing controller/use-case as authoritative.** The intent is authoritative. Reading code is fine for context (e.g., to align styling) but never to override what the user said.
+- **One endpoint per invocation.** Same as `/document-e2e`.
+- **Spec doc is the only writable target.** No code changes. No test changes.
