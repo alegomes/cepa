@@ -144,8 +144,10 @@ def main():
         prefix = raw_agent_type.split(":", 1)[0]
         if prefix != PLUGIN_NAME:
             sys.exit(0)
-    elif not raw_agent_type:
-        # Main session (no subagent caller) — not subject to plugin path-locks.
+    else:
+        # No prefix at all — either main session (empty agent_type) or a
+        # built-in CC agent (statusline-setup, Explore, Plan, general-purpose,
+        # etc.). Neither is from our plugin; not our concern. Fail-open.
         sys.exit(0)
 
     agent = detect_agent(payload)
