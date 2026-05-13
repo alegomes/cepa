@@ -1,13 +1,24 @@
 {
   "name": "common",
   "version": "0.1.0",
-  "description": "Shared mindset skills required by the alegomes topology plugins. Ships mental-model, active-listener, zero-micromanagement, conversational-response, and till-done. Also ships the autonomous-mode skill plus /common:autonomous-start, /common:autonomous-resume, /common:debrief, and a PostToolUse checkpoint hook for unattended runs.",
+  "description": "Shared mindset skills required by the alegomes topology plugins. Ships mental-model, active-listener, zero-micromanagement, conversational-response, till-done, autonomous-mode, and green-or-revert. Commands: /autonomous-start, /autonomous-resume, /debrief, /recap. Hooks: autonomous-checkpoint (PostToolUse on Task), session-log (UserPromptSubmit), mark-build-stale + capture-build-result + gate-advance (the green-or-revert state machine).",
   "author": {
     "name": "alegomes"
   },
-  "keywords": ["agents", "skills", "shared", "autonomous"],
+  "keywords": ["agents", "skills", "shared", "autonomous", "green-or-revert"],
   "skills": "./skills/",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/gate-advance.py\""
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Task",
@@ -15,6 +26,24 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/autonomous-checkpoint.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/mark-build-stale.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/capture-build-result.py\""
           }
         ]
       }
