@@ -15,6 +15,7 @@ composable plugins.
 | **[docs/green-or-revert.md](docs/green-or-revert.md)** | Build-state machine (`UNKNOWN`/`SUCCESS`/`STALE`/`FAILURE`). Hard gate on commits/pushes/PRs while build is broken. Stops the "I think the test passes" failure mode. |
 | **[docs/e2e-cycle.md](docs/e2e-cycle.md)** | The four E2E spec commands (`/spec-e2e`, `/document-e2e`, `/resync-e2e`, `/audit-e2e`) and how they relate (intent ↔ spec ↔ code ↔ tests). |
 | **[docs/troubleshooting.md](docs/troubleshooting.md)** | Common errors: path-lock blocks, gate-advance blocks, cache staleness, MCP auth dropout, worktree-strips-Task quirk. |
+| **[docs/internals/](docs/internals/)** | For extending or debugging the marketplace itself: architecture, hooks reference, path-lock design, build-state machine, agent anatomy, expertise files, extension cookbook, CC quirks. |
 | **[agents-overview.md](agents-overview.md)** | Per-agent reference: role, delegations, write allowlist, when-to-use. The cross-plugin matrix. |
 
 ## Plugins
