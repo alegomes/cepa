@@ -1,12 +1,32 @@
 # claude-multi-team-plugin
 
-A Claude Code plugin marketplace shipping a multi-agent setup as six
-composable plugins:
+A Claude Code plugin marketplace shipping a multi-agent setup as **seven**
+composable plugins.
+
+## Documentation
+
+| Document | Read it for |
+|---|---|
+| **[docs/getting-started.md](docs/getting-started.md)** | First 10 minutes: install, pick a topology, run your first command. |
+| **[docs/topologies.md](docs/topologies.md)** | Choosing between `hex-backend`, `multi-team`, `solo-pair`, `discovery`, `book`. Composition rules with `jira-flow`. |
+| **[docs/commands.md](docs/commands.md)** | Full reference for every slash command, grouped by plugin. |
+| **[docs/jira-flow.md](docs/jira-flow.md)** | `jira-flow.yaml` schema (`defaults`, `status_map`, `lifecycles`), `/configure` walkthrough, Implementation Summary contract, read-back verification. |
+| **[docs/autonomous-mode.md](docs/autonomous-mode.md)** | Unattended-operation lifecycle: `/autonomous-start` → checkpoint hook → `/autonomous-resume` → `/debrief`. Survives token-limit hits and session crashes. |
+| **[docs/green-or-revert.md](docs/green-or-revert.md)** | Build-state machine (`UNKNOWN`/`SUCCESS`/`STALE`/`FAILURE`). Hard gate on commits/pushes/PRs while build is broken. Stops the "I think the test passes" failure mode. |
+| **[docs/e2e-cycle.md](docs/e2e-cycle.md)** | The four E2E spec commands (`/spec-e2e`, `/document-e2e`, `/resync-e2e`, `/audit-e2e`) and how they relate (intent ↔ spec ↔ code ↔ tests). |
+| **[docs/troubleshooting.md](docs/troubleshooting.md)** | Common errors: path-lock blocks, gate-advance blocks, cache staleness, MCP auth dropout, worktree-strips-Task quirk. |
+| **[agents-overview.md](agents-overview.md)** | Per-agent reference: role, delegations, write allowlist, when-to-use. The cross-plugin matrix. |
+
+## Plugins
 
 - **`common`** — eight shared mindset skills (`mental-model`,
   `active-listener`, `zero-micromanagement`, `conversational-response`,
   `till-done`, `scope-discipline`, `evidence-over-assumption`,
-  `name-the-disagreement`). Required by every topology.
+  `name-the-disagreement`) plus the `autonomous-mode` and
+  `green-or-revert` skills. Cross-topology commands: `/autonomous-start`,
+  `/autonomous-resume`, `/debrief`, `/recap`. Hooks: session-log,
+  autonomous-checkpoint, mark-build-stale, capture-build-result,
+  gate-advance. Required by every topology.
 - **`multi-team`** — the generic 9-agent topology: orchestrator + 3
   leads (Opus, delegate-only) + 6 workers (Sonnet, domain-locked).
   For plan → build → validate workflows.
@@ -15,18 +35,29 @@ composable plugins:
 - **`hex-backend`** — a 13-agent hexagonal-architecture topology
   with a per-Task quality loop (qa → refactor-advisor → code-reviewer).
   Path-lock keyed to the canonical `domain/application/api-rest/
-  infrastructure/bootstrap` Maven layout.
+  infrastructure/bootstrap` Maven layout. Ships three flow commands
+  (`plan-build-validate`, `reproduce-fix-verify`, `investigate`) plus
+  a four-command E2E spec cycle
+  (`spec-e2e` / `document-e2e` / `resync-e2e` / `audit-e2e`).
 - **`discovery`** — a 6-agent continuous product-discovery topology
   (discovery-lead + opportunity-framer + user-researcher +
   assumption-tester + evidence-auditor + epic-briefer). Sits *upstream*
   of the build topologies — translates raw signals into validated
   opportunities, hands off to engineering via a delivery brief.
 - **`jira-flow`** — adds an `atlassian-expert` worker plus Jira-aware
-  slash commands (`capture`, `plan-track-build-validate`, `execute`,
-  `drain`, `advance`). Layers on top of any topology that ships the
-  standard 3-lead set, OR any topology with a custom lifecycle declared
-  in `jira-flow.yaml` (used by `/advance` —
-  discovery's column flow rides on this).
+  slash commands (`configure`, `capture`, `plan-track-build-validate`,
+  `execute`, `drain`, `advance`). Layers on top of any topology that
+  ships the standard 3-lead set, OR any topology with a custom lifecycle
+  declared in `jira-flow.yaml` (used by `/advance` — discovery's column
+  flow rides on this). Project Jira config lives at `jira-flow.yaml` in
+  the project root: `defaults` block (site / project_key / board_id /
+  status_map / issue_types), plus `default_topology` and per-topology
+  lifecycles. `atlassian-expert` enforces anti-hallucination (refuses
+  to infer site URLs from repo names) and read-back verification on
+  every Jira write.
+- **`book`** — a 10-agent book-writing topology. Outside the
+  software-engineering surface area; documented in
+  `book/book-topology.md`.
 
 Edit once here, install in any project, version like normal code.
 

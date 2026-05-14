@@ -78,13 +78,13 @@ plan → (per-Task: build → qa → housekeeping → review) → cross-cutting 
 | `planning-lead` | lead (DISCOVERY) | orchestrator | `epic-author`, `product-manager`, `integration-analyst` (parallel) | Read, Glob, Grep, Task, Write | `spec/**`, `specs/**`, `docs/**`, own expertise |
 | `epic-author` | worker | `planning-lead` | — | Read, Glob, Grep, Write | `spec/**`, `specs/**`, `docs/**`, own expertise |
 | `product-manager` | worker | `planning-lead` | — | Read, Glob, Grep, Write | `spec/**`, `specs/**`, `docs/**`, own expertise |
-| `integration-analyst` | worker | `planning-lead` | — | Read, Glob, Grep, Write | `spec/**`, `specs/**`, `docs/**`, own expertise |
-| `engineering-lead` | lead (ARCHITECT + EXECUTOR) | orchestrator | dev workers + per-Task quality loop (qa, refactor-advisor, code-reviewer) | Read, Glob, Grep, Task, Write, Bash (RO) | `docs/tasks/**`, own expertise |
+| `integration-analyst` | worker (also E2E spec author, Mode A descriptive + Mode B prescriptive) | `planning-lead`, `engineering-lead` (for E2E spec authoring) | — | Read, Glob, Grep, Write | `spec/**`, `specs/**`, `docs/**`, own expertise |
+| `engineering-lead` | lead (ARCHITECT + EXECUTOR) | orchestrator | dev workers + per-Task quality loop (qa, refactor-advisor, code-reviewer); routes ARCHITECT to `integration-analyst` for E2E spec authoring on endpoint Tasks | Read, Glob, Grep, Task, Write, Bash (RO + branch reconciliation: `git checkout -b`, `git merge --no-ff`, `git branch -d`, `git worktree remove`) | `docs/tasks/**`, `docs/investigations/**`, `pom.xml`, `**/pom.xml`, own expertise |
 | `domain-dev` | worker | `engineering-lead` | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | `domain/src/main/**`, `application/src/main/**`, own expertise |
 | `api-dev` | worker | `engineering-lead` | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | `api-rest/src/main/**`, own expertise |
 | `adapter-dev` | worker | `engineering-lead` | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | `infrastructure/src/main/**`, `bootstrap/src/main/**`, own expertise |
 | `validation-lead` | lead (VALIDATION + GATE) | orchestrator | `security-reviewer`; runs `./mvnw verify` directly | Read, Glob, Grep, Task, Bash | own expertise only |
-| `qa-engineer` | worker (Tester) | `engineering-lead` | — | Read, Glob, Grep, Edit, Write, Bash | `*/src/test/**`, own expertise |
+| `qa-engineer` | worker (Tester; reads `specs/e2e-assertions.md` as authoritative for E2E tests; requires literal BUILD SUCCESS evidence for PASS verdicts) | `engineering-lead` | — | Read, Glob, Grep, Edit, Write, Bash | `*/src/test/**`, own expertise |
 | `refactor-advisor` | worker (Housekeeping, advisory) | `engineering-lead` | — | Read, Glob, Grep, Write | `docs/housekeeping/**`, own expertise (no source edits) |
 | `security-reviewer` | worker | `validation-lead` | — | Read, Glob, Grep, Write | `docs/security-reviews/**`, own expertise |
 | `code-reviewer` | worker (final GATE) | `engineering-lead` | — | Read, Glob, Grep | — (advisory verdict only; no writes) |
@@ -100,13 +100,25 @@ plugin-namespaced; hook strips the prefix).
 
 ```
 dev worker → RESULT.md
-  → qa-engineer (gap scan; CRITICAL/HIGH blocks)
+  → qa-engineer (gap scan; CRITICAL/HIGH blocks; literal BUILD SUCCESS required for PASS)
   → (if gaps) back to dev worker, iterate
   → refactor-advisor (housekeeping report; advisory, never blocks)
-  → code-reviewer (APPROVE / REJECT vs. TASK.md + ACL compliance)
+  → code-reviewer (APPROVE / REJECT vs. TASK.md + ACL compliance; auto-REJECT on missing build evidence)
   → (if REJECT) back to dev worker, iterate
   → next Task
 ```
+
+**Commands** (all in `hex-backend/commands/`):
+
+| Command | Purpose |
+|---|---|
+| `/hex-backend:plan-build-validate <task>` | Canonical feature flow: plan → build (per-Task loop) → validate. |
+| `/hex-backend:reproduce-fix-verify <bug>` | Confirmed-bug flow: failing test → fix → verify. NOT-A-BUG is a valid outcome. |
+| `/hex-backend:investigate <hypothesis>` | Read-only analysis. Writes `docs/investigations/<slug>.md` with conclusion + recommended next command. |
+| `/hex-backend:spec-e2e <METHOD /path>` | **Prescriptive** E2E spec (intent → spec). Takes freeform intent and/or `--task <TASK.md>`. |
+| `/hex-backend:document-e2e <METHOD /path>` | **Descriptive** E2E spec (code → spec). Reads controller + use case + adapter + seed. |
+| `/hex-backend:resync-e2e <ep>` or `--all` | Propagates spec edits to E2E tests. Runs verify with green-build evidence. |
+| `/hex-backend:audit-e2e <ep>` or `--all` | Read-only 3-way diff: Spec↔Code, Spec↔Tests, Code↔Tests. |
 
 ---
 
@@ -173,6 +185,34 @@ and `hex-backend` ship those names; `solo-pair` doesn't, so jira-flow
 doesn't work with solo-pair-only. CC has no enforced plugin
 dependencies — the soft requirement is documented in the plugin
 descriptions and surfaces at first delegation if missing.
+
+---
+
+## common (cross-topology layer)
+
+The `common@alegomes` plugin ships the shared mindset skills, the
+autonomous-operation lifecycle, the session log, and the green-or-revert
+build-state machine. No agents — `common` is a horizontal layer that
+every topology rides on top of.
+
+**Commands** (all in `common/commands/`):
+
+| Command | Purpose |
+|---|---|
+| `/common:autonomous-start [--topology=X] [--flow=NAME] [--no-jira] <description>` | Kick off an unattended run. Auto-detects Jira key in args; if found AND `jira-flow.yaml` exists, wraps with In Progress → flow → In Review (Implementation Summary). Activates `autonomous-mode` skill. |
+| `/common:autonomous-resume [run-id]` | Pick up after compaction / session crash from `docs/autonomous/<run-id>/state.yaml`. Defaults to most recent in-progress. |
+| `/common:debrief [run-id]` | Walk every `### Decision:` block from the run with the user. Verdicts (`keep` / `overrule` / `refine` / `skip`) land in `<agent>-mental-model.yaml` under `feedback`. Dual-scan detects format drift. |
+| `/common:recap [--since=YYYY-MM-DD]` | Render "Asked / Status / Delivered" table for the session. Reads `.claude/session-log.md` (intent) and the conversation (delivery). Read-only. |
+
+**Hooks** (all in `common/hooks/`):
+
+| Hook | Event | Purpose |
+|---|---|---|
+| `session-log.py` | UserPromptSubmit | Appends every user prompt to `.claude/session-log.md` with date/time headers. Survives auto-compaction. |
+| `autonomous-checkpoint.py` | PostToolUse on `Task` | Appends to `docs/autonomous/<run-id>/state.yaml` after every subagent call when `CLAUDE_AUTONOMOUS_RUN_ID` is set. Out-of-band — orchestrator cannot forget. |
+| `mark-build-stale.py` | PostToolUse on `Edit\|Write\|MultiEdit` | Marks `.claude/last-build.json` as STALE when source / build manifest / migration is edited. |
+| `capture-build-result.py` | PostToolUse on `Bash` | Detects Maven/Gradle/npm/yarn/pytest/cargo/go-test invocations; writes SUCCESS or FAILURE with command + tail. |
+| `gate-advance.py` | PreToolUse on `Bash` | Hard gate: refuses `git commit` / `git push` / `gh pr create` / `kubectl apply` / `terraform apply` / `docker push` / `aws\|gcloud\|az deploy` when build state is STALE or FAILURE. |
 
 ---
 
@@ -340,8 +380,10 @@ mechanism that prevents the card from advancing on optimism.
 | `scope-discipline` | Don't expand the work beyond what was asked. While-I-was-in-there findings are follow-ups, not silent inclusions. | every agent |
 | `evidence-over-assumption` | Distinguish what you verified from what you assumed when reporting. "I checked X by running Y" vs. "I'm assuming X because Z." | every agent |
 | `name-the-disagreement` | When synthesizing reports from multiple sub-agents that disagree, surface the disagreement explicitly — don't average or pick silently. | leads + orchestrator (synthesizers) |
+| `autonomous-mode` | Activated by `/common:autonomous-start`. No questions to the user; every ambiguity logged in formal `### Decision:` block (Options / Chosen / Rationale). | orchestrator (session-wide) |
+| `green-or-revert` | Never claim runtime state without consulting `.claude/last-build.json`. After meaningful edits, verify is the next action — don't wait to be asked. On FAILURE, fix or revert before any other action. | orchestrator + leads + dev workers |
 
-The eight skills ship in the **`common@alegomes` plugin**
+The ten skills ship in the **`common@alegomes` plugin**
 (`common/skills/`). Every topology requires `common`; install it once
 per project and the skills are available to every subagent via CC's
 session-wide skill namespace.
