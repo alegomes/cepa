@@ -171,6 +171,44 @@ Re-arm via `RemoteTrigger update` with a new `run_once_at` and
 `enabled` without a new schedule — the previous timestamp may be in
 the past.
 
+## PostToolUse `tool_response` shape varies — defensive extraction required
+
+PostToolUse hooks receive a `tool_response` field whose shape varies
+across CC versions, MCP wrappers (like context-mode that redirects
+Bash → ctx_execute), and tool types. A hook that reads only the most
+common shape (`{"stdout": "..."}` or `{"content": [...]}`) silently
+fails when CC sends a different envelope.
+
+Symptom: the hook runs successfully (exit 0), but the state it should
+update doesn't change. Reproduced in 2026-05-17: `mvnw verify`
+returned BUILD SUCCESS but `capture-build-result.py` did not write
+`SUCCESS` to `.claude/last-build.json` — the hook's `extract_text`
+returned empty because the `tool_response` shape on that CC build
+wasn't in the recognized list, and `classify()` couldn't find the
+"BUILD SUCCESS" marker in an empty string.
+
+Shapes the marketplace's `capture-build-result.py` now handles
+(post-fix):
+
+- Top-level `str` — raw text.
+- Top-level `list` — content blocks.
+- `dict` with any of: `stdout`, `output`, `result`, `content`, `text`,
+  `data`, `message` — each may be str OR list-of-content-blocks.
+- Nested envelope: `dict.output` itself a `dict` with `stdout` /
+  `content` / `text` / `result` inside.
+- Anthropic SDK envelope: `dict.tool_use_result.content`.
+- Fallback: `dict.stderr` only.
+
+Content-block lists are flattened with handling for `{type: text,
+text: ...}` AND `{type: tool_result, content: ...}` (the latter may
+itself nest a list).
+
+Pattern lesson: when writing a PostToolUse hook that reads
+`tool_response`, gate everything on a `CAPTURE_BUILD_DEBUG`-style env
+var that dumps the actual payload shape to a file on every invocation.
+You will hit shape drift; observability built in from day one beats
+guessing later.
+
 ## MCP auth dropouts
 
 The Atlassian (and other) MCP connectors lose authorization
