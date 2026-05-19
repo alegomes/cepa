@@ -46,6 +46,19 @@ defaults:
 # --- Default topology for build/validate flows ---
 default_topology: hex-backend       # which topology's leads /jira-flow:execute delegates to
 
+# --- Per-topology overrides (optional) ---
+# When a topology is active, fields here REPLACE the matching field
+# in `defaults` for that topology's operations. Common use: same Jira
+# project, different Team field per topology (engineering vs product).
+topologies:
+  discovery:
+    required_fields:
+      - { id: customfield_10010, name: "Team", value: "Product" }
+    # project_key: DISC          # if discovery uses a different Jira project
+  hex-backend:
+    required_fields:
+      - { id: customfield_10010, name: "Team", value: "Engineering" }
+
 # --- Lifecycles for /jira-flow:advance ---
 lifecycles:
   - topology: discovery
@@ -96,10 +109,34 @@ lifecycles:
 - **`default_topology`** — which build topology
   `/jira-flow:plan-track-build-validate` and `/jira-flow:execute`
   delegate to (e.g., `hex-backend` → `hex-backend:engineering-lead`).
+- **`topologies.<name>`** — per-topology overrides applied when that
+  topology is the active one. Each block can override any field from
+  `defaults` (most useful: `required_fields`, `project_key`,
+  `status_map`). Common use: same Jira project, different `Team`
+  field per topology (Engineering for hex-backend, Product for
+  discovery). Merge semantics: per-field replacement, atomic for
+  lists (the topology's `required_fields` replaces the entire
+  `defaults.required_fields`, not merged item-by-item). Topologies
+  without a block here inherit `defaults` wholesale.
 - **`lifecycles[]`** — custom column workflows for `/jira-flow:advance`.
   Each lifecycle has `project_key`, optional `issue_type`, and an
   ordered `columns[]` list with optional `on_enter` agent and
   `enter_gate` precondition.
+
+### Active-topology resolution order
+
+When `atlassian-expert` does a write operation, it picks which
+`topologies.<active>` block to merge over `defaults`:
+
+1. **Explicit `Topology: <name>` line** in the orchestrator's
+   delegation prompt (preferred — commands include this for write
+   operations).
+2. **`.claude/topology`** marker file (one-line text).
+3. **`defaults.default_topology`** from the config.
+4. **No topology resolvable** → use `defaults` alone.
+
+For read operations (`getJiraIssue`, `searchJiraIssuesUsingJql`),
+topology overrides usually don't matter — `defaults` is enough.
 
 ## The contract atlassian-expert enforces
 

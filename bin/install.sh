@@ -261,9 +261,19 @@ defaults:
     bug: "Bug"
     epic: "Epic"
     task: "Task"
-  required_fields: []
+  required_fields: []   # baseline; per-topology overrides go in topologies: below
 
 default_topology: ${TOPOLOGY}
+
+# Per-topology overrides — fields here REPLACE the matching defaults
+# field when that topology is active. Common use: different Team
+# values per topology (engineering vs product), or different
+# project_key when discovery uses a separate Jira project. Lists are
+# atomic — the override replaces the default list entirely, not
+# merged item-by-item. Topologies without a block here inherit
+# defaults wholesale. See discovery/jira-flow.example.yaml for a
+# worked example.
+topologies: {}
 EOF
       echo "  ✔ Seeded ${JIRA_FLOW_DST} (default_topology: ${TOPOLOGY})"
       echo "    EDIT IT: replace defaults.site, defaults.project_key, defaults.board_id"

@@ -25,6 +25,8 @@ You are the orchestrator. Don't frame, don't research, don't run discovery-lead.
 
 ## Workflow
 
+The active topology for this command is **always `discovery`** (it's a discovery-namespaced command). The delegation to `atlassian-expert` in step 2 MUST include `Topology: discovery` as its first line so per-topology overrides from `topologies.discovery` in `jira-flow.yaml` apply (e.g., Team = Product instead of the default Team = Engineering).
+
 ### 1. Resolve discovery board project + issue type
 
 Read the project Jira config: `jira-flow.yaml` at project root if present, otherwise legacy `.claude/jira-flow.lifecycle.yaml`. Find the `discovery` lifecycle entry. Read its `project_key` (or, if the new-schema `defaults.project_key` is set and matches, use that). That's the target project.

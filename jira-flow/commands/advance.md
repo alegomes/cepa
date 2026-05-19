@@ -66,6 +66,8 @@ You are the orchestrator. Don't implement anything yourself; delegate to `atlass
 
 ## Workflow
 
+The active topology for write delegations is the matched lifecycle entry's `topology` field (set in step 3). Every delegation to `atlassian-expert` for write operations (createIssue, transition, addComment, edit) below MUST include `Topology: <matched-lifecycle-topology>` as the first line of the delegation prompt — atlassian-expert uses this to apply per-topology overrides from `topologies.<X>` in `jira-flow.yaml`.
+
 ### 1. Load project config
 
 Read the project Jira config: `jira-flow.yaml` at project root first, falling back to legacy `.claude/jira-flow.lifecycle.yaml` if the new location isn't present (with a one-time deprecation note in your reply: "Note: reading legacy `.claude/jira-flow.lifecycle.yaml` — move to `jira-flow.yaml` at project root."). If neither exists → abort with the message above.

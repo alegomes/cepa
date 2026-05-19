@@ -54,7 +54,41 @@ defaults:
 # topology's leads to delegate to (e.g. hex-backend:engineering-lead).
 default_topology: discovery
 
-# --- 3. Lifecycles for /jira-flow:advance ---
+# --- 3. Per-topology overrides (optional) ---
+# When a topology is active, fields here REPLACE the matching field
+# in `defaults`. Used by atlassian-expert when creating issues or
+# applying required_fields. List fields like `required_fields` are
+# atomic: the topology's list replaces the defaults' list entirely,
+# not merged item-by-item.
+#
+# Active topology resolution order:
+#   1. Explicit `topology: <name>` in the orchestrator's delegation.
+#   2. `.claude/topology` marker file.
+#   3. `defaults.default_topology` above.
+#   4. No topology → use defaults alone.
+#
+# Common use case: same Jira project, different Team field per
+# topology. Discovery work goes to the product team; hex-backend work
+# goes to engineering.
+topologies:
+  discovery:
+    # Product team owns discovery cards.
+    required_fields:
+      - { id: customfield_10010, name: "Team", value: "Product" }
+    # If discovery uses a different Jira project, override here:
+    # project_key: DISC
+
+  hex-backend:
+    # Engineering team owns code Stories. If matching `defaults`,
+    # this block is optional.
+    required_fields:
+      - { id: customfield_10010, name: "Team", value: "Engineering" }
+
+  multi-team:
+    required_fields:
+      - { id: customfield_10010, name: "Team", value: "Platform" }
+
+# --- 4. Lifecycles for /jira-flow:advance ---
 lifecycles:
   - topology: discovery
     project_key: WEGO

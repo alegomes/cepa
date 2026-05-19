@@ -37,8 +37,12 @@ You are the orchestrator. Do **not** plan, decompose, or execute. Just capture.
 
 ### 3. Create the issue
 
+Resolve the active topology for this capture: prefer the orchestrator's current context if known (e.g., called from inside an autonomous run with a `--topology` flag); else read `.claude/topology`; else fall back to `defaults.default_topology` in `jira-flow.yaml`. Pass it to atlassian-expert so the right `topologies.<active>.required_fields` apply (e.g., Team = Engineering for hex-backend, Team = Product for discovery).
+
 Delegate to `atlassian-expert`:
 
+> Topology: `<resolved-topology>`.
+>
 > Create a new Jira issue in project `<key>`: `issueType=<type>`, summary `<first 80 chars of the description>`, description:
 >
 > ```
