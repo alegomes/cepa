@@ -1,0 +1,54 @@
+# hex-backend.yaml — project root layout config for the hex-backend topology.
+#
+# Maps architectural ROLES (the invariants of hexagonal architecture)
+# to the physical modules in YOUR project.
+#
+# The hex-backend plugin is opinionated about the architectural
+# invariants:
+#   - Domain is framework-free (no JPA / @Inject / Quarkus annotations)
+#   - Dependencies always point inward (Anti-Corruption Layer at adapters)
+#   - Driving adapters call use cases through ports
+#   - Driven adapters implement driven ports
+#
+# It is NOT opinionated about directory names. The default layout
+# (used when this file is absent) maps each role to a module of the
+# same name plus `api` → `api-rest` and `adapter` → `infrastructure`:
+#
+#   role          → module
+#   ─────────────   ────────────
+#   domain        → domain
+#   application   → application
+#   api           → api-rest
+#   adapter       → infrastructure
+#   bootstrap     → bootstrap
+#
+# If your project follows that convention, you can DELETE this file
+# entirely — the plugin uses the defaults.
+#
+# If your project uses different module names (e.g.,
+# `tenancy-core/tenancy-api/tenancy-adapter/tenancy-app`), edit the
+# `roles` block below to map each architectural role to your module.
+# Roles can share a module (e.g., domain and application code living
+# together is common in smaller projects).
+
+schema_version: 1
+
+roles:
+  # The framework-free core: entities, value objects, domain exceptions.
+  # No @Inject, no @ApplicationScoped, no JPA annotations.
+  domain: domain
+
+  # Use cases + driving/driven ports. Pure Java; may share a module
+  # with domain in smaller projects.
+  application: application
+
+  # Driving adapters: REST controllers, GraphQL resolvers, message
+  # consumers. Translates external requests into use case calls.
+  api: api-rest
+
+  # Driven adapters: persistence, third-party API clients, message
+  # producers. Implements driven ports defined in application/.
+  adapter: infrastructure
+
+  # Composition root: CDI wiring, framework config, main entry point.
+  bootstrap: bootstrap

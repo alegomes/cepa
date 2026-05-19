@@ -57,19 +57,34 @@ reinstalling. Required after editing without a version bump.
 
 ### `[hex-backend path-lock] BLOCKED: agent 'X' cannot Edit Y`
 
-Worker tried to write outside its allowlist. **Correct behavior** —
-delegate to the right peer, or check whether your project layout
-differs from the topology's assumptions.
+Worker tried to write outside its allowlist. Two cases:
 
-For `hex-backend`, the allowlist is keyed to the canonical Maven
-layout (`domain/`, `application/`, `api-rest/`, `infrastructure/`,
-`bootstrap/`). If your layout is different, either:
+1. **Right agent, wrong project layout.** `hex-backend`'s path-lock
+   defaults to the canonical Maven layout (`domain/`, `application/`,
+   `api-rest/`, `infrastructure/`, `bootstrap/`), but your project
+   uses different module names (e.g., `tenancy-core/tenancy-api/...`).
+   The error message includes the active role → module mapping; if it
+   shows the canonical layout but your project doesn't use it, create
+   `hex-backend.yaml` at project root mapping each role to your
+   module:
 
-1. Override the agent locally: drop a `.claude/agents/<name>.md` in the
-   project with the same body but different `tools:` allowlist or
-   write-glob prose.
-2. Edit `hex-backend/hooks/path-lock.py`'s `ALLOWED_WRITES` table
-   centrally (and `bin/install.sh --clean`).
+   ```yaml
+   schema_version: 1
+   roles:
+     domain:       tenancy-core
+     application:  tenancy-core
+     api:          tenancy-api
+     adapter:      tenancy-adapter
+     bootstrap:    tenancy-app
+   ```
+
+   `bin/install.sh --topology=hex-backend` seeds this file by default.
+   If you have it, edit; if not, copy from
+   `<plugin-repo>/hex-backend/hex-backend.example.yaml`.
+
+2. **Right agent, right layout, wrong file.** The agent is writing the
+   wrong file. Maybe the right answer is to delegate; check the
+   agent's spec to see whose lane this should be.
 
 ### `[hex-backend path-lock] BLOCKED: unknown agent 'orchestrator' attempted Edit`
 

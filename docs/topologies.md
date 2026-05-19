@@ -87,6 +87,31 @@ present.
 
 ### hex-backend (the deepest specialization)
 
+**About the name.** "Hexagonal" here refers to the architectural style
+(Cockburn's Ports & Adapters): framework-free domain, dependencies
+pointing inward, Anti-Corruption Layer at adapters. The topology is
+opinionated about those invariants but NOT about physical module
+names. The default layout uses
+`domain/application/api-rest/infrastructure/bootstrap`, but if your
+project names its modules `tenancy-core/tenancy-api/tenancy-adapter/
+tenancy-app` (or any other convention), edit `hex-backend.yaml` at
+project root to remap each architectural role to your module:
+
+```yaml
+schema_version: 1
+roles:
+  domain:       tenancy-core
+  application:  tenancy-core
+  api:          tenancy-api
+  adapter:      tenancy-adapter
+  bootstrap:    tenancy-app
+```
+
+`bin/install.sh --topology=hex-backend` seeds this file with canonical
+defaults. Roles may share a module (common when domain and application
+code live together). See `docs/internals/path-lock.md` for the full
+schema and behavior.
+
 Three teams:
 
 - **Planning team** (4 agents): `planning-lead` + `epic-author` +

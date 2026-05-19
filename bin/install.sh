@@ -270,6 +270,24 @@ EOF
       echo "    with your Jira's values before running any /jira-flow:* command."
     fi
   fi
+
+  # Seed hex-backend.yaml (role → module mapping) when wiring hex-backend.
+  # Only seed if absent; if user already customized, don't overwrite.
+  # The plugin is opinionated about hexagonal INVARIANTS, not about
+  # module naming — this file maps roles to physical modules.
+  if [ "${TOPOLOGY}" = "hex-backend" ]; then
+    HEX_LAYOUT_SRC="${REPO_DIR}/hex-backend/hex-backend.example.yaml"
+    HEX_LAYOUT_DST="${HOST_PROJECT}/hex-backend.yaml"
+    if [ -f "${HEX_LAYOUT_DST}" ]; then
+      echo "  ✔ ${HEX_LAYOUT_DST} already exists — leaving untouched"
+    elif [ -f "${HEX_LAYOUT_SRC}" ]; then
+      cp "${HEX_LAYOUT_SRC}" "${HEX_LAYOUT_DST}"
+      echo "  ✔ Seeded ${HEX_LAYOUT_DST} (canonical layout)"
+      echo "    Edit roles.* if your project uses different module names"
+      echo "    (e.g. tenancy-core instead of domain). Delete the file"
+      echo "    entirely to use canonical defaults."
+    fi
+  fi
 fi
 
 # --- Final summary ---

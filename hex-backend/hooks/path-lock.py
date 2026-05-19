@@ -1,11 +1,38 @@
 #!/usr/bin/env python3
 """PreToolUse hook for the hex-backend topology.
 
-Same structure and detection logic as multi-team's path-lock.py, but the
-ALLOWED_WRITES table is keyed to a hexagonal-architecture Maven layout:
-  domain/        application/        api-rest/        infrastructure/        bootstrap/
+Enforces per-agent write allowlists keyed to hexagonal-architecture
+ROLES (domain / application / api / adapter / bootstrap), not to
+specific module names. The mapping from role → physical module name
+is per-project, read from `hex-backend.yaml` at project root.
 
-Each module has src/main and src/test. Workers are domain/api/adapter-aware.
+The canonical mapping (used when no config file is present):
+
+  role            module          src/main path
+  ─────────────   ─────────────   ────────────────────────
+  domain          domain          domain/src/main/**
+  application     application     application/src/main/**
+  api             api-rest        api-rest/src/main/**
+  adapter         infrastructure  infrastructure/src/main/**
+  bootstrap       bootstrap       bootstrap/src/main/**
+
+Projects whose modules are named differently (e.g.,
+`tenancy-core` instead of `domain`) override via
+`hex-backend.yaml`:
+
+  schema_version: 1
+  roles:
+    domain:       tenancy-core
+    application:  tenancy-core    # roles may share a module
+    api:          tenancy-api
+    adapter:      tenancy-adapter
+    bootstrap:    tenancy-app
+
+The plugin is still opinionated about the architectural INVARIANTS
+(domain is framework-free, dependencies point inward, ACL keeps
+externals out of the core, etc.). It is no longer opinionated about
+the directory layout that implements those invariants — that's
+project convention.
 
 Exit codes:
   0 — allowed
@@ -20,38 +47,149 @@ from pathlib import Path
 
 PLUGIN_NAME = "hex-backend"
 
-ALLOWED_WRITES = {
-    # Orchestrator + leads — no source writes; only own expertise file.
-    "orchestrator":      [],
-    "planning-lead":     ["spec/**", "specs/**", "docs/**"],
-    "engineering-lead":  ["docs/tasks/**", "docs/investigations/**", "pom.xml", "**/pom.xml"],
-    "validation-lead":   [],
-
-    # Planning workers — write specs and decomposition artifacts.
-    "epic-author":       ["spec/**", "specs/**", "docs/**"],
-    "product-manager":   ["spec/**", "specs/**", "docs/**"],
-    "integration-analyst": ["spec/**", "specs/**", "docs/**"],
-
-    # Engineering workers — domain-aware writes per hex layer.
-    "domain-dev":        ["domain/src/main/**",
-                          "application/src/main/**"],
-    "api-dev":           ["api-rest/src/main/**"],
-    "adapter-dev":       ["infrastructure/src/main/**",
-                          "bootstrap/src/main/**"],
-
-    # Validation workers.
-    "qa-engineer":       ["domain/src/test/**",
-                          "application/src/test/**",
-                          "api-rest/src/test/**",
-                          "infrastructure/src/test/**",
-                          "bootstrap/src/test/**"],
-    "refactor-advisor":  ["docs/housekeeping/**"],
-    "security-reviewer": ["docs/security-reviews/**"],
-    "code-reviewer":     [],   # advisory only, no writes
+# Canonical role → module mapping. Used when `hex-backend.yaml` is
+# absent or doesn't override a role.
+DEFAULT_ROLES = {
+    "domain":      "domain",
+    "application": "application",
+    "api":         "api-rest",
+    "adapter":     "infrastructure",
+    "bootstrap":   "bootstrap",
 }
 
 GATED_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
+
+# ─── role / module config ─────────────────────────────────────────────
+
+def parse_minimal_yaml(text: str) -> dict:
+    """Parse a flat 2-level YAML for hex-backend.yaml. Pure stdlib;
+    doesn't handle quoted multi-line strings, lists, or anchors. Good
+    enough for the schema we own.
+
+    Recognized shape:
+        schema_version: 1
+        roles:
+          domain: tenancy-core
+          api: tenancy-api
+    """
+    result: dict = {}
+    current_section_key = None
+    for line in text.splitlines():
+        # Strip comments.
+        if "#" in line:
+            # naive: don't strip inside strings; YAML comments after value are fine
+            line = line.split("#", 1)[0]
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        if not line.startswith((" ", "\t")):
+            # top-level key
+            if ":" not in stripped:
+                continue
+            key, _, value = stripped.partition(":")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if value:
+                result[key] = value
+                current_section_key = None
+            else:
+                result[key] = {}
+                current_section_key = key
+        else:
+            # indented (assumed to be inside current_section_key)
+            if current_section_key is None:
+                continue
+            if ":" not in stripped:
+                continue
+            key, _, value = stripped.partition(":")
+            result[current_section_key][key.strip()] = (
+                value.strip().strip('"').strip("'")
+            )
+    return result
+
+
+def load_roles(project_root: Path) -> dict:
+    """Read hex-backend.yaml from project root and merge into DEFAULT_ROLES.
+    Falls back to defaults silently. Falls back to defaults loudly (stderr
+    warning) on parse error."""
+    config_path = project_root / "hex-backend.yaml"
+    if not config_path.exists():
+        return DEFAULT_ROLES.copy()
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except OSError as e:
+        print(
+            f"[hex-backend path-lock] could not read {config_path}: {e}; "
+            f"falling back to canonical layout.",
+            file=sys.stderr,
+        )
+        return DEFAULT_ROLES.copy()
+
+    try:
+        parsed = parse_minimal_yaml(text)
+    except Exception as e:
+        print(
+            f"[hex-backend path-lock] could not parse {config_path}: {e}; "
+            f"falling back to canonical layout.",
+            file=sys.stderr,
+        )
+        return DEFAULT_ROLES.copy()
+
+    overrides = parsed.get("roles")
+    if not isinstance(overrides, dict):
+        return DEFAULT_ROLES.copy()
+
+    roles = DEFAULT_ROLES.copy()
+    for role, module in overrides.items():
+        if role in DEFAULT_ROLES and isinstance(module, str) and module:
+            roles[role] = module
+    return roles
+
+
+def build_allowed_writes(roles: dict) -> dict:
+    """Construct the per-agent write allowlist from the role → module mapping.
+
+    When two roles map to the same module (e.g., domain and application both
+    map to `tenancy-core`), the resulting globs are deduplicated.
+    """
+    def main_globs(*role_keys):
+        modules = {roles[r] for r in role_keys}
+        return sorted({f"{m}/src/main/**" for m in modules})
+
+    def test_globs(*role_keys):
+        modules = {roles[r] for r in role_keys}
+        return sorted({f"{m}/src/test/**" for m in modules})
+
+    return {
+        # Orchestrator + leads — no source writes; only own expertise file.
+        "orchestrator":      [],
+        "planning-lead":     ["spec/**", "specs/**", "docs/**"],
+        "engineering-lead":  ["docs/tasks/**", "docs/investigations/**",
+                              "pom.xml", "**/pom.xml"],
+        "validation-lead":   [],
+
+        # Planning workers — write specs and decomposition artifacts.
+        "epic-author":         ["spec/**", "specs/**", "docs/**"],
+        "product-manager":     ["spec/**", "specs/**", "docs/**"],
+        "integration-analyst": ["spec/**", "specs/**", "docs/**"],
+
+        # Engineering workers — role-aware writes, mapped via hex-backend.yaml.
+        "domain-dev":          main_globs("domain", "application"),
+        "api-dev":             main_globs("api"),
+        "adapter-dev":         main_globs("adapter", "bootstrap"),
+
+        # Validation workers.
+        "qa-engineer":         test_globs("domain", "application", "api",
+                                          "adapter", "bootstrap"),
+        "refactor-advisor":    ["docs/housekeeping/**"],
+        "security-reviewer":   ["docs/security-reviews/**"],
+        "code-reviewer":       [],  # advisory only, no writes
+    }
+
+
+# ─── agent detection (unchanged) ──────────────────────────────────────
 
 def detect_agent(payload: dict) -> str:
     """Figure out which agent triggered this tool call.
@@ -72,10 +210,11 @@ def detect_agent(payload: dict) -> str:
     return "orchestrator"
 
 
-def debug_log(payload: dict, resolved_agent: str) -> None:
+def debug_log(payload: dict, resolved_agent: str, roles: dict) -> None:
     """When HEX_PATHLOCK_DEBUG=1, append a JSON line to the debug log so we can
-    see what CC actually sends in the PreToolUse payload. Default log path is
-    /tmp/hex-pathlock-debug.log; override with HEX_PATHLOCK_DEBUG_LOG."""
+    see what CC actually sends in the PreToolUse payload AND what role mapping
+    is active. Default log path is /tmp/hex-pathlock-debug.log; override with
+    HEX_PATHLOCK_DEBUG_LOG."""
     if os.environ.get("HEX_PATHLOCK_DEBUG") != "1":
         return
     log_path = os.environ.get("HEX_PATHLOCK_DEBUG_LOG", "/tmp/hex-pathlock-debug.log")
@@ -91,6 +230,7 @@ def debug_log(payload: dict, resolved_agent: str) -> None:
         "resolved_agent": resolved_agent,
         "tool_name": payload.get("tool_name"),
         "file_path": (payload.get("tool_input") or {}).get("file_path"),
+        "roles_in_use": roles,
     }
     try:
         with open(log_path, "a") as f:
@@ -109,7 +249,7 @@ def is_own_expertise_file(file_path: str, agent: str) -> bool:
     )
 
 
-def path_matches(file_path: str, globs: list[str], project_root: Path) -> bool:
+def path_matches(file_path: str, globs: list, project_root: Path) -> bool:
     try:
         rel = str(Path(file_path).resolve().relative_to(project_root))
     except ValueError:
@@ -122,6 +262,8 @@ def path_matches(file_path: str, globs: list[str], project_root: Path) -> bool:
             return True
     return False
 
+
+# ─── main ─────────────────────────────────────────────────────────────
 
 def main():
     raw = sys.stdin.read()
@@ -150,13 +292,17 @@ def main():
         # etc.). Neither is from our plugin; not our concern. Fail-open.
         sys.exit(0)
 
+    project_root = Path(payload.get("cwd") or os.getcwd()).resolve()
+    roles = load_roles(project_root)
+    allowed_writes = build_allowed_writes(roles)
+
     agent = detect_agent(payload)
-    debug_log(payload, agent)
+    debug_log(payload, agent, roles)
 
     if is_own_expertise_file(file_path, agent):
         sys.exit(0)
 
-    allowed = ALLOWED_WRITES.get(agent)
+    allowed = allowed_writes.get(agent)
 
     if allowed is None:
         print(
@@ -167,17 +313,33 @@ def main():
         )
         sys.exit(2)
 
-    project_root = Path(payload.get("cwd") or os.getcwd()).resolve()
-
     if path_matches(file_path, allowed, project_root):
         sys.exit(0)
+
+    # Build a layout-aware error message so the user can see why the path didn't match.
+    non_default = [r for r, m in roles.items() if m != DEFAULT_ROLES[r]]
+    layout_note = ""
+    if non_default:
+        layout_note = (
+            f"\n  Active role → module mapping (from hex-backend.yaml):\n    "
+            + "\n    ".join(f"{r}: {roles[r]}" for r in DEFAULT_ROLES.keys())
+            + "\n  (Edit hex-backend.yaml at project root to remap roles.)"
+        )
+    else:
+        layout_note = (
+            f"\n  Using canonical layout (domain/application/api-rest/"
+            f"infrastructure/bootstrap). If this project uses different "
+            f"module names, create hex-backend.yaml at project root with "
+            f"a `roles:` block."
+        )
 
     print(
         f"[hex-backend path-lock] BLOCKED: agent {agent!r} cannot {tool_name} {file_path}.\n"
         f"  Allowed write globs for {agent!r}:\n  - "
         + "\n  - ".join(allowed or ["(none — only own expertise file)"])
-        + f"\n  Plus its own expertise file: .claude/expertise/{agent}-mental-model.yaml\n"
-        f"  Delegate to the appropriate worker instead.",
+        + f"\n  Plus its own expertise file: .claude/expertise/{agent}-mental-model.yaml"
+        + layout_note +
+        f"\n  Delegate to the appropriate worker instead.",
         file=sys.stderr,
     )
     sys.exit(2)

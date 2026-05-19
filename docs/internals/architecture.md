@@ -133,10 +133,10 @@ Total: 41 agents, 24 commands, 9 hooks, 13 skills, across 7 plugins.
 | `engineering-lead` (multi-team) | (none — delegate-only) |
 | `engineering-lead` (hex-backend) | `docs/tasks/**`, `docs/investigations/**`, `pom.xml`, `**/pom.xml` |
 | `validation-lead` (any) | (none — delegate-only) |
-| `domain-dev` | `domain/src/main/**`, `application/src/main/**` |
-| `api-dev` | `api-rest/src/main/**` |
-| `adapter-dev` | `infrastructure/src/main/**`, `bootstrap/src/main/**` |
-| `qa-engineer` (hex-backend) | `*/src/test/**` |
+| `domain-dev` | `<domain-module>/src/main/**`, `<application-module>/src/main/**` (default: `domain/`, `application/`; remappable via `hex-backend.yaml`) |
+| `api-dev` | `<api-module>/src/main/**` (default: `api-rest/`) |
+| `adapter-dev` | `<adapter-module>/src/main/**`, `<bootstrap-module>/src/main/**` (default: `infrastructure/`, `bootstrap/`) |
+| `qa-engineer` (hex-backend) | `<each-module>/src/test/**` for all five role modules |
 | `qa-engineer` (multi-team) | `tests/**`, `apps/*/tests/**`, `apps/*/__tests__/**` |
 | `refactor-advisor` | `docs/housekeeping/**` |
 | `security-reviewer` (any) | `docs/security-reviews/**` (hex) or `specs/security-reviews/**` (multi-team) |
@@ -159,6 +159,7 @@ Every agent also gets a structural pass to write its own
 | Per-agent expertise | `common/expertise/<agent>-mental-model.yaml` (symlinked to host's `.claude/expertise/`) | `mental-model` skill (write), `debrief` (write) | Cross-project; grows over time, pruned at 20 entries (except `principle`-tagged) |
 | Topology snippet | `.claude/<topology>-topology.md` | `bin/install.sh` (copy) | Per project; copied snapshot, edits don't propagate back |
 | Jira config | `jira-flow.yaml` (project root) | `bin/install.sh` seed / `/jira-flow:configure` interactive / manual edits | Per project; team-edited |
+| hex-backend layout | `hex-backend.yaml` (project root) | `bin/install.sh` seed (with `--topology=hex-backend`) / manual edits | Per project; team-edited; maps architectural roles → module names |
 | Session intent log | `.claude/session-log.md` | `session-log` hook | Per project; append-only, manually rotate |
 | Autonomous run state | `docs/autonomous/<run-id>/state.yaml` | `/common:autonomous-start` (create) / `autonomous-checkpoint` hook (append) | Per run; survives session restart |
 | Build state | `.claude/last-build.json` | `mark-build-stale` + `capture-build-result` hooks (write); `gate-advance` (read) | Per session; rewritten on edits + verify runs |

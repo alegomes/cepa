@@ -149,6 +149,110 @@ else:
     sys.exit(0)
 ```
 
+## Role-based allowlists (hex-backend only)
+
+`hex-backend`'s path-lock differs from the others in one important way:
+the allowlist is built from a role → module mapping that the project
+can override. The plugin is opinionated about the architectural
+**invariants** of hexagonal architecture (framework-free domain, ACL at
+adapters, dependencies pointing inward) but NOT about physical module
+names. Different projects use different names; the plugin shouldn't
+care, as long as the invariants hold.
+
+### Default mapping (canonical layout)
+
+When `hex-backend.yaml` is absent at the project root, the path-lock
+uses these defaults:
+
+```python
+DEFAULT_ROLES = {
+    "domain":      "domain",
+    "application": "application",
+    "api":         "api-rest",
+    "adapter":     "infrastructure",
+    "bootstrap":   "bootstrap",
+}
+```
+
+### Override via `hex-backend.yaml` at project root
+
+```yaml
+schema_version: 1
+
+roles:
+  domain:       tenancy-core
+  application:  tenancy-core      # roles may share a module
+  api:          tenancy-api
+  adapter:      tenancy-adapter
+  bootstrap:    tenancy-app
+```
+
+The path-lock reads this on every invocation, merges with defaults
+(absent keys fall back to canonical), and builds `ALLOWED_WRITES`
+dynamically:
+
+```python
+"domain-dev":   sorted({"<domain-module>/src/main/**", "<application-module>/src/main/**"})
+"api-dev":      sorted({"<api-module>/src/main/**"})
+"adapter-dev":  sorted({"<adapter-module>/src/main/**", "<bootstrap-module>/src/main/**"})
+"qa-engineer":  sorted({"<each-module>/src/test/**"})
+```
+
+Modules deduplicate via `set` — so if `domain` and `application` both
+map to `tenancy-core`, `domain-dev`'s allowlist contains
+`tenancy-core/src/main/**` once, not twice.
+
+### YAML parser
+
+The hook uses a minimal pure-stdlib YAML parser (no PyYAML
+dependency) that handles the 2-level shape:
+
+```python
+def parse_minimal_yaml(text):
+    # Returns {"schema_version": "1", "roles": {"domain": "tenancy-core", ...}}
+```
+
+Doesn't handle quoted multi-line strings, lists, or anchors. Fine for
+the schema we own. If `hex-backend.yaml` exists but doesn't parse, the
+hook logs a stderr warning and falls back to defaults (fail-safe, not
+fail-closed — config bugs shouldn't deadlock the user).
+
+### Error message includes layout context
+
+When the hook blocks, the error message tells you which layout is
+active:
+
+```
+[hex-backend path-lock] BLOCKED: agent 'domain-dev' cannot Edit ...
+  Allowed write globs for 'domain-dev':
+  - tenancy-core/src/main/**
+  Plus its own expertise file: .claude/expertise/domain-dev-mental-model.yaml
+  Active role → module mapping (from hex-backend.yaml):
+    domain: tenancy-core
+    application: tenancy-core
+    api: tenancy-api
+    adapter: tenancy-adapter
+    bootstrap: tenancy-app
+  (Edit hex-backend.yaml at project root to remap roles.)
+```
+
+So the diagnostic is one read away — no need to dig into the source
+to understand why a path didn't match.
+
+### When this matters
+
+- Project follows canonical layout → no `hex-backend.yaml` needed.
+- Project has different module names → seed `hex-backend.yaml`
+  (`bin/install.sh --topology=hex-backend` does this; or copy
+  `hex-backend/hex-backend.example.yaml` manually).
+- Project shares modules across roles (e.g., domain + application in
+  one module) → set both keys to the same value; the dedup handles
+  the rest.
+
+The other topologies (`multi-team`, `discovery`, `book`) don't have
+role-based mapping — their allowlists are direct globs. If a future
+topology adopts the role pattern, mirror this design.
+
 ## The structural-exemption rule
 
 Every agent can write its own `<agent>-mental-model.yaml` regardless
