@@ -110,13 +110,24 @@ def parse_minimal_yaml(text: str) -> dict:
     return result
 
 
-def load_roles(project_root: Path) -> dict:
-    """Read hex-backend.yaml from project root and merge into DEFAULT_ROLES.
-    Falls back to defaults silently. Falls back to defaults loudly (stderr
-    warning) on parse error."""
+def load_config(project_root: Path) -> tuple:
+    """Read hex-backend.yaml from project root.
+
+    Returns (roles, extra_write_globs) where:
+      - roles: dict mapping role names to module names
+      - extra_write_globs: dict mapping agent names to list of additional glob patterns
+
+    extra_write_globs section in hex-backend.yaml:
+      extra_write_globs:
+        adapter-dev: scripts/fase0-concierge/**,scripts/other/**
+
+    Multiple globs per agent are comma-separated.
+
+    Falls back to defaults silently on missing file; loudly on parse error.
+    """
     config_path = project_root / "hex-backend.yaml"
     if not config_path.exists():
-        return DEFAULT_ROLES.copy()
+        return DEFAULT_ROLES.copy(), {}
     try:
         text = config_path.read_text(encoding="utf-8")
     except OSError as e:
@@ -125,7 +136,7 @@ def load_roles(project_root: Path) -> dict:
             f"falling back to canonical layout.",
             file=sys.stderr,
         )
-        return DEFAULT_ROLES.copy()
+        return DEFAULT_ROLES.copy(), {}
 
     try:
         parsed = parse_minimal_yaml(text)
@@ -135,20 +146,36 @@ def load_roles(project_root: Path) -> dict:
             f"falling back to canonical layout.",
             file=sys.stderr,
         )
-        return DEFAULT_ROLES.copy()
+        return DEFAULT_ROLES.copy(), {}
 
     overrides = parsed.get("roles")
     if not isinstance(overrides, dict):
-        return DEFAULT_ROLES.copy()
+        overrides = {}
 
     roles = DEFAULT_ROLES.copy()
     for role, module in overrides.items():
         if role in DEFAULT_ROLES and isinstance(module, str) and module:
             roles[role] = module
+
+    extra_write_globs: dict = {}
+    extra_section = parsed.get("extra_write_globs")
+    if isinstance(extra_section, dict):
+        for agent_name, globs_str in extra_section.items():
+            if isinstance(globs_str, str) and globs_str:
+                globs = [g.strip() for g in globs_str.split(",") if g.strip()]
+                if globs:
+                    extra_write_globs[agent_name] = globs
+
+    return roles, extra_write_globs
+
+
+def load_roles(project_root: Path) -> dict:
+    """Backward-compat wrapper. Returns only the roles dict."""
+    roles, _ = load_config(project_root)
     return roles
 
 
-def build_allowed_writes(roles: dict) -> dict:
+def build_allowed_writes(roles: dict, extra_write_globs: dict = None) -> dict:
     """Construct the per-agent write allowlist from the role → module mapping.
 
     When two roles map to the same module (e.g., domain and application both
@@ -162,7 +189,7 @@ def build_allowed_writes(roles: dict) -> dict:
         modules = {roles[r] for r in role_keys}
         return sorted({f"{m}/src/test/**" for m in modules})
 
-    return {
+    result = {
         # Orchestrator + leads — no source writes; only own expertise file.
         "orchestrator":      [],
         "planning-lead":     ["spec/**", "specs/**", "docs/**"],
@@ -187,6 +214,11 @@ def build_allowed_writes(roles: dict) -> dict:
         "security-reviewer":   ["docs/security-reviews/**"],
         "code-reviewer":       [],  # advisory only, no writes
     }
+    if extra_write_globs:
+        for agent_name, globs in extra_write_globs.items():
+            existing = result.get(agent_name, [])
+            result[agent_name] = existing + [g for g in globs if g not in existing]
+    return result
 
 
 # ─── agent detection (unchanged) ──────────────────────────────────────
@@ -293,8 +325,8 @@ def main():
         sys.exit(0)
 
     project_root = Path(payload.get("cwd") or os.getcwd()).resolve()
-    roles = load_roles(project_root)
-    allowed_writes = build_allowed_writes(roles)
+    roles, extra_write_globs = load_config(project_root)
+    allowed_writes = build_allowed_writes(roles, extra_write_globs)
 
     agent = detect_agent(payload)
     debug_log(payload, agent, roles)

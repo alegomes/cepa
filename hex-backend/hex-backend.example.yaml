@@ -52,3 +52,24 @@ roles:
 
   # Composition root: CDI wiring, framework config, main entry point.
   bootstrap: bootstrap
+
+# Optional: project-specific write paths that fall outside the
+# canonical role-based allowlists.
+#
+# Use case: a one-off migration script, a project-specific tooling
+# directory, an integration test fixtures dir, etc. — paths that
+# legitimately need writes from a specific agent but don't fit the
+# hex-architecture roles above.
+#
+# Format: `<agent-name>: <comma-separated-globs>`. Multiple agents
+# may have extras. Each list is APPENDED to the canonical role-based
+# allowlist for that agent (deduplicated), so the agent keeps its
+# default writes AND gains the extras.
+#
+# Use sparingly. If you find yourself adding many extras for the same
+# agent, the project probably wants a `roles:` remap or a different
+# topology, not an ever-growing extras block.
+#
+# extra_write_globs:
+#   adapter-dev: scripts/fase0-concierge/**,scripts/other-migration/**
+#   qa-engineer: e2e-fixtures/**

@@ -249,6 +249,53 @@ to understand why a path didn't match.
   one module) → set both keys to the same value; the dedup handles
   the rest.
 
+### `extra_write_globs` — additive per-agent overrides
+
+For paths that fall outside the canonical role-based allowlist but
+that an agent legitimately needs to write — one-off migration
+scripts, project-specific tooling dirs, integration test fixtures —
+add an `extra_write_globs:` block:
+
+```yaml
+extra_write_globs:
+  adapter-dev: scripts/fase0-concierge/**,scripts/other-migration/**
+  qa-engineer: e2e-fixtures/**
+```
+
+Format: `<agent-name>: <comma-separated-globs>`. Parsed line-by-line
+(no quoting needed), each agent's extras are split on commas, stripped,
+and **appended** to the canonical allowlist computed from `roles:`.
+
+Semantics:
+
+- **Additive, not replacing.** `adapter-dev` keeps its canonical
+  `infrastructure/src/main/**` + `bootstrap/src/main/**` AND gains
+  `scripts/fase0-concierge/**`. Extras are deduped against existing
+  entries.
+- **Per-agent.** Different agents have different extras; no cross-
+  agent sharing.
+- **Order doesn't matter for matching** (`path_matches` checks each
+  glob independently and short-circuits on first match).
+- **Empty / absent block** → no extras. Allowlist is purely
+  role-based.
+
+When to use:
+
+- **Yes:** a Story needs `adapter-dev` to drop a Flyway/Liquibase
+  migration script into `scripts/migrations/` for a one-shot DB op.
+- **Yes:** a project has integration test fixtures under
+  `e2e-fixtures/` that `qa-engineer` legitimately owns.
+- **No:** the project's domain code lives in `tenancy-core/` instead
+  of `domain/`. That's a `roles:` remap, not an extras append.
+- **No:** the project has many extras for one agent. That signals
+  either the topology is wrong (consider `multi-team`) or the project
+  layout fights the architecture. Don't paper it over with extras.
+
+Error messages already list the merged allowlist (canonical + extras),
+so when a write is blocked the user sees their extras among the
+allowed globs and can diagnose whether the missing path needs to be
+added.
+
 The other topologies (`multi-team`, `discovery`, `book`) don't have
 role-based mapping — their allowlists are direct globs. If a future
 topology adopts the role pattern, mirror this design.

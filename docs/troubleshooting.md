@@ -82,9 +82,26 @@ Worker tried to write outside its allowlist. Two cases:
    If you have it, edit; if not, copy from
    `<plugin-repo>/hex-backend/hex-backend.example.yaml`.
 
-2. **Right agent, right layout, wrong file.** The agent is writing the
-   wrong file. Maybe the right answer is to delegate; check the
-   agent's spec to see whose lane this should be.
+2. **Right agent, right layout, but file outside any module** (e.g.,
+   a one-off migration script in `scripts/`, integration test
+   fixtures in `e2e-fixtures/`). Add an `extra_write_globs:` block to
+   `hex-backend.yaml`:
+
+   ```yaml
+   extra_write_globs:
+     adapter-dev: scripts/fase0-concierge/**
+     qa-engineer: e2e-fixtures/**
+   ```
+
+   The extras are appended to the agent's canonical allowlist (not
+   replacing). Use sparingly — many extras for one agent is a smell
+   that the topology choice or the project layout is off, not that
+   you need more extras.
+
+3. **Right agent, right layout, wrong file.** The agent is writing the
+   wrong file (the file genuinely belongs to a different agent's
+   lane). Maybe the right answer is to delegate; check the agent's
+   spec to see whose lane this should be.
 
 ### `[hex-backend path-lock] BLOCKED: unknown agent 'orchestrator' attempted Edit`
 

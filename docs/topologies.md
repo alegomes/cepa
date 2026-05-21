@@ -109,7 +109,10 @@ roles:
 
 `bin/install.sh --topology=hex-backend` seeds this file with canonical
 defaults. Roles may share a module (common when domain and application
-code live together). See `docs/internals/path-lock.md` for the full
+code live together). The same file also supports an optional
+`extra_write_globs:` block for project-specific paths an agent
+legitimately needs outside the role-based allowlist (e.g., one-off
+migration scripts). See `docs/internals/path-lock.md` for the full
 schema and behavior.
 
 Three teams:
