@@ -248,6 +248,13 @@ to understand why a path didn't match.
 - Project shares modules across roles (e.g., domain + application in
   one module) → set both keys to the same value; the dedup handles
   the rest.
+- **Single-module project** (no per-role module subdirectory; all
+  sources directly under `src/main/`) → set every role to `.` (or
+  empty string). The hook recognizes `.`/`""` as "no module prefix"
+  and produces globs of the form `src/main/**` instead of
+  `./src/main/**`. This matters because `fnmatch` doesn't normalize
+  the `./` prefix — without the special-casing, the glob wouldn't
+  match relativized paths like `src/main/java/.../X.java`.
 
 ### `extra_write_globs` — additive per-agent overrides
 
@@ -262,9 +269,26 @@ extra_write_globs:
   qa-engineer: e2e-fixtures/**
 ```
 
-Format: `<agent-name>: <comma-separated-globs>`. Parsed line-by-line
-(no quoting needed), each agent's extras are split on commas, stripped,
-and **appended** to the canonical allowlist computed from `roles:`.
+Format accepts **two equivalent syntaxes** for the value:
+
+- **Comma-separated string** (concise, no quoting):
+  ```yaml
+  extra_write_globs:
+    adapter-dev: scripts/fase0-concierge/**,scripts/other-migration/**
+  ```
+- **Inline flow list** (readable when items have special chars):
+  ```yaml
+  extra_write_globs:
+    adapter-dev: ["scripts/fase0-concierge/**", "scripts/other-migration/**"]
+  ```
+
+Both are parsed equivalently — the minimal YAML parser recognizes
+`[a, b]` flow lists and treats the result identically to CSV. Multi-line
+YAML lists (with `-` items on separate lines) are NOT supported; stick
+to one of the inline forms above.
+
+Each agent's extras are stripped and **appended** to the canonical
+allowlist computed from `roles:`.
 
 Semantics:
 

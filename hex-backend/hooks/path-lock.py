@@ -62,9 +62,24 @@ GATED_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 # ─── role / module config ─────────────────────────────────────────────
 
+def _parse_scalar_or_list(value: str):
+    """Parse a YAML scalar value. Recognizes inline flow lists
+    [a, b, c] (quoted or unquoted items) and returns them as a Python
+    list. Plain scalars come back as a single string."""
+    v = value.strip()
+    if v.startswith("[") and v.endswith("]"):
+        inner = v[1:-1].strip()
+        if not inner:
+            return []
+        items = [item.strip().strip('"').strip("'") for item in inner.split(",")]
+        return [i for i in items if i]
+    return v.strip('"').strip("'")
+
+
 def parse_minimal_yaml(text: str) -> dict:
     """Parse a flat 2-level YAML for hex-backend.yaml. Pure stdlib;
-    doesn't handle quoted multi-line strings, lists, or anchors. Good
+    doesn't handle quoted multi-line strings, multi-line lists, or
+    anchors. Inline flow lists like `[a, b, c]` ARE handled. Good
     enough for the schema we own.
 
     Recognized shape:
@@ -72,14 +87,22 @@ def parse_minimal_yaml(text: str) -> dict:
         roles:
           domain: tenancy-core
           api: tenancy-api
+        extra_write_globs:
+          adapter-dev: scripts/foo/**,scripts/bar/**            # CSV string
+          qa-engineer: ["e2e-fixtures/**", "tests-extra/**"]    # inline list
     """
     result: dict = {}
     current_section_key = None
     for line in text.splitlines():
-        # Strip comments.
+        # Strip comments. Care: don't strip a `#` inside an inline list
+        # (e.g., quoted string with `#`). Cheap heuristic: only strip
+        # comments when the `#` is preceded by whitespace OR is at line
+        # start. This is fine for the schemas we own.
         if "#" in line:
-            # naive: don't strip inside strings; YAML comments after value are fine
-            line = line.split("#", 1)[0]
+            for i, ch in enumerate(line):
+                if ch == "#" and (i == 0 or line[i-1].isspace()):
+                    line = line[:i]
+                    break
         stripped = line.strip()
         if not stripped:
             continue
@@ -90,9 +113,9 @@ def parse_minimal_yaml(text: str) -> dict:
                 continue
             key, _, value = stripped.partition(":")
             key = key.strip()
-            value = value.strip().strip('"').strip("'")
+            value = value.strip()
             if value:
-                result[key] = value
+                result[key] = _parse_scalar_or_list(value)
                 current_section_key = None
             else:
                 result[key] = {}
@@ -104,9 +127,7 @@ def parse_minimal_yaml(text: str) -> dict:
             if ":" not in stripped:
                 continue
             key, _, value = stripped.partition(":")
-            result[current_section_key][key.strip()] = (
-                value.strip().strip('"').strip("'")
-            )
+            result[current_section_key][key.strip()] = _parse_scalar_or_list(value)
     return result
 
 
@@ -160,11 +181,15 @@ def load_config(project_root: Path) -> tuple:
     extra_write_globs: dict = {}
     extra_section = parsed.get("extra_write_globs")
     if isinstance(extra_section, dict):
-        for agent_name, globs_str in extra_section.items():
-            if isinstance(globs_str, str) and globs_str:
-                globs = [g.strip() for g in globs_str.split(",") if g.strip()]
-                if globs:
-                    extra_write_globs[agent_name] = globs
+        for agent_name, globs_value in extra_section.items():
+            if isinstance(globs_value, list):
+                globs = [g.strip() for g in globs_value if isinstance(g, str) and g.strip()]
+            elif isinstance(globs_value, str) and globs_value:
+                globs = [g.strip() for g in globs_value.split(",") if g.strip()]
+            else:
+                globs = []
+            if globs:
+                extra_write_globs[agent_name] = globs
 
     return roles, extra_write_globs
 
@@ -180,14 +205,27 @@ def build_allowed_writes(roles: dict, extra_write_globs: dict = None) -> dict:
 
     When two roles map to the same module (e.g., domain and application both
     map to `tenancy-core`), the resulting globs are deduplicated.
+
+    Single-module projects use module value `.` (or empty string) to mean
+    "no module prefix — sources live directly under project root". The
+    resulting glob is `src/main/**` (NOT `./src/main/**` — fnmatch and the
+    fallback path comparison don't normalize `./` prefixes).
     """
+    def _prefix(module_name: str) -> str:
+        m = (module_name or "").strip()
+        # Single-module projects: "." or "" means "no module-level prefix";
+        # sources are at project root.
+        if m in ("", "."):
+            return ""
+        return m.rstrip("/") + "/"
+
     def main_globs(*role_keys):
         modules = {roles[r] for r in role_keys}
-        return sorted({f"{m}/src/main/**" for m in modules})
+        return sorted({f"{_prefix(m)}src/main/**" for m in modules})
 
     def test_globs(*role_keys):
         modules = {roles[r] for r in role_keys}
-        return sorted({f"{m}/src/test/**" for m in modules})
+        return sorted({f"{_prefix(m)}src/test/**" for m in modules})
 
     result = {
         # Orchestrator + leads — no source writes; only own expertise file.

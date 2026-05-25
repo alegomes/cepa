@@ -53,6 +53,22 @@ roles:
   # Composition root: CDI wiring, framework config, main entry point.
   bootstrap: bootstrap
 
+# Single-module projects: use `.` (or empty string) to mean "no
+# module-level prefix; sources live directly under project root,
+# under src/main/...". Example for a single-module hex project where
+# all layers share `src/`:
+#
+# roles:
+#   domain:      .
+#   application: .
+#   api:         .
+#   adapter:     .
+#   bootstrap:   .
+#
+# Result: each role's glob becomes `src/main/**` (not `./src/main/**`).
+# fnmatch doesn't normalize `./` so the literal `.` is what makes it
+# work as a single-module marker.
+
 # Optional: project-specific write paths that fall outside the
 # canonical role-based allowlists.
 #
@@ -70,6 +86,18 @@ roles:
 # agent, the project probably wants a `roles:` remap or a different
 # topology, not an ever-growing extras block.
 #
-# extra_write_globs:
-#   adapter-dev: scripts/fase0-concierge/**,scripts/other-migration/**
-#   qa-engineer: e2e-fixtures/**
+# Two equivalent syntaxes for the value:
+#
+#   # Comma-separated string (concise; no quoting):
+#   extra_write_globs:
+#     adapter-dev: scripts/fase0-concierge/**,scripts/other-migration/**
+#     qa-engineer: e2e-fixtures/**
+#
+#   # Inline list (more readable when items contain commas or special chars):
+#   extra_write_globs:
+#     adapter-dev: ["scripts/fase0-concierge/**", "scripts/other-migration/**"]
+#     qa-engineer: ["e2e-fixtures/**"]
+#
+# Both are parsed equivalently. Multi-line YAML lists (with `-` items
+# on separate lines) are NOT supported by the minimal parser. Stick
+# to one of the two inline forms above.
