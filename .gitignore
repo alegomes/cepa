@@ -5,3 +5,10 @@ __pycache__/
 # Research scaffold — indydev Dan source material, YouTube transcripts/frames.
 # Useful local context, not part of the plugin.
 multi-agent/
+
+# Accidental self-referential symlink occasionally created in
+# common/expertise/expertise by manual ln -s typos or wrong-host
+# bin/install.sh invocations. Insync syncs it across clones; if it
+# reappears, rm in BOTH clones simultaneously (Insync resurrects it
+# otherwise). See conversation 2026-05-21 / 2026-05-26.
+common/expertise/expertise
