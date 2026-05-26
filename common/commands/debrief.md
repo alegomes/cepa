@@ -1,6 +1,6 @@
 ---
-description: Walk through every autonomous-mode decision from a run with the user — keep / overrule / refine each one. Verdicts get written to the relevant agent's expertise file as feedback so future autonomous runs by that agent are biased toward the user's preferences. Run after /common:autonomous-resume reports a completed run, or anytime you want to review what the team decided while you were away.
-argument-hint: [run-id]   (defaults to most recent completed-but-not-debriefed run)
+description: Walk through autonomous-mode decisions from a run with the user — keep / overrule / refine each one. By default surfaces only strategic-altitude decisions (scope, contract, breaking change, user-facing naming); pass --all to include tactical and implementation decisions too. Verdicts get written to the relevant agent's expertise file as feedback so future runs are biased toward your preferences. Run after /common:autonomous-resume reports a completed run.
+argument-hint: [run-id] [--all]   (run-id defaults to most recent completed-but-not-debriefed run)
 ---
 
 # /common:debrief
@@ -13,23 +13,28 @@ It's not real RL (no weight updates), it's persistent-context reinforcement. In 
 
 ## Variables
 
-- `$ARGUMENTS` — the run-id, or empty for "most recent completed-but-not-debriefed run."
+- `$ARGUMENTS` — `[run-id]` and/or `[--all]`. Run-id may be omitted (defaults to most recent completed-but-not-debriefed). `--all` includes tactical and implementation decisions; without it, debrief walks only `strategic` altitude.
 
 ## Instructions
 
-You are the orchestrator. Drive the user through every decision in the run. **You may ask the user questions in this command — debrief is the explicit human-in-the-loop ceremony.** The autonomous-mode skill does NOT apply here.
+You are the orchestrator. Drive the user through the relevant decisions in the run. **You may ask the user questions in this command — debrief is the explicit human-in-the-loop ceremony.** The autonomous-mode skill does NOT apply here.
 
 ## Workflow
 
-### 1. Resolve run-id
+### 1. Parse arguments
 
-If `$ARGUMENTS` is empty:
+- Detect `--all` flag (anywhere in `$ARGUMENTS`). If present, `mode = all`; default `mode = strategic-only`.
+- Remaining tokens after removing flags are treated as the run-id (or empty).
+
+### 2. Resolve run-id
+
+If no run-id (after flag parsing):
 
 - List `docs/autonomous/*/state.yaml`.
 - Filter to `status: completed` AND not `debriefed`.
 - Pick most recent. If zero match → reply: "No runs awaiting debrief. Use `/common:debrief <run-id>` to debrief a specific run, or check `docs/autonomous/`." Stop.
 
-### 2. Collect every Decision — formal first, then drift-detect.
+### 3. Collect every Decision — formal first, then drift-detect.
 
 Walk every artifact produced during the run. The state file's `log` lists subagent calls; from those, infer the artifacts touched (`docs/tasks/<story>/**`, `docs/investigations/**`, RESULT.md siblings, MERGE.md, the spec file). Read each.
 
@@ -43,7 +48,7 @@ Walk every artifact produced during the run. The state file's `log` lists subage
 **Rationale:** ...
 ```
 
-Tag each with: which agent wrote it (from the artifact's owner per path-lock rules), which Task / phase it belongs to, the artifact's path.
+Tag each with: which agent wrote it (from the artifact's owner per path-lock rules), which Task / phase it belongs to, the artifact's path, and **the altitude** (read the `**Altitude:**` field from the block — `strategic`, `tactical`, or `implementation`). Blocks without an Altitude field (legacy or omitted) default to `tactical`.
 
 **Pass B — drift detection.** Re-scan the same artifacts looking for *informal* decision content the agent failed to put in a Decision block. Heuristics for "decision-like prose":
 
@@ -59,7 +64,31 @@ For each candidate, capture: artifact path, line range, the prose, and a one-lin
 - If informal > formal → **format drift**. Surface this loudly to the user (see step 3).
 - If both are zero → reply: "Run `<run-id>` had no logged decisions. Either it was simple work without ambiguity, or the agents skipped the logging discipline. No debrief needed." Mark `status: debriefed` in state.yaml. Stop.
 
-### 3a. Surface format drift (only when informal > formal)
+### 4. Apply altitude filter
+
+Filter the collected decisions according to the mode parsed in step 1:
+
+- **`mode = strategic-only`** (default): keep only decisions where `altitude == "strategic"`. Set aside tactical and implementation ones — they're still in the artifacts on disk; the user can re-run with `--all` later to revisit.
+- **`mode = all`**: keep all decisions regardless of altitude.
+
+Report the filtering result up front before walking. Example:
+
+> **Run `<run-id>` produced M decisions** (F formal + I informal):
+> - strategic: S
+> - tactical: T
+> - implementation: P
+>
+> Walking S strategic decisions in this debrief. Re-run with
+> `/common:debrief <run-id> --all` to include the T tactical + P
+> implementation decisions.
+
+If `mode = strategic-only` AND S == 0 (no strategic decisions found): tell the user this run had no user-altitude decisions worth reviewing. Suggest running `--all` if they want to audit the tactical/implementation choices. Mark `status: debriefed` in state.yaml. Stop. (The run's choices live in code + commit messages; no further reinforcement needed at user level.)
+
+If `mode = strategic-only` AND S > 0: proceed to step 5.
+
+If `mode = all` AND there are zero decisions of any altitude: same as step 3's empty-both-passes case — mark debriefed, stop.
+
+### 5a. Surface format drift (only when informal > formal)
 
 Before walking individual decisions, tell the user:
 
@@ -80,13 +109,13 @@ If the user picks "record": for each agent that produced informal-only decisions
   tag: principle
 ```
 
-`principle`-tagged entries are exempt from the 20-entry auto-prune cap. Then proceed to step 3b walking each decision (formal + informal alike).
+`principle`-tagged entries are exempt from the 20-entry auto-prune cap. Then proceed to step 5b walking each decision (filtered by altitude per step 4; formal blocks first, then any informal-detected passages that survived the filter).
 
-### 3b. Walk decisions one at a time
+### 5b. Walk decisions one at a time
 
-For each decision (formal blocks first, then informal-detected passages, in chronological order — read order = run order):
+For each decision (filtered by altitude per step 4; formal blocks first, then informal-detected passages, in chronological order — read order = run order):
 
-> **Decision N of M** (agent: `<agent>`, in `<artifact path>`)
+> **Decision N of M** (agent: `<agent>`, altitude: `<altitude>`, in `<artifact path>`)
 >
 > **Topic:** <topic>
 >
@@ -105,15 +134,16 @@ For each decision (formal blocks first, then informal-detected passages, in chro
 
 Wait for the user's response. Parse the verdict. Don't infer.
 
-### 4. Persist verdicts
+### 6. Persist verdicts
 
-For each decision, append an entry to `common/expertise/<agent>-mental-model.yaml` under a `feedback` section (create the section if it doesn't exist):
+For each decision walked, append an entry to `common/expertise/<agent>-mental-model.yaml` under a `feedback` section (create the section if it doesn't exist):
 
 ```yaml
 feedback:
   - run_id: <run-id>
     date: <YYYY-MM-DD>
     topic: <topic>
+    altitude: strategic | tactical | implementation
     original_choice: <Option X — description>
     user_verdict: keep | overrule | refine
     user_reason: <verbatim from user, or "(no reason given)">
@@ -125,33 +155,43 @@ Cap entries per agent at **20**. When at cap, prune the oldest non-`principle` e
 
 The agent reads this file at boot via the `mental-model` skill. Future autonomous runs see "user overruled X in similar situation; consider Y instead."
 
-### 5. Mark the run debriefed
+### 7. Mark the run debriefed
 
 Update `docs/autonomous/<run-id>/state.yaml`:
 
 ```yaml
 status: debriefed
 debriefed_at: <ISO 8601>
+debrief_mode: strategic-only | all
 debrief_summary:
   decisions_total: M
+  by_altitude:
+    strategic: S
+    tactical: T
+    implementation: P
   formal_blocks: F          # passed Pass A
   informal_detected: I      # found by Pass B heuristics only
   format_drift: <true|false>  # true if I > F
+  walked: W                  # how many decisions actually walked (after altitude filter)
   kept: K
   overruled: O
   refined: R
   skipped: S
 ```
 
-### 6. Final report
+Note: if `debrief_mode == strategic-only` and tactical/implementation decisions exist, the run is still considered debriefed for state-tracking purposes. The user can re-run with `--all` later if they want to revisit lower-altitude decisions; the artifacts on disk stay available indefinitely.
+
+### 8. Final report
 
 A single concise summary:
 
-- **Run:** `<run-id>`
-- **Decisions reviewed:** M (kept K, overruled O, refined R, skipped S)
+- **Run:** `<run-id>` — mode: `<strategic-only | all>`
+- **Decisions in run:** M total (strategic S, tactical T, implementation P)
+- **Reviewed this debrief:** W (kept K, overruled O, refined R, skipped Sk)
 - **Format compliance:** F formal blocks / I informal-only. If `format_drift: true`, add: "Recorded `principle` feedback on N agent(s) for the next run."
 - **Updated expertise files:** list of `<agent>-mental-model.yaml` paths.
-- **Skipped decisions:** if any, list them so user can return later.
+- **Not reviewed (filtered out):** if mode was `strategic-only`, mention the count of tactical+implementation decisions that were skipped and how to re-debrief: `/common:debrief <run-id> --all`.
+- **Skipped decisions:** if any (user said `skip` during walk), list them so user can return later.
 
 ## Constraints
 
@@ -159,3 +199,5 @@ A single concise summary:
 - **Skipped decisions stay in the artifacts** but don't get a feedback entry. The user can re-run debrief later targeting just the skipped ones (future enhancement; not in scope yet).
 - **Never auto-overrule.** The user's verdict is required. If they didn't answer clearly for a decision, treat it as `skip`, not `keep`.
 - **One decision at a time.** Don't batch the whole list and ask for verdicts en masse — the point is forced reflection on each.
+- **Default mode is strategic-only.** If the user wants to audit tactical/implementation decisions, they pass `--all` explicitly. Don't flood their attention with implementation choices by default.
+- **Altitude misclassification detection** (optional heuristic): if a Decision block's topic mentions "scope", "spec", "API", "contract", "breaking", "rename", "defer" but `Altitude: implementation` is set, flag it during the walk as "possibly misclassified — likely strategic". Don't auto-promote; surface to user for awareness.

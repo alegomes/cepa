@@ -13,41 +13,62 @@ You are operating in **autonomous mode**. The user has stepped away. Your job is
 
 Not "should I do X or Y?", not "is this the right approach?", not "want me to continue?". Decide and continue. The exception is **catastrophic ambiguity** — e.g., the user's request literally has two contradictory interpretations and you can't infer from context which one they meant. In that case, document both interpretations in `docs/autonomous/<run-id>/state.yaml` under `blockers`, pick the more conservative one, and proceed. Tell them in the final report.
 
-### 2. For every ambiguous decision, log it — using the literal Decision block.
+### 2. Log decisions worth the user's time — using the literal Decision block.
 
-Whatever artifact is current (TASK.md, RESULT.md, MERGE.md, investigation report, integration spec — whatever you're writing right now), append a block in **exactly** this format:
+Not every choice you make during a run is a Decision. **The threshold for logging matters.** Logging too much creates noise the user can't engage with; logging too little loses signal.
+
+**What counts as a Decision worth logging:** the trade-off crosses a Task boundary — i.e., the choice affects something OUTSIDE your immediate implementation lane. Concretely:
+
+- **Scope** — should this Story include X, defer X, or drop X.
+- **Contract** — API shape, request/response schema, error codes, public method signatures, OpenAPI changes.
+- **Spec** — behavior visible to users or to other services (validation rules, status transitions, ordering guarantees, retry semantics).
+- **Cross-lane interaction** — the choice affects another worker's work (domain port shape that adapter-dev will implement, test fixture shape that qa-engineer will use).
+- **Naming** — public-facing names: endpoint paths, field names in DTOs, table/column names, event types. Internal names don't count.
+- **Strategy** — rename strategy (big-bang vs deprecation), migration approach, breaking-change handling.
+
+**What does NOT count** (don't log these):
+
+- Local code organization (where to extract a method, which package a class lives in).
+- Library/framework micro-choices that any competent engineer would resolve the same way (Optional<T> vs nullable T, StringBuilder vs concat, buffer size).
+- Test-internal choices (wiremock vs Testcontainers, fixture filenames, assertion granularity) — unless the choice changes what the test covers, in which case it's a Spec decision.
+- Pattern application (this is a Builder, that's a Factory) — unless the choice has user-visible consequences.
+- Anything you'd resolve identically next week without re-deliberating.
+
+In short: if the answer to "would a competent peer in my role resolve this the same way?" is "yes, almost certainly" — it's not a Decision. Just do it.
+
+**Block format (when you do log):**
 
 ```markdown
 ### Decision: <one-line topic>
 
+**Altitude:** strategic | tactical | implementation
+
 **Options considered:**
 - Option A: <description> — pros: ... | cons: ...
 - Option B: <description> — pros: ... | cons: ...
-- (more if relevant)
 
 **Chosen:** Option <X>
 
 **Rationale:** <why this option, what trade-off you accepted, what evidence supported it>
 ```
 
-**Format is non-negotiable.** `/common:debrief` matches on the literal `### Decision:` heading and the three labeled fields (`**Options considered:**`, `**Chosen:**`, `**Rationale:**`). Inline prose like "I decided X because Y" is **insufficient** — debrief either misses it entirely (no audit trail) or reduces to fragile heuristics (less signal in the reinforcement loop).
+**Altitude field** classifies who should review the decision at debrief time:
 
-**Single-option decisions still get logged.** If only one approach was viable, write:
+- **`strategic`** — user / product / external-contract concerns. Scope, breaking changes, public naming, spec semantics, deferrals. The user reviews these at debrief.
+- **`tactical`** — orchestrator / lead concerns. Task decomposition, integration seams, merge strategy, dependency curation. Lead reviews; user may audit if interested.
+- **`implementation`** — worker-internal concerns that still crossed the "wouldn't a peer resolve identically?" line for some reason (rare). Logged for completeness but **debrief skips by default**; surfaced only with `--all`.
 
-```markdown
-### Decision: <topic>
+When in doubt between `strategic` and `tactical`: prefer `tactical`. The user can opt to see them; defaulting to flooding their attention is worse than defaulting to silence with an audit trail they can pull on demand.
 
-**Options considered:**
-- Only one viable approach: <X>. Alternatives rejected because <reason>.
+**Format is non-negotiable.** `/common:debrief` matches on the literal `### Decision:` heading and the four labeled fields (`**Altitude:**`, `**Options considered:**`, `**Chosen:**`, `**Rationale:**`). Inline prose like "I decided X because Y" is **insufficient** — debrief either misses it entirely (no audit trail) or reduces to fragile heuristics (less signal in the reinforcement loop).
 
-**Chosen:** <X>
+**Backward compat:** older Decision blocks without the `**Altitude:**` field will be treated as `tactical` by debrief (a reasonable default — they were probably worth surfacing but not necessarily user-facing).
 
-**Rationale:** <why this, evidence, trade-off accepted>
-```
-
-Don't skip the block because "there was no real choice" — naming why alternatives weren't viable is exactly the audit trail the user needs at debrief time.
+**Single-option decisions still get logged when they're worth logging.** If only one approach was viable AND the trade-off crosses a Task boundary (per the criteria above), write the block with `**Options considered:** Only one viable approach: <X>. Alternatives rejected because <reason>.` Don't log single-option decisions for internal implementation choices.
 
 **Multi-artifact decisions:** if the choice affects multiple artifacts (e.g., api-dev's RESULT.md and adapter-dev's), log the full block once in the most central artifact and add a one-line reference in the others: `> See decision "<topic>" in <path>:<heading>`.
+
+**Path-locked workers:** if you can't write to any of `docs/**` / `spec/**` / TASK.md / RESULT.md paths, include a `### Decision: ...` block as text in your reply to the lead (with the full canonical format above), explicitly labeled `Decisions to transcribe:`. The lead is responsible for persisting it to a path it can write (e.g., into the TASK.md / RESULT.md). This isn't a workaround — it's the protocol. Worker reports up; lead transcribes. Decisions that stay only in chat replies are lost at session end.
 
 ### 3. Don't fabricate green builds.
 
