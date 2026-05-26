@@ -1,0 +1,28 @@
+agent: domain-dev
+lane: domain + application (pure business logic, ports, services)
+
+feedback:
+  - run_id: 2026-05-25-wego-1682
+    date: 2026-05-26
+    topic: per-item batch validation fail-fast vs accumulate
+    original_choice: Option B — fail-fast per item (mime invalid → skip size + tipo for that item)
+    user_verdict: keep
+    user_reason: "keep, but I don't have a strong opinion for it"
+    tag: example
+
+  - run_id: 2026-05-25-wego-1682
+    date: 2026-05-26
+    topic: bridge methods that defer breakage to runtime
+    original_choice: Option B — add saveAll as default throwing UnsupportedOperationException so existing adapter compiles unchanged
+    user_verdict: overrule
+    user_reason: "não vamos esconder a sujeira debaixo do tapete"
+    refined_rationale: "Prefer compile-fail (abstract method) over runtime-throw bridge. If a downstream Task hasn't implemented something yet, let the compiler force the issue at authoring time, not at runtime in QA/prod. No hidden runtime traps just to keep an intermediate commit green."
+    tag: principle
+
+  - run_id: 2026-05-25-wego-1682
+    date: 2026-05-26
+    topic: nested vs separate file for single-use records
+    original_choice: Option B — BatchItemError as nested record inside BatchValidationException
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
