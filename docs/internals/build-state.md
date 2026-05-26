@@ -179,11 +179,18 @@ broad and it'll fire on commands that aren't builds.
 
 ### gate-advance (PreToolUse on Bash)
 
-Two pattern lists:
+Three pattern lists (LOCAL vs SHARING is the H1+H2 design choice):
 
 ```python
-ADVANCE_PATTERNS = [
+# Local operations — recoverable via `git reset`. Fail-OPEN on
+# missing baseline (with loud warning); BLOCK on STALE/FAILURE.
+LOCAL_PATTERNS = [
     re.compile(r"(?:^|\s|&&\s|;\s)git\s+commit\b"),
+]
+
+# Sharing operations — broadcast / deploy / unrecoverable. Fail-CLOSED
+# on missing baseline; BLOCK on STALE/FAILURE.
+SHARING_PATTERNS = [
     re.compile(r"(?:^|\s|&&\s|;\s)git\s+push\b"),
     re.compile(r"(?:^|\s|&&\s|;\s)gh\s+pr\s+(?:create|merge|review\s+--approve)\b"),
     re.compile(r"(?:^|\s|&&\s|;\s)gh\s+release\b"),
@@ -211,19 +218,37 @@ EXEMPT_PATTERNS = [
 The separator prefix `(?:^|\s|&&\s|;\s)` lets the regex match commands
 inside compound shells (e.g., `git add foo && git commit -m bar`).
 
-**Exempt list precedence over advance:** the hook checks exempt first.
-If the command matches any exempt pattern AND no advance pattern, it
-exits 0. If it matches BOTH (e.g., a one-liner that runs tests then
-commits), the advance pattern still triggers and the gate fires.
+**Tier precedence: SHARING > LOCAL > EXEMPT.** When the command mixes
+patterns (e.g., `git add foo && git commit -m bar` matches both
+EXEMPT/`git add` and LOCAL/`git commit`), the strictest tier wins.
+`classify()` returns the highest tier that matched. This is
+conservative: a compound command that includes a commit needs the gate;
+the user splits it into two commands if they want finer-grained
+control.
 
-This is conservative: a compound command that includes a commit needs
-the gate. The user splits it into two commands if they want
-finer-grained control.
+**Behavior matrix:**
 
-To add a new advancement command (e.g., `helm install` for k8s
-deploys): add a regex to `ADVANCE_PATTERNS`. To add a new
-recovery command (e.g., a project-specific test runner): add to
-`EXEMPT_PATTERNS`.
+| state | exempt-only | local | sharing |
+|---|---|---|---|
+| `SUCCESS` | exit 0 | exit 0 | exit 0 |
+| `STALE` | exit 0 | exit 2 | exit 2 |
+| `FAILURE` | exit 0 | exit 2 | exit 2 |
+| missing | exit 0 | exit 0 + LOUD banner | exit 2 |
+
+The "missing baseline" row is the asymmetry that H1 + H2 introduced.
+Older code fail-open-with-stderr-warning for both tiers; the warning
+was easy to miss, so unverified commits historically slipped through
+in cache-stale projects (the wego-tasy-gateway incident, May 2026).
+The split treats local commits as recoverable (loud warning, no block)
+and sharing operations as unrecoverable (block until baseline exists).
+
+To add a new advancement command:
+- New local operation (rare; almost everything that isn't a build is
+  sharing-tier) → add regex to `LOCAL_PATTERNS`.
+- New sharing operation (e.g., `helm install` for k8s deploys) → add
+  regex to `SHARING_PATTERNS`.
+- New recovery command (e.g., a project-specific test runner) → add to
+  `EXEMPT_PATTERNS`.
 
 ## State file race conditions
 
@@ -298,7 +323,9 @@ state file.
 - **New file type that should mark STALE:** extend `SOURCE_EXTENSIONS`
   or `BUILD_FILES` in `mark-build-stale.py`.
 - **New advancement command:** add regex to `gate-advance.py`'s
-  `ADVANCE_PATTERNS`.
+  `LOCAL_PATTERNS` (recoverable; fail-open on missing baseline) or
+  `SHARING_PATTERNS` (broadcasts/deploys; fail-closed on missing
+  baseline). Almost everything new lands in SHARING.
 - **Project layout where source lives outside `src/main/`:** the
   exclusions are path-fragment based; tighten or loosen as needed.
 

@@ -10,31 +10,50 @@ Exit codes:
   0 — allowed
   2 — blocked (stderr reaches the agent so it can self-correct)
 
-What gets gated:
-  - Bash:  git commit, git push, gh pr create, gh pr merge, gh release
-  - Bash:  deploy commands (heuristic: kubectl apply, terraform apply,
-           docker push, aws/gcloud/az deploy)
+What gets gated, in two tiers:
+
+  LOCAL operations — fail-OPEN when no baseline exists (with a loud
+  warning). Recoverable with `git reset` if the commit was a mistake.
+    - git commit
+
+  SHARING operations — fail-CLOSED when no baseline exists. Broadcasts
+  unverified code to others; the friction of forcing a baseline is
+  worth it.
+    - git push
+    - gh pr create / merge / approve, gh release
+    - kubectl apply, terraform apply
+    - docker push
+    - aws/gcloud/az deploy or push
+
+  Both tiers fail-CLOSED when state is STALE or FAILURE (existing
+  build context says "broken"; no exceptions).
 
 What does NOT get gated:
   - Read-only Bash (status, log, diff, ls, etc.)
   - Test/build invocations themselves (./mvnw, gradle, pytest, npm test).
     These are how you fix STALE/FAILURE — gating them would be a deadlock.
 
-UNKNOWN status (no state file yet) is allowed — we can't gate when we
-have no prior data. The skill instructs the agent to establish a baseline.
+UNKNOWN status (state file present but unrecognized) is treated as
+FAILURE (something's off; don't proceed).
 """
 
 import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 
-# Commands that mean "I'm done, push it out" — gate these.
-ADVANCE_PATTERNS = [
+# Local operations: commit. Recoverable with git reset; missing baseline
+# falls open with a loud warning (H1).
+LOCAL_PATTERNS = [
     re.compile(r"(?:^|\s|&&\s|;\s)git\s+commit\b"),
+]
+
+# Sharing operations: push code to others / deploy. Missing baseline
+# fails CLOSED (H2). Once your work crosses the boundary out of your
+# machine, it's unrecoverable — the gate forces a baseline first.
+SHARING_PATTERNS = [
     re.compile(r"(?:^|\s|&&\s|;\s)git\s+push\b"),
     re.compile(r"(?:^|\s|&&\s|;\s)gh\s+pr\s+(?:create|merge|review\s+--approve)\b"),
     re.compile(r"(?:^|\s|&&\s|;\s)gh\s+release\b"),
@@ -60,14 +79,21 @@ EXEMPT_PATTERNS = [
 ]
 
 
-def is_gated(command: str) -> bool:
-    """True if this Bash command needs gating against build state."""
-    if any(p.search(command) for p in EXEMPT_PATTERNS):
-        # If command mixes exempt + gated patterns, the gated portion still
-        # matters. Check that there's no advance pattern in the same line.
-        if not any(p.search(command) for p in ADVANCE_PATTERNS):
-            return False
-    return any(p.search(command) for p in ADVANCE_PATTERNS)
+def classify(command: str) -> str:
+    """Return one of: 'local', 'sharing', 'exempt-only', 'unrelated'."""
+    matches_local = any(p.search(command) for p in LOCAL_PATTERNS)
+    matches_sharing = any(p.search(command) for p in SHARING_PATTERNS)
+    matches_exempt = any(p.search(command) for p in EXEMPT_PATTERNS)
+
+    # When the command mixes exempt + gated portions, the gated portion
+    # still matters. The strictest tier wins: sharing > local > exempt.
+    if matches_sharing:
+        return "sharing"
+    if matches_local:
+        return "local"
+    if matches_exempt:
+        return "exempt-only"
+    return "unrelated"
 
 
 def main():
@@ -82,23 +108,57 @@ def main():
         sys.exit(0)
 
     command = (payload.get("tool_input") or {}).get("command", "")
-    if not command or not is_gated(command):
+    if not command:
+        sys.exit(0)
+
+    tier = classify(command)
+    if tier in ("unrelated", "exempt-only"):
         sys.exit(0)
 
     cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
     state_path = cwd / ".claude" / "last-build.json"
 
+    # ─── Missing baseline ─────────────────────────────────────────────
     if not state_path.exists():
-        # No baseline. Can't gate; let it through but emit a soft warning
-        # to stderr so the user sees that no verification was on file.
-        print(
-            "[gate-advance] no .claude/last-build.json — no build verification "
-            "recorded yet this session. Consider running ./mvnw verify (or "
-            "equivalent) before this commit / push to establish a baseline.",
-            file=sys.stderr,
-        )
-        sys.exit(0)
+        if tier == "local":
+            # H1: fail-OPEN for local commits, but make the warning
+            # impossible to ignore. The user can `git reset` if they
+            # later realize this commit slipped a broken build through.
+            warning = (
+                "\n"
+                "╔══════════════════════════════════════════════════════════════════════╗\n"
+                "║              ⚠  COMMIT WITHOUT BUILD VERIFICATION  ⚠               ║\n"
+                "╠══════════════════════════════════════════════════════════════════════╣\n"
+                "║  No .claude/last-build.json found at this project.                  ║\n"
+                "║  No build has been verified yet — this commit is UNVERIFIED.        ║\n"
+                "║                                                                      ║\n"
+                "║  RECOMMENDED: run your project's verify command FIRST to establish  ║\n"
+                "║    a baseline (e.g., `./mvnw verify`, `npm test`, `pytest`).        ║\n"
+                "║                                                                      ║\n"
+                "║  ALLOWED because this is a LOCAL commit (recoverable via            ║\n"
+                "║    `git reset`). Pushes / PRs / deploys will be BLOCKED until       ║\n"
+                "║    a SUCCESS baseline is recorded.                                  ║\n"
+                "╚══════════════════════════════════════════════════════════════════════╝\n"
+            )
+            print(warning, file=sys.stderr)
+            sys.exit(0)
+        else:
+            # H2: fail-CLOSED for sharing operations.
+            print(
+                f"[gate-advance] BLOCKED: sharing operation requires a build baseline.\n"
+                f"  Command: {command[:200]}\n"
+                f"  No .claude/last-build.json found — no build has been verified at\n"
+                f"  this project yet. Sharing unverified code is the failure mode this\n"
+                f"  gate exists to prevent.\n"
+                f"  Suggestion: run your project's verify command (e.g. `./mvnw verify`,\n"
+                f"  `npm test`, `pytest`) to establish a SUCCESS baseline, then retry.\n"
+                f"  If your project uses a build tool not recognized by capture-build-\n"
+                f"  result.py, extend its PATTERNS list rather than faking the state file.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
+    # ─── Baseline exists — read and gate on status ─────────────────────
     try:
         state = json.loads(state_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
@@ -109,7 +169,7 @@ def main():
     if status == "SUCCESS":
         sys.exit(0)
 
-    # STALE or FAILURE → block.
+    # STALE or FAILURE → block (regardless of tier).
     if status == "STALE":
         reason = f"build is STALE since edit to {state.get('after_edit_to', '<unknown path>')} at {state.get('since', '<unknown time>')}"
         suggestion = "Run your project's verify command (e.g. `./mvnw <scope> verify`) before this operation. The hook will clear STALE on a green run."

@@ -126,9 +126,13 @@ Records the command, kind, and last ~12 lines of output.
 ### `gate-advance.py` (PreToolUse, matches `Bash`)
 
 Hard gate. Refuses Bash commands that signal "I'm done, push it out"
-when `last-build.json` is `STALE` or `FAILURE`. Gated commands:
+when `last-build.json` is `STALE` or `FAILURE`. Gated commands split
+into two tiers based on recoverability:
 
+**Local tier** (recoverable via `git reset`):
 - `git commit`
+
+**Sharing tier** (broadcasts to others / deploys; unrecoverable):
 - `git push`
 - `gh pr create`, `gh pr merge`, `gh release`
 - `kubectl apply`, `terraform apply`, `docker push`
@@ -143,8 +147,34 @@ the recovery path):
   `restore`, `reset`, `add`, `rm`, `mv`, `fetch`, `pull`, `merge`,
   `rebase`, `branch`, `tag`, `worktree`, `config`, `remote`
 
-`UNKNOWN` status (no state file yet) is **allowed with a stderr
-warning** — can't gate without a baseline.
+When the command mixes exempt + gated portions (e.g., `git add foo
+&& git commit -m bar`), the gated portion still applies; the strictest
+tier wins (sharing > local > exempt).
+
+### Behavior by tier and state
+
+| `last-build.json` state | local tier (`git commit`) | sharing tier (`push` / PR / deploy) |
+|---|---|---|
+| `SUCCESS` | ALLOW | ALLOW |
+| `STALE` | BLOCK | BLOCK |
+| `FAILURE` | BLOCK | BLOCK |
+| missing (no baseline yet) | **ALLOW** with loud stderr warning | **BLOCK** with clear message |
+
+The asymmetry on "missing baseline" is intentional:
+
+- A bad local commit is cheap to undo (`git reset`); blocking it just
+  to force `./mvnw verify` would add friction to greenfield projects
+  and to projects whose build tool isn't recognized by
+  `capture-build-result.py`. So we ALLOW with a warning loud enough
+  that nobody can miss it (boxed ⚠ banner in stderr).
+- A bad `git push` / `gh pr create` / `kubectl apply` crosses out of
+  your machine — unrecoverable. Forcing a baseline before that is
+  worth the friction.
+
+This split (H1 + H2 in the design discussion) replaces the older
+behavior of fail-open-with-stderr-warning for both tiers. The old
+behavior let unverified commits ship silently because nobody reads
+plain stderr lines mid-session.
 
 When the gate fires, the block message names:
 
