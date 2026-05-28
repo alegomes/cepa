@@ -194,6 +194,12 @@ from the run's artifacts and asks for your verdict:
 - **`refine: <new rationale>`** — right call, weak rationale. New
   rationale replaces the original.
 - **`skip`** — defer.
+- **`batch-keep`** (only available with `--all`) — keep this AND all
+  remaining tactical/implementation decisions in a single sweep with
+  reason "batch-keep — debrief pace decision: only strategic gets
+  individual review". Strategic decisions continue being walked
+  individually. Useful when the tactical/implementation pile is
+  mostly fine and going one-by-one wastes attention.
 
 Verdicts get written to `common/expertise/<agent>-mental-model.yaml`:
 

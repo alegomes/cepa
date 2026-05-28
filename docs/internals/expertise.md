@@ -68,6 +68,20 @@ feedback:
 | `feedback` | Optional (empty list = `feedback: []`) | List of feedback entries from `/common:debrief`. New entries appended; capped at 20 (with `principle` exemption). |
 | Other | Yes | Agent-specific top-level keys for free-form mental model content. Example: `lane: api-rest REST surface` for `api-dev`. |
 
+### Reserved sections
+
+Three top-level keys carry schema meaning across the marketplace:
+
+| Section | Owner | Purpose |
+|---|---|---|
+| `feedback:` | `/common:debrief` (machine-written) | Per-decision verdicts from user. Schema below. |
+| `heuristics:` | Worker / lead / human (hand-written) | Durable rules of thumb. Two acceptable shapes: short string (one-line rule) OR structured object with `id` / `when` / `why_it_bites` / `verdict_rule`. Examples in `validation-lead-mental-model.yaml` post-2026-05-28. |
+| `ecosystem_gotchas:` | Worker (hand-written) | Optional flat list of one-line version-specific gotchas. |
+
+Other keys (`agent:`, `lane:`, `decisions:`, etc.) are role-specific
+free-form context. `/common:debrief` only touches `feedback:`; it
+ignores all other sections.
+
 ### Feedback entry shape
 
 | Field | Source | Notes |

@@ -131,8 +131,15 @@ For each decision (filtered by altitude per step 4; formal blocks first, then in
 > - `overrule: <reason>` — wrong call; tell me what you would have done and why.
 > - `refine: <new rationale>` — right call but the rationale needs sharpening.
 > - `skip` — defer; we'll come back to this one.
+> - `batch-keep` — keep this AND all remaining tactical/implementation decisions in a single sweep. Reason: "batch-keep — debrief pace decision: only strategic gets individual review". Strategic decisions remain individually reviewed.
 
 Wait for the user's response. Parse the verdict. Don't infer.
+
+**`batch-keep` mode** — once the user says `batch-keep` on any tactical or implementation decision, switch to batch-mode for the remainder of that altitude group. Every remaining `tactical` and `implementation` decision auto-keeps with the same reason. Continue walking `strategic` decisions individually (those still need attention). At the end of the walk, the report names how many were batch-kept so the user knows the count.
+
+This mode codifies the observed pattern from wego-1682 and wego-1683 runs: user wants individual review on strategic, but tactical and implementation rarely raise individual reservations and going one-by-one wastes attention. `batch-keep` makes the pattern explicit; user can pick it once and the rest of the lower-altitude walk flows.
+
+**`batch-keep` is only available when `mode = all`** (the default `strategic-only` mode never touches tactical/implementation, so there's nothing to batch). If user says `batch-keep` in `strategic-only` mode, treat as `keep` (strategic still gets individual attention; nothing else to batch).
 
 ### 6. Persist verdicts
 
@@ -177,6 +184,7 @@ debrief_summary:
   overruled: O
   refined: R
   skipped: S
+  batch_kept: B              # how many auto-kept via batch-keep mode
 ```
 
 Note: if `debrief_mode == strategic-only` and tactical/implementation decisions exist, the run is still considered debriefed for state-tracking purposes. The user can re-run with `--all` later if they want to revisit lower-altitude decisions; the artifacts on disk stay available indefinitely.
@@ -187,7 +195,7 @@ A single concise summary:
 
 - **Run:** `<run-id>` — mode: `<strategic-only | all>`
 - **Decisions in run:** M total (strategic S, tactical T, implementation P)
-- **Reviewed this debrief:** W (kept K, overruled O, refined R, skipped Sk)
+- **Reviewed this debrief:** W (kept K, overruled O, refined R, skipped Sk, batch-kept B)
 - **Format compliance:** F formal blocks / I informal-only. If `format_drift: true`, add: "Recorded `principle` feedback on N agent(s) for the next run."
 - **Updated expertise files:** list of `<agent>-mental-model.yaml` paths.
 - **Not reviewed (filtered out):** if mode was `strategic-only`, mention the count of tactical+implementation decisions that were skipped and how to re-debrief: `/common:debrief <run-id> --all`.
