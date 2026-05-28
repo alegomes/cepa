@@ -5,4 +5,143 @@
 # only agent-global knowledge; project-specific facts go in the host project's
 # CLAUDE.md. See common/skills/mental-model/SKILL.md.
 
-last_updated: null
+last_updated: 2026-05-27
+
+feedback:
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: comparison key for atendimento.medico (HIS diff)
+    original_choice: Option A — compare by CPF
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: comparison key for atendimento.convenio (HIS diff — future, when ACL exposes)
+    original_choice: Option A — compare by operadora (name)
+    user_verdict: refine
+    user_reason: "não seria mais seguro com codigoOperadora?"
+    refined_rationale: |
+      When the convenio field eventually enters the diff scope (via the
+      follow-up Story that expands wego-tasy-gateway ACL), use
+      codigoOperadora — not operadora name. Reason: name variation
+      ("Bradesco Saúde" vs "BRADESCO SAUDE" vs "Bradesco Saude") triggers
+      false-positive drift blocks that erode operator trust in the
+      mechanism. Code is stable identity. The ACL expansion Story should
+      surface codigoOperadora at the same time it surfaces the field for
+      diff, so the two land together.
+    tag: principle
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: D1 semantic field set vs HIS contract surface (refresh-on-dispatch diff scope)
+    altitude: strategic
+    original_choice: Option B — diff only for paciente.* + medico.cpf (fields HIS contract exposes today); rest deferred to follow-up ACL Story
+    user_verdict: refine
+    user_reason: "B + responsavel"
+    refined_rationale: |
+      Ship Option B, but DO include responsavel.* in scope. Don't wait for
+      a separate follow-up Story to ACL-expand responsavel — pull that
+      expansion into the same Story as the diff. Rationale: responsavel is
+      load-bearing for assinatura legal validity (who is signing on behalf
+      of whom); leaving it out of diff scope while paciente/medico are
+      covered is an inconsistent safety net. The other deferred fields
+      (dataAlta, situacao) are lower-stakes and can wait.
+    tag: principle
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: refactor importarDoHis semantics (split into fresh vs cached methods)
+    altitude: strategic
+    original_choice: Option A — split into importarDoHis (always fresh) + importarOuObterLocal (cached, for legacy callers)
+    user_verdict: keep
+    user_reason: "upload cached faz sentido — operador acabou de fazer upload, sem necessidade de round-trip extra ao HIS"
+    tag: example
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: remove @Retry(maxRetries=2) from TasyGatewayAdapter (HIS dispatch path)
+    altitude: strategic
+    original_choice: Option A — remove @Retry from adapter entirely (affects all callers, not just dispatch)
+    user_verdict: refine
+    user_reason: "Eu quero que o retry+timeout seja uma feature flag"
+    refined_rationale: |
+      Don't hard-remove @Retry+@Timeout — make them feature-flagged
+      (e.g. wego.his.retry.enabled, wego.his.timeout.ms). The fail-fast
+      decision has TWO real benefits, not one: (1) latency UX (avoid
+      10s × 3 attempts = 30s waits for operator); (2) observability of
+      chronic HIS instability — retries mask intermittent failures and
+      let HIS degrade silently, so removing retry surfaces every blip as
+      a 503 the operator complains about, generating a ticket and root
+      cause. Feature-flagging both knobs lets ops tune per environment
+      without code change, AND keeps the "expose chronic problems" lever
+      available even after the initial rollout settles. Follow-up task
+      to introduce the flags.
+    tag: principle
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: kill-switch via feature flag wego.refresh-on-dispatch.enabled (default false)
+    altitude: strategic
+    original_choice: Option A — ship default-off; first cliente stays on old behavior; ops flips when comfortable
+    user_verdict: keep
+    user_reason: "(after explanation of canary-switch rationale)"
+    tag: example
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: naming of the cached-semantics method (importarOuObterLocal)
+    altitude: strategic
+    original_choice: Option A — importarOuObterLocal (action-first reading; "try import; fallback local")
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: HisAtendimentoDiff placement (package-private class vs static inner)
+    altitude: strategic
+    original_choice: Option B — separate package-private class in application/service (testable in isolation; service stays readable)
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: diff block placement in SolicitarAssinaturaService.execute()
+    altitude: strategic
+    original_choice: Option B — after buscarPorNrAtendimento, before resolverArquivos (first side-effect); reuses snapshot, blocks before any side-effect
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: HIS snapshot persistence on refresh-on-dispatch (ephemeral vs persisted)
+    altitude: strategic
+    original_choice: Ephemeral — snapshot used for diff inside execute() and discarded; NOT written to atendimento_snapshot_history; local snapshot NOT auto-overwritten
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: debrief presentation style
+    altitude: meta
+    original_choice: "(behavioral feedback, not a decision in the run — surfaced mid-debrief)"
+    user_verdict: principle
+    user_reason: "Apresente todas as demais decisões nesse nível de clareza."
+    refined_rationale: |
+      When walking decisions in /common:debrief, do NOT copy-paste the
+      raw Decision block from the artifact. For EACH decision, present:
+      (1) topic in plain language; (2) Contexto — what the surrounding
+      code/flow is and why this choice matters; (3) Risco se errar —
+      concrete bad outcomes of picking wrong; (4) Opções — labeled with
+      what each one means in practice (not abstract trade-off jargon);
+      (5) Diferença prática — what changes for the user/operator/dev
+      between options; (6) Rationale (verbatim) — quoted from the block;
+      (7) Verdict? prompt. The user shouldn't have to ask "I don't
+      understand this decision" — every decision should be self-explained
+      at the level of someone who didn't author the run.
+    tag: principle

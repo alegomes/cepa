@@ -5,4 +5,60 @@
 # only agent-global knowledge; project-specific facts go in the host project's
 # CLAUDE.md. See common/skills/mental-model/SKILL.md.
 
-last_updated: null
+last_updated: 2026-05-28
+
+heuristics:
+  - id: provided-scope-breaks-transitive-runtime-contract
+    when: >
+      A library module ships a runtime CONTRACT (e.g. a JAX-RS ExceptionMapper /
+      @Provider, a CDI bean, an SPI impl) that a downstream consumer needs at
+      RUNTIME, but the producing module depends on the contract jar with Maven
+      `provided` scope.
+    why_it_bites: >
+      `provided` is NOT transitive. The consumer that depends only on the producer
+      jar does NOT get the contract jar on its runtime classpath. The behavior the
+      producer's own tests prove (because the test classpath DOES have it) silently
+      fails to materialize for consumers — typically degrading to a generic/default
+      handler. A green producer build + a green consumer smoke that never exercises
+      the affected path will BOTH pass while the runtime contract is broken.
+    verdict_rule: >
+      Treat as a real regression if the pre-change state delivered the contract
+      out-of-box (producer shipped its own mapper) and the post-change state makes
+      it depend on the consumer remembering to add a dep. Recommend `compile` for
+      inter-module deps whose contract is runtime-load-bearing, especially when the
+      rest of the repo uses `compile` for inter-module deps. `provided` is correct
+      only for opt-in / leaf-app-supplies-runtime deps that carry no auto-discovered
+      runtime behavior the producer's clients rely on.
+
+  - id: auto-discovered-provider-drags-its-transitive-needs
+    when: >
+      A jandex/CDI-indexed jar is on a consumer's classpath and the container
+      auto-discovers ALL its @Provider/@ApplicationScoped beans at boot, including
+      ones the consumer never asked for.
+    why_it_bites: >
+      A discovered bean whose toResponse/methods reference a `provided`
+      (non-transitive) type (e.g. jakarta.validation.ConstraintViolationException)
+      forces EVERY consumer of that jar to supply that provider at runtime or fail
+      at boot with ClassNotFoundException — even consumers with zero use of that
+      feature. "All-or-nothing bean discovery" couples unrelated features.
+    verdict_rule: >
+      Documenting the runtime prerequisite (README "adopters need a X provider") is
+      acceptable for a caveat-level ship IF the prerequisite is a single common,
+      cheap dep. Recommend a structural split (core mappers vs validation mapper)
+      only once a real consumer cannot or should not pull that provider. Note it as
+      a tracked caveat, not a blocker, when a one-line dep resolves it.
+
+  - id: smoke-cannot-prove-a-path-it-never-exercises
+    when: >
+      An end-to-end smoke/IT is offered as proof of non-regression for a change
+      that affects an error/edge path the smoke never triggers (smoke sends valid
+      input; the change is on the invalid-input/401/error branch).
+    why_it_bites: >
+      A green smoke is genuine evidence for the HAPPY path and proof of NO build/boot
+      regression — but it is NOT evidence for the changed error path. Reporting
+      "smoke passed" as blanket non-regression masks a latent break.
+    verdict_rule: >
+      Accept the smoke as proof of the happy path + boot integrity, and explicitly
+      state that the changed error path is NOT covered by it. If the error path
+      regression is real (see provided-scope heuristic), the smoke being green does
+      not lift the caveat/blocker.

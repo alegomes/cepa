@@ -1,2 +1,12 @@
 agent: api-dev
 lane: api-rest REST surface
+
+feedback:
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: HisDataDriftException 409 payload — reuse BatchItemError vs new field on ProblemDetail
+    altitude: tactical
+    original_choice: Option B — reuse BatchItemError(index, code, message) with code="campo:<nome>" and message="local → his" (zero new surface; consumer parses code prefix)
+    user_verdict: keep
+    user_reason: "batch-keep — debrief pace: altas one-by-one, mids/lows batch-keep (no individual reservation raised)"
+    tag: example

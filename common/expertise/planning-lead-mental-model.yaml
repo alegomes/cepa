@@ -39,3 +39,15 @@ feedback:
     user_verdict: keep
     user_reason: "(no reason given)"
     tag: example
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: WEGO-1683 first-touch + HIS-404 handling (mids batch)
+    altitude: tactical
+    original_choice: |
+      Batch-keep on 2 Round-1 planning decisions:
+      - First-touch import (no local snapshot to compare): skip diff, treat HIS as truth on first-touch (Option A) — existing semantics preserved; diff requires two values.
+      - HIS returns 404 on refresh-on-dispatch: treat as divergence via pseudo-field `_existencia_no_his`, throw HisDataDriftException (Option A) — single block path, operator sees same "go investigate" screen regardless of why HIS disagreed.
+    user_verdict: keep
+    user_reason: "batch-keep — debrief pace: altas one-by-one, mids/lows batch-keep (no individual reservation raised)"
+    tag: example

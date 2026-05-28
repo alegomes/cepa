@@ -26,3 +26,17 @@ feedback:
     user_verdict: keep
     user_reason: "(no reason given)"
     tag: example
+
+  - run_id: 2026-05-27-wego-1683
+    date: 2026-05-27
+    topic: WEGO-1683 tactical batch — T1+T2+T3+T5 inline decisions (mids/lows)
+    altitude: tactical
+    original_choice: |
+      Batch-keep on 8 tactical decisions from the run:
+      - Round 2 T1 (AtendimentoNormalizer): skip medico.cpf re-normalization (Medico constructor already strips non-digits); email handled separately via normalizeEmail (RFC 5321 case-insensitive); blank-after-normalize via normalizeStringOrOriginal (validation belongs upstream, not in normalizer).
+      - Round 3 T2 (exceptions): extend DomainException not raw RuntimeException (existing mappers filter on DomainException); JavaBean getters on exception + record-style on nested Divergencia (matches BatchValidationException precedent); HisDataDriftException refuses null/empty divergencias list at construction (fail-loud on diff-logic bugs).
+      - Round 4 T3 caller routing: BuscarAtendimentosFiltrados / BuscarHistoricoAtendimento / SolicitarAssinatura → importarDoHis (fresh); UploadDocumentoAtendimento + UploadDocumentosBatch → importarOuObterLocal (cached).
+      - Round 5 T5: catch RuntimeException in refreshFromHis → convert to HisUnavailableException (operator sees consistent 503 for any gateway hiccup, real cause still logged).
+    user_verdict: keep
+    user_reason: "batch-keep — debrief pace: altas one-by-one, mids/lows batch-keep (no individual reservation raised)"
+    tag: example
