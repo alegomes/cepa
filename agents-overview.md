@@ -175,7 +175,8 @@ whichever topology is also installed.
 | `/jira-flow:configure [--migrate]` | Interactive setup of `jira-flow.yaml` at project root. Validates site against accessible Atlassian sites, asks for project_key / board_id / default_topology, runs a smoke test. Run once after install. |
 | `/jira-flow:capture <description>` | Register a freeform request as a Jira Story (or Epic/Bug/Task via prefix). No planning, no execution. |
 | `/jira-flow:plan-track-build-validate <abstract task>` | Full discovery + Jira lifecycle. Registers Epic + Stories, executes one Story, transitions through To Do → In Progress → In Review. |
-| `/jira-flow:execute <jira-key>` | Single existing card. Runs a detail audit; if under-specified, planning-lead enriches the card description in Jira before build. |
+| `/jira-flow:execute <jira-key> [--force-feature-flow]` | Single existing card. Auto-detects issue type: Bug → dispatches to `/jira-flow:fix`; Story/Task/Epic → runs detail audit + build + validate. `--force-feature-flow` overrides Bug auto-dispatch. |
+| `/jira-flow:fix <jira-key>` | Bug-flow wrapper around the topology's `reproduce-fix-verify`: failing test first → fix → verify with green build evidence. Skips planning enrichment (failing test IS the spec). NOT-A-BUG is a valid outcome. Requires a topology with `reproduce-fix-verify` (hex-backend). |
 | `/jira-flow:drain <column> [--max N]` | Bulk-execute up to N cards (default 5) from a column. Stops on first BLOCKED. User confirmation required. |
 | `/jira-flow:advance <jira-key>` | Generic column-by-column transition driven by `jira-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). For default To Do → In Progress → In Review, prefer `/execute`. |
 

@@ -74,7 +74,8 @@ The Jira lifecycle layer. Pairs with any topology.
 |---|---|---|
 | `/jira-flow:configure` | `[--migrate]` | Interactive setup of `jira-flow.yaml` at project root. Validates site against your accessible Atlassian sites (via `getAccessibleAtlassianResources` — no guessing), asks for project_key / board_id / status_map / issue_types / default_topology. Runs smoke test against live Jira at the end. `--migrate` moves legacy `.claude/jira-flow.lifecycle.yaml` to the new location. |
 | `/jira-flow:capture` | `[Epic\|Bug\|Task]: <description>` | Lightweight register. Creates one Jira issue (default type: Story) and stops — no planning, no execution, no transitions. Reads `defaults.project_key` from `jira-flow.yaml`. Verifies the card actually exists via read-back before reporting success. |
-| `/jira-flow:execute` | `<jira-key>` | Single existing card. Detail audit; if under-specified, `planning-lead` enriches the description in Jira before build. Transitions through `status_map.in_progress` → build → `status_map.in_review` (with Implementation Summary comment first, then transition). |
+| `/jira-flow:execute` | `<jira-key> [--force-feature-flow]` | Single existing card. Auto-detects issue type: **Bug** cards dispatch to `/jira-flow:fix` (reproduce-fix-verify); **Story / Task / Epic** cards run the canonical detail-audit + build + validate flow. `--force-feature-flow` overrides auto-dispatch on Bug. Transitions through `status_map.in_progress` → flow → `status_map.in_review` with Implementation Summary. |
+| `/jira-flow:fix` | `<jira-key>` | Bug-flow wrapper around the topology's `reproduce-fix-verify` command (failing test first → fix → verify with BUILD SUCCESS evidence → APPROVE). Lighter than `/jira-flow:execute` — skips planning enrichment because the failing test IS the spec. Requires a topology with `reproduce-fix-verify` (currently `hex-backend` only). NOT-A-BUG is a valid outcome. |
 | `/jira-flow:plan-track-build-validate` | `<abstract task description>` | Full plan + Jira lifecycle. Registers Epic + 1-3 candidate Stories; executes one Story end-to-end; transitions through `to_do` → `in_progress` → `in_review`. |
 | `/jira-flow:drain` | `[column] [--max N]` | Bulk-execute cards from a column (default: `defaults.status_map.to_do`, fallback `"To Do"`). User confirmation required before starting. Stops on first BLOCKED card. `--max` defaults to 5. |
 | `/jira-flow:advance` | `<jira-key>` | Generic column-by-column transition driven by `lifecycles[]` in `jira-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). Runs the column's `on_enter` agent if declared, confirms `enter_gate` precondition with you if declared, transitions with Implementation Summary if `requires_summary: true` (or status name contains `review`/`qa`). |
@@ -98,7 +99,8 @@ agent matrix.
 
 - Known requirements, no Jira → `/hex-backend:plan-build-validate <description>` (or `/multi-team:plan-build-validate` for non-hex projects).
 - Known requirements, Jira-tracked → `/jira-flow:plan-track-build-validate <description>` (creates Epic + Stories, runs one Story end-to-end).
-- Existing Jira card with the description → `/jira-flow:execute <KEY>`.
+- Existing Jira card with the description (Story/Task/Epic) → `/jira-flow:execute <KEY>` (auto-routes Bug cards to `/jira-flow:fix`).
+- Existing Jira card known to be a Bug → `/jira-flow:fix <KEY>` (skip the auto-detect; go straight to reproduce-fix-verify).
 - Unattended → `/common:autonomous-start "<KEY> <description>"` (auto-detects key, wraps with lifecycle).
 
 ### "I want to fix a bug"

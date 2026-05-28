@@ -1,6 +1,6 @@
 ---
-description: Execute one existing Jira card. Reviews the card detail; if insufficient, runs a planning enrichment pass to update the card description before proceeding to build + validate. Use /jira-flow:plan-track-build-validate for abstract input that needs decomposition.
-argument-hint: <jira-key>
+description: Execute one existing Jira card. Auto-detects the issue type — Bug cards dispatch to /jira-flow:fix (reproduce-fix-verify flow); Story/Task/Epic cards proceed with the canonical plan-build-validate flow (detail audit + build + validate). Override auto-dispatch with --force-feature-flow. Use /jira-flow:plan-track-build-validate for abstract input that needs decomposition.
+argument-hint: <jira-key> [--force-feature-flow]
 ---
 
 # /jira-flow:execute
@@ -32,11 +32,27 @@ Read the project Jira config: `jira-flow.yaml` at project root if present, other
 
 ### 1. Fetch card details
 
+Parse `$ARGUMENTS`: the first token is the Jira key. Detect `--force-feature-flow` flag (anywhere in the args). The key without the flag is the issue identifier.
+
 Delegate to `atlassian-expert`:
 
-> Fetch Jira issue $ARGUMENTS — full details (summary, description, acceptance criteria, status, last 3 comments). Reply with the verbatim content.
+> Fetch Jira issue `<jira-key>` — full details (summary, description, acceptance criteria, **issue type**, status, last 3 comments). Reply with the verbatim content. Include the issue type name (e.g., `Bug`, `Story`, `Task`, `Epic`).
 
 If the card doesn't exist or you don't have access → abort with a clear error.
+
+### 1a. Auto-dispatch on Bug type
+
+Read the card's issue type. Read `defaults.issue_types.bug` from `jira-flow.yaml` (default `"Bug"`).
+
+If `--force-feature-flow` was NOT passed AND the card's issue type matches `defaults.issue_types.bug` (case-insensitive):
+
+> The card `<jira-key>` is a Bug. Dispatching to `/jira-flow:fix <jira-key>` — that command uses the topology's reproduce-fix-verify flow (failing test first, fix, verify) which is the right shape for bugs. The plan-build-validate ceremony in this command is overhead for a confirmed bug.
+>
+> If you actually want the heavier feature-flow on this Bug (e.g., the card represents systemic-bug-as-feature scope work), re-run as `/jira-flow:execute <jira-key> --force-feature-flow`.
+
+Then invoke `/jira-flow:fix <jira-key>` and STOP this command. Don't continue to step 2.
+
+If the issue type is `Story`, `Task`, `Epic`, or any non-bug type, OR `--force-feature-flow` was passed → continue with step 2 (the canonical feature flow below).
 
 ### 2. Detail audit (planning-lead)
 
