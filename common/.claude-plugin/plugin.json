@@ -1,7 +1,7 @@
 {
   "name": "common",
   "version": "0.1.0",
-  "description": "Shared mindset skills required by the alegomes topology plugins. Ships mental-model, active-listener, zero-micromanagement, conversational-response, till-done, autonomous-mode, and green-or-revert. Commands: /autonomous-start, /autonomous-resume, /debrief, /recap, /branch, /return. Hooks: autonomous-checkpoint (PostToolUse on Task), session-log (UserPromptSubmit), mark-build-stale + capture-build-result + gate-advance (the green-or-revert state machine), lead-no-worktree (PreToolUse on Task — blocks worktree-isolated leads).",
+  "description": "Shared mindset skills required by the alegomes topology plugins. Ships mental-model, active-listener, zero-micromanagement, conversational-response, till-done, autonomous-mode, green-or-revert, and acceptance-completeness. Agents: completion-auditor (independent last-mile acceptance gate). Commands: /autonomous-start, /autonomous-resume, /debrief, /recap, /branch, /return. Hooks: autonomous-checkpoint (PostToolUse on Task), session-log (UserPromptSubmit), mark-build-stale + capture-build-result + gate-advance (the green-or-revert state machine), lead-no-worktree (PreToolUse on Task — blocks worktree-isolated leads), acceptance-gate (PreToolUse on transitionJiraIssue — blocks In-Review while the acceptance audit is incomplete).",
   "author": {
     "name": "alegomes"
   },
@@ -24,6 +24,15 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/lead-no-worktree.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*transitionJiraIssue",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/acceptance-gate.py\""
           }
         ]
       }
