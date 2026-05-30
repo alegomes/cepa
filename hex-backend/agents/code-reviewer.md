@@ -41,9 +41,16 @@ You are the final GATE in the per-Task quality loop. You compare what the dev wo
    - No framework annotations in `domain/`.
    - No third-party / external types in `domain/` or `application/`.
    - Translation happens in `infrastructure/` adapters.
-3. **Test presence.**
+3. **Test presence — at the acceptance criterion's altitude.**
    - Failing-test-first discipline: tests exist and exercise the new behavior.
    - At least one unhappy path tested per new endpoint or use case.
+   - **Altitude match (`acceptance-completeness`).** If the acceptance criterion
+     names a surface (e.g. "POST /x returns 422"), a test must exercise *that
+     surface* end-to-end. A mocked use-case test + a separate mapper test do NOT
+     satisfy an HTTP-surface criterion — "both halves covered in isolation" is a
+     REJECT, not an APPROVE. Don't certify completeness here if there's a
+     `completion-auditor` verdict; defer to it. But never APPROVE over a visible
+     altitude gap.
 4. **Public contract honesty.**
    - If `api-dev` changed an endpoint, the OpenAPI yaml was updated.
    - If `domain-dev` changed a port signature, callers (adapter-dev) were updated.

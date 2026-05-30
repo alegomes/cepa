@@ -25,7 +25,11 @@ For a feature, run `/hex-backend:plan-build-validate`.
 
 You are the orchestrator. Drive reproduce → fix → verify. Apply `till-done`
 (don't accept a partial return — the fix must reach green build), apply
-`scope-discipline` (no drive-by refactors; the fix should match the failing test).
+`scope-discipline` (no drive-by refactors; the fix should match the failing test),
+and apply `acceptance-completeness` (the regression test must demonstrate the
+card's acceptance criterion **at the altitude it was written at** — if the
+criterion names an HTTP surface, "the failing test" is an HTTP test, not a
+mocked use-case test).
 
 ## Worktree policy
 
@@ -51,9 +55,13 @@ Delegate to `engineering-lead`:
 > 1. Read the relevant code to locate the suspected failure surface.
 > 2. Delegate to `qa-engineer` with: "Write a failing regression test that
 >    captures this bug. The test must fail on the current code for the right
->    reason (i.e., the bug's symptom, not a typo or import error). Place it in
->    the appropriate test module. Run it; paste the literal failure output.
->    Reply with the test file path + the failure tail."
+>    reason (i.e., the bug's symptom, not a typo or import error). **Place it at
+>    the altitude of the card's acceptance criterion** (`acceptance-completeness`):
+>    if the criterion names an HTTP endpoint ('POST /x returns 422'), write an
+>    integration/E2E test that issues the request and asserts the status/body —
+>    not a mocked use-case test. If an `specs/e2e-assertions.md` section exists
+>    for the endpoint, it is the source of truth. Run it; paste the literal
+>    failure output. Reply with the test file path + the failure tail."
 > 3. If qa-engineer cannot reproduce the bug:
 >    - If the bug description is too vague to reproduce → reply `BLOCKED:
 >      cannot reproduce` with what you tried and what you'd need from the user.
@@ -100,6 +108,34 @@ Delegate to `engineering-lead`:
 >    green-build evidence is attached." If REJECT → back to dev worker → iterate.
 > 4. Reply with: qa verdict, code-reviewer verdict, final commit SHA.
 
+### 4. Acceptance audit (independent last-mile gate)
+
+Green build + code review prove the change is correct and minimal. They do
+**not** prove the card's acceptance criterion is demonstrated at the surface it
+was written at — that's the recurring last-mile gap (`acceptance-completeness`).
+
+**You (the orchestrator) invoke `completion-auditor` directly** — not through
+`engineering-lead`. Independence is the point: the chain that built the fix does
+not get to certify its own completeness.
+
+> Delegate to `completion-auditor`:
+>
+> > Audit acceptance completeness for this bug fix.
+> > Card content (verbatim, includes acceptance criteria): <paste $ARGUMENTS>.
+> > Changed files / commit: <paths + SHA from phase 2>.
+> > Reproducer test: <path from phase 1>.
+> > Pin each acceptance criterion to its altitude, find and RUN the test that
+> > demonstrates it at that surface, write `.claude/acceptance/<KEY>.yaml`
+> > (use the Jira key if the card content has one, else a slug), and return
+> > COMPLETE or INCOMPLETE with the precise gap per criterion.
+
+- If **INCOMPLETE** → route the named gap back to the right dev/qa worker (write
+  the missing altitude test), re-run Verify, re-audit. Do **not** declare
+  READY-TO-SHIP with an open gap. `till-done` applies — the last mile is part
+  of the job, not a follow-up.
+- If **COMPLETE** → proceed. The verdict is now anchored to demonstrated
+  acceptance, not just a green build.
+
 ## Report
 
 A single concise message back to the user:
@@ -107,7 +143,9 @@ A single concise message back to the user:
 - **Bug:** one-line restatement.
 - **Reproducer:** failing test path.
 - **Fix:** paths touched + commit SHA.
-- **Verdict:** qa + code-reviewer outcome.
+- **Verdict:** qa + code-reviewer outcome + `completion-auditor` COMPLETE/INCOMPLETE.
+- **Acceptance:** the `.claude/acceptance/<KEY>.yaml` path + per-criterion
+  altitude/test (or the open gap if INCOMPLETE).
 - **Notes:** anything the user should know — e.g., "the fix exposes a related
   edge case worth a follow-up Story" (don't expand scope; flag for later).
 
@@ -117,7 +155,14 @@ If `NOT-A-BUG`, report that with the evidence and stop. Don't apologize for
 ## Constraints
 
 - **No planning phase.** The failing test is the spec. Don't decompose into
-  Tasks; this is a single-Task flow.
+  Tasks; this is a single-Task flow. **But "the failing test is the spec" only
+  holds if the test sits at the acceptance criterion's altitude** — a mocked
+  use-case test is not the spec for an HTTP-surface criterion. That is what the
+  acceptance audit (step 4) enforces.
+- **The acceptance audit is not optional.** A READY-TO-SHIP verdict requires a
+  `completion-auditor` COMPLETE. When run via `/jira-flow:fix`, the
+  `acceptance-gate` hook independently blocks the In-Review transition while the
+  audit is INCOMPLETE — so skipping it doesn't get the card moved anyway.
 - **No worktree at any layer** by default — single fix, one worker, no
   parallelism. User can branch manually if they want isolation.
 - **No validation-lead** unless the user explicitly asks (e.g., for a

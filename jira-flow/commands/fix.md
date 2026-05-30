@@ -19,7 +19,7 @@ For a non-existent card (greenfield bug discovery) use `/jira-flow:capture Bug: 
 
 ## Instructions
 
-You are the orchestrator. Drive a focused reproduce → fix → verify flow on one Jira card. Apply `till-done`, `scope-discipline`. Apply the green-build-evidence rule — `PASS` requires literal BUILD SUCCESS in the worker's reply.
+You are the orchestrator. Drive a focused reproduce → fix → verify flow on one Jira card. Apply `till-done`, `scope-discipline`, `acceptance-completeness`. Apply the green-build-evidence rule — `PASS` requires literal BUILD SUCCESS in the worker's reply. And a second, independent bar: the card does not reach In Review until `completion-auditor` returns COMPLETE — a green build proves the parts, not the acceptance criterion at its stated surface.
 
 ## Workflow
 
@@ -60,6 +60,10 @@ Report to the user that the card needs more detail. Stop.
 
 ### 3. Move card to "in progress"
 
+Clear any stale acceptance artifact from a prior run so it can't block a fresh
+start: if `.claude/acceptance/$ARGUMENTS.yaml` exists, delete it (the
+`completion-auditor` will rewrite it at the end of this run).
+
 Read `defaults.status_map.in_progress` from `jira-flow.yaml`. Delegate to `atlassian-expert`:
 
 > Topology: `<default_topology>`.
@@ -95,7 +99,15 @@ verdict (READY-TO-SHIP / READY-WITH-CAVEATS / BLOCKED / NOT-A-BUG). Wait for it.
 
 #### READY-TO-SHIP or READY-WITH-CAVEATS
 
-Build the Implementation Summary from the reproduce-fix-verify report (reproducer test path, fix commit SHA, paths touched, qa-engineer's BUILD SUCCESS evidence). Read `defaults.status_map.in_review` from `jira-flow.yaml`.
+**Acceptance precondition.** The reproduce-fix-verify report must include a
+`completion-auditor` verdict of COMPLETE and the `.claude/acceptance/$ARGUMENTS.yaml`
+path. If the audit is INCOMPLETE (or absent), do NOT transition — report the open
+gap and stop; the card stays in `in_progress` until the missing altitude test
+lands. (Even if you tried to transition anyway, the `acceptance-gate` hook in
+`common` reads the artifact and blocks the `transitionJiraIssue` call while
+status != complete — this precondition just fails earlier and more clearly.)
+
+Build the Implementation Summary from the reproduce-fix-verify report (reproducer test path, fix commit SHA, paths touched, qa-engineer's BUILD SUCCESS evidence, and the acceptance artifact path). Read `defaults.status_map.in_review` from `jira-flow.yaml`.
 
 Delegate to `atlassian-expert`:
 
@@ -111,6 +123,8 @@ Delegate to `atlassian-expert`:
 > **Fix:** <paths touched, one line per>
 >
 > **Build verification:** `./mvnw <scope> verify` → BUILD SUCCESS (commit `<SHA>`)
+>
+> **Acceptance:** completion-auditor COMPLETE — each criterion demonstrated at its altitude (e.g. `POST /api/v1/x → 422` via `<endpoint test>`). Artifact: `.claude/acceptance/<KEY>.yaml`.
 >
 > **Caveats / follow-ups:**
 > - <none, or caveats from READY-WITH-CAVEATS verdict>
