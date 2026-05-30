@@ -15,7 +15,9 @@ Patterns detected:
   - pytest → exit code is the signal
   - cargo → exit code
   - go test → exit code
-  - docker build → exit code (static-site / containerized verify)
+  - docker build → output markers (writing image / naming to /
+    Successfully built), NOT exit code — CC's Bash tool_response omits
+    the exit code on success, so marker-less patterns can't classify.
 
 If the command isn't one we know how to parse, we skip — better to leave
 stale than mis-classify.
@@ -36,13 +38,18 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-# (regex on command, kind, success-marker, failure-marker)
-# When markers are None, we fall back to exit_code from tool_response.
+# (regex on command, kind, success-markers, failure-markers)
+# Markers may be None, a single string, or a list of substrings. Failure
+# markers are checked first (fail-closed). When no marker is defined OR
+# matched, we fall back to exit_code — but note CC's Bash tool_response
+# omits the exit code on success in current versions, so marker-less
+# patterns (npm/yarn/pytest/cargo/go-test below) effectively can't classify
+# a green build yet. Prefer text markers. See classify().
 PATTERNS = [
     (re.compile(r"(?:^|\s)(?:\./)?mvnw?\b.*\b(?:verify|test|package|install)\b"),
-     "maven", "BUILD SUCCESS", "BUILD FAILURE"),
+     "maven", ["BUILD SUCCESS"], ["BUILD FAILURE"]),
     (re.compile(r"(?:^|\s)(?:\./)?gradlew?\b.*\b(?:build|test|check|verify)\b"),
-     "gradle", "BUILD SUCCESSFUL", "BUILD FAILED"),
+     "gradle", ["BUILD SUCCESSFUL"], ["BUILD FAILED"]),
     (re.compile(r"(?:^|\s)npm\b.*\b(?:test|run\s+test|run\s+build)\b"),
      "npm", None, None),
     (re.compile(r"(?:^|\s)(?:yarn|pnpm)\b.*\b(?:test|build)\b"),
@@ -53,8 +60,15 @@ PATTERNS = [
      "cargo", None, None),
     (re.compile(r"(?:^|\s)go\s+test\b"),
      "go-test", None, None),
+    # docker build emits no exit code the hook can read, so classify on
+    # output text. BuildKit (plain progress) prints "writing image" +
+    # "naming to"; the classic builder prints "Successfully built". Failures:
+    # BuildKit "failed to solve" / "executor failed"; classic "returned a
+    # non-zero code".
     (re.compile(r"(?:^|\s)docker\s+(?:buildx\s+)?build\b"),
-     "docker-build", None, None),
+     "docker-build",
+     ["writing image", "naming to", "Successfully built"],
+     ["failed to solve", "executor failed", "returned a non-zero code"]),
 ]
 
 
@@ -183,22 +197,40 @@ def tail(text: str, lines: int = 12) -> str:
     return "\n".join(parts[-lines:])
 
 
+def _as_list(markers):
+    """Normalize a marker spec (None | str | list) to a list of substrings."""
+    if markers is None:
+        return []
+    if isinstance(markers, str):
+        return [markers]
+    return list(markers)
+
+
 def classify(command: str, response_text: str, exit_code):
     """Return (status, kind, reason).
 
     status: "SUCCESS" | "FAILURE" | None
     kind:   pattern kind that matched (or None if no pattern matched)
     reason: one-line diagnostic string for debug log
+
+    Markers (success/failure) may be None, a single string, or a list of
+    substrings. Failure markers win over success markers (fail-closed: a
+    build gate should bias to FAILURE on ambiguous output). When no marker
+    is defined or matched, fall back to exit_code — but CC's Bash
+    tool_response omits the exit code on success in current versions, so a
+    marker-less pattern may stay unclassified (returns None) rather than
+    falsely going green.
     """
-    for pattern, kind, success_marker, failure_marker in PATTERNS:
+    for pattern, kind, success_markers, failure_markers in PATTERNS:
         if not pattern.search(command):
             continue
 
-        # Markers when defined.
-        if success_marker is not None and success_marker in response_text:
-            return "SUCCESS", kind, f"matched success marker {success_marker!r}"
-        if failure_marker is not None and failure_marker in response_text:
-            return "FAILURE", kind, f"matched failure marker {failure_marker!r}"
+        for m in _as_list(failure_markers):
+            if m in response_text:
+                return "FAILURE", kind, f"matched failure marker {m!r}"
+        for m in _as_list(success_markers):
+            if m in response_text:
+                return "SUCCESS", kind, f"matched success marker {m!r}"
 
         # Marker-less or marker-missing — fall back to exit code if available.
         if exit_code == 0:
@@ -210,8 +242,8 @@ def classify(command: str, response_text: str, exit_code):
             f"matched pattern {kind!r} but could not classify: "
             f"no marker in response_text (len={len(response_text)}), "
             f"no exit_code (exit_code={exit_code!r}). "
-            f"Likely a tool_response shape extract_text doesn't cover; "
-            f"set CAPTURE_BUILD_DEBUG=1 and rerun."
+            f"CC's Bash tool_response often omits exit_code on success — "
+            f"give this pattern text markers. Set CAPTURE_BUILD_DEBUG=1 to inspect."
         )
 
     return None, None, "no command pattern matched (not a build command)"
