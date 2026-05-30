@@ -40,3 +40,22 @@ feedback:
     user_verdict: keep
     user_reason: "batch-keep — debrief pace: altas one-by-one, mids/lows batch-keep (no individual reservation raised)"
     tag: example
+
+  - run_id: 2026-05-30-wego-1705
+    date: 2026-05-30
+    topic: defense-in-depth — verify-green ≠ system-correct
+    user_verdict: principle
+    user_reason: |
+      WEGO-1705 fix relaxou validator (API layer) e shipou verde — mas validator-aceita
+      ≠ system-aceita. Domain Signatario.requireNonNull e PlugSignPort.requireNonNull
+      ainda enforçavam a regra antiga em layers downstream → consumidores recebiam 500.
+      Bug nunca detectado pelo verify (testes focados só no validator) e o Swagger
+      documentava o request quebrado.
+    refined_rationale: |
+      Para qualquer mudança que relaxe validação / mude contrato (validator, openapi,
+      domain invariant, adapter), aplicar defense-in-depth: R1 grep do campo pelo
+      pipeline inteiro antes do fix; R2 teste no nível onde o COMPORTAMENTO vive
+      (não só onde a code-change vive); R3 gaps deliberados de teste = card de
+      follow-up (nunca silente); R4 smoke real (curl) antes de "ready to ship".
+      Ver common/skills/defense-in-depth/SKILL.md.
+    tag: principle
