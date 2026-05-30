@@ -68,17 +68,28 @@ Read `defaults.status_map.in_progress` from `jira-flow.yaml`. Delegate to `atlas
 
 ### 4. Run reproduce-fix-verify
 
-Delegate to `<default_topology>:engineering-lead` (or invoke the command directly — depending on topology design, the lead drives reproduce-fix-verify internally):
+**Invoke the command, don't hand the whole flow to a lead.** Run
+`/<default_topology>:reproduce-fix-verify` with the card description verbatim:
 
-> Run the reproduce-fix-verify flow for the bug described in Jira card $ARGUMENTS. Card content (verbatim): <paste content from step 1>.
->
-> Apply the canonical reproduce → fix → verify shape: qa-engineer writes the failing regression test first; the right dev-worker (domain-dev / api-dev / adapter-dev based on the affected layer) makes minimum change to pass; qa-engineer re-runs `./mvnw verify` with green-build evidence; code-reviewer approves. NOT-A-BUG is a valid outcome if reproduction reveals the code already handles the case.
->
-> Reply with: reproducer test path, fix commit SHA, paths touched, verdict (READY-TO-SHIP / READY-WITH-CAVEATS / BLOCKED / NOT-A-BUG).
+> /`<default_topology>`:reproduce-fix-verify The bug described in Jira card $ARGUMENTS. Card content (verbatim): <paste content from step 1>.
 
-Equivalently, if the topology surface includes a slash command form: invoke `/<default_topology>:reproduce-fix-verify <card description verbatim>` and wait for the report.
+That command is the orchestrator of the reproduce → fix → verify phases: it
+drives `engineering-lead` one phase at a time (qa-engineer writes the failing
+regression test first; the right dev-worker — domain-dev / api-dev / adapter-dev
+based on the affected layer — makes the minimum change to pass; qa-engineer
+re-runs `./mvnw verify` with green-build evidence; code-reviewer approves).
+NOT-A-BUG is a valid outcome if reproduction reveals the code already handles
+the case.
 
-Wait for the verdict.
+Do NOT collapse this into a single `Task` that tells `engineering-lead` to "run
+the whole flow," and **never** invoke any lead with `isolation: "worktree"`. A
+worktreed lead loses the `Task` tool in CC 2.1.x (the `lead-no-worktree` hook in
+`common` blocks it), and a one-shot "do everything" delegation turns the lead
+into a solo do-it-all agent that can't reach its workers — see the "Worktree
+policy" section in `reproduce-fix-verify.md` and `cc_plugin_quirks.md`.
+
+The command reports back: reproducer test path, fix commit SHA, paths touched,
+verdict (READY-TO-SHIP / READY-WITH-CAVEATS / BLOCKED / NOT-A-BUG). Wait for it.
 
 ### 5. Transition based on verdict
 
