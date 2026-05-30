@@ -19,7 +19,7 @@ For an existing Jira card (no decomposition needed), use `/jira-flow:execute` in
 
 ## Instructions
 
-You are the orchestrator. Drive the planning, building, validation phases AND keep the Jira issue lifecycle in sync. Apply `till-done`, `scope-discipline`, `name-the-disagreement` throughout.
+You are the orchestrator. Drive the planning, building, validation phases AND keep the Jira issue lifecycle in sync. Apply `till-done`, `scope-discipline`, `name-the-disagreement`, `acceptance-completeness` throughout. The Story does not reach In Review until `validation-lead`'s `completion-auditor` returns COMPLETE — a green build proves the parts, not each acceptance criterion at its user-facing surface; the `acceptance-gate` hook enforces this structurally at the transition.
 
 `atlassian-expert` is the ONLY agent allowed to modify Jira state. Don't try to call Atlassian MCP tools directly. If `atlassian-expert` is missing (jira-flow not installed properly), abort with a clear error.
 
@@ -63,6 +63,8 @@ If multiple → ask the user: "Stories proposed: [list]. Which should I execute 
 
 ### 5. Move Story to In Progress
 
+Clear any stale acceptance artifact from a prior run so it can't block a fresh start (mirrors `/jira-flow:fix`): if `.claude/acceptance/<key>.yaml` exists, delete it — `validation-lead`'s `completion-auditor` will rewrite it at the end of this run.
+
 Delegate to `atlassian-expert`:
 
 > Transition Story <key> to "In Progress."
@@ -80,11 +82,13 @@ Wait for the implementation summary.
 
 Delegate to `validation-lead`:
 
-> Cross-cutting validation for Story <key>'s implementation. Delegate to security-reviewer, run the project's full build verify, produce verdict (READY-TO-SHIP / READY-WITH-CAVEATS / BLOCKED).
+> Cross-cutting validation for Story <key>'s implementation. Delegate to security-reviewer, run the project's full build verify, and run the independent acceptance audit (`completion-auditor`) confirming each acceptance criterion is demonstrated at its user-facing altitude. Produce verdict (READY-TO-SHIP / READY-WITH-CAVEATS / BLOCKED) — INCOMPLETE acceptance blocks READY-TO-SHIP. Report the `.claude/acceptance/<key>.yaml` path.
 
 Wait for the verdict.
 
 ### 8. Move Story based on verdict
+
+**Acceptance precondition.** validation-lead's verdict must carry a `completion-auditor` COMPLETE and the `.claude/acceptance/<key>.yaml` path. If the audit is INCOMPLETE (or absent), do NOT transition — report the open gap and stop; the Story stays In Progress until the missing user-facing-surface test lands. (Even if you tried to transition anyway, the `acceptance-gate` hook in `common` reads the artifact and blocks the `transitionJiraIssue` call while `status != complete`.)
 
 If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Read `defaults.status_map.in_review` from `jira-flow.yaml` (default `"In Review"`). Then delegate to `atlassian-expert`:
 
@@ -100,6 +104,8 @@ If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from en
 > - <list from engineering-lead / qa-engineer>
 >
 > **Build verification:** `./mvnw <scope> verify` → BUILD SUCCESS (commit `<SHA>`)
+>
+> **Acceptance:** completion-auditor COMPLETE — each criterion demonstrated at its altitude (the user-facing surface it names). Artifact: `.claude/acceptance/<key>.yaml`.
 >
 > **Caveats / follow-ups:**
 > - <none, or caveats from READY-WITH-CAVEATS verdict>

@@ -17,7 +17,7 @@ Execute a single, already-tracked Jira card. Reviews the card detail before exec
 
 ## Instructions
 
-You are the orchestrator. Drive a focused build → validate flow on one Jira card. Apply `till-done`, `scope-discipline`. The detail audit ALWAYS runs — even if the card looks fine at first glance.
+You are the orchestrator. Drive a focused build → validate flow on one Jira card. Apply `till-done`, `scope-discipline`, `acceptance-completeness`. The detail audit ALWAYS runs — even if the card looks fine at first glance. A second, independent bar gates In Review: the card does not advance until `validation-lead`'s `completion-auditor` returns COMPLETE — a green build proves the parts, not each acceptance criterion at its user-facing surface.
 
 ## Workflow
 
@@ -78,6 +78,8 @@ If planning-lead said SUFFICIENT, skip this step.
 
 ### 4. Move card to "in progress"
 
+Clear any stale acceptance artifact from a prior run so it can't block a fresh start (mirrors `/jira-flow:fix`): if `.claude/acceptance/<jira-key>.yaml` exists, delete it — `validation-lead`'s `completion-auditor` will rewrite it at the end of this run.
+
 Read `defaults.status_map.in_progress` from `jira-flow.yaml` (default `"In Progress"`). Delegate to `atlassian-expert`:
 
 > Transition $ARGUMENTS to status `<defaults.status_map.in_progress>`.
@@ -97,6 +99,8 @@ Delegate to `validation-lead`:
 
 ### 7. Transition based on verdict
 
+**Acceptance precondition.** validation-lead's verdict must carry a `completion-auditor` COMPLETE and the `.claude/acceptance/<jira-key>.yaml` path. If the audit is INCOMPLETE (or absent), do NOT transition — report the open gap and stop; the card stays in `in_progress` until the missing user-facing-surface test lands. (Even if you tried to transition anyway, the `acceptance-gate` hook in `common` reads the artifact and blocks the `transitionJiraIssue` call while `status != complete` — this precondition just fails earlier and more clearly.)
+
 If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Read `defaults.status_map.in_review` from `jira-flow.yaml` (default `"In Review"`). Then delegate to `atlassian-expert`:
 
 > Transition $ARGUMENTS to status `<defaults.status_map.in_review>` with the Implementation Summary below. Post the summary as a comment first, then run the transition.
@@ -111,6 +115,8 @@ If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from en
 > - <list from engineering-lead / qa-engineer>
 >
 > **Build verification:** `./mvnw <scope> verify` → BUILD SUCCESS (commit `<SHA from qa-engineer>`)
+>
+> **Acceptance:** completion-auditor COMPLETE — each criterion demonstrated at its altitude (the user-facing surface it names). Artifact: `.claude/acceptance/<jira-key>.yaml`.
 >
 > **Caveats / follow-ups:**
 > - <none, or caveats from validation-lead's READY-WITH-CAVEATS verdict>
