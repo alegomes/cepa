@@ -9,14 +9,14 @@
       "name": "common",
       "source": "./common",
       "description": "Shared mindset skills required by the topology plugins (mental-model, active-listener, zero-micromanagement, conversational-response, till-done).",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "tags": ["agents", "skills", "shared"]
     },
     {
       "name": "multi-team",
       "source": "./multi-team",
       "description": "Multi-team agent topology — orchestrator + 3 leads + 6 workers, with path-lock hook. Requires common@alegomes.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "tags": ["agents", "orchestration", "multi-team"]
     },
     {
@@ -30,7 +30,7 @@
       "name": "hex-backend",
       "source": "./hex-backend",
       "description": "Hexagonal-architecture backend topology — 13 agents across 3 teams (planning, engineering, validation) with a per-Task quality loop (qa → refactor-advisor → code-reviewer). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. Requires common@alegomes. Pair with jira-flow@alegomes for Jira lifecycle.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "tags": ["agents", "hexagonal", "java", "quarkus", "backend"]
     },
     {
@@ -44,7 +44,7 @@
       "name": "jira-flow",
       "source": "./jira-flow",
       "description": "Adds atlassian-expert worker plus Jira-aware slash commands (capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead/engineering-lead/validation-lead OR declares a custom lifecycle in .claude/jira-flow.lifecycle.yaml (used by /advance). Tested with hex-backend, multi-team, and discovery. Won't work with solo-pair for the lead-based commands. Requires common@alegomes.",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "tags": ["agents", "jira", "atlassian", "tracking", "workflow"]
     },
     {

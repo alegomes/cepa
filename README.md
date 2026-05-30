@@ -25,11 +25,14 @@ composable plugins.
 - **`common`** — eight shared mindset skills (`mental-model`,
   `active-listener`, `zero-micromanagement`, `conversational-response`,
   `till-done`, `scope-discipline`, `evidence-over-assumption`,
-  `name-the-disagreement`) plus the `autonomous-mode` and
-  `green-or-revert` skills. Cross-topology commands: `/autonomous-start`,
-  `/autonomous-resume`, `/debrief`, `/recap`. Hooks: session-log,
-  autonomous-checkpoint, mark-build-stale, capture-build-result,
-  gate-advance. Required by every topology.
+  `name-the-disagreement`) plus four enforcement/operation skills
+  (`autonomous-mode`, `green-or-revert`, `defense-in-depth`,
+  `acceptance-completeness`). Ships one agent: `completion-auditor` (the
+  independent last-mile acceptance gate). Cross-topology commands:
+  `/autonomous-start`, `/autonomous-resume`, `/debrief`, `/recap`,
+  `/branch`, `/return`. Hooks: session-log, autonomous-checkpoint,
+  mark-build-stale, capture-build-result, gate-advance, lead-no-worktree,
+  acceptance-gate. Required by every topology.
 - **`multi-team`** — the generic 9-agent topology: orchestrator + 3
   leads (Opus, delegate-only) + 6 workers (Sonnet, domain-locked).
   For plan → build → validate workflows.
