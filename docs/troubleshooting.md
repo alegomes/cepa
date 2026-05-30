@@ -183,6 +183,37 @@ echo '{"status": "SUCCESS", "at": "<now>", "command": "<override>", "kind": "man
 
 The skill will flag that you cheated.
 
+## acceptance-gate hook blocks
+
+### `transitionJiraIssue blocked` / can't move the card to In Review
+
+```
+[acceptance-gate] BLOCKED: cannot move WEGO-1706 to review — acceptance
+audit is 'incomplete', not 'complete'.
+```
+
+The acceptance audit is incomplete: at least one criterion isn't
+demonstrated by a test **at the surface it was written at** (e.g. the
+criterion says "POST /x returns 422" but only a mocked use-case test
+and the mapper are covered, separately — the literal POST → 422 is
+never exercised end-to-end). The block message lists the open gaps per
+criterion.
+
+Fix: close the altitude gap, then re-audit.
+
+```sh
+# 1. Add the missing test at the criterion's altitude (an integration/E2E
+#    test that issues the request and asserts the status/body), make it green.
+# 2. Re-run completion-auditor (re-runs automatically in the fix flow, or
+#    re-invoke it) — it rewrites .claude/acceptance/<KEY>.yaml.
+# 3. Retry the transition once status: complete.
+```
+
+Do **NOT** edit `.claude/acceptance/<KEY>.yaml` to fake `status:
+complete`. The recovery is to demonstrate the criterion, not to silence
+the gate — and the `acceptance-completeness` skill flags a hand-edited
+verdict. See [`acceptance-completeness.md`](acceptance-completeness.md).
+
 ## Jira / atlassian-expert
 
 ### `BLOCKED: site not found in jira-flow.yaml defaults block`
