@@ -15,6 +15,7 @@ Patterns detected:
   - pytest → exit code is the signal
   - cargo → exit code
   - go test → exit code
+  - docker build → exit code (static-site / containerized verify)
 
 If the command isn't one we know how to parse, we skip — better to leave
 stale than mis-classify.
@@ -52,6 +53,8 @@ PATTERNS = [
      "cargo", None, None),
     (re.compile(r"(?:^|\s)go\s+test\b"),
      "go-test", None, None),
+    (re.compile(r"(?:^|\s)docker\s+(?:buildx\s+)?build\b"),
+     "docker-build", None, None),
 ]
 
 
