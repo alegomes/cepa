@@ -13,6 +13,7 @@ composable plugins.
 | **[docs/jira-flow.md](docs/jira-flow.md)** | `jira-flow.yaml` schema (`defaults`, `status_map`, `lifecycles`), `/configure` walkthrough, Implementation Summary contract, read-back verification. |
 | **[docs/autonomous-mode.md](docs/autonomous-mode.md)** | Unattended-operation lifecycle: `/autonomous-start` → checkpoint hook → `/autonomous-resume` → `/debrief`. Survives token-limit hits and session crashes. |
 | **[docs/green-or-revert.md](docs/green-or-revert.md)** | Build-state machine (`UNKNOWN`/`SUCCESS`/`STALE`/`FAILURE`). Hard gate on commits/pushes/PRs while build is broken. Stops the "I think the test passes" failure mode. |
+| **[docs/context-forking.md](docs/context-forking.md)** | Fork a discussion into an isolated context and return with only the conclusion: `/branch` + `/return`, the two-session isolation model, the `.claude/forks/` LIFO stack, and when to use a subagent instead. |
 | **[docs/e2e-cycle.md](docs/e2e-cycle.md)** | The four E2E spec commands (`/spec-e2e`, `/document-e2e`, `/resync-e2e`, `/audit-e2e`) and how they relate (intent ↔ spec ↔ code ↔ tests). |
 | **[docs/troubleshooting.md](docs/troubleshooting.md)** | Common errors: path-lock blocks, gate-advance blocks, cache staleness, MCP auth dropout, worktree-strips-Task quirk. |
 | **[docs/internals/](docs/internals/)** | For extending or debugging the marketplace itself: architecture, hooks reference, path-lock design, build-state machine, agent anatomy, expertise files, extension cookbook, CC quirks. |
