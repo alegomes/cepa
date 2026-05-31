@@ -80,6 +80,15 @@ If planning-lead said SUFFICIENT, skip this step.
 
 Clear any stale acceptance artifact from a prior run so it can't block a fresh start (mirrors `/jira-flow:fix`): if `.claude/acceptance/<jira-key>.yaml` exists, delete it — `validation-lead`'s `completion-auditor` will rewrite it at the end of this run.
 
+**Capture the change baseline** for the later change-scoped proof (`/jira-flow:prove`). Before any code is written, record the current commit as this card's baseline: run `git rev-parse HEAD` and write `.claude/cards/<jira-key>.yaml`:
+
+```yaml
+card: <jira-key>
+base_commit: <SHA from git rev-parse HEAD>
+```
+
+Create `.claude/cards/` if absent. This baseline is what lets `proof-reviewer` reconstruct the card's diff (`base_commit..HEAD`, intersected with the Implementation Summary's touched-files list) without relying on a branch-per-card convention. If this is not a git repo or `git` is unavailable, skip silently — proof falls back to the touched-files list alone.
+
 Read `defaults.status_map.in_progress` from `jira-flow.yaml` (default `"In Progress"`). Delegate to `atlassian-expert`:
 
 > Transition $ARGUMENTS to status `<defaults.status_map.in_progress>`.

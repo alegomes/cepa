@@ -37,10 +37,18 @@ defaults:
     # only pulls from `to_do`, so unrefined Backlog items stay safe.
     to_do:       "To Do"          # ready-for-development column /drain pulls from
     in_progress: "In Progress"    # work in flight
-    in_review:   "In Review"      # done, awaiting human review
+    in_review:   "In Review"      # done, awaiting review. MUST match the board's literal
+                                  #          status name — some boards call this column
+                                  #          "Review", not "In Review". /jira-flow:prove and
+                                  #          /jira-flow:prove-drain pull from this status, so a
+                                  #          mismatch means they find zero cards.
     blocked:     "Blocked"        # optional; if your project doesn't have this status,
                                   #          set it to null and blocked cards stay in `in_progress`
                                   #          with a comment.
+    done:        "Done"           # optional; the status AFTER in_review. When set, /jira-flow:prove
+                                  #          auto-advances a PROVEN card here. Leave unset (or null)
+                                  #          for triage-only: PROVEN gets a ✅ comment but stays in
+                                  #          Review for you to move manually.
   issue_types:
     story: "Story"
     bug: "Bug"

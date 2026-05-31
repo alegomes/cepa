@@ -64,6 +64,22 @@ Clear any stale acceptance artifact from a prior run so it can't block a fresh
 start: if `.claude/acceptance/$ARGUMENTS.yaml` exists, delete it (the
 `completion-auditor` will rewrite it at the end of this run).
 
+**Capture the change baseline** for the later change-scoped proof
+(`/jira-flow:prove`). Before any code is written, record the current commit as
+this card's baseline: run `git rev-parse HEAD` and write
+`.claude/cards/$ARGUMENTS.yaml`:
+
+```yaml
+card: <jira-key>
+base_commit: <SHA from git rev-parse HEAD>
+```
+
+Create `.claude/cards/` if absent. For a bug fix this baseline is doubly
+important: `proof-reviewer` uses it to confirm the regression test goes **red at
+`base_commit`** (test present, fix reverted) — the proof that the test actually
+captures the bug. If this is not a git repo or `git` is unavailable, skip
+silently and note it.
+
 Read `defaults.status_map.in_progress` from `jira-flow.yaml`. Delegate to `atlassian-expert`:
 
 > Topology: `<default_topology>`.
