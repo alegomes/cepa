@@ -66,10 +66,11 @@ their complexity.
 
 ## hex-backend
 
-13-agent hexagonal-architecture topology. Three teams, each with one
-Opus lead and 2-4 Sonnet workers. Per-Task quality loop runs inside
-engineering-lead (qa → refactor-advisor → code-reviewer). Cross-cutting
-validation runs through validation-lead. Canonical workflow:
+14-agent hexagonal-architecture topology. Three teams, each with one
+Opus lead and 2-4 Sonnet workers, plus the standalone `proof-reviewer`
+gate. Per-Task quality loop runs inside engineering-lead (qa →
+refactor-advisor → code-reviewer). Cross-cutting validation runs through
+validation-lead. Canonical workflow:
 plan → (per-Task: build → qa → housekeeping → review) → cross-cutting validate.
 
 | Agent | Role | Reports to | Delegates to | Tools | Writes |
@@ -88,6 +89,7 @@ plan → (per-Task: build → qa → housekeeping → review) → cross-cutting 
 | `refactor-advisor` | worker (Housekeeping, advisory) | `engineering-lead` | — | Read, Glob, Grep, Write | `docs/housekeeping/**`, own expertise (no source edits) |
 | `security-reviewer` | worker | `validation-lead` | — | Read, Glob, Grep, Write | `docs/security-reviews/**`, own expertise |
 | `code-reviewer` | worker (final GATE) | `engineering-lead` | — | Read, Glob, Grep | — (advisory verdict only; no writes) |
+| `proof-reviewer` | worker (change-driven Review gate; called by `/jira-flow:prove`) | `/jira-flow:prove`, `/jira-flow:prove-drain` | — | Read, Glob, Grep, Bash, Write | `.claude/proof/<KEY>.yaml` only (never code; works in a throwaway git worktree) |
 
 **Models:** orchestrator + 3 leads = `opus`; 10 workers = `sonnet`.
 
@@ -178,6 +180,8 @@ whichever topology is also installed.
 | `/jira-flow:execute <jira-key> [--force-feature-flow]` | Single existing card. Auto-detects issue type: Bug → dispatches to `/jira-flow:fix`; Story/Task/Epic → runs detail audit + build + validate. `--force-feature-flow` overrides Bug auto-dispatch. |
 | `/jira-flow:fix <jira-key>` | Bug-flow wrapper around the topology's `reproduce-fix-verify`: failing test first → fix → verify with green build evidence. Skips planning enrichment (failing test IS the spec). NOT-A-BUG is a valid outcome. Requires a topology with `reproduce-fix-verify` (hex-backend). |
 | `/jira-flow:drain <column> [--max N]` | Bulk-execute up to N cards (default 5) from a column. Stops on first BLOCKED. User confirmation required. |
+| `/jira-flow:prove <jira-key>` | Change-driven proof gate for a card in `status_map.in_review`. Delegates to `<topology>:proof-reviewer` (hex-backend ships it); verdict drives the transition — PROVEN → `status_map.done`, UNPROVEN → `in_progress` with the gap, NEEDS-HUMAN stays in Review. See [docs/proof-gate.md](docs/proof-gate.md). |
+| `/jira-flow:prove-drain [--max N]` | Bulk-prove the Review column. Runs `/jira-flow:prove` per card. Unlike `/drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. |
 | `/jira-flow:advance <jira-key>` | Generic column-by-column transition driven by `jira-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). For default To Do → In Progress → In Review, prefer `/execute`. |
 
 **Soft requirement:** jira-flow's commands delegate to subagents named
@@ -283,9 +287,11 @@ switch to multi-team for that work.
    delegates to `security-reviewer`.
 8. **Orchestrator** reports.
 
-**Visible cost:** 13 agents available; per run ≈ planning-lead (3
-workers) + engineering-lead (N Tasks × 4 agents in the loop) +
-validation-lead (1 worker + Bash). Scales with Task count.
+**Visible cost:** 14 agents available (13 in the build flow + the
+standalone `proof-reviewer` gate, which runs separately via
+`/jira-flow:prove`); per run ≈ planning-lead (3 workers) +
+engineering-lead (N Tasks × 4 agents in the loop) + validation-lead
+(1 worker + Bash). Scales with Task count.
 
 **Visible artifacts:** Epic + Stories under `spec/`, TASK-NNN.md files,
 RESULT.md per Task, housekeeping reports, security review, Maven
@@ -504,6 +510,14 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
   three Jira-aware commands have not been run against a real Jira
   project. Atlassian MCP tools are available; the agent prompt is
   written but unverified.
+- 🟡 **`proof-reviewer` / proof-gate unverified against a real pom** —
+  the L2/L3/L4 mechanics assume specific JaCoCo (IT-isolated), PIT, and
+  failsafe wiring that hasn't been run against a real `pom.xml` yet.
+  Also: cards already in Review predate the `base_commit` capture, so
+  they lack a `.claude/cards/<KEY>.yaml` baseline and will diff-scope
+  from the touched-files list alone (weaker L3) — expect more
+  NEEDS-HUMAN on the existing backlog than on cards run through the flow
+  after the capture landed. Fire test before trusting `prove-drain`.
 - 🟡 If you want to capture the team-topology config more strictly,
   add a non-driving `topology.yaml` per topology as documentation
   (CC won't read it; risk of drift). Recommend: skip until needed.

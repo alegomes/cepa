@@ -97,9 +97,17 @@ lifecycles:
   - `in_progress` — `/jira-flow:execute` and `/common:autonomous-start`
     transition into this when work begins.
   - `in_review` — destination after the flow completes successfully,
-    with an Implementation Summary comment.
+    with an Implementation Summary comment. **Must match the board's
+    literal name** — some boards call this column `"Review"`, not
+    `"In Review"`. `/jira-flow:prove` and `/jira-flow:prove-drain` pull
+    from this status, so a mismatch makes them find zero cards.
   - `blocked` — optional; if your project lacks a Blocked column set
     to `null` and blocked cards stay in `in_progress` with a comment.
+  - `done` — optional; the status *after* `in_review`. When set,
+    `/jira-flow:prove` auto-advances a PROVEN card here. Leave unset
+    (or `null`) for triage-only: a PROVEN card gets a ✅ comment but
+    stays in Review for you to move manually. See
+    [proof-gate.md](proof-gate.md).
 - **`defaults.issue_types`** — literal type names for `createIssue`
   calls. Standard names usually work; custom Jira setups may differ.
 - **`defaults.required_fields`** — project-mandated custom fields with

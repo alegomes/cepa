@@ -6,7 +6,7 @@ and `jira-flow` (optional Jira layer). Pick **one topology per project**
 
 | Topology | Agents | Best for | Path-lock | Commands |
 |---|---|---|---|---|
-| **hex-backend** | 13 | Java/Quarkus hexagonal backends. Per-Task quality loop. | `domain/`, `application/`, `api-rest/`, `infrastructure/`, `bootstrap/` Maven layout | `plan-build-validate`, `reproduce-fix-verify`, `investigate`, `spec-e2e`, `document-e2e`, `resync-e2e`, `audit-e2e` |
+| **hex-backend** | 14 | Java/Quarkus hexagonal backends. Per-Task quality loop. | `domain/`, `application/`, `api-rest/`, `infrastructure/`, `bootstrap/` Maven layout | `plan-build-validate`, `reproduce-fix-verify`, `investigate`, `spec-e2e`, `document-e2e`, `resync-e2e`, `audit-e2e` (+ `proof-reviewer` agent for `/jira-flow:prove`) |
 | **multi-team** | 9 | Greenfield apps with frontend + backend. Generic plan→build→validate. | `apps/*/api/**`, `apps/*/web/**`, `tests/**` | `plan-build-validate` |
 | **solo-pair** | 2 | One-file tweaks, bug fixes, small refactors. No leads, no per-Task loop. | tool-allowlist only (`pair-reviewer` is read-only via tools) | none — describe in chat |
 | **discovery** | 6 | Continuous product discovery: signals → opportunities → validated bets → engineering brief. Sits *upstream* of build topologies. | `docs/discovery/**` | `capture` (plus generic `/jira-flow:advance` for column transitions) |

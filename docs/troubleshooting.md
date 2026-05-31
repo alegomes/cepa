@@ -266,6 +266,27 @@ canonical commands (`/jira-flow:execute`, `/jira-flow:advance`,
 `/common:autonomous-start`) — they assemble the summary from the flow
 output before delegating.
 
+### `/jira-flow:prove` / `prove-drain` says "Nothing in Review" but the column is full
+
+`status_map.in_review` in `jira-flow.yaml` doesn't match the board's
+literal column name. The prove commands query `status = "<in_review>"`,
+so if your board calls the column `"Review"` and the config says
+`"In Review"` (or vice-versa), the JQL returns zero. Fix the value to
+match the board exactly. Check the literal name in Jira's board settings
+or in any card's status chip.
+
+### `/jira-flow:prove` returns NEEDS-HUMAN for everything
+
+The deterministic levels (coverage + mutation) couldn't run, so the
+proof falls to NEEDS-HUMAN rather than guessing. Usual causes: the
+project has no PIT plugin (L3 mutation) or no IT-isolated JaCoCo wiring
+(L2 coverage), or `.claude/cards/<KEY>.yaml` has no `base_commit` (cards
+that reached Review *before* the base-commit capture was added — only
+cards run through `/jira-flow:execute`/`:fix` afterward carry it). Check
+the `levels:` block in `.claude/proof/<KEY>.yaml` — any `assumed`/
+`skipped` status names what's missing. Older cards with no baseline can't
+be diff-scoped; re-running their build through the flow is the clean fix.
+
 ## autonomous-mode
 
 ### "No in-progress autonomous runs found"
