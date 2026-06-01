@@ -151,6 +151,15 @@ accordingly or the prove commands find zero cards.
 of `.claude/acceptance/<KEY>.yaml`. A `pass` on any level is invalid without a
 `run:` line containing the literal command and its result.
 
+**The `verdict` is mechanical — there is no waiver.** It is computed from the
+levels: any `assumed`/`skipped`/`gap`/`survived`/`green-at-base` level makes
+`proven` structurally unavailable. The agent never writes `proven` next to an
+unmet level and never embeds a self-granted waiver (waiving a structural gap is
+the human's call at review). As defense-in-depth, `/jira-flow:prove` re-derives
+the verdict from the levels rather than trusting the `verdict` field, so a
+malformed artifact can't auto-advance a card — a `proven` that contradicts its
+own levels is treated as NEEDS-HUMAN and flagged.
+
 ## Relationship to the rest of the flow
 
 ```

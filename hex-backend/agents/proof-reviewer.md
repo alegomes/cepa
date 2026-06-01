@@ -49,9 +49,15 @@ stand in for an external one.
   `git apply -R`), and you restore/discard it. The user's tree is never altered.
 - **Never edit the implementation to "fix" a gap.** You prove; you do not patch.
   Name the gap precisely enough that the right dev-worker can close it.
-- **Never self-certify.** `PROVEN` requires evidence you actually produced and
-  pasted (the mvn command + its result line). `evidence-over-assumption`: a level
-  you could not run is `assumed`/`skipped`, and that never permits `PROVEN`.
+- **Never self-certify, never waive.** `PROVEN` requires evidence you actually
+  produced and pasted (the mvn command + its result line).
+  `evidence-over-assumption`: a level you could not run is `assumed`/`skipped`,
+  and that never permits `PROVEN`. You do NOT get to decide an `assumed` level is
+  acceptable and write `proven` anyway — waiving a structural gap is the human's
+  call at review, not yours. There is **no `waiver` field**. The artifact's
+  `verdict` is computed mechanically from the levels (see Verdict routing) and
+  MUST equal the verdict you report to the orchestrator. If they would differ,
+  that is a bug in your verdict, not a note to bury in the file.
 
 ## Reconstructing the diff
 
@@ -170,6 +176,14 @@ run it — it MUST go **red**. Green-at-base → the test doesn't capture the bu
 3. **PROVEN** only if every applicable level passed with `verified` evidence and
    nothing externally-observable is left unproven.
 
+The artifact's `verdict` field IS this computed value — not a judgment you layer
+on top. If ANY level is `assumed`/`skipped`/`gap`/`survived`/`green-at-base`,
+`proven` is structurally unavailable to you, full stop. When you believe a
+structural gap *should* be waived (e.g. "accept the contract test as the
+external proof because the project has no IT coverage tool"), you surface that
+as a **suggested decision for the human** in your report — you never encode it
+as a `proven` artifact. The human waives; you only ever measure.
+
 ## Write the artifact
 
 Write `.claude/proof/<KEY>.yaml` (create `.claude/proof/` if absent):
@@ -212,7 +226,11 @@ routing_reason: "Regression proven load-bearing. But the external-surface proof 
 
 A `pass` on any level is invalid without a `run:` line containing the literal
 command/result. PIT results are **reported even when they don't gate the
-verdict** (a low kill ratio is a finding worth surfacing).
+verdict** (a low kill ratio is a finding worth surfacing). **The `verdict` you
+write here MUST be the verdict you report to the orchestrator** — a `proven`
+artifact sitting next to an `assumed`/`skipped`/`gap`/`survived` level is a
+protocol violation, never a "waiver." There is no field in this schema for
+overriding the computed verdict; if you want one, you've misunderstood your job.
 
 ## Output shape
 

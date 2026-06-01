@@ -89,8 +89,15 @@ Delegate to `<default_topology>:proof-reviewer`:
 > touch the primary working tree or edit any code. Write
 > `.claude/proof/$ARGUMENTS.yaml` and return your verdict with evidence.
 
-Wait for the verdict. Then read `.claude/proof/$ARGUMENTS.yaml` yourself to
-confirm the artifact exists and matches the reported verdict.
+Wait for the verdict. Then read `.claude/proof/$ARGUMENTS.yaml` yourself and
+**cross-check it — do not trust the `verdict` field blindly.** Re-derive the
+verdict from the levels: if any level is `assumed`/`skipped`/`gap`/`survived`/
+`green-at-base`, the only valid verdicts are UNPROVEN or NEEDS-HUMAN — never
+PROVEN. If the artifact says `verdict: proven` but a level contradicts it (a
+self-granted waiver the agent must never write), treat the card as
+**NEEDS-HUMAN**, act on that, and flag the inconsistency in your report. The
+verdict field is not authoritative when it disagrees with its own levels — the
+levels are.
 
 ### 4. Apply the verdict
 
@@ -165,14 +172,27 @@ Delegate to `atlassian-expert`:
 
 ## Report
 
-A single concise message:
+Write for a human, not for the protocol — apply `conversational-response`'s
+"translate jargon at the human boundary." Lead with the plain-language outcome
+and what you need from them; keep the protocol codes as parenthetical anchors,
+never as the headline.
 
-- **Card:** $ARGUMENTS link + title + issue type.
-- **Verdict:** PROVEN / UNPROVEN / NEEDS-HUMAN.
-- **Evidence:** one line per level (the run results).
-- **Action taken:** advanced to `<done>` / returned to `<in_progress>` / left in Review.
-- **For UNPROVEN:** the precise gap(s) and the missing external test(s).
-- **For NEEDS-HUMAN:** what to look at.
+- **What happened, in one plain line** — e.g. "Proved the fix is load-bearing
+  except for one thing I can't measure" — then the card link, type, and where it
+  ended up (advanced / returned / left in Review).
+- **The evidence as the questions a human actually asks** — one line per level,
+  phrased *question → plain answer (code in parens)*:
+  - "Do the tests catch a broken fix? **Yes** — every changed line, broken,
+    turned a test red *(L3 mutation: 0 survived)*."
+  - "Does the coverage reach the endpoint? **Can't measure** — no coverage tool
+    in the project, not a fault of this card *(L2: assumed)*."
+- **If UNPROVEN:** in plain words, what isn't proven and the one test that would
+  close it.
+- **If NEEDS-HUMAN:** state the single decision you need, plainly (e.g. "is the
+  contract test good enough as the external proof, or should we add the missing
+  coverage tool first?"), plus anything you're obligated to flag (e.g. an
+  artifact whose `verdict` disagreed with its levels).
+- Close with the concrete options and one "how do you want to proceed?"
 
 ## Constraints
 
