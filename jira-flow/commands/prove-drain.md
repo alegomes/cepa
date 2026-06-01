@@ -88,8 +88,12 @@ Proved from Review (max <N>):
 Remaining in Review (not attempted this run): <count>
 ```
 
-Suggest re-running for the next batch if cards remain, and point the user at the
-NEEDS-HUMAN set as their actual review queue.
+The table above is the at-a-glance count. For each card in the NEEDS-HUMAN set —
+the only one that costs the user attention — expand it in plain language (apply
+`conversational-response`'s "translate jargon at the human boundary"): the one
+decision you need and why, not a wall of `assumed`/`L2`/`altitude` the user has
+to decode. Suggest re-running for the next batch if cards remain, and point the
+user at the NEEDS-HUMAN set as their actual review queue.
 
 ## Constraints
 
