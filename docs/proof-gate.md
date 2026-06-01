@@ -37,16 +37,43 @@ This is [`defense-in-depth`](../common/skills/defense-in-depth) mechanized.
 Four levels, weakest to strongest. The default ruler is **all four**, with the
 noisy top level routed so it can never produce a false rejection.
 
-| Level | Question | Tooling (hex-backend) | Verdict effect |
+| Level | Question | Tooling (hex-backend / Quarkus) | Verdict effect |
 |---|---|---|---|
-| **L2 external coverage** | Is every changed line executed by an *integration* test, not just a unit test? | JaCoCo, IT-only report ∩ diff | `gap` → UNPROVEN |
-| **L3 diff mutation** | If I corrupt a changed line, does an *integration* test go red? | PIT, `targetClasses`=diff, `targetTests`=IT | surviving mutant → UNPROVEN |
-| **L4 adversarial input** | Is there externally-observable behavior that no assertion covers? | jqwik / REST-assured fuzz on touched endpoints | finding → NEEDS-HUMAN |
+| **L2 coverage pre-filter** | Is every changed line even touched by a test at its claimed altitude? | `quarkus-jacoco` (the Quarkus-aware JaCoCo) ∩ diff, or structural | `gap` → UNPROVEN |
+| **L3 load-bearing** | If I break a changed line, does the test that should guard it — *external* where the change is externally-observable — go red? | **perturbation** (universal: revert hunk → re-run covering test → require RED) + **PIT** as the fast path on non-Quarkus layers | survives / surviving mutant → UNPROVEN |
+| **L4 adversarial input** | Is there externally-observable behavior that no assertion covers? | jqwik / RestAssured fuzz on touched endpoints | finding → NEEDS-HUMAN |
 | **Bug: regression-red-at-base** | Does the regression test actually capture the bug? | run the test at `base_commit` with the fix reverted | green-at-base → UNPROVEN |
 
-L2 catches new code only reachable from mocked unit tests. L3 is the real
-load-bearing proof — "executed" isn't "guarded." L4 catches the *unknown
-unknowns* (behaviors no criterion mentioned) and is the only noisy level.
+L2 catches new code no test reaches. L3 is the real load-bearing proof —
+"executed" isn't "guarded." L4 catches the *unknown unknowns* (behaviors no
+criterion mentioned) and is the only noisy level.
+
+### L3 on Quarkus: perturbation is the mechanism, PIT is the fast path
+
+The principle is *break it and watch a test go red*. The realization splits by
+layer, because **PIT cannot instrument `@QuarkusTest`** (Quarkus rewrites
+bytecode at test time; PIT mutates the original; the two fight):
+
+- **Inner layers** (`domain`, `application`, `infrastructure` — pure JUnit5
+  tests): PIT runs, diff-scoped, and gives an exhaustive verdict fast. This is
+  most cards.
+- **External surface** (`@QuarkusTest` + RestAssured, which here run under
+  *surefire*, not failsafe): PIT can't touch it, so the gate **perturbs** — it
+  reverts the changed hunk in its throwaway worktree and re-runs the
+  `@QuarkusTest`, requiring RED.
+
+The rule that addresses the core fear: **a green PIT against unit tests never
+substitutes for an external proof.** Domain behavior that scores 100% on its unit
+tests can still never reach the endpoint — and that gap lives precisely in the
+`@QuarkusTest` layer PIT can't see. For an externally-observable change, only the
+perturbation-vs-`@QuarkusTest` proof clears it. A low PIT kill ratio on the inner
+layers is reported as a complementary finding (weak unit tests), not the verdict.
+
+> Validated on `wego-assinatura-backend` (Quarkus 3.17.5), WEGO-1698: the
+> regression-red-at-base check passed cleanly; PIT ran on application (81% killed)
+> and infrastructure (42% — weak adapter tests, a finding in itself); but the
+> external proof was blocked because the PlugSign test double is a no-op, so the
+> 422 is unobservable at the HTTP surface → correctly NEEDS-HUMAN.
 
 ### Why L4 can be set to max without flooding you
 
