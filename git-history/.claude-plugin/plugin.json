@@ -1,0 +1,22 @@
+{
+  "name": "git-history",
+  "version": "0.1.0",
+  "description": "Git-history analysis topology — orchestrator + git-historian lead + 2 workers (history-collector, history-narrator). Two jobs: (1) tell a project's story from its branch/commit history, and (2) analyze effort allocation across one or more repos on a single timeline. A deterministic collector script (scripts/collect.py) extracts effort proxies (commits, line churn, time-clustered work hours, per-area attribution) and narrative signals (commit-message keywords, structural shifts, stack/dependency changes, reverts, gaps) into datapack.json; scripts/render.py draws PNG charts (matplotlib); the history-narrator turns the facts into prose + a structured report, clearly separating evidence from inference. Path-lock keyed to git-history-report/**. Standalone. Requires common@alegomes.",
+  "author": {
+    "name": "alegomes"
+  },
+  "keywords": ["agents", "git", "history", "effort-analysis", "storytelling"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/path-lock.py\""
+          }
+        ]
+      }
+    ]
+  }
+}
