@@ -159,6 +159,7 @@ tier wins (sharing > local > exempt).
 | `STALE` | BLOCK | BLOCK |
 | `FAILURE` | BLOCK | BLOCK |
 | missing (no baseline yet) | **ALLOW** with loud stderr warning | **BLOCK** with clear message |
+| any state, but `.claude/no-build` present | **ALLOW** | **ALLOW** |
 
 The asymmetry on "missing baseline" is intentional:
 
@@ -175,6 +176,15 @@ This split (H1 + H2 in the design discussion) replaces the older
 behavior of fail-open-with-stderr-warning for both tiers. The old
 behavior let unverified commits ship silently because nobody reads
 plain stderr lines mid-session.
+
+**The `.claude/no-build` opt-out.** For a repo that has no build to verify —
+docs-only, content, config — a baseline can never exist, so the sharing tier
+would block `push` forever. Create `.claude/no-build` (commit it to apply for
+the team) and the gate allows both tiers: there is nothing to verify, so it
+does not apply. This is an **explicit, human-placed** marker — the gate never
+auto-detects "build-less" and opens the door itself, so a real project that
+simply hasn't run verify yet stays protected. Faking `last-build.json` with a
+`SUCCESS` you never ran is the dishonest alternative this exists to replace.
 
 When the gate fires, the block message names:
 

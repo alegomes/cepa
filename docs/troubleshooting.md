@@ -183,6 +183,27 @@ echo '{"status": "SUCCESS", "at": "<now>", "command": "<override>", "kind": "man
 
 The skill will flag that you cheated.
 
+### `BLOCKED: sharing operation requires a build baseline` on a repo with no build
+
+A `git push` / PR / deploy was blocked because there's no
+`.claude/last-build.json` yet. For a repo that builds, the fix is to run
+verify once to establish the baseline. But for a **docs-only / build-less
+repo** (Markdown, config, content) a baseline can never exist — the gate would
+block sharing forever.
+
+Don't fake the state file. Opt out honestly:
+
+```sh
+mkdir -p .claude && touch .claude/no-build
+git add .claude/no-build   # commit it so the opt-out applies for teammates / CI
+```
+
+`.claude/no-build` is an explicit, human-placed marker: when present,
+`gate-advance` allows commits and pushes without a build baseline (there's
+nothing to verify). It is never auto-created — the gate will not decide on its
+own that your repo is build-less, so a real project that simply hasn't run
+verify yet stays protected. If you later add a build, delete the marker.
+
 ## acceptance-gate hook blocks
 
 ### `transitionJiraIssue blocked` / can't move the card to In Review

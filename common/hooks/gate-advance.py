@@ -32,6 +32,11 @@ What does NOT get gated:
   - Read-only Bash (status, log, diff, ls, etc.)
   - Test/build invocations themselves (./mvnw, gradle, pytest, npm test).
     These are how you fix STALE/FAILURE — gating them would be a deadlock.
+  - ANY project that declares it has no build, via a `.claude/no-build`
+    marker file. Explicit, human-placed opt-out for docs-only / build-less
+    repos where a build baseline can never exist. Deliberate marker, not
+    auto-detection — the gate never decides on its own that a repo is
+    build-less.
 
 UNKNOWN status (state file present but unrecognized) is treated as
 FAILURE (something's off; don't proceed).
@@ -116,6 +121,21 @@ def main():
         sys.exit(0)
 
     cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
+
+    # Explicit opt-out. A project with no build to verify declares it by
+    # creating `.claude/no-build`. The gate has nothing to baseline here,
+    # so it does not apply — to EITHER tier. This is a deliberate,
+    # human-placed marker, never auto-detection: the gate does not open
+    # a door by guessing a repo is build-less. (Commit the marker if the
+    # opt-out should hold for teammates / CI too.)
+    if (cwd / ".claude" / "no-build").exists():
+        print(
+            "[gate-advance] .claude/no-build present — this project opts out of "
+            "build-baseline gating (no build to verify); allowing.",
+            file=sys.stderr,
+        )
+        sys.exit(0)
+
     state_path = cwd / ".claude" / "last-build.json"
 
     # ─── Missing baseline ─────────────────────────────────────────────
@@ -153,7 +173,9 @@ def main():
                 f"  Suggestion: run your project's verify command (e.g. `./mvnw verify`,\n"
                 f"  `npm test`, `pytest`) to establish a SUCCESS baseline, then retry.\n"
                 f"  If your project uses a build tool not recognized by capture-build-\n"
-                f"  result.py, extend its PATTERNS list rather than faking the state file.",
+                f"  result.py, extend its PATTERNS list rather than faking the state file.\n"
+                f"  If this project genuinely has NO build (e.g. docs-only), opt out\n"
+                f"  honestly: create `.claude/no-build` (commit it to apply for the team).",
                 file=sys.stderr,
             )
             sys.exit(2)
