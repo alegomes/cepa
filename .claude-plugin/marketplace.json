@@ -1,6 +1,6 @@
 {
   "name": "alegomes",
-  "description": "Six-plugin multi-agent marketplace for Claude Code: shared mindset skills (common); four topologies (multi-team — 9-agent generic; solo-pair — 2-agent lightweight; hex-backend — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
+  "description": "Multi-agent marketplace for Claude Code: shared mindset skills (common); topologies (multi-team — 9-agent generic; solo-pair — 2-agent lightweight; hex-backend — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery; book — 10-agent book-writing; git-history — 3-agent Git-history analysis); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
   "owner": {
     "name": "alegomes"
   },
@@ -53,6 +53,13 @@
       "description": "Book-writing topology — 2 leads + 10 workers for authoring technical books. /book:inception grills the author for audience + produces chapter map. /book:write-chapter runs the per-chapter loop (outline→research→draft→code→exercises→review). /book:finalize runs continuity review across all chapters then compiles to LaTeX. Standalone. Requires common@alegomes.",
       "version": "0.1.0",
       "tags": ["agents", "book", "writing", "technical-writing", "authoring"]
+    },
+    {
+      "name": "git-history",
+      "source": "./git-history",
+      "description": "Git-history analysis topology — orchestrator + git-historian lead + 2 workers (history-collector, history-narrator). Two jobs: tell a project's story from its branch/commit history, and analyze effort allocation across one or more repos on a single timeline. A deterministic collector (scripts/collect.py) extracts effort proxies + narrative signals into datapack.json; scripts/render.py draws matplotlib charts; the narrator writes prose + a structured report, separating evidence from inference. /git-history:analyze runs the flow. Standalone. Requires common@alegomes.",
+      "version": "0.1.0",
+      "tags": ["agents", "git", "history", "effort-analysis", "storytelling"]
     }
   ]
 }

@@ -9,7 +9,7 @@
 # With --clean: also uninstalls existing plugins and nukes the marketplace
 #   plugin cache before reinstalling. Use this when you've edited plugin
 #   source without bumping versions and want CC to pick up the changes.
-# With --topology=NAME (multi-team | solo-pair | hex-backend | book): also copies
+# With --topology=NAME (multi-team | solo-pair | hex-backend | discovery | book | git-history): also copies
 #   that topology's snippet into the host project's .claude/ and appends the
 #   matching @-import line to CLAUDE.md (idempotent, creates CLAUDE.md if
 #   missing). Skip this flag if you want to wire CLAUDE.md yourself.
@@ -47,9 +47,9 @@ for arg in "$@"; do
 done
 
 case "${TOPOLOGY}" in
-  ""|multi-team|solo-pair|hex-backend|discovery|book) ;;
+  ""|multi-team|solo-pair|hex-backend|discovery|book|git-history) ;;
   *)
-    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, solo-pair, hex-backend, discovery, or book."
+    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, solo-pair, hex-backend, discovery, book, or git-history."
     exit 1
     ;;
 esac
@@ -93,6 +93,7 @@ if [ "${CLEAN}" -eq 1 ]; then
   claude plugin uninstall "discovery@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "jira-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "book@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "git-history@${MARKETPLACE_NAME}" 2>/dev/null || true
 
   if [ -d "${CACHE_DIR}" ]; then
     echo "▶ --clean: removing plugin cache at ${CACHE_DIR}"
@@ -128,6 +129,9 @@ claude plugin install jira-flow@alegomes
 
 echo "▶ Installing book@alegomes (10-agent book-writing topology)"
 claude plugin install book@alegomes
+
+echo "▶ Installing git-history@alegomes (3-agent Git-history analysis topology)"
+claude plugin install git-history@alegomes
 
 # --- Per-project setup: symlink for centralized expertise ---
 
@@ -305,7 +309,7 @@ fi
 echo ""
 echo "✔ Done."
 echo ""
-echo "Seven plugins installed:"
+echo "Eight plugins installed:"
 echo "    common       — 8 mindset skills (required by every topology)"
 echo "    multi-team   — 9-agent generic topology + /multi-team:plan-build-validate"
 echo "    solo-pair    — 2-agent dev/reviewer topology"
@@ -313,6 +317,7 @@ echo "    hex-backend  — 13-agent hexagonal-architecture topology + per-Task q
 echo "    discovery    — 6-agent continuous product-discovery topology"
 echo "    jira-flow    — atlassian-expert + Jira-aware commands (pair with any topology)"
 echo "    book         — 10-agent book-writing topology + /book:inception + /book:write-chapter"
+echo "    git-history  — 3-agent Git-history analysis topology + /git-history:analyze"
 echo ""
 if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   echo "Host project setup at ${HOST_PROJECT}:"
@@ -327,6 +332,7 @@ if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
       hex-backend) echo "    /hex-backend:plan-build-validate <task>" ;;
       discovery)   echo "    /discovery:capture <signal>   (then /jira-flow:advance <KEY> to move forward)" ;;
       book)        echo "    /book:inception \"<book title>\"   (then /book:write-chapter <slug>)" ;;
+      git-history) echo "    /git-history:analyze <repo-path> [more-paths...]   (story + effort report)" ;;
     esac
   else
     echo ""
