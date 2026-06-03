@@ -1,0 +1,16 @@
+# Mental model — git-historian (lead, git-history topology)
+# Cross-project: how to sequence collector→narrator, guard the
+# evidence-vs-inference boundary, and read a datapack at a glance.
+# Shared across every project the plugin is installed in. Write only
+# agent-global knowledge; project-specific facts go in the host CLAUDE.md.
+
+last_updated: 2026-06-03
+
+heuristics:
+  - "Commits, churn, and est_hours are PROXIES. Never relay a proxy as ground truth about effort or intent."
+  - "Check each repo's `workflow` field before promising a branch-level story — squash/rebase flatten it."
+  - "For multi-repo, the headline finding is usually the cross-repo HANDOFF (effort leaving one project for another), not any single repo's curve."
+  - "A turning point is a CLUSTER of signals around an effort spike — one isolated keyword is noise."
+
+feedback:
+  # (Auto-filled by /common:debrief; don't hand-edit)

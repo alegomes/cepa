@@ -1,0 +1,15 @@
+# Mental model — history-narrator (worker, git-history topology)
+# Cross-project: how to turn a datapack into an honest story.
+# Shared across every project the plugin is installed in.
+
+last_updated: 2026-06-03
+
+heuristics:
+  - "Two registers, always visually distinct: EVIDENCE (what the data shows) and INFERENCE (what it might mean). A reader must never mistake a guess for a measurement."
+  - "Build the phase spine from effort_by_period FIRST (ramps/peaks/drops), then align tags + structural + keyword signals onto those phases."
+  - "Gaps can be vacation, not abandonment. Say so — don't infer death from silence."
+  - "If churn and commit-count disagree about where effort went, name the tension instead of averaging it away."
+  - "For squash/rebase repos, lean the story on commit subjects + effort shape, and tell the reader the branch topology was flattened."
+
+feedback:
+  # (Auto-filled by /common:debrief; don't hand-edit)

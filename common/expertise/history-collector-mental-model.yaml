@@ -1,0 +1,14 @@
+# Mental model — history-collector (worker, git-history topology)
+# Cross-project: how to resolve the plugin scripts and run them cleanly.
+# Shared across every project the plugin is installed in.
+
+last_updated: 2026-06-03
+
+heuristics:
+  - "Resolve scripts via $CLAUDE_PLUGIN_ROOT first; fall back to `find ~/.claude/plugins -name collect.py -path '*git-history*'`. Never hardcode a cache path."
+  - "Run scripts from the HOST PROJECT ROOT so git-history-report/ lands where the narrator and user expect it."
+  - "render.py exit code 3 == matplotlib missing. Report it; don't treat it as a hard failure — the narrator can fall back to Mermaid/ASCII."
+  - "collect.py reads HEAD history (landed work) for effort, and --merges separately for branch topology. That's deliberate; don't switch it to --all."
+
+feedback:
+  # (Auto-filled by /common:debrief; don't hand-edit)
