@@ -1,0 +1,12 @@
+# This repository has no build to verify — it is Claude Code plugin SOURCE
+# (Markdown agent/command/skill definitions, Python hooks, JSON manifests).
+# There is no `./mvnw verify` / `npm test` / etc. to establish a green baseline.
+#
+# The presence of this file opts the repo out of the gate-advance build-baseline
+# requirement (both the local-commit and the sharing tiers). It is the honest
+# alternative to faking `.claude/last-build.json` with a SUCCESS that never ran.
+#
+# See: common/hooks/gate-advance.py  ·  docs/green-or-revert.md (the .claude/no-build opt-out)
+#
+# Takes effect once the `common` plugin is reinstalled with the marker-aware
+# gate-advance (commit a83f73c). Delete this file if a real build is ever added.
