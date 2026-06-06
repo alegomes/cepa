@@ -163,6 +163,24 @@ else
   fi
 fi
 
+# --- Launcher: ccw (auto-isolating claude) ---
+
+CCW="${REPO_DIR}/common/bin/ccw"
+if [ -f "${CCW}" ]; then
+  chmod +x "${CCW}" 2>/dev/null || true
+  echo ""
+  echo "▶ Worktree launcher available: ${CCW}"
+  echo "  Use it instead of 'claude' to auto-isolate parallel sessions into their"
+  echo "  own git worktrees (only when another live session shares the tree)."
+  echo "  Add to your shell rc (you run the shell yourself):"
+  echo ""
+  echo "    alias claude='${CCW}'"
+  echo ""
+  echo "  Aliasing 'claude' is recommended; ccw falls back to the real binary via"
+  echo "  CLAUDE_WT_CLAUDE_BIN. Prefer not to override 'claude'? Alias it as 'ccw':"
+  echo "    alias ccw='${CCW}'"
+fi
+
 # --- Per-project setup: topology snippet + CLAUDE.md @-import ---
 
 if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
