@@ -16,6 +16,15 @@
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/path-lock.py\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/bash-path-lock.py\""
+          }
+        ]
       }
     ]
   }
