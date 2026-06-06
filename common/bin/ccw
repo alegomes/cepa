@@ -1,0 +1,65 @@
+#!/bin/sh
+# ccw — "claude-worktree" launcher.
+#
+# Use this instead of `claude` and stop thinking about worktrees. It starts a
+# normal session in the current directory UNLESS another live session already
+# occupies this working tree — in which case it auto-isolates this one into its
+# own git worktree so the two can't collide. You decide nothing; isolation
+# appears only when it would actually save you from a clash.
+#
+#   ccw                 # auto: isolate only if needed
+#   ccw -s billing-api  # force a named worktree (session/billing-api), reuse to resume
+#   ccw --resume        # any other args pass straight through to claude
+#
+# Install: alias claude='/path/to/common/bin/ccw'   (or put this on PATH)
+# Override the real binary with CLAUDE_WT_CLAUDE_BIN if you aliased `claude`.
+
+set -e
+
+CLAUDE_BIN="${CLAUDE_WT_CLAUDE_BIN:-claude}"
+
+# Resolve our own location (following symlinks) → find session-launch.py.
+SELF="$0"
+while [ -L "$SELF" ]; do
+  link=$(readlink "$SELF")
+  case "$link" in
+    /*) SELF="$link" ;;
+    *)  SELF="$(dirname "$SELF")/$link" ;;
+  esac
+done
+SCRIPT_DIR=$(cd "$(dirname "$SELF")" && pwd)
+LAUNCH_PY="$SCRIPT_DIR/../hooks/session-launch.py"
+
+# Parse our own flags; everything else goes to claude.
+SLICE=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|--slice) SLICE="$2"; shift 2 ;;
+    *) break ;;
+  esac
+done
+
+# Not a git repo, or can't find the helper → just be claude.
+ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exec "$CLAUDE_BIN" "$@"
+[ -f "$LAUNCH_PY" ] || exec "$CLAUDE_BIN" "$@"
+
+# Already inside a session worktree → nothing to isolate.
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+case "$BRANCH" in
+  session/*) exec "$CLAUDE_BIN" "$@" ;;
+esac
+
+# Decide (atomic, under lock). On any failure, fall back to launching in place.
+RESULT=$(CLAUDE_WT_ROOT="$ROOT" CLAUDE_WT_SLICE="$SLICE" python3 "$LAUNCH_PY") \
+  || exec "$CLAUDE_BIN" "$@"
+
+DIR=$(printf '%s' "$RESULT" | cut -f1)
+CLAIM=$(printf '%s' "$RESULT" | cut -f2)
+[ -n "$DIR" ] || exec "$CLAUDE_BIN" "$@"
+
+cd "$DIR" || exec "$CLAUDE_BIN" "$@"
+if [ "$DIR" != "$ROOT" ]; then
+  printf '⊕ Another session is live in %s\n  → isolated this one to %s\n' "$ROOT" "$DIR" >&2
+fi
+
+exec env CLAUDE_WT_CLAIM="$CLAIM" "$CLAUDE_BIN" "$@"
