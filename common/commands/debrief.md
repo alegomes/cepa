@@ -98,15 +98,12 @@ Before walking individual decisions, tell the user:
 > - record a `principle`-tagged feedback entry on each agent that drifted, telling them "use the formal Decision block, no inline prose"? (recommended)
 > - skip the format feedback and only walk individual decisions? (you'll see the drift again next run)
 
-If the user picks "record": for each agent that produced informal-only decisions, append to `common/expertise/<agent>-mental-model.yaml` under `feedback`:
+If the user picks "record": for each agent that produced informal-only decisions, append this entry to `common/expertise/<agent>-mental-model.yaml` — via the lock helper described in step 6, **not** by hand-editing the file:
 
-```yaml
-- run_id: <run-id>
-  date: <YYYY-MM-DD>
-  topic: format compliance
-  user_verdict: overrule
-  user_reason: "Used inline prose for decisions instead of the required ### Decision: block. Future runs MUST use the formal block — Options considered / Chosen / Rationale — even for single-option decisions."
-  tag: principle
+```bash
+printf '  - run_id: <run-id>\n    date: <YYYY-MM-DD>\n    topic: format compliance\n    user_verdict: overrule\n    user_reason: "Used inline prose for decisions instead of the required ### Decision: block. Future runs MUST use the formal block — Options considered / Chosen / Rationale — even for single-option decisions."\n    tag: principle' \
+  | python3 "${CLAUDE_PLUGIN_ROOT}/hooks/expertise-append.py" \
+      --file common/expertise/<agent>-mental-model.yaml --cap 20
 ```
 
 `principle`-tagged entries are exempt from the 20-entry auto-prune cap. Then proceed to step 5b walking each decision (filtered by altitude per step 4; formal blocks first, then any informal-detected passages that survived the filter).
@@ -126,14 +123,20 @@ For each decision (filtered by altitude per step 4; formal blocks first, then in
 > **Chosen:** <which option>
 > **Rationale:** <verbatim>
 >
-> Verdict?
+> Verdict — or talk it through first?
 > - `keep` — the call was right.
 > - `overrule: <reason>` — wrong call; tell me what you would have done and why.
 > - `refine: <new rationale>` — right call but the rationale needs sharpening.
 > - `skip` — defer; we'll come back to this one.
 > - `batch-keep` — keep this AND all remaining tactical/implementation decisions in a single sweep. Reason: "batch-keep — debrief pace decision: only strategic gets individual review". Strategic decisions remain individually reviewed.
+> - **or just ask** — not ready to verdict? Ask me anything about this decision (why this option, what the rejected one would have cost, what it touched downstream, how it interacts with another decision) and I'll answer before you decide.
 
-Wait for the user's response. Parse the verdict. Don't infer.
+Wait for the user's response, then branch on what they gave you:
+
+- **Terminal verdict** (`keep` / `overrule:` / `refine:` / `skip` / `batch-keep`) → record it (step 6) and advance to the next decision. Don't infer a verdict the user didn't actually give.
+- **A question or anything that isn't one of those verdicts** → you're in the **discussion loop**. Answer it, grounded in the run's artifacts — the Decision block itself, the surrounding RESULT.md / spec / MERGE.md, what the chosen option touched downstream, and any related decision the user references. Don't hand-wave; if the artifacts don't say, say so. Then **re-present the verdict prompt for this same decision** and wait again. Stay on this decision — looping through as many questions as the user has — until they give a terminal verdict. Never advance to the next decision off the back of a question.
+
+The discussion loop is not a detour from the ceremony — it *is* the ceremony. Debrief is the one command where you may freely converse with the user (step 0); a decision the user understood before keeping or overruling produces sharper feedback than a reflexive `keep`. If a discussion changes the user's mind, the verdict they land on (`overrule:` / `refine:`) carries the reasoning you surfaced together — capture their words, not your summary (see step 6's verbatim rule).
 
 **`batch-keep` mode** — once the user says `batch-keep` on any tactical or implementation decision, switch to batch-mode for the remainder of that altitude group. Every remaining `tactical` and `implementation` decision auto-keeps with the same reason. Continue walking `strategic` decisions individually (those still need attention). At the end of the walk, the report names how many were batch-kept so the user knows the count.
 
@@ -143,10 +146,9 @@ This mode codifies the observed pattern from wego-1682 and wego-1683 runs: user 
 
 ### 6. Persist verdicts
 
-For each decision walked, append an entry to `common/expertise/<agent>-mental-model.yaml` under a `feedback` section (create the section if it doesn't exist):
+For each decision walked, append an entry to `common/expertise/<agent>-mental-model.yaml` under its `feedback` section. The entry shape is:
 
 ```yaml
-feedback:
   - run_id: <run-id>
     date: <YYYY-MM-DD>
     topic: <topic>
@@ -158,7 +160,15 @@ feedback:
     tag: principle | example   # default: example. user can override.
 ```
 
-Cap entries per agent at **20**. When at cap, prune the oldest non-`principle` entries first; never auto-prune `principle`-tagged entries.
+**Do not hand-edit the YAML file.** These expertise files are symlinked from the plugin source and shared across every project and every concurrent `claude` session — two debriefs editing the same agent file at once would clobber each other. Append through the lock helper instead, which serializes the write with an `flock` and handles the 20-entry cap for you:
+
+```bash
+printf '  - run_id: ...\n    date: ...\n    topic: ...\n    user_verdict: ...\n    user_reason: "..."\n    tag: example' \
+  | python3 "${CLAUDE_PLUGIN_ROOT}/hooks/expertise-append.py" \
+      --file common/expertise/<agent>-mental-model.yaml --cap 20
+```
+
+Pass the item block on stdin exactly as it should appear under `feedback:` (two-space indent, leading `- `). The helper appends it atomically and, when the file would exceed **20** entries, prunes the oldest non-`principle` entries first — `principle`-tagged entries are never auto-pruned. One invocation per entry. (If `${CLAUDE_PLUGIN_ROOT}` isn't set in your shell, use the absolute path to `common/hooks/expertise-append.py`.)
 
 The agent reads this file at boot via the `mental-model` skill. Future autonomous runs see "user overruled X in similar situation; consider Y instead."
 

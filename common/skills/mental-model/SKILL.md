@@ -34,7 +34,8 @@ in `specs/`, or in feature-level docs. Not here.
 
 - **At task start**: read your expertise file before doing real work.
 - **At task end**: append at most a few short lines if there's something
-  durable, agent-global worth remembering.
+  durable, agent-global worth remembering — through the lock helper, not a
+  raw Write/Edit (see **How to write** below).
 
 ## What goes in
 
@@ -56,10 +57,42 @@ in `specs/`, or in feature-level docs. Not here.
 - Things easy to re-derive from `git log`, `grep`, or a README.
 - Apologies or self-corrections — write what is true now.
 
+## How to write — use the lock helper for appends
+
+`.claude/expertise/` is a symlink to a directory shared across every project
+**and every concurrent `claude` session**. If two sessions append to the same
+file at the same moment with a raw Write/Edit, one append silently overwrites
+the other. So **append through the lock helper**, which serializes the write
+with an `flock` and preserves the file's hand-formatting:
+
+```bash
+printf '  - "when a 415 hits a REST controller, check Content-Type before the MediaType allowlist"' \
+  | python3 ".claude/expertise/../hooks/expertise-append.py" \
+      --file .claude/expertise/<your-name>-mental-model.yaml \
+      --section heuristics --cap 0
+```
+
+- `--section` is the top-level sequence you're adding to — `heuristics` or
+  `ecosystem_gotchas`. **Never** write `--section feedback`: that section is
+  owned by `/common:debrief`.
+- `--cap 0` disables auto-prune — correct for `heuristics` / `ecosystem_gotchas`,
+  where trimming is a judgment call (drop the least-useful note, not the
+  oldest). `/common:debrief` is the only caller that passes a real cap.
+- Pass the item on stdin exactly as it should appear under the key: two-space
+  indent, leading `- `. Works for one-line string items and multi-line
+  structured items alike. One invocation per item.
+- The path `.claude/expertise/../hooks/expertise-append.py` resolves through the
+  symlink to the helper inside the plugin, from any host project — you don't
+  need to know where the plugin lives.
+
 ## Pruning
 
-- If something you wrote previously is now wrong, **edit or delete it**.
-  Don't append a contradicting note.
+- If something you wrote previously is now wrong, **edit or delete it**
+  (a direct Edit — the helper only appends). Don't append a contradicting
+  note. Edits/deletes are rare and you hold the context to do them precisely;
+  just know that, like any edit to the shared file, a simultaneous write from
+  another session is possible. Append — the common task-end action — is what
+  the lock protects.
 - Stay under your `max-lines` budget. When you hit it, the oldest
   least-used notes get dropped — write to keep, not to fill.
 
