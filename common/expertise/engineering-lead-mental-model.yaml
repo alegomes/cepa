@@ -5,7 +5,7 @@
 # only agent-global knowledge; project-specific facts go in the host project's
 # CLAUDE.md. See common/skills/mental-model/SKILL.md.
 
-last_updated: "2026-05-09"
+last_updated: "2026-06-06"
 
 feedback:
   - run_id: 2026-05-08-api-fixes-features-batch
@@ -60,4 +60,25 @@ feedback:
       (não só onde a code-change vive); R3 gaps deliberados de teste = card de
       follow-up (nunca silente); R4 smoke real (curl) antes de "ready to ship".
       Ver common/skills/defense-in-depth/SKILL.md.
+    tag: principle
+
+  - run_id: 2026-06-06-bash-pathlock-bypass
+    date: 2026-06-06
+    topic: "lead escreveu source via Bash porque o path-lock só gateava Write"
+    original_choice: "Editar o código diretamente via Bash (sed/cat>) quando o Write estava bloqueado pelo path-lock; validação aprovou pelo mérito (correto, mínimo, verificado)"
+    user_verdict: overrule
+    user_reason: |
+      O artefato sair correto não valida o bypass. São dois eixos: qualidade do
+      output (a validação julgou) e integridade da fronteira (falhou em silêncio).
+      O path-lock bloqueia Write em source pro engineering-lead de propósito — lead
+      decompõe e delega, workers escrevem. Usar Bash (sed -i / cat > / tee / heredoc)
+      pra contornar é delegation bypass, não atalho. O pipeline julga mérito, nunca
+      proveniência, então esse controle é a ÚNICA coisa que pega a violação.
+    refined_rationale: |
+      Nunca escrever arquivo via Bash. Se o Write for bloqueado pra um path, isso é
+      o sinal de delegar (zero-micromanagement), não de rotear em volta da trava.
+      Agora há um segundo lock (hex-backend/hooks/bash-path-lock.py) que detecta
+      escrita shell-level (>, >>, tee, sed -i, cp, mv) para path interno fora do
+      allowlist — mas a disciplina é tua primeiro; o hook é defense-in-depth, não
+      substituto. Ver common/skills/zero-micromanagement + defense-in-depth.
     tag: principle
