@@ -17,10 +17,18 @@ Signal (default backend): relevance = |new_terms ∩ seen_terms| / |new_terms|.
 A low value means most of this prompt's vocabulary is unseen → likely a new
 subject. Tunable; an embedding backend can replace `relevance()` later.
 
+It also carries the wrap-up nudge: when the session looks like a good cut point
+— a subject pivot AFTER the prior work closed (recent commits), or simply a long
+session — it suggests saving a handoff and starting fresh. The bar to suggest
+ENDING is deliberately higher than the bar to suggest worktree isolation,
+because a noisy signal that nags is worse than one that stays quiet.
+
 Config (env):
-  CLAUDE_WT_SUBJECT=off                 disable entirely
+  CLAUDE_WT_SUBJECT=off                 disable subject detection entirely
   CLAUDE_WT_SUBJECT_THRESHOLD=0.20      relevance below this = candidate shift
   CLAUDE_WT_SUBJECT_MINPROMPTS=3        need this many prior prompts as baseline
+  CLAUDE_WT_NUDGE=off                   disable the wrap-up/handoff nudge only
+  CLAUDE_WT_SESSION_SOFTCAP=45          prompts past which "long session" nudges
 
 Never blocks; exit 0 always.
 """
@@ -59,6 +67,19 @@ def relevance(new: set, seen: set) -> float:
     return len(new & seen) / len(new)
 
 
+def recent_commit_close(cwd: str, within_secs: int = 900) -> bool:
+    """True if HEAD's last commit is recent — a cheap 'the prior work just
+    closed' signal. Commit is the most honest marker that a chunk finished."""
+    rc, out, _ = L.git(["log", "-1", "--format=%ct"], cwd=cwd)
+    if rc != 0 or not out.strip():
+        return False
+    try:
+        import time
+        return (time.time() - int(out.strip())) <= within_secs
+    except (ValueError, OSError):
+        return False
+
+
 def main():
     if os.environ.get("CLAUDE_WT_SUBJECT", "").lower() == "off":
         sys.exit(0)
@@ -88,23 +109,41 @@ def main():
         if entry is None:
             sys.exit(0)
 
+        nudge_on = os.environ.get("CLAUDE_WT_NUDGE", "").lower() != "off"
+        try:
+            soft_cap = int(os.environ.get("CLAUDE_WT_SESSION_SOFTCAP", "45"))
+        except ValueError:
+            soft_cap = 45
+
         subj = entry.setdefault("subject", {"centroid": {}, "prompts": 0, "last_flag": -10})
         centroid = subj.get("centroid", {})
         seen = set(centroid)
         new = terms(prompt)
 
-        flag = False
+        msg = None
+
+        # ── Trigger 1: subject divergence (with enough baseline + cooldown) ──
         if subj["prompts"] >= min_prompts and len(new) >= 4:
             rel = relevance(new, seen)
             since_last = subj["prompts"] - subj.get("last_flag", -10)
             if rel < threshold and since_last >= 3:
-                flag = True
+                subj["last_flag"] = subj["prompts"]
                 old_top = sorted(centroid, key=lambda k: -centroid[k])[:6]
                 fresh = sorted(new - seen)[:6]
-                subj["last_flag"] = subj["prompts"]
-                print(json.dumps({"hookSpecificOutput": {
-                    "hookEventName": "UserPromptSubmit",
-                    "additionalContext": (
+                # Higher bar to suggest ENDING: pivot AND the prior work closed
+                # (recent commit). Otherwise fall back to the gentle isolate hint.
+                if nudge_on and recent_commit_close(cwd):
+                    msg = (
+                        "[wrap-up] O assunto mudou (sobreposição de termos "
+                        f"{rel:.0%}) E o trabalho anterior parece fechado — houve "
+                        "commit há pouco. Bom ponto de corte. Ofereça ao usuário "
+                        "salvar um handoff e seguir numa sessão nova; se ele "
+                        "concordar, rode `/common:handoff` na hora. Se ele quiser "
+                        "continuar aqui, siga sem insistir — é sugestão, não "
+                        "bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
+                    )
+                else:
+                    msg = (
                         "[subject-watch] Lexical signal: this prompt's vocabulary "
                         f"diverges from the session so far (seen-term overlap "
                         f"{rel:.0%}). Earlier focus: {', '.join(old_top) or '—'}. "
@@ -115,7 +154,24 @@ def main():
                         "/ `/common:worktree-start <slice>`) so the two land "
                         "separately. If it's the same thread of work, ignore this "
                         "silently."
-                    )}}))
+                    )
+
+        # ── Trigger 2: long session (independent; only if 1 didn't fire) ──
+        if msg is None and nudge_on and subj["prompts"] >= soft_cap:
+            since_len = subj["prompts"] - subj.get("last_len_flag", -100)
+            if since_len >= 20:
+                subj["last_len_flag"] = subj["prompts"]
+                msg = (
+                    f"[wrap-up] Sessão longa ({subj['prompts']} interações) — o "
+                    "contexto tende a poluir e ficar caro. Se estamos num ponto "
+                    "estável, ofereça ao usuário salvar um handoff e recomeçar "
+                    "limpo; se ele topar, rode `/common:handoff`. Sugestão, não "
+                    "bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
+                )
+
+        if msg is not None:
+            print(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit", "additionalContext": msg}}))
 
         # Update running subject regardless of flag.
         for w in new:
