@@ -22,9 +22,23 @@ topology is wired.
 | `/common:branch` | `<assunto>` \| `resume [<fork-id>]` | Fork the current discussion into an isolated context. `<assunto>` (origin session): snapshots the thread to `.claude/forks/<id>/context.md` and pushes an `open` frame — then stops, without discussing the topic. `resume [<id>]` (fresh session): loads the snapshot, marks `active`, starts the interactive side discussion. No id = top-most `open`/`active` frame. Pairs with `/common:return`. See [`context-forking.md`](context-forking.md). |
 | `/common:return` | `[<fork-id>]` (default: top of stack) | Close a fork. In the **side** session: distills the discussion into `resolution.md`, marks `resolved`. In the **origin** session: ingests only that resolution into the main thread, marks the frame `closed` in place (LIFO pop). Picks save-vs-ingest by reading its own conversation; asks if ambiguous. "Top of stack" = top-most non-`closed` frame, which drives both the nested-unwind order and re-ingest idempotence. |
 
+### Per-session worktree lifecycle
+
+For running parallel `claude` windows on one repo without collisions. The `ccw`
+launcher auto-isolates a session into its own worktree when another live session
+already occupies the tree; these commands manage that lifecycle by hand.
+
+| Command | Argument | What it does |
+|---|---|---|
+| `/common:worktree-start` | `<slice>` | Creates `../<repo>-<slice>` on branch `session/<slice>` and tells you where to open the new session. The "spin up parallel work" half. |
+| `/common:worktree-list` | (none) | Read-only dashboard of all session worktrees: commits ahead, clean/dirty, live/idle, age, areas touched, conflict prediction against base, build status. |
+| `/common:worktree-merge` | `<slice>` | Verifies the branch is green, merges `session/<slice>` into the current branch (surfacing conflicts normally), then removes the worktree and deletes the branch. The "land it" half. |
+| `/common:worktree-discard` | `<slice>` | Removes the worktree and deletes its branch after showing exactly what work would be lost. The "throw it away" half. |
+| `/common:worktree-name` | `[<name>]` | Renames the current (or a named) session worktree to something readable (`session/<name>`). Optional — naming is never required. |
+
 ## hex-backend
 
-The 13-agent hexagonal-architecture topology. Three end-to-end flow
+The 14-agent hexagonal-architecture topology. Three end-to-end flow
 commands + four E2E spec commands.
 
 ### Flow commands

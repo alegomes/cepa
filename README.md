@@ -1,6 +1,6 @@
 # claude-multi-team-plugin
 
-A Claude Code plugin marketplace shipping a multi-agent setup as **seven**
+A Claude Code plugin marketplace shipping a multi-agent setup as **eight**
 composable plugins.
 
 ## Documentation
@@ -41,8 +41,9 @@ composable plugins.
   For plan → build → validate workflows.
 - **`solo-pair`** — a lightweight 2-agent topology: dev + reviewer.
   For small tasks where multi-team's overhead isn't worth it.
-- **`hex-backend`** — a 13-agent hexagonal-architecture topology
-  with a per-Task quality loop (qa → refactor-advisor → code-reviewer).
+- **`hex-backend`** — a 14-agent hexagonal-architecture topology
+  with a per-Task quality loop (qa → refactor-advisor → code-reviewer)
+  plus a standalone `proof-reviewer` (the change-driven proof gate).
   Path-lock keyed to the canonical `domain/application/api-rest/
   infrastructure/bootstrap` Maven layout. Ships three flow commands
   (`plan-build-validate`, `reproduce-fix-verify`, `investigate`) plus
@@ -64,9 +65,14 @@ composable plugins.
   lifecycles. `atlassian-expert` enforces anti-hallucination (refuses
   to infer site URLs from repo names) and read-back verification on
   every Jira write.
-- **`book`** — a 10-agent book-writing topology. Outside the
-  software-engineering surface area; documented in
+- **`book`** — a 12-agent book-writing topology (2 leads + 10 workers).
+  Outside the software-engineering surface area; documented in
   `book/book-topology.md`.
+- **`git-history`** — a 3-agent Git-history analysis topology
+  (`git-historian` lead + `history-collector` + `history-narrator`).
+  Tells a project's story from its commit history and analyzes effort
+  allocation across one or more repos. Standalone; `/git-history:analyze`
+  runs the flow.
 
 Edit once here, install in any project, version like normal code.
 
@@ -92,8 +98,8 @@ agent matrices.
 
 ```
 claude-multi-team-plugin/
-├── .claude-plugin/marketplace.json  # 6-plugin marketplace: common + multi-team + solo-pair + hex-backend + discovery + jira-flow
-├── bin/install.sh                   # one-command installer for all six plugins
+├── .claude-plugin/marketplace.json  # 8-plugin marketplace: common + multi-team + solo-pair + hex-backend + discovery + jira-flow + book + git-history
+├── bin/install.sh                   # one-command installer for all eight plugins
 ├── common/                          # shared mindset skills + centralized expertise (required by every topology)
 │   ├── .claude-plugin/plugin.json
 │   ├── expertise/                   # per-agent mental-model.yaml stubs (centralized via host symlink)
@@ -108,11 +114,11 @@ claude-multi-team-plugin/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/
 │   └── solo-pair-topology.md
-├── hex-backend/                     # 13-agent hexagonal-architecture backend topology
+├── hex-backend/                     # 14-agent hexagonal-architecture backend topology
 │   ├── .claude-plugin/plugin.json
-│   ├── agents/                      # planning team (4) + engineering team (4) + validation team (5)
+│   ├── agents/                      # 3 teams (planning/engineering/validation) + standalone proof-reviewer
 │   ├── commands/                    # /hex-backend:plan-build-validate
-│   ├── hooks/path-lock.py           # keyed to */src/main and */src/test
+│   ├── hooks/path-lock.py           # keyed to */src/main and */src/test (+ bash-path-lock.py)
 │   └── hex-backend-topology.md
 ├── discovery/                       # 6-agent continuous product-discovery topology
 │   ├── .claude-plugin/plugin.json
@@ -125,6 +131,8 @@ claude-multi-team-plugin/
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/atlassian-expert.md
 │   └── commands/                    # /jira-flow:{capture,plan-track-build-validate,execute,drain,advance}
+├── book/                            # 12-agent book-writing topology (2 leads + 10 workers)
+├── git-history/                     # 3-agent Git-history analysis topology
 ├── agents-overview.md               # cross-agent matrix + indydev-Dan idea audit
 └── README.md                        # you are here
 ```
@@ -145,8 +153,8 @@ cd /path/to/your/host-project
 That single command does **all three** setup steps:
 
 1. Registers this repo as a Claude Code plugin marketplace and installs
-   all six plugins (`common` + `multi-team` + `solo-pair` +
-   `hex-backend` + `discovery` + `jira-flow`).
+   all eight plugins (`common` + `multi-team` + `solo-pair` +
+   `hex-backend` + `discovery` + `jira-flow` + `book` + `git-history`).
 2. Sets up the current directory as a host project by creating
    `.claude/expertise` as a **symlink** to the plugin's centralized
    expertise directory (so accumulated agent knowledge follows you
@@ -196,8 +204,11 @@ If you'd rather see each step, run these in any Claude Code session:
 /plugin install common@alegomes        # required by every topology — 8 mindset skills
 /plugin install multi-team@alegomes    # generic 9-agent topology
 /plugin install solo-pair@alegomes     # 2-agent dev/reviewer pair
-/plugin install hex-backend@alegomes   # 13-agent hexagonal-architecture topology
+/plugin install hex-backend@alegomes   # 14-agent hexagonal-architecture topology
+/plugin install discovery@alegomes     # 6-agent continuous product-discovery topology
 /plugin install jira-flow@alegomes     # Jira lifecycle layer (pair with a topology)
+/plugin install book@alegomes          # 12-agent book-writing topology
+/plugin install git-history@alegomes   # 3-agent Git-history analysis topology
 ```
 
 Then create the expertise symlink manually in your host project:
@@ -241,7 +252,7 @@ cp ~/coding/harnessing/claude/claude-multi-team-plugin/multi-team/multi-team-top
 # OPTION B — solo-pair (1 dev + 1 reviewer, lightweight):
 cp ~/coding/harnessing/claude/claude-multi-team-plugin/solo-pair/solo-pair-topology.md .claude/
 
-# OPTION C — hex-backend (3 teams · 13 agents · per-Task quality loop):
+# OPTION C — hex-backend (3 teams · 14 agents · per-Task quality loop):
 cp ~/coding/harnessing/claude/claude-multi-team-plugin/hex-backend/hex-backend-topology.md .claude/
 ```
 
@@ -271,7 +282,7 @@ In the host project, in Claude Code:
 ```
 
 For `multi-team`, `/agents` lists all 9 agents (3 leads + 6 workers).
-For `solo-pair`, 2 agents. For `hex-backend`, all 13. Plus
+For `solo-pair`, 2 agents. For `hex-backend`, all 14. Plus
 `atlassian-expert` from `jira-flow` if installed. Either way the eight
 `common` skills should be auto-loaded into the session.
 
@@ -480,10 +491,13 @@ This is the whole point of using a plugin instead of copy-pasting `.claude/`:
    | `common/skills/` or `common/expertise/` | `common` | `common/.claude-plugin/plugin.json` + `common` entry in `marketplace.json` |
    | Cross-cutting | all affected | bump each plugin's two files |
 
-   Semver (currently at `0.1.0` — version stays at `0.1.0` until first
-   public release; the marketplace is local-only for now):
-   - `0.1.0 → 0.1.1` — prompt tweaks (patch), once we start versioning
-   - `0.1.0 → 0.2.0` — new agents/skills/commands (minor)
+   Semver, bumped per change — plugins are independently versioned (e.g.
+   `common` and `hex-backend` are at `0.3.0`; others trail). Bumping
+   matters even though the marketplace is local-only: without a version
+   change, a non-`--clean` install reads the **stale plugin cache** (see
+   [`docs/internals/cc-quirks.md`](docs/internals/cc-quirks.md)).
+   - patch (`0.3.0 → 0.3.1`) — prompt tweaks / bugfixes
+   - minor (`0.2.0 → 0.3.0`) — new agents/skills/commands/hooks
    - `0.x → 1.0.0` — when stable and publicly released
 
 3. **Commit** the change locally:
@@ -491,14 +505,14 @@ This is the whole point of using a plugin instead of copy-pasting `.claude/`:
    ```sh
    cd ~/coding/harnessing/claude/claude-multi-team-plugin
    git add .
-   git commit -m "v0.1.1 — <what changed>"
+   git commit -m "<type>(<plugin>): <what changed>"
    ```
 
 4. **Update each project**: in Claude Code, `/plugin update <name>` per
    plugin you bumped (or `/plugin update` to refresh all installed).
 
 Projects that need a specific version pin to it explicitly:
-`/plugin install multi-team@0.1.0`.
+`/plugin install multi-team@0.2.0`.
 
 ---
 
