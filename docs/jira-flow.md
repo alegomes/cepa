@@ -42,6 +42,14 @@ defaults:
     # Custom fields with project-mandated defaults. Auto-filled on
     # every createIssue.
     - { id: customfield_10010, name: "Team", value: "Engineering" }
+  scope:
+    # Raw JQL fragment AND-ed into the *-drain column queries. '' = whole
+    # column. See "Scoping the *-drain commands" below.
+    jql: 'sprint in openSprints()'
+  scope_overrides:
+    # Per-command scope. Keys: drain, prove_drain. Replaces defaults.scope
+    # for that command.
+    prove_drain: { jql: 'labels = needs-review' }
 
 # --- Default topology for build/validate flows ---
 default_topology: hex-backend       # which topology's leads /jira-flow:execute delegates to
@@ -58,6 +66,7 @@ topologies:
   hex-backend:
     required_fields:
       - { id: customfield_10010, name: "Team", value: "Engineering" }
+    scope: { jql: 'component = backend' }   # drain backend work only when hex-backend is active
 
 # --- Lifecycles for /jira-flow:advance ---
 lifecycles:
@@ -114,13 +123,21 @@ lifecycles:
   default values, auto-filled on every `createIssue`. Format:
   `{id, name, value}` objects. Currently only supports static defaults
   (no per-card overrides via this mechanism).
+- **`defaults.scope`** — a raw JQL fragment (`{ jql: '...' }`) that
+  narrows which cards the auto-selecting `*-drain` commands sweep. `''`
+  (the default) means whole-column, the original behavior. See
+  [Scoping the *-drain commands](#scoping-the--drain-commands) below.
+- **`defaults.scope_overrides`** — per-command scope. Keys are command
+  names (`drain`, `prove_drain`); each is a `{ jql: '...' }` that
+  *replaces* `defaults.scope` for that one command. Lets you, e.g.,
+  scope `drain` to a sprint but `prove_drain` to a review label.
 - **`default_topology`** — which build topology
   `/jira-flow:plan-track-build-validate` and `/jira-flow:execute`
   delegate to (e.g., `hex-backend` → `hex-backend:engineering-lead`).
 - **`topologies.<name>`** — per-topology overrides applied when that
   topology is the active one. Each block can override any field from
   `defaults` (most useful: `required_fields`, `project_key`,
-  `status_map`). Common use: same Jira project, different `Team`
+  `status_map`, `scope`). Common use: same Jira project, different `Team`
   field per topology (Engineering for hex-backend, Product for
   discovery). Merge semantics: per-field replacement, atomic for
   lists (the topology's `required_fields` replaces the entire
@@ -145,6 +162,77 @@ When `atlassian-expert` does a write operation, it picks which
 
 For read operations (`getJiraIssue`, `searchJiraIssuesUsingJql`),
 topology overrides usually don't matter — `defaults` is enough.
+
+## Scoping the *-drain commands
+
+By default `/jira-flow:drain` and `/jira-flow:prove-drain` sweep an
+*entire* status column (`to_do` and `in_review` respectively). On a busy
+board that's often more than you want to process in one run. **Scope**
+narrows the sweep to a slice — a sprint, a team, a component, a label —
+declared once in `jira-flow.yaml` instead of typed on every invocation.
+
+`scope.jql` is a **raw JQL fragment**, AND-ed into the command's status
+query before ordering:
+
+```
+status = "<column>" AND (<effective scope>) ORDER BY priority, rank
+```
+
+Write it exactly as you'd type it into Jira's advanced search — the
+parentheses are added for you. An empty fragment (`''`) is the original
+whole-column behavior.
+
+### Precedence
+
+When more than one scope could apply, the **effective scope** is resolved
+by precedence — *first match wins, no merging* (a more specific level
+*replaces* the baseline, it does not AND onto it):
+
+1. `--no-scope` flag → no scope at all (full column).
+2. `--scope "<jql>"` flag → that fragment, this run only.
+3. `defaults.scope_overrides.<command>.jql` (per-command; keys `drain`, `prove_drain`).
+4. `topologies.<active>.scope.jql` (per-topology; active topology resolved as for any override).
+5. `defaults.scope.jql` (the baseline).
+6. None of the above non-empty → no scope.
+
+`atlassian-expert` does the resolution centrally (it already reads the
+config); the commands just pass it a `Command:` line and any flag. The
+effective fragment is always echoed on the drain's confirmation screen
+and final report, so an empty result from an over-narrow filter reads as
+"scope excluded everything," never as "the board is empty."
+
+### Per-run flags
+
+Both drains accept:
+
+- `--scope "<jql>"` — override the configured scope for this run.
+- `--no-scope` — ignore configured scope entirely; sweep the whole column.
+
+They're mutually exclusive. Example:
+
+```sh
+/jira-flow:prove-drain --max 10 --scope 'labels = hotfix'
+/jira-flow:drain --no-scope        # whole To Do column, ignore config
+```
+
+### Single-card commands warn, they don't filter
+
+`/jira-flow:execute`, `/jira-flow:prove`, `/jira-flow:fix`, and
+`/jira-flow:advance` act on a card you named by key — so scope can't
+*select* for them. Instead they **warn and proceed**: if the named card
+falls outside the effective scope, you get a one-line heads-up
+("⚠ WEGO-1234 is outside the configured scope … running it anyway") and
+the command continues. Pass `--no-scope` to silence the warning. This
+catches accidental cross-team / cross-sprint work without ever blocking a
+deliberate one-off.
+
+### What scope does *not* touch
+
+The card-*creation* commands — `/jira-flow:capture` and
+`/jira-flow:plan-track-build-validate` — ignore scope. A raw JQL filter
+selects existing cards; it can't supply field defaults for new ones.
+Use `required_fields` (and per-topology overrides) to stamp team /
+component / label values onto created cards.
 
 ## The contract atlassian-expert enforces
 
