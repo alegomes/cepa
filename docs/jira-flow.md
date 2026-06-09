@@ -226,6 +226,12 @@ the command continues. Pass `--no-scope` to silence the warning. This
 catches accidental cross-team / cross-sprint work without ever blocking a
 deliberate one-off.
 
+> **Known double-warn:** `/jira-flow:execute` on a Bug card auto-dispatches
+> to `/jira-flow:fix`, and both fetch the card — so an out-of-scope Bug
+> warns twice (once in `execute`, once in `fix`). It's cosmetic; the work
+> still proceeds. `--no-scope` carries through the dispatch and silences
+> both.
+
 ### What scope does *not* touch
 
 The card-*creation* commands — `/jira-flow:capture` and

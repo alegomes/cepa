@@ -56,7 +56,7 @@ If `--force-feature-flow` was NOT passed AND the card's issue type matches `defa
 >
 > If you actually want the heavier feature-flow on this Bug (e.g., the card represents systemic-bug-as-feature scope work), re-run as `/jira-flow:execute <jira-key> --force-feature-flow`.
 
-Then invoke `/jira-flow:fix <jira-key>` and STOP this command. Don't continue to step 2.
+Then invoke `/jira-flow:fix <jira-key>` and STOP this command. Don't continue to step 2. If `--no-scope` was passed, forward it (`/jira-flow:fix <jira-key> --no-scope`) so the scope warning isn't repeated — `fix` re-fetches the card and would otherwise re-emit the out-of-scope heads-up you already saw in step 1.
 
 If the issue type is `Story`, `Task`, `Epic`, or any non-bug type, OR `--force-feature-flow` was passed → continue with step 2 (the canonical feature flow below).
 
