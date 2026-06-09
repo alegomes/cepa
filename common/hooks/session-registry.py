@@ -23,12 +23,47 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
+import _handoff as H  # noqa: E402
 
 
 def emit_context(text: str) -> None:
     print(json.dumps({
         "hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": text}
     }))
+
+
+def resume_notice(session_id: str, cwd: str, root: str):
+    """Direct lookup of this branch's handoff, left by a previous session.
+
+    Branch-keyed, so no scan: the new session knows its own branch. We offer the
+    handoff only when it's safe and unambiguous — not our own, no LIVE peer in
+    this same tree (that's the overlap case, handled separately), and fresh.
+    Returns the context block (with its own "don't announce" rule) or None.
+    """
+    branch = L.current_branch(cwd)
+    path = H.handoff_path(root, branch)
+    if not path.exists():
+        return None
+    meta, auto, note = H.parse(path)
+    if meta.get("session_id") == session_id:
+        return None  # already ours
+    if L.live_sessions_in(root, str(cwd), exclude_key=session_id):
+        return None  # a live peer shares this tree → ambiguous; overlap warning covers it
+    if H.age_seconds(meta) > H.FRESH_WINDOW_SECONDS:
+        return None  # too old to be "where we left off"
+
+    parts = [p for p in (auto, note) if p and "sem narrativa" not in p and "sem checkpoint" not in p]
+    body = "\n\n".join(parts).strip()
+    if not body:
+        return None
+    return (
+        "[resume] Há um handoff de uma sessão anterior neste branch "
+        f"(`{meta.get('branch', '?')}`, atualizado {meta.get('updated_at', '?')}). "
+        "Conteúdo abaixo.\n"
+        "REGRA: se a primeira mensagem do usuário continua este trabalho, apenas "
+        "siga de onde parou — NÃO anuncie nem resuma o handoff de volta pro usuário. "
+        "Se for outro assunto, ignore em silêncio.\n\n" + body
+    )
 
 
 def on_start(session_id: str, cwd: str) -> None:
@@ -61,6 +96,7 @@ def on_start(session_id: str, cwd: str) -> None:
         }
     entry["session_id"] = session_id
     entry["last_seen"] = L.now_iso()
+    entry.setdefault("start_commit", L.current_commit(cwd))  # baseline for "commits this session"
     entry.pop("claim", None)
     L.write_entry(root, session_id, entry)
 
@@ -108,9 +144,18 @@ def on_start(session_id: str, cwd: str) -> None:
     except Exception as e:  # noqa: BLE001
         print(f"[session-registry] worktree scan failed: {e}", file=sys.stderr)
 
+    # Two context blocks with DIFFERENT instructions, kept apart so they don't
+    # contradict: notices are meant to be surfaced; the resume block is meant to
+    # be acted on silently.
+    parts = []
     if notices:
-        emit_context("\n\n".join(notices) + "\n\nMention the relevant points to "
+        parts.append("\n\n".join(notices) + "\n\nMention the relevant points to "
                      "the user at the start of your reply.")
+    resume = resume_notice(session_id, str(cwd), root)
+    if resume:
+        parts.append(resume)
+    if parts:
+        emit_context("\n\n———\n\n".join(parts))
 
 
 def on_end(session_id: str, cwd: str) -> None:
