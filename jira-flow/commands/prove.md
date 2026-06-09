@@ -1,6 +1,6 @@
 ---
 description: Prove one Jira card that is already in Review. Delegates to the topology's proof-reviewer, which interrogates the card's diff (base_commit..HEAD) and proves every changed line of behavior is load-bearing at the external surface — external coverage of the diff, diff-scoped mutation against the integration tests, adversarial input against the touched endpoints, and (for bugs) regression-red-at-base. Then applies the verdict to the card: PROVEN advances, UNPROVEN sends back, NEEDS-HUMAN stays for you. Use to clear the Review column without losing rigor.
-argument-hint: <jira-key>
+argument-hint: <jira-key> [--no-scope]
 ---
 
 # /jira-flow:prove
@@ -26,6 +26,7 @@ clear error.
 ## Variables
 
 - `$ARGUMENTS` — the Jira issue key (e.g., `WEGO-1234`).
+- `--no-scope` — suppress the out-of-scope warning (step 1). The named card is proved regardless; this just silences the heads-up.
 
 ## Instructions
 
@@ -52,14 +53,19 @@ the mutation level)."
 
 ### 1. Fetch card details
 
-Delegate to `atlassian-expert`:
+Detect a `--no-scope` flag in `$ARGUMENTS`; the remaining token is the key. Delegate to `atlassian-expert` (the `Command:` line asks it to also report scope membership — a guard, not a filter; add `Scope: none` only if `--no-scope` was passed):
 
+> Command: prove
+> <Scope: none — only if --no-scope was passed>
+>
 > Fetch Jira issue $ARGUMENTS — summary, description, acceptance criteria,
 > **issue type**, status, and the **full text of the most recent Implementation
 > Summary comment** (it carries the head commit SHA and the touched-files list).
-> Reply verbatim.
+> Reply verbatim, and include the one-line scope verdict (`scope: in` / `scope: OUT (...)` / `scope: n/a`).
 
 If the card doesn't exist / no access → abort with a clear error.
+
+**Out-of-scope warning (warn, don't block).** If `atlassian-expert` reports `scope: OUT` and `--no-scope` was not passed, print a heads-up — "⚠ `$ARGUMENTS` is outside the configured scope (`<effective fragment>`); proving it anyway because you named it. Pass `--no-scope` to silence." — then continue. Never abort on scope for an explicitly-named card.
 
 ### 2. Precondition: card must be in Review
 

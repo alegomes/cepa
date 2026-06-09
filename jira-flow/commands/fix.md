@@ -1,6 +1,6 @@
 ---
 description: Execute a Bug-type Jira card via the topology's reproduce-fix-verify flow (failing test first, fix, verify). Wraps the bug flow with Jira lifecycle — transitions through To Do → In Progress → In Review with Implementation Summary. Use directly for bugs, or rely on /jira-flow:execute's auto-detect to route here when the card's issue type is Bug.
-argument-hint: <jira-key>
+argument-hint: <jira-key> [--no-scope]
 ---
 
 # /jira-flow:fix
@@ -16,6 +16,7 @@ For a non-existent card (greenfield bug discovery) use `/jira-flow:capture Bug: 
 ## Variables
 
 - `$ARGUMENTS` — the Jira issue key (e.g., `WEGO-1234`).
+- `--no-scope` — suppress the out-of-scope warning (step 1). The named bug is fixed regardless; this just silences the heads-up.
 
 ## Instructions
 
@@ -34,11 +35,16 @@ Read the project Jira config: `jira-flow.yaml` at project root if present, other
 
 ### 1. Fetch card details
 
-Delegate to `atlassian-expert`:
+Detect a `--no-scope` flag in `$ARGUMENTS`; the remaining token is the key. Delegate to `atlassian-expert` (the `Command:` line asks it to also report scope membership — a guard, not a filter; add `Scope: none` only if `--no-scope` was passed):
 
-> Fetch Jira issue $ARGUMENTS — full details (summary, description, acceptance criteria, issue type, status, last 3 comments). Reply with the verbatim content.
+> Command: fix
+> <Scope: none — only if --no-scope was passed>
+>
+> Fetch Jira issue $ARGUMENTS — full details (summary, description, acceptance criteria, issue type, status, last 3 comments). Reply with the verbatim content, and include the one-line scope verdict (`scope: in` / `scope: OUT (...)` / `scope: n/a`).
 
 If the card doesn't exist → abort with a clear error.
+
+**Out-of-scope warning (warn, don't block).** If `atlassian-expert` reports `scope: OUT` and `--no-scope` was not passed, print a heads-up — "⚠ `$ARGUMENTS` is outside the configured scope (`<effective fragment>`); fixing it anyway because you named it. Pass `--no-scope` to silence." — then continue. Never abort on scope for an explicitly-named card.
 
 ### 2. Reproducer audit (lightweight)
 

@@ -1,6 +1,6 @@
 ---
 description: Advance a Jira card to the next column in its topology's lifecycle. Reads `jira-flow.yaml` to know what "next" means and which agent (if any) runs on entry. Generic across topologies — used by discovery, hex-backend with custom flows, etc. For the default To Do → In Progress → In Review flow, use /jira-flow:execute instead.
-argument-hint: <jira-key>
+argument-hint: <jira-key> [--no-scope]
 ---
 
 # /jira-flow:advance
@@ -16,6 +16,7 @@ For the standard To Do → In Progress → In Review flow with planning + build 
 ## Variables
 
 - `$ARGUMENTS` — the Jira issue key (e.g., `WEGO-1234`).
+- `--no-scope` — suppress the out-of-scope warning (step 2). The named card advances regardless; this just silences the heads-up.
 
 ## Lifecycle file format
 
@@ -76,11 +77,16 @@ Parse the `lifecycles` list. Hold all of them in mind — the matching one will 
 
 ### 2. Fetch current card state
 
-Delegate to `atlassian-expert`:
+Detect a `--no-scope` flag in `$ARGUMENTS`; the remaining token is the key. Delegate to `atlassian-expert` (the `Command:` line asks it to also report scope membership — a guard, not a filter; add `Scope: none` only if `--no-scope` was passed):
 
-> Fetch Jira issue $ARGUMENTS — return summary, current status, project key, and last 3 comments.
+> Command: advance
+> <Scope: none — only if --no-scope was passed>
+>
+> Fetch Jira issue $ARGUMENTS — return summary, current status, project key, last 3 comments, and the one-line scope verdict (`scope: in` / `scope: OUT (...)` / `scope: n/a`).
 
 If the card doesn't exist → abort with a clear error.
+
+**Out-of-scope warning (warn, don't block).** If `atlassian-expert` reports `scope: OUT` and `--no-scope` was not passed, print a heads-up — "⚠ `$ARGUMENTS` is outside the configured scope (`<effective fragment>`); advancing it anyway because you named it. Pass `--no-scope` to silence." — then continue. Never abort on scope for an explicitly-named card.
 
 ### 3. Match card to a lifecycle
 

@@ -1,6 +1,6 @@
 ---
 description: Execute one existing Jira card. Auto-detects the issue type — Bug cards dispatch to /jira-flow:fix (reproduce-fix-verify flow); Story/Task/Epic cards proceed with the canonical plan-build-validate flow (detail audit + build + validate). Override auto-dispatch with --force-feature-flow. Use /jira-flow:plan-track-build-validate for abstract input that needs decomposition.
-argument-hint: <jira-key> [--force-feature-flow]
+argument-hint: <jira-key> [--force-feature-flow] [--no-scope]
 ---
 
 # /jira-flow:execute
@@ -14,6 +14,7 @@ Execute a single, already-tracked Jira card. Reviews the card detail before exec
 ## Variables
 
 - `$ARGUMENTS` — the Jira issue key (e.g., `WEGO-1234`).
+- `--no-scope` — suppress the out-of-scope warning (see step 1). You named the card by key, so it runs regardless; this just silences the heads-up.
 
 ## Instructions
 
@@ -32,13 +33,18 @@ Read the project Jira config: `jira-flow.yaml` at project root if present, other
 
 ### 1. Fetch card details
 
-Parse `$ARGUMENTS`: the first token is the Jira key. Detect `--force-feature-flow` flag (anywhere in the args). The key without the flag is the issue identifier.
+Parse `$ARGUMENTS`: the first token is the Jira key. Detect `--force-feature-flow` and `--no-scope` flags (anywhere in the args). The key without the flags is the issue identifier.
 
-Delegate to `atlassian-expert`:
+Delegate to `atlassian-expert` (the `Command:` line asks it to also report this card's scope membership — a guard, not a filter; add `Scope: none` only if `--no-scope` was passed):
 
-> Fetch Jira issue `<jira-key>` — full details (summary, description, acceptance criteria, **issue type**, status, last 3 comments). Reply with the verbatim content. Include the issue type name (e.g., `Bug`, `Story`, `Task`, `Epic`).
+> Command: execute
+> <Scope: none — only if --no-scope was passed>
+>
+> Fetch Jira issue `<jira-key>` — full details (summary, description, acceptance criteria, **issue type**, status, last 3 comments). Reply with the verbatim content. Include the issue type name (e.g., `Bug`, `Story`, `Task`, `Epic`), and the one-line scope verdict (`scope: in` / `scope: OUT (...)` / `scope: n/a`).
 
 If the card doesn't exist or you don't have access → abort with a clear error.
+
+**Out-of-scope warning (warn, don't block).** If `atlassian-expert` reports `scope: OUT` and `--no-scope` was not passed, print a heads-up before continuing — e.g. "⚠ `<jira-key>` is outside the configured scope (`<effective fragment>`). Running it anyway because you named it explicitly; pass `--no-scope` to silence this." Then proceed normally. Never abort on scope for a single, explicitly-named card.
 
 ### 1a. Auto-dispatch on Bug type
 
