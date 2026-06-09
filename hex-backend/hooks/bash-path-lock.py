@@ -70,8 +70,11 @@ def _load_pathlock_module():
 
 
 # Redirection: `>` or `>>`, NOT preceded by a digit or `&` (excludes `2>`,
-# `&>`, `1>&2`), and the target must not start with `&` (excludes `>&1`).
-_REDIR_RE = re.compile(r"""(?<![0-9&])>>?\s*(?!&)("[^"]+"|'[^']+'|[^\s;&|<>()]+)""")
+# `&>`, `1>&2`), and the target must not start with `&` (excludes `>&1`) or `=`
+# (excludes the `>=` comparison operator — `>` immediately followed by `=` is
+# never a redirect; without this, `sed -i 's/>=/>/'`, `grep '>='`, and
+# `[[ $a >= $b ]]` capture junk targets and get falsely blocked).
+_REDIR_RE = re.compile(r"""(?<![0-9&])>>?\s*(?![&=])("[^"]+"|'[^']+'|[^\s;&|<>()]+)""")
 
 # Constructs we cannot statically analyze — fail open but log.
 _UNCOVERED_RE = re.compile(
