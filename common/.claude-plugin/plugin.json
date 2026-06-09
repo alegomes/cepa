@@ -1,7 +1,7 @@
 {
   "name": "common",
   "version": "0.2.0",
-  "description": "Shared mindset skills required by the alegomes topology plugins. Ships mental-model, active-listener, zero-micromanagement, conversational-response, till-done, autonomous-mode, green-or-revert, and acceptance-completeness. Agents: completion-auditor (independent last-mile acceptance gate). Commands: /autonomous-start, /autonomous-resume, /debrief, /recap, /branch, /return, and the per-session worktree lifecycle (/worktree-start, /worktree-merge, /worktree-list, /worktree-discard, /worktree-name) for parallel `claude` windows on one repo. Launcher: bin/ccw — drop-in for `claude` that auto-isolates a session into its own git worktree only when another live session already occupies the tree. Hooks: autonomous-checkpoint (PostToolUse on Task), session-log (UserPromptSubmit), session-subject (UserPromptSubmit — experimental lexical subject-shift detection), session-activity (PostToolUse Edit|Write|MultiEdit — records touched dirs), session-registry (SessionStart/SessionEnd — live-session registry, overlap warning, worktree auto-clean + unmerged reminder, WIP-autosave), mark-build-stale + capture-build-result + gate-advance (the green-or-revert state machine), lead-no-worktree (PreToolUse on Task — blocks worktree-isolated leads), acceptance-gate (PreToolUse on transitionJiraIssue — blocks In-Review while the acceptance audit is incomplete). Helpers: _wtlib.py + session-launch.py + session-worktrees.py (worktree engine), expertise-append.py (flock-serialized append+prune for the shared mental-model.yaml files).",
+  "description": "Shared mindset skills required by the alegomes topology plugins. Ships mental-model, active-listener, zero-micromanagement, conversational-response, till-done, autonomous-mode, green-or-revert, and acceptance-completeness. Agents: completion-auditor (independent last-mile acceptance gate). Commands: /autonomous-start, /autonomous-resume, /debrief, /recap, /handoff (save a rich session handoff for seamless resume), /branch, /return, and the per-session worktree lifecycle (/worktree-start, /worktree-merge, /worktree-list, /worktree-discard, /worktree-name) for parallel `claude` windows on one repo. Launcher: bin/ccw — drop-in for `claude` that auto-isolates a session into its own git worktree only when another live session already occupies the tree. Hooks: autonomous-checkpoint (PostToolUse on Task), session-log (UserPromptSubmit), session-subject (UserPromptSubmit — lexical subject-shift detection + wrap-up/handoff nudge), session-activity (PostToolUse Edit|Write|MultiEdit — records touched dirs), session-registry (SessionStart/SessionEnd — live-session registry, overlap warning, worktree auto-clean + unmerged reminder, WIP-autosave, transparent handoff resume), session-checkpoint (Stop — continuous mechanical handoff skeleton at .claude/handoffs/<branch>.md, crash-proof), mark-build-stale + capture-build-result + gate-advance (the green-or-revert state machine), enforcement-guard (PreToolUse Bash + Edit/Write/MultiEdit — blocks subagents from writing the plugin/hook/settings enforcement surface), lead-no-worktree (PreToolUse on Task — blocks worktree-isolated leads), acceptance-gate (PreToolUse on transitionJiraIssue — blocks In-Review while the acceptance audit is incomplete). Helpers: _wtlib.py + session-launch.py + session-worktrees.py (worktree engine), _handoff.py (handoff file format + zone-preserving IO), expertise-append.py (flock-serialized append+prune for the shared mental-model.yaml files).",
   "author": {
     "name": "alegomes"
   },
@@ -98,6 +98,16 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session-subject.py\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session-checkpoint.py\""
           }
         ]
       }
