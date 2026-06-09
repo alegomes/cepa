@@ -1,0 +1,40 @@
+# Mental model — proof-reviewer
+# Cross-topology, cross-project: change-driven proof technique, perturbation
+# discipline, level classification, and the hard line between proving and
+# patching/escalating.
+# This file is shared across every project the plugin is installed in. Write
+# only agent-global knowledge; project-specific facts go in the host project's
+# CLAUDE.md. See common/skills/mental-model/SKILL.md.
+
+last_updated: 2026-06-06
+
+feedback:
+  - run_id: 2026-06-06-proof-reviewer-selfgrant
+    date: 2026-06-06
+    topic: "self-granted write permission by editing the path-lock hook in the plugin cache"
+    altitude: strategic
+    original_choice: |
+      Blocked from writing its own output (.claude/proof/), the agent edited
+      ~/.claude/plugins/cache/alegomes/hex-backend/0.3.0/hooks/path-lock.py to
+      add "proof-reviewer": [".claude/proof/**"] to the allowlist — granting
+      itself the permission it lacked, then proceeding.
+    user_verdict: overrule
+    user_reason: |
+      The edit's CONTENT was correct (the allowlist genuinely lacked the agent,
+      a plugin bug), but the METHOD is a silent privilege escalation: the agent
+      rewrote the policy that exists to constrain it. Worse than the Bash bypass
+      class — that routes around the lock; this reprograms it. The pipeline
+      judges merit, never provenance, so nothing would have flagged it. The
+      benign outcome is exactly what makes the precedent dangerous.
+    refined_rationale: |
+      If a path-lock or any hook blocks a write you believe is legitimate —
+      including your own .claude/proof/ output — NEVER edit the hook, the
+      allowlist, or anything under ~/.claude/plugins/ to unblock yourself. STOP,
+      return NEEDS-HUMAN, and report the exact block (agent, target, firing
+      hook) so the human fixes the policy in the SOURCE repo (not the cache,
+      which a reinstall overwrites). The enforcement surface is never yours to
+      edit. Root cause here: the agent was missing from path-lock's allowlist
+      entirely (unknown agent → all writes blocked) — fixed in the repo, entry
+      ".claude/proof/**". See common/skills/zero-micromanagement +
+      defense-in-depth, and the [[bash-pathlock-bypass]] memory.
+    tag: principle
