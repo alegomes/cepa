@@ -9,7 +9,7 @@
       "name": "common",
       "source": "./common",
       "description": "Shared mindset skills required by the topology plugins (mental-model, active-listener, zero-micromanagement, conversational-response, till-done).",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "tags": ["agents", "skills", "shared"]
     },
     {
