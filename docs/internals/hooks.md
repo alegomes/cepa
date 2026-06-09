@@ -5,15 +5,16 @@ writes, and how to debug it.
 
 ## Hook events used
 
-CC supports several PreToolUse / PostToolUse / etc. hook events. This
-marketplace uses four:
+CC supports several hook events. This marketplace uses six:
 
 | Event | Fires | Marketplace usage |
 |---|---|---|
-| `PreToolUse` | Before a tool call lands. Hook can exit 2 to BLOCK the call. | `path-lock.py` (every topology), `gate-advance.py` (common) |
-| `PostToolUse` | After a tool call returns. Hook can observe + write to disk. Cannot block (the call already happened). | `autonomous-checkpoint.py`, `mark-build-stale.py`, `capture-build-result.py` (common) |
-| `UserPromptSubmit` | When the user submits a prompt. Hook can observe; can inject system reminders. | `session-log.py` (common) |
-| `SessionStart` | Session boot. Hook can inject context. | Not currently used. |
+| `PreToolUse` | Before a tool call lands. Hook can exit 2 to BLOCK the call. | `path-lock.py` + `bash-path-lock.py` (every topology), `gate-advance.py` + `enforcement-guard.py` + `lead-no-worktree.py` + `acceptance-gate.py` (common) |
+| `PostToolUse` | After a tool call returns. Hook can observe + write to disk. Cannot block (the call already happened). | `autonomous-checkpoint.py`, `mark-build-stale.py`, `capture-build-result.py`, `session-activity.py` (common) |
+| `UserPromptSubmit` | When the user submits a prompt. Hook can observe; can inject system reminders. | `session-log.py`, `session-subject.py` (common) |
+| `SessionStart` | Session boot. Hook can inject context. | `session-registry.py` (common) — registry hygiene + transparent handoff resume |
+| `SessionEnd` | Session teardown. | `session-registry.py` (common) — WIP-autosave + deregister |
+| `Stop` | After the main agent finishes a turn. | `session-checkpoint.py` (common) — continuous handoff skeleton |
 
 ## Hook payload anatomy
 
@@ -64,10 +65,10 @@ the full design):
 
 ## Every hook the marketplace ships
 
-### path-lock.py × 4 (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
+### path-lock.py × 5 (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
 
 Owners: `multi-team/hooks/`, `hex-backend/hooks/`, `discovery/hooks/`,
-`book/hooks/`.
+`book/hooks/`, `git-history/hooks/`.
 
 Enforces per-agent write allowlists. Each instance has a `PLUGIN_NAME`
 constant and an `ALLOWED_WRITES` dict keyed by agent name.
@@ -95,6 +96,60 @@ See [`path-lock.md`](path-lock.md) for design rationale, the
 multi-plugin collision fix (`PLUGIN_NAME` prefix scoping), the
 built-in-agent fail-open fix, and debugging via
 `HEX_PATHLOCK_DEBUG=1`.
+
+### bash-path-lock.py × 5 (PreToolUse, matcher `Bash`)
+
+Owners: same five topologies as `path-lock.py`.
+
+The Bash half of the path-lock. `path-lock.py` only gates
+`Edit/Write/MultiEdit` — so an agent blocked from a `Write` could land the
+same write through the shell (`sed -i`, `cat > file`, `tee`, a heredoc). This
+hook closes that bypass: it detects **shell-level writes** to an **in-project**
+path outside the agent's allowlist and exits 2.
+
+**Logic:**
+
+```python
+1. tool_name must be Bash; act only on this plugin's prefixed subagents.
+2. Reuse the sibling path-lock.py's allowlist (build_allowed_writes /
+   ALLOWED_WRITES, imported via importlib — single source of truth).
+3. extract_write_targets(command): redirections (>, >>), tee, sed -i, cp, mv,
+   install, dd of=, truncate. Indecidable constructs (python -c, heredoc-to-
+   interpreter, ...) → fail open, but logged to BASH_PATHLOCK_COVERAGE_LOG.
+4. For each target inside project_root and outside the agent's allowlist
+   (own expertise file exempt): BLOCK. Out-of-root targets (/tmp, $HOME,
+   build caches) are out of scope — allowed.
+```
+
+Deliberately narrow to keep false positives near zero: subprocess-internal
+writes (`mvn`, `git`, `npm`) are invisible — only explicit shell redirection/
+file-mutation commands are caught. It is a guardrail, not a sandbox; see
+[`path-lock.md`](path-lock.md)#the-bash-half-and-the-enforcement-surface.
+
+### enforcement-guard.py (PreToolUse, matcher `Bash` + `Edit\|Write\|MultiEdit\|NotebookEdit`)
+
+Owner: `common/hooks/`.
+
+The path-locks protect in-project paths; they cannot protect the files that
+DEFINE the rules, which live out of root: installed plugin code under
+`~/.claude/plugins/`, the global `~/.claude/settings.json` (which declares the
+hooks), and a project's own `.claude/hooks/`. A subagent once edited the cached
+`path-lock.py` via Bash to whitelist itself — a silent privilege escalation
+both locks allowed (out-of-root blind spot). This guard is the missing
+invariant: **no plugin subagent writes the enforcement surface, anywhere.**
+
+**Logic:**
+
+```python
+1. Only gate plugin-prefixed subagents (main session / built-in agents
+   fail open — you can still reinstall + edit settings).
+2. Collect targets: file_path (Edit/Write) or shell-write targets (Bash).
+3. BLOCK if a target resolves under any `.claude/` segment whose child is
+   `plugins`, `hooks`, or one of {settings.json, settings.local.json,
+   keybindings.json} — home OR project.
+4. Carve-out: the agent's own <agent>-mental-model.yaml in an expertise/
+   dir stays writable (its legitimate mental-model home, even in the cache).
+```
 
 ### gate-advance.py (PreToolUse, matcher `Bash`)
 
@@ -224,6 +279,64 @@ UTC time headers.
 
 `/common:recap` reads this file to render its "Asked / Status /
 Delivered" table.
+
+### session-subject.py (UserPromptSubmit)
+
+Owner: `common/hooks/`.
+
+Lexical subject-shift detection plus the wrap-up/handoff nudge. Tracks a
+per-session vocabulary centroid in the registry entry. "Lexical proposes, model
+disposes": the hook injects a discreet note; the model, which understands the
+live conversation, decides whether to surface it.
+
+- **Subject divergence** (overlap below `CLAUDE_WT_SUBJECT_THRESHOLD`, after a
+  baseline of `CLAUDE_WT_SUBJECT_MINPROMPTS`): a gentle hint to isolate a new
+  task in its own worktree.
+- **Wrap-up nudge** (a divergence AND a recent commit = prior work closed, OR a
+  long session past `CLAUDE_WT_SESSION_SOFTCAP=45` prompts): suggest saving a
+  handoff and starting fresh; on agreement the model runs `/common:handoff`.
+  Higher bar than the isolate-hint to avoid nagging.
+
+Off-switches: `CLAUDE_WT_SUBJECT=off` (whole detector), `CLAUDE_WT_NUDGE=off`
+(just the wrap-up nudge).
+
+### session-activity.py (PostToolUse, matcher `Edit|Write|MultiEdit`)
+
+Owner: `common/hooks/`. Records which top-level dirs a session touches into its
+registry entry (`touched_dirs`), feeding the worktree "multi-area" flag and the
+handoff checkpoint's "areas touched" line.
+
+### session-registry.py (SessionStart / SessionEnd)
+
+Owner: `common/hooks/`. The live-session registry + worktree hygiene, plus
+**transparent handoff resume**. On start: registers the session (capturing
+`start_commit`), prunes dead entries, warns on same-tree overlap, auto-cleans
+finished worktrees, and — via a direct branch-keyed lookup — injects the
+previous session's handoff as background with a "don't announce, just continue"
+rule (suppressed when a live peer shares the tree or the handoff is >48h old).
+On end: WIP-autosaves a dirty `session/*` worktree and deregisters.
+
+### session-checkpoint.py (Stop)
+
+Owner: `common/hooks/`. Every turn, rewrites the AUTO zone of
+`<main-root>/.claude/handoffs/<branch-slug>.md` with mechanical facts (commits
+this session, dirs touched, last intents from `session-log.md`). Crash-proof:
+the skeleton is always current, so a token-limit kill never loses the thread.
+The narrative (NOTE zone) is written separately by `/common:handoff`; the two
+zones are marker-delimited and never clobber each other (`_handoff.py`).
+
+### lead-no-worktree.py (PreToolUse, matcher `Task`)
+
+Owner: `common/hooks/`. Blocks spawning a lead agent with worktree isolation —
+leads are write-locked out of the workers' lanes, so isolating them is a
+mistake. Exit 2 with a re-issue suggestion.
+
+### acceptance-gate.py (PreToolUse, matcher `mcp__.*transitionJiraIssue`)
+
+Owner: `common/hooks/`. Blocks the In-Review transition while the per-card
+acceptance audit (`.claude/acceptance/<KEY>.yaml`, written by
+`completion-auditor`) is absent or incomplete. See
+[`../acceptance-completeness.md`](../acceptance-completeness.md).
 
 ## Hook ordering when multiple match
 

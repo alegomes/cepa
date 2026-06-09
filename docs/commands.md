@@ -18,6 +18,7 @@ topology is wired.
 | `/common:autonomous-resume` | `[run-id]` (defaults to most recent in-progress) | Reads `state.yaml`, reconstructs topology + flow + last position, re-activates `autonomous-mode`, continues from next pending step. Won't fabricate progress on ambiguous state. |
 | `/common:debrief` | `[run-id]` (defaults to most recent completed-but-not-debriefed) | Human-in-the-loop ceremony. Walks every `### Decision:` block from the run's artifacts, takes your verdict (`keep` / `overrule: <reason>` / `refine: <new rationale>`), writes to `common/expertise/<agent>-mental-model.yaml` under `feedback`. Dual-scan also flags format drift (informal-prose decisions vs. formal Decision blocks). |
 | `/common:recap` | `[--since=YYYY-MM-DD]` (default: today) | Renders an "Asked / Status / Delivered" table for the current session. Reads `.claude/session-log.md` (intent log from `session-log` hook) and reasons over conversation context for delivery evidence. Read-only. |
+| `/common:handoff` | (none) | Saves a rich session handoff for seamless resume. Writes the narrative (decisions, current state, next concrete step, caveats, open threads) into this branch's `.claude/handoffs/<branch-slug>.md`, on top of the mechanical skeleton the `session-checkpoint` Stop hook keeps current every turn. The next session's `SessionStart` (`session-registry`) surfaces it automatically. Replaces hand-writing "salve a memória de handoff". See [handoff.md](handoff.md). |
 | `/common:branch` | `<assunto>` \| `resume [<fork-id>]` | Fork the current discussion into an isolated context. `<assunto>` (origin session): snapshots the thread to `.claude/forks/<id>/context.md` and pushes an `open` frame — then stops, without discussing the topic. `resume [<id>]` (fresh session): loads the snapshot, marks `active`, starts the interactive side discussion. No id = top-most `open`/`active` frame. Pairs with `/common:return`. See [`context-forking.md`](context-forking.md). |
 | `/common:return` | `[<fork-id>]` (default: top of stack) | Close a fork. In the **side** session: distills the discussion into `resolution.md`, marks `resolved`. In the **origin** session: ingests only that resolution into the main thread, marks the frame `closed` in place (LIFO pop). Picks save-vs-ingest by reading its own conversation; asks if ambiguous. "Top of stack" = top-most non-`closed` frame, which drives both the nested-unwind order and re-ingest idempotence. |
 
@@ -139,6 +140,10 @@ agent matrix.
 ### "I lost the thread of what's been done"
 
 - `/common:recap`. Reads the session log + conversation context, renders "Asked / Status / Delivered" table.
+
+### "I want to stop and pick up cleanly in a new session"
+
+- `/common:handoff`. Writes the rich handoff; the next session resumes from it automatically (no need to mention it). The `session-checkpoint` Stop hook already keeps a mechanical skeleton current every turn, so even a token-limit kill leaves something to resume from. See [handoff.md](handoff.md).
 
 ### "I want to branch off into a side topic, then come back"
 

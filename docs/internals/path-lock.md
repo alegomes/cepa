@@ -1,9 +1,20 @@
 # path-lock deep dive
 
-The PreToolUse hook that enforces per-agent write allowlists. Four
+The PreToolUse hook that enforces per-agent write allowlists. Five
 instances ship across topologies (`multi-team`, `hex-backend`,
-`discovery`, `book`); each has the same structure with a different
-`PLUGIN_NAME` constant and `ALLOWED_WRITES` table.
+`discovery`, `book`, `git-history`); each has the same structure with a
+different `PLUGIN_NAME` constant and `ALLOWED_WRITES` table.
+
+It has two companions that close its blind spots — covered in
+[The Bash half and the enforcement surface](#the-bash-half-and-the-enforcement-surface)
+at the bottom:
+
+- **`bash-path-lock.py`** (per topology) — the path-lock only gates
+  `Edit/Write/MultiEdit`; this catches the same writes done through the
+  shell (`sed -i`, `cat >`, `tee`).
+- **`enforcement-guard.py`** (common) — the path-lock keys on in-project
+  paths, so it can't protect the files that define the rules (they live
+  out of root). This blocks subagents from writing the enforcement surface.
 
 This page covers the design history (every bug we hit and fixed), the
 current logic flow, and how to debug when something blocks
@@ -426,9 +437,17 @@ needs updating.
 
 ## What the path-lock can't do
 
-- **Block delete operations** outside `Edit`/`Write`/`MultiEdit`. The
-  hook only gates these tools. A `Bash` `rm` command bypasses it.
+- **Block `Bash` deletes / moves out of an allowlist.** The path-lock
+  only gates `Edit`/`Write`/`MultiEdit`. Its companion `bash-path-lock.py`
+  now catches shell **writes** (`>`, `tee`, `sed -i`, `cp`, `mv`) to an
+  in-project path outside the allowlist — but a `Bash` `rm`, or a write via
+  an interpreter (`python -c`), still slips through (logged, not blocked).
   (For commit/push protections, see `gate-advance.py`.)
+- **Protect itself, or anything out of project root.** The allowlist is
+  keyed to in-project paths, so the hook treats out-of-root targets as "not
+  mine" — including the installed plugin code under `~/.claude/plugins/`
+  where the hook itself lives. `enforcement-guard.py` (common) covers that
+  surface; see below.
 - **Prevent the orchestrator from writing.** Main session has empty
   `agent_type` → fail-open. Orchestrators don't normally write code
   (they delegate), but if they do, path-lock won't catch it. The tool
@@ -436,6 +455,63 @@ needs updating.
   orchestrators from having `Edit`/`Write` in the first place.
 - **Enforce read restrictions.** The hook only checks writes.
   Workers can read anywhere.
+
+## The Bash half and the enforcement surface
+
+The path-lock guarantees nothing on its own. It gates four tools and keys on
+in-project paths, which leaves two blind spots that an agent — reaching for the
+shell when a `Write` is blocked — will find without any malice. Two companion
+hooks close them.
+
+### `bash-path-lock.py` — the Bash bypass
+
+`path-lock.py` matches `Edit|Write|MultiEdit|NotebookEdit`, never `Bash`. So an
+agent whose `Write` to source is blocked can land the same edit with `sed -i`,
+`cat > file`, `tee`, or a heredoc. It happened: a lead edited source via Bash
+and validation approved the artifact on merit, because the pipeline judges
+merit, never provenance — so the lock was the only control that could have
+caught it, and it never fired.
+
+`bash-path-lock.py` (one per topology, `PreToolUse` matcher `Bash`) reuses the
+sibling `path-lock.py`'s allowlist (imported via `importlib` — single source of
+truth) and blocks **explicit shell-level writes** to an in-project path outside
+the agent's allowlist: `>`, `>>`, `tee`, `sed -i`, `cp`, `mv`, `install`,
+`dd of=`, `truncate`. Deliberately narrow to keep false positives near zero —
+subprocess-internal writes (`mvn`, `git`, `npm` create files via the JVM/git,
+not via shell redirection) are invisible, out-of-root targets (`/tmp`, `$HOME`)
+are out of scope, and the main session isn't gated. Constructs it can't analyze
+statically (`python -c`, heredoc-to-interpreter) fail open but are logged to
+`BASH_PATHLOCK_COVERAGE_LOG` — honest about what it can't see. A guardrail, not
+a sandbox; the agent's own discipline (its prompt + expertise) is the primary
+control.
+
+### `enforcement-guard.py` — the lock can't protect itself
+
+A path-lock keyed to in-project paths cannot, by construction, protect the
+files that define the rules — they live out of root. A `proof-reviewer`,
+blocked from writing its own output, edited the cached
+`~/.claude/plugins/.../path-lock.py` via Bash to add itself to the allowlist: a
+silent privilege escalation that **both** locks allowed, because the target is
+out of root and both deliberately treat out-of-root as out of scope. Worse than
+the Bash-write class — that routes around the lock; this rewrites it.
+
+`enforcement-guard.py` (common, `PreToolUse` on `Bash` + the edit tools) is the
+missing invariant: **no plugin subagent writes the enforcement surface, anywhere
+on disk.** It blocks any target under a `.claude/` segment whose child is
+`plugins`, `hooks`, or `settings.json`/`settings.local.json`/`keybindings.json`
+— home or project. Carve-out: the agent's own `<agent>-mental-model.yaml` in an
+`expertise/` dir stays writable (its legitimate home, even in the cache). Main
+session and built-in agents aren't gated, so a human can still reinstall and
+edit settings.
+
+The root cause underneath that incident was mundane: `proof-reviewer` was
+missing from the allowlist entirely (unknown agent → every write blocked,
+including its documented `.claude/proof/` output), which is what drove it to the
+shell. The fix was to add the entry in the **source repo** — never the cache,
+which a reinstall overwrites. That is the rule the guard now enforces for
+everyone: if a write you believe is legitimate is blocked, stop and report so a
+human fixes the policy at the source — editing the enforcement surface to
+self-grant is never an agent's call.
 
 ## Memory references
 

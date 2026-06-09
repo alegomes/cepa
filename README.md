@@ -12,6 +12,7 @@ composable plugins.
 | **[docs/commands.md](docs/commands.md)** | Full reference for every slash command, grouped by plugin. |
 | **[docs/jira-flow.md](docs/jira-flow.md)** | `jira-flow.yaml` schema (`defaults`, `status_map`, `lifecycles`), `/configure` walkthrough, Implementation Summary contract, read-back verification. |
 | **[docs/autonomous-mode.md](docs/autonomous-mode.md)** | Unattended-operation lifecycle: `/autonomous-start` → checkpoint hook → `/autonomous-resume` → `/debrief`. Survives token-limit hits and session crashes. |
+| **[docs/handoff.md](docs/handoff.md)** | Session handoff: continuous checkpoint (Stop hook) + transparent branch-keyed resume (SessionStart) + `/handoff` command + wrap-up nudge. Stop and pick up cleanly in a new session without hand-writing a summary; survives token-limit kills. |
 | **[docs/green-or-revert.md](docs/green-or-revert.md)** | Build-state machine (`UNKNOWN`/`SUCCESS`/`STALE`/`FAILURE`). Hard gate on commits/pushes/PRs while build is broken. Stops the "I think the test passes" failure mode. |
 | **[docs/acceptance-completeness.md](docs/acceptance-completeness.md)** | Per-card acceptance-evidence machine (`absent`/`incomplete`/`complete`). The `completion-auditor` pins each criterion to its altitude; the `acceptance-gate` hook blocks the In-Review transition until a test demonstrates the criterion at the surface it was written at. Stops the "both halves are covered" failure mode. |
 | **[docs/proof-gate.md](docs/proof-gate.md)** | Automated, change-driven gate for the Review column. The `proof-reviewer` interrogates the whole diff and proves every changed line is load-bearing at the external surface — IT coverage of the diff, diff-scoped mutation, adversarial input, regression-red-at-base. `/jira-flow:prove` + `/jira-flow:prove-drain` triage Review by evidence: PROVEN advances, UNPROVEN bounces back, NEEDS-HUMAN stays for you. The outbound counterpart to acceptance-completeness. |
@@ -31,9 +32,10 @@ composable plugins.
   `acceptance-completeness`). Ships one agent: `completion-auditor` (the
   independent last-mile acceptance gate). Cross-topology commands:
   `/autonomous-start`, `/autonomous-resume`, `/debrief`, `/recap`,
-  `/branch`, `/return`. Hooks: session-log, autonomous-checkpoint,
-  mark-build-stale, capture-build-result, gate-advance, lead-no-worktree,
-  acceptance-gate. Required by every topology.
+  `/handoff`, `/branch`, `/return`. Hooks: session-log, session-subject,
+  session-activity, session-registry, session-checkpoint, autonomous-checkpoint,
+  mark-build-stale, capture-build-result, gate-advance, enforcement-guard,
+  lead-no-worktree, acceptance-gate. Required by every topology.
 - **`multi-team`** — the generic 9-agent topology: orchestrator + 3
   leads (Opus, delegate-only) + 6 workers (Sonnet, domain-locked).
   For plan → build → validate workflows.
@@ -334,6 +336,8 @@ when fan-out overhead would dwarf the task.
 |---|---|---|
 | Leads can't write code | tool allowlist (no `Edit`/`Write`/`MultiEdit`) | No — CC enforces tool allowlists |
 | Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (multi-team, hex-backend); solo-pair has no hook |
+| Workers can't escape the lock via shell | `bash-path-lock.py` PreToolUse hook (catches `sed -i`/`cat >`/`tee` to locked in-project paths) | Mostly — `rm` and interpreter-writes (`python -c`) slip through (logged) |
+| Agents can't edit the enforcement code itself | `enforcement-guard.py` (blocks subagent writes to `.claude/plugins/`, `.claude/hooks/`, settings) | No — for plugin subagents; main session is ungated by design |
 | Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
 | Plan → build → validate ordering | prompt-only (in command + topology) | Yes — orchestrator can reorder if user pushes |
 | jira-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
