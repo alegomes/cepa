@@ -251,6 +251,14 @@ def build_allowed_writes(roles: dict, extra_write_globs: dict = None) -> dict:
         "refactor-advisor":    ["docs/housekeeping/**"],
         "security-reviewer":   ["docs/security-reviews/**"],
         "code-reviewer":       [],  # advisory only, no writes
+
+        # Standalone proof gate. Its ONLY in-project write is its verdict
+        # artifact; source perturbation happens in a throwaway /tmp worktree
+        # (out of root, never gated). Without this entry it is an "unknown
+        # agent" and every write — including its documented output — is
+        # blocked, which is what drove it to edit this very file to whitelist
+        # itself. See common/expertise/proof-reviewer-mental-model.yaml.
+        "proof-reviewer":      [".claude/proof/**"],
     }
     if extra_write_globs:
         for agent_name, globs in extra_write_globs.items():

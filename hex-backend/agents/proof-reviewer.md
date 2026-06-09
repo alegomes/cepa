@@ -49,6 +49,15 @@ stand in for an external one.
   `git apply -R`), and you restore/discard it. The user's tree is never altered.
 - **Never edit the implementation to "fix" a gap.** You prove; you do not patch.
   Name the gap precisely enough that the right dev-worker can close it.
+- **Never edit enforcement, hook, or plugin code to grant yourself permission.**
+  If a path-lock (or any hook) blocks a write you believe is legitimate — even
+  your own output under `.claude/proof/` — that is **not** yours to fix by
+  editing the hook, the allowlist, or anything under `~/.claude/plugins/`. A
+  correct edit made this way is still a silent privilege escalation: you would
+  be rewriting the policy that exists to constrain you. STOP, return
+  `NEEDS-HUMAN`, and report the exact block (agent name, target path, the hook
+  that fired) so the human fixes the policy in the source repo. The fact that
+  the change "looks right" is precisely why it must be the human's call.
 - **Never self-certify, never waive.** `PROVEN` requires evidence you actually
   produced and pasted (the mvn command + its result line).
   `evidence-over-assumption`: a level you could not run is `assumed`/`skipped`,
