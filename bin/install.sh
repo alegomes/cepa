@@ -285,6 +285,21 @@ defaults:
     task: "Task"
   required_fields: []   # baseline; per-topology overrides go in topologies: below
 
+  # Scope: narrow which cards the *-drain commands sweep. scope.jql is a raw
+  # JQL fragment AND-ed into the column query:
+  #     status = "<column>" AND (<scope.jql>) ORDER BY priority, rank
+  # Leave '' to sweep the whole column. Precedence (first match wins, no merge):
+  #   --no-scope  >  --scope "<jql>"  >  scope_overrides.<command>  >
+  #   topologies.<active>.scope  >  defaults.scope
+  # Command keys for scope_overrides: drain, prove_drain. Single-card commands
+  # (execute/prove/fix/advance) only WARN when the named card is out of scope.
+  # Worked example: discovery/jira-flow.example.yaml.
+  scope:
+    jql: ''
+  scope_overrides:
+    drain:       { jql: '' }
+    prove_drain: { jql: '' }
+
 default_topology: ${TOPOLOGY}
 
 # Per-topology overrides — fields here REPLACE the matching defaults
@@ -292,8 +307,9 @@ default_topology: ${TOPOLOGY}
 # values per topology (engineering vs product), or different
 # project_key when discovery uses a separate Jira project. Lists are
 # atomic — the override replaces the default list entirely, not
-# merged item-by-item. Topologies without a block here inherit
-# defaults wholesale. See discovery/jira-flow.example.yaml for a
+# merged item-by-item. A topology may also carry its own scope: block
+# ({ jql: '...' }) at precedence level 4. Topologies without a block here
+# inherit defaults wholesale. See discovery/jira-flow.example.yaml for a
 # worked example.
 topologies: {}
 EOF

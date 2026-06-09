@@ -57,6 +57,40 @@ defaults:
   required_fields: []                   # custom fields with project-mandated defaults, e.g.:
                                         # - { id: customfield_10010, name: "Team", value: "Engineering" }
 
+  # --- Scope: narrow WHICH cards the auto-selecting commands act on ---
+  #
+  # The *-drain commands (/jira-flow:drain, /jira-flow:prove-drain) sweep a whole
+  # status column by default. `scope` lets you constrain that sweep to a slice of
+  # the board — a sprint, a team, a label, an epic — without editing each command.
+  #
+  # `scope.jql` is a RAW JQL fragment, AND-ed into the command's status query:
+  #
+  #     status = "<column>" AND (<scope.jql>) ORDER BY priority, rank
+  #
+  # Write it exactly as you would type it into Jira's advanced search (the parens
+  # are added for you). Leave it empty ('') to sweep the whole column, as before.
+  #
+  # Effective scope is resolved by PRECEDENCE — first match wins, no merging:
+  #   1. `--no-scope` flag on the command  → no scope at all
+  #   2. `--scope "<jql>"` flag            → that fragment, this run only
+  #   3. defaults.scope_overrides.<command>.jql   (per-command, below)
+  #   4. topologies.<active>.scope.jql            (per-topology, section 3)
+  #   5. defaults.scope.jql                       (this baseline)
+  # A more specific level REPLACES the baseline — it does not AND onto it.
+  #
+  # Single-card commands (/jira-flow:execute, :prove, :fix, :advance) do NOT
+  # filter by scope — you named the card by key. They instead WARN if the named
+  # card falls outside the effective scope, then proceed (silence it with
+  # --no-scope).
+  scope:
+    jql: ''                             # baseline, e.g. 'sprint in openSprints()'
+
+  # Per-command scope overrides. Command keys: `drain`, `prove_drain`. A present
+  # key fully replaces `defaults.scope` for that command (see precedence above).
+  scope_overrides:
+    drain:       { jql: '' }            # e.g. 'labels = ready-for-dev'
+    prove_drain: { jql: '' }            # e.g. 'labels = needs-review'
+
 # --- 2. Default topology for build/validate flows ---
 # Tells /jira-flow:execute and /jira-flow:plan-track-build-validate which
 # topology's leads to delegate to (e.g. hex-backend:engineering-lead).
@@ -78,6 +112,10 @@ default_topology: discovery
 # Common use case: same Jira project, different Team field per
 # topology. Discovery work goes to the product team; hex-backend work
 # goes to engineering.
+#
+# A topology may also carry its own `scope:` block (a `{ jql: '...' }`),
+# which sits at precedence level 4 — above defaults.scope, below any
+# per-command override or CLI flag (see the scope notes in `defaults`).
 topologies:
   discovery:
     # Product team owns discovery cards.
@@ -91,6 +129,11 @@ topologies:
     # this block is optional.
     required_fields:
       - { id: customfield_10010, name: "Team", value: "Engineering" }
+    # When hex-backend is the active topology, scope the drains to backend
+    # work only. Replaces defaults.scope (unless a per-command override or a
+    # --scope/--no-scope flag is in play). Drop the block to inherit defaults.
+    # scope:
+    #   jql: 'component = backend'
 
   multi-team:
     required_fields:
