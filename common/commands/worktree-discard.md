@@ -27,10 +27,13 @@ and requires confirmation first.
 
 2. **Show what would be lost — then confirm.** Report the branch's unmerged
    commits (`git log --oneline <base>..session/<name>`) and any uncommitted
-   changes (`git -C <worktree> status --porcelain`). Tell the user plainly:
-   *"This will permanently delete N commits and any uncommitted changes in
-   `session/<name>`. Confirm?"* **Wait for explicit confirmation.** Do not
-   proceed on anything short of a clear yes.
+   changes (`git -C <worktree> status --porcelain`). Call out **untracked files
+   explicitly** (the `??` lines) — these live nowhere else and are gone for good.
+   Seeded files (`.env` and the like, copied from the main tree at creation) are
+   expected and safe to lose; genuinely new untracked work is not — flag it.
+   Tell the user plainly: *"This will permanently delete N commits and these
+   untracked files: … in `session/<name>`. Confirm?"* **Wait for explicit
+   confirmation.** Do not proceed on anything short of a clear yes.
 
 3. **Refuse if a live session is using it.** If the worktree has a live session
    (per the registry), stop — tell the user to close that window first.

@@ -38,6 +38,9 @@ branch back into your integration branch and pruning the worktree.
   (`session/<slice>`) and the worktree directory (`<repo>-<slice>`).
 - `CCW_WORKTREE_HOME` (env, optional) — parent directory for session worktrees.
   Defaults to `~/ccw-worktrees`. Set it to relocate where worktrees are created.
+- `CCW_SEED` (env, optional) — space/colon-separated globs of gitignored files
+  to copy into a fresh worktree. Overrides `.claude/worktree-seed`; both fall
+  back to `.env`, `.env.local`.
 
 ## Steps
 
@@ -71,7 +74,14 @@ branch back into your integration branch and pruning the worktree.
    carries committed history, so uncommitted changes here stay here.)
    If the command fails, surface stderr verbatim and stop.
 
-5. **Hand off.** Report success and tell the user exactly how to start the
+5. **Seed gitignored essentials.** A fresh worktree carries only tracked
+   content, so files like `.env` are missing. Copy them in:
+   `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/seed-worktree.py" "<worktree-home>/<repo>-<slice>"`
+   (Configurable via `$CCW_SEED` or a `.claude/worktree-seed` file; defaults to
+   `.env`, `.env.local`. Best-effort — never blocks worktree creation.) Mention
+   any files it seeded.
+
+6. **Hand off.** Report success and tell the user exactly how to start the
    parallel session — this command does **not** move the current session into
    the worktree:
 

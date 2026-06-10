@@ -34,12 +34,20 @@ Entry schema (all optional except session_id/pid/cwd):
 
 import json
 import os
+import re
+import shutil
 import socket
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
 STALE_HOURS = 24
+
+# Gitignored files copied into a fresh worktree by default (override via
+# $CCW_SEED or a .claude/worktree-seed file). A fresh worktree starts without
+# any gitignored files (checkout only carries tracked content), so essentials
+# like .env would otherwise have to be recreated by hand and get lost on discard.
+DEFAULT_SEED_GLOBS = [".env", ".env.local"]
 
 
 # ── time / identity ──────────────────────────────────────────────────────
@@ -339,3 +347,64 @@ def auto_clean(root: str):
         git(["branch", "-D", info["branch"]], cwd=root)
         removed.append(info["branch"])
     return removed
+
+
+# ── worktree seeding ──────────────────────────────────────────────────────
+
+def seed_globs(main_root: str):
+    """Globs of gitignored files to copy into a fresh worktree.
+
+    Precedence: $CCW_SEED (space/colon-separated) > .claude/worktree-seed
+    (one glob per line, '#' comments) > DEFAULT_SEED_GLOBS.
+    """
+    env = os.environ.get("CCW_SEED", "").strip()
+    if env:
+        return [g for g in re.split(r"[:\s]+", env) if g]
+    cfg = Path(main_root) / ".claude" / "worktree-seed"
+    if cfg.is_file():
+        try:
+            lines = cfg.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            lines = []
+        out = [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
+        if out:
+            return out
+    return list(DEFAULT_SEED_GLOBS)
+
+
+def seed_worktree(main_root: str, wt_path: str):
+    """Copy gitignored seed files from the main tree into a fresh worktree so it
+    is usable immediately (e.g. .env).
+
+    Copies (never symlinks) — a symlink would re-couple the worktree to the
+    synced main tree, which is the very thing the relocated worktree home avoids.
+    Only fills files ABSENT in the worktree, so it never clobbers tracked content
+    the checkout already placed. Returns the list of copied relative paths.
+    """
+    copied = []
+    main = Path(main_root)
+    dest = Path(wt_path)
+    for pattern in seed_globs(main_root):
+        if pattern.startswith("/") or ".." in pattern.split("/"):
+            continue  # refuse absolute or traversal patterns
+        try:
+            matches = sorted(main.glob(pattern))
+        except (ValueError, OSError):
+            continue
+        for src in matches:
+            if not src.is_file():
+                continue
+            try:
+                rel = src.relative_to(main)
+            except ValueError:
+                continue
+            tgt = dest / rel
+            if tgt.exists():
+                continue  # checkout already placed it — don't clobber
+            try:
+                tgt.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, tgt)
+                copied.append(str(rel))
+            except OSError:
+                pass
+    return copied

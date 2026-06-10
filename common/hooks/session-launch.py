@@ -113,6 +113,11 @@ def main() -> int:
                     print(f"[session-launch] worktree add failed: {err}", file=sys.stderr)
                     return 1
 
+            if not already_wt:
+                # Fill the fresh worktree with gitignored essentials (.env, …)
+                # so it's usable immediately and nothing is lost on discard.
+                L.seed_worktree(root, wt_path)
+
             entry.update({
                 "cwd": wt_path,
                 "is_session_worktree": True,
