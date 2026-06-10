@@ -78,11 +78,19 @@ def main() -> int:
                 print(f"{root}\t{claim_id}")
                 return 0
 
-            # Isolate into a worktree.
+            # Isolate into a worktree. Place it OUTSIDE the repo tree — a repo
+            # under a cloud-sync folder (Insync/Dropbox/iCloud) would otherwise
+            # have its sibling worktrees synced too, and the sync daemon's own
+            # move/replace/conflict-copy races delete live worktrees mid-step.
+            # Default home is ~/ccw-worktrees; override with CCW_WORKTREE_HOME.
             name = slice_name or neutral_name(root)
             branch = f"session/{name}"
             repo_name = os.path.basename(os.path.abspath(root))
-            wt_path = os.path.abspath(os.path.join(root, "..", f"{repo_name}-{name}"))
+            wt_home = os.environ.get("CCW_WORKTREE_HOME", "").strip() \
+                or os.path.expanduser("~/ccw-worktrees")
+            wt_home = os.path.abspath(wt_home)
+            os.makedirs(wt_home, exist_ok=True)
+            wt_path = os.path.join(wt_home, f"{repo_name}-{name}")
             base_branch = L.current_branch(root)
             base_commit = L.current_commit(root)
 

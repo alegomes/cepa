@@ -1,5 +1,5 @@
 ---
-description: Spin up an isolated git worktree so a parallel `claude` window works on its own slice of the repo without colliding with other windows. /common:worktree-start <slice> creates ../<repo>-<slice> on branch session/<slice> and tells you where to open the new session. Merge it back with /common:worktree-merge.
+description: Spin up an isolated git worktree so a parallel `claude` window works on its own slice of the repo without colliding with other windows. /common:worktree-start <slice> creates ~/ccw-worktrees/<repo>-<slice> (outside the repo, to dodge cloud-sync races) on branch session/<slice> and tells you where to open the new session. Merge it back with /common:worktree-merge.
 argument-hint: <slice>   (a short kebab-case name for the slice of work, e.g. billing-api)
 ---
 
@@ -36,6 +36,8 @@ branch back into your integration branch and pruning the worktree.
 - `$ARGUMENTS` — `<slice>`: a short kebab-case name for this slice of work
   (e.g. `billing-api`, `tenant-cache`). Used for both the branch name
   (`session/<slice>`) and the worktree directory (`<repo>-<slice>`).
+- `CCW_WORKTREE_HOME` (env, optional) — parent directory for session worktrees.
+  Defaults to `~/ccw-worktrees`. Set it to relocate where worktrees are created.
 
 ## Steps
 
@@ -47,7 +49,12 @@ branch back into your integration branch and pruning the worktree.
 
 2. **Derive names.**
    - Branch: `session/<slice>`.
-   - Worktree path: a sibling of the repo root — `<repo-root>/../<repo>-<slice>`.
+   - Worktree home: `$CCW_WORKTREE_HOME` if set, else `~/ccw-worktrees`. Worktrees
+     live **outside the repo tree on purpose** — a repo under a cloud-sync folder
+     (Insync/Dropbox/iCloud) would otherwise have its sibling worktrees synced
+     too, and the sync daemon's own move/replace/conflict-copy races delete live
+     worktrees mid-step. Create the home dir if missing (`mkdir -p`).
+   - Worktree path: `<worktree-home>/<repo>-<slice>`.
    - The fork point is **the current HEAD** (whatever branch/commit this session
      is on). Note it so the user knows what they're branching from; mention it.
 
@@ -59,7 +66,7 @@ branch back into your integration branch and pruning the worktree.
    - If the target directory already exists, stop and report it; don't overwrite.
 
 4. **Create the worktree.**
-   `git worktree add "<repo-root>/../<repo>-<slice>" -b session/<slice>`
+   `git worktree add "<worktree-home>/<repo>-<slice>" -b session/<slice>`
    (A dirty working tree in *this* session is fine — `git worktree add` only
    carries committed history, so uncommitted changes here stay here.)
    If the command fails, surface stderr verbatim and stop.

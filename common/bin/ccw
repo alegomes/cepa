@@ -13,6 +13,10 @@
 #
 # Install: alias claude='/path/to/common/bin/ccw'   (or put this on PATH)
 # Override the real binary with CLAUDE_WT_CLAUDE_BIN if you aliased `claude`.
+#
+# Worktrees are created under ~/ccw-worktrees (override: CCW_WORKTREE_HOME),
+# deliberately OUTSIDE the repo tree — keeping them out of a cloud-sync folder
+# (Insync/Dropbox/iCloud), whose move/replace races otherwise delete live ones.
 
 set -e
 
