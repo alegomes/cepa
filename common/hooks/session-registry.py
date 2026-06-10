@@ -136,10 +136,14 @@ def on_start(session_id: str, cwd: str) -> None:
                 if c["multi_area"]:
                     bits.append(f"spans {', '.join(c['areas'][:4])}")
                 live = " (live)" if c["alive"] else ""
-                lines.append(f"  • {c['branch']} — {', '.join(bits) or 'no commits'}, "
+                cap = L.caption(c.get("label", ""), c.get("hint", ""))
+                head = f"{c['branch']} {cap}".rstrip()
+                lines.append(f"  • {head} — {', '.join(bits) or 'no commits'}, "
                              f"{c['age']} old{live}")
             lines.append("  Land with `/common:worktree-merge <name>`, inspect with "
-                         "`/common:worktree-list`, or drop with `/common:worktree-discard <name>`.")
+                         "`/common:worktree-list`, drop with `/common:worktree-discard <name>`, "
+                         "or label one with `/common:worktree-label <purpose>` so you "
+                         "remember what it's for.")
             notices.append("\n".join(lines))
     except Exception as e:  # noqa: BLE001
         print(f"[session-registry] worktree scan failed: {e}", file=sys.stderr)

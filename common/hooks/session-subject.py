@@ -80,6 +80,21 @@ def recent_commit_close(cwd: str, within_secs: int = 900) -> bool:
         return False
 
 
+def label_offer(cwd: str, root: str) -> str:
+    """Suffix nudging the model to label THIS worktree, but only when it's an
+    unlabeled session/* worktree — the exact case that strands timestamp names.
+    """
+    branch = L.current_branch(cwd)
+    if not branch.startswith("session/") or L.branch_description(root, branch):
+        return ""
+    return (
+        f" Além disso, este worktree (`{branch}`) ainda não tem rótulo: ofereça "
+        "batizá-lo com `/common:worktree-label <propósito>` pra ele não virar "
+        "mais um worktree timestamp órfão na lista. O usuário pode recusar e "
+        "rotular depois."
+    )
+
+
 def main():
     if os.environ.get("CLAUDE_WT_SUBJECT", "").lower() == "off":
         sys.exit(0)
@@ -141,7 +156,7 @@ def main():
                         "concordar, rode `/common:handoff` na hora. Se ele quiser "
                         "continuar aqui, siga sem insistir — é sugestão, não "
                         "bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
-                    )
+                    ) + label_offer(cwd, root)
                 else:
                     msg = (
                         "[subject-watch] Lexical signal: this prompt's vocabulary "
@@ -167,7 +182,7 @@ def main():
                     "estável, ofereça ao usuário salvar um handoff e recomeçar "
                     "limpo; se ele topar, rode `/common:handoff`. Sugestão, não "
                     "bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
-                )
+                ) + label_offer(cwd, root)
 
         if msg is not None:
             print(json.dumps({"hookSpecificOutput": {

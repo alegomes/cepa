@@ -176,6 +176,56 @@ def predict_conflict(root: str, base: str, branch: str):
     return None  # old git / unknown ref / error
 
 
+# ── worktree label (free-text purpose) ─────────────────────────────────────
+#
+# A session worktree's purpose is stored as the branch's git *description*
+# (`branch.<name>.description`), NOT in the per-session registry entry. The
+# entry is deleted at SessionEnd, but a worktree outlives its session — so a
+# label kept in the entry would vanish exactly when the next session needs it.
+# The branch description is durable, branch-keyed, never touches the ref name,
+# and git drops it automatically when the branch is deleted (merge/discard).
+
+def branch_description(root: str, branch: str) -> str:
+    """The free-text label attached to a session branch, or '' if none."""
+    if not branch:
+        return ""
+    rc, out, _ = git(["config", f"branch.{branch}.description"], cwd=root)
+    return out if rc == 0 else ""
+
+
+def set_branch_description(root: str, branch: str, text: str) -> bool:
+    """Set (or, with empty text, clear) a branch's label. Idempotent clear."""
+    if not branch:
+        return False
+    if text:
+        rc, _, _ = git(["config", f"branch.{branch}.description", text], cwd=root)
+        return rc == 0
+    rc, _, _ = git(["config", "--unset", f"branch.{branch}.description"], cwd=root)
+    return rc in (0, 5)  # 5 = key absent → already clear
+
+
+def subject_hint(entry: dict, n: int = 3) -> str:
+    """Top-n subject terms from a live session's running vocabulary — a weak,
+    auto-derived stand-in shown only while no human label exists. Empty once the
+    session (and its centroid) is gone, which is fine: by then a label was due.
+    """
+    cent = (entry.get("subject") or {}).get("centroid") or {}
+    if not cent:
+        return ""
+    return ", ".join(sorted(cent, key=lambda k: -cent[k])[:n])
+
+
+def caption(label: str, hint: str) -> str:
+    """Display suffix for a worktree's purpose: the human label if set (quoted),
+    else a clearly-marked auto-guess from the subject vocabulary, else nothing.
+    """
+    if label:
+        return f"“{label}”"
+    if hint:
+        return f"(assunto≈ {hint})"
+    return ""
+
+
 # ── registry ─────────────────────────────────────────────────────────────
 
 def sessions_dir(root: str) -> Path:
@@ -329,6 +379,8 @@ def classify(root: str, predict=False):
             "age": age_str(e.get("started_at", "")),
             "areas": sorted(touched, key=lambda k: -touched[k]),
             "multi_area": len(touched) > 1,
+            "label": branch_description(root, branch),
+            "hint": subject_hint(e),
         }
         if predict and ahead > 0:
             info["conflict"] = predict_conflict(root, base, branch)

@@ -56,7 +56,9 @@ def main():
             flags.append("merged/empty")
         areas = f" · areas: {', '.join(c['areas'][:5])}" if c["areas"] else ""
         multi = " (multi-area!)" if c["multi_area"] else ""
-        print(f"• {c['branch']}  →  base {c['base']}")
+        cap = L.caption(c.get("label", ""), c.get("hint", ""))
+        head = f"{c['branch']} {cap}".rstrip()
+        print(f"• {head}  →  base {c['base']}")
         print(f"    {c['ahead'] if c['ahead'] >= 0 else '?'} commits ahead · "
               f"{conflict_s} · build {build_status(c['path'])} · "
               f"{c['age']} old{(' · ' + ', '.join(flags)) if flags else ''}")
@@ -70,7 +72,10 @@ def main():
 
     print("Land: /common:worktree-merge <name> · "
           "Drop: /common:worktree-discard <name> · "
+          "Label: /common:worktree-label <purpose> · "
           "(finished+clean worktrees are auto-removed on next session start)")
+    print('A “quoted” caption is a label you set; "(assunto≈ …)" is a weak '
+          "auto-guess from the session's words, shown only until you label it.")
     return 0
 
 
