@@ -1,0 +1,46 @@
+# review-gate.yaml — written by /review-gate:configure at project root.
+# Controls the pre-merge review gate for THIS repo.
+
+# Which git host this repo lives on. Selects the adapter agent.
+# Only `bitbucket` is supported today; bitbucket-expert refuses any other value.
+host: bitbucket
+
+# Default destination branch for opened PRs (overridable per run with -d).
+# This is also the PROTECTED branch the fence (no-direct-main) guards.
+default_dest: main
+
+# Close the source branch on merge (Bitbucket close_source_branch).
+close_source_branch: true
+
+# Merge strategy used by /review-gate:merge: merge_commit | squash | fast_forward
+strategy: merge_commit
+
+# Auto-merge on green: when true, /review-gate:merge merges immediately once the
+# QA gate returns PROVEN — the gate passing IS the go-ahead. When false (default),
+# it stops at PROVEN and waits for your explicit confirmation. Merging straight to
+# the main branch is the most irreversible step; leaving this false keeps it a
+# human decision. Turn it on per repo, deliberately.
+auto_merge: false
+
+review:
+  # Effort level passed through to /code-review (low | medium | high | max).
+  effort: medium
+  # What to do with hygiene findings before opening the PR:
+  #   fix    — apply the findings to the working tree, then open the PR
+  #   report — print findings, open the PR anyway (findings are advisory)
+  #   block  — print findings and STOP; do not open the PR until they're handled
+  on_findings: fix
+
+# The fence (no-direct-main) and the nudge (push-nudge) are active automatically
+# in any repo that has this file. To opt a repo (or a single run) OUT of the fence
+# — bootstrap, hotfix — create .claude/allow-direct-main or set
+# REVIEW_GATE_ALLOW_DIRECT=1. To silence the push nudge: REVIEW_GATE_NUDGE=off.
+
+# OPTIONAL — only read when jira-flow.yaml is also present at project root.
+# Wires the PR boundary to the Jira lifecycle. Omit the whole block to run
+# review-gate standalone (no tracker).
+jira:
+  on_open: "In Progress -> In Review"   # transition fired when the PR opens
+  on_merge: "In Review -> Done"         # transition fired when the PR merges
+  qa_gate: prove                        # delegate the QA axis at merge to /jira-flow:prove
+                                        # (requires jira-flow installed; ignored if absent)
