@@ -125,6 +125,19 @@ Services (Docker/Testcontainers for the DB + Flyway). If Docker is unavailable,
 the external proof cannot run → record `skipped` (→ NEEDS-HUMAN), never a false
 UNPROVEN.
 
+**The guarding test must be capable of failing (non-vacuous).** A perturbation
+proves nothing unless the test it should turn RED actually exercises the broken
+behavior — and a green test is evidence only if it *could* have gone red. This
+bites hardest on a *negative* property ("the log does not leak the CPF"): before
+citing a passing test, confirm the asserted value is genuinely in scope in that
+test's data flow. A test that asserts the *absence* of a token the scenario
+never introduces — e.g. `assertNoneContains("99988877766")` on a path where the
+CPF row is never fetched — is **vacuously green**: it passes whether or not the
+code is correct, so it is not evidence. Record that level `skipped`, never cite
+it as "mitigating." To prove a no-leak property you need the inverse scenario:
+the sensitive value present at the log/failure point, then asserted absent from
+the output.
+
 **PIT (fast path, non-Quarkus layers only).** For changed classes covered by
 non-Quarkus tests, PIT is a faster, more exhaustive perturbation. If `pitest` is
 in the project's pluginManagement (the repo may ship it), run it diff-scoped:
@@ -240,6 +253,23 @@ write here MUST be the verdict you report to the orchestrator** — a `proven`
 artifact sitting next to an `assumed`/`skipped`/`gap`/`survived` level is a
 protocol violation, never a "waiver." There is no field in this schema for
 overriding the computed verdict; if you want one, you've misunderstood your job.
+
+**A skipped check surfaces as its own level status — never averaged into a
+parent `pass`.** If one perturbation in a level passes and another is skipped,
+the level is not `pass`: burying the skip inside a `results:` string while the
+status still reads `pass` is the same drift by another route (it is how
+WEGO-1785 shipped `proven` with an un-run LGPD perturbation sitting under
+`perturbation: status: pass`). Give each skipped check a status the routing can
+see.
+
+This rule is now enforced mechanically: a PreToolUse guard
+(`hooks/proof-verdict-guard.py`) recomputes the verdict from the level statuses
+when you Write the artifact and **blocks** a `verdict: proven` that any
+`skipped`/`assumed`/`survived`/`gap`/`findings` level contradicts, naming the
+verdict you must write instead. The guard is a backstop for the rule above, not
+a substitute for it — and like every enforcement surface, it is never yours to
+edit to get unblocked (see [[bash-pathlock-bypass]] / the self-grant entry in
+your mental model).
 
 ## Output shape
 

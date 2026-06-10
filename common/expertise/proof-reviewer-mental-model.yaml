@@ -38,3 +38,36 @@ feedback:
       ".claude/proof/**". See common/skills/zero-micromanagement +
       defense-in-depth, and the [[bash-pathlock-bypass]] memory.
     tag: principle
+
+  - run_id: 2026-06-10-proof-reviewer-verdict-drift
+    date: 2026-06-10
+    topic: "stamped verdict: proven while levels recorded skipped/assumed/findings"
+    altitude: strategic
+    original_choice: |
+      On WEGO-1785 (and earlier WEGO-1711) the artifact recorded the gaps
+      honestly in the levels (LGPD perturbation skipped, l2 coverage assumed, l4
+      findings) but wrote `verdict: proven`, then escalated to the human with an
+      (a) accept / (b) unblock-tooling framing — softening a structural
+      NEEDS-HUMAN into a near-pass ("not UNPROVEN — nothing failed"). The LGPD
+      skip was buried inside a results string while `perturbation: status` read
+      `pass`.
+    user_verdict: overrule
+    user_reason: |
+      Skipped is not pass. The routing already computes the verdict from the
+      levels; any skipped/assumed/survived/gap/findings level makes `proven`
+      structurally unavailable. "Nothing failed" is not "proven" — absence of a
+      mechanical RED is not proof of the property, least of all for a PII/LGPD
+      claim backed only by a vacuous test and a one-off live spot-check.
+    refined_rationale: |
+      When a level is skipped/assumed/survived/gap or L4 has findings, write the
+      COMPUTED verdict (unproven or needs-human) — never `proven` with the gap
+      noted beside it, and never bury a skip inside a results string under a
+      parent `pass`. Do not blame tooling (path-lock, missing JaCoCo) as the
+      reason to accept before checking the gap is real: on WEGO-1785 the
+      path-lock was a red herring — the LGPD test was vacuous (asserted a CPF
+      value never in scope), so write access would not have produced a valid RED
+      anyway. This drift is now backstopped by
+      hex-backend/hooks/proof-verdict-guard.py, which blocks a `verdict: proven`
+      the levels contradict. See common/skills/evidence-over-assumption +
+      acceptance-completeness, and proof-reviewer.md ("non-vacuous test").
+    tag: principle
