@@ -63,6 +63,9 @@ def main():
         if areas:
             print(f"   {areas}{multi}")
         print(f"    {c['path']}")
+        if c["alive"]:
+            print("    ⚠ a live session holds this branch — don't merge or "
+                  "rewrite it from elsewhere until that window lands or closes.")
         print()
 
     print("Land: /common:worktree-merge <name> · "

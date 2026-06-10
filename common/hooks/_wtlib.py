@@ -240,6 +240,23 @@ def live_sessions_in(root: str, tree_cwd: str, exclude_key: str = ""):
     ]
 
 
+def branch_owners(root: str, branch: str, exclude_cwd: str = ""):
+    """Live registry entries currently sitting on `branch`.
+
+    A branch with a live owner is being actively worked (and possibly rewritten):
+    merging it, or merging *into* it, from another session is how parallel
+    sessions clobber each other. `exclude_cwd` drops the caller's own entry so a
+    session never reports itself as a competing owner.
+    """
+    out = []
+    for _, e in read_entries(root):
+        if exclude_cwd and same_path(e.get("cwd", ""), exclude_cwd):
+            continue
+        if e.get("branch") == branch and entry_is_live(e):
+            out.append(e)
+    return out
+
+
 # ── worktree scan / classify ─────────────────────────────────────────────
 
 def list_worktrees(root: str):
