@@ -1,0 +1,52 @@
+#compdef ccw
+# ---------------------------------------------------------------------------
+# zsh completion for `ccw` — the claude-worktree launcher (common/bin/ccw).
+#
+# Completes the -s/--slice value with the session/* worktrees that already
+# exist in the current repo, NEWEST FIRST, each annotated with its label (the
+# branch's git description, set via /common:worktree-label). So you can resume a
+# recent worktree by Tab instead of remembering a timestamp name like
+# `session/0610-2218`.
+#
+# Install (you run your own shell — this is never auto-edited into your rc):
+#   add BEFORE `compinit` in ~/.zshrc, then restart the shell:
+#
+#     fpath=(/path/to/common/completions $fpath)
+#     autoload -U compinit && compinit
+#
+# `bin/install.sh` prints the exact line with the resolved absolute path.
+# ---------------------------------------------------------------------------
+
+_ccw() {
+  _arguments -C \
+    '(-s --slice)'{-s,--slice}'[force/resume a named worktree (session/<slice>)]:slice:_ccw_slices' \
+    '*:: :_default'
+}
+
+# Offer existing session/* slices as completion candidates, newest commit first,
+# captioned with the branch label when one is set. Silent no-op outside a repo.
+_ccw_slices() {
+  local root
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
+
+  local -a refs slices
+  local ref slice desc
+  refs=(${(f)"$(git for-each-ref --sort=-committerdate \
+        --format='%(refname:short)' refs/heads/session/ 2>/dev/null)"})
+
+  for ref in $refs; do
+    slice=${ref#session/}
+    desc=$(git config "branch.${ref}.description" 2>/dev/null)
+    if [[ -n $desc ]]; then
+      # keep only the first line of the label; _describe splits on ':'
+      slices+=("${slice}:${desc%%$'\n'*}")
+    else
+      slices+=("$slice")
+    fi
+  done
+
+  (( ${#slices} )) || return 1
+  _describe -V -t slices 'session worktree' slices
+}
+
+_ccw "$@"
