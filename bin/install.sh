@@ -181,6 +181,23 @@ if [ -f "${CCW}" ]; then
   echo "    alias ccw='${CCW}'"
 fi
 
+# --- Shell completion for ccw (zsh) ---
+# Tab-completes `ccw -s <slice>` with existing session/* worktrees, newest first,
+# each captioned with its label (the branch's git description). Resume a recent
+# worktree without remembering its timestamp name. You run your own shell, so we
+# print the line to add rather than editing your rc.
+
+COMPLETIONS_DIR="${REPO_DIR}/common/completions"
+if [ -f "${COMPLETIONS_DIR}/_ccw" ]; then
+  echo ""
+  echo "▶ zsh completion for ccw available: ${COMPLETIONS_DIR}/_ccw"
+  echo "  Tab-completes 'ccw -s <slice>' from your recent session/* worktrees."
+  echo "  Add to ~/.zshrc BEFORE the 'compinit' line, then restart your shell:"
+  echo ""
+  echo "    fpath=(${COMPLETIONS_DIR} \$fpath)"
+  echo "    autoload -U compinit && compinit"
+fi
+
 # --- Per-project setup: topology snippet + CLAUDE.md @-import ---
 
 if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
