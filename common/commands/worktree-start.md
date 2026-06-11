@@ -81,12 +81,25 @@ branch back into your integration branch and pruning the worktree.
    `.env`, `.env.local`. Best-effort — never blocks worktree creation.) Mention
    any files it seeded.
 
-6. **Hand off.** Report success and tell the user exactly how to start the
+6. **Copy the launch command to the clipboard.** The handoff below is a
+   terminal switch — opening a new window then *retyping* a long absolute path
+   is the actual friction. Pre-load the exact command so the new terminal is one
+   paste away:
+
+   ```
+   printf 'cd %s && claude' "<absolute path>" | pbcopy
+   ```
+
+   `pbcopy` is macOS-only and best-effort — if it's absent (Linux/other), skip
+   it silently and don't claim the command was copied. When it succeeds, say so
+   in the hand-off ("copied to clipboard — ⌘V in the new terminal").
+
+7. **Hand off.** Report success and tell the user exactly how to start the
    parallel session — this command does **not** move the current session into
    the worktree:
 
    > Worktree ready: `<absolute path>` on branch `session/<slice>` (forked from
-   > `<fork-point>`). Open a new terminal and run:
+   > `<fork-point>`). Open a new terminal and paste (already on your clipboard):
    >
    > ```
    > cd "<absolute path>" && claude
