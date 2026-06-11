@@ -60,6 +60,13 @@
       "description": "Git-history analysis topology — orchestrator + git-historian lead + 2 workers (history-collector, history-narrator). Two jobs: tell a project's story from its branch/commit history, and analyze effort allocation across one or more repos on a single timeline. A deterministic collector (scripts/collect.py) extracts effort proxies + narrative signals into datapack.json; scripts/render.py draws matplotlib charts; the narrator writes prose + a structured report, separating evidence from inference. /git-history:analyze runs the flow. Standalone. Requires common@alegomes.",
       "version": "0.1.0",
       "tags": ["agents", "git", "history", "effort-analysis", "storytelling"]
+    },
+    {
+      "name": "review-gate",
+      "source": "./review-gate",
+      "description": "Pre-merge review gate — code reaches main through a reviewed pull request, not a direct merge. Two doors owned here: open (hygiene gate via /code-review) and merge (QA gate via the topology's proof-reviewer). One quarantined adapter (bitbucket-expert) owns all Bitbucket REST via bundled bin/open-pr.sh + bin/merge-pr.sh. A fence hook (no-direct-main) blocks direct push/merge to the default branch and redirects to the flow; a nudge hook (push-nudge) suggests a PR after a feature-branch push; auto_merge merges on a PROVEN QA verdict. Optional jira-flow seam maps open→In Review, merge→Done. Standalone otherwise. Pair with jira-flow@alegomes for the Jira lifecycle.",
+      "version": "0.1.0",
+      "tags": ["pull-request", "code-review", "bitbucket", "workflow", "pre-merge"]
     }
   ]
 }
