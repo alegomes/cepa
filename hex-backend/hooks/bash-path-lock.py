@@ -24,9 +24,11 @@ DESIGN — deliberately narrow, to keep false positives near zero
   so they are invisible here. That is correct: those are the lead's legitimate
   Bash uses.
 - We only flag a target that resolves INSIDE the project tree. Writes to
-  /tmp, /dev/null, caches, $HOME — out of scope, always allowed. (This is
-  intentionally laxer than the Write-tool lock, which blocks out-of-root
-  writes too; Bash legitimately touches paths outside the repo.)
+  /tmp, /dev/null, caches, $HOME — out of scope, always allowed. (The
+  Write-tool lock now applies the same out-of-root carve-out, so both halves
+  agree: writes outside the project tree are nobody's business here. Bash
+  always touched paths outside the repo legitimately; the Write lock had to
+  catch up so proof-reviewer could perturb code in its /tmp worktree.)
 - Main session / built-in agents (no plugin-prefixed agent_type) are NOT
   gated — same fail-open contract as path-lock.py.
 
