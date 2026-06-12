@@ -64,6 +64,11 @@ git constraints follow, and the whole command is built around them:
 - Compute: dirty? (`git status --porcelain`), commits ahead of base
   (`git rev-list --count <base>..HEAD`), and the session slice
   (`session/<slice>` → `<slice>`).
+- From `git status --porcelain`, split the working-tree changes into **what
+  you'll commit** (tracked changes + genuine new work) versus **runtime noise to
+  leave alone** (untracked `.claude/` session state, build output, caches). You
+  show the first list in the plan and stage exactly it in L2 — see L2 for the
+  rule. If anything is ambiguous, mark it for the user to decide at confirmation.
 - **Decide the path.** Default **land**. Switch to **discard** if `--discard`
   was passed, OR if there are 0 commits ahead of base AND nothing worth
   committing (an empty branch — landing it would be a no-op merge). If you flip
@@ -76,7 +81,8 @@ the whole chain. Land example:
 
 ```
 wrap-up plan — landing session/<slice> → <base>
-  1. commit <N> change(s)         msg: "<subject you'll use>"
+  1. commit <N> file(s)           <path-a>, <path-b>, …   msg: "<subject>"
+                                  (skipping runtime noise: .claude/sessions/, …)
   2. handoff                      → .claude/handoffs/<slug>.md
   3. merge --no-ff into <base>    (in base worktree <path>)   [green: OK | no-build]
   4. push <base>                  → origin   (or: local-only, skip)
@@ -103,7 +109,23 @@ re-show the plan.
 
 ### L2. Commit
 
-- In the session worktree: `git add -A` then commit with the chosen message.
+- **Stage deliberately — never blind `git add -A`.** A blanket add sweeps in
+  session/runtime state that lives nowhere in git on purpose: `.claude/session-log.md`,
+  `.claude/sessions/`, `.claude/handoffs/`, `.claude/last-build.json`, and the
+  like. In a repo that gitignores `.claude/` this is moot; in one that doesn't
+  (the plugin repo itself, for instance) `-A` would commit that noise onto the
+  branch you're about to land.
+- Do it in two moves, in the session worktree:
+  1. `git add -u` — stages modifications/deletions to **already-tracked** files
+     only. This can never pull in untracked runtime state.
+  2. For untracked files (the `??` lines of `git status --porcelain`), add only
+     **genuine new work** explicitly by path (a new source file, a new doc).
+     **Skip** generated/runtime files — anything under `.claude/` that isn't a
+     deliberately-tracked marker (e.g. `.claude/no-build`), build output, caches.
+     If an untracked file's nature is ambiguous (work vs noise), **surface it and
+     ask** rather than guess — don't silently commit OR silently drop it.
+- The plan (step 1) already listed the exact paths to be committed, so the single
+  confirmation covers this staging — what gets committed should match that list.
 - If the tree was already clean (nothing to commit), say so and continue — the
   branch may already carry committed work to land.
 
