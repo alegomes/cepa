@@ -19,9 +19,11 @@ subject. Tunable; an embedding backend can replace `relevance()` later.
 
 It also carries the wrap-up nudge: when the session looks like a good cut point
 — a subject pivot AFTER the prior work closed (recent commits), or simply a long
-session — it suggests saving a handoff and starting fresh. The bar to suggest
-ENDING is deliberately higher than the bar to suggest worktree isolation,
-because a noisy signal that nags is worse than one that stays quiet.
+session — it suggests cutting. If the session is landable (its own `session/*`
+worktree with commits ahead of base) it points at `/common:wrap-up` (the whole
+commit→handoff→merge→push→prune chain); otherwise at `/common:handoff` alone.
+The bar to suggest ENDING is deliberately higher than the bar to suggest worktree
+isolation, because a noisy signal that nags is worse than one that stays quiet.
 
 Config (env):
   CLAUDE_WT_SUBJECT=off                 disable subject detection entirely
@@ -78,6 +80,32 @@ def recent_commit_close(cwd: str, within_secs: int = 900) -> bool:
         return (time.time() - int(out.strip())) <= within_secs
     except (ValueError, OSError):
         return False
+
+
+def wrap_action(cwd: str, root: str, entry: dict) -> str:
+    """The action clause for a wrap-up nudge — a complete, capitalized sentence.
+
+    When the session is genuinely *landable* (an own `session/*` worktree with
+    commits ahead of its base), point at `/common:wrap-up`: it does the whole
+    chain (commit + handoff + merge/push/prune) in one confirmed step, which is
+    exactly what a good cut point wants. Otherwise there's nothing to land —
+    fall back to the narrative-only `/common:handoff`.
+    """
+    branch = L.current_branch(cwd)
+    if branch.startswith("session/"):
+        base = entry.get("base_branch") or L.default_base(root)
+        if L.commits_ahead(cwd, base, branch) > 0:
+            return (
+                f"Como este worktree (`{branch}`) tem commits à frente de "
+                f"`{base}`, a sessão inteira pode aterrissar de uma vez: ofereça "
+                "`/common:wrap-up` (commit + handoff + merge/push/prune numa "
+                "tacada, atrás de uma confirmação). Se ele só quiser registrar e "
+                "parar sem aterrissar, `/common:handoff`."
+            )
+    return (
+        "Ofereça ao usuário salvar um handoff e seguir numa sessão nova; se ele "
+        "concordar, rode `/common:handoff` na hora."
+    )
 
 
 def label_offer(cwd: str, root: str) -> str:
@@ -151,11 +179,10 @@ def main():
                     msg = (
                         "[wrap-up] O assunto mudou (sobreposição de termos "
                         f"{rel:.0%}) E o trabalho anterior parece fechado — houve "
-                        "commit há pouco. Bom ponto de corte. Ofereça ao usuário "
-                        "salvar um handoff e seguir numa sessão nova; se ele "
-                        "concordar, rode `/common:handoff` na hora. Se ele quiser "
-                        "continuar aqui, siga sem insistir — é sugestão, não "
-                        "bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
+                        "commit há pouco. Bom ponto de corte. "
+                        + wrap_action(cwd, root, entry) +
+                        " Se ele quiser continuar aqui, siga sem insistir — é "
+                        "sugestão, não bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
                     ) + label_offer(cwd, root)
                 else:
                     msg = (
@@ -179,9 +206,9 @@ def main():
                 msg = (
                     f"[wrap-up] Sessão longa ({subj['prompts']} interações) — o "
                     "contexto tende a poluir e ficar caro. Se estamos num ponto "
-                    "estável, ofereça ao usuário salvar um handoff e recomeçar "
-                    "limpo; se ele topar, rode `/common:handoff`. Sugestão, não "
-                    "bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
+                    "estável, é um bom momento pra cortar. "
+                    + wrap_action(cwd, root, entry) +
+                    " Sugestão, não bloqueio. (Desliga com CLAUDE_WT_NUDGE=off.)"
                 ) + label_offer(cwd, root)
 
         if msg is not None:
