@@ -9,6 +9,9 @@
 #
 #   ccw                 # auto: isolate only if needed
 #   ccw -s billing-api  # force a named worktree (session/billing-api), reuse to resume
+#   ccw -s              # no name → pick a recent worktree to resume (fzf, or a
+#                       #   numbered menu) — terminal-agnostic, unlike Tab
+#                       #   completion which Warp's own engine ignores
 #   ccw --resume        # any other args pass straight through to claude
 #
 # Install: alias claude='/path/to/common/bin/ccw'   (or put this on PATH)
@@ -34,11 +37,64 @@ done
 SCRIPT_DIR=$(cd "$(dirname "$SELF")" && pwd)
 LAUNCH_PY="$SCRIPT_DIR/../hooks/session-launch.py"
 
+# Interactive picker for `ccw -s` with no name: choose an existing session/*
+# worktree to resume, newest commit first, each captioned with its label (the
+# branch's git description). Uses fzf when present, else a numbered /dev/tty
+# menu. Prints the chosen slice on stdout; returns non-zero when there's nothing
+# to pick or the user cancels. Every fallible command is guarded so `set -e`
+# (inherited by this command substitution's subshell) can't truncate the list.
+pick_slice() {
+  _root="$1"
+  _refs=$(git -C "$_root" for-each-ref --sort=-committerdate \
+            --format='%(refname:short)' refs/heads/session/ 2>/dev/null || true)
+  if [ -z "$_refs" ]; then
+    printf '✗ No session worktrees to resume. Create one with: ccw -s <name>\n' >&2
+    return 1
+  fi
+
+  _tab=$(printf '\t')
+  _rows=$(printf '%s\n' "$_refs" | while IFS= read -r _ref; do
+    [ -n "$_ref" ] || continue
+    _slice=${_ref#session/}
+    _desc=$(git -C "$_root" config "branch.$_ref.description" 2>/dev/null | head -n1 || true)
+    printf '%s%s%s\n' "$_slice" "$_tab" "$_desc"
+  done)
+
+  if command -v fzf >/dev/null 2>&1; then
+    _pick=$(printf '%s\n' "$_rows" | fzf \
+      --delimiter="$_tab" --with-nth=1,2 --nth=1 \
+      --height=40% --reverse --prompt='resume worktree > ' \
+      --header='session/* worktrees — newest first (Esc to cancel)' || true)
+  else
+    printf '%s\n' "$_rows" | awk -F"$_tab" \
+      '{printf "  %d) %s%s\n", NR, $1, ($2==""?"":"  - "$2)}' >&2
+    printf 'resume which? [number, or Enter to cancel] > ' >&2
+    _ans=""
+    read -r _ans < /dev/tty || true
+    case "$_ans" in
+      ""|*[!0-9]*) return 1 ;;
+    esac
+    _pick=$(printf '%s\n' "$_rows" | sed -n "${_ans}p")
+  fi
+
+  [ -n "$_pick" ] || return 1
+  printf '%s\n' "${_pick%%"$_tab"*}"
+}
+
 # Parse our own flags; everything else goes to claude.
 SLICE=""
+PICK=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    -s|--slice) SLICE="$2"; shift 2 ;;
+    -s|--slice)
+      # A real slice name follows only if the next arg exists, is non-empty,
+      # and isn't itself a flag. Otherwise `-s` means "let me pick one".
+      if [ $# -ge 2 ] && [ -n "$2" ] && [ "${2#-}" = "$2" ]; then
+        SLICE="$2"; shift 2
+      else
+        PICK=1; shift
+      fi
+      ;;
     *) break ;;
   esac
 done
@@ -52,6 +108,14 @@ BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 case "$BRANCH" in
   session/*) exec "$CLAUDE_BIN" "$@" ;;
 esac
+
+# `ccw -s` with no name → pick a recent worktree to resume. Cancel or an empty
+# list aborts cleanly (launch nothing) rather than starting a surprise session.
+if [ "$PICK" = "1" ]; then
+  SLICE=$(pick_slice "$ROOT") || exit 0
+  [ -n "$SLICE" ] || exit 0
+  printf '↻ resuming session/%s\n' "$SLICE" >&2
+fi
 
 # Decide (atomic, under lock). On any failure, fall back to launching in place.
 RESULT=$(CLAUDE_WT_ROOT="$ROOT" CLAUDE_WT_SLICE="$SLICE" python3 "$LAUNCH_PY") \

@@ -196,6 +196,10 @@ if [ -f "${COMPLETIONS_DIR}/_ccw" ]; then
   echo ""
   echo "    fpath=(${COMPLETIONS_DIR} \$fpath)"
   echo "    autoload -U compinit && compinit"
+  echo ""
+  echo "  Note: Warp uses its own completion engine and ignores zsh completions,"
+  echo "  so Tab won't work there. In ANY terminal (Warp included), run 'ccw -s'"
+  echo "  with no name to pick a recent worktree interactively instead."
 fi
 
 # --- Per-project setup: topology snippet + CLAUDE.md @-import ---
