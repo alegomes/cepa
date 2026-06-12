@@ -12,7 +12,15 @@ report whether EITHER side is held by another LIVE session:
 
 Both are exactly the cross-session clobbers that motivated the worktree model.
 
-Usage: worktree-guard.py <source-branch> [--cwd <dir>]
+Usage: worktree-guard.py <source-branch> [--cwd <dir>] [--exclude-cwd <dir>]
+  --cwd          a worktree on the merge DESTINATION branch (its current branch
+                 is taken as the merge target). Defaults to the process cwd.
+  --exclude-cwd  the worktree of the session DOING the merge, dropped from the
+                 owner check so it never flags itself as a competing live owner.
+                 Defaults to --cwd — correct for /common:worktree-merge, which
+                 runs from the destination window. /common:wrap-up runs from the
+                 SOURCE session, so it must pass --cwd <base> --exclude-cwd
+                 <session-worktree> (otherwise the calling session self-blocks).
 Prints a first line "BLOCK: <n>" or "OK", then human detail. Exit 0 always —
 this is advisory; the command enforces the refusal so a human can override.
 """
@@ -36,9 +44,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("source")
     ap.add_argument("--cwd", default=os.getcwd())
+    ap.add_argument("--exclude-cwd", default=None)
     args = ap.parse_args()
 
     cwd = os.path.abspath(args.cwd)
+    exclude_cwd = os.path.abspath(args.exclude_cwd) if args.exclude_cwd else cwd
     root = L.main_root(cwd)
     if not root:
         print("OK")
@@ -50,8 +60,8 @@ def main() -> int:
         source = f"session/{source}"
     dest = L.current_branch(cwd)
 
-    src_owners = L.branch_owners(root, source, exclude_cwd=cwd)
-    dest_owners = L.branch_owners(root, dest, exclude_cwd=cwd) if dest else []
+    src_owners = L.branch_owners(root, source, exclude_cwd=exclude_cwd)
+    dest_owners = L.branch_owners(root, dest, exclude_cwd=exclude_cwd) if dest else []
 
     blockers = len(src_owners) + len(dest_owners)
     if blockers == 0:
