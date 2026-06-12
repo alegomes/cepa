@@ -138,6 +138,18 @@ def main():
         # etc.). Neither is from our plugin; not our concern. Fail-open.
         sys.exit(0)
 
+    # Out-of-root writes are not this lock's jurisdiction. It enforces
+    # architectural boundaries WITHIN the project tree; a write to /tmp, $HOME,
+    # or a sibling tree is none of our business. (Same carve-out bash-path-lock.py
+    # already applies; without it, relative_to() raises ValueError and the write
+    # is falsely BLOCKED.) The enforcement-guard hook still blocks subagent writes
+    # to plugins/hooks/settings regardless of location.
+    project_root = Path(payload.get("cwd") or os.getcwd()).resolve()
+    try:
+        Path(file_path).resolve().relative_to(project_root)
+    except ValueError:
+        sys.exit(0)
+
     agent = detect_agent(payload)
 
     # Always allow the agent to write its own expertise file, regardless of
@@ -157,8 +169,6 @@ def main():
             file=sys.stderr,
         )
         sys.exit(2)
-
-    project_root = Path(payload.get("cwd") or os.getcwd()).resolve()
 
     if path_matches(file_path, allowed, project_root):
         sys.exit(0)

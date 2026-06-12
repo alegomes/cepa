@@ -371,6 +371,21 @@ def main():
         sys.exit(0)
 
     project_root = Path(payload.get("cwd") or os.getcwd()).resolve()
+
+    # Out-of-root writes are not this lock's jurisdiction. It enforces
+    # architectural boundaries WITHIN the project tree; a write to /tmp, $HOME,
+    # or a sibling tree is none of our business. This is what lets proof-reviewer
+    # break code in its throwaway /tmp perturbation worktree (see the
+    # proof-reviewer note in build_allowed_writes) — without it, relative_to()
+    # raises ValueError, path_matches returns False, and the perturbation is
+    # falsely BLOCKED. bash-path-lock.py already applies the same carve-out. The
+    # enforcement-guard hook still blocks subagent writes to plugins/hooks/
+    # settings regardless of location, so this does not reopen that vector.
+    try:
+        Path(file_path).resolve().relative_to(project_root)
+    except ValueError:
+        sys.exit(0)
+
     roles, extra_write_globs = load_config(project_root)
     allowed_writes = build_allowed_writes(roles, extra_write_globs)
 
