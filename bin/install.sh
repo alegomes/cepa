@@ -9,7 +9,7 @@
 # With --clean: also uninstalls existing plugins and nukes the marketplace
 #   plugin cache before reinstalling. Use this when you've edited plugin
 #   source without bumping versions and want CC to pick up the changes.
-# With --topology=NAME (multi-team | solo-pair | hex-backend | discovery | book | git-history): also copies
+# With --topology=NAME (multi-team | solo-pair | hex-backend | discovery | book | docs | git-history): also copies
 #   that topology's snippet into the host project's .claude/ and appends the
 #   matching @-import line to CLAUDE.md (idempotent, creates CLAUDE.md if
 #   missing). Skip this flag if you want to wire CLAUDE.md yourself.
@@ -47,11 +47,19 @@ for arg in "$@"; do
 done
 
 case "${TOPOLOGY}" in
-  ""|multi-team|solo-pair|hex-backend|discovery|book|git-history) ;;
+  ""|multi-team|solo-pair|hex-backend|discovery|book|docs|git-history) ;;
   *)
-    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, solo-pair, hex-backend, discovery, book, or git-history."
+    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, solo-pair, hex-backend, discovery, book, docs, or git-history."
     exit 1
     ;;
+esac
+
+# Map topology NAME → source directory. They match for every topology except
+# `docs`, whose source lives in docs-topology/ (the repo's own docs/ holds the
+# marketplace documentation, so the plugin can't share that path).
+case "${TOPOLOGY}" in
+  docs) TOPOLOGY_DIR="docs-topology" ;;
+  *)    TOPOLOGY_DIR="${TOPOLOGY}" ;;
 esac
 
 HOST_PROJECT_INPUT="${HOST_PROJECT_INPUT:-$(pwd)}"
@@ -93,6 +101,7 @@ if [ "${CLEAN}" -eq 1 ]; then
   claude plugin uninstall "discovery@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "jira-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "book@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "docs@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "git-history@${MARKETPLACE_NAME}" 2>/dev/null || true
 
   if [ -d "${CACHE_DIR}" ]; then
@@ -129,6 +138,9 @@ claude plugin install jira-flow@alegomes
 
 echo "▶ Installing book@alegomes (10-agent book-writing topology)"
 claude plugin install book@alegomes
+
+echo "▶ Installing docs@alegomes (9-agent documentation/onboarding topology)"
+claude plugin install docs@alegomes
 
 echo "▶ Installing git-history@alegomes (3-agent Git-history analysis topology)"
 claude plugin install git-history@alegomes
@@ -205,7 +217,7 @@ fi
 # --- Per-project setup: topology snippet + CLAUDE.md @-import ---
 
 if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
-  SNIPPET_SRC="${REPO_DIR}/${TOPOLOGY}/${TOPOLOGY}-topology.md"
+  SNIPPET_SRC="${REPO_DIR}/${TOPOLOGY_DIR}/${TOPOLOGY}-topology.md"
   SNIPPET_DST="${HOST_PROJECT}/.claude/${TOPOLOGY}-topology.md"
   CLAUDE_MD="${HOST_PROJECT}/CLAUDE.md"
   IMPORT_LINE="@.claude/${TOPOLOGY}-topology.md"
@@ -268,7 +280,7 @@ if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
       echo "    Edit it: set defaults.site, defaults.project_key, defaults.board_id,"
       echo "    and the lifecycle status names to match your discovery board."
     fi
-  elif [ "${TOPOLOGY}" = "hex-backend" ] || [ "${TOPOLOGY}" = "multi-team" ] || [ "${TOPOLOGY}" = "book" ]; then
+  elif [ "${TOPOLOGY}" = "hex-backend" ] || [ "${TOPOLOGY}" = "multi-team" ] || [ "${TOPOLOGY}" = "book" ] || [ "${TOPOLOGY}" = "docs" ]; then
     if [ -f "${JIRA_FLOW_DST}" ]; then
       echo "  ✔ ${JIRA_FLOW_DST} already exists — leaving untouched"
     else
@@ -364,7 +376,7 @@ fi
 echo ""
 echo "✔ Done."
 echo ""
-echo "Eight plugins installed:"
+echo "Nine plugins installed:"
 echo "    common       — 8 mindset skills (required by every topology)"
 echo "    multi-team   — 9-agent generic topology + /multi-team:plan-build-validate"
 echo "    solo-pair    — 2-agent dev/reviewer topology"
@@ -372,6 +384,7 @@ echo "    hex-backend  — 13-agent hexagonal-architecture topology + per-Task q
 echo "    discovery    — 6-agent continuous product-discovery topology"
 echo "    jira-flow    — atlassian-expert + Jira-aware commands (pair with any topology)"
 echo "    book         — 10-agent book-writing topology + /book:inception + /book:write-chapter"
+echo "    docs         — 9-agent documentation/onboarding topology + /docs:survey ... /docs:finalize"
 echo "    git-history  — 3-agent Git-history analysis topology + /git-history:analyze"
 echo ""
 if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
@@ -387,6 +400,7 @@ if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
       hex-backend) echo "    /hex-backend:plan-build-validate <task>" ;;
       discovery)   echo "    /discovery:capture <signal>   (then /jira-flow:advance <KEY> to move forward)" ;;
       book)        echo "    /book:inception \"<book title>\"   (then /book:write-chapter <slug>)" ;;
+      docs)        echo "    /docs:survey   (then /docs:declutter → /docs:checkpoint → /docs:author → /docs:finalize)" ;;
       git-history) echo "    /git-history:analyze <repo-path> [more-paths...]   (story + effort report)" ;;
     esac
   else
