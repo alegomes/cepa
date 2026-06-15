@@ -162,12 +162,84 @@ def on_start(session_id: str, cwd: str) -> None:
         emit_context("\n\n———\n\n".join(parts))
 
 
+def prune_marker_path(root: str, session_id: str):
+    return L.sessions_dir(root) / f"{session_id}.prune-on-exit"
+
+
+def read_prune_marker(root: str, session_id: str):
+    """The deferred-prune intent left by /common:wrap-up, or None.
+
+    wrap-up runs from INSIDE the session worktree, so it can't remove that
+    worktree itself: deleting the live session's cwd makes the very next Stop
+    hook fail to launch (`posix_spawn '/bin/sh' ENOENT`, cwd gone). Instead it
+    drops this marker and we reap the worktree here, after the session's last
+    turn — no hook ever fires from a dead cwd.
+    """
+    marker = prune_marker_path(root, session_id)
+    if not marker.exists():
+        return None
+    try:
+        return json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}  # present but unreadable → still consume it below
+
+
+def do_prune_on_exit(root: str, session_id: str, cwd: str, spec: dict) -> None:
+    """Reap the session worktree wrap-up flagged for deferred pruning.
+
+    Land path (discard=false): only delete the branch if it's truly merged into
+    base — if wrap-up's merge didn't land (or later work made the branch ahead
+    again), leave everything for the user / auto_clean rather than drop commits.
+    Discard path (discard=true): the user explicitly threw it away → force.
+    """
+    marker = prune_marker_path(root, session_id)
+    base_wt = spec.get("base_worktree") or ""
+    base_branch = spec.get("base_branch") or ""
+    branch = spec.get("branch") or L.current_branch(cwd)
+    session_wt = spec.get("session_worktree") or cwd
+    discard = bool(spec.get("discard"))
+
+    # Step out of the dir we're about to remove so git never hits EBUSY on cwd.
+    try:
+        if base_wt and os.path.isdir(base_wt):
+            os.chdir(base_wt)
+    except OSError:
+        pass
+
+    if not (base_wt and branch and session_wt):
+        print(f"[session-registry] prune-on-exit marker incomplete; skipping "
+              f"({session_id[:8]})", file=sys.stderr)
+    elif discard:
+        L.git(["worktree", "remove", "--force", session_wt], cwd=base_wt)
+        L.git(["branch", "-D", branch], cwd=base_wt)
+        print(f"[session-registry] discarded worktree {branch} on exit", file=sys.stderr)
+    elif base_branch and L.is_merged(base_wt, base_branch, branch):
+        rc, _, _ = L.git(["worktree", "remove", session_wt], cwd=base_wt)
+        if rc != 0:
+            L.git(["worktree", "remove", "--force", session_wt], cwd=base_wt)
+        L.git(["branch", "-d", branch], cwd=base_wt)
+        print(f"[session-registry] pruned landed worktree {branch} on exit",
+              file=sys.stderr)
+    else:
+        print(f"[session-registry] prune-on-exit skipped: {branch} not merged into "
+              f"{base_branch or '?'}; leaving worktree intact", file=sys.stderr)
+
+    try:
+        marker.unlink()
+    except OSError:
+        pass
+
+
 def on_end(session_id: str, cwd: str) -> None:
     root = L.main_root(cwd)
     branch = L.current_branch(cwd)
+    spec = read_prune_marker(root, session_id) if root else None
 
-    # 5. WIP-autosave — ONLY in a session worktree, ONLY if dirty.
-    if branch.startswith("session/") and L.is_dirty(cwd):
+    # 5. WIP-autosave — ONLY in a session worktree, ONLY if dirty, and NEVER when
+    #    this worktree is being discarded (committing work we're about to throw
+    #    away is pointless and would mark a clean branch as ahead of base).
+    if branch.startswith("session/") and not (spec and spec.get("discard")) \
+            and L.is_dirty(cwd):
         L.git(["add", "-A"], cwd=cwd)
         rc, _, err = L.git(
             ["commit", "-m", f"WIP: session autosave ({session_id[:8]})",
@@ -177,6 +249,11 @@ def on_end(session_id: str, cwd: str) -> None:
                   file=sys.stderr)
         else:
             print(f"[session-registry] WIP-autosave failed: {err}", file=sys.stderr)
+
+    # 5b. Deferred prune (wrap-up's marker) — reap the worktree now that the
+    #     session's last turn is over, so no Stop hook fires from a dead cwd.
+    if root and spec is not None:
+        do_prune_on_exit(root, session_id, cwd, spec)
 
     # 6. Deregister.
     if root:

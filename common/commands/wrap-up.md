@@ -39,10 +39,14 @@ git constraints follow, and the whole command is built around them:
 
 1. **You can't merge a branch into itself.** The merge must run in the worktree
    that has the *integration* branch checked out — reached with `git -C <base-worktree>`.
-2. **Git won't remove the worktree you're standing in.** The prune of the
-   current session worktree must also run from the base worktree
-   (`git -C <base-worktree> worktree remove <session-path>`). Your shell's cwd
-   goes stale at that point — fine, you're exiting anyway.
+2. **You must NOT remove the worktree you're standing in.** `git worktree remove`
+   would delete the directory this very session is running in. The session still
+   has one more turn left (this command's final report), and when that turn ends
+   its **Stop hook fires from the now-deleted cwd** — Claude Code can't even
+   `posix_spawn '/bin/sh'` to launch the hook, so you get a
+   `Stop hook error: … ENOENT … /bin/sh`. So the prune is **deferred**: wrap-up
+   drops a marker and the `session-registry` SessionEnd hook reaps the worktree
+   *after* your last turn (see L7). No live cwd is ever deleted.
 
 ## Steps
 
@@ -60,7 +64,9 @@ git constraints follow, and the whole command is built around them:
   `<root>/.claude/sessions/*.json` for the entry whose `cwd`/`worktree_path`
   matches the current worktree, and take `base_branch` (+ `base_commit`). If no
   entry records it, fall back to `default_base` (origin/HEAD → main → master) and
-  **say so** — don't silently assume `main`.
+  **say so** — don't silently assume `main`. **Note that entry's filename stem —
+  it is this session's `<session_id>`, needed for the deferred-prune marker (L7
+  / discard step 3).**
 - Compute: dirty? (`git status --porcelain`), commits ahead of base
   (`git rev-list --count <base>..HEAD`), and the session slice
   (`session/<slice>` → `<slice>`).
@@ -194,20 +200,39 @@ re-show the plan.
 - Push the **integration branch only** — never the session branch; it's about to
   be deleted.
 
-### L7. Prune (from the base worktree)
+### L7. Defer the prune to SessionEnd (do NOT remove your own cwd)
 
-- `git -C <base-worktree> worktree remove <session-worktree-path>`
-  (`--force` only if the user confirms there's unsaved state — there shouldn't be).
-- `git -C <base-worktree> branch -d session/<slice>` (`-D` only on explicit
-  confirmation if git refuses for unmerged commits — that refusal usually means
-  the merge didn't actually carry everything).
+Removing the current session worktree from here would delete the directory this
+session is running in, and the next Stop hook would fail to launch (see "The
+cross-worktree fact" above). So **don't** run `worktree remove` now. Instead drop
+a one-shot marker the SessionEnd hook consumes after your final turn:
+
+- Write `<root>/.claude/sessions/<session_id>.prune-on-exit` (the `<session_id>`
+  noted in step 0), containing:
+  ```json
+  {
+    "base_worktree": "<base-worktree-path>",
+    "base_branch": "<base>",
+    "branch": "session/<slice>",
+    "session_worktree": "<this-worktree-path>",
+    "discard": false
+  }
+  ```
+  (`<this-worktree-path>` = `git rev-parse --show-toplevel`.)
+- On `exit`, `session-registry`'s SessionEnd handler verifies the branch is
+  merged into `<base>`, then runs `git -C <base-worktree> worktree remove` +
+  `git branch -d session/<slice>` — after your last turn, so no hook fires from a
+  dead cwd. (Backstop: if the session crashes before SessionEnd, `auto_clean` on
+  the next session start reaps the now-merged, clean, not-alive worktree anyway.)
 
 ### L8. Report
 
-One block: landed `session/<slice>` → `<base>`; pushed (or local-only); worktree
-removed + branch deleted; handoff at `<path>`. Close with: **"Safe to `exit`."**
-(A slash command can't close the session for you — that last keystroke is yours,
-but everything is already landed, so it's a no-op safety-wise.)
+One block: landed `session/<slice>` → `<base>`; pushed (or local-only); handoff
+at `<path>`; **the worktree + branch will be removed automatically when you
+`exit`** (or run `/common:worktree-discard <slice>` from the base window to drop
+it now). Close with: **"Safe to `exit`."** (A slash command can't close the
+session for you — that last keystroke is yours, but everything is already landed,
+so it's a no-op safety-wise.)
 
 ---
 
@@ -221,10 +246,21 @@ Mirror `/common:worktree-discard`:
    This was already in the plan; the confirmation covers it.
 2. Optional handoff (default skip for a dead end; write it if the user asked or
    if there's a lesson worth keeping). 
-3. From the base worktree:
-   `git -C <base-worktree> worktree remove --force <session-worktree-path>` then
-   `git -C <base-worktree> branch -D session/<slice>`.
-4. Report what was removed. Close with **"Safe to `exit`."**
+3. **Defer the removal the same way the land path does** — never delete your own
+   cwd (see "The cross-worktree fact"). Write
+   `<root>/.claude/sessions/<session_id>.prune-on-exit` with `"discard": true`:
+   ```json
+   {
+     "base_worktree": "<base-worktree-path>",
+     "branch": "session/<slice>",
+     "session_worktree": "<this-worktree-path>",
+     "discard": true
+   }
+   ```
+   On `exit`, the SessionEnd hook force-removes the worktree and `-D`s the branch
+   (no merge check — the user chose to throw it away). Locating `<base-worktree>`
+   needs the same `git worktree list` lookup the land path uses in L4.
+4. Report what *will* be removed on `exit`. Close with **"Safe to `exit`."**
 
 ## Constraints
 
