@@ -47,7 +47,7 @@ defaults:
     # column. See "Scoping the *-drain commands" below.
     jql: 'sprint in openSprints()'
   scope_overrides:
-    # Per-command scope. Keys: drain, prove_drain. Replaces defaults.scope
+    # Per-command scope. Keys: drain, prove_drain, triage. Replaces defaults.scope
     # for that command.
     prove_drain: { jql: 'labels = needs-review' }
 
@@ -128,9 +128,10 @@ lifecycles:
   (the default) means whole-column, the original behavior. See
   [Scoping the *-drain commands](#scoping-the--drain-commands) below.
 - **`defaults.scope_overrides`** — per-command scope. Keys are command
-  names (`drain`, `prove_drain`); each is a `{ jql: '...' }` that
+  names (`drain`, `prove_drain`, `triage`); each is a `{ jql: '...' }` that
   *replaces* `defaults.scope` for that one command. Lets you, e.g.,
-  scope `drain` to a sprint but `prove_drain` to a review label.
+  scope `drain` to a sprint but `prove_drain` to a review label, or
+  `triage` to a single epic's children.
 - **`default_topology`** — which build topology
   `/jira-flow:plan-track-build-validate` and `/jira-flow:execute`
   delegate to (e.g., `hex-backend` → `hex-backend:engineering-lead`).
