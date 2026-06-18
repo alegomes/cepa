@@ -1,6 +1,6 @@
 {
   "name": "alegomes",
-  "description": "Multi-agent marketplace for Claude Code: shared mindset skills (common); topologies (multi-team — 9-agent generic; solo-pair — 2-agent lightweight; hex-backend — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery; book — 10-agent book-writing; docs — 9-agent documentation/onboarding; git-history — 3-agent Git-history analysis); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
+  "description": "Multi-agent marketplace for Claude Code: shared mindset skills (common); topologies (multi-team — 9-agent generic; solo-pair — 2-agent lightweight; hex-backend — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery; design — 6-agent product-design (brief → build-ready spec); book — 10-agent book-writing; docs — 9-agent documentation/onboarding; git-history — 3-agent Git-history analysis); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
   "owner": {
     "name": "alegomes"
   },
@@ -60,6 +60,13 @@
       "description": "Documentation/onboarding topology — orchestrator + docs-lead + 8 workers that sweep an existing project and produce a Diátaxis doc tree (tutorial / how-to / reference / explanation) for handing it off to engineers who weren't there for the decisions. Central discipline: separate the HOW (extractable from code) from the WHY (elicitable — owner/commit/ADR/Jira) and NEVER invent rationale — no source becomes an owner question, not a guess. Five owner-checkpointed phases: /docs:survey (read-only 4-front archaeology → gap-report), /docs:declutter (archive process-exhaust, demote rival front-doors), /docs:checkpoint (owner answers the WHY-gaps), /docs:author (write the grounded tree, Tutorial last), /docs:finalize (whole-tree consistency review). Path-lock keyed to docs/** + docs/_survey/. Standalone. Requires common@alegomes. Pair with jira-flow@alegomes to open cards from the checkpoint.",
       "version": "0.1.0",
       "tags": ["agents", "documentation", "onboarding", "diataxis", "technical-writing"]
+    },
+    {
+      "name": "design",
+      "source": "./design",
+      "description": "Product-design topology — design-lead + 5 workers (ux-architect, visual-designer, design-system-keeper, prototyper, design-critic) that turn a feature brief into a build-ready design spec engineering can implement from. Sits between discovery and engineering: owns the UX + visual design, not the build. Path-lock keyed to docs/design/**; produces artifacts, never code. Prototyper is the sole holder of Gamma/Canva MCP tools. Two entry points: /design:explore-critique-spec (linear) and a per-column lifecycle via jira-flow. Requires common@alegomes. Pair with discovery for the upstream brief and multi-team/hex-backend for the downstream build.",
+      "version": "0.1.0",
+      "tags": ["agents", "design", "ux", "visual-design", "prototyping"]
     },
     {
       "name": "git-history",
