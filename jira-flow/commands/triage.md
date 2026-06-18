@@ -102,7 +102,7 @@ For IMPLEMENTED rows, show the specific `file:line` + commit in EVIDENCE, and th
 
 ### 6. Grill the NEEDS-DECISION bucket
 
-For each NEEDS-DECISION card, ask the user a focused question (use `AskUserQuestion` when the choices are discrete; ask in prose when open-ended). Frame the actual decision and what each answer implies for routing — e.g.:
+For each NEEDS-DECISION card, ask the user a focused question (use `AskUserQuestion` when the choices are discrete; ask in prose when open-ended). The question, every option label, and every option description are last-hop user-facing text — apply `conversational-response`'s "translate jargon at the human boundary" (plain headline, protocol code in parens; never a bare `L4` / `altitude` / `waiver` / `AC binário` in a label). Frame the actual decision and what each answer implies for routing — e.g.:
 
 > WEGO-1237 — criteria conflict: criterion 2 says "any authenticated user", criterion 4 says "admins only". Which holds?
 > • Any authenticated user → card becomes READY (→ To Do)

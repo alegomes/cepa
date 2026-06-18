@@ -49,6 +49,27 @@ erase:
 - A coded term with no plain-language gloss anywhere in a user-facing reply is a
   defect — the same class of miss as a wall of undescribed diff.
 
+### Interactive prompts are user-facing too
+
+`AskUserQuestion` is the last hop to the user, not an internal channel — the
+rule above applies to **every part of the dialog**, not just prose replies:
+
+- **The question text** — frame the actual decision in plain words; the code
+  goes in parentheses. Not "WEGO-1841: L4 surfaced an unasserted response on the
+  touched endpoint — accept the L3 waiver?" but "WEGO-1841: the tests prove the
+  fix works, but one error response isn't checked. Accept anyway? *(L4 finding,
+  L3 proven)*."
+- **Every option label** — labels are short (a few words), so jargon compresses
+  worst exactly here. A label may carry a code only if it *also* reads in plain
+  language: `Accept — fix is proven` over `Waiver → Done`, `Send back for one
+  more pass` over `Exigir L4`.
+- **Every option description** — this is where the gloss lives when the label
+  has no room. State what choosing it *means and does* in plain words, code in
+  parens. The description must stand on its own for a reader who has never seen
+  the protocol.
+- Same defect bar: a coded term with no plain-language gloss anywhere in the
+  question or its options is a defect.
+
 ## Anti-patterns
 
 - Pasting the entire diff back. The diff is in the files.
