@@ -159,6 +159,13 @@ The change is provably not load-bearing somewhere. Send it back. Read
 
 Deterministic levels passed, but L4 surfaced something or a level couldn't run.
 Leave the card in Review — this is exactly the card that needs your judgment.
+
+If you put the decision to the user interactively (an `AskUserQuestion` rather
+than just the Jira comment), the question, the option labels, and the option
+descriptions are last-hop user-facing text — apply `conversational-response`'s
+"translate jargon at the human boundary" to all of them (plain headline,
+protocol code in parens; never a bare `L4` / `waiver` / `altitude` in a label).
+
 Delegate to `atlassian-expert`:
 
 > Topology: `<default_topology>`.
