@@ -12,3 +12,6 @@ multi-agent/
 # reappears, rm in BOTH clones simultaneously (Insync resurrects it
 # otherwise). See conversation 2026-05-21 / 2026-05-26.
 common/expertise/expertise
+
+# Session intent log (session-log hook scratch)
+.claude/session-log.md
