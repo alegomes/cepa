@@ -1,6 +1,6 @@
 {
   "name": "alegomes",
-  "description": "Multi-agent marketplace for Claude Code: shared mindset skills (common); topologies (build-team — 9-agent generic; build-solo — 2-agent lightweight; build-hex — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery; design — 6-agent product-design (brief → build-ready spec); book — 10-agent book-writing; docs — 9-agent documentation/onboarding; git-history — 3-agent Git-history analysis); plus a Jira lifecycle layer (board-flow). Originally adapted from indydev Dan's lead-agents pattern.",
+  "description": "Multi-agent marketplace for Claude Code: shared mindset skills (common); topologies (build-team — 9-agent generic; build-solo — 2-agent lightweight; build-hex — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery; design — 6-agent product-design (brief → build-ready spec); docs — 9-agent documentation/onboarding); plus a Jira lifecycle layer (board-flow). Book-writing and git-history analysis split out to the alegomes-labs marketplace. Originally adapted from indydev Dan's lead-agents pattern.",
   "owner": {
     "name": "alegomes"
   },
@@ -48,13 +48,6 @@
       "tags": ["agents", "jira", "atlassian", "tracking", "workflow"]
     },
     {
-      "name": "book",
-      "source": "./book",
-      "description": "Book-writing topology — 2 leads + 10 workers for authoring technical books. /book:inception grills the author for audience + produces chapter map. /book:write-chapter runs the per-chapter loop (outline→research→draft→code→exercises→review). /book:finalize runs continuity review across all chapters then compiles to LaTeX. Standalone. Requires common@alegomes.",
-      "version": "0.1.0",
-      "tags": ["agents", "book", "writing", "technical-writing", "authoring"]
-    },
-    {
       "name": "docs",
       "source": "./docs-topology",
       "description": "Documentation/onboarding topology — orchestrator + docs-lead + 8 workers that sweep an existing project and produce a Diátaxis doc tree (tutorial / how-to / reference / explanation) for handing it off to engineers who weren't there for the decisions. Central discipline: separate the HOW (extractable from code) from the WHY (elicitable — owner/commit/ADR/Jira) and NEVER invent rationale — no source becomes an owner question, not a guess. Five owner-checkpointed phases: /docs:survey (read-only 4-front archaeology → gap-report), /docs:declutter (archive process-exhaust, demote rival front-doors), /docs:checkpoint (owner answers the WHY-gaps), /docs:author (write the grounded tree, Tutorial last), /docs:finalize (whole-tree consistency review). Path-lock keyed to docs/** + docs/_survey/. Standalone. Requires common@alegomes. Pair with board-flow@alegomes to open cards from the checkpoint.",
@@ -67,13 +60,6 @@
       "description": "Product-design topology — design-lead + 5 workers (ux-architect, visual-designer, design-system-keeper, prototyper, design-critic) that turn a feature brief into a build-ready design spec engineering can implement from. Sits between discovery and engineering: owns the UX + visual design, not the build. Path-lock keyed to docs/design/**; produces artifacts, never code. Prototyper is the sole holder of Gamma/Canva MCP tools. Two entry points: /design:explore-critique-spec (linear) and a per-column lifecycle via board-flow. Requires common@alegomes. Pair with discovery for the upstream brief and build-team/build-hex for the downstream build.",
       "version": "0.1.0",
       "tags": ["agents", "design", "ux", "visual-design", "prototyping"]
-    },
-    {
-      "name": "git-history",
-      "source": "./git-history",
-      "description": "Git-history analysis topology — orchestrator + git-historian lead + 2 workers (history-collector, history-narrator). Two jobs: tell a project's story from its branch/commit history, and analyze effort allocation across one or more repos on a single timeline. A deterministic collector (scripts/collect.py) extracts effort proxies + narrative signals into datapack.json; scripts/render.py draws matplotlib charts; the narrator writes prose + a structured report, separating evidence from inference. /git-history:analyze runs the flow. Standalone. Requires common@alegomes.",
-      "version": "0.1.0",
-      "tags": ["agents", "git", "history", "effort-analysis", "storytelling"]
     },
     {
       "name": "review-gate",

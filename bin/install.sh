@@ -9,7 +9,7 @@
 # With --clean: also uninstalls existing plugins and nukes the marketplace
 #   plugin cache before reinstalling. Use this when you've edited plugin
 #   source without bumping versions and want CC to pick up the changes.
-# With --topology=NAME (build-team | build-solo | build-hex | discovery | book | docs | git-history): also copies
+# With --topology=NAME (build-team | build-solo | build-hex | discovery | docs): also copies
 #   that topology's snippet into the host project's .claude/ and appends the
 #   matching @-import line to CLAUDE.md (idempotent, creates CLAUDE.md if
 #   missing). Skip this flag if you want to wire CLAUDE.md yourself.
@@ -47,9 +47,9 @@ for arg in "$@"; do
 done
 
 case "${TOPOLOGY}" in
-  ""|build-team|build-solo|build-hex|discovery|book|docs|git-history) ;;
+  ""|build-team|build-solo|build-hex|discovery|docs) ;;
   *)
-    echo "✗ Unknown --topology: ${TOPOLOGY}. Use build-team, build-solo, build-hex, discovery, book, docs, or git-history."
+    echo "✗ Unknown --topology: ${TOPOLOGY}. Use build-team, build-solo, build-hex, discovery, or docs."
     exit 1
     ;;
 esac
@@ -100,9 +100,7 @@ if [ "${CLEAN}" -eq 1 ]; then
   claude plugin uninstall "build-hex@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "discovery@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "board-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "book@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "docs@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "git-history@${MARKETPLACE_NAME}" 2>/dev/null || true
 
   if [ -d "${CACHE_DIR}" ]; then
     echo "▶ --clean: removing plugin cache at ${CACHE_DIR}"
@@ -136,14 +134,8 @@ claude plugin install discovery@alegomes
 echo "▶ Installing board-flow@alegomes (Jira lifecycle layer)"
 claude plugin install board-flow@alegomes
 
-echo "▶ Installing book@alegomes (10-agent book-writing topology)"
-claude plugin install book@alegomes
-
 echo "▶ Installing docs@alegomes (9-agent documentation/onboarding topology)"
 claude plugin install docs@alegomes
-
-echo "▶ Installing git-history@alegomes (3-agent Git-history analysis topology)"
-claude plugin install git-history@alegomes
 
 # --- Per-project setup: symlink for centralized expertise ---
 
@@ -280,7 +272,7 @@ if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
       echo "    Edit it: set defaults.site, defaults.project_key, defaults.board_id,"
       echo "    and the lifecycle status names to match your discovery board."
     fi
-  elif [ "${TOPOLOGY}" = "build-hex" ] || [ "${TOPOLOGY}" = "build-team" ] || [ "${TOPOLOGY}" = "book" ] || [ "${TOPOLOGY}" = "docs" ]; then
+  elif [ "${TOPOLOGY}" = "build-hex" ] || [ "${TOPOLOGY}" = "build-team" ] || [ "${TOPOLOGY}" = "docs" ]; then
     if [ -f "${JIRA_FLOW_DST}" ]; then
       echo "  ✔ ${JIRA_FLOW_DST} already exists — leaving untouched"
     else
@@ -376,16 +368,14 @@ fi
 echo ""
 echo "✔ Done."
 echo ""
-echo "Nine plugins installed:"
+echo "Seven plugins installed:"
 echo "    common       — 8 mindset skills (required by every topology)"
 echo "    build-team   — 9-agent generic topology + /build-team:plan-build-validate"
 echo "    build-solo    — 2-agent dev/reviewer topology"
 echo "    build-hex  — 13-agent hexagonal-architecture topology + per-Task quality loop"
 echo "    discovery    — 6-agent continuous product-discovery topology"
 echo "    board-flow    — atlassian-expert + Jira-aware commands (pair with any topology)"
-echo "    book         — 10-agent book-writing topology + /book:inception + /book:write-chapter"
 echo "    docs         — 9-agent documentation/onboarding topology + /docs:survey ... /docs:finalize"
-echo "    git-history  — 3-agent Git-history analysis topology + /git-history:analyze"
 echo ""
 if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   echo "Host project setup at ${HOST_PROJECT}:"
@@ -399,9 +389,7 @@ if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
       build-solo)   echo "    /build-solo:* (or just describe a small task — 2-agent dev/reviewer)" ;;
       build-hex) echo "    /build-hex:plan-build-validate <task>" ;;
       discovery)   echo "    /discovery:capture <signal>   (then /board-flow:advance <KEY> to move forward)" ;;
-      book)        echo "    /book:inception \"<book title>\"   (then /book:write-chapter <slug>)" ;;
       docs)        echo "    /docs:survey   (then /docs:declutter → /docs:checkpoint → /docs:author → /docs:finalize)" ;;
-      git-history) echo "    /git-history:analyze <repo-path> [more-paths...]   (story + effort report)" ;;
     esac
   else
     echo ""
