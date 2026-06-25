@@ -8,14 +8,14 @@ composable plugins.
 | Document | Read it for |
 |---|---|
 | **[docs/getting-started.md](docs/getting-started.md)** | First 10 minutes: install, pick a topology, run your first command. |
-| **[docs/topologies.md](docs/topologies.md)** | Choosing between `build-hex`, `build-team`, `build-solo`, `discovery`, `book`. Composition rules with `jira-flow`. |
+| **[docs/topologies.md](docs/topologies.md)** | Choosing between `build-hex`, `build-team`, `build-solo`, `discovery`, `book`. Composition rules with `board-flow`. |
 | **[docs/commands.md](docs/commands.md)** | Full reference for every slash command, grouped by plugin. |
-| **[docs/jira-flow.md](docs/jira-flow.md)** | `jira-flow.yaml` schema (`defaults`, `status_map`, `lifecycles`), `/configure` walkthrough, Implementation Summary contract, read-back verification. |
+| **[docs/board-flow.md](docs/board-flow.md)** | `board-flow.yaml` schema (`defaults`, `status_map`, `lifecycles`), `/configure` walkthrough, Implementation Summary contract, read-back verification. |
 | **[docs/autonomous-mode.md](docs/autonomous-mode.md)** | Unattended-operation lifecycle: `/autonomous-start` → checkpoint hook → `/autonomous-resume` → `/debrief`. Survives token-limit hits and session crashes. |
 | **[docs/handoff.md](docs/handoff.md)** | Session handoff: continuous checkpoint (Stop hook) + transparent branch-keyed resume (SessionStart) + `/handoff` command + wrap-up nudge. Stop and pick up cleanly in a new session without hand-writing a summary; survives token-limit kills. |
 | **[docs/green-or-revert.md](docs/green-or-revert.md)** | Build-state machine (`UNKNOWN`/`SUCCESS`/`STALE`/`FAILURE`). Hard gate on commits/pushes/PRs while build is broken. Stops the "I think the test passes" failure mode. |
 | **[docs/acceptance-completeness.md](docs/acceptance-completeness.md)** | Per-card acceptance-evidence machine (`absent`/`incomplete`/`complete`). The `completion-auditor` pins each criterion to its altitude; the `acceptance-gate` hook blocks the In-Review transition until a test demonstrates the criterion at the surface it was written at. Stops the "both halves are covered" failure mode. |
-| **[docs/proof-gate.md](docs/proof-gate.md)** | Automated, change-driven gate for the Review column. The `proof-reviewer` interrogates the whole diff and proves every changed line is load-bearing at the external surface — IT coverage of the diff, diff-scoped mutation, adversarial input, regression-red-at-base. `/jira-flow:prove` + `/jira-flow:prove-drain` triage Review by evidence: PROVEN advances, UNPROVEN bounces back, NEEDS-HUMAN stays for you. The outbound counterpart to acceptance-completeness. |
+| **[docs/proof-gate.md](docs/proof-gate.md)** | Automated, change-driven gate for the Review column. The `proof-reviewer` interrogates the whole diff and proves every changed line is load-bearing at the external surface — IT coverage of the diff, diff-scoped mutation, adversarial input, regression-red-at-base. `/board-flow:prove` + `/board-flow:prove-drain` triage Review by evidence: PROVEN advances, UNPROVEN bounces back, NEEDS-HUMAN stays for you. The outbound counterpart to acceptance-completeness. |
 | **[docs/context-forking.md](docs/context-forking.md)** | Fork a discussion into an isolated context and return with only the conclusion: `/branch` + `/return`, the two-session isolation model, the `.claude/forks/` LIFO stack, and when to use a subagent instead. |
 | **[docs/e2e-cycle.md](docs/e2e-cycle.md)** | The four E2E spec commands (`/spec-e2e`, `/document-e2e`, `/resync-e2e`, `/audit-e2e`) and how they relate (intent ↔ spec ↔ code ↔ tests). |
 | **[docs/troubleshooting.md](docs/troubleshooting.md)** | Common errors: path-lock blocks, gate-advance blocks, cache staleness, MCP auth dropout, worktree-strips-Task quirk. |
@@ -54,12 +54,12 @@ composable plugins.
   assumption-tester + evidence-auditor + epic-briefer). Sits *upstream*
   of the build topologies — translates raw signals into validated
   opportunities, hands off to engineering via a delivery brief.
-- **`jira-flow`** — adds an `atlassian-expert` worker plus Jira-aware
+- **`board-flow`** — adds an `atlassian-expert` worker plus Jira-aware
   slash commands (`configure`, `capture`, `plan-track-build-validate`,
   `execute`, `drain`, `advance`). Layers on top of any topology that
   ships the standard 3-lead set, OR any topology with a custom lifecycle
-  declared in `jira-flow.yaml` (used by `/advance` — discovery's column
-  flow rides on this). Project Jira config lives at `jira-flow.yaml` in
+  declared in `board-flow.yaml` (used by `/advance` — discovery's column
+  flow rides on this). Project Jira config lives at `board-flow.yaml` in
   the project root: `defaults` block (site / project_key / board_id /
   status_map / issue_types), plus `default_topology` and per-topology
   lifecycles. `atlassian-expert` enforces anti-hallucination (refuses
@@ -98,7 +98,7 @@ agent matrices.
 
 ```
 claude-multi-team-plugin/
-├── .claude-plugin/marketplace.json  # 8-plugin marketplace: common + build-team + build-solo + build-hex + discovery + jira-flow + book + git-history
+├── .claude-plugin/marketplace.json  # 8-plugin marketplace: common + build-team + build-solo + build-hex + discovery + board-flow + book + git-history
 ├── bin/install.sh                   # one-command installer for all eight plugins
 ├── common/                          # shared mindset skills + centralized expertise (required by every topology)
 │   ├── .claude-plugin/plugin.json
@@ -125,12 +125,12 @@ claude-multi-team-plugin/
 │   ├── agents/                      # discovery-lead + 5 workers (framer, researcher, tester, auditor, briefer)
 │   ├── commands/                    # /discovery:capture
 │   ├── hooks/path-lock.py           # keyed to docs/discovery/**
-│   ├── jira-flow.lifecycle.example.yaml
+│   ├── board-flow.lifecycle.example.yaml
 │   └── discovery-topology.md
-├── jira-flow/                       # Jira lifecycle layer (pair with any topology)
+├── board-flow/                       # Jira lifecycle layer (pair with any topology)
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/atlassian-expert.md
-│   └── commands/                    # /jira-flow:{capture,plan-track-build-validate,execute,drain,advance}
+│   └── commands/                    # /board-flow:{capture,plan-track-build-validate,execute,drain,advance}
 ├── book/                            # 12-agent book-writing topology (2 leads + 10 workers)
 ├── git-history/                     # 3-agent Git-history analysis topology
 ├── agents-overview.md               # cross-agent matrix + indydev-Dan idea audit
@@ -154,7 +154,7 @@ That single command does **all three** setup steps:
 
 1. Registers this repo as a Claude Code plugin marketplace and installs
    all eight plugins (`common` + `build-team` + `build-solo` +
-   `build-hex` + `discovery` + `jira-flow` + `book` + `git-history`).
+   `build-hex` + `discovery` + `board-flow` + `book` + `git-history`).
 2. Sets up the current directory as a host project by creating
    `.claude/expertise` as a **symlink** to the plugin's centralized
    expertise directory (so accumulated agent knowledge follows you
@@ -164,7 +164,7 @@ That single command does **all three** setup steps:
    `.claude/` and appends `@.claude/<topology>-topology.md` to
    `CLAUDE.md` (creating `CLAUDE.md` if missing). For
    `--topology=discovery`, the lifecycle template is also seeded to
-   `jira-flow.yaml` (edit project_key, issue_type,
+   `board-flow.yaml` (edit project_key, issue_type,
    and status names to match your discovery board). The append is
    idempotent — re-running
    doesn't duplicate the line.
@@ -206,7 +206,7 @@ If you'd rather see each step, run these in any Claude Code session:
 /plugin install build-solo@alegomes     # 2-agent dev/reviewer pair
 /plugin install build-hex@alegomes   # 14-agent hexagonal-architecture topology
 /plugin install discovery@alegomes     # 6-agent continuous product-discovery topology
-/plugin install jira-flow@alegomes     # Jira lifecycle layer (pair with a topology)
+/plugin install board-flow@alegomes     # Jira lifecycle layer (pair with a topology)
 /plugin install book@alegomes          # 12-agent book-writing topology
 /plugin install git-history@alegomes   # 3-agent Git-history analysis topology
 ```
@@ -225,10 +225,10 @@ mindset skills (`mental-model`, `active-listener`, `zero-micromanagement`,
 these skills in their bodies; without `common` installed, the references
 go nowhere.
 
-**`jira-flow` requires a topology** — its commands delegate to
+**`board-flow` requires a topology** — its commands delegate to
 `planning-lead`, `engineering-lead`, `validation-lead` by name.
 `build-hex` and `build-team` both ship those leads; `build-solo`
-doesn't, so jira-flow + build-solo-only would fail.
+doesn't, so board-flow + build-solo-only would fail.
 
 The expertise symlink is what makes accumulated agent learnings persist
 *across* projects — agents read and write to a single shared location
@@ -283,7 +283,7 @@ In the host project, in Claude Code:
 
 For `build-team`, `/agents` lists all 9 agents (3 leads + 6 workers).
 For `build-solo`, 2 agents. For `build-hex`, all 14. Plus
-`atlassian-expert` from `jira-flow` if installed. Either way the eight
+`atlassian-expert` from `board-flow` if installed. Either way the eight
 `common` skills should be auto-loaded into the session.
 
 Then try a canonical workflow (use the right namespaced command for
@@ -291,8 +291,8 @@ your installed topology):
 
 ```
 /build-team:plan-build-validate add a --json output flag to predict
-# OR — if jira-flow is also installed:
-/jira-flow:plan-track-build-validate add a --json output flag to predict
+# OR — if board-flow is also installed:
+/board-flow:plan-track-build-validate add a --json output flag to predict
 # OR — for build-hex:
 /build-hex:plan-build-validate <task>
 ```
@@ -351,7 +351,7 @@ when fan-out overhead would dwarf the task.
 | Agents can't edit the enforcement code itself | `enforcement-guard.py` (blocks subagent writes to `.claude/plugins/`, `.claude/hooks/`, settings) | No — for plugin subagents; main session is ungated by design |
 | Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
 | Plan → build → validate ordering | prompt-only (in command + topology) | Yes — orchestrator can reorder if user pushes |
-| jira-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
+| board-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
 
 If you see the main session writing code, that's a *prompt* failure —
 tighten the topology snippet, bump the version, `/plugin update`. The
@@ -404,23 +404,23 @@ column at a time:
 
 ```
 /discovery:capture "raw signal"     → card lands in Inbox
-/jira-flow:advance <KEY>            → discovery-lead routes to opportunity-framer (Framing)
-/jira-flow:advance <KEY>            → user-researcher (Researching)
+/board-flow:advance <KEY>            → discovery-lead routes to opportunity-framer (Framing)
+/board-flow:advance <KEY>            → user-researcher (Researching)
 ... human collects evidence ...
-/jira-flow:advance <KEY>            → assumption-tester writes test plan; gate on Validating
+/board-flow:advance <KEY>            → assumption-tester writes test plan; gate on Validating
 ... human runs tests, drops evidence in docs/discovery/<KEY>/evidence/ ...
-/jira-flow:advance <KEY>            → evidence-auditor returns verdicts
-/jira-flow:advance <KEY>            → epic-briefer writes handoff brief, links to engineer board
+/board-flow:advance <KEY>            → evidence-auditor returns verdicts
+/board-flow:advance <KEY>            → epic-briefer writes handoff brief, links to engineer board
 ```
 
 6 agents, but each card invokes them sequentially (or loops back). The
-`/jira-flow:advance` command reads `jira-flow.yaml` to
+`/board-flow:advance` command reads `board-flow.yaml` to
 know which agent to invoke per column. Use for product-discovery work
 *upstream* of any build topology.
 
-**jira-flow** layers on top of any topology — its commands delegate to
+**board-flow** layers on top of any topology — its commands delegate to
 `planning-lead`/`engineering-lead`/`validation-lead` (for the lead-based
-flows) or to `on_enter` agents declared in `jira-flow.yaml`
+flows) or to `on_enter` agents declared in `board-flow.yaml`
 (for `/advance`). Adds Jira lifecycle: Epic + Stories registered for build
 topologies; column-by-column transitions for discovery (or any custom
 lifecycle). See `agents-overview.md` §"Workflow walkthroughs" for a
@@ -433,13 +433,13 @@ turn-by-turn narrative.
   `discovery` is *upstream* of build topologies — they don't compete,
   they hand off via the engineer-board Epic. If you want continuous
   discovery and code delivery in the same project, install discovery
-  + a build topology + jira-flow, and let the handoff cross the
+  + a build topology + board-flow, and let the handoff cross the
   boundary explicitly via `epic-briefer` → `epic-author`.
 - **`common` is required** for every topology. The skills are
   referenced in agent bodies.
-- **`jira-flow`'s lead-based commands require a 3-lead topology**
+- **`board-flow`'s lead-based commands require a 3-lead topology**
   (build-team or build-hex). build-solo has no leads → those commands
-  fail at first delegation. `/jira-flow:advance` is generic: it works
+  fail at first delegation. `/board-flow:advance` is generic: it works
   with discovery (or any topology that ships a lifecycle file).
 - **You can swap topologies** — change the `@-import` line in
   `CLAUDE.md` and the orchestrator behavior swaps with it. Plugins
@@ -454,7 +454,7 @@ turn-by-turn narrative.
 | `[build-hex path-lock] BLOCKED: agent 'X' cannot Edit Y` | worker writing outside its domain | correct — let it delegate, or check `ALLOWED_WRITES` if your layout differs |
 | `[build-hex path-lock] BLOCKED: unknown agent 'orchestrator'` on a worker tool call | hook can't read `agent_type` (CC version mismatch) | see Troubleshooting §"Hook fails to detect agent name" |
 | `/agents` doesn't list a topology after install | `common@alegomes` missing, or topology not installed | re-run `bin/install.sh` |
-| jira-flow commands hang on build-solo | no leads exist | switch to build-team or build-hex |
+| board-flow commands hang on build-solo | no leads exist | switch to build-team or build-hex |
 
 ### What it can't do
 
@@ -487,7 +487,7 @@ This is the whole point of using a plugin instead of copy-pasting `.claude/`:
    | `build-team/` (agents, commands, hooks, topology) | `build-team` | `build-team/.claude-plugin/plugin.json` + `build-team` entry in `marketplace.json` |
    | `build-solo/` | `build-solo` | `build-solo/.claude-plugin/plugin.json` + `build-solo` entry in `marketplace.json` |
    | `build-hex/` (agents, commands, hook, topology) | `build-hex` | `build-hex/.claude-plugin/plugin.json` + `build-hex` entry in `marketplace.json` |
-   | `jira-flow/` (agent, commands) | `jira-flow` | `jira-flow/.claude-plugin/plugin.json` + `jira-flow` entry in `marketplace.json` |
+   | `board-flow/` (agent, commands) | `board-flow` | `board-flow/.claude-plugin/plugin.json` + `board-flow` entry in `marketplace.json` |
    | `common/skills/` or `common/expertise/` | `common` | `common/.claude-plugin/plugin.json` + `common` entry in `marketplace.json` |
    | Cross-cutting | all affected | bump each plugin's two files |
 
@@ -594,5 +594,5 @@ different field name, inspect the payload by adding
 **`/build-team:plan-build-validate` says "Unknown command"**
 CC plugin commands are namespaced by plugin. Use the namespaced form
 (`/build-team:plan-build-validate`, `/build-hex:plan-build-validate`,
-`/jira-flow:execute`, etc.) — the bare form (`/plan-build-validate`)
+`/board-flow:execute`, etc.) — the bare form (`/plan-build-validate`)
 won't work.

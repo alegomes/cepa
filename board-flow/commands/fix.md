@@ -1,17 +1,17 @@
 ---
-description: Execute a Bug-type Jira card via the topology's reproduce-fix-verify flow (failing test first, fix, verify). Wraps the bug flow with Jira lifecycle — transitions through To Do → In Progress → In Review with Implementation Summary. Use directly for bugs, or rely on /jira-flow:execute's auto-detect to route here when the card's issue type is Bug.
+description: Execute a Bug-type Jira card via the topology's reproduce-fix-verify flow (failing test first, fix, verify). Wraps the bug flow with Jira lifecycle — transitions through To Do → In Progress → In Review with Implementation Summary. Use directly for bugs, or rely on /board-flow:execute's auto-detect to route here when the card's issue type is Bug.
 argument-hint: <jira-key> [--no-scope]
 ---
 
-# /jira-flow:fix
+# /board-flow:fix
 
 ## Purpose
 
-Bug-flow wrapper around the topology's `reproduce-fix-verify` command. Mirror of `/jira-flow:execute` but routes the bug-shaped work: confirm reproducer → write failing regression test → fix → verify with green build → APPROVE. Transitions the Jira card through the canonical lifecycle (In Progress → In Review with Implementation Summary).
+Bug-flow wrapper around the topology's `reproduce-fix-verify` command. Mirror of `/board-flow:execute` but routes the bug-shaped work: confirm reproducer → write failing regression test → fix → verify with green build → APPROVE. Transitions the Jira card through the canonical lifecycle (In Progress → In Review with Implementation Summary).
 
-**Requires** a topology with a `reproduce-fix-verify` command (currently `build-hex` ships it; `build-team` and `build-solo` do not). If your topology doesn't have it, this command aborts with a clear error suggesting `/jira-flow:execute --force-feature-flow` as the fallback.
+**Requires** a topology with a `reproduce-fix-verify` command (currently `build-hex` ships it; `build-team` and `build-solo` do not). If your topology doesn't have it, this command aborts with a clear error suggesting `/board-flow:execute --force-feature-flow` as the fallback.
 
-For a non-existent card (greenfield bug discovery) use `/jira-flow:capture Bug: <description>` first, then `/jira-flow:fix <KEY>`.
+For a non-existent card (greenfield bug discovery) use `/board-flow:capture Bug: <description>` first, then `/board-flow:fix <KEY>`.
 
 ## Variables
 
@@ -26,10 +26,10 @@ You are the orchestrator. Drive a focused reproduce → fix → verify flow on o
 
 ### 0. Resolve topology prefix
 
-Read the project Jira config: `jira-flow.yaml` at project root if present, otherwise legacy `.claude/jira-flow.lifecycle.yaml`. Extract the top-level `default_topology` value.
+Read the project Jira config: `board-flow.yaml` at project root if present, otherwise legacy `.claude/board-flow.lifecycle.yaml`. Extract the top-level `default_topology` value.
 
 - Prefix every topology-agent delegation with it: `<default_topology>:engineering-lead`, `<default_topology>:qa-engineer`, etc.
-- Check that `/<default_topology>:reproduce-fix-verify` exists. If the topology doesn't ship that command (build-team and build-solo don't), abort with: "Topology `<default_topology>` doesn't ship `reproduce-fix-verify`. Either switch topologies, or use `/jira-flow:execute <jira-key> --force-feature-flow` to run the plan-build-validate flow on this bug instead (heavier, but works)."
+- Check that `/<default_topology>:reproduce-fix-verify` exists. If the topology doesn't ship that command (build-team and build-solo don't), abort with: "Topology `<default_topology>` doesn't ship `reproduce-fix-verify`. Either switch topologies, or use `/board-flow:execute <jira-key> --force-feature-flow` to run the plan-build-validate flow on this bug instead (heavier, but works)."
 
 `atlassian-expert` is always bare. Write delegations include `Topology: <default_topology>` as the first line of the prompt so per-topology overrides apply (e.g., the right Team field per topology).
 
@@ -60,7 +60,7 @@ If all three are present → proceed.
 
 If any are missing AND the card description is too vague to attempt reproduction → delegate to `atlassian-expert`:
 
-> Add a comment to $ARGUMENTS: "[automated] /jira-flow:fix paused — the description lacks reproduction details. Need: observed behavior, expected behavior, steps to reproduce or input that triggers. Please update the card and re-run." Do NOT transition.
+> Add a comment to $ARGUMENTS: "[automated] /board-flow:fix paused — the description lacks reproduction details. Need: observed behavior, expected behavior, steps to reproduce or input that triggers. Please update the card and re-run." Do NOT transition.
 
 Report to the user that the card needs more detail. Stop.
 
@@ -71,7 +71,7 @@ start: if `.claude/acceptance/$ARGUMENTS.yaml` exists, delete it (the
 `completion-auditor` will rewrite it at the end of this run).
 
 **Capture the change baseline** for the later change-scoped proof
-(`/jira-flow:prove`). Before any code is written, record the current commit as
+(`/board-flow:prove`). Before any code is written, record the current commit as
 this card's baseline: run `git rev-parse HEAD` and write
 `.claude/cards/$ARGUMENTS.yaml`:
 
@@ -86,7 +86,7 @@ important: `proof-reviewer` uses it to confirm the regression test goes **red at
 captures the bug. If this is not a git repo or `git` is unavailable, skip
 silently and note it.
 
-Read `defaults.status_map.in_progress` from `jira-flow.yaml`. Delegate to `atlassian-expert`:
+Read `defaults.status_map.in_progress` from `board-flow.yaml`. Delegate to `atlassian-expert`:
 
 > Topology: `<default_topology>`.
 >
@@ -129,7 +129,7 @@ lands. (Even if you tried to transition anyway, the `acceptance-gate` hook in
 `common` reads the artifact and blocks the `transitionJiraIssue` call while
 status != complete — this precondition just fails earlier and more clearly.)
 
-Build the Implementation Summary from the reproduce-fix-verify report (reproducer test path, fix commit SHA, paths touched, qa-engineer's BUILD SUCCESS evidence, and the acceptance artifact path). Read `defaults.status_map.in_review` from `jira-flow.yaml`.
+Build the Implementation Summary from the reproduce-fix-verify report (reproducer test path, fix commit SHA, paths touched, qa-engineer's BUILD SUCCESS evidence, and the acceptance artifact path). Read `defaults.status_map.in_review` from `board-flow.yaml`.
 
 Delegate to `atlassian-expert`:
 
@@ -162,7 +162,7 @@ Delegate to `atlassian-expert`:
 >
 > Add a comment to $ARGUMENTS:
 >
-> "[automated] /jira-flow:fix concluded NOT-A-BUG. Reason: <one-line evidence from reproducer attempt>. The reported behavior could not be reproduced; the code at `<file:line>` already handles the case. Suggest closing as 'Cannot Reproduce' or 'Not a Bug' — leaving status decision to the reporter."
+> "[automated] /board-flow:fix concluded NOT-A-BUG. Reason: <one-line evidence from reproducer attempt>. The reported behavior could not be reproduced; the code at `<file:line>` already handles the case. Suggest closing as 'Cannot Reproduce' or 'Not a Bug' — leaving status decision to the reporter."
 >
 > Do NOT transition. Leave status decision to the human.
 

@@ -1,6 +1,6 @@
 ---
 name: epic-briefer
-description: Use when discovery-lead has a Validated card ready for engineering handoff. Reads the card's framing + research + assumptions + audit and writes a delivery brief at docs/discovery/<card>/handoff.md. Then (if jira-flow is installed) creates a linked Jira card on the engineer board for the build topology's epic-author to pick up. Translator, not re-thinker.
+description: Use when discovery-lead has a Validated card ready for engineering handoff. Reads the card's framing + research + assumptions + audit and writes a delivery brief at docs/discovery/<card>/handoff.md. Then (if board-flow is installed) creates a linked Jira card on the engineer board for the build topology's epic-author to pick up. Translator, not re-thinker.
 tools: Read, Glob, Grep, Write, Task
 model: sonnet
 color: purple

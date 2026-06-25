@@ -1,25 +1,25 @@
 ---
-description: Interactive setup for jira-flow.yaml at project root. Walks the user through site, project_key, board_id, issue_types, and default_topology. Validates site against the user's actually-accessible Atlassian sites via atlassian-expert (no guessing). Use after `bin/install.sh --topology=NAME` to replace the placeholder values, or anytime atlassian-expert is refusing operations because of missing config.
-argument-hint: [--migrate]   (optional: detect legacy .claude/jira-flow.lifecycle.yaml and offer to migrate it to project root)
+description: Interactive setup for board-flow.yaml at project root. Walks the user through site, project_key, board_id, issue_types, and default_topology. Validates site against the user's actually-accessible Atlassian sites via atlassian-expert (no guessing). Use after `bin/install.sh --topology=NAME` to replace the placeholder values, or anytime atlassian-expert is refusing operations because of missing config.
+argument-hint: [--migrate]   (optional: detect legacy .claude/board-flow.lifecycle.yaml and offer to migrate it to project root)
 ---
 
-# /jira-flow:configure
+# /board-flow:configure
 
 ## Purpose
 
-`bin/install.sh` seeds `jira-flow.yaml` with placeholder values (`example.atlassian.net`, `EXAMPLE`, etc.) — those have to be replaced before any `/jira-flow:*` command will work. This command does that interactively: asks for each value, validates the site against your actual Atlassian sites (so you can't typo it), and writes the file.
+`bin/install.sh` seeds `board-flow.yaml` with placeholder values (`example.atlassian.net`, `EXAMPLE`, etc.) — those have to be replaced before any `/board-flow:*` command will work. This command does that interactively: asks for each value, validates the site against your actual Atlassian sites (so you can't typo it), and writes the file.
 
 This is one of the few commands where **asking the user questions is the point**. The autonomous-mode skill, if active, does NOT apply here — configuration values come from the user, not inference.
 
 ## Variables
 
-- `$ARGUMENTS` — `--migrate` (optional). If set, also looks for legacy `.claude/jira-flow.lifecycle.yaml` and offers to move its contents into the new file at project root.
+- `$ARGUMENTS` — `--migrate` (optional). If set, also looks for legacy `.claude/board-flow.lifecycle.yaml` and offers to move its contents into the new file at project root.
 
 ## Instructions
 
 You are the orchestrator. Drive the user through each value. Don't fabricate any value — every field comes from the user's answer or from `atlassian-expert`'s validated lookup.
 
-`atlassian-expert` is the only Jira read path. If it isn't installed, abort: "jira-flow's atlassian-expert is required for site validation; install jira-flow@alegomes."
+`atlassian-expert` is the only Jira read path. If it isn't installed, abort: "board-flow's atlassian-expert is required for site validation; install board-flow@alegomes."
 
 ## Workflow
 
@@ -27,17 +27,17 @@ You are the orchestrator. Drive the user through each value. Don't fabricate any
 
 Check for these files in order:
 
-- `jira-flow.yaml` at project root → "current config" (canonical location).
-- `.claude/jira-flow.lifecycle.yaml` → "legacy config".
+- `board-flow.yaml` at project root → "current config" (canonical location).
+- `.claude/board-flow.lifecycle.yaml` → "legacy config".
 
 Branches:
 
 - **Neither exists** → fresh setup. Skip to step 2.
 - **Canonical exists, legacy doesn't** → re-configuration. Read current values; in step 2, present them as defaults (user can press enter to keep).
 - **Legacy exists, canonical doesn't** → migration case.
-  - If `--migrate` was passed: read legacy values, offer to move them into the new location at project root. Ask user to confirm: "Found legacy `.claude/jira-flow.lifecycle.yaml`. Migrate its contents to `jira-flow.yaml` (project root) and delete the legacy file? (yes / no / keep both)"
-  - If `--migrate` not passed: tell user "Legacy config found at `.claude/jira-flow.lifecycle.yaml`. Re-run with `/jira-flow:configure --migrate` to move it, or I'll create a fresh `jira-flow.yaml` ignoring it. Continue with fresh setup? (yes / cancel)"
-- **Both exist** → conflict. Tell user: "Both `jira-flow.yaml` and `.claude/jira-flow.lifecycle.yaml` exist. The new file wins (commands prefer it). Want me to delete the legacy file? (yes / no — leave alone)" Then proceed using the canonical as the source.
+  - If `--migrate` was passed: read legacy values, offer to move them into the new location at project root. Ask user to confirm: "Found legacy `.claude/board-flow.lifecycle.yaml`. Migrate its contents to `board-flow.yaml` (project root) and delete the legacy file? (yes / no / keep both)"
+  - If `--migrate` not passed: tell user "Legacy config found at `.claude/board-flow.lifecycle.yaml`. Re-run with `/board-flow:configure --migrate` to move it, or I'll create a fresh `board-flow.yaml` ignoring it. Continue with fresh setup? (yes / cancel)"
+- **Both exist** → conflict. Tell user: "Both `board-flow.yaml` and `.claude/board-flow.lifecycle.yaml` exist. The new file wins (commands prefer it). Want me to delete the legacy file? (yes / no — leave alone)" Then proceed using the canonical as the source.
 
 ### 2. Resolve site (validated)
 
@@ -68,7 +68,7 @@ Don't try to enumerate boards via API — many users have hundreds. Trust the us
 
 ### 5. Resolve status_map
 
-These are the literal Jira status names for the four states the canonical flow uses. `/jira-flow:drain` pulls cards from `to_do`. `/jira-flow:execute` and `/common:autonomous-start` move cards through `to_do` → `in_progress` → `in_review`. Blocked cards stay in `in_progress` unless `blocked` is set.
+These are the literal Jira status names for the four states the canonical flow uses. `/board-flow:drain` pulls cards from `to_do`. `/board-flow:execute` and `/common:autonomous-start` move cards through `to_do` → `in_progress` → `in_review`. Blocked cards stay in `in_progress` unless `blocked` is set.
 
 Show current values (or defaults): `to_do: "To Do"`, `in_progress: "In Progress"`, `in_review: "In Review"`, `blocked: "Blocked"`.
 
@@ -88,25 +88,25 @@ Ask: "Use standard issue type names (Story / Bug / Epic / Task) or customize? (s
 
 ### 7. Resolve default_topology
 
-Read `.claude/topology` if present. If found: confirm with user: "Default topology for `/jira-flow:execute` and `/jira-flow:plan-track-build-validate`: `<value from .claude/topology>` (matches `.claude/topology`). Keep? (yes / type different)".
+Read `.claude/topology` if present. If found: confirm with user: "Default topology for `/board-flow:execute` and `/board-flow:plan-track-build-validate`: `<value from .claude/topology>` (matches `.claude/topology`). Keep? (yes / type different)".
 
 If `.claude/topology` is missing: ask "Default topology? Options: `build-hex`, `build-team`, `discovery`, `book`. Type one:". Don't write a value the user didn't give.
 
 ### 8. Show the proposed file and confirm
 
-Display the assembled `jira-flow.yaml` exactly as it'll be written. Ask: "Write this to `<path>`? (yes / cancel / edit field <name>)".
+Display the assembled `board-flow.yaml` exactly as it'll be written. Ask: "Write this to `<path>`? (yes / cancel / edit field <name>)".
 
 If "edit field <name>" → loop back to that step.
 
 ### 9. Write the file
 
-Write `jira-flow.yaml` at project root. Preserve any existing `lifecycles:` block from the prior config (don't overwrite lifecycles — those are advance-command schema, separate concern). If migrating from legacy AND user confirmed deletion, delete `.claude/jira-flow.lifecycle.yaml` after the new file is written and verified readable.
+Write `board-flow.yaml` at project root. Preserve any existing `lifecycles:` block from the prior config (don't overwrite lifecycles — those are advance-command schema, separate concern). If migrating from legacy AND user confirmed deletion, delete `.claude/board-flow.lifecycle.yaml` after the new file is written and verified readable.
 
 ### 10. Verify
 
 Delegate to `atlassian-expert`:
 
-> Read the just-written `jira-flow.yaml`. Try a no-op operation: `getJiraIssue` for any one issue in `defaults.project_key` (e.g., search for one card via `searchJiraIssuesUsingJql` with `project = <KEY> ORDER BY created DESC` and limit 1). If it succeeds, the config works end-to-end. If it fails, report the error.
+> Read the just-written `board-flow.yaml`. Try a no-op operation: `getJiraIssue` for any one issue in `defaults.project_key` (e.g., search for one card via `searchJiraIssuesUsingJql` with `project = <KEY> ORDER BY created DESC` and limit 1). If it succeeds, the config works end-to-end. If it fails, report the error.
 
 This is the smoke test — proves the site + project + auth all line up.
 

@@ -1,15 +1,15 @@
 ---
-description: Run plan → build → validate against any topology that ships planning-lead/engineering-lead/validation-lead, AND keep the Jira lifecycle in sync (Epic + Stories registered, Story transitions through To Do → In Progress → In Review). For abstract input that needs decomposition. Use /jira-flow:execute for an existing card.
+description: Run plan → build → validate against any topology that ships planning-lead/engineering-lead/validation-lead, AND keep the Jira lifecycle in sync (Epic + Stories registered, Story transitions through To Do → In Progress → In Review). For abstract input that needs decomposition. Use /board-flow:execute for an existing card.
 argument-hint: <abstract task description>
 ---
 
-# /jira-flow:plan-track-build-validate
+# /board-flow:plan-track-build-validate
 
 ## Purpose
 
 Same plan → build → validate flow as `/build-hex:plan-build-validate` (or `/build-team:plan-build-validate`), wrapped with Jira lifecycle: register Epic + Stories before execution; transition the executing Story through To Do → In Progress → In Review.
 
-For an existing Jira card (no decomposition needed), use `/jira-flow:execute` instead.
+For an existing Jira card (no decomposition needed), use `/board-flow:execute` instead.
 
 **Requires** a topology plugin that ships `planning-lead`, `engineering-lead`, and `validation-lead` subagents (e.g., `build-hex@alegomes` or `build-team@alegomes`). Won't work with `build-solo` alone (no leads).
 
@@ -21,18 +21,18 @@ For an existing Jira card (no decomposition needed), use `/jira-flow:execute` in
 
 You are the orchestrator. Drive the planning, building, validation phases AND keep the Jira issue lifecycle in sync. Apply `till-done`, `scope-discipline`, `name-the-disagreement`, `acceptance-completeness` throughout. The Story does not reach In Review until `validation-lead`'s `completion-auditor` returns COMPLETE — a green build proves the parts, not each acceptance criterion at its user-facing surface; the `acceptance-gate` hook enforces this structurally at the transition.
 
-`atlassian-expert` is the ONLY agent allowed to modify Jira state. Don't try to call Atlassian MCP tools directly. If `atlassian-expert` is missing (jira-flow not installed properly), abort with a clear error.
+`atlassian-expert` is the ONLY agent allowed to modify Jira state. Don't try to call Atlassian MCP tools directly. If `atlassian-expert` is missing (board-flow not installed properly), abort with a clear error.
 
 ## Workflow
 
 ### 0. Resolve topology prefix
 
-Read the project Jira config: `jira-flow.yaml` at project root if present, otherwise legacy `.claude/jira-flow.lifecycle.yaml`. Extract the top-level `default_topology` value (e.g., `build-hex`, `build-team`, `discovery`).
+Read the project Jira config: `board-flow.yaml` at project root if present, otherwise legacy `.claude/board-flow.lifecycle.yaml`. Extract the top-level `default_topology` value (e.g., `build-hex`, `build-team`, `discovery`).
 
 - If found, prefix every topology-agent delegation in this workflow with it: `<default_topology>:planning-lead`, `<default_topology>:engineering-lead`, `<default_topology>:validation-lead`.
 - If the file is absent or `default_topology` is not set, use bare names — backward compatible, but may misroute when multiple topologies are installed.
 
-`atlassian-expert` is always bare (it belongs to jira-flow, not a topology). However, every delegation to `atlassian-expert` for **write operations** (createIssue, transition, addComment, edit) below MUST include `Topology: <default_topology>` as the first line of the delegation prompt — atlassian-expert uses this to apply per-topology overrides from `topologies.<X>` in `jira-flow.yaml`. Read-only delegations don't need the hint.
+`atlassian-expert` is always bare (it belongs to board-flow, not a topology). However, every delegation to `atlassian-expert` for **write operations** (createIssue, transition, addComment, edit) below MUST include `Topology: <default_topology>` as the first line of the delegation prompt — atlassian-expert uses this to apply per-topology overrides from `topologies.<X>` in `board-flow.yaml`. Read-only delegations don't need the hint.
 
 ### 1. Register skeleton Epic in To Do
 
@@ -63,7 +63,7 @@ If multiple → ask the user: "Stories proposed: [list]. Which should I execute 
 
 ### 5. Move Story to In Progress
 
-Clear any stale acceptance artifact from a prior run so it can't block a fresh start (mirrors `/jira-flow:fix`): if `.claude/acceptance/<key>.yaml` exists, delete it — `validation-lead`'s `completion-auditor` will rewrite it at the end of this run.
+Clear any stale acceptance artifact from a prior run so it can't block a fresh start (mirrors `/board-flow:fix`): if `.claude/acceptance/<key>.yaml` exists, delete it — `validation-lead`'s `completion-auditor` will rewrite it at the end of this run.
 
 Delegate to `atlassian-expert`:
 
@@ -90,7 +90,7 @@ Wait for the verdict.
 
 **Acceptance precondition.** validation-lead's verdict must carry a `completion-auditor` COMPLETE and the `.claude/acceptance/<key>.yaml` path. If the audit is INCOMPLETE (or absent), do NOT transition — report the open gap and stop; the Story stays In Progress until the missing user-facing-surface test lands. (Even if you tried to transition anyway, the `acceptance-gate` hook in `common` reads the artifact and blocks the `transitionJiraIssue` call while `status != complete`.)
 
-If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Read `defaults.status_map.in_review` from `jira-flow.yaml` (default `"In Review"`). Then delegate to `atlassian-expert`:
+If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Read `defaults.status_map.in_review` from `board-flow.yaml` (default `"In Review"`). Then delegate to `atlassian-expert`:
 
 > Transition Story <key> to status `<defaults.status_map.in_review>` with the Implementation Summary below. Post the summary as a comment first, then run the transition.
 >
@@ -133,4 +133,4 @@ A single concise message back to the user:
 - Don't edit code yourself; you're the orchestrator.
 - Don't auto-transition past In Review unless explicitly asked. The user owns Done/Closed.
 - The per-Task quality loop is mandatory inside engineering-lead's phase. Don't skip qa, refactor-advisor, or code-reviewer.
-- If `atlassian-expert` is unavailable (jira-flow not installed), abort with: "jira-flow's atlassian-expert is required for this command; install jira-flow@alegomes or use /build-hex:plan-build-validate (no Jira tracking)."
+- If `atlassian-expert` is unavailable (board-flow not installed), abort with: "board-flow's atlassian-expert is required for this command; install board-flow@alegomes or use /build-hex:plan-build-validate (no Jira tracking)."

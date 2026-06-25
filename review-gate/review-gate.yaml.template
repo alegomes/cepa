@@ -36,11 +36,11 @@ review:
 # — bootstrap, hotfix — create .claude/allow-direct-main or set
 # REVIEW_GATE_ALLOW_DIRECT=1. To silence the push nudge: REVIEW_GATE_NUDGE=off.
 
-# OPTIONAL — only read when jira-flow.yaml is also present at project root.
+# OPTIONAL — only read when board-flow.yaml is also present at project root.
 # Wires the PR boundary to the Jira lifecycle. Omit the whole block to run
 # review-gate standalone (no tracker).
 jira:
   on_open: "In Progress -> In Review"   # transition fired when the PR opens
   on_merge: "In Review -> Done"         # transition fired when the PR merges
-  qa_gate: prove                        # delegate the QA axis at merge to /jira-flow:prove
-                                        # (requires jira-flow installed; ignored if absent)
+  qa_gate: prove                        # delegate the QA axis at merge to /board-flow:prove
+                                        # (requires board-flow installed; ignored if absent)

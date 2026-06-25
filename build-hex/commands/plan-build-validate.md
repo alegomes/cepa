@@ -11,7 +11,7 @@ Run the full plan → build → validate flow for one Story-sized task on a
 hexagonal-architecture backend. For tasks that only need one or two
 phases, delegate to those leads directly instead of running this command.
 
-For Jira-tracked work, prefer `/jira-flow:plan-track-build-validate` —
+For Jira-tracked work, prefer `/board-flow:plan-track-build-validate` —
 this command does NOT touch Jira.
 
 ## Variables

@@ -38,7 +38,7 @@ CC plugin commands are namespaced. Use the namespaced form:
 
 ```
 /build-hex:plan-build-validate    # not /plan-build-validate
-/jira-flow:execute WEGO-1234
+/board-flow:execute WEGO-1234
 /common:autonomous-start "..."
 ```
 
@@ -237,12 +237,12 @@ verdict. See [`acceptance-completeness.md`](acceptance-completeness.md).
 
 ## Jira / atlassian-expert
 
-### `BLOCKED: site not found in jira-flow.yaml defaults block`
+### `BLOCKED: site not found in board-flow.yaml defaults block`
 
 `atlassian-expert` refused to infer the site URL. Fix:
 
 ```
-/jira-flow:configure
+/board-flow:configure
 ```
 
 Interactive walkthrough — validates the site against your accessible
@@ -258,7 +258,7 @@ returned 200 but the card isn't there. Likely causes:
 
 - **Required field missing.** Jira refused the create; the response
   was malformed in a way that the create call interpreted as success.
-  Add the field to `defaults.required_fields` in `jira-flow.yaml`.
+  Add the field to `defaults.required_fields` in `board-flow.yaml`.
 - **Permissions on the project.** Your Atlassian account doesn't have
   permission to create issues in the target project.
 - **MCP transient failure.** Retry; if recurrent, reauthorize the
@@ -283,27 +283,27 @@ comment. Agent-level enforcement; not bypassable.
 
 Likely cause: you invoked `atlassian-expert` directly (or via a
 non-standard command) without supplying the summary. Use the
-canonical commands (`/jira-flow:execute`, `/jira-flow:advance`,
+canonical commands (`/board-flow:execute`, `/board-flow:advance`,
 `/common:autonomous-start`) — they assemble the summary from the flow
 output before delegating.
 
-### `/jira-flow:prove` / `prove-drain` says "Nothing in Review" but the column is full
+### `/board-flow:prove` / `prove-drain` says "Nothing in Review" but the column is full
 
-`status_map.in_review` in `jira-flow.yaml` doesn't match the board's
+`status_map.in_review` in `board-flow.yaml` doesn't match the board's
 literal column name. The prove commands query `status = "<in_review>"`,
 so if your board calls the column `"Review"` and the config says
 `"In Review"` (or vice-versa), the JQL returns zero. Fix the value to
 match the board exactly. Check the literal name in Jira's board settings
 or in any card's status chip.
 
-### `/jira-flow:prove` returns NEEDS-HUMAN for everything
+### `/board-flow:prove` returns NEEDS-HUMAN for everything
 
 The deterministic levels (coverage + mutation) couldn't run, so the
 proof falls to NEEDS-HUMAN rather than guessing. Usual causes: the
 project has no PIT plugin (L3 mutation) or no IT-isolated JaCoCo wiring
 (L2 coverage), or `.claude/cards/<KEY>.yaml` has no `base_commit` (cards
 that reached Review *before* the base-commit capture was added — only
-cards run through `/jira-flow:execute`/`:fix` afterward carry it). Check
+cards run through `/board-flow:execute`/`:fix` afterward carry it). Check
 the `levels:` block in `.claude/proof/<KEY>.yaml` — any `assumed`/
 `skipped` status names what's missing. Older cards with no baseline can't
 be diff-scoped; re-running their build through the flow is the clean fix.
@@ -359,7 +359,7 @@ See `cc_plugin_quirks` memory for the full empirical write-up.
 
 ### `/discovery:capture` succeeds but the card isn't on the discovery board
 
-Check `jira-flow.yaml` — `lifecycles[]` must have a `discovery` entry
+Check `board-flow.yaml` — `lifecycles[]` must have a `discovery` entry
 with `project_key` matching your discovery board's project. If the
 project key in `defaults.project_key` differs from the discovery
 project, you need both (defaults for build topology, lifecycles entry

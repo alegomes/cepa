@@ -87,7 +87,7 @@ human.
 3. **`/docs:checkpoint`** — You walk the owner through the WHY-gaps and "expected
    or drift?" questions from the gap-report. Their answers become
    `SOURCED: owner` in the gap-report. Where an answer reveals a real defect or
-   security gap, open a tracker card (pairs with `jira-flow`).
+   security gap, open a tracker card (pairs with `board-flow`).
 
 4. **`/docs:author`** — Write the grounded Diátaxis tree from the ledgers. Every
    WHY traces to a source (code / ADR / commit / Jira / owner) or is flagged

@@ -1,15 +1,15 @@
 # Choosing a topology
 
 The marketplace ships five topology plugins, plus `common` (required)
-and `jira-flow` (optional Jira layer). Pick **one topology per project**
+and `board-flow` (optional Jira layer). Pick **one topology per project**
 — importing two snippets gives the orchestrator conflicting instructions.
 
 | Topology | Agents | Best for | Path-lock | Commands |
 |---|---|---|---|---|
-| **build-hex** | 14 | Java/Quarkus hexagonal backends. Per-Task quality loop. | `domain/`, `application/`, `api-rest/`, `infrastructure/`, `bootstrap/` Maven layout | `plan-build-validate`, `reproduce-fix-verify`, `investigate`, `spec-e2e`, `document-e2e`, `resync-e2e`, `audit-e2e` (+ `proof-reviewer` agent for `/jira-flow:prove`) |
+| **build-hex** | 14 | Java/Quarkus hexagonal backends. Per-Task quality loop. | `domain/`, `application/`, `api-rest/`, `infrastructure/`, `bootstrap/` Maven layout | `plan-build-validate`, `reproduce-fix-verify`, `investigate`, `spec-e2e`, `document-e2e`, `resync-e2e`, `audit-e2e` (+ `proof-reviewer` agent for `/board-flow:prove`) |
 | **build-team** | 9 | Greenfield apps with frontend + backend. Generic plan→build→validate. | `apps/*/api/**`, `apps/*/web/**`, `tests/**` | `plan-build-validate` |
 | **build-solo** | 2 | One-file tweaks, bug fixes, small refactors. No leads, no per-Task loop. | tool-allowlist only (`pair-reviewer` is read-only via tools) | none — describe in chat |
-| **discovery** | 6 | Continuous product discovery: signals → opportunities → validated bets → engineering brief. Sits *upstream* of build topologies. | `docs/discovery/**` | `capture` (plus generic `/jira-flow:advance` for column transitions) |
+| **discovery** | 6 | Continuous product discovery: signals → opportunities → validated bets → engineering brief. Sits *upstream* of build topologies. | `docs/discovery/**` | `capture` (plus generic `/board-flow:advance` for column transitions) |
 | **book** | 10 | Book writing (non-software). Outline → draft → revise → finalize. | `book/**`, `chapters/**`, `notes/**` | `outline`, `draft`, `revise`, `finalize`, `status` |
 
 ## How to choose
@@ -45,7 +45,7 @@ opportunity framing, user research, assumption testing, evidence-based
 validation — `discovery` covers that. It's not an alternative to the
 build topologies; it's complementary. Common setup:
 
-- `discovery` + `build-hex` + `jira-flow`: continuous discovery on one
+- `discovery` + `build-hex` + `board-flow`: continuous discovery on one
   Jira board, validated opportunities hand off via `epic-briefer` to
   engineering's `epic-author` on the build board.
 
@@ -57,11 +57,11 @@ build topologies; it's complementary. Common setup:
 - **`common` is required by every topology.** The 8 mindset skills are
   referenced in agent bodies; without `common` the references go
   nowhere.
-- **`jira-flow` requires a 3-lead topology** for its lead-based commands
-  (`/jira-flow:execute`, `/jira-flow:plan-track-build-validate`).
+- **`board-flow` requires a 3-lead topology** for its lead-based commands
+  (`/board-flow:execute`, `/board-flow:plan-track-build-validate`).
   `build-hex` and `build-team` ship those leads; `build-solo` doesn't.
-  Trying jira-flow lead-based commands on a `build-solo`-only project
-  fails at the first delegation. `/jira-flow:advance` is generic and
+  Trying board-flow lead-based commands on a `build-solo`-only project
+  fails at the first delegation. `/board-flow:advance` is generic and
   works with any topology that ships a lifecycle file.
 - **`discovery` is upstream, not competing.** Run discovery and a build
   topology in the same project — they coordinate via the engineer-board
@@ -166,10 +166,10 @@ fan-out overhead would dwarf the task.
 6 agents arranged around a 7-column lifecycle (Inbox → Framing →
 Researching → Validating → Validated → Handed off / Discarded). Each
 column has an `on_enter` agent and optional `enter_gate` precondition,
-declared in `jira-flow.yaml`'s `lifecycles[]` block.
+declared in `board-flow.yaml`'s `lifecycles[]` block.
 
 Use `/discovery:capture "<raw signal>"` to land a card in Inbox, then
-`/jira-flow:advance <KEY>` to walk it column by column.
+`/board-flow:advance <KEY>` to walk it column by column.
 
 ### book (non-software)
 

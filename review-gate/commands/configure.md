@@ -1,5 +1,5 @@
 ---
-description: Interactive setup for review-gate.yaml at project root. Walks the user through host, default destination branch, close-source behavior, and the review policy (effort + on_findings). Detects whether jira-flow.yaml is present and offers to wire the optional Jira seam. Use once per repo after installing review-gate, before the first /review-gate:open.
+description: Interactive setup for review-gate.yaml at project root. Walks the user through host, default destination branch, close-source behavior, and the review policy (effort + on_findings). Detects whether board-flow.yaml is present and offers to wire the optional Jira seam. Use once per repo after installing review-gate, before the first /review-gate:open.
 argument-hint: (no arguments)
 ---
 
@@ -31,11 +31,11 @@ If `review-gate.yaml` already exists at project root, read it and show the curre
 
 Write all of these (the merge keys too) — `/review-gate:merge` reads `strategy` and `auto_merge`, so omitting them forces it onto silent fallbacks.
 
-### 3. Detect the jira-flow seam
+### 3. Detect the board-flow seam
 
-Check for `jira-flow.yaml` at project root AND that the jira-flow plugin is actually installed (the seam delegates to jira-flow's `atlassian-expert` / `/jira-flow:prove` — a config file alone isn't enough).
-- **Both present** → ask whether to wire the Jira seam. If yes, include the `jira:` block (on_open / on_merge / qa_gate). Use the status names from `jira-flow.yaml`'s `defaults.status_map` so the transitions match this project's actual Jira columns — don't hard-code "In Review".
-- **yaml present but plugin NOT installed** → warn that the seam would reference an absent `atlassian-expert`, and omit the `jira:` block (or write it but tell the user it's inert until jira-flow is installed).
+Check for `board-flow.yaml` at project root AND that the board-flow plugin is actually installed (the seam delegates to board-flow's `atlassian-expert` / `/board-flow:prove` — a config file alone isn't enough).
+- **Both present** → ask whether to wire the Jira seam. If yes, include the `jira:` block (on_open / on_merge / qa_gate). Use the status names from `board-flow.yaml`'s `defaults.status_map` so the transitions match this project's actual Jira columns — don't hard-code "In Review".
+- **yaml present but plugin NOT installed** → warn that the seam would reference an absent `atlassian-expert`, and omit the `jira:` block (or write it but tell the user it's inert until board-flow is installed).
 - **Absent** → omit the `jira:` block entirely. review-gate runs standalone.
 
 ### 4. Write the file

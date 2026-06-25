@@ -76,4 +76,4 @@ A single concise message:
 - **Don't modify production code.** Re-sync touches `*/src/test/**` only. If an assertion can't be tested because the production code is missing the behavior, flag it as an open question — don't add the behavior. That's `engineering-lead`'s call.
 - **Don't change the spec doc.** This is the propagation direction; the spec is the input. Spec edits go through `/build-hex:spec-e2e` (intent → spec) or `/build-hex:document-e2e` (code → spec).
 - **Sweep is sequential.** No parallel re-sync across endpoints — tests in different modules can share fixtures, and concurrent edits risk merge conflicts.
-- **Stop-on-first-BLOCKED in sweep.** Same logic as `/jira-flow:drain` — don't keep burning budget once the build is red.
+- **Stop-on-first-BLOCKED in sweep.** Same logic as `/board-flow:drain` — don't keep burning budget once the build is red.

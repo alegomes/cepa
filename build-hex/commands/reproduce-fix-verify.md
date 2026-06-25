@@ -160,7 +160,7 @@ If `NOT-A-BUG`, report that with the evidence and stop. Don't apologize for
   use-case test is not the spec for an HTTP-surface criterion. That is what the
   acceptance audit (step 4) enforces.
 - **The acceptance audit is not optional.** A READY-TO-SHIP verdict requires a
-  `completion-auditor` COMPLETE. When run via `/jira-flow:fix`, the
+  `completion-auditor` COMPLETE. When run via `/board-flow:fix`, the
   `acceptance-gate` hook independently blocks the In-Review transition while the
   audit is INCOMPLETE — so skipping it doesn't get the card moved anyway.
 - **No worktree at any layer** by default — single fix, one worker, no

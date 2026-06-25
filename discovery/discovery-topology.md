@@ -72,18 +72,18 @@ continuous discovery — each pass burns down risk.
 - `/discovery:capture <description>` — drop a raw signal as an Opportunity
   card on the discovery board, lands in Inbox. Lightweight: no framing,
   no research, just tracking.
-- `/jira-flow:advance <card-key>` — move a card to its next column,
+- `/board-flow:advance <card-key>` — move a card to its next column,
   invoking the column's `on_enter` agent. Generic across topologies; reads
-  `jira-flow.yaml` (project root). (Provided by `jira-flow@alegomes`.)
+  `board-flow.yaml` (project root). (Provided by `board-flow@alegomes`.)
 
 ## Composition
 
 - `discovery` alone → produces validated opportunities as local artifacts
   under `docs/discovery/`.
-- `discovery + jira-flow` → same, plus board lifecycle on your discovery
+- `discovery + board-flow` → same, plus board lifecycle on your discovery
   Jira board. `epic-briefer` publishes a brief; the next agent in the chain
   picks it up.
-- `discovery + jira-flow + build-hex` (or `+ build-team`) → end-to-end:
+- `discovery + board-flow + build-hex` (or `+ build-team`) → end-to-end:
   signal → validated solution → engineer-board Epic → Stories → code → ship.
   The handoff is two-step: discovery's `epic-briefer` writes the brief and
   links a card to the engineer board; engineering's `epic-author` reads the

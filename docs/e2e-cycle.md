@@ -156,7 +156,7 @@ Or for a sweep across all sections:
 ```
 /build-hex:resync-e2e --all
 # → walks every spec section sequentially
-# → stops on first BLOCKED (same logic as /jira-flow:drain)
+# → stops on first BLOCKED (same logic as /board-flow:drain)
 ```
 
 ### Code suspected of drift

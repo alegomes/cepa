@@ -1,5 +1,5 @@
 ---
-description: Merge the open PR for the current branch, gated by the QA gate. Finds the PR, runs the QA gate (the topology's proof-reviewer — proves every changed line is load-bearing at the surface), and on PROVEN merges via bitbucket-expert. With auto_merge:true it merges immediately on PROVEN; otherwise it stops at PROVEN and waits for your go-ahead. If jira-flow is wired, also transitions the card In Review → Done.
+description: Merge the open PR for the current branch, gated by the QA gate. Finds the PR, runs the QA gate (the topology's proof-reviewer — proves every changed line is load-bearing at the surface), and on PROVEN merges via bitbucket-expert. With auto_merge:true it merges immediately on PROVEN; otherwise it stops at PROVEN and waits for your go-ahead. If board-flow is wired, also transitions the card In Review → Done.
 argument-hint: [pr-id]   (optional: merge this PR id instead of auto-detecting from the current branch)
 ---
 
@@ -28,7 +28,7 @@ You are the orchestrator. You delegate the proof (to the topology's `proof-revie
 
 Run the **QA axis**, not hygiene:
 - If a topology with a `proof-reviewer` is installed (e.g. `build-hex:proof-reviewer`), delegate the change-driven proof on `base..HEAD` to it. It returns **PROVEN / UNPROVEN / NEEDS-HUMAN**.
-- This is the same reviewer `/jira-flow:prove` uses — same gate, different entry point. Do not duplicate the proof logic; delegate to the one reviewer.
+- This is the same reviewer `/board-flow:prove` uses — same gate, different entry point. Do not duplicate the proof logic; delegate to the one reviewer.
 - No topology / no proof-reviewer available → there is no QA gate to run. Say so explicitly (don't pretend one passed), fall back to the project's own verify (build/tests green per `.claude/last-build.json`), and treat a missing baseline as NOT proven.
 
 Route the verdict:
@@ -45,9 +45,9 @@ Route the verdict:
 
 ### 4. Jira seam (only if configured)
 
-If the **jira-flow plugin is installed** AND `review-gate.yaml` has a `jira:` block with `on_merge`:
-- After a successful merge, delegate to jira-flow's `atlassian-expert` to transition the card per `on_merge` (e.g. In Review → Done).
-- jira-flow not installed (even if a stray `jira-flow.yaml` exists) / no block → skip silently. Don't delegate to an absent `atlassian-expert`.
+If the **board-flow plugin is installed** AND `review-gate.yaml` has a `jira:` block with `on_merge`:
+- After a successful merge, delegate to board-flow's `atlassian-expert` to transition the card per `on_merge` (e.g. In Review → Done).
+- board-flow not installed (even if a stray `board-flow.yaml` exists) / no block → skip silently. Don't delegate to an absent `atlassian-expert`.
 
 ### 5. Report
 

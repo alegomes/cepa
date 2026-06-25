@@ -39,7 +39,7 @@ Every topology except `build-solo` follows the same shape:
 | Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (build-team, build-hex, discovery, book); build-solo has no hook |
 | Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
 | Plan → build → validate ordering | prompt-only (in command + topology) | Yes — orchestrator can reorder |
-| jira-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
+| board-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
 | Build state honesty | `gate-advance` PreToolUse hook on Bash commit/push/PR/deploy | No (hook returns exit 2 on STALE/FAILURE) |
 | Verify before claiming runtime state | `green-or-revert` skill + `.claude/last-build.json` | Soft — model honors the skill, but file says the truth |
 | Decision logging in autonomous mode | `autonomous-mode` skill + `### Decision:` format | Soft — debrief dual-scan catches drift retroactively |
@@ -101,7 +101,7 @@ claude-multi-team-plugin/
 ├── build-solo/                         # 2-agent lightweight topology
 ├── build-hex/                       # 13-agent hexagonal-architecture topology
 ├── discovery/                         # 6-agent product-discovery topology
-├── jira-flow/                         # Jira lifecycle layer (1 agent + 6 commands)
+├── board-flow/                         # Jira lifecycle layer (1 agent + 6 commands)
 ├── book/                              # 10-agent book-writing topology
 ├── docs/                              # user-facing documentation
 │   └── internals/                     # this directory
@@ -118,7 +118,7 @@ claude-multi-team-plugin/
 | build-solo | 2 | 0 | 0 | 0 |
 | build-hex | 13 | 7 | 1 | 0 |
 | discovery | 6 | 1 | 1 | 0 |
-| jira-flow | 1 | 6 | 0 | 1 |
+| board-flow | 1 | 6 | 0 | 1 |
 | book | 10 | 5 | 1 | 2 |
 
 Total: 41 agents, 24 commands, 9 hooks, 13 skills, across 7 plugins.
@@ -145,7 +145,7 @@ Total: 41 agents, 24 commands, 9 hooks, 13 skills, across 7 plugins.
 | `ux-researcher`, `product-manager` (build-team) | `specs/**` |
 | `frontend-dev` (build-team) | `apps/*/web/**`, `apps/*/frontend/**` |
 | `backend-dev` (build-team) | `apps/*/api/**`, `apps/*/backend/**`, `apps/*/migrations/**`, `apps/classifier/**` |
-| `atlassian-expert` (jira-flow) | (none — only Jira state via MCP) |
+| `atlassian-expert` (board-flow) | (none — only Jira state via MCP) |
 
 Every agent also gets a structural pass to write its own
 `<agent>-mental-model.yaml` regardless of disk location (see
@@ -158,7 +158,7 @@ Every agent also gets a structural pass to write its own
 | Active topology | `.claude/topology` | `bin/install.sh` (write) / commands (read) | Per project; set at install, persists |
 | Per-agent expertise | `common/expertise/<agent>-mental-model.yaml` (symlinked to host's `.claude/expertise/`) | `mental-model` skill (write), `debrief` (write) | Cross-project; grows over time, pruned at 20 entries (except `principle`-tagged) |
 | Topology snippet | `.claude/<topology>-topology.md` | `bin/install.sh` (copy) | Per project; copied snapshot, edits don't propagate back |
-| Jira config | `jira-flow.yaml` (project root) | `bin/install.sh` seed / `/jira-flow:configure` interactive / manual edits | Per project; team-edited |
+| Jira config | `board-flow.yaml` (project root) | `bin/install.sh` seed / `/board-flow:configure` interactive / manual edits | Per project; team-edited |
 | build-hex layout | `build-hex.yaml` (project root) | `bin/install.sh` seed (with `--topology=build-hex`) / manual edits | Per project; team-edited; maps architectural roles → module names |
 | Session intent log | `.claude/session-log.md` | `session-log` hook | Per project; append-only, manually rotate |
 | Autonomous run state | `docs/autonomous/<run-id>/state.yaml` | `/common:autonomous-start` (create) / `autonomous-checkpoint` hook (append) | Per run; survives session restart |

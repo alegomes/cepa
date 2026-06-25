@@ -1,9 +1,9 @@
 ---
-description: Bulk-prove the Review column. Iterates cards in `defaults.status_map.in_review` (priority order) and runs the equivalent of /jira-flow:prove on each — change-driven proof, then routes the verdict. Unlike /jira-flow:drain, it does NOT stop on a failed card: UNPROVEN bounces back and the drain continues, because clearing the queue is the whole point. PROVEN auto-advances (if a done status is configured), NEEDS-HUMAN stays for you. Use to triage a backlogged Review column.
+description: Bulk-prove the Review column. Iterates cards in `defaults.status_map.in_review` (priority order) and runs the equivalent of /board-flow:prove on each — change-driven proof, then routes the verdict. Unlike /board-flow:drain, it does NOT stop on a failed card: UNPROVEN bounces back and the drain continues, because clearing the queue is the whole point. PROVEN auto-advances (if a done status is configured), NEEDS-HUMAN stays for you. Use to triage a backlogged Review column.
 argument-hint: [--max N] [--scope "<jql>"] [--no-scope]
 ---
 
-# /jira-flow:prove-drain
+# /board-flow:prove-drain
 
 ## Purpose
 
@@ -22,14 +22,14 @@ PIT, in a throwaway worktree). Use `--max` to cap per run. Default `--max 5`.
 - `--scope "<jql>"` — a raw JQL fragment that narrows the drain to a slice of the Review column for this run only, overriding any configured scope.
 - `--no-scope` — ignore configured scope entirely; sweep the whole Review column.
 
-**Scope** lets you triage a slice of Review (e.g. one team's cards, or `labels = needs-review`) instead of the entire column. By default the drain applies the effective scope resolved from `jira-flow.yaml` (`defaults.scope` / `scope_overrides.prove_drain` / the active topology's `scope`); the two flags above override that for one run. You don't resolve the precedence yourself — pass the command name and any flag to `atlassian-expert`, which resolves and reports the effective fragment.
+**Scope** lets you triage a slice of Review (e.g. one team's cards, or `labels = needs-review`) instead of the entire column. By default the drain applies the effective scope resolved from `board-flow.yaml` (`defaults.scope` / `scope_overrides.prove_drain` / the active topology's `scope`); the two flags above override that for one run. You don't resolve the precedence yourself — pass the command name and any flag to `atlassian-expert`, which resolves and reports the effective fragment.
 
 ## Instructions
 
 You are the orchestrator. Iterate the Review column, prove each card, route each
 verdict. Apply `scope-discipline` (don't exceed `--max`). **Do not stop on
 UNPROVEN** — sending a card back is forward progress, not a blocker (this is the
-deliberate difference from `/jira-flow:drain`).
+deliberate difference from `/board-flow:drain`).
 
 ## Workflow
 
@@ -38,8 +38,8 @@ deliberate difference from `/jira-flow:drain`).
 - Max cards: parse `--max N`. Default 5.
 - Scope flags: detect `--no-scope` and `--scope "<jql>"` (mutually exclusive; if both appear, abort with "pass either --scope or --no-scope, not both"). Build the **scope directive**: `--no-scope` → `Scope: none`; `--scope "<jql>"` → `Scope: <jql>`; neither → omit the line (atlassian-expert resolves the effective scope from config).
 - Read `default_topology` and `defaults.status_map.in_review` from
-  `jira-flow.yaml`. Confirm the topology ships `proof-reviewer` (else abort as in
-  `/jira-flow:prove`).
+  `board-flow.yaml`. Confirm the topology ships `proof-reviewer` (else abort as in
+  `/board-flow:prove`).
 
 ### 2. List cards in Review
 
@@ -78,7 +78,7 @@ Wait for confirmation.
 
 For each confirmed card, in priority order:
 
-  a. Run the equivalent of `/jira-flow:prove <card-key>` (proof + verdict-driven
+  a. Run the equivalent of `/board-flow:prove <card-key>` (proof + verdict-driven
      transition).
   b. Capture the verdict and the action taken.
   c. **Continue regardless of verdict** — UNPROVEN does not stop the drain.
@@ -112,7 +112,7 @@ NEEDS-HUMAN set as their actual review queue.
 
 - Default `--max 5`. Each card is an expensive proof; raise deliberately.
 - **No stop-on-failure.** UNPROVEN and NEEDS-HUMAN are normal outcomes; the drain
-  processes the whole confirmed batch. (Contrast `/jira-flow:drain`, which stops
+  processes the whole confirmed batch. (Contrast `/board-flow:drain`, which stops
   on BLOCKED.)
 - Always confirm before starting. Don't prove N cards without buy-in.
 - Per-card proof is FULL — don't shortcut to save time across cards.

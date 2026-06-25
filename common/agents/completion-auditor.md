@@ -10,7 +10,7 @@ color: red
 
 | Field | Value |
 |---|---|
-| Reports to | the flow orchestrator (`/jira-flow:fix`, `reproduce-fix-verify`, `validation-lead`) |
+| Reports to | the flow orchestrator (`/board-flow:fix`, `reproduce-fix-verify`, `validation-lead`) |
 | Delegates to | — (worker, never delegates) |
 | Skills | acceptance-completeness, active-listener, evidence-over-assumption, conversational-response |
 | Reads | acceptance criteria (verbatim), the diff, the test sources, the build/run evidence |

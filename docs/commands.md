@@ -14,7 +14,7 @@ topology is wired.
 
 | Command | Argument | What it does |
 |---|---|---|
-| `/common:autonomous-start` | `[--topology=X] [--flow=NAME] [--no-jira] <description, may include Jira key>` | Generates a run-id, writes initial `docs/autonomous/<run-id>/state.yaml`, activates `autonomous-mode` skill, dispatches into the right topology flow. Auto-detects Jira key (`[A-Z]{2,}-\d+`); if found AND `jira-flow.yaml` exists, wraps the run with Jira lifecycle (In Progress → flow → In Review with Implementation Summary). |
+| `/common:autonomous-start` | `[--topology=X] [--flow=NAME] [--no-jira] <description, may include Jira key>` | Generates a run-id, writes initial `docs/autonomous/<run-id>/state.yaml`, activates `autonomous-mode` skill, dispatches into the right topology flow. Auto-detects Jira key (`[A-Z]{2,}-\d+`); if found AND `board-flow.yaml` exists, wraps the run with Jira lifecycle (In Progress → flow → In Review with Implementation Summary). |
 | `/common:autonomous-resume` | `[run-id]` (defaults to most recent in-progress) | Reads `state.yaml`, reconstructs topology + flow + last position, re-activates `autonomous-mode`, continues from next pending step. Won't fabricate progress on ambiguous state. |
 | `/common:debrief` | `[run-id]` (defaults to most recent completed-but-not-debriefed) | Human-in-the-loop ceremony. Walks every `### Decision:` block from the run's artifacts, takes your verdict (`keep` / `overrule: <reason>` / `refine: <new rationale>`), writes to `common/expertise/<agent>-mental-model.yaml` under `feedback`. Dual-scan also flags format drift (informal-prose decisions vs. formal Decision blocks). |
 | `/common:recap` | `[--since=YYYY-MM-DD]` (default: today) | Renders an "Asked / Status / Delivered" table for the current session. Reads `.claude/session-log.md` (intent log from `session-log` hook) and reasons over conversation context for delivery evidence. Read-only. |
@@ -78,27 +78,27 @@ No commands. Describe the task in chat; orchestrator dispatches
 
 | Command | Argument | What it does |
 |---|---|---|
-| `/discovery:capture` | `"<raw signal>"` | Creates a Jira card on the discovery board in the project's default status (Inbox). Lightweight — no framing, no research, just tracking. Discovery board is configured in `jira-flow.yaml`'s `discovery` lifecycle entry. |
+| `/discovery:capture` | `"<raw signal>"` | Creates a Jira card on the discovery board in the project's default status (Inbox). Lightweight — no framing, no research, just tracking. Discovery board is configured in `board-flow.yaml`'s `discovery` lifecycle entry. |
 
-Discovery cards advance column-by-column via `/jira-flow:advance` (no
+Discovery cards advance column-by-column via `/board-flow:advance` (no
 `/discovery:plan-build-validate` — discovery is continuous, not phased).
 
-## jira-flow
+## board-flow
 
 The Jira lifecycle layer. Pairs with any topology.
 
 | Command | Argument | What it does |
 |---|---|---|
-| `/jira-flow:configure` | `[--migrate]` | Interactive setup of `jira-flow.yaml` at project root. Validates site against your accessible Atlassian sites (via `getAccessibleAtlassianResources` — no guessing), asks for project_key / board_id / status_map / issue_types / default_topology. Runs smoke test against live Jira at the end. `--migrate` moves legacy `.claude/jira-flow.lifecycle.yaml` to the new location. |
-| `/jira-flow:capture` | `[Epic\|Bug\|Task]: <description>` | Lightweight register. Creates one Jira issue (default type: Story) and stops — no planning, no execution, no transitions. Reads `defaults.project_key` from `jira-flow.yaml`. Verifies the card actually exists via read-back before reporting success. |
-| `/jira-flow:execute` | `<jira-key> [--force-feature-flow]` | Single existing card. Auto-detects issue type: **Bug** cards dispatch to `/jira-flow:fix` (reproduce-fix-verify); **Story / Task / Epic** cards run the canonical detail-audit + build + validate flow. `--force-feature-flow` overrides auto-dispatch on Bug. Transitions through `status_map.in_progress` → flow → `status_map.in_review` with Implementation Summary. |
-| `/jira-flow:fix` | `<jira-key>` | Bug-flow wrapper around the topology's `reproduce-fix-verify` command (failing test first → fix → verify with BUILD SUCCESS evidence → APPROVE). Lighter than `/jira-flow:execute` — skips planning enrichment because the failing test IS the spec. Requires a topology with `reproduce-fix-verify` (currently `build-hex` only). NOT-A-BUG is a valid outcome. |
-| `/jira-flow:plan-track-build-validate` | `<abstract task description>` | Full plan + Jira lifecycle. Registers Epic + 1-3 candidate Stories; executes one Story end-to-end; transitions through `to_do` → `in_progress` → `in_review`. |
-| `/jira-flow:drain` | `[column] [--max N]` | Bulk-execute cards from a column (default: `defaults.status_map.to_do`, fallback `"To Do"`). User confirmation required before starting. Stops on first BLOCKED card. `--max` defaults to 5. |
-| `/jira-flow:triage` | `[source-column] [--max N] [--dry-run]` | Groom a backlog column (default `"Backlog"`). Classifies each card into one of four buckets and routes it: **ALREADY-IMPLEMENTED** → `status_map.in_review` (with a triage-sourced Implementation Summary; the proof gate still applies), **READY** → `status_map.to_do`, **OBSOLETE** → Won't Do (per-card confirm, never batch), **NEEDS-DECISION** → grills you interactively, re-routing on your answer. Implementation evidence comes from a per-card read-only `Explore` over the codebase + git (`file:line` + commit). Read-heavy; writes nothing until you confirm the plan (`--dry-run` writes nothing at all). Scope-aware like `*-drain`. `--max` defaults to 15. Routes by evidence — it does **not** prove; follow with `/jira-flow:prove-drain`. |
-| `/jira-flow:prove` | `<jira-key>` | Change-driven proof gate for a card already in `status_map.in_review`. Delegates to the topology's `proof-reviewer` (currently `build-hex`), which proves every changed line is load-bearing at the external surface — IT coverage of the diff, diff-scoped mutation, adversarial input, and (for bugs) regression-red-at-base. Verdict drives the transition: **PROVEN** advances to `status_map.done` (if set), **UNPROVEN** returns to `in_progress` with the gap, **NEEDS-HUMAN** stays in Review. See [proof-gate](proof-gate.md). |
-| `/jira-flow:prove-drain` | `[--max N]` | Bulk-prove the Review column (`status_map.in_review`). Runs `/jira-flow:prove` per card in priority order. Unlike `/jira-flow:drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. `--max` defaults to 5. |
-| `/jira-flow:advance` | `<jira-key>` | Generic column-by-column transition driven by `lifecycles[]` in `jira-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). Runs the column's `on_enter` agent if declared, confirms `enter_gate` precondition with you if declared, transitions with Implementation Summary if `requires_summary: true` (or status name contains `review`/`qa`). |
+| `/board-flow:configure` | `[--migrate]` | Interactive setup of `board-flow.yaml` at project root. Validates site against your accessible Atlassian sites (via `getAccessibleAtlassianResources` — no guessing), asks for project_key / board_id / status_map / issue_types / default_topology. Runs smoke test against live Jira at the end. `--migrate` moves legacy `.claude/board-flow.lifecycle.yaml` to the new location. |
+| `/board-flow:capture` | `[Epic\|Bug\|Task]: <description>` | Lightweight register. Creates one Jira issue (default type: Story) and stops — no planning, no execution, no transitions. Reads `defaults.project_key` from `board-flow.yaml`. Verifies the card actually exists via read-back before reporting success. |
+| `/board-flow:execute` | `<jira-key> [--force-feature-flow]` | Single existing card. Auto-detects issue type: **Bug** cards dispatch to `/board-flow:fix` (reproduce-fix-verify); **Story / Task / Epic** cards run the canonical detail-audit + build + validate flow. `--force-feature-flow` overrides auto-dispatch on Bug. Transitions through `status_map.in_progress` → flow → `status_map.in_review` with Implementation Summary. |
+| `/board-flow:fix` | `<jira-key>` | Bug-flow wrapper around the topology's `reproduce-fix-verify` command (failing test first → fix → verify with BUILD SUCCESS evidence → APPROVE). Lighter than `/board-flow:execute` — skips planning enrichment because the failing test IS the spec. Requires a topology with `reproduce-fix-verify` (currently `build-hex` only). NOT-A-BUG is a valid outcome. |
+| `/board-flow:plan-track-build-validate` | `<abstract task description>` | Full plan + Jira lifecycle. Registers Epic + 1-3 candidate Stories; executes one Story end-to-end; transitions through `to_do` → `in_progress` → `in_review`. |
+| `/board-flow:drain` | `[column] [--max N]` | Bulk-execute cards from a column (default: `defaults.status_map.to_do`, fallback `"To Do"`). User confirmation required before starting. Stops on first BLOCKED card. `--max` defaults to 5. |
+| `/board-flow:triage` | `[source-column] [--max N] [--dry-run]` | Groom a backlog column (default `"Backlog"`). Classifies each card into one of four buckets and routes it: **ALREADY-IMPLEMENTED** → `status_map.in_review` (with a triage-sourced Implementation Summary; the proof gate still applies), **READY** → `status_map.to_do`, **OBSOLETE** → Won't Do (per-card confirm, never batch), **NEEDS-DECISION** → grills you interactively, re-routing on your answer. Implementation evidence comes from a per-card read-only `Explore` over the codebase + git (`file:line` + commit). Read-heavy; writes nothing until you confirm the plan (`--dry-run` writes nothing at all). Scope-aware like `*-drain`. `--max` defaults to 15. Routes by evidence — it does **not** prove; follow with `/board-flow:prove-drain`. |
+| `/board-flow:prove` | `<jira-key>` | Change-driven proof gate for a card already in `status_map.in_review`. Delegates to the topology's `proof-reviewer` (currently `build-hex`), which proves every changed line is load-bearing at the external surface — IT coverage of the diff, diff-scoped mutation, adversarial input, and (for bugs) regression-red-at-base. Verdict drives the transition: **PROVEN** advances to `status_map.done` (if set), **UNPROVEN** returns to `in_progress` with the gap, **NEEDS-HUMAN** stays in Review. See [proof-gate](proof-gate.md). |
+| `/board-flow:prove-drain` | `[--max N]` | Bulk-prove the Review column (`status_map.in_review`). Runs `/board-flow:prove` per card in priority order. Unlike `/board-flow:drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. `--max` defaults to 5. |
+| `/board-flow:advance` | `<jira-key>` | Generic column-by-column transition driven by `lifecycles[]` in `board-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). Runs the column's `on_enter` agent if declared, confirms `enter_gate` precondition with you if declared, transitions with Implementation Summary if `requires_summary: true` (or status name contains `review`/`qa`). |
 
 ## book
 
@@ -118,9 +118,9 @@ agent matrix.
 ### "I want to implement a new feature"
 
 - Known requirements, no Jira → `/build-hex:plan-build-validate <description>` (or `/build-team:plan-build-validate` for non-hex projects).
-- Known requirements, Jira-tracked → `/jira-flow:plan-track-build-validate <description>` (creates Epic + Stories, runs one Story end-to-end).
-- Existing Jira card with the description (Story/Task/Epic) → `/jira-flow:execute <KEY>` (auto-routes Bug cards to `/jira-flow:fix`).
-- Existing Jira card known to be a Bug → `/jira-flow:fix <KEY>` (skip the auto-detect; go straight to reproduce-fix-verify).
+- Known requirements, Jira-tracked → `/board-flow:plan-track-build-validate <description>` (creates Epic + Stories, runs one Story end-to-end).
+- Existing Jira card with the description (Story/Task/Epic) → `/board-flow:execute <KEY>` (auto-routes Bug cards to `/board-flow:fix`).
+- Existing Jira card known to be a Bug → `/board-flow:fix <KEY>` (skip the auto-detect; go straight to reproduce-fix-verify).
 - Unattended → `/common:autonomous-start "<KEY> <description>"` (auto-detects key, wraps with lifecycle).
 
 ### "I want to fix a bug"
@@ -166,7 +166,7 @@ agent matrix.
 
 ### "I want to track work in Jira"
 
-- First time: `/jira-flow:configure`. Walks you through the config.
-- New work item, no detail yet: `/jira-flow:capture "<description>"`. Just registers, doesn't execute.
-- Drain a column: `/jira-flow:drain` (default column = `to_do` from `status_map`).
-- Custom lifecycle column transition: `/jira-flow:advance <KEY>`.
+- First time: `/board-flow:configure`. Walks you through the config.
+- New work item, no detail yet: `/board-flow:capture "<description>"`. Just registers, doesn't execute.
+- Drain a column: `/board-flow:drain` (default column = `to_do` from `status_map`).
+- Custom lifecycle column transition: `/board-flow:advance <KEY>`.

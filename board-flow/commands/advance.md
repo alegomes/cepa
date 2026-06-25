@@ -1,17 +1,17 @@
 ---
-description: Advance a Jira card to the next column in its topology's lifecycle. Reads `jira-flow.yaml` to know what "next" means and which agent (if any) runs on entry. Generic across topologies — used by discovery, build-hex with custom flows, etc. For the default To Do → In Progress → In Review flow, use /jira-flow:execute instead.
+description: Advance a Jira card to the next column in its topology's lifecycle. Reads `board-flow.yaml` to know what "next" means and which agent (if any) runs on entry. Generic across topologies — used by discovery, build-hex with custom flows, etc. For the default To Do → In Progress → In Review flow, use /board-flow:execute instead.
 argument-hint: <jira-key> [--no-scope]
 ---
 
-# /jira-flow:advance
+# /board-flow:advance
 
 ## Purpose
 
 Move one Jira card forward in its topology's defined lifecycle. The lifecycle file declares the column flow, the agent that runs on entry to each column (if any), and the gate that must be satisfied before entering (if any).
 
-Generic by design — the same command works for discovery's 7-column flow, build-hex's delivery flow, or any custom lifecycle a topology wants to declare. The lifecycle file at `jira-flow.yaml` is the source of truth.
+Generic by design — the same command works for discovery's 7-column flow, build-hex's delivery flow, or any custom lifecycle a topology wants to declare. The lifecycle file at `board-flow.yaml` is the source of truth.
 
-For the standard To Do → In Progress → In Review flow with planning + build + validate, use `/jira-flow:execute` — it remains the right tool when no custom lifecycle is needed.
+For the standard To Do → In Progress → In Review flow with planning + build + validate, use `/board-flow:execute` — it remains the right tool when no custom lifecycle is needed.
 
 ## Variables
 
@@ -20,7 +20,7 @@ For the standard To Do → In Progress → In Review flow with planning + build 
 
 ## Lifecycle file format
 
-`jira-flow.yaml` (host project, copied or hand-authored from a topology's template):
+`board-flow.yaml` (host project, copied or hand-authored from a topology's template):
 
 ```yaml
 schema_version: 1
@@ -57,7 +57,7 @@ Schema rules:
 - `requires_summary` (optional, boolean, default `false`) — if `true`, transitioning into this column requires an Implementation Summary, which is posted as a comment before the transition. Auto-true for any column whose `status` name contains `review` or `qa` (case-insensitive), even if the field is omitted.
 - `status` is the literal Jira status name in the project (case-sensitive).
 
-If `jira-flow.yaml` is missing → abort with: "No lifecycle file found. Create `jira-flow.yaml` or use `/jira-flow:execute` for the default flow."
+If `board-flow.yaml` is missing → abort with: "No lifecycle file found. Create `board-flow.yaml` or use `/board-flow:execute` for the default flow."
 
 ## Instructions
 
@@ -67,11 +67,11 @@ You are the orchestrator. Don't implement anything yourself; delegate to `atlass
 
 ## Workflow
 
-The active topology for write delegations is the matched lifecycle entry's `topology` field (set in step 3). Every delegation to `atlassian-expert` for write operations (createIssue, transition, addComment, edit) below MUST include `Topology: <matched-lifecycle-topology>` as the first line of the delegation prompt — atlassian-expert uses this to apply per-topology overrides from `topologies.<X>` in `jira-flow.yaml`.
+The active topology for write delegations is the matched lifecycle entry's `topology` field (set in step 3). Every delegation to `atlassian-expert` for write operations (createIssue, transition, addComment, edit) below MUST include `Topology: <matched-lifecycle-topology>` as the first line of the delegation prompt — atlassian-expert uses this to apply per-topology overrides from `topologies.<X>` in `board-flow.yaml`.
 
 ### 1. Load project config
 
-Read the project Jira config: `jira-flow.yaml` at project root first, falling back to legacy `.claude/jira-flow.lifecycle.yaml` if the new location isn't present (with a one-time deprecation note in your reply: "Note: reading legacy `.claude/jira-flow.lifecycle.yaml` — move to `jira-flow.yaml` at project root."). If neither exists → abort with the message above.
+Read the project Jira config: `board-flow.yaml` at project root first, falling back to legacy `.claude/board-flow.lifecycle.yaml` if the new location isn't present (with a one-time deprecation note in your reply: "Note: reading legacy `.claude/board-flow.lifecycle.yaml` — move to `board-flow.yaml` at project root."). If neither exists → abort with the message above.
 
 Parse the `lifecycles` list. Hold all of them in mind — the matching one will be picked in step 3.
 
@@ -94,7 +94,7 @@ Find the lifecycle in the file where:
 - `project_key` matches the card's project, AND
 - one of its `columns` has `status` matching the card's current status.
 
-If no match → abort: "Card $ARGUMENTS is in status `<X>` which is not declared in any lifecycle in `jira-flow.yaml`. Update the file or transition the card manually."
+If no match → abort: "Card $ARGUMENTS is in status `<X>` which is not declared in any lifecycle in `board-flow.yaml`. Update the file or transition the card manually."
 
 If multiple lifecycles match (same project + same status) → ask the user which lifecycle to use. Don't guess.
 
@@ -115,7 +115,7 @@ Show the gate description to the user and ask:
 > Has this been satisfied? (yes / no / show me the card so I can decide)
 
 - If `yes` → proceed.
-- If `no` → abort: "Gate not satisfied. Resolve the gate condition before re-running `/jira-flow:advance $ARGUMENTS`."
+- If `no` → abort: "Gate not satisfied. Resolve the gate condition before re-running `/board-flow:advance $ARGUMENTS`."
 - If `show me the card` → display the card content and re-ask.
 
 ### 6. (Conditional) Collect Implementation Summary
@@ -175,7 +175,7 @@ Advanced: $ARGUMENTS
   Topology: <topology name>
   on_enter: <agent name, or "none">
   Artifact: <path or "none — see card comment">
-  Next: /jira-flow:advance $ARGUMENTS to move forward, or work the column manually.
+  Next: /board-flow:advance $ARGUMENTS to move forward, or work the column manually.
 ```
 
 ## Constraints

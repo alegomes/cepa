@@ -77,14 +77,14 @@ happens:
   runs the whole loop in sequence and assembles `design-spec.md`. Use for a
   well-scoped feature you want designed end-to-end in one go.
 - **Per-column (board-driven / continuous):** delegate to `design-lead`
-  directly, or — with `jira-flow` installed — use `/jira-flow:advance <card>`
+  directly, or — with `board-flow` installed — use `/board-flow:advance <card>`
   to step a design card forward one column at a time. The lead's routing table
   (in `design-lead.md`) maps each column to its worker. Use when design is
   tracked on a board and loops between Critique and Explore over several passes.
 
 To wire the per-column flow to a board, declare the columns in the host
-project's `jira-flow.yaml` (or `.claude/jira-flow.lifecycle.yaml`) with each
-column's `on_enter` agent — `/jira-flow:advance` reads it generically.
+project's `board-flow.yaml` (or `.claude/board-flow.lifecycle.yaml`) with each
+column's `on_enter` agent — `/board-flow:advance` reads it generically.
 
 ## Composition
 
@@ -95,7 +95,7 @@ column's `on_enter` agent — `/jira-flow:advance` reads it generically.
   engineering's `frontend-dev` reads it and builds. The design spec is the only
   artifact that crosses the boundary — design does not write code, engineering
   does not redesign.
-- `design + jira-flow` → the per-column lifecycle runs against a design board.
+- `design + board-flow` → the per-column lifecycle runs against a design board.
 
 End-to-end: signal → (discovery) validated opportunity → (design) build-ready
 spec → (engineering) shipped feature.

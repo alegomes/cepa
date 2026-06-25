@@ -3,7 +3,7 @@ description: Prove one Jira card that is already in Review. Delegates to the top
 argument-hint: <jira-key> [--no-scope]
 ---
 
-# /jira-flow:prove
+# /board-flow:prove
 
 ## Purpose
 
@@ -39,7 +39,7 @@ evidence. You only route the Jira transition off its verdict.
 
 ### 0. Resolve topology prefix
 
-Read `jira-flow.yaml` at project root (else legacy `.claude/jira-flow.lifecycle.yaml`).
+Read `board-flow.yaml` at project root (else legacy `.claude/board-flow.lifecycle.yaml`).
 Extract `default_topology`. Prefix the proof delegation: `<default_topology>:proof-reviewer`.
 
 Check the topology ships `proof-reviewer`. If not, abort: "Topology
@@ -69,11 +69,11 @@ If the card doesn't exist / no access → abort with a clear error.
 
 ### 2. Precondition: card must be in Review
 
-Read `defaults.status_map.in_review` from `jira-flow.yaml` (this MUST match the
+Read `defaults.status_map.in_review` from `board-flow.yaml` (this MUST match the
 board's literal status name — e.g. `"Review"` or `"In Review"`).
 
 If the card's status is NOT `in_review`, do not proceed. Report:
-"$ARGUMENTS is in `<status>`, not `<in_review>`. /jira-flow:prove only runs on
+"$ARGUMENTS is in `<status>`, not `<in_review>`. /board-flow:prove only runs on
 cards in Review — it proves work that's already been built and is awaiting
 review." Stop.
 
@@ -109,7 +109,7 @@ levels are.
 
 #### PROVEN
 
-Read `defaults.status_map.done` from `jira-flow.yaml` (optional).
+Read `defaults.status_map.done` from `board-flow.yaml` (optional).
 
 - **If `done` is set:** build a Proof Summary and delegate to `atlassian-expert`:
 

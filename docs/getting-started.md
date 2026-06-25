@@ -33,13 +33,13 @@ That single command:
 
 1. Registers this repo as a Claude Code plugin marketplace.
 2. Installs all seven plugins (`common`, `build-team`, `build-solo`,
-   `build-hex`, `discovery`, `jira-flow`, `book`).
+   `build-hex`, `discovery`, `board-flow`, `book`).
 3. Symlinks `./.claude/expertise/` → the plugin's centralized expertise
    directory (accumulated agent learnings follow you across projects).
 4. Copies `build-hex-topology.md` into your `.claude/` and appends
    `@.claude/build-hex-topology.md` to your `CLAUDE.md` (creating it
    if absent).
-5. Seeds `jira-flow.yaml` at project root with placeholder values
+5. Seeds `board-flow.yaml` at project root with placeholder values
    (you'll fix those next).
 6. Writes `.claude/topology` (one-line marker so the cross-topology
    commands know which flow to dispatch into).
@@ -53,13 +53,13 @@ Pick a different topology by changing `--topology=NAME`. See
 project; for anything else use `build-team` (generic) or `build-solo`
 (lightweight).
 
-## 3. (Jira projects only) configure jira-flow
+## 3. (Jira projects only) configure board-flow
 
-If you'll use any `/jira-flow:*` command:
+If you'll use any `/board-flow:*` command:
 
 ```sh
 # In Claude Code, in your host project:
-/jira-flow:configure
+/board-flow:configure
 ```
 
 This walks you through site / project / board / status names / issue
@@ -68,9 +68,9 @@ to prove the config works end-to-end. Replaces the placeholder values
 seeded by `install.sh`.
 
 Without this step, every Jira write refuses with `BLOCKED: site not
-found in jira-flow.yaml defaults block; cannot infer.` — the
+found in board-flow.yaml defaults block; cannot infer.` — the
 `atlassian-expert` agent will not fabricate a URL from your repo name.
-That's intentional; see [`jira-flow.md`](jira-flow.md) for the full
+That's intentional; see [`board-flow.md`](board-flow.md) for the full
 contract.
 
 ## 4. Verify the install

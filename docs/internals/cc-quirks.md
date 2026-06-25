@@ -134,7 +134,7 @@ The bare command form (`/plan-build-validate`) returns
 
 - `/build-team:plan-build-validate`
 - `/build-hex:plan-build-validate`
-- `/jira-flow:execute`
+- `/board-flow:execute`
 - `/common:autonomous-start`
 
 CC has no convention for "default plugin"; the namespace is always

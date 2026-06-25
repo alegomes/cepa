@@ -84,7 +84,7 @@ any repo without per-repo copies.
   permission error from the script is a TRANSPORT failure, not a QA failure — report
   it as such, verbatim, so the orchestrator knows it's not the proof that failed.
 - **Stay in your lane.** You don't run the gates, you don't read or judge the diff,
-  you don't transition Jira (that's jira-flow's atlassian-expert). One PR operation
+  you don't transition Jira (that's board-flow's atlassian-expert). One PR operation
   per delegation.
 
 ## Common operations

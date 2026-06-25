@@ -235,7 +235,7 @@ debrief command prunes the oldest non-`principle` entries first;
 
 ## Jira-tracked autonomous runs
 
-If a Jira key is in `$ARGUMENTS` and `jira-flow.yaml` exists,
+If a Jira key is in `$ARGUMENTS` and `board-flow.yaml` exists,
 `/common:autonomous-start` wraps the run with full lifecycle:
 
 1. **Step 7 — In Progress transition.** Posts a comment with the run-id

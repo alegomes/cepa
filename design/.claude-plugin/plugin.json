@@ -1,7 +1,7 @@
 {
   "name": "design",
   "version": "0.1.0",
-  "description": "Product-design topology — design-lead + 5 workers (ux-architect, visual-designer, design-system-keeper, prototyper, design-critic) that turn a feature brief into a design spec engineering can build from. Path-lock keyed to docs/design/**; produces artifacts, never code. Prototyper is the sole holder of Gamma/Canva MCP tools. Both a linear command and a per-column lifecycle (via jira-flow). Requires common@alegomes.",
+  "description": "Product-design topology — design-lead + 5 workers (ux-architect, visual-designer, design-system-keeper, prototyper, design-critic) that turn a feature brief into a design spec engineering can build from. Path-lock keyed to docs/design/**; produces artifacts, never code. Prototyper is the sole holder of Gamma/Canva MCP tools. Both a linear command and a per-column lifecycle (via board-flow). Requires common@alegomes.",
   "author": {
     "name": "alegomes"
   },

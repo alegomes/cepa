@@ -84,7 +84,7 @@ its `evidence: verified`. Anything else is `incomplete`.
 
 It lives under `.claude/acceptance/` — the same transient-state home as
 `.claude/last-build.json` and `.claude/forks/`. Untracked, not part of the
-plugin. `/jira-flow:fix` deletes a stale `<KEY>.yaml` at the start of a run
+plugin. `/board-flow:fix` deletes a stale `<KEY>.yaml` at the start of a run
 so a prior verdict can't poison a fresh start.
 
 ## The state machine
@@ -199,7 +199,7 @@ Even the regression test in step 1 is required to sit at the criterion's
 altitude — a mocked use-case test is not "the spec" for an HTTP-surface
 criterion.
 
-### `jira-flow:fix` — precondition before In-Review
+### `board-flow:fix` — precondition before In-Review
 
 The bug-flow wrapper runs `reproduce-fix-verify`, then before transitioning
 to `in_review` checks that the report carries a `completion-auditor`
@@ -208,7 +208,7 @@ absent) → it does **not** transition; the card stays in `in_progress` until
 the missing altitude test lands. The `acceptance-gate` hook is the
 backstop: even if the orchestrator tried to transition anyway, the hook
 reads the artifact and blocks the `transitionJiraIssue` call. The
-precondition just fails earlier and more clearly. (`/jira-flow:execute`
+precondition just fails earlier and more clearly. (`/board-flow:execute`
 auto-routes Bug cards here.)
 
 ## What this doesn't protect against

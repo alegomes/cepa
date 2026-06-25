@@ -105,7 +105,7 @@ evidence routes to the human, not to a clear.
 
 There is no branch-per-card convention. Instead:
 
-- `/jira-flow:execute` and `/jira-flow:fix` record `base_commit` (the HEAD before
+- `/board-flow:execute` and `/board-flow:fix` record `base_commit` (the HEAD before
   any code is written) in `.claude/cards/<KEY>.yaml` when the card enters In
   Progress.
 - The **Implementation Summary** comment posted at the In Review transition
@@ -119,20 +119,20 @@ There is no branch-per-card convention. Instead:
 | Piece | Lives in | Role |
 |---|---|---|
 | `proof-reviewer` (agent) | `build-hex` | The change-driven proof mechanics (L2/L3/L4 + bug check). Writes `.claude/proof/<KEY>.yaml`. Never edits code; works in a throwaway git worktree. |
-| `/jira-flow:prove <KEY>` | `jira-flow` | Topology-agnostic. Resolves the topology, delegates to `<topology>:proof-reviewer`, applies the verdict to the card via `atlassian-expert`. |
-| `/jira-flow:prove-drain [--max N]` | `jira-flow` | Iterates the Review column. Does NOT stop on UNPROVEN — a bounce is progress. |
-| `base_commit` capture | `jira-flow` execute/fix | Records the change baseline at In Progress entry. |
-| `status_map.done` | `jira-flow.yaml` | Optional. Set it to auto-advance PROVEN cards; leave unset for triage-only. |
+| `/board-flow:prove <KEY>` | `board-flow` | Topology-agnostic. Resolves the topology, delegates to `<topology>:proof-reviewer`, applies the verdict to the card via `atlassian-expert`. |
+| `/board-flow:prove-drain [--max N]` | `board-flow` | Iterates the Review column. Does NOT stop on UNPROVEN — a bounce is progress. |
+| `base_commit` capture | `board-flow` execute/fix | Records the change baseline at In Progress entry. |
+| `status_map.done` | `board-flow.yaml` | Optional. Set it to auto-advance PROVEN cards; leave unset for triage-only. |
 
-The split is deliberate: `jira-flow` stays topology-agnostic (it just prefixes
+The split is deliberate: `board-flow` stays topology-agnostic (it just prefixes
 the agent name and drives Jira), while the Java/Maven-specific proof mechanics
-live in `build-hex` — mirroring how `/jira-flow:fix` delegates to
+live in `build-hex` — mirroring how `/board-flow:fix` delegates to
 `/<topology>:reproduce-fix-verify`. A JS topology would ship its own
-`proof-reviewer` backed by Stryker; `jira-flow` would not change.
+`proof-reviewer` backed by Stryker; `board-flow` would not change.
 
 ## Configuration
 
-In `jira-flow.yaml`:
+In `board-flow.yaml`:
 
 ```yaml
 defaults:
@@ -155,7 +155,7 @@ of `.claude/acceptance/<KEY>.yaml`. A `pass` on any level is invalid without a
 levels: any `assumed`/`skipped`/`gap`/`survived`/`green-at-base` level makes
 `proven` structurally unavailable. The agent never writes `proven` next to an
 unmet level and never embeds a self-granted waiver (waiving a structural gap is
-the human's call at review). As defense-in-depth, `/jira-flow:prove` re-derives
+the human's call at review). As defense-in-depth, `/board-flow:prove` re-derives
 the verdict from the levels rather than trusting the `verdict` field, so a
 malformed artifact can't auto-advance a card — a `proven` that contradicts its
 own levels is treated as NEEDS-HUMAN and flagged.

@@ -1,11 +1,11 @@
 ---
 name: suggest-capture
-description: Use when the user makes a new work request — a feature, bug fix, refactor, investigation, or anything that would normally become a Jira card — and no existing Jira key has been mentioned in the conversation. Suggest running /jira-flow:capture to register the work before starting. Do NOT trigger for clarifying questions, opinion requests, code reads, or follow-ups on already-tracked work.
+description: Use when the user makes a new work request — a feature, bug fix, refactor, investigation, or anything that would normally become a Jira card — and no existing Jira key has been mentioned in the conversation. Suggest running /board-flow:capture to register the work before starting. Do NOT trigger for clarifying questions, opinion requests, code reads, or follow-ups on already-tracked work.
 ---
 
 # Suggest capture
 
-When jira-flow is active, Jira should be the source of truth for tracked work. But auto-creating a card on every user message is noisy and brittle (most messages aren't work items). This skill threads the needle: when the user clearly asks for new work and there's no card yet, **suggest** capturing — don't do it silently.
+When board-flow is active, Jira should be the source of truth for tracked work. But auto-creating a card on every user message is noisy and brittle (most messages aren't work items). This skill threads the needle: when the user clearly asks for new work and there's no card yet, **suggest** capturing — don't do it silently.
 
 ## When to fire
 
@@ -28,10 +28,10 @@ Examples that should **not** fire:
 
 Before starting work, give the user a one-line suggestion and wait:
 
-> This looks like new work. Want me to register it as a Jira card first? Run `/jira-flow:capture <description>` (or paste a Jira key if it already exists). Otherwise I'll proceed without tracking.
+> This looks like new work. Want me to register it as a Jira card first? Run `/board-flow:capture <description>` (or paste a Jira key if it already exists). Otherwise I'll proceed without tracking.
 
 Then:
-- If the user runs `/jira-flow:capture` or supplies a key → reference the key in the work going forward.
+- If the user runs `/board-flow:capture` or supplies a key → reference the key in the work going forward.
 - If the user says "skip" / "just do it" / proceeds without answering → drop it; do **not** ask again this session for the same request.
 
 Suggest at most **once per request**. Don't nag. If the same kind of work comes up later, suggest again — but never twice for the same item.

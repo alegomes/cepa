@@ -10,7 +10,7 @@ color: red
 
 | Field | Value |
 |---|---|
-| Reports to | `/jira-flow:prove`, `/jira-flow:prove-drain` |
+| Reports to | `/board-flow:prove`, `/board-flow:prove-drain` |
 | Delegates to | — (worker, never delegates; Jira writes happen in the calling command via `atlassian-expert`) |
 | Skills | defense-in-depth, evidence-over-assumption, active-listener, scope-discipline, conversational-response |
 | Reads | the card's diff (`base_commit..HEAD` ∩ touched files), the test sources, the build config (`pom.xml`, surefire/failsafe, pitest, jacoco), the acceptance criteria |

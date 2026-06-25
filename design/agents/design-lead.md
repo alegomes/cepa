@@ -62,7 +62,7 @@ Just produced: <artifact path(s) | none>
 Worker(s): <names | none>
 Findings: <1-3 crisp bullets>
 Risks / disagreements: <or "none">
-Next move: <human action | /design:explore-critique-spec | /jira-flow:advance | hand off>
+Next move: <human action | /design:explore-critique-spec | /board-flow:advance | hand off>
 ```
 
 You don't draw flows, pick type scales, define tokens, build decks, or write verdicts. You orchestrate the agents who do.

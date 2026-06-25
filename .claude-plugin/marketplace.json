@@ -1,6 +1,6 @@
 {
   "name": "alegomes",
-  "description": "Multi-agent marketplace for Claude Code: shared mindset skills (common); topologies (build-team — 9-agent generic; build-solo — 2-agent lightweight; build-hex — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery; design — 6-agent product-design (brief → build-ready spec); book — 10-agent book-writing; docs — 9-agent documentation/onboarding; git-history — 3-agent Git-history analysis); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
+  "description": "Multi-agent marketplace for Claude Code: shared mindset skills (common); topologies (build-team — 9-agent generic; build-solo — 2-agent lightweight; build-hex — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery; design — 6-agent product-design (brief → build-ready spec); book — 10-agent book-writing; docs — 9-agent documentation/onboarding; git-history — 3-agent Git-history analysis); plus a Jira lifecycle layer (board-flow). Originally adapted from indydev Dan's lead-agents pattern.",
   "owner": {
     "name": "alegomes"
   },
@@ -29,21 +29,21 @@
     {
       "name": "build-hex",
       "source": "./build-hex",
-      "description": "Hexagonal-architecture backend topology — 13 agents across 3 teams (planning, engineering, validation) with a per-Task quality loop (qa → refactor-advisor → code-reviewer). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. Requires common@alegomes. Pair with jira-flow@alegomes for Jira lifecycle.",
+      "description": "Hexagonal-architecture backend topology — 13 agents across 3 teams (planning, engineering, validation) with a per-Task quality loop (qa → refactor-advisor → code-reviewer). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. Requires common@alegomes. Pair with board-flow@alegomes for Jira lifecycle.",
       "version": "0.2.0",
       "tags": ["agents", "hexagonal", "java", "quarkus", "backend"]
     },
     {
       "name": "discovery",
       "source": "./discovery",
-      "description": "Continuous product-discovery topology — 6 agents (discovery-lead + opportunity-framer + user-researcher + assumption-tester + evidence-auditor + epic-briefer) for translating raw signals into validated opportunities. Path-lock keyed to docs/discovery/**. Pair with jira-flow@alegomes for board lifecycle, and with build-hex or build-team for delivery handoff. Requires common@alegomes.",
+      "description": "Continuous product-discovery topology — 6 agents (discovery-lead + opportunity-framer + user-researcher + assumption-tester + evidence-auditor + epic-briefer) for translating raw signals into validated opportunities. Path-lock keyed to docs/discovery/**. Pair with board-flow@alegomes for board lifecycle, and with build-hex or build-team for delivery handoff. Requires common@alegomes.",
       "version": "0.1.0",
       "tags": ["agents", "discovery", "product", "research", "validation"]
     },
     {
-      "name": "jira-flow",
-      "source": "./jira-flow",
-      "description": "Adds atlassian-expert worker plus Jira-aware slash commands (capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead/engineering-lead/validation-lead OR declares a custom lifecycle in .claude/jira-flow.lifecycle.yaml (used by /advance). Tested with build-hex, build-team, and discovery. Won't work with build-solo for the lead-based commands. Requires common@alegomes.",
+      "name": "board-flow",
+      "source": "./board-flow",
+      "description": "Adds atlassian-expert worker plus Jira-aware slash commands (capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead/engineering-lead/validation-lead OR declares a custom lifecycle in .claude/board-flow.lifecycle.yaml (used by /advance). Tested with build-hex, build-team, and discovery. Won't work with build-solo for the lead-based commands. Requires common@alegomes.",
       "version": "0.2.0",
       "tags": ["agents", "jira", "atlassian", "tracking", "workflow"]
     },
@@ -57,14 +57,14 @@
     {
       "name": "docs",
       "source": "./docs-topology",
-      "description": "Documentation/onboarding topology — orchestrator + docs-lead + 8 workers that sweep an existing project and produce a Diátaxis doc tree (tutorial / how-to / reference / explanation) for handing it off to engineers who weren't there for the decisions. Central discipline: separate the HOW (extractable from code) from the WHY (elicitable — owner/commit/ADR/Jira) and NEVER invent rationale — no source becomes an owner question, not a guess. Five owner-checkpointed phases: /docs:survey (read-only 4-front archaeology → gap-report), /docs:declutter (archive process-exhaust, demote rival front-doors), /docs:checkpoint (owner answers the WHY-gaps), /docs:author (write the grounded tree, Tutorial last), /docs:finalize (whole-tree consistency review). Path-lock keyed to docs/** + docs/_survey/. Standalone. Requires common@alegomes. Pair with jira-flow@alegomes to open cards from the checkpoint.",
+      "description": "Documentation/onboarding topology — orchestrator + docs-lead + 8 workers that sweep an existing project and produce a Diátaxis doc tree (tutorial / how-to / reference / explanation) for handing it off to engineers who weren't there for the decisions. Central discipline: separate the HOW (extractable from code) from the WHY (elicitable — owner/commit/ADR/Jira) and NEVER invent rationale — no source becomes an owner question, not a guess. Five owner-checkpointed phases: /docs:survey (read-only 4-front archaeology → gap-report), /docs:declutter (archive process-exhaust, demote rival front-doors), /docs:checkpoint (owner answers the WHY-gaps), /docs:author (write the grounded tree, Tutorial last), /docs:finalize (whole-tree consistency review). Path-lock keyed to docs/** + docs/_survey/. Standalone. Requires common@alegomes. Pair with board-flow@alegomes to open cards from the checkpoint.",
       "version": "0.1.0",
       "tags": ["agents", "documentation", "onboarding", "diataxis", "technical-writing"]
     },
     {
       "name": "design",
       "source": "./design",
-      "description": "Product-design topology — design-lead + 5 workers (ux-architect, visual-designer, design-system-keeper, prototyper, design-critic) that turn a feature brief into a build-ready design spec engineering can implement from. Sits between discovery and engineering: owns the UX + visual design, not the build. Path-lock keyed to docs/design/**; produces artifacts, never code. Prototyper is the sole holder of Gamma/Canva MCP tools. Two entry points: /design:explore-critique-spec (linear) and a per-column lifecycle via jira-flow. Requires common@alegomes. Pair with discovery for the upstream brief and build-team/build-hex for the downstream build.",
+      "description": "Product-design topology — design-lead + 5 workers (ux-architect, visual-designer, design-system-keeper, prototyper, design-critic) that turn a feature brief into a build-ready design spec engineering can implement from. Sits between discovery and engineering: owns the UX + visual design, not the build. Path-lock keyed to docs/design/**; produces artifacts, never code. Prototyper is the sole holder of Gamma/Canva MCP tools. Two entry points: /design:explore-critique-spec (linear) and a per-column lifecycle via board-flow. Requires common@alegomes. Pair with discovery for the upstream brief and build-team/build-hex for the downstream build.",
       "version": "0.1.0",
       "tags": ["agents", "design", "ux", "visual-design", "prototyping"]
     },
@@ -78,7 +78,7 @@
     {
       "name": "review-gate",
       "source": "./review-gate",
-      "description": "Pre-merge review gate — code reaches main through a reviewed pull request, not a direct merge. Two doors owned here: open (hygiene gate via /code-review) and merge (QA gate via the topology's proof-reviewer). One quarantined adapter (bitbucket-expert) owns all Bitbucket REST via bundled bin/open-pr.sh + bin/merge-pr.sh. A fence hook (no-direct-main) blocks direct push/merge to the default branch and redirects to the flow; a nudge hook (push-nudge) suggests a PR after a feature-branch push; auto_merge merges on a PROVEN QA verdict. Optional jira-flow seam maps open→In Review, merge→Done. Standalone otherwise. Pair with jira-flow@alegomes for the Jira lifecycle.",
+      "description": "Pre-merge review gate — code reaches main through a reviewed pull request, not a direct merge. Two doors owned here: open (hygiene gate via /code-review) and merge (QA gate via the topology's proof-reviewer). One quarantined adapter (bitbucket-expert) owns all Bitbucket REST via bundled bin/open-pr.sh + bin/merge-pr.sh. A fence hook (no-direct-main) blocks direct push/merge to the default branch and redirects to the flow; a nudge hook (push-nudge) suggests a PR after a feature-branch push; auto_merge merges on a PROVEN QA verdict. Optional board-flow seam maps open→In Review, merge→Done. Standalone otherwise. Pair with board-flow@alegomes for the Jira lifecycle.",
       "version": "0.1.0",
       "tags": ["pull-request", "code-review", "bitbucket", "workflow", "pre-merge"]
     }

@@ -1,15 +1,15 @@
 ---
-description: Execute one existing Jira card. Auto-detects the issue type — Bug cards dispatch to /jira-flow:fix (reproduce-fix-verify flow); Story/Task/Epic cards proceed with the canonical plan-build-validate flow (detail audit + build + validate). Override auto-dispatch with --force-feature-flow. Use /jira-flow:plan-track-build-validate for abstract input that needs decomposition.
+description: Execute one existing Jira card. Auto-detects the issue type — Bug cards dispatch to /board-flow:fix (reproduce-fix-verify flow); Story/Task/Epic cards proceed with the canonical plan-build-validate flow (detail audit + build + validate). Override auto-dispatch with --force-feature-flow. Use /board-flow:plan-track-build-validate for abstract input that needs decomposition.
 argument-hint: <jira-key> [--force-feature-flow] [--no-scope]
 ---
 
-# /jira-flow:execute
+# /board-flow:execute
 
 ## Purpose
 
 Execute a single, already-tracked Jira card. Reviews the card detail before execution — if the card is one-line or under-specified, runs a planning enrichment pass to update the card description first; otherwise proceeds straight to build + validate.
 
-**Requires** a topology with `planning-lead`, `engineering-lead`, `validation-lead` subagents installed alongside jira-flow.
+**Requires** a topology with `planning-lead`, `engineering-lead`, `validation-lead` subagents installed alongside board-flow.
 
 ## Variables
 
@@ -24,12 +24,12 @@ You are the orchestrator. Drive a focused build → validate flow on one Jira ca
 
 ### 0. Resolve topology prefix
 
-Read the project Jira config: `jira-flow.yaml` at project root if present, otherwise legacy `.claude/jira-flow.lifecycle.yaml`. Extract the top-level `default_topology` value (e.g., `build-hex`, `build-team`, `discovery`).
+Read the project Jira config: `board-flow.yaml` at project root if present, otherwise legacy `.claude/board-flow.lifecycle.yaml`. Extract the top-level `default_topology` value (e.g., `build-hex`, `build-team`, `discovery`).
 
 - If found, prefix every topology-agent delegation in this workflow with it: `<default_topology>:planning-lead`, `<default_topology>:engineering-lead`, `<default_topology>:validation-lead`.
 - If the file is absent or `default_topology` is not set, use bare names — backward compatible, but may misroute when multiple topologies are installed.
 
-`atlassian-expert` is always bare (it belongs to jira-flow, not a topology). However, every delegation to `atlassian-expert` for **write operations** (createIssue, transition, addComment, edit) below MUST include `Topology: <default_topology>` as the first line of the delegation prompt — atlassian-expert uses this to apply per-topology overrides from `topologies.<X>` in `jira-flow.yaml` (e.g., the right Team field value for Engineering vs. Product). Read-only delegations don't need the hint.
+`atlassian-expert` is always bare (it belongs to board-flow, not a topology). However, every delegation to `atlassian-expert` for **write operations** (createIssue, transition, addComment, edit) below MUST include `Topology: <default_topology>` as the first line of the delegation prompt — atlassian-expert uses this to apply per-topology overrides from `topologies.<X>` in `board-flow.yaml` (e.g., the right Team field value for Engineering vs. Product). Read-only delegations don't need the hint.
 
 ### 1. Fetch card details
 
@@ -48,15 +48,15 @@ If the card doesn't exist or you don't have access → abort with a clear error.
 
 ### 1a. Auto-dispatch on Bug type
 
-Read the card's issue type. Read `defaults.issue_types.bug` from `jira-flow.yaml` (default `"Bug"`).
+Read the card's issue type. Read `defaults.issue_types.bug` from `board-flow.yaml` (default `"Bug"`).
 
 If `--force-feature-flow` was NOT passed AND the card's issue type matches `defaults.issue_types.bug` (case-insensitive):
 
-> The card `<jira-key>` is a Bug. Dispatching to `/jira-flow:fix <jira-key>` — that command uses the topology's reproduce-fix-verify flow (failing test first, fix, verify) which is the right shape for bugs. The plan-build-validate ceremony in this command is overhead for a confirmed bug.
+> The card `<jira-key>` is a Bug. Dispatching to `/board-flow:fix <jira-key>` — that command uses the topology's reproduce-fix-verify flow (failing test first, fix, verify) which is the right shape for bugs. The plan-build-validate ceremony in this command is overhead for a confirmed bug.
 >
-> If you actually want the heavier feature-flow on this Bug (e.g., the card represents systemic-bug-as-feature scope work), re-run as `/jira-flow:execute <jira-key> --force-feature-flow`.
+> If you actually want the heavier feature-flow on this Bug (e.g., the card represents systemic-bug-as-feature scope work), re-run as `/board-flow:execute <jira-key> --force-feature-flow`.
 
-Then invoke `/jira-flow:fix <jira-key>` and STOP this command. Don't continue to step 2. If `--no-scope` was passed, forward it (`/jira-flow:fix <jira-key> --no-scope`) so the scope warning isn't repeated — `fix` re-fetches the card and would otherwise re-emit the out-of-scope heads-up you already saw in step 1.
+Then invoke `/board-flow:fix <jira-key>` and STOP this command. Don't continue to step 2. If `--no-scope` was passed, forward it (`/board-flow:fix <jira-key> --no-scope`) so the scope warning isn't repeated — `fix` re-fetches the card and would otherwise re-emit the out-of-scope heads-up you already saw in step 1.
 
 If the issue type is `Story`, `Task`, `Epic`, or any non-bug type, OR `--force-feature-flow` was passed → continue with step 2 (the canonical feature flow below).
 
@@ -78,15 +78,15 @@ Delegate to `planning-lead`:
 
 If planning-lead enriched the card, delegate to `atlassian-expert`:
 
-> Update Jira issue $ARGUMENTS: replace description with <enriched description from planning-lead>. Add a comment: "[automated] Description enriched by jira-flow's detail audit."
+> Update Jira issue $ARGUMENTS: replace description with <enriched description from planning-lead>. Add a comment: "[automated] Description enriched by board-flow's detail audit."
 
 If planning-lead said SUFFICIENT, skip this step.
 
 ### 4. Move card to "in progress"
 
-Clear any stale acceptance artifact from a prior run so it can't block a fresh start (mirrors `/jira-flow:fix`): if `.claude/acceptance/<jira-key>.yaml` exists, delete it — `validation-lead`'s `completion-auditor` will rewrite it at the end of this run.
+Clear any stale acceptance artifact from a prior run so it can't block a fresh start (mirrors `/board-flow:fix`): if `.claude/acceptance/<jira-key>.yaml` exists, delete it — `validation-lead`'s `completion-auditor` will rewrite it at the end of this run.
 
-**Capture the change baseline** for the later change-scoped proof (`/jira-flow:prove`). Before any code is written, record the current commit as this card's baseline: run `git rev-parse HEAD` and write `.claude/cards/<jira-key>.yaml`:
+**Capture the change baseline** for the later change-scoped proof (`/board-flow:prove`). Before any code is written, record the current commit as this card's baseline: run `git rev-parse HEAD` and write `.claude/cards/<jira-key>.yaml`:
 
 ```yaml
 card: <jira-key>
@@ -95,7 +95,7 @@ base_commit: <SHA from git rev-parse HEAD>
 
 Create `.claude/cards/` if absent. This baseline is what lets `proof-reviewer` reconstruct the card's diff (`base_commit..HEAD`, intersected with the Implementation Summary's touched-files list) without relying on a branch-per-card convention. If this is not a git repo or `git` is unavailable, skip silently — proof falls back to the touched-files list alone.
 
-Read `defaults.status_map.in_progress` from `jira-flow.yaml` (default `"In Progress"`). Delegate to `atlassian-expert`:
+Read `defaults.status_map.in_progress` from `board-flow.yaml` (default `"In Progress"`). Delegate to `atlassian-expert`:
 
 > Transition $ARGUMENTS to status `<defaults.status_map.in_progress>`.
 
@@ -116,7 +116,7 @@ Delegate to `validation-lead`:
 
 **Acceptance precondition.** validation-lead's verdict must carry a `completion-auditor` COMPLETE and the `.claude/acceptance/<jira-key>.yaml` path. If the audit is INCOMPLETE (or absent), do NOT transition — report the open gap and stop; the card stays in `in_progress` until the missing user-facing-surface test lands. (Even if you tried to transition anyway, the `acceptance-gate` hook in `common` reads the artifact and blocks the `transitionJiraIssue` call while `status != complete` — this precondition just fails earlier and more clearly.)
 
-If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Read `defaults.status_map.in_review` from `jira-flow.yaml` (default `"In Review"`). Then delegate to `atlassian-expert`:
+If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from engineering-lead's report (paths built, tests added) and qa-engineer's BUILD SUCCESS evidence (commit SHA). Format using the canonical template (see atlassian-expert's "Transition to Review with Implementation Summary"). Read `defaults.status_map.in_review` from `board-flow.yaml` (default `"In Review"`). Then delegate to `atlassian-expert`:
 
 > Transition $ARGUMENTS to status `<defaults.status_map.in_review>` with the Implementation Summary below. Post the summary as a comment first, then run the transition.
 >

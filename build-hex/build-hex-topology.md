@@ -79,7 +79,7 @@ out to multiple leads in parallel — make multiple Task calls in one message.
    is APPROVED. Don't accept "almost done" verdicts.
 6. **Watch the budget.** Per-Story execution costs significant tokens —
    one Story per `/plan-build-validate` invocation is the norm; bulk
-   execution belongs to `jira-flow:drain` if installed.
+   execution belongs to `board-flow:drain` if installed.
 
 ### Workflow conventions
 
@@ -133,9 +133,9 @@ If your project diverges (different module names, additional modules),
 override the workers locally in `.claude/agents/<name>.md` —
 project-local files win over plugin-shipped ones.
 
-### Pairing with jira-flow
+### Pairing with board-flow
 
-If the `jira-flow@alegomes` plugin is also installed, prefer its commands
-(`/jira-flow:plan-track-build-validate`, `/jira-flow:execute`,
-`/jira-flow:drain`) over `/build-hex:plan-build-validate` — they wrap
+If the `board-flow@alegomes` plugin is also installed, prefer its commands
+(`/board-flow:plan-track-build-validate`, `/board-flow:execute`,
+`/board-flow:drain`) over `/build-hex:plan-build-validate` — they wrap
 the same workflow with Jira lifecycle transitions.

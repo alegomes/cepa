@@ -1,16 +1,16 @@
-# jira-flow
+# board-flow
 
 The Jira lifecycle layer. Pairs with any topology to keep cards in
 sync with build/discovery state.
 
-## Config file: `jira-flow.yaml` at project root
+## Config file: `board-flow.yaml` at project root
 
 Project-team data — your team's Jira site, project, board, status names.
 Lives at the **project root** (not under `.claude/` — that directory is
 for CC plumbing). Visible to `ls`, version-controlled.
 
 Created by `bin/install.sh --topology=NAME` with placeholders. Replace
-the placeholders by hand or run `/jira-flow:configure` for an
+the placeholders by hand or run `/board-flow:configure` for an
 interactive walkthrough.
 
 ### Full schema
@@ -22,10 +22,10 @@ schema_version: 1
 defaults:
   site: wego.atlassian.net           # YOUR Jira cloud site
   project_key: WEGO                  # default project for new cards
-  board_id: 766                      # default board, used by /jira-flow:drain
+  board_id: 766                      # default board, used by /board-flow:drain
   status_map:
     # Literal Jira status names. Backlog is implicit (project's create
-    # default); to_do is "refined and ready" — what /jira-flow:drain
+    # default); to_do is "refined and ready" — what /board-flow:drain
     # pulls from. The split between Backlog and to_do is the team's
     # grooming convention — drain only pulls from to_do, so unrefined
     # items in Backlog stay safe.
@@ -52,7 +52,7 @@ defaults:
     prove_drain: { jql: 'labels = needs-review' }
 
 # --- Default topology for build/validate flows ---
-default_topology: build-hex       # which topology's leads /jira-flow:execute delegates to
+default_topology: build-hex       # which topology's leads /board-flow:execute delegates to
 
 # --- Per-topology overrides (optional) ---
 # When a topology is active, fields here REPLACE the matching field
@@ -68,7 +68,7 @@ topologies:
       - { id: customfield_10010, name: "Team", value: "Engineering" }
     scope: { jql: 'component = backend' }   # drain backend work only when build-hex is active
 
-# --- Lifecycles for /jira-flow:advance ---
+# --- Lifecycles for /board-flow:advance ---
 lifecycles:
   - topology: discovery
     project_key: WEGO
@@ -94,26 +94,26 @@ lifecycles:
   the orchestrator's request.
 - **`defaults.board_id`** — numeric board ID (find in Jira's URL when
   viewing the board: `/jira/software/projects/<KEY>/boards/<ID>`). Used
-  by `/jira-flow:drain` to query the board's columns.
+  by `/board-flow:drain` to query the board's columns.
 - **`defaults.status_map`** — literal Jira status names. Different teams
   call them different things (`"Doing"` / `"Code Review"` / `"Done"`
   vs. defaults). Commands read this map instead of hardcoding strings.
   Four entries:
-  - `to_do` — refined-and-ready column. `/jira-flow:drain` pulls from
+  - `to_do` — refined-and-ready column. `/board-flow:drain` pulls from
     here, NOT from Backlog. The split is intentional: Backlog holds
     unrefined items the team hasn't groomed yet; `to_do` holds items
     ready for development.
-  - `in_progress` — `/jira-flow:execute` and `/common:autonomous-start`
+  - `in_progress` — `/board-flow:execute` and `/common:autonomous-start`
     transition into this when work begins.
   - `in_review` — destination after the flow completes successfully,
     with an Implementation Summary comment. **Must match the board's
     literal name** — some boards call this column `"Review"`, not
-    `"In Review"`. `/jira-flow:prove` and `/jira-flow:prove-drain` pull
+    `"In Review"`. `/board-flow:prove` and `/board-flow:prove-drain` pull
     from this status, so a mismatch makes them find zero cards.
   - `blocked` — optional; if your project lacks a Blocked column set
     to `null` and blocked cards stay in `in_progress` with a comment.
   - `done` — optional; the status *after* `in_review`. When set,
-    `/jira-flow:prove` auto-advances a PROVEN card here. Leave unset
+    `/board-flow:prove` auto-advances a PROVEN card here. Leave unset
     (or `null`) for triage-only: a PROVEN card gets a ✅ comment but
     stays in Review for you to move manually. See
     [proof-gate.md](proof-gate.md).
@@ -133,7 +133,7 @@ lifecycles:
   scope `drain` to a sprint but `prove_drain` to a review label, or
   `triage` to a single epic's children.
 - **`default_topology`** — which build topology
-  `/jira-flow:plan-track-build-validate` and `/jira-flow:execute`
+  `/board-flow:plan-track-build-validate` and `/board-flow:execute`
   delegate to (e.g., `build-hex` → `build-hex:engineering-lead`).
 - **`topologies.<name>`** — per-topology overrides applied when that
   topology is the active one. Each block can override any field from
@@ -144,7 +144,7 @@ lifecycles:
   lists (the topology's `required_fields` replaces the entire
   `defaults.required_fields`, not merged item-by-item). Topologies
   without a block here inherit `defaults` wholesale.
-- **`lifecycles[]`** — custom column workflows for `/jira-flow:advance`.
+- **`lifecycles[]`** — custom column workflows for `/board-flow:advance`.
   Each lifecycle has `project_key`, optional `issue_type`, and an
   ordered `columns[]` list with optional `on_enter` agent and
   `enter_gate` precondition.
@@ -166,11 +166,11 @@ topology overrides usually don't matter — `defaults` is enough.
 
 ## Scoping the *-drain commands
 
-By default `/jira-flow:drain` and `/jira-flow:prove-drain` sweep an
+By default `/board-flow:drain` and `/board-flow:prove-drain` sweep an
 *entire* status column (`to_do` and `in_review` respectively). On a busy
 board that's often more than you want to process in one run. **Scope**
 narrows the sweep to a slice — a sprint, a team, a component, a label —
-declared once in `jira-flow.yaml` instead of typed on every invocation.
+declared once in `board-flow.yaml` instead of typed on every invocation.
 
 `scope.jql` is a **raw JQL fragment**, AND-ed into the command's status
 query before ordering:
@@ -212,14 +212,14 @@ Both drains accept:
 They're mutually exclusive. Example:
 
 ```sh
-/jira-flow:prove-drain --max 10 --scope 'labels = hotfix'
-/jira-flow:drain --no-scope        # whole To Do column, ignore config
+/board-flow:prove-drain --max 10 --scope 'labels = hotfix'
+/board-flow:drain --no-scope        # whole To Do column, ignore config
 ```
 
 ### Single-card commands warn, they don't filter
 
-`/jira-flow:execute`, `/jira-flow:prove`, `/jira-flow:fix`, and
-`/jira-flow:advance` act on a card you named by key — so scope can't
+`/board-flow:execute`, `/board-flow:prove`, `/board-flow:fix`, and
+`/board-flow:advance` act on a card you named by key — so scope can't
 *select* for them. Instead they **warn and proceed**: if the named card
 falls outside the effective scope, you get a one-line heads-up
 ("⚠ WEGO-1234 is outside the configured scope … running it anyway") and
@@ -227,16 +227,16 @@ the command continues. Pass `--no-scope` to silence the warning. This
 catches accidental cross-team / cross-sprint work without ever blocking a
 deliberate one-off.
 
-> **Known double-warn:** `/jira-flow:execute` on a Bug card auto-dispatches
-> to `/jira-flow:fix`, and both fetch the card — so an out-of-scope Bug
+> **Known double-warn:** `/board-flow:execute` on a Bug card auto-dispatches
+> to `/board-flow:fix`, and both fetch the card — so an out-of-scope Bug
 > warns twice (once in `execute`, once in `fix`). It's cosmetic; the work
 > still proceeds. `--no-scope` carries through the dispatch and silences
 > both.
 
 ### What scope does *not* touch
 
-The card-*creation* commands — `/jira-flow:capture` and
-`/jira-flow:plan-track-build-validate` — ignore scope. A raw JQL filter
+The card-*creation* commands — `/board-flow:capture` and
+`/board-flow:plan-track-build-validate` — ignore scope. A raw JQL filter
 selects existing cards; it can't supply field defaults for new ones.
 Use `required_fields` (and per-topology overrides) to stamp team /
 component / label values onto created cards.
@@ -249,7 +249,7 @@ non-negotiable rules.
 ### 1. Read config first, every time
 
 At the start of every invocation, `atlassian-expert` reads
-`jira-flow.yaml` (falling back to legacy `.claude/jira-flow.lifecycle.yaml`).
+`board-flow.yaml` (falling back to legacy `.claude/board-flow.lifecycle.yaml`).
 It extracts the `defaults` block and uses those values verbatim.
 
 ### 2. Never infer or fabricate identifiers
@@ -263,7 +263,7 @@ guessing from conversation context, falling back to typical Atlassian
 URL patterns, or substituting a value seen in earlier context.
 
 Missing config + missing request → refuse with `BLOCKED: <field> not
-found in jira-flow.yaml defaults block; cannot infer. Add it to the
+found in board-flow.yaml defaults block; cannot infer. Add it to the
 config and retry.`
 
 This rule exists because the agent once invented `wego.atlassian.net`
@@ -317,11 +317,11 @@ Canonical template:
 
 Producers of this summary:
 
-- `/jira-flow:execute` step 7 — assembled from `engineering-lead`'s
+- `/board-flow:execute` step 7 — assembled from `engineering-lead`'s
   report + `qa-engineer`'s BUILD SUCCESS evidence.
-- `/jira-flow:plan-track-build-validate` step 8 — same.
+- `/board-flow:plan-track-build-validate` step 8 — same.
 - `/common:autonomous-start` step 9 — same, with the run-id appended.
-- `/jira-flow:advance` step 6 — assembled from preceding flow context if
+- `/board-flow:advance` step 6 — assembled from preceding flow context if
   available; otherwise asks the user.
 
 If the orchestrator's delegation reaches `atlassian-expert` without a
@@ -332,29 +332,29 @@ hard-coded, can't be bypassed by command drift.
 
 ## Composition rules
 
-- **Lead-based commands** (`/jira-flow:execute`,
-  `/jira-flow:plan-track-build-validate`) require a topology with
+- **Lead-based commands** (`/board-flow:execute`,
+  `/board-flow:plan-track-build-validate`) require a topology with
   `planning-lead` + `engineering-lead` + `validation-lead`. `build-hex`
   and `build-team` ship those; `build-solo` doesn't.
-- **Generic commands** (`/jira-flow:advance`, `/jira-flow:capture`,
-  `/jira-flow:drain`, `/jira-flow:configure`) work with any topology
+- **Generic commands** (`/board-flow:advance`, `/board-flow:capture`,
+  `/board-flow:drain`, `/board-flow:configure`) work with any topology
   (including `build-solo` and `discovery`).
-- **Discovery's column flow** rides on `/jira-flow:advance` reading the
+- **Discovery's column flow** rides on `/board-flow:advance` reading the
   `discovery` entry in `lifecycles[]`. No `/discovery:advance` — the
   generic command does the work.
 
 ## Migration from legacy config location
 
-Earlier the config lived at `.claude/jira-flow.lifecycle.yaml`. It
-moved to `jira-flow.yaml` at project root (visible, not hidden under
+Earlier the config lived at `.claude/board-flow.lifecycle.yaml`. It
+moved to `board-flow.yaml` at project root (visible, not hidden under
 plugin plumbing). Every command falls back to the legacy location with
 a one-time deprecation note if the new file is absent.
 
 To migrate manually:
 
 ```sh
-mv .claude/jira-flow.lifecycle.yaml jira-flow.yaml
+mv .claude/board-flow.lifecycle.yaml board-flow.yaml
 ```
 
-Or use `/jira-flow:configure --migrate` (offers to move + delete the
+Or use `/board-flow:configure --migrate` (offers to move + delete the
 legacy file in one step).

@@ -1,13 +1,13 @@
 ---
-description: Bulk-execute Jira cards from a column (default = `defaults.status_map.to_do` from `jira-flow.yaml`, fallback "To Do"). Iterates through up to N cards in priority order. Stops on first BLOCKED to avoid wasting budget on a stuck card. Heavy operation — each card runs the full execution flow. The split between Backlog (unrefined) and `to_do` (ready for dev) is intentional: drain only pulls from `to_do`, so unrefined Backlog items stay safe.
+description: Bulk-execute Jira cards from a column (default = `defaults.status_map.to_do` from `board-flow.yaml`, fallback "To Do"). Iterates through up to N cards in priority order. Stops on first BLOCKED to avoid wasting budget on a stuck card. Heavy operation — each card runs the full execution flow. The split between Backlog (unrefined) and `to_do` (ready for dev) is intentional: drain only pulls from `to_do`, so unrefined Backlog items stay safe.
 argument-hint: [column] [--max N] [--scope "<jql>"] [--no-scope]
 ---
 
-# /jira-flow:drain
+# /board-flow:drain
 
 ## Purpose
 
-Bulk-execute pending Jira cards. Iterates through cards in a column (default = `defaults.status_map.to_do` from `jira-flow.yaml`, fallback `"To Do"`), running the equivalent of `/jira-flow:execute` on each. Stops on first BLOCKED card.
+Bulk-execute pending Jira cards. Iterates through cards in a column (default = `defaults.status_map.to_do` from `board-flow.yaml`, fallback `"To Do"`), running the equivalent of `/board-flow:execute` on each. Stops on first BLOCKED card.
 
 Why `to_do` and not Backlog: the project convention encoded in `status_map` is that Backlog holds unrefined / unprioritized items, and `to_do` holds items refined and ready for development. Drain pulls only from `to_do` so the team's grooming process stays meaningful.
 
@@ -15,11 +15,11 @@ Why `to_do` and not Backlog: the project convention encoded in `status_map` is t
 
 ## Variables
 
-- `$ARGUMENTS` — typically the column name followed optionally by `--max N`. If empty, defaults: column = `defaults.status_map.to_do` from `jira-flow.yaml` (fallback `"To Do"` if no config), max = 5.
+- `$ARGUMENTS` — typically the column name followed optionally by `--max N`. If empty, defaults: column = `defaults.status_map.to_do` from `board-flow.yaml` (fallback `"To Do"` if no config), max = 5.
 - `--scope "<jql>"` — a raw JQL fragment that narrows the drain to a slice of the column for this run only, overriding any configured scope.
 - `--no-scope` — ignore configured scope entirely; sweep the whole column.
 
-**Scope** lets you drain a slice of the column (a sprint, a team, a label) instead of all of it. By default the drain applies the effective scope resolved from `jira-flow.yaml` (`defaults.scope` / `scope_overrides.drain` / the active topology's `scope`); the two flags above override that for one run. You don't resolve the precedence yourself — pass the command name and any flag to `atlassian-expert`, which resolves and reports the effective fragment.
+**Scope** lets you drain a slice of the column (a sprint, a team, a label) instead of all of it. By default the drain applies the effective scope resolved from `board-flow.yaml` (`defaults.scope` / `scope_overrides.drain` / the active topology's `scope`); the two flags above override that for one run. You don't resolve the precedence yourself — pass the command name and any flag to `atlassian-expert`, which resolves and reports the effective fragment.
 
 ## Instructions
 
@@ -29,7 +29,7 @@ You are the orchestrator. Iterate through pending cards. Stop on first BLOCKED. 
 
 ### 1. Parse arguments
 
-- Column name: `$ARGUMENTS` minus any flag (`--max N`, `--scope "..."`, `--no-scope`). If empty, read `defaults.status_map.to_do` from `jira-flow.yaml`; if config missing entirely, fallback to literal `"To Do"`.
+- Column name: `$ARGUMENTS` minus any flag (`--max N`, `--scope "..."`, `--no-scope`). If empty, read `defaults.status_map.to_do` from `board-flow.yaml`; if config missing entirely, fallback to literal `"To Do"`.
 - Max cards: parse `--max N` from `$ARGUMENTS`. Default: 5.
 - Scope flags: detect `--no-scope` and `--scope "<jql>"`. They are mutually exclusive; if both appear, abort with "pass either --scope or --no-scope, not both." Build the **scope directive** to hand to `atlassian-expert`: `--no-scope` → `Scope: none`; `--scope "<jql>"` → `Scope: <jql>`; neither → omit the line (atlassian-expert resolves the effective scope from config).
 
@@ -65,7 +65,7 @@ Wait for user confirmation before proceeding.
 
 For each card the user confirmed:
 
-  a. Run the equivalent of `/jira-flow:execute <card-key>` (full detail audit + build + validate + transitions).
+  a. Run the equivalent of `/board-flow:execute <card-key>` (full detail audit + build + validate + transitions).
   b. Capture the verdict.
   c. **If verdict is BLOCKED:**
      - Stop the drain. Don't process remaining cards.
