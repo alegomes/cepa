@@ -68,7 +68,7 @@ the full design):
 ### path-lock.py × 5 (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
 
 Owners: `build-team/hooks/`, `build-hex/hooks/`, `discovery/hooks/`,
-`book/hooks/`, `git-history/hooks/`.
+`design/hooks/`, `docs-topology/hooks/`.
 
 Enforces per-agent write allowlists. Each instance has a `PLUGIN_NAME`
 constant and an `ALLOWED_WRITES` dict keyed by agent name.

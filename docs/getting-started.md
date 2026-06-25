@@ -33,7 +33,7 @@ That single command:
 
 1. Registers this repo as a Claude Code plugin marketplace.
 2. Installs all seven plugins (`common`, `build-team`, `build-solo`,
-   `build-hex`, `discovery`, `board-flow`, `book`).
+   `build-hex`, `discovery`, `board-flow`, `docs`).
 3. Symlinks `./.claude/expertise/` → the plugin's centralized expertise
    directory (accumulated agent learnings follow you across projects).
 4. Copies `build-hex-topology.md` into your `.claude/` and appends

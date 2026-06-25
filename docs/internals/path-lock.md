@@ -2,7 +2,7 @@
 
 The PreToolUse hook that enforces per-agent write allowlists. Five
 instances ship across topologies (`build-team`, `build-hex`,
-`discovery`, `book`, `git-history`); each has the same structure with a
+`discovery`, `design`, `docs`); each has the same structure with a
 different `PLUGIN_NAME` constant and `ALLOWED_WRITES` table.
 
 It has two companions that close its blind spots — covered in
@@ -331,7 +331,7 @@ so when a write is blocked the user sees their extras among the
 allowed globs and can diagnose whether the missing path needs to be
 added.
 
-The other topologies (`build-team`, `discovery`, `book`) don't have
+The other topologies (`build-team`, `discovery`, `design`, `docs`) don't have
 role-based mapping — their allowlists are direct globs. If a future
 topology adopts the role pattern, mirror this design.
 
@@ -410,7 +410,7 @@ See [`hooks.md`](hooks.md)#hook-didnt-fire.
 
 ```sh
 export HEX_PATHLOCK_DEBUG=1
-# (or replace hex with build-team/discovery/book per topology you're using)
+# (or replace hex with build-team/discovery/design/docs per topology you're using)
 ```
 
 Then read `/tmp/hex-pathlock-debug.log`. Each line is a JSON record:

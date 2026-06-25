@@ -36,7 +36,7 @@ Every topology except `build-solo` follows the same shape:
 | Guarantee | How | Bypassable? |
 |---|---|---|
 | Leads can't write code | tool allowlist (no `Edit`/`Write`/`MultiEdit` in `tools:` frontmatter) | No — CC enforces tool allowlists |
-| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (build-team, build-hex, discovery, book); build-solo has no hook |
+| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (build-team, build-hex, discovery, design, docs); build-solo has no hook |
 | Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
 | Plan → build → validate ordering | prompt-only (in command + topology) | Yes — orchestrator can reorder |
 | board-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
@@ -89,20 +89,22 @@ Notable patterns:
 
 ```
 claude-multi-team-plugin/
-├── .claude-plugin/marketplace.json    # 7-plugin marketplace registry
+├── .claude-plugin/marketplace.json    # 9-plugin marketplace registry (cepa)
 ├── bin/install.sh                     # one-command installer + per-project wiring
-├── common/                            # cross-topology layer
+├── common/                            # cross-topology layer (required substrate)
 │   ├── .claude-plugin/plugin.json
-│   ├── commands/                      # autonomous-start, autonomous-resume, debrief, recap
+│   ├── commands/                      # autonomous-start/-resume, debrief, recap, handoff, branch/return, ...
 │   ├── expertise/                     # per-agent mental-model.yaml stubs (centralized via host symlink)
-│   ├── hooks/                         # session-log, autonomous-checkpoint, mark-build-stale, capture-build-result, gate-advance
-│   └── skills/                        # 10 skills (8 mindset + autonomous-mode + green-or-revert)
+│   ├── hooks/                         # session-log, autonomous-checkpoint, mark-build-stale, capture-build-result, gate-advance, ...
+│   └── skills/                        # mindset skills + autonomous-mode, green-or-revert, acceptance-completeness, ...
 ├── build-team/                        # 9-agent generic topology
-├── build-solo/                         # 2-agent lightweight topology
-├── build-hex/                       # 13-agent hexagonal-architecture topology
+├── build-solo/                        # 2-agent lightweight topology
+├── build-hex/                         # 14-agent hexagonal-architecture topology
 ├── discovery/                         # 6-agent product-discovery topology
-├── board-flow/                         # Jira lifecycle layer (1 agent + 6 commands)
-├── book/                              # 10-agent book-writing topology
+├── design/                            # 6-agent product-design topology
+├── docs-topology/                     # documentation/onboarding topology (plugin name: docs)
+├── board-flow/                        # Jira lifecycle layer
+├── review-gate/                       # pre-merge PR gate
 ├── docs/                              # user-facing documentation
 │   └── internals/                     # this directory
 ├── agents-overview.md                 # cross-agent matrix
@@ -111,17 +113,20 @@ claude-multi-team-plugin/
 
 ## The marketplace surface, in numbers
 
-| Plugin | Agents | Commands | Hooks | Skills |
-|---|---|---|---|---|
-| common | 0 | 4 | 5 | 10 |
-| build-team | 9 | 1 | 1 | 0 |
-| build-solo | 2 | 0 | 0 | 0 |
-| build-hex | 13 | 7 | 1 | 0 |
-| discovery | 6 | 1 | 1 | 0 |
-| board-flow | 1 | 6 | 0 | 1 |
-| book | 10 | 5 | 1 | 2 |
+| Plugin | Agents | Commands |
+|---|---|---|
+| common | 1 | 14 |
+| build-team | 9 | 1 |
+| build-solo | 2 | 0 |
+| build-hex | 14 | 7 |
+| discovery | 6 | 1 |
+| design | 6 | 1 |
+| docs | 9 | 6 |
+| board-flow | 1 | 10 |
+| review-gate | 1 | 4 |
 
-Total: 41 agents, 24 commands, 9 hooks, 13 skills, across 7 plugins.
+Total: 49 agents, 44 commands across 9 plugins. (Hook and skill counts vary per
+plugin; see each `plugin.json`.)
 
 ## Path-lock allowlists at a glance
 

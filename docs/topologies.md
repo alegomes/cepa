@@ -1,6 +1,6 @@
 # Choosing a topology
 
-The marketplace ships five topology plugins, plus `common` (required)
+The marketplace ships six topology plugins, plus `common` (required)
 and `board-flow` (optional Jira layer). Pick **one topology per project**
 — importing two snippets gives the orchestrator conflicting instructions.
 
@@ -10,18 +10,14 @@ and `board-flow` (optional Jira layer). Pick **one topology per project**
 | **build-team** | 9 | Greenfield apps with frontend + backend. Generic plan→build→validate. | `apps/*/api/**`, `apps/*/web/**`, `tests/**` | `plan-build-validate` |
 | **build-solo** | 2 | One-file tweaks, bug fixes, small refactors. No leads, no per-Task loop. | tool-allowlist only (`pair-reviewer` is read-only via tools) | none — describe in chat |
 | **discovery** | 6 | Continuous product discovery: signals → opportunities → validated bets → engineering brief. Sits *upstream* of build topologies. | `docs/discovery/**` | `capture` (plus generic `/board-flow:advance` for column transitions) |
-| **book** | 10 | Book writing (non-software). Outline → draft → revise → finalize. | `book/**`, `chapters/**`, `notes/**` | `outline`, `draft`, `revise`, `finalize`, `status` |
+| **design** | 6 | Product design: a feature brief → a build-ready design spec, before engineering builds. Upstream of the build teams. | `docs/design/**` | `explore-critique-spec` (+ per-column lifecycle via `/board-flow:advance`) |
+| **docs** | 9 | Sweep an existing project into a grounded Diátaxis doc tree for onboarding. | `docs/**`, `docs/_survey/**` | `survey`, `declutter`, `checkpoint`, `author`, `finalize` |
 
 ## How to choose
 
-Three questions to answer in order:
+Two questions to answer in order:
 
-### 1. Am I writing software?
-
-- **No** (book, longform document) → `book`. Stop reading.
-- **Yes** → continue.
-
-### 2. Is it a Java/Quarkus hexagonal backend, or some other layout?
+### 1. Is it a Java/Quarkus hexagonal backend, or some other layout?
 
 - **Hexagonal Java/Quarkus** with the `domain/application/api-rest/
   infrastructure/bootstrap` module layout → `build-hex`. The
@@ -30,7 +26,7 @@ Three questions to answer in order:
 - **Anything else** (Node app, Python service, fullstack with
   frontend, etc.) → continue.
 
-### 3. How much overhead can I tolerate?
+### 2. How much overhead can I tolerate?
 
 - **Small task, obvious scope** (one-file fix, rename, small refactor)
   → `build-solo`. 2 agents, no fan-out, no per-Task ceremony. Fast.
@@ -170,9 +166,3 @@ declared in `board-flow.yaml`'s `lifecycles[]` block.
 
 Use `/discovery:capture "<raw signal>"` to land a card in Inbox, then
 `/board-flow:advance <KEY>` to walk it column by column.
-
-### book (non-software)
-
-10 agents, separate topology for writing books / longform documents.
-Outline → chapter drafts → continuity reviews → manuscript compile.
-See `book/book-topology.md` for the full agent matrix and command set.

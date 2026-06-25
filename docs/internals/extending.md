@@ -75,7 +75,7 @@ Gotchas:
 ## Add a new skill
 
 1. **Pick a plugin** — usually `common` (cross-topology). Topology-
-   specific skills exist (book has 2) but most belong in common.
+   specific skills exist (e.g. `docs` ships 2) but most belong in common.
 2. **Author the spec** — `<plugin>/skills/<name>/SKILL.md`. The
    directory + `SKILL.md` filename are conventional; CC discovers them.
    - YAML frontmatter (`name`, `description`).

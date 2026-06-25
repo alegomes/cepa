@@ -100,19 +100,6 @@ The Jira lifecycle layer. Pairs with any topology.
 | `/board-flow:prove-drain` | `[--max N]` | Bulk-prove the Review column (`status_map.in_review`). Runs `/board-flow:prove` per card in priority order. Unlike `/board-flow:drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. `--max` defaults to 5. |
 | `/board-flow:advance` | `<jira-key>` | Generic column-by-column transition driven by `lifecycles[]` in `board-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). Runs the column's `on_enter` agent if declared, confirms `enter_gate` precondition with you if declared, transitions with Implementation Summary if `requires_summary: true` (or status name contains `review`/`qa`). |
 
-## book
-
-| Command | Argument | What it does |
-|---|---|---|
-| `/book:outline` | `<concept>` | Authors the book outline from your concept. |
-| `/book:draft` | `<chapter spec>` | Drafts a chapter against an approved outline. |
-| `/book:revise` | `<chapter>` | Revision pass on an existing chapter draft. |
-| `/book:finalize` | (none) | Final continuity review + manuscript compile across all chapters. |
-| `/book:status` | (none) | Reports progress against the outline (which chapters drafted, revised, finalized). |
-
-See `book/commands/` for argument details and `book/agents/` for the
-agent matrix.
-
 ## When to use which command
 
 ### "I want to implement a new feature"
