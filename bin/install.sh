@@ -101,6 +101,8 @@ if [ "${CLEAN}" -eq 1 ]; then
   claude plugin uninstall "discovery@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "board-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "docs@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "design@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "review-gate@${MARKETPLACE_NAME}" 2>/dev/null || true
 
   if [ -d "${CACHE_DIR}" ]; then
     echo "▶ --clean: removing plugin cache at ${CACHE_DIR}"
@@ -125,7 +127,7 @@ claude plugin install build-team@cepa
 echo "▶ Installing build-solo@cepa (2-agent dev/reviewer topology)"
 claude plugin install build-solo@cepa
 
-echo "▶ Installing build-hex@cepa (13-agent hexagonal-architecture topology)"
+echo "▶ Installing build-hex@cepa (14-agent hexagonal-architecture topology)"
 claude plugin install build-hex@cepa
 
 echo "▶ Installing discovery@cepa (6-agent continuous product-discovery topology)"
@@ -136,6 +138,12 @@ claude plugin install board-flow@cepa
 
 echo "▶ Installing docs@cepa (9-agent documentation/onboarding topology)"
 claude plugin install docs@cepa
+
+echo "▶ Installing design@cepa (6-agent product-design topology)"
+claude plugin install design@cepa
+
+echo "▶ Installing review-gate@cepa (pre-merge PR gate)"
+claude plugin install review-gate@cepa
 
 # --- Per-project setup: symlink for centralized expertise ---
 
@@ -368,14 +376,16 @@ fi
 echo ""
 echo "✔ Done."
 echo ""
-echo "Seven plugins installed:"
+echo "Nine plugins installed:"
 echo "    common       — 8 mindset skills (required by every topology)"
 echo "    build-team   — 9-agent generic topology + /build-team:plan-build-validate"
 echo "    build-solo    — 2-agent dev/reviewer topology"
-echo "    build-hex  — 13-agent hexagonal-architecture topology + per-Task quality loop"
+echo "    build-hex  — 14-agent hexagonal-architecture topology + per-Task quality loop"
 echo "    discovery    — 6-agent continuous product-discovery topology"
+echo "    design       — 6-agent product-design topology (brief → build-ready spec)"
 echo "    board-flow    — atlassian-expert + Jira-aware commands (pair with any topology)"
 echo "    docs         — 9-agent documentation/onboarding topology + /docs:survey ... /docs:finalize"
+echo "    review-gate  — pre-merge PR gate (open + merge doors)"
 echo ""
 if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   echo "Host project setup at ${HOST_PROJECT}:"

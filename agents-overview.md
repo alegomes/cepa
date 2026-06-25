@@ -4,11 +4,14 @@ A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
 is each topology's own `hooks/path-lock.py` (build-team, build-hex,
-and discovery have one; build-solo doesn't, by design).
+discovery, design, and docs have one; build-solo doesn't, by design).
 
-The marketplace ships **six plugins**: `common` (skills + expertise),
-four topologies (`build-team`, `build-solo`, `build-hex`, `discovery`),
-and a cross-cutting layer (`board-flow`).
+The marketplace ships **nine plugins**: `common` (skills + expertise),
+six topologies (`build-team`, `build-solo`, `build-hex`, `discovery`,
+`design`, `docs`), and two cross-cutting layers (`board-flow`,
+`review-gate`). This overview details the build and discovery agents; the
+`design`, `docs`, and `review-gate` agents live in their own
+`<plugin>/agents/` dirs.
 
 ---
 
@@ -502,7 +505,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
   was observed working (orchestrator → leads → workers → honest BLOCKED
   reply when target code wasn't present). Not yet exercised against a
   real codebase end-to-end.
-- 🟡 **Real-task validation of `build-hex`** — the 13-agent topology
+- 🟡 **Real-task validation of `build-hex`** — the 14-agent topology
   was just built. The per-Task quality loop, refactor-advisor's
   housekeeping report shape, and code-reviewer's APPROVE/REJECT have
   not been observed live yet.

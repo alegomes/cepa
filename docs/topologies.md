@@ -1,7 +1,8 @@
 # Choosing a topology
 
 The marketplace ships six topology plugins, plus `common` (required)
-and `board-flow` (optional Jira layer). Pick **one topology per project**
+and the `board-flow` + `review-gate` layers (optional). Pick **one build
+topology per project**
 — importing two snippets gives the orchestrator conflicting instructions.
 
 | Topology | Agents | Best for | Path-lock | Commands |

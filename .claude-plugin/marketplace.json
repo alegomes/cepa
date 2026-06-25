@@ -29,7 +29,7 @@
     {
       "name": "build-hex",
       "source": "./build-hex",
-      "description": "Hexagonal-architecture backend topology — 13 agents across 3 teams (planning, engineering, validation) with a per-Task quality loop (qa → refactor-advisor → code-reviewer). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. Requires common@cepa. Pair with board-flow@cepa for Jira lifecycle.",
+      "description": "Hexagonal-architecture backend topology — 14 agents (3 teams: planning, engineering, validation + a standalone proof-reviewer) with a per-Task quality loop (qa → refactor-advisor → code-reviewer). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. Requires common@cepa. Pair with board-flow@cepa for Jira lifecycle.",
       "version": "0.2.0",
       "tags": ["agents", "hexagonal", "java", "quarkus", "backend"]
     },

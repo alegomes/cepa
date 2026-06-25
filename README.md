@@ -50,7 +50,7 @@ Cepa is a marketplace of composable plugins on two shelves.
 |---|---|---|
 | Doing something small and scoped | **`build-solo`** | dev + reviewer (2 agents) |
 | Building a feature, any stack | **`build-team`** | orchestrator + 3 leads + 6 workers |
-| On a hexagonal-architecture backend | **`build-hex`** | 13 agents, per-task quality loop + proof gate |
+| On a hexagonal-architecture backend | **`build-hex`** | 14 agents, per-task quality loop + proof gate |
 
 `build-solo` and `build-team` differ by *size*; `build-hex` differs by *architecture-awareness* —
 it knows and enforces the ports/adapters layout, with the heaviest rigor (proof-reviewer, E2E specs).
@@ -107,7 +107,7 @@ Or run `bin/install.sh --topology=build-team /path/to/your-project` to wire a pr
 | `common` | Shared mindset skills + gates + hooks; ships `completion-auditor`. Required by every topology. |
 | `build-solo` | 2-agent dev/reviewer pair for small tasks. |
 | `build-team` | Generic 9-agent topology: orchestrator + 3 leads + 6 domain-locked workers. |
-| `build-hex` | 13-agent hexagonal-architecture topology with per-task quality loop + standalone proof-reviewer. |
+| `build-hex` | 14-agent hexagonal-architecture topology with per-task quality loop + standalone proof-reviewer. |
 | `discovery` | 6-agent continuous product-discovery topology (sits upstream of the build teams). |
 | `design` | 6-agent product-design topology (brief → build-ready spec). |
 | `docs` | Documentation/onboarding topology → grounded Diátaxis tree. |

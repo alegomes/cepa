@@ -2,7 +2,7 @@
 
 > When this snippet is loaded into your project's `CLAUDE.md` (via `@-import`
 > or copy-paste), the main `claude` session operates as the orchestrator
-> of a 13-agent team installed by the `build-hex` plugin.
+> of a 14-agent team installed by the `build-hex` plugin.
 
 ## Frame: a system that builds hexagonal backends
 
