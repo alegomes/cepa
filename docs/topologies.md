@@ -167,3 +167,30 @@ declared in `board-flow.yaml`'s `lifecycles[]` block.
 
 Use `/discovery:capture "<raw signal>"` to land a card in Inbox, then
 `/board-flow:advance <KEY>` to walk it column by column.
+
+### design (product design, upstream of the build)
+
+6 agents (design-lead + ux-architect, visual-designer, design-system-keeper,
+prototyper, design-critic). Turns a feature brief into a build-ready design
+spec — interaction flows, visual language, design-system fit, a shareable
+prototype, and a critique — before engineering builds. Not a build topology:
+it produces artifacts under `docs/design/**`, never code, and composes
+*alongside* a build topology rather than replacing it.
+
+Run `/design:explore-critique-spec "<feature>"` for the linear flow, or drive
+it per-column with `/board-flow:advance`. Sits downstream of `discovery` and
+upstream of `build-team` / `build-hex`. `prototyper` is the sole holder of the
+Gamma/Canva MCP tools.
+
+### docs (documentation & onboarding)
+
+9 agents (docs-lead + 8 workers) that sweep an EXISTING project into a
+grounded Diátaxis doc tree (tutorial / how-to / reference / explanation).
+The discipline: extract the HOW from code, elicit the WHY from a source
+(owner / commit / ADR / tracker), and never invent rationale — a missing
+source becomes an owner question.
+
+Five owner-checkpointed phases: `/docs:survey` → `/docs:declutter` →
+`/docs:checkpoint` → `/docs:author` → `/docs:finalize` (`/docs:status` shows
+progress). Like `design`, it composes alongside a build topology rather than
+replacing it; path-lock keyed to `docs/**` + `docs/_survey/**`.

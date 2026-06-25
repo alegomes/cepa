@@ -9,9 +9,7 @@ discovery, design, and docs have one; build-solo doesn't, by design).
 The marketplace ships **nine plugins**: `common` (skills + expertise),
 six topologies (`build-team`, `build-solo`, `build-hex`, `discovery`,
 `design`, `docs`), and two cross-cutting layers (`board-flow`,
-`review-gate`). This overview details the build and discovery agents; the
-`design`, `docs`, and `review-gate` agents live in their own
-`<plugin>/agents/` dirs.
+`review-gate`) — every one of which is documented below.
 
 ---
 
@@ -164,6 +162,78 @@ post-hoc rationalization.
 
 ---
 
+## design
+
+Product-design topology. **Upstream of the build topologies** — turns a
+feature brief into a build-ready design spec (UX + visual) so engineering
+implements from a spec instead of inventing one. Produces artifacts, never
+code.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `design-lead` | lead (orchestrator) | main session | the 5 workers below | Read, Glob, Grep, Task | nothing except own expertise |
+| `ux-architect` | worker (Explore — how it works) | design-lead | — | Read, Glob, Grep, Write | `docs/design/**` |
+| `visual-designer` | worker (Explore — how it looks) | design-lead | — | Read, Glob, Grep, Write | `docs/design/**` |
+| `design-system-keeper` | worker (Systematize) | design-lead | — | Read, Glob, Grep, Write | `docs/design/**` |
+| `prototyper` | worker (Prototype) — sole holder of Gamma/Canva MCP | design-lead | — | Read, Glob, Grep, Write, Gamma/Canva MCP | `docs/design/**` |
+| `design-critic` | worker (Critique) — quality gate, SHIP / REVISE / BLOCK | design-lead | — | Read, Glob, Grep, Write | `docs/design/reviews/**` |
+
+**Commands:**
+
+| Command | Purpose |
+|---|---|
+| `/design:explore-critique-spec <feature>` | Run the canonical design loop: explore (flows ∥ visual) → systematize against the design system → prototype → critique → assemble a build-ready design spec. |
+
+The lifecycle (Brief → Explore → Systematize → Prototype → Critique ⇄
+Explore → Spec'd → Handed off) can also be driven per-column via
+`/board-flow:advance`. Sits between `discovery` (upstream brief) and
+`build-team`/`build-hex` (downstream build).
+
+**Path-lock** is keyed to `docs/design/**` (the design-critic to
+`docs/design/reviews/**`). Design agents cannot write code, only design
+artifacts. `prototyper` is the only agent in the marketplace holding the
+Gamma/Canva MCP tools.
+
+---
+
+## docs
+
+Documentation/onboarding topology. Sweeps an EXISTING project and produces
+a grounded Diátaxis doc tree (tutorial / how-to / reference / explanation)
+for handing it off to engineers who weren't there for the decisions.
+Central discipline: separate the **HOW** (extractable from code) from the
+**WHY** (elicitable — owner / commit / ADR / tracker) and NEVER invent
+rationale — a missing source becomes an owner question, not a guess.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `docs-lead` | lead (orchestrator) | main session | the 8 workers below | Read, Glob, Grep, Task, Write | `docs/_survey/gap-report.md`, `docs/_survey/STATUS.md` |
+| `diataxis-inventory` | worker (Survey) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/inventory.md` |
+| `how-extractor` | worker (Survey — the HOW) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/how-ledger.md` |
+| `flow-tracer` | worker (Survey — end-to-end flows) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/flows.md` |
+| `rationale-archaeologist` | worker (Survey — the WHY) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/why-ledger.md`, `open-questions.md` |
+| `structure-surgeon` | worker (Declutter) | docs-lead | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | `docs/**`, `archive/**`, `README.md` |
+| `doc-author` | worker (Author) | docs-lead | — | Read, Glob, Grep, Write | `docs/how-to/**`, `reference/**`, `explanation/**` |
+| `tutorial-author` | worker (Author — Tutorial last) | docs-lead | — | Read, Glob, Grep, Write | `docs/tutorial/**` |
+| `consistency-reviewer` | worker (Finalize) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/consistency-review.md` |
+
+**Commands** (five owner-checkpointed phases + status):
+
+| Command | Purpose |
+|---|---|
+| `/docs:survey` | Phase 1 — read-only 4-front archaeology (inventory ∥ how ∥ flows ∥ why) → gap-report. |
+| `/docs:declutter` | Phase 2 — archive process-exhaust, demote rival front-doors (moves files, rewrites no prose). |
+| `/docs:checkpoint` | Phase 3 — owner answers the WHY-gaps; answers become sourced rationale. |
+| `/docs:author` | Phase 4 — write the grounded tree (Tutorial last, from a real first run). |
+| `/docs:finalize` | Phase 5 — whole-tree consistency review + owner sign-off. |
+| `/docs:status` | Show which phases are done / in progress / pending (reads STATUS markers). |
+
+**Path-lock** is keyed to `docs/**` + `docs/_survey/**`. The
+`structure-surgeon`'s lock is deliberately broad (it moves files across the
+tree) — owner-gated by `/docs:declutter`, not by the glob.
+
+---
+
 ## board-flow
 
 Cross-cutting layer. **Not a topology** — adds Jira lifecycle to
@@ -193,6 +263,32 @@ and `build-hex` ship those names; `build-solo` doesn't, so board-flow
 doesn't work with build-solo-only. CC has no enforced plugin
 dependencies — the soft requirement is documented in the plugin
 descriptions and surfaces at first delegation if missing.
+
+---
+
+## review-gate
+
+Cross-cutting layer. **Not a topology** — adds a pre-merge gate so code
+reaches the default branch only through a reviewed, proven pull request,
+never a direct push.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `bitbucket-expert` | worker (cross-cutting) — the only agent allowed to touch the Bitbucket REST API | orchestrator (called from review-gate commands at the PR boundary) | — | Bash (bundled `bin/open-pr.sh` + `bin/merge-pr.sh`), Read, Glob, Grep | Bitbucket PR state via the bundled scripts; own expertise |
+
+**Commands:**
+
+| Command | Purpose |
+|---|---|
+| `/review-gate:open` | Open door — hygiene gate via `/code-review`, then opens a PR through `bitbucket-expert`. |
+| `/review-gate:merge` | Merge door — QA gate via the topology's `proof-reviewer`; merges (optionally auto) on a PROVEN verdict. |
+| `/review-gate:review` | Run the review pass on the current diff / PR. |
+| `/review-gate:configure` | Set up the gate (Bitbucket workspace/repo, default branch, auto_merge). |
+
+**Hooks:** `no-direct-main.py` (fence — blocks direct push/merge to the
+default branch and redirects to the flow) and `push-nudge.py` (suggests a
+PR after a feature-branch push). Optional `board-flow` seam maps
+open → In Review, merge → Done.
 
 ---
 
