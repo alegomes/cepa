@@ -195,7 +195,7 @@ descriptions and surfaces at first delegation if missing.
 
 ## common (cross-topology layer)
 
-The `common@alegomes` plugin ships the shared mindset skills, the
+The `common@cepa` plugin ships the shared mindset skills, the
 autonomous-operation lifecycle, the session log, and the green-or-revert
 build-state machine. No agents — `common` is a horizontal layer that
 every topology rides on top of.
@@ -390,7 +390,7 @@ mechanism that prevents the card from advancing on optimism.
 | `autonomous-mode` | Activated by `/common:autonomous-start`. No questions to the user; every ambiguity logged in formal `### Decision:` block (Options / Chosen / Rationale). | orchestrator (session-wide) |
 | `green-or-revert` | Never claim runtime state without consulting `.claude/last-build.json`. After meaningful edits, verify is the next action — don't wait to be asked. On FAILURE, fix or revert before any other action. | orchestrator + leads + dev workers |
 
-The ten skills ship in the **`common@alegomes` plugin**
+The ten skills ship in the **`common@cepa` plugin**
 (`common/skills/`). Every topology requires `common`; install it once
 per project and the skills are available to every subagent via CC's
 session-wide skill namespace.
@@ -473,7 +473,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Shared mindset skills available across topologies | ✅ | `common@alegomes` plugin ships the five skills; required by both `build-team` and `build-solo` |
+| Shared mindset skills available across topologies | ✅ | `common@cepa` plugin ships the five skills; required by both `build-team` and `build-solo` |
 
 ---
 

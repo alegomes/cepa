@@ -1,598 +1,134 @@
-# claude-multi-team-plugin
+# Cepa
 
-A Claude Code plugin marketplace shipping a multi-agent setup as **eight**
-composable plugins.
+**Give Claude Code a team instead of a single agent — one that proves its own work.**
 
-## Documentation
+One Claude writes the code, reviews it, and tells you it's done. That's three mediocre
+jobs in one. **Cepa** splits the work the way a real team does — a planner, an implementer,
+a reviewer — and adds the thing a solo agent can't do: **it refuses to call something
+"done" until it can prove it.**
+
+> *Cepa* (Portuguese): the rootstock — the living strain every vine is grown from. This is
+> the strain your software teams are cultured from. *Don't hire a team. Culture one.*
+
+```mermaid
+flowchart LR
+  You --> O[Orchestrator]
+  O --> P[Plan]
+  O --> B[Build]
+  O --> V[Validate]
+  P --> w1[workers]
+  B --> w2[workers]
+  V --> w3[workers]
+  classDef tier fill:#0d1117,stroke:#30363d,color:#c9d1d9;
+  class O,P,B,V tier;
+```
+
+The orchestrator routes the work. **Leads** own a phase and delegate — they never write code
+themselves. **Workers** are domain-locked: each does one job, inside its own lane.
+
+## The part that matters
+
+A solo agent's most expensive habit is lying about "done" — the test it *thinks* passed,
+the half of the feature it forgot. Cepa won't let it:
+
+- **green-or-revert** — can't commit or push while the build is red. No "I think the tests pass."
+- **acceptance-completeness** — a card can't reach Review until a test actually demonstrates
+  each requirement, *at the surface it was written for*.
+- **proof gate** — before anything ships, an independent reviewer **breaks each change and
+  re-runs the covering test**. If nothing goes red, the change wasn't doing anything — it
+  bounces back.
+
+Most agent swarms generate. Cepa generates *and disproves its own work before trusting it.*
+
+## Pick a team
+
+Cepa is a marketplace of composable plugins on two shelves.
+
+### Shelf 1 — pick a build team
+
+| If you're… | Use | Shape |
+|---|---|---|
+| Doing something small and scoped | **`build-solo`** | dev + reviewer (2 agents) |
+| Building a feature, any stack | **`build-team`** | orchestrator + 3 leads + 6 workers |
+| On a hexagonal-architecture backend | **`build-hex`** | 13 agents, per-task quality loop + proof gate |
+
+`build-solo` and `build-team` differ by *size*; `build-hex` differs by *architecture-awareness* —
+it knows and enforces the ports/adapters layout, with the heaviest rigor (proof-reviewer, E2E specs).
+
+### Shelf 2 — add a layer (compose onto any team)
+
+| Layer | What it adds |
+|---|---|
+| **`discovery`** | Upstream: turn raw signals into validated opportunities, hand off a delivery brief |
+| **`design`** | Turn a feature brief into a build-ready design spec (UX + visual), before engineering builds |
+| **`docs`** | Sweep an existing project into a grounded Diátaxis doc tree for onboarding |
+| **`board-flow`** | Jira/tracker lifecycle — register, transition, and drive cards through any topology |
+| **`review-gate`** | Pre-merge gate — code reaches main only through a reviewed, proven PR |
+| **`common`** | The substrate every plugin needs: mindset skills, the gates, the hooks |
+
+These trace the product lifecycle — **discover → design → build → document** — with `board-flow`
+and `review-gate` wrapping any stage. (A go-to-market / content stage is on the roadmap.)
+
+→ **[Get started in 10 minutes](docs/getting-started.md)**
+
+```sh
+# install the marketplace, then a team + the layers you want
+/plugin marketplace add /path/to/this-repo
+/plugin install common@cepa        # required substrate
+/plugin install build-team@cepa    # or build-solo / build-hex
+/plugin install board-flow@cepa    # optional layers
+```
+
+Or run `bin/install.sh --topology=build-team /path/to/your-project` to wire a project in one shot.
+
+---
+
+## Reference
 
 | Document | Read it for |
 |---|---|
-| **[docs/getting-started.md](docs/getting-started.md)** | First 10 minutes: install, pick a topology, run your first command. |
-| **[docs/topologies.md](docs/topologies.md)** | Choosing between `build-hex`, `build-team`, `build-solo`, `discovery`, `book`. Composition rules with `board-flow`. |
-| **[docs/commands.md](docs/commands.md)** | Full reference for every slash command, grouped by plugin. |
-| **[docs/board-flow.md](docs/board-flow.md)** | `board-flow.yaml` schema (`defaults`, `status_map`, `lifecycles`), `/configure` walkthrough, Implementation Summary contract, read-back verification. |
-| **[docs/autonomous-mode.md](docs/autonomous-mode.md)** | Unattended-operation lifecycle: `/autonomous-start` → checkpoint hook → `/autonomous-resume` → `/debrief`. Survives token-limit hits and session crashes. |
-| **[docs/handoff.md](docs/handoff.md)** | Session handoff: continuous checkpoint (Stop hook) + transparent branch-keyed resume (SessionStart) + `/handoff` command + wrap-up nudge. Stop and pick up cleanly in a new session without hand-writing a summary; survives token-limit kills. |
-| **[docs/green-or-revert.md](docs/green-or-revert.md)** | Build-state machine (`UNKNOWN`/`SUCCESS`/`STALE`/`FAILURE`). Hard gate on commits/pushes/PRs while build is broken. Stops the "I think the test passes" failure mode. |
-| **[docs/acceptance-completeness.md](docs/acceptance-completeness.md)** | Per-card acceptance-evidence machine (`absent`/`incomplete`/`complete`). The `completion-auditor` pins each criterion to its altitude; the `acceptance-gate` hook blocks the In-Review transition until a test demonstrates the criterion at the surface it was written at. Stops the "both halves are covered" failure mode. |
-| **[docs/proof-gate.md](docs/proof-gate.md)** | Automated, change-driven gate for the Review column. The `proof-reviewer` interrogates the whole diff and proves every changed line is load-bearing at the external surface — IT coverage of the diff, diff-scoped mutation, adversarial input, regression-red-at-base. `/board-flow:prove` + `/board-flow:prove-drain` triage Review by evidence: PROVEN advances, UNPROVEN bounces back, NEEDS-HUMAN stays for you. The outbound counterpart to acceptance-completeness. |
-| **[docs/context-forking.md](docs/context-forking.md)** | Fork a discussion into an isolated context and return with only the conclusion: `/branch` + `/return`, the two-session isolation model, the `.claude/forks/` LIFO stack, and when to use a subagent instead. |
-| **[docs/e2e-cycle.md](docs/e2e-cycle.md)** | The four E2E spec commands (`/spec-e2e`, `/document-e2e`, `/resync-e2e`, `/audit-e2e`) and how they relate (intent ↔ spec ↔ code ↔ tests). |
-| **[docs/troubleshooting.md](docs/troubleshooting.md)** | Common errors: path-lock blocks, gate-advance blocks, cache staleness, MCP auth dropout, worktree-strips-Task quirk. |
-| **[docs/internals/](docs/internals/)** | For extending or debugging the marketplace itself: architecture, hooks reference, path-lock design, build-state machine, agent anatomy, expertise files, extension cookbook, CC quirks. |
-| **[agents-overview.md](agents-overview.md)** | Per-agent reference: role, delegations, write allowlist, when-to-use. The cross-plugin matrix. |
+| **[docs/getting-started.md](docs/getting-started.md)** | Install, pick a topology, run your first command. |
+| **[docs/topologies.md](docs/topologies.md)** | Choosing between the build teams and composing the layers. |
+| **[docs/commands.md](docs/commands.md)** | Every slash command, grouped by plugin. |
+| **[docs/board-flow.md](docs/board-flow.md)** | `board-flow.yaml` schema, `/configure`, Implementation Summary contract. |
+| **[docs/green-or-revert.md](docs/green-or-revert.md)** | The build-state gate that blocks commits while the build is broken. |
+| **[docs/acceptance-completeness.md](docs/acceptance-completeness.md)** | The per-card acceptance-evidence gate. |
+| **[docs/proof-gate.md](docs/proof-gate.md)** | The change-driven proof gate for the Review column. |
+| **[docs/autonomous-mode.md](docs/autonomous-mode.md)** | Unattended runs: `/autonomous-start` → checkpoint → `/autonomous-resume` → `/debrief`. |
+| **[docs/handoff.md](docs/handoff.md)** | Session handoff: stop and pick up cleanly in a new session. |
+| **[docs/troubleshooting.md](docs/troubleshooting.md)** | Common errors: path-lock, gate-advance, cache staleness, MCP auth. |
+| **[docs/internals/](docs/internals/)** | Extending the marketplace: architecture, hooks, path-lock, agent anatomy. |
+| **[agents-overview.md](agents-overview.md)** | Per-agent reference: role, delegations, write allowlist, when-to-use. |
 
 ## Plugins
 
-- **`common`** — eight shared mindset skills (`mental-model`,
-  `active-listener`, `zero-micromanagement`, `conversational-response`,
-  `till-done`, `scope-discipline`, `evidence-over-assumption`,
-  `name-the-disagreement`) plus four enforcement/operation skills
-  (`autonomous-mode`, `green-or-revert`, `defense-in-depth`,
-  `acceptance-completeness`). Ships one agent: `completion-auditor` (the
-  independent last-mile acceptance gate). Cross-topology commands:
-  `/autonomous-start`, `/autonomous-resume`, `/debrief`, `/recap`,
-  `/handoff`, `/branch`, `/return`. Hooks: session-log, session-subject,
-  session-activity, session-registry, session-checkpoint, autonomous-checkpoint,
-  mark-build-stale, capture-build-result, gate-advance, enforcement-guard,
-  lead-no-worktree, acceptance-gate. Required by every topology.
-- **`build-team`** — the generic 9-agent topology: orchestrator + 3
-  leads (Opus, delegate-only) + 6 workers (Sonnet, domain-locked).
-  For plan → build → validate workflows.
-- **`build-solo`** — a lightweight 2-agent topology: dev + reviewer.
-  For small tasks where build-team's overhead isn't worth it.
-- **`build-hex`** — a 14-agent hexagonal-architecture topology
-  with a per-Task quality loop (qa → refactor-advisor → code-reviewer)
-  plus a standalone `proof-reviewer` (the change-driven proof gate).
-  Path-lock keyed to the canonical `domain/application/api-rest/
-  infrastructure/bootstrap` Maven layout. Ships three flow commands
-  (`plan-build-validate`, `reproduce-fix-verify`, `investigate`) plus
-  a four-command E2E spec cycle
-  (`spec-e2e` / `document-e2e` / `resync-e2e` / `audit-e2e`).
-- **`discovery`** — a 6-agent continuous product-discovery topology
-  (discovery-lead + opportunity-framer + user-researcher +
-  assumption-tester + evidence-auditor + epic-briefer). Sits *upstream*
-  of the build topologies — translates raw signals into validated
-  opportunities, hands off to engineering via a delivery brief.
-- **`board-flow`** — adds an `atlassian-expert` worker plus Jira-aware
-  slash commands (`configure`, `capture`, `plan-track-build-validate`,
-  `execute`, `drain`, `advance`). Layers on top of any topology that
-  ships the standard 3-lead set, OR any topology with a custom lifecycle
-  declared in `board-flow.yaml` (used by `/advance` — discovery's column
-  flow rides on this). Project Jira config lives at `board-flow.yaml` in
-  the project root: `defaults` block (site / project_key / board_id /
-  status_map / issue_types), plus `default_topology` and per-topology
-  lifecycles. `atlassian-expert` enforces anti-hallucination (refuses
-  to infer site URLs from repo names) and read-back verification on
-  every Jira write.
-- **`book`** — a 12-agent book-writing topology (2 leads + 10 workers).
-  Outside the software-engineering surface area; documented in
-  `book/book-topology.md`.
-- **`git-history`** — a 3-agent Git-history analysis topology
-  (`git-historian` lead + `history-collector` + `history-narrator`).
-  Tells a project's story from its commit history and analyzes effort
-  allocation across one or more repos. Standalone; `/git-history:analyze`
-  runs the flow.
+| Plugin | Role |
+|---|---|
+| `common` | Shared mindset skills + gates + hooks; ships `completion-auditor`. Required by every topology. |
+| `build-solo` | 2-agent dev/reviewer pair for small tasks. |
+| `build-team` | Generic 9-agent topology: orchestrator + 3 leads + 6 domain-locked workers. |
+| `build-hex` | 13-agent hexagonal-architecture topology with per-task quality loop + standalone proof-reviewer. |
+| `discovery` | 6-agent continuous product-discovery topology (sits upstream of the build teams). |
+| `design` | 6-agent product-design topology (brief → build-ready spec). |
+| `docs` | Documentation/onboarding topology → grounded Diátaxis tree. |
+| `board-flow` | `atlassian-expert` + Jira-aware commands; layers onto any topology. |
+| `review-gate` | Pre-merge PR gate with a quarantined `bitbucket-expert` adapter. |
+
+> Book-writing and git-history analysis used to live here. They're narrative/analysis tools
+> off the product-lifecycle spine, so they were split into the separate **cepa-labs**
+> marketplace ([claude-standalone-topologies](../claude-standalone-topologies)).
 
 Edit once here, install in any project, version like normal code.
 
-## Why a multi-agent system
-
-We are building **a system that will build systems**. Software worth
-shipping needs more than one perspective — a planner, an implementer,
-a reviewer — and trying to compress all three into one agent gets you
-mediocre versions of all three. This plugin packages the three-tier
-pattern (orchestrator → leads → workers) so any Claude Code project
-can install a team rather than hire one.
-
-The mindset comes from indydev Dan's `lead-agents` pattern (the second
-asset in his Agentic Horizon trilogy). The Claude Code adaptation here
-ports the agents, the path-lock hook, and the eight mindset skills
-(`mental-model`, `active-listener`, `zero-micromanagement`,
-`conversational-response`, `till-done`, `scope-discipline`,
-`evidence-over-assumption`, `name-the-disagreement`). Some Pi-format
-features (machine-readable team-config YAML, runtime env-var injection
-into agents) don't have direct CC equivalents and live as conventions
-instead. See `agents-overview.md` for the full audit and per-topology
-agent matrices.
-
-```
-claude-multi-team-plugin/
-├── .claude-plugin/marketplace.json  # 8-plugin marketplace: common + build-team + build-solo + build-hex + discovery + board-flow + book + git-history
-├── bin/install.sh                   # one-command installer for all eight plugins
-├── common/                          # shared mindset skills + centralized expertise (required by every topology)
-│   ├── .claude-plugin/plugin.json
-│   ├── expertise/                   # per-agent mental-model.yaml stubs (centralized via host symlink)
-│   └── skills/                      # 8 mindset skills
-├── build-team/                      # generic 9-agent topology (frontend-dev / backend-dev / etc.)
-│   ├── .claude-plugin/plugin.json
-│   ├── agents/                      # 9 subagent system prompts
-│   ├── commands/                    # /build-team:plan-build-validate
-│   ├── hooks/path-lock.py
-│   └── build-team-topology.md
-├── build-solo/                       # 2-agent dev/reviewer pair
-│   ├── .claude-plugin/plugin.json
-│   ├── agents/
-│   └── build-solo-topology.md
-├── build-hex/                     # 14-agent hexagonal-architecture backend topology
-│   ├── .claude-plugin/plugin.json
-│   ├── agents/                      # 3 teams (planning/engineering/validation) + standalone proof-reviewer
-│   ├── commands/                    # /build-hex:plan-build-validate
-│   ├── hooks/path-lock.py           # keyed to */src/main and */src/test (+ bash-path-lock.py)
-│   └── build-hex-topology.md
-├── discovery/                       # 6-agent continuous product-discovery topology
-│   ├── .claude-plugin/plugin.json
-│   ├── agents/                      # discovery-lead + 5 workers (framer, researcher, tester, auditor, briefer)
-│   ├── commands/                    # /discovery:capture
-│   ├── hooks/path-lock.py           # keyed to docs/discovery/**
-│   ├── board-flow.lifecycle.example.yaml
-│   └── discovery-topology.md
-├── board-flow/                       # Jira lifecycle layer (pair with any topology)
-│   ├── .claude-plugin/plugin.json
-│   ├── agents/atlassian-expert.md
-│   └── commands/                    # /board-flow:{capture,plan-track-build-validate,execute,drain,advance}
-├── book/                            # 12-agent book-writing topology (2 leads + 10 workers)
-├── git-history/                     # 3-agent Git-history analysis topology
-├── agents-overview.md               # cross-agent matrix + indydev-Dan idea audit
-└── README.md                        # you are here
-```
-
----
-
-## Setup
-
-### Install + per-project setup (one command)
-
-From inside the host project where you want to use the agents:
-
-```sh
-cd /path/to/your/host-project
-~/coding/harnessing/claude/claude-multi-team-plugin/bin/install.sh --topology=build-team
-```
-
-That single command does **all three** setup steps:
-
-1. Registers this repo as a Claude Code plugin marketplace and installs
-   all eight plugins (`common` + `build-team` + `build-solo` +
-   `build-hex` + `discovery` + `board-flow` + `book` + `git-history`).
-2. Sets up the current directory as a host project by creating
-   `.claude/expertise` as a **symlink** to the plugin's centralized
-   expertise directory (so accumulated agent knowledge follows you
-   across projects).
-3. With `--topology=NAME` (one of `build-team`, `build-solo`,
-   `build-hex`, `discovery`), copies the topology snippet into
-   `.claude/` and appends `@.claude/<topology>-topology.md` to
-   `CLAUDE.md` (creating `CLAUDE.md` if missing). For
-   `--topology=discovery`, the lifecycle template is also seeded to
-   `board-flow.yaml` (edit project_key, issue_type,
-   and status names to match your discovery board). The append is
-   idempotent — re-running
-   doesn't duplicate the line.
-
-If you skip `--topology`, the plugins install but you'll need to wire
-`CLAUDE.md` yourself (see the "Per host project: activate orchestrator
-mode" subsection below).
-
-You only *use* one topology per project (the one you `@-import` from
-your `CLAUDE.md`), but installing all of them is harmless — agents
-only consume context when invoked.
-
-To install for a different host project from anywhere:
-
-```sh
-~/coding/harnessing/claude/claude-multi-team-plugin/bin/install.sh /path/to/host-project
-```
-
-Re-running the script is safe — marketplace re-registration is
-idempotent and the symlink check refuses to clobber existing files.
-
-If you've **edited the plugin source without bumping a version** and
-want CC to pick up the changes, add `--clean` to force a full
-teardown + reinstall (uninstalls each plugin, nukes
-`~/.claude/plugins/cache/alegomes/`, then re-registers and installs):
-
-```sh
-~/coding/harnessing/claude/claude-multi-team-plugin/bin/install.sh --clean
-```
-
-### Manual install (one slash command per plugin)
-
-If you'd rather see each step, run these in any Claude Code session:
-
-```
-/plugin marketplace add /path/to/claude-multi-team-plugin
-/plugin install common@alegomes        # required by every topology — 8 mindset skills
-/plugin install build-team@alegomes    # generic 9-agent topology
-/plugin install build-solo@alegomes     # 2-agent dev/reviewer pair
-/plugin install build-hex@alegomes   # 14-agent hexagonal-architecture topology
-/plugin install discovery@alegomes     # 6-agent continuous product-discovery topology
-/plugin install board-flow@alegomes     # Jira lifecycle layer (pair with a topology)
-/plugin install book@alegomes          # 12-agent book-writing topology
-/plugin install git-history@alegomes   # 3-agent Git-history analysis topology
-```
-
-Then create the expertise symlink manually in your host project:
-
-```sh
-ln -s /path/to/claude-multi-team-plugin/common/expertise \
-      /path/to/host-project/.claude/expertise
-```
-
-`common@alegomes` is required by every topology — it ships the eight
-mindset skills (`mental-model`, `active-listener`, `zero-micromanagement`,
-`conversational-response`, `till-done`, `scope-discipline`,
-`evidence-over-assumption`, `name-the-disagreement`). The agents reference
-these skills in their bodies; without `common` installed, the references
-go nowhere.
-
-**`board-flow` requires a topology** — its commands delegate to
-`planning-lead`, `engineering-lead`, `validation-lead` by name.
-`build-hex` and `build-team` both ship those leads; `build-solo`
-doesn't, so board-flow + build-solo-only would fail.
-
-The expertise symlink is what makes accumulated agent learnings persist
-*across* projects — agents read and write to a single shared location
-inside the plugin, regardless of which host project they're running in.
-See `common/skills/mental-model/SKILL.md` for the agent-global vs
-project-specific guardrail.
-
-### Per host project: activate orchestrator mode
-
-The plugin ships the *agents*, but the **main session's** orchestrator
-behavior comes from the host project's `CLAUDE.md`. Two-line setup in
-each project where you want this:
-
-```sh
-# from the host project root, pick ONE topology:
-mkdir -p .claude
-
-# OPTION A — build-team (3 leads + 6 workers, generic):
-cp ~/coding/harnessing/claude/claude-multi-team-plugin/build-team/build-team-topology.md .claude/
-
-# OPTION B — build-solo (1 dev + 1 reviewer, lightweight):
-cp ~/coding/harnessing/claude/claude-multi-team-plugin/build-solo/build-solo-topology.md .claude/
-
-# OPTION C — build-hex (3 teams · 14 agents · per-Task quality loop):
-cp ~/coding/harnessing/claude/claude-multi-team-plugin/build-hex/build-hex-topology.md .claude/
-```
-
-Then add one line to the project's `CLAUDE.md` (create it if it doesn't
-exist), referencing the snippet you copied:
-
-```markdown
-@.claude/build-team-topology.md     # or build-solo-topology.md, or build-hex-topology.md
-```
-
-Each topology snippet is self-contained, so you can swap between them
-by changing the `@-import` line. Don't import more than one at once —
-orchestrator instructions conflict across topologies.
-
-If the project already has a `CLAUDE.md`, just append that one `@-import`
-line to the bottom — it composes with whatever else is in there.
-
----
-
-## Verify the install
-
-In the host project, in Claude Code:
-
-```
-/agents          # should list the agents for your installed topology
-/plugin list     # should show common + your topology plugin(s)
-```
-
-For `build-team`, `/agents` lists all 9 agents (3 leads + 6 workers).
-For `build-solo`, 2 agents. For `build-hex`, all 14. Plus
-`atlassian-expert` from `board-flow` if installed. Either way the eight
-`common` skills should be auto-loaded into the session.
-
-Then try a canonical workflow (use the right namespaced command for
-your installed topology):
-
-```
-/build-team:plan-build-validate add a --json output flag to predict
-# OR — if board-flow is also installed:
-/board-flow:plan-track-build-validate add a --json output flag to predict
-# OR — for build-hex:
-/build-hex:plan-build-validate <task>
-```
-
-The orchestrator should fan out to `planning-lead`, `engineering-lead`,
-and `validation-lead` in sequence, with each lead delegating to its
-workers. If you see the main session writing code itself instead of
-delegating, the orchestrator instructions need tightening — edit the
-relevant `*-topology.md`, bump the version, and `/plugin update <name>`.
-
----
-
-## How it works
-
-### The three-tier model
-
-Every topology (except build-solo) follows the same shape:
-
-```
-        ┌─────────────────────────────┐
-        │  orchestrator (main session) │   delegate-only, no Edit/Write
-        └──────────────┬──────────────┘
-                       │ Task tool
-       ┌───────────────┼───────────────┐
-       ▼               ▼               ▼
-  planning-lead   engineering-lead   validation-lead    Opus, delegate-only
-       │               │               │
-       ▼               ▼               ▼
-   PM, UX, …      dev workers      qa, security, …    Sonnet, write code
-```
-
-- **Orchestrator** = the Claude Code session you're typing into. It
-  doesn't write code; it decomposes the request and dispatches leads.
-  Behavior comes from the topology snippet you imported into `CLAUDE.md`.
-- **Leads** are Opus subagents with **no `Edit`/`Write`/`MultiEdit`
-  tools**. They can `Read`, `Grep`, run `Task` (to call workers), and
-  write specs/task docs only. The lack of edit tools is the enforcement —
-  a lead literally cannot write source code.
-- **Workers** are Sonnet subagents with edit tools but **domain-locked
-  write globs**. The `path-lock.py` hook (build-team, build-hex)
-  blocks writes outside each worker's allowlist with exit code 2; the
-  agent receives the blocked message on stderr and self-corrects (or
-  delegates to the right peer).
-
-`build-solo` skips the lead tier — `pair-dev` writes, `pair-reviewer` is
-read-only via tool allowlist (no path-lock hook). It's the right choice
-when fan-out overhead would dwarf the task.
-
-### What's enforced vs. what's convention
-
-| Guarantee | How | Bypassable? |
-|---|---|---|
-| Leads can't write code | tool allowlist (no `Edit`/`Write`/`MultiEdit`) | No — CC enforces tool allowlists |
-| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (build-team, build-hex); build-solo has no hook |
-| Workers can't escape the lock via shell | `bash-path-lock.py` PreToolUse hook (catches `sed -i`/`cat >`/`tee` to locked in-project paths) | Mostly — `rm` and interpreter-writes (`python -c`) slip through (logged) |
-| Agents can't edit the enforcement code itself | `enforcement-guard.py` (blocks subagent writes to `.claude/plugins/`, `.claude/hooks/`, settings) | No — for plugin subagents; main session is ungated by design |
-| Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
-| Plan → build → validate ordering | prompt-only (in command + topology) | Yes — orchestrator can reorder if user pushes |
-| board-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
-
-If you see the main session writing code, that's a *prompt* failure —
-tighten the topology snippet, bump the version, `/plugin update`. The
-hard guardrails (tool allowlist + path-lock) catch worker misbehavior.
-
-### Per-topology workflow at a glance
-
-**build-team** — `/build-team:plan-build-validate <task>`:
-
-```
-orchestrator
-  → planning-lead → product-manager + ux-researcher  (specs/**)
-  → engineering-lead → frontend-dev + backend-dev    (apps/**)
-  → validation-lead → qa-engineer + security-reviewer
-  → orchestrator synthesizes verdict for user
-```
-
-≈9 subagent invocations per run. Use for greenfield features that
-need product/UX framing before code.
-
-**build-solo** — describe the task in chat:
-
-```
-orchestrator → pair-dev → pair-reviewer → orchestrator reports
-```
-
-2 subagent invocations. Use for one-file tweaks, bug fixes,
-refactors with obvious scope.
-
-**build-hex** — `/build-hex:plan-build-validate <task>`:
-
-```
-orchestrator
-  → planning-lead → epic-author + product-manager + integration-analyst (parallel)
-  → engineering-lead, per Task:
-       → domain-dev / api-dev / adapter-dev (the right one for that Task)
-       → qa-engineer (gap scan; CRITICAL/HIGH blocks → back to dev)
-       → refactor-advisor (housekeeping report, advisory only)
-       → code-reviewer (APPROVE/REJECT vs TASK.md → REJECT loops back)
-  → validation-lead → security-reviewer + ./mvnw verify
-  → orchestrator reports
-```
-
-≈13 subagents + a per-Task quality loop that may iterate. Use for
-hexagonal Java/Quarkus backends. Cost scales with Task count, not
-just topology size.
-
-**discovery** — continuous, no `plan-build-validate` equivalent. One
-column at a time:
-
-```
-/discovery:capture "raw signal"     → card lands in Inbox
-/board-flow:advance <KEY>            → discovery-lead routes to opportunity-framer (Framing)
-/board-flow:advance <KEY>            → user-researcher (Researching)
-... human collects evidence ...
-/board-flow:advance <KEY>            → assumption-tester writes test plan; gate on Validating
-... human runs tests, drops evidence in docs/discovery/<KEY>/evidence/ ...
-/board-flow:advance <KEY>            → evidence-auditor returns verdicts
-/board-flow:advance <KEY>            → epic-briefer writes handoff brief, links to engineer board
-```
-
-6 agents, but each card invokes them sequentially (or loops back). The
-`/board-flow:advance` command reads `board-flow.yaml` to
-know which agent to invoke per column. Use for product-discovery work
-*upstream* of any build topology.
-
-**board-flow** layers on top of any topology — its commands delegate to
-`planning-lead`/`engineering-lead`/`validation-lead` (for the lead-based
-flows) or to `on_enter` agents declared in `board-flow.yaml`
-(for `/advance`). Adds Jira lifecycle: Epic + Stories registered for build
-topologies; column-by-column transitions for discovery (or any custom
-lifecycle). See `agents-overview.md` §"Workflow walkthroughs" for a
-turn-by-turn narrative.
-
-### Composition rules
-
-- **Pick exactly one topology per project.** Importing two topology
-  snippets gives the orchestrator conflicting instructions. Exception:
-  `discovery` is *upstream* of build topologies — they don't compete,
-  they hand off via the engineer-board Epic. If you want continuous
-  discovery and code delivery in the same project, install discovery
-  + a build topology + board-flow, and let the handoff cross the
-  boundary explicitly via `epic-briefer` → `epic-author`.
-- **`common` is required** for every topology. The skills are
-  referenced in agent bodies.
-- **`board-flow`'s lead-based commands require a 3-lead topology**
-  (build-team or build-hex). build-solo has no leads → those commands
-  fail at first delegation. `/board-flow:advance` is generic: it works
-  with discovery (or any topology that ships a lifecycle file).
-- **You can swap topologies** — change the `@-import` line in
-  `CLAUDE.md` and the orchestrator behavior swaps with it. Plugins
-  installed but not imported don't consume context.
-
-### Failure modes you'll actually hit
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `Unknown command: /plan-build-validate` | bare command form | use namespaced: `/build-team:plan-build-validate` |
-| Main session writes code instead of delegating | weak topology snippet for this task class | tighten the snippet or restate the rule in chat |
-| `[build-hex path-lock] BLOCKED: agent 'X' cannot Edit Y` | worker writing outside its domain | correct — let it delegate, or check `ALLOWED_WRITES` if your layout differs |
-| `[build-hex path-lock] BLOCKED: unknown agent 'orchestrator'` on a worker tool call | hook can't read `agent_type` (CC version mismatch) | see Troubleshooting §"Hook fails to detect agent name" |
-| `/agents` doesn't list a topology after install | `common@alegomes` missing, or topology not installed | re-run `bin/install.sh` |
-| board-flow commands hang on build-solo | no leads exist | switch to build-team or build-hex |
-
-### What it can't do
-
-- **Run code on its own infrastructure.** Agents call `Bash` against
-  *your* shell — they can run tests and tools you have installed, but
-  there's no sandbox.
-- **Persist memory between unrelated sessions** beyond what
-  `expertise/<agent>-mental-model.yaml` files capture. Pick up where
-  you left off lives in the host symlink, not magic.
-- **Override CC's own guardrails.** If a tool requires user confirmation
-  in your CC permission mode, the agent will pause for it.
-- **Replace human review.** The `code-reviewer` agent (build-hex) is
-  an LLM verdict — useful, not authoritative. Treat it as a first pass.
-
----
-
-## Iteration workflow
-
-This is the whole point of using a plugin instead of copy-pasting `.claude/`:
-
-1. **Edit centrally** in `~/coding/harnessing/claude/claude-multi-team-plugin/`
-   — agents, skills, commands, hooks, or a topology snippet.
-
-2. **Bump the version** of whichever plugin(s) you changed. Each plugin
-   has *two* places that must match: its own `plugin.json` and its
-   entry in the marketplace's `marketplace.json`.
-
-   | What you touched | Plugin to bump | Both files to update |
-   |---|---|---|
-   | `build-team/` (agents, commands, hooks, topology) | `build-team` | `build-team/.claude-plugin/plugin.json` + `build-team` entry in `marketplace.json` |
-   | `build-solo/` | `build-solo` | `build-solo/.claude-plugin/plugin.json` + `build-solo` entry in `marketplace.json` |
-   | `build-hex/` (agents, commands, hook, topology) | `build-hex` | `build-hex/.claude-plugin/plugin.json` + `build-hex` entry in `marketplace.json` |
-   | `board-flow/` (agent, commands) | `board-flow` | `board-flow/.claude-plugin/plugin.json` + `board-flow` entry in `marketplace.json` |
-   | `common/skills/` or `common/expertise/` | `common` | `common/.claude-plugin/plugin.json` + `common` entry in `marketplace.json` |
-   | Cross-cutting | all affected | bump each plugin's two files |
-
-   Semver, bumped per change — plugins are independently versioned (e.g.
-   `common` and `build-hex` are at `0.3.0`; others trail). Bumping
-   matters even though the marketplace is local-only: without a version
-   change, a non-`--clean` install reads the **stale plugin cache** (see
-   [`docs/internals/cc-quirks.md`](docs/internals/cc-quirks.md)).
-   - patch (`0.3.0 → 0.3.1`) — prompt tweaks / bugfixes
-   - minor (`0.2.0 → 0.3.0`) — new agents/skills/commands/hooks
-   - `0.x → 1.0.0` — when stable and publicly released
-
-3. **Commit** the change locally:
-
-   ```sh
-   cd ~/coding/harnessing/claude/claude-multi-team-plugin
-   git add .
-   git commit -m "<type>(<plugin>): <what changed>"
-   ```
-
-4. **Update each project**: in Claude Code, `/plugin update <name>` per
-   plugin you bumped (or `/plugin update` to refresh all installed).
-
-Projects that need a specific version pin to it explicitly:
-`/plugin install build-team@0.2.0`.
-
----
-
-## Per-project overrides
-
-A worker's domain glob (`apps/*/api/**` for build-team, `domain/src/main/**`
-for build-hex, etc.) won't match every project.
-
-### Override a subagent locally
-
-Drop a `.claude/agents/<agent-name>.md` in the host project. **Project-local
-agents win over plugin-shipped ones** — keep the plugin's prompt as a
-base, just change the `tools:` allowlist or the prose write-globs to
-match your layout.
-
-### Adjust the path-lock hook for your project layout
-
-The hook's `ALLOWED_WRITES` table — `build-team/hooks/path-lock.py` (for
-build-team) or `build-hex/hooks/path-lock.py` (for build-hex) — is
-the source of truth for write-glob enforcement. If you need different
-paths for one project:
-
-1. **Edit centrally** if the new layout should be the new default for
-   *all* projects (then bump version + update).
-2. **Add a project-specific hook** at `.claude/hooks/path-lock.py` and
-   register it in `.claude/settings.json`. Project hooks run alongside
-   plugin hooks — both must pass.
-
----
-
-## What's NOT in the plugin (intentionally)
-
-- **Demo apps** — bring your own.
-- **`justfile`** — keep your project's existing build tooling.
-- **A Pi version** — Pi's adapter still lives in the original
-  `lead-agents/` repo until we port it to a Pi extension.
-
----
-
-## Versioning policy
-
-- `0.x` — pre-stable, breaking changes allowed at any minor bump.
-- `1.x` — stable, breaking changes only at major bumps.
-- **Hooks that block previously-allowed paths are breaking changes.**
-- Adding a new agent/skill/command is a minor bump.
-- Prompt-only edits to existing agents are patches.
-
----
-
-## Troubleshooting
-
-**`/plugin marketplace add` says "not found"**
-The path needs to point at the directory containing `.claude-plugin/`.
-Check: `ls ~/coding/harnessing/claude/claude-multi-team-plugin/.claude-plugin/` should
-list `plugin.json` and `marketplace.json`.
-
-**`/agents` doesn't show your topology's agents after install**
-Run `/plugin list` — the plugins you installed should be active.
-Common cause: you installed a topology but forgot `common@alegomes`,
-which is required-alongside. Re-run the install commands. If the
-marketplace itself isn't listed, re-add it with the absolute path
-(no `~`).
-
-**Hook blocks a legitimate write**
-The `ALLOWED_WRITES` table in `build-team/hooks/path-lock.py` is mismatched with
-the agent's prose. Either widen the glob (and bump version) or override
-the agent locally.
-
-**Hook fails to detect agent name**
-Run `claude --debug` in the host project. The hook prints to stderr;
-check whether it's falling back to `"orchestrator"` for delegated calls.
-On CC 2.1.x the agent identity comes from the PreToolUse payload's
-`agent_type` field (plugin-namespaced as `<plugin>:<agent>`); the hook
-strips the prefix. If you're on a different CC version that uses a
-different field name, inspect the payload by adding
-`print(payload, file=sys.stderr)` at the top of `path-lock.py`'s
-`main()` and add the right key to `detect_agent`.
-
-**`/build-team:plan-build-validate` says "Unknown command"**
-CC plugin commands are namespaced by plugin. Use the namespaced form
-(`/build-team:plan-build-validate`, `/build-hex:plan-build-validate`,
-`/board-flow:execute`, etc.) — the bare form (`/plan-build-validate`)
-won't work.
+## Why a team that proves itself
+
+We are building **a system that builds systems** — a strain you culture into a project that
+grows the team that ships it. Software worth shipping needs more than one perspective, and
+compressing planner + implementer + reviewer into one agent gets you mediocre versions of
+all three. Cepa packages the three-tier pattern (orchestrator → leads → workers) so any
+Claude Code project can *install* a team rather than hire one — and the gates make that team
+honest about what it has actually finished.
+
+The mindset comes from indydev Dan's `lead-agents` pattern. The Claude Code adaptation ports
+the agents, the path-lock hooks, and the shared mindset skills, and adds the green-or-revert,
+acceptance-completeness, and proof gates that make "done" mean *proven*.

@@ -231,8 +231,8 @@ Larger surface; comes up rarely but worth documenting.
    per-topology wiring (if it's a topology plugin):
 
    ```sh
-   echo "▶ Installing <new-plugin>@alegomes (...)"
-   claude plugin install <new-plugin>@alegomes
+   echo "▶ Installing <new-plugin>@cepa (...)"
+   claude plugin install <new-plugin>@cepa
    ```
 
    Also add to the topology validation (`case "${TOPOLOGY}" in

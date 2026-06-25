@@ -135,7 +135,7 @@ project-local files win over plugin-shipped ones.
 
 ### Pairing with board-flow
 
-If the `board-flow@alegomes` plugin is also installed, prefer its commands
+If the `board-flow@cepa` plugin is also installed, prefer its commands
 (`/board-flow:plan-track-build-validate`, `/board-flow:execute`,
 `/board-flow:drain`) over `/build-hex:plan-build-validate` — they wrap
 the same workflow with Jira lifecycle transitions.

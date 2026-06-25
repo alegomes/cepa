@@ -19,7 +19,7 @@ This is one of the few commands where **asking the user questions is the point**
 
 You are the orchestrator. Drive the user through each value. Don't fabricate any value — every field comes from the user's answer or from `atlassian-expert`'s validated lookup.
 
-`atlassian-expert` is the only Jira read path. If it isn't installed, abort: "board-flow's atlassian-expert is required for site validation; install board-flow@alegomes."
+`atlassian-expert` is the only Jira read path. If it isn't installed, abort: "board-flow's atlassian-expert is required for site validation; install board-flow@cepa."
 
 ## Workflow
 

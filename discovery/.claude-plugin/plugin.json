@@ -1,7 +1,7 @@
 {
   "name": "discovery",
   "version": "0.1.0",
-  "description": "Continuous product-discovery topology — 6 agents (discovery-lead, opportunity-framer, user-researcher, assumption-tester, evidence-auditor, epic-briefer) for translating raw signals into validated opportunities. Pair with board-flow@alegomes for board lifecycle, and with build-hex@alegomes (or build-team@alegomes) for delivery handoff via the engineer-board Epic. Path-lock keyed to docs/discovery/**.",
+  "description": "Continuous product-discovery topology — 6 agents (discovery-lead, opportunity-framer, user-researcher, assumption-tester, evidence-auditor, epic-briefer) for translating raw signals into validated opportunities. Pair with board-flow@cepa for board lifecycle, and with build-hex@cepa (or build-team@cepa) for delivery handoff via the engineer-board Epic. Path-lock keyed to docs/discovery/**.",
   "author": {
     "name": "alegomes"
   },

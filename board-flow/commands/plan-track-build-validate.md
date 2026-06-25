@@ -11,7 +11,7 @@ Same plan → build → validate flow as `/build-hex:plan-build-validate` (or `/
 
 For an existing Jira card (no decomposition needed), use `/board-flow:execute` instead.
 
-**Requires** a topology plugin that ships `planning-lead`, `engineering-lead`, and `validation-lead` subagents (e.g., `build-hex@alegomes` or `build-team@alegomes`). Won't work with `build-solo` alone (no leads).
+**Requires** a topology plugin that ships `planning-lead`, `engineering-lead`, and `validation-lead` subagents (e.g., `build-hex@cepa` or `build-team@cepa`). Won't work with `build-solo` alone (no leads).
 
 ## Variables
 
@@ -133,4 +133,4 @@ A single concise message back to the user:
 - Don't edit code yourself; you're the orchestrator.
 - Don't auto-transition past In Review unless explicitly asked. The user owns Done/Closed.
 - The per-Task quality loop is mandatory inside engineering-lead's phase. Don't skip qa, refactor-advisor, or code-reviewer.
-- If `atlassian-expert` is unavailable (board-flow not installed), abort with: "board-flow's atlassian-expert is required for this command; install board-flow@alegomes or use /build-hex:plan-build-validate (no Jira tracking)."
+- If `atlassian-expert` is unavailable (board-flow not installed), abort with: "board-flow's atlassian-expert is required for this command; install board-flow@cepa or use /build-hex:plan-build-validate (no Jira tracking)."

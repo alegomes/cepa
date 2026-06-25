@@ -46,7 +46,7 @@ Detect a Jira key in `$ARGUMENTS` using regex `[A-Z]{2,}-\d+`. If multiple match
 If a key is found AND `--no-jira` is not set AND `board-flow.yaml` exists at project root (or legacy `.claude/board-flow.lifecycle.yaml`):
 
 - Set `jira_key = <found-key>`. The run will be Jira-tracked: this command will transition the card to **In Progress** before dispatching the flow, and to **In Review** with an Implementation Summary comment after the flow returns.
-- If `board-flow@alegomes` plugin is NOT installed (no `atlassian-expert` agent available), surface that as a soft warning ("Jira key detected but board-flow not installed; running without lifecycle wrapping") and proceed without Jira tracking.
+- If `board-flow@cepa` plugin is NOT installed (no `atlassian-expert` agent available), surface that as a soft warning ("Jira key detected but board-flow not installed; running without lifecycle wrapping") and proceed without Jira tracking.
 
 If no key found OR `--no-jira` is set OR `board-flow.yaml` is missing: `jira_key = null`. The run is not Jira-tracked. (Note this in the final report.)
 

@@ -11,7 +11,7 @@ Drop a raw product signal — a user complaint, a sales-team note, an idea from 
 
 The card stays in Inbox until you (or your team) decide to start work on it via `/board-flow:advance <KEY>`, which routes through `discovery-lead` and the right phase agent.
 
-**Requires** `board-flow@alegomes` installed (for `atlassian-expert`). Without it, abort with a clear error.
+**Requires** `board-flow@cepa` installed (for `atlassian-expert`). Without it, abort with a clear error.
 
 ## Variables
 

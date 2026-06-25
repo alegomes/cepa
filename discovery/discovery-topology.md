@@ -74,7 +74,7 @@ continuous discovery — each pass burns down risk.
   no research, just tracking.
 - `/board-flow:advance <card-key>` — move a card to its next column,
   invoking the column's `on_enter` agent. Generic across topologies; reads
-  `board-flow.yaml` (project root). (Provided by `board-flow@alegomes`.)
+  `board-flow.yaml` (project root). (Provided by `board-flow@cepa`.)
 
 ## Composition
 

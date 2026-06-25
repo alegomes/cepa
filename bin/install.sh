@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the alegomes build-team plugins into Claude Code AND set up the
+# Install the Cepa marketplace plugins into Claude Code AND set up the
 # host project for centralized expertise (via symlink).
 #
 # Usage:
@@ -71,7 +71,7 @@ HOST_PROJECT="$(cd "${HOST_PROJECT_INPUT}" 2>/dev/null && pwd)" || {
   exit 1
 }
 
-MARKETPLACE_NAME="alegomes"
+MARKETPLACE_NAME="cepa"
 EXPERTISE_SOURCE="${REPO_DIR}/common/expertise"
 EXPERTISE_TARGET="${HOST_PROJECT}/.claude/expertise"
 CACHE_DIR="${HOME}/.claude/plugins/cache/${MARKETPLACE_NAME}"
@@ -116,26 +116,26 @@ claude plugin marketplace add "${REPO_DIR}"
 
 # --- Plugin install ---
 
-echo "▶ Installing common@alegomes (8 mindset skills — required)"
-claude plugin install common@alegomes
+echo "▶ Installing common@cepa (8 mindset skills — required)"
+claude plugin install common@cepa
 
-echo "▶ Installing build-team@alegomes (9-agent generic topology)"
-claude plugin install build-team@alegomes
+echo "▶ Installing build-team@cepa (9-agent generic topology)"
+claude plugin install build-team@cepa
 
-echo "▶ Installing build-solo@alegomes (2-agent dev/reviewer topology)"
-claude plugin install build-solo@alegomes
+echo "▶ Installing build-solo@cepa (2-agent dev/reviewer topology)"
+claude plugin install build-solo@cepa
 
-echo "▶ Installing build-hex@alegomes (13-agent hexagonal-architecture topology)"
-claude plugin install build-hex@alegomes
+echo "▶ Installing build-hex@cepa (13-agent hexagonal-architecture topology)"
+claude plugin install build-hex@cepa
 
-echo "▶ Installing discovery@alegomes (6-agent continuous product-discovery topology)"
-claude plugin install discovery@alegomes
+echo "▶ Installing discovery@cepa (6-agent continuous product-discovery topology)"
+claude plugin install discovery@cepa
 
-echo "▶ Installing board-flow@alegomes (Jira lifecycle layer)"
-claude plugin install board-flow@alegomes
+echo "▶ Installing board-flow@cepa (Jira lifecycle layer)"
+claude plugin install board-flow@cepa
 
-echo "▶ Installing docs@alegomes (9-agent documentation/onboarding topology)"
-claude plugin install docs@alegomes
+echo "▶ Installing docs@cepa (9-agent documentation/onboarding topology)"
+claude plugin install docs@cepa
 
 # --- Per-project setup: symlink for centralized expertise ---
 

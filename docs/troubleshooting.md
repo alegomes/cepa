@@ -22,7 +22,7 @@ If you used `~` in the path, replace with the absolute path.
 
 Three common causes:
 
-1. **`common@alegomes` missing** — required by every topology because
+1. **`common@cepa` missing** — required by every topology because
    skills are referenced in agent bodies.
 2. **Topology snippet not imported in `CLAUDE.md`** — agents are
    installed but the orchestrator doesn't know to use them.

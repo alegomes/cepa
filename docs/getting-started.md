@@ -80,7 +80,7 @@ contract.
 /agents          # should list the topology's agents (13 for build-hex)
 ```
 
-If `/agents` is empty, you probably forgot `common@alegomes` (required by
+If `/agents` is empty, you probably forgot `common@cepa` (required by
 every topology) or installed without `--topology` and forgot to add the
 `@.claude/<topology>-topology.md` line to `CLAUDE.md`. Re-run
 `bin/install.sh --topology=NAME` against your project.
