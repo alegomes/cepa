@@ -90,7 +90,7 @@ Ask: "Use standard issue type names (Story / Bug / Epic / Task) or customize? (s
 
 Read `.claude/topology` if present. If found: confirm with user: "Default topology for `/jira-flow:execute` and `/jira-flow:plan-track-build-validate`: `<value from .claude/topology>` (matches `.claude/topology`). Keep? (yes / type different)".
 
-If `.claude/topology` is missing: ask "Default topology? Options: `hex-backend`, `multi-team`, `discovery`, `book`. Type one:". Don't write a value the user didn't give.
+If `.claude/topology` is missing: ask "Default topology? Options: `build-hex`, `build-team`, `discovery`, `book`. Type one:". Don't write a value the user didn't give.
 
 ### 8. Show the proposed file and confirm
 

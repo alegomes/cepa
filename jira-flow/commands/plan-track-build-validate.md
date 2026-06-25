@@ -7,11 +7,11 @@ argument-hint: <abstract task description>
 
 ## Purpose
 
-Same plan → build → validate flow as `/hex-backend:plan-build-validate` (or `/multi-team:plan-build-validate`), wrapped with Jira lifecycle: register Epic + Stories before execution; transition the executing Story through To Do → In Progress → In Review.
+Same plan → build → validate flow as `/build-hex:plan-build-validate` (or `/build-team:plan-build-validate`), wrapped with Jira lifecycle: register Epic + Stories before execution; transition the executing Story through To Do → In Progress → In Review.
 
 For an existing Jira card (no decomposition needed), use `/jira-flow:execute` instead.
 
-**Requires** a topology plugin that ships `planning-lead`, `engineering-lead`, and `validation-lead` subagents (e.g., `hex-backend@alegomes` or `multi-team@alegomes`). Won't work with `build-solo` alone (no leads).
+**Requires** a topology plugin that ships `planning-lead`, `engineering-lead`, and `validation-lead` subagents (e.g., `build-hex@alegomes` or `build-team@alegomes`). Won't work with `build-solo` alone (no leads).
 
 ## Variables
 
@@ -27,7 +27,7 @@ You are the orchestrator. Drive the planning, building, validation phases AND ke
 
 ### 0. Resolve topology prefix
 
-Read the project Jira config: `jira-flow.yaml` at project root if present, otherwise legacy `.claude/jira-flow.lifecycle.yaml`. Extract the top-level `default_topology` value (e.g., `hex-backend`, `multi-team`, `discovery`).
+Read the project Jira config: `jira-flow.yaml` at project root if present, otherwise legacy `.claude/jira-flow.lifecycle.yaml`. Extract the top-level `default_topology` value (e.g., `build-hex`, `build-team`, `discovery`).
 
 - If found, prefix every topology-agent delegation in this workflow with it: `<default_topology>:planning-lead`, `<default_topology>:engineering-lead`, `<default_topology>:validation-lead`.
 - If the file is absent or `default_topology` is not set, use bare names — backward compatible, but may misroute when multiple topologies are installed.
@@ -133,4 +133,4 @@ A single concise message back to the user:
 - Don't edit code yourself; you're the orchestrator.
 - Don't auto-transition past In Review unless explicitly asked. The user owns Done/Closed.
 - The per-Task quality loop is mandatory inside engineering-lead's phase. Don't skip qa, refactor-advisor, or code-reviewer.
-- If `atlassian-expert` is unavailable (jira-flow not installed), abort with: "jira-flow's atlassian-expert is required for this command; install jira-flow@alegomes or use /hex-backend:plan-build-validate (no Jira tracking)."
+- If `atlassian-expert` is unavailable (jira-flow not installed), abort with: "jira-flow's atlassian-expert is required for this command; install jira-flow@alegomes or use /build-hex:plan-build-validate (no Jira tracking)."

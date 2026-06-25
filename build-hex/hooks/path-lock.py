@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""PreToolUse hook for the hex-backend topology.
+"""PreToolUse hook for the build-hex topology.
 
 Enforces per-agent write allowlists keyed to hexagonal-architecture
 ROLES (domain / application / api / adapter / bootstrap), not to
 specific module names. The mapping from role → physical module name
-is per-project, read from `hex-backend.yaml` at project root.
+is per-project, read from `build-hex.yaml` at project root.
 
 The canonical mapping (used when no config file is present):
 
@@ -18,7 +18,7 @@ The canonical mapping (used when no config file is present):
 
 Projects whose modules are named differently (e.g.,
 `tenancy-core` instead of `domain`) override via
-`hex-backend.yaml`:
+`build-hex.yaml`:
 
   schema_version: 1
   roles:
@@ -45,9 +45,9 @@ import os
 import sys
 from pathlib import Path
 
-PLUGIN_NAME = "hex-backend"
+PLUGIN_NAME = "build-hex"
 
-# Canonical role → module mapping. Used when `hex-backend.yaml` is
+# Canonical role → module mapping. Used when `build-hex.yaml` is
 # absent or doesn't override a role.
 DEFAULT_ROLES = {
     "domain":      "domain",
@@ -77,7 +77,7 @@ def _parse_scalar_or_list(value: str):
 
 
 def parse_minimal_yaml(text: str) -> dict:
-    """Parse a flat 2-level YAML for hex-backend.yaml. Pure stdlib;
+    """Parse a flat 2-level YAML for build-hex.yaml. Pure stdlib;
     doesn't handle quoted multi-line strings, multi-line lists, or
     anchors. Inline flow lists like `[a, b, c]` ARE handled. Good
     enough for the schema we own.
@@ -132,13 +132,13 @@ def parse_minimal_yaml(text: str) -> dict:
 
 
 def load_config(project_root: Path) -> tuple:
-    """Read hex-backend.yaml from project root.
+    """Read build-hex.yaml from project root.
 
     Returns (roles, extra_write_globs) where:
       - roles: dict mapping role names to module names
       - extra_write_globs: dict mapping agent names to list of additional glob patterns
 
-    extra_write_globs section in hex-backend.yaml:
+    extra_write_globs section in build-hex.yaml:
       extra_write_globs:
         adapter-dev: scripts/fase0-concierge/**,scripts/other/**
 
@@ -146,14 +146,14 @@ def load_config(project_root: Path) -> tuple:
 
     Falls back to defaults silently on missing file; loudly on parse error.
     """
-    config_path = project_root / "hex-backend.yaml"
+    config_path = project_root / "build-hex.yaml"
     if not config_path.exists():
         return DEFAULT_ROLES.copy(), {}
     try:
         text = config_path.read_text(encoding="utf-8")
     except OSError as e:
         print(
-            f"[hex-backend path-lock] could not read {config_path}: {e}; "
+            f"[build-hex path-lock] could not read {config_path}: {e}; "
             f"falling back to canonical layout.",
             file=sys.stderr,
         )
@@ -163,7 +163,7 @@ def load_config(project_root: Path) -> tuple:
         parsed = parse_minimal_yaml(text)
     except Exception as e:
         print(
-            f"[hex-backend path-lock] could not parse {config_path}: {e}; "
+            f"[build-hex path-lock] could not parse {config_path}: {e}; "
             f"falling back to canonical layout.",
             file=sys.stderr,
         )
@@ -240,7 +240,7 @@ def build_allowed_writes(roles: dict, extra_write_globs: dict = None) -> dict:
         "product-manager":     ["spec/**", "specs/**", "docs/**"],
         "integration-analyst": ["spec/**", "specs/**", "docs/**"],
 
-        # Engineering workers — role-aware writes, mapped via hex-backend.yaml.
+        # Engineering workers — role-aware writes, mapped via build-hex.yaml.
         "domain-dev":          main_globs("domain", "application"),
         "api-dev":             main_globs("api"),
         "adapter-dev":         main_globs("adapter", "bootstrap"),
@@ -348,7 +348,7 @@ def main():
     try:
         payload = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
-        print(f"[hex-backend path-lock] could not parse hook payload; allowing", file=sys.stderr)
+        print(f"[build-hex path-lock] could not parse hook payload; allowing", file=sys.stderr)
         sys.exit(0)
 
     tool_name = payload.get("tool_name", "")
@@ -399,9 +399,9 @@ def main():
 
     if allowed is None:
         print(
-            f"[hex-backend path-lock] BLOCKED: unknown agent {agent!r} attempted "
+            f"[build-hex path-lock] BLOCKED: unknown agent {agent!r} attempted "
             f"{tool_name} on {file_path}. Add {agent!r} to "
-            f"hex-backend/hooks/path-lock.py if this is intentional.",
+            f"build-hex/hooks/path-lock.py if this is intentional.",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -414,20 +414,20 @@ def main():
     layout_note = ""
     if non_default:
         layout_note = (
-            f"\n  Active role → module mapping (from hex-backend.yaml):\n    "
+            f"\n  Active role → module mapping (from build-hex.yaml):\n    "
             + "\n    ".join(f"{r}: {roles[r]}" for r in DEFAULT_ROLES.keys())
-            + "\n  (Edit hex-backend.yaml at project root to remap roles.)"
+            + "\n  (Edit build-hex.yaml at project root to remap roles.)"
         )
     else:
         layout_note = (
             f"\n  Using canonical layout (domain/application/api-rest/"
             f"infrastructure/bootstrap). If this project uses different "
-            f"module names, create hex-backend.yaml at project root with "
+            f"module names, create build-hex.yaml at project root with "
             f"a `roles:` block."
         )
 
     print(
-        f"[hex-backend path-lock] BLOCKED: agent {agent!r} cannot {tool_name} {file_path}.\n"
+        f"[build-hex path-lock] BLOCKED: agent {agent!r} cannot {tool_name} {file_path}.\n"
         f"  Allowed write globs for {agent!r}:\n  - "
         + "\n  - ".join(allowed or ["(none — only own expertise file)"])
         + f"\n  Plus its own expertise file: .claude/expertise/{agent}-mental-model.yaml"

@@ -21,7 +21,7 @@ import os
 import sys
 from pathlib import Path
 
-PLUGIN_NAME = "multi-team"
+PLUGIN_NAME = "build-team"
 
 # Per-agent in-project write allowlist. Keep these globs identical to the
 # prose in each subagent's .md file's "Writes" row so the prompt and the
@@ -55,7 +55,7 @@ def detect_agent(payload: dict) -> str:
     """Figure out which agent triggered this tool call.
 
     CC 2.1.x sends `agent_type` in PreToolUse payloads when a subagent is the
-    caller. The value is plugin-namespaced (e.g. "multi-team:backend-dev"); we
+    caller. The value is plugin-namespaced (e.g. "build-team:backend-dev"); we
     strip the prefix to match the bare names used in ALLOWED_WRITES.
 
     When the call comes from the main session (no subagent), `agent_type` is

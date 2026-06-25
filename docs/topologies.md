@@ -6,8 +6,8 @@ and `jira-flow` (optional Jira layer). Pick **one topology per project**
 
 | Topology | Agents | Best for | Path-lock | Commands |
 |---|---|---|---|---|
-| **hex-backend** | 14 | Java/Quarkus hexagonal backends. Per-Task quality loop. | `domain/`, `application/`, `api-rest/`, `infrastructure/`, `bootstrap/` Maven layout | `plan-build-validate`, `reproduce-fix-verify`, `investigate`, `spec-e2e`, `document-e2e`, `resync-e2e`, `audit-e2e` (+ `proof-reviewer` agent for `/jira-flow:prove`) |
-| **multi-team** | 9 | Greenfield apps with frontend + backend. Generic plan→build→validate. | `apps/*/api/**`, `apps/*/web/**`, `tests/**` | `plan-build-validate` |
+| **build-hex** | 14 | Java/Quarkus hexagonal backends. Per-Task quality loop. | `domain/`, `application/`, `api-rest/`, `infrastructure/`, `bootstrap/` Maven layout | `plan-build-validate`, `reproduce-fix-verify`, `investigate`, `spec-e2e`, `document-e2e`, `resync-e2e`, `audit-e2e` (+ `proof-reviewer` agent for `/jira-flow:prove`) |
+| **build-team** | 9 | Greenfield apps with frontend + backend. Generic plan→build→validate. | `apps/*/api/**`, `apps/*/web/**`, `tests/**` | `plan-build-validate` |
 | **build-solo** | 2 | One-file tweaks, bug fixes, small refactors. No leads, no per-Task loop. | tool-allowlist only (`pair-reviewer` is read-only via tools) | none — describe in chat |
 | **discovery** | 6 | Continuous product discovery: signals → opportunities → validated bets → engineering brief. Sits *upstream* of build topologies. | `docs/discovery/**` | `capture` (plus generic `/jira-flow:advance` for column transitions) |
 | **book** | 10 | Book writing (non-software). Outline → draft → revise → finalize. | `book/**`, `chapters/**`, `notes/**` | `outline`, `draft`, `revise`, `finalize`, `status` |
@@ -24,7 +24,7 @@ Three questions to answer in order:
 ### 2. Is it a Java/Quarkus hexagonal backend, or some other layout?
 
 - **Hexagonal Java/Quarkus** with the `domain/application/api-rest/
-  infrastructure/bootstrap` module layout → `hex-backend`. The
+  infrastructure/bootstrap` module layout → `build-hex`. The
   per-Task quality loop and worker domain-locks are tuned for this
   layout specifically.
 - **Anything else** (Node app, Python service, fullstack with
@@ -35,8 +35,8 @@ Three questions to answer in order:
 - **Small task, obvious scope** (one-file fix, rename, small refactor)
   → `build-solo`. 2 agents, no fan-out, no per-Task ceremony. Fast.
 - **Bigger task that benefits from product/UX framing before code** →
-  `multi-team`. 3 leads + 6 workers, generic enough for most stacks.
-  Less specialized than `hex-backend` but covers more ground.
+  `build-team`. 3 leads + 6 workers, generic enough for most stacks.
+  Less specialized than `build-hex` but covers more ground.
 
 ### Aside: Product discovery
 
@@ -45,7 +45,7 @@ opportunity framing, user research, assumption testing, evidence-based
 validation — `discovery` covers that. It's not an alternative to the
 build topologies; it's complementary. Common setup:
 
-- `discovery` + `hex-backend` + `jira-flow`: continuous discovery on one
+- `discovery` + `build-hex` + `jira-flow`: continuous discovery on one
   Jira board, validated opportunities hand off via `epic-briefer` to
   engineering's `epic-author` on the build board.
 
@@ -59,7 +59,7 @@ build topologies; it's complementary. Common setup:
   nowhere.
 - **`jira-flow` requires a 3-lead topology** for its lead-based commands
   (`/jira-flow:execute`, `/jira-flow:plan-track-build-validate`).
-  `hex-backend` and `multi-team` ship those leads; `build-solo` doesn't.
+  `build-hex` and `build-team` ship those leads; `build-solo` doesn't.
   Trying jira-flow lead-based commands on a `build-solo`-only project
   fails at the first delegation. `/jira-flow:advance` is generic and
   works with any topology that ships a lifecycle file.
@@ -73,19 +73,19 @@ Change `CLAUDE.md`'s `@-import` line and also update `.claude/topology`:
 
 ```sh
 # from project root
-echo "multi-team" > .claude/topology
+echo "build-team" > .claude/topology
 
 # in CLAUDE.md, change the import line:
-# @.claude/hex-backend-topology.md   →  @.claude/multi-team-topology.md
+# @.claude/build-hex-topology.md   →  @.claude/build-team-topology.md
 ```
 
-Then `bin/install.sh --topology=multi-team` to copy the new snippet over.
+Then `bin/install.sh --topology=build-team` to copy the new snippet over.
 The plugins themselves don't need reinstalling — they're all already
 present.
 
 ## Per-topology details
 
-### hex-backend (the deepest specialization)
+### build-hex (the deepest specialization)
 
 **About the name.** "Hexagonal" here refers to the architectural style
 (Cockburn's Ports & Adapters): framework-free domain, dependencies
@@ -94,7 +94,7 @@ opinionated about those invariants but NOT about physical module
 names. The default layout uses
 `domain/application/api-rest/infrastructure/bootstrap`, but if your
 project names its modules `tenancy-core/tenancy-api/tenancy-adapter/
-tenancy-app` (or any other convention), edit `hex-backend.yaml` at
+tenancy-app` (or any other convention), edit `build-hex.yaml` at
 project root to remap each architectural role to your module:
 
 ```yaml
@@ -107,7 +107,7 @@ roles:
   bootstrap:    tenancy-app
 ```
 
-`bin/install.sh --topology=hex-backend` seeds this file with canonical
+`bin/install.sh --topology=build-hex` seeds this file with canonical
 defaults. Roles may share a module (common when domain and application
 code live together). The same file also supports an optional
 `extra_write_globs:` block for project-specific paths an agent
@@ -135,9 +135,9 @@ dev worker → qa-engineer → refactor-advisor → code-reviewer
 `qa-engineer` requires literal `BUILD SUCCESS` output in its reply for
 PASS verdicts. `code-reviewer` auto-REJECTs missing build evidence.
 `engineering-lead` rejects unsubstantiated PASS. Three layers of
-defense; see `hex-backend/agents/qa-engineer.md` for the spec.
+defense; see `build-hex/agents/qa-engineer.md` for the spec.
 
-### multi-team (the generic shape)
+### build-team (the generic shape)
 
 3 leads + 6 workers:
 
@@ -145,7 +145,7 @@ defense; see `hex-backend/agents/qa-engineer.md` for the spec.
 - **Workers**: `product-manager`, `ux-researcher`, `frontend-dev`,
   `backend-dev`, `qa-engineer`, `security-reviewer`.
 
-No per-Task quality loop (lighter than `hex-backend`). Use when you
+No per-Task quality loop (lighter than `build-hex`). Use when you
 want plan → build → validate ordering but don't need the hexagonal
 specifics.
 

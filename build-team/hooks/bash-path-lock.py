@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook for the multi-team topology — the BASH half of the path-lock.
+"""PreToolUse hook for the build-team topology — the BASH half of the path-lock.
 
 WHY THIS EXISTS
 ---------------
@@ -45,7 +45,7 @@ import shlex
 import sys
 from pathlib import Path
 
-PLUGIN_NAME = "multi-team"
+PLUGIN_NAME = "build-team"
 
 
 def _load_pathlock_module():
@@ -160,7 +160,7 @@ def main():
     try:
         payload = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
-        print("[multi-team bash-path-lock] could not parse hook payload; allowing",
+        print("[build-team bash-path-lock] could not parse hook payload; allowing",
               file=sys.stderr)
         sys.exit(0)
 
@@ -206,7 +206,7 @@ def main():
 
     allowed_disp = "\n  - ".join(allowed or ["(none — only own expertise file)"])
     print(
-        f"[multi-team bash-path-lock] BLOCKED: agent {agent!r} attempted a "
+        f"[build-team bash-path-lock] BLOCKED: agent {agent!r} attempted a "
         f"shell-level write to a path outside its allowlist via Bash.\n"
         f"  Offending target(s): {', '.join(violations)}\n"
         f"  Command: {command[:300]}\n"

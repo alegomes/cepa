@@ -1,9 +1,9 @@
 ---
-description: Run the canonical hex-backend workflow — plan with planning-lead, decompose+build with engineering-lead (per-Task quality loop), validate with validation-lead.
+description: Run the canonical build-hex workflow — plan with planning-lead, decompose+build with engineering-lead (per-Task quality loop), validate with validation-lead.
 argument-hint: <task description>
 ---
 
-# /hex-backend:plan-build-validate
+# /build-hex:plan-build-validate
 
 ## Purpose
 
@@ -53,7 +53,7 @@ When invoking subagents via the `Agent` tool:
   worktree allowed but pointless (read-only / advisory).
 
 For parallel **Stories** (not Tasks within one Story), run multiple
-`/hex-backend:plan-build-validate` invocations rather than worktreeing
+`/build-hex:plan-build-validate` invocations rather than worktreeing
 the leads.
 
 ## Workflow

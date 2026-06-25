@@ -1,15 +1,15 @@
 ---
-description: Author an E2E behavior spec from INTENT (not from code). You describe what an endpoint should do — in prose, or via a TASK.md path — and integration-analyst produces the spec section in specs/e2e-assertions.md following project style. Use BEFORE implementation, when designing a new endpoint, or when re-specifying expected behavior independent of current code. For documenting an EXISTING endpoint's behavior from its code, use /hex-backend:document-e2e.
+description: Author an E2E behavior spec from INTENT (not from code). You describe what an endpoint should do — in prose, or via a TASK.md path — and integration-analyst produces the spec section in specs/e2e-assertions.md following project style. Use BEFORE implementation, when designing a new endpoint, or when re-specifying expected behavior independent of current code. For documenting an EXISTING endpoint's behavior from its code, use /build-hex:document-e2e.
 argument-hint: [--preview] [--task <path/to/TASK.md>] <METHOD /path/to/endpoint> ["<freeform intent description>"]
 ---
 
-# /hex-backend:spec-e2e
+# /build-hex:spec-e2e
 
 ## Purpose
 
 **Prescriptive E2E spec authoring** — you provide intent (prose, a TASK.md, requirements), `integration-analyst` produces the spec section. The endpoint may not exist in code yet; that's fine. The spec describes what the endpoint **should** do, with the same level of detail (happy path, edge cases, errors, invariants) as the descriptive mode but driven by your description, not by reading existing code.
 
-This is the **intent → spec** direction. For the opposite (existing code → spec, "document what's there"), use `/hex-backend:document-e2e`.
+This is the **intent → spec** direction. For the opposite (existing code → spec, "document what's there"), use `/build-hex:document-e2e`.
 
 **Use when:**
 - Designing a new endpoint before implementation. Spec drives dev work.
@@ -17,7 +17,7 @@ This is the **intent → spec** direction. For the opposite (existing code → s
 - Inside `plan-build-validate`, `engineering-lead`'s ARCHITECT phase invokes this automatically using the TASK.md as intent (the new endpoint doesn't have code yet).
 
 **Don't use when:**
-- The endpoint exists and works correctly and you just need spec-from-code → use `/hex-backend:document-e2e`.
+- The endpoint exists and works correctly and you just need spec-from-code → use `/build-hex:document-e2e`.
 
 ## Variables
 
@@ -47,7 +47,7 @@ You are the orchestrator. Don't author the spec yourself; delegate to `integrati
 
 Same as `/document-e2e` step 2 — locate `specs/e2e-assertions.md` (or equivalent), confirm or ask permission to create. Skip the "endpoint exists in code" check — endpoint may not exist yet (that's the whole point of prescriptive mode).
 
-If the endpoint DOES exist in code (Grep finds a matching controller), surface a soft note: "Endpoint `<METHOD> <path>` exists in code at `<file:line>`. You're authoring a prescriptive spec — proceed if you intend the spec to describe desired behavior independent of (or differing from) the current implementation. Otherwise, `/hex-backend:document-e2e` would capture what the code does today." Don't block on it; the user picks.
+If the endpoint DOES exist in code (Grep finds a matching controller), surface a soft note: "Endpoint `<METHOD> <path>` exists in code at `<file:line>`. You're authoring a prescriptive spec — proceed if you intend the spec to describe desired behavior independent of (or differing from) the current implementation. Otherwise, `/build-hex:document-e2e` would capture what the code does today." Don't block on it; the user picks.
 
 ### 3. Delegate to integration-analyst (prescriptive mode)
 
@@ -83,7 +83,7 @@ A single concise message:
 - **Mode:** write / preview.
 - **Open questions:** count + summary. Prescriptive specs typically have more open questions than descriptive (intent rarely covers every edge case). Resolve them before authoring tests against this spec.
 - **Code-existence note:** if the endpoint already has an implementation that contradicts the spec, surface the divergence loudly — the user is now committed to changing the code, the spec, or both.
-- **Next step:** if open questions, suggest resolving; if endpoint doesn't exist yet, suggest dispatching to `engineering-lead` to implement against the spec; if code already exists and diverges, suggest `/hex-backend:audit-e2e <endpoint>` for the 3-way diff.
+- **Next step:** if open questions, suggest resolving; if endpoint doesn't exist yet, suggest dispatching to `engineering-lead` to implement against the spec; if code already exists and diverges, suggest `/build-hex:audit-e2e <endpoint>` for the 3-way diff.
 
 ## Constraints
 

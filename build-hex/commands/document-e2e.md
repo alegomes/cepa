@@ -1,15 +1,15 @@
 ---
-description: Document the E2E behavior of an EXISTING endpoint by reading its current implementation (controller + use case + adapter + seed). Produces a descriptive spec section in specs/e2e-assertions.md reflecting what the code actually does today. Use to backfill specs for endpoints already shipped, or to capture current behavior before refactoring. For NEW endpoints (spec-first / spec drives implementation), use /hex-backend:spec-e2e instead.
+description: Document the E2E behavior of an EXISTING endpoint by reading its current implementation (controller + use case + adapter + seed). Produces a descriptive spec section in specs/e2e-assertions.md reflecting what the code actually does today. Use to backfill specs for endpoints already shipped, or to capture current behavior before refactoring. For NEW endpoints (spec-first / spec drives implementation), use /build-hex:spec-e2e instead.
 argument-hint: [--preview] <METHOD /path/to/endpoint>   (e.g., "GET /api/v1/assinaturas/resumo")
 ---
 
-# /hex-backend:document-e2e
+# /build-hex:document-e2e
 
 ## Purpose
 
 **Descriptive E2E spec authoring** — capture what an endpoint does today, traceable to the actual code + seed (no invented values), in the project's existing style. The spec lives in `specs/e2e-assertions.md` (or wherever the project's E2E spec doc is — the agent verifies on read).
 
-This is the **code → spec** direction. For the **intent → spec** direction (you describe what an endpoint should do, the spec is authored from your description, code may not exist yet), use `/hex-backend:spec-e2e`.
+This is the **code → spec** direction. For the **intent → spec** direction (you describe what an endpoint should do, the spec is authored from your description, code may not exist yet), use `/build-hex:spec-e2e`.
 
 **Use when:**
 - The endpoint exists in code but isn't in the spec doc (backfill).
@@ -17,8 +17,8 @@ This is the **code → spec** direction. For the **intent → spec** direction (
 - The implementation drifted from a stale spec and you want to capture the "as-is" before deciding which side to fix.
 
 **Don't use when:**
-- The endpoint doesn't exist yet — there's no code to read. Use `/hex-backend:spec-e2e` (prescriptive) instead.
-- You're inside a `plan-build-validate` flow creating a new endpoint — `engineering-lead`'s ARCHITECT phase invokes `/hex-backend:spec-e2e` automatically (intent-driven, since code doesn't exist yet).
+- The endpoint doesn't exist yet — there's no code to read. Use `/build-hex:spec-e2e` (prescriptive) instead.
+- You're inside a `plan-build-validate` flow creating a new endpoint — `engineering-lead`'s ARCHITECT phase invokes `/build-hex:spec-e2e` automatically (intent-driven, since code doesn't exist yet).
 
 ## Variables
 

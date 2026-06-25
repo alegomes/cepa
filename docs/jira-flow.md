@@ -52,7 +52,7 @@ defaults:
     prove_drain: { jql: 'labels = needs-review' }
 
 # --- Default topology for build/validate flows ---
-default_topology: hex-backend       # which topology's leads /jira-flow:execute delegates to
+default_topology: build-hex       # which topology's leads /jira-flow:execute delegates to
 
 # --- Per-topology overrides (optional) ---
 # When a topology is active, fields here REPLACE the matching field
@@ -63,10 +63,10 @@ topologies:
     required_fields:
       - { id: customfield_10010, name: "Team", value: "Product" }
     # project_key: DISC          # if discovery uses a different Jira project
-  hex-backend:
+  build-hex:
     required_fields:
       - { id: customfield_10010, name: "Team", value: "Engineering" }
-    scope: { jql: 'component = backend' }   # drain backend work only when hex-backend is active
+    scope: { jql: 'component = backend' }   # drain backend work only when build-hex is active
 
 # --- Lifecycles for /jira-flow:advance ---
 lifecycles:
@@ -134,12 +134,12 @@ lifecycles:
   `triage` to a single epic's children.
 - **`default_topology`** — which build topology
   `/jira-flow:plan-track-build-validate` and `/jira-flow:execute`
-  delegate to (e.g., `hex-backend` → `hex-backend:engineering-lead`).
+  delegate to (e.g., `build-hex` → `build-hex:engineering-lead`).
 - **`topologies.<name>`** — per-topology overrides applied when that
   topology is the active one. Each block can override any field from
   `defaults` (most useful: `required_fields`, `project_key`,
   `status_map`, `scope`). Common use: same Jira project, different `Team`
-  field per topology (Engineering for hex-backend, Product for
+  field per topology (Engineering for build-hex, Product for
   discovery). Merge semantics: per-field replacement, atomic for
   lists (the topology's `required_fields` replaces the entire
   `defaults.required_fields`, not merged item-by-item). Topologies
@@ -334,8 +334,8 @@ hard-coded, can't be bypassed by command drift.
 
 - **Lead-based commands** (`/jira-flow:execute`,
   `/jira-flow:plan-track-build-validate`) require a topology with
-  `planning-lead` + `engineering-lead` + `validation-lead`. `hex-backend`
-  and `multi-team` ship those; `build-solo` doesn't.
+  `planning-lead` + `engineering-lead` + `validation-lead`. `build-hex`
+  and `build-team` ship those; `build-solo` doesn't.
 - **Generic commands** (`/jira-flow:advance`, `/jira-flow:capture`,
   `/jira-flow:drain`, `/jira-flow:configure`) work with any topology
   (including `build-solo` and `discovery`).

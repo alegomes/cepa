@@ -27,7 +27,7 @@ You are the orchestrator. You delegate the proof (to the topology's `proof-revie
 ### 2. QA gate
 
 Run the **QA axis**, not hygiene:
-- If a topology with a `proof-reviewer` is installed (e.g. `hex-backend:proof-reviewer`), delegate the change-driven proof on `base..HEAD` to it. It returns **PROVEN / UNPROVEN / NEEDS-HUMAN**.
+- If a topology with a `proof-reviewer` is installed (e.g. `build-hex:proof-reviewer`), delegate the change-driven proof on `base..HEAD` to it. It returns **PROVEN / UNPROVEN / NEEDS-HUMAN**.
 - This is the same reviewer `/jira-flow:prove` uses — same gate, different entry point. Do not duplicate the proof logic; delegate to the one reviewer.
 - No topology / no proof-reviewer available → there is no QA gate to run. Say so explicitly (don't pretend one passed), fall back to the project's own verify (build/tests green per `.claude/last-build.json`), and treat a missing baseline as NOT proven.
 

@@ -3,13 +3,13 @@ description: Propagate updates in specs/e2e-assertions.md to the corresponding E
 argument-hint: [--all] [<METHOD /path/to/endpoint>]   (mutually exclusive — one endpoint, or `--all`)
 ---
 
-# /hex-backend:resync-e2e
+# /build-hex:resync-e2e
 
 ## Purpose
 
 Spec is the source of truth for E2E behavior (per `qa-engineer.md`'s authoritative-spec rule). When the spec changes, tests need to follow — otherwise drift accumulates and the next test failure becomes "is the spec wrong, or is the test wrong, or is the code wrong?". This command keeps the spec → tests direction in sync.
 
-For the opposite direction (code changed, spec needs update), use `/hex-backend:document-e2e <endpoint>` (re-document from code) or `/hex-backend:spec-e2e <endpoint>` (re-author from intent if the new behavior is what should be specced). Use `--preview` on either to see the diff before writing. For 3-way alignment audit (no propagation), use `/hex-backend:audit-e2e`.
+For the opposite direction (code changed, spec needs update), use `/build-hex:document-e2e <endpoint>` (re-document from code) or `/build-hex:spec-e2e <endpoint>` (re-author from intent if the new behavior is what should be specced). Use `--preview` on either to see the diff before writing. For 3-way alignment audit (no propagation), use `/build-hex:audit-e2e`.
 
 ## Variables
 
@@ -27,7 +27,7 @@ You are the orchestrator. Don't write tests yourself; delegate to `qa-engineer`.
 ### 1. Parse arguments
 
 - `--all` → mode = `sweep`. Identify the spec doc (`specs/e2e-assertions.md` or the project's equivalent — verify location).
-- `<METHOD> <path>` → mode = `single`. Same parsing rules as `/hex-backend:spec-e2e` and `/hex-backend:document-e2e`.
+- `<METHOD> <path>` → mode = `single`. Same parsing rules as `/build-hex:spec-e2e` and `/build-hex:document-e2e`.
 - Both → error: "Pass either an endpoint OR `--all`, not both."
 - Neither → error: "Specify an endpoint or `--all`."
 
@@ -35,7 +35,7 @@ You are the orchestrator. Don't write tests yourself; delegate to `qa-engineer`.
 
 Read the spec file. Extract every `#### <METHOD> <path>` section (heading + body until the next `####` or EOF).
 
-In `single` mode: find the section matching the requested endpoint. If absent → error: "No spec section for `<METHOD> <path>`. Author one first — `/hex-backend:document-e2e <METHOD> <path>` (capture from existing code) or `/hex-backend:spec-e2e <METHOD> <path> '<intent>'` (author from intent)."
+In `single` mode: find the section matching the requested endpoint. If absent → error: "No spec section for `<METHOD> <path>`. Author one first — `/build-hex:document-e2e <METHOD> <path>` (capture from existing code) or `/build-hex:spec-e2e <METHOD> <path> '<intent>'` (author from intent)."
 
 In `sweep` mode: collect all sections. If zero → error: "No `#### <METHOD> <path>` sections found in `<spec file>`. Nothing to re-sync."
 
@@ -72,8 +72,8 @@ A single concise message:
 
 ## Constraints
 
-- **Spec is authoritative; don't second-guess it.** If a spec assertion seems wrong, update the spec via `/hex-backend:document-e2e --preview` (re-document from code) or `/hex-backend:spec-e2e --preview` (re-author from intent), not by skipping the test or weakening the assertion in code. Re-sync re-aligns tests; it doesn't rewrite the spec.
+- **Spec is authoritative; don't second-guess it.** If a spec assertion seems wrong, update the spec via `/build-hex:document-e2e --preview` (re-document from code) or `/build-hex:spec-e2e --preview` (re-author from intent), not by skipping the test or weakening the assertion in code. Re-sync re-aligns tests; it doesn't rewrite the spec.
 - **Don't modify production code.** Re-sync touches `*/src/test/**` only. If an assertion can't be tested because the production code is missing the behavior, flag it as an open question — don't add the behavior. That's `engineering-lead`'s call.
-- **Don't change the spec doc.** This is the propagation direction; the spec is the input. Spec edits go through `/hex-backend:spec-e2e` (intent → spec) or `/hex-backend:document-e2e` (code → spec).
+- **Don't change the spec doc.** This is the propagation direction; the spec is the input. Spec edits go through `/build-hex:spec-e2e` (intent → spec) or `/build-hex:document-e2e` (code → spec).
 - **Sweep is sequential.** No parallel re-sync across endpoints — tests in different modules can share fixtures, and concurrent edits risk merge conflicts.
 - **Stop-on-first-BLOCKED in sweep.** Same logic as `/jira-flow:drain` — don't keep burning budget once the build is red.

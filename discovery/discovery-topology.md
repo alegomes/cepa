@@ -83,7 +83,7 @@ continuous discovery — each pass burns down risk.
 - `discovery + jira-flow` → same, plus board lifecycle on your discovery
   Jira board. `epic-briefer` publishes a brief; the next agent in the chain
   picks it up.
-- `discovery + jira-flow + hex-backend` (or `+ multi-team`) → end-to-end:
+- `discovery + jira-flow + build-hex` (or `+ build-team`) → end-to-end:
   signal → validated solution → engineer-board Epic → Stories → code → ship.
   The handoff is two-step: discovery's `epic-briefer` writes the brief and
   links a card to the engineer board; engineering's `epic-author` reads the

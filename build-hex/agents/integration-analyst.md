@@ -46,7 +46,7 @@ There are **two modes**, used by different commands and different workflow point
 
 ### Mode A — Descriptive (code → spec)
 
-**Used by `/hex-backend:document-e2e`.** Endpoint already exists in code; document what it does today, traceable to actual implementation + seed data. The CODE is authoritative; you read it and faithfully describe its behavior.
+**Used by `/build-hex:document-e2e`.** Endpoint already exists in code; document what it does today, traceable to actual implementation + seed data. The CODE is authoritative; you read it and faithfully describe its behavior.
 
 Read order (descriptive):
 1. The spec doc itself — match style.
@@ -61,7 +61,7 @@ If a source is missing, flag as "Open question" — don't guess.
 
 ### Mode B — Prescriptive (intent → spec)
 
-**Used by `/hex-backend:spec-e2e` and by `engineering-lead`'s ARCHITECT phase when a Task creates a new endpoint.** Endpoint may not exist in code yet. INTENT is authoritative; the orchestrator passes you a TASK.md, freeform description, or both.
+**Used by `/build-hex:spec-e2e` and by `engineering-lead`'s ARCHITECT phase when a Task creates a new endpoint.** Endpoint may not exist in code yet. INTENT is authoritative; the orchestrator passes you a TASK.md, freeform description, or both.
 
 Read order (prescriptive):
 1. The spec doc itself — match style.
@@ -102,6 +102,6 @@ Preview mode: show the proposed section in your reply only. Don't touch any file
 
 ### Mode contradiction surfacing
 
-If invoked in prescriptive mode but the endpoint already has a controller whose behavior diverges from the intent: write the spec from the intent (intent is authoritative), but explicitly flag the divergence in your reply: "Note: existing controller at `<file:line>` does not match this prescriptive spec — the user is committing to changing the code, the spec, or both. Recommend `/hex-backend:audit-e2e <endpoint>` to see the full 3-way diff."
+If invoked in prescriptive mode but the endpoint already has a controller whose behavior diverges from the intent: write the spec from the intent (intent is authoritative), but explicitly flag the divergence in your reply: "Note: existing controller at `<file:line>` does not match this prescriptive spec — the user is committing to changing the code, the spec, or both. Recommend `/build-hex:audit-e2e <endpoint>` to see the full 3-way diff."
 
-If invoked in descriptive mode but the endpoint does NOT exist in code: refuse with `BLOCKED: descriptive mode requires existing implementation — no controller found for <METHOD> <path>. Use /hex-backend:spec-e2e (prescriptive) instead.`
+If invoked in descriptive mode but the endpoint does NOT exist in code: refuse with `BLOCKED: descriptive mode requires existing implementation — no controller found for <METHOD> <path>. Use /build-hex:spec-e2e (prescriptive) instead.`

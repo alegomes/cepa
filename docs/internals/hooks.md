@@ -34,7 +34,7 @@ common keys we rely on:
     "is_error": false,
     "exit_code": 0
   },
-  "agent_type": "hex-backend:domain-dev",  // Subagent caller, plugin-namespaced.
+  "agent_type": "build-hex:domain-dev",  // Subagent caller, plugin-namespaced.
                                              // Empty string when called from main session.
                                              // BUILT-IN CC AGENTS (statusline-setup,
                                              // Explore, Plan, general-purpose) arrive
@@ -67,7 +67,7 @@ the full design):
 
 ### path-lock.py × 5 (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
 
-Owners: `multi-team/hooks/`, `hex-backend/hooks/`, `discovery/hooks/`,
+Owners: `build-team/hooks/`, `build-hex/hooks/`, `discovery/hooks/`,
 `book/hooks/`, `git-history/hooks/`.
 
 Enforces per-agent write allowlists. Each instance has a `PLUGIN_NAME`
@@ -364,7 +364,7 @@ Hooks print stderr; messages surface in the debug log.
 
 ### Hook-specific debug logs
 
-`hex-backend/hooks/path-lock.py` has a `HEX_PATHLOCK_DEBUG` env var:
+`build-hex/hooks/path-lock.py` has a `HEX_PATHLOCK_DEBUG` env var:
 
 ```sh
 export HEX_PATHLOCK_DEBUG=1

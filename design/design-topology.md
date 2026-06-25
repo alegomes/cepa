@@ -33,7 +33,7 @@ Do **not** use it when:
 | `design-critic` | Critique | Adversarial gate — heuristics, a11y, consistency → SHIP/REVISE/BLOCK | sonnet |
 
 `ux-architect` is deliberately distinct from `discovery:user-researcher` and
-`multi-team:ux-researcher`: it designs *interaction*, it does not generate user
+`build-team:ux-researcher`: it designs *interaction*, it does not generate user
 *evidence*. If you need user research, compose with discovery.
 
 ## Artifact layout
@@ -91,7 +91,7 @@ column's `on_enter` agent — `/jira-flow:advance` reads it generically.
 - `design` alone → produces design specs as local artifacts under `docs/design/`.
 - `discovery → design` → discovery validates the opportunity and hands off a
   brief; design turns it into a spec. The brief is the crossing artifact.
-- `design → multi-team` (or `→ hex-backend`) → design owns `design-spec.md`;
+- `design → build-team` (or `→ build-hex`) → design owns `design-spec.md`;
   engineering's `frontend-dev` reads it and builds. The design spec is the only
   artifact that crosses the boundary — design does not write code, engineering
   does not redesign.

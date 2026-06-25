@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse hook for the hex-backend topology — proof-verdict integrity gate.
+"""PreToolUse hook for the build-hex topology — proof-verdict integrity gate.
 
 The proof-reviewer's own routing already forbids it (proof-reviewer.md,
 "Verdict routing"): a proof artifact whose `verdict: proven` sits next to a
@@ -35,7 +35,7 @@ from pathlib import Path
 
 # A level whose status is in UNPROVEN_STATUSES routes the card to UNPROVEN;
 # anything else forbidding `proven` routes to NEEDS-HUMAN. Both forbid `proven`.
-# Mirrors the "Verdict routing" section of hex-backend/agents/proof-reviewer.md.
+# Mirrors the "Verdict routing" section of build-hex/agents/proof-reviewer.md.
 UNPROVEN_STATUSES = {"survived", "green-at-base", "green_at_base"}
 NEEDS_HUMAN_STATUSES = {"skipped", "assumed", "gap", "findings"}
 FORBIDDING_STATUSES = UNPROVEN_STATUSES | NEEDS_HUMAN_STATUSES
@@ -132,7 +132,7 @@ def main():
 
     computed = "unproven" if any(s in UNPROVEN_STATUSES for s in forbidding) else "needs-human"
     print(
-        f"[hex-backend proof-verdict-guard] BLOCKED: {file_path} declares "
+        f"[build-hex proof-verdict-guard] BLOCKED: {file_path} declares "
         f"verdict: proven, but these level statuses forbid it: "
         f"{', '.join(forbidding)}.\n"
         f"  Per the Verdict routing in proof-reviewer.md, `proven` is "

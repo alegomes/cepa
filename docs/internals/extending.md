@@ -103,7 +103,7 @@ Gotchas:
 
 1. **Pick a plugin** — usually `common` (cross-topology hooks like
   `gate-advance`) or the topology that owns the enforcement (e.g.,
-  `hex-backend/hooks/path-lock.py` is topology-specific).
+  `build-hex/hooks/path-lock.py` is topology-specific).
 2. **Author the script** — `<plugin>/hooks/<name>.py`. Must be
    executable (`chmod +x`). Conventional shape:
 
@@ -236,7 +236,7 @@ Larger surface; comes up rarely but worth documenting.
    ```
 
    Also add to the topology validation (`case "${TOPOLOGY}" in
-   ""|multi-team|...|<new-plugin>) ;;`).
+   ""|build-team|...|<new-plugin>) ;;`).
 
 6. **Author the plugin contents** — agents, commands, hooks per the
    recipes above.

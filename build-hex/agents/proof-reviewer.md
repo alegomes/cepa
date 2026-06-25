@@ -79,7 +79,7 @@ stand in for an external one.
    weakens scoping; note it.
 3. Collect the **changed production classes** and, per class, its module
    (`domain`/`application`/`api-rest`/`infrastructure`/`bootstrap` — read
-   `hex-backend.yaml` for the role→module map; don't hardcode).
+   `build-hex.yaml` for the role→module map; don't hardcode).
 
 ## Classifying each changed class — which technique applies
 

@@ -2,7 +2,7 @@
 
 > When this snippet is loaded into your project's `CLAUDE.md` (via `@-import`
 > or copy-paste), the main `claude` session operates as the orchestrator
-> of a 13-agent team installed by the `hex-backend` plugin.
+> of a 13-agent team installed by the `build-hex` plugin.
 
 ## Frame: a system that builds hexagonal backends
 
@@ -98,7 +98,7 @@ engineering-lead → TASK.md decomposition, then for each Task:
 validation-lead → security-reviewer + run full verify → verdict
 ```
 
-The `/hex-backend:plan-build-validate <task>` slash command runs all of this for one Story.
+The `/build-hex:plan-build-validate <task>` slash command runs all of this for one Story.
 
 For lighter tasks: just `validation-lead` for a security review; just
 `planning-lead` for scoping; `engineering-lead` then `validation-lead`
@@ -137,5 +137,5 @@ project-local files win over plugin-shipped ones.
 
 If the `jira-flow@alegomes` plugin is also installed, prefer its commands
 (`/jira-flow:plan-track-build-validate`, `/jira-flow:execute`,
-`/jira-flow:drain`) over `/hex-backend:plan-build-validate` — they wrap
+`/jira-flow:drain`) over `/build-hex:plan-build-validate` — they wrap
 the same workflow with Jira lifecycle transitions.

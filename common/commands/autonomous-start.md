@@ -25,7 +25,7 @@ Parse `--topology=NAME` from `$ARGUMENTS` if present. Otherwise read `.claude/to
 
 If neither flag nor file exists:
 
-> Reply with: "No topology configured. Run `bin/install.sh --topology=NAME` from the plugin repo (NAME = `hex-backend` | `multi-team` | `discovery` | `build-solo`), or pass `--topology=NAME` to this command. Aborting." Stop.
+> Reply with: "No topology configured. Run `bin/install.sh --topology=NAME` from the plugin repo (NAME = `build-hex` | `build-team` | `discovery` | `build-solo`), or pass `--topology=NAME` to this command. Aborting." Stop.
 
 If the topology name doesn't match any installed plugin, surface that and abort. Don't guess.
 
@@ -92,10 +92,10 @@ If `atlassian-expert` returns BLOCKED (e.g., card already past `in_progress`, tr
 
 Hand off to the chosen flow's slash command, prefixing the description as if the user had run it directly. Examples:
 
-- topology=hex-backend, flow=plan-build-validate → invoke `/hex-backend:plan-build-validate <description>`
-- topology=hex-backend, flow=reproduce-fix-verify → invoke `/hex-backend:reproduce-fix-verify <description>`
-- topology=hex-backend, flow=investigate → invoke `/hex-backend:investigate <description>`
-- topology=multi-team, flow=plan-build-validate → invoke `/multi-team:plan-build-validate <description>`
+- topology=build-hex, flow=plan-build-validate → invoke `/build-hex:plan-build-validate <description>`
+- topology=build-hex, flow=reproduce-fix-verify → invoke `/build-hex:reproduce-fix-verify <description>`
+- topology=build-hex, flow=investigate → invoke `/build-hex:investigate <description>`
+- topology=build-team, flow=plan-build-validate → invoke `/build-team:plan-build-validate <description>`
 - topology=discovery, flow=investigate → invoke `/discovery:investigate <description>` (when/if it exists)
 
 The autonomous-mode skill is now in effect; the called command's orchestrator inherits the no-questions discipline. The checkpoint hook captures every subagent call.
@@ -151,4 +151,4 @@ When the flow returns, append a final entry to the state file (`status: complete
 - **Don't override the green-build rule.** The skill explicitly preserves it.
 - **State file is the source of truth.** Anything the user needs to know about this run lives in `docs/autonomous/<run-id>/state.yaml` or in the artifacts referenced from it. Don't bury status in chat.
 - **Jira lifecycle is best-effort, not load-bearing.** If `atlassian-expert` returns BLOCKED on the In Progress transition (e.g., card already advanced past it, transition not available, MCP auth dropout), record the blocker and run the flow anyway. The opposite — refusing to do work because Jira state isn't perfect — would be worse. The In Review transition is conditional on the flow succeeding; a blocked flow leaves the card in In Progress with a blocker comment.
-- **No double-tracking.** If the underlying topology flow already transitions the card itself (e.g., user passes a description that explicitly invokes `/jira-flow:execute`), this command will double-transition. autonomous-start dispatches into raw topology commands (`/hex-backend:plan-build-validate`, etc.), which are Jira-agnostic — so this shouldn't happen in practice. If you find yourself running autonomous-start with a `/jira-flow:*` command in the description, drop the slash-command prefix; let autonomous-start own the Jira side.
+- **No double-tracking.** If the underlying topology flow already transitions the card itself (e.g., user passes a description that explicitly invokes `/jira-flow:execute`), this command will double-transition. autonomous-start dispatches into raw topology commands (`/build-hex:plan-build-validate`, etc.), which are Jira-agnostic — so this shouldn't happen in practice. If you find yourself running autonomous-start with a `/jira-flow:*` command in the description, drop the slash-command prefix; let autonomous-start own the Jira side.

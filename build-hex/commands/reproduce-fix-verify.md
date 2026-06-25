@@ -1,9 +1,9 @@
 ---
-description: Run a focused bug-fix flow on a hex-backend codebase — reproduce the bug with a failing regression test, route the fix to the right dev worker, verify with green build evidence and code review. Use this for confirmed bugs, not for "I'm not sure if X is wrong" (use /hex-backend:investigate for that).
+description: Run a focused bug-fix flow on a build-hex codebase — reproduce the bug with a failing regression test, route the fix to the right dev worker, verify with green build evidence and code review. Use this for confirmed bugs, not for "I'm not sure if X is wrong" (use /build-hex:investigate for that).
 argument-hint: <bug description, error message, or steps to reproduce>
 ---
 
-# /hex-backend:reproduce-fix-verify
+# /build-hex:reproduce-fix-verify
 
 ## Purpose
 
@@ -13,8 +13,8 @@ planning phase (the spec is the failing test), no parallel fan-out (one bug,
 one worker), and no validation-lead by default (bug fixes are narrow; the user
 can run validation explicitly if the bug is security-relevant).
 
-For a bug whose existence is uncertain, run `/hex-backend:investigate` first.
-For a feature, run `/hex-backend:plan-build-validate`.
+For a bug whose existence is uncertain, run `/build-hex:investigate` first.
+For a feature, run `/build-hex:plan-build-validate`.
 
 ## Variables
 
@@ -33,7 +33,7 @@ mocked use-case test).
 
 ## Worktree policy
 
-Same constraint as `/hex-backend:plan-build-validate`: leads run in main session.
+Same constraint as `/build-hex:plan-build-validate`: leads run in main session.
 For this command, the dev worker also runs in main session by default — there's
 no parallelism benefit for a single fix and worktree adds merge ceremony for no
 gain. If the user wants the fix isolated on its own branch, they should create
@@ -86,7 +86,7 @@ Delegate to `engineering-lead`:
 >    based on the responsible layer. Tell them: "The failing test at `<path>`
 >    captures bug **$ARGUMENTS**. Make it pass with the minimum change. No
 >    drive-by refactors — `scope-discipline` applies. Commit before returning
->    with the same rules as `/hex-backend:plan-build-validate` (branch name,
+>    with the same rules as `/build-hex:plan-build-validate` (branch name,
 >    commit SHA, RESULT.md path)."
 > 2. Wait for the worker's RESULT.md + commit SHA.
 > 3. Reply with: paths touched, commit SHA, RESULT.md path.

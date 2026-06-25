@@ -1,5 +1,5 @@
 ---
-description: Advance a Jira card to the next column in its topology's lifecycle. Reads `jira-flow.yaml` to know what "next" means and which agent (if any) runs on entry. Generic across topologies — used by discovery, hex-backend with custom flows, etc. For the default To Do → In Progress → In Review flow, use /jira-flow:execute instead.
+description: Advance a Jira card to the next column in its topology's lifecycle. Reads `jira-flow.yaml` to know what "next" means and which agent (if any) runs on entry. Generic across topologies — used by discovery, build-hex with custom flows, etc. For the default To Do → In Progress → In Review flow, use /jira-flow:execute instead.
 argument-hint: <jira-key> [--no-scope]
 ---
 
@@ -9,7 +9,7 @@ argument-hint: <jira-key> [--no-scope]
 
 Move one Jira card forward in its topology's defined lifecycle. The lifecycle file declares the column flow, the agent that runs on entry to each column (if any), and the gate that must be satisfied before entering (if any).
 
-Generic by design — the same command works for discovery's 7-column flow, hex-backend's delivery flow, or any custom lifecycle a topology wants to declare. The lifecycle file at `jira-flow.yaml` is the source of truth.
+Generic by design — the same command works for discovery's 7-column flow, build-hex's delivery flow, or any custom lifecycle a topology wants to declare. The lifecycle file at `jira-flow.yaml` is the source of truth.
 
 For the standard To Do → In Progress → In Review flow with planning + build + validate, use `/jira-flow:execute` — it remains the right tool when no custom lifecycle is needed.
 

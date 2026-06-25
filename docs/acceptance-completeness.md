@@ -186,7 +186,7 @@ The discipline is enforced at two layers — a prompt-level precondition that
 fails early and clearly, and the hook that catches it structurally even if
 the prompt is ignored.
 
-### `hex-backend:reproduce-fix-verify` — step 4, "Acceptance audit"
+### `build-hex:reproduce-fix-verify` — step 4, "Acceptance audit"
 
 After Verify (green build + code review prove the change is correct and
 minimal), the orchestrator invokes `completion-auditor` **directly — not

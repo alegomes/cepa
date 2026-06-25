@@ -2,7 +2,7 @@
 
 > When this snippet is loaded into your project's `CLAUDE.md` (via `@-import`
 > or copy-paste), the main `claude` session operates as the orchestrator
-> of a 9-agent team installed by the `multi-team` plugin.
+> of a 9-agent team installed by the `build-team` plugin.
 
 ## Frame: a system that builds systems
 

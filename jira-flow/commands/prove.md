@@ -20,7 +20,7 @@ Different lens (change-driven, not criterion-driven), different position (out of
 Review, not into it). They compose; they do not overlap.
 
 **Requires** a topology that ships a `proof-reviewer` subagent (currently
-`hex-backend`). If the active topology has none, this command aborts with a
+`build-hex`). If the active topology has none, this command aborts with a
 clear error.
 
 ## Variables
@@ -44,7 +44,7 @@ Extract `default_topology`. Prefix the proof delegation: `<default_topology>:pro
 
 Check the topology ships `proof-reviewer`. If not, abort: "Topology
 `<default_topology>` doesn't ship `proof-reviewer`. The change-driven proof gate
-is currently implemented for `hex-backend` (Maven/JaCoCo/PIT). Switch topologies
+is currently implemented for `build-hex` (Maven/JaCoCo/PIT). Switch topologies
 or build a `proof-reviewer` for `<default_topology>` (JS would use Stryker for
 the mutation level)."
 

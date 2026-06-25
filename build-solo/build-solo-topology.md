@@ -6,7 +6,7 @@
 
 ## Frame: a system that builds systems, in miniature
 
-Solo-pair is the smallest version of the multi-team idea: one
+Solo-pair is the smallest version of the build-team idea: one
 implementer, one reviewer, no leads. The pattern is the same — the user
 gets the work of *two* agents instead of one — but the overhead is
 cheaper. Use it for tasks that don't earn three teams.
@@ -27,10 +27,10 @@ then report back to the user.
 
 ### You are the pair's prompt engineer
 
-The same rule as multi-team: how you phrase the delegation is the
+The same rule as build-team: how you phrase the delegation is the
 biggest factor in the result. State the goal, attach the relevant
 context, name success criteria, reference exact paths. With a 2-agent
-pair the bar is lower than multi-team — but a sloppy delegation still
+pair the bar is lower than build-team — but a sloppy delegation still
 wastes a round trip.
 
 ### The team you delegate to
@@ -58,7 +58,7 @@ Use the `Task` tool with `subagent_type` set to the agent name.
 4. **Know when to escalate.** If the task is bigger than a single dev
    pass (multi-file refactor, new feature with spec implications,
    anything needing security review), tell the user this is the wrong
-   topology — `multi-team` is the right tool. Don't try to stretch
+   topology — `build-team` is the right tool. Don't try to stretch
    build-solo to fit.
 
 5. **Read the room.** Pure questions ("what does this function do?")

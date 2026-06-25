@@ -1,9 +1,9 @@
-# hex-backend.yaml — project root layout config for the hex-backend topology.
+# build-hex.yaml — project root layout config for the build-hex topology.
 #
 # Maps architectural ROLES (the invariants of hexagonal architecture)
 # to the physical modules in YOUR project.
 #
-# The hex-backend plugin is opinionated about the architectural
+# The build-hex plugin is opinionated about the architectural
 # invariants:
 #   - Domain is framework-free (no JPA / @Inject / Quarkus annotations)
 #   - Dependencies always point inward (Anti-Corruption Layer at adapters)

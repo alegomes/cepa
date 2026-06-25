@@ -93,7 +93,7 @@ defaults:
 
 # --- 2. Default topology for build/validate flows ---
 # Tells /jira-flow:execute and /jira-flow:plan-track-build-validate which
-# topology's leads to delegate to (e.g. hex-backend:engineering-lead).
+# topology's leads to delegate to (e.g. build-hex:engineering-lead).
 default_topology: discovery
 
 # --- 3. Per-topology overrides (optional) ---
@@ -110,7 +110,7 @@ default_topology: discovery
 #   4. No topology → use defaults alone.
 #
 # Common use case: same Jira project, different Team field per
-# topology. Discovery work goes to the product team; hex-backend work
+# topology. Discovery work goes to the product team; build-hex work
 # goes to engineering.
 #
 # A topology may also carry its own `scope:` block (a `{ jql: '...' }`),
@@ -124,18 +124,18 @@ topologies:
     # If discovery uses a different Jira project, override here:
     # project_key: DISC
 
-  hex-backend:
+  build-hex:
     # Engineering team owns code Stories. If matching `defaults`,
     # this block is optional.
     required_fields:
       - { id: customfield_10010, name: "Team", value: "Engineering" }
-    # When hex-backend is the active topology, scope the drains to backend
+    # When build-hex is the active topology, scope the drains to backend
     # work only. Replaces defaults.scope (unless a per-command override or a
     # --scope/--no-scope flag is in play). Drop the block to inherit defaults.
     # scope:
     #   jql: 'component = backend'
 
-  multi-team:
+  build-team:
     required_fields:
       - { id: customfield_10010, name: "Team", value: "Platform" }
 

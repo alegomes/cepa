@@ -37,7 +37,7 @@ This is [`defense-in-depth`](../common/skills/defense-in-depth) mechanized.
 Four levels, weakest to strongest. The default ruler is **all four**, with the
 noisy top level routed so it can never produce a false rejection.
 
-| Level | Question | Tooling (hex-backend / Quarkus) | Verdict effect |
+| Level | Question | Tooling (build-hex / Quarkus) | Verdict effect |
 |---|---|---|---|
 | **L2 coverage pre-filter** | Is every changed line even touched by a test at its claimed altitude? | `quarkus-jacoco` (the Quarkus-aware JaCoCo) ∩ diff, or structural | `gap` → UNPROVEN |
 | **L3 load-bearing** | If I break a changed line, does the test that should guard it — *external* where the change is externally-observable — go red? | **perturbation** (universal: revert hunk → re-run covering test → require RED) + **PIT** as the fast path on non-Quarkus layers | survives / surviving mutant → UNPROVEN |
@@ -118,7 +118,7 @@ There is no branch-per-card convention. Instead:
 
 | Piece | Lives in | Role |
 |---|---|---|
-| `proof-reviewer` (agent) | `hex-backend` | The change-driven proof mechanics (L2/L3/L4 + bug check). Writes `.claude/proof/<KEY>.yaml`. Never edits code; works in a throwaway git worktree. |
+| `proof-reviewer` (agent) | `build-hex` | The change-driven proof mechanics (L2/L3/L4 + bug check). Writes `.claude/proof/<KEY>.yaml`. Never edits code; works in a throwaway git worktree. |
 | `/jira-flow:prove <KEY>` | `jira-flow` | Topology-agnostic. Resolves the topology, delegates to `<topology>:proof-reviewer`, applies the verdict to the card via `atlassian-expert`. |
 | `/jira-flow:prove-drain [--max N]` | `jira-flow` | Iterates the Review column. Does NOT stop on UNPROVEN — a bounce is progress. |
 | `base_commit` capture | `jira-flow` execute/fix | Records the change baseline at In Progress entry. |
@@ -126,7 +126,7 @@ There is no branch-per-card convention. Instead:
 
 The split is deliberate: `jira-flow` stays topology-agnostic (it just prefixes
 the agent name and drives Jira), while the Java/Maven-specific proof mechanics
-live in `hex-backend` — mirroring how `/jira-flow:fix` delegates to
+live in `build-hex` — mirroring how `/jira-flow:fix` delegates to
 `/<topology>:reproduce-fix-verify`. A JS topology would ship its own
 `proof-reviewer` backed by Stryker; `jira-flow` would not change.
 

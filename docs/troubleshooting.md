@@ -37,7 +37,7 @@ handles all three.
 CC plugin commands are namespaced. Use the namespaced form:
 
 ```
-/hex-backend:plan-build-validate    # not /plan-build-validate
+/build-hex:plan-build-validate    # not /plan-build-validate
 /jira-flow:execute WEGO-1234
 /common:autonomous-start "..."
 ```
@@ -55,17 +55,17 @@ reinstalling. Required after editing without a version bump.
 
 ## path-lock hook blocks
 
-### `[hex-backend path-lock] BLOCKED: agent 'X' cannot Edit Y`
+### `[build-hex path-lock] BLOCKED: agent 'X' cannot Edit Y`
 
 Worker tried to write outside its allowlist. Two cases:
 
-1. **Right agent, wrong project layout.** `hex-backend`'s path-lock
+1. **Right agent, wrong project layout.** `build-hex`'s path-lock
    defaults to the canonical Maven layout (`domain/`, `application/`,
    `api-rest/`, `infrastructure/`, `bootstrap/`), but your project
    uses different module names (e.g., `tenancy-core/tenancy-api/...`).
    The error message includes the active role → module mapping; if it
    shows the canonical layout but your project doesn't use it, create
-   `hex-backend.yaml` at project root mapping each role to your
+   `build-hex.yaml` at project root mapping each role to your
    module:
 
    ```yaml
@@ -78,14 +78,14 @@ Worker tried to write outside its allowlist. Two cases:
      bootstrap:    tenancy-app
    ```
 
-   `bin/install.sh --topology=hex-backend` seeds this file by default.
+   `bin/install.sh --topology=build-hex` seeds this file by default.
    If you have it, edit; if not, copy from
-   `<plugin-repo>/hex-backend/hex-backend.example.yaml`.
+   `<plugin-repo>/build-hex/build-hex.example.yaml`.
 
 2. **Right agent, right layout, but file outside any module** (e.g.,
    a one-off migration script in `scripts/`, integration test
    fixtures in `e2e-fixtures/`). Add an `extra_write_globs:` block to
-   `hex-backend.yaml`:
+   `build-hex.yaml`:
 
    ```yaml
    extra_write_globs:
@@ -103,7 +103,7 @@ Worker tried to write outside its allowlist. Two cases:
    lane). Maybe the right answer is to delegate; check the agent's
    spec to see whose lane this should be.
 
-### `[hex-backend path-lock] BLOCKED: unknown agent 'orchestrator' attempted Edit`
+### `[build-hex path-lock] BLOCKED: unknown agent 'orchestrator' attempted Edit`
 
 The hook couldn't identify the calling agent and fell back to
 `"orchestrator"` (which has empty allowlist). Reasons:
@@ -350,7 +350,7 @@ Fix: **leads never get worktree isolation.** They run in the main
 session. Only dev workers (leaf agents that don't delegate further)
 can use worktree.
 
-`/hex-backend:plan-build-validate` enforces this. If you're invoking
+`/build-hex:plan-build-validate` enforces this. If you're invoking
 leads ad-hoc, don't pass `isolation: "worktree"`.
 
 See `cc_plugin_quirks` memory for the full empirical write-up.

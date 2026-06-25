@@ -205,7 +205,7 @@ the agent that owns the adjacent concern. Examples:
 Leads need the per-Task or per-flow workflow section, the synthesis
 discipline (`name-the-disagreement`), and the explicit "I delegate;
 workers execute" rule. Bash policy is read-only by default; some leads
-(hex-backend's `engineering-lead`) extend to branch reconciliation
+(build-hex's `engineering-lead`) extend to branch reconciliation
 (`git merge --no-ff`, `git checkout -b`, `git worktree remove`) for
 the parallel-worker merge flow.
 

@@ -1,7 +1,7 @@
 # path-lock deep dive
 
 The PreToolUse hook that enforces per-agent write allowlists. Five
-instances ship across topologies (`multi-team`, `hex-backend`,
+instances ship across topologies (`build-team`, `build-hex`,
 `discovery`, `book`, `git-history`); each has the same structure with a
 different `PLUGIN_NAME` constant and `ALLOWED_WRITES` table.
 
@@ -81,9 +81,9 @@ def main():
 
 ### Bug 1: Multi-plugin hook collision (fixed in commit `0284825`)
 
-**Symptom.** `hex-backend:engineering-lead` blocked from writing
-`docs/tasks/**/TASK.md` because `multi-team`'s path-lock fired on the
-same call and `multi-team`'s `ALLOWED_WRITES["engineering-lead"]` is
+**Symptom.** `build-hex:engineering-lead` blocked from writing
+`docs/tasks/**/TASK.md` because `build-team`'s path-lock fired on the
+same call and `build-team`'s `ALLOWED_WRITES["engineering-lead"]` is
 `[]`.
 
 **Cause.** CC fires every registered hook on a matching event. Without
@@ -133,7 +133,7 @@ If CC moves the field again, add the new key to the fallback list.
 ### Bug 4: Built-in CC agents blocked unfairly (fixed in commit `7c9d597`)
 
 **Symptom.** `statusline-setup` (a CC built-in agent) was BLOCKED
-trying to edit a config file in a hex-backend project. The hook saw
+trying to edit a config file in a build-hex project. The hook saw
 `agent_type: "statusline-setup"` (no colon, no plugin prefix), fell
 through to `ALLOWED_WRITES.get("statusline-setup")` → `None`, and
 refused.
@@ -160,9 +160,9 @@ else:
     sys.exit(0)
 ```
 
-## Role-based allowlists (hex-backend only)
+## Role-based allowlists (build-hex only)
 
-`hex-backend`'s path-lock differs from the others in one important way:
+`build-hex`'s path-lock differs from the others in one important way:
 the allowlist is built from a role → module mapping that the project
 can override. The plugin is opinionated about the architectural
 **invariants** of hexagonal architecture (framework-free domain, ACL at
@@ -172,7 +172,7 @@ care, as long as the invariants hold.
 
 ### Default mapping (canonical layout)
 
-When `hex-backend.yaml` is absent at the project root, the path-lock
+When `build-hex.yaml` is absent at the project root, the path-lock
 uses these defaults:
 
 ```python
@@ -185,7 +185,7 @@ DEFAULT_ROLES = {
 }
 ```
 
-### Override via `hex-backend.yaml` at project root
+### Override via `build-hex.yaml` at project root
 
 ```yaml
 schema_version: 1
@@ -224,7 +224,7 @@ def parse_minimal_yaml(text):
 ```
 
 Doesn't handle quoted multi-line strings, lists, or anchors. Fine for
-the schema we own. If `hex-backend.yaml` exists but doesn't parse, the
+the schema we own. If `build-hex.yaml` exists but doesn't parse, the
 hook logs a stderr warning and falls back to defaults (fail-safe, not
 fail-closed — config bugs shouldn't deadlock the user).
 
@@ -234,17 +234,17 @@ When the hook blocks, the error message tells you which layout is
 active:
 
 ```
-[hex-backend path-lock] BLOCKED: agent 'domain-dev' cannot Edit ...
+[build-hex path-lock] BLOCKED: agent 'domain-dev' cannot Edit ...
   Allowed write globs for 'domain-dev':
   - tenancy-core/src/main/**
   Plus its own expertise file: .claude/expertise/domain-dev-mental-model.yaml
-  Active role → module mapping (from hex-backend.yaml):
+  Active role → module mapping (from build-hex.yaml):
     domain: tenancy-core
     application: tenancy-core
     api: tenancy-api
     adapter: tenancy-adapter
     bootstrap: tenancy-app
-  (Edit hex-backend.yaml at project root to remap roles.)
+  (Edit build-hex.yaml at project root to remap roles.)
 ```
 
 So the diagnostic is one read away — no need to dig into the source
@@ -252,10 +252,10 @@ to understand why a path didn't match.
 
 ### When this matters
 
-- Project follows canonical layout → no `hex-backend.yaml` needed.
-- Project has different module names → seed `hex-backend.yaml`
-  (`bin/install.sh --topology=hex-backend` does this; or copy
-  `hex-backend/hex-backend.example.yaml` manually).
+- Project follows canonical layout → no `build-hex.yaml` needed.
+- Project has different module names → seed `build-hex.yaml`
+  (`bin/install.sh --topology=build-hex` does this; or copy
+  `build-hex/build-hex.example.yaml` manually).
 - Project shares modules across roles (e.g., domain + application in
   one module) → set both keys to the same value; the dedup handles
   the rest.
@@ -323,7 +323,7 @@ When to use:
 - **No:** the project's domain code lives in `tenancy-core/` instead
   of `domain/`. That's a `roles:` remap, not an extras append.
 - **No:** the project has many extras for one agent. That signals
-  either the topology is wrong (consider `multi-team`) or the project
+  either the topology is wrong (consider `build-team`) or the project
   layout fights the architecture. Don't paper it over with extras.
 
 Error messages already list the merged allowlist (canonical + extras),
@@ -331,7 +331,7 @@ so when a write is blocked the user sees their extras among the
 allowed globs and can diagnose whether the missing path needs to be
 added.
 
-The other topologies (`multi-team`, `discovery`, `book`) don't have
+The other topologies (`build-team`, `discovery`, `book`) don't have
 role-based mapping — their allowlists are direct globs. If a future
 topology adopts the role pattern, mirror this design.
 
@@ -371,8 +371,8 @@ This bypasses the allowlist check. Why structural rather than path-glob:
   `file_path` against `payload["cwd"]` and refuses paths that fall
   outside the project root.
 - **Empty allowlist means delegate-only.** `engineering-lead`
-  (multi-team) has `[]` because it never writes code; it writes
-  TASK.md indirectly through worker delegations. `hex-backend`'s
+  (build-team) has `[]` because it never writes code; it writes
+  TASK.md indirectly through worker delegations. `build-hex`'s
   `engineering-lead` has writes for `docs/tasks/**` etc. since the
   hex topology needs the lead to write decomposition artifacts.
 
@@ -394,7 +394,7 @@ Either:
 
 The agent is the right one, the file path is wrong. Either:
 
-1. **Project layout differs from topology assumption.** hex-backend's
+1. **Project layout differs from topology assumption.** build-hex's
    allowlist assumes Maven `<module>/src/main/**`. If your project
    uses `<module>/main/src/` or whatever, override locally (see
    [`extending.md`](extending.md)#per-project-overrides) or widen the
@@ -410,7 +410,7 @@ See [`hooks.md`](hooks.md)#hook-didnt-fire.
 
 ```sh
 export HEX_PATHLOCK_DEBUG=1
-# (or replace hex with multi-team/discovery/book per topology you're using)
+# (or replace hex with build-team/discovery/book per topology you're using)
 ```
 
 Then read `/tmp/hex-pathlock-debug.log`. Each line is a JSON record:
@@ -419,7 +419,7 @@ Then read `/tmp/hex-pathlock-debug.log`. Each line is a JSON record:
 {
   "top_level_keys": [...],
   "identity_fields": {
-    "agent_type": "hex-backend:domain-dev",
+    "agent_type": "build-hex:domain-dev",
     "agent_name": null,
     "subagent_name": null,
     "agent": null,

@@ -1,9 +1,9 @@
 ---
-description: Run a read-only analysis flow on a hex-backend codebase — examine the code/contracts, write a markdown findings report, conclude with a recommended next step (no-issue / bug / feature-or-refactor / design-decision-needed). Use when you're unsure whether something is wrong, duplicated, or missing.
+description: Run a read-only analysis flow on a build-hex codebase — examine the code/contracts, write a markdown findings report, conclude with a recommended next step (no-issue / bug / feature-or-refactor / design-decision-needed). Use when you're unsure whether something is wrong, duplicated, or missing.
 argument-hint: <question or hypothesis to investigate, e.g., "endpoints X and Y look duplicated, confirm or refute">
 ---
 
-# /hex-backend:investigate
+# /build-hex:investigate
 
 ## Purpose
 
@@ -13,17 +13,17 @@ delegates to a specialist (e.g., `integration-analyst` for API/contract
 questions), writes a findings report, and concludes with one of:
 
 - **NOT-AN-ISSUE** — the concern is unfounded; here's why.
-- **BUG** — confirmed broken; recommend `/hex-backend:reproduce-fix-verify`.
+- **BUG** — confirmed broken; recommend `/build-hex:reproduce-fix-verify`.
 - **FEATURE-OR-REFACTOR** — real work, not a bug; recommend
-  `/hex-backend:plan-build-validate`.
+  `/build-hex:plan-build-validate`.
 - **DESIGN-DECISION-NEEDED** — multiple viable options; here are N choices and
   the trade-offs.
 
 No code changes. No tests. No commits. Output is a markdown report at
 `docs/investigations/<slug>.md` plus a one-line conclusion to the user.
 
-For a confirmed bug, skip this and run `/hex-backend:reproduce-fix-verify`.
-For known feature work, skip this and run `/hex-backend:plan-build-validate`.
+For a confirmed bug, skip this and run `/build-hex:reproduce-fix-verify`.
+For known feature work, skip this and run `/build-hex:plan-build-validate`.
 
 ## Variables
 
@@ -41,7 +41,7 @@ file:line).
 
 ## Worktree policy
 
-Same constraint as the other hex-backend commands: leads run in main session,
+Same constraint as the other build-hex commands: leads run in main session,
 never with `isolation: "worktree"`. Workers in this command are read-only and
 don't need worktree.
 

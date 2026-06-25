@@ -3,16 +3,16 @@
 A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
-is each topology's own `hooks/path-lock.py` (multi-team, hex-backend,
+is each topology's own `hooks/path-lock.py` (build-team, build-hex,
 and discovery have one; build-solo doesn't, by design).
 
 The marketplace ships **six plugins**: `common` (skills + expertise),
-four topologies (`multi-team`, `build-solo`, `hex-backend`, `discovery`),
+four topologies (`build-team`, `build-solo`, `build-hex`, `discovery`),
 and a cross-cutting layer (`jira-flow`).
 
 ---
 
-## multi-team
+## build-team
 
 Three teams, each with one Opus lead and two Sonnet workers, plus the
 orchestrator (the main session itself). Canonical workflow: plan → build → validate.
@@ -35,7 +35,7 @@ cost-and-quality the way indydev Dan's source intends (better reasoning
 for delegation/synthesis at the top, faster instruction-following at the
 bottom).
 
-**Hook:** `multi-team/hooks/path-lock.py` enforces the *Writes* column on every
+**Hook:** `build-team/hooks/path-lock.py` enforces the *Writes* column on every
 `Edit` / `Write` / `MultiEdit` / `NotebookEdit` call. Identifies the calling
 subagent via the `agent_type` field in CC's PreToolUse payload (sent as
 `<plugin>:<agent>` — the hook strips the prefix). Verified empirically in
@@ -46,7 +46,7 @@ at runtime.
 
 ## build-solo
 
-Lightweight 2-agent topology for tasks where multi-team's overhead isn't
+Lightweight 2-agent topology for tasks where build-team's overhead isn't
 worth it. Sequential dev → reviewer; no leads.
 
 | Agent | Role | Reports to | Delegates to | Tools | Writes |
@@ -64,7 +64,7 @@ their complexity.
 
 ---
 
-## hex-backend
+## build-hex
 
 14-agent hexagonal-architecture topology. Three teams, each with one
 Opus lead and 2-4 Sonnet workers, plus the standalone `proof-reviewer`
@@ -93,9 +93,9 @@ plan → (per-Task: build → qa → housekeeping → review) → cross-cutting 
 
 **Models:** orchestrator + 3 leads = `opus`; 10 workers = `sonnet`.
 
-**Hook:** `hex-backend/hooks/path-lock.py` enforces the *Writes* column
+**Hook:** `build-hex/hooks/path-lock.py` enforces the *Writes* column
 on every `Edit` / `Write` / `MultiEdit` / `NotebookEdit` call. Same
-agent-detection mechanism as multi-team (PreToolUse `agent_type` field,
+agent-detection mechanism as build-team (PreToolUse `agent_type` field,
 plugin-namespaced; hook strips the prefix).
 
 **Per-Task quality loop** (inside `engineering-lead`'s phase, mandatory):
@@ -110,17 +110,17 @@ dev worker → RESULT.md
   → next Task
 ```
 
-**Commands** (all in `hex-backend/commands/`):
+**Commands** (all in `build-hex/commands/`):
 
 | Command | Purpose |
 |---|---|
-| `/hex-backend:plan-build-validate <task>` | Canonical feature flow: plan → build (per-Task loop) → validate. |
-| `/hex-backend:reproduce-fix-verify <bug>` | Confirmed-bug flow: failing test → fix → verify. NOT-A-BUG is a valid outcome. |
-| `/hex-backend:investigate <hypothesis>` | Read-only analysis. Writes `docs/investigations/<slug>.md` with conclusion + recommended next command. |
-| `/hex-backend:spec-e2e <METHOD /path>` | **Prescriptive** E2E spec (intent → spec). Takes freeform intent and/or `--task <TASK.md>`. |
-| `/hex-backend:document-e2e <METHOD /path>` | **Descriptive** E2E spec (code → spec). Reads controller + use case + adapter + seed. |
-| `/hex-backend:resync-e2e <ep>` or `--all` | Propagates spec edits to E2E tests. Runs verify with green-build evidence. |
-| `/hex-backend:audit-e2e <ep>` or `--all` | Read-only 3-way diff: Spec↔Code, Spec↔Tests, Code↔Tests. |
+| `/build-hex:plan-build-validate <task>` | Canonical feature flow: plan → build (per-Task loop) → validate. |
+| `/build-hex:reproduce-fix-verify <bug>` | Confirmed-bug flow: failing test → fix → verify. NOT-A-BUG is a valid outcome. |
+| `/build-hex:investigate <hypothesis>` | Read-only analysis. Writes `docs/investigations/<slug>.md` with conclusion + recommended next command. |
+| `/build-hex:spec-e2e <METHOD /path>` | **Prescriptive** E2E spec (intent → spec). Takes freeform intent and/or `--task <TASK.md>`. |
+| `/build-hex:document-e2e <METHOD /path>` | **Descriptive** E2E spec (code → spec). Reads controller + use case + adapter + seed. |
+| `/build-hex:resync-e2e <ep>` or `--all` | Propagates spec edits to E2E tests. Runs verify with green-build evidence. |
+| `/build-hex:audit-e2e <ep>` or `--all` | Read-only 3-way diff: Spec↔Code, Spec↔Tests, Code↔Tests. |
 
 ---
 
@@ -178,15 +178,15 @@ whichever topology is also installed.
 | `/jira-flow:capture <description>` | Register a freeform request as a Jira Story (or Epic/Bug/Task via prefix). No planning, no execution. |
 | `/jira-flow:plan-track-build-validate <abstract task>` | Full discovery + Jira lifecycle. Registers Epic + Stories, executes one Story, transitions through To Do → In Progress → In Review. |
 | `/jira-flow:execute <jira-key> [--force-feature-flow]` | Single existing card. Auto-detects issue type: Bug → dispatches to `/jira-flow:fix`; Story/Task/Epic → runs detail audit + build + validate. `--force-feature-flow` overrides Bug auto-dispatch. |
-| `/jira-flow:fix <jira-key>` | Bug-flow wrapper around the topology's `reproduce-fix-verify`: failing test first → fix → verify with green build evidence. Skips planning enrichment (failing test IS the spec). NOT-A-BUG is a valid outcome. Requires a topology with `reproduce-fix-verify` (hex-backend). |
+| `/jira-flow:fix <jira-key>` | Bug-flow wrapper around the topology's `reproduce-fix-verify`: failing test first → fix → verify with green build evidence. Skips planning enrichment (failing test IS the spec). NOT-A-BUG is a valid outcome. Requires a topology with `reproduce-fix-verify` (build-hex). |
 | `/jira-flow:drain <column> [--max N]` | Bulk-execute up to N cards (default 5) from a column. Stops on first BLOCKED. User confirmation required. |
-| `/jira-flow:prove <jira-key>` | Change-driven proof gate for a card in `status_map.in_review`. Delegates to `<topology>:proof-reviewer` (hex-backend ships it); verdict drives the transition — PROVEN → `status_map.done`, UNPROVEN → `in_progress` with the gap, NEEDS-HUMAN stays in Review. See [docs/proof-gate.md](docs/proof-gate.md). |
+| `/jira-flow:prove <jira-key>` | Change-driven proof gate for a card in `status_map.in_review`. Delegates to `<topology>:proof-reviewer` (build-hex ships it); verdict drives the transition — PROVEN → `status_map.done`, UNPROVEN → `in_progress` with the gap, NEEDS-HUMAN stays in Review. See [docs/proof-gate.md](docs/proof-gate.md). |
 | `/jira-flow:prove-drain [--max N]` | Bulk-prove the Review column. Runs `/jira-flow:prove` per card. Unlike `/drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. |
 | `/jira-flow:advance <jira-key>` | Generic column-by-column transition driven by `jira-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). For default To Do → In Progress → In Review, prefer `/execute`. |
 
 **Soft requirement:** jira-flow's commands delegate to subagents named
-`planning-lead`, `engineering-lead`, `validation-lead`. Both `multi-team`
-and `hex-backend` ship those names; `build-solo` doesn't, so jira-flow
+`planning-lead`, `engineering-lead`, `validation-lead`. Both `build-team`
+and `build-hex` ship those names; `build-solo` doesn't, so jira-flow
 doesn't work with build-solo-only. CC has no enforced plugin
 dependencies — the soft requirement is documented in the plugin
 descriptions and surfaces at first delegation if missing.
@@ -227,7 +227,7 @@ Turn-by-turn narratives showing what actually happens when you run the
 canonical command for each topology. Useful for predicting cost, spotting
 where a run went off-rails, and onboarding new users.
 
-### multi-team — `/multi-team:plan-build-validate "add a --json flag to predict"`
+### build-team — `/build-team:plan-build-validate "add a --json flag to predict"`
 
 1. **Orchestrator** (main session) reads the command, decomposes into
    plan / build / validate phases, calls `planning-lead` via Task.
@@ -262,9 +262,9 @@ files, source edits, test files, security note.
 **Visible cost:** 2 subagent invocations. **No path-lock**, no specs,
 no validation phase. If a request grows mid-flight (e.g., "and refactor
 the surrounding pagination logic"), the topology shape is wrong —
-switch to multi-team for that work.
+switch to build-team for that work.
 
-### hex-backend — `/hex-backend:plan-build-validate "expose subscription status via REST"`
+### build-hex — `/build-hex:plan-build-validate "expose subscription status via REST"`
 
 1. **Orchestrator** calls `planning-lead`.
 2. **planning-lead** (Opus) delegates in parallel:
@@ -299,12 +299,12 @@ build output, source across all 5 modules.
 
 ### jira-flow — `/jira-flow:execute WEGO-1234`
 
-(Assumes hex-backend or multi-team also installed.)
+(Assumes build-hex or build-team also installed.)
 
 1. **Orchestrator** parses the Jira key, calls `atlassian-expert`.
 2. **atlassian-expert** calls `getJiraIssue WEGO-1234`, returns the card body.
 3. **Orchestrator** runs a **detail audit** on the card. If under-specified:
-   - Calls `planning-lead` (from hex-backend or multi-team) to enrich.
+   - Calls `planning-lead` (from build-hex or build-team) to enrich.
    - Calls `atlassian-expert` again to `editJiraIssue` with the enriched description.
 4. **Orchestrator** calls `atlassian-expert` to `transitionJiraIssue` → `In Progress`.
 5. **Orchestrator** runs the topology's build phase (engineering-lead → workers → quality loop).
@@ -365,7 +365,7 @@ The narrative below assumes discovery + jira-flow are installed and
    - `epic-briefer` calls `atlassian-expert` to create a linked Epic on the engineer board with the brief path embedded and a "relates to" link back to the discovery card.
    - Orchestrator reports the engineer-board Epic key + brief path.
 
-10. **Handoff to build topology (out of discovery's scope).** Engineering's `planning-lead` (e.g., from hex-backend) picks up the linked Epic, reads `handoff.md`, runs `epic-author` to author the Epic's full description and Stories on the engineer board. From here it's the build topology's normal flow (`/jira-flow:execute <Epic-key>` → Stories → code → ship).
+10. **Handoff to build topology (out of discovery's scope).** Engineering's `planning-lead` (e.g., from build-hex) picks up the linked Epic, reads `handoff.md`, runs `epic-author` to author the Epic's full description and Stories on the engineer board. From here it's the build topology's normal flow (`/jira-flow:execute <Epic-key>` → Stories → code → ship).
 
 **Visible cost:** small per `/advance` invocation (1-2 agents + 1-2 Atlassian
 MCP calls). Total cost across a card's life depends on how many loops the
@@ -405,7 +405,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Team of agents | ✅ | 9-agent multi-team + 2-agent build-solo |
+| Team of agents | ✅ | 9-agent build-team + 2-agent build-solo |
 | 3 tiers (orchestrator / leaders / workers) | ✅ | topology snippets, agent files |
 | Thinkers (orchestrator, leads) vs doers (workers) | ✅ | leads have no `Edit`/`Write` tools; workers do |
 | Thinkers don't write code; they understand, refine, organize, delegate, aggregate | ✅ | `zero-micromanagement` skill + lead front-matter tool list |
@@ -422,9 +422,9 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Topology / multi-team-config concept | 🟡 | We have `*-topology.md` snippets (CC orchestrator instructions). Pi has a YAML config the harness reads; CC has no equivalent. The snippet *is* the topology in CC. |
+| Topology / build-team-config concept | 🟡 | We have `*-topology.md` snippets (CC orchestrator instructions). Pi has a YAML config the harness reads; CC has no equivalent. The snippet *is* the topology in CC. |
 | Orchestrator name + path + color | 🟡 | Orchestrator = main CC session (no separate file/path). Color N/A for main session. |
-| Agent paths | ✅ | `agents/` (multi-team) and `build-solo/agents/` |
+| Agent paths | ✅ | `agents/` (build-team) and `build-solo/agents/` |
 | Session paths | 🔴 | CC manages session storage internally; not exposed |
 | Shared context (files all agents should know) | ✅ | "Shared context" section in both topology snippets |
 | Teams[] declaration | 🟡 | Implicit in agent set + this matrix |
@@ -473,7 +473,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Shared mindset skills available across topologies | ✅ | `common@alegomes` plugin ships the five skills; required by both `multi-team` and `build-solo` |
+| Shared mindset skills available across topologies | ✅ | `common@alegomes` plugin ships the five skills; required by both `build-team` and `build-solo` |
 
 ---
 
@@ -482,9 +482,9 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 - **Plugin install** via `bin/install.sh` (with `--clean` for stale-cache
   recovery) against a local-path marketplace.
 - **Skill auto-loading** — the five `common:*` mindset skills and the
-  `multi-team:plan-build-validate` slash command are discoverable in CC.
+  `build-team:plan-build-validate` slash command are discoverable in CC.
 - **Subagent identity** in PreToolUse hook — CC sends `agent_type` as
-  `<plugin>:<agent-name>` (e.g. `multi-team:backend-dev`); the hook
+  `<plugin>:<agent-name>` (e.g. `build-team:backend-dev`); the hook
   strips the prefix to match `ALLOWED_WRITES`.
 - **Centralized expertise via host symlink** — `backend-dev` (subagent)
   read AND wrote `.claude/expertise/backend-dev-mental-model.yaml`; the
@@ -498,11 +498,11 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 ## Outstanding work
 
-- 🟡 **Real-task validation of `multi-team`** — basic delegation flow
+- 🟡 **Real-task validation of `build-team`** — basic delegation flow
   was observed working (orchestrator → leads → workers → honest BLOCKED
   reply when target code wasn't present). Not yet exercised against a
   real codebase end-to-end.
-- 🟡 **Real-task validation of `hex-backend`** — the 13-agent topology
+- 🟡 **Real-task validation of `build-hex`** — the 13-agent topology
   was just built. The per-Task quality loop, refactor-advisor's
   housekeeping report shape, and code-reviewer's APPROVE/REJECT have
   not been observed live yet.
