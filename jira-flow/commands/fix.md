@@ -9,7 +9,7 @@ argument-hint: <jira-key> [--no-scope]
 
 Bug-flow wrapper around the topology's `reproduce-fix-verify` command. Mirror of `/jira-flow:execute` but routes the bug-shaped work: confirm reproducer → write failing regression test → fix → verify with green build → APPROVE. Transitions the Jira card through the canonical lifecycle (In Progress → In Review with Implementation Summary).
 
-**Requires** a topology with a `reproduce-fix-verify` command (currently `hex-backend` ships it; `multi-team` and `solo-pair` do not). If your topology doesn't have it, this command aborts with a clear error suggesting `/jira-flow:execute --force-feature-flow` as the fallback.
+**Requires** a topology with a `reproduce-fix-verify` command (currently `hex-backend` ships it; `multi-team` and `build-solo` do not). If your topology doesn't have it, this command aborts with a clear error suggesting `/jira-flow:execute --force-feature-flow` as the fallback.
 
 For a non-existent card (greenfield bug discovery) use `/jira-flow:capture Bug: <description>` first, then `/jira-flow:fix <KEY>`.
 
@@ -29,7 +29,7 @@ You are the orchestrator. Drive a focused reproduce → fix → verify flow on o
 Read the project Jira config: `jira-flow.yaml` at project root if present, otherwise legacy `.claude/jira-flow.lifecycle.yaml`. Extract the top-level `default_topology` value.
 
 - Prefix every topology-agent delegation with it: `<default_topology>:engineering-lead`, `<default_topology>:qa-engineer`, etc.
-- Check that `/<default_topology>:reproduce-fix-verify` exists. If the topology doesn't ship that command (multi-team and solo-pair don't), abort with: "Topology `<default_topology>` doesn't ship `reproduce-fix-verify`. Either switch topologies, or use `/jira-flow:execute <jira-key> --force-feature-flow` to run the plan-build-validate flow on this bug instead (heavier, but works)."
+- Check that `/<default_topology>:reproduce-fix-verify` exists. If the topology doesn't ship that command (multi-team and build-solo don't), abort with: "Topology `<default_topology>` doesn't ship `reproduce-fix-verify`. Either switch topologies, or use `/jira-flow:execute <jira-key> --force-feature-flow` to run the plan-build-validate flow on this bug instead (heavier, but works)."
 
 `atlassian-expert` is always bare. Write delegations include `Topology: <default_topology>` as the first line of the prompt so per-topology overrides apply (e.g., the right Team field per topology).
 

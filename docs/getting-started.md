@@ -32,7 +32,7 @@ cd /path/to/your/host-project
 That single command:
 
 1. Registers this repo as a Claude Code plugin marketplace.
-2. Installs all seven plugins (`common`, `multi-team`, `solo-pair`,
+2. Installs all seven plugins (`common`, `multi-team`, `build-solo`,
    `hex-backend`, `discovery`, `jira-flow`, `book`).
 3. Symlinks `./.claude/expertise/` → the plugin's centralized expertise
    directory (accumulated agent learnings follow you across projects).
@@ -50,7 +50,7 @@ CC to pick up the changes without a version bump.
 Pick a different topology by changing `--topology=NAME`. See
 [`topologies.md`](topologies.md) for the choice guide. The
 `hex-backend` topology in this guide assumes a Java/Quarkus hexagonal
-project; for anything else use `multi-team` (generic) or `solo-pair`
+project; for anything else use `multi-team` (generic) or `build-solo`
 (lightweight).
 
 ## 3. (Jira projects only) configure jira-flow

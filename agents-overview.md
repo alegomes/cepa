@@ -4,10 +4,10 @@ A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
 is each topology's own `hooks/path-lock.py` (multi-team, hex-backend,
-and discovery have one; solo-pair doesn't, by design).
+and discovery have one; build-solo doesn't, by design).
 
 The marketplace ships **six plugins**: `common` (skills + expertise),
-four topologies (`multi-team`, `solo-pair`, `hex-backend`, `discovery`),
+four topologies (`multi-team`, `build-solo`, `hex-backend`, `discovery`),
 and a cross-cutting layer (`jira-flow`).
 
 ---
@@ -44,7 +44,7 @@ at runtime.
 
 ---
 
-## solo-pair
+## build-solo
 
 Lightweight 2-agent topology for tasks where multi-team's overhead isn't
 worth it. Sequential dev → reviewer; no leads.
@@ -57,7 +57,7 @@ worth it. Sequential dev → reviewer; no leads.
 
 **Models:** workers = `sonnet`. No leads.
 
-**Hook:** none. solo-pair relies on `pair-reviewer`'s tool allowlist
+**Hook:** none. build-solo relies on `pair-reviewer`'s tool allowlist
 (no Edit/Write) for read-only enforcement; `pair-dev` is unrestricted by
 design — the topology is for small tasks where domain locks don't earn
 their complexity.
@@ -186,8 +186,8 @@ whichever topology is also installed.
 
 **Soft requirement:** jira-flow's commands delegate to subagents named
 `planning-lead`, `engineering-lead`, `validation-lead`. Both `multi-team`
-and `hex-backend` ship those names; `solo-pair` doesn't, so jira-flow
-doesn't work with solo-pair-only. CC has no enforced plugin
+and `hex-backend` ship those names; `build-solo` doesn't, so jira-flow
+doesn't work with build-solo-only. CC has no enforced plugin
 dependencies — the soft requirement is documented in the plugin
 descriptions and surfaces at first delegation if missing.
 
@@ -250,7 +250,7 @@ where a run went off-rails, and onboarding new users.
 **Visible cost:** ~9 subagent invocations. **Visible artifacts:** spec
 files, source edits, test files, security note.
 
-### solo-pair — "fix the off-by-one in `pagination.ts:42`"
+### build-solo — "fix the off-by-one in `pagination.ts:42`"
 
 1. **Orchestrator** sees a small, scoped task → calls `pair-dev` directly.
 2. **pair-dev** edits `pagination.ts`, runs the existing test, reports.
@@ -405,7 +405,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Team of agents | ✅ | 9-agent multi-team + 2-agent solo-pair |
+| Team of agents | ✅ | 9-agent multi-team + 2-agent build-solo |
 | 3 tiers (orchestrator / leaders / workers) | ✅ | topology snippets, agent files |
 | Thinkers (orchestrator, leads) vs doers (workers) | ✅ | leads have no `Edit`/`Write` tools; workers do |
 | Thinkers don't write code; they understand, refine, organize, delegate, aggregate | ✅ | `zero-micromanagement` skill + lead front-matter tool list |
@@ -424,7 +424,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 |---|---|---|
 | Topology / multi-team-config concept | 🟡 | We have `*-topology.md` snippets (CC orchestrator instructions). Pi has a YAML config the harness reads; CC has no equivalent. The snippet *is* the topology in CC. |
 | Orchestrator name + path + color | 🟡 | Orchestrator = main CC session (no separate file/path). Color N/A for main session. |
-| Agent paths | ✅ | `agents/` (multi-team) and `solo-pair/agents/` |
+| Agent paths | ✅ | `agents/` (multi-team) and `build-solo/agents/` |
 | Session paths | 🔴 | CC manages session storage internally; not exposed |
 | Shared context (files all agents should know) | ✅ | "Shared context" section in both topology snippets |
 | Teams[] declaration | 🟡 | Implicit in agent set + this matrix |
@@ -473,7 +473,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Shared mindset skills available across topologies | ✅ | `common@alegomes` plugin ships the five skills; required by both `multi-team` and `solo-pair` |
+| Shared mindset skills available across topologies | ✅ | `common@alegomes` plugin ships the five skills; required by both `multi-team` and `build-solo` |
 
 ---
 

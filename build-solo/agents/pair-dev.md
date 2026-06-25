@@ -1,6 +1,6 @@
 ---
 name: pair-dev
-description: Use for the implementation half of solo-pair topology — writes or modifies code for small, well-scoped tasks. Worker, never delegates. Pairs with pair-reviewer.
+description: Use for the implementation half of build-solo topology — writes or modifies code for small, well-scoped tasks. Worker, never delegates. Pairs with pair-reviewer.
 tools: Read, Glob, Grep, Edit, Write, MultiEdit, Bash
 model: sonnet
 color: green

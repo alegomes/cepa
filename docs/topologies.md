@@ -8,7 +8,7 @@ and `jira-flow` (optional Jira layer). Pick **one topology per project**
 |---|---|---|---|---|
 | **hex-backend** | 14 | Java/Quarkus hexagonal backends. Per-Task quality loop. | `domain/`, `application/`, `api-rest/`, `infrastructure/`, `bootstrap/` Maven layout | `plan-build-validate`, `reproduce-fix-verify`, `investigate`, `spec-e2e`, `document-e2e`, `resync-e2e`, `audit-e2e` (+ `proof-reviewer` agent for `/jira-flow:prove`) |
 | **multi-team** | 9 | Greenfield apps with frontend + backend. Generic plan→build→validate. | `apps/*/api/**`, `apps/*/web/**`, `tests/**` | `plan-build-validate` |
-| **solo-pair** | 2 | One-file tweaks, bug fixes, small refactors. No leads, no per-Task loop. | tool-allowlist only (`pair-reviewer` is read-only via tools) | none — describe in chat |
+| **build-solo** | 2 | One-file tweaks, bug fixes, small refactors. No leads, no per-Task loop. | tool-allowlist only (`pair-reviewer` is read-only via tools) | none — describe in chat |
 | **discovery** | 6 | Continuous product discovery: signals → opportunities → validated bets → engineering brief. Sits *upstream* of build topologies. | `docs/discovery/**` | `capture` (plus generic `/jira-flow:advance` for column transitions) |
 | **book** | 10 | Book writing (non-software). Outline → draft → revise → finalize. | `book/**`, `chapters/**`, `notes/**` | `outline`, `draft`, `revise`, `finalize`, `status` |
 
@@ -33,7 +33,7 @@ Three questions to answer in order:
 ### 3. How much overhead can I tolerate?
 
 - **Small task, obvious scope** (one-file fix, rename, small refactor)
-  → `solo-pair`. 2 agents, no fan-out, no per-Task ceremony. Fast.
+  → `build-solo`. 2 agents, no fan-out, no per-Task ceremony. Fast.
 - **Bigger task that benefits from product/UX framing before code** →
   `multi-team`. 3 leads + 6 workers, generic enough for most stacks.
   Less specialized than `hex-backend` but covers more ground.
@@ -59,8 +59,8 @@ build topologies; it's complementary. Common setup:
   nowhere.
 - **`jira-flow` requires a 3-lead topology** for its lead-based commands
   (`/jira-flow:execute`, `/jira-flow:plan-track-build-validate`).
-  `hex-backend` and `multi-team` ship those leads; `solo-pair` doesn't.
-  Trying jira-flow lead-based commands on a `solo-pair`-only project
+  `hex-backend` and `multi-team` ship those leads; `build-solo` doesn't.
+  Trying jira-flow lead-based commands on a `build-solo`-only project
   fails at the first delegation. `/jira-flow:advance` is generic and
   works with any topology that ships a lifecycle file.
 - **`discovery` is upstream, not competing.** Run discovery and a build
@@ -149,7 +149,7 @@ No per-Task quality loop (lighter than `hex-backend`). Use when you
 want plan → build → validate ordering but don't need the hexagonal
 specifics.
 
-### solo-pair (the small-task option)
+### build-solo (the small-task option)
 
 2 agents, no leads, no path-lock hook:
 

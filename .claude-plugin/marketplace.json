@@ -1,6 +1,6 @@
 {
   "name": "alegomes",
-  "description": "Multi-agent marketplace for Claude Code: shared mindset skills (common); topologies (multi-team — 9-agent generic; solo-pair — 2-agent lightweight; hex-backend — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery; design — 6-agent product-design (brief → build-ready spec); book — 10-agent book-writing; docs — 9-agent documentation/onboarding; git-history — 3-agent Git-history analysis); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
+  "description": "Multi-agent marketplace for Claude Code: shared mindset skills (common); topologies (multi-team — 9-agent generic; build-solo — 2-agent lightweight; hex-backend — 13-agent hexagonal-architecture; discovery — 6-agent continuous product discovery; design — 6-agent product-design (brief → build-ready spec); book — 10-agent book-writing; docs — 9-agent documentation/onboarding; git-history — 3-agent Git-history analysis); plus a Jira lifecycle layer (jira-flow). Originally adapted from indydev Dan's lead-agents pattern.",
   "owner": {
     "name": "alegomes"
   },
@@ -20,8 +20,8 @@
       "tags": ["agents", "orchestration", "multi-team"]
     },
     {
-      "name": "solo-pair",
-      "source": "./solo-pair",
+      "name": "build-solo",
+      "source": "./build-solo",
       "description": "Lightweight 2-agent topology — one dev, one reviewer, no leads. For small tweaks where multi-team orchestration overhead isn't worth it. Requires common@alegomes.",
       "version": "0.1.0",
       "tags": ["agents", "pair-programming", "lightweight"]
@@ -43,7 +43,7 @@
     {
       "name": "jira-flow",
       "source": "./jira-flow",
-      "description": "Adds atlassian-expert worker plus Jira-aware slash commands (capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead/engineering-lead/validation-lead OR declares a custom lifecycle in .claude/jira-flow.lifecycle.yaml (used by /advance). Tested with hex-backend, multi-team, and discovery. Won't work with solo-pair for the lead-based commands. Requires common@alegomes.",
+      "description": "Adds atlassian-expert worker plus Jira-aware slash commands (capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead/engineering-lead/validation-lead OR declares a custom lifecycle in .claude/jira-flow.lifecycle.yaml (used by /advance). Tested with hex-backend, multi-team, and discovery. Won't work with build-solo for the lead-based commands. Requires common@alegomes.",
       "version": "0.2.0",
       "tags": ["agents", "jira", "atlassian", "tracking", "workflow"]
     },

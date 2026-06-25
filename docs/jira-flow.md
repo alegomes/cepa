@@ -335,10 +335,10 @@ hard-coded, can't be bypassed by command drift.
 - **Lead-based commands** (`/jira-flow:execute`,
   `/jira-flow:plan-track-build-validate`) require a topology with
   `planning-lead` + `engineering-lead` + `validation-lead`. `hex-backend`
-  and `multi-team` ship those; `solo-pair` doesn't.
+  and `multi-team` ship those; `build-solo` doesn't.
 - **Generic commands** (`/jira-flow:advance`, `/jira-flow:capture`,
   `/jira-flow:drain`, `/jira-flow:configure`) work with any topology
-  (including `solo-pair` and `discovery`).
+  (including `build-solo` and `discovery`).
 - **Discovery's column flow** rides on `/jira-flow:advance` reading the
   `discovery` entry in `lifecycles[]`. No `/discovery:advance` — the
   generic command does the work.

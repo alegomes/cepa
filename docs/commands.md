@@ -69,7 +69,7 @@ The generic 9-agent topology.
 |---|---|---|
 | `/multi-team:plan-build-validate` | `<task description>` | Generic plan → build → validate. `planning-lead` (`product-manager` + `ux-researcher`) → `engineering-lead` (`frontend-dev` + `backend-dev`) → `validation-lead` (`qa-engineer` + `security-reviewer`). No per-Task loop. |
 
-## solo-pair
+## build-solo
 
 No commands. Describe the task in chat; orchestrator dispatches
 `pair-dev` then `pair-reviewer`.
@@ -125,7 +125,7 @@ agent matrix.
 
 ### "I want to fix a bug"
 
-- Local, no Jira → `/hex-backend:reproduce-fix-verify <description>` (or describe in chat for `solo-pair`).
+- Local, no Jira → `/hex-backend:reproduce-fix-verify <description>` (or describe in chat for `build-solo`).
 - Jira-tracked → still `/hex-backend:reproduce-fix-verify` directly, or wrap with `/common:autonomous-start "<KEY> bug: <description>"`.
 
 ### "I'm not sure if X is a problem"

@@ -25,7 +25,7 @@ Parse `--topology=NAME` from `$ARGUMENTS` if present. Otherwise read `.claude/to
 
 If neither flag nor file exists:
 
-> Reply with: "No topology configured. Run `bin/install.sh --topology=NAME` from the plugin repo (NAME = `hex-backend` | `multi-team` | `discovery` | `solo-pair`), or pass `--topology=NAME` to this command. Aborting." Stop.
+> Reply with: "No topology configured. Run `bin/install.sh --topology=NAME` from the plugin repo (NAME = `hex-backend` | `multi-team` | `discovery` | `build-solo`), or pass `--topology=NAME` to this command. Aborting." Stop.
 
 If the topology name doesn't match any installed plugin, surface that and abort. Don't guess.
 

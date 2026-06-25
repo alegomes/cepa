@@ -2,7 +2,7 @@
 
 > When this snippet is loaded into your project's `CLAUDE.md` (via `@-import`
 > or copy-paste), the main `claude` session operates as the orchestrator
-> of a 2-agent pair installed by the `solo-pair` plugin.
+> of a 2-agent pair installed by the `build-solo` plugin.
 
 ## Frame: a system that builds systems, in miniature
 
@@ -59,7 +59,7 @@ Use the `Task` tool with `subagent_type` set to the agent name.
    pass (multi-file refactor, new feature with spec implications,
    anything needing security review), tell the user this is the wrong
    topology — `multi-team` is the right tool. Don't try to stretch
-   solo-pair to fit.
+   build-solo to fit.
 
 5. **Read the room.** Pure questions ("what does this function do?")
    don't need the pair — answer them yourself.

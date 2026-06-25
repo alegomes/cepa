@@ -9,7 +9,7 @@
 # With --clean: also uninstalls existing plugins and nukes the marketplace
 #   plugin cache before reinstalling. Use this when you've edited plugin
 #   source without bumping versions and want CC to pick up the changes.
-# With --topology=NAME (multi-team | solo-pair | hex-backend | discovery | book | docs | git-history): also copies
+# With --topology=NAME (multi-team | build-solo | hex-backend | discovery | book | docs | git-history): also copies
 #   that topology's snippet into the host project's .claude/ and appends the
 #   matching @-import line to CLAUDE.md (idempotent, creates CLAUDE.md if
 #   missing). Skip this flag if you want to wire CLAUDE.md yourself.
@@ -47,9 +47,9 @@ for arg in "$@"; do
 done
 
 case "${TOPOLOGY}" in
-  ""|multi-team|solo-pair|hex-backend|discovery|book|docs|git-history) ;;
+  ""|multi-team|build-solo|hex-backend|discovery|book|docs|git-history) ;;
   *)
-    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, solo-pair, hex-backend, discovery, book, docs, or git-history."
+    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, build-solo, hex-backend, discovery, book, docs, or git-history."
     exit 1
     ;;
 esac
@@ -96,7 +96,7 @@ if [ "${CLEAN}" -eq 1 ]; then
   echo "▶ --clean: uninstalling existing plugins (errors ignored)"
   claude plugin uninstall "common@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "multi-team@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "solo-pair@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "build-solo@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "hex-backend@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "discovery@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "jira-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
@@ -124,8 +124,8 @@ claude plugin install common@alegomes
 echo "▶ Installing multi-team@alegomes (9-agent generic topology)"
 claude plugin install multi-team@alegomes
 
-echo "▶ Installing solo-pair@alegomes (2-agent dev/reviewer topology)"
-claude plugin install solo-pair@alegomes
+echo "▶ Installing build-solo@alegomes (2-agent dev/reviewer topology)"
+claude plugin install build-solo@alegomes
 
 echo "▶ Installing hex-backend@alegomes (13-agent hexagonal-architecture topology)"
 claude plugin install hex-backend@alegomes
@@ -250,9 +250,9 @@ if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
     echo "  ✔ Appended ${IMPORT_LINE} to ${CLAUDE_MD}"
   fi
 
-  # Sanity warning: jira-flow needs leads, solo-pair has none.
-  if [ "${TOPOLOGY}" = "solo-pair" ]; then
-    echo "  ⚠ solo-pair has no leads. /jira-flow:* commands won't work with this topology."
+  # Sanity warning: jira-flow needs leads, build-solo has none.
+  if [ "${TOPOLOGY}" = "build-solo" ]; then
+    echo "  ⚠ build-solo has no leads. /jira-flow:* commands won't work with this topology."
   fi
 
   # Seed jira-flow project config at project root. This is project-team
@@ -379,7 +379,7 @@ echo ""
 echo "Nine plugins installed:"
 echo "    common       — 8 mindset skills (required by every topology)"
 echo "    multi-team   — 9-agent generic topology + /multi-team:plan-build-validate"
-echo "    solo-pair    — 2-agent dev/reviewer topology"
+echo "    build-solo    — 2-agent dev/reviewer topology"
 echo "    hex-backend  — 13-agent hexagonal-architecture topology + per-Task quality loop"
 echo "    discovery    — 6-agent continuous product-discovery topology"
 echo "    jira-flow    — atlassian-expert + Jira-aware commands (pair with any topology)"
@@ -396,7 +396,7 @@ if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
     echo "You're ready. Open Claude Code in ${HOST_PROJECT} and try:"
     case "${TOPOLOGY}" in
       multi-team)  echo "    /multi-team:plan-build-validate <task>" ;;
-      solo-pair)   echo "    /solo-pair:* (or just describe a small task — 2-agent dev/reviewer)" ;;
+      build-solo)   echo "    /build-solo:* (or just describe a small task — 2-agent dev/reviewer)" ;;
       hex-backend) echo "    /hex-backend:plan-build-validate <task>" ;;
       discovery)   echo "    /discovery:capture <signal>   (then /jira-flow:advance <KEY> to move forward)" ;;
       book)        echo "    /book:inception \"<book title>\"   (then /book:write-chapter <slug>)" ;;
@@ -406,15 +406,15 @@ if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   else
     echo ""
     echo "Final manual step: pick ONE topology snippet and import it from CLAUDE.md."
-    echo "(Or re-run with --topology=multi-team|solo-pair|hex-backend to automate.)"
+    echo "(Or re-run with --topology=multi-team|build-solo|hex-backend to automate.)"
     echo ""
     echo "  cp ${REPO_DIR}/hex-backend/hex-backend-topology.md ${HOST_PROJECT}/.claude/"
     echo "  # OR"
     echo "  cp ${REPO_DIR}/multi-team/multi-team-topology.md ${HOST_PROJECT}/.claude/"
     echo "  # OR"
-    echo "  cp ${REPO_DIR}/solo-pair/solo-pair-topology.md ${HOST_PROJECT}/.claude/"
+    echo "  cp ${REPO_DIR}/build-solo/build-solo-topology.md ${HOST_PROJECT}/.claude/"
     echo ""
     echo "  Then add the matching @-import to ${HOST_PROJECT}/CLAUDE.md:"
-    echo "    @.claude/hex-backend-topology.md   (or multi-team-topology.md / solo-pair-topology.md)"
+    echo "    @.claude/hex-backend-topology.md   (or multi-team-topology.md / build-solo-topology.md)"
   fi
 fi

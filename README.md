@@ -8,7 +8,7 @@ composable plugins.
 | Document | Read it for |
 |---|---|
 | **[docs/getting-started.md](docs/getting-started.md)** | First 10 minutes: install, pick a topology, run your first command. |
-| **[docs/topologies.md](docs/topologies.md)** | Choosing between `hex-backend`, `multi-team`, `solo-pair`, `discovery`, `book`. Composition rules with `jira-flow`. |
+| **[docs/topologies.md](docs/topologies.md)** | Choosing between `hex-backend`, `multi-team`, `build-solo`, `discovery`, `book`. Composition rules with `jira-flow`. |
 | **[docs/commands.md](docs/commands.md)** | Full reference for every slash command, grouped by plugin. |
 | **[docs/jira-flow.md](docs/jira-flow.md)** | `jira-flow.yaml` schema (`defaults`, `status_map`, `lifecycles`), `/configure` walkthrough, Implementation Summary contract, read-back verification. |
 | **[docs/autonomous-mode.md](docs/autonomous-mode.md)** | Unattended-operation lifecycle: `/autonomous-start` → checkpoint hook → `/autonomous-resume` → `/debrief`. Survives token-limit hits and session crashes. |
@@ -39,7 +39,7 @@ composable plugins.
 - **`multi-team`** — the generic 9-agent topology: orchestrator + 3
   leads (Opus, delegate-only) + 6 workers (Sonnet, domain-locked).
   For plan → build → validate workflows.
-- **`solo-pair`** — a lightweight 2-agent topology: dev + reviewer.
+- **`build-solo`** — a lightweight 2-agent topology: dev + reviewer.
   For small tasks where multi-team's overhead isn't worth it.
 - **`hex-backend`** — a 14-agent hexagonal-architecture topology
   with a per-Task quality loop (qa → refactor-advisor → code-reviewer)
@@ -98,7 +98,7 @@ agent matrices.
 
 ```
 claude-multi-team-plugin/
-├── .claude-plugin/marketplace.json  # 8-plugin marketplace: common + multi-team + solo-pair + hex-backend + discovery + jira-flow + book + git-history
+├── .claude-plugin/marketplace.json  # 8-plugin marketplace: common + multi-team + build-solo + hex-backend + discovery + jira-flow + book + git-history
 ├── bin/install.sh                   # one-command installer for all eight plugins
 ├── common/                          # shared mindset skills + centralized expertise (required by every topology)
 │   ├── .claude-plugin/plugin.json
@@ -110,10 +110,10 @@ claude-multi-team-plugin/
 │   ├── commands/                    # /multi-team:plan-build-validate
 │   ├── hooks/path-lock.py
 │   └── multi-team-topology.md
-├── solo-pair/                       # 2-agent dev/reviewer pair
+├── build-solo/                       # 2-agent dev/reviewer pair
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/
-│   └── solo-pair-topology.md
+│   └── build-solo-topology.md
 ├── hex-backend/                     # 14-agent hexagonal-architecture backend topology
 │   ├── .claude-plugin/plugin.json
 │   ├── agents/                      # 3 teams (planning/engineering/validation) + standalone proof-reviewer
@@ -153,13 +153,13 @@ cd /path/to/your/host-project
 That single command does **all three** setup steps:
 
 1. Registers this repo as a Claude Code plugin marketplace and installs
-   all eight plugins (`common` + `multi-team` + `solo-pair` +
+   all eight plugins (`common` + `multi-team` + `build-solo` +
    `hex-backend` + `discovery` + `jira-flow` + `book` + `git-history`).
 2. Sets up the current directory as a host project by creating
    `.claude/expertise` as a **symlink** to the plugin's centralized
    expertise directory (so accumulated agent knowledge follows you
    across projects).
-3. With `--topology=NAME` (one of `multi-team`, `solo-pair`,
+3. With `--topology=NAME` (one of `multi-team`, `build-solo`,
    `hex-backend`, `discovery`), copies the topology snippet into
    `.claude/` and appends `@.claude/<topology>-topology.md` to
    `CLAUDE.md` (creating `CLAUDE.md` if missing). For
@@ -203,7 +203,7 @@ If you'd rather see each step, run these in any Claude Code session:
 /plugin marketplace add /path/to/claude-multi-team-plugin
 /plugin install common@alegomes        # required by every topology — 8 mindset skills
 /plugin install multi-team@alegomes    # generic 9-agent topology
-/plugin install solo-pair@alegomes     # 2-agent dev/reviewer pair
+/plugin install build-solo@alegomes     # 2-agent dev/reviewer pair
 /plugin install hex-backend@alegomes   # 14-agent hexagonal-architecture topology
 /plugin install discovery@alegomes     # 6-agent continuous product-discovery topology
 /plugin install jira-flow@alegomes     # Jira lifecycle layer (pair with a topology)
@@ -227,8 +227,8 @@ go nowhere.
 
 **`jira-flow` requires a topology** — its commands delegate to
 `planning-lead`, `engineering-lead`, `validation-lead` by name.
-`hex-backend` and `multi-team` both ship those leads; `solo-pair`
-doesn't, so jira-flow + solo-pair-only would fail.
+`hex-backend` and `multi-team` both ship those leads; `build-solo`
+doesn't, so jira-flow + build-solo-only would fail.
 
 The expertise symlink is what makes accumulated agent learnings persist
 *across* projects — agents read and write to a single shared location
@@ -249,8 +249,8 @@ mkdir -p .claude
 # OPTION A — multi-team (3 leads + 6 workers, generic):
 cp ~/coding/harnessing/claude/claude-multi-team-plugin/multi-team/multi-team-topology.md .claude/
 
-# OPTION B — solo-pair (1 dev + 1 reviewer, lightweight):
-cp ~/coding/harnessing/claude/claude-multi-team-plugin/solo-pair/solo-pair-topology.md .claude/
+# OPTION B — build-solo (1 dev + 1 reviewer, lightweight):
+cp ~/coding/harnessing/claude/claude-multi-team-plugin/build-solo/build-solo-topology.md .claude/
 
 # OPTION C — hex-backend (3 teams · 14 agents · per-Task quality loop):
 cp ~/coding/harnessing/claude/claude-multi-team-plugin/hex-backend/hex-backend-topology.md .claude/
@@ -260,7 +260,7 @@ Then add one line to the project's `CLAUDE.md` (create it if it doesn't
 exist), referencing the snippet you copied:
 
 ```markdown
-@.claude/multi-team-topology.md     # or solo-pair-topology.md, or hex-backend-topology.md
+@.claude/multi-team-topology.md     # or build-solo-topology.md, or hex-backend-topology.md
 ```
 
 Each topology snippet is self-contained, so you can swap between them
@@ -282,7 +282,7 @@ In the host project, in Claude Code:
 ```
 
 For `multi-team`, `/agents` lists all 9 agents (3 leads + 6 workers).
-For `solo-pair`, 2 agents. For `hex-backend`, all 14. Plus
+For `build-solo`, 2 agents. For `hex-backend`, all 14. Plus
 `atlassian-expert` from `jira-flow` if installed. Either way the eight
 `common` skills should be auto-loaded into the session.
 
@@ -309,7 +309,7 @@ relevant `*-topology.md`, bump the version, and `/plugin update <name>`.
 
 ### The three-tier model
 
-Every topology (except solo-pair) follows the same shape:
+Every topology (except build-solo) follows the same shape:
 
 ```
         ┌─────────────────────────────┐
@@ -337,7 +337,7 @@ Every topology (except solo-pair) follows the same shape:
   agent receives the blocked message on stderr and self-corrects (or
   delegates to the right peer).
 
-`solo-pair` skips the lead tier — `pair-dev` writes, `pair-reviewer` is
+`build-solo` skips the lead tier — `pair-dev` writes, `pair-reviewer` is
 read-only via tool allowlist (no path-lock hook). It's the right choice
 when fan-out overhead would dwarf the task.
 
@@ -346,7 +346,7 @@ when fan-out overhead would dwarf the task.
 | Guarantee | How | Bypassable? |
 |---|---|---|
 | Leads can't write code | tool allowlist (no `Edit`/`Write`/`MultiEdit`) | No — CC enforces tool allowlists |
-| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (multi-team, hex-backend); solo-pair has no hook |
+| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (multi-team, hex-backend); build-solo has no hook |
 | Workers can't escape the lock via shell | `bash-path-lock.py` PreToolUse hook (catches `sed -i`/`cat >`/`tee` to locked in-project paths) | Mostly — `rm` and interpreter-writes (`python -c`) slip through (logged) |
 | Agents can't edit the enforcement code itself | `enforcement-guard.py` (blocks subagent writes to `.claude/plugins/`, `.claude/hooks/`, settings) | No — for plugin subagents; main session is ungated by design |
 | Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
@@ -372,7 +372,7 @@ orchestrator
 ≈9 subagent invocations per run. Use for greenfield features that
 need product/UX framing before code.
 
-**solo-pair** — describe the task in chat:
+**build-solo** — describe the task in chat:
 
 ```
 orchestrator → pair-dev → pair-reviewer → orchestrator reports
@@ -438,7 +438,7 @@ turn-by-turn narrative.
 - **`common` is required** for every topology. The skills are
   referenced in agent bodies.
 - **`jira-flow`'s lead-based commands require a 3-lead topology**
-  (multi-team or hex-backend). solo-pair has no leads → those commands
+  (multi-team or hex-backend). build-solo has no leads → those commands
   fail at first delegation. `/jira-flow:advance` is generic: it works
   with discovery (or any topology that ships a lifecycle file).
 - **You can swap topologies** — change the `@-import` line in
@@ -454,7 +454,7 @@ turn-by-turn narrative.
 | `[hex-backend path-lock] BLOCKED: agent 'X' cannot Edit Y` | worker writing outside its domain | correct — let it delegate, or check `ALLOWED_WRITES` if your layout differs |
 | `[hex-backend path-lock] BLOCKED: unknown agent 'orchestrator'` on a worker tool call | hook can't read `agent_type` (CC version mismatch) | see Troubleshooting §"Hook fails to detect agent name" |
 | `/agents` doesn't list a topology after install | `common@alegomes` missing, or topology not installed | re-run `bin/install.sh` |
-| jira-flow commands hang on solo-pair | no leads exist | switch to multi-team or hex-backend |
+| jira-flow commands hang on build-solo | no leads exist | switch to multi-team or hex-backend |
 
 ### What it can't do
 
@@ -485,7 +485,7 @@ This is the whole point of using a plugin instead of copy-pasting `.claude/`:
    | What you touched | Plugin to bump | Both files to update |
    |---|---|---|
    | `multi-team/` (agents, commands, hooks, topology) | `multi-team` | `multi-team/.claude-plugin/plugin.json` + `multi-team` entry in `marketplace.json` |
-   | `solo-pair/` | `solo-pair` | `solo-pair/.claude-plugin/plugin.json` + `solo-pair` entry in `marketplace.json` |
+   | `build-solo/` | `build-solo` | `build-solo/.claude-plugin/plugin.json` + `build-solo` entry in `marketplace.json` |
    | `hex-backend/` (agents, commands, hook, topology) | `hex-backend` | `hex-backend/.claude-plugin/plugin.json` + `hex-backend` entry in `marketplace.json` |
    | `jira-flow/` (agent, commands) | `jira-flow` | `jira-flow/.claude-plugin/plugin.json` + `jira-flow` entry in `marketplace.json` |
    | `common/skills/` or `common/expertise/` | `common` | `common/.claude-plugin/plugin.json` + `common` entry in `marketplace.json` |

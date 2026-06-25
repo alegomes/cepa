@@ -11,7 +11,7 @@ Same plan → build → validate flow as `/hex-backend:plan-build-validate` (or 
 
 For an existing Jira card (no decomposition needed), use `/jira-flow:execute` instead.
 
-**Requires** a topology plugin that ships `planning-lead`, `engineering-lead`, and `validation-lead` subagents (e.g., `hex-backend@alegomes` or `multi-team@alegomes`). Won't work with `solo-pair` alone (no leads).
+**Requires** a topology plugin that ships `planning-lead`, `engineering-lead`, and `validation-lead` subagents (e.g., `hex-backend@alegomes` or `multi-team@alegomes`). Won't work with `build-solo` alone (no leads).
 
 ## Variables
 

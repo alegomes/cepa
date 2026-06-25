@@ -2,7 +2,7 @@
 
 ## The three-tier model
 
-Every topology except `solo-pair` follows the same shape:
+Every topology except `build-solo` follows the same shape:
 
 ```
         ┌──────────────────────────────┐
@@ -28,7 +28,7 @@ Every topology except `solo-pair` follows the same shape:
   globs. The path-lock PreToolUse hook (`path-lock.py`) blocks writes
   outside each worker's allowlist.
 
-`solo-pair` skips the lead tier entirely. `pair-dev` writes;
+`build-solo` skips the lead tier entirely. `pair-dev` writes;
 `pair-reviewer` is read-only via tool allowlist (no path-lock).
 
 ## What's enforced vs. what's convention
@@ -36,7 +36,7 @@ Every topology except `solo-pair` follows the same shape:
 | Guarantee | How | Bypassable? |
 |---|---|---|
 | Leads can't write code | tool allowlist (no `Edit`/`Write`/`MultiEdit` in `tools:` frontmatter) | No — CC enforces tool allowlists |
-| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (multi-team, hex-backend, discovery, book); solo-pair has no hook |
+| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (multi-team, hex-backend, discovery, book); build-solo has no hook |
 | Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
 | Plan → build → validate ordering | prompt-only (in command + topology) | Yes — orchestrator can reorder |
 | jira-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
@@ -98,7 +98,7 @@ claude-multi-team-plugin/
 │   ├── hooks/                         # session-log, autonomous-checkpoint, mark-build-stale, capture-build-result, gate-advance
 │   └── skills/                        # 10 skills (8 mindset + autonomous-mode + green-or-revert)
 ├── multi-team/                        # 9-agent generic topology
-├── solo-pair/                         # 2-agent lightweight topology
+├── build-solo/                         # 2-agent lightweight topology
 ├── hex-backend/                       # 13-agent hexagonal-architecture topology
 ├── discovery/                         # 6-agent product-discovery topology
 ├── jira-flow/                         # Jira lifecycle layer (1 agent + 6 commands)
@@ -115,7 +115,7 @@ claude-multi-team-plugin/
 |---|---|---|---|---|
 | common | 0 | 4 | 5 | 10 |
 | multi-team | 9 | 1 | 1 | 0 |
-| solo-pair | 2 | 0 | 0 | 0 |
+| build-solo | 2 | 0 | 0 | 0 |
 | hex-backend | 13 | 7 | 1 | 0 |
 | discovery | 6 | 1 | 1 | 0 |
 | jira-flow | 1 | 6 | 0 | 1 |
