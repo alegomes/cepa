@@ -76,7 +76,7 @@ def main():
              "carve-out must stay scoped: in-root unknown agent is still gated"),
         ]
         # The exact bug that drove this fix: a KNOWN proof-reviewer perturbing
-        # source in its /tmp worktree. Only hex-backend ships that agent.
+        # source in its /tmp worktree. Only build-hex ships that agent.
         if "proof-reviewer" in hook.read_text():
             cases.append(
                 ("out-of-root proof-reviewer -> allow",

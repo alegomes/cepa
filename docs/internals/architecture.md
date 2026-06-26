@@ -2,7 +2,7 @@
 
 ## The three-tier model
 
-Every topology except `solo-pair` follows the same shape:
+Every topology except `build-solo` follows the same shape:
 
 ```
         ┌──────────────────────────────┐
@@ -28,7 +28,7 @@ Every topology except `solo-pair` follows the same shape:
   globs. The path-lock PreToolUse hook (`path-lock.py`) blocks writes
   outside each worker's allowlist.
 
-`solo-pair` skips the lead tier entirely. `pair-dev` writes;
+`build-solo` skips the lead tier entirely. `pair-dev` writes;
 `pair-reviewer` is read-only via tool allowlist (no path-lock).
 
 ## What's enforced vs. what's convention
@@ -36,10 +36,10 @@ Every topology except `solo-pair` follows the same shape:
 | Guarantee | How | Bypassable? |
 |---|---|---|
 | Leads can't write code | tool allowlist (no `Edit`/`Write`/`MultiEdit` in `tools:` frontmatter) | No — CC enforces tool allowlists |
-| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (multi-team, hex-backend, discovery, book); solo-pair has no hook |
+| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (build-team, build-hex, discovery, design, docs); build-solo has no hook |
 | Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
 | Plan → build → validate ordering | prompt-only (in command + topology) | Yes — orchestrator can reorder |
-| jira-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
+| board-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
 | Build state honesty | `gate-advance` PreToolUse hook on Bash commit/push/PR/deploy | No (hook returns exit 2 on STALE/FAILURE) |
 | Verify before claiming runtime state | `green-or-revert` skill + `.claude/last-build.json` | Soft — model honors the skill, but file says the truth |
 | Decision logging in autonomous mode | `autonomous-mode` skill + `### Decision:` format | Soft — debrief dual-scan catches drift retroactively |
@@ -89,20 +89,22 @@ Notable patterns:
 
 ```
 claude-multi-team-plugin/
-├── .claude-plugin/marketplace.json    # 7-plugin marketplace registry
+├── .claude-plugin/marketplace.json    # 9-plugin marketplace registry (cepa)
 ├── bin/install.sh                     # one-command installer + per-project wiring
-├── common/                            # cross-topology layer
+├── common/                            # cross-topology layer (required substrate)
 │   ├── .claude-plugin/plugin.json
-│   ├── commands/                      # autonomous-start, autonomous-resume, debrief, recap
+│   ├── commands/                      # autonomous-start/-resume, debrief, recap, handoff, branch/return, ...
 │   ├── expertise/                     # per-agent mental-model.yaml stubs (centralized via host symlink)
-│   ├── hooks/                         # session-log, autonomous-checkpoint, mark-build-stale, capture-build-result, gate-advance
-│   └── skills/                        # 10 skills (8 mindset + autonomous-mode + green-or-revert)
-├── multi-team/                        # 9-agent generic topology
-├── solo-pair/                         # 2-agent lightweight topology
-├── hex-backend/                       # 13-agent hexagonal-architecture topology
+│   ├── hooks/                         # session-log, autonomous-checkpoint, mark-build-stale, capture-build-result, gate-advance, ...
+│   └── skills/                        # mindset skills + autonomous-mode, green-or-revert, acceptance-completeness, ...
+├── build-team/                        # 9-agent generic topology
+├── build-solo/                        # 2-agent lightweight topology
+├── build-hex/                         # 14-agent hexagonal-architecture topology
 ├── discovery/                         # 6-agent product-discovery topology
-├── jira-flow/                         # Jira lifecycle layer (1 agent + 6 commands)
-├── book/                              # 10-agent book-writing topology
+├── design/                            # 6-agent product-design topology
+├── docs-topology/                     # documentation/onboarding topology (plugin name: docs)
+├── board-flow/                        # Jira lifecycle layer
+├── review-gate/                       # pre-merge PR gate
 ├── docs/                              # user-facing documentation
 │   └── internals/                     # this directory
 ├── agents-overview.md                 # cross-agent matrix
@@ -111,41 +113,44 @@ claude-multi-team-plugin/
 
 ## The marketplace surface, in numbers
 
-| Plugin | Agents | Commands | Hooks | Skills |
-|---|---|---|---|---|
-| common | 0 | 4 | 5 | 10 |
-| multi-team | 9 | 1 | 1 | 0 |
-| solo-pair | 2 | 0 | 0 | 0 |
-| hex-backend | 13 | 7 | 1 | 0 |
-| discovery | 6 | 1 | 1 | 0 |
-| jira-flow | 1 | 6 | 0 | 1 |
-| book | 10 | 5 | 1 | 2 |
+| Plugin | Agents | Commands |
+|---|---|---|
+| common | 1 | 14 |
+| build-team | 9 | 1 |
+| build-solo | 2 | 0 |
+| build-hex | 14 | 7 |
+| discovery | 6 | 1 |
+| design | 6 | 1 |
+| docs | 9 | 6 |
+| board-flow | 1 | 10 |
+| review-gate | 1 | 4 |
 
-Total: 41 agents, 24 commands, 9 hooks, 13 skills, across 7 plugins.
+Total: 49 agents, 44 commands across 9 plugins. (Hook and skill counts vary per
+plugin; see each `plugin.json`.)
 
 ## Path-lock allowlists at a glance
 
 | Agent / Plugin | Writes |
 |---|---|
 | (orchestrator, main session) | (none — main session is fail-open via no-colon `agent_type`) |
-| `planning-lead` (multi-team) | `specs/**` |
-| `planning-lead` (hex-backend) | `spec/**`, `specs/**`, `docs/**` |
-| `engineering-lead` (multi-team) | (none — delegate-only) |
-| `engineering-lead` (hex-backend) | `docs/tasks/**`, `docs/investigations/**`, `pom.xml`, `**/pom.xml` |
+| `planning-lead` (build-team) | `specs/**` |
+| `planning-lead` (build-hex) | `spec/**`, `specs/**`, `docs/**` |
+| `engineering-lead` (build-team) | (none — delegate-only) |
+| `engineering-lead` (build-hex) | `docs/tasks/**`, `docs/investigations/**`, `pom.xml`, `**/pom.xml` |
 | `validation-lead` (any) | (none — delegate-only) |
-| `domain-dev` | `<domain-module>/src/main/**`, `<application-module>/src/main/**` (default: `domain/`, `application/`; remappable via `hex-backend.yaml`) |
+| `domain-dev` | `<domain-module>/src/main/**`, `<application-module>/src/main/**` (default: `domain/`, `application/`; remappable via `build-hex.yaml`) |
 | `api-dev` | `<api-module>/src/main/**` (default: `api-rest/`) |
 | `adapter-dev` | `<adapter-module>/src/main/**`, `<bootstrap-module>/src/main/**` (default: `infrastructure/`, `bootstrap/`) |
-| `qa-engineer` (hex-backend) | `<each-module>/src/test/**` for all five role modules |
-| `qa-engineer` (multi-team) | `tests/**`, `apps/*/tests/**`, `apps/*/__tests__/**` |
+| `qa-engineer` (build-hex) | `<each-module>/src/test/**` for all five role modules |
+| `qa-engineer` (build-team) | `tests/**`, `apps/*/tests/**`, `apps/*/__tests__/**` |
 | `refactor-advisor` | `docs/housekeeping/**` |
-| `security-reviewer` (any) | `docs/security-reviews/**` (hex) or `specs/security-reviews/**` (multi-team) |
+| `security-reviewer` (any) | `docs/security-reviews/**` (hex) or `specs/security-reviews/**` (build-team) |
 | `code-reviewer` | (none — advisory verdict only) |
-| `epic-author`, `product-manager`, `integration-analyst` (hex-backend) | `spec/**`, `specs/**`, `docs/**` |
-| `ux-researcher`, `product-manager` (multi-team) | `specs/**` |
-| `frontend-dev` (multi-team) | `apps/*/web/**`, `apps/*/frontend/**` |
-| `backend-dev` (multi-team) | `apps/*/api/**`, `apps/*/backend/**`, `apps/*/migrations/**`, `apps/classifier/**` |
-| `atlassian-expert` (jira-flow) | (none — only Jira state via MCP) |
+| `epic-author`, `product-manager`, `integration-analyst` (build-hex) | `spec/**`, `specs/**`, `docs/**` |
+| `ux-researcher`, `product-manager` (build-team) | `specs/**` |
+| `frontend-dev` (build-team) | `apps/*/web/**`, `apps/*/frontend/**` |
+| `backend-dev` (build-team) | `apps/*/api/**`, `apps/*/backend/**`, `apps/*/migrations/**`, `apps/classifier/**` |
+| `atlassian-expert` (board-flow) | (none — only Jira state via MCP) |
 
 Every agent also gets a structural pass to write its own
 `<agent>-mental-model.yaml` regardless of disk location (see
@@ -158,8 +163,8 @@ Every agent also gets a structural pass to write its own
 | Active topology | `.claude/topology` | `bin/install.sh` (write) / commands (read) | Per project; set at install, persists |
 | Per-agent expertise | `common/expertise/<agent>-mental-model.yaml` (symlinked to host's `.claude/expertise/`) | `mental-model` skill (write), `debrief` (write) | Cross-project; grows over time, pruned at 20 entries (except `principle`-tagged) |
 | Topology snippet | `.claude/<topology>-topology.md` | `bin/install.sh` (copy) | Per project; copied snapshot, edits don't propagate back |
-| Jira config | `jira-flow.yaml` (project root) | `bin/install.sh` seed / `/jira-flow:configure` interactive / manual edits | Per project; team-edited |
-| hex-backend layout | `hex-backend.yaml` (project root) | `bin/install.sh` seed (with `--topology=hex-backend`) / manual edits | Per project; team-edited; maps architectural roles → module names |
+| Jira config | `board-flow.yaml` (project root) | `bin/install.sh` seed / `/board-flow:configure` interactive / manual edits | Per project; team-edited |
+| build-hex layout | `build-hex.yaml` (project root) | `bin/install.sh` seed (with `--topology=build-hex`) / manual edits | Per project; team-edited; maps architectural roles → module names |
 | Session intent log | `.claude/session-log.md` | `session-log` hook | Per project; append-only, manually rotate |
 | Autonomous run state | `docs/autonomous/<run-id>/state.yaml` | `/common:autonomous-start` (create) / `autonomous-checkpoint` hook (append) | Per run; survives session restart |
 | Build state | `.claude/last-build.json` | `mark-build-stale` + `capture-build-result` hooks (write); `gate-advance` (read) | Per session; rewritten on edits + verify runs |

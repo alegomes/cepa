@@ -1,5 +1,5 @@
 ---
-description: Start an autonomous (unattended) run on whichever topology this project is wired to. Reads .claude/topology to dispatch into the right plan-build-validate / reproduce-fix-verify / investigate flow. If a Jira key (e.g. WEGO-1234) appears in the description and jira-flow.yaml exists, also wraps the run with Jira lifecycle: transitions to In Progress before work, and to In Review with an Implementation Summary comment after. Generates a run-id, writes state, activates autonomous-mode, and dispatches.
+description: Start an autonomous (unattended) run on whichever topology this project is wired to. Reads .claude/topology to dispatch into the right plan-build-validate / reproduce-fix-verify / investigate flow. If a Jira key (e.g. WEGO-1234) appears in the description and board-flow.yaml exists, also wraps the run with Jira lifecycle: transitions to In Progress before work, and to In Review with an Implementation Summary comment after. Generates a run-id, writes state, activates autonomous-mode, and dispatches.
 argument-hint: [--topology=NAME] [--flow=plan-build-validate|reproduce-fix-verify|investigate] [--no-jira] <task description, may include a Jira key like WEGO-1234>
 ---
 
@@ -25,7 +25,7 @@ Parse `--topology=NAME` from `$ARGUMENTS` if present. Otherwise read `.claude/to
 
 If neither flag nor file exists:
 
-> Reply with: "No topology configured. Run `bin/install.sh --topology=NAME` from the plugin repo (NAME = `hex-backend` | `multi-team` | `discovery` | `solo-pair`), or pass `--topology=NAME` to this command. Aborting." Stop.
+> Reply with: "No topology configured. Run `bin/install.sh --topology=NAME` from the plugin repo (NAME = `build-hex` | `build-team` | `discovery` | `build-solo`), or pass `--topology=NAME` to this command. Aborting." Stop.
 
 If the topology name doesn't match any installed plugin, surface that and abort. Don't guess.
 
@@ -43,12 +43,12 @@ If the chosen flow doesn't exist for the chosen topology (e.g., `discovery` does
 
 Detect a Jira key in `$ARGUMENTS` using regex `[A-Z]{2,}-\d+`. If multiple match, take the first.
 
-If a key is found AND `--no-jira` is not set AND `jira-flow.yaml` exists at project root (or legacy `.claude/jira-flow.lifecycle.yaml`):
+If a key is found AND `--no-jira` is not set AND `board-flow.yaml` exists at project root (or legacy `.claude/board-flow.lifecycle.yaml`):
 
 - Set `jira_key = <found-key>`. The run will be Jira-tracked: this command will transition the card to **In Progress** before dispatching the flow, and to **In Review** with an Implementation Summary comment after the flow returns.
-- If `jira-flow@alegomes` plugin is NOT installed (no `atlassian-expert` agent available), surface that as a soft warning ("Jira key detected but jira-flow not installed; running without lifecycle wrapping") and proceed without Jira tracking.
+- If `board-flow@cepa` plugin is NOT installed (no `atlassian-expert` agent available), surface that as a soft warning ("Jira key detected but board-flow not installed; running without lifecycle wrapping") and proceed without Jira tracking.
 
-If no key found OR `--no-jira` is set OR `jira-flow.yaml` is missing: `jira_key = null`. The run is not Jira-tracked. (Note this in the final report.)
+If no key found OR `--no-jira` is set OR `board-flow.yaml` is missing: `jira_key = null`. The run is not Jira-tracked. (Note this in the final report.)
 
 ### 4. Generate run-id
 
@@ -80,7 +80,7 @@ Run a Bash command to write the run-id to a session-local marker file at `docs/a
 
 ### 7. (Conditional) Transition Jira card to "in progress"
 
-If `jira_key` is set, read `defaults.status_map.in_progress` from `jira-flow.yaml` (default `"In Progress"`). Delegate to `atlassian-expert`:
+If `jira_key` is set, read `defaults.status_map.in_progress` from `board-flow.yaml` (default `"In Progress"`). Delegate to `atlassian-expert`:
 
 > Transition Jira issue `<jira_key>` to status `<defaults.status_map.in_progress>`. (Use `getTransitionsForJiraIssue` to find the actual transition ID — names vary across projects.)
 >
@@ -92,10 +92,10 @@ If `atlassian-expert` returns BLOCKED (e.g., card already past `in_progress`, tr
 
 Hand off to the chosen flow's slash command, prefixing the description as if the user had run it directly. Examples:
 
-- topology=hex-backend, flow=plan-build-validate → invoke `/hex-backend:plan-build-validate <description>`
-- topology=hex-backend, flow=reproduce-fix-verify → invoke `/hex-backend:reproduce-fix-verify <description>`
-- topology=hex-backend, flow=investigate → invoke `/hex-backend:investigate <description>`
-- topology=multi-team, flow=plan-build-validate → invoke `/multi-team:plan-build-validate <description>`
+- topology=build-hex, flow=plan-build-validate → invoke `/build-hex:plan-build-validate <description>`
+- topology=build-hex, flow=reproduce-fix-verify → invoke `/build-hex:reproduce-fix-verify <description>`
+- topology=build-hex, flow=investigate → invoke `/build-hex:investigate <description>`
+- topology=build-team, flow=plan-build-validate → invoke `/build-team:plan-build-validate <description>`
 - topology=discovery, flow=investigate → invoke `/discovery:investigate <description>` (when/if it exists)
 
 The autonomous-mode skill is now in effect; the called command's orchestrator inherits the no-questions discipline. The checkpoint hook captures every subagent call.
@@ -104,7 +104,7 @@ The autonomous-mode skill is now in effect; the called command's orchestrator in
 
 If `jira_key` is set AND the flow returned successfully (not blocked at the topology level):
 
-Read `defaults.status_map.in_review` from `jira-flow.yaml` (default `"In Review"`). Assemble the Implementation Summary using the canonical template (from `atlassian-expert`'s "Transition to Review with Implementation Summary" common operation):
+Read `defaults.status_map.in_review` from `board-flow.yaml` (default `"In Review"`). Assemble the Implementation Summary using the canonical template (from `atlassian-expert`'s "Transition to Review with Implementation Summary" common operation):
 
 ```markdown
 ## Implementation summary
@@ -151,4 +151,4 @@ When the flow returns, append a final entry to the state file (`status: complete
 - **Don't override the green-build rule.** The skill explicitly preserves it.
 - **State file is the source of truth.** Anything the user needs to know about this run lives in `docs/autonomous/<run-id>/state.yaml` or in the artifacts referenced from it. Don't bury status in chat.
 - **Jira lifecycle is best-effort, not load-bearing.** If `atlassian-expert` returns BLOCKED on the In Progress transition (e.g., card already advanced past it, transition not available, MCP auth dropout), record the blocker and run the flow anyway. The opposite — refusing to do work because Jira state isn't perfect — would be worse. The In Review transition is conditional on the flow succeeding; a blocked flow leaves the card in In Progress with a blocker comment.
-- **No double-tracking.** If the underlying topology flow already transitions the card itself (e.g., user passes a description that explicitly invokes `/jira-flow:execute`), this command will double-transition. autonomous-start dispatches into raw topology commands (`/hex-backend:plan-build-validate`, etc.), which are Jira-agnostic — so this shouldn't happen in practice. If you find yourself running autonomous-start with a `/jira-flow:*` command in the description, drop the slash-command prefix; let autonomous-start own the Jira side.
+- **No double-tracking.** If the underlying topology flow already transitions the card itself (e.g., user passes a description that explicitly invokes `/board-flow:execute`), this command will double-transition. autonomous-start dispatches into raw topology commands (`/build-hex:plan-build-validate`, etc.), which are Jira-agnostic — so this shouldn't happen in practice. If you find yourself running autonomous-start with a `/board-flow:*` command in the description, drop the slash-command prefix; let autonomous-start own the Jira side.

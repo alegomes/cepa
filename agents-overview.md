@@ -3,16 +3,17 @@
 A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
-is each topology's own `hooks/path-lock.py` (multi-team, hex-backend,
-and discovery have one; solo-pair doesn't, by design).
+is each topology's own `hooks/path-lock.py` (build-team, build-hex,
+discovery, design, and docs have one; build-solo doesn't, by design).
 
-The marketplace ships **six plugins**: `common` (skills + expertise),
-four topologies (`multi-team`, `solo-pair`, `hex-backend`, `discovery`),
-and a cross-cutting layer (`jira-flow`).
+The marketplace ships **nine plugins**: `common` (skills + expertise),
+six topologies (`build-team`, `build-solo`, `build-hex`, `discovery`,
+`design`, `docs`), and two cross-cutting layers (`board-flow`,
+`review-gate`) — every one of which is documented below.
 
 ---
 
-## multi-team
+## build-team
 
 Three teams, each with one Opus lead and two Sonnet workers, plus the
 orchestrator (the main session itself). Canonical workflow: plan → build → validate.
@@ -35,7 +36,7 @@ cost-and-quality the way indydev Dan's source intends (better reasoning
 for delegation/synthesis at the top, faster instruction-following at the
 bottom).
 
-**Hook:** `multi-team/hooks/path-lock.py` enforces the *Writes* column on every
+**Hook:** `build-team/hooks/path-lock.py` enforces the *Writes* column on every
 `Edit` / `Write` / `MultiEdit` / `NotebookEdit` call. Identifies the calling
 subagent via the `agent_type` field in CC's PreToolUse payload (sent as
 `<plugin>:<agent>` — the hook strips the prefix). Verified empirically in
@@ -44,9 +45,9 @@ at runtime.
 
 ---
 
-## solo-pair
+## build-solo
 
-Lightweight 2-agent topology for tasks where multi-team's overhead isn't
+Lightweight 2-agent topology for tasks where build-team's overhead isn't
 worth it. Sequential dev → reviewer; no leads.
 
 | Agent | Role | Reports to | Delegates to | Tools | Writes |
@@ -57,14 +58,14 @@ worth it. Sequential dev → reviewer; no leads.
 
 **Models:** workers = `sonnet`. No leads.
 
-**Hook:** none. solo-pair relies on `pair-reviewer`'s tool allowlist
+**Hook:** none. build-solo relies on `pair-reviewer`'s tool allowlist
 (no Edit/Write) for read-only enforcement; `pair-dev` is unrestricted by
 design — the topology is for small tasks where domain locks don't earn
 their complexity.
 
 ---
 
-## hex-backend
+## build-hex
 
 14-agent hexagonal-architecture topology. Three teams, each with one
 Opus lead and 2-4 Sonnet workers, plus the standalone `proof-reviewer`
@@ -89,13 +90,13 @@ plan → (per-Task: build → qa → housekeeping → review) → cross-cutting 
 | `refactor-advisor` | worker (Housekeeping, advisory) | `engineering-lead` | — | Read, Glob, Grep, Write | `docs/housekeeping/**`, own expertise (no source edits) |
 | `security-reviewer` | worker | `validation-lead` | — | Read, Glob, Grep, Write | `docs/security-reviews/**`, own expertise |
 | `code-reviewer` | worker (final GATE) | `engineering-lead` | — | Read, Glob, Grep | — (advisory verdict only; no writes) |
-| `proof-reviewer` | worker (change-driven Review gate; called by `/jira-flow:prove`) | `/jira-flow:prove`, `/jira-flow:prove-drain` | — | Read, Glob, Grep, Bash, Write | `.claude/proof/<KEY>.yaml` only (never code; works in a throwaway git worktree) |
+| `proof-reviewer` | worker (change-driven Review gate; called by `/board-flow:prove`) | `/board-flow:prove`, `/board-flow:prove-drain` | — | Read, Glob, Grep, Bash, Write | `.claude/proof/<KEY>.yaml` only (never code; works in a throwaway git worktree) |
 
 **Models:** orchestrator + 3 leads = `opus`; 10 workers = `sonnet`.
 
-**Hook:** `hex-backend/hooks/path-lock.py` enforces the *Writes* column
+**Hook:** `build-hex/hooks/path-lock.py` enforces the *Writes* column
 on every `Edit` / `Write` / `MultiEdit` / `NotebookEdit` call. Same
-agent-detection mechanism as multi-team (PreToolUse `agent_type` field,
+agent-detection mechanism as build-team (PreToolUse `agent_type` field,
 plugin-namespaced; hook strips the prefix).
 
 **Per-Task quality loop** (inside `engineering-lead`'s phase, mandatory):
@@ -110,17 +111,17 @@ dev worker → RESULT.md
   → next Task
 ```
 
-**Commands** (all in `hex-backend/commands/`):
+**Commands** (all in `build-hex/commands/`):
 
 | Command | Purpose |
 |---|---|
-| `/hex-backend:plan-build-validate <task>` | Canonical feature flow: plan → build (per-Task loop) → validate. |
-| `/hex-backend:reproduce-fix-verify <bug>` | Confirmed-bug flow: failing test → fix → verify. NOT-A-BUG is a valid outcome. |
-| `/hex-backend:investigate <hypothesis>` | Read-only analysis. Writes `docs/investigations/<slug>.md` with conclusion + recommended next command. |
-| `/hex-backend:spec-e2e <METHOD /path>` | **Prescriptive** E2E spec (intent → spec). Takes freeform intent and/or `--task <TASK.md>`. |
-| `/hex-backend:document-e2e <METHOD /path>` | **Descriptive** E2E spec (code → spec). Reads controller + use case + adapter + seed. |
-| `/hex-backend:resync-e2e <ep>` or `--all` | Propagates spec edits to E2E tests. Runs verify with green-build evidence. |
-| `/hex-backend:audit-e2e <ep>` or `--all` | Read-only 3-way diff: Spec↔Code, Spec↔Tests, Code↔Tests. |
+| `/build-hex:plan-build-validate <task>` | Canonical feature flow: plan → build (per-Task loop) → validate. |
+| `/build-hex:reproduce-fix-verify <bug>` | Confirmed-bug flow: failing test → fix → verify. NOT-A-BUG is a valid outcome. |
+| `/build-hex:investigate <hypothesis>` | Read-only analysis. Writes `docs/investigations/<slug>.md` with conclusion + recommended next command. |
+| `/build-hex:spec-e2e <METHOD /path>` | **Prescriptive** E2E spec (intent → spec). Takes freeform intent and/or `--task <TASK.md>`. |
+| `/build-hex:document-e2e <METHOD /path>` | **Descriptive** E2E spec (code → spec). Reads controller + use case + adapter + seed. |
+| `/build-hex:resync-e2e <ep>` or `--all` | Propagates spec edits to E2E tests. Runs verify with green-build evidence. |
+| `/build-hex:audit-e2e <ep>` or `--all` | Read-only 3-way diff: Spec↔Code, Spec↔Tests, Code↔Tests. |
 
 ---
 
@@ -146,8 +147,8 @@ off to engineering via a delivery brief.
 | `/discovery:capture <signal>` | Lightweight: register a raw signal as an Opportunity card on the discovery board, lands in Inbox. No framing or research. |
 
 The lifecycle (Inbox → Framing → Researching → Validating → Validated →
-Handed off / Discarded) is driven by `/jira-flow:advance <KEY>`, which
-reads `jira-flow.yaml`. There is no
+Handed off / Discarded) is driven by `/board-flow:advance <KEY>`, which
+reads `board-flow.yaml`. There is no
 `/discovery:plan-build-validate` — discovery is continuous, not bounded.
 
 **Path-lock** is keyed to `docs/discovery/**`. Discovery agents cannot
@@ -161,7 +162,79 @@ post-hoc rationalization.
 
 ---
 
-## jira-flow
+## design
+
+Product-design topology. **Upstream of the build topologies** — turns a
+feature brief into a build-ready design spec (UX + visual) so engineering
+implements from a spec instead of inventing one. Produces artifacts, never
+code.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `design-lead` | lead (orchestrator) | main session | the 5 workers below | Read, Glob, Grep, Task | nothing except own expertise |
+| `ux-architect` | worker (Explore — how it works) | design-lead | — | Read, Glob, Grep, Write | `docs/design/**` |
+| `visual-designer` | worker (Explore — how it looks) | design-lead | — | Read, Glob, Grep, Write | `docs/design/**` |
+| `design-system-keeper` | worker (Systematize) | design-lead | — | Read, Glob, Grep, Write | `docs/design/**` |
+| `prototyper` | worker (Prototype) — sole holder of Gamma/Canva MCP | design-lead | — | Read, Glob, Grep, Write, Gamma/Canva MCP | `docs/design/**` |
+| `design-critic` | worker (Critique) — quality gate, SHIP / REVISE / BLOCK | design-lead | — | Read, Glob, Grep, Write | `docs/design/reviews/**` |
+
+**Commands:**
+
+| Command | Purpose |
+|---|---|
+| `/design:explore-critique-spec <feature>` | Run the canonical design loop: explore (flows ∥ visual) → systematize against the design system → prototype → critique → assemble a build-ready design spec. |
+
+The lifecycle (Brief → Explore → Systematize → Prototype → Critique ⇄
+Explore → Spec'd → Handed off) can also be driven per-column via
+`/board-flow:advance`. Sits between `discovery` (upstream brief) and
+`build-team`/`build-hex` (downstream build).
+
+**Path-lock** is keyed to `docs/design/**` (the design-critic to
+`docs/design/reviews/**`). Design agents cannot write code, only design
+artifacts. `prototyper` is the only agent in the marketplace holding the
+Gamma/Canva MCP tools.
+
+---
+
+## docs
+
+Documentation/onboarding topology. Sweeps an EXISTING project and produces
+a grounded Diátaxis doc tree (tutorial / how-to / reference / explanation)
+for handing it off to engineers who weren't there for the decisions.
+Central discipline: separate the **HOW** (extractable from code) from the
+**WHY** (elicitable — owner / commit / ADR / tracker) and NEVER invent
+rationale — a missing source becomes an owner question, not a guess.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `docs-lead` | lead (orchestrator) | main session | the 8 workers below | Read, Glob, Grep, Task, Write | `docs/_survey/gap-report.md`, `docs/_survey/STATUS.md` |
+| `diataxis-inventory` | worker (Survey) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/inventory.md` |
+| `how-extractor` | worker (Survey — the HOW) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/how-ledger.md` |
+| `flow-tracer` | worker (Survey — end-to-end flows) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/flows.md` |
+| `rationale-archaeologist` | worker (Survey — the WHY) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/why-ledger.md`, `open-questions.md` |
+| `structure-surgeon` | worker (Declutter) | docs-lead | — | Read, Glob, Grep, Edit, Write, MultiEdit, Bash | `docs/**`, `archive/**`, `README.md` |
+| `doc-author` | worker (Author) | docs-lead | — | Read, Glob, Grep, Write | `docs/how-to/**`, `reference/**`, `explanation/**` |
+| `tutorial-author` | worker (Author — Tutorial last) | docs-lead | — | Read, Glob, Grep, Write | `docs/tutorial/**` |
+| `consistency-reviewer` | worker (Finalize) | docs-lead | — | Read, Glob, Grep, Write | `docs/_survey/consistency-review.md` |
+
+**Commands** (five owner-checkpointed phases + status):
+
+| Command | Purpose |
+|---|---|
+| `/docs:survey` | Phase 1 — read-only 4-front archaeology (inventory ∥ how ∥ flows ∥ why) → gap-report. |
+| `/docs:declutter` | Phase 2 — archive process-exhaust, demote rival front-doors (moves files, rewrites no prose). |
+| `/docs:checkpoint` | Phase 3 — owner answers the WHY-gaps; answers become sourced rationale. |
+| `/docs:author` | Phase 4 — write the grounded tree (Tutorial last, from a real first run). |
+| `/docs:finalize` | Phase 5 — whole-tree consistency review + owner sign-off. |
+| `/docs:status` | Show which phases are done / in progress / pending (reads STATUS markers). |
+
+**Path-lock** is keyed to `docs/**` + `docs/_survey/**`. The
+`structure-surgeon`'s lock is deliberately broad (it moves files across the
+tree) — owner-gated by `/docs:declutter`, not by the glob.
+
+---
+
+## board-flow
 
 Cross-cutting layer. **Not a topology** — adds Jira lifecycle to
 whichever topology is also installed.
@@ -170,32 +243,58 @@ whichever topology is also installed.
 |---|---|---|---|---|---|
 | `atlassian-expert` | worker (cross-cutting) | orchestrator (called from any Jira-aware command) | — | Atlassian MCP tools (createJiraIssue, getJiraIssue, editJiraIssue, transitionJiraIssue, etc.) + Read, Glob, Grep | Jira state via MCP only; own expertise |
 
-**Commands** (all in `jira-flow/commands/`):
+**Commands** (all in `board-flow/commands/`):
 
 | Command | Purpose |
 |---|---|
-| `/jira-flow:configure [--migrate]` | Interactive setup of `jira-flow.yaml` at project root. Validates site against accessible Atlassian sites, asks for project_key / board_id / default_topology, runs a smoke test. Run once after install. |
-| `/jira-flow:capture <description>` | Register a freeform request as a Jira Story (or Epic/Bug/Task via prefix). No planning, no execution. |
-| `/jira-flow:plan-track-build-validate <abstract task>` | Full discovery + Jira lifecycle. Registers Epic + Stories, executes one Story, transitions through To Do → In Progress → In Review. |
-| `/jira-flow:execute <jira-key> [--force-feature-flow]` | Single existing card. Auto-detects issue type: Bug → dispatches to `/jira-flow:fix`; Story/Task/Epic → runs detail audit + build + validate. `--force-feature-flow` overrides Bug auto-dispatch. |
-| `/jira-flow:fix <jira-key>` | Bug-flow wrapper around the topology's `reproduce-fix-verify`: failing test first → fix → verify with green build evidence. Skips planning enrichment (failing test IS the spec). NOT-A-BUG is a valid outcome. Requires a topology with `reproduce-fix-verify` (hex-backend). |
-| `/jira-flow:drain <column> [--max N]` | Bulk-execute up to N cards (default 5) from a column. Stops on first BLOCKED. User confirmation required. |
-| `/jira-flow:prove <jira-key>` | Change-driven proof gate for a card in `status_map.in_review`. Delegates to `<topology>:proof-reviewer` (hex-backend ships it); verdict drives the transition — PROVEN → `status_map.done`, UNPROVEN → `in_progress` with the gap, NEEDS-HUMAN stays in Review. See [docs/proof-gate.md](docs/proof-gate.md). |
-| `/jira-flow:prove-drain [--max N]` | Bulk-prove the Review column. Runs `/jira-flow:prove` per card. Unlike `/drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. |
-| `/jira-flow:advance <jira-key>` | Generic column-by-column transition driven by `jira-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). For default To Do → In Progress → In Review, prefer `/execute`. |
+| `/board-flow:configure [--migrate]` | Interactive setup of `board-flow.yaml` at project root. Validates site against accessible Atlassian sites, asks for project_key / board_id / default_topology, runs a smoke test. Run once after install. |
+| `/board-flow:capture <description>` | Register a freeform request as a Jira Story (or Epic/Bug/Task via prefix). No planning, no execution. |
+| `/board-flow:plan-track-build-validate <abstract task>` | Full discovery + Jira lifecycle. Registers Epic + Stories, executes one Story, transitions through To Do → In Progress → In Review. |
+| `/board-flow:execute <jira-key> [--force-feature-flow]` | Single existing card. Auto-detects issue type: Bug → dispatches to `/board-flow:fix`; Story/Task/Epic → runs detail audit + build + validate. `--force-feature-flow` overrides Bug auto-dispatch. |
+| `/board-flow:fix <jira-key>` | Bug-flow wrapper around the topology's `reproduce-fix-verify`: failing test first → fix → verify with green build evidence. Skips planning enrichment (failing test IS the spec). NOT-A-BUG is a valid outcome. Requires a topology with `reproduce-fix-verify` (build-hex). |
+| `/board-flow:drain <column> [--max N]` | Bulk-execute up to N cards (default 5) from a column. Stops on first BLOCKED. User confirmation required. |
+| `/board-flow:prove <jira-key>` | Change-driven proof gate for a card in `status_map.in_review`. Delegates to `<topology>:proof-reviewer` (build-hex ships it); verdict drives the transition — PROVEN → `status_map.done`, UNPROVEN → `in_progress` with the gap, NEEDS-HUMAN stays in Review. See [docs/proof-gate.md](docs/proof-gate.md). |
+| `/board-flow:prove-drain [--max N]` | Bulk-prove the Review column. Runs `/board-flow:prove` per card. Unlike `/drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. |
+| `/board-flow:advance <jira-key>` | Generic column-by-column transition driven by `board-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). For default To Do → In Progress → In Review, prefer `/execute`. |
 
-**Soft requirement:** jira-flow's commands delegate to subagents named
-`planning-lead`, `engineering-lead`, `validation-lead`. Both `multi-team`
-and `hex-backend` ship those names; `solo-pair` doesn't, so jira-flow
-doesn't work with solo-pair-only. CC has no enforced plugin
+**Soft requirement:** board-flow's commands delegate to subagents named
+`planning-lead`, `engineering-lead`, `validation-lead`. Both `build-team`
+and `build-hex` ship those names; `build-solo` doesn't, so board-flow
+doesn't work with build-solo-only. CC has no enforced plugin
 dependencies — the soft requirement is documented in the plugin
 descriptions and surfaces at first delegation if missing.
 
 ---
 
+## review-gate
+
+Cross-cutting layer. **Not a topology** — adds a pre-merge gate so code
+reaches the default branch only through a reviewed, proven pull request,
+never a direct push.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `bitbucket-expert` | worker (cross-cutting) — the only agent allowed to touch the Bitbucket REST API | orchestrator (called from review-gate commands at the PR boundary) | — | Bash (bundled `bin/open-pr.sh` + `bin/merge-pr.sh`), Read, Glob, Grep | Bitbucket PR state via the bundled scripts; own expertise |
+
+**Commands:**
+
+| Command | Purpose |
+|---|---|
+| `/review-gate:open` | Open door — hygiene gate via `/code-review`, then opens a PR through `bitbucket-expert`. |
+| `/review-gate:merge` | Merge door — QA gate via the topology's `proof-reviewer`; merges (optionally auto) on a PROVEN verdict. |
+| `/review-gate:review` | Run the review pass on the current diff / PR. |
+| `/review-gate:configure` | Set up the gate (Bitbucket workspace/repo, default branch, auto_merge). |
+
+**Hooks:** `no-direct-main.py` (fence — blocks direct push/merge to the
+default branch and redirects to the flow) and `push-nudge.py` (suggests a
+PR after a feature-branch push). Optional `board-flow` seam maps
+open → In Review, merge → Done.
+
+---
+
 ## common (cross-topology layer)
 
-The `common@alegomes` plugin ships the shared mindset skills, the
+The `common@cepa` plugin ships the shared mindset skills, the
 autonomous-operation lifecycle, the session log, and the green-or-revert
 build-state machine. No agents — `common` is a horizontal layer that
 every topology rides on top of.
@@ -204,7 +303,7 @@ every topology rides on top of.
 
 | Command | Purpose |
 |---|---|
-| `/common:autonomous-start [--topology=X] [--flow=NAME] [--no-jira] <description>` | Kick off an unattended run. Auto-detects Jira key in args; if found AND `jira-flow.yaml` exists, wraps with In Progress → flow → In Review (Implementation Summary). Activates `autonomous-mode` skill. |
+| `/common:autonomous-start [--topology=X] [--flow=NAME] [--no-jira] <description>` | Kick off an unattended run. Auto-detects Jira key in args; if found AND `board-flow.yaml` exists, wraps with In Progress → flow → In Review (Implementation Summary). Activates `autonomous-mode` skill. |
 | `/common:autonomous-resume [run-id]` | Pick up after compaction / session crash from `docs/autonomous/<run-id>/state.yaml`. Defaults to most recent in-progress. |
 | `/common:debrief [run-id]` | Walk every `### Decision:` block from the run with the user. Verdicts (`keep` / `overrule` / `refine` / `skip`) land in `<agent>-mental-model.yaml` under `feedback`. Dual-scan detects format drift. |
 | `/common:recap [--since=YYYY-MM-DD]` | Render "Asked / Status / Delivered" table for the session. Reads `.claude/session-log.md` (intent) and the conversation (delivery). Read-only. |
@@ -227,7 +326,7 @@ Turn-by-turn narratives showing what actually happens when you run the
 canonical command for each topology. Useful for predicting cost, spotting
 where a run went off-rails, and onboarding new users.
 
-### multi-team — `/multi-team:plan-build-validate "add a --json flag to predict"`
+### build-team — `/build-team:plan-build-validate "add a --json flag to predict"`
 
 1. **Orchestrator** (main session) reads the command, decomposes into
    plan / build / validate phases, calls `planning-lead` via Task.
@@ -250,7 +349,7 @@ where a run went off-rails, and onboarding new users.
 **Visible cost:** ~9 subagent invocations. **Visible artifacts:** spec
 files, source edits, test files, security note.
 
-### solo-pair — "fix the off-by-one in `pagination.ts:42`"
+### build-solo — "fix the off-by-one in `pagination.ts:42`"
 
 1. **Orchestrator** sees a small, scoped task → calls `pair-dev` directly.
 2. **pair-dev** edits `pagination.ts`, runs the existing test, reports.
@@ -262,9 +361,9 @@ files, source edits, test files, security note.
 **Visible cost:** 2 subagent invocations. **No path-lock**, no specs,
 no validation phase. If a request grows mid-flight (e.g., "and refactor
 the surrounding pagination logic"), the topology shape is wrong —
-switch to multi-team for that work.
+switch to build-team for that work.
 
-### hex-backend — `/hex-backend:plan-build-validate "expose subscription status via REST"`
+### build-hex — `/build-hex:plan-build-validate "expose subscription status via REST"`
 
 1. **Orchestrator** calls `planning-lead`.
 2. **planning-lead** (Opus) delegates in parallel:
@@ -289,7 +388,7 @@ switch to multi-team for that work.
 
 **Visible cost:** 14 agents available (13 in the build flow + the
 standalone `proof-reviewer` gate, which runs separately via
-`/jira-flow:prove`); per run ≈ planning-lead (3 workers) +
+`/board-flow:prove`); per run ≈ planning-lead (3 workers) +
 engineering-lead (N Tasks × 4 agents in the loop) + validation-lead
 (1 worker + Bash). Scales with Task count.
 
@@ -297,14 +396,14 @@ engineering-lead (N Tasks × 4 agents in the loop) + validation-lead
 RESULT.md per Task, housekeeping reports, security review, Maven
 build output, source across all 5 modules.
 
-### jira-flow — `/jira-flow:execute WEGO-1234`
+### board-flow — `/board-flow:execute WEGO-1234`
 
-(Assumes hex-backend or multi-team also installed.)
+(Assumes build-hex or build-team also installed.)
 
 1. **Orchestrator** parses the Jira key, calls `atlassian-expert`.
 2. **atlassian-expert** calls `getJiraIssue WEGO-1234`, returns the card body.
 3. **Orchestrator** runs a **detail audit** on the card. If under-specified:
-   - Calls `planning-lead` (from hex-backend or multi-team) to enrich.
+   - Calls `planning-lead` (from build-hex or build-team) to enrich.
    - Calls `atlassian-expert` again to `editJiraIssue` with the enriched description.
 4. **Orchestrator** calls `atlassian-expert` to `transitionJiraIssue` → `In Progress`.
 5. **Orchestrator** runs the topology's build phase (engineering-lead → workers → quality loop).
@@ -320,52 +419,52 @@ multiplies by N cards; stops at first BLOCKED to cap cost.
 ### discovery — life of an Opportunity card (continuous)
 
 Discovery is **continuous, not bounded** — there's no single command that
-runs the whole flow. Each `/jira-flow:advance <KEY>` invocation moves the
+runs the whole flow. Each `/board-flow:advance <KEY>` invocation moves the
 card forward one column. A card may take days or weeks across many
 sessions; the timeline is shaped by how fast the human collects evidence.
 
-The narrative below assumes discovery + jira-flow are installed and
-`jira-flow.yaml` declares the WEGO discovery lifecycle.
+The narrative below assumes discovery + board-flow are installed and
+`board-flow.yaml` declares the WEGO discovery lifecycle.
 
 1. **Capture.** User runs `/discovery:capture "Patients struggle to figure out which contract to sign first"`.
    - Orchestrator calls `atlassian-expert` to create a Story on the WEGO discovery board (status `To Do` = Inbox column).
    - Card lands. No agent runs. ~1 Atlassian MCP call.
 
-2. **Inbox → Framing.** User runs `/jira-flow:advance WEGO-2001`.
-   - Orchestrator reads `jira-flow.yaml`, matches the discovery lifecycle, identifies next column = Framing.
+2. **Inbox → Framing.** User runs `/board-flow:advance WEGO-2001`.
+   - Orchestrator reads `board-flow.yaml`, matches the discovery lifecycle, identifies next column = Framing.
    - `atlassian-expert` transitions card to `Framing`.
    - `discovery-lead` is invoked, routes to `opportunity-framer`.
    - `opportunity-framer` writes `docs/discovery/WEGO-2001/framing.md` (problem statement, target user, outcome, IN/OUT scope, open questions).
    - Discovery-lead reports artifact path. Orchestrator updates the card with a comment linking to the brief.
 
-3. **Framing → Researching.** User runs `/jira-flow:advance WEGO-2001`.
+3. **Framing → Researching.** User runs `/board-flow:advance WEGO-2001`.
    - Same routing pattern. `user-researcher` reads `framing.md`, inventories `evidence/` (probably empty on first pass), writes `docs/discovery/WEGO-2001/research.md`. On a first pass with no evidence yet, the report is mostly "gaps in evidence" — pointers for the human to go talk to users or pull data.
 
 4. **Human collects evidence.** User runs interviews, drops transcripts in `docs/discovery/WEGO-2001/evidence/`. No agent run. Days may pass.
 
-5. **Re-run user-researcher (loop).** User runs `/jira-flow:advance WEGO-2001` while still in Researching, asking to re-synthesize with new evidence. Discovery-lead routes back to `user-researcher` (the column itself doesn't transition). Updated `research.md` shows patterns now that there's evidence.
+5. **Re-run user-researcher (loop).** User runs `/board-flow:advance WEGO-2001` while still in Researching, asking to re-synthesize with new evidence. Discovery-lead routes back to `user-researcher` (the column itself doesn't transition). Updated `research.md` shows patterns now that there's evidence.
 
-6. **Researching → Validating (gated).** User runs `/jira-flow:advance WEGO-2001`.
+6. **Researching → Validating (gated).** User runs `/board-flow:advance WEGO-2001`.
    - Orchestrator sees that the next column (Validating) has an `enter_gate`: "card has assumption-tester test plan". The plan doesn't exist yet → orchestrator invokes `assumption-tester` first.
    - `assumption-tester` writes `docs/discovery/WEGO-2001/assumptions.md` (ranked assumptions + per-assumption test plan + pre-declared success criteria).
    - Orchestrator confirms the gate is satisfied (test plan now exists), prompts user, then transitions to Validating.
 
 7. **Human runs experiments.** Prototypes, more interviews, fake-door tests. Drops new evidence in `evidence/`. Days–weeks may pass.
 
-8. **Validating → Validated (gated).** User runs `/jira-flow:advance WEGO-2001`.
+8. **Validating → Validated (gated).** User runs `/board-flow:advance WEGO-2001`.
    - Next column (Validated) has an `enter_gate`: "evidence-auditor verdict = Validate". The audit doesn't exist yet → orchestrator invokes `evidence-auditor` first.
    - `evidence-auditor` reads `assumptions.md` (the rubric) + `evidence/` (the data), returns verdicts per assumption (Confirmed / Invalidated / Inconclusive), writes `docs/discovery/WEGO-2001/audit.md`. Recommended next move: Validate, Loop back, or Discard.
    - If Validate → orchestrator confirms gate, transitions to Validated.
    - If Loop back → orchestrator does NOT transition; reports back what to test next. The card stays in Validating; the human runs more tests.
-   - If Discard → user runs `/jira-flow:advance` to move to Discarded (terminal).
+   - If Discard → user runs `/board-flow:advance` to move to Discarded (terminal).
 
-9. **Validated → Handed off.** User runs `/jira-flow:advance WEGO-2001`.
+9. **Validated → Handed off.** User runs `/board-flow:advance WEGO-2001`.
    - Discovery-lead routes to `epic-briefer`.
    - `epic-briefer` reads framing + research + assumptions + audit; writes `docs/discovery/WEGO-2001/handoff.md` (delivery brief: validated assumptions, invalidated paths excluded, boundaries, suggested starter Stories).
    - `epic-briefer` calls `atlassian-expert` to create a linked Epic on the engineer board with the brief path embedded and a "relates to" link back to the discovery card.
    - Orchestrator reports the engineer-board Epic key + brief path.
 
-10. **Handoff to build topology (out of discovery's scope).** Engineering's `planning-lead` (e.g., from hex-backend) picks up the linked Epic, reads `handoff.md`, runs `epic-author` to author the Epic's full description and Stories on the engineer board. From here it's the build topology's normal flow (`/jira-flow:execute <Epic-key>` → Stories → code → ship).
+10. **Handoff to build topology (out of discovery's scope).** Engineering's `planning-lead` (e.g., from build-hex) picks up the linked Epic, reads `handoff.md`, runs `epic-author` to author the Epic's full description and Stories on the engineer board. From here it's the build topology's normal flow (`/board-flow:execute <Epic-key>` → Stories → code → ship).
 
 **Visible cost:** small per `/advance` invocation (1-2 agents + 1-2 Atlassian
 MCP calls). Total cost across a card's life depends on how many loops the
@@ -390,7 +489,7 @@ mechanism that prevents the card from advancing on optimism.
 | `autonomous-mode` | Activated by `/common:autonomous-start`. No questions to the user; every ambiguity logged in formal `### Decision:` block (Options / Chosen / Rationale). | orchestrator (session-wide) |
 | `green-or-revert` | Never claim runtime state without consulting `.claude/last-build.json`. After meaningful edits, verify is the next action — don't wait to be asked. On FAILURE, fix or revert before any other action. | orchestrator + leads + dev workers |
 
-The ten skills ship in the **`common@alegomes` plugin**
+The ten skills ship in the **`common@cepa` plugin**
 (`common/skills/`). Every topology requires `common`; install it once
 per project and the skills are available to every subagent via CC's
 session-wide skill namespace.
@@ -405,7 +504,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Team of agents | ✅ | 9-agent multi-team + 2-agent solo-pair |
+| Team of agents | ✅ | 9-agent build-team + 2-agent build-solo |
 | 3 tiers (orchestrator / leaders / workers) | ✅ | topology snippets, agent files |
 | Thinkers (orchestrator, leads) vs doers (workers) | ✅ | leads have no `Edit`/`Write` tools; workers do |
 | Thinkers don't write code; they understand, refine, organize, delegate, aggregate | ✅ | `zero-micromanagement` skill + lead front-matter tool list |
@@ -422,9 +521,9 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Topology / multi-team-config concept | 🟡 | We have `*-topology.md` snippets (CC orchestrator instructions). Pi has a YAML config the harness reads; CC has no equivalent. The snippet *is* the topology in CC. |
+| Topology / build-team-config concept | 🟡 | We have `*-topology.md` snippets (CC orchestrator instructions). Pi has a YAML config the harness reads; CC has no equivalent. The snippet *is* the topology in CC. |
 | Orchestrator name + path + color | 🟡 | Orchestrator = main CC session (no separate file/path). Color N/A for main session. |
-| Agent paths | ✅ | `agents/` (multi-team) and `solo-pair/agents/` |
+| Agent paths | ✅ | `agents/` (build-team) and `build-solo/agents/` |
 | Session paths | 🔴 | CC manages session storage internally; not exposed |
 | Shared context (files all agents should know) | ✅ | "Shared context" section in both topology snippets |
 | Teams[] declaration | 🟡 | Implicit in agent set + this matrix |
@@ -473,7 +572,7 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 | Idea | Status | Where / how |
 |---|---|---|
-| Shared mindset skills available across topologies | ✅ | `common@alegomes` plugin ships the five skills; required by both `multi-team` and `solo-pair` |
+| Shared mindset skills available across topologies | ✅ | `common@cepa` plugin ships the five skills; required by both `build-team` and `build-solo` |
 
 ---
 
@@ -482,9 +581,9 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 - **Plugin install** via `bin/install.sh` (with `--clean` for stale-cache
   recovery) against a local-path marketplace.
 - **Skill auto-loading** — the five `common:*` mindset skills and the
-  `multi-team:plan-build-validate` slash command are discoverable in CC.
+  `build-team:plan-build-validate` slash command are discoverable in CC.
 - **Subagent identity** in PreToolUse hook — CC sends `agent_type` as
-  `<plugin>:<agent-name>` (e.g. `multi-team:backend-dev`); the hook
+  `<plugin>:<agent-name>` (e.g. `build-team:backend-dev`); the hook
   strips the prefix to match `ALLOWED_WRITES`.
 - **Centralized expertise via host symlink** — `backend-dev` (subagent)
   read AND wrote `.claude/expertise/backend-dev-mental-model.yaml`; the
@@ -498,15 +597,15 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
 
 ## Outstanding work
 
-- 🟡 **Real-task validation of `multi-team`** — basic delegation flow
+- 🟡 **Real-task validation of `build-team`** — basic delegation flow
   was observed working (orchestrator → leads → workers → honest BLOCKED
   reply when target code wasn't present). Not yet exercised against a
   real codebase end-to-end.
-- 🟡 **Real-task validation of `hex-backend`** — the 13-agent topology
+- 🟡 **Real-task validation of `build-hex`** — the 14-agent topology
   was just built. The per-Task quality loop, refactor-advisor's
   housekeeping report shape, and code-reviewer's APPROVE/REJECT have
   not been observed live yet.
-- 🟡 **Real-task validation of `jira-flow`** — atlassian-expert and the
+- 🟡 **Real-task validation of `board-flow`** — atlassian-expert and the
   three Jira-aware commands have not been run against a real Jira
   project. Atlassian MCP tools are available; the agent prompt is
   written but unverified.

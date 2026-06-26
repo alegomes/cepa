@@ -77,7 +77,7 @@ feedback:
     refined_rationale: |
       Nunca escrever arquivo via Bash. Se o Write for bloqueado pra um path, isso é
       o sinal de delegar (zero-micromanagement), não de rotear em volta da trava.
-      Agora há um segundo lock (hex-backend/hooks/bash-path-lock.py) que detecta
+      Agora há um segundo lock (build-hex/hooks/bash-path-lock.py) que detecta
       escrita shell-level (>, >>, tee, sed -i, cp, mv) para path interno fora do
       allowlist — mas a disciplina é tua primeiro; o hook é defense-in-depth, não
       substituto. Ver common/skills/zero-micromanagement + defense-in-depth.

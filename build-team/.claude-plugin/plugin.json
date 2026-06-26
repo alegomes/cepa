@@ -1,0 +1,31 @@
+{
+  "name": "build-team",
+  "version": "0.2.0",
+  "description": "Multi-team agent topology — orchestrator + 3 leads + 6 workers, with path-lock hook. Adapted from indydev Dan's lead-agents pattern.",
+  "author": {
+    "name": "alegomes"
+  },
+  "keywords": ["agents", "orchestration", "build-team", "subagents"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/path-lock.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/bash-path-lock.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

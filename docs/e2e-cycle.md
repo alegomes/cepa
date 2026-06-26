@@ -1,13 +1,13 @@
 # E2E spec cycle
 
-Four hex-backend commands forming a directed cycle between spec, code,
+Four build-hex commands forming a directed cycle between spec, code,
 and tests. Each command has a clear direction; none silently does
 work in the wrong one.
 
 ```
                          intent (TASK.md / freeform)
                                     │
-                                    │ /hex-backend:spec-e2e
+                                    │ /build-hex:spec-e2e
                                     ▼
                               ┌─────────────┐
                               │    spec     │   specs/e2e-assertions.md
@@ -15,12 +15,12 @@ work in the wrong one.
                               └──┬──────────┘
                                  │      ▲
                                  │      │
-              /hex-backend:resync-e2e   │ /hex-backend:document-e2e
+              /build-hex:resync-e2e   │ /build-hex:document-e2e
                                  │      │
                                  ▼      │
                               ┌──────────┐                 ┌──────────┐
                               │  tests   │ ◄─────────────► │   code   │
-                              └──────────┘   /hex-backend:  └──────────┘
+                              └──────────┘   /build-hex:  └──────────┘
                                               audit-e2e
                                           (read-only 3-way diff)
 ```
@@ -29,10 +29,10 @@ work in the wrong one.
 
 | Command | Direction | Writes |
 |---|---|---|
-| `/hex-backend:spec-e2e <ep> "<intent>"` or `--task <TASK.md>` | **intent → spec** (prescriptive) | `specs/e2e-assertions.md` |
-| `/hex-backend:document-e2e <ep>` | **code → spec** (descriptive) | `specs/e2e-assertions.md` |
-| `/hex-backend:resync-e2e <ep>` or `--all` | **spec → tests** | `*/src/test/**` |
-| `/hex-backend:audit-e2e <ep>` or `--all` | **read-only 3-way diff** | nothing |
+| `/build-hex:spec-e2e <ep> "<intent>"` or `--task <TASK.md>` | **intent → spec** (prescriptive) | `specs/e2e-assertions.md` |
+| `/build-hex:document-e2e <ep>` | **code → spec** (descriptive) | `specs/e2e-assertions.md` |
+| `/build-hex:resync-e2e <ep>` or `--all` | **spec → tests** | `*/src/test/**` |
+| `/build-hex:audit-e2e <ep>` or `--all` | **read-only 3-way diff** | nothing |
 
 All four delegate to `integration-analyst` (spec author) and/or
 `qa-engineer` (test author and 3-way comparator). Neither writes
@@ -100,7 +100,7 @@ Story arrives → TASK.md authored by engineering-lead
               ↓
               integration-analyst (auto, via ARCHITECT step 2a)
               ↓
-              /hex-backend:spec-e2e (prescriptive, from TASK.md)
+              /build-hex:spec-e2e (prescriptive, from TASK.md)
               ↓
               spec section appended to specs/e2e-assertions.md
               ↓
@@ -120,7 +120,7 @@ didn't exist yet. Now it's prescriptive with the TASK.md as intent.
 You inherited a codebase with no E2E specs:
 
 ```
-/hex-backend:document-e2e GET /api/v1/users
+/build-hex:document-e2e GET /api/v1/users
 # → reads controller + use case + adapter + seed
 # → writes specs/e2e-assertions.md section reflecting current behavior
 
@@ -130,7 +130,7 @@ You inherited a codebase with no E2E specs:
 After enough endpoints are documented, you can:
 
 ```
-/hex-backend:audit-e2e --all
+/build-hex:audit-e2e --all
 # → reports drift across spec/code/tests for every section
 # → tells you which endpoints to /resync-e2e (tests stale)
 #   vs. /document-e2e (re-document if code changed)
@@ -143,7 +143,7 @@ You updated `specs/e2e-assertions.md` (added a case, changed an
 assertion, dropped an obsolete check):
 
 ```
-/hex-backend:resync-e2e GET /api/v1/users
+/build-hex:resync-e2e GET /api/v1/users
 # → reads the spec section
 # → diffs against existing test cases
 # → adds missing tests, updates value mismatches, removes obsolete
@@ -154,15 +154,15 @@ assertion, dropped an obsolete check):
 Or for a sweep across all sections:
 
 ```
-/hex-backend:resync-e2e --all
+/build-hex:resync-e2e --all
 # → walks every spec section sequentially
-# → stops on first BLOCKED (same logic as /jira-flow:drain)
+# → stops on first BLOCKED (same logic as /board-flow:drain)
 ```
 
 ### Code suspected of drift
 
 ```
-/hex-backend:audit-e2e GET /api/v1/users
+/build-hex:audit-e2e GET /api/v1/users
 # → 3-way diff: Spec↔Code, Spec↔Tests, Code↔Tests
 # → verdict: ALIGNED / MINOR-DRIFT / MAJOR-DRIFT
 # → for MAJOR drift, suggests the most natural next command:

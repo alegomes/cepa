@@ -1,5 +1,5 @@
 #!/bin/sh
-# Install the alegomes multi-team plugins into Claude Code AND set up the
+# Install the Cepa marketplace plugins into Claude Code AND set up the
 # host project for centralized expertise (via symlink).
 #
 # Usage:
@@ -9,18 +9,18 @@
 # With --clean: also uninstalls existing plugins and nukes the marketplace
 #   plugin cache before reinstalling. Use this when you've edited plugin
 #   source without bumping versions and want CC to pick up the changes.
-# With --topology=NAME (multi-team | solo-pair | hex-backend | discovery | book | docs | git-history): also copies
+# With --topology=NAME (build-team | build-solo | build-hex | discovery | docs): also copies
 #   that topology's snippet into the host project's .claude/ and appends the
 #   matching @-import line to CLAUDE.md (idempotent, creates CLAUDE.md if
 #   missing). Skip this flag if you want to wire CLAUDE.md yourself.
 # With a path argument: sets up the given path as the host project instead of cwd.
 #
 # Examples:
-#   cd ~/test-multi-team && ~/.../bin/install.sh
+#   cd ~/test-build-team && ~/.../bin/install.sh
 #   ~/.../bin/install.sh ~/some-other-project
 #   ~/.../bin/install.sh --clean              # force-refresh everything
-#   ~/.../bin/install.sh --topology=hex-backend ~/foo
-#   ~/.../bin/install.sh --clean --topology=multi-team ~/foo
+#   ~/.../bin/install.sh --topology=build-hex ~/foo
+#   ~/.../bin/install.sh --clean --topology=build-team ~/foo
 
 set -e
 
@@ -47,9 +47,9 @@ for arg in "$@"; do
 done
 
 case "${TOPOLOGY}" in
-  ""|multi-team|solo-pair|hex-backend|discovery|book|docs|git-history) ;;
+  ""|build-team|build-solo|build-hex|discovery|docs) ;;
   *)
-    echo "✗ Unknown --topology: ${TOPOLOGY}. Use multi-team, solo-pair, hex-backend, discovery, book, docs, or git-history."
+    echo "✗ Unknown --topology: ${TOPOLOGY}. Use build-team, build-solo, build-hex, discovery, or docs."
     exit 1
     ;;
 esac
@@ -71,7 +71,7 @@ HOST_PROJECT="$(cd "${HOST_PROJECT_INPUT}" 2>/dev/null && pwd)" || {
   exit 1
 }
 
-MARKETPLACE_NAME="alegomes"
+MARKETPLACE_NAME="cepa"
 EXPERTISE_SOURCE="${REPO_DIR}/common/expertise"
 EXPERTISE_TARGET="${HOST_PROJECT}/.claude/expertise"
 CACHE_DIR="${HOME}/.claude/plugins/cache/${MARKETPLACE_NAME}"
@@ -95,14 +95,14 @@ fi
 if [ "${CLEAN}" -eq 1 ]; then
   echo "▶ --clean: uninstalling existing plugins (errors ignored)"
   claude plugin uninstall "common@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "multi-team@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "solo-pair@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "hex-backend@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "build-team@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "build-solo@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "build-hex@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "discovery@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "jira-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "book@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "board-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "docs@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "git-history@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "design@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "review-gate@${MARKETPLACE_NAME}" 2>/dev/null || true
 
   if [ -d "${CACHE_DIR}" ]; then
     echo "▶ --clean: removing plugin cache at ${CACHE_DIR}"
@@ -118,32 +118,32 @@ claude plugin marketplace add "${REPO_DIR}"
 
 # --- Plugin install ---
 
-echo "▶ Installing common@alegomes (8 mindset skills — required)"
-claude plugin install common@alegomes
+echo "▶ Installing common@cepa (8 mindset skills — required)"
+claude plugin install common@cepa
 
-echo "▶ Installing multi-team@alegomes (9-agent generic topology)"
-claude plugin install multi-team@alegomes
+echo "▶ Installing build-team@cepa (9-agent generic topology)"
+claude plugin install build-team@cepa
 
-echo "▶ Installing solo-pair@alegomes (2-agent dev/reviewer topology)"
-claude plugin install solo-pair@alegomes
+echo "▶ Installing build-solo@cepa (2-agent dev/reviewer topology)"
+claude plugin install build-solo@cepa
 
-echo "▶ Installing hex-backend@alegomes (13-agent hexagonal-architecture topology)"
-claude plugin install hex-backend@alegomes
+echo "▶ Installing build-hex@cepa (14-agent hexagonal-architecture topology)"
+claude plugin install build-hex@cepa
 
-echo "▶ Installing discovery@alegomes (6-agent continuous product-discovery topology)"
-claude plugin install discovery@alegomes
+echo "▶ Installing discovery@cepa (6-agent continuous product-discovery topology)"
+claude plugin install discovery@cepa
 
-echo "▶ Installing jira-flow@alegomes (Jira lifecycle layer)"
-claude plugin install jira-flow@alegomes
+echo "▶ Installing board-flow@cepa (Jira lifecycle layer)"
+claude plugin install board-flow@cepa
 
-echo "▶ Installing book@alegomes (10-agent book-writing topology)"
-claude plugin install book@alegomes
+echo "▶ Installing docs@cepa (9-agent documentation/onboarding topology)"
+claude plugin install docs@cepa
 
-echo "▶ Installing docs@alegomes (9-agent documentation/onboarding topology)"
-claude plugin install docs@alegomes
+echo "▶ Installing design@cepa (6-agent product-design topology)"
+claude plugin install design@cepa
 
-echo "▶ Installing git-history@alegomes (3-agent Git-history analysis topology)"
-claude plugin install git-history@alegomes
+echo "▶ Installing review-gate@cepa (pre-merge PR gate)"
+claude plugin install review-gate@cepa
 
 # --- Per-project setup: symlink for centralized expertise ---
 
@@ -250,28 +250,28 @@ if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
     echo "  ✔ Appended ${IMPORT_LINE} to ${CLAUDE_MD}"
   fi
 
-  # Sanity warning: jira-flow needs leads, solo-pair has none.
-  if [ "${TOPOLOGY}" = "solo-pair" ]; then
-    echo "  ⚠ solo-pair has no leads. /jira-flow:* commands won't work with this topology."
+  # Sanity warning: board-flow needs leads, build-solo has none.
+  if [ "${TOPOLOGY}" = "build-solo" ]; then
+    echo "  ⚠ build-solo has no leads. /board-flow:* commands won't work with this topology."
   fi
 
-  # Seed jira-flow project config at project root. This is project-team
+  # Seed board-flow project config at project root. This is project-team
   # data (your Jira site, project key, board, etc.) — visible at root, not
   # hidden under .claude/. atlassian-expert reads it on every invocation.
-  JIRA_FLOW_DST="${HOST_PROJECT}/jira-flow.yaml"
-  LEGACY_DST="${HOST_PROJECT}/.claude/jira-flow.lifecycle.yaml"
+  JIRA_FLOW_DST="${HOST_PROJECT}/board-flow.yaml"
+  LEGACY_DST="${HOST_PROJECT}/.claude/board-flow.lifecycle.yaml"
 
   # Backward-compat note: if the legacy file exists at .claude/, leave it
   # alone but tell the user to migrate. Don't auto-move (avoids surprise on
   # a project that may have local edits in flight).
   if [ -f "${LEGACY_DST}" ] && [ ! -f "${JIRA_FLOW_DST}" ]; then
     echo "  ⚠ Legacy ${LEGACY_DST} found. Move it to ${JIRA_FLOW_DST}"
-    echo "    (project root) when you can — atlassian-expert and the jira-flow"
+    echo "    (project root) when you can — atlassian-expert and the board-flow"
     echo "    commands prefer the new location."
   fi
 
   if [ "${TOPOLOGY}" = "discovery" ]; then
-    JIRA_FLOW_SRC="${REPO_DIR}/discovery/jira-flow.example.yaml"
+    JIRA_FLOW_SRC="${REPO_DIR}/discovery/board-flow.example.yaml"
     if [ -f "${JIRA_FLOW_DST}" ]; then
       echo "  ✔ ${JIRA_FLOW_DST} already exists — leaving untouched"
     elif [ -f "${JIRA_FLOW_SRC}" ]; then
@@ -280,23 +280,23 @@ if [ -n "${TOPOLOGY}" ] && [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
       echo "    Edit it: set defaults.site, defaults.project_key, defaults.board_id,"
       echo "    and the lifecycle status names to match your discovery board."
     fi
-  elif [ "${TOPOLOGY}" = "hex-backend" ] || [ "${TOPOLOGY}" = "multi-team" ] || [ "${TOPOLOGY}" = "book" ] || [ "${TOPOLOGY}" = "docs" ]; then
+  elif [ "${TOPOLOGY}" = "build-hex" ] || [ "${TOPOLOGY}" = "build-team" ] || [ "${TOPOLOGY}" = "docs" ]; then
     if [ -f "${JIRA_FLOW_DST}" ]; then
       echo "  ✔ ${JIRA_FLOW_DST} already exists — leaving untouched"
     else
       cat > "${JIRA_FLOW_DST}" <<EOF
-# jira-flow project config for the ${TOPOLOGY} topology.
+# board-flow project config for the ${TOPOLOGY} topology.
 #
-# Two roles for atlassian-expert and the jira-flow commands:
+# Two roles for atlassian-expert and the board-flow commands:
 #
 #   defaults — identity values for every Jira call (site, project, board,
 #     issue types, custom fields). atlassian-expert is FORBIDDEN to infer
 #     these from context; missing values cause BLOCKED, not guesses.
 #
-#   default_topology — which topology's leads /jira-flow:execute and
-#     /jira-flow:plan-track-build-validate delegate to.
+#   default_topology — which topology's leads /board-flow:execute and
+#     /board-flow:plan-track-build-validate delegate to.
 #
-# Edit the defaults below before using jira-flow commands. Sample values
+# Edit the defaults below before using board-flow commands. Sample values
 # shown — replace site, project_key, board_id with YOUR Jira's values.
 schema_version: 1
 
@@ -306,7 +306,7 @@ defaults:
   board_id: 1
   status_map:
     # Literal Jira status names. Backlog is implicit (where new cards land);
-    # to_do is "refined and ready for dev" — what /jira-flow:drain pulls from.
+    # to_do is "refined and ready for dev" — what /board-flow:drain pulls from.
     to_do:       "To Do"
     in_progress: "In Progress"
     in_review:   "In Review"
@@ -326,7 +326,7 @@ defaults:
   #   topologies.<active>.scope  >  defaults.scope
   # Command keys for scope_overrides: drain, prove_drain. Single-card commands
   # (execute/prove/fix/advance) only WARN when the named card is out of scope.
-  # Worked example: discovery/jira-flow.example.yaml.
+  # Worked example: discovery/board-flow.example.yaml.
   scope:
     jql: ''
   scope_overrides:
@@ -342,23 +342,23 @@ default_topology: ${TOPOLOGY}
 # atomic — the override replaces the default list entirely, not
 # merged item-by-item. A topology may also carry its own scope: block
 # ({ jql: '...' }) at precedence level 4. Topologies without a block here
-# inherit defaults wholesale. See discovery/jira-flow.example.yaml for a
+# inherit defaults wholesale. See discovery/board-flow.example.yaml for a
 # worked example.
 topologies: {}
 EOF
       echo "  ✔ Seeded ${JIRA_FLOW_DST} (default_topology: ${TOPOLOGY})"
       echo "    EDIT IT: replace defaults.site, defaults.project_key, defaults.board_id"
-      echo "    with your Jira's values before running any /jira-flow:* command."
+      echo "    with your Jira's values before running any /board-flow:* command."
     fi
   fi
 
-  # Seed hex-backend.yaml (role → module mapping) when wiring hex-backend.
+  # Seed build-hex.yaml (role → module mapping) when wiring build-hex.
   # Only seed if absent; if user already customized, don't overwrite.
   # The plugin is opinionated about hexagonal INVARIANTS, not about
   # module naming — this file maps roles to physical modules.
-  if [ "${TOPOLOGY}" = "hex-backend" ]; then
-    HEX_LAYOUT_SRC="${REPO_DIR}/hex-backend/hex-backend.example.yaml"
-    HEX_LAYOUT_DST="${HOST_PROJECT}/hex-backend.yaml"
+  if [ "${TOPOLOGY}" = "build-hex" ]; then
+    HEX_LAYOUT_SRC="${REPO_DIR}/build-hex/build-hex.example.yaml"
+    HEX_LAYOUT_DST="${HOST_PROJECT}/build-hex.yaml"
     if [ -f "${HEX_LAYOUT_DST}" ]; then
       echo "  ✔ ${HEX_LAYOUT_DST} already exists — leaving untouched"
     elif [ -f "${HEX_LAYOUT_SRC}" ]; then
@@ -378,14 +378,14 @@ echo "✔ Done."
 echo ""
 echo "Nine plugins installed:"
 echo "    common       — 8 mindset skills (required by every topology)"
-echo "    multi-team   — 9-agent generic topology + /multi-team:plan-build-validate"
-echo "    solo-pair    — 2-agent dev/reviewer topology"
-echo "    hex-backend  — 13-agent hexagonal-architecture topology + per-Task quality loop"
+echo "    build-team   — 9-agent generic topology + /build-team:plan-build-validate"
+echo "    build-solo    — 2-agent dev/reviewer topology"
+echo "    build-hex  — 14-agent hexagonal-architecture topology + per-Task quality loop"
 echo "    discovery    — 6-agent continuous product-discovery topology"
-echo "    jira-flow    — atlassian-expert + Jira-aware commands (pair with any topology)"
-echo "    book         — 10-agent book-writing topology + /book:inception + /book:write-chapter"
+echo "    design       — 6-agent product-design topology (brief → build-ready spec)"
+echo "    board-flow    — atlassian-expert + Jira-aware commands (pair with any topology)"
 echo "    docs         — 9-agent documentation/onboarding topology + /docs:survey ... /docs:finalize"
-echo "    git-history  — 3-agent Git-history analysis topology + /git-history:analyze"
+echo "    review-gate  — pre-merge PR gate (open + merge doors)"
 echo ""
 if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
   echo "Host project setup at ${HOST_PROJECT}:"
@@ -395,26 +395,24 @@ if [ "${HOST_PROJECT}" != "${REPO_DIR}" ]; then
     echo ""
     echo "You're ready. Open Claude Code in ${HOST_PROJECT} and try:"
     case "${TOPOLOGY}" in
-      multi-team)  echo "    /multi-team:plan-build-validate <task>" ;;
-      solo-pair)   echo "    /solo-pair:* (or just describe a small task — 2-agent dev/reviewer)" ;;
-      hex-backend) echo "    /hex-backend:plan-build-validate <task>" ;;
-      discovery)   echo "    /discovery:capture <signal>   (then /jira-flow:advance <KEY> to move forward)" ;;
-      book)        echo "    /book:inception \"<book title>\"   (then /book:write-chapter <slug>)" ;;
+      build-team)  echo "    /build-team:plan-build-validate <task>" ;;
+      build-solo)   echo "    /build-solo:* (or just describe a small task — 2-agent dev/reviewer)" ;;
+      build-hex) echo "    /build-hex:plan-build-validate <task>" ;;
+      discovery)   echo "    /discovery:capture <signal>   (then /board-flow:advance <KEY> to move forward)" ;;
       docs)        echo "    /docs:survey   (then /docs:declutter → /docs:checkpoint → /docs:author → /docs:finalize)" ;;
-      git-history) echo "    /git-history:analyze <repo-path> [more-paths...]   (story + effort report)" ;;
     esac
   else
     echo ""
     echo "Final manual step: pick ONE topology snippet and import it from CLAUDE.md."
-    echo "(Or re-run with --topology=multi-team|solo-pair|hex-backend to automate.)"
+    echo "(Or re-run with --topology=build-team|build-solo|build-hex to automate.)"
     echo ""
-    echo "  cp ${REPO_DIR}/hex-backend/hex-backend-topology.md ${HOST_PROJECT}/.claude/"
+    echo "  cp ${REPO_DIR}/build-hex/build-hex-topology.md ${HOST_PROJECT}/.claude/"
     echo "  # OR"
-    echo "  cp ${REPO_DIR}/multi-team/multi-team-topology.md ${HOST_PROJECT}/.claude/"
+    echo "  cp ${REPO_DIR}/build-team/build-team-topology.md ${HOST_PROJECT}/.claude/"
     echo "  # OR"
-    echo "  cp ${REPO_DIR}/solo-pair/solo-pair-topology.md ${HOST_PROJECT}/.claude/"
+    echo "  cp ${REPO_DIR}/build-solo/build-solo-topology.md ${HOST_PROJECT}/.claude/"
     echo ""
     echo "  Then add the matching @-import to ${HOST_PROJECT}/CLAUDE.md:"
-    echo "    @.claude/hex-backend-topology.md   (or multi-team-topology.md / solo-pair-topology.md)"
+    echo "    @.claude/build-hex-topology.md   (or build-team-topology.md / build-solo-topology.md)"
   fi
 fi

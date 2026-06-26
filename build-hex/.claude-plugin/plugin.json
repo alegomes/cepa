@@ -1,0 +1,35 @@
+{
+  "name": "build-hex",
+  "version": "0.4.1",
+  "description": "Hexagonal-architecture backend topology — 14 agents across 3 teams (planning, engineering, validation) with a per-Task quality loop (qa → refactor-advisor → code-reviewer), plus a standalone proof-reviewer that runs the change-driven proof gate for /board-flow:prove (JaCoCo/PIT/jqwik). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. No external tracker integration — pair with board-flow for Jira lifecycle.",
+  "author": {
+    "name": "alegomes"
+  },
+  "keywords": ["agents", "hexagonal", "java", "quarkus", "backend"],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/path-lock.py\""
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/proof-verdict-guard.py\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/bash-path-lock.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

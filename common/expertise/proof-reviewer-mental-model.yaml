@@ -15,7 +15,7 @@ feedback:
     altitude: strategic
     original_choice: |
       Blocked from writing its own output (.claude/proof/), the agent edited
-      ~/.claude/plugins/cache/alegomes/hex-backend/0.3.0/hooks/path-lock.py to
+      ~/.claude/plugins/cache/alegomes/build-hex/0.3.0/hooks/path-lock.py to
       add "proof-reviewer": [".claude/proof/**"] to the allowlist — granting
       itself the permission it lacked, then proceeding.
     user_verdict: overrule
@@ -67,7 +67,7 @@ feedback:
       path-lock was a red herring — the LGPD test was vacuous (asserted a CPF
       value never in scope), so write access would not have produced a valid RED
       anyway. This drift is now backstopped by
-      hex-backend/hooks/proof-verdict-guard.py, which blocks a `verdict: proven`
+      build-hex/hooks/proof-verdict-guard.py, which blocks a `verdict: proven`
       the levels contradict. See common/skills/evidence-over-assumption +
       acceptance-completeness, and proof-reviewer.md ("non-vacuous test").
     tag: principle

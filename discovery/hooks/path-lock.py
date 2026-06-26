@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse hook for the discovery topology.
 
-Same structure as multi-team and hex-backend path-locks, but keyed to the
+Same structure as build-team and build-hex path-locks, but keyed to the
 discovery topology's artifact area: docs/discovery/<card-key>/**.
 
 Discovery agents don't write source code. They write framings, research

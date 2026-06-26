@@ -22,7 +22,7 @@ If you used `~` in the path, replace with the absolute path.
 
 Three common causes:
 
-1. **`common@alegomes` missing** — required by every topology because
+1. **`common@cepa` missing** — required by every topology because
    skills are referenced in agent bodies.
 2. **Topology snippet not imported in `CLAUDE.md`** — agents are
    installed but the orchestrator doesn't know to use them.
@@ -37,8 +37,8 @@ handles all three.
 CC plugin commands are namespaced. Use the namespaced form:
 
 ```
-/hex-backend:plan-build-validate    # not /plan-build-validate
-/jira-flow:execute WEGO-1234
+/build-hex:plan-build-validate    # not /plan-build-validate
+/board-flow:execute WEGO-1234
 /common:autonomous-start "..."
 ```
 
@@ -55,17 +55,17 @@ reinstalling. Required after editing without a version bump.
 
 ## path-lock hook blocks
 
-### `[hex-backend path-lock] BLOCKED: agent 'X' cannot Edit Y`
+### `[build-hex path-lock] BLOCKED: agent 'X' cannot Edit Y`
 
 Worker tried to write outside its allowlist. Two cases:
 
-1. **Right agent, wrong project layout.** `hex-backend`'s path-lock
+1. **Right agent, wrong project layout.** `build-hex`'s path-lock
    defaults to the canonical Maven layout (`domain/`, `application/`,
    `api-rest/`, `infrastructure/`, `bootstrap/`), but your project
    uses different module names (e.g., `tenancy-core/tenancy-api/...`).
    The error message includes the active role → module mapping; if it
    shows the canonical layout but your project doesn't use it, create
-   `hex-backend.yaml` at project root mapping each role to your
+   `build-hex.yaml` at project root mapping each role to your
    module:
 
    ```yaml
@@ -78,14 +78,14 @@ Worker tried to write outside its allowlist. Two cases:
      bootstrap:    tenancy-app
    ```
 
-   `bin/install.sh --topology=hex-backend` seeds this file by default.
+   `bin/install.sh --topology=build-hex` seeds this file by default.
    If you have it, edit; if not, copy from
-   `<plugin-repo>/hex-backend/hex-backend.example.yaml`.
+   `<plugin-repo>/build-hex/build-hex.example.yaml`.
 
 2. **Right agent, right layout, but file outside any module** (e.g.,
    a one-off migration script in `scripts/`, integration test
    fixtures in `e2e-fixtures/`). Add an `extra_write_globs:` block to
-   `hex-backend.yaml`:
+   `build-hex.yaml`:
 
    ```yaml
    extra_write_globs:
@@ -103,7 +103,7 @@ Worker tried to write outside its allowlist. Two cases:
    lane). Maybe the right answer is to delegate; check the agent's
    spec to see whose lane this should be.
 
-### `[hex-backend path-lock] BLOCKED: unknown agent 'orchestrator' attempted Edit`
+### `[build-hex path-lock] BLOCKED: unknown agent 'orchestrator' attempted Edit`
 
 The hook couldn't identify the calling agent and fell back to
 `"orchestrator"` (which has empty allowlist). Reasons:
@@ -237,12 +237,12 @@ verdict. See [`acceptance-completeness.md`](acceptance-completeness.md).
 
 ## Jira / atlassian-expert
 
-### `BLOCKED: site not found in jira-flow.yaml defaults block`
+### `BLOCKED: site not found in board-flow.yaml defaults block`
 
 `atlassian-expert` refused to infer the site URL. Fix:
 
 ```
-/jira-flow:configure
+/board-flow:configure
 ```
 
 Interactive walkthrough — validates the site against your accessible
@@ -258,7 +258,7 @@ returned 200 but the card isn't there. Likely causes:
 
 - **Required field missing.** Jira refused the create; the response
   was malformed in a way that the create call interpreted as success.
-  Add the field to `defaults.required_fields` in `jira-flow.yaml`.
+  Add the field to `defaults.required_fields` in `board-flow.yaml`.
 - **Permissions on the project.** Your Atlassian account doesn't have
   permission to create issues in the target project.
 - **MCP transient failure.** Retry; if recurrent, reauthorize the
@@ -283,27 +283,27 @@ comment. Agent-level enforcement; not bypassable.
 
 Likely cause: you invoked `atlassian-expert` directly (or via a
 non-standard command) without supplying the summary. Use the
-canonical commands (`/jira-flow:execute`, `/jira-flow:advance`,
+canonical commands (`/board-flow:execute`, `/board-flow:advance`,
 `/common:autonomous-start`) — they assemble the summary from the flow
 output before delegating.
 
-### `/jira-flow:prove` / `prove-drain` says "Nothing in Review" but the column is full
+### `/board-flow:prove` / `prove-drain` says "Nothing in Review" but the column is full
 
-`status_map.in_review` in `jira-flow.yaml` doesn't match the board's
+`status_map.in_review` in `board-flow.yaml` doesn't match the board's
 literal column name. The prove commands query `status = "<in_review>"`,
 so if your board calls the column `"Review"` and the config says
 `"In Review"` (or vice-versa), the JQL returns zero. Fix the value to
 match the board exactly. Check the literal name in Jira's board settings
 or in any card's status chip.
 
-### `/jira-flow:prove` returns NEEDS-HUMAN for everything
+### `/board-flow:prove` returns NEEDS-HUMAN for everything
 
 The deterministic levels (coverage + mutation) couldn't run, so the
 proof falls to NEEDS-HUMAN rather than guessing. Usual causes: the
 project has no PIT plugin (L3 mutation) or no IT-isolated JaCoCo wiring
 (L2 coverage), or `.claude/cards/<KEY>.yaml` has no `base_commit` (cards
 that reached Review *before* the base-commit capture was added — only
-cards run through `/jira-flow:execute`/`:fix` afterward carry it). Check
+cards run through `/board-flow:execute`/`:fix` afterward carry it). Check
 the `levels:` block in `.claude/proof/<KEY>.yaml` — any `assumed`/
 `skipped` status names what's missing. Older cards with no baseline can't
 be diff-scoped; re-running their build through the flow is the clean fix.
@@ -350,7 +350,7 @@ Fix: **leads never get worktree isolation.** They run in the main
 session. Only dev workers (leaf agents that don't delegate further)
 can use worktree.
 
-`/hex-backend:plan-build-validate` enforces this. If you're invoking
+`/build-hex:plan-build-validate` enforces this. If you're invoking
 leads ad-hoc, don't pass `isolation: "worktree"`.
 
 See `cc_plugin_quirks` memory for the full empirical write-up.
@@ -359,7 +359,7 @@ See `cc_plugin_quirks` memory for the full empirical write-up.
 
 ### `/discovery:capture` succeeds but the card isn't on the discovery board
 
-Check `jira-flow.yaml` — `lifecycles[]` must have a `discovery` entry
+Check `board-flow.yaml` — `lifecycles[]` must have a `discovery` entry
 with `project_key` matching your discovery board's project. If the
 project key in `defaults.project_key` differs from the discovery
 project, you need both (defaults for build topology, lifecycles entry

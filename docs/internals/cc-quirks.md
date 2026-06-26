@@ -13,7 +13,7 @@ controlled snapshot.
 ### `marketplace.json` source field
 
 For local plugins, `source` must be a **bare string** (e.g.,
-`"./multi-team"`). The object form `{ "type": "local", "path": "..." }`
+`"./build-team"`). The object form `{ "type": "local", "path": "..." }`
 is rejected by validation. That form is reserved for `git-subdir`
 plugins, not local.
 
@@ -132,9 +132,9 @@ projects.
 The bare command form (`/plan-build-validate`) returns
 `Unknown command`. Use `/<plugin>:<command>`:
 
-- `/multi-team:plan-build-validate`
-- `/hex-backend:plan-build-validate`
-- `/jira-flow:execute`
+- `/build-team:plan-build-validate`
+- `/build-hex:plan-build-validate`
+- `/board-flow:execute`
 - `/common:autonomous-start`
 
 CC has no convention for "default plugin"; the namespace is always
@@ -151,9 +151,9 @@ cannot run worktreed.
 Workaround used in this marketplace: leads run in main session; only
 leaf workers (dev workers, qa, code-reviewer) can be worktreed.
 
-Empirically reproduced twice on hex-backend Stories WEGO-1567 and
+Empirically reproduced twice on build-hex Stories WEGO-1567 and
 WEGO-1566 — both stalled at ARCHITECT phase before the workaround.
-Documented in `hex-backend/commands/plan-build-validate.md`'s
+Documented in `build-hex/commands/plan-build-validate.md`'s
 "Worktree policy" section.
 
 Worth re-verifying on CC version bumps — could be fixed upstream

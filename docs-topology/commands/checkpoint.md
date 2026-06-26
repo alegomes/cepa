@@ -1,5 +1,5 @@
 ---
-description: Phase 3 — the owner checkpoint. Walks the owner through the gap-report's WHY-gaps, "expected-or-deviation?" questions, and drifts. Their answers become SOURCED:owner rationale in the gap-report. Where an answer reveals a real defect or security gap, open a tracker card (pairs with jira-flow). This is the make-or-break grounding step — no authoring until it's done.
+description: Phase 3 — the owner checkpoint. Walks the owner through the gap-report's WHY-gaps, "expected-or-deviation?" questions, and drifts. Their answers become SOURCED:owner rationale in the gap-report. Where an answer reveals a real defect or security gap, open a tracker card (pairs with board-flow). This is the make-or-break grounding step — no authoring until it's done.
 argument-hint: "(none — walks the gap-report's open questions)"
 ---
 
@@ -44,11 +44,11 @@ Delegate to docs-lead:
 > card). Anything the owner did not answer stays an open question — do not
 > paraphrase it into a rationale.
 
-### 4. Open cards for the defects (optional — jira-flow)
+### 4. Open cards for the defects (optional — board-flow)
 
 For each answer that revealed a real defect/security/correctness issue, open a
-tracker card. If `jira-flow` is installed and `jira-flow.yaml` exists, use
-`/jira-flow:capture` (or delegate to `atlassian-expert`) to register each one and
+tracker card. If `board-flow` is installed and `board-flow.yaml` exists, use
+`/board-flow:capture` (or delegate to `atlassian-expert`) to register each one and
 note the key in the gap-report. (The pilot opened 5 cards this way.)
 
 ### 5. Report next step

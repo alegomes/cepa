@@ -1,5 +1,5 @@
 ---
-description: Open a pull request for the current branch, gated by a hygiene review. Runs /code-review on the diff (handling findings per review-gate.yaml), drafts the PR title + body from the diff, then delegates the actual open to bitbucket-expert. If jira-flow.yaml is present and the Jira seam is configured, also transitions the linked card In Progress → In Review.
+description: Open a pull request for the current branch, gated by a hygiene review. Runs /code-review on the diff (handling findings per review-gate.yaml), drafts the PR title + body from the diff, then delegates the actual open to bitbucket-expert. If board-flow.yaml is present and the Jira seam is configured, also transitions the linked card In Progress → In Review.
 argument-hint: [dest-branch]   (optional: PR target; default = review-gate.yaml default_dest)
 ---
 
@@ -9,7 +9,7 @@ argument-hint: [dest-branch]   (optional: PR target; default = review-gate.yaml 
 
 The main gesture: turn the current feature branch into a reviewed PR instead of a direct merge to main. Hygiene gate first (cheap, blocks early), then open the PR with a description drafted from the diff.
 
-The **QA axis is not here** — proving the change is correct and load-bearing belongs to the merge gate (`/jira-flow:prove`), by design. This command owns hygiene + transport, nothing more.
+The **QA axis is not here** — proving the change is correct and load-bearing belongs to the merge gate (`/board-flow:prove`), by design. This command owns hygiene + transport, nothing more.
 
 ## Variables
 
@@ -43,13 +43,13 @@ Delegate to **`bitbucket-expert`** with: the title, the body-file path, source (
 
 ### 5. Jira seam (only if configured)
 
-If the **jira-flow plugin is installed** AND `review-gate.yaml` has a `jira:` block with `on_open`:
-- Delegate to **`jira-flow`'s atlassian-expert** to transition the linked card per `on_open` (e.g. In Progress → In Review), including the Implementation Summary it requires (files touched, tests, build verification, the PR URL).
-- jira-flow not installed (even if a stray `jira-flow.yaml` exists), or no `jira:` block → skip silently. review-gate works standalone. Don't delegate to an `atlassian-expert` that isn't there.
+If the **board-flow plugin is installed** AND `review-gate.yaml` has a `jira:` block with `on_open`:
+- Delegate to **`board-flow`'s atlassian-expert** to transition the linked card per `on_open` (e.g. In Progress → In Review), including the Implementation Summary it requires (files touched, tests, build verification, the PR URL).
+- board-flow not installed (even if a stray `board-flow.yaml` exists), or no `jira:` block → skip silently. review-gate works standalone. Don't delegate to an `atlassian-expert` that isn't there.
 
 ### 6. Report
 
-PR URL + id, the gate verdict (clean / fixed / findings-carried), and — if applicable — the Jira transition. One concrete next step (e.g. "merge once the QA gate passes: `/jira-flow:prove <KEY>`").
+PR URL + id, the gate verdict (clean / fixed / findings-carried), and — if applicable — the Jira transition. One concrete next step (e.g. "merge once the QA gate passes: `/board-flow:prove <KEY>`").
 
 ## Notes
 

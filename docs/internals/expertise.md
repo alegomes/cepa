@@ -197,7 +197,7 @@ The `mental-model` skill instructs the agent to:
 ## What expertise files don't store
 
 - **Project-specific facts.** `WEGO is on Jira project key WEGO` is
-  per-project — goes in the host's `CLAUDE.md` or `jira-flow.yaml`.
+  per-project — goes in the host's `CLAUDE.md` or `board-flow.yaml`.
   Not in the cross-project expertise.
 - **Sensitive data.** Expertise files are version-controlled in the
   plugin repo. Don't put credentials, tokens, customer data, etc.

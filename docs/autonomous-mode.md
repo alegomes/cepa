@@ -57,7 +57,7 @@ Shape:
 ```yaml
 schema_version: 1
 run_id: 2026-05-09-wego-1567
-topology: hex-backend
+topology: build-hex
 flow: plan-build-validate
 jira_key: WEGO-1567                  # null if not Jira-tracked
 started_at: 2026-05-09T08:15:00Z
@@ -68,7 +68,7 @@ blockers:
   - { task: 3, reason: "missing X cred" }
 log:
   - timestamp: 2026-05-09T08:16:12Z
-    subagent: hex-backend:planning-lead
+    subagent: build-hex:planning-lead
     prompt_summary: "Produce one-page spec for /users endpoint..."
     result_summary: "Wrote spec/users-endpoint.md. Decomposed into 4 Stories..."
     exit_status: ok
@@ -235,7 +235,7 @@ debrief command prunes the oldest non-`principle` entries first;
 
 ## Jira-tracked autonomous runs
 
-If a Jira key is in `$ARGUMENTS` and `jira-flow.yaml` exists,
+If a Jira key is in `$ARGUMENTS` and `board-flow.yaml` exists,
 `/common:autonomous-start` wraps the run with full lifecycle:
 
 1. **Step 7 — In Progress transition.** Posts a comment with the run-id

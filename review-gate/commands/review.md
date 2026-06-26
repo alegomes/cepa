@@ -7,7 +7,7 @@ argument-hint: [base-ref]   (optional: diff against this ref instead of the repo
 
 ## Purpose
 
-The **hygiene axis** of the gate, run in isolation. This is form, not behavior: lint, style, standardization, simplification, and obvious bugs — the cheap, fast pass. It does NOT touch Bitbucket and does NOT open a PR. The QA axis (is it correct, is every line load-bearing) is a separate, heavier gate that lives at merge — see `/jira-flow:prove`.
+The **hygiene axis** of the gate, run in isolation. This is form, not behavior: lint, style, standardization, simplification, and obvious bugs — the cheap, fast pass. It does NOT touch Bitbucket and does NOT open a PR. The QA axis (is it correct, is every line load-bearing) is a separate, heavier gate that lives at merge — see `/board-flow:prove`.
 
 Use this when you want the gate's verdict (or fixes) decoupled from opening the PR.
 

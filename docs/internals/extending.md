@@ -75,7 +75,7 @@ Gotchas:
 ## Add a new skill
 
 1. **Pick a plugin** — usually `common` (cross-topology). Topology-
-   specific skills exist (book has 2) but most belong in common.
+   specific skills exist (e.g. `docs` ships 2) but most belong in common.
 2. **Author the spec** — `<plugin>/skills/<name>/SKILL.md`. The
    directory + `SKILL.md` filename are conventional; CC discovers them.
    - YAML frontmatter (`name`, `description`).
@@ -103,7 +103,7 @@ Gotchas:
 
 1. **Pick a plugin** — usually `common` (cross-topology hooks like
   `gate-advance`) or the topology that owns the enforcement (e.g.,
-  `hex-backend/hooks/path-lock.py` is topology-specific).
+  `build-hex/hooks/path-lock.py` is topology-specific).
 2. **Author the script** — `<plugin>/hooks/<name>.py`. Must be
    executable (`chmod +x`). Conventional shape:
 
@@ -231,12 +231,12 @@ Larger surface; comes up rarely but worth documenting.
    per-topology wiring (if it's a topology plugin):
 
    ```sh
-   echo "▶ Installing <new-plugin>@alegomes (...)"
-   claude plugin install <new-plugin>@alegomes
+   echo "▶ Installing <new-plugin>@cepa (...)"
+   claude plugin install <new-plugin>@cepa
    ```
 
    Also add to the topology validation (`case "${TOPOLOGY}" in
-   ""|multi-team|...|<new-plugin>) ;;`).
+   ""|build-team|...|<new-plugin>) ;;`).
 
 6. **Author the plugin contents** — agents, commands, hooks per the
    recipes above.
