@@ -1,0 +1,32 @@
+{
+  "_setup": [
+    "Static-token Atlassian MCP for HEADLESS / scheduled routines (Path A of loop-engineering).",
+    "The claude.ai OAuth connector does NOT survive a scheduled run (token is in-memory per",
+    "session; a fresh scheduled connection is unauthenticated). This registers Atlassian's",
+    "official Rovo MCP server in API-token mode, which authenticates from a static header and",
+    "therefore works unattended. See docs/loop-engineering.md.",
+    "",
+    "STEPS:",
+    "1. Generate an Atlassian Cloud API token at https://id.atlassian.com/manage-profile/security/api-tokens",
+    "2. An org admin must enable token auth: Atlassian Administration -> Rovo -> Rovo MCP server",
+    "   -> Authentication -> allow API token. (Without this, only OAuth works.)",
+    "3. Build the Basic credential WITHOUT committing the token:",
+    "     export ATLASSIAN_MCP_BASIC_AUTH=$(printf '%s' 'you@company.com:YOUR_API_TOKEN' | base64)",
+    "   Put that export in the routine's env (or your shell profile for interactive use).",
+    "4. Copy the mcpServers block below into your HOST project's .mcp.json (NOT the plugin repo).",
+    "5. The token is NOT bound to a cloudId — atlassian-expert resolves it via",
+    "   getAccessibleAtlassianResources on first use and threads it through calls.",
+    "6. Delete this _setup key from the real .mcp.json (it is ignored, but keep the file clean).",
+    "",
+    "This server registers under the key 'atlassian' -> tools are mcp__atlassian__<tool>, the",
+    "SAME base names as the OAuth connector. atlassian-expert is dual-bound to both prefixes."
+  ],
+  "mcpServers": {
+    "atlassian": {
+      "url": "https://mcp.atlassian.com/v1/mcp",
+      "headers": {
+        "Authorization": "Basic ${ATLASSIAN_MCP_BASIC_AUTH}"
+      }
+    }
+  }
+}
