@@ -1,8 +1,10 @@
 # Loop engineering — scheduled autonomous routines
 
-> **Status:** design + Path A in progress (slice `session/loop-pathA`, started 2026-06-29).
-> Reconstructed from the parked `session/loop-engineering` design session (2026-06-19),
-> brought current to the post-rebrand world (`cepa` marketplace, `board-flow`, `build-*`).
+> **Status:** Path A plugin-side **scaffolded** (slice `session/loop-pathA`, 2026-06-29) —
+> server chosen (official Rovo, API-token), `atlassian-expert` dual-bound, preflight added,
+> `.mcp.json` template shipped. Remaining: owner supplies the token + a live read-the-board
+> test (see end of Path A). Reconstructed from the parked `session/loop-engineering` design
+> session (2026-06-19), brought current to the post-rebrand world (`cepa`, `board-flow`).
 
 ## The goal
 
@@ -54,45 +56,52 @@ gates every routine at once.
 
 Three parts. Part 2 is the non-trivial one (plugin surgery).
 
-### 1. Register a static-token Atlassian MCP server
+### 1. Register a static-token Atlassian MCP server — ✅ resolved: official Rovo, API-token mode
 
-Add a token-auth Atlassian MCP server to a committed `.mcp.json` (or routine env). It
-registers under a **different server name** → a **different tool prefix** than
-`mcp__claude_ai_Atlassian__*`, and likely **different tool base-names** too (e.g.
-`jira_search` vs `searchJiraIssuesUsingJql`).
+**Server chosen: Atlassian's official Rovo MCP server in API-token mode** (remote HTTP,
+`https://mcp.atlassian.com/v1/mcp`). A 2026 capability that postdates the original design
+session — it authenticates from a static `Authorization: Basic base64(email:token)` header,
+so it survives headless/scheduled runs. Decisive advantage over the community servers
+(`sooperset/mcp-atlassian`, `aashari`): it exposes the **exact same tool base-names** as the
+OAuth connector (`searchJiraIssuesUsingJql`, `transitionJiraIssue`, …), which turns Part 2
+from a rewrite into a prefix add.
 
-> **Server choice: TBD** — being researched (token-auth Atlassian MCP options: cred model,
-> tool naming, headless-friendliness). Candidates: `sooperset/mcp-atlassian`, `aashari`'s
-> jira server, others. The exact tool names from the chosen server drive Part 2.
+Template: **`board-flow/atlassian-mcp.example.json`** — copied into the *host* project's
+`.mcp.json`, with the credential supplied via env (`${ATLASSIAN_MCP_BASIC_AUTH}`), never the
+literal token in git. The token is a **secret only the owner can generate**
+(id.atlassian.com → API token), and an **org admin must enable** API-token auth in
+Atlassian Administration → Rovo → Rovo MCP server. The token is **not bound to a `cloudId`**,
+so `atlassian-expert` resolves it via `getAccessibleAtlassianResources` on first use.
 
-Credentials are a **secret only the owner can generate** (id.atlassian.com → API token).
-The committed `.mcp.json` references them via env var (never the literal token in git).
+### 2. Re-bind `atlassian-expert` — ✅ done (dual-bind)
 
-### 2. Re-bind `atlassian-expert` to the new server
+`board-flow/agents/atlassian-expert.md` is now **dual-bound**: the `tools:` frontmatter lists
+both `mcp__claude_ai_Atlassian__*` (OAuth, interactive) **and** `mcp__atlassian__*` (Rovo
+token, headless), and a new *Tool binding* section tells the agent to prefer the token prefix
+when available and fall back to OAuth otherwise. Because the base-names are identical, the
+entire operational prose stayed valid — no capability-abstraction rewrite needed. This keeps
+the zero-config OAuth path working for interactive users while unlocking headless runs.
 
-Today `board-flow/agents/atlassian-expert.md` is hard-locked to `mcp__claude_ai_Atlassian__*`
-in two ways:
-
-- the `tools:` frontmatter line (15 explicit tool names), and
-- the prose body, which names specific tools (`getJiraIssue`, `searchJiraIssuesUsingJql`,
-  `transitionJiraIssue`, `getTransitionsForJiraIssue`, `addCommentToJiraIssue`, …).
-
-Re-binding means mapping each capability to the new server's tool name, updating both the
-frontmatter allowlist and every in-body reference. **This is plugin surgery, not config.**
-Open question to settle during the build: do we *replace* the OAuth binding, or make the
-agent **dual-bound** (both tool sets in the allowlist) so the same agent works interactively
-*and* headless? Dual-binding is more robust but the prose can only name one set cleanly — lean
-toward a capability-abstraction (refer to operations, not literal tool names, with a small
-tool-name map up top).
-
-### 3. Read-board-or-hard-fail preflight
+### 3. Read-board-or-hard-fail preflight — ✅ done
 
 > **The single most important safety rule.** The failure mode is *silent success*.
 
-Every routine's **first act** must be to prove it can READ the board (a trivial JQL probe
-against the configured project), and **hard-fail loudly** if it can't — never proceed as if
-the board were simply empty. A real empty column and a broken auth connection must produce
-**different, unmistakable** outcomes.
+Every routine's **first act** must prove it can READ the board (a probe against the configured
+project), and **hard-fail loudly** if it can't — never proceed as if the board were simply
+empty. A real empty column and a broken auth connection must produce **different,
+unmistakable** outcomes. Implemented as the **Board-read preflight** rule in
+`atlassian-expert.md`: the first Jira op of a run probes `getAccessibleAtlassianResources` /
+`getVisibleJiraProjects`; on failure it replies `BLOCKED: … AUTH/connection failure, NOT an
+empty board` instead of returning zero cards.
+
+### What remains for the owner to finish Path A
+
+1. Generate an id.atlassian.com API token; have an org admin enable Rovo API-token auth.
+2. `export ATLASSIAN_MCP_BASIC_AUTH=$(printf '%s' 'you@co.com:TOKEN' | base64)` in the routine env.
+3. Copy `board-flow/atlassian-mcp.example.json`'s `mcpServers` block into the host project's
+   `.mcp.json`.
+4. **Live test:** delegate a board read to `atlassian-expert` and confirm it returns cards via
+   `mcp__atlassian__*` (and that the preflight fails loudly when the token is wrong).
 
 ## What's already in place (we're wiring, not building)
 
