@@ -80,3 +80,56 @@ partir da área declarada da decisão.
   `name-the-disagreement` no nível certo)
 - Saída: relatório? edição direta do artefato? proposta consolidada para aprovação?
   (na sessão de origem o fluxo foi: lentes → síntese → propostas concretas → aplicar)
+
+---
+
+## Topologia de marketing / produção de conteúdo
+
+**Status:** pendente · **Lar provável:** nova topologia `marketing` (par de `docs`)
+· **Origem:** run autônomo `2026-06-30-sales-enablement-kit` (kit de sales-enablement
+do WeGo). A tarefa era escrita de prosa comercial, e nenhuma topologia instalada
+servia: `autonomous-start` aborta sem `.claude/topology`, e os flows existentes
+(`build-hex`, `build-team`, `discovery`) são para build de código. Rodou como
+orquestrador direto, improvisando o fan-out de redatores.
+
+### Problema
+
+Produção de conteúdo (sales-enablement, marketing, copy, propostas) é um tipo de
+trabalho recorrente e estruturável, mas hoje cai no vão: ou força um flow de código
+que não encaixa, ou vira orquestração ad-hoc sem disciplina (sem grounding garantido,
+sem gate de revisão, sem checagem de regras de marca/estilo). O run de referência teve
+de montar à mão um brief de fontes compartilhado + 6 redatores paralelos + um sweep de
+QA de regras duras (sem travessão, terminologia, anonimização, honestidade de
+prontidão). Isso deveria ser uma topologia de primeira classe.
+
+### Esboço de solução
+
+Uma topologia `marketing` análoga à `docs`, com um loop content-lead → redatores →
+crítico:
+
+- **content-strategist / planning** — destila o brief: público, oferta, fontes de fato
+  (números canônicos), regras de marca/estilo. Produz um `BRIEF.md` que ancora todos os
+  redatores (o run de referência provou que grounding compartilhado é o que mantém os
+  números consistentes entre agentes paralelos).
+- **copywriter (worker, paralelizável)** — escreve cada artefato a partir do brief;
+  write-lock por arquivo/seção.
+- **brand-style-critic (gate)** — varre regras duras (proibições de estilo, terminologia
+  reservada, anonimização, claims honestos vs. roadmap) e devolve PASS/REVISE com
+  achados localizados. É o equivalente de marketing ao `design-critic` / `code-reviewer`.
+- **fact-checker (gate)** — confere que todo número/claim traça a uma fonte declarada no
+  brief; sem invenção (o run de referência impôs "não inventar número fora do brief").
+
+### Como difere do que já existe
+
+- **`docs`** documenta um sistema existente (extrai HOW do código, WHY de ADRs); marketing
+  parte de uma oferta e de fontes de fato para produzir prosa persuasiva. Estrutura de loop
+  parecida, propósito e gates diferentes.
+- **`design`** desenha UI; marketing produz texto/conteúdo comercial.
+
+### Pendências de design (decidir antes de implementar)
+
+- O gate de regras de marca/estilo é configurável por projeto? (um `brand-rules.yaml`
+  análogo ao brief deste run: proibições de estilo + termos reservados + claims honestos).
+- Integra com `board-flow` (cards de conteúdo) como as outras topologias?
+- Fonte de fato: como declarar e versionar o `BRIEF.md` de números canônicos para
+  fan-out paralelo de redatores sem drift.
