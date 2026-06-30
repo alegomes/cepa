@@ -1,13 +1,16 @@
 # Loop engineering — scheduled autonomous routines
 
-> **Status:** Path A plugin-side **scaffolded + server live-verified** (slice
-> `session/loop-pathA`; server choice corrected 2026-06-30). Server is the community
-> **`mcp-atlassian`** (sooperset, uvx, static API token), **not** the Rovo HTTP server the
-> first scaffold targeted — a live probe on 2026-06-30 read real WEGO cards through it
-> headless with zero org-admin gating, so the binding was flipped to it. `atlassian-expert`
-> dual-bound (OAuth + `mcp-atlassian`, with a tool-name translation table), preflight added,
-> `.mcp.json` template shipped. Remaining: a live **scheduled-run** test (the interactive
-> probe passed; the cloud-cron path is still unproven). Reconstructed from the parked
+> **Status:** Path A **cloud auth SOLVED + live-verified** (slice `session/loop-pathA`,
+> 2026-06-30). The headless blocker that defined Path A turned out to be a **non-issue for the
+> cloud-cron substrate**: a real `/schedule` routine read the live WEGO board through the
+> **claude.ai Atlassian OAuth connector** with zero human intervention — its refresh token is
+> stored server-side and silently exchanged, so no browser and no warm session are needed.
+> The autonomous fleet therefore just **attaches the OAuth connector** to each routine; no
+> static token, no `.mcp.json`, no org-admin gate. `atlassian-expert` is **triple-bound**:
+> `mcp__claude_ai_Atlassian__*` (local interactive) + `mcp__Atlassian__*` (cloud routine,
+> camelCase, the proven path) + `mcp__mcp-atlassian__*` (community uvx server, for a *local*
+> headless launcher only). Preflight added. Remaining: build the first real routine
+> (execution / To-Do) and the confirmation-gate-skip. Reconstructed from the parked
 > `session/loop-engineering` design (2026-06-19), brought current to the post-rebrand world
 > (`cepa`, `board-flow`).
 
@@ -32,106 +35,106 @@ before execution) so they don't race on the same board.
 **First routine to build = execution, To-Do column only.** Backlog is deliberately
 excluded — unrefined work doesn't become a build.
 
-## The blocker that defines Path A: auth-in-headless
+## The blocker that defined Path A: auth-in-headless — RESOLVED (it doesn't apply to cloud)
 
-A scheduled routine runs on Anthropic cloud infra, in a **fresh session with no browser**.
-The official claude.ai Atlassian connector authenticates with **OAuth**, and:
+The original worry (2026-06-19): a scheduled routine runs on Anthropic cloud infra in a
+**fresh session with no browser**, the claude.ai Atlassian connector authenticates with
+**OAuth**, and the OAuth token was assumed to be **in-memory per interactive session** — so a
+fresh scheduled connection would be unauthenticated, read zero cards, and report "nothing to
+do" (the silent-success trap, ref Claude Code issue #46228).
 
-- the OAuth token is **in-memory per interactive session** — it does not persist to a
-  scheduled run;
-- a fresh scheduled connection is **unauthenticated**, and the connector's `authenticate`
-  tool needs a **browser** to complete the flow.
+> **That assumption was wrong for the cloud-cron substrate. Verified 2026-06-30:** a one-shot
+> `/schedule` routine with the `claude.ai Atlassian` connector attached called
+> `getAccessibleAtlassianResources` (resolved cloudId silently), `getVisibleJiraProjects` (saw
+> WEGO), and `searchJiraIssuesUsingJql` (returned the real cards WEGO-1887/1886/1885/1881/1884)
+> — **headless, zero human intervention.** When a connector is attached to a routine, its OAuth
+> **refresh** token is stored **server-side by claude.ai** and exchanged for an access token at
+> call time. #46228 is about a *local* headless connection going cold; it does not apply to a
+> cloud routine with a server-side connector grant.
 
-> **Verdict (researched 2026-06-19, ref Claude Code issue #46228):** a scheduled routine
-> using `mcp__claude_ai_Atlassian__*` tools fails **silently** — it connects, reads zero
-> cards, and reports "0 tasks, nothing to do." The classic *"ran, did nothing, reported
-> success"* trap.
+So the fleet's auth story is simply: **attach the OAuth connector to each routine.** No static
+token, no `.mcp.json`, no org-admin gate. The forks below are now historical context.
 
-This is why the architectural fork below matters, and why **auth is the foundation** — it
-gates every routine at once.
+### The forks (resolved)
 
-### The fork (resolved)
-
-| Path | Approach | Verdict |
+| Fork | Options considered | Resolution |
 |---|---|---|
-| **A** ✅ | **Static API token** — register an Atlassian MCP server that authenticates with an `id.atlassian.com` API token in `.mcp.json` / routine env. | **Chosen.** Survives headless; unblocks *all* routines at once. |
-| **B** ❌ | `/loop` in a live, interactive session (OAuth already warm). | Rejected. Pins one live session per routine — doesn't scale to a fleet. |
+| **Cloud auth mechanism** | (A) static API-token server in `.mcp.json`/env; (B) `/loop` in a warm interactive session. | **Neither needed** — the OAuth *connector* works headless in cloud (proven). B still doesn't scale; A is now reserved for the *local* headless case only. |
+| **If a token server were needed, which one** | official Rovo HTTP (needs org-admin to enable token auth; was never connected here) vs community `mcp-atlassian` (uvx, personal token, no admin gate, live-verified locally). | `mcp-atlassian` — but only relevant for a **local** headless launcher, since cloud routines use the connector. |
 
-Within Path A there was a **second fork — which token server** — and the first scaffold
-picked wrong. See §1 below.
+The journey: the first scaffold chased Rovo HTTP → re-eval flipped it to `mcp-atlassian` →
+the cloud test then showed **no token server is needed in cloud at all**. The static-token
+work survives as the local-headless option (`mcp__mcp-atlassian__*`), not the cloud path.
 
 ## Path A — the foundation (this slice)
 
-Three parts. Part 2 is the non-trivial one (plugin surgery).
+### 1. Cloud auth = attach the OAuth connector — ✅ resolved & verified
 
-### 1. Register a static-token Atlassian MCP server — ✅ resolved: community `mcp-atlassian` (sooperset)
+For the **cloud `/schedule` fleet**, the auth foundation is simply: **attach the `claude.ai
+Atlassian` OAuth connector to each routine** (in the routine's `mcp_connections`, under the
+connector name `Atlassian`). The connector's tools then appear under the prefix
+**`mcp__Atlassian__*`** with the familiar camelCase names (`searchJiraIssuesUsingJql`,
+`transitionJiraIssue`, …), and they **work headless** — the connector's refresh token lives
+server-side at claude.ai and is exchanged at call time. **No static token, no `.mcp.json`, no
+org-admin gate, no `cloudId` plumbing** (the agent resolves it via
+`getAccessibleAtlassianResources` if a call ever needs it).
 
-**Server chosen: the community `mcp-atlassian` server (sooperset)**, run as a local `uvx`
-subprocess (`uvx --python 3.13 mcp-atlassian`) authenticated from a static API token in its
-own `env` block (`JIRA_URL` / `JIRA_USERNAME` / `JIRA_API_TOKEN`). Because the credential is
-config-time, not session-time, it survives headless/scheduled runs.
+> **Verified 2026-06-30** with a throwaway one-shot routine — it read WEGO
+> (WEGO-1887/1886/1885/1881/1884) through `mcp__Atlassian__*` with zero human intervention.
+> Keep routines using the standard connector name `Atlassian` so the prefix stays
+> `mcp__Atlassian__`.
 
-> **The first scaffold targeted the wrong server.** It picked Atlassian's official Rovo MCP
-> (remote HTTP, `mcp.atlassian.com`, `Authorization: Basic` header) on the theory that its
-> tool base-names match the OAuth connector exactly, making the re-bind a one-line prefix add.
-> Two problems surfaced on re-evaluation (2026-06-30): (a) the Rovo server needs an **org admin
-> to enable API-token auth** — the gate that was stalling the owner steps — and was never
-> live-tested; (b) it wasn't even connected in this environment. Meanwhile `mcp-atlassian`
-> **was** connected, and a live probe (`jira_get_all_projects` + a `jira_search` on `WEGO`)
-> **returned real cards headlessly with no admin gating**. Lower friction, actually verified —
-> so the binding was flipped to it. The cost: its tool names are **different** (snake_case
-> `jira_search`, not `searchJiraIssuesUsingJql`), so the re-bind needed a translation table,
-> not a prefix add (see §2).
+**Local-headless option (not the cloud path).** If you ever run an *unattended* `claude` on
+your **own machine** (a cron/launchd job, no claude.ai connector wired), the OAuth session is
+cold and you instead register the community **`mcp-atlassian`** server (sooperset, `uvx`,
+static API token in `env`: `JIRA_URL`/`JIRA_USERNAME`/`JIRA_API_TOKEN`). Template:
+**`board-flow/atlassian-mcp.example.json`** → host project's `.mcp.json`, token via
+`${JIRA_API_TOKEN}` (never inline). It exposes **snake_case** tools (`jira_search`, …), with
+its site fixed by `JIRA_URL` (no `cloudId`) which must match `defaults.site`. This is the only
+place a token + token server is needed.
 
-Template: **`board-flow/atlassian-mcp.example.json`** — copied into the *host* project's
-`.mcp.json`, with the token supplied via `${JIRA_API_TOKEN}` env, never the literal token in
-git. The token is a **personal API token the owner generates** (id.atlassian.com → API token);
-crucially, **no org-admin action is required**. The site is **fixed by `JIRA_URL`** at
-config time — there is **no `cloudId`** to resolve, and `JIRA_URL` must match
-`defaults.site` in `board-flow.yaml` or the preflight hard-fails.
+> ⚠ **Secret hygiene.** The local `mcp-atlassian` install had its API token written **inline
+> in `~/.claude.json`**. Migrated 2026-06-30 to `${JIRA_API_TOKEN}` (the literal token now
+> lives in `~/.zsecrets`, chmod 600, sourced from `~/.zprofile`). Rotate it if it was ever
+> synced/backed up.
 
-> ⚠ **Secret hygiene.** The currently-working install configures `mcp-atlassian` in
-> `~/.claude.json` with the API token written **inline in plaintext**. That is a live
-> credential sitting in a config file — the template deliberately uses `${JIRA_API_TOKEN}`
-> by reference instead, and the owner should migrate the global config to match (and rotate
-> the token if it has ever been synced/backed up).
+### 2. Bind `atlassian-expert` — ✅ done (triple-bind, two vocabularies)
 
-### 2. Re-bind `atlassian-expert` — ✅ done (dual-bind + translation table)
-
-`board-flow/agents/atlassian-expert.md` is now **dual-bound**: the `tools:` frontmatter lists
-both `mcp__claude_ai_Atlassian__*` (OAuth, interactive) **and** `mcp__mcp-atlassian__*`
-(token, headless). Because the two servers use **different tool vocabularies**, a new *Tool
-binding* section carries a **translation table** (camelCase `getJiraIssue` ↔ snake_case
-`jira_get_issue`, etc.); the doc keeps the OAuth camelCase names as its canonical vocabulary
-and the agent translates when on the token server. The agent prefers the token server when
-connected and falls back to OAuth otherwise — so the zero-config OAuth path still works for
-interactive users while headless runs are unlocked.
+`board-flow/agents/atlassian-expert.md` is **triple-bound** in its `tools:` frontmatter:
+`mcp__claude_ai_Atlassian__*` (local interactive, camelCase) + `mcp__Atlassian__*` (cloud
+routine, camelCase — **the proven headless path**) + `mcp__mcp-atlassian__*` (local-headless,
+snake_case). The *Tool binding* section maps the three prefixes to two vocabularies: the two
+OAuth prefixes share the canonical camelCase names verbatim, and only the snake_case token
+server goes through the **translation table** (`getJiraIssue` ↔ `jira_get_issue`, etc.). The
+agent uses whichever prefix is connected in its run context, preferring an OAuth/camelCase one
+when more than one is present (no translation needed).
 
 ### 3. Read-board-or-hard-fail preflight — ✅ done
 
 > **The single most important safety rule.** The failure mode is *silent success*.
 
-Every routine's **first act** must prove it can READ the board (a probe against the configured
-project), and **hard-fail loudly** if it can't — never proceed as if the board were simply
-empty. A real empty column and a broken auth connection must produce **different,
-unmistakable** outcomes. Implemented as the **Board-read preflight** rule in
-`atlassian-expert.md`: the first Jira op of a run probes `jira_get_all_projects` (token
-server) / `getVisibleJiraProjects` (OAuth) and confirms the configured `project_key` is in
-the list; on failure it replies `BLOCKED: … AUTH/connection failure, NOT an empty board`
-instead of returning zero cards.
+Every routine's **first act** must prove it can READ the board, and **hard-fail loudly** if it
+can't — never proceed as if the board were simply empty. A real empty column and a broken auth
+connection must produce **different, unmistakable** outcomes. Implemented as the **Board-read
+preflight** in `atlassian-expert.md`: the first Jira op probes `getVisibleJiraProjects`
+(OAuth) / `jira_get_all_projects` (token server) and confirms `project_key` is in the list; on
+failure it replies `BLOCKED: … AUTH/connection failure, NOT an empty board` instead of
+returning zero cards.
 
 ### What remains for the owner to finish Path A
 
-1. Generate a personal id.atlassian.com API token. **No org-admin step needed.**
-2. `export JIRA_API_TOKEN='…'` in the routine env (and migrate the inline token in
-   `~/.claude.json` to this by-reference form — see the secret-hygiene note in §1).
-3. Copy `board-flow/atlassian-mcp.example.json`'s `mcpServers` block into the host project's
-   `.mcp.json`, setting `JIRA_URL` to match `defaults.site`.
-4. **Live SCHEDULED-run test** (the interactive probe already passed 2026-06-30): create one
-   `/schedule` cloud-cron routine and confirm `mcp-atlassian` is actually present and
-   authenticated in the cloud session — the open premise is whether a local `uvx` stdio server
-   + its env survive the cloud-cron substrate. If it doesn't, that's the real Path A blocker,
-   not auth. Also confirm the preflight fails loudly when the token is wrong.
+Cloud auth is done — the rest is wiring the first real routine:
+
+1. **Build the execution routine** (To-Do column): a `/schedule` cloud-cron job that attaches
+   the `Atlassian` connector and runs `/board-flow:drain`, under `autonomous-mode` so it skips
+   the interactive confirmation gate (see Open threads). Stagger it after triage.
+2. Confirm the **preflight fails loudly** in-routine when the connector is detached or the
+   project isn't visible (the silent-success guard), so a broken fleet member aborts instead
+   of reporting "0 cards."
+3. Land the slice + reinstall.
+4. *(Only if a local-headless launcher is ever wanted)* finish the `mcp-atlassian` setup:
+   personal id.atlassian.com token (no admin step), `${JIRA_API_TOKEN}` in env, template into
+   `.mcp.json`.
 
 ## What's already in place (we're wiring, not building)
 

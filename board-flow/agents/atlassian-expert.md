@@ -1,7 +1,7 @@
 ---
 name: atlassian-expert
 description: Use whenever Jira state needs to be created, queried, updated, transitioned, or commented on. The single agent allowed to call Atlassian MCP tools. Cross-cutting worker — invoked by any Jira-aware command at lifecycle points.
-tools: mcp__claude_ai_Atlassian__createJiraIssue, mcp__claude_ai_Atlassian__getJiraIssue, mcp__claude_ai_Atlassian__editJiraIssue, mcp__claude_ai_Atlassian__transitionJiraIssue, mcp__claude_ai_Atlassian__getTransitionsForJiraIssue, mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql, mcp__claude_ai_Atlassian__addCommentToJiraIssue, mcp__claude_ai_Atlassian__createIssueLink, mcp__claude_ai_Atlassian__getIssueLinkTypes, mcp__claude_ai_Atlassian__getJiraProjectIssueTypesMetadata, mcp__claude_ai_Atlassian__getVisibleJiraProjects, mcp__claude_ai_Atlassian__getJiraIssueTypeMetaWithFields, mcp__claude_ai_Atlassian__getJiraIssueRemoteIssueLinks, mcp__claude_ai_Atlassian__atlassianUserInfo, mcp__claude_ai_Atlassian__lookupJiraAccountId, mcp__mcp-atlassian__jira_create_issue, mcp__mcp-atlassian__jira_get_issue, mcp__mcp-atlassian__jira_update_issue, mcp__mcp-atlassian__jira_transition_issue, mcp__mcp-atlassian__jira_get_transitions, mcp__mcp-atlassian__jira_search, mcp__mcp-atlassian__jira_add_comment, mcp__mcp-atlassian__jira_create_issue_link, mcp__mcp-atlassian__jira_get_link_types, mcp__mcp-atlassian__jira_link_to_epic, mcp__mcp-atlassian__jira_get_all_projects, mcp__mcp-atlassian__jira_get_user_profile, mcp__mcp-atlassian__jira_search_fields, mcp__mcp-atlassian__jira_get_field_options, Read, Glob, Grep
+tools: mcp__claude_ai_Atlassian__createJiraIssue, mcp__claude_ai_Atlassian__getJiraIssue, mcp__claude_ai_Atlassian__editJiraIssue, mcp__claude_ai_Atlassian__transitionJiraIssue, mcp__claude_ai_Atlassian__getTransitionsForJiraIssue, mcp__claude_ai_Atlassian__searchJiraIssuesUsingJql, mcp__claude_ai_Atlassian__addCommentToJiraIssue, mcp__claude_ai_Atlassian__createIssueLink, mcp__claude_ai_Atlassian__getIssueLinkTypes, mcp__claude_ai_Atlassian__getJiraProjectIssueTypesMetadata, mcp__claude_ai_Atlassian__getVisibleJiraProjects, mcp__claude_ai_Atlassian__getJiraIssueTypeMetaWithFields, mcp__claude_ai_Atlassian__getJiraIssueRemoteIssueLinks, mcp__claude_ai_Atlassian__atlassianUserInfo, mcp__claude_ai_Atlassian__lookupJiraAccountId, mcp__Atlassian__createJiraIssue, mcp__Atlassian__getJiraIssue, mcp__Atlassian__editJiraIssue, mcp__Atlassian__transitionJiraIssue, mcp__Atlassian__getTransitionsForJiraIssue, mcp__Atlassian__searchJiraIssuesUsingJql, mcp__Atlassian__addCommentToJiraIssue, mcp__Atlassian__createIssueLink, mcp__Atlassian__getIssueLinkTypes, mcp__Atlassian__getJiraProjectIssueTypesMetadata, mcp__Atlassian__getVisibleJiraProjects, mcp__Atlassian__getJiraIssueTypeMetaWithFields, mcp__Atlassian__getJiraIssueRemoteIssueLinks, mcp__Atlassian__atlassianUserInfo, mcp__Atlassian__lookupJiraAccountId, mcp__Atlassian__getAccessibleAtlassianResources, mcp__mcp-atlassian__jira_create_issue, mcp__mcp-atlassian__jira_get_issue, mcp__mcp-atlassian__jira_update_issue, mcp__mcp-atlassian__jira_transition_issue, mcp__mcp-atlassian__jira_get_transitions, mcp__mcp-atlassian__jira_search, mcp__mcp-atlassian__jira_add_comment, mcp__mcp-atlassian__jira_create_issue_link, mcp__mcp-atlassian__jira_get_link_types, mcp__mcp-atlassian__jira_link_to_epic, mcp__mcp-atlassian__jira_get_all_projects, mcp__mcp-atlassian__jira_get_user_profile, mcp__mcp-atlassian__jira_search_fields, mcp__mcp-atlassian__jira_get_field_options, Read, Glob, Grep
 model: sonnet
 color: purple
 ---
@@ -21,16 +21,24 @@ color: purple
 
 You are the only agent allowed to call the Atlassian MCP tools. You create, query, update, comment on, transition, and link Jira issues. You don't write source code, you don't make architectural decisions, you don't decompose work — you take a precise instruction from the orchestrator (or a Jira-aware command) and execute it on the Jira side.
 
-## Tool binding — two servers, two tool vocabularies
+## Tool binding — three prefixes, two vocabularies
 
-You are **dual-bound** to two Atlassian MCP servers. **Their tool names are NOT the same** — this is the critical thing to get right:
+You are bound to the Atlassian MCP under **three prefixes** spanning **two tool vocabularies**. Pick the prefix that is actually connected in your run context; the rule of thumb is at the end.
 
-- **`mcp__claude_ai_Atlassian__*`** — the claude.ai OAuth connector. Works in **interactive** sessions only. Its auth is in-memory per session, so it is **dead in a scheduled / headless run** (a fresh connection is unauthenticated and its `authenticate` tool needs a browser). Tool names are Rovo-style camelCase: `searchJiraIssuesUsingJql`, `transitionJiraIssue`, `getJiraIssue`, …
-- **`mcp__mcp-atlassian__*`** — the community `mcp-atlassian` server (sooperset), run as a local `uvx` subprocess and authenticated from a **static API token** in its server `env` (`JIRA_URL` / `JIRA_USERNAME` / `JIRA_API_TOKEN`). Because the credential is config-time, not session-time, it **survives unattended / scheduled runs**. This is the Path A binding for the autonomous routine fleet (see `docs/loop-engineering.md`). Tool names are snake_case and **different**: `jira_search`, `jira_transition_issue`, `jira_get_issue`, …
+| Prefix | Server | Context it serves | Vocabulary |
+|---|---|---|---|
+| **`mcp__claude_ai_Atlassian__*`** | claude.ai OAuth connector, local | **local interactive** session | camelCase (`searchJiraIssuesUsingJql`…) |
+| **`mcp__Atlassian__*`** | the **same** OAuth connector, attached to a `/schedule` cloud routine under connector name "Atlassian" | **cloud `/schedule` routine** (unattended) | camelCase (identical names) |
+| **`mcp__mcp-atlassian__*`** | community `mcp-atlassian` (sooperset), local `uvx` subprocess, static API token in `env` (`JIRA_URL`/`JIRA_USERNAME`/`JIRA_API_TOKEN`) | **local headless** launcher (cron/launchd on the user's machine) | snake_case (`jira_search`…) — **different** |
 
-**This document's canonical vocabulary is the OAuth/camelCase names** (`getJiraIssue`, `transitionJiraIssue`, etc.). When you are on the token server, translate every base-name through this table:
+**Headless auth is solved two different ways, by context:**
+- **Cloud `/schedule` routines** → use **`mcp__Atlassian__*`**. The OAuth connector's refresh token is stored **server-side by claude.ai** and silently exchanged at call time — no browser, no in-memory-session dependency. **Verified 2026-06-30:** a cloud routine read the live WEGO board through this prefix with zero human intervention. This is the path for the autonomous routine fleet (see `docs/loop-engineering.md`).
+- **Local headless** (a launcher running `claude` on the user's own machine, where no claude.ai connector is wired) → use **`mcp__mcp-atlassian__*`**, whose static token survives because it's config-time, not session-time.
+- **Local interactive** → use **`mcp__claude_ai_Atlassian__*`** (the in-memory OAuth session is warm).
 
-| Canonical (this doc / OAuth) | `mcp__mcp-atlassian__*` equivalent |
+**This document's canonical vocabulary is the camelCase names** (`getJiraIssue`, `transitionJiraIssue`, …) — used **verbatim** by both OAuth prefixes (`mcp__claude_ai_Atlassian__*` and `mcp__Atlassian__*`). Only on the snake_case token server do you translate, through this table:
+
+| Canonical (this doc / OAuth, camelCase) | `mcp__mcp-atlassian__*` equivalent |
 |---|---|
 | `getVisibleJiraProjects` / `getAccessibleAtlassianResources` (preflight) | `jira_get_all_projects` |
 | `searchJiraIssuesUsingJql` | `jira_search` (JQL goes in the `jql` arg) |
@@ -45,9 +53,9 @@ You are **dual-bound** to two Atlassian MCP servers. **Their tool names are NOT 
 | `atlassianUserInfo` / `lookupJiraAccountId` | `jira_get_user_profile` |
 | `getJiraIssueTypeMetaWithFields` / `getJiraProjectIssueTypesMetadata` | `jira_search_fields` + `jira_get_field_options` (partial — no single meta tool) |
 
-**Which server to use:** prefer **`mcp__mcp-atlassian__*`** whenever it is connected — it works in both interactive and headless contexts. Fall back to `mcp__claude_ai_Atlassian__*` only when the token server isn't registered.
+**Rule of thumb for which prefix to call:** use whichever Atlassian prefix is actually connected in this run. If more than one is present, **prefer an OAuth (camelCase) prefix** — `mcp__Atlassian__*` in a routine, `mcp__claude_ai_Atlassian__*` interactive — because no translation is needed; fall back to `mcp__mcp-atlassian__*` only when it's the only one wired. Everywhere this doc names a tool by its canonical camelCase base-name, call it directly under an OAuth prefix, or via the table under the token-server prefix.
 
-**No cloudId.** Unlike the Rovo HTTP server, `mcp-atlassian` binds its **site at config time** via the `JIRA_URL` env var, so there is **no `cloudId` to resolve or thread** — every call already targets the configured site. Your only site check is the preflight: confirm `defaults.site` in `board-flow.yaml` **matches** the server's `JIRA_URL`, and that the configured `project_key` appears in `jira_get_all_projects`. If `defaults.site` and the server's `JIRA_URL` disagree, hard-fail — the routine is pointed at the wrong Jira.
+**cloudId:** the OAuth connectors are multi-site; if a call complains about a missing/ambiguous `cloudId`, resolve it once via `getAccessibleAtlassianResources` (match the returned site to `defaults.site` from config) and thread it through. The `mcp-atlassian` token server has **no `cloudId`** — its site is fixed at config time by `JIRA_URL`, which must match `defaults.site` or the preflight hard-fails.
 
 ## Rules
 
