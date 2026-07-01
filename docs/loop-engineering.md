@@ -8,11 +8,13 @@
 > The autonomous fleet therefore just **attaches the OAuth connector** to each routine; no
 > static token, no `.mcp.json`, no org-admin gate. `atlassian-expert` is **triple-bound**:
 > `mcp__claude_ai_Atlassian__*` (local interactive) + `mcp__Atlassian__*` (cloud routine,
-> camelCase, the proven path) + `mcp__mcp-atlassian__*` (community uvx server, for a *local*
-> headless launcher only). Preflight added. Remaining: build the first real routine
-> (execution / To-Do) and the confirmation-gate-skip. Reconstructed from the parked
-> `session/loop-engineering` design (2026-06-19), brought current to the post-rebrand world
-> (`cepa`, `board-flow`).
+> camelCase, the proven path) + `mcp__mcp-atlassian__*` (community uvx server, local headless
+> launcher). Preflight added. **Substrate is per-repo:** GitHub-hosted board-flow repos → cloud
+> `/schedule` routine; the wego pilot is **Bitbucket-hosted, which the cloud sandbox cannot
+> clone** (TEST3, 2026-07-01), so the wego fleet runs **locally** (launchd/cron +
+> `mcp-atlassian`). Remaining: build the first local execution job (validation-first) + the
+> confirmation-gate skip. Reconstructed from the parked `session/loop-engineering` design
+> (2026-06-19), brought current to the post-rebrand world (`cepa`, `board-flow`).
 
 ## The goal
 
@@ -123,18 +125,18 @@ returning zero cards.
 
 ### What remains for the owner to finish Path A
 
-Cloud auth is done — the rest is wiring the first real routine:
+Auth is done, and the substrate is decided **per repo**: GitHub-hosted → cloud routine;
+wego (Bitbucket) → **local launcher**. Remaining for the wego pilot:
 
-1. **Build the execution routine** (To-Do column): a `/schedule` cloud-cron job that attaches
-   the `Atlassian` connector and runs `/board-flow:drain`, under `autonomous-mode` so it skips
-   the interactive confirmation gate (see Open threads). Stagger it after triage.
-2. Confirm the **preflight fails loudly** in-routine when the connector is detached or the
-   project isn't visible (the silent-success guard), so a broken fleet member aborts instead
-   of reporting "0 cards."
-3. Land the slice + reinstall.
-4. *(Only if a local-headless launcher is ever wanted)* finish the `mcp-atlassian` setup:
-   personal id.atlassian.com token (no admin step), `${JIRA_API_TOKEN}` in env, template into
-   `.mcp.json`.
+1. **Build the local execution job** (To-Do column): a `launchd`/`cron` job that `source`s
+   `~/.zsecrets` (so `JIRA_API_TOKEN` is set for `mcp-atlassian`), then runs
+   `claude -p "/board-flow:drain"` in the local `wego-assinatura-backend` checkout, under
+   `autonomous-mode`. **Start validation-first** (preflight + list-To-Do, no build).
+2. Confirm the **preflight fails loudly** when the token is missing/wrong (the silent-success
+   guard) — verify by running the job once with `JIRA_API_TOKEN` unset.
+3. Land the slice + reinstall (so the triple-bound `atlassian-expert` is live).
+4. *(For any future GitHub-hosted board-flow repo)* the cloud routine path is ready: attach the
+   `Atlassian` connector, enable the plugins, run `/board-flow:drain` under `autonomous-mode`.
 
 ## What's already in place (we're wiring, not building)
 
@@ -161,6 +163,88 @@ Cloud auth is done — the rest is wiring the first real routine:
 - **Cadence:** not fixed. Suggested 1–2×/day for the build routine; staggered after triage.
 - **Enrichment command:** does not exist yet — must be built before the enrichment routine.
 - **Security routine:** needs a dedicated validation command.
+
+## The repo-hosting constraint — GitHub vs Bitbucket (a second cloud gate)
+
+Auth (the connector) is not the only thing a cloud routine needs — it must also **clone the
+target repo**. Cloud routines source from the account's **connected git provider (GitHub)**.
+So a routine can only run `/board-flow:drain` against a codebase the cloud sandbox can clone.
+
+> **This kills the cloud path for the wego pilot — proven, not theorized.**
+> `wego-assinatura-backend` lives on **Bitbucket**
+> (`git@bitbucket.org:seasolutions/wego-assinatura-backend.git`), no GitHub mirror. TEST3
+> (2026-07-01) confirmed the cloud sandbox **cannot clone it**: HTTPS fails with no
+> credentials (exit 128), and the sandbox has **no `ssh` binary** at all. GitHub clones fine
+> (local proxy + `GITHUB_TOKEN`), and the Atlassian connector works — but the *repo* is
+> unreachable. Three ways out: **(a)** run the wego fleet **locally** (launchd/cron on the
+> owner's Mac, where the Bitbucket clone + SSH key already exist) via the
+> `mcp__mcp-atlassian__*` binding — **chosen**, see below; (b) **mirror** the repo to GitHub;
+> (c) provision the cloud env with a Bitbucket app-password + `ssh`.
+
+**Rule:** before building a cloud routine for a repo, confirm the sandbox can clone it. If the
+repo isn't on the connected GitHub account, the cloud path is a dead end and the
+local-headless launcher is the home.
+
+### The wego fleet runs locally (Bitbucket ⇒ local launcher)
+
+Because of the above, the wego execution fleet is a **local** automation, not a cloud routine:
+
+- **Substrate:** `launchd` (macOS) or `cron` on the owner's machine — each job invokes
+  `claude` headless (`claude -p "/board-flow:drain"`) in the local `wego-assinatura-backend`
+  checkout, where the Bitbucket remote + credentials already work.
+- **Auth:** the `mcp__mcp-atlassian__*` server (uvx, static token). Its `JIRA_API_TOKEN` must
+  be present in the job's environment — a `launchd` plist does **not** source `~/.zprofile`,
+  so set it explicitly in the plist's `EnvironmentVariables` (referencing `~/.zsecrets`) or
+  have the job `source ~/.zsecrets` before invoking `claude`. **This is the #1 footgun**: a
+  missing token = the preflight's silent-success guard must fire (it will hard-fail loudly).
+- **Skip the confirmation gate:** run under `autonomous-mode` (`CLAUDE_AUTONOMOUS_RUN_ID` set
+  in the job env, or the job invokes `/common:autonomous-start`).
+- **Validation-first:** the first local job runs preflight + list-To-Do only (no build, no
+  transition), so the whole local stack (token resolves, `mcp-atlassian` respawns with it,
+  board-flow.yaml read, WEGO visible) is proven before any autonomous build is unleashed.
+- The cloud OAuth path (`mcp__Atlassian__*`) stays valid for any **GitHub-hosted** board-flow
+  repo — it's only wego's Bitbucket hosting that forces local.
+
+## Building & operating a routine
+
+A routine is created via the `/schedule` skill (or the `RemoteTrigger` API directly). The
+shape that works, distilled from the tests:
+
+- **Auth:** attach the OAuth connector in `mcp_connections` under name `Atlassian` →
+  tools appear as `mcp__Atlassian__*`. List the ones the flow needs in
+  `session_context.allowed_tools`.
+- **Repo:** `session_context.sources[].git_repository.url` — must be cloneable by the sandbox
+  (GitHub). This is the session cwd, where `/board-flow:drain` looks for `board-flow.yaml`.
+- **Plugins:** for slash commands like `/board-flow:drain` to exist, the board-flow plugin +
+  the project's topology must be loaded via the routine's `enabled_plugins` /
+  `extra_marketplaces` (the marketplace is the plugin repo itself). *Loading plugins in a
+  routine is still unverified — the next validation step after the clone question.*
+- **Skip the confirmation gate:** `drain`/`triage`/`prove-drain` ask for interactive
+  confirmation. Run the routine under **`autonomous-mode`** (set `CLAUDE_AUTONOMOUS_RUN_ID`
+  or invoke `/common:autonomous-start`), which encodes "never ask the user."
+- **Reading a routine's result:** the `RemoteTrigger` API exposes **no transcript**, and
+  `persist_session:false` sessions aren't retrievable. The working trick used throughout these
+  tests: have the routine **write its verdict to a file and `git push` it to a branch** on a
+  GitHub repo the owner can `git fetch` — a poll loop locally watches for the branch. Delete
+  the branch after reading.
+- **Run-on-demand vs cron:** create with `enabled:false` + a placeholder future `run_once_at`,
+  then fire manually with `RemoteTrigger {action:"run"}` (works on a disabled routine — the
+  session spawns immediately). Promote to `cron_expression` (min interval 1h, UTC) once
+  validated. Stagger the pipeline: triage before execution before proof.
+
+## Test log
+
+Chronological record of what's been proven in the cloud substrate (all read-only):
+
+| # | Date | Question | Trigger | Verdict |
+|---|---|---|---|---|
+| TEST1 | 2026-06-30 | Does the OAuth connector read the board headless in cloud? | `trig_01MWDXXDn8QifnQyAoH3TwVU` | **HEADLESS-OK** (but transcript unreadable → re-run as TEST2) |
+| TEST2 | 2026-06-30 | Same, with git report-back | `trig_01NBzsQTEjMWXXDQWXeA6Pv9` | **HEADLESS-OK** — read WEGO-1887/1886/1885/1881/1884 via `mcp__Atlassian__*`, zero human intervention |
+| TEST3 | 2026-07-01 | Can the cloud sandbox clone the private Bitbucket wego repo? | `trig_01P2Q1m79WBxKUTVmfjiGFKC` | **BITBUCKET-CLONE-FAIL** — HTTPS: no creds (exit 128); SSH: `ssh` binary absent. GitHub works (proxy + `GITHUB_TOKEN`); connector fine (WEGO visible). → wego fleet must run **locally** |
+
+Test triggers auto-disable after firing (one-shot); report-back branches are deleted after
+reading. TEST1/TEST2 triggers can't be deleted via API (owner deletes at
+`https://claude.ai/code/routines`).
 
 ## References
 
