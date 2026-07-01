@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# local-fleet-validate.sh — validation-first LOCAL read for a board-flow fleet (any repo).
+# board-flow-fleet-validate.sh — validation-first LOCAL read for a board-flow fleet (any repo).
 #
 # WHY THIS EXISTS
 #   board-flow "loop-engineering" routines can run in the cloud (/schedule) ONLY for
@@ -12,13 +12,13 @@
 #   autonomous build is ever unleashed. READ-ONLY: no build, no Jira mutation.
 #
 # USAGE
-#   local-fleet-validate.sh [REPO_PATH]                 # REPO_PATH defaults to $PWD
+#   board-flow-fleet-validate.sh [REPO_PATH]                 # REPO_PATH defaults to $PWD
 #
 #   # Config-driven (repo has board-flow.yaml): project_key + To-Do status come from it.
-#   local-fleet-validate.sh /path/to/board-flow-repo
+#   board-flow-fleet-validate.sh /path/to/board-flow-repo
 #
 #   # Override mode (repo has NO board-flow.yaml yet, e.g. wego):
-#   PROJECT_KEY=WEGO TODO_STATUS='A fazer' local-fleet-validate.sh ~/path/to/wego
+#   PROJECT_KEY=WEGO TODO_STATUS='A fazer' board-flow-fleet-validate.sh ~/path/to/wego
 #
 #   Env knobs: SECRETS_FILE (default ~/.zsecrets), CLAUDE_BIN (default ~/.local/bin/claude),
 #              PROJECT_KEY, TODO_STATUS.

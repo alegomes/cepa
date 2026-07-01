@@ -202,7 +202,7 @@ Because of the above, the wego execution fleet is a **local** automation, not a 
 - **Validation-first:** the first local job runs preflight + list-To-Do only (no build, no
   transition), so the whole local stack (token resolves, `mcp-atlassian` respawns with it,
   board-flow.yaml read, WEGO visible) is proven before any autonomous build is unleashed.
-  This is shipped as **`board-flow/local-fleet-validate.sh`** — a generic, read-only launcher
+  This is shipped as **`board-flow/board-flow-fleet-validate.sh`** — a generic, read-only launcher
   (config-driven, or `PROJECT_KEY`/`TODO_STATUS` overrides for a repo without `board-flow.yaml`
   yet, like wego). Ran green 2026-07-01 against wego (20 To-Do cards). Symlink it onto `PATH`
   (e.g. `~/.local/bin/board-flow-fleet-validate`). Promote to a `launchd`/`cron` job running
