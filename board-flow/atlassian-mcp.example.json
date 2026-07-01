@@ -1,0 +1,50 @@
+{
+  "_setup": [
+    "Static-token Atlassian MCP for a LOCAL HEADLESS launcher (cron/launchd running `claude`",
+    "on your own machine). This is NOT needed for the cloud /schedule routine fleet — those",
+    "attach the claude.ai Atlassian OAuth connector, whose refresh token is stored server-side",
+    "and works headless in the cloud (verified 2026-06-30; see docs/loop-engineering.md). Use",
+    "this template only when you run an unattended `claude` LOCALLY, where no claude.ai connector",
+    "is wired and the interactive OAuth session is cold.",
+    "",
+    "It registers the community 'mcp-atlassian' server (sooperset), a local uvx subprocess that",
+    "authenticates from a static API token in its own env block — so it survives unattended.",
+    "",
+    "Tool names differ from the OAuth connector: this server exposes snake_case tools",
+    "(mcp__mcp-atlassian__jira_search, jira_transition_issue, ...). atlassian-expert is",
+    "dual-bound and translates between the two vocabularies via a table in its agent doc.",
+    "",
+    "PREREQS: uv/uvx installed (https://docs.astral.sh/uv/), Python 3.13 available to uvx.",
+    "",
+    "STEPS:",
+    "1. Generate an Atlassian Cloud API token:",
+    "     https://id.atlassian.com/manage-profile/security/api-tokens",
+    "   No org-admin action is required — a personal API token is enough. (This is the whole",
+    "   reason Path A targets this server instead of the Rovo MCP, which needs an admin to",
+    "   enable token auth.)",
+    "2. Export the token in the routine's env (and your shell profile for interactive use) so it",
+    "   is NEVER committed to the repo:",
+    "     export JIRA_API_TOKEN='your-api-token'",
+    "3. Set JIRA_URL to your site and JIRA_USERNAME to the token owner's email below.",
+    "   JIRA_URL must MATCH defaults.site in board-flow.yaml, or atlassian-expert's preflight",
+    "   hard-fails (it refuses to run against the wrong Jira).",
+    "4. Copy the mcpServers block below into your HOST project's .mcp.json (NOT the plugin repo).",
+    "5. The site is fixed by JIRA_URL — there is NO cloudId to resolve.",
+    "6. Delete this _setup key from the real .mcp.json (it is ignored, but keep the file clean).",
+    "",
+    "SECURITY: keep the token in the env var, not inline. A token written straight into a config",
+    "file is a committed credential one mistake away from a public repo — pass it by reference."
+  ],
+  "mcpServers": {
+    "mcp-atlassian": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--python", "3.13", "mcp-atlassian"],
+      "env": {
+        "JIRA_URL": "https://your-site.atlassian.net",
+        "JIRA_USERNAME": "you@company.com",
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}"
+      }
+    }
+  }
+}
