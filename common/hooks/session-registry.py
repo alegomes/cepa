@@ -153,6 +153,40 @@ def on_start(session_id: str, cwd: str) -> None:
     except Exception as e:  # noqa: BLE001
         print(f"[session-registry] worktree scan failed: {e}", file=sys.stderr)
 
+    # Nudges de manutenção — sugestão, nunca bloqueio. O doctor pega falhas de
+    # infraestrutura ANTES de custarem uma tarefa; o metrics só vale se lido.
+    try:
+        from datetime import datetime, timezone
+
+        def _stamp_age_days(p):
+            try:
+                ts = datetime.fromisoformat(p.read_text().strip().replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                return (datetime.now(timezone.utc) - ts).total_seconds() / 86400
+            except (OSError, ValueError):
+                return None
+
+        from pathlib import Path as _P
+        doctor_stamp = _P(root) / ".claude" / "doctor-last-run"
+        d_age = _stamp_age_days(doctor_stamp) if doctor_stamp.exists() else None
+        if d_age is None or d_age > 1:
+            when = "nunca rodou" if d_age is None else f"há {d_age:.0f}d sem rodar"
+            notices.append(f"[manutenção] /common:doctor {when} neste repo — 30s "
+                           "que pegam plugin quebrado, baseline stale, worktree "
+                           "órfã e handoff vencido antes de custarem uma tarefa. "
+                           "Sugira ao usuário (não rode sem pedir).")
+        tdir = _P(os.environ.get("CEPA_TELEMETRY_DIR") or
+                  (_P.home() / ".claude" / "cepa-telemetry"))
+        m_stamp = tdir / "last-metrics-review"
+        m_age = _stamp_age_days(m_stamp) if m_stamp.exists() else None
+        has_events = tdir.is_dir() and any(tdir.glob("events-*.jsonl"))
+        if has_events and (m_age is None or m_age > 7):
+            notices.append("[manutenção] a telemetria do harness está acumulada há "
+                           "mais de uma semana sem revisão — sugira /common:metrics.")
+    except Exception as e:  # noqa: BLE001
+        print(f"[session-registry] nudge scan failed: {e}", file=sys.stderr)
+
     # Two context blocks with DIFFERENT instructions, kept apart so they don't
     # contradict: notices are meant to be surfaced; the resume block is meant to
     # be acted on silently.

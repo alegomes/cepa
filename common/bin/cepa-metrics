@@ -90,6 +90,14 @@ def main():
     if args.repo:
         events = [e for e in events if e.get("repo") == args.repo]
 
+    # carimbo que o nudge semanal do session-registry consulta
+    try:
+        TELEMETRY_DIR.mkdir(parents=True, exist_ok=True)
+        (TELEMETRY_DIR / "last-metrics-review").write_text(
+            datetime.now(timezone.utc).isoformat(timespec="seconds") + "\n")
+    except OSError:
+        pass
+
     if not events:
         print(f"Nenhum evento entre {start.date()} e {end.date()} em {TELEMETRY_DIR}.")
         print("A telemetria começa a acumular a partir da instalação desta versão — "

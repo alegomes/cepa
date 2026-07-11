@@ -198,3 +198,95 @@ CLI = wrappers JSON do socket):
   apontar para drain ou sessão única.
 - v0 sem daemon: validar plan.yaml + ondas usando subagentes worktree-isolados da
   própria sessão, antes de construir o maestro.
+
+---
+
+# Programa melhorias-2026-07
+
+Universo de demandas da auditoria de sessões de 07/2026 + discussão de lacunas.
+Plano de execução em ondas: `.claude/programs/melhorias-2026-07/plan.yaml`.
+Também é o v0 do Maestro: valida o formato de plano/ondas antes do daemon existir.
+
+## P1. Lint editorial como hook
+
+**Onda 1 · Lar:** `common` · **Status:** ver plan.yaml
+
+Regras de estilo (zero travessão, LinkedIn-ês, hashtags genéricas) hoje dependem de
+re-ensino do usuário a cada sessão (2+ correções idênticas na auditoria). Solução:
+hook PostToolUse em Write/Edit/MultiEdit, **opt-in por projeto** via
+`.claude/editorial-lint` (globs, um por linha — sem o arquivo, hook inerte). Ao
+detectar travessão/frases-marca/hashtag genérica em arquivo casado, devolve aviso ao
+modelo (exit 2 em PostToolUse = feedback não-bloqueante). Aceite: escrever "foo — bar"
+num arquivo coberto gera o aviso; arquivo fora dos globs não gera nada.
+
+## P2. Nudges de manutenção (doctor diário, metrics semanal)
+
+**Onda 1 · Lar:** `common` · **Status:** ver plan.yaml
+
+O doctor e o metrics só valem se rodarem; hoje dependem de memória do usuário.
+Solução: `session-registry` (SessionStart) injeta sugestão de `/common:doctor` se o
+repo está >24h sem rodá-lo (stamp `.claude/doctor-last-run`, gravado pelo próprio
+doctor) e de `/common:metrics` se >7d sem revisão (stamp no dir de telemetria, gravado
+pelo cepa-metrics). Nudge, nunca bloqueio. Nota: o item era "cron do metrics" via
+/schedule, mas routine cloud não lê o ledger local (~/.claude) — adaptado para nudge
+local; um launchd job fica como evolução se o nudge se provar fraco.
+
+## P3. Manifesto de ambiente (.claude/env.yaml)
+
+**Onda 2 · Lar:** `common` · **Status:** pendente
+
+O cepa modela código, não runtime — e as fricções de sessões paralelas foram todas de
+runtime (porta 8083, ~/.m2, .env, containers). Solução: `.claude/env.yaml` por projeto
+(portas usadas, serviços dependentes, comando de subida, healthcheck, arquivos a
+seedar). Consumidores: preflight do worktree-start (vira mecânico), cepa-doctor
+(checa portas/serviços), seed-worktree (lista de seeds). Aceite: doctor acusa porta
+ocupada declarada no manifest; worktree-start seeda o que o manifest lista.
+
+## P4. Consolidação periódica de mental-models
+
+**Onda 2 · Lar:** `common` · **Status:** pendente
+
+Entries de expertise acumulam com prune por contagem, nunca re-verificados — mesmo
+defeito do handoff pré-"hipótese". Solução: comando `/common:consolidate` que funde
+entries redundantes, aposenta os que o código atual contradiz (verificando contra o
+repo) e marca proveniência. Aceite: rodar no expertise mais gordo reduz entries sem
+perder nenhuma regra ainda-válida (diff revisável antes de gravar).
+
+## P5. Cascata multi-repo no board-flow
+
+**Onda 2 · Lar:** `board-flow` · **Status:** pendente
+
+Trabalho backend+frontend+extensão exige fechamento manual de cards em cada repo
+("feche o WEGO-1940 nos dois brokers"). Solução: convenção de cards vinculados
+(link type configurável) + no fechamento do pai, atlassian-expert lista filhos
+abertos e propõe cascata. Sempre via seam opcional — nada disso vira premissa para
+projetos sem Jira. Aceite: fechar card pai com 2 filhos linkados gera proposta de
+fechamento dos 2.
+
+## P6. Proof-gate de UI/extensão
+
+**Onda 3 (design interativo) · Lar:** novo agente em `common` ou plugin próprio ·
+**Status:** pendente — TEM decisão de design aberta (onde mora a superfície
+Playwright: por repo frontend vs genérico no cepa)
+
+O proof-reviewer prova o backend; a superfície onde o usuário mais sofre (SPA +
+extensão Chrome) não tem gate. Solução: irmão do proof-reviewer para UI — Playwright
+como superfície externa (carrega extensão unpacked, percorre o fluxo, asserta efeito
+no backend), screenshot-diff para regressão visual. Aceite: regressão plantada na
+extensão do wego-acesso é pega pelo gate.
+
+## P7. Advisors como Workflow
+
+**Onda 3 (design interativo) · Lar:** `common` · **Status:** pendente — resolver as 3
+pendências do item "Advisors" acima (declaração de área, nº de lentes, quem sintetiza)
+
+O item Advisors deste backlog implementado como Workflow script (fan-out isolado
+determinístico + síntese name-the-disagreement), não como prosa de orquestração.
+Meta-aceite: usar o advisors recém-nascido para revisar o design do P6.
+
+## P8. Revisão com evidência (fecha o programa)
+
+**Onda 4 · Status:** aguarda ~2 semanas de telemetria
+
+`/common:metrics --days 30`: bloqueios de gate caíram? proof_blocks apareceram?
+builds vermelhos mudaram? O que a métrica apontar vira a próxima fornada de cards.

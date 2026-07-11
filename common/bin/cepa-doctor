@@ -257,12 +257,26 @@ def check_project(cwd: Path):
 
 # ── Main ────────────────────────────────────────────────────────────────
 
+def stamp_run():
+    """Grava o carimbo que o nudge diário do session-registry consulta."""
+    rc, out, _ = git(["rev-parse", "--show-toplevel"], cwd=str(Path.cwd()))
+    if rc != 0:
+        return
+    try:
+        stamp = Path(out.strip()) / ".claude" / "doctor-last-run"
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        stamp.write_text(datetime.now(timezone.utc).isoformat(timespec="seconds") + "\n")
+    except OSError:
+        pass
+
+
 def main():
     settings = check_settings()
     check_plugins(settings)
     check_hooks_compile()
     check_telemetry()
     check_project(Path.cwd())
+    stamp_run()
 
     icons = {"ok": "✓", "warn": "⚠", "fail": "✗"}
     order = {"fail": 0, "warn": 1, "ok": 2}

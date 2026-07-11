@@ -1,0 +1,70 @@
+# Plano do programa — v0 do formato que o Maestro consumirá.
+# REGRA: plano é HIPÓTESE — cada sessão re-valida sua fatia contra o main atual
+# antes de começar (fork points abaixo são intenção, não fato consumado).
+program: melhorias-2026-07
+source: BACKLOG.md            # seção "Programa melhorias-2026-07" (P1–P8)
+created: 2026-07-11
+principios:
+  - teto de 3 slices concorrentes (o limite é a atencao do humano, nao a maquina)
+  - onda N+1 forka somente apos a onda N aterrissar no main (merge train)
+  - slice com decisao de design aberta NUNCA vai autonomo (gate humano)
+  - um slice = uma sessao = um worktree; wrap-up ao fim
+
+waves:
+  - id: 1
+    label: quick-wins
+    mode: sequential-inline    # P1 e P2 colidem em common/plugin.json — nao paralelizar
+    slices: [P1-lint-editorial, P2-nudges]
+    status: done              # entregue 2026-07-11 (commit na main)
+  - id: 2
+    label: medios-paralelos
+    mode: parallel-worktrees   # superficies disjuntas: hooks/ vs commands/ vs board-flow/
+    fork_after: wave-1
+    slices: [P3-env-manifest, P4-consolidacao-mm, P5-cascata-multirepo]
+    status: pending
+  - id: 3
+    label: grandes-com-design
+    mode: interactive-design-then-build   # decisao humana antes do build
+    fork_after: wave-2
+    slices: [P6-ui-proof-gate, P7-advisors-workflow]   # um por vez, nesta ordem
+    status: pending
+  - id: 4
+    label: revisao-com-evidencia
+    mode: interactive
+    not_before: 2026-07-25     # precisa de ~2 semanas de telemetria acumulada
+    slices: [P8-metrics-review]
+    status: pending
+
+slices:
+  P1-lint-editorial:
+    surface: [common/hooks/editorial-lint.py, common/.claude-plugin/plugin.json]
+    human_gate: none
+    status: done
+  P2-nudges:
+    surface: [common/hooks/session-registry.py, common/bin/cepa-doctor, common/bin/cepa-metrics]
+    human_gate: none
+    status: done
+  P3-env-manifest:
+    surface: [common/hooks/seed-worktree.py, common/bin/cepa-doctor, common/commands/worktree-start.md, docs/]
+    human_gate: none
+    status: pending
+  P4-consolidacao-mm:
+    surface: [common/commands/consolidate.md, common/expertise/]
+    human_gate: revisar diff antes de gravar consolidacao
+    status: pending
+  P5-cascata-multirepo:
+    surface: [board-flow/agents/atlassian-expert.md, board-flow/skills/]
+    human_gate: none
+    status: pending
+  P6-ui-proof-gate:
+    surface: [a definir na sessao de design]
+    human_gate: "DECISAO ABERTA: onde mora a superficie Playwright (por repo vs generico)"
+    status: pending
+  P7-advisors-workflow:
+    surface: [common/ (workflow script + registry de lentes)]
+    human_gate: "3 pendencias do item Advisors do BACKLOG"
+    status: pending
+  P8-metrics-review:
+    surface: []                # leitura
+    human_gate: conduz o humano
+    status: pending
