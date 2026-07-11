@@ -133,3 +133,68 @@ crítico:
 - Integra com `board-flow` (cards de conteúdo) como as outras topologias?
 - Fonte de fato: como declarar e versionar o `BRIEF.md` de números canônicos para
   fan-out paralelo de redatores sem drift.
+
+---
+
+## Maestro — orquestração multi-harness (frota de sessões Claude Code)
+
+**Status:** pendente, spike de viabilidade APROVADO (2026-07-11) · **Lar provável:**
+plugin novo `fleet`/`maestro` · **Origem:** estratégia multi-sessões da auditoria de
+sessões de 07/2026.
+
+### Problema
+
+Planejar um universo de demandas em ondas de sessões concorrentes hoje é trabalho
+artesanal, e o despacho é manual (abrir N terminais, colar N comandos, integrar N
+resultados). Queremos: plano discutido e aprovado → **uma ação** → N sessões criadas
+e geridas por um agente central que media decisões e reporta o resultado final.
+
+### Spike (2026-07-11) — socket do herdr como plano de controle: VIÁVEL
+
+Testado contra herdr 0.7.3 rodando localmente (socket `~/.config/herdr/herdr.sock`,
+CLI = wrappers JSON do socket):
+
+- `herdr agent start <nome> --cwd --workspace --env -- claude -p ...` spawna uma
+  sessão headless num pane visível. ✓
+- `herdr wait output <pane> --match <marcador> --timeout` é a primitiva de
+  sincronização do maestro — bloqueia até a filha imprimir o marcador. ✓
+- `herdr worktree create --branch --base` cria worktree via socket em
+  `~/.herdr/worktrees/<repo>/` (fora do repo/Insync, mesmo princípio do ccw),
+  com workspace próprio; `worktree remove` limpa. ✓
+- `agent send` / `pane send-text` injetam input em sessões interativas. ✓ (não testado
+  a fundo)
+- **Pegadinha real:** o pane fecha quando o processo termina e o output some — filhas
+  precisam de wrapper (`sh -c 'claude -p ... | tee resultado.txt; echo MAESTRO-EXIT:$?;
+  sleep N'`) que persista o resultado em arquivo e segure o pane.
+- **Gap:** `agent_status` fica `unknown` para filhas headless; o status rico
+  (working/blocked/idle) vem do hook `herdr integration install claude`, que cobre
+  sessões interativas. Para headless, sincronizar por wait-output + arquivos — ou o
+  wrapper reportar via `pane report-agent`.
+
+### Desenho aprovado em discussão
+
+1. `/program-plan` (conversacional): parseia BACKLOG.md (fonte nativa — NUNCA acoplar
+   a Jira; board-flow é adapter opcional), analisa superfície de arquivos /
+   dependências / gates humanos por demanda, propõe ondas com fork points e teto de
+   2–3 slices concorrentes (o limite é a atenção do humano). Estado em
+   `.claude/programs/<nome>/plan.yaml` (plano é hipótese — re-validado por sessão).
+2. Maestro (daemon fino, Agent SDK ou script): a ação única. Por slice da onda:
+   worktree via socket herdr → spawn `claude -p` (autonomous-mode + demanda) →
+   sincroniza por wait-output → merge train ao fim da onda → onda seguinte forka
+   pós-merge → relatório final + debrief agregado.
+3. Mediação de decisões: filhas headless com `--permission-prompt-tool` apontando
+   para um MCP servido pelo maestro — decisões táticas ele resolve com base no plano
+   e loga para debrief; estratégicas escalam ao humano.
+4. Telemetria: eventos `program_start`/`slice_done`/`program_done` no ledger
+   (`_telemetry.py` CLI) para o /common:metrics medir throughput e acerto de predição.
+
+### Pendências de design
+
+- Política de escalonamento (o que o maestro decide sozinho) — reusar a taxonomia de
+  altitude do debrief.
+- Filhas interativas (steering humano via pane) vs headless (mediação via MCP) — o
+  spike sugere headless-em-pane como default: output visível, decisão centralizada.
+- Piso de uso: programa só vale para ≥4 demandas / multi-semana; abaixo disso,
+  apontar para drain ou sessão única.
+- v0 sem daemon: validar plan.yaml + ondas usando subagentes worktree-isolados da
+  própria sessão, antes de construir o maestro.
