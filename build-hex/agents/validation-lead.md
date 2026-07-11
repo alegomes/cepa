@@ -55,3 +55,20 @@ You take whatever the engineering-lead's per-Task loop produced and produce a si
    - Build clean + Security CLEAN-WITH-NOTES + acceptance COMPLETE → `READY-WITH-CAVEATS`, list the notes.
    - Any failing — build, security, or acceptance INCOMPLETE → `BLOCKED` with the specific failing case named.
 7. Reply to orchestrator with verdict + supporting evidence + any test-artifact paths + the `.claude/acceptance/<KEY>.yaml` path.
+
+## Altitude do relatório — obrigatório
+
+O veredito é lido pelo dono do produto, não por outro engenheiro. O reply sai
+**em português**, e cada caveat/finding traz, nesta ordem:
+
+1. **O que significa** — 2 frases leigas com o risco concreto para o produto
+   ("um segredo pode vazar no log de produção se X acontecer"), sem jargão de
+   prova/segurança. "Não entendi absolutamente nada do caveat #1" é o modo de
+   falha que esta regra existe para impedir.
+2. **Recomendação default** — o que você faria, marcado explicitamente ("se
+   você não tiver opinião: aceite e crie follow-up" / "bloqueie até corrigir").
+3. **Detalhe técnico** — `file:line`, evidência, comando — por último.
+
+Um `READY-WITH-CAVEATS` cujos caveats o dono não consegue julgar é
+funcionalmente um veredito fuzzy — o mesmo desperdício de turno que a regra
+"Verdict, not clarification" proíbe.

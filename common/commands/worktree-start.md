@@ -81,7 +81,34 @@ branch back into your integration branch and pruning the worktree.
    `.env`, `.env.local`. Best-effort — never blocks worktree creation.) Mention
    any files it seeded.
 
-6. **Copy the launch command to the clipboard.** The handoff below is a
+6. **Preflight de ambiente.** Parallel sessions fail first on shared runtime
+   state, not on code. Run these checks and include the findings in the
+   hand-off (each is best-effort — a failed check is reported, never blocks):
+
+   - **Drift do fork point:** `git fetch origin --quiet` then
+     `git rev-list --count HEAD..origin/<default-branch>`. If the fork point
+     is behind, say by how many commits and recommend rebasing the new branch
+     before starting work — scripts and entities that evolved on main are the
+     top cause of "worktree quebrado na largada".
+   - **Trabalho paralelo em voo:** `git worktree list` + branches `session/*` —
+     name the other live slices so the new session knows what it may collide
+     with (migrations, shared entities, `dev-portais-reais.sh`-style scripts).
+   - **Migrations colidentes** (repos with Flyway/Liquibase): list migration
+     files added on other `session/*` branches vs the default branch
+     (`git diff --name-only <default-branch>...session/<other> -- '*migration*'`)
+     and warn when two branches add versions for the same day — renumber early,
+     not at merge time.
+   - **Portas de dev ocupadas** (when the repo has a dev server — Quarkus,
+     Next.js, etc.): `lsof -nP -iTCP:8080,8083,3000 -sTCP:LISTEN` and report
+     who holds them, so the new session picks a free port instead of killing a
+     sibling's dev server (`lsof kill` de porta já matou o quarkus:dev de outra
+     worktree).
+   - **Repositório Maven compartilhado** (repos with `pom.xml`): remind that
+     `~/.m2` is shared across worktrees — a sibling session installing a
+     SNAPSHOT can serve stale artifacts here; on weird compile errors,
+     re-install the local dependency before debugging.
+
+7. **Copy the launch command to the clipboard.** The handoff below is a
    terminal switch — opening a new window then *retyping* a long absolute path
    is the actual friction. Pre-load the exact command so the new terminal is one
    paste away:
@@ -94,7 +121,7 @@ branch back into your integration branch and pruning the worktree.
    it silently and don't claim the command was copied. When it succeeds, say so
    in the hand-off ("copied to clipboard — ⌘V in the new terminal").
 
-7. **Hand off.** Report success and tell the user exactly how to start the
+8. **Hand off.** Report success and tell the user exactly how to start the
    parallel session — this command does **not** move the current session into
    the worktree:
 

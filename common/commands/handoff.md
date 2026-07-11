@@ -70,6 +70,12 @@ Rules:
   `file:line` where it helps.
 - **Convert relative dates to absolute** ("amanhã" → the actual date).
 - **Don't fabricate.** If a thread's state is unclear, say so rather than guess.
+- **Mark perishable facts.** Anything the next session could state as fact but
+  that another session/person can change in the meantime — remotes, sibling
+  repos existing or not, branch positions, build state, "X ainda não foi
+  implementado" — gets a `(verificar)` suffix. The reader re-checks before
+  repeating it; a handoff fact repeated without verification is the top-1
+  user-reported failure of this system.
 - If there's genuinely nothing strategic to record (a trivial session), write a
   one-line NOTE and say so — don't pad.
 

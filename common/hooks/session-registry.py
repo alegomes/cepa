@@ -62,7 +62,12 @@ def resume_notice(session_id: str, cwd: str, root: str):
         "Conteúdo abaixo.\n"
         "REGRA: se a primeira mensagem do usuário continua este trabalho, apenas "
         "siga de onde parou — NÃO anuncie nem resuma o handoff de volta pro usuário. "
-        "Se for outro assunto, ignore em silêncio.\n\n" + body
+        "Se for outro assunto, ignore em silêncio.\n"
+        "REGRA: o handoff é HIPÓTESE, não fato — ele descreve o mundo de quando foi "
+        "escrito. Antes de AFIRMAR qualquer fato vindo daqui (remotes, existência de "
+        "diretórios/repos vizinhos, nomes pós-rename, estado de build, o que está ou "
+        "não implementado), re-verifique no disco/git com um comando barato. Repetir "
+        "um fato stale de handoff como verdade é o erro nº 1 apontado pelo usuário.\n\n" + body
     )
 
 

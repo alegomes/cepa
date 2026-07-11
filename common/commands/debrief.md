@@ -123,6 +123,13 @@ For each decision (filtered by altitude per step 4; formal blocks first, then in
 > **Chosen:** <which option>
 > **Rationale:** <verbatim>
 >
+> **Em uma frase:** <tradução leiga da decisão e do que muda na prática para o
+> produto/usuário — sem jargão; se a decisão envolve um termo técnico
+> inevitável, defina-o aqui em meia frase>
+> **Minha leitura:** <keep ou overrule, com meia frase de porquê — a
+> recomendação default de quem leu os artefatos, para o usuário não ter que
+> decidir às cegas>
+>
 > Verdict — or talk it through first?
 > - `keep` — the call was right.
 > - `overrule: <reason>` — wrong call; tell me what you would have done and why.

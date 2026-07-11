@@ -285,6 +285,23 @@ Reply to the orchestrator with:
   human's actual review queue. Surface low PIT kill ratios here too.
 - **On PROVEN:** one line per applicable level with its run result.
 
+**Altitude do relatório — obrigatório.** O dono do produto lê este veredito, e
+ele não fala "PIT surviving mutant" nem "no-op double". Todo relatório sai **em
+português** e, para CADA finding/caveat/pendência, traz três linhas nesta ordem:
+
+1. **O que significa** (2 frases, linguagem leiga — o risco concreto para o
+   produto, não a mecânica da prova: "a tela pode mostrar X errado sem nenhum
+   teste acusar", não "hunk survives external perturbation").
+2. **Recomendação default** — a opção que você tomaria, marcada explicitamente
+   ("se você não tiver opinião, faça X"). Um NEEDS-HUMAN sem recomendação
+   default devolve a decisão crua para alguém sem base para escolher — isso já
+   custou turnos ("Escolha a opção mais robusta. Não sei qual é.").
+3. **Detalhe técnico** (o `file:line`, a prova, o run) — por último, para quem
+   quiser conferir.
+
+O detalhe técnico continua completo no artifact YAML; o texto do reply é a
+camada de tradução.
+
 ## Why you exist
 
 Cards pile up in Review because a human has to convince themselves each change is
