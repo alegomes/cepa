@@ -420,25 +420,74 @@ def auto_clean(root: str):
 
 # ── worktree seeding ──────────────────────────────────────────────────────
 
+def env_manifest_list(main_root: str, key: str):
+    """Read a top-level list key from the project's .claude/env.yaml.
+
+    The environment manifest (see docs/env-manifest.md) is deliberately
+    shallow, so this is a tolerant line parser — no pyyaml dependency.
+    Supports block lists ('- item') and inline flow lists ('key: [a, b]').
+    Returns [] on any problem (missing file, unreadable, malformed):
+    fail-silent by design, like everything else in the seeding path.
+    """
+    path = Path(main_root) / ".claude" / "env.yaml"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    items = []
+    in_key = False
+    for raw in lines:
+        if raw.lstrip().startswith("#"):
+            continue
+        line = re.sub(r"\s#.*$", "", raw.rstrip())
+        if not line.strip():
+            continue
+        top = re.match(r"^([A-Za-z_][\w-]*):\s*(.*)$", line)
+        if top:
+            in_key = top.group(1) == key
+            val = top.group(2).strip()
+            if in_key and val:
+                if val.startswith("[") and val.endswith("]"):
+                    items.extend(x.strip().strip("'\"")
+                                 for x in val[1:-1].split(",") if x.strip())
+                else:
+                    items.append(val.strip("'\""))
+                in_key = False
+            continue
+        if in_key:
+            item = re.match(r"^\s+-\s*(.+)$", line)
+            if item:
+                items.append(item.group(1).strip().strip("'\""))
+    return [i for i in items if i]
+
+
 def seed_globs(main_root: str):
     """Globs of gitignored files to copy into a fresh worktree.
 
     Precedence: $CCW_SEED (space/colon-separated) > .claude/worktree-seed
     (one glob per line, '#' comments) > DEFAULT_SEED_GLOBS.
+    A `seed:` list in .claude/env.yaml (see docs/env-manifest.md) is
+    ADDITIVE: its globs are appended to whichever source won, deduped.
     """
     env = os.environ.get("CCW_SEED", "").strip()
     if env:
-        return [g for g in re.split(r"[:\s]+", env) if g]
-    cfg = Path(main_root) / ".claude" / "worktree-seed"
-    if cfg.is_file():
-        try:
-            lines = cfg.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            lines = []
-        out = [ln.strip() for ln in lines if ln.strip() and not ln.strip().startswith("#")]
-        if out:
-            return out
-    return list(DEFAULT_SEED_GLOBS)
+        base = [g for g in re.split(r"[:\s]+", env) if g]
+    else:
+        base = []
+        cfg = Path(main_root) / ".claude" / "worktree-seed"
+        if cfg.is_file():
+            try:
+                lines = cfg.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                lines = []
+            base = [ln.strip() for ln in lines
+                    if ln.strip() and not ln.strip().startswith("#")]
+        if not base:
+            base = list(DEFAULT_SEED_GLOBS)
+    for g in env_manifest_list(main_root, "seed"):
+        if g not in base:
+            base.append(g)
+    return base
 
 
 def seed_worktree(main_root: str, wt_path: str):

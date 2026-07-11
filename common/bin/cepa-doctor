@@ -19,6 +19,10 @@ Checks do projeto (cwd):
   - .claude/last-build.json: status e idade do baseline
   - worktrees session/*: stale (>14d sem commit) e diretórios órfãos
   - handoffs: arquivos sem update há >30d (fonte de fatos stale)
+  - ambiente (.claude/env.yaml, ver docs/env-manifest.md): portas declaradas
+    ocupadas por processo de OUTRO diretório (lsof) e containers de `services`
+    ausentes no `docker ps` (best-effort; sem docker → skip silencioso).
+    O `healthcheck:` do manifest NUNCA roda aqui — doctor é só leitura.
 
 Saída: ✓ / ⚠ / ✗ por check. Exit 0 = tudo ok, 1 = só warnings, 2 = falhas.
 O check VIVO do board-flow.yaml contra o Jira não acontece aqui (script sem
@@ -253,6 +257,120 @@ def check_project(cwd: Path):
             warn("handoffs", f"{f.name} sem update há {a:.0f}d — fatos dele são hipótese vencida; considere apagar")
     if hdir.is_dir() and not stale:
         ok("handoffs", "sem handoffs vencidos")
+
+    check_env_manifest(root)
+
+
+# ── Ambiente (.claude/env.yaml) ─────────────────────────────────────────
+
+def env_manifest_list(path: Path, key: str):
+    """Lê uma chave-lista de topo do env.yaml sem pyyaml (formato raso —
+    ver docs/env-manifest.md). Suporta listas em bloco ('- item') e inline
+    ('key: [a, b]'). Qualquer problema → lista vazia (fail-silent)."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    items, in_key = [], False
+    for raw in lines:
+        if raw.lstrip().startswith("#"):
+            continue
+        line = re.sub(r"\s#.*$", "", raw.rstrip())
+        if not line.strip():
+            continue
+        top = re.match(r"^([A-Za-z_][\w-]*):\s*(.*)$", line)
+        if top:
+            in_key = top.group(1) == key
+            val = top.group(2).strip()
+            if in_key and val:
+                if val.startswith("[") and val.endswith("]"):
+                    items.extend(x.strip().strip("'\"")
+                                 for x in val[1:-1].split(",") if x.strip())
+                else:
+                    items.append(val.strip("'\""))
+                in_key = False
+            continue
+        if in_key:
+            item = re.match(r"^\s+-\s*(.+)$", line)
+            if item:
+                items.append(item.group(1).strip().strip("'\""))
+    return [i for i in items if i]
+
+
+def port_holder(port: str):
+    """Quem escuta TCP:<port>? Retorna (pid, comando, cwd) ou None se livre.
+    Best-effort: lsof ausente/erro → None (porta tratada como livre)."""
+    try:
+        p = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-Fpc"],
+                           capture_output=True, text=True, timeout=10)
+    except Exception:
+        return None
+    pid = cmd = None
+    for line in p.stdout.splitlines():
+        if line.startswith("p") and pid is None:
+            pid = line[1:]
+        elif line.startswith("c") and cmd is None:
+            cmd = line[1:]
+    if not pid:
+        return None
+    cwd = None
+    try:
+        q = subprocess.run(["lsof", "-a", "-p", pid, "-d", "cwd", "-Fn"],
+                           capture_output=True, text=True, timeout=10)
+        for line in q.stdout.splitlines():
+            if line.startswith("n"):
+                cwd = line[1:]
+                break
+    except Exception:
+        pass
+    return pid, cmd or "?", cwd
+
+
+def check_env_manifest(root: Path):
+    """Confere o manifesto de ambiente (.claude/env.yaml) contra a realidade.
+    Só leitura: o `healthcheck:` declarado NUNCA é executado aqui."""
+    ef = root / ".claude" / "env.yaml"
+    if not ef.exists():
+        return
+    ports = env_manifest_list(ef, "ports")
+    services = env_manifest_list(ef, "services")
+    if not ports and not services:
+        ok("ambiente", "env.yaml presente, sem ports/services declarados")
+        return
+
+    root_real = os.path.realpath(str(root))
+    for port in ports:
+        if not str(port).isdigit():
+            warn("ambiente", f"porta inválida no env.yaml: {port!r}")
+            continue
+        holder = port_holder(str(port))
+        if holder is None:
+            ok("ambiente", f"porta {port} livre")
+            continue
+        pid, cmd, cwd = holder
+        cwd_real = os.path.realpath(cwd) if cwd else None
+        if cwd_real and (cwd_real == root_real
+                         or cwd_real.startswith(root_real + os.sep)):
+            ok("ambiente", f"porta {port} em uso pelo próprio projeto ({cmd}, pid {pid})")
+        else:
+            warn("ambiente", f"porta {port} ocupada por {cmd} (pid {pid}, cwd {cwd or '?'}) "
+                             f"— processo de OUTRO diretório; suba numa porta livre em vez de matá-lo")
+
+    if services:
+        try:
+            p = subprocess.run(["docker", "ps", "--format", "{{.Names}}"],
+                               capture_output=True, text=True, timeout=15)
+        except Exception:
+            return  # docker ausente/indisponível → skip silencioso
+        if p.returncode != 0:
+            return  # daemon fora do ar → skip silencioso (best-effort)
+        running = set(p.stdout.split())
+        for svc in services:
+            if svc in running:
+                ok("ambiente", f"container {svc} rodando")
+            else:
+                warn("ambiente", f"container {svc} declarado no env.yaml não está no docker ps "
+                                 f"— suba com o comando `up:` do manifest")
 
 
 # ── Main ────────────────────────────────────────────────────────────────

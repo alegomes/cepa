@@ -40,7 +40,8 @@ branch back into your integration branch and pruning the worktree.
   Defaults to `~/ccw-worktrees`. Set it to relocate where worktrees are created.
 - `CCW_SEED` (env, optional) — space/colon-separated globs of gitignored files
   to copy into a fresh worktree. Overrides `.claude/worktree-seed`; both fall
-  back to `.env`, `.env.local`.
+  back to `.env`, `.env.local`. A `seed:` list in `.claude/env.yaml` (see
+  `docs/env-manifest.md`) is always **added** on top of whichever source won.
 
 ## Steps
 
@@ -78,8 +79,8 @@ branch back into your integration branch and pruning the worktree.
    content, so files like `.env` are missing. Copy them in:
    `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/seed-worktree.py" "<worktree-home>/<repo>-<slice>"`
    (Configurable via `$CCW_SEED` or a `.claude/worktree-seed` file; defaults to
-   `.env`, `.env.local`. Best-effort — never blocks worktree creation.) Mention
-   any files it seeded.
+   `.env`, `.env.local`; a `seed:` list in `.claude/env.yaml` is added on top.
+   Best-effort — never blocks worktree creation.) Mention any files it seeded.
 
 6. **Preflight de ambiente.** Parallel sessions fail first on shared runtime
    state, not on code. Run these checks and include the findings in the
@@ -99,10 +100,14 @@ branch back into your integration branch and pruning the worktree.
      and warn when two branches add versions for the same day — renumber early,
      not at merge time.
    - **Portas de dev ocupadas** (when the repo has a dev server — Quarkus,
-     Next.js, etc.): `lsof -nP -iTCP:8080,8083,3000 -sTCP:LISTEN` and report
-     who holds them, so the new session picks a free port instead of killing a
-     sibling's dev server (`lsof kill` de porta já matou o quarkus:dev de outra
-     worktree).
+     Next.js, etc.): if the repo has a `.claude/env.yaml` environment manifest
+     (see `docs/env-manifest.md`), the ports to check come **from its `ports:`
+     list** — that's the mechanical source, not a guess:
+     `lsof -nP -iTCP:<port1>,<port2>,… -sTCP:LISTEN`. Only when there is no
+     manifest, fall back to the classic guess `8080,8083,3000`. Either way,
+     report who holds each busy port, so the new session picks a free port
+     instead of killing a sibling's dev server (`lsof kill` de porta já matou
+     o quarkus:dev de outra worktree).
    - **Repositório Maven compartilhado** (repos with `pom.xml`): remind that
      `~/.m2` is shared across worktrees — a sibling session installing a
      SNAPSHOT can serve stale artifacts here; on weird compile errors,
