@@ -33,6 +33,7 @@ Before starting work, give the user a one-line suggestion and wait:
 Then:
 - If the user runs `/board-flow:capture` or supplies a key → reference the key in the work going forward.
 - If the user says "skip" / "just do it" / proceeds without answering → drop it; do **not** ask again this session for the same request.
+- If the request is the cross-repo half of work already carded in another repo (the user names a sibling key, or says "same as X, but on the frontend/extension"), note in the suggestion that the captured card should be linked to its sibling — see "Cascata multi-repo" in `agents/atlassian-expert.md` (`defaults.sibling_link_type`).
 
 Suggest at most **once per request**. Don't nag. If the same kind of work comes up later, suggest again — but never twice for the same item.
 

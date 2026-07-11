@@ -92,6 +92,10 @@ Read `.claude/topology` if present. If found: confirm with user: "Default topolo
 
 If `.claude/topology` is missing: ask "Default topology? Options: `build-hex`, `build-team`, `discovery`. Type one:". Don't write a value the user didn't give.
 
+### Optional keys (not walked through)
+
+Some `defaults` keys are optional and hand-edited rather than asked here: `status_map.done` (auto-advance target for `/board-flow:prove`), a discard status (`wont_do` / `cancelled`), and `sibling_link_type` — the issue link type used to tie sibling cards of the same work across repos (default `"Relates"`; see "Cascata multi-repo" in `agents/atlassian-expert.md`). Mention they exist if the user asks; don't prompt for them.
+
 ### 8. Show the proposed file and confirm
 
 Display the assembled `board-flow.yaml` exactly as it'll be written. Ask: "Write this to `<path>`? (yes / cancel / edit field <name>)".
