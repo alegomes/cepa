@@ -21,7 +21,7 @@ waves:
     mode: parallel-worktrees   # superficies disjuntas: hooks/ vs commands/ vs board-flow/
     fork_after: wave-1
     slices: [P3-env-manifest, P4-consolidacao-mm, P5-cascata-multirepo]
-    status: pending
+    status: done              # 3 agentes paralelos em worktrees, merge train 2026-07-11; 1 conflito real (atlassian-expert.md, resolvido)
   - id: 3
     label: grandes-com-design
     mode: interactive-design-then-build   # decisao humana antes do build
@@ -47,15 +47,15 @@ slices:
   P3-env-manifest:
     surface: [common/hooks/seed-worktree.py, common/bin/cepa-doctor, common/commands/worktree-start.md, docs/]
     human_gate: none
-    status: pending
+    status: done
   P4-consolidacao-mm:
     surface: [common/commands/consolidate.md, common/expertise/]
     human_gate: revisar diff antes de gravar consolidacao
-    status: pending
+    status: done
   P5-cascata-multirepo:
     surface: [board-flow/agents/atlassian-expert.md, board-flow/skills/]
     human_gate: none
-    status: pending
+    status: done
   P6-ui-proof-gate:
     surface: [a definir na sessao de design]
     human_gate: "DECISAO ABERTA: onde mora a superficie Playwright (por repo vs generico)"
