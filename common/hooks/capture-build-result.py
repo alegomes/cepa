@@ -38,22 +38,45 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+# Shared markers for the JS/Node toolchain (npm/yarn/pnpm). CC's Bash
+# tool_response omits the exit code on SUCCESS, so a green npm/Next build can
+# only be recognized by text. FAILURES still carry a non-zero exit code (→
+# is_error → exit-code fallback), so they classify even without a marker; the
+# success markers below are what close the green-detection gap.
+#
+# Success markers cover the dominant build tools: Next.js / CRA / webpack
+# ("Compiled successfully"), Vite ("built in"), and the yarn success footer
+# ("Done in "). Failure markers are a safety net (checked first) so a build that
+# prints a success marker mid-run but fails later — e.g. Next compiles, then a
+# page throws during prerender — is still classified FAILURE.
+_JS_SUCCESS = ["Compiled successfully", "built in", "build completed", "Done in "]
+_JS_FAILURE = [
+    "npm error",                  # npm v9/10 wraps any failed run-script
+    "npm ERR!",                   # npm v8 and earlier
+    "ELIFECYCLE",                 # npm/pnpm lifecycle failure
+    "error Command failed",       # yarn
+    "Failed to compile",          # Next.js / CRA compile error
+    "Build error occurred",       # Next.js build failure
+    "Export encountered errors",  # Next.js export/prerender failure
+    "error TS",                   # tsc type error
+]
+
 # (regex on command, kind, success-markers, failure-markers)
 # Markers may be None, a single string, or a list of substrings. Failure
 # markers are checked first (fail-closed). When no marker is defined OR
 # matched, we fall back to exit_code — but note CC's Bash tool_response
 # omits the exit code on success in current versions, so marker-less
-# patterns (npm/yarn/pytest/cargo/go-test below) effectively can't classify
-# a green build yet. Prefer text markers. See classify().
+# patterns (pytest/cargo/go-test below) effectively can't classify a green
+# build yet. Prefer text markers. See classify().
 PATTERNS = [
     (re.compile(r"(?:^|\s)(?:\./)?mvnw?\b.*\b(?:verify|test|package|install)\b"),
      "maven", ["BUILD SUCCESS"], ["BUILD FAILURE"]),
     (re.compile(r"(?:^|\s)(?:\./)?gradlew?\b.*\b(?:build|test|check|verify)\b"),
      "gradle", ["BUILD SUCCESSFUL"], ["BUILD FAILED"]),
     (re.compile(r"(?:^|\s)npm\b.*\b(?:test|run\s+test|run\s+build)\b"),
-     "npm", None, None),
+     "npm", _JS_SUCCESS, _JS_FAILURE),
     (re.compile(r"(?:^|\s)(?:yarn|pnpm)\b.*\b(?:test|build)\b"),
-     "yarn", None, None),
+     "yarn", _JS_SUCCESS, _JS_FAILURE),
     (re.compile(r"(?:^|\s)pytest\b"),
      "pytest", None, None),
     (re.compile(r"(?:^|\s)cargo\b.*\b(?:test|build|check)\b"),
@@ -341,6 +364,13 @@ def main():
         state_path.write_text(json.dumps(new_state, indent=2) + "\n", encoding="utf-8")
     except OSError as e:
         print(f"[capture-build-result] could not write {state_path}: {e}", file=sys.stderr)
+
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import _telemetry as T
+        T.emit("build_result", cwd=str(cwd), status=status, kind=kind)
+    except Exception:
+        pass  # telemetry never breaks the capture
 
     sys.exit(0)
 

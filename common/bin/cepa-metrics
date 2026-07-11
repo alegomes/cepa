@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""cepa-metrics — aggregate the harness's own telemetry into a readable report.
+
+Reads the JSONL ledgers written by _telemetry.py (and inline emitters) at
+~/.claude/cepa-telemetry/events-YYYY-MM.jsonl and answers the questions the
+harness could not answer about itself: how often gates fire (and where), how
+builds trend per repo, which proof verdicts dominate, how many sessions each
+project consumes.
+
+Usage:
+  cepa-metrics                  # last 30 days
+  cepa-metrics --days 7         # last N days
+  cepa-metrics --month 2026-07  # a specific month
+  cepa-metrics --repo wego-acesso-backend   # filter to one repo
+  cepa-metrics --json           # machine-readable dump of the aggregates
+
+Reading the numbers:
+  - gate_block reason=stale/failure with HIGH counts on one repo → the verify
+    loop is too slow there or the baseline scope is wrong.
+  - gate_block reason=no-baseline on a repo that HAS a build → sessions are
+    pushing before ever running verify.
+  - gate_warn reason=no-build-manifest recurring on the same repo → commit the
+    .claude/no-build marker and silence it.
+  - proof_block > 0 → an agent stamped `proven` over a forbidding level; the
+    guard caught it. Recurring == prompt drift in proof-reviewer.
+  - builds failure-rate per repo → where the red-green loop burns the most.
+"""
+
+import argparse
+import json
+import os
+import sys
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+TELEMETRY_DIR = Path(os.environ.get("CEPA_TELEMETRY_DIR") or (Path.home() / ".claude" / "cepa-telemetry"))
+
+
+def load_events(since: datetime, until: datetime):
+    events = []
+    if not TELEMETRY_DIR.is_dir():
+        return events
+    for f in sorted(TELEMETRY_DIR.glob("events-*.jsonl")):
+        for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+                ts = datetime.fromisoformat(str(e.get("ts", "")).replace("Z", "+00:00"))
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            if since <= ts <= until:
+                e["_ts"] = ts
+                events.append(e)
+    return events
+
+
+def fmt_counter(c: Counter, indent="    ", top=None) -> str:
+    items = c.most_common(top)
+    if not items:
+        return f"{indent}(nenhum)"
+    width = max(len(str(k)) for k, _ in items)
+    return "\n".join(f"{indent}{str(k):<{width}}  {v}" for k, v in items)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Aggregate cepa harness telemetry.")
+    ap.add_argument("--days", type=int, default=30)
+    ap.add_argument("--month", help="YYYY-MM (overrides --days)")
+    ap.add_argument("--repo", help="filter to one repo name")
+    ap.add_argument("--json", action="store_true", dest="as_json")
+    args = ap.parse_args()
+
+    now = datetime.now(timezone.utc)
+    if args.month:
+        try:
+            start = datetime.strptime(args.month, "%Y-%m").replace(tzinfo=timezone.utc)
+        except ValueError:
+            print(f"--month inválido: {args.month} (use YYYY-MM)", file=sys.stderr)
+            return 1
+        end = (start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(seconds=1)
+    else:
+        start, end = now - timedelta(days=args.days), now
+
+    events = load_events(start, end)
+    if args.repo:
+        events = [e for e in events if e.get("repo") == args.repo]
+
+    if not events:
+        print(f"Nenhum evento entre {start.date()} e {end.date()} em {TELEMETRY_DIR}.")
+        print("A telemetria começa a acumular a partir da instalação desta versão — "
+              "rode de novo depois de algumas sessões.")
+        return 0
+
+    # ── Aggregate ──────────────────────────────────────────────────────
+    by_event = Counter(e.get("event", "?") for e in events)
+    sessions = Counter(e.get("repo") or "?" for e in events if e.get("event") == "session_start")
+
+    builds = defaultdict(Counter)   # repo -> {SUCCESS: n, FAILURE: n}
+    for e in events:
+        if e.get("event") == "build_result":
+            builds[e.get("repo") or "?"][e.get("status", "?")] += 1
+
+    gate_blocks = Counter()         # (repo, tier, reason)
+    gate_warns = Counter()
+    for e in events:
+        key = (e.get("repo") or "?", e.get("tier", "?"), e.get("reason", "?"))
+        if e.get("event") == "gate_block":
+            gate_blocks[key] += 1
+        elif e.get("event") == "gate_warn":
+            gate_warns[key] += 1
+
+    proof_verdicts = Counter()      # (repo, verdict)
+    proof_blocks = Counter()        # repo
+    for e in events:
+        if e.get("event") == "proof_verdict":
+            proof_verdicts[(e.get("repo") or "?", e.get("verdict", "?"))] += 1
+        elif e.get("event") == "proof_block":
+            proof_blocks[e.get("repo") or "?"] += 1
+
+    known = {"session_start", "session_end", "build_result", "gate_block", "gate_warn",
+             "proof_verdict", "proof_block"}
+    custom = Counter(e.get("event") for e in events if e.get("event") not in known)
+
+    if args.as_json:
+        print(json.dumps({
+            "period": [start.isoformat(), end.isoformat()],
+            "total_events": len(events),
+            "by_event": dict(by_event),
+            "sessions_per_repo": dict(sessions),
+            "builds": {r: dict(c) for r, c in builds.items()},
+            "gate_blocks": {" ".join(k): v for k, v in gate_blocks.items()},
+            "gate_warns": {" ".join(k): v for k, v in gate_warns.items()},
+            "proof_verdicts": {" ".join(k): v for k, v in proof_verdicts.items()},
+            "proof_blocks": dict(proof_blocks),
+            "custom_events": dict(custom),
+        }, indent=2, ensure_ascii=False, default=str))
+        return 0
+
+    # ── Report ─────────────────────────────────────────────────────────
+    print(f"# Telemetria do harness — {start.date()} a {end.date()}")
+    print(f"{len(events)} eventos · ledger: {TELEMETRY_DIR}\n")
+
+    print(f"## Sessões por repo ({sum(sessions.values())} no período)")
+    print(fmt_counter(sessions))
+
+    print("\n## Builds por repo (verde / vermelho)")
+    if builds:
+        for repo in sorted(builds, key=lambda r: -sum(builds[r].values())):
+            c = builds[repo]
+            ok, fail = c.get("SUCCESS", 0), c.get("FAILURE", 0)
+            total = sum(c.values())
+            rate = f"{100 * fail / total:.0f}%" if total else "-"
+            print(f"    {repo}: {ok} verdes, {fail} vermelhos (taxa de falha {rate})")
+    else:
+        print("    (nenhum)")
+
+    print("\n## Gate-advance — bloqueios (repo · tier · motivo)")
+    print(fmt_counter(Counter({f"{r} · {t} · {m}": v for (r, t, m), v in gate_blocks.items()})))
+    print("\n## Gate-advance — avisos sem bloqueio")
+    print(fmt_counter(Counter({f"{r} · {t} · {m}": v for (r, t, m), v in gate_warns.items()})))
+
+    print("\n## Proof gate — vereditos escritos (repo · veredito)")
+    print(fmt_counter(Counter({f"{r} · {v}": n for (r, v), n in proof_verdicts.items()})))
+    if proof_blocks:
+        print("\n## Proof gate — `proven` sobre-declarado barrado pelo guard ⚠")
+        print(fmt_counter(proof_blocks))
+
+    if custom:
+        print("\n## Eventos custom (emitidos por comandos/skills)")
+        print(fmt_counter(custom))
+
+    # ── Leituras sugeridas ─────────────────────────────────────────────
+    hints = []
+    for (repo, tier, reason), n in gate_blocks.items():
+        if reason in ("stale", "failure") and n >= 5:
+            hints.append(f"- {repo}: {n} bloqueios por build {reason.upper()} — loop de verify lento ou baseline com escopo errado.")
+        if reason == "no-baseline" and n >= 3:
+            hints.append(f"- {repo}: {n} bloqueios sem baseline — sessões tentam compartilhar antes de rodar verify.")
+    for (repo, tier, reason), n in gate_warns.items():
+        if reason == "no-build-manifest" and n >= 3:
+            hints.append(f"- {repo}: {n} avisos de repo sem build — commite `.claude/no-build` e silencie.")
+    for repo, n in proof_blocks.items():
+        hints.append(f"- {repo}: {n} artefato(s) `proven` contraditório(s) barrados — prompt drift no proof-reviewer; vale investigar.")
+    if hints:
+        print("\n## Leituras sugeridas")
+        print("\n".join(hints))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

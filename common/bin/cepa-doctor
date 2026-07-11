@@ -1,0 +1,281 @@
+#!/usr/bin/env python3
+"""cepa-doctor — valida a instalação do harness contra a realidade.
+
+Quase toda falha de infraestrutura do harness é descoberta no meio de uma
+tarefa, no pior momento: plugin que não carregou (cards criados sem custom
+fields), board-flow.yaml de outro módulo, baseline FAILURE de semanas,
+worktrees órfãs, handoffs stale pós-rename. Este comando transforma isso em
+manutenção de 30 segundos.
+
+Checks globais (independem do projeto):
+  - settings.json parseia; plugins @cepa habilitados
+  - versão de cada plugin no repo vs. o cache instalado (edição sem reinstall)
+  - todos os hooks .py do cache compilam
+  - diretório de telemetria gravável
+
+Checks do projeto (cwd):
+  - é git repo (rituais degradam sem git)
+  - board-flow.yaml: estrutura mínima do bloco defaults
+  - .claude/last-build.json: status e idade do baseline
+  - worktrees session/*: stale (>14d sem commit) e diretórios órfãos
+  - handoffs: arquivos sem update há >30d (fonte de fatos stale)
+
+Saída: ✓ / ⚠ / ✗ por check. Exit 0 = tudo ok, 1 = só warnings, 2 = falhas.
+O check VIVO do board-flow.yaml contra o Jira não acontece aqui (script sem
+MCP) — o comando /common:doctor delega essa parte ao atlassian-expert.
+"""
+
+import json
+import os
+import py_compile
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+CLAUDE_DIR = Path.home() / ".claude"
+RESULTS = []  # (level, area, message)  level: "ok" | "warn" | "fail"
+
+
+def ok(area, msg):
+    RESULTS.append(("ok", area, msg))
+
+
+def warn(area, msg):
+    RESULTS.append(("warn", area, msg))
+
+
+def fail(area, msg):
+    RESULTS.append(("fail", area, msg))
+
+
+def semver(v: str):
+    try:
+        return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+    except Exception:
+        return (0,)
+
+
+def age_days(iso: str):
+    try:
+        ts = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - ts).total_seconds() / 86400
+    except Exception:
+        return None
+
+
+def git(args, cwd=None):
+    try:
+        p = subprocess.run(["git"] + args, capture_output=True, text=True,
+                           cwd=cwd, timeout=15)
+        return p.returncode, p.stdout, p.stderr
+    except Exception as e:
+        return 1, "", str(e)
+
+
+# ── Checks globais ──────────────────────────────────────────────────────
+
+def check_settings():
+    path = CLAUDE_DIR / "settings.json"
+    if not path.exists():
+        warn("settings", "~/.claude/settings.json não existe")
+        return {}
+    try:
+        settings = json.loads(path.read_text(encoding="utf-8"))
+        ok("settings", "settings.json parseia")
+        return settings
+    except json.JSONDecodeError as e:
+        fail("settings", f"settings.json inválido: {e}")
+        return {}
+
+
+def cepa_repo_root():
+    try:
+        mk = json.loads((CLAUDE_DIR / "plugins" / "known_marketplaces.json").read_text())
+        loc = mk.get("cepa", {}).get("installLocation")
+        return Path(loc) if loc else None
+    except Exception:
+        return None
+
+
+def check_plugins(settings):
+    repo = cepa_repo_root()
+    if not repo or not repo.is_dir():
+        fail("plugins", "marketplace 'cepa' não encontrado em known_marketplaces.json")
+        return
+    enabled = settings.get("enabledPlugins", {})
+    cache_root = CLAUDE_DIR / "plugins" / "cache" / "cepa"
+    for pj in sorted(repo.glob("*/.claude-plugin/plugin.json")):
+        try:
+            meta = json.loads(pj.read_text())
+            repo_v = meta.get("version", "0")
+            # o nome do plugin vem do manifest, não do diretório (ex.: o
+            # diretório docs-topology/ é a fonte do plugin "docs")
+            name = meta.get("name") or pj.parent.parent.name
+        except Exception as e:
+            fail("plugins", f"{pj.parent.parent.name}: plugin.json do repo inválido ({e})")
+            continue
+        key = f"{name}@cepa"
+        if enabled.get(key) is not True:
+            warn("plugins", f"{key} NÃO habilitado em enabledPlugins — cards/hooks desse plugin não funcionam")
+        cdir = cache_root / name
+        versions = sorted((d.name for d in cdir.iterdir() if d.is_dir()), key=semver) if cdir.is_dir() else []
+        if not versions:
+            fail("plugins", f"{name}: nenhuma versão no cache — rode bin/install.sh")
+            continue
+        latest = versions[-1]
+        if semver(repo_v) > semver(latest):
+            warn("plugins", f"{name}: repo está em {repo_v} mas o cache instalado é {latest} — edições não valem; rode bin/install.sh")
+        else:
+            ok("plugins", f"{name} {latest} instalado e habilitado")
+
+
+def check_hooks_compile():
+    cache_root = CLAUDE_DIR / "plugins" / "cache" / "cepa"
+    if not cache_root.is_dir():
+        return
+    bad = 0
+    total = 0
+    for plugin_dir in cache_root.iterdir():
+        versions = sorted((d for d in plugin_dir.iterdir() if d.is_dir()),
+                          key=lambda d: semver(d.name)) if plugin_dir.is_dir() else []
+        if not versions:
+            continue
+        hooks = versions[-1] / "hooks"
+        for py in hooks.glob("*.py") if hooks.is_dir() else []:
+            total += 1
+            try:
+                py_compile.compile(str(py), doraise=True)
+            except py_compile.PyCompileError as e:
+                bad += 1
+                fail("hooks", f"{py.relative_to(cache_root)} não compila: {e.msg.splitlines()[-1][:120]}")
+    if total and not bad:
+        ok("hooks", f"{total} hooks .py do cache compilam")
+
+
+def check_telemetry():
+    tdir = Path(os.environ.get("CEPA_TELEMETRY_DIR") or (CLAUDE_DIR / "cepa-telemetry"))
+    try:
+        tdir.mkdir(parents=True, exist_ok=True)
+        probe = tdir / ".doctor-probe"
+        probe.write_text("ok")
+        probe.unlink()
+        ok("telemetria", f"ledger gravável em {tdir}")
+    except OSError as e:
+        warn("telemetria", f"ledger não gravável ({e}) — métricas não acumulam")
+
+
+# ── Checks do projeto (cwd) ─────────────────────────────────────────────
+
+def check_project(cwd: Path):
+    rc, out, _ = git(["rev-parse", "--show-toplevel"], cwd=str(cwd))
+    if rc != 0:
+        warn("projeto", "cwd não é um git repo — handoff/wrap-up/worktrees degradam aqui")
+        return
+    root = Path(out.strip())
+    ok("projeto", f"git repo: {root}")
+
+    # board-flow.yaml — estrutura mínima
+    bf = root / "board-flow.yaml"
+    if bf.exists():
+        text = bf.read_text(encoding="utf-8", errors="replace")
+        missing = [k for k in ("site", "project_key", "status_map") if not re.search(rf"^\s*{k}:", text, re.M)]
+        for k in ("to_do", "in_progress", "in_review"):
+            if not re.search(rf"^\s*{k}:", text, re.M):
+                missing.append(f"status_map.{k}")
+        if missing:
+            warn("board-flow", f"board-flow.yaml sem chave(s): {', '.join(missing)} — rode /board-flow:configure")
+        else:
+            ok("board-flow", "board-flow.yaml com estrutura mínima (checagem VIVA contra o Jira: /common:doctor --live)")
+
+    # baseline de build
+    no_build = (root / ".claude" / "no-build").exists()
+    lb = root / ".claude" / "last-build.json"
+    if no_build:
+        ok("build", "projeto opta por .claude/no-build (sem baseline a cobrar)")
+    elif lb.exists():
+        try:
+            state = json.loads(lb.read_text())
+            status = state.get("status", "?")
+            a = age_days(state.get("at") or state.get("since"))
+            atxt = f", {a:.0f}d atrás" if a is not None else ""
+            if status == "SUCCESS":
+                ok("build", f"baseline SUCCESS{atxt}")
+            else:
+                w = f"baseline {status}{atxt} — gate-advance vai bloquear commits/push até um verify verde"
+                if a is not None and a > 7:
+                    w += " (antigo demais para ser verdade; rode o verify)"
+                warn("build", w)
+        except (OSError, json.JSONDecodeError) as e:
+            warn("build", f"last-build.json ilegível: {e}")
+    else:
+        warn("build", "sem baseline de build — o primeiro push será bloqueado; rode o verify do projeto (ou crie .claude/no-build)")
+
+    # worktrees session/*
+    rc, out, _ = git(["worktree", "list", "--porcelain"], cwd=str(root))
+    registered = set()
+    if rc == 0:
+        wt_path = None
+        for line in out.splitlines():
+            if line.startswith("worktree "):
+                wt_path = line.split(" ", 1)[1]
+            elif line.startswith("branch ") and wt_path:
+                branch = line.split("/", 2)[-1] if "refs/heads/" in line else line
+                if "session/" in line:
+                    registered.add(Path(wt_path).name)
+                    rc2, out2, _ = git(["log", "-1", "--format=%ct"], cwd=wt_path)
+                    if rc2 == 0 and out2.strip().isdigit():
+                        d = (datetime.now(timezone.utc).timestamp() - int(out2.strip())) / 86400
+                        if d > 14:
+                            warn("worktrees", f"{Path(wt_path).name} ({branch.strip()}) sem commit há {d:.0f}d — merge ou /common:worktree-discard")
+                wt_path = None
+    wt_home = Path(os.environ.get("CCW_WORKTREE_HOME") or (Path.home() / "ccw-worktrees"))
+    if wt_home.is_dir():
+        prefix = f"{root.name}-"
+        orphans = [d.name for d in wt_home.iterdir()
+                   if d.is_dir() and d.name.startswith(prefix) and d.name not in registered]
+        for o in orphans:
+            warn("worktrees", f"diretório órfão {wt_home / o} (não registrado em git worktree) — lixo de sessão morta")
+    if not any(r[1] == "worktrees" for r in RESULTS):
+        ok("worktrees", "sem worktrees stale ou órfãs")
+
+    # handoffs stale
+    hdir = root / ".claude" / "handoffs"
+    stale = 0
+    for f in hdir.glob("*.md") if hdir.is_dir() else []:
+        m = re.search(r"^updated_at:\s*(\S+)", f.read_text(encoding="utf-8", errors="replace"), re.M)
+        a = age_days(m.group(1)) if m else None
+        if a is not None and a > 30:
+            stale += 1
+            warn("handoffs", f"{f.name} sem update há {a:.0f}d — fatos dele são hipótese vencida; considere apagar")
+    if hdir.is_dir() and not stale:
+        ok("handoffs", "sem handoffs vencidos")
+
+
+# ── Main ────────────────────────────────────────────────────────────────
+
+def main():
+    settings = check_settings()
+    check_plugins(settings)
+    check_hooks_compile()
+    check_telemetry()
+    check_project(Path.cwd())
+
+    icons = {"ok": "✓", "warn": "⚠", "fail": "✗"}
+    order = {"fail": 0, "warn": 1, "ok": 2}
+    print("# cepa-doctor\n")
+    for level, area, msg in sorted(RESULTS, key=lambda r: (order[r[0]], r[1])):
+        print(f" {icons[level]} [{area}] {msg}")
+
+    fails = sum(1 for r in RESULTS if r[0] == "fail")
+    warns = sum(1 for r in RESULTS if r[0] == "warn")
+    print(f"\n{fails} falha(s), {warns} aviso(s), "
+          f"{sum(1 for r in RESULTS if r[0] == 'ok')} ok.")
+    return 2 if fails else (1 if warns else 0)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

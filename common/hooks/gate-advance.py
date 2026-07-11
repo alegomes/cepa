@@ -54,6 +54,15 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    import _telemetry as T
+except Exception:  # telemetry must never break the gate
+    class T:  # noqa: N801
+        @staticmethod
+        def emit(*a, **k):
+            pass
+
 
 # Local operations: commit. Recoverable with git reset; missing baseline
 # falls open with a loud warning (H1).
@@ -196,6 +205,7 @@ def main():
                 "╚══════════════════════════════════════════════════════════════════════╝\n"
             )
             print(warning, file=sys.stderr)
+            T.emit("gate_warn", cwd=str(cwd), tier=tier, reason="no-baseline")
             sys.exit(0)
         elif not has_build_manifest(cwd):
             # Build-less repo (no recognizable build manifest at root):
@@ -211,6 +221,7 @@ def main():
                 "command from that path first to record a baseline.",
                 file=sys.stderr,
             )
+            T.emit("gate_warn", cwd=str(cwd), tier=tier, reason="no-build-manifest")
             sys.exit(0)
         else:
             # H2: fail-CLOSED for sharing operations.
@@ -228,6 +239,7 @@ def main():
                 f"  honestly: create `.claude/no-build` (commit it to apply for the team).",
                 file=sys.stderr,
             )
+            T.emit("gate_block", cwd=str(cwd), tier=tier, reason="no-baseline")
             sys.exit(2)
 
     # ─── Baseline exists — read and gate on status ─────────────────────
@@ -270,6 +282,10 @@ def main():
         f"  State file: {state_path}\n"
         f"  Override by re-establishing green build, not by editing the state file.",
         file=sys.stderr,
+    )
+    T.emit(
+        "gate_block", cwd=str(cwd), tier=tier, reason=status.lower(),
+        age_days=round(age, 1) if age is not None else None,
     )
     sys.exit(2)
 

@@ -292,6 +292,17 @@ def main():
     except Exception as e:  # noqa: BLE001 — a registry error must never break the session
         print(f"[session-registry] {e}", file=sys.stderr)
 
+    try:
+        import _telemetry as T
+        T.emit(
+            "session_end" if event == "SessionEnd" else "session_start",
+            cwd=cwd,
+            branch=L.current_branch(cwd),
+            session=session_id[:8],
+        )
+    except Exception:
+        pass  # telemetry never breaks the session
+
     sys.exit(0)
 
 

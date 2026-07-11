@@ -31,7 +31,37 @@ import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+
+
+def _t_emit(event: str, cwd: str = None, **fields) -> None:
+    """Minimal inline mirror of common/hooks/_telemetry.py (cross-plugin import
+    is fragile across versioned cache dirs, so the ~20 lines are duplicated).
+    Same ledger, same shape: ~/.claude/cepa-telemetry/events-YYYY-MM.jsonl.
+    Strictly fail-silent."""
+    try:
+        import subprocess
+        repo = ""
+        try:
+            out = subprocess.run(
+                ["git", "-C", cwd or os.getcwd(), "rev-parse",
+                 "--path-format=absolute", "--git-common-dir"],
+                capture_output=True, text=True, timeout=5)
+            if out.returncode == 0:
+                common = out.stdout.strip()
+                repo = Path(common).parent.name if common.endswith("/.git") else Path(common).name
+        except Exception:
+            pass
+        entry = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                 "event": event, "repo": repo}
+        entry.update(fields)
+        tdir = Path(os.environ.get("CEPA_TELEMETRY_DIR") or (Path.home() / ".claude" / "cepa-telemetry"))
+        tdir.mkdir(parents=True, exist_ok=True)
+        with open(tdir / f"events-{entry['ts'][:7]}.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+    except Exception:
+        pass
 
 # A level whose status is in UNPROVEN_STATUSES routes the card to UNPROVEN;
 # anything else forbidding `proven` routes to NEEDS-HUMAN. Both forbid `proven`.
@@ -123,11 +153,17 @@ def main():
         except Exception:
             sys.exit(0)  # can't understand it → never block
 
+    card = Path(file_path).stem
+    hook_cwd = payload.get("cwd") or os.getcwd()
+    declared = verdict.strip().lower() if isinstance(verdict, str) else "?"
+
     if not isinstance(verdict, str) or verdict.strip().lower() != "proven":
+        _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict=declared)
         sys.exit(0)  # only `proven` can be contradicted
 
     forbidding = sorted({s for s in statuses if s in FORBIDDING_STATUSES})
     if not forbidding:
+        _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven")
         sys.exit(0)  # proven is consistent with the levels
 
     computed = "unproven" if any(s in UNPROVEN_STATUSES for s in forbidding) else "needs-human"
@@ -145,6 +181,8 @@ def main():
         f"you believe the block is wrong, return NEEDS-HUMAN and say so.",
         file=sys.stderr,
     )
+    _t_emit("proof_block", cwd=hook_cwd, card=card,
+            declared="proven", computed=computed)
     sys.exit(2)
 
 
