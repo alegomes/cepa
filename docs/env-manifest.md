@@ -92,3 +92,10 @@ itens. Qualquer erro (arquivo ilegível, formato inesperado) resulta em lista
 vazia — os consumidores seguem em frente sem o manifesto. Se você precisar
 de estrutura mais rica que isso, o env.yaml é o lugar errado: ele é um
 declarador, não um orquestrador.
+
+> **Por que o `.claude/ui-proof.yaml` (P6) usa outro dialeto?** Deliberado:
+> o env.yaml é consumido por hooks fail-silent com parse por linhas, então é
+> raso; o [manifesto de prova de UI](ui-proof-manifest.md) é consumido por um
+> agente com YAML de verdade e precisa de aninhamento (`flows` → `steps`).
+> Consumidores diferentes, contratos de parsing diferentes — a mesma
+> justificativa está registrada lá.

@@ -1,6 +1,6 @@
 ---
-description: Prova a superfície de UI/extensão do projeto pelo gate mecânico — delega ao ui-proof-reviewer, que sobe o app, roda os fluxos declarados em .claude/ui-proof.yaml via Playwright (extensão Chrome unpacked incluída) e exige efeito verificável no backend, com prova green→red→green quando o diff da mudança é conhecido. Retorna PROVEN / UNPROVEN / NEEDS-HUMAN com relatório leigo em pt-BR. Sem manifesto, o comando não chuta — devolve NEEDS-HUMAN dizendo exatamente o que declarar.
-argument-hint: [fluxo | --all]
+description: Prova a superfície de UI/extensão do projeto pelo gate mecânico — delega ao ui-proof-reviewer, que sobe o app, roda os fluxos declarados em .claude/ui-proof.yaml via Playwright (extensão Chrome unpacked incluída) e exige efeito verificável no backend, com prova green→red→green quando o diff da mudança é conhecido. Retorna PROVEN / UNPROVEN / NEEDS-HUMAN com relatório leigo em pt-BR. Sem manifesto, o comando não chuta — devolve NEEDS-HUMAN dizendo exatamente o que declarar. Com --draft, PROPÕE um esqueleto comentado de manifesto a partir da estrutura do repo (proposta explícita, nunca prova).
+argument-hint: [fluxo | --all | --draft]
 ---
 
 # /common:prove-ui
@@ -18,6 +18,8 @@ contrato de relatório. O que provar mora no repo do projeto, em
 
 - `$ARGUMENTS` — o nome de UM fluxo declarado no manifesto (ex.:
   `registrar-acesso`), ou `--all` para todos. Vazio = `--all`.
+  `--draft` = modo proposta: em vez de provar, PROPÕE um esqueleto de
+  manifesto (ver passo 0).
 
 ## Instructions
 
@@ -27,6 +29,26 @@ mecanicamente, a partir dos statuses que ele mediu. Você não relaxa o
 veredito, não re-roda fluxo "para confirmar", não edita o artifact.
 
 ## Workflow
+
+### 0. Modo `--draft` — propor o manifesto, nunca prová-lo
+
+Se `$ARGUMENTS` contém `--draft`, este run não prova nada — ele **propõe**.
+Inspecione a estrutura do repo (um `manifest.json` de extensão? um
+`package.json` com scripts `build`/`serve`/`preview`? um `.claude/env.yaml`
+com `up:`/`ports:`? rotas óbvias de SPA?) e escreva um esqueleto de
+`.claude/ui-proof.yaml` **comentado** em `.claude/ui-proof.draft.yaml`
+seguindo `docs/ui-proof-manifest.md` (do cepa): campos `up`, `base_url`,
+`build`, `serve`, `extension_dir` quando aplicável, e um ou dois `flows`
+placeholder com `steps`, `assert` (incluindo o `{nonce}` de frescor) e
+`covers` — cada valor incerto marcado com `# TODO(humano):`.
+
+Deixe explícito no arquivo e no relatório: **proposta explícita ≠ prova.**
+O rascunho não vale como manifesto — o dono do produto revisa, ajusta e
+renomeia para `.claude/ui-proof.yaml`; até lá, o gate continua devolvendo
+NEEDS-HUMAN por manifesto ausente. Isso não viola a doutrina "o agente não
+inventa fluxos": inventar seria *provar* contra um chute; propor um rascunho
+para o humano validar é o oposto. Pare aqui — não delegue ao
+ui-proof-reviewer no modo `--draft`.
 
 ### 1. Resolver escopo e contexto de mudança
 
@@ -67,7 +89,8 @@ Repasse ao usuário o relatório do agente **verificando o contrato** antes:
   manifesto.
 - NEEDS-HUMAN por manifesto ausente vem com o esqueleto mínimo do
   `.claude/ui-proof.yaml` a criar (campos `up`, `base_url`, `flows`) e o
-  apontador para `docs/ui-proof-manifest.md`.
+  apontador para `docs/ui-proof-manifest.md` — e com a sugestão de rodar
+  `/common:prove-ui --draft` para gerar um rascunho comentado a revisar.
 
 ### 4. Seam opcional de board (sem Jira aqui)
 

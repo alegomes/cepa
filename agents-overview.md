@@ -296,8 +296,15 @@ open → In Review, merge → Done.
 
 The `common@cepa` plugin ships the shared mindset skills, the
 autonomous-operation lifecycle, the session log, and the green-or-revert
-build-state machine. No agents — `common` is a horizontal layer that
-every topology rides on top of.
+build-state machine. `common` is a horizontal layer that every topology
+rides on top of — and that is exactly why it DOES ship agents when the
+concern is cross-topology: **`completion-auditor`** (independent last-mile
+acceptance gate, used by every board-flow lifecycle) and
+**`ui-proof-reviewer`** (independent proof gate for the UI/extension
+surface, driven by the host repo's `.claude/ui-proof.yaml` — any topology
+can have a SPA/extension in front of what it builds, so pinning it to one
+topology would hide it from the rest). Agents whose knowledge is
+topology-specific still live in their topologies.
 
 **Commands** (all in `common/commands/`):
 
