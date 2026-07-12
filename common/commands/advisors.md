@@ -83,85 +83,77 @@ recebe o artefato, o perfil da própria lente e NADA das outras.
 export const meta = {
   name: "advisors-panel",
   description: "Fan-out paralelo e isolado de lentes de revisao sobre um artefato de decisao",
-  input: {
-    type: "object",
-    properties: {
-      artifact_path: { type: "string", description: "path do artefato em revisao" },
-      artifact_content: { type: "string", description: "conteudo integral do artefato (ou diff+descricao, para PR)" },
-      lenses: {
-        type: "array",
-        maxItems: 7,
-        items: {
-          type: "object",
-          properties: {
-            name: { type: "string" },
-            profile: { type: "string", description: "system-prompt-fragment da lente, vindo do registry" }
-          },
-          required: ["name", "profile"]
-        }
-      }
-    },
-    required: ["artifact_path", "artifact_content", "lenses"]
-  }
+  phases: [{ title: "Pareceres" }],
 };
+
+// A Workflow tool entrega o input no global `args` — e pode entregá-lo como
+// STRING JSON (observado no primeiro uso real). A guarda é obrigatória.
+const A = typeof args === "string" ? JSON.parse(args) : args;
+// A.artifact_path: path do artefato; A.artifact_content: conteúdo integral
+// (ou diff+descrição, para PR); A.lenses: [{ name, profile }] — máx. 7,
+// profile copiado verbatim do registry.
 
 const lensOutputSchema = {
   type: "object",
+  additionalProperties: false,
+  required: ["lente", "achados", "veredito_da_lente", "premissas_que_desafio"],
   properties: {
+    // a lente se identifica DENTRO do schema — enriquecer depois via .then()
+    // não aparece no journal por agente e dificulta o debug
+    lente: { type: "string" },
     achados: {
       type: "array",
       items: {
         type: "object",
+        additionalProperties: false,
+        required: ["titulo", "severidade", "onde", "argumento"],
         properties: {
           titulo: { type: "string" },
           severidade: { type: "string", enum: ["critica", "alta", "media", "baixa"] },
           onde: { type: "string", description: "secao/linha/trecho do artefato" },
-          argumento: { type: "string" }
+          argumento: { type: "string" },
         },
-        required: ["titulo", "severidade", "onde", "argumento"]
-      }
+      },
     },
-    veredito_da_lente: { type: "string", description: "uma frase: a posicao desta lente sobre a decisao" },
-    premissas_que_desafio: { type: "array", items: { type: "string" } }
+    veredito_da_lente: { type: "string", description: "uma frase: a posicao desta lente" },
+    premissas_que_desafio: { type: "array", items: { type: "string" } },
   },
-  required: ["achados", "veredito_da_lente", "premissas_que_desafio"]
 };
 
-export default async function advisorsPanel({ input }) {
-  const runs = input.lenses.map(function (lens) {
-    return agent({
-      name: "lens-" + lens.name,
-      prompt: [
-        "Voce e UMA lente de um painel de advisors. Voce NAO ve as outras lentes; nao especule sobre elas.",
-        "SEU PERFIL (encarne-o integralmente):",
-        lens.profile,
-        "ARTEFATO EM REVISAO (" + input.artifact_path + "):",
-        "---",
-        input.artifact_content,
-        "---",
-        "Revise o artefato EXCLUSIVAMENTE pela sua lente. Ancorar cada achado em um trecho concreto do artefato ('onde').",
-        "Devolva APENAS o JSON no schema de saida: achados (titulo, severidade, onde, argumento), veredito_da_lente (uma frase), premissas_que_desafio (lista)."
-      ].join("\n\n"),
-      output: lensOutputSchema
-    });
-  });
+const reports = await parallel(A.lenses.map((lens) => () =>
+  agent(
+    [
+      "Voce e UMA lente de um painel de advisors. Voce NAO ve as outras lentes; nao especule sobre elas.",
+      "SEU PERFIL (encarne-o integralmente):",
+      lens.profile,
+      "ARTEFATO EM REVISAO (" + A.artifact_path + "):",
+      "---",
+      A.artifact_content,
+      "---",
+      "Revise o artefato EXCLUSIVAMENTE pela sua lente. Ancore cada achado em um trecho concreto do artefato ('onde').",
+      "No campo 'lente' do JSON de saida, escreva exatamente: " + lens.name,
+    ].join("\n\n"),
+    { label: "lente:" + lens.name, phase: "Pareceres", schema: lensOutputSchema }
+  )
+));
 
-  const reports = await parallel(runs);
-
-  return {
-    panel: input.lenses.map(function (lens, i) {
-      return { lens: lens.name, report: reports[i] };
-    })
-  };
-}
+return reports.filter(Boolean);
 ```
 
 Notas de execução:
 
+- Invoque a Workflow tool com este script no campo `script` e o input no campo
+  `args` como objeto JSON: `{artifact_path, artifact_content, lenses: [{name,
+  profile}]}` — `artifact_content` integral, `profile` copiado verbatim do
+  registry (passo 3).
 - O script é determinístico de propósito: sem `Date.now`, sem `Math.random`,
-  `meta` como literal puro. Não o "melhore" com nada disso.
-- O input é dado do passo 3: `artifact_content` integral, e um item em `lenses`
-  por lente do painel com o `profile` copiado verbatim do registry.
+  `meta` como literal puro. Não o "melhore" com nada disso. O `return` top-level
+  é válido no dialeto da Workflow tool (corpo roda em contexto async) — um
+  `node --check` acusa "Illegal return statement" e isso NÃO é um erro real.
+- Lições do primeiro uso real (2026-07-11, painel do P6): `args` pode chegar
+  como string JSON (daí a guarda no topo); e a identidade da lente vai DENTRO
+  do schema de saída, porque enriquecimento via `.then()` não aparece no
+  journal por agente.
 - Se a Workflow tool não estiver disponível nesta sessão, degrade para o
   equivalente manual: um `Task` por lente, **todos no mesmo bloco** (paralelo),
   cada um com o mesmo prompt do `agent()` acima. O isolamento e o schema JSON
