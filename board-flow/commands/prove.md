@@ -105,6 +105,19 @@ self-granted waiver the agent must never write), treat the card as
 verdict field is not authoritative when it disagrees with its own levels — the
 levels are.
 
+### 3b. UI gate — when the diff touches a declared UI surface
+
+If the repo has `.claude/ui-proof.yaml` AND the card's diff (touched files
+from the Implementation Summary) matches the `covers:` globs of at least one
+flow in it, the backend verdict alone is not enough — also delegate to
+`common:ui-proof-reviewer` (same diff context, slug = the card key; it writes
+`.claude/proof/ui-<KEY>.yaml`). Combine mechanically: **PROVEN requires BOTH
+verdicts PROVEN**; any UNPROVEN → UNPROVEN; otherwise any NEEDS-HUMAN →
+NEEDS-HUMAN. Name which gate produced each part of the combined verdict in
+your report and in the Jira comment. If the manifest exists but no flow
+covers the diff, skip this step and say so in one line (no UI surface
+declared for these files — a manifest gap to flag, not a block).
+
 ### 4. Apply the verdict
 
 #### PROVEN
