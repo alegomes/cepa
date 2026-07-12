@@ -26,8 +26,8 @@ waves:
     label: grandes-com-design
     mode: interactive-design-then-build   # decisao humana antes do build
     fork_after: wave-2
-    slices: [P6-ui-proof-gate, P7-advisors-workflow]   # um por vez, nesta ordem
-    status: pending
+    slices: [P6-ui-proof-gate, P7-advisors-workflow]
+    status: done              # design aprovado pelo dono 2026-07-11 (4 decisoes); build paralelo, merges limpos
   - id: 4
     label: revisao-com-evidencia
     mode: interactive
@@ -59,11 +59,11 @@ slices:
   P6-ui-proof-gate:
     surface: [a definir na sessao de design]
     human_gate: "DECISAO ABERTA: onde mora a superficie Playwright (por repo vs generico)"
-    status: pending
+    status: done
   P7-advisors-workflow:
     surface: [common/ (workflow script + registry de lentes)]
     human_gate: "3 pendencias do item Advisors do BACKLOG"
-    status: pending
+    status: done
   P8-metrics-review:
     surface: []                # leitura
     human_gate: conduz o humano
