@@ -27,7 +27,7 @@ waves:
     mode: interactive-design-then-build   # decisao humana antes do build
     fork_after: wave-2
     slices: [P6-ui-proof-gate, P7-advisors-workflow]
-    status: done              # design aprovado pelo dono 2026-07-11 (4 decisoes); build paralelo, merges limpos
+    status: done              # design aprovado (4 decisoes); build paralelo; P6 rev2 pos-painel de advisors (7 lentes, sintese em advisors-p6-sintese.md)
   - id: 4
     label: revisao-com-evidencia
     mode: interactive
