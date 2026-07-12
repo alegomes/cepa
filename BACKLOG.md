@@ -138,9 +138,16 @@ crítico:
 
 ## Maestro — orquestração multi-harness (frota de sessões Claude Code)
 
-**Status:** pendente, spike de viabilidade APROVADO (2026-07-11) · **Lar provável:**
-plugin novo `fleet`/`maestro` · **Origem:** estratégia multi-sessões da auditoria de
-sessões de 07/2026.
+**Status:** DESIGN FECHADO (rev2, 2026-07-12) — pronto para construir · **Lar:**
+plugin novo `maestro/` (decisão D6) · **Origem:** estratégia multi-sessões da
+auditoria de sessões de 07/2026.
+
+> **Design completo em `.claude/programs/maestro/design.md`** (rev2, revisado por
+> painel de 7 advisors — síntese em `.claude/programs/maestro/advisors-sintese.md`).
+> As "pendências de design" abaixo foram TODAS resolvidas lá (7 decisões de dono +
+> 15 propostas do painel aplicadas). Ordem de construção: (1) spike do porteiro MCP
+> com 1 filha fake, (2) program-plan + intake gate, (3) /maestro:run. O texto abaixo
+> permanece como registro histórico do spike.
 
 ### Problema
 
