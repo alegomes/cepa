@@ -1,0 +1,266 @@
+#!/usr/bin/env python3
+"""cepa-dor — Definition of Ready invocável para slices de um plan.yaml.
+
+Primitiva desacoplada de propósito (design Maestro v1, Componente 4): o
+maestro é o primeiro cliente, mas /board-flow:triage e /board-flow:drain
+podem reusar as checagens não-específicas de onda. 100% leitura.
+
+Veredito por slice: READY / NOT-READY com lacunas nomeadas, em pt-BR.
+
+Checagens (cada uma existe porque a falha correspondente já custou uma onda):
+  - schema_version == 1 (recusa versão desconhecida)
+  - programa com >= 4 demandas (D7)
+  - superfície declarada e DISJUNTA dos demais slices da onda — globs
+    expandidos contra a árvore de arquivos no fork point (interseção
+    glob×glob no abstrato não é computável); interseção → NOT-READY dos DOIS
+  - superfície não intersecta a zona de enforcement (deny incondicional)
+  - arquivos de alto atrito que nenhum slice declara → AVISO (não veto)
+  - critério de aceite declarado; em repo .claude/no-build o slice DEVE
+    trazer acceptance_cmd executável (merge train não aterrissa N slices
+    com verificação zero)
+  - zero decisão estratégica em aberto (human_gate: none ou decisão registrada)
+  - contexto mínimo apontado (context não-vazio)
+  - baseline verde no fork point (.claude/last-build.json — mesmo sinal do
+    green-or-revert; em repo no-build a checagem é dispensada com nota)
+
+Uso:
+  cepa-dor <plan.yaml> [--wave N] [--fork-point REF] [--repo DIR] [--json]
+           [--enforcement-zone GLOB ...]
+
+Exit: 0 = todos READY · 1 = READY com avisos · 2 = algum NOT-READY (ou plano inválido)
+"""
+import argparse
+import fnmatch
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("✗ cepa-dor precisa de PyYAML (pip install pyyaml)", file=sys.stderr)
+    sys.exit(2)
+
+DEFAULT_ENFORCEMENT_ZONE = [
+    ".claude/settings*",
+    ".claude-plugin/*",
+    "*/.claude-plugin/*",
+    "*/hooks/*",
+    "*/plugins/*",
+]
+
+HIGH_FRICTION = [
+    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock",
+    "Cargo.lock", "uv.lock", "Gemfile.lock", "composer.lock",
+    "*/migrations/*", "*/migration/*", "*/db/migrate/*",
+    "*/index.ts", "*/index.js", "*/__init__.py",
+    ".claude/settings*", "*settings.json",
+]
+
+
+def git_tree(repo: Path, ref: str) -> list[str]:
+    out = subprocess.run(
+        ["git", "-C", str(repo), "ls-tree", "-r", "--name-only", ref],
+        capture_output=True, text=True)
+    if out.returncode != 0:
+        raise RuntimeError(f"git ls-tree {ref} falhou: {out.stderr.strip()}")
+    return out.stdout.splitlines()
+
+
+def expand(globs: list[str], tree: list[str]) -> set[str]:
+    hits: set[str] = set()
+    for g in globs:
+        hits.update(f for f in tree
+                    if fnmatch.fnmatch(f, g) or fnmatch.fnmatch(f, g.rstrip("/") + "/*"))
+    return hits
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="cepa-dor")
+    ap.add_argument("plan")
+    ap.add_argument("--wave", type=int, default=None,
+                    help="id da onda a checar (default: primeira pending)")
+    ap.add_argument("--fork-point", default="HEAD")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--enforcement-zone", nargs="*",
+                    default=DEFAULT_ENFORCEMENT_ZONE)
+    args = ap.parse_args()
+
+    repo = Path(args.repo).resolve()
+    problems_global: list[str] = []
+    warnings_global: list[str] = []
+
+    try:
+        plan = yaml.safe_load(Path(args.plan).read_text())
+    except Exception as e:
+        print(f"✗ plan.yaml ilegível: {e}")
+        return 2
+
+    if not isinstance(plan, dict) or plan.get("schema_version") != 1:
+        print(f"✗ schema_version ausente ou desconhecida "
+              f"({plan.get('schema_version') if isinstance(plan, dict) else '?'}) — "
+              "cepa-dor conhece apenas a versão 1")
+        return 2
+
+    slices_all: dict = plan.get("slices") or {}
+    waves = plan.get("waves") or []
+
+    # D7 — piso de 4 demandas no PROGRAMA (memória de cálculo na decisão D7)
+    demandas = {s.get("demanda", k) for k, s in slices_all.items()}
+    if len(demandas) < 4:
+        problems_global.append(
+            f"programa com {len(demandas)} demanda(s) — piso é 4 (D7): abaixo "
+            "disso /board-flow:drain ou sessão única ganham do overhead do maestro")
+
+    # onda alvo
+    wave = None
+    if args.wave is not None:
+        wave = next((w for w in waves if w.get("id") == args.wave), None)
+        if wave is None:
+            print(f"✗ onda {args.wave} não existe no plano")
+            return 2
+    else:
+        wave = next((w for w in waves if w.get("status", "pending") == "pending"), None)
+        if wave is None:
+            print("✗ nenhuma onda pending no plano (use --wave para forçar)")
+            return 2
+
+    wave_slices = wave.get("slices") or []
+    missing = [s for s in wave_slices if s not in slices_all]
+    if missing:
+        print(f"✗ onda {wave.get('id')}: slices sem definição: {', '.join(missing)}")
+        return 2
+
+    try:
+        tree = git_tree(repo, args.fork_point)
+    except RuntimeError as e:
+        print(f"✗ {e}")
+        return 2
+
+    no_build = (repo / ".claude" / "no-build").exists()
+
+    # baseline no fork point — mesmo sinal do green-or-revert
+    if no_build:
+        warnings_global.append(
+            "repo .claude/no-build: baseline dispensada; a verificação recai "
+            "no acceptance_cmd de cada slice")
+    else:
+        lb = repo / ".claude" / "last-build.json"
+        status = None
+        if lb.exists():
+            try:
+                status = json.loads(lb.read_text()).get("status")
+            except Exception:
+                pass
+        if status != "SUCCESS":
+            problems_global.append(
+                f"baseline no fork point não está verde (last-build.json: "
+                f"{status or 'ausente'}) — rode o build/verify antes de forkar a onda")
+
+    # expansão de superfícies
+    expanded: dict[str, set[str]] = {}
+    per_slice: dict[str, dict] = {}
+    for name in wave_slices:
+        sl = slices_all[name]
+        gaps: list[str] = []
+        warns: list[str] = []
+        surface = sl.get("surface") or []
+        if not surface:
+            gaps.append("superfície não declarada (surface: [])")
+        files = expand(surface, tree)
+        expanded[name] = files
+        if surface and not files:
+            warns.append("nenhum arquivo EXISTENTE casa com a superfície no fork "
+                         "point — ok se o slice só cria arquivos novos; confira os globs")
+
+        # zona de enforcement — deny incondicional
+        zona = expand(args.enforcement_zone, tree) & files
+        # globs também podem cobrir arquivos futuros: cheque glob×glob literal
+        if zona:
+            gaps.append("superfície intersecta a zona de enforcement "
+                        f"({len(zona)} arquivo(s), ex.: {sorted(zona)[0]}) — "
+                        "nenhum glob de slice pode incluí-la")
+
+        # aceite
+        acc = (sl.get("acceptance") or "").strip()
+        acc_cmd = (sl.get("acceptance_cmd") or "").strip()
+        if not acc:
+            gaps.append("critério de aceite testável não declarado (acceptance:)")
+        if no_build and not acc_cmd:
+            gaps.append("repo .claude/no-build exige acceptance_cmd executável "
+                        "(comando de verificação próprio do slice)")
+
+        # decisão estratégica aberta — preditor nº 1 de mediação
+        hg = sl.get("human_gate", None)
+        if hg is None or (isinstance(hg, str) and not hg.strip()):
+            gaps.append("human_gate ausente — declare 'none' ou registre a decisão já tomada")
+        elif isinstance(hg, str) and hg.strip().lower().startswith(("open", "aberta", "pendente", "tbd", "?")):
+            gaps.append(f"decisão estratégica em aberto (human_gate: {hg!r}) — "
+                        "resolva e registre antes do fork")
+
+        # contexto mínimo
+        if not sl.get("context"):
+            gaps.append("contexto mínimo não apontado (context: links de specs/cards/docs)")
+
+        per_slice[name] = {"gaps": gaps, "warns": warns}
+
+    # disjunção par a par — interseção derruba os DOIS slices
+    names = list(wave_slices)
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            inter = expanded[names[i]] & expanded[names[j]]
+            if inter:
+                msg = (f"superfície intersecta a de {{other}} "
+                       f"({len(inter)} arquivo(s), ex.: {sorted(inter)[0]})")
+                per_slice[names[i]]["gaps"].append(msg.format(other=names[j]))
+                per_slice[names[j]]["gaps"].append(msg.format(other=names[i]))
+
+    # alto atrito que ninguém declara → aviso da onda, não veto
+    declared = set().union(*expanded.values()) if expanded else set()
+    friction = expand(HIGH_FRICTION, tree) - declared
+    if friction:
+        warnings_global.append(
+            f"{len(friction)} arquivo(s) de alto atrito fora de toda superfície "
+            f"(ex.: {sorted(friction)[0]}) — conflito incidental será pego pelo "
+            "verify pós-merge do merge train, não pelo intake")
+
+    # ── relatório ──────────────────────────────────────────────────────────
+    verdicts = {n: ("NOT-READY" if per_slice[n]["gaps"] or problems_global
+                    else "READY") for n in names}
+
+    if args.json:
+        print(json.dumps({
+            "wave": wave.get("id"),
+            "fork_point": args.fork_point,
+            "global_problems": problems_global,
+            "global_warnings": warnings_global,
+            "slices": {n: {"verdict": verdicts[n], **per_slice[n]} for n in names},
+        }, ensure_ascii=False, indent=2))
+    else:
+        print(f"# cepa-dor — onda {wave.get('id')} @ {args.fork_point}\n")
+        for p in problems_global:
+            print(f" ✗ [programa] {p}")
+        for w in warnings_global:
+            print(f" ⚠ [onda] {w}")
+        for n in names:
+            v = verdicts[n]
+            mark = "✓" if v == "READY" else "✗"
+            print(f" {mark} [{n}] {v}")
+            for g in per_slice[n]["gaps"]:
+                print(f"     ✗ {g}")
+            for w in per_slice[n]["warns"]:
+                print(f"     ⚠ {w}")
+        ready = sum(1 for v in verdicts.values() if v == "READY")
+        print(f"\n{ready}/{len(names)} slice(s) READY.")
+
+    if any(v == "NOT-READY" for v in verdicts.values()):
+        return 2
+    if warnings_global or any(per_slice[n]["warns"] for n in names):
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
