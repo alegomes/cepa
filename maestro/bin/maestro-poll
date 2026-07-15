@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""maestro-poll — uma iteração do event loop da onda (design rev2.1, Comp. 2a).
+
+Núcleo determinístico e testável: a sincronização primária é por ARQUIVO
+(resultado.txt de cada filha + wave-state), NUNCA pelo pane do herdr (o pane é
+cosmético). Este script NÃO fala com o herdr nem mata processos — ele INSPECIONA
+o estado em disco e reporta as transições que a sessão maestro deve efetivar.
+
+Por que iteração-inspetor em vez de loop interno: sem event loop há deadlock (a
+sessão presa num wait bloqueante não drena a fila de escalação). O /maestro:run
+chama isto em rodízio, age sobre a saída e repete.
+
+Para cada slice `running`, decide o estado terminal lendo o marcador no
+resultado.txt (o wrapper normativo garante que ele aparece):
+  MAESTRO-EXIT:0                 → DONE
+  MAESTRO-EXIT:<n≠0>             → FAIL
+  MAESTRO-EXIT:ESCALATED:<id>    → ESCALATED (protocolo 3a; não é falha)
+  (sem marcador, mtime velho)    → suspeita de heartbeat / TIMEOUT por T_slice
+
+Uso:
+  maestro-poll <program-dir> [--now EPOCH] [--heartbeat-s 300]
+Lê <program-dir>/wave-state.yaml e os <program-dir>/slices/<S>/resultado.txt.
+Emite JSON: {transitions:[...], escalations:[...], alive:[...]}.
+--now permite teste determinístico (Date.now não existe no runtime de workflow,
+mas aqui é CLI normal; ainda assim aceitamos --now para os testes).
+"""
+import argparse
+import json
+import re
+import sys
+import time
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("maestro-poll precisa de PyYAML", file=sys.stderr)
+    sys.exit(2)
+
+EXIT_RE = re.compile(r"MAESTRO-EXIT:(ESCALATED:(\S+)|(\d+))")
+
+
+def read_marker(resultado: Path):
+    """Retorna (estado_terminal, detalhe) ou (None, None) se ainda rodando."""
+    if not resultado.is_file():
+        return None, None
+    txt = resultado.read_text(errors="replace")
+    # o ÚLTIMO marcador vale (a filha pode logar antes de sair)
+    last = None
+    for m in EXIT_RE.finditer(txt):
+        last = m
+    if not last:
+        return None, None
+    if last.group(2) is not None:            # ESCALATED:<id>
+        return "ESCALATED", last.group(2)
+    code = int(last.group(3))
+    return ("DONE" if code == 0 else "FAIL"), code
+
+
+def poll(program_dir: Path, now: float, heartbeat_s: int):
+    ws_path = program_dir / "wave-state.yaml"
+    ws = yaml.safe_load(ws_path.read_text()) if ws_path.is_file() else {}
+    slices = ws.get("slices") or {}
+    default_timeout = int(ws.get("timeout_min_default", 45)) * 60
+
+    transitions, alive, stalled = [], [], []
+    for name, st in slices.items():
+        if st.get("status") != "running":
+            continue
+        sdir = program_dir / "slices" / name
+        resultado = sdir / "resultado.txt"
+        term, detail = read_marker(resultado)
+        if term:
+            tr = {"slice": name, "to": term, "detail": detail}
+            transitions.append(tr)
+            continue
+        # ainda rodando — heartbeat + timeout
+        started = st.get("started_epoch")
+        t_slice = int(st.get("timeout_min", default_timeout // 60)) * 60
+        if started and (now - started) > t_slice:
+            transitions.append({"slice": name, "to": "TIMEOUT",
+                                "detail": f"sem MAESTRO-EXIT após {t_slice}s"})
+            continue
+        mtime = resultado.stat().st_mtime if resultado.is_file() else started
+        if mtime and (now - mtime) > heartbeat_s:
+            stalled.append({"slice": name,
+                            "idle_s": round(now - mtime)})
+        alive.append(name)
+
+    # escalações pendentes na fila do porteiro
+    escalations = []
+    esc_dir = program_dir / "gatekeeper" / "escalations"
+    if esc_dir.is_dir():
+        for f in sorted(esc_dir.glob("*.yaml")):
+            try:
+                e = yaml.safe_load(f.read_text())
+            except Exception:
+                continue
+            if isinstance(e, dict) and e.get("estado") == "pending":
+                escalations.append(e)
+
+    # saúde do porteiro
+    gk_pid = None
+    pidf = program_dir / "gatekeeper" / "gatekeeper.pid"
+    if pidf.is_file():
+        try:
+            gk_pid = int(pidf.read_text().strip())
+        except ValueError:
+            pass
+    gk_alive = _pid_alive(gk_pid) if gk_pid else False
+
+    return {
+        "transitions": transitions,
+        "escalations": escalations,
+        "alive": alive,
+        "stalled": stalled,
+        "gatekeeper": {"pid": gk_pid, "alive": gk_alive},
+        "wave_done": len(alive) == 0 and not any(
+            s.get("status") == "running" for s in slices.values()),
+    }
+
+
+def _pid_alive(pid):
+    import os
+    try:
+        os.kill(pid, 0)
+    except (ProcessLookupError, PermissionError):
+        return isinstance(pid, int)  # PermissionError → existe mas de outro dono
+    except OSError:
+        return False
+    return True
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="maestro-poll")
+    ap.add_argument("program_dir")
+    ap.add_argument("--now", type=float, default=None)
+    ap.add_argument("--heartbeat-s", type=int, default=300)
+    args = ap.parse_args()
+    now = args.now if args.now is not None else time.time()
+    out = poll(Path(args.program_dir), now, args.heartbeat_s)
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

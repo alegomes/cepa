@@ -71,8 +71,8 @@
     {
       "name": "maestro",
       "source": "./maestro",
-      "description": "Multi-harness orchestration — plan a universe of demands into waves of concurrent Claude Code sessions and land them with one action. Ships /maestro:program-plan (BACKLOG → .claude/programs/<name>/plan.yaml, schema v1) gated by the invocable Definition-of-Ready check (common/bin/cepa-dor: disjoint surfaces at the fork point, enforcement-zone veto, resolved human gates, executable acceptance, >=4-demand floor). Gatekeeper (permission mediation for headless children via --permission-prompt-tool, shadow-mode) proven as spike; /maestro:run is construction step 3, not shipped yet. Requires common@cepa.",
-      "version": "0.1.0",
+      "description": "Multi-harness orchestration — plan a universe of demands into waves of concurrent Claude Code sessions and land them with one action. Ships /maestro:program-plan (BACKLOG → .claude/programs/<name>/plan.yaml, schema v1, gated by the invocable Definition-of-Ready common/bin/cepa-dor), /maestro:run (gc → intake → gatekeeper → fork each slice into a herdr worktree with generated settings + normative wrapper → file-based event loop → merge train reusing worktree-merge guards) and /maestro:resume (crash recovery from wave-state). Deterministic cores tested (fork-settings, gatekeeper, poll, wave-state); end-to-end herdr spawn is construction step 4. Requires common@cepa.",
+      "version": "0.2.0",
       "tags": ["orchestration", "multi-session", "waves", "worktrees", "gatekeeper"]
     }
   ]

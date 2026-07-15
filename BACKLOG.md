@@ -138,8 +138,10 @@ crítico:
 
 ## Maestro — orquestração multi-harness (frota de sessões Claude Code)
 
-**Status:** EM CONSTRUÇÃO — passo 1 (spike do porteiro) FEITO 2026-07-15, VIÁVEL
-(`maestro/spike-gatekeeper/SPIKE-RESULTS.md`); design rev2.1 · **Lar:**
+**Status:** EM CONSTRUÇÃO — passos 1-3 FEITOS 2026-07-15 (spike VIÁVEL +
+program-plan/intake + núcleos determinísticos do run testados + comandos
+run/resume autorados); FALTA só o passo 4 (1ª onda real ponta a ponta com
+herdr, após reinstall) · design rev2.1 · **Lar:**
 plugin novo `maestro/` (decisão D6) · **Origem:** estratégia multi-sessões da
 auditoria de sessões de 07/2026.
 

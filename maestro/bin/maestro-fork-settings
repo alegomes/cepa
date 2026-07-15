@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""maestro-fork-settings — gera o settings.json da filha a partir de um slice.
+
+Camada 1 do enforcement multi-camada do Maestro (design rev2.1). Deny-by-default
+com allow restrito à superfície declarada e regras `ask` que ROTEIAM ao porteiro
+tudo que a camada 1 não pré-aprova.
+
+ACHADO DO SPIKE (obrigatório, senão a camada 3 é decorativa): sem regras `ask`,
+o modo default do headless pré-aprova comandos "seguros" (touch, mkdir…) e o
+porteiro NUNCA é consultado. Por isso emitimos `ask` cobrindo Bash/Write/Edit —
+o allow mais específico (superfície, base de Bash) vence para o que é permitido,
+e o `ask` catch-all manda o resto ao `--permission-prompt-tool`.
+
+Modelo de precedência do Claude Code: deny > allow > ask, por especificidade.
+  - deny  : zona de enforcement (incondicional) — plugins/, hooks/, settings, cache
+  - allow : Write/Edit(<glob da superfície>), Bash(<base>:*) + bash_extra
+  - ask   : Write, Edit, Bash (catch-all) → porteiro decide/escala
+
+Uso:
+  maestro-fork-settings <plan.yaml> <slice> [--port P] [--host H]
+                        [--enforcement-zone GLOB ...]
+Emite o settings.json no stdout (o /maestro:run grava no worktree do slice).
+"""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("maestro-fork-settings precisa de PyYAML", file=sys.stderr)
+    sys.exit(2)
+
+# Conjunto base de Bash pré-aprovado nas settings (build/test/git local, leitura).
+# Deliberadamente conservador — o que passar daqui vai ao porteiro.
+BASE_BASH = [
+    "ls", "cat", "pwd", "echo", "grep", "rg", "find", "head", "tail", "wc",
+    "git status", "git diff", "git log", "git add", "git commit", "git show",
+    "git branch", "git rev-parse", "git stash",
+    "python3", "pytest", "node", "npm test", "npm run",
+    "mvn", "./mvnw", "gradle", "./gradlew", "make", "cargo", "go",
+    "sed", "awk", "test", "true", "mkdir", "touch", "cp", "mv",
+]
+
+DEFAULT_ENFORCEMENT_ZONE = [
+    ".claude/settings.json", ".claude/settings.local.json",
+    ".claude-plugin/**", "**/.claude-plugin/**",
+    "**/hooks/**", "**/plugins/**",
+]
+
+
+def build_settings(plan: dict, slice_name: str, gk_url: str,
+                   enforcement_zone: list[str]) -> dict:
+    slices = plan.get("slices") or {}
+    if slice_name not in slices:
+        raise KeyError(f"slice {slice_name!r} não existe no plano")
+    sl = slices[slice_name]
+    surface = sl.get("surface") or []
+    bash_extra = sl.get("bash_extra") or []
+
+    deny: list[str] = []
+    for z in enforcement_zone:
+        deny.append(f"Write({z})")
+        deny.append(f"Edit({z})")
+
+    allow: list[str] = []
+    for g in surface:
+        allow.append(f"Write({g})")
+        allow.append(f"Edit({g})")
+    for cmd in BASE_BASH + list(bash_extra):
+        # Bash(cmd:*) casa o comando e seus argumentos
+        allow.append(f"Bash({cmd}:*)")
+
+    # ask catch-all → roteia ao porteiro tudo que allow não cobriu.
+    # (o allow mais específico vence; sem isto o porteiro é decorativo)
+    ask = ["Bash", "Write", "Edit"]
+
+    return {
+        "permissions": {
+            "deny": deny,
+            "allow": allow,
+            "ask": ask,
+        },
+        # a filha aponta o permission-prompt-tool para ESTE porteiro; a
+        # identidade do slice vai na URL (achado do spike: o payload não a traz)
+        "mcpServers": {
+            "gatekeeper": {"type": "http", "url": gk_url}
+        },
+        "_maestro": {
+            "slice": slice_name,
+            "surface": surface,
+            "gatekeeper_url": gk_url,
+        },
+    }
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="maestro-fork-settings")
+    ap.add_argument("plan")
+    ap.add_argument("slice")
+    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--host", default="127.0.0.1")
+    ap.add_argument("--enforcement-zone", nargs="*",
+                    default=DEFAULT_ENFORCEMENT_ZONE)
+    args = ap.parse_args()
+
+    plan = yaml.safe_load(Path(args.plan).read_text())
+    if not isinstance(plan, dict) or plan.get("schema_version") != 1:
+        print("schema_version ausente ou desconhecida (esperado 1)", file=sys.stderr)
+        return 2
+
+    # identidade do slice via query param — 1 porteiro compartilhado por N filhas
+    gk_url = f"http://{args.host}:{args.port}/mcp?slice={args.slice}"
+    try:
+        settings = build_settings(plan, args.slice, gk_url, args.enforcement_zone)
+    except KeyError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    print(json.dumps(settings, ensure_ascii=False, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

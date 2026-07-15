@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""maestro-wave-state — store do estado da onda (design rev2.1, Comp. 2c).
+
+Morte da sessão maestro é o modo de falha mais provável de sessão longa; o
+wave-state.yaml é escrito a CADA transição para que /maestro:resume reconstrua a
+onda (nos moldes do /common:autonomous-resume). Este script é a única porta de
+escrita do wave-state — o /maestro:run e o /maestro:resume o chamam.
+
+Subcomandos:
+  init <program-dir> --plan PLAN --wave N
+        cria wave-state.yaml da onda (slices em pending, timeout_min por slice)
+  set-slice <program-dir> <slice> <status> [--pane ID] [--worktree PATH]
+        [--pid N] [--started-epoch E] [--detail TEXT]
+  set-gk <program-dir> --pid N [--url URL]
+  landed <program-dir> <slice>          # marca merge aterrissado
+  get <program-dir> [--json]            # imprime o estado (resume lê isto)
+
+Estados terminais por slice: DONE | FAIL | TIMEOUT | ESCALATED (nunca "pendurado").
+"""
+import argparse
+import sys
+import time
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("maestro-wave-state precisa de PyYAML", file=sys.stderr)
+    sys.exit(2)
+
+VALID = {"pending", "running", "DONE", "FAIL", "TIMEOUT", "ESCALATED"}
+
+
+def _path(d):
+    return Path(d) / "wave-state.yaml"
+
+
+def _load(d):
+    p = _path(d)
+    return yaml.safe_load(p.read_text()) if p.is_file() else {}
+
+
+def _save(d, ws):
+    Path(d).mkdir(parents=True, exist_ok=True)
+    _path(d).write_text(yaml.safe_dump(ws, allow_unicode=True, sort_keys=False))
+
+
+def cmd_init(a):
+    plan = yaml.safe_load(Path(a.plan).read_text())
+    if plan.get("schema_version") != 1:
+        print("schema_version desconhecida", file=sys.stderr)
+        return 2
+    wave = next((w for w in plan.get("waves", []) if w.get("id") == a.wave), None)
+    if wave is None:
+        print(f"onda {a.wave} não existe no plano", file=sys.stderr)
+        return 2
+    slices_def = plan.get("slices") or {}
+    ws = {
+        "program": plan.get("program"),
+        "wave": a.wave,
+        "created_epoch": int(time.time()),
+        "timeout_min_default": 45,
+        "gatekeeper": {"pid": None, "url": None},
+        "landed": [],
+        "slices": {
+            s: {"status": "pending",
+                "timeout_min": int(slices_def.get(s, {}).get("timeout_min", 45)),
+                "pane": None, "worktree": None, "pid": None,
+                "started_epoch": None, "detail": None}
+            for s in (wave.get("slices") or [])
+        },
+    }
+    _save(a.program_dir, ws)
+    print(f"wave-state inicializado: onda {a.wave}, "
+          f"{len(ws['slices'])} slice(s)")
+    return 0
+
+
+def cmd_set_slice(a):
+    if a.status not in VALID:
+        print(f"status inválido: {a.status} (∈ {sorted(VALID)})", file=sys.stderr)
+        return 2
+    ws = _load(a.program_dir)
+    sl = ws.setdefault("slices", {}).setdefault(a.slice, {})
+    sl["status"] = a.status
+    if a.pane is not None:
+        sl["pane"] = a.pane
+    if a.worktree is not None:
+        sl["worktree"] = a.worktree
+    if a.pid is not None:
+        sl["pid"] = a.pid
+    if a.started_epoch is not None:
+        sl["started_epoch"] = a.started_epoch
+    elif a.status == "running" and not sl.get("started_epoch"):
+        sl["started_epoch"] = int(time.time())
+    if a.detail is not None:
+        sl["detail"] = a.detail
+    _save(a.program_dir, ws)
+    print(f"{a.slice} → {a.status}")
+    return 0
+
+
+def cmd_set_gk(a):
+    ws = _load(a.program_dir)
+    gk = ws.setdefault("gatekeeper", {})
+    gk["pid"] = a.pid
+    if a.url is not None:
+        gk["url"] = a.url
+    _save(a.program_dir, ws)
+    print(f"gatekeeper pid={a.pid}")
+    return 0
+
+
+def cmd_landed(a):
+    ws = _load(a.program_dir)
+    landed = ws.setdefault("landed", [])
+    if a.slice not in landed:
+        landed.append(a.slice)
+    _save(a.program_dir, ws)
+    print(f"landed: {a.slice}")
+    return 0
+
+
+def cmd_get(a):
+    ws = _load(a.program_dir)
+    if a.json:
+        import json
+        print(json.dumps(ws, ensure_ascii=False, indent=2))
+    else:
+        print(yaml.safe_dump(ws, allow_unicode=True, sort_keys=False))
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="maestro-wave-state")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p = sub.add_parser("init"); p.add_argument("program_dir")
+    p.add_argument("--plan", required=True); p.add_argument("--wave", type=int, required=True)
+    p.set_defaults(fn=cmd_init)
+
+    p = sub.add_parser("set-slice"); p.add_argument("program_dir")
+    p.add_argument("slice"); p.add_argument("status")
+    p.add_argument("--pane"); p.add_argument("--worktree")
+    p.add_argument("--pid", type=int); p.add_argument("--started-epoch", type=int)
+    p.add_argument("--detail")
+    p.set_defaults(fn=cmd_set_slice)
+
+    p = sub.add_parser("set-gk"); p.add_argument("program_dir")
+    p.add_argument("--pid", type=int, required=True); p.add_argument("--url")
+    p.set_defaults(fn=cmd_set_gk)
+
+    p = sub.add_parser("landed"); p.add_argument("program_dir"); p.add_argument("slice")
+    p.set_defaults(fn=cmd_landed)
+
+    p = sub.add_parser("get"); p.add_argument("program_dir")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_get)
+
+    a = ap.parse_args()
+    return a.fn(a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
