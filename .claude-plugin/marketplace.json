@@ -67,6 +67,13 @@
       "description": "Pre-merge review gate — code reaches main through a reviewed pull request, not a direct merge. Two doors owned here: open (hygiene gate via /code-review) and merge (QA gate via the topology's proof-reviewer). One quarantined adapter (bitbucket-expert) owns all Bitbucket REST via bundled bin/open-pr.sh + bin/merge-pr.sh. A fence hook (no-direct-main) blocks direct push/merge to the default branch and redirects to the flow; a nudge hook (push-nudge) suggests a PR after a feature-branch push; auto_merge merges on a PROVEN QA verdict. Optional board-flow seam maps open→In Review, merge→Done. Standalone otherwise. Pair with board-flow@cepa for the Jira lifecycle.",
       "version": "0.1.0",
       "tags": ["pull-request", "code-review", "bitbucket", "workflow", "pre-merge"]
+    },
+    {
+      "name": "maestro",
+      "source": "./maestro",
+      "description": "Multi-harness orchestration — plan a universe of demands into waves of concurrent Claude Code sessions and land them with one action. Ships /maestro:program-plan (BACKLOG → .claude/programs/<name>/plan.yaml, schema v1) gated by the invocable Definition-of-Ready check (common/bin/cepa-dor: disjoint surfaces at the fork point, enforcement-zone veto, resolved human gates, executable acceptance, >=4-demand floor). Gatekeeper (permission mediation for headless children via --permission-prompt-tool, shadow-mode) proven as spike; /maestro:run is construction step 3, not shipped yet. Requires common@cepa.",
+      "version": "0.1.0",
+      "tags": ["orchestration", "multi-session", "waves", "worktrees", "gatekeeper"]
     }
   ]
 }

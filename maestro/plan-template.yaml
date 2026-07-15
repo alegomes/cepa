@@ -1,0 +1,39 @@
+# plan.yaml — schema v1 (Maestro). Template anotado; copie para
+# .claude/programs/<nome>/plan.yaml e preencha.
+#
+# REGRAS DE COSTURA (design rev2.1):
+# - /maestro:run lê EXCLUSIVAMENTE este arquivo, nunca BACKLOG.md — toda fonte
+#   futura (Jira/board-flow, discovery) entra escrevendo um plan.yaml válido.
+# - Plano é HIPÓTESE: cada filha re-valida sua fatia contra o main atual.
+# - Intake: cada slice passa por `common/bin/cepa-dor <plan> --wave N` antes
+#   do fork; NOT-READY não forka.
+
+schema_version: 1               # obrigatório; /maestro:run recusa versão desconhecida
+program: exemplo                # nome do programa (vira .claude/programs/<nome>/)
+source: BACKLOG.md              # de onde as demandas vieram (rastreio, não costura)
+max_concurrent_slices: 3        # teto = atenção do humano; subir só com taxa de
+                                # escalação comprovadamente baixa (gatilho medido)
+
+waves:
+  - id: 1
+    mode: parallel-worktrees    # ou sequential-inline / interactive
+    fork_after: null            # null = forka do main atual; "wave-1" = após onda 1 aterrissar
+    slices: [S1, S2]
+    status: pending             # pending | running | done
+
+slices:
+  S1:
+    demanda: "P9 do BACKLOG"    # âncora na fonte (D7 conta demandas distintas)
+    surface:                    # globs; expandidos contra a árvore no fork point;
+      - "common/hooks/foo*.py"  # DISJUNTOS entre slices da onda; zona de
+      - "docs/foo.md"           # enforcement é veto incondicional
+    human_gate: none            # 'none' OU a decisão estratégica JÁ tomada, registrada;
+                                # "open:..." = NOT-READY (preditor nº 1 de mediação)
+    acceptance: "pytest tests/test_foo.py verde + hook dispara no cenário X"
+    acceptance_cmd: "python3 tests/test_foo.py"   # OBRIGATÓRIO em repo .claude/no-build
+    context:                    # contexto mínimo p/ a filha (links, não prosa)
+      - "BACKLOG.md#p9"
+      - "docs/foo-notes.md"
+    bash_extra: ["pytest"]      # allows de Bash além do conjunto base das settings geradas
+    timeout_min: 45             # T_slice do event loop (default 45)
+    status: pending             # pending | running | DONE | FAIL | TIMEOUT | ESCALATED
