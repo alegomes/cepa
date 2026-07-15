@@ -1,6 +1,6 @@
-# Maestro v1 — design (rev2)
+# Maestro v1 — design (rev2.1)
 
-**Status:** rev2 — revisado pelo painel de advisors (15 propostas aplicadas) · **Data:** 2026-07-12
+**Status:** rev2.1 — rev2 + achados do spike do porteiro (passo 1 da ordem de construção, 2026-07-15, VIÁVEL — evidência em `maestro/spike-gatekeeper/SPIKE-RESULTS.md`) · **Data:** 2026-07-12
 **Origem:** BACKLOG.md § "Maestro — orquestração multi-harness" (spike herdr aprovado 2026-07-11)
 **Decisões de dono:** 7 fechadas em 2026-07-12; D3 refinada e D5 ajustada na ratificação pós-painel (mesma data).
 **Síntese do painel:** `.claude/programs/maestro/advisors-sintese.md` (7 lentes, 53 achados).
@@ -75,6 +75,11 @@ camada única é contornável. A filha roda sob TRÊS camadas, nomeadas:
    Isso substitui a "allowlist da onda" da rev1 — não existe uma segunda
    allowlist paralela ao sistema de permissões nativo; a Regra 1 do porteiro
    da rev1 vira estas settings.
+   **Achado do spike (obrigatório):** além de deny+allow, as settings geradas
+   DEVEM conter regras `ask` cobrindo toda a zona que deve chegar ao porteiro
+   (ex.: `"ask": ["Bash"]` por baixo dos allows). Sem `ask`, o modo default do
+   headless pré-aprova comandos "seguros" (touch, mkdir…) e a camada 3 nunca é
+   consultada — no spike, 0 chamadas chegaram ao porteiro até a regra existir.
 2. **Hooks do harness ativos no worktree** (herdadas do seed): path-lock,
    bash-path-lock, enforcement-guard, gate-advance — as mesmas 5 topologias.
    **Deny incondicional da superfície de enforcement** (plugins/, hooks/,
@@ -138,7 +143,18 @@ camada única é contornável. A filha roda sob TRÊS camadas, nomeadas:
 3. **Porteiro** (`maestro/bin/maestro-gatekeeper`, processo próprio; paths da
    fila e da superfície **parametrizados por CLI/env**, contrato documentado
    em `common/` — o maestro é o primeiro cliente, não o dono: drain,
-   autonomous-mode e o daemon v2 são consumidores previstos):
+   autonomous-mode e o daemon v2 são consumidores previstos).
+   **Fechado pelo spike (2026-07-15):** transporte = MCP streamable HTTP em
+   loopback, 1 servidor por onda compartilhado pelas N filhas (stdio descartado:
+   mataria o porteiro único e a fila única); resposta = JSON em `content[0].text`
+   (`{"behavior":"allow|deny", ...}`); latência sub-ms, fora do caminho crítico.
+   **O payload não identifica a filha** (só `tool_name`, `input`, `tool_use_id`)
+   → a identidade do slice vai na URL da mcp-config gerada por fork
+   (`http://127.0.0.1:P/mcp?slice=S1`); o porteiro lê o query param.
+   O protocolo 3a cabe inteiro na `message` do deny — a filha obedece o
+   `MAESTRO-EXIT:ESCALATED:<id>` sem nada no prompt dela (provado). Esqueleto
+   funcional em `maestro/spike-gatekeeper/gatekeeper.py` (inclui `--shadow`).
+   Especificação:
    - Recebe apenas a zona que as camadas 1–2 não pré-decidiram.
    - **Regra de escalação** (padrões estratégicos explícitos: editar
      contrato/OpenAPI, rename user-facing, delete fora da superfície,
@@ -279,13 +295,15 @@ validação. Em troca, três dívidas ficam nomeadas:
    nomeada no código.
 3. `agent_status` unknown para filhas headless: sincronização por arquivo é
    a fonte de verdade; pane report-agent é melhoria opcional.
+4. *(spike 2026-07-15)* `--permission-prompt-tool` está OCULTO no `--help` da
+   CLI 2.1.210, porém funcional — mesmo tratamento da dívida 1: smoke-test do
+   flag a cada upgrade do Claude Code (o run-spike.sh serve de teste).
 
 ## Ordem de construção (queimar o risco não-spikado primeiro)
 
-1. **Spike porteiro** (~1 dia): processo MCP mínimo + 1 filha fake
-   `claude -p` com `--permission-prompt-tool` — prova o único elo nunca
-   spikado (o herdr já foi; o porteiro não). Decide de vez credencial/
-   transporte/latência.
+1. ✅ **Spike porteiro** — FEITO 2026-07-15, VIÁVEL (commit do spike em
+   `maestro/spike-gatekeeper/`; resultados e achados em SPIKE-RESULTS.md).
+   Credencial/transporte/latência decididos — ver Componente 3.
 2. **program-plan + intake gate** (dá para começar já: BACKLOG.md e o
    plan.yaml do v0 existem) + schema v1 + checagem DoR invocável.
 3. **/maestro:run**: fork (settings geradas + worktree herdr + wrapper) +
