@@ -123,6 +123,11 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
 - **Shadow-mode** (1º programa): o porteiro aprova tudo e loga o que TERIA
   negado/escalado — mede se o intake consegue zerar escalações, em vez de exigir
   plantar uma. Deny ativo a partir do 2º, com regras calibradas pelo log.
+- **Escopo de aprovação (porteiro e escalações):** cada aprovação libera SÓ o
+  comando/pedido apresentado, nunca a filha nem a onda. Uma escalação decidida
+  pelo humano vale para aquela instância; a mesma classe de pedido volta ao
+  porteiro na próxima ocorrência. "Aprovei uma vez" não vira allowlist implícita
+  — allowlist é mudança de regra, feita nas settings geradas, com intenção.
 - Sincronização é por arquivo (resultado.txt + wave-state); o pane do herdr é
   observabilidade. O contrato dos marcadores `MAESTRO-EXIT:*` é string-match
   versionado com o plugin — smoke-teste a cada upgrade do herdr E do Claude Code.

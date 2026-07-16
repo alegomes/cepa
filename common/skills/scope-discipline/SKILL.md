@@ -24,6 +24,10 @@ The "while I was in there I noticed X" instinct feels helpful. It's not. Silentl
 - **Don't fix it.** Trust the lead to route a follow-up task if it matters.
 - If the finding is genuinely blocking your assigned task, say so explicitly: "I can't proceed without addressing X" — then wait for the lead to decide.
 
+## Approval scope
+
+Scope discipline also applies to what a confirmation *covers*. An approval releases work **until the next checkpoint, not through the entire lifecycle**: "go ahead" after a plan means implement and validate — it does not mean merge, push, transition the card, or close the story. When you reach the next decision the user would want to see (a share-boundary operation, a verdict, a scope change), stop again. Treating one "sim" as blanket consent is scope creep on the approval itself.
+
 ## What this is NOT
 
 - Not "ignore obvious bugs that block the task." Genuine blockers always come back to the lead.
