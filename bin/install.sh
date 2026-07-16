@@ -90,20 +90,28 @@ if [ ! -d "${EXPERTISE_SOURCE}" ]; then
   exit 1
 fi
 
+# --- Plugin list: derived from marketplace.json (single source of truth) ---
+# The install/uninstall lists used to be hardcoded here and drifted from the
+# marketplace (the maestro plugin was registered there but forgotten here, so
+# --clean reported success while silently not installing it). The marketplace
+# manifest is what plugin authors already maintain — derive from it.
+
+MARKETPLACE_JSON="${REPO_DIR}/.claude-plugin/marketplace.json"
+PLUGINS="$(python3 -c '
+import json, sys
+print("\n".join(p["name"] for p in json.load(open(sys.argv[1]))["plugins"]))
+' "${MARKETPLACE_JSON}")" || {
+  echo "✗ Could not read plugin list from ${MARKETPLACE_JSON}"
+  exit 1
+}
+
 # --- Optional: --clean teardown ---
 
 if [ "${CLEAN}" -eq 1 ]; then
   echo "▶ --clean: uninstalling existing plugins (errors ignored)"
-  claude plugin uninstall "common@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "build-team@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "build-solo@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "build-hex@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "discovery@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "board-flow@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "docs@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "design@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "review-gate@${MARKETPLACE_NAME}" 2>/dev/null || true
-  claude plugin uninstall "maestro@${MARKETPLACE_NAME}" 2>/dev/null || true
+  for PLUGIN in ${PLUGINS}; do
+    claude plugin uninstall "${PLUGIN}@${MARKETPLACE_NAME}" 2>/dev/null || true
+  done
 
   if [ -d "${CACHE_DIR}" ]; then
     echo "▶ --clean: removing plugin cache at ${CACHE_DIR}"
@@ -117,37 +125,12 @@ echo "▶ Refreshing marketplace registration: ${MARKETPLACE_NAME}"
 claude plugin marketplace remove "${MARKETPLACE_NAME}" 2>/dev/null || true
 claude plugin marketplace add "${REPO_DIR}"
 
-# --- Plugin install ---
+# --- Plugin install (order = marketplace.json order; common comes first) ---
 
-echo "▶ Installing common@cepa (8 mindset skills — required)"
-claude plugin install common@cepa
-
-echo "▶ Installing build-team@cepa (9-agent generic topology)"
-claude plugin install build-team@cepa
-
-echo "▶ Installing build-solo@cepa (2-agent dev/reviewer topology)"
-claude plugin install build-solo@cepa
-
-echo "▶ Installing build-hex@cepa (14-agent hexagonal-architecture topology)"
-claude plugin install build-hex@cepa
-
-echo "▶ Installing discovery@cepa (6-agent continuous product-discovery topology)"
-claude plugin install discovery@cepa
-
-echo "▶ Installing board-flow@cepa (Jira lifecycle layer)"
-claude plugin install board-flow@cepa
-
-echo "▶ Installing docs@cepa (9-agent documentation/onboarding topology)"
-claude plugin install docs@cepa
-
-echo "▶ Installing design@cepa (6-agent product-design topology)"
-claude plugin install design@cepa
-
-echo "▶ Installing review-gate@cepa (pre-merge PR gate)"
-claude plugin install review-gate@cepa
-
-echo "▶ Installing maestro@cepa (program orchestrator — plan/run/resume waves)"
-claude plugin install maestro@cepa
+for PLUGIN in ${PLUGINS}; do
+  echo "▶ Installing ${PLUGIN}@${MARKETPLACE_NAME}"
+  claude plugin install "${PLUGIN}@${MARKETPLACE_NAME}"
+done
 
 # --- Per-project setup: symlink for centralized expertise ---
 

@@ -331,28 +331,3 @@ classificar). Alternativa mais cirúrgica: worktrees de prova declaram um marcad
 deliberado em worktree descartável NÃO muda o last-build.json do repo principal,
 e o push seguinte não é bloqueado; regression test nos moldes do
 test_summary_nulls_gate.py.
-
-## install.sh não instala o plugin maestro
-
-**Status:** correção imediata FEITA (2026-07-16 — maestro adicionado às listas de
-uninstall/install); resta a estrutural (derivar do marketplace.json) · **Lar:** `bin/install.sh`
-· **Origem:** sessão wego 2026-07-16; confirmado: a lista hardcoded de
-uninstall/install (`bin/install.sh:97-105,122-146`) tem 9 plugins e não inclui
-`maestro`, embora `.claude-plugin/marketplace.json` já o liste — a sessão que
-criou o plugin (2026-07-16) registrou no marketplace e esqueceu o installer.
-
-### Problema
-
-O passo declarado como próximo ("`bin/install.sh --clean` + restart para tornar
-o maestro live") silenciosamente NÃO instalaria o maestro: o script remove e
-reinstala só os 9 plugins da lista. O /maestro:run falharia por plugin ausente
-depois de um reinstall que reportou sucesso.
-
-### Esboço de solução
-
-Correção imediata: adicionar as duas linhas (`uninstall`/`install maestro@cepa`).
-Correção estrutural (evita a próxima recorrência): derivar a lista de plugins do
-próprio `marketplace.json` (`python3 -c` sobre o JSON) em vez de hardcode — o
-marketplace é a fonte de verdade que a sessão criadora já atualiza. Aceite:
-`install.sh --clean` seguido de `claude plugin list` mostra o maestro na versão
-do repo.
