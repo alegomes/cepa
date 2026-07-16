@@ -103,6 +103,7 @@ if [ "${CLEAN}" -eq 1 ]; then
   claude plugin uninstall "docs@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "design@${MARKETPLACE_NAME}" 2>/dev/null || true
   claude plugin uninstall "review-gate@${MARKETPLACE_NAME}" 2>/dev/null || true
+  claude plugin uninstall "maestro@${MARKETPLACE_NAME}" 2>/dev/null || true
 
   if [ -d "${CACHE_DIR}" ]; then
     echo "▶ --clean: removing plugin cache at ${CACHE_DIR}"
@@ -144,6 +145,9 @@ claude plugin install design@cepa
 
 echo "▶ Installing review-gate@cepa (pre-merge PR gate)"
 claude plugin install review-gate@cepa
+
+echo "▶ Installing maestro@cepa (program orchestrator — plan/run/resume waves)"
+claude plugin install maestro@cepa
 
 # --- Per-project setup: symlink for centralized expertise ---
 
