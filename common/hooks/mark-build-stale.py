@@ -105,6 +105,20 @@ def main():
         sys.exit(0)
 
     cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
+
+    edited = Path(file_path)
+    if edited.is_absolute():
+        try:
+            rel = str(edited.resolve().relative_to(cwd))
+        except ValueError:
+            # Edit landed OUTSIDE the session tree — e.g. a proof worktree
+            # perturbation in /tmp. It does not invalidate THIS project's
+            # build; marking the main baseline STALE for it poisons the
+            # advance gate (and the bare relative_to() used to crash here).
+            sys.exit(0)
+    else:
+        rel = file_path
+
     state_path = cwd / ".claude" / "last-build.json"
 
     previous = {}
@@ -117,7 +131,7 @@ def main():
     new_state = {
         "status": "STALE",
         "since": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "after_edit_to": str(Path(file_path).relative_to(cwd)) if Path(file_path).is_absolute() else file_path,
+        "after_edit_to": rel,
         "last_known_status": previous.get("status", "UNKNOWN"),
         "last_known_at": previous.get("at"),
         "last_known_command": previous.get("command"),

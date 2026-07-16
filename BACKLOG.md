@@ -300,34 +300,3 @@ Meta-aceite: usar o advisors recém-nascido para revisar o design do P6.
 
 `/common:metrics --days 30`: bloqueios de gate caíram? proof_blocks apareceram?
 builds vermelhos mudaram? O que a métrica apontar vira a próxima fornada de cards.
-
-## Baseline envenenada por provas de perturbação (gates colidindo)
-
-**Status:** pendente · **Lar provável:** `common` (capture-build-result.py, talvez
-mark-build-stale.py) · **Origem:** sessão wego 2026-07-16, ao rodar prova com RED
-deliberado em worktree descartável; mecânica confirmada no código na mesma data.
-
-### Problema
-
-`capture-build-result.py` resolve o destino da baseline pelo `cwd` do payload da
-sessão (`hooks/capture-build-result.py:351-352`), não pelo diretório onde o build
-de fato rodou. Um `cd /tmp/proof-wt && ./mvnw verify` — exatamente o gesto do
-proof-reviewer/completion-auditor produzindo o RED deliberado da prova por
-perturbação — grava FAILURE no `.claude/last-build.json` do **repo principal**.
-O gate-advance então bloqueia o próximo commit/push com uma baseline que descreve
-outro diretório. Não é caso exótico: é o fluxo normal do gate de prova colidindo
-com o gate de avanço — dois hooks do mesmo harness trabalhando um contra o outro.
-Sintoma agravante: a gravação em background/`| tail` é intermitente (evidência
-contraditória na sessão de origem), então o envenenamento é não-determinístico.
-
-### Esboço de solução
-
-No capture-build-result (e no mark-build-stale, conferir simetria): detectar o
-prefixo `cd <path> &&` do comando; se o alvo resolve para FORA do cwd da sessão,
-gravar a baseline no `.claude/` do diretório onde o build rodou — ou simplesmente
-não gravar (deixar stale é o comportamento já documentado para o que não se sabe
-classificar). Alternativa mais cirúrgica: worktrees de prova declaram um marcador
-(`.claude/proof-worktree`) que o hook respeita e ignora. Aceite: rodar um RED
-deliberado em worktree descartável NÃO muda o last-build.json do repo principal,
-e o push seguinte não é bloqueado; regression test nos moldes do
-test_summary_nulls_gate.py.

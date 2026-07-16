@@ -320,6 +320,29 @@ def debug_log(payload, response_text, exit_code, status, kind, reason):
         pass
 
 
+# ─── effective build dir ──────────────────────────────────────────────
+
+# Leading `cd <target> &&` / `;` prefix — the idiom throwaway proof worktrees
+# use to run a build outside the session tree ("cd /tmp/wt && ./mvnw verify").
+# Quoted and unquoted targets; repeated leading cds compose.
+_CD_PREFIX_RE = re.compile(
+    r"""^\s*cd\s+(?:"(?P<dq>[^"]+)"|'(?P<sq>[^']+)'|(?P<bare>[^\s;&|]+))\s*(?:&&|;)\s*"""
+)
+
+
+def effective_build_dir(command: str, cwd: Path) -> Path:
+    """Where the build actually ran: follow leading `cd X &&` prefixes."""
+    where = cwd
+    rest = command
+    while True:
+        m = _CD_PREFIX_RE.match(rest)
+        if not m:
+            return where
+        target = os.path.expanduser(m.group("dq") or m.group("sq") or m.group("bare"))
+        where = Path(target).resolve() if os.path.isabs(target) else (where / target).resolve()
+        rest = rest[m.end():]
+
+
 # ─── main ─────────────────────────────────────────────────────────────
 
 def main():
@@ -349,7 +372,24 @@ def main():
         sys.exit(0)  # Not a build command we recognize, or result was ambiguous.
 
     cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
-    state_path = cwd / ".claude" / "last-build.json"
+    build_dir = effective_build_dir(command, cwd)
+    if build_dir != cwd and not build_dir.is_relative_to(cwd):
+        # The build ran OUTSIDE the session tree — e.g. a proof worktree
+        # producing a deliberate RED for a perturbation proof. Its result
+        # describes THAT tree, not this one: recording it here poisons the
+        # main baseline and gate-advance blocks the next push on another
+        # directory's failure (the proof gate and the advance gate working
+        # against each other). Record it where the build ran instead.
+        state_path = build_dir / ".claude" / "last-build.json"
+        print(
+            f"[capture-build-result] build ran outside the session tree "
+            f"({build_dir}); recording its result there — main baseline untouched.",
+            file=sys.stderr,
+        )
+    else:
+        # Inside the tree (including `cd subdir && build` in a monorepo):
+        # the session's baseline is the right home, as before.
+        state_path = cwd / ".claude" / "last-build.json"
 
     new_state = {
         "status": status,
