@@ -100,6 +100,25 @@ The Jira lifecycle layer. Pairs with any topology.
 | `/board-flow:prove-drain` | `[--max N]` | Bulk-prove the Review column (`status_map.in_review`). Runs `/board-flow:prove` per card in priority order. Unlike `/board-flow:drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. `--max` defaults to 5. |
 | `/board-flow:advance` | `<jira-key>` | Generic column-by-column transition driven by `lifecycles[]` in `board-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). Runs the column's `on_enter` agent if declared, confirms `enter_gate` precondition with you if declared, transitions with Implementation Summary if `requires_summary: true` (or status name contains `review`/`qa`). |
 
+## maestro
+
+Multi-harness orchestration: plan a universe of ≥4 demands into waves of
+concurrent Claude Code sessions and land them with one action. **Not yet live
+end-to-end** — construction steps 1–3 done + tested, step 4 (first real wave via
+`herdr`) unrun; nothing works until `bin/install.sh --clean` + `herdr` running.
+Full guide: [maestro.md](maestro.md).
+
+| Command | Argument | What it does |
+|---|---|---|
+| `/maestro:program-plan` | `<name> [--source FILE] [--demandas "P9,P10,…"]` | Conversational planning. Reads a source (default `BACKLOG.md`), analyzes each demand's file surface + dependencies + human gates, proposes waves with disjoint surfaces, writes `.claude/programs/<name>/plan.yaml` (schema v1), then iterates the intake gate (`cepa-dor`) with you until every slice is `READY`. The **only** command that reads the BACKLOG — everything downstream reads only `plan.yaml` (seam invariant). Floor: ≥4 demandas (D7). |
+| `/maestro:run` | `<name> [--wave N] [--shadow] [--port P]` | The single action for the current wave: gc of orphans → intake gate → bring up the gatekeeper (shadow-mode on the 1st program) → fork each slice into a `herdr` worktree with generated settings + the normative wrapper → file-based event loop (`DONE`/`FAIL`/`TIMEOUT`/`ESCALATED` per slice) → merge train reusing `worktree-merge`'s guards with a verify after **each** merge → report. Reads only `plan.yaml`. Requires `herdr` running. |
+| `/maestro:resume` | `<name>` | Rebuild an interrupted wave from `wave-state.yaml` (written on every transition), reconcile against reality (health-check gatekeeper, confirm live panes, re-read markers), continue the event loop / merge train. Idempotent. Modeled on `/common:autonomous-resume`. |
+
+Two helpers you can run by hand: `python3 common/bin/cepa-dor <plan> --wave N`
+(the intake gate — `READY`/`NOT-READY` per slice) and
+`python3 maestro/bin/maestro-fork-settings <plan> <slice>` (preview a child's
+generated `settings.json`).
+
 ## When to use which command
 
 ### "I want to implement a new feature"
@@ -157,3 +176,13 @@ The Jira lifecycle layer. Pairs with any topology.
 - New work item, no detail yet: `/board-flow:capture "<description>"`. Just registers, doesn't execute.
 - Drain a column: `/board-flow:drain` (default column = `to_do` from `status_map`).
 - Custom lifecycle column transition: `/board-flow:advance <KEY>`.
+
+### "I have ≥4 independent demands to run in parallel"
+
+- `/maestro:program-plan <name>` to turn them into a wave plan (`plan.yaml`),
+  gated by the intake check until every slice is `READY`. Then `/maestro:run
+  <name>` to execute the wave with one action, and `/maestro:resume <name>` if
+  the session dies mid-wave. With 3 demands or fewer, use `/board-flow:drain` or
+  a single session instead — the orchestration overhead isn't worth it. See
+  [maestro.md](maestro.md). (Not yet live end-to-end — needs `bin/install.sh
+  --clean` + `herdr`.)
