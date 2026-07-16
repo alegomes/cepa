@@ -148,9 +148,19 @@ Delegate to `atlassian-expert`:
 >
 > **Acceptance:** completion-auditor COMPLETE — each criterion demonstrated at its altitude (e.g. `POST /api/v1/x → 422` via `<endpoint test>`). Artifact: `.claude/acceptance/<KEY>.yaml`.
 >
+> **New debt introduced:** <none, or list, each with a revisit trigger>
+>
+> **Scope captured outside the card:** <none, or findings captured as follow-ups — never silently absorbed into the fix>
+>
+> **Release needed:** <no, or yes: what and why>
+>
+> **Human validation route:** <if the bug was user-visible: command/URL + expected observation + fail condition to confirm the symptom is gone; if internal: "not applicable (internal substrate — regression test above suffices)">
+>
 > **Caveats / follow-ups:**
 > - <none, or caveats from READY-WITH-CAVEATS verdict>
 > ```
+
+The four explicit-null fields are mandatory even when negative — the summary-nulls-gate hook blocks the comment without them. For a user-visible bug, the route is the human replaying the original symptom; green regression tests support the fix but do not replace that check.
 
 #### NOT-A-BUG
 

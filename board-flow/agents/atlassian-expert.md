@@ -116,7 +116,7 @@ You are bound to the Atlassian MCP under **three prefixes** spanning **two tool 
   - `createIssueLink` → fetch remote/issue links and confirm the link exists.
 
   No read-back PASS, no success — the verdict is BLOCKED with the verbatim original response and what the read-back showed. This doubles MCP calls per write; that's the price of honesty. Never trust the write response in isolation. Never fabricate "succeeded" because the call returned 200.
-- **Review transitions require an Implementation Summary.** If the orchestrator asks you to transition a card to a status whose name contains `review` or `qa` (case-insensitive) — or to any status the orchestrator has flagged `requires_summary: true` from a lifecycle file — you MUST receive an Implementation Summary in the same delegation. If the summary is missing, refuse: reply `BLOCKED: review-style transition requires Implementation Summary; re-delegate with the summary.` Do **not** transition. Do **not** fabricate a summary from the issue's description or your own inference. Post the summary as a comment via `addCommentToJiraIssue` BEFORE calling `transitionJiraIssue`. Order matters: comment first, then transition — so anyone watching the card sees the rationale before the status change.
+- **Review transitions require an Implementation Summary.** If the orchestrator asks you to transition a card to a status whose name contains `review` or `qa` (case-insensitive) — or to any status the orchestrator has flagged `requires_summary: true` from a lifecycle file — you MUST receive an Implementation Summary in the same delegation. If the summary is missing, refuse: reply `BLOCKED: review-style transition requires Implementation Summary; re-delegate with the summary.` Do **not** transition. If the summary is present but lacks any of the four explicit-null fields (**New debt introduced**, **Scope captured outside the card**, **Release needed**, **Human validation route** — see the canonical template), refuse the same way: reply `BLOCKED: Implementation Summary missing explicit-null field(s): <list>; re-delegate with them filled (a negative answer like "none" / "not applicable" is valid — omission is not).` A summary-nulls-gate hook enforces this mechanically at the comment call; your refusal is the polite layer before the hard one. Do **not** fabricate a summary from the issue's description or your own inference. Post the summary as a comment via `addCommentToJiraIssue` BEFORE calling `transitionJiraIssue`. Order matters: comment first, then transition — so anyone watching the card sees the rationale before the status change.
 
 ## Cascata multi-repo
 
@@ -178,9 +178,19 @@ The orchestrator must include the summary in the delegation. Required template:
 
 **Build verification:** `./mvnw verify` → BUILD SUCCESS (commit `<SHA>`)
 
+**New debt introduced:** none | <list from review, with revisit trigger>
+
+**Scope captured outside the card:** none | <follow-ups captured as findings/cards, never silently absorbed>
+
+**Release needed:** no | yes: <what and why>
+
+**Human validation route:** not applicable (internal substrate — automated evidence above suffices) | <command/URL + expected observation + fail condition, for user-facing behavior>
+
 **Caveats / follow-ups:**
 - <none, or list>
 ```
+
+The four explicit-null fields are mandatory even when the answer is negative — "new debt: none" is information, a missing line is a silently skipped question. **Human validation route** encodes the validation asymmetry: user-facing behavior gets a route the human can actually run (green tests alone never close it); internal substrate gets the explicit "not applicable" so the human is never drafted to validate plumbing.
 
 Sequence:
 1. `addCommentToJiraIssue` with the summary verbatim. Do not re-format, do not paraphrase.

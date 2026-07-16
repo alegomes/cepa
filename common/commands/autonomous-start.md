@@ -119,11 +119,21 @@ Read `defaults.status_map.in_review` from `board-flow.yaml` (default `"In Review
   (For investigate flow: "Read-only investigation — no build run. See findings: docs/investigations/<slug>.md")
   (For reproduce-fix-verify: failing test path that now passes + commit SHA)
 
+**New debt introduced:** <none, or refactor-advisor findings, each with a revisit trigger>
+
+**Scope captured outside the card:** <none, or findings captured as follow-ups — named, never silently absorbed>
+
+**Release needed:** <no, or yes: what and why>
+
+**Human validation route:** <for user-facing behavior: command/URL + expected observation + fail condition — in an autonomous run this is what the user validates at debrief time; for internal substrate: "not applicable (internal substrate — automated evidence above suffices)">
+
 **Caveats / follow-ups:**
 - <validation-lead's caveats, refactor-advisor findings, or "none">
 
 **Autonomous run:** `<run-id>` — see `docs/autonomous/<run-id>/state.yaml` for the full log and `/common:debrief <run-id>` to review decisions.
 ```
+
+The four explicit-null fields are mandatory even when negative — the summary-nulls-gate hook blocks the comment without them. They matter MORE in an autonomous run: the user wasn't watching, so the negatives ("no debt", "nothing absorbed") are the only place these questions get answered at all.
 
 Then delegate to `atlassian-expert`:
 

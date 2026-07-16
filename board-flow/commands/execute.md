@@ -133,9 +133,19 @@ If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from en
 >
 > **Acceptance:** completion-auditor COMPLETE — each criterion demonstrated at its altitude (the user-facing surface it names). Artifact: `.claude/acceptance/<jira-key>.yaml`.
 >
+> **New debt introduced:** <none, or list from refactor-advisor's findings, each with a revisit trigger>
+>
+> **Scope captured outside the card:** <none, or findings captured as follow-ups — named, never silently absorbed into this card>
+>
+> **Release needed:** <no, or yes: what and why>
+>
+> **Human validation route:** <for user-facing behavior: command/URL + expected observation + fail condition the Navigator can run; for internal substrate: "not applicable (internal substrate — automated evidence above suffices)">
+>
 > **Caveats / follow-ups:**
 > - <none, or caveats from validation-lead's READY-WITH-CAVEATS verdict>
 > ```
+
+The four explicit-null fields (**New debt introduced**, **Scope captured outside the card**, **Release needed**, **Human validation route**) are mandatory — a negative answer ("none", "no", "not applicable") is valid content; an omitted line is a silently skipped question and the summary-nulls-gate hook will block the comment. Fill them from evidence already in hand: refactor-advisor's findings (debt), scope-discipline captures (out-of-card findings), and whether the card's acceptance criteria name a user-facing surface (validation route) — do not invent a route for pure plumbing, and do not let green tests stand in for the route on user-facing work.
 
 If BLOCKED: leave the card where it is (in `<defaults.status_map.in_progress>`). If `defaults.status_map.blocked` is set (non-null), optionally also transition into the blocked column — ask the user once at session start which they prefer; default to leaving in `in_progress` with a comment. Delegate to `atlassian-expert`:
 

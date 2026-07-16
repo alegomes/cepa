@@ -107,9 +107,19 @@ If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from en
 >
 > **Acceptance:** completion-auditor COMPLETE — each criterion demonstrated at its altitude (the user-facing surface it names). Artifact: `.claude/acceptance/<key>.yaml`.
 >
+> **New debt introduced:** <none, or list from refactor-advisor's findings, each with a revisit trigger>
+>
+> **Scope captured outside the card:** <none, or findings captured as follow-ups — named, never silently absorbed>
+>
+> **Release needed:** <no, or yes: what and why>
+>
+> **Human validation route:** <for user-facing behavior: command/URL + expected observation + fail condition; for internal substrate: "not applicable (internal substrate — automated evidence above suffices)">
+>
 > **Caveats / follow-ups:**
 > - <none, or caveats from READY-WITH-CAVEATS verdict>
 > ```
+
+The four explicit-null fields are mandatory even when negative — the summary-nulls-gate hook blocks the comment without them.
 
 If BLOCKED: Leave In Progress. Delegate to `atlassian-expert`:
 

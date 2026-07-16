@@ -140,7 +140,16 @@ Group the work; every write delegation starts with `Topology: <default_topology>
   >
   > **Proof strategy (for /board-flow:prove):** <hint, e.g. "bug — regression test must go RED at base_commit" / "altitude — AC is at the REST surface, needs an E2E, expect completion-auditor" / "has contract+E2E — proof should be cheap">
   > <if not-perturbable:> **Not perturbable:** confidence is by inspection/query (seed/data or pure config), not by break-and-RED. Do not bounce as UNPROVEN on missing perturbation.
+  >
+  > **New debt introduced:** unknown (triage-routed — implementation predates this audit; assess at proof)
+  >
+  > **Scope captured outside the card:** none | <anything the triage inspection surfaced, captured as follow-ups>
+  >
+  > **Release needed:** <no, or yes: what — judge from whether the shipped behavior is user-visible>
+  >
+  > **Human validation route:** <for user-visible behavior: command/URL + expected observation + fail condition; else "not applicable (internal substrate)">
   > ```
+  The four explicit-null fields are mandatory (summary-nulls-gate blocks the comment without them); in the triage context "unknown" is an honest value for debt — the proof gate is where it gets assessed.
 
 - **→ To Do.** Delegate: `Transition Jira issue <KEY> to status \`<defaults.status_map.to_do>\`.`
 
