@@ -360,9 +360,19 @@ transformar em número.
 
 ## `summary-nulls-gate` bloqueia summary honesto por formatação (falso positivo)
 
-**Status:** pendente · **Lar:** `common/hooks/summary-nulls-gate.py` (+
+**Status:** ✅ CORRIGIDO 2026-07-21 (pendente `bin/install.sh` para valer na cópia
+instalada) · **Lar:** `common/hooks/summary-nulls-gate.py` (+
 `tests/test_summary_nulls_gate.py`) · **Origem:** sessão wego 2026-07-21, validação da
 Leva 1 via `/board-flow:execute WEGO-1948`.
+
+> **Correção aplicada.** `MARKER` passou a aceitar negrito, heading markdown (`###`),
+> heading de wiki (`h3.`) e bullet; a ordem das palavras no pt-BR ficou frouxa; e a
+> mensagem separa "ausente" de "presente em formato não reconhecido". A suíte foi de 19
+> para 27 checks; prova por perturbação: revertendo o hook, 6 dos 8 checks novos ficam
+> vermelhos. **Segundo defeito achado durante o conserto** e corrigido junto: o
+> `SUMMARY_HEADING_RE` só reconhecia heading markdown, então um summary em wiki do Jira
+> com ZERO campos **passava em silêncio** — o buraco era pior que o falso positivo que
+> originou o card.
 
 ### Problema
 

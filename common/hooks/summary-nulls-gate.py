@@ -36,27 +36,55 @@ import json
 import re
 import sys
 
+# Structural markers that can introduce a heading or a labeled field.
+# Jira comments are written in WIKI markup (`h3. Label`), not markdown, so a
+# markdown-only gate is blind to the format its own callers naturally use:
+# before 2026-07-21 a wiki-formatted summary with ZERO fields passed silently,
+# and a wiki-formatted summary WITH all four was blocked as if it had none.
+# Both directions were wrong; both are covered by tests now.
+MARKER = r"(?:\*\*|__|#{1,6}\s*|h[1-6]\.\s*|[-*+]\s+)"
+
 SUMMARY_HEADING_RE = re.compile(
-    r"^#{1,4}\s*Implementation summary", re.MULTILINE | re.IGNORECASE
+    rf"^{MARKER}?\s*Implementation summary", re.MULTILINE | re.IGNORECASE
 )
 
-# Field label → regex accepting the canonical English label or its pt-BR
-# equivalent, as a bold markdown label. Values are free-form on purpose.
+# Field label → accepted spellings. English is canonical; pt-BR is accepted
+# because the harness mandates pt-BR prose. Word order is deliberately loose
+# ("dívida nova" vs "nova dívida") — the gate's job is to prove the QUESTION
+# was answered, not to police phrasing.
+FIELD_LABELS = {
+    "New debt introduced": (
+        r"New debt introduced",
+        r"(?:Nova\s+d[íi]vida|D[íi]vida\s+nova)\s+introduzida",
+        r"D[íi]vida\s+introduzida",
+    ),
+    "Scope captured outside the card": (
+        r"Scope captured outside the card",
+        r"Escopo capturado fora do card",
+    ),
+    "Release needed": (
+        r"Release needed",
+        r"Release\s+necess[áa]ri[ao]",
+    ),
+    "Human validation route": (
+        r"Human validation route",
+        r"Rota de valida[çc][ãa]o humana",
+    ),
+}
+
+# Matched WITH a structural marker — the field is properly labeled.
 REQUIRED_FIELDS = {
-    "New debt introduced": re.compile(
-        r"\*\*(?:New debt introduced|D[íi]vida nova introduzida)", re.IGNORECASE
-    ),
-    "Scope captured outside the card": re.compile(
-        r"\*\*(?:Scope captured outside the card|Escopo capturado fora do card)",
-        re.IGNORECASE,
-    ),
-    "Release needed": re.compile(
-        r"\*\*(?:Release needed|Release necess[áa]ria)", re.IGNORECASE
-    ),
-    "Human validation route": re.compile(
-        r"\*\*(?:Human validation route|Rota de valida[çc][ãa]o humana)",
-        re.IGNORECASE,
-    ),
+    label: re.compile(rf"{MARKER}\s*(?:{'|'.join(spellings)})", re.IGNORECASE)
+    for label, spellings in FIELD_LABELS.items()
+}
+
+# Matched WITHOUT any marker — used only to tell "you never answered this"
+# apart from "you answered it in a shape I don't recognize". Reporting the
+# second as the first is how a formatting slip gets mistaken for an omission,
+# which teaches agents that this gate is formatting noise.
+BARE_FIELDS = {
+    label: re.compile(rf"(?:{'|'.join(spellings)})", re.IGNORECASE)
+    for label, spellings in FIELD_LABELS.items()
 }
 
 # Possible field names the MCP comment tools may use for the body.
@@ -97,10 +125,32 @@ def main():
     if not missing:
         sys.exit(0)
 
-    missing_lines = "".join(f"\n    - **{m}:**" for m in missing)
+    # Split the diagnosis: absent vs. present-but-unlabeled. Same block either
+    # way, but the agent needs to know whether to ANSWER the question or just
+    # re-format the answer it already wrote.
+    absent = [m for m in missing if not BARE_FIELDS[m].search(body)]
+    unlabeled = [m for m in missing if m not in absent]
+
+    missing_lines = "".join(f"\n    - **{m}:**" for m in absent)
+    unlabeled_lines = "".join(f"\n    - **{m}:**" for m in unlabeled)
+
+    detail = ""
+    if absent:
+        detail += (
+            f"[summary-nulls-gate] BLOCKED: Implementation Summary is missing "
+            f"explicit-null field(s):{missing_lines}\n"
+        )
+    if unlabeled:
+        detail += (
+            f"[summary-nulls-gate] BLOCKED: field(s) present but NOT in a recognized "
+            f"format:{unlabeled_lines}\n"
+            f"  The text is there — the label just isn't marked up. Prefix it with "
+            f"`**bold**`, a heading (`###` or `h3.`), or a list bullet. Do NOT re-write "
+            f"the answer; only the label's markup is wrong.\n"
+        )
+
     print(
-        f"[summary-nulls-gate] BLOCKED: Implementation Summary is missing explicit-null "
-        f"field(s):{missing_lines}\n"
+        f"{detail}"
         f"  A summary must answer these questions even when the answer is negative:\n"
         f"    **New debt introduced:** none | <list from review>\n"
         f"    **Scope captured outside the card:** none | <follow-ups captured, not absorbed>\n"

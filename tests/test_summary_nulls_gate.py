@@ -113,6 +113,89 @@ ptbr = """## Implementation summary (bug fix)
 r = run_hook(CLOUD_TOOL, {"commentBody": ptbr})
 check("pt-BR labels pass", r.returncode == 0, r.stderr)
 
+# ── pt-BR word order is loose ────────────────────────────────────────────────
+# The gate proves the QUESTION was answered; it does not police phrasing.
+r = run_hook(CLOUD_TOOL, {"commentBody": ptbr.replace(
+    "**Dívida nova introduzida:**", "**Nova dívida introduzida:**")})
+check("pt-BR alternate word order passes", r.returncode == 0, r.stderr)
+
+# ── Jira WIKI markup (regression: WEGO-1948, 2026-07-21) ─────────────────────
+# Jira comments are written in wiki markup, not markdown. Before the fix the
+# gate was blind to it in BOTH directions: a wiki summary with zero fields
+# passed silently, and a wiki summary with all four was blocked as if empty.
+WIKI_BARE = """h2. Implementation summary
+
+h3. Arquivos tocados
+* `src/a.py`
+"""
+r = run_hook(LOCAL_TOOL, {"comment": WIKI_BARE})
+check("wiki-heading summary with no fields BLOCKS", r.returncode == 2, f"rc={r.returncode}")
+check(
+    "wiki-heading bare summary names all four",
+    all(label in r.stderr for label, _ in FIELDS),
+    r.stderr[:300],
+)
+
+WIKI_FULL = """h2. Implementation summary
+
+h3. Arquivos tocados
+* `src/a.py`
+
+h3. Nova dívida introduzida
+nenhuma
+
+h3. Escopo capturado fora do card
+nenhum
+
+h3. Release necessária
+não
+
+h3. Rota de validação humana
+não se aplica (substrato interno)
+"""
+r = run_hook(LOCAL_TOOL, {"comment": WIKI_FULL})
+check("wiki-heading summary with all four passes", r.returncode == 0, r.stderr[:400])
+
+# ── markdown heading fields (### Label) also count ───────────────────────────
+MD_HEADINGS = """## Implementation summary
+
+### New debt introduced
+none
+
+### Scope captured outside the card
+none
+
+### Release needed
+no
+
+### Human validation route
+not applicable (internal substrate)
+"""
+r = run_hook(CLOUD_TOOL, {"commentBody": MD_HEADINGS})
+check("markdown-heading fields pass", r.returncode == 0, r.stderr[:400])
+
+# ── present but unlabeled → blocked, and SAID to be a formatting problem ─────
+# Reporting this as "missing" is what teaches agents the gate is noise.
+UNLABELED = """## Implementation summary
+
+New debt introduced: none
+Scope captured outside the card: none
+Release needed: no
+Human validation route: not applicable
+"""
+r = run_hook(CLOUD_TOOL, {"commentBody": UNLABELED})
+check("unlabeled fields still block", r.returncode == 2, f"rc={r.returncode}")
+check(
+    "unlabeled fields are reported as a FORMAT problem, not as missing",
+    "NOT in a recognized format" in r.stderr,
+    r.stderr[:400],
+)
+check(
+    "unlabeled fields are not called missing",
+    "is missing explicit-null" not in r.stderr,
+    r.stderr[:400],
+)
+
 # ── non-summary comments are never gated ─────────────────────────────────────
 for name, body in [
     ("NOT-A-BUG comment", "[automated] /board-flow:fix concluded NOT-A-BUG. Reason: ..."),
