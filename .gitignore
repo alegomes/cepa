@@ -15,3 +15,19 @@ common/expertise/expertise
 
 # Session intent log (session-log hook scratch)
 .claude/session-log.md
+
+# Estado de runtime do harness rodando SOBRE este repo — escrito por hooks e
+# comandos, específico desta máquina/sessão. O que é fonte dentro de .claude/
+# (no-build, programs/**) segue rastreado de propósito.
+.claude/doctor-last-run
+.claude/last-build.json
+.claude/sessions/
+.claude/handoffs/
+
+# Symlink criado pelo bin/install.sh apontando para o clone canônico
+# (~/coding/cepa/common/expertise). Scaffolding de instalação, não fonte.
+.claude/expertise
+
+# Saída gerada pelo relatório de git-history (pngs + datapack + prosa).
+# Regenerável a partir do repo; não é dist.
+git-history-report/
