@@ -1,0 +1,36 @@
+# Mental model — adapter-dev
+# Cross-topology, cross-project: adapter/persistence patterns, config-binding
+# pitfalls, external-client gotchas.
+# This file is shared across every project the plugin is installed in. Write
+# only agent-global knowledge; project-specific facts go in the host project's
+# CLAUDE.md. See common/skills/mental-model/SKILL.md.
+
+last_updated: 2026-06-03
+
+feedback:
+  - run_id: 2026-06-02-wego-1732
+    date: 2026-06-03
+    topic: classify config obligatoriness by ACTUAL profile behavior, not the spec's theoretical matrix
+    altitude: strategic
+    original_choice: Option B — DB_* OBRIGATÓRIA só em prod (staging usa DevServices), não em prod+staging como a matriz da spec dizia
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-06-02-wego-1732
+    date: 2026-06-03
+    topic: ao deduplicar validação isolada para um catálogo central, preservar TODA a semântica do guard antigo (incl. valores-sentinela) e remover o guard por completo — não deixar resíduo
+    altitude: strategic
+    original_choice: Option B — adicionar sentinelValues ao ConfigItem/ConfigCatalog e remover PlugSignAdapter.validateConfig inteiro, em vez de um guard residual com TODO
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-06-02-wego-1732
+    date: 2026-06-03
+    topic: tratar o default-sentinela explícito de um secret (ex. "changeme") como AUSENTE, para misconfiguração falhar alto no boot e não silenciosa em runtime
+    altitude: strategic
+    original_choice: Option B — registrar sentinela "changeme" também em KEYCLOAK_CLIENT_SECRET (não só PLUGSIGN_API_KEY), pois application.properties usa ${KEYCLOAK_CLIENT_SECRET:changeme}
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example

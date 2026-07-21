@@ -29,3 +29,23 @@ feedback:
       follow-up (nunca silente); R4 smoke real (curl) antes de "ready to ship".
       Ver common/skills/defense-in-depth/SKILL.md.
     tag: principle
+
+  - run_id: 2026-06-03-drain-followups
+    date: 2026-06-03
+    topic: shape de sub-recurso aninhado em DTO de lista (medico em GET /atendimentos)
+    altitude: strategic
+    original_choice: Option A — subset enxuto MedicoResumoResponse{id,nome,crm,crmUf} na lista, distinto do MedicoInfo completo do detalhe
+    user_verdict: overrule
+    user_reason: |
+      Espelhar o MedicoInfo completo do detalhe na lista — consistência de
+      contrato (mesmo shape em todo endpoint) vale mais que payload enxuto;
+      o front não quer dois formatos de medico.
+    refined_rationale: |
+      Ao adicionar um sub-recurso aninhado (medico, paciente, responsavel...)
+      a um DTO de LISTA, o default é ESPELHAR o shape COMPLETO já exposto no
+      endpoint de DETALHE — não criar um subset enxuto endpoint-específico.
+      Consistência de contrato > economia de payload; o front não quer dois
+      formatos do mesmo recurso. Só divergir para um subset slim se o
+      produto/usuário pedir explicitamente. (No WEGO-1735 fiz subset e foi
+      overruled.)
+    tag: principle

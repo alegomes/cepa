@@ -5,7 +5,7 @@
 # only agent-global knowledge; project-specific facts go in the host project's
 # CLAUDE.md. See common/skills/mental-model/SKILL.md.
 
-last_updated: "2026-05-09"
+last_updated: "2026-06-06"
 
 feedback:
   - run_id: 2026-05-07-api-cleanup-rename
@@ -16,6 +16,7 @@ feedback:
     user_reason: "I'd have chosen A. We don't have active clients yet. It's time to keep the house clean"
     refined_rationale: "When there are no active external clients, prefer big-bang rename over deprecation windows — transitional routes add complexity without protecting anyone. Only choose deprecation window when real clients (confirmed, in production) consume the endpoint."
     tag: principle
+
   - run_id: 2026-05-08-api-fixes-features-batch
     date: "2026-05-09"
     topic: "metodoEnvio — atributo do pedido vs do signatário"
@@ -24,6 +25,7 @@ feedback:
     user_reason: "Implementar B — mover metodoEnvio para signatário"
     refined_rationale: "Breaking changes semânticos corretos devem ser implementados mesmo sem clientes externos ativos. Não diferir breaking changes semânticos corretos só por medo de quebrar clientes hipotéticos."
     tag: principle
+
   - run_id: 2026-05-08-api-fixes-features-batch
     date: "2026-05-09"
     topic: "Partials em endpoint de assinaturas — implementar agora vs defer"
@@ -32,6 +34,7 @@ feedback:
     user_reason: "registre o spike no Jira"
     refined_rationale: "Correct to defer implementation, but the spike itself should be tracked in Jira so it doesn't get lost. When deferring a feature for lack of demand, always create a Jira spike to capture the investigation need — not a silent backlog item."
     tag: principle
+
   - run_id: 2026-05-08-api-fixes-features-batch
     date: "2026-05-09"
     topic: "Coordenadas de assinatura — defaults em TipoDocumento vs always-in-request"
@@ -46,8 +49,73 @@ feedback:
     altitude: tactical
     original_choice: |
       Batch-keep on 2 Round-1 planning decisions:
+
       - First-touch import (no local snapshot to compare): skip diff, treat HIS as truth on first-touch (Option A) — existing semantics preserved; diff requires two values.
+
       - HIS returns 404 on refresh-on-dispatch: treat as divergence via pseudo-field `_existencia_no_his`, throw HisDataDriftException (Option A) — single block path, operator sees same "go investigate" screen regardless of why HIS disagreed.
     user_verdict: keep
     user_reason: "batch-keep — debrief pace: altas one-by-one, mids/lows batch-keep (no individual reservation raised)"
+    tag: example
+
+  - run_id: 2026-06-05-drain-6-followups
+    date: 2026-06-06
+    topic: "Defer WEGO-1743 (pg_trgm/unaccent search) — infra precondition unconfirmable autonomously"
+    altitude: strategic
+    original_choice: "Option B — block the card; a green local build (DevServices Postgres) is false confidence about prod CNPG allowing CREATE EXTENSION, and a failing migrate-at-start migration breaks boot"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-06-05-drain-6-followups
+    date: 2026-06-06
+    topic: "Defer WEGO-1741 (dev Deployment health probes) — change is out of this repo"
+    altitude: strategic
+    original_choice: "Option B — block; the fix is a k8s manifest in clinic-manager-gitops (no backend source change here) + depends on WEGO-1736"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-06-05-drain-6-followups
+    date: 2026-06-06
+    topic: "WEGO-1747 pagination bounds — @Max(100), @Min(1), reject 400"
+    altitude: strategic
+    original_choice: "Option A — @Max(100) (2x headroom over largest default 50) + @Min(1) + pin violation to HTTP 400 problem+json (not 500 via catch-all) with a test"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-06-05-drain-6-followups
+    date: 2026-06-06
+    topic: "WEGO-1730 — delete the broad IllegalStateException mapper, accept 409→500 for other throwers"
+    altitude: strategic
+    original_choice: "Option A — dedicated StatusFaturamentoInvalidoException (409) + DELETE the broad mapper; other IllegalStateException paths correctly become 500 (they were mislabeled 409). Other throwers not retrofitted (scope-discipline)"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-06-05-drain-6-followups
+    date: 2026-06-06
+    topic: "WEGO-1729 — sanitize WebApplicationExceptionMapper detail by status class"
+    altitude: strategic
+    original_choice: "Option A — branch on HTTP status class: 4xx keeps getMessage() verbatim, 5xx/3xx/unknown emit generic reason phrase. Zero regression (all real throw sites are 4xx); conservative latent hardening"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-06-05-drain-6-followups
+    date: 2026-06-06
+    topic: "WEGO-1728 — structured PlugSignBusinessException (422), vendor body out of the message"
+    altitude: strategic
+    original_choice: "Option A — new exception carrying upstreamStatus+vendorBody fields; httpStatus 422; safe getMessage(); convert internal message-string detections to upstreamStatus branching (leak-proof at source, retires fragile string-matching) — over the minimal detail()-override (Option B)"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-07-09-wego-1923
+    date: 2026-07-09
+    topic: escopo de "operacionalizar" para a imagem de producao
+    altitude: strategic
+    original_choice: "Opcao B — motor operavel e verificado (imagem capaz, config documentada, CI provando os dois ramos), default de prod mantido em none"
+    user_verdict: keep
+    user_reason: "(no reason given)"
     tag: example

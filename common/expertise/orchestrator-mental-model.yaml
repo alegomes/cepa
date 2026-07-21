@@ -5,17 +5,9 @@
 # only agent-global knowledge; project-specific facts go in the host project's
 # CLAUDE.md. See common/skills/mental-model/SKILL.md.
 
-last_updated: 2026-05-27
+last_updated: 2026-06-05
 
 feedback:
-  - run_id: 2026-05-27-wego-1683
-    date: 2026-05-27
-    topic: comparison key for atendimento.medico (HIS diff)
-    original_choice: Option A — compare by CPF
-    user_verdict: keep
-    user_reason: "(no reason given)"
-    tag: example
-
   - run_id: 2026-05-27-wego-1683
     date: 2026-05-27
     topic: comparison key for atendimento.convenio (HIS diff — future, when ACL exposes)
@@ -145,3 +137,140 @@ feedback:
       understand this decision" — every decision should be self-explained
       at the level of someone who didn't author the run.
     tag: principle
+
+  - run_id: 2026-06-02-wego-1732
+    date: 2026-06-03
+    topic: divergência entre reviewers — sustentar o que aponta CORREÇÃO sobre o que dá APPROVE
+    altitude: strategic
+    original_choice: Option A — REJECT o gate; sustentei o refactor-advisor (Finding "MEDIUM") contra o code-reviewer (APPROVE), tratei como bug de correção, roteei conserto + teste-guarda
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    refined_rationale: |
+      Quando code-reviewer e refactor-advisor divergem e UM deles aponta um
+      defeito de CORREÇÃO (não estilo), não despache pelo APPROVE — verifique
+      o achado no código você mesmo e, se confirmado, REJECT mesmo com build
+      verde e reviewer aprovando. Rótulo de severidade do advisor (MEDIUM)
+      não é confiável para correção: um falso-abort/falso-positivo de runtime
+      é HIGH na prática. O loop adversarial existe exatamente para isso —
+      o refactor-advisor pegou no run 1732 um falso-abort que qa + code-reviewer
+      deixaram passar. Confirmar-no-código > confiar no veredito do artefato.
+    tag: principle
+
+  - run_id: 2026-06-02-wego-1732
+    date: 2026-06-03
+    topic: ler o expertise file ANTES de conduzir o debrief, não ao persistir
+    altitude: meta
+    original_choice: "(descuido de processo — li orchestrator-mental-model.yaml só na hora de persistir)"
+    user_verdict: principle
+    user_reason: "(auto-registrado: violei o princípio de apresentação do debrief de wego-1683 por não ter lido o arquivo no início)"
+    refined_rationale: |
+      No INÍCIO de /common:debrief (e de qualquer task), ler o
+      orchestrator-mental-model.yaml ANTES de agir. No run 1732 apresentei as
+      decisões no formato cru do bloco, violando o princípio já registrado em
+      wego-1683 (Contexto / Risco se errar / Diferença prática / Opções em
+      linguagem prática). O princípio só vale se for lido no momento certo —
+      boot da task, não no fim.
+    tag: principle
+
+  - run_id: 2026-06-03-drain-followups
+    date: 2026-06-03
+    topic: classificar bloqueio na triagem de um drain — separar tipos de bloqueio
+    altitude: strategic
+    original_choice: "Option A — executar só os 4 cards in-repo; deixar 1736/1737/1741 (GitOps) e 1743 (CNPG) em To Do com comentário de bloqueador"
+    user_verdict: refine
+    user_reason: "refine via debrief — separar tipos de bloqueio"
+    refined_rationale: |
+      Manter a decisão (não executar o que não dá para verificar), MAS o
+      racional deve SEPARAR os tipos de bloqueio em vez de agrupá-los como
+      "infra/bloqueado":
+      (1) bloqueio por ACESSO — cluster/Keycloak/ArgoCD fora de alcance da
+          sessão → realmente não-executável nem verificável;
+      (2) bloqueio por REPO AUSENTE — ex. clinic-manager-gitops não está
+          local mas é CLONÁVEL → considerar clonar antes de rotular como
+          bloqueado (a ausência não é o mesmo que inacessível);
+      (3) bloqueio por CONFIRMAÇÃO EXTERNA — ex. CNPG permitir
+          pg_trgm/unaccent → é uma pergunta a responder, não um repo a tocar.
+      Cada categoria tem tratamento diferente; não colapsar as três num só
+      "bloqueado". Na triagem, checar a categoria 2 (clonável?) antes de
+      descartar.
+    tag: principle
+
+  - run_id: 2026-06-03-drain-followups
+    date: 2026-06-03
+    topic: shape de sub-recurso aninhado em DTO de lista (medico em GET /atendimentos)
+    altitude: strategic
+    original_choice: "Option A — subset enxuto medico{id,nome,crm,crmUf} na lista, distinto do MedicoInfo completo do detalhe"
+    user_verdict: overrule
+    user_reason: |
+      Espelhar o MedicoInfo completo do detalhe na lista — consistência de
+      contrato (mesmo shape em todo endpoint) vale mais que payload enxuto;
+      o front não quer dois formatos de medico.
+    refined_rationale: |
+      Default para sub-recurso aninhado (medico, paciente, etc) em DTO de
+      lista: ESPELHAR o shape COMPLETO já usado no endpoint de detalhe, não
+      inventar um subset enxuto endpoint-específico. Consistência de contrato
+      > economia de payload (o front não quer dois formatos do mesmo recurso).
+      Só fazer subset se o usuário/produto pedir explicitamente uma lista
+      slim. Em modo autônomo, NÃO tratar isso como decisão livre do
+      orquestrador rumo ao "enxuto" — o default seguro é consistência total.
+    tag: principle
+
+  - run_id: 2026-06-03-backlog-triage
+    date: 2026-06-05
+    topic: escopo de card de higiene LGPD — incluir superfície PII adjacente (trilha de auditoria) num card que diz "logs INFO"
+    altitude: strategic
+    original_choice: "Option B — incluir o mascaramento da trilha de auditoria (WebhookResource:176) no WEGO-1699, apesar do título dizer só 'logs INFO'; fix de 1 linha na mesma região, mesma superfície .getCpf()"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 2026-06-30-sales-enablement-kit
+    date: 2026-06-30
+    topic: tarefa sem topologia adequada (escrita de marketing/docs) rodada como orquestrador direto
+    altitude: strategic
+    original_choice: "Option A — rodar como orquestrador direto, sem topologia, por nao haver flow que sirva a escrita de prosa de marketing"
+    user_verdict: refine
+    user_reason: "A chamada de rodar direto estava certa, mas e incompleta."
+    refined_rationale: |
+      Quando se deparar com uma tarefa que nao tem topologia especializada que sirva
+      (ex.: escrita de marketing, prosa, conteudo), rodar como orquestrador direto E
+      registrar, no repositorio do plugin cepa (BACKLOG.md), a sugestao de criacao de
+      uma topologia especializada para aquele fim (neste caso: marketing). Nao apenas
+      improvisar e seguir: capturar a lacuna de capacidade da Cepa como item de backlog.
+    tag: principle
+
+  - run_id: 2026-06-30-sales-enablement-kit
+    date: 2026-06-30
+    topic: estrutura e nomeacao do kit de sales-enablement (subpasta dedicada + modulos/ aninhado vs flat na raiz de marketing)
+    altitude: strategic
+    original_choice: "Option A — marketing/sales-enablement/ com README indice, cross-modulo flat na raiz e one-pagers em modulos/; linka (nao move) o material existente do Remessa"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 20260709-trilha-fundacao
+    date: 2026-07-09
+    topic: "corpo entra no esquema e no canonico agora, mas nao na ingestao"
+    altitude: strategic
+    original_choice: "Option B — coluna + canonico agora; campo NAO exposto no DTO ate as guardas (scrubber/truncagem) landarem"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 20260709-trilha-fundacao
+    date: 2026-07-09
+    topic: "hash da corrente cobre corpo em texto claro, nunca o ciphertext"
+    altitude: strategic
+    original_choice: "Option B — canonico sobre o plaintext; verificar() decifra antes de recomputar, para que a rotacao da chave (AES-GCM, IV aleatorio) nao quebre a cadeia"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 20260709-trilha-fundacao
+    date: 2026-07-09
+    topic: "migration nao trunca nem recompoe linhas pre-existentes de audit_action"
+    altitude: strategic
+    original_choice: "Option A — dropar as colunas e aceitar que linhas antigas fiquem nao-verificaveis; nunca TRUNCATE numa tabela de auditoria, nunca recomputar SHA-256 em SQL. Consequencia documentada no cabecalho da migration."
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example

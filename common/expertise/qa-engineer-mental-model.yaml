@@ -5,4 +5,25 @@
 # only agent-global knowledge; project-specific facts go in the host project's
 # CLAUDE.md. See common/skills/mental-model/SKILL.md.
 
-last_updated: null
+last_updated: 2026-06-03
+
+feedback:
+  - run_id: 2026-06-02-wego-1732
+    date: 2026-06-03
+    topic: testar RESOLUÇÃO de valor, não só a lógica de classificação — cobrir o caminho "feature ON com tudo presente" pega chaves de propriedade mal-mapeadas
+    altitude: strategic
+    original_choice: |
+      Lacuna que deixou um bug passar: a suíte cobria classify() (lógica) e o
+      caminho oidc=OFF, mas NENHUM teste com oidc=ON + Keycloak presente
+      assertando que o boot SOBE. Resultado: KEYCLOAK_URL/REALM com propertyName
+      não-resolvível sempre resolvia FALTANDO → falso-abort em prod-com-OIDC,
+      e os testes passavam mesmo assim.
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    refined_rationale: |
+      Para qualquer validador/leitor de config: além de testar a LÓGICA
+      (classify/decide), sempre incluir um teste-guarda do caminho "tudo
+      configurado corretamente → não falha", com a feature LIGADA (oidc=ON,
+      mock=off). Esse teste exercita a RESOLUÇÃO real de cada chave e pega
+      propertyName/env-var mal-mapeado que um teste de lógica nunca alcança.
+    tag: principle

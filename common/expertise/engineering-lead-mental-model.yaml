@@ -15,6 +15,7 @@ feedback:
     user_verdict: overrule
     user_reason: "agente fez mudança de escopo não solicitada e identificou root cause errado. O bug era q retornando falsos positivos — 'lim' tampouco estava em cpf/telefone, logo remover esses campos não era o fix do bug. Restringir o escopo de q foi decisão autônoma indevida."
     tag: principle
+
   - run_id: 2026-05-08-api-fixes-features-batch
     date: "2026-05-09"
     topic: "S2 — adição autônoma de escape de wildcards SQL no filtro q"
@@ -22,12 +23,14 @@ feedback:
     user_verdict: keep
     user_reason: "(no reason given — aprovado após explicação de provenance)"
     tag: example
+
   - run_id: 2026-05-09-seed-q-filter-status-bugs
     date: "2026-05-09"
     topic: format compliance — investigation report decisions
     user_verdict: overrule
     user_reason: "Used a markdown table (Verdict per bug / root cause / fix layer) and prose hypotheses instead of the required ### Decision: blocks. Future runs MUST use the formal block — Options considered / Chosen / Rationale — even for single-option decisions or root-cause conclusions. The investigation report is an artifact read by /common:debrief; informal prose makes decisions invisible to the reinforcement loop."
     tag: principle
+
   - run_id: 2026-05-09-seed-q-filter-status-bugs
     date: "2026-05-09"
     topic: "WEGO-1655 — q='exem' false positives: NOT-A-BUG vs BUG"
@@ -35,6 +38,7 @@ feedback:
     user_verdict: overrule
     user_reason: "A conclusão foi prematura. Existem pedidos com signatarios:[] que ainda aparecem no resultado — o match está vindo do campo desnormalizado email_beneficiario na tabela pedido_assinatura, não dos signatários. Isso não foi verificado antes de fechar o ticket. NOT-A-BUG exige verificar o dado desnormalizado, não apenas inferir pelos emails dos signatários."
     tag: principle
+
   - run_id: 2026-05-08-api-fixes-features-batch
     date: "2026-05-09"
     topic: "Cobertura do filtro q — unit test vs E2E full-stack"
@@ -81,4 +85,42 @@ feedback:
       escrita shell-level (>, >>, tee, sed -i, cp, mv) para path interno fora do
       allowlist — mas a disciplina é tua primeiro; o hook é defense-in-depth, não
       substituto. Ver common/skills/zero-micromanagement + defense-in-depth.
+    tag: principle
+
+  - run_id: 20260709-trilha-fundacao
+    date: 2026-07-09
+    topic: "corpo no out-port RegistroAcao, mas nao no DTO/in-port"
+    altitude: strategic
+    original_choice: "Option B — slot de corpo no out-port para que o teste de hash-sobre-texto-claro exercite o caminho real do anexar(); DTO/in-port seguem sem o campo"
+    user_verdict: refine
+    user_reason: "refine"
+    refined_rationale: "A escolha esta certa (a alternativa — testar calcularHash isolado — testa a costura errada: calcularHash JA recebe o plaintext pronto; quem escolhe o que passar e verificar()/anexar(). E forjar a linha por SQL exigiria reimplementar o canonico no teste, que entao passa junto com o bug). O que faltou no rationale: reconhecer que o slot deixa o portao de producao apoiado APENAS na ausencia do campo no DTO, sem nenhuma assercao prendendo o null. Ao abrir um slot de porta que so o teste preenche, PRENDA o comportamento de producao com um teste no service (ex.: assertNull(reg.corpo())) no mesmo commit — senao a seguranca e estrutural por acidente e evapora no dia em que o proximo card adicionar o campo ao in-port. Feito em eea8ee6."
+    tag: principle
+
+  - run_id: 20260709-trilha-fundacao
+    date: 2026-07-09
+    topic: "renomear urlMascarada -> url na porta, entidade e coluna (raiz, nao so javadoc)"
+    altitude: strategic
+    original_choice: "Option B — rename ponta a ponta; o ADR revoga a premissa de mascaramento, entao um campo de contrato chamado urlMascarada fica ativamente errado"
+    user_verdict: keep
+    user_reason: "(no reason given)"
+    tag: example
+
+  - run_id: 20260709-trilha-fundacao
+    date: 2026-07-09
+    topic: "canonico do hash dropa so recurso/recursoCodigo; mantem detalhe e saude_*"
+    altitude: strategic
+    original_choice: "Option B — manter detalhe e saude_* no lacre; dropar apenas os dois campos que o ADR nomeia como derivados"
+    user_verdict: refine
+    user_reason: "refine — apos investigar: o critério do rationale estava impreciso, ainda que a escolha estivesse certa"
+    refined_rationale: "A escolha esta certa, o criterio do rationale nao. Nao e \"observado vs composto\": detalhe E composto pela borda (era ele que empacotava \"GET 200\"), e ainda assim pertence ao lacre. O criterio correto, que o ADR 0001 §2 enuncia sem nomear, e: NADA QUE O BACKEND VA RECOMPUTAR PODE ESTAR DENTRO DO LACRE. recurso/recurso_codigo saem porque o backend os re-deriva na leitura (VIEW, ADR §7) — selados, cada melhoria da regra exigiria abrir o envelope. detalhe e saude_* sao carga opaca que o backend so armazena e nunca re-derivara; selá-los nao pode causar aquele modo de falha. Corolario pratico, mais importante que a regra: o que fica FORA do canonico e exatamente o que alguem pode reescrever de graca sem quebrar verificar(). Logo o canonico nao se \"simplifica\" — sele toda coluna gravada exceto (a) o que o backend recomputa e (b) a maquinaria de tombstone (purgado/purgado_em/motivo_purga) e o proprio lacre (seq/prev_hash/hash). Tirar saude_* deixaria alguem virar injecaoOk de false para true e apagar a prova de que a instrumentacao estava cega. Achado decorrente, levado ao WEGO-1896: truncado/tamanho_original estao fora do canonico e precisam entrar NO MESMO COMMIT em que ganharem escritor — um campo cujo proposito e declarar \"aqui cortamos dado\" e justamente o que um adversario vira para false."
+    tag: principle
+
+  - run_id: 2026-07-09-wego-1923
+    date: 2026-07-09
+    topic: format compliance
+    altitude: strategic
+    original_choice: "Escreveu 4 blocos de decisao com cabecalho `## Decision:` (H2) em vez do `### Decision:` (H3) canonico — 3 em 00-DECISIONS.md, 1 em 05-ROUTING-NOTES.md"
+    user_verdict: overrule
+    user_reason: "Used `## Decision:` (H2) instead of the required `### Decision:` (H3) heading. The four fields were all present, but /common:debrief matches on the literal `### Decision:` heading — so those blocks are invisible to the tool that exists to surface them. Content compliance without heading compliance is silent invisibility, not a style nit. Future runs MUST use the exact `### Decision:` heading, even when nesting under another section."
     tag: principle
