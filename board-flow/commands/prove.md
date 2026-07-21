@@ -165,8 +165,21 @@ The change is provably not load-bearing somewhere. Send it back. Read
 >
 > - <for each failure: `file:line` — which level caught it — the external test that must exist to close it>
 >
+> **Reason:** <the single concrete gap, in one sentence — `file:line` plus the external test that would close it>
+>
 > Artifact: `.claude/proof/<KEY>.yaml`. This is the recurring last-mile gap: the behavior exists in the code but no test proves it from outside.
 > ```
+
+The `Reason:` field is not decoration: `bounce-reason-gate` blocks the comment
+without it. A card that comes back carrying only "not proven" forces the next
+session to re-derive the WHY from the diff — the reason costs one sentence to
+write and an archaeology to reconstruct.
+
+**And name the real condition.** "Attention" is not a state. When a card stops
+for something other than rework, say which: **Blocked** (waiting on X),
+**Deferred** (until Y), **Dropped** (because Z) — each with its reason. A status
+that only signals "someone look at this" hides the one fact the next person
+needs.
 
 #### NEEDS-HUMAN
 

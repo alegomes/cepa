@@ -92,7 +92,9 @@ slices:
       - "tests/test_summary_nulls_gate.py"
     bash_extra: ["python3"]
     timeout_min: 45
-    status: pending
+    status: DONE   # 2026-07-21 · test_bounce_reason_gate.py verde (17 casos);
+                   # perturbação: exit 2→0 no caminho de bloqueio derruba 4 casos.
+                   # common 0.16.0 (bump desta onda; description já cobre o A6)
 
   A6:
     demanda: "A6 do BACKLOG — dívida com revisit trigger no Implementation Summary"

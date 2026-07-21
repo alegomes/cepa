@@ -82,6 +82,14 @@ For each confirmed card, in priority order:
      transition).
   b. Capture the verdict and the action taken.
   c. **Continue regardless of verdict** — UNPROVEN does not stop the drain.
+     Every card returned on UNPROVEN carries its own `**Reason:**` — the
+     concrete gap for THAT card, not the batch's. `bounce-reason-gate` blocks
+     the comment without it, and a shared reason pasted across N cards is the
+     failure it exists to prevent: it reads as answered while telling the next
+     session nothing about any individual card. Where a card stops for
+     something other than rework, name the real condition — **Blocked**
+     (waiting on X) / **Deferred** (until Y) / **Dropped** (because Z).
+     "Attention" is not a state.
   d. If `proof-reviewer` returns a hard environmental failure for a card (can't
      create a worktree, build infra down), record it as `ERROR` for that card
      and continue to the next — one broken card shouldn't sink the batch.
