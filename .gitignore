@@ -28,6 +28,7 @@ common/expertise/expertise
 # (~/coding/cepa/common/expertise). Scaffolding de instalação, não fonte.
 .claude/expertise
 
-# Saída gerada pelo relatório de git-history (pngs + datapack + prosa).
-# Regenerável a partir do repo; não é dist.
-git-history-report/
+# Relatório de git-history: a prosa e os gráficos que ela referencia são
+# versionados (ver git-history-report/). Só o datapack intermediário fica
+# de fora — é insumo bruto, não citado por nenhum texto.
+git-history-report/datapack.json
