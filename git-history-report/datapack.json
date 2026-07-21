@@ -1,0 +1,324 @@
+{
+  "schema_version": 1,
+  "generated_args": {
+    "repos": [
+      "/Users/alegomes/coding/harnessing/claude/claude-multi-team-plugin"
+    ],
+    "since": null,
+    "until": null,
+    "granularity_requested": "auto",
+    "session_gap_min": 120,
+    "gap_days": 21
+  },
+  "granularity": "week",
+  "span": {
+    "start": "2026-04-26T16:21:03-03:00",
+    "end": "2026-06-03T18:24:22-03:00",
+    "days": 38
+  },
+  "periods": [
+    "2026-W17",
+    "2026-W18",
+    "2026-W19",
+    "2026-W20",
+    "2026-W21",
+    "2026-W22",
+    "2026-W23",
+    "2026-W24"
+  ],
+  "repos": [
+    {
+      "name": "claude-multi-team-plugin",
+      "path": "/Users/alegomes/coding/harnessing/claude/claude-multi-team-plugin",
+      "empty": false,
+      "workflow": "linear/rebase",
+      "workflow_evidence": {
+        "merge_ratio": 0.0,
+        "squash_marker_ratio": 0.0,
+        "merge_count": 0,
+        "squash_markers": 0
+      },
+      "first_commit": "2026-04-26T16:21:03-03:00",
+      "last_commit": "2026-06-03T18:24:22-03:00",
+      "total_commits": 101,
+      "total_churn": 22848,
+      "authors": 1,
+      "effort_by_period": {
+        "2026-W17": {
+          "commits": 2,
+          "churn": 1298,
+          "est_hours": 1.06
+        },
+        "2026-W18": {
+          "commits": 27,
+          "churn": 4569,
+          "est_hours": 14.02
+        },
+        "2026-W19": {
+          "commits": 33,
+          "churn": 6071,
+          "est_hours": 19.54
+        },
+        "2026-W20": {
+          "commits": 5,
+          "churn": 4781,
+          "est_hours": 5.03
+        },
+        "2026-W21": {
+          "commits": 3,
+          "churn": 770,
+          "est_hours": 3.0
+        },
+        "2026-W22": {
+          "commits": 24,
+          "churn": 3747,
+          "est_hours": 11.7
+        },
+        "2026-W23": {
+          "commits": 7,
+          "churn": 1612,
+          "est_hours": 3.06
+        }
+      },
+      "area_effort": [
+        {
+          "area": "docs",
+          "churn": 5341,
+          "commits": 16,
+          "first": "2026-05-13T21:12:59-03:00",
+          "last": "2026-06-03T14:12:28-03:00"
+        },
+        {
+          "area": "common",
+          "churn": 3506,
+          "commits": 33,
+          "first": "2026-05-02T10:05:08-03:00",
+          "last": "2026-06-03T18:24:22-03:00"
+        },
+        {
+          "area": "hex-backend",
+          "churn": 2255,
+          "commits": 24,
+          "first": "2026-05-03T12:38:50-03:00",
+          "last": "2026-06-01T13:59:42-03:00"
+        },
+        {
+          "area": "bin",
+          "churn": 1875,
+          "commits": 16,
+          "first": "2026-05-03T09:39:23-03:00",
+          "last": "2026-06-03T18:24:16-03:00"
+        },
+        {
+          "area": "jira-flow",
+          "churn": 1445,
+          "commits": 19,
+          "first": "2026-05-03T12:38:50-03:00",
+          "last": "2026-06-01T13:59:42-03:00"
+        },
+        {
+          "area": ".claude-plugin",
+          "churn": 1398,
+          "commits": 13,
+          "first": "2026-04-26T16:21:03-03:00",
+          "last": "2026-06-03T18:24:16-03:00"
+        },
+        {
+          "area": "git-history",
+          "churn": 1371,
+          "commits": 1,
+          "first": "2026-06-03T18:24:10-03:00",
+          "last": "2026-06-03T18:24:10-03:00"
+        },
+        {
+          "area": "book",
+          "churn": 1092,
+          "commits": 5,
+          "first": "2026-05-09T10:04:45-03:00",
+          "last": "2026-05-13T20:11:04-03:00"
+        },
+        {
+          "area": "discovery",
+          "churn": 1069,
+          "commits": 10,
+          "first": "2026-05-05T06:02:34-03:00",
+          "last": "2026-05-31T09:23:27-03:00"
+        },
+        {
+          "area": "(root)",
+          "churn": 1059,
+          "commits": 28,
+          "first": "2026-04-26T16:21:03-03:00",
+          "last": "2026-05-31T09:23:34-03:00"
+        },
+        {
+          "area": "agents",
+          "churn": 778,
+          "commits": 6,
+          "first": "2026-04-26T16:21:03-03:00",
+          "last": "2026-05-02T11:18:53-03:00"
+        },
+        {
+          "area": "solo-pair",
+          "churn": 631,
+          "commits": 10,
+          "first": "2026-05-01T15:40:10-03:00",
+          "last": "2026-05-03T10:42:49-03:00"
+        },
+        {
+          "area": "commands",
+          "churn": 303,
+          "commits": 2,
+          "first": "2026-04-26T16:21:03-03:00",
+          "last": "2026-05-01T20:45:50-03:00"
+        },
+        {
+          "area": "skills",
+          "churn": 303,
+          "commits": 2,
+          "first": "2026-04-26T16:21:03-03:00",
+          "last": "2026-05-01T20:45:50-03:00"
+        },
+        {
+          "area": "hooks",
+          "churn": 284,
+          "commits": 2,
+          "first": "2026-04-26T16:21:03-03:00",
+          "last": "2026-05-02T11:18:53-03:00"
+        },
+        {
+          "area": "multi-team",
+          "churn": 127,
+          "commits": 11,
+          "first": "2026-05-02T11:56:16-03:00",
+          "last": "2026-05-30T18:48:56-03:00"
+        },
+        {
+          "area": ".claude",
+          "churn": 12,
+          "commits": 1,
+          "first": "2026-06-03T14:15:39-03:00",
+          "last": "2026-06-03T14:15:39-03:00"
+        }
+      ],
+      "tags": [],
+      "merges": [],
+      "signals": {
+        "keyword": [
+          {
+            "date": "2026-04-26T16:24:27-03:00",
+            "hash": "8048e289f8",
+            "subject": "docs: rewrite README around local-path setup workflow",
+            "category": "rewrite"
+          },
+          {
+            "date": "2026-05-03T09:41:46-03:00",
+            "hash": "dce2b301f8",
+            "subject": "Local-only install; drop GitHub-publish framing",
+            "category": "abandon"
+          }
+        ],
+        "reverts": [
+          {
+            "date": "2026-05-03T10:03:06-03:00",
+            "hash": "db29e45ef8",
+            "subject": "fix: revert remaining 9 multi-team agent Writes paths to .claude/expertise"
+          },
+          {
+            "date": "2026-05-03T10:42:49-03:00",
+            "hash": "d67f7a0616",
+            "subject": "Revert versions to 0.1.0 and refresh audit with empirical findings"
+          },
+          {
+            "date": "2026-05-13T16:39:52-03:00",
+            "hash": "0b9e9d3209",
+            "subject": "feat(common): green-or-revert — structural gate against optimistic claims"
+          }
+        ],
+        "gaps": [],
+        "stack_changes": [],
+        "structural": [
+          {
+            "area": "book",
+            "event": "introduced-late",
+            "date": "2026-05-09T10:04:45-03:00",
+            "churn": 1092
+          },
+          {
+            "area": "docs",
+            "event": "introduced-late",
+            "date": "2026-05-13T21:12:59-03:00",
+            "churn": 5341
+          },
+          {
+            "area": ".claude",
+            "event": "introduced-late",
+            "date": "2026-06-03T14:15:39-03:00",
+            "churn": 12
+          },
+          {
+            "area": "git-history",
+            "event": "introduced-late",
+            "date": "2026-06-03T18:24:10-03:00",
+            "churn": 1371
+          }
+        ]
+      },
+      "signals_truncated": {}
+    }
+  ],
+  "timeline": {
+    "by_period": {
+      "2026-W17": {
+        "claude-multi-team-plugin": {
+          "commits": 2,
+          "churn": 1298,
+          "est_hours": 1.06
+        }
+      },
+      "2026-W18": {
+        "claude-multi-team-plugin": {
+          "commits": 27,
+          "churn": 4569,
+          "est_hours": 14.02
+        }
+      },
+      "2026-W19": {
+        "claude-multi-team-plugin": {
+          "commits": 33,
+          "churn": 6071,
+          "est_hours": 19.54
+        }
+      },
+      "2026-W20": {
+        "claude-multi-team-plugin": {
+          "commits": 5,
+          "churn": 4781,
+          "est_hours": 5.03
+        }
+      },
+      "2026-W21": {
+        "claude-multi-team-plugin": {
+          "commits": 3,
+          "churn": 770,
+          "est_hours": 3.0
+        }
+      },
+      "2026-W22": {
+        "claude-multi-team-plugin": {
+          "commits": 24,
+          "churn": 3747,
+          "est_hours": 11.7
+        }
+      },
+      "2026-W23": {
+        "claude-multi-team-plugin": {
+          "commits": 7,
+          "churn": 1612,
+          "est_hours": 3.06
+        }
+      },
+      "2026-W24": {}
+    }
+  }
+}

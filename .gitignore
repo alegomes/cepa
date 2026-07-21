@@ -27,8 +27,3 @@ common/expertise/expertise
 # Symlink criado pelo bin/install.sh apontando para o clone canônico
 # (~/coding/cepa/common/expertise). Scaffolding de instalação, não fonte.
 .claude/expertise
-
-# Relatório de git-history: a prosa e os gráficos que ela referencia são
-# versionados (ver git-history-report/). Só o datapack intermediário fica
-# de fora — é insumo bruto, não citado por nenhum texto.
-git-history-report/datapack.json
