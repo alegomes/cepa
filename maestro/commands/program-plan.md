@@ -34,7 +34,12 @@ comando é o único lugar onde BACKLOG.md (ou outra fonte) é interpretado.
      naming user-facing, breaking change)? Ela precisa ser tomada AGORA, na
      conversa, e registrada no `human_gate` — ou a demanda fica fora da onda;
    - **critério de aceite executável** (`acceptance` + `acceptance_cmd` — o
-     repo é `.claude/no-build`, então `acceptance_cmd` é obrigatório).
+     repo é `.claude/no-build`, então `acceptance_cmd` é obrigatório);
+   - **forma do aceite** (`acceptance_form`): se a demanda só nomeia passos
+     privados de implementação — nenhum Given/When/Then observável em alguma
+     superfície — ela não é US. Ou o `acceptance` ganha a tripla observável
+     (`acceptance_form: bdd`), ou o slice **assume** que é substrato
+     (`acceptance_form: substrate`). Sem uma das duas, o intake reprova.
 
 3. **Proposta de ondas.** Agrupe slices de superfícies disjuntas na mesma onda
    (teto `max_concurrent_slices`, default 3); dependências e decisões pesadas
@@ -72,3 +77,7 @@ comando é o único lugar onde BACKLOG.md (ou outra fonte) é interpretado.
 - Arquivos de alto atrito não declarados (lockfiles, migrations, index/barrel)
   viram aviso, não veto — o verify pós-merge do merge train é quem pega
   conflito incidental.
+- `acceptance_form: substrate` não é escape hatch: é uma **declaração**. Um
+  slice de substrato aceita ser verificado por critério técnico porque ninguém
+  finge que ele tem superfície observável. Marcar `substrate` numa demanda que
+  o usuário enxerga é mentir para o gate — e o gate acredita.

@@ -18,6 +18,10 @@ Checagens (cada uma existe porque a falha correspondente já custou uma onda):
   - critério de aceite declarado; em repo .claude/no-build o slice DEVE
     trazer acceptance_cmd executável (merge train não aterrissa N slices
     com verificação zero)
+  - forma do aceite: ou o acceptance traz um Given/When/Then observável em
+    alguma superfície (US), ou o slice declara `acceptance_form: substrate`
+    (TS). Um plano que só nomeia passos privados de implementação não é
+    demanda verificável — é palpite com nome de slice
   - zero decisão estratégica em aberto (human_gate: none ou decisão registrada)
   - contexto mínimo apontado (context não-vazio)
   - baseline verde no fork point (.claude/last-build.json — mesmo sinal do
@@ -32,6 +36,7 @@ Exit: 0 = todos READY · 1 = READY com avisos · 2 = algum NOT-READY (ou plano i
 import argparse
 import fnmatch
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -49,6 +54,25 @@ DEFAULT_ENFORCEMENT_ZONE = [
     "*/hooks/*",
     "*/plugins/*",
 ]
+
+# Formas de aceite reconhecidas. 'bdd' = comportamento observável numa
+# superfície (US); 'substrate' = trabalho de substrato assumido como tal (TS),
+# cujo aceite legítimo é técnico. A ausência das duas é o caso que este check
+# existe para pegar: plano que só nomeia passos privados de implementação.
+ACCEPTANCE_FORMS = ("bdd", "substrate")
+
+# Triplas BDD aceitas — inglês (canônico) e pt-BR (a prosa do harness).
+# Exigimos as TRÊS palavras: "Given" sozinho é contexto, não critério.
+BDD_TRIPLES = [
+    (r"\bgiven\b", r"\bwhen\b", r"\bthen\b"),
+    (r"\bdado\b", r"\bquando\b", r"\bent[ãa]o\b"),
+]
+
+
+def has_bdd(text: str) -> bool:
+    return any(all(re.search(w, text, re.IGNORECASE) for w in triple)
+               for triple in BDD_TRIPLES)
+
 
 HIGH_FRICTION = [
     "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock",
@@ -191,6 +215,22 @@ def main() -> int:
         if no_build and not acc_cmd:
             gaps.append("repo .claude/no-build exige acceptance_cmd executável "
                         "(comando de verificação próprio do slice)")
+
+        # forma do aceite — BDD observável OU substrato declarado
+        form = str(sl.get("acceptance_form") or "").strip().lower()
+        if form and form not in ACCEPTANCE_FORMS:
+            gaps.append(f"acceptance_form inválido ({form!r}) — use "
+                        f"'bdd' (comportamento observável) ou 'substrate' "
+                        f"(trabalho de substrato assumido)")
+        elif form == "bdd" and not has_bdd(acc):
+            gaps.append("acceptance_form: bdd mas o acceptance não traz um "
+                        "Given/When/Then (ou Dado/Quando/Então) observável — "
+                        "escreva o critério na forma que você declarou")
+        elif not form and not has_bdd(acc):
+            gaps.append("aceite sem Given/When/Then observável e sem "
+                        "`acceptance_form: substrate` — o plano só nomeia passos "
+                        "privados de implementação: ou declare o comportamento "
+                        "observável numa superfície, ou assuma que é substrato")
 
         # decisão estratégica aberta — preditor nº 1 de mediação
         hg = sl.get("human_gate", None)

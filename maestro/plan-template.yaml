@@ -29,7 +29,13 @@ slices:
       - "docs/foo.md"           # enforcement é veto incondicional
     human_gate: none            # 'none' OU a decisão estratégica JÁ tomada, registrada;
                                 # "open:..." = NOT-READY (preditor nº 1 de mediação)
-    acceptance: "pytest tests/test_foo.py verde + hook dispara no cenário X"
+    acceptance: |                # US: Given/When/Then observável numa superfície
+      Given um comentário de devolução sem razão
+      When o agente tenta postá-lo
+      Then o hook bloqueia nomeando o campo faltante
+    acceptance_form: bdd        # bdd | substrate — sem uma das duas, NOT-READY.
+                                # 'substrate' = trabalho de substrato (TS) cujo
+                                # aceite legítimo é técnico; declarar é assumir.
     acceptance_cmd: "python3 tests/test_foo.py"   # OBRIGATÓRIO em repo .claude/no-build
     context:                    # contexto mínimo p/ a filha (links, não prosa)
       - "BACKLOG.md#p9"

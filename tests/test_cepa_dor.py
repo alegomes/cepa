@@ -10,7 +10,10 @@ Guards the intake-gate contracts from the v1 design (Componente 4):
   - open human_gate / missing acceptance_cmd in a no-build repo → NOT-READY;
   - D7 floor (<4 demandas) blocks the program;
   - a clean plan comes out READY (exit 0 or 1-with-warnings, never 2);
-  - unknown schema_version is refused.
+  - unknown schema_version is refused;
+  - "BDD ou substrato" (A3): um slice cujo aceite só nomeia passos privados de
+    implementação reprova nomeando a lacuna; declarar `acceptance_form:
+    substrate` (ou escrever a tripla observável) passa.
 """
 
 import subprocess
@@ -65,11 +68,39 @@ waves:
     slices: [S1, S2]
     status: pending
 slices:
-  S1: {{demanda: A, surface: [{s1}], human_gate: {hg1}, acceptance: ok, {ac1} context: [x]}}
-  S2: {{demanda: B, surface: [{s2}], human_gate: none, acceptance: ok, acceptance_cmd: "true", context: [x]}}
-  S3: {{demanda: C, surface: ["docs/x.md"], human_gate: none, acceptance: ok, acceptance_cmd: "true", context: [x]}}
-  S4: {{demanda: D, surface: ["src/b.py"], human_gate: none, acceptance: ok, acceptance_cmd: "true", context: [x]}}
+  S1: {{demanda: A, surface: [{s1}], human_gate: {hg1}, acceptance: ok, acceptance_form: substrate, {ac1} context: [x]}}
+  S2: {{demanda: B, surface: [{s2}], human_gate: none, acceptance: ok, acceptance_form: substrate, acceptance_cmd: "true", context: [x]}}
+  S3: {{demanda: C, surface: ["docs/x.md"], human_gate: none, acceptance: ok, acceptance_form: substrate, acceptance_cmd: "true", context: [x]}}
+  S4: {{demanda: D, surface: ["src/b.py"], human_gate: none, acceptance: ok, acceptance_form: substrate, acceptance_cmd: "true", context: [x]}}
 """
+
+# Plano de 1 slice na onda (S2..S4 existem só para o piso D7) usado para
+# exercitar a forma do aceite isoladamente.
+PLAN_FORM = """\
+schema_version: 1
+program: t
+waves:
+  - id: 1
+    slices: [S1]
+    status: pending
+slices:
+  S1:
+    demanda: A
+    surface: ["src/a.py"]
+    human_gate: none
+    acceptance: "{acc}"
+    acceptance_cmd: "true"
+    context: [x]
+{form}\
+  S2: {{demanda: B, surface: ["docs/x.md"], human_gate: none, acceptance: ok, acceptance_form: substrate, acceptance_cmd: "true", context: [x]}}
+  S3: {{demanda: C, surface: ["docs/x.md"], human_gate: none, acceptance: ok, acceptance_form: substrate, acceptance_cmd: "true", context: [x]}}
+  S4: {{demanda: D, surface: ["docs/x.md"], human_gate: none, acceptance: ok, acceptance_form: substrate, acceptance_cmd: "true", context: [x]}}
+"""
+
+# Aceite que só nomeia passos privados de implementação — o caso que o A3 pega.
+ACC_PRIVADO = "refatorar o parser e extrair o helper de normalizacao"
+ACC_BDD = ("Dado um card em Review sem razao, Quando o agente posta a "
+           "devolucao, Entao o hook bloqueia nomeando o campo")
 
 
 def main():
@@ -127,6 +158,39 @@ def main():
                     repo)
         check("schema_version desconhecida é recusada", r.returncode == 2
               and "schema_version" in r.stdout, r.stdout)
+
+        # ── A3: "BDD ou substrato" ──────────────────────────────────────────
+        # US sem BDD e sem declaração de substrato → NOT-READY, lacuna nomeada
+        r = run_dor(PLAN_FORM.format(acc=ACC_PRIVADO, form=""), repo)
+        check("aceite só com passos privados → NOT-READY", r.returncode == 2
+              and "NOT-READY" in r.stdout, r.stdout)
+        check("a lacuna do aceite é NOMEADA (BDD ou substrato)",
+              "Given/When/Then" in r.stdout and "substrate" in r.stdout,
+              r.stdout)
+
+        # substrato declarado → passa (aceite técnico é legítimo p/ TS)
+        r = run_dor(PLAN_FORM.format(acc=ACC_PRIVADO,
+                                     form="    acceptance_form: substrate\n"),
+                    repo)
+        check("substrato declarado passa", r.returncode in (0, 1), r.stdout)
+
+        # tripla observável (pt-BR) sem declarar forma → passa
+        r = run_dor(PLAN_FORM.format(acc=ACC_BDD, form=""), repo)
+        check("Given/When/Then observável passa sem declarar forma",
+              r.returncode in (0, 1), r.stdout)
+
+        # declarou bdd mas não escreveu a tripla → NOT-READY
+        r = run_dor(PLAN_FORM.format(acc=ACC_PRIVADO,
+                                     form="    acceptance_form: bdd\n"), repo)
+        check("acceptance_form: bdd sem tripla → NOT-READY",
+              r.returncode == 2 and "acceptance_form: bdd" in r.stdout,
+              r.stdout)
+
+        # valor inválido é recusado em vez de ignorado em silêncio
+        r = run_dor(PLAN_FORM.format(acc=ACC_BDD,
+                                     form="    acceptance_form: talvez\n"), repo)
+        check("acceptance_form inválido → NOT-READY", r.returncode == 2
+              and "inválido" in r.stdout, r.stdout)
 
         # baseline não-verde em repo COM build
         repo2 = make_repo(tempfile.mkdtemp(dir=tmp), no_build=False)
