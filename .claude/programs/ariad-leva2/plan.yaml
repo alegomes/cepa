@@ -1,0 +1,199 @@
+# plan.yaml — programa ariad-leva2 (schema v1)
+#
+# Leva 2 dos mecanismos do Ariad (avaliação 2026-07-16/20, memory/ariad-evaluation.md).
+# Demandas A1–A10 no BACKLOG.md ("Programa ariad-leva2").
+#
+# PASSO 0 (fora deste plano, ANTES da Onda 1): bin/install.sh --clean + restart
+# + validar a Leva 1 (summary-nulls-gate) num card WEGO real. A4/A6 estendem
+# esse gate e não devem ser construídos sobre gate não-validado.
+#
+# ⚠ EXECUTOR: sessão principal, NÃO /maestro:run. O cepa-dor (rodado 2026-07-20)
+# vetou A4/A6/A1/A5/A8/A2: as superfícies intersectam a ZONA DE ENFORCEMENT
+# (common/hooks/*, */.claude-plugin/plugin.json) — veto incondicional por design
+# (filhas forkadas não escrevem a superfície de enforcement; enforcement-guard).
+# A Leva 2 É trabalho de harness, logo é trabalho da sessão principal: execute
+# onda a onda, inline, usando este arquivo como estado (status por slice) e os
+# acceptance_cmd como verificação. Só A3 e ADOC seriam forkáveis (READY no gate);
+# não vale quebrar o programa por isso. NÃO afrouxe --enforcement-zone para
+# "passar no gate" — o veto é a arquitetura funcionando.
+#
+# Costura de superfícies (decisões deste plano):
+# - triage.md pertence ao A6 (o A3 cita o critério lá via A6, não edita).
+# - a prosa de drain do A8 foi absorvida pelo A5; A8 fica maestro-only.
+# - hooks registram DENTRO de common/.claude-plugin/plugin.json (não há hooks.json);
+#   os dois hooks novos (A4, A1) editam esse arquivo → ondas diferentes de propósito.
+# - bump de versão do common tem dono único por onda: onda 1 = A4 (0.16.0, inclui
+#   a mudança do A6 no changelog/description); onda 2 = A1 (0.17.x conforme A2 ainda
+#   não rodou); A6 NÃO toca plugin.json.
+# - Onda 4 (docs A7+A9+A10) roda sequential-inline: 1 commit, sem worktree.
+
+schema_version: 1
+program: ariad-leva2
+source: BACKLOG.md
+max_concurrent_slices: 3
+
+waves:
+  - id: 1
+    mode: sequential-inline  # zona de enforcement → sessão principal (ver cabeçalho)
+    fork_after: null
+    slices: [A3, A4, A6]
+    status: pending
+  - id: 2
+    mode: sequential-inline  # zona de enforcement → sessão principal (ver cabeçalho)
+    fork_after: "wave-1"
+    slices: [A1, A5, A8]
+    status: pending
+  - id: 3
+    mode: sequential-inline
+    fork_after: "wave-2"
+    slices: [A2]
+    status: pending
+  - id: 4
+    mode: sequential-inline
+    fork_after: "wave-3"
+    slices: [ADOC]
+    status: pending
+
+slices:
+  A3:
+    demanda: "A3 do BACKLOG — teste BDD-ou-substrato no cepa-dor"
+    surface:
+      - "maestro/plan-template.yaml"
+      - "maestro/commands/program-plan.md"
+      - "tests/test_cepa_dor.py"
+    human_gate: none   # decisão tomada: campo acceptance_form: bdd | substrate; US sem BDD e sem declaração de substrato = NOT-READY
+    acceptance: "test_cepa_dor.py verde com +2 casos: slice US sem BDD reprova nomeando a lacuna; slice substrate declarado passa"
+    acceptance_cmd: "python3 tests/test_cepa_dor.py"
+    context:
+      - "BACKLOG.md#a3-teste-bdd-ou-substrato-no-cepa-dor"
+      - "maestro/plan-template.yaml"
+    bash_extra: ["python3"]
+    timeout_min: 45
+    status: pending
+
+  A4:
+    demanda: "A4 do BACKLOG — razão obrigatória em bounce-back"
+    surface:
+      - "common/hooks/bounce-reason-gate.py"
+      - "common/.claude-plugin/plugin.json"
+      - "board-flow/commands/prove.md"
+      - "board-flow/commands/prove-drain.md"
+      - "board-flow/agents/atlassian-expert.md"
+      - "tests/test_bounce_reason_gate.py"
+    human_gate: none   # decisão tomada: string-match EN+pt-BR (Reason:/Motivo:) na mesma técnica do summary-nulls-gate; bloqueio, não aviso
+    acceptance: "hook bloqueia comentário de devolução sem Reason:/Motivo: + texto; templates de devolução atualizados; teste de regressão verde"
+    acceptance_cmd: "python3 tests/test_bounce_reason_gate.py"
+    context:
+      - "BACKLOG.md#a4-razão-obrigatória-em-bounce-back"
+      - "common/hooks/summary-nulls-gate.py"
+      - "tests/test_summary_nulls_gate.py"
+    bash_extra: ["python3"]
+    timeout_min: 45
+    status: pending
+
+  A6:
+    demanda: "A6 do BACKLOG — dívida com revisit trigger no Implementation Summary"
+    surface:
+      - "common/hooks/summary-nulls-gate.py"
+      - "common/commands/autonomous-start.md"
+      - "board-flow/commands/execute.md"
+      - "board-flow/commands/fix.md"
+      - "board-flow/commands/plan-track-build-validate.md"
+      - "board-flow/commands/triage.md"
+      - "tests/test_summary_nulls_gate.py"
+    human_gate: none   # decisões tomadas: exigência condicional (debt != none/unknown → Revisit trigger: obrigatório); ledger = cards Jira label debt, sem sistema de arquivos novo
+    acceptance: "gate exige Revisit trigger: quando há dívida declarada e não exige quando none; triage ganha proposta de Debt Payment por trigger disparado + critério BDD-ou-substrato no bucket READY"
+    acceptance_cmd: "python3 tests/test_summary_nulls_gate.py"
+    context:
+      - "BACKLOG.md#a6-dívida-com-revisit-trigger-no-implementation-summary"
+      - "common/hooks/summary-nulls-gate.py"
+    bash_extra: ["python3"]
+    timeout_min: 45
+    status: pending
+
+  A1:
+    demanda: "A1 do BACKLOG — validation seeds + carry-forward no handoff do discovery"
+    surface:
+      - "discovery/agents/epic-briefer.md"
+      - "discovery/.claude-plugin/plugin.json"
+      - "common/hooks/handoff-seeds-gate.py"
+      - "common/.claude-plugin/plugin.json"
+      - "tests/test_handoff_seeds_gate.py"
+    human_gate: none   # decisão tomada: rótulos Validation seeds: / Carry-forward notes: obrigatórios (nulo explícito ok); PreToolUse no Write de docs/discovery/*/handoff.md
+    acceptance: "Write de handoff.md sem os 2 rótulos é bloqueado; com 'none' passa; seeds copiadas para a descrição do card criado pelo epic-briefer"
+    acceptance_cmd: "python3 tests/test_handoff_seeds_gate.py"
+    context:
+      - "BACKLOG.md#a1-validation-seeds--carry-forward-no-handoff-do-discovery"
+      - "common/hooks/summary-nulls-gate.py"
+    bash_extra: ["python3"]
+    timeout_min: 45
+    status: pending
+
+  A5:
+    demanda: "A5 do BACKLOG — regras de fechamento acoplado no drain (+ outcome terminal, prosa)"
+    surface:
+      - "board-flow/commands/drain.md"
+      - "board-flow/commands/prove-drain.md"
+      - "board-flow/.claude-plugin/plugin.json"
+      - "build-hex/agents/proof-reviewer.md"
+      - "build-hex/.claude-plugin/plugin.json"
+    human_gate: none   # decisão tomada: disciplina + telemetria nesta leva (sem hook); lote exige evidência/razão/dívida POR card; drain não encerra com card sem outcome terminal
+    acceptance: "seções normativas presentes em drain.md e prove-drain.md; proof-reviewer instruído a recusar veredito agregado (evidência por card ou NEEDS-HUMAN)"
+    acceptance_cmd: "grep -q 'por card' board-flow/commands/prove-drain.md && grep -q 'outcome terminal' board-flow/commands/drain.md && grep -qi 'NEEDS-HUMAN' build-hex/agents/proof-reviewer.md"
+    context:
+      - "BACKLOG.md#a5-regras-de-fechamento-acoplado-no-drain"
+    bash_extra: ["grep"]
+    timeout_min: 30
+    status: pending
+
+  A8:
+    demanda: "A8 do BACKLOG — outcome terminal por onda no maestro + revisão nunca edita"
+    surface:
+      - "maestro/bin/maestro-wave-state"
+      - "maestro/commands/run.md"
+      - "maestro/.claude-plugin/plugin.json"
+      - "common/agents/completion-auditor.md"
+      - "tests/test_maestro_run_cores.py"
+    human_gate: none   # decisão tomada: merge train/relatório não completa com slice sem estado terminal (DONE|FAIL|TIMEOUT|ESCALATED); revisores com Write: veredito em YAML, mudança vira card
+    acceptance: "test_maestro_run_cores.py verde com caso novo: onda com slice não-terminal não aterrissa; frase normativa nos revisores"
+    acceptance_cmd: "python3 tests/test_maestro_run_cores.py"
+    context:
+      - "BACKLOG.md#a8-fronteira-de-mutação--outcome-terminal-por-onda"
+      - "maestro/bin/maestro-wave-state"
+    bash_extra: ["python3"]
+    timeout_min: 45
+    status: pending
+
+  A2:
+    demanda: "A2 do BACKLOG — updates operacionais do harness (classes + rota mínima)"
+    surface:
+      - "bin/install.sh"
+      - "common/commands/doctor.md"
+      - "common/.claude-plugin/plugin.json"
+      - "docs/harness-ops.md"
+    human_gate: none   # decisões tomadas: registro em .claude/ops/last-install.json (versões live antes → alvo → resultado); cache anterior preservado + --rollback; doctor checa drift live-vs-repo com idade e install incompleto
+    acceptance: "install interrompido deixa registro incompleto que o doctor acusa; --rollback restaura o cache anterior; doctor reporta drift live-vs-repo com idade"
+    acceptance_cmd: "bash -n bin/install.sh && grep -q 'last-install.json' bin/install.sh && grep -qi 'rollback' bin/install.sh && test -f docs/harness-ops.md"
+    context:
+      - "BACKLOG.md#a2-updates-operacionais-do-harness-classes--rota-mínima"
+      - "bin/install.sh"
+    bash_extra: ["bash", "grep"]
+    timeout_min: 60
+    status: pending
+
+  ADOC:
+    demanda: "A7 + A9 + A10 do BACKLOG — convenções em prosa (1 commit de docs)"
+    surface:
+      - "docs/incomprimivel.md"
+      - "docs/precedencia-de-instrucoes.md"
+      - "docs/versionamento.md"
+    human_gate: none   # conteúdo já decidido nos itens A7/A9/A10 do BACKLOG
+    acceptance: "3 docs criados: lista do incomprimível por gate; precedência em 5 camadas (+ regra parar-e-expor); versionamento por nível colapsado + release note com exclusões conscientes"
+    acceptance_cmd: "test -f docs/incomprimivel.md && test -f docs/precedencia-de-instrucoes.md && test -f docs/versionamento.md"
+    context:
+      - "BACKLOG.md#a7-lista-do-incomprimível-regras-de-compressão-por-gate"
+      - "BACKLOG.md#a9-precedência-de-instruções-em-5-camadas"
+      - "BACKLOG.md#a10-versionamento-pelo-nível-que-colapsou--release-note-narrativa"
+    bash_extra: []
+    timeout_min: 30
+    status: pending

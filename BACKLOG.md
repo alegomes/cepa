@@ -211,6 +211,52 @@ CLI = wrappers JSON do socket):
 
 ---
 
+## Baseline cega para builds longos (> teto de foreground do Bash)
+
+**Status:** pendente · **Lar:** `common/hooks/capture-build-result.py` (+ possivelmente
+`gate-advance.py`) · **Origem:** sessão wego 2026-07-20 — build Maven de ~14:30 nunca
+grava baseline, diagnóstico confirmado como limite de desenho, não uso errado.
+
+### Problema
+
+Choque entre duas medidas fixas: o `capture-build-result` decide verde/vermelho pelo
+**marcador literal no `tool_response`** (`BUILD SUCCESS` etc. — por desenho, já que o
+tool_response omite exit code no sucesso), e o Bash do CC tem **teto de foreground de
+10 minutos**. Build que dura mais que o teto é movido para background e o
+`tool_response` vira só "moved to background" — sem marcador, sem gravação. Resultado:
+**enquanto o build durar mais que o teto, NENHUMA invocação grava baseline**; o
+green-or-revert opera cego (ou pior, STALE eterno) exatamente nos repos de build mais
+pesado. Determinístico, não intermitente.
+
+Nota: isto provavelmente explica parte da evidência "gravação intermitente em
+background/`| tail`" reportada pela sessão wego de 07/16 e deixada sem card por falta
+de reprodução — o subcaso >10min é reproduzível.
+
+### Esboço de solução
+
+O sinal precisa parar de depender do tool_response da invocação que INICIOU o build.
+Caminhos (não exclusivos, decidir no design):
+
+1. **Capturar na conclusão do background:** se o CC expõe hook/evento na finalização
+   de task em background (PostToolUse de BashOutput/TaskOutput), aplicar ali os mesmos
+   marcadores sobre o output final. Investigar primeiro — é a rota limpa.
+2. **Evidência em arquivo:** convenção de wrapper (`... | tee .claude/build-output.log`
+   e/ou `echo EXIT:$? >> ...`) + hook lendo o arquivo em vez do tool_response — mesma
+   técnica do wrapper `MAESTRO-EXIT:*` das filhas do maestro. Funciona para qualquer
+   duração, mas exige disciplina de invocação (ou o hook injetar o wrapper).
+3. **Paliativo honesto:** quando o tool_response é "moved to background" num comando
+   de build reconhecido, gravar estado `pending`/timestamp em vez de silêncio, para o
+   doctor e o gate-advance ao menos DIZEREM "build longo em andamento, baseline
+   pendente" em vez de STALE mudo.
+
+### Aceite
+
+Build sintético > teto de foreground (ex.: `sleep 660 && echo BUILD SUCCESS`) termina
+com baseline gravada verde; variante com FAILURE grava vermelho; suite `tests/` cobre
+o caso.
+
+---
+
 # Programa melhorias-2026-07
 
 Universo de demandas da auditoria de sessões de 07/2026 + discussão de lacunas.
@@ -300,3 +346,131 @@ Meta-aceite: usar o advisors recém-nascido para revisar o design do P6.
 
 `/common:metrics --days 30`: bloqueios de gate caíram? proof_blocks apareceram?
 builds vermelhos mudaram? O que a métrica apontar vira a próxima fornada de cards.
+
+---
+
+# Programa ariad-leva2
+
+Leva 2 de mecanismos garimpados na segunda avaliação do Ariad (2026-07-16/20;
+avaliação completa em `memory/ariad-evaluation.md` dos dois espaços de projeto).
+Mesmo método da Leva 1: hook primeiro, prosa depois. Plano de execução em ondas:
+`.claude/programs/ariad-leva2/plan.yaml`.
+
+**Pré-requisito (passo 0, antes da Onda 1):** rodar o reinstall pendente
+(`bin/install.sh --clean` + restart) e validar a Leva 1 viva num card WEGO real —
+A4 e A6 estendem o próprio summary-nulls-gate e não devem ser construídos sobre
+gate não-validado.
+
+## A1. Validation seeds + carry-forward no handoff do discovery
+
+**Onda 2 · Lar:** `discovery` + hook em `common` · **Status:** ver plan.yaml
+
+Quando exploração vira entrega, o handoff deve carregar sementes de validação
+(pensadas ANTES de implementar) e achados implementation-relevant. Template do
+`handoff.md` do epic-briefer ganha `Validation seeds:` e `Carry-forward notes:`
+obrigatórios (nulo explícito permitido, ausência não); dente = hook
+`handoff-seeds-gate.py` (PreToolUse no Write de `docs/discovery/*/handoff.md`,
+string-match nos rótulos); seeds viajam para a descrição do card criado. Aceite:
+Write de handoff sem os rótulos é bloqueado; com "none" passa.
+
+## A2. Updates operacionais do harness (classes + rota mínima)
+
+**Onda 3 · Lar:** `bin/install.sh` + `common:doctor` + docs · **Status:** ver plan.yaml
+
+Mudança em common/hooks/bin/settings = update **operacional** (muda a superfície
+em que o próximo agente opera) e exige rota mínima: estado atual, alvo, rollback,
+validação. `install.sh --clean` grava `.claude/ops/last-install.json` (versões
+live antes → alvo → resultado) e preserva o cache anterior (`--rollback`
+restaura); doctor ganha 2 checks: drift live-vs-repo com idade, e último install
+incompleto. Prosa curta em `docs/harness-ops.md` ("na dúvida, é operacional;
+ausência de rota de recuperação é fato que o humano vê antes"). Ataca a dor
+crônica "NOT live until reinstall". Aceite: install interrompido no meio é
+acusado pelo doctor; --rollback restaura o estado anterior.
+
+## A3. Teste "BDD ou substrato" no cepa-dor
+
+**Onda 1 · Lar:** `maestro` · **Status:** ver plan.yaml
+
+Se o plano de um slice/card só nomeia passos privados de implementação — nenhum
+Given/When/Then observável em alguma superfície — não é US: ou declara-se
+substrato (TS) ou é NOT-READY. `plan-template.yaml` ganha `acceptance_form:
+bdd | substrate`; intake gate do `program-plan` reprova slice sem uma das duas
+formas, nomeando a lacuna. Aceite: `tests/test_cepa_dor.py` com +2 casos (US sem
+BDD reprova; substrato declarado passa).
+
+## A4. Razão obrigatória em bounce-back
+
+**Onda 1 · Lar:** `common/hooks` + `board-flow` (prove*) · **Status:** ver plan.yaml
+
+Card devolvido de Review sem razão estruturada obriga re-arqueologia na próxima
+sessão. Hook novo `bounce-reason-gate.py` (mesma técnica do summary-nulls-gate):
+comentário de devolução sem `Reason:`/`Motivo:` + texto é bloqueado; templates de
+devolução em prove.md/prove-drain.md/atlassian-expert.md ganham o campo. Regra
+anexa em prosa: "Attention não é estado — nomeie a condição real (Blocked/
+Deferred/Dropped + razão)". Aceite: teste novo + devolução real bloqueada sem razão.
+
+## A5. Regras de fechamento acoplado no drain
+
+**Onda 2 · Lar:** `board-flow` (drain*) + `build-hex:proof-reviewer` · **Status:** ver plan.yaml
+
+Fechar cards em lote só quando causalmente acoplados com fronteira de validação
+compartilhada — e mesmo aí, evidência/razão/impacto de dívida POR card; proibido
+com risco ou dívida independentes. Seção normativa em drain.md e prove-drain.md;
+proof-reviewer recusa veredito agregado ("evidência por card ou NEEDS-HUMAN").
+Inclui (vindo do A8) o critério de término: drain não encerra com card sem
+outcome terminal nomeado. Enforcement por disciplina + telemetria (contar lote
+sem evidência por card se aparecer na prática). Aceite: prove-drain real com
+outcome e evidência nomeados por card.
+
+## A6. Dívida com revisit trigger no Implementation Summary
+
+**Onda 1 · Lar:** `common/hooks/summary-nulls-gate.py` + templates board-flow · **Status:** ver plan.yaml
+
+Estende o campo da Leva 1: se `New debt introduced` ≠ none/unknown, o gate passa
+a exigir `Revisit trigger:` (e aceita `Closure condition:` opcional). Templates
+dos 5 produtores atualizados; dívida que sobrevive ao card vira card Jira com
+label `debt` (o board é o ledger — sem sistema de arquivos novo); triage propõe
+"Debt Payment" quando o trigger de um card debt disparou; bônus: linha do
+critério BDD-ou-substrato (A3) no bucket READY do triage. Aceite:
+test_summary_nulls_gate.py +3 casos (dívida sem trigger bloqueia; com trigger
+passa; none não exige).
+
+## A7. Lista do incomprimível (regras de compressão por gate)
+
+**Onda 4 · Lar:** docs · **Status:** ver plan.yaml
+
+Do conceito de cadence do Ariad, o exportável é a regra de compressão EXPLÍCITA:
+documentar, por checkpoint/gate existente do cepa, o que pode ser comprimido em
+trabalho trivial e o que NUNCA pode (rota humana de US; os 4 nulos do summary; a
+razão de bounce do A4; "no release needed" dito em vez de pulado). Não cria gate
+novo — é o spec de crescimento dos gates. Entra no commit de docs da Onda 4.
+
+## A8. Fronteira de mutação + outcome terminal por onda
+
+**Onda 2 · Lar:** `maestro` · **Status:** ver plan.yaml
+
+Do Refinement do Ariad: revisão nunca edita — achou mudança necessária, abre
+card/CR; e nada fecha com item sem outcome terminal. No cepa: check mecânico no
+`maestro-wave-state` — merge train/relatório não completa com slice sem estado
+terminal (DONE/FAIL/TIMEOUT/ESCALATED); frase normativa nos agentes revisores
+com Write (proof-reviewer, completion-auditor): "veredito em YAML, mudança vira
+card, nunca edit". (A parte de drain foi para o A5.) Aceite: caso novo em
+tests/test_maestro_run_cores.py — onda com slice não-terminal não aterrissa.
+
+## A9. Precedência de instruções em 5 camadas
+
+**Onda 4 · Lar:** docs/`common` · **Status:** ver plan.yaml
+
+Ordem explícita: instrução da sessão > contrato do projeto (CLAUDE.md do repo) >
+preferências do usuário (CLAUDE.md global) > defaults dos plugins > guidance
+geral; conflito com camada superior = parar e expor. Doc de ~15 linhas
+referenciado pelos agentes lead. Entra no commit de docs da Onda 4.
+
+## A10. Versionamento pelo nível que colapsou + release note narrativa
+
+**Onda 4 · Lar:** docs · **Status:** ver plan.yaml
+
+Convenção para bumps dos plugins (contrato de hook quebrado → MAJOR; gate/feature
+novo → MINOR; fix → PATCH — formaliza o de facto) e release note/commit de
+release citando o que foi **conscientemente excluído**. Entra no commit de docs
+da Onda 4.
