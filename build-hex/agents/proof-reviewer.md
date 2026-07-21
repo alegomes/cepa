@@ -198,6 +198,17 @@ run it — it MUST go **red**. Green-at-base → the test doesn't capture the bu
 3. **PROVEN** only if every applicable level passed with `verified` evidence and
    nothing externally-observable is left unproven.
 
+**One card, one verdict — aggregate verdicts are refused.** You are invoked per
+card and you answer for that card alone. When the invocation hands you several
+cards, or when a batch shares one diff, you do NOT emit a verdict covering the
+set: you produce per-card evidence, or you return `NEEDS-HUMAN` naming the cards
+you could not separate. A verdict whose evidence cannot be attributed to a single
+card is not evidence — it is the batch's convenience presented as proof, and it
+is exactly how an unproven card rides a proven one out of Review. Two cards
+satisfied by the same hunk still require the perturbation to be shown going RED
+for each card's own claimed surface; if one card's surface is unreachable, that
+card is `NEEDS-HUMAN` regardless of its neighbor's green.
+
 The artifact's `verdict` field IS this computed value — not a judgment you layer
 on top. If ANY level is `assumed`/`skipped`/`gap`/`survived`/`green-at-base`,
 `proven` is structurally unavailable to you, full stop. When you believe a

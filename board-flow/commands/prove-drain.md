@@ -93,6 +93,8 @@ For each confirmed card, in priority order:
   d. If `proof-reviewer` returns a hard environmental failure for a card (can't
      create a worktree, build infra down), record it as `ERROR` for that card
      and continue to the next — one broken card shouldn't sink the batch.
+  e. Before recording any card's outcome, apply **Coupled closure** below. The
+     batch is a scheduling convenience; it is never the unit of evidence.
 
 ### 5. Final report
 
@@ -116,9 +118,47 @@ every option description — never a bare `L4` / `waiver` / `altitude` in a labe
 Suggest re-running for the next batch if cards remain, and point the user at the
 NEEDS-HUMAN set as their actual review queue.
 
+## Coupled closure — the batch is not the unit of evidence
+
+Draining N cards in one run creates a standing temptation: prove once, close
+many. The saving is real and the reasoning is almost never valid. Two cards that
+merely rode the same commit are not the same change.
+
+**Closing cards together is allowed only when both hold:**
+
+1. **Causally coupled** — they are one change split across cards (the same hunk
+   satisfies them; fixing one necessarily fixes the other), not merely adjacent,
+   same-file, same-sprint, or same-author.
+2. **Shared validation boundary** — a single external surface exercises all of
+   them, so one perturbation going RED demonstrably covers every card in the set.
+
+**Forbidden outright — no matter how coupled they look:** cards carrying
+independent risk, or independent debt. A shared proof cannot speak for a risk
+only one of them introduces.
+
+**Even when both conditions hold, every card gets its own line:**
+
+- its **evidence** — the specific run line / perturbation that covers THAT card;
+- its **reason** — the `**Reason:**` required by `bounce-reason-gate`, written
+  for that card, never pasted across the set;
+- its **debt impact** — the `New debt introduced` value for that card, and (per
+  `summary-nulls-gate`) the `Revisit trigger` when that value isn't none/unknown.
+
+A batch-level "all proven, same fix" is not evidence — it is the absence of
+evidence formatted to look like a conclusion. When you cannot write the per-card
+line, the card is not closed: route it individually.
+
+**Telemetry, not enforcement (this wave).** No hook checks this yet. If a batch
+without per-card evidence appears in practice, record it as a counted occurrence
+so the next wave knows whether prose was enough. Discipline first; a gate only
+once the failure is observed.
+
 ## Constraints
 
 - Default `--max 5`. Each card is an expensive proof; raise deliberately.
+- **Coupled closure or individual closure — never batch-by-convenience.** See the
+  section above; per-card evidence, reason, and debt impact are required even for
+  a legitimately coupled set.
 - **No stop-on-failure.** UNPROVEN and NEEDS-HUMAN are normal outcomes; the drain
   processes the whole confirmed batch. (Contrast `/board-flow:drain`, which stops
   on BLOCKED.)

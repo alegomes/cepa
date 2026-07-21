@@ -3,9 +3,16 @@
 # Leva 2 dos mecanismos do Ariad (avaliação 2026-07-16/20, memory/ariad-evaluation.md).
 # Demandas A1–A10 no BACKLOG.md ("Programa ariad-leva2").
 #
-# PASSO 0 (fora deste plano, ANTES da Onda 1): bin/install.sh --clean + restart
-# + validar a Leva 1 (summary-nulls-gate) num card WEGO real. A4/A6 estendem
-# esse gate e não devem ser construídos sobre gate não-validado.
+# PASSO 0 — ✅ CUMPRIDO 2026-07-21. Validação da Leva 1 (summary-nulls-gate)
+# rodou num card WEGO real via /board-flow:execute WEGO-1948 e achou DOIS
+# defeitos que fixture nenhuma pegaria: (a) falso positivo — summary honesto
+# em markup de wiki do Jira (h3.) era bloqueado com mensagem mentindo que os
+# campos faltavam; (b) pior, achado no conserto — SUMMARY_HEADING_RE só
+# reconhecia heading markdown, então summary em wiki com ZERO campos passava
+# em silêncio. Corrigidos em 8ee011a (suíte 19 → 27 checks, perturbação:
+# reverter o hook deixa 6 dos 8 checks novos vermelhos). Ver BACKLOG.md
+# "summary-nulls-gate bloqueia summary honesto por formatação".
+# bin/install.sh --clean rodou 2026-07-21 20:10 (cache em common/0.17.0).
 #
 # ⚠ EXECUTOR: sessão principal, NÃO /maestro:run. O cepa-dor (rodado 2026-07-20)
 # vetou A4/A6/A1/A5/A8/A2: as superfícies intersectam a ZONA DE ENFORCEMENT
@@ -23,8 +30,10 @@
 # - hooks registram DENTRO de common/.claude-plugin/plugin.json (não há hooks.json);
 #   os dois hooks novos (A4, A1) editam esse arquivo → ondas diferentes de propósito.
 # - bump de versão do common tem dono único por onda: onda 1 = A4 (0.16.0, inclui
-#   a mudança do A6 no changelog/description); onda 2 = A1 (0.17.x conforme A2 ainda
-#   não rodou); A6 NÃO toca plugin.json.
+#   a mudança do A6 no changelog/description); onda 2 = A1; A6 NÃO toca plugin.json.
+#   ⚠ 0.17.0 foi consumido FORA deste programa (b7a7c72, maven-reactor-guard /
+#   WEGO-1949, sessão paralela) — o A1 vai para 0.18.0. Reler a versão do
+#   plugin.json na hora do bump; não confiar neste comentário.
 # - Onda 4 (docs A7+A9+A10) roda sequential-inline: 1 commit, sem worktree.
 
 schema_version: 1
@@ -37,13 +46,16 @@ waves:
     mode: sequential-inline  # zona de enforcement → sessão principal (ver cabeçalho)
     fork_after: null
     slices: [A3, A4, A6]
-    status: done   # 2026-07-21 · A3 a90272f · A4 f875ad6 · A6 <este commit>
-                   # ⚠ common 0.16.0 NÃO está live: exige bin/install.sh --clean
+    status: done   # 2026-07-21 · A3 a90272f · A4 f875ad6 · A6 dad667b
+                   # live desde o --clean de 2026-07-21 20:10
   - id: 2
     mode: sequential-inline  # zona de enforcement → sessão principal (ver cabeçalho)
     fork_after: "wave-1"
     slices: [A1, A5, A8]
-    status: pending
+    status: in-progress   # 2026-07-21 · ordem alterada para A5 → A8 → A1:
+                   # o A1 disputa common/.claude-plugin/plugin.json com a sessão
+                   # paralela que landou b7a7c72; A5 e A8 não encostam nesse
+                   # arquivo. A1 entra quando a outra sessão encerrar.
   - id: 3
     mode: sequential-inline
     fork_after: "wave-2"
@@ -151,12 +163,21 @@ slices:
       - "build-hex/.claude-plugin/plugin.json"
     human_gate: none   # decisão tomada: disciplina + telemetria nesta leva (sem hook); lote exige evidência/razão/dívida POR card; drain não encerra com card sem outcome terminal
     acceptance: "seções normativas presentes em drain.md e prove-drain.md; proof-reviewer instruído a recusar veredito agregado (evidência por card ou NEEDS-HUMAN)"
-    acceptance_cmd: "grep -q 'por card' board-flow/commands/prove-drain.md && grep -q 'outcome terminal' board-flow/commands/drain.md && grep -qi 'NEEDS-HUMAN' build-hex/agents/proof-reviewer.md"
+    # acceptance_cmd corrigido na execução, por DOIS defeitos do original:
+    #   grep -q 'por card' ... && grep -q 'outcome terminal' ... && grep -qi 'NEEDS-HUMAN' build-hex/agents/proof-reviewer.md
+    # (a) 'por card' é pt-BR, mas a prosa desses arquivos é em inglês — a
+    #     cláusula ficaria vermelha para sempre, independente da entrega;
+    # (b) 'NEEDS-HUMAN' JÁ existia no proof-reviewer antes do A5 → cláusula
+    #     trivialmente verde, não testava a frase normativa nova nenhuma.
+    # As 4 cláusulas abaixo foram verificadas vermelhas @HEAD e verdes após.
+    acceptance_cmd: "grep -q 'per-card evidence' board-flow/commands/prove-drain.md && grep -q 'Coupled closure' board-flow/commands/prove-drain.md && grep -q 'outcome terminal' board-flow/commands/drain.md && grep -q 'aggregate verdicts are refused' build-hex/agents/proof-reviewer.md"
     context:
       - "BACKLOG.md#a5-regras-de-fechamento-acoplado-no-drain"
     bash_extra: ["grep"]
     timeout_min: 30
-    status: pending
+    status: DONE   # 2026-07-21 · 4 cláusulas verdes; perturbação: as 4 estão
+                   # vermelhas em git show HEAD:<arquivo> (nenhuma pré-existia).
+                   # board-flow 0.8.0 · build-hex 0.5.0 (donos únicos desta onda)
 
   A8:
     demanda: "A8 do BACKLOG — outcome terminal por onda no maestro + revisão nunca edita"

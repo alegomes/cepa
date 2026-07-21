@@ -73,13 +73,38 @@ For each card the user confirmed:
      - Move to step 5 (final report).
   d. **If READY-TO-SHIP or READY-WITH-CAVEATS:**
      - Continue to the next card.
+  e. Record that card's **outcome terminal** before moving on (see below). A card
+     you touched and cannot name an outcome for is an unfinished card, not a
+     quiet success.
+
+### 4b. Outcome terminal — no card leaves the drain unnamed
+
+The drain does not finish while any attempted card lacks a named terminal
+outcome. Every card you touched ends in exactly one of:
+
+| Outcome | Means |
+|---|---|
+| `SHIPPED` | moved to In Review / done, verdict recorded |
+| `BLOCKED` | stopped on a condition outside the card — name the condition and who clears it |
+| `DEFERRED` | deliberately postponed — name what must be true to pick it up |
+| `DROPPED` | will not be done — name why |
+| `ERROR` | the run itself failed (infra, permissions) — name the failure |
+
+"In progress", "partially done", "needs attention" and silence are **not**
+outcomes. They are the absence of a decision wearing a status label, and they are
+how a card returns to the board next week with nobody knowing what happened to
+it. If you cannot name the outcome, the honest terminal is `BLOCKED` with the
+reason "outcome undetermined: <what you don't know>".
+
+This mirrors the same rule the maestro applies per wave (a wave doesn't land with
+a non-terminal slice) — one discipline, two surfaces.
 
 ### 5. Final report
 
 A single summary message:
 
 - **Drained from column:** <column> (scope: <effective scope, or "none">)
-- **Cards attempted:** N
+- **Cards attempted:** N — each with its outcome terminal (`SHIPPED` / `BLOCKED` / `DEFERRED` / `DROPPED` / `ERROR`). The count of attempted cards MUST equal the count of named outcomes; if it doesn't, the drain is not finished.
 - **Moved to In Review:** M (list keys + verdicts)
 - **Blocked:** 0 or 1 (key + reason)
 - **Remaining in column (not attempted this run):** count
