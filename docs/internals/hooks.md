@@ -9,7 +9,7 @@ CC supports several hook events. This marketplace uses six:
 
 | Event | Fires | Marketplace usage |
 |---|---|---|
-| `PreToolUse` | Before a tool call lands. Hook can exit 2 to BLOCK the call. | `path-lock.py` + `bash-path-lock.py` (every topology), `gate-advance.py` + `enforcement-guard.py` + `lead-no-worktree.py` + `acceptance-gate.py` (common) |
+| `PreToolUse` | Before a tool call lands. Hook can exit 2 to BLOCK the call. | `path-lock.py` + `bash-path-lock.py` (every topology), `gate-advance.py` + `enforcement-guard.py` + `maven-reactor-guard.py` + `lead-no-worktree.py` + `acceptance-gate.py` (common) |
 | `PostToolUse` | After a tool call returns. Hook can observe + write to disk. Cannot block (the call already happened). | `autonomous-checkpoint.py`, `mark-build-stale.py`, `capture-build-result.py`, `session-activity.py` (common) |
 | `UserPromptSubmit` | When the user submits a prompt. Hook can observe; can inject system reminders. | `session-log.py`, `session-subject.py` (common) |
 | `SessionStart` | Session boot. Hook can inject context. | `session-registry.py` (common) — registry hygiene + transparent handoff resume |
@@ -150,6 +150,36 @@ invariant: **no plugin subagent writes the enforcement surface, anywhere.**
 4. Carve-out: the agent's own <agent>-mental-model.yaml in an expertise/
    dir stays writable (its legitimate mental-model home, even in the cache).
 ```
+
+### maven-reactor-guard.py (PreToolUse, matcher `Bash`)
+
+Owner: `common/hooks/`.
+
+`./mvnw test -pl <modulo>` **sem** `-am` resolve os módulos irmãos pelos jars do
+`~/.m2` em vez de recompilar o reator. Cache defasado ⇒ os testes rodam contra
+código antigo e o vermelho é **falso**: determinístico, reproduzível e irreal —
+o que faz ele se disfarçar de bug funcional. Em 2026-07-21 (WEGO-1949) isso
+custou uma investigação inteira e um card acusando indevidamente uma feature
+entregue: o jar de `application` era de 16/jul e sequer tinha o método que o
+teste exercitava. Já estava documentado no README do projeto e na memória, e
+reincidiu — daí a barreira ser mecânica e bloquear, não avisar.
+
+**Logic:**
+
+```python
+1. Só tool Bash; comando contendo `stale-ok` fail-open (escape hatch para
+   quem ACABOU de rodar `./mvnw install -DskipTests`).
+2. cwd precisa ser raiz de reator multi-módulo (`<modules>` no pom.xml).
+   Single-module e sem-pom fail-open — o problema não existe lá.
+3. Por segmento (split em ; | && ||): achar uma invocação REAL do Maven.
+   Prefixo de env (`FOO=bar ./mvnw`) e wrapper (`timeout 600 mvn`) contam;
+   `echo`/`grep`/`cat` + amigos não — ali o `mvn` é texto citado.
+4. BLOCK se houver `-pl`/`--projects` (inclusive `-pl=x`) sem `-am`/
+   `--also-make`. `-amd`/`--also-make-dependents` NÃO conta: constrói os
+   dependentes, não as dependências, então o buraco continua aberto.
+```
+
+Testes: `tests/test_maven_reactor_guard.py` (25 casos, sem deps).
 
 ### gate-advance.py (PreToolUse, matcher `Bash`)
 
