@@ -121,6 +121,8 @@ Read `defaults.status_map.in_review` from `board-flow.yaml` (default `"In Review
 
 **New debt introduced:** <none, or refactor-advisor findings, each with a revisit trigger>
 
+**Revisit trigger:** <required when debt is anything other than none/unknown — the condition that brings it back into view; `Closure condition:` optional>
+
 **Scope captured outside the card:** <none, or findings captured as follow-ups — named, never silently absorbed>
 
 **Release needed:** <no, or yes: what and why>

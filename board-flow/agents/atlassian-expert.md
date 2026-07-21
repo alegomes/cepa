@@ -186,6 +186,8 @@ The orchestrator must include the summary in the delegation. Required template:
 
 **New debt introduced:** none | <list from review, with revisit trigger>
 
+**Revisit trigger:** <required when debt is anything other than none/unknown — the condition that brings it back into view; `Closure condition:` optional>
+
 **Scope captured outside the card:** none | <follow-ups captured as findings/cards, never silently absorbed>
 
 **Release needed:** no | yes: <what and why>

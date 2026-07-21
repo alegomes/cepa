@@ -79,8 +79,36 @@ Then assign the bucket by this **precedence**:
    - **proof-strategy hint** — how the proof gate should later attack it, inferred from the card's type: **Bug** → the regression test must go RED at `base_commit` (highest false-positive risk — "code looks fixed + a test exists" is the classic false-green); **AC at an external surface (REST endpoint / outbound payload) but only a unit test covers it** → altitude gap, expect `completion-auditor` INCOMPLETE / an E2E is needed; **already has contract + E2E** → load-bearing proof should be cheap and pass; **boot/config behavior** → perturbation (force the bad config, e.g. the feature flag off in prod, require fail-fast abort).
    - **not-perturbable flag** — set it for cards whose "done" can't be shown by breaking prod code and re-running a test (seed / reference data, pure configuration). Their confidence comes from inspection/query, not proof — flag them so `/board-flow:prove-drain` treats them as inspect-not-prove instead of bouncing them UNPROVEN.
 3. **OBSOLETE** — superseded, a **duplicate of another card (dedup)**, or targets code/an area that no longer exists. A dedup card is **not** "done" even if the behavior exists — bucket it OBSOLETE, not In Review, and before proposing Won't Do confirm the **canonical** card's real state (it may itself be unfinished). Always cite the canonical key in the reason.
-4. **READY** — clear outcome, acceptance criteria present, bounded scope; nothing blocks a developer from starting.
+4. **READY** — clear outcome, acceptance criteria present, bounded scope; nothing blocks a developer from starting. Apply the same **BDD-or-substrate** test the maestro's intake gate applies (`cepa-dor`): if the card's acceptance criteria only name private implementation steps — no Given/When/Then observable at *some* surface — it is not READY unless the card explicitly declares itself substrate (technical work whose legitimate acceptance is technical). Otherwise it falls to NEEDS-REFINEMENT with that named as the gap. A card nobody can verify from outside is a card whose "done" will be argued about later.
 5. **NEEDS-REFINEMENT (stays in backlog)** — none of the above; too thin to start, not obsolete, not done.
+
+### 4b. Sweep the debt ledger (Debt Payment proposals)
+
+Debt declared in an Implementation Summary carries a **Revisit trigger** — the
+condition that brings it back into view (`summary-nulls-gate` requires it
+whenever the declared debt is anything other than none/unknown). **The board is
+the ledger**: debt that outlives its card lives as a Jira card labeled `debt`,
+not in a file the harness would have to invent and then keep in sync.
+
+Triage is where the ledger gets read. Via `atlassian-expert`, search the project
+for open cards labeled `debt`, and for each one read its Revisit trigger:
+
+- **Trigger clearly fired** (the named condition happened — that endpoint did
+  change, the contract did add retries, the table did cross the threshold):
+  propose it as a **Debt Payment** card in this run's write plan — bucket
+  **READY → To Do**, with the trigger quoted as the reason and the card that
+  introduced the debt cited. Its acceptance is the debt's `Closure condition:`
+  when one was declared.
+- **Trigger clearly not fired:** leave it. Say nothing beyond a count — a
+  ledger that reports every unfired trigger every run trains the user to skip
+  the section.
+- **Can't tell from the trigger's own words:** bucket it **NEEDS-DECISION** and
+  ask in the grill (step 6). Do not decide that a vague trigger fired; a
+  fabricated "it's time" is how debt payment loses the user's trust.
+
+Debt Payment proposals go through the same confirmation as everything else in
+step 7 — nothing is created without a yes. If the project has no `debt`-labeled
+cards, skip this step silently.
 
 ### 5. Triage report
 

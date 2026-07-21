@@ -37,7 +37,8 @@ waves:
     mode: sequential-inline  # zona de enforcement → sessão principal (ver cabeçalho)
     fork_after: null
     slices: [A3, A4, A6]
-    status: pending
+    status: done   # 2026-07-21 · A3 a90272f · A4 f875ad6 · A6 <este commit>
+                   # ⚠ common 0.16.0 NÃO está live: exige bin/install.sh --clean
   - id: 2
     mode: sequential-inline  # zona de enforcement → sessão principal (ver cabeçalho)
     fork_after: "wave-1"
@@ -105,6 +106,10 @@ slices:
       - "board-flow/commands/fix.md"
       - "board-flow/commands/plan-track-build-validate.md"
       - "board-flow/commands/triage.md"
+      - "board-flow/agents/atlassian-expert.md"   # corrigido na execução: o
+                                # template canônico do summary vive aqui; sem
+                                # ele os 5 produtores ficariam inconsistentes
+                                # com o gate (o A4 já tinha tocado o arquivo)
       - "tests/test_summary_nulls_gate.py"
     human_gate: none   # decisões tomadas: exigência condicional (debt != none/unknown → Revisit trigger: obrigatório); ledger = cards Jira label debt, sem sistema de arquivos novo
     acceptance: "gate exige Revisit trigger: quando há dívida declarada e não exige quando none; triage ganha proposta de Debt Payment por trigger disparado + critério BDD-ou-substrato no bucket READY"
@@ -114,7 +119,9 @@ slices:
       - "common/hooks/summary-nulls-gate.py"
     bash_extra: ["python3"]
     timeout_min: 45
-    status: pending
+    status: DONE   # 2026-07-21 · test_summary_nulls_gate.py verde (38 casos,
+                   # +11 do A6); perturbação: desligar a exigência condicional
+                   # derruba 5 casos. Sem bump: o 0.16.0 do A4 já descreve.
 
   A1:
     demanda: "A1 do BACKLOG — validation seeds + carry-forward no handoff do discovery"

@@ -10,6 +10,15 @@ undetectable; a missing mandatory field is a string-match away. Same
 hook+gate pattern as acceptance-gate.py, one seam earlier: it fires on the
 comment post, before the transition.
 
+It also enforces the debt-with-an-exit rule: declaring "New debt introduced:
+<something>" and stopping there is how debt outlives the card that created it
+with nobody holding the string. When the declared debt is anything other than
+none/unknown, the gate additionally requires a **Revisit trigger** — the
+condition that brings the debt back into view ("when the PlugSign contract
+adds retries", "next time this endpoint changes"). `Closure condition:` is
+accepted as an optional companion. The board is the ledger: debt that
+survives the card becomes a Jira card labeled `debt`, not a new file format.
+
 It also enforces the human-validation asymmetry: every summary carries a
 **Human validation route** field — either a real route (command/URL +
 expected observation + fail condition) for user-facing behavior, or the
@@ -87,6 +96,57 @@ BARE_FIELDS = {
     for label, spellings in FIELD_LABELS.items()
 }
 
+# ── conditional field: debt declared → revisit trigger required ─────────────
+# The debt value, inline (`**New debt introduced:** foo`) or block-style
+# (`h3. Nova dívida introduzida` with the value on the next line).
+DEBT_SPELLINGS = "|".join(FIELD_LABELS["New debt introduced"])
+DEBT_INLINE_RE = re.compile(
+    rf"{MARKER}\s*(?:{DEBT_SPELLINGS})\s*:?\s*\**[^\S\n]*(?P<value>\S[^\n]*)",
+    re.IGNORECASE,
+)
+DEBT_BLOCK_RE = re.compile(
+    rf"^{MARKER}\s*(?:{DEBT_SPELLINGS})\s*:?\s*\**\s*$\n+(?!{MARKER})(?P<value>\S[^\n]*)",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+# Values that mean "there is no debt to hold a string on". `unknown` is here
+# deliberately: /board-flow:triage routes pre-existing implementations with
+# "unknown (assess at proof)", and demanding a revisit trigger for debt nobody
+# has assessed yet would only teach agents to invent one.
+NO_DEBT_VALUES = (
+    r"none", r"no\b", r"n/?a", r"not applicable", r"nothing", r"zero",
+    r"nenhum[ao]?", r"n[ãa]o\s+aplic[áa]vel", r"sem\s+d[íi]vida", r"nada",
+    r"unknown", r"desconhecid[ao]", r"a\s+avaliar", r"to\s+assess",
+)
+NO_DEBT_RE = re.compile(rf"^\W*(?:{'|'.join(NO_DEBT_VALUES)})\b", re.IGNORECASE)
+
+REVISIT_LABELS = (
+    r"Revisit trigger",
+    r"Gatilho de revisita",
+    r"Gatilho de revis[ãa]o",
+)
+REVISIT_RE = re.compile(
+    rf"{MARKER}\s*(?:{'|'.join(REVISIT_LABELS)})", re.IGNORECASE
+)
+REVISIT_BARE_RE = re.compile(rf"(?:{'|'.join(REVISIT_LABELS)})", re.IGNORECASE)
+
+
+def debt_value(body: str) -> str | None:
+    for rx in (DEBT_INLINE_RE, DEBT_BLOCK_RE):
+        m = rx.search(body)
+        if m:
+            return m.group("value").strip()
+    return None
+
+
+def declares_real_debt(body: str) -> bool:
+    """True when the summary names debt that outlives the card."""
+    value = debt_value(body)
+    if value is None:
+        return False
+    return not NO_DEBT_RE.match(value)
+
+
 # Possible field names the MCP comment tools may use for the body.
 BODY_FIELDS = ("commentBody", "comment", "body", "text", "commentText")
 
@@ -122,13 +182,23 @@ def main():
         sys.exit(0)
 
     missing = [label for label, rx in REQUIRED_FIELDS.items() if not rx.search(body)]
+
+    # Conditional field: debt that outlives the card must carry the condition
+    # that brings it back. Only checked once the debt field itself is present —
+    # otherwise the agent gets two errors for one omission.
+    bare_lookup = dict(BARE_FIELDS)
+    debt_declared = "New debt introduced" not in missing and declares_real_debt(body)
+    if debt_declared and not REVISIT_RE.search(body):
+        missing.append("Revisit trigger")
+        bare_lookup["Revisit trigger"] = REVISIT_BARE_RE
+
     if not missing:
         sys.exit(0)
 
     # Split the diagnosis: absent vs. present-but-unlabeled. Same block either
     # way, but the agent needs to know whether to ANSWER the question or just
     # re-format the answer it already wrote.
-    absent = [m for m in missing if not BARE_FIELDS[m].search(body)]
+    absent = [m for m in missing if not bare_lookup[m].search(body)]
     unlabeled = [m for m in missing if m not in absent]
 
     missing_lines = "".join(f"\n    - **{m}:**" for m in absent)
@@ -149,8 +219,20 @@ def main():
             f"the answer; only the label's markup is wrong.\n"
         )
 
+    debt_note = ""
+    if debt_declared:
+        debt_note = (
+            f"  You declared debt ({debt_value(body)[:60]!r}) — debt without a\n"
+            f"  revisit trigger is debt nobody is holding the string on:\n"
+            f"    **Revisit trigger:** <the condition that brings this back into view>\n"
+            f"    **Closure condition:** <optional — what would let us drop it>\n"
+            f"  If the debt outlives this card, open a Jira card labeled `debt`; the\n"
+            f"  board is the ledger. If there is really no debt, say so: `none`.\n"
+        )
+
     print(
         f"{detail}"
+        f"{debt_note}"
         f"  A summary must answer these questions even when the answer is negative:\n"
         f"    **New debt introduced:** none | <list from review>\n"
         f"    **Scope captured outside the card:** none | <follow-ups captured, not absorbed>\n"

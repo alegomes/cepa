@@ -135,6 +135,8 @@ If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from en
 >
 > **New debt introduced:** <none, or list from refactor-advisor's findings, each with a revisit trigger>
 >
+> **Revisit trigger:** <required when debt is anything other than none/unknown — the condition that brings it back into view; `Closure condition:` optional>
+>
 > **Scope captured outside the card:** <none, or findings captured as follow-ups — named, never silently absorbed into this card>
 >
 > **Release needed:** <no, or yes: what and why>

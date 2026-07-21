@@ -150,6 +150,8 @@ Delegate to `atlassian-expert`:
 >
 > **New debt introduced:** <none, or list, each with a revisit trigger>
 >
+> **Revisit trigger:** <required when debt is anything other than none/unknown — the condition that brings it back into view; `Closure condition:` optional>
+>
 > **Scope captured outside the card:** <none, or findings captured as follow-ups — never silently absorbed into the fix>
 >
 > **Release needed:** <no, or yes: what and why>

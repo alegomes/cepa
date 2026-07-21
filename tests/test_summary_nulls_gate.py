@@ -11,7 +11,9 @@ Guards the contracts of the explicit-null gate (imported from Ariad):
   - non-summary comments are never gated (NOT-A-BUG, triage, block reasons);
   - other tools and unparseable payloads fail open;
   - both MCP server variants (cloud connector / mcp-atlassian) are matched,
-    with their differing body field names.
+    with their differing body field names;
+  - the conditional Revisit trigger (A6): declared debt requires it, "none" /
+    "unknown" do not, and the block names it.
 """
 
 import json
@@ -195,6 +197,67 @@ check(
     "is missing explicit-null" not in r.stderr,
     r.stderr[:400],
 )
+
+# ── A6: dívida declarada exige Revisit trigger ───────────────────────────────
+DEBT_NO_TRIGGER = FULL_SUMMARY.replace(
+    "**New debt introduced:** none",
+    "**New debt introduced:** PlugSignGateway duplica a normalização de CPF",
+)
+r = run_hook(CLOUD_TOOL, {"commentBody": DEBT_NO_TRIGGER})
+check("dívida declarada sem Revisit trigger BLOQUEIA", r.returncode == 2,
+      f"rc={r.returncode}")
+check("o bloqueio nomeia o Revisit trigger", "Revisit trigger" in r.stderr,
+      r.stderr[:400])
+check("o bloqueio ecoa a dívida declarada", "PlugSign" in r.stderr,
+      r.stderr[:400])
+
+DEBT_WITH_TRIGGER = DEBT_NO_TRIGGER.replace(
+    "**Scope captured outside the card:** none",
+    "**Revisit trigger:** quando o contrato do PlugSign mudar a validação\n\n"
+    "**Scope captured outside the card:** none",
+)
+r = run_hook(CLOUD_TOOL, {"commentBody": DEBT_WITH_TRIGGER})
+check("dívida declarada COM Revisit trigger passa", r.returncode == 0,
+      r.stderr[:400])
+
+# "none" e "unknown" não exigem trigger — unknown é o que o triage escreve
+r = run_hook(CLOUD_TOOL, {"commentBody": FULL_SUMMARY})
+check("dívida 'none' não exige trigger", r.returncode == 0, r.stderr[:200])
+
+TRIAGE_UNKNOWN = FULL_SUMMARY.replace(
+    "**New debt introduced:** none",
+    "**New debt introduced:** unknown (triage-routed — assess at proof)",
+)
+r = run_hook(CLOUD_TOOL, {"commentBody": TRIAGE_UNKNOWN})
+check("dívida 'unknown' (rota do triage) não exige trigger",
+      r.returncode == 0, r.stderr[:300])
+
+# pt-BR: "nenhuma" isenta; dívida real em pt-BR exige o gatilho
+PTBR_SEM_DIVIDA = ptbr
+r = run_hook(CLOUD_TOOL, {"commentBody": PTBR_SEM_DIVIDA})
+check("pt-BR 'nenhuma' não exige trigger", r.returncode == 0, r.stderr[:200])
+
+PTBR_COM_DIVIDA = ptbr.replace(
+    "**Dívida nova introduzida:** nenhuma",
+    "**Dívida nova introduzida:** o adapter ainda faz parsing manual de data",
+)
+r = run_hook(CLOUD_TOOL, {"commentBody": PTBR_COM_DIVIDA})
+check("pt-BR com dívida real exige trigger", r.returncode == 2,
+      f"rc={r.returncode}")
+r = run_hook(CLOUD_TOOL, {"commentBody": PTBR_COM_DIVIDA.replace(
+    "**Release necessária:** não",
+    "**Gatilho de revisita:** na próxima mudança do adapter\n\n"
+    "**Release necessária:** não")})
+check("pt-BR com dívida + gatilho de revisita passa", r.returncode == 0,
+      r.stderr[:400])
+
+# wiki markup: dívida em bloco também dispara a exigência
+WIKI_DEBT = WIKI_FULL.replace("h3. Nova dívida introduzida\nnenhuma",
+                              "h3. Nova dívida introduzida\nfalta índice na tabela de contratos")
+r = run_hook(LOCAL_TOOL, {"comment": WIKI_DEBT})
+check("wiki com dívida real exige trigger", r.returncode == 2, f"rc={r.returncode}")
+r = run_hook(LOCAL_TOOL, {"comment": WIKI_DEBT + "\nh3. Revisit trigger\nquando a tabela passar de 1M linhas\n"})
+check("wiki com dívida + trigger passa", r.returncode == 0, r.stderr[:400])
 
 # ── non-summary comments are never gated ─────────────────────────────────────
 for name, body in [
