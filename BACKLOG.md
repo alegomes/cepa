@@ -358,6 +358,89 @@ transformar em número.
 
 ---
 
+## `summary-nulls-gate` bloqueia summary honesto por formatação (falso positivo)
+
+**Status:** pendente · **Lar:** `common/hooks/summary-nulls-gate.py` (+
+`tests/test_summary_nulls_gate.py`) · **Origem:** sessão wego 2026-07-21, validação da
+Leva 1 via `/board-flow:execute WEGO-1948`.
+
+### Problema
+
+O gate exige os 4 campos de nulos explícitos em `**negrito**`, com redação exata. Um
+Implementation Summary que **responde as quatro perguntas de boa-fé**, mas usa markup de
+wiki do Jira (`h3.`) em vez de markdown, é bloqueado — e a mensagem de erro afirma que
+**os quatro campos estão faltando**, quando os quatro estão respondidos logo abaixo.
+
+Três condições do ambiente conspiram para isso reincidir sempre:
+
+1. O harness manda escrever em **pt-BR** (regra transversal do dono).
+2. Comentário de Jira usa **markup de wiki** (`h3.`), não markdown — é o formato natural
+   de quem está escrevendo para o Jira.
+3. O regex exige `\*\*` e **ordem exata das palavras**: aceita `Dívida nova introduzida`,
+   mas rejeita `Nova dívida introduzida`.
+
+O regex atual (`REQUIRED_FIELDS`) já contempla variantes pt-BR, então a intenção
+bilíngue existe — o defeito é de forma, não de idioma.
+
+### Evidência (2026-07-21, hook exercitado diretamente)
+
+```
+passou    (exit 0)  1. EN completo (4/4)
+BLOQUEOU  (exit 2)  2. EN faltando 1 → aponta: Human validation route
+BLOQUEOU  (exit 2)  3. EN faltando 2 → aponta: Release needed + Human validation route
+passou    (exit 0)  4. PT-BR completo em negrito
+BLOQUEOU  (exit 2)  5. PT-BR completo, mas com header h3.  ← FALSO POSITIVO
+passou    (exit 0)  6. comentário comum, sem heading de summary
+```
+
+Casos 2, 3 e 6 provam que **o gate funciona** — bloqueia por omissão real, nomeia o campo
+certo, e não barra comentário que não é summary. O defeito é isolado ao caso 5.
+
+Caso 5 aconteceu de verdade no WEGO-1948: primeira tentativa de publicar o summary foi
+rejeitada, e o agente "corrigiu" reformatando. Funcionou, mas pelo motivo errado.
+
+### Por que isso é pior que um bug cosmético
+
+Um gate que dá falso positivo ensina o agente que **o bloqueio é ruído de formatação**.
+A partir daí ele contorna mecanicamente em vez de tratar a pergunta como pergunta — que é
+exatamente o hábito que o gate existe para impedir. Gate que erra treina desprezo por
+gate.
+
+Agrava: a mensagem de erro é ativamente enganosa (diz "faltando" sobre campo presente),
+então nem o agente nem o humano aprendem a causa real. Na sessão de origem, a explicação
+que circulou foi "o gate só aceita inglês" — falsa, e repetida adiante como fato.
+
+### Esboço de solução
+
+Mudança pequena, no regex de `REQUIRED_FIELDS`:
+
+1. **Aceitar cabeçalho além de negrito:** prefixo `(?:\*\*|#{1,6}\s*|h[1-6]\.\s*)` cobrindo
+   markdown bold, heading markdown e heading de wiki do Jira.
+2. **Afrouxar a ordem das palavras no variante pt-BR**, ou casar por palavras-chave
+   (`dívida.*introduzida`) em vez de frase literal.
+3. **Corrigir a mensagem de erro:** quando o rótulo aparece no corpo mas fora do formato
+   esperado, dizer *"campo presente mas em formato não reconhecido"* em vez de *"faltando"*.
+   Distinguir os dois casos é o que impede a explicação errada de circular.
+
+### Aceite
+
+- `tests/test_summary_nulls_gate.py` cobre os 6 casos da tabela acima. Hoje a suíte
+  (141 linhas) já cobre o variante pt-BR em negrito, mas **não** o caso de cabeçalho wiki.
+- Caso 5 passa (exit 0).
+- Casos 2 e 3 seguem bloqueando, com o nome do campo faltante correto — a proteção não
+  pode ser afrouxada junto.
+- A mensagem de erro distingue "ausente" de "presente em formato não reconhecido".
+
+### Nota sobre a validação da Leva 1
+
+A demanda de origem pedia validar em card real que (a) o summary sai com os 4 campos e
+(b) o gate bloqueia se faltar. **(a) foi validado organicamente; (b) não.** Rodar um card
+real quase nunca produz summary com campo faltando, porque quem escreve está tentando
+acertar — o cenário de omissão só aparece em teste sintético. Vale registrar como padrão:
+*gate de omissão não se valida por uso, só por teste.*
+
+---
+
 # Programa melhorias-2026-07
 
 Universo de demandas da auditoria de sessões de 07/2026 + discussão de lacunas.
