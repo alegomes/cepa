@@ -66,7 +66,7 @@ waves:
     mode: sequential-inline
     fork_after: "wave-3"
     slices: [ADOC]
-    status: pending
+    status: done   # 2026-07-22 · ADOC <este commit>
 
 slices:
   A3:
@@ -263,6 +263,12 @@ slices:
       - "BACKLOG.md#a7-lista-do-incomprimível-regras-de-compressão-por-gate"
       - "BACKLOG.md#a9-precedência-de-instruções-em-5-camadas"
       - "BACKLOG.md#a10-versionamento-pelo-nível-que-colapsou--release-note-narrativa"
-    bash_extra: []
+    bash_extra: ["test"]
     timeout_min: 30
-    status: pending
+    status: DONE   # 2026-07-22 · 3 docs criados (incomprimivel, precedencia-de-
+                   # instrucoes, versionamento) + harness-ops (do A2) indexados
+                   # no README. Afirmações dos docs sobre gates conferidas
+                   # contra o código (acceptance-gate, check-terminal, 4 nulos,
+                   # bounce Reason/Motivo, no-build). pt-BR de propósito: casa
+                   # com o plano, com harness-ops.md e com o público; a árvore
+                   # docs/ em inglês fica como divergência anotada.
