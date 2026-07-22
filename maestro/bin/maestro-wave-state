@@ -14,6 +14,7 @@ Subcomandos:
   set-gk <program-dir> --pid N [--url URL]
   landed <program-dir> <slice>          # marca merge aterrissado
   get <program-dir> [--json]            # imprime o estado (resume lê isto)
+  check-terminal <program-dir> [--json] # exit 0 se toda slice terminou; 2 senão
 
 Estados terminais por slice: DONE | FAIL | TIMEOUT | ESCALATED (nunca "pendurado").
 """
@@ -29,6 +30,11 @@ except ImportError:
     sys.exit(2)
 
 VALID = {"pending", "running", "DONE", "FAIL", "TIMEOUT", "ESCALATED"}
+
+# Estados que ENCERRAM uma slice. O complemento (pending/running) não é um
+# resultado — é a ausência de um. Uma onda que aterrissa com slice aí dentro
+# some do radar sem ninguém ter decidido nada sobre ela.
+TERMINAL = {"DONE", "FAIL", "TIMEOUT", "ESCALATED"}
 
 
 def _path(d):
@@ -121,6 +127,32 @@ def cmd_landed(a):
     return 0
 
 
+def cmd_check_terminal(a):
+    """Fronteira de término da onda: nada aterrissa com slice pendurada.
+
+    Chamado pelo /maestro:run antes do merge train e antes do relatório. É
+    mecânico de propósito — 'a onda acabou' vira uma pergunta com resposta
+    verificável, não uma impressão de quem estava conduzindo.
+    """
+    ws = _load(a.program_dir)
+    slices = ws.get("slices") or {}
+    pend = {s: (v or {}).get("status") for s, v in slices.items()
+            if (v or {}).get("status") not in TERMINAL}
+    if a.json:
+        import json
+        print(json.dumps({"wave": ws.get("wave"), "total": len(slices),
+                          "non_terminal": pend}, ensure_ascii=False, indent=2))
+    elif pend:
+        print(f"onda {ws.get('wave')}: {len(pend)} de {len(slices)} slice(s) "
+              f"sem estado terminal", file=sys.stderr)
+        for s, st in sorted(pend.items()):
+            print(f"  {s}: {st or 'sem status'} "
+                  f"(terminal ∈ {sorted(TERMINAL)})", file=sys.stderr)
+    else:
+        print(f"onda {ws.get('wave')}: {len(slices)} slice(s), todas terminais")
+    return 2 if pend else 0
+
+
 def cmd_get(a):
     ws = _load(a.program_dir)
     if a.json:
@@ -156,6 +188,10 @@ def main():
     p = sub.add_parser("get"); p.add_argument("program_dir")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_get)
+
+    p = sub.add_parser("check-terminal"); p.add_argument("program_dir")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_check_terminal)
 
     a = ap.parse_args()
     return a.fn(a)

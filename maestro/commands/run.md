@@ -96,7 +96,22 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
      escala (fail-mode declarado).
    - Aguarde entre iterações (o `poll` é barato; não faça busy-loop apertado).
 
-8. **Merge train** (pós-onda — REUSA os guards do `/common:worktree-merge`,
+8. **Fronteira de término** (antes do merge train — mecânica, não impressão de
+   quem estava conduzindo):
+
+   ```
+   python3 maestro/bin/maestro-wave-state check-terminal PROGDIR
+   ```
+
+   Exit 0 = toda slice em estado terminal (`DONE|FAIL|TIMEOUT|ESCALATED`).
+   Exit 2 = ainda há slice pendurada, e o comando nomeia quais. **Com exit 2 não
+   siga para o merge train nem para o relatório**: volte ao event loop, ou force
+   o estado terminal honesto (`set-slice PROGDIR <slice> ESCALATED --detail "<o
+   que ficou sem resposta>"`). `pending`/`running` não são resultados — são a
+   ausência de um, e a onda que aterrissa com slice ali dentro faz essa slice
+   sumir do radar sem ninguém ter decidido nada sobre ela.
+
+9. **Merge train** (pós-onda — REUSA os guards do `/common:worktree-merge`,
    nunca reimplementa):
    - só slices DONE entram; FAIL/TIMEOUT/ESCALATED re-forkam na onda seguinte a
      partir do main novo (a onda NÃO trava);
@@ -108,9 +123,9 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
    - `maestro-wave-state landed PROGDIR <slice>` a cada merge;
    - **prune só ao fim da onda inteira** (worktree é barato; evidência não volta).
 
-9. **Relatório + debrief.** Resuma: veredito de intake por slice, estados
-   terminais, escalações e como foram decididas, merges aterrissados, o que
-   re-forka. Liste as decisões de zona-cinza/escalada do porteiro (elas entram
+10. **Relatório + debrief.** Só depois do passo 8 verde. Resuma: veredito de
+   intake por slice, estados terminais, escalações e como foram decididas,
+   merges aterrissados, o que re-forka. Liste as decisões de zona-cinza/escalada do porteiro (elas entram
    no debrief default independente da altitude). Emita a telemetria
    (`program_start/wave_done/...`) e diga o próximo passo (onda seguinte ou fim).
 

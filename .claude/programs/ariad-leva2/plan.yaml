@@ -195,7 +195,13 @@ slices:
       - "maestro/bin/maestro-wave-state"
     bash_extra: ["python3"]
     timeout_min: 45
-    status: pending
+    status: DONE   # 2026-07-22 · test_maestro_run_cores.py verde (+9 casos do A8).
+                   # Perturbações: check-terminal sempre-0 derruba 3 casos;
+                   # TERMINAL reduzido a {DONE} derruba 4. maestro 0.3.0.
+                   # build-hex:proof-reviewer NÃO precisou de edição: já tinha
+                   # "Never edit the implementation to 'fix' a gap" (linha 50),
+                   # então a frase normativa do A8 só faltava no
+                   # completion-auditor — a superfície declarada estava certa.
 
   A2:
     demanda: "A2 do BACKLOG — updates operacionais do harness (classes + rota mínima)"

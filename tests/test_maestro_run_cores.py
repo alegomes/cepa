@@ -95,6 +95,52 @@ def test_wave_state(tmp):
     check("landed registra o merge", "S1" in json.loads(r.stdout)["landed"], r.stdout)
 
 
+def test_check_terminal(tmp):
+    """A8 — a onda não aterrissa com slice sem estado terminal."""
+    pd = Path(tmp) / "prog3"
+    pd.mkdir()
+    plan = pd / "plan.yaml"
+    plan.write_text(PLAN)
+    sh([BIN / "maestro-wave-state", "init", pd, "--plan", plan, "--wave", "1"])
+
+    # recém-inicializada: as duas slices em pending → NÃO aterrissa
+    r = sh([BIN / "maestro-wave-state", "check-terminal", pd])
+    check("onda toda pending → exit 2", r.returncode == 2, r.stdout + r.stderr)
+    check("nomeia as slices penduradas",
+          "S1" in r.stderr and "S2" in r.stderr, r.stderr)
+
+    # uma terminal, outra rodando → ainda NÃO aterrissa (o caso perigoso:
+    # parece progresso, e é exatamente onde uma slice some do radar)
+    sh([BIN / "maestro-wave-state", "set-slice", pd, "S1", "DONE"])
+    sh([BIN / "maestro-wave-state", "set-slice", pd, "S2", "running"])
+    r = sh([BIN / "maestro-wave-state", "check-terminal", pd])
+    check("uma DONE + uma running → exit 2", r.returncode == 2, r.stdout + r.stderr)
+    check("não acusa a slice que já terminou",
+          "S2" in r.stderr and "S1" not in r.stderr, r.stderr)
+
+    # os quatro estados terminais contam como término (não só DONE):
+    # FAIL/TIMEOUT/ESCALATED são resultados, e re-forkam na onda seguinte
+    for st in ("FAIL", "TIMEOUT", "ESCALATED"):
+        sh([BIN / "maestro-wave-state", "set-slice", pd, "S2", st])
+        r = sh([BIN / "maestro-wave-state", "check-terminal", pd])
+        check(f"S2={st} conta como terminal → exit 0",
+              r.returncode == 0, r.stdout + r.stderr)
+
+    r = sh([BIN / "maestro-wave-state", "check-terminal", pd, "--json"])
+    check("--json lista os não-terminais (vazio quando tudo terminou)",
+          r.returncode == 0 and json.loads(r.stdout)["non_terminal"] == {}, r.stdout)
+
+    # regressão para o caminho de status ausente: slice no wave-state sem a
+    # chave status não pode passar por omissão
+    import yaml
+    ws = yaml.safe_load((pd / "wave-state.yaml").read_text())
+    ws["slices"]["S3"] = {"timeout_min": 45}
+    (pd / "wave-state.yaml").write_text(yaml.safe_dump(ws, allow_unicode=True))
+    r = sh([BIN / "maestro-wave-state", "check-terminal", pd])
+    check("slice sem chave status → exit 2 (não passa por omissão)",
+          r.returncode == 2 and "S3" in r.stderr, r.stdout + r.stderr)
+
+
 def _prog_with_running(tmp, marker=None, mtime_age=0, started=None, timeout_min=45):
     pd = Path(tmp) / "prog2"
     (pd / "slices" / "S1").mkdir(parents=True, exist_ok=True)
@@ -162,6 +208,7 @@ def main():
             (Path(tmp) / sub).mkdir()
         test_fork_settings(tmp)
         test_wave_state(tmp)
+        test_check_terminal(tmp)
         test_poll(tmp)
     print()
     if FAILS:

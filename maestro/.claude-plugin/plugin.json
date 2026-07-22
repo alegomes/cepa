@@ -1,9 +1,15 @@
 {
   "name": "maestro",
-  "version": "0.2.0",
-  "description": "Multi-harness orchestration — plan a universe of demands into waves of concurrent Claude Code sessions and land them with one action. v1 design (rev2.1) at .claude/programs/maestro/design.md. Commands: /maestro:program-plan (BACKLOG demands → .claude/programs/<name>/plan.yaml, schema v1, gated by the invocable Definition-of-Ready common/bin/cepa-dor), /maestro:run (gc → intake → gatekeeper up → fork each slice into a herdr worktree with generated settings + normative wrapper → file-based event loop → merge train reusing worktree-merge guards → report; reads only plan.yaml), /maestro:resume (rebuild an interrupted wave from wave-state.yaml). Deterministic cores in bin/ (tested): maestro-fork-settings (camada 1 — deny-by-default + surface allow + ask-routes-to-gatekeeper), maestro-gatekeeper (permission mediation over shared loopback MCP HTTP, slice identity via query param, shadow-mode, escalation queue; proven as spike 2026-07-15), maestro-poll (event-loop iteration by file marker), maestro-wave-state (crash-recovery store). End-to-end (herdr spawn + full wave) validated in construction step 4 — first real program. Requires common@cepa.",
+  "version": "0.3.0",
+  "description": "Multi-harness orchestration — plan a universe of demands into waves of concurrent Claude Code sessions and land them with one action. v1 design (rev2.1) at .claude/programs/maestro/design.md. Commands: /maestro:program-plan (BACKLOG demands → .claude/programs/<name>/plan.yaml, schema v1, gated by the invocable Definition-of-Ready common/bin/cepa-dor), /maestro:run (gc → intake → gatekeeper up → fork each slice into a herdr worktree with generated settings + normative wrapper → file-based event loop → merge train reusing worktree-merge guards → report; reads only plan.yaml), /maestro:resume (rebuild an interrupted wave from wave-state.yaml). Deterministic cores in bin/ (tested): maestro-fork-settings (camada 1 — deny-by-default + surface allow + ask-routes-to-gatekeeper), maestro-gatekeeper (permission mediation over shared loopback MCP HTTP, slice identity via query param, shadow-mode, escalation queue; proven as spike 2026-07-15), maestro-poll (event-loop iteration by file marker), maestro-wave-state (crash-recovery store, plus the `check-terminal` boundary: the wave does not reach the merge train or the report while any slice is still pending/running — those are the absence of a result, not a result, and a wave that lands with one makes that slice vanish unremarked; exit 2 names the offenders). End-to-end (herdr spawn + full wave) validated in construction step 4 — first real program. Requires common@cepa.",
   "author": {
     "name": "alegomes"
   },
-  "keywords": ["orchestration", "multi-session", "waves", "worktrees", "gatekeeper"]
+  "keywords": [
+    "orchestration",
+    "multi-session",
+    "waves",
+    "worktrees",
+    "gatekeeper"
+  ]
 }
