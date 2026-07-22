@@ -39,6 +39,15 @@ para um momento em que consertar é barato.
    exceto correções triviais e reversíveis explicitamente pedidas na mesma
    frase.
 
+   **Área `ops` — trate com prioridade sobre as demais.** Ela responde "o
+   harness que está rodando é o que eu acho que está?", e um ✗ aí contamina
+   todo o resto do relatório: se o último install não terminou, os hooks live
+   não são os do repo, e qualquer outro check pode estar medindo a coisa
+   errada. Traduza sem jargão — "a última instalação morreu no meio, então o
+   que está valendo agora não é nem o antigo nem o novo" — e ofereça as duas
+   saídas explícitas: refazer (`bin/install.sh --clean`) ou voltar
+   (`bin/install.sh --rollback`). Ver `docs/harness-ops.md`.
+
 5. Exit code do script: 0 = saudável, 1 = só avisos, 2 = falhas. Se 2, sugira
    resolver antes de começar trabalho novo.
 
@@ -48,3 +57,7 @@ para um momento em que consertar é barato.
   apaga um arquivo próprio). Toda mutação passa pelo passo 4 com confirmação.
 - Checks de projeto rodam sobre o cwd; rode o comando de dentro do repo que
   quer diagnosticar.
+- O check `ops` é a exceção: ele lê `~/.claude/ops/last-install.json`, que é
+  **global** — descreve o cache de plugins da máquina, não deste repositório.
+  Por isso ele vale igual em qualquer cwd, e por isso guarda `repo_dir` (de
+  qual clone veio o que está instalado).

@@ -3,12 +3,16 @@
 # host project for centralized expertise (via symlink).
 #
 # Usage:
-#   ./bin/install.sh [--clean] [--topology=NAME] [/path/to/host-project]
+#   ./bin/install.sh [--clean] [--rollback] [--topology=NAME] [/path/to/host-project]
 #
 # Without arguments: installs plugins (idempotent), sets up cwd as host project.
-# With --clean: also uninstalls existing plugins and nukes the marketplace
+# With --clean: also uninstalls existing plugins and SETS ASIDE the marketplace
 #   plugin cache before reinstalling. Use this when you've edited plugin
-#   source without bumping versions and want CC to pick up the changes.
+#   source without bumping versions and want CC to pick up the changes. The
+#   previous cache is preserved (not deleted) so --rollback can restore it.
+# With --rollback: restore the cache set aside by the last --clean and exit.
+#   The recovery route for an install that made things worse — or one that
+#   died halfway and left the harness in a state nobody chose.
 # With --topology=NAME (build-team | build-solo | build-hex | discovery | docs): also copies
 #   that topology's snippet into the host project's .claude/ and appends the
 #   matching @-import line to CLAUDE.md (idempotent, creates CLAUDE.md if
@@ -19,6 +23,7 @@
 #   cd ~/test-build-team && ~/.../bin/install.sh
 #   ~/.../bin/install.sh ~/some-other-project
 #   ~/.../bin/install.sh --clean              # force-refresh everything
+#   ~/.../bin/install.sh --rollback           # undo the last --clean
 #   ~/.../bin/install.sh --topology=build-hex ~/foo
 #   ~/.../bin/install.sh --clean --topology=build-team ~/foo
 
@@ -27,15 +32,19 @@ set -e
 # --- Argument parsing ---
 
 CLEAN=0
+ROLLBACK=0
 TOPOLOGY=""
 HOST_PROJECT_INPUT=""
 
 for arg in "$@"; do
   case "$arg" in
     --clean) CLEAN=1 ;;
+    --rollback) ROLLBACK=1 ;;
     --topology=*) TOPOLOGY="${arg#--topology=}" ;;
     --help|-h)
-      head -n 24 "$0" | sed -n '2,24p' | sed 's/^# \{0,1\}//'
+      # Print the whole header block, however long it grows. A hardcoded line
+      # count silently truncated the examples the moment a flag was documented.
+      sed -n '2,/^$/{/^#/!q; s/^# \{0,1\}//; p;}' "$0"
       exit 0
       ;;
     -*)
@@ -75,6 +84,69 @@ MARKETPLACE_NAME="cepa"
 EXPERTISE_SOURCE="${REPO_DIR}/common/expertise"
 EXPERTISE_TARGET="${HOST_PROJECT}/.claude/expertise"
 CACHE_DIR="${HOME}/.claude/plugins/cache/${MARKETPLACE_NAME}"
+PREV_CACHE_DIR="${CACHE_DIR}.prev"
+OPS_DIR="${HOME}/.claude/ops"
+OPS_FILE="${OPS_DIR}/last-install.json"
+
+# --- Operational record -----------------------------------------------------
+# Changing hooks/bin/settings is an OPERATIONAL update: it changes the surface
+# the NEXT agent runs on, and it is invisible from inside a session. The
+# minimum route for one is state → target → rollback → validation. This file
+# is the state+target half; --rollback is the recovery half; /common:doctor
+# reads the record and is the validation half.
+#
+# It lives under ~/.claude (not the project) because the plugin cache it
+# describes is global — one machine, one live harness, whatever repo you
+# happen to be standing in.
+
+ops_versions() {  # dir → {"plugin": "version"} for the newest version present
+  python3 - "$1" <<'PYOPS'
+import json, os, re, sys
+root = sys.argv[1]
+def sv(v):
+    try: return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
+    except Exception: return (0,)
+out = {}
+if os.path.isdir(root):
+    for name in sorted(os.listdir(root)):
+        d = os.path.join(root, name)
+        if not os.path.isdir(d):
+            continue
+        vs = sorted((x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x))), key=sv)
+        if vs:
+            out[name] = vs[-1]
+print(json.dumps(out))
+PYOPS
+}
+
+ops_write() {  # $1 = status, $2 = optional note
+  mkdir -p "${OPS_DIR}"
+  STATUS="$1" NOTE="${2:-}" \
+  FROM="${OPS_FROM:-{\}}" TO="${OPS_TO:-{\}}" \
+  REPO="${REPO_DIR}" HOSTP="${HOST_PROJECT:-}" \
+  CACHE="${CACHE_DIR}" PREV="${PREV_CACHE_DIR}" \
+  OPSF="${OPS_FILE}" STARTED="${OPS_STARTED:-}" \
+  python3 - <<'PYOPS'
+import json, os
+from datetime import datetime, timezone
+now = datetime.now(timezone.utc).isoformat()
+rec = {
+    "status": os.environ["STATUS"],          # in_progress | ok | rolled_back
+    "started_at": os.environ.get("STARTED") or now,
+    "finished_at": None if os.environ["STATUS"] == "in_progress" else now,
+    "repo_dir": os.environ["REPO"],
+    "host_project": os.environ.get("HOSTP") or None,
+    "cache_dir": os.environ["CACHE"],
+    "previous_cache_dir": os.environ["PREV"],
+    "versions_before": json.loads(os.environ["FROM"] or "{}"),
+    "versions_target": json.loads(os.environ["TO"] or "{}"),
+    "note": os.environ.get("NOTE") or None,
+}
+with open(os.environ["OPSF"], "w") as f:
+    json.dump(rec, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PYOPS
+}
 
 # --- Sanity checks ---
 
@@ -88,6 +160,31 @@ if [ ! -d "${EXPERTISE_SOURCE}" ]; then
   echo "✗ Expertise source directory not found: ${EXPERTISE_SOURCE}"
   echo "  This script must be run from a complete clone of the marketplace repo."
   exit 1
+fi
+
+# --- --rollback: restore and exit (before anything else touches state) ------
+
+if [ "${ROLLBACK}" -eq 1 ]; then
+  if [ ! -d "${PREV_CACHE_DIR}" ]; then
+    echo "✗ Nothing to roll back to: ${PREV_CACHE_DIR} does not exist."
+    echo "  A rollback point is created by --clean (it sets the old cache aside"
+    echo "  instead of deleting it). If you have never run --clean since this"
+    echo "  feature landed, there is no previous state to restore."
+    exit 1
+  fi
+  echo "▶ --rollback: restoring the cache set aside by the last --clean"
+  echo "    from: ${PREV_CACHE_DIR}"
+  echo "      to: ${CACHE_DIR}"
+  BROKEN_CACHE_DIR="${CACHE_DIR}.rolledback"
+  rm -rf "${BROKEN_CACHE_DIR}"
+  [ -d "${CACHE_DIR}" ] && mv "${CACHE_DIR}" "${BROKEN_CACHE_DIR}"
+  mv "${PREV_CACHE_DIR}" "${CACHE_DIR}"
+  OPS_FROM="$(ops_versions "${BROKEN_CACHE_DIR}")"
+  OPS_TO="$(ops_versions "${CACHE_DIR}")"
+  ops_write "rolled_back" "restored from ${PREV_CACHE_DIR}; the cache being replaced was kept at ${BROKEN_CACHE_DIR}"
+  echo "✓ Cache restored. The replaced cache was kept at ${BROKEN_CACHE_DIR}"
+  echo "  ⚠ Restart Claude Code — a running session holds the OLD hooks in memory."
+  exit 0
 fi
 
 # --- Plugin list: derived from marketplace.json (single source of truth) ---
@@ -107,6 +204,27 @@ print("\n".join(p["name"] for p in json.load(open(sys.argv[1]))["plugins"]))
 
 # --- Optional: --clean teardown ---
 
+# Record the operational state BEFORE anything is torn down: what is live now,
+# what we are aiming at. A run that dies between here and the final ops_write
+# leaves status=in_progress on disk — which is exactly what /common:doctor
+# reports as "last install did not finish", instead of the harness silently
+# sitting in a state nobody chose.
+OPS_STARTED="$(date -u +%Y-%m-%dT%H:%M:%S+00:00)"
+OPS_FROM="$(ops_versions "${CACHE_DIR}")"
+OPS_TO="$(python3 - "${REPO_DIR}" <<'PYOPS'
+import glob, json, os, sys
+out = {}
+for pj in sorted(glob.glob(os.path.join(sys.argv[1], "*", ".claude-plugin", "plugin.json"))):
+    try:
+        m = json.load(open(pj))
+        out[m.get("name") or os.path.basename(os.path.dirname(os.path.dirname(pj)))] = m.get("version", "0")
+    except Exception:
+        pass
+print(json.dumps(out))
+PYOPS
+)"
+ops_write "in_progress"
+
 if [ "${CLEAN}" -eq 1 ]; then
   echo "▶ --clean: uninstalling existing plugins (errors ignored)"
   for PLUGIN in ${PLUGINS}; do
@@ -114,8 +232,13 @@ if [ "${CLEAN}" -eq 1 ]; then
   done
 
   if [ -d "${CACHE_DIR}" ]; then
-    echo "▶ --clean: removing plugin cache at ${CACHE_DIR}"
-    rm -rf "${CACHE_DIR}"
+    # Set aside, don't delete: an install with no way back is an operational
+    # change without a recovery route, and the absence of one is a fact the
+    # human should see BEFORE it matters, not after.
+    echo "▶ --clean: setting the current cache aside at ${PREV_CACHE_DIR}"
+    echo "    (restore it with: bin/install.sh --rollback)"
+    rm -rf "${PREV_CACHE_DIR}"
+    mv "${CACHE_DIR}" "${PREV_CACHE_DIR}"
   fi
 fi
 
@@ -358,10 +481,21 @@ EOF
   fi
 fi
 
+# --- Close the operational record -------------------------------------------
+# Reached only if every step above succeeded (set -e). Until this line runs,
+# the record on disk says in_progress, and the doctor treats that as an
+# unfinished install rather than a healthy one.
+
+ops_write "ok"
+
 # --- Final summary ---
 
 echo ""
 echo "✔ Done."
+if [ "${CLEAN}" -eq 1 ] && [ -d "${PREV_CACHE_DIR}" ]; then
+  echo "  Rollback point: ${PREV_CACHE_DIR}  (restore with bin/install.sh --rollback)"
+fi
+echo "  Operational record: ${OPS_FILE}  (checked by /common:doctor)"
 echo ""
 echo "Nine plugins installed:"
 echo "    common       — 8 mindset skills (required by every topology)"

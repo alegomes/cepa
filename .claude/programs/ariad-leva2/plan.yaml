@@ -61,7 +61,7 @@ waves:
     mode: sequential-inline
     fork_after: "wave-2"
     slices: [A2]
-    status: pending
+    status: done   # 2026-07-22 · A2 <este commit>
   - id: 4
     mode: sequential-inline
     fork_after: "wave-3"
@@ -220,15 +220,35 @@ slices:
       - "common/commands/doctor.md"
       - "common/.claude-plugin/plugin.json"
       - "docs/harness-ops.md"
+      - "common/bin/cepa-doctor"   # corrigido na execução: doctor.md é só a
+                                # prosa do comando; os checks mecânicos vivem
+                                # aqui. Mesma armadilha do A3 (cepa-dor).
+      - "tests/test_install_ops.py"   # corrigido na execução: o plano não
+                                # previa teste, e o acceptance_cmd só tinha
+                                # greps — que não provam comportamento algum.
     human_gate: none   # decisões tomadas: registro em .claude/ops/last-install.json (versões live antes → alvo → resultado); cache anterior preservado + --rollback; doctor checa drift live-vs-repo com idade e install incompleto
     acceptance: "install interrompido deixa registro incompleto que o doctor acusa; --rollback restaura o cache anterior; doctor reporta drift live-vs-repo com idade"
-    acceptance_cmd: "bash -n bin/install.sh && grep -q 'last-install.json' bin/install.sh && grep -qi 'rollback' bin/install.sh && test -f docs/harness-ops.md"
+    # O acceptance_cmd original era só grep+test -f: verde assim que as strings
+    # existissem, provando zero comportamento. Mantido como smoke, mas a prova
+    # real é a suíte, que roda install.sh de verdade com um `claude` stub.
+    acceptance_cmd: "bash -n bin/install.sh && grep -q 'last-install.json' bin/install.sh && grep -qi 'rollback' bin/install.sh && test -f docs/harness-ops.md && python3 tests/test_install_ops.py"
     context:
       - "BACKLOG.md#a2-updates-operacionais-do-harness-classes--rota-mínima"
       - "bin/install.sh"
-    bash_extra: ["bash", "grep"]
+    bash_extra: ["bash", "grep", "python3"]
     timeout_min: 60
-    status: pending
+    status: DONE   # 2026-07-22 · test_install_ops.py verde (27 casos).
+                   # Perturbações: --clean voltando a apagar o cache derruba 1;
+                   # sem ops_write in_progress derruba a suíte; doctor ignorando
+                   # in_progress derruba 4; doctor sem idade derruba 1.
+                   # ⚠ A 1ª versão da suíte era FURADA: provava que --rollback
+                   # consome o ponto, nunca que --clean o cria — a perturbação
+                   # "voltar a apagar o cache" passou verde. Fechado com um
+                   # `claude` stub no PATH, que torna o caminho --clean inteiro
+                   # executável offline. common 0.19.0.
+                   # Regressão introduzida e corrigida no mesmo commit: o --help
+                   # usava `head -n 24` fixo e truncou os exemplos quando o
+                   # cabeçalho cresceu; agora o corte é dinâmico.
 
   ADOC:
     demanda: "A7 + A9 + A10 do BACKLOG — convenções em prosa (1 commit de docs)"

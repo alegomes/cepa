@@ -105,7 +105,50 @@ def cepa_repo_root():
         return None
 
 
-def check_plugins(settings):
+def last_install():
+    """The operational record written by bin/install.sh, or None."""
+    try:
+        return json.loads((CLAUDE_DIR / "ops" / "last-install.json").read_text())
+    except Exception:
+        return None
+
+
+def check_ops(rec):
+    """Did the last operational update finish, and is a way back available?
+
+    An install that dies halfway leaves the harness in a state nobody chose,
+    and the session that runs next has no way to tell. The record turns that
+    into something visible before it costs a task.
+    """
+    if rec is None:
+        warn("ops", "sem registro de install (~/.claude/ops/last-install.json) — "
+                    "rode bin/install.sh uma vez para passar a ter rota de recuperação")
+        return
+    status = rec.get("status")
+    started, finished = rec.get("started_at"), rec.get("finished_at")
+    if status == "in_progress":
+        a = age_days(started)
+        atxt = f" (começou há {a:.1f}d)" if a is not None else ""
+        fail("ops", f"último install NÃO terminou{atxt} — o harness está num estado "
+                    f"que ninguém escolheu; rode bin/install.sh de novo ou "
+                    f"bin/install.sh --rollback")
+        return
+    prev = rec.get("previous_cache_dir")
+    has_prev = bool(prev) and Path(prev).is_dir()
+    a = age_days(finished or started)
+    atxt = f", há {a:.0f}d" if a is not None else ""
+    if status == "rolled_back":
+        warn("ops", f"último evento foi um --rollback{atxt} — o cache live é o "
+                    f"ANTERIOR ao install que você tentou; confirme se é isso mesmo")
+        return
+    if has_prev:
+        ok("ops", f"último install ok{atxt}, com rollback disponível ({prev})")
+    else:
+        ok("ops", f"último install ok{atxt} (sem ponto de rollback — "
+                  f"só --clean cria um)")
+
+
+def check_plugins(settings, rec=None):
     repo = cepa_repo_root()
     if not repo or not repo.is_dir():
         fail("plugins", "marketplace 'cepa' não encontrado em known_marketplaces.json")
@@ -132,7 +175,11 @@ def check_plugins(settings):
             continue
         latest = versions[-1]
         if semver(repo_v) > semver(latest):
-            warn("plugins", f"{name}: repo está em {repo_v} mas o cache instalado é {latest} — edições não valem; rode bin/install.sh")
+            # A idade do drift é o que separa "acabei de editar" de "faz duas
+            # semanas que trabalho contra um harness que não é o instalado".
+            a = age_days((rec or {}).get("finished_at") or (rec or {}).get("started_at"))
+            atxt = f"; o último install foi há {a:.0f}d" if a is not None else ""
+            warn("plugins", f"{name}: repo está em {repo_v} mas o cache instalado é {latest}{atxt} — edições não valem; rode bin/install.sh")
         else:
             ok("plugins", f"{name} {latest} instalado e habilitado")
 
@@ -390,7 +437,9 @@ def stamp_run():
 
 def main():
     settings = check_settings()
-    check_plugins(settings)
+    rec = last_install()
+    check_ops(rec)
+    check_plugins(settings, rec)
     check_hooks_compile()
     check_telemetry()
     check_project(Path.cwd())
