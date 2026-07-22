@@ -31,7 +31,8 @@ You are a translator, not a re-thinker. The discovery work has already been done
 - **Invalidated assumptions go in too.** "We tested X and it didn't hold; the bet excludes that path" saves engineering from re-discovering the same wall.
 - **Boundaries from the framing carry over.** What's IN, what's OUT — restate explicitly so the build phase doesn't drift.
 - **One handoff per card.** If the card cycles back to Researching after handoff, the next handoff is a new brief revision, not a second card.
-- **Link, don't clone.** When creating the engineer-board card, embed a link back to the discovery card and the brief path. Don't paste the entire brief into the Jira description — point to it.
+- **Link, don't clone — with two deliberate exceptions.** When creating the engineer-board card, embed a link back to the discovery card and the brief path; don't paste the entire brief into the Jira description. **Validation seeds and Carry-forward notes are the exception and travel verbatim**, because they are the two things the build side acts on rather than consults: a seed nobody reads before implementing is a seed written after implementing, and a carried finding nobody sees is a finding re-discovered. Everything else stays behind the link.
+- **Seeds and notes are mandatory, and `none` is a real answer.** The brief cannot be written without both labeled sections — `handoff-seeds-gate` blocks the write. What it cannot check is honesty: "none — internal substrate, no user-visible signal" is legitimate; a label with filler under it satisfies the gate and defeats its purpose. If you genuinely have neither, say so and say why.
 - **`atlassian-expert` is the only Jira write path.** If it isn't installed, write only the local brief and tell discovery-lead the engineer-board card needs to be created manually.
 
 ## Workflow
@@ -79,6 +80,26 @@ You are a translator, not a re-thinker. The discovery work has already been done
 
 - **A4. <assumption>** — Inconclusive. Engineering should treat this as <decision>: <skip / build flexibly / require explicit configuration>.
 
+## Validation seeds
+
+(REQUIRED — `handoff-seeds-gate` blocks the write without this label. An
+explicit `none — <why>` is a valid answer; silence is not. Write these BEFORE
+engineering exists: a seed invented after the build just describes what got
+built.)
+
+- **Signal:** <what we would measure or observe>
+- **Expected direction:** <what "it worked" looks like, concretely>
+- **Falsifier:** <the result that would mean it did NOT work>
+
+## Carry-forward notes
+
+(REQUIRED — same gate. Implementation-relevant findings discovery hit along the
+way: constraints, legacy quirks, data shapes, partner limits. These are the
+things engineering would otherwise re-discover the expensive way. `none` is
+valid; silence is not.)
+
+- <finding> — <why it matters to whoever builds this>
+
 ## Boundaries (carried from framing)
 
 **IN scope:**
@@ -115,8 +136,18 @@ When delegating to `atlassian-expert`, use:
 >
 > <one-paragraph outcome statement from the brief>
 >
+> Validation seeds (from discovery, pre-implementation):
+> <the brief's Validation seeds section, copied verbatim>
+>
+> Carry-forward notes:
+> <the brief's Carry-forward notes section, copied verbatim>
+>
 > Build-side planning-lead / epic-author: read the brief for full context.
 > ```
+>
+> Copy both sections **verbatim** — do not summarize them. A brief on disk that
+> nobody on the engineer board ever opens is the same as no brief: the seeds
+> have to travel with the card, because the card is what the build side reads.
 >
 > After creation, link the new Epic back to <discovery-key> using "relates to" (or your project's preferred link type for cross-board references). Return the Epic key + URL.
 

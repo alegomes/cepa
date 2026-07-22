@@ -52,10 +52,11 @@ waves:
     mode: sequential-inline  # zona de enforcement → sessão principal (ver cabeçalho)
     fork_after: "wave-1"
     slices: [A1, A5, A8]
-    status: in-progress   # 2026-07-21 · ordem alterada para A5 → A8 → A1:
-                   # o A1 disputa common/.claude-plugin/plugin.json com a sessão
-                   # paralela que landou b7a7c72; A5 e A8 não encostam nesse
-                   # arquivo. A1 entra quando a outra sessão encerrar.
+    status: done   # 2026-07-22 · A5 db9889b · A8 1f2510a · A1 <este commit>.
+                   # Ordem executada A5 → A8 → A1 (não a do plano): o A1 disputa
+                   # common/.claude-plugin/plugin.json com a sessão paralela que
+                   # landou b7a7c72. Ao chegar a vez do A1 o arquivo estava
+                   # intocado desde 21/07 19:48 e o tree limpo.
   - id: 3
     mode: sequential-inline
     fork_after: "wave-2"
@@ -151,7 +152,16 @@ slices:
       - "common/hooks/summary-nulls-gate.py"
     bash_extra: ["python3"]
     timeout_min: 45
-    status: pending
+    status: DONE   # 2026-07-22 · test_handoff_seeds_gate.py verde (25 casos).
+                   # Perturbações: gate sempre-0 derruba 5; escopo alargado
+                   # para qualquer .md derruba 5; sem separar ausente de
+                   # mal-formatado derruba 2. common 0.18.0 (0.17.0 tinha sido
+                   # consumido fora do programa) · discovery 0.2.0.
+                   # Contradição resolvida na execução: a regra "Link, don't
+                   # clone" do epic-briefer proibia colar o brief no card;
+                   # seeds+notes viram exceção declarada (o build side AGE
+                   # sobre elas, não as consulta), em vez de duas regras
+                   # conflitantes no mesmo arquivo.
 
   A5:
     demanda: "A5 do BACKLOG — regras de fechamento acoplado no drain (+ outcome terminal, prosa)"
