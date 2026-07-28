@@ -668,3 +668,94 @@ Convenção para bumps dos plugins (contrato de hook quebrado → MAJOR; gate/fe
 novo → MINOR; fix → PATCH — formaliza o de facto) e release note/commit de
 release citando o que foi **conscientemente excluído**. Entra no commit de docs
 da Onda 4.
+
+---
+
+## Fio condutor: "e agora, o que eu faço?" entre sessões e entre cards
+
+**Status:** pendente (só registrado, não discutido) · **Lar provável:** `board-flow`
++ `common` (handoff), com parentesco em `maestro` · **Origem:** relato do dono ao
+fim da sessão do WEGO-1958 (2026-07-28), depois de ~horas de execução com muitos
+desdobramentos.
+
+### O relato, na voz do dono
+
+> Estamos há algumas horas trabalhando nesta sessão. Começamos com a execução do
+> card WEGO-1958, tentamos fazer o prove dele e tivemos que lidar com vários
+> desdobramentos. Depois de tantas idas e vindas, a minha memória se perde e eu
+> não sei o que fazer na sequência. Sim, o harness me sugeriu fazer um handoff
+> agora mas, e depois? O que eu tenho mesmo que fazer depois do WEGO-1958? Tenho
+> que testá-lo manualmente? Ou tenho que executar um próximo card? Com muita
+> frequência, eu me perco. No entanto, o card 1958 executado nesta sessão nasceu
+> em uma sessão anterior na qual ele foi priorizado junto a vários outros. Quais
+> são mesmo esses outros? Qual era mesmo a ordem de execução? Percebe o problema?
+> Houve um momento de planejamento. Eu comecei a execução. Mas me perdi no meio do
+> caminho.
+
+### O problema, destrinchado
+
+São três perdas distintas que hoje se apresentam como uma só sensação de
+"me perdi":
+
+1. **A ordem de execução não sobrevive à sessão que a produziu.** Houve um momento
+   de planejamento em que vários cards foram priorizados juntos. Essa priorização
+   virou prosa no handoff e descrição de card (o WEGO-1958 diz "Pendência 1 do
+   handoff"), mas **a lista e a ordem não existem como artefato consultável**. O
+   Jira guarda a fila (`To Do`) e não a ordem nem o porquê dela.
+
+2. **O fim de um card não aponta para o próximo passo.** O card fecha com
+   Implementation Summary, veredito de prova e status Done. Nada responde
+   "e agora?". As duas respostas plausíveis competem em silêncio: *validar à mão*
+   ou *puxar o próximo card*.
+
+3. **A sessão longa dissolve o fio.** Uma execução com desdobramentos (3 rodadas de
+   proof gate, 4 cards abertos, 2 decisões de escopo) enterra o objetivo original
+   sob o rastro do caminho. O `/common:recap` reconstrói o que **foi feito**;
+   nenhum comando reconstrói o que **falta fazer**.
+
+### Por que o que já existe não cobre
+
+- **`/common:handoff`** e o nudge de wrap-up salvam contexto e olham para trás.
+  Ótimos para retomar *esta* linha de trabalho; mudos sobre a fila que a
+  antecedia.
+- **`/common:recap`** é explicitamente retrospectivo (você pediu / eu entreguei).
+- **`/board-flow:drain`** executa a coluna inteira em ordem de prioridade, mas é
+  tudo-ou-nada e sem parada humana: não serve para "um card por vez, sabendo
+  qual é o próximo".
+- **`maestro:program-plan`** é o parente mais próximo e já resolve metade: escreve
+  `.claude/programs/<nome>/plan.yaml` com ondas e slices, e `maestro:resume`
+  reconstrói estado. Mas nasceu para **execução paralela em worktrees** (piso de
+  uso ≥4 demandas), o que é peso demais para "tenho 6 cards priorizados e vou
+  tocar um de cada vez, em sessões diferentes".
+- **A1** (validation seeds + carry-forward) toca a mesma família, mas está preso
+  ao handoff do `discovery`.
+
+### Esboço de solução (a discutir, nada decidido)
+
+Três peças que podem ser independentes:
+
+1. **Plano de execução persistente e leve** — o "single-track" do
+   `maestro:program-plan`: um artefato versionado (`.claude/programs/<nome>/`?)
+   que registre a lista priorizada, a ordem, o porquê da ordem, e o estado de cada
+   item. Produzido no momento do planejamento, consultado no começo de toda
+   sessão. Candidato natural a virar o que o `SessionStart` mostra, ao lado do
+   handoff.
+
+2. **`/board-flow:next`** — comando que responde a pergunta literal: dado o estado
+   do board e do plano, **qual é o próximo passo e por quê**. Precisa distinguir
+   os dois tipos de "próximo": *ação humana pendente* (validar à mão, rotacionar
+   segredo, aprovar PR) e *próximo card*. A matéria-prima do primeiro tipo já é
+   produzida hoje e se perde: o campo **Human validation route** do Implementation
+   Summary é escrito por card e nunca agregado numa lista.
+
+3. **Fechamento de card que aponta adiante** — ao fim de `execute`/`fix`/`prove`,
+   fechar com "o que ficou pendente de você" + "o próximo item do plano", em vez
+   de só o relatório do que foi feito. Barato, e ataca a dor no ponto exato em
+   que ela aparece.
+
+### Sinal de que o problema é real
+
+Nesta mesma sessão o dono perguntou "o que devo fazer?" sobre os follow-ups, e a
+sessão terminou com quatro cards novos abertos (1962, 1963, 1964, 1965) — todos
+com ordem relativa indefinida e nenhum vínculo com a priorização original que
+gerou o WEGO-1958. A dor se reproduz sozinha a cada card executado.
