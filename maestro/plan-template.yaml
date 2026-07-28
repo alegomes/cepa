@@ -5,9 +5,9 @@
 # (`mode: single-track`, um item por vez entre sessões). Manter duas cópias
 # anotadas do schema criaria front-doors rivais, que divergem em silêncio.
 #
-# O schema NÃO mudou: `schema_version` segue 1, `mode` é opcional com default
-# `parallel-waves`, e todo plan.yaml escrito antes desta mudança continua
-# válido e é lido sem alteração.
+# O schema foi para v2, onde `mode` é explícito e obrigatório. Planos v1 (sem
+# `mode`) continuam válidos e são lidos sem alteração por todos os consumidores
+# — não há migração a fazer.
 #
 # → common/plan-schema.yaml   (ambos os modos, anotado)
 # → docs/maestro.md           (como o maestro usa o modo parallel-waves)

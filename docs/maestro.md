@@ -66,15 +66,20 @@ and continue the event loop / merge train from where it died. Death of the
 maestro session is the most likely failure of a long run, so this is a
 first-class path, not an afterthought. Modeled on `/common:autonomous-resume`.
 
-## The plan.yaml (schema v1)
+## The plan.yaml (schema v2)
 
 Copy the `mode: parallel-waves` block from
 [`common/plan-schema.yaml`](../common/plan-schema.yaml) — it's the annotated
-source of truth, shared with board-flow's `single-track` mode. The shape:
+source of truth, shared with board-flow's `single-track` mode.
+
+Versions: **1** is the legacy shape (waves only, no `mode`) and is still read by
+every consumer — existing plans need no migration. **2** makes `mode` explicit
+and required, so a wave-only consumer can refuse a document it cannot read
+instead of treating a missing `waves` as an empty plan. The shape:
 
 ```yaml
-schema_version: 1               # required; /maestro:run refuses unknown versions
-mode: parallel-waves            # optional, this is the default; single-track = board-flow
+schema_version: 2               # required; consumers accept 1 (legacy) and 2
+mode: parallel-waves            # required in v2; single-track = board-flow
 program: exemplo
 source: BACKLOG.md
 max_concurrent_slices: 3        # ceiling = human attention, not the machine
@@ -217,7 +222,7 @@ terminal state; a merge already in `landed` is skipped.
 | Path | What |
 |---|---|
 | `maestro/commands/{program-plan,run,resume}.md` | The three commands. |
-| `common/plan-schema.yaml` | Annotated plan.yaml (schema v1) — canonical, both modes. |
+| `common/plan-schema.yaml` | Annotated plan.yaml (schema v2; v1 still read) — canonical, both modes. |
 | `maestro/plan-template.yaml` | Pointer to the above (kept so old links resolve). |
 | `maestro/bin/maestro-fork-settings` | Generates a child's `settings.json` (layer 1). |
 | `maestro/bin/maestro-gatekeeper` | The permission gatekeeper (MCP over loopback HTTP). |

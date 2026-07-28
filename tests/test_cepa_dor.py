@@ -10,11 +10,11 @@ Guards the intake-gate contracts from the v1 design (Componente 4):
   - open human_gate / missing acceptance_cmd in a no-build repo → NOT-READY;
   - D7 floor (<4 demandas) blocks the program;
   - a clean plan comes out READY (exit 0 or 1-with-warnings, never 2);
-  - unknown schema_version is refused;
-  - `mode` (fio condutor, schema compartilhado com o board-flow): ausente =
-    parallel-waves (compatibilidade — a asserção que sustenta a decisão de não
-    bumpar schema_version), single-track é recusado apontando o caminho, valor
-    desconhecido não passa em silêncio;
+  - unknown schema_version is refused (conhecidas: 1 e 2);
+  - `mode` (fio condutor, schema compartilhado com o board-flow): um plano v1
+    sem `mode` segue válido sem migração, v2 exige o campo, single-track em v1
+    manda subir a versão, single-track em v2 é recusado apontando o caminho, e
+    valor desconhecido não passa em silêncio;
   - "BDD ou substrato" (A3): um slice cujo aceite só nomeia passos privados de
     implementação reprova nomeando a lacuna; declarar `acceptance_form:
     substrate` (ou escrever a tripla observável) passa.
@@ -157,34 +157,48 @@ def main():
         check("piso D7 (<4 demandas) bloqueia", r.returncode == 2
               and "piso é 4" in r.stdout, r.stdout)
 
-        # unknown schema_version
-        r = run_dor("schema_version: 2\nprogram: t\nwaves: []\nslices: {}\n",
+        # unknown schema_version (v1 e v2 são conhecidas; 3 não)
+        r = run_dor("schema_version: 3\nprogram: t\nwaves: []\nslices: {}\n",
                     repo)
         check("schema_version desconhecida é recusada", r.returncode == 2
               and "schema_version" in r.stdout, r.stdout)
 
         # ── `mode` (fio condutor): schema compartilhado com o board-flow ─────
-        # A asserção que sustenta a decisão de NÃO bumpar schema_version: um
-        # plano sem `mode` (todos os escritos antes do campo existir) tem de
-        # continuar passando exatamente como antes.
-        r = run_dor(PLAN_4D.format(s1='"src/a.py"', s2='"docs/x.md"',
-                                   hg1="none", ac1='acceptance_cmd: "true",'),
+        # COMPATIBILIDADE v1 — a asserção que sustenta "plano no disco não
+        # precisa ser migrado": PLAN_4D é v1 e sem `mode`, como todo plano
+        # escrito antes do campo existir, e tem de passar exatamente como antes.
+        wave_v1 = PLAN_4D.format(s1='"src/a.py"', s2='"docs/x.md"',
+                                 hg1="none", ac1='acceptance_cmd: "true",')
+        r = run_dor(wave_v1, repo)
+        check("v1 sem `mode` segue válido (legado = parallel-waves)",
+              r.returncode in (0, 1), r.stdout)
+
+        # v2 com o mode explícito de onda: mesmo plano, mesmo veredito
+        wave_v2 = wave_v1.replace("schema_version: 1",
+                                  "schema_version: 2\nmode: parallel-waves", 1)
+        check("o fixture v2 difere mesmo do v1", wave_v2 != wave_v1)
+        r = run_dor(wave_v2, repo)
+        check("v2 com mode: parallel-waves é aceito",
+              r.returncode in (0, 1), r.stdout)
+
+        # v2 exige o campo — sem ele não dá para saber que documento é
+        r = run_dor(wave_v1.replace("schema_version: 1", "schema_version: 2", 1),
                     repo)
-        check("plano sem `mode` segue válido (default parallel-waves)",
-              r.returncode in (0, 1), r.stdout)
+        check("v2 sem `mode` é recusado", r.returncode == 2
+              and "exige `mode` explícito" in r.stdout, r.stdout)
 
-        # `mode` explícito de onda muda nada
-        r = run_dor(("schema_version: 1\nmode: parallel-waves\n"
-                     + PLAN_4D.format(s1='"src/a.py"', s2='"docs/x.md"',
-                                      hg1="none",
-                                      ac1='acceptance_cmd: "true",'
-                                      ).split("\n", 1)[1]), repo)
-        check("mode: parallel-waves explícito é aceito",
-              r.returncode in (0, 1), r.stdout)
-
-        # single-track é recusado APONTANDO O CAMINHO — um erro cru aqui
-        # devolveria "nenhuma onda pending", que não diz o que fazer.
+        # single-track NÃO existia em v1 — a recusa manda subir a versão em vez
+        # de aceitar um documento que aquela versão nunca descreveu
         r = run_dor("schema_version: 1\nmode: single-track\nprogram: t\n"
+                    "items:\n  - id: X\n    why: y\n    status: pending\n", repo)
+        check("single-track em plano v1 é recusado", r.returncode == 2
+              and "não existe no schema v1" in r.stdout, r.stdout)
+        check("a recusa do v1 manda subir para v2",
+              "schema_version: 2" in r.stdout, r.stdout)
+
+        # single-track em v2 é recusado APONTANDO O CAMINHO — um erro cru aqui
+        # devolveria "nenhuma onda pending", que não diz o que fazer.
+        r = run_dor("schema_version: 2\nmode: single-track\nprogram: t\n"
                     "items:\n  - id: X\n    why: y\n    status: pending\n", repo)
         # NÃO casar só por "single-track": a mensagem genérica de mode
         # desconhecido também contém essa palavra ("esperado 'parallel-waves'
@@ -196,7 +210,7 @@ def main():
               "/board-flow:next" in r.stdout, r.stdout)
 
         # valor inválido não passa em silêncio como se fosse onda
-        r = run_dor("schema_version: 1\nmode: talvez\nprogram: t\n"
+        r = run_dor("schema_version: 2\nmode: talvez\nprogram: t\n"
                     "waves: []\nslices: {}\n", repo)
         check("mode desconhecido é recusado", r.returncode == 2
               and "mode desconhecido" in r.stdout, r.stdout)

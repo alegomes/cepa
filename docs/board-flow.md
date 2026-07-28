@@ -357,7 +357,7 @@ plan per board, schema annotated in
 [`common/plan-schema.yaml`](../common/plan-schema.yaml).
 
 ```yaml
-schema_version: 1
+schema_version: 2
 mode: single-track
 program: ACME
 source: "Jira ACME · To Do, triaged 2026-07-28"
@@ -385,10 +385,14 @@ blocks the comment without it) and was simply never aggregated anywhere.
 **Same schema as the maestro, different mode.** `mode: parallel-waves` is the
 maestro's (waves of slices forked into worktrees, floor of ≥4 demands);
 `single-track` is one item at a time across sessions. Neither plugin depends on
-the other — both read the schema in `common`. `mode` is optional and defaults to
-`parallel-waves`, so plans written before the field existed are still valid.
-Point a single-track plan at `/maestro:run` (or at `cepa-dor`) and it refuses by
-naming the right command, instead of failing downstream with "no pending wave".
+the other — both read the schema in `common`. Point a single-track plan at
+`/maestro:run` (or at `cepa-dor`) and it refuses by naming the right command,
+instead of failing downstream with "no pending wave".
+
+Schema **v2** is where `mode` became explicit and required. **v1** (waves only,
+no `mode`) is still read by every consumer, so plans already on disk need no
+migration — but `mode: single-track` in a v1 plan is an error, and the consumer
+tells you to raise the version rather than guessing what you meant.
 
 **The plan is a hypothesis, not a contract** — whoever executes an item
 re-validates it against the board's current state. Re-running triage merges into

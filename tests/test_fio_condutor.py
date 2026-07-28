@@ -60,8 +60,10 @@ def main():
     # O bloco single-track é YAML vivo (o parallel-waves fica comentado como
     # exemplo), então tem de parsear e trazer os campos que carregam a dor.
     plan = yaml.safe_load(schema_txt)
-    check("schema_version segue 1 (nada foi bumpado)",
-          plan.get("schema_version") == 1, repr(plan.get("schema_version")))
+    check("schema canônico está em v2 (mode explícito)",
+          plan.get("schema_version") == 2, repr(plan.get("schema_version")))
+    check("v1 segue documentada como legado lido sem migração",
+          "1 — legado" in schema_txt and "sem migração" in schema_txt)
     check("modo do exemplo vivo é single-track",
           plan.get("mode") == "single-track", repr(plan.get("mode")))
 

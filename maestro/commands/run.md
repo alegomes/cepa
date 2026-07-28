@@ -27,8 +27,9 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
 
 ## Steps
 
-1. **Carregar e validar o plano.** Leia `PROGDIR/plan.yaml`. Recuse
-   `schema_version` ≠ 1. Confira `mode`: ausente ou `parallel-waves` segue o
+1. **Carregar e validar o plano.** Leia `PROGDIR/plan.yaml`. Aceite
+   `schema_version` 1 (legado, só ondas) e 2 (`mode` explícito); recuse
+   qualquer outra. Confira `mode`: ausente (só em v1) ou `parallel-waves` segue o
    fluxo; **`single-track` não é executável aqui** — pare e diga que aquele
    plano é de um item por vez (`/board-flow:next` responde qual é o próximo),
    e que promovê-lo a onda exige declarar superfície e aceite por item, com

@@ -206,7 +206,7 @@ Update `.claude/programs/<project_key>/plan.yaml` — **one living plan per
 board**, schema `common/plan-schema.yaml`, `mode: single-track`:
 
 ```yaml
-schema_version: 1
+schema_version: 2
 mode: single-track
 program: <project_key>
 source: "Jira <project_key> · <source-column>, triaged <YYYY-MM-DD>"

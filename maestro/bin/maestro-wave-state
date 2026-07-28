@@ -53,8 +53,13 @@ def _save(d, ws):
 
 def cmd_init(a):
     plan = yaml.safe_load(Path(a.plan).read_text())
-    if plan.get("schema_version") != 1:
-        print("schema_version desconhecida", file=sys.stderr)
+    # v1 = legado (só ondas); v2 = `mode` explícito. Ver common/plan-schema.yaml.
+    if plan.get("schema_version") not in (1, 2):
+        print("schema_version desconhecida (esperado 1 ou 2)", file=sys.stderr)
+        return 2
+    if (plan.get("mode") or "parallel-waves") != "parallel-waves":
+        print("plano single-track não tem ondas — /maestro:run não o executa",
+              file=sys.stderr)
         return 2
     wave = next((w for w in plan.get("waves", []) if w.get("id") == a.wave), None)
     if wave is None:

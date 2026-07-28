@@ -8,10 +8,11 @@ podem reusar as checagens não-específicas de onda. 100% leitura.
 Veredito por slice: READY / NOT-READY com lacunas nomeadas, em pt-BR.
 
 Checagens (cada uma existe porque a falha correspondente já custou uma onda):
-  - schema_version == 1 (recusa versão desconhecida)
-  - mode == parallel-waves (ausente = parallel-waves, por compatibilidade);
-    um plano single-track é recusado apontando /board-flow:triage e
-    /board-flow:next — ver common/plan-schema.yaml
+  - schema_version em {1, 2} (recusa versão desconhecida). v1 = legado, só
+    ondas; v2 = `mode` explícito e obrigatório
+  - mode == parallel-waves (em v1, ausente = parallel-waves); um plano
+    single-track é recusado apontando /board-flow:triage e /board-flow:next —
+    ver common/plan-schema.yaml
   - programa com >= 4 demandas (D7)
   - superfície declarada e DISJUNTA dos demais slices da onda — globs
     expandidos contra a árvore de arquivos no fork point (interseção
@@ -49,6 +50,11 @@ try:
 except ImportError:
     print("✗ cepa-dor precisa de PyYAML (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
+
+# Versões do plan.yaml que este binário sabe ler. v1 = legado (só ondas, sem
+# `mode`); v2 = `mode` explícito. Aceitar as duas é o que evita migrar planos
+# que estão no disco e funcionando — ver common/plan-schema.yaml.
+KNOWN_SCHEMA_VERSIONS = {1, 2}
 
 DEFAULT_ENFORCEMENT_ZONE = [
     ".claude/settings*",
@@ -125,17 +131,32 @@ def main() -> int:
         print(f"✗ plan.yaml ilegível: {e}")
         return 2
 
-    if not isinstance(plan, dict) or plan.get("schema_version") != 1:
-        print(f"✗ schema_version ausente ou desconhecida "
-              f"({plan.get('schema_version') if isinstance(plan, dict) else '?'}) — "
-              "cepa-dor conhece apenas a versão 1")
+    version = plan.get("schema_version") if isinstance(plan, dict) else None
+    if version not in KNOWN_SCHEMA_VERSIONS:
+        print(f"✗ schema_version ausente ou desconhecida ({version}) — "
+              f"cepa-dor conhece as versões {sorted(KNOWN_SCHEMA_VERSIONS)}")
         return 2
 
-    # `mode` ausente = parallel-waves (compatibilidade: todo plano escrito antes
-    # do campo existir é de onda). Um plano single-track não tem ondas nem
-    # superfícies a disjuntar — recusar apontando o caminho certo, em vez de
-    # falhar adiante com "nenhuma onda pending", que não diz o que fazer.
-    mode = plan.get("mode") or "parallel-waves"
+    # v1 não tinha `mode`: todo plano daquela época é de onda. v2 exige o campo
+    # — é o que permite recusar um documento que não se sabe ler, em vez de
+    # tratar a ausência de `waves` como plano vazio.
+    mode = plan.get("mode")
+    if version == 1:
+        if mode is None:
+            mode = "parallel-waves"
+        elif mode == "single-track":
+            print("✗ `mode: single-track` não existe no schema v1 — "
+                  "suba o plano para `schema_version: 2` "
+                  "(ver common/plan-schema.yaml)")
+            return 2
+    elif mode is None:
+        print("✗ schema v2 exige `mode` explícito "
+              "(single-track | parallel-waves) — ver common/plan-schema.yaml")
+        return 2
+
+    # Um plano single-track não tem ondas nem superfícies a disjuntar — recusar
+    # apontando o caminho certo, em vez de falhar adiante com "nenhuma onda
+    # pending", que não diz o que fazer.
     if mode == "single-track":
         print("✗ este é um plano single-track (um item por vez, sem fork) — "
               "cepa-dor só avalia slices de onda.\n"

@@ -1,5 +1,5 @@
 ---
-description: Planeja um programa do Maestro — conversa sobre um universo de demandas (default BACKLOG.md), propõe ondas de slices com superfícies disjuntas e fork points, escreve .claude/programs/<nome>/plan.yaml (schema v1) e roda o intake gate (cepa-dor) até cada slice sair READY ou ter a lacuna nomeada. Não executa nada — /maestro:run (passo 3 da construção) é quem forka. Piso de uso: ≥4 demandas (D7); com menos, /board-flow:drain ou sessão única ganham.
+description: Planeja um programa do Maestro — conversa sobre um universo de demandas (default BACKLOG.md), propõe ondas de slices com superfícies disjuntas e fork points, escreve .claude/programs/<nome>/plan.yaml (schema v2, canônico em common/plan-schema.yaml; v1 segue lida sem migração) e roda o intake gate (cepa-dor) até cada slice sair READY ou ter a lacuna nomeada. Não executa nada — /maestro:run (passo 3 da construção) é quem forka. Piso de uso: ≥4 demandas (D7); com menos, /board-flow:drain ou sessão única ganham.
 argument-hint: [nome-do-programa] [--source ARQUIVO] [--demandas "P9,P10,..."]
 ---
 
@@ -48,11 +48,11 @@ comando é o único lugar onde BACKLOG.md (ou outra fonte) é interpretado.
 
 4. **Escrever o plano.** Com o desenho acordado, escreva
    `.claude/programs/<nome>/plan.yaml` seguindo `common/plan-schema.yaml`
-   (schema_version: 1, bloco `mode: parallel-waves`). Um slice por demanda,
-   salvo demanda grande que o usuário concorde em fatiar. O `mode` pode ficar
-   ausente — o default é `parallel-waves` — mas escreva-o explícito: o mesmo
-   schema também serve o `single-track` do board-flow, e o campo é o que
-   diz a quem lê qual dos dois este plano é.
+   (`schema_version: 2`, `mode: parallel-waves`). Um slice por demanda, salvo
+   demanda grande que o usuário concorde em fatiar. O `mode` é explícito porque
+   o mesmo schema também serve o `single-track` do board-flow — é o campo que
+   diz a quem lê qual dos dois este plano é. Planos v1 no disco (sem `mode`)
+   continuam válidos e **não precisam ser migrados**.
 
 5. **Intake gate.** Rode:
 

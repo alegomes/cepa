@@ -1,4 +1,4 @@
-# plan.yaml — schema v1 (canônico, cepa/common). Template anotado; copie o
+# plan.yaml — schema v2 (canônico, cepa/common). Template anotado; copie o
 # bloco do modo que você quer para .claude/programs/<nome>/plan.yaml.
 #
 # Este arquivo é a FONTE ÚNICA do formato de plano do harness. Dois plugins o
@@ -13,11 +13,21 @@
 # - Intake (parallel-waves): cada slice passa por `common/bin/cepa-dor <plan>
 #   --wave N` antes do fork; NOT-READY não forka.
 
-schema_version: 1               # obrigatório; consumidores recusam versão desconhecida
+# VERSÕES
+#   1 — legado: só ondas, `mode` ausente. Todos os consumidores seguem lendo,
+#       sem migração: um plano v1 no disco hoje funciona amanhã igual.
+#   2 — `mode` obrigatório e explícito, os dois valores válidos.
+#
+# Por que a versão subiu mesmo sem quebrar nada: `mode` muda o SIGNIFICADO do
+# documento — um plano single-track não tem ondas, e um consumidor que só
+# entende ondas precisa poder dizer "não sei ler isto" em vez de tratar a
+# ausência de `waves` como plano vazio. O número é o que torna essa recusa
+# possível de declarar; deduzi-la da forma do arquivo seria adivinhação.
+schema_version: 2               # obrigatório; consumidores aceitam 1 (legado) e 2
 
-# `mode` é OPCIONAL e o default é `parallel-waves` — todo plan.yaml escrito
-# antes deste campo existir continua válido e é lido sem alteração. Foi por
-# isso que o campo entrou sem bumpar schema_version: nada quebrou.
+# Em v2 é OBRIGATÓRIO — declarar qual dos dois documentos este arquivo é.
+# Em v1 é ausente e vale `parallel-waves`; `single-track` num plano v1 é erro,
+# porque o modo não existia lá (o consumidor manda subir para 2).
 mode: single-track              # single-track | parallel-waves
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -66,6 +76,8 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
 # ═══════════════════════════════════════════════════════════════════════════
 # MODO parallel-waves — ondas de slices em worktrees (Maestro)
 # ═══════════════════════════════════════════════════════════════════════════
+# É o conteúdo do schema v1 inteiro, agora sob um `mode` explícito. Um plano v1
+# sem `mode` é exatamente isto e não precisa de migração.
 # Piso de uso: >= 4 demandas (D7). Abaixo disso o overhead do fork perde para
 # /board-flow:drain, para uma sessão única — ou para o single-track acima.
 #

@@ -682,9 +682,11 @@ execução com muitos desdobramentos.
 > **Decidido e feito (2026-07-28).** O schema de plano subiu para
 > `common/plan-schema.yaml` e ganhou `mode: single-track | parallel-waves` —
 > `board-flow` e `maestro` são consumidores irmãos, nenhum depende do outro.
-> `mode` é opcional com default `parallel-waves` e `schema_version` segue **1**:
-> nenhum plano existente quebrou, e por isso não houve bump (bumpar obrigaria a
-> mexer em quatro consumidores para ganhar zero). `/board-flow:triage` passou a
+> O schema foi para **v2**, onde `mode` é explícito e obrigatório; a **v1**
+> (só ondas, sem `mode`) segue aceita por todos os consumidores, então nenhum
+> plano no disco precisou de migração. O número existe para que um consumidor
+> que só entende ondas possa dizer "não sei ler isto" em vez de tratar a
+> ausência de `waves` como plano vazio. `/board-flow:triage` passou a
 > persistir a fila **ordenada** com o `why` por item, e `execute`/`fix`/`prove`
 > fecham com "And now?" — rota de validação humana + próximo item do plano.
 > Travado por `tests/test_fio_condutor.py` (27 asserções, prova de perturbação:
