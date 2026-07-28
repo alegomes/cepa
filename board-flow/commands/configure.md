@@ -50,13 +50,13 @@ If the call fails (auth dropout, MCP unavailable): tell user "Couldn't reach Jir
 If the call succeeds:
 
 - One site → confirm with user: "Found one site: `<url>`. Use it? (yes / no — type a different one)".
-- Multiple sites → numbered list, user picks: "Which site? 1) `wego.atlassian.net`  2) `other.atlassian.net`  ..."
+- Multiple sites → numbered list, user picks: "Which site? 1) `<url-1>`  2) `<url-2>`  ..." — the URLs come from the call's response, never from your own guess.
 
-Whatever the user picks (or types if validation skipped) → `site = <chosen-value>`. Don't accept partial URLs ("wego" → "wego.atlassian.net" is forbidden inference); require the full host.
+Whatever the user picks (or types if validation skipped) → `site = <chosen-value>`. Don't accept partial URLs (completing `acme` into `acme.atlassian.net` is forbidden inference); require the full host.
 
 ### 3. Resolve project_key
 
-Ask: "Project key (e.g., `WEGO`, `ENG`)? Current: `<value or none>`. Enter to keep, or type new:"
+Ask: "Project key (e.g., `ACME`, `ENG`)? Current: `<value or none>`. Enter to keep, or type new:"
 
 Optional validation: if the user wants, delegate to `atlassian-expert` to call `getVisibleJiraProjects` and confirm the key exists in their accessible sites. Recommended on first setup, optional on re-run.
 
