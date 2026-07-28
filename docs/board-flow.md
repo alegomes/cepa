@@ -20,8 +20,8 @@ schema_version: 1
 
 # --- Defaults: identity values for every Jira operation ---
 defaults:
-  site: wego.atlassian.net           # YOUR Jira cloud site
-  project_key: WEGO                  # default project for new cards
+  site: acme.atlassian.net           # YOUR Jira cloud site
+  project_key: ACME                  # default project for new cards
   board_id: 766                      # default board, used by /board-flow:drain
   status_map:
     # Literal Jira status names. Backlog is implicit (project's create
@@ -86,7 +86,7 @@ lifecycles:
 ### Field-by-field
 
 - **`defaults.site`** — your Jira cloud hostname (e.g.,
-  `wego.atlassian.net`). `atlassian-expert` is forbidden to infer this
+  `acme.atlassian.net`). `atlassian-expert` is forbidden to infer this
   from your repo name or any other context; missing here means every
   Jira write refuses.
 - **`defaults.project_key`** — default Jira project key for new cards.
@@ -258,7 +258,7 @@ Site URLs, project keys, board IDs, issue types, custom field values —
 all come from the config or from the orchestrator's request payload.
 
 **Forbidden:** deriving a site URL from the repo name
-(`wego-assinatura-backend` → `wego.atlassian.net` is forbidden),
+(`acme-billing-service` → `acme.atlassian.net` is forbidden),
 guessing from conversation context, falling back to typical Atlassian
 URL patterns, or substituting a value seen in earlier context.
 
@@ -266,10 +266,23 @@ Missing config + missing request → refuse with `BLOCKED: <field> not
 found in board-flow.yaml defaults block; cannot infer. Add it to the
 config and retry.`
 
-This rule exists because the agent once invented `wego.atlassian.net`
-when the real site was different — a hallucinated URL is worse than
-asking, because everyone downstream debugs an auth issue against a fake
-site instead of seeing the real bug.
+This rule exists because the agent once invented a site URL by pasting
+the repo's name prefix in front of `.atlassian.net`, when the real site
+was different — a hallucinated URL is worse than asking, because
+everyone downstream debugs an auth issue against a site that doesn't
+exist instead of seeing the real bug. Two corollaries, both learned the
+hard way (2026-07-28):
+
+- **Every hostname in these prompts is deliberately fictional**
+  (`acme.atlassian.net`). A negative example that is plausible and
+  specific to the repo in front of the agent reads as a suggestion, not
+  as a prohibition — the agent that broke this rule had copied the
+  hostname straight out of the sentence forbidding it.
+- **A missing site is a `BLOCKED`, never an auth request.** Asking the
+  user to authorize or reauthorize a site implies the site is real; if
+  the hostname was invented, the user goes hunting for permission to a
+  domain that doesn't resolve. When auth looks broken, name the
+  configured site verbatim so a wrong target is visible at a glance.
 
 ### 3. Read-back verification on every write
 
