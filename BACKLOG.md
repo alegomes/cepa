@@ -673,10 +673,24 @@ da Onda 4.
 
 ## Fio condutor: "e agora, o que eu faço?" entre sessões e entre cards
 
-**Status:** pendente (só registrado, não discutido) · **Lar provável:** `board-flow`
-+ `common` (handoff), com parentesco em `maestro` · **Origem:** relato do dono ao
-fim da sessão do WEGO-1958 (2026-07-28), depois de ~horas de execução com muitos
-desdobramentos.
+**Status:** peças 1 e 3 CONSTRUÍDAS (2026-07-28, commits `8d752e3` + `21b73fa`);
+peça 2 (`/board-flow:next`) pendente · **Lar:** schema em `common`, produtor e
+consumidores em `board-flow`, `maestro` como consumidor irmão · **Origem:**
+relato do dono ao fim da sessão do WEGO-1958 (2026-07-28), depois de ~horas de
+execução com muitos desdobramentos.
+
+> **Decidido e feito (2026-07-28).** O schema de plano subiu para
+> `common/plan-schema.yaml` e ganhou `mode: single-track | parallel-waves` —
+> `board-flow` e `maestro` são consumidores irmãos, nenhum depende do outro.
+> `mode` é opcional com default `parallel-waves` e `schema_version` segue **1**:
+> nenhum plano existente quebrou, e por isso não houve bump (bumpar obrigaria a
+> mexer em quatro consumidores para ganhar zero). `/board-flow:triage` passou a
+> persistir a fila **ordenada** com o `why` por item, e `execute`/`fix`/`prove`
+> fecham com "And now?" — rota de validação humana + próximo item do plano.
+> Travado por `tests/test_fio_condutor.py` (27 asserções, prova de perturbação:
+> 16 RED). **Falta a peça 2**, `/board-flow:next`, que responde a pergunta
+> literal quando o fio se perde no meio da sessão (perda 3) em vez de só no fim
+> de um card.
 
 ### O relato, na voz do dono
 

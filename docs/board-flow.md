@@ -343,6 +343,58 @@ summary on a review-style transition, `atlassian-expert` refuses with
 re-delegate with the summary.` This is agent-level enforcement —
 hard-coded, can't be bypassed by command drift.
 
+## The execution plan (`mode: single-track`)
+
+Jira stores the **queue** — the To Do column — and neither the **order** you
+decided to work it in nor the **why** behind that order. Both used to live only
+in the chat that produced them, so a session boundary erased them. The symptom
+was a specific question, asked after hours of work with detours: *what do I do
+next — validate this by hand, or pull another card?*
+
+`/board-flow:triage` is where the order is actually decided, so it is where the
+order gets written down: `.claude/programs/<project_key>/plan.yaml`, one living
+plan per board, schema annotated in
+[`common/plan-schema.yaml`](../common/plan-schema.yaml).
+
+```yaml
+schema_version: 1
+mode: single-track
+program: ACME
+source: "Jira ACME · To Do, triaged 2026-07-28"
+items:
+  - id: ACME-1235
+    title: "Block a bounce comment with no reason"
+    why: "first — unblocks 1237 and 1240, which touch the same hook"
+    status: pending
+    blocked_by: []
+    human_pending: null
+```
+
+Three fields carry the three losses:
+
+| Field | Answers |
+|---|---|
+| the order of `items` | "which one was first, again?" |
+| `why` | "does this order still make sense?" — without it you re-prioritise from scratch |
+| `human_pending` | "do I still have to validate this by hand?" |
+
+`human_pending` is fed from the **Human validation route** of the Implementation
+Summary — a field that is already mandatory (the `summary-nulls-gate` hook
+blocks the comment without it) and was simply never aggregated anywhere.
+
+**Same schema as the maestro, different mode.** `mode: parallel-waves` is the
+maestro's (waves of slices forked into worktrees, floor of ≥4 demands);
+`single-track` is one item at a time across sessions. Neither plugin depends on
+the other — both read the schema in `common`. `mode` is optional and defaults to
+`parallel-waves`, so plans written before the field existed are still valid.
+Point a single-track plan at `/maestro:run` (or at `cepa-dor`) and it refuses by
+naming the right command, instead of failing downstream with "no pending wave".
+
+**The plan is a hypothesis, not a contract** — whoever executes an item
+re-validates it against the board's current state. Re-running triage merges into
+the plan rather than overwriting it: `done` items keep their `human_pending`,
+and cancelled cards become `dropped` so the plan still explains why they left.
+
 ## Composition rules
 
 - **Lead-based commands** (`/board-flow:execute`,
