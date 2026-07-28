@@ -233,6 +233,22 @@ never as the headline.
   artifact whose `verdict` disagreed with its levels).
 - Close with the concrete options and one "how do you want to proceed?"
 
+Then, **only when the card advanced (PROVEN)**, add **"And now?"** — proving a
+card is exactly the moment the user is left holding "so is it done, or do I
+still have to touch it?". On UNPROVEN or NEEDS-HUMAN the next step is the card
+itself, and this section would compete with it; skip it there.
+
+- **Left for you:** the card's **Human validation route** verbatim, from the
+  Implementation Summary. A proof gate closes *load-bearing at the surface it
+  claims* — it does not close *a human looked at it*, and the two get conflated
+  precisely here. If the route is the explicit null ("not applicable — internal
+  substrate"), say so: "nothing to check by hand" is the answer, not silence.
+- **Next in the plan:** read `.claude/programs/<project_key>/plan.yaml` (schema
+  `common/plan-schema.yaml`, `mode: single-track`) and name the next `pending`
+  item not `blocked_by` an unfinished one — key, title, and its `why`. Mark the
+  proven card `done` there, carrying its Human validation route into
+  `human_pending`. No plan file? Say so and offer `/board-flow:triage`.
+
 ## Constraints
 
 - **Runs only on cards in Review.** It proves built work; it does not build.

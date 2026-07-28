@@ -146,12 +146,23 @@ Summarize the resolved plan and ask for a single go-ahead (skip this and step 8 
 ```
 Proposed transitions:
   → In Review (N): WEGO-1234, ...        (each gets an Implementation Summary; proof gate still applies)
-  → To Do (M):     WEGO-1235, ...
+  → To Do (M), in execution order:
+      1. WEGO-1235  — unblocks 1237 and 1240, which touch the same hook
+      2. WEGO-1240  — needs the hook stabilised by 1235
+      3. WEGO-1237  — independent; last because it is the largest
   → Won't Do (K):  WEGO-1236  ← per-card confirm required
   No change (J):   WEGO-1238 (needs-refinement)
 
 Apply? yes / no / pick (e.g. "only the To Do moves").
 ```
+
+**The To Do list is ORDERED, and every item carries the reason it sits where it
+sits.** Propose the order yourself from the evidence you already gathered —
+dependencies first, then blast radius, then size — and let the user correct it;
+an order they merely approved still beats one that was never written down. This
+is the moment the execution order exists; step 9 is what makes it survive the
+session. A list without `why` records the order but not the criterion, so the
+first "does this still make sense?" forces a re-priorisation from scratch.
 
 Wait for confirmation. For each Won't Do, confirm **individually** before cancelling.
 
@@ -185,22 +196,60 @@ Group the work; every write delegation starts with `Topology: <default_topology>
 
 - **No change.** For NEEDS-REFINEMENT cards, optionally post a comment naming what's missing (acceptance criteria, scope) so the next grooming pass is cheaper — ask the user once whether to annotate or stay silent.
 
-### 9. Final report
+### 9. Persist the execution plan
+
+Triage is the moment the queue gets an order and a rationale. Both used to die
+in the chat: Jira stores the *queue* (To Do), never the *order* nor the *why*.
+Write them down.
+
+Update `.claude/programs/<project_key>/plan.yaml` — **one living plan per
+board**, schema `common/plan-schema.yaml`, `mode: single-track`:
+
+```yaml
+schema_version: 1
+mode: single-track
+program: <project_key>
+source: "Jira <project_key> · <source-column>, triaged <YYYY-MM-DD>"
+items:
+  - id: WEGO-1235
+    title: "<card summary>"
+    why: "unblocks 1237 and 1240, which touch the same hook"
+    status: pending
+    blocked_by: []
+    human_pending: null
+```
+
+Rules:
+
+- **Merge, never overwrite.** Items already `done` stay, with their
+  `human_pending` intact — that field is the answer to "do I still have to
+  validate this by hand?", and a re-triage that wipes it re-creates the very
+  loss this plan exists to prevent. Cards moved to Won't Do become
+  `status: dropped` (kept, so the plan explains why they left), not deletions.
+- **Only `→ To Do` cards become `pending` items.** Cards routed to In Review
+  belong to the proof queue, not the build queue.
+- **The plan is a hypothesis, not a contract** (same rule as the maestro's):
+  whoever executes re-validates the item against the board's current state.
+- Say in the report that the file was written, and where.
+
+### 10. Final report
 
 A single summary:
 
 - **Triaged from:** <source-column> (scope: <effective scope, or "none">)
 - **Cards classified:** N
 - **→ In Review:** list of keys (or "none")
-- **→ To Do:** list of keys
+- **→ To Do:** keys **in execution order**, each with its one-line `why`
+- **Execution plan:** `.claude/programs/<project_key>/plan.yaml` (written | updated: N new, M preserved)
 - **→ Won't Do:** list of keys (or "none — none confirmed")
 - **Stayed (needs-refinement):** list of keys
 - **Remaining in column (not classified this run):** count, if `--max` was hit
-- **Next steps:** "Run `/board-flow:prove-drain` to prove the cards just moved to In Review (triage routed them by evidence, it did not prove them). Run `/board-flow:drain` to build the To Do cards." If `--dry-run`, note that nothing was written.
+- **Next steps:** name the *first item of the plan* by key and title — not a generic pointer. Then: "Run `/board-flow:prove-drain` to prove the cards just moved to In Review (triage routed them by evidence, it did not prove them). Run `/board-flow:drain` to build the To Do cards in one go, or work the plan one card at a time and use `/board-flow:next` when you lose the thread." If `--dry-run`, note that nothing was written — **including the plan**.
 
 ## Constraints
 
 - **Default `--max 15`.** Each card costs an evidence search; raise deliberately.
+- **The order and its `why` are outputs, not chat.** A triage run that transitions cards but leaves `.claude/programs/<project_key>/plan.yaml` unwritten has done half the job: the queue moved and the reasoning evaporated. Under `--max`, the plan holds only the cards actually classified — say so, never let a truncated plan read as the whole queue.
 - **Read-heavy, write-late.** No Jira write happens before the step-7 confirmation (and none at all under `--dry-run`).
 - **In Review here is a candidacy, not a verdict.** Triage routes by code evidence; `/board-flow:prove` is what proves load-bearing behavior at the surface. Never report a triaged-to-Review card as "done."
 - **PARTIAL never rounds up to IMPLEMENTED.** If a single acceptance criterion is unmet, the card is not done — bucket it READY or NEEDS-DECISION and name the gap.

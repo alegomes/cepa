@@ -199,6 +199,21 @@ A single concise message back to the user:
 - **New card status:** In Review / still In Progress (BLOCKED) / unchanged (NOT-A-BUG).
 - **Notes:** caveats, follow-ups, or "the reported behavior wasn't reproducible — close as not-a-bug?"
 
+Then close with **"And now?"** — the report says what *was done*; this says what
+*is left*. Without it the two plausible answers ("validate it by hand" and "pull
+the next card") compete in silence. Two lines, always both:
+
+- **Left for you:** the card's **Human validation route** verbatim, when it is a
+  real route. On a bug this is rarely null — a user-visible symptom is exactly
+  what a green regression test cannot close alone. If it *is* the explicit null,
+  say so plainly rather than staying quiet. Add any other human-only leftover.
+- **Next in the plan:** read `.claude/programs/<project_key>/plan.yaml` (schema
+  `common/plan-schema.yaml`, `mode: single-track`) and name the next `pending`
+  item not `blocked_by` an unfinished one — key, title, and its `why`. Mark the
+  card just fixed as `done` there, carrying its Human validation route into
+  `human_pending`. No plan file? Say so and offer `/board-flow:triage`; do not
+  invent an order from the board's default sort.
+
 ## Constraints
 
 - **The card MUST exist** — atlassian-expert returns an error otherwise; abort gracefully.

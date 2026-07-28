@@ -166,6 +166,25 @@ A single concise message back to the user:
 - **New card status:** In Review / still In Progress (BLOCKED).
 - **Notes:** caveats or follow-ups.
 
+Then close with **"And now?"** — the report says what *was done*; this says what
+*is left*. Without it the two plausible answers ("validate it by hand" and "pull
+the next card") compete in silence, and after a long session with detours the
+user has to reconstruct the answer from memory. Two lines, always both:
+
+- **Left for you:** the card's **Human validation route** verbatim, when it is a
+  real route. If it is the explicit null ("not applicable — internal
+  substrate"), say *that* — "nothing to validate by hand, the automated evidence
+  closes it" is the answer, not silence. Add any other human-only leftover the
+  run produced (a secret to rotate, a PR to approve, a release to cut, an
+  escalation left open).
+- **Next in the plan:** read `.claude/programs/<project_key>/plan.yaml` (schema
+  `common/plan-schema.yaml`, `mode: single-track`) and name the next `pending`
+  item that is not `blocked_by` an unfinished one — key, title, and its `why`.
+  Also mark the card just finished as `done` there, carrying its Human
+  validation route into `human_pending`, so the leftover survives this session.
+  No plan file? Say so and offer `/board-flow:triage` to create one; do not
+  invent an order from the board's default sort.
+
 ## Constraints
 
 - The card MUST exist before invoking — atlassian-expert returns an error otherwise; abort gracefully.
