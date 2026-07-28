@@ -28,7 +28,13 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
 ## Steps
 
 1. **Carregar e validar o plano.** Leia `PROGDIR/plan.yaml`. Recuse
-   `schema_version` ≠ 1. Selecione a onda alvo (`--wave` ou a primeira pending).
+   `schema_version` ≠ 1. Confira `mode`: ausente ou `parallel-waves` segue o
+   fluxo; **`single-track` não é executável aqui** — pare e diga que aquele
+   plano é de um item por vez (`/board-flow:next` responde qual é o próximo),
+   e que promovê-lo a onda exige declarar superfície e aceite por item, com
+   `/maestro:program-plan`. Qualquer outro valor é erro (ver
+   `common/plan-schema.yaml`). Selecione a onda alvo (`--wave` ou a primeira
+   pending).
 
 2. **gc de órfãos** (o análogo do que o cepa-doctor faz para ccw-worktrees —
    restos de programas anteriores custam a próxima onda):

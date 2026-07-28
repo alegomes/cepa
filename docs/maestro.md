@@ -68,11 +68,13 @@ first-class path, not an afterthought. Modeled on `/common:autonomous-resume`.
 
 ## The plan.yaml (schema v1)
 
-Copy [`maestro/plan-template.yaml`](../maestro/plan-template.yaml) — it's the
-annotated source of truth. The shape:
+Copy the `mode: parallel-waves` block from
+[`common/plan-schema.yaml`](../common/plan-schema.yaml) — it's the annotated
+source of truth, shared with board-flow's `single-track` mode. The shape:
 
 ```yaml
 schema_version: 1               # required; /maestro:run refuses unknown versions
+mode: parallel-waves            # optional, this is the default; single-track = board-flow
 program: exemplo
 source: BACKLOG.md
 max_concurrent_slices: 3        # ceiling = human attention, not the machine
@@ -215,7 +217,8 @@ terminal state; a merge already in `landed` is skipped.
 | Path | What |
 |---|---|
 | `maestro/commands/{program-plan,run,resume}.md` | The three commands. |
-| `maestro/plan-template.yaml` | Annotated plan.yaml (schema v1). |
+| `common/plan-schema.yaml` | Annotated plan.yaml (schema v1) — canonical, both modes. |
+| `maestro/plan-template.yaml` | Pointer to the above (kept so old links resolve). |
 | `maestro/bin/maestro-fork-settings` | Generates a child's `settings.json` (layer 1). |
 | `maestro/bin/maestro-gatekeeper` | The permission gatekeeper (MCP over loopback HTTP). |
 | `maestro/bin/maestro-poll` | One event-loop iteration (by file marker). |

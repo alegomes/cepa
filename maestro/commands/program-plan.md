@@ -47,9 +47,12 @@ comando é o único lugar onde BACKLOG.md (ou outra fonte) é interpretado.
    (onda · slice · demanda · superfície · gate humano · aceite) e discuta.
 
 4. **Escrever o plano.** Com o desenho acordado, escreva
-   `.claude/programs/<nome>/plan.yaml` seguindo `maestro/plan-template.yaml`
-   (schema_version: 1). Um slice por demanda, salvo demanda grande que o
-   usuário concorde em fatiar.
+   `.claude/programs/<nome>/plan.yaml` seguindo `common/plan-schema.yaml`
+   (schema_version: 1, bloco `mode: parallel-waves`). Um slice por demanda,
+   salvo demanda grande que o usuário concorde em fatiar. O `mode` pode ficar
+   ausente — o default é `parallel-waves` — mas escreva-o explícito: o mesmo
+   schema também serve o `single-track` do board-flow, e o campo é o que
+   diz a quem lê qual dos dois este plano é.
 
 5. **Intake gate.** Rode:
 

@@ -9,6 +9,9 @@ Veredito por slice: READY / NOT-READY com lacunas nomeadas, em pt-BR.
 
 Checagens (cada uma existe porque a falha correspondente já custou uma onda):
   - schema_version == 1 (recusa versão desconhecida)
+  - mode == parallel-waves (ausente = parallel-waves, por compatibilidade);
+    um plano single-track é recusado apontando /board-flow:triage e
+    /board-flow:next — ver common/plan-schema.yaml
   - programa com >= 4 demandas (D7)
   - superfície declarada e DISJUNTA dos demais slices da onda — globs
     expandidos contra a árvore de arquivos no fork point (interseção
@@ -126,6 +129,24 @@ def main() -> int:
         print(f"✗ schema_version ausente ou desconhecida "
               f"({plan.get('schema_version') if isinstance(plan, dict) else '?'}) — "
               "cepa-dor conhece apenas a versão 1")
+        return 2
+
+    # `mode` ausente = parallel-waves (compatibilidade: todo plano escrito antes
+    # do campo existir é de onda). Um plano single-track não tem ondas nem
+    # superfícies a disjuntar — recusar apontando o caminho certo, em vez de
+    # falhar adiante com "nenhuma onda pending", que não diz o que fazer.
+    mode = plan.get("mode") or "parallel-waves"
+    if mode == "single-track":
+        print("✗ este é um plano single-track (um item por vez, sem fork) — "
+              "cepa-dor só avalia slices de onda.\n"
+              "  O gate de prontidão do single-track é por item, no momento em "
+              "que o item vira card: use /board-flow:triage.\n"
+              "  Para saber o próximo passo deste plano: /board-flow:next")
+        return 2
+    if mode != "parallel-waves":
+        print(f"✗ mode desconhecido ({mode!r}) — "
+              "esperado 'parallel-waves' ou 'single-track' "
+              "(ver common/plan-schema.yaml)")
         return 2
 
     slices_all: dict = plan.get("slices") or {}

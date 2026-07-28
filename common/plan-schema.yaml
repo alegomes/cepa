@@ -1,0 +1,103 @@
+# plan.yaml — schema v1 (canônico, cepa/common). Template anotado; copie o
+# bloco do modo que você quer para .claude/programs/<nome>/plan.yaml.
+#
+# Este arquivo é a FONTE ÚNICA do formato de plano do harness. Dois plugins o
+# consomem como irmãos, nenhum depende do outro:
+#   - maestro    → mode: parallel-waves  (forka N sessões em worktrees)
+#   - board-flow → mode: single-track    (um item por vez, sessões diferentes)
+#
+# REGRAS DE COSTURA (design Maestro rev2.1, preservadas):
+# - /maestro:run lê EXCLUSIVAMENTE este arquivo, nunca BACKLOG.md — toda fonte
+#   futura (Jira/board-flow, discovery) entra escrevendo um plan.yaml válido.
+# - Plano é HIPÓTESE: quem executa re-valida sua fatia contra o main atual.
+# - Intake (parallel-waves): cada slice passa por `common/bin/cepa-dor <plan>
+#   --wave N` antes do fork; NOT-READY não forka.
+
+schema_version: 1               # obrigatório; consumidores recusam versão desconhecida
+
+# `mode` é OPCIONAL e o default é `parallel-waves` — todo plan.yaml escrito
+# antes deste campo existir continua válido e é lido sem alteração. Foi por
+# isso que o campo entrou sem bumpar schema_version: nada quebrou.
+mode: single-track              # single-track | parallel-waves
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MODO single-track — a fila priorizada que sobrevive à sessão
+# ═══════════════════════════════════════════════════════════════════════════
+# Existe porque a ordem de execução decidida num momento de planejamento
+# virava prosa no handoff e evaporava: o Jira guarda a FILA (To Do) e não a
+# ORDEM nem o PORQUÊ dela. Consumido por /board-flow:next.
+#
+# Não tem `waves`, `surface`, `fork_after` nem `timeout_min`: nada aqui roda em
+# paralelo, então não há superfície a disjuntar nem sessão a cronometrar.
+
+program: exemplo                # nome do plano (vira .claude/programs/<nome>/)
+source: "Jira WEGO · coluna To Do, priorizada em 2026-07-28"
+                                # de onde as demandas vieram (rastreio, não costura)
+
+items:                          # ORDEM DA LISTA = ordem de execução. É o dado.
+  - id: WEGO-1958               # chave do card OU âncora na fonte ("P9 do BACKLOG")
+    title: "Bloquear devolução sem razão"
+    why: "primeiro porque destrava 1962 e 1963, que tocam o mesmo hook"
+                                # OBRIGATÓRIO. É o campo que evapora hoje. Sem
+                                # ele o plano guarda a ordem mas não o critério,
+                                # e a primeira dúvida ("ainda faz sentido?")
+                                # obriga a refazer a priorização do zero.
+    status: done                # pending | in_progress | done | blocked | dropped
+    blocked_by: []              # ids de outros items; um item bloqueado não é
+                                # "o próximo" mesmo estando no topo da fila
+    human_pending: |            # o que sobrou PRA VOCÊ depois do card fechar.
+      Rodar /board-flow:prove no card e conferir que o veredito sai PROVEN.
+                                # Preenchido a partir do campo `Human validation
+                                # route` do Implementation Summary (obrigatório
+                                # e garantido por summary-nulls-gate.py). Nulo
+                                # explícito é resposta válida: use
+                                # "não aplicável (substrato interno)".
+                                # Um item com human_pending aberto NÃO some da
+                                # vista quando vira `done` — é o que responde
+                                # "tenho que testar à mão ou puxo o próximo?".
+
+  - id: WEGO-1962
+    title: "Agregar rota de validação humana"
+    why: "depende do hook estabilizado em 1958"
+    status: pending
+    blocked_by: [WEGO-1958]
+    human_pending: null         # ainda não executado — sem rota a cobrar
+
+# ═══════════════════════════════════════════════════════════════════════════
+# MODO parallel-waves — ondas de slices em worktrees (Maestro)
+# ═══════════════════════════════════════════════════════════════════════════
+# Piso de uso: >= 4 demandas (D7). Abaixo disso o overhead do fork perde para
+# /board-flow:drain, para uma sessão única — ou para o single-track acima.
+#
+# max_concurrent_slices: 3      # teto = atenção do humano; subir só com taxa de
+#                               # escalação comprovadamente baixa (gatilho medido)
+#
+# waves:
+#   - id: 1
+#     mode: parallel-worktrees  # ou sequential-inline / interactive
+#     fork_after: null          # null = forka do main atual; "wave-1" = após onda 1 aterrissar
+#     slices: [S1, S2]
+#     status: pending           # pending | running | done
+#
+# slices:
+#   S1:
+#     demanda: "P9 do BACKLOG"  # âncora na fonte (D7 conta demandas distintas)
+#     surface:                  # globs; expandidos contra a árvore no fork point;
+#       - "common/hooks/foo*.py"# DISJUNTOS entre slices da onda; zona de
+#       - "docs/foo.md"         # enforcement é veto incondicional
+#     human_gate: none          # 'none' OU a decisão estratégica JÁ tomada, registrada;
+#                               # "open:..." = NOT-READY (preditor nº 1 de mediação)
+#     acceptance: |             # US: Given/When/Then observável numa superfície
+#       Given um comentário de devolução sem razão
+#       When o agente tenta postá-lo
+#       Then o hook bloqueia nomeando o campo faltante
+#     acceptance_form: bdd      # bdd | substrate — sem uma das duas, NOT-READY.
+#                               # 'substrate' = trabalho de substrato (TS) cujo
+#                               # aceite legítimo é técnico; declarar é assumir.
+#     acceptance_cmd: "python3 tests/test_foo.py"  # OBRIGATÓRIO em repo .claude/no-build
+#     context:                  # contexto mínimo p/ a filha (links, não prosa)
+#       - "BACKLOG.md#p9"
+#       - "docs/foo-notes.md"
+#     bash_extra: ["pytest"]    # allows de Bash além do conjunto base das settings geradas
+#     timeout_min: 45           # T_slice do event loop (default 45)
+#     status: pending           # pending | running | DONE | FAIL | TIMEOUT | ESCALATED
