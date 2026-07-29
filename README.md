@@ -92,6 +92,7 @@ Or run `bin/install.sh --topology=build-team /path/to/your-project` to wire a pr
 | **[docs/commands.md](docs/commands.md)** | Every slash command, grouped by plugin. |
 | **[docs/maestro.md](docs/maestro.md)** | Multi-harness orchestration: plan ≥4 demands into waves of concurrent sessions, run them with one action. |
 | **[docs/board-flow.md](docs/board-flow.md)** | `board-flow.yaml` schema, `/configure`, Implementation Summary contract. |
+| **[docs/execution-plan.md](docs/execution-plan.md)** | The execution plan: keeping "what do I do next?" answerable across sessions — order, the `why` behind it, and the human debt a closed card leaves behind. |
 | **[docs/green-or-revert.md](docs/green-or-revert.md)** | The build-state gate that blocks commits while the build is broken. |
 | **[docs/acceptance-completeness.md](docs/acceptance-completeness.md)** | The per-card acceptance-evidence gate. |
 | **[docs/proof-gate.md](docs/proof-gate.md)** | The change-driven proof gate for the Review column. |

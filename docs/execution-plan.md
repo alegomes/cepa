@@ -1,0 +1,188 @@
+# The execution plan
+
+*What do I do next?* — the question a long session dissolves, and what the
+harness does to keep it answerable.
+
+## The problem
+
+At the end of a working session on one card, after hours of detours, the owner
+wrote:
+
+> Depois de tantas idas e vindas, a minha memória se perde e eu não sei o que
+> fazer na sequência. Sim, o harness me sugeriu fazer um handoff agora mas, e
+> depois? [...] Tenho que testá-lo manualmente? Ou tenho que executar um próximo
+> card? [...] O card nasceu em uma sessão anterior na qual ele foi priorizado
+> junto a vários outros. Quais são mesmo esses outros? Qual era mesmo a ordem?
+
+That is one feeling and **three distinct losses**:
+
+1. **The execution order doesn't survive the session that produced it.** A
+   planning moment prioritised several items together. That priority became
+   prose in a handoff and a line in a card description — but the list and its
+   order never existed as a consultable artifact. A tracker stores the *queue*
+   (the To Do column); it stores neither the *order* nor the *why*.
+2. **The end of a card points nowhere.** A card closes with a summary, a verdict
+   and a status. Nothing answers "and now?", so the two plausible answers —
+   *validate it by hand* and *pull the next one* — compete in silence.
+3. **A long session dissolves the thread.** Three rounds of proof gate, four
+   cards opened, two scope decisions, and the original objective is buried under
+   the trail of how you got here.
+
+**Why the existing pieces don't cover it:** `/common:handoff` and the wrap-up
+nudge save context and look *backwards* — great for resuming *this* line of
+work, mute about the queue that preceded it. `/common:recap` is explicitly
+retrospective (you asked / I delivered). `/board-flow:drain` runs a whole column
+in priority order, but it's all-or-nothing with no human stop. `/maestro:run` is
+the closest relative and solves the other half — but it was built for *parallel
+execution in worktrees*, which is far too much machinery for "I have six items
+and I'll work them one at a time, across different sessions."
+
+## The artifact
+
+One file: `.claude/programs/<nome>/plan.yaml`, `mode: single-track`, schema
+annotated in [`common/plan-schema.yaml`](../common/plan-schema.yaml).
+
+```yaml
+schema_version: 2
+mode: single-track
+program: ACME
+source: "Jira ACME · To Do, triaged 2026-07-28"
+items:
+  - id: ACME-1235                 # card key OR an anchor in the source ("P9 do BACKLOG")
+    title: "Block a bounce comment with no reason"
+    why: "first — unblocks 1237 and 1240, which touch the same hook"
+    status: pending               # pending | in_progress | done | blocked | dropped
+    blocked_by: []
+    human_pending: null
+```
+
+The order of `items` **is** the data. Three fields carry the three losses:
+
+| Field | The question it answers |
+|---|---|
+| the order of `items` | "which one was first, again?" |
+| `why` | "does this order still make sense?" — without it you re-prioritise from scratch |
+| `human_pending` | "do I still have to validate this by hand?" |
+
+`human_pending` is fed from the **Human validation route** of the Implementation
+Summary — a field that is already mandatory (the `summary-nulls-gate` hook
+blocks the comment without it) and was simply never aggregated anywhere.
+
+**A tracker is optional.** An item's `id` is a card key *or* an anchor in
+whatever source the work comes from. A repo whose demands live in `BACKLOG.md` —
+the `cepa` repo itself, which keeps its own plan at
+`.claude/programs/cepa/plan.yaml` — gets the order, the `why` and the human debt
+all the same. What it doesn't get is reconciliation, and the tooling says so
+rather than implying a verification that never happened.
+
+## The three moments
+
+The plan answers the question only if something asks it. Three moments do:
+
+| When | What answers | What it does |
+|---|---|---|
+| The order is being decided | [`/board-flow:triage`](commands.md) | Grooms a column by code evidence **and persists the order + the `why`** |
+| A card closes | `/board-flow:execute` · `/fix` · `/prove` | Close with **"And now?"** — the human route verbatim + the next unblocked item |
+| Mid-session, thread lost | [`/common:next`](commands.md) | Reconciles against the tracker (if any) and names **one** next step |
+
+### Writing it: `/board-flow:triage`
+
+Triage already read every card, gathered evidence, and routed the queue — it was
+simply emitting an *unordered* list and letting the ordering rationale die in the
+chat. It now proposes the To Do list **in execution order**, each item carrying
+the reason it sits where it sits, and writes the plan once you confirm.
+
+An order you merely approved still beats one that was never written down.
+
+Re-running triage **merges** rather than overwrites: `done` items keep their
+`human_pending`, cancelled cards become `dropped` (kept, so the plan still
+explains why they left). Under `--max`, the plan holds only the cards actually
+classified, and says so — a truncated plan must never read as the whole queue.
+
+### Reading it: `/common:next`
+
+It lives in `common`, not `board-flow`, because a plan doesn't require a tracker.
+
+It ends with **one** recommendation and its `why` — never a menu, since a list of
+equally-weighted options is precisely the state you're stuck in when you run it.
+Before answering it reconciles the plan against the tracker, because **the plan
+is a hypothesis, not a contract**: it records what was true when it was written.
+
+Every divergence is *named*, never absorbed — each one means something happened
+outside the plan, and a plan that silently absorbs reality is a plan that lies:
+
+| Plan says | Tracker says | Reading |
+|---|---|---|
+| `pending` | done | finished elsewhere → ask what its human validation route was, or that debt is lost |
+| `pending` | in progress | a live session may be on it → warn before starting it too |
+| `done` | in progress / to do | it bounced back → `pending` again, and probably the real next step |
+| item present | card gone / Won't Do | → `dropped`, with the reason |
+| — | in To Do, absent from plan | the plan is stale or truncated → **name these**; never fold them in as if prioritised |
+
+Cards on the board but absent from the plan are never appended: they were given
+no position and no rationale, and inventing one would forge exactly the decision
+this mechanism exists to preserve.
+
+With no tracker wired, the command skips reconciliation and says the statuses are
+self-reported. It does **not** substitute a guess: git proves a commit exists,
+never that an item is *done*, and inferring `done` from a commit message is the
+false confidence the done-confidence ladder exists to prevent.
+
+### Closing human debt
+
+A `human_pending` clears by becoming `null`, and **only the user clears it** —
+they alone know whether they actually ran the route. Never a green test, never a
+card status, never elapsed time. A list that closes itself is decoration, and the
+debt goes back to being invisible.
+
+## Relationship to the maestro
+
+Both read the same schema; neither plugin depends on the other.
+
+| | `single-track` | `parallel-waves` |
+|---|---|---|
+| Owner | board-flow / common | maestro |
+| Unit | one item at a time, across sessions | waves of slices forked into worktrees |
+| Extra fields | — | `surface`, `fork_after`, `acceptance_cmd`, `timeout_min`, … |
+| Floor | none | ≥4 demands (D7) |
+| Reader | `/common:next` | `/maestro:run` |
+
+Point a single-track plan at `/maestro:run` or `cepa-dor` and it refuses by
+**naming the right command**, instead of failing downstream with "no pending
+wave" — an error that says what went wrong but not what to do.
+
+Promoting single-track → a wave is deliberately manual: it requires declaring a
+disjoint surface and an executable acceptance per item, which is real work worth
+doing only against a real demand.
+
+### Schema versions
+
+**v2** made `mode` explicit and required. **v1** (waves only, no `mode`) is still
+read by every consumer, so plans already on disk need no migration; `mode:
+single-track` in a v1 plan is refused with an instruction to raise the version.
+
+The version exists because `mode` changes what the document *means*: a
+single-track plan has no `waves`. Without the number, a wave-only consumer can't
+say "I don't know how to read this" — it reads a missing `waves` as an empty plan
+and carries on.
+
+## Status
+
+The three pieces are built and guarded by `tests/test_fio_condutor.py`
+(prompt-contract assertions with perturbation proofs). **None has been exercised
+on a real board yet:** triage has never written a plan from live cards, and
+`next` has never reconciled against a live tracker. The tests lock the contract,
+not the behaviour in production — that distinction is tracked as an item in the
+`cepa` plan itself.
+
+Two questions are deliberately left open, to be decided with use rather than
+guessed: whether the plan should surface at `SessionStart` alongside the handoff,
+and who writes the plan in a repo with no tracker.
+
+## See also
+
+- [`common/plan-schema.yaml`](../common/plan-schema.yaml) — the annotated schema, both modes
+- [commands.md](commands.md) — `/common:next`, `/board-flow:triage`
+- [board-flow.md](board-flow.md) — the tracker half: config, Implementation Summary contract
+- [maestro.md](maestro.md) — the `parallel-waves` sibling
+- [handoff.md](handoff.md) — resuming *this* line of work (the plan handles the queue *around* it)

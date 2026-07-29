@@ -343,94 +343,29 @@ summary on a review-style transition, `atlassian-expert` refuses with
 re-delegate with the summary.` This is agent-level enforcement —
 hard-coded, can't be bypassed by command drift.
 
-## The execution plan (`mode: single-track`)
+## The execution plan
 
 Jira stores the **queue** — the To Do column — and neither the **order** you
-decided to work it in nor the **why** behind that order. Both used to live only
-in the chat that produced them, so a session boundary erased them. The symptom
-was a specific question, asked after hours of work with detours: *what do I do
-next — validate this by hand, or pull another card?*
+decided to work it in nor the **why** behind that order. `/board-flow:triage`
+now persists both into `.claude/programs/<project_key>/plan.yaml`, and
+`/common:next` reads them back.
 
-`/board-flow:triage` is where the order is actually decided, so it is where the
-order gets written down: `.claude/programs/<project_key>/plan.yaml`, one living
-plan per board, schema annotated in
-[`common/plan-schema.yaml`](../common/plan-schema.yaml).
+The mechanism, the schema and the reasoning live in
+**[execution-plan.md](execution-plan.md)** — it is not board-flow's, because a
+plan does not require a tracker.
 
-```yaml
-schema_version: 2
-mode: single-track
-program: ACME
-source: "Jira ACME · To Do, triaged 2026-07-28"
-items:
-  - id: ACME-1235
-    title: "Block a bounce comment with no reason"
-    why: "first — unblocks 1237 and 1240, which touch the same hook"
-    status: pending
-    blocked_by: []
-    human_pending: null
-```
+What board-flow contributes:
 
-Three fields carry the three losses:
-
-| Field | Answers |
-|---|---|
-| the order of `items` | "which one was first, again?" |
-| `why` | "does this order still make sense?" — without it you re-prioritise from scratch |
-| `human_pending` | "do I still have to validate this by hand?" |
-
-`human_pending` is fed from the **Human validation route** of the Implementation
-Summary — a field that is already mandatory (the `summary-nulls-gate` hook
-blocks the comment without it) and was simply never aggregated anywhere.
-
-**Same schema as the maestro, different mode.** `mode: parallel-waves` is the
-maestro's (waves of slices forked into worktrees, floor of ≥4 demands);
-`single-track` is one item at a time across sessions. Neither plugin depends on
-the other — both read the schema in `common`. Point a single-track plan at
-`/maestro:run` (or at `cepa-dor`) and it refuses by naming the right command,
-instead of failing downstream with "no pending wave".
-
-Schema **v2** is where `mode` became explicit and required. **v1** (waves only,
-no `mode`) is still read by every consumer, so plans already on disk need no
-migration — but `mode: single-track` in a v1 plan is an error, and the consumer
-tells you to raise the version rather than guessing what you meant.
-
-**The plan is a hypothesis, not a contract** — whoever executes an item
-re-validates it against the board's current state. Re-running triage merges into
-the plan rather than overwriting it: `done` items keep their `human_pending`,
-and cancelled cards become `dropped` so the plan still explains why they left.
-
-### Reading the plan: `/common:next`
-
-The plan answers the question only if something asks it. Three moments do:
-
-| When | What answers |
-|---|---|
-| A card closes | `execute` / `fix` / `prove` end with "And now?" |
-| Mid-session, thread lost | **`/common:next`** |
-| The order needs deciding | `/board-flow:triage` writes it |
-
-It lives in `common`, not here, because **a plan doesn't require a tracker**: an
-item's `id` is a card key or an anchor in whatever source the work comes from
-(`"P9 do BACKLOG"`). A repo with no Jira — the `cepa` repo itself — still gets
-the plan, the order and the `why`; it just gets an answer that says the statuses
-are self-reported. What `board-flow` contributes is the half only it can do:
-
-`/common:next` reconciles the plan against the live board before answering —
-a card marked `pending` may already be done, and one marked `done` may have
-bounced back. Every divergence is named rather than absorbed, because each one
-means something happened outside the plan, and a plan that silently absorbs
-reality is a plan that lies. Cards sitting in To Do but absent from the plan are
-reported, never folded in: they were never given a position or a rationale, and
-inventing one would forge the decision this whole mechanism exists to preserve.
-
-It ends with **one** recommendation and its `why` — never a menu, since a list
-of equally-weighted options is precisely the state you're stuck in when you run
-it. Read-only unless you pass `--sync`.
-
-**Closing human debt is the user's move alone.** A `human_pending` clears by
-becoming `null`, and only the person who ran the route can say it ran — never a
-green test, a card status, or elapsed time. A list that closes itself is
-decoration, and the debt goes back to being invisible.
+- **`/board-flow:triage` is the producer.** It is already the moment the order
+  gets decided, so it is where the order gets written down: the To Do list is
+  proposed *in execution order*, each item carrying the reason it sits where it
+  sits, merged into the existing plan rather than overwriting it.
+- **`/execute`, `/fix` and `/prove` close with "And now?"** — the card's `Human
+  validation route` verbatim plus the next unblocked item of the plan.
+- **The reconciliation half of `/common:next`.** With `board-flow.yaml` present,
+  it checks the plan against the live board before answering and names every
+  divergence. Without it, the answer still comes — from the plan alone, flagged
+  as self-reported.
 
 ## Composition rules
 

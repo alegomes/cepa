@@ -19,7 +19,11 @@ Guards:
     (`why`, `human_pending`, ordered `items`);
   - /board-flow:triage persists the ordered plan (loss 1);
   - execute/fix/prove close by pointing forward, surfacing the Human validation
-    route and the next plan item (loss 2).
+    route and the next plan item (loss 2);
+  - /common:next answers on demand (loss 3), lives in common because a plan does
+    not require a tracker, names ONE step, and never infers `done` from a commit;
+  - the canonical doc is docs/execution-plan.md — the mechanism belongs to the
+    plan, not to the tracker plugin — and docs/board-flow.md stayed a pointer.
 """
 
 import sys
@@ -47,7 +51,12 @@ def check(name, cond, detail=""):
 
 
 def read(p):
-    return p.read_text(encoding="utf-8")
+    """Arquivo ausente devolve vazio em vez de estourar.
+
+    Um arquivo sumido tem de derrubar as asserções QUE FALAM DELE, não abortar
+    a suíte no meio — senão a primeira remoção esconde todas as regressões
+    seguintes (foi o que a perturbação pegou, duas vezes)."""
+    return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
 def main():
@@ -113,9 +122,7 @@ def main():
     nxt_path = REPO / "common" / "commands" / "next.md"
     check("/common:next existe (mora em common — plano não exige tracker)",
           nxt_path.exists())
-    # sem retorno cedo, o read() estoura e as asserções de docs/manifest abaixo
-    # nunca rodam — um arquivo sumido esconderia as outras regressões
-    nxt = read(nxt_path) if nxt_path.exists() else ""
+    nxt = read(nxt_path)
 
     check("next lê o plano single-track",
           "plan.yaml" in nxt and "single-track" in nxt)
@@ -142,8 +149,23 @@ def main():
     # registrado onde o usuário encontra
     check("next está na tabela de comandos",
           "/common:next" in read(REPO / "docs" / "commands.md"))
-    check("next está documentado no board-flow.md",
-          "/common:next" in read(REPO / "docs" / "board-flow.md"))
+    # o doc canônico é o do mecanismo (common), não o do plugin de tracker —
+    # o board-flow.md guarda ponteiro + a metade que é dele, sem duplicar
+    doc = read(REPO / "docs" / "execution-plan.md")
+    check("existe doc canônico do mecanismo", bool(doc))
+    check("o doc nomeia as 3 perdas", doc.count("three distinct losses") == 1)
+    check("o doc registra que tracker é opcional",
+          "A tracker is optional" in doc)
+    check("o doc separa single-track de parallel-waves",
+          "single-track" in doc and "parallel-waves" in doc)
+    bf = read(REPO / "docs" / "board-flow.md")
+    check("board-flow.md aponta para o doc canônico",
+          "execution-plan.md" in bf)
+    check("board-flow.md não reintroduziu uma cópia do schema do plano",
+          "human_pending: null" not in bf,
+          "o doc do plugin voltou a duplicar o schema — front-door rival")
+    check("next está no índice do README",
+          "docs/execution-plan.md" in read(REPO / "README.md"))
     check("next está registrado no manifest do common",
           "/next (answers" in read(REPO / "common" / ".claude-plugin" / "plugin.json"))
     check("board-flow não reivindica mais o next",
