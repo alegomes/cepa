@@ -673,8 +673,8 @@ da Onda 4.
 
 ## Fio condutor: "e agora, o que eu faço?" entre sessões e entre cards
 
-**Status:** peças 1 e 3 CONSTRUÍDAS (2026-07-28, commits `8d752e3` + `21b73fa`);
-peça 2 (`/board-flow:next`) pendente · **Lar:** schema em `common`, produtor e
+**Status:** as 3 peças CONSTRUÍDAS (2026-07-28/29, commits `8d752e3` · `21b73fa`
+· `2e8b953` · `86416a4`) — **nenhuma validada em board real** · **Lar:** schema em `common`, produtor e
 consumidores em `board-flow`, `maestro` como consumidor irmão · **Origem:**
 relato do dono ao fim da sessão do WEGO-1958 (2026-07-28), depois de ~horas de
 execução com muitos desdobramentos.
@@ -689,10 +689,17 @@ execução com muitos desdobramentos.
 > ausência de `waves` como plano vazio. `/board-flow:triage` passou a
 > persistir a fila **ordenada** com o `why` por item, e `execute`/`fix`/`prove`
 > fecham com "And now?" — rota de validação humana + próximo item do plano.
-> Travado por `tests/test_fio_condutor.py` (27 asserções, prova de perturbação:
-> 16 RED). **Falta a peça 2**, `/board-flow:next`, que responde a pergunta
-> literal quando o fio se perde no meio da sessão (perda 3) em vez de só no fim
-> de um card.
+> `/board-flow:next` responde a pergunta sob demanda (perda 3), reconciliando o
+> plano contra o board vivo e nomeando **um** passo com o `why` — nunca um menu.
+> Travado por `tests/test_fio_condutor.py` (prova de perturbação em 3 cortes).
+>
+> **O que falta é uso, não código.** Nada disso rodou num board real: o
+> `/board-flow:triage` nunca escreveu um plano de verdade, e o `next` nunca
+> reconciliou contra Jira vivo. Os testes travam contrato de prompt, não
+> comportamento em produção. Primeira validação honesta = rodar `triage` num
+> board com fila real e ver se a ordem proposta sobrevive à revisão do dono.
+> Aberto de propósito, para decidir com uso: se o plano deve aparecer no
+> `SessionStart` ao lado do handoff, e se vale promover single-track → onda.
 
 ### O relato, na voz do dono
 
