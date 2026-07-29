@@ -11,7 +11,7 @@ Checagens (cada uma existe porque a falha correspondente já custou uma onda):
   - schema_version em {1, 2} (recusa versão desconhecida). v1 = legado, só
     ondas; v2 = `mode` explícito e obrigatório
   - mode == parallel-waves (em v1, ausente = parallel-waves); um plano
-    single-track é recusado apontando /board-flow:triage e /board-flow:next —
+    single-track é recusado apontando /board-flow:triage e /common:next —
     ver common/plan-schema.yaml
   - programa com >= 4 demandas (D7)
   - superfície declarada e DISJUNTA dos demais slices da onda — globs
@@ -161,8 +161,9 @@ def main() -> int:
         print("✗ este é um plano single-track (um item por vez, sem fork) — "
               "cepa-dor só avalia slices de onda.\n"
               "  O gate de prontidão do single-track é por item, no momento em "
-              "que o item vira card: use /board-flow:triage.\n"
-              "  Para saber o próximo passo deste plano: /board-flow:next")
+              "que o item entra na fila: /board-flow:triage onde há tracker; "
+              "sem tracker, a revisão do dono ao aprovar a ordem.\n"
+              "  Para saber o próximo passo deste plano: /common:next")
         return 2
     if mode != "parallel-waves":
         print(f"✗ mode desconhecido ({mode!r}) — "

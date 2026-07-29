@@ -399,17 +399,23 @@ re-validates it against the board's current state. Re-running triage merges into
 the plan rather than overwriting it: `done` items keep their `human_pending`,
 and cancelled cards become `dropped` so the plan still explains why they left.
 
-### Reading the plan: `/board-flow:next`
+### Reading the plan: `/common:next`
 
 The plan answers the question only if something asks it. Three moments do:
 
 | When | What answers |
 |---|---|
 | A card closes | `execute` / `fix` / `prove` end with "And now?" |
-| Mid-session, thread lost | **`/board-flow:next`** |
+| Mid-session, thread lost | **`/common:next`** |
 | The order needs deciding | `/board-flow:triage` writes it |
 
-`/board-flow:next` reconciles the plan against the live board before answering —
+It lives in `common`, not here, because **a plan doesn't require a tracker**: an
+item's `id` is a card key or an anchor in whatever source the work comes from
+(`"P9 do BACKLOG"`). A repo with no Jira — the `cepa` repo itself — still gets
+the plan, the order and the `why`; it just gets an answer that says the statuses
+are self-reported. What `board-flow` contributes is the half only it can do:
+
+`/common:next` reconciles the plan against the live board before answering —
 a card marked `pending` may already be done, and one marked `done` may have
 bounced back. Every divergence is named rather than absorbed, because each one
 means something happened outside the plan, and a plan that silently absorbs

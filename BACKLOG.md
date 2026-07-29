@@ -689,7 +689,7 @@ execução com muitos desdobramentos.
 > ausência de `waves` como plano vazio. `/board-flow:triage` passou a
 > persistir a fila **ordenada** com o `why` por item, e `execute`/`fix`/`prove`
 > fecham com "And now?" — rota de validação humana + próximo item do plano.
-> `/board-flow:next` responde a pergunta sob demanda (perda 3), reconciliando o
+> `/common:next` responde a pergunta sob demanda (perda 3), reconciliando o
 > plano contra o board vivo e nomeando **um** passo com o `why` — nunca um menu.
 > Travado por `tests/test_fio_condutor.py` (prova de perturbação em 3 cortes).
 >
@@ -764,7 +764,7 @@ Três peças que podem ser independentes:
    sessão. Candidato natural a virar o que o `SessionStart` mostra, ao lado do
    handoff.
 
-2. **`/board-flow:next`** — comando que responde a pergunta literal: dado o estado
+2. **`/common:next`** — comando que responde a pergunta literal: dado o estado
    do board e do plano, **qual é o próximo passo e por quê**. Precisa distinguir
    os dois tipos de "próximo": *ação humana pendente* (validar à mão, rotacionar
    segredo, aprovar PR) e *próximo card*. A matéria-prima do primeiro tipo já é

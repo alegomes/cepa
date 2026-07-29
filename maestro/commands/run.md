@@ -31,7 +31,7 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
    `schema_version` 1 (legado, só ondas) e 2 (`mode` explícito); recuse
    qualquer outra. Confira `mode`: ausente (só em v1) ou `parallel-waves` segue o
    fluxo; **`single-track` não é executável aqui** — pare e diga que aquele
-   plano é de um item por vez (`/board-flow:next` responde qual é o próximo),
+   plano é de um item por vez (`/common:next` responde qual é o próximo),
    e que promovê-lo a onda exige declarar superfície e aceite por item, com
    `/maestro:program-plan`. Qualquer outro valor é erro (ver
    `common/plan-schema.yaml`). Selecione a onda alvo (`--wave` ou a primeira

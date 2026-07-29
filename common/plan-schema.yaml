@@ -35,7 +35,7 @@ mode: single-track              # single-track | parallel-waves
 # ═══════════════════════════════════════════════════════════════════════════
 # Existe porque a ordem de execução decidida num momento de planejamento
 # virava prosa no handoff e evaporava: o Jira guarda a FILA (To Do) e não a
-# ORDEM nem o PORQUÊ dela. Consumido por /board-flow:next.
+# ORDEM nem o PORQUÊ dela. Consumido por /common:next.
 #
 # Não tem `waves`, `surface`, `fork_after` nem `timeout_min`: nada aqui roda em
 # paralelo, então não há superfície a disjuntar nem sessão a cronometrar.
@@ -67,7 +67,7 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # "tenho que testar à mão ou puxo o próximo?".
                                 # FECHAR a pendência = trocar o texto por null.
                                 # Só o humano fecha: ele é o único que sabe se
-                                # rodou a rota. /board-flow:next lista as
+                                # rodou a rota. /common:next lista as
                                 # abertas e oferece fechá-las; agente nenhum
                                 # fecha por conta própria, senão a lista vira
                                 # decoração e a dívida volta a sumir.

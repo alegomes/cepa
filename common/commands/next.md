@@ -1,9 +1,9 @@
 ---
-description: Responde "e agora, o que eu faço?" a qualquer momento — lê o plano de execução single-track (.claude/programs/<project_key>/plan.yaml), reconcilia contra o estado vivo do board e nomeia UM próximo passo com o porquê. Distingue os dois tipos de próximo que se confundem em silêncio: ação humana pendente (validar à mão, aprovar PR, rotacionar segredo) e próximo card. Read-only por default; --sync grava a reconciliação no plano.
+description: Responde "e agora, o que eu faço?" a qualquer momento — lê o plano de execução single-track (.claude/programs/<nome>/plan.yaml) e nomeia UM próximo passo com o porquê registrado na priorização. Distingue os dois tipos de próximo que se confundem em silêncio: ação humana pendente (validar à mão, aprovar PR, rotacionar segredo) e próximo item. Não exige Jira — com board-flow.yaml presente, reconcilia contra o board vivo; sem, responde do plano e diz que o status é auto-declarado. Read-only por default; --sync grava a reconciliação.
 argument-hint: [--plan NOME] [--offline] [--sync]
 ---
 
-# /board-flow:next
+# /common:next
 
 ## Purpose
 
@@ -21,17 +21,23 @@ Two different questions hide inside "what next", and they compete in silence:
 
 - **What is pending on ME** — validate a fix by hand, approve a PR, rotate a
   secret, cut a release. Nobody else can do it, and it accumulates invisibly.
-- **What is the next card** — the next unblocked item of the plan.
+- **What is the next item** — the next unblocked item of the plan.
 
 This command separates them, then names **one** recommended step.
 
+**A tracker is optional.** The plan is a file, not a board projection: an item's
+`id` is a card key *or* an anchor in whatever source the work comes from
+(`"P9 do BACKLOG"`, an ADR, an issue number). Where a tracker exists and
+`board-flow` is installed, this command reconciles against it; where it doesn't
+— a repo whose demands live in `BACKLOG.md`, like this one — it answers from the
+plan and says plainly that the statuses are self-reported.
+
 ## Variables
 
-- `--plan NOME` — plan to read. Default: `.claude/programs/<project_key>/plan.yaml`,
-  with `project_key` from `board-flow.yaml`.
-- `--offline` — skip the Jira round-trip; answer from the plan file alone. Use
-  when you want an instant answer or have no board access. Say in the report
-  that the answer was not reconciled against the board.
+- `--plan NOME` — plan to read, i.e. `.claude/programs/NOME/plan.yaml`.
+- `--offline` — skip the tracker round-trip even when one is configured. Use for
+  an instant answer or with no network. Say in the report that the answer wasn't
+  reconciled.
 - `--sync` — write the reconciliation back into the plan (step 4). Without it
   the command is 100% read-only and only *reports* the divergences.
 
@@ -39,17 +45,28 @@ This command separates them, then names **one** recommended step.
 
 ### 1. Locate the plan
 
-Read `board-flow.yaml` at project root for `defaults.project_key` (else legacy
-`.claude/board-flow.lifecycle.yaml`). Resolve the plan path.
+In order, first hit wins:
 
-**No plan file.** Don't guess an order from the board's default sort — an order
-nobody chose is worse than an admitted absence, because it reads as a decision.
-Report: no execution plan for this board, the queue exists in Jira but its order
-and rationale don't; run `/board-flow:triage` to create one. Then, as a
-courtesy, list the `to_do` cards **as an unordered set**, labelled as such.
+1. `--plan NOME` → `.claude/programs/NOME/plan.yaml`.
+2. `board-flow.yaml` at project root (else legacy
+   `.claude/board-flow.lifecycle.yaml`) → `defaults.project_key` →
+   `.claude/programs/<project_key>/plan.yaml`, if it exists.
+3. Exactly one `.claude/programs/*/plan.yaml` with `mode: single-track` → that one.
+4. More than one → list them and ask which; don't pick for the user.
 
-**No `board-flow.yaml`.** Say the repo isn't wired to a board and stop — this
-command reads a board's plan; it isn't a generic to-do list.
+**No plan file at all.** Don't manufacture an order — an order nobody chose is
+worse than an admitted absence, because it reads as a decision. Say there is no
+execution plan, then name the cheapest way to get one **for this repo**:
+
+- tracker wired (`board-flow.yaml` present) → `/board-flow:triage`, which grooms
+  the column and writes the plan from the cards it just classified;
+- no tracker → the plan is a short file and this session can write it: offer to
+  build it from the repo's own source of demands (`BACKLOG.md` or whatever the
+  user names), asking for the order and the `why` per item. Write nothing until
+  the user confirms the order.
+
+Then, as a courtesy, list whatever candidates you can see (the `to_do` cards, or
+the source's open items) **as an unordered set**, labelled as such.
 
 ### 2. Read the plan
 
@@ -65,10 +82,20 @@ Collect, in plan order:
 - **blocked items ahead of the candidate** — each with what blocks it, so a
   stalled top-of-queue is visible instead of silently skipped.
 
-### 3. Reconcile against the board (skip if `--offline`)
+### 3. Reconcile against the tracker (only if one is wired; skip if `--offline`)
 
-**The plan is a hypothesis, not a contract.** It records what was true when
-triage ran; the board is what is true now. Delegate to `atlassian-expert`:
+**The plan is a hypothesis, not a contract.** It records what was true when it
+was written; the tracker is what is true now.
+
+**No tracker wired** (no `board-flow.yaml`, or `board-flow` not installed): skip
+this step and **say so in the report** — the statuses are self-reported by the
+plan, nobody verified them. That is a weaker answer than a reconciled one, and
+the user is entitled to know which of the two they got. Do not substitute a
+guess: git history proves a commit exists, never that an item is *done*, and
+inferring `done` from a commit message is exactly the false confidence the
+`done`-confidence ladder exists to prevent.
+
+With a tracker, delegate to `atlassian-expert`:
 
 > Command: next
 >
@@ -125,8 +152,9 @@ Default precedence, to be overridden with a stated reason:
    with it.
 
 If everything is `done` and no human debt is open, say the plan is finished and
-point at `/board-flow:triage` for the next round. Do not manufacture a next step
-from an empty plan.
+name how a next round gets planned (`/board-flow:triage` with a tracker;
+otherwise offer to write the next plan from the repo's source of demands). Do
+not manufacture a next step from an empty plan.
 
 ## Report
 
@@ -149,6 +177,22 @@ Bloqueado: nenhum
   porquê. /board-flow:triage é quem os coloca.
 ```
 
+Without a tracker the shape is the same, minus the divergence block, plus one
+honest line about what wasn't checked:
+
+```
+Próximo passo: P12 — "produtor de plano sem tracker"
+  porque: sem ele, um repo como este só ganha plano se alguém pedir na mão
+
+Pendente com você (1):
+  • P9 — rodar bin/install.sh --clean e reiniciar; nada está live até isso
+
+Fila depois dele: P14 (depende de uso, não de código)
+Bloqueado: nenhum
+ℹ Sem tracker neste repo — os status acima são os do plano, auto-declarados.
+  Ninguém conferiu.
+```
+
 Rules for the report:
 
 - **Exactly one recommendation**, with its `why` from the plan — never a menu of
@@ -158,14 +202,18 @@ Rules for the report:
   answer; silence is the ambiguity that started all this.
 - **Divergences are stated, never absorbed.** If the plan and the board disagree,
   the report says so before it says what to do.
-- Under `--offline`, say the answer wasn't reconciled against the board.
+- **Say which kind of answer this is.** Reconciled against a tracker, or read
+  from a plan nobody verified — under `--offline` or with no tracker wired, that
+  line is not optional.
 
 ## Constraints
 
-- **Read-only unless `--sync`.** No Jira write ever — this command reports, it
-  doesn't transition. `atlassian-expert` is used read-only.
-- **Never invents an order.** Absent a plan, or for cards outside it, the honest
-  answer is "these have no position yet" plus `/board-flow:triage`.
+- **Read-only unless `--sync`.** No tracker write ever — this command reports,
+  it doesn't transition. `atlassian-expert`, when used at all, is read-only.
+- **A tracker is optional; a plan is not.** With no `board-flow.yaml` the command
+  still works from the plan file — it just says the statuses are self-reported.
+- **Never invents an order.** Absent a plan, or for items outside it, the honest
+  answer is "these have no position yet" plus the way to give them one.
 - **Doesn't execute anything.** It names the next step; `/board-flow:execute`,
-  `/fix` and `/drain` do the work.
+  `/fix` and `/drain` do the work where a tracker exists.
 - **Refuses a parallel-waves plan** — that's `/maestro:run`'s document.

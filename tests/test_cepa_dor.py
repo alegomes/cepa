@@ -206,8 +206,8 @@ def main():
         # o que a perturbação pegou. Casar pela orientação específica.
         check("plano single-track é recusado pelo cepa-dor",
               r.returncode == 2 and "um item por vez" in r.stdout, r.stdout)
-        check("recusa do single-track aponta /board-flow:next",
-              "/board-flow:next" in r.stdout, r.stdout)
+        check("recusa do single-track aponta /common:next",
+              "/common:next" in r.stdout, r.stdout)
 
         # valor inválido não passa em silêncio como se fosse onda
         r = run_dor("schema_version: 2\nmode: talvez\nprogram: t\n"

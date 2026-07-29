@@ -244,7 +244,7 @@ A single summary:
 - **→ Won't Do:** list of keys (or "none — none confirmed")
 - **Stayed (needs-refinement):** list of keys
 - **Remaining in column (not classified this run):** count, if `--max` was hit
-- **Next steps:** name the *first item of the plan* by key and title — not a generic pointer. Then: "Run `/board-flow:prove-drain` to prove the cards just moved to In Review (triage routed them by evidence, it did not prove them). Run `/board-flow:drain` to build the To Do cards in one go, or work the plan one card at a time and use `/board-flow:next` when you lose the thread." If `--dry-run`, note that nothing was written — **including the plan**.
+- **Next steps:** name the *first item of the plan* by key and title — not a generic pointer. Then: "Run `/board-flow:prove-drain` to prove the cards just moved to In Review (triage routed them by evidence, it did not prove them). Run `/board-flow:drain` to build the To Do cards in one go, or work the plan one card at a time and use `/common:next` when you lose the thread." If `--dry-run`, note that nothing was written — **including the plan**.
 
 ## Constraints
 

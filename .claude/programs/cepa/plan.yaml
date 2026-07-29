@@ -1,0 +1,81 @@
+# plan.yaml — o próprio cepa, em modo single-track.
+#
+# Primeiro uso real do mecanismo, e de propósito num repo SEM Jira: se o plano
+# só funcionasse com tracker, o repo onde a dor foi sentida não poderia usá-lo.
+# Os status aqui são auto-declarados — não há board conferindo. /common:next
+# diz isso ao responder, em vez de fingir que verificou.
+#
+# Fonte das demandas: BACKLOG.md e o que ficou aberto na sessão de 28-29/07.
+
+schema_version: 2
+mode: single-track
+program: cepa
+source: "BACKLOG.md + sessão 2026-07-28/29 (fio condutor)"
+
+items:
+  - id: "instalar-leva-fio-condutor"
+    title: "bin/install.sh --clean + restart, e rodar /common:doctor"
+    why: >-
+      primeiro de tudo porque NADA desta leva está live — o cache serve common
+      0.19.0 / board-flow 0.8.1 / maestro 0.3.0 contra 0.21.0 / 0.11.0 / 0.4.0
+      no repo. Todo item abaixo depende de o harness instalado ser este.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "validar-fio-condutor-em-board-real"
+    title: "Rodar /board-flow:triage num board com fila real e ver a ordem sobreviver à revisão"
+    why: >-
+      a primeira validação honesta das 3 peças. Os testes travam contrato de
+      prompt, não comportamento: o triage nunca escreveu um plano de verdade e
+      o next nunca reconciliou contra Jira vivo. Antes disto, "pronto" é
+      code-exists (L0 da escada de confiança), não funciona.
+    status: pending
+    blocked_by: ["instalar-leva-fio-condutor"]
+    human_pending: null
+
+  - id: "produtor-de-plano-sem-tracker"
+    title: "Decidir quem escreve o plano single-track num repo sem Jira"
+    why: >-
+      registrado como ITEM, e não como parágrafo no BACKLOG, porque o receio do
+      dono era exatamente este: adiar e esquecer — a falha que esta iniciativa
+      inteira existe para atacar. Fica DEPOIS da validação de propósito: são
+      três desenhos plausíveis (o agente escreve sob pedido; program-plan
+      --single-track, que arrasta superfície/fork/cepa-dor junto; ou um
+      /common:plan novo) e nenhum uso real ainda para escolher entre eles.
+      Gatilho para promover: a segunda vez que pedir o plano na mão incomodar.
+    status: pending
+    blocked_by: ["validar-fio-condutor-em-board-real"]
+    human_pending: null
+
+  - id: "stale-e-reactor-no-wego"
+    title: "Investigar os 5 bloqueios STALE + 86 maven_reactor_block do wego-assinatura-backend"
+    why: >-
+      maior sinal isolado da telemetria (28/07): o reactor_block é 20% de todos
+      os eventos do mês e provavelmente é a mesma causa dos STALE vista de outro
+      ângulo. Independente das peças acima — pode furar a fila se um dia de
+      trabalho no wego travar de novo.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "proof-gate-nunca-disse-proven"
+    title: "Re-exercitar o proof gate depois do fix de path-lock out-of-root"
+    why: >-
+      7 vereditos no mês, todos needs-human ou unproven, nenhum PROVEN — padrão
+      consistente com o fix de path-lock que existe no repo mas nunca foi
+      re-exercitado. Um gate caro que nunca conclui é pior que gate nenhum,
+      porque consome orçamento e não fecha card.
+    status: pending
+    blocked_by: ["instalar-leva-fio-condutor"]
+    human_pending: null
+
+  - id: "onboarding-maestro-blocos-1-3"
+    title: "Retomar a sessão de onboarding do Maestro (blocos 1-3)"
+    why: >-
+      pedidos em 23/07 e 27/07, mas o que ficou entendido não foi registrado em
+      lugar nenhum — este item existe para a dúvida não se perder de novo.
+      Antes de retomar, confirmar com o dono onde parou, em vez de repetir.
+    status: pending
+    blocked_by: []
+    human_pending: null

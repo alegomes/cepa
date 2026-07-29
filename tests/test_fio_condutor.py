@@ -109,9 +109,10 @@ def main():
         check(f"{cmd}: sem plano, não inventa ordem",
               "/board-flow:triage" in txt)
 
-    # ── /board-flow:next: a pergunta respondida sob demanda (loss 3) ────────
-    nxt_path = REPO / "board-flow" / "commands" / "next.md"
-    check("/board-flow:next existe", nxt_path.exists())
+    # ── /common:next: a pergunta respondida sob demanda (loss 3) ────────
+    nxt_path = REPO / "common" / "commands" / "next.md"
+    check("/common:next existe (mora em common — plano não exige tracker)",
+          nxt_path.exists())
     # sem retorno cedo, o read() estoura e as asserções de docs/manifest abaixo
     # nunca rodam — um arquivo sumido esconderia as outras regressões
     nxt = read(nxt_path) if nxt_path.exists() else ""
@@ -140,12 +141,26 @@ def main():
 
     # registrado onde o usuário encontra
     check("next está na tabela de comandos",
-          "/board-flow:next" in read(REPO / "docs" / "commands.md"))
+          "/common:next" in read(REPO / "docs" / "commands.md"))
     check("next está documentado no board-flow.md",
-          "/board-flow:next" in read(REPO / "docs" / "board-flow.md"))
-    manifest = read(REPO / "board-flow" / ".claude-plugin" / "plugin.json")
-    check("next está registrado no manifest do board-flow",
-          "advance, next" in manifest)
+          "/common:next" in read(REPO / "docs" / "board-flow.md"))
+    check("next está registrado no manifest do common",
+          "/next (answers" in read(REPO / "common" / ".claude-plugin" / "plugin.json"))
+    check("board-flow não reivindica mais o next",
+          "advance, next" not in read(REPO / "board-flow" / ".claude-plugin" / "plugin.json"))
+
+    # o furo que o dono achou: um repo sem Jira (como o cepa) tem de conseguir usar
+    # a frase "A tracker is optional" aparece 2x (Purpose e Constraints) — casar
+    # a solta deixaria a asserção passar com uma das duas removida, que foi o que
+    # a perturbação pegou. Cada uma é ancorada no seu contexto.
+    check("next declara no Purpose que tracker é opcional",
+          "**A tracker is optional.** The plan is a file" in nxt)
+    check("a constraint reafirma tracker opcional, plano não",
+          "A tracker is optional; a plan is not." in nxt)
+    check("sem tracker, o status é declaradamente auto-declarado",
+          "self-reported" in nxt)
+    check("next não infere `done` de commit (escada de confiança)",
+          "never that an item is *done*" in nxt)
 
     print()
     if FAILURES:
