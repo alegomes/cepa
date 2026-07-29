@@ -109,6 +109,44 @@ def main():
         check(f"{cmd}: sem plano, não inventa ordem",
               "/board-flow:triage" in txt)
 
+    # ── /board-flow:next: a pergunta respondida sob demanda (loss 3) ────────
+    nxt_path = REPO / "board-flow" / "commands" / "next.md"
+    check("/board-flow:next existe", nxt_path.exists())
+    # sem retorno cedo, o read() estoura e as asserções de docs/manifest abaixo
+    # nunca rodam — um arquivo sumido esconderia as outras regressões
+    nxt = read(nxt_path) if nxt_path.exists() else ""
+
+    check("next lê o plano single-track",
+          "plan.yaml" in nxt and "single-track" in nxt)
+    check("next separa os DOIS tipos de próximo",
+          "pending human action" in nxt.lower() or "ação humana" in nxt.lower())
+    check("next trata o plano como hipótese, não contrato",
+          "The plan is a hypothesis, not a contract" in nxt)
+    check("next declara divergência em vez de absorvê-la",
+          "Divergences are stated, never absorbed" in nxt)
+    check("next nomeia UM passo, não um menu",
+          "Exactly one recommendation" in nxt)
+    check("next não inventa ordem sem plano",
+          "Never invents an order" in nxt and "/board-flow:triage" in nxt)
+    check("next é read-only sem --sync",
+          "Read-only unless `--sync`" in nxt)
+    check("next recusa plano de ondas (é do maestro)",
+          "parallel-waves" in nxt and "/maestro:run" in nxt)
+    # só o humano fecha a dívida — senão a lista vira decoração
+    check("só o usuário fecha um human_pending",
+          "only the user clears it" in nxt)
+    check("o schema registra que fechar = null, e só o humano fecha",
+          "Só o humano fecha" in schema_txt)
+
+    # registrado onde o usuário encontra
+    check("next está na tabela de comandos",
+          "/board-flow:next" in read(REPO / "docs" / "commands.md"))
+    check("next está documentado no board-flow.md",
+          "/board-flow:next" in read(REPO / "docs" / "board-flow.md"))
+    manifest = read(REPO / "board-flow" / ".claude-plugin" / "plugin.json")
+    check("next está registrado no manifest do board-flow",
+          "advance, next" in manifest)
+
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")

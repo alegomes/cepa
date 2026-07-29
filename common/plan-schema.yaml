@@ -65,6 +65,12 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # Um item com human_pending aberto NÃO some da
                                 # vista quando vira `done` — é o que responde
                                 # "tenho que testar à mão ou puxo o próximo?".
+                                # FECHAR a pendência = trocar o texto por null.
+                                # Só o humano fecha: ele é o único que sabe se
+                                # rodou a rota. /board-flow:next lista as
+                                # abertas e oferece fechá-las; agente nenhum
+                                # fecha por conta própria, senão a lista vira
+                                # decoração e a dívida volta a sumir.
 
   - id: WEGO-1962
     title: "Agregar rota de validação humana"

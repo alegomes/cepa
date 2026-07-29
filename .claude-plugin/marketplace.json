@@ -1,6 +1,6 @@
 {
   "name": "cepa",
-  "description": "Cepa — a Claude Code agent organization that builds software with a team and proves its own work. Pick a build team (build-solo / build-team / build-hex); add lifecycle + workflow layers (discovery, design, docs, board-flow, review-gate) on the shared mindset-skills + gates substrate (common). Book-writing and git-history analysis live in the separate cepa-labs marketplace. Adapted from indydev Dan's lead-agents pattern.",
+  "description": "Cepa \u2014 a Claude Code agent organization that builds software with a team and proves its own work. Pick a build team (build-solo / build-team / build-hex); add lifecycle + workflow layers (discovery, design, docs, board-flow, review-gate) on the shared mindset-skills + gates substrate (common). Book-writing and git-history analysis live in the separate cepa-labs marketplace. Adapted from indydev Dan's lead-agents pattern.",
   "owner": {
     "name": "alegomes"
   },
@@ -10,70 +10,124 @@
       "source": "./common",
       "description": "Shared mindset skills required by the topology plugins (mental-model, active-listener, zero-micromanagement, conversational-response, till-done).",
       "version": "0.3.0",
-      "tags": ["agents", "skills", "shared"]
+      "tags": [
+        "agents",
+        "skills",
+        "shared"
+      ]
     },
     {
       "name": "build-team",
       "source": "./build-team",
-      "description": "Multi-team agent topology — orchestrator + 3 leads + 6 workers, with path-lock hook. Requires common@cepa.",
+      "description": "Multi-team agent topology \u2014 orchestrator + 3 leads + 6 workers, with path-lock hook. Requires common@cepa.",
       "version": "0.2.0",
-      "tags": ["agents", "orchestration", "build-team"]
+      "tags": [
+        "agents",
+        "orchestration",
+        "build-team"
+      ]
     },
     {
       "name": "build-solo",
       "source": "./build-solo",
-      "description": "Lightweight 2-agent topology — one dev, one reviewer, no leads. For small tweaks where build-team orchestration overhead isn't worth it. Requires common@cepa.",
+      "description": "Lightweight 2-agent topology \u2014 one dev, one reviewer, no leads. For small tweaks where build-team orchestration overhead isn't worth it. Requires common@cepa.",
       "version": "0.1.0",
-      "tags": ["agents", "pair-programming", "lightweight"]
+      "tags": [
+        "agents",
+        "pair-programming",
+        "lightweight"
+      ]
     },
     {
       "name": "build-hex",
       "source": "./build-hex",
-      "description": "Hexagonal-architecture backend topology — 14 agents (3 teams: planning, engineering, validation + a standalone proof-reviewer) with a per-Task quality loop (qa → refactor-advisor → code-reviewer). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. Requires common@cepa. Pair with board-flow@cepa for Jira lifecycle.",
+      "description": "Hexagonal-architecture backend topology \u2014 14 agents (3 teams: planning, engineering, validation + a standalone proof-reviewer) with a per-Task quality loop (qa \u2192 refactor-advisor \u2192 code-reviewer). Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. Requires common@cepa. Pair with board-flow@cepa for Jira lifecycle.",
       "version": "0.2.0",
-      "tags": ["agents", "hexagonal", "java", "quarkus", "backend"]
+      "tags": [
+        "agents",
+        "hexagonal",
+        "java",
+        "quarkus",
+        "backend"
+      ]
     },
     {
       "name": "discovery",
       "source": "./discovery",
-      "description": "Continuous product-discovery topology — 6 agents (discovery-lead + opportunity-framer + user-researcher + assumption-tester + evidence-auditor + epic-briefer) for translating raw signals into validated opportunities. Path-lock keyed to docs/discovery/**. Pair with board-flow@cepa for board lifecycle, and with build-hex or build-team for delivery handoff. Requires common@cepa.",
+      "description": "Continuous product-discovery topology \u2014 6 agents (discovery-lead + opportunity-framer + user-researcher + assumption-tester + evidence-auditor + epic-briefer) for translating raw signals into validated opportunities. Path-lock keyed to docs/discovery/**. Pair with board-flow@cepa for board lifecycle, and with build-hex or build-team for delivery handoff. Requires common@cepa.",
       "version": "0.1.0",
-      "tags": ["agents", "discovery", "product", "research", "validation"]
+      "tags": [
+        "agents",
+        "discovery",
+        "product",
+        "research",
+        "validation"
+      ]
     },
     {
       "name": "board-flow",
       "source": "./board-flow",
-      "description": "Adds atlassian-expert worker plus Jira-aware slash commands (capture, plan-track-build-validate, execute, drain, advance) on top of any topology that ships planning-lead/engineering-lead/validation-lead OR declares a custom lifecycle in .claude/board-flow.lifecycle.yaml (used by /advance). Tested with build-hex, build-team, and discovery. Won't work with build-solo for the lead-based commands. Requires common@cepa.",
+      "description": "Adds atlassian-expert worker plus Jira-aware slash commands (configure, capture, plan-track-build-validate, execute, fix, drain, triage, prove, prove-drain, advance, next) on top of any topology that ships planning-lead/engineering-lead/validation-lead OR declares a custom lifecycle in board-flow.yaml at project root (used by /advance). /triage grooms a backlog column by code evidence and persists the execution order + the why behind it into .claude/programs/<project_key>/plan.yaml (single-track mode of common/plan-schema.yaml); /next reads that plan, reconciles it against the live board and names one next step, separating pending human action from the next card; /prove + /prove-drain run the change-driven proof gate over the Review column. Tested with build-hex, build-team, and discovery. Won't work with build-solo for the lead-based commands. Requires common@cepa.",
       "version": "0.2.0",
-      "tags": ["agents", "jira", "atlassian", "tracking", "workflow"]
+      "tags": [
+        "agents",
+        "jira",
+        "atlassian",
+        "tracking",
+        "workflow"
+      ]
     },
     {
       "name": "docs",
       "source": "./docs-topology",
-      "description": "Documentation/onboarding topology — orchestrator + docs-lead + 8 workers that sweep an existing project and produce a Diátaxis doc tree (tutorial / how-to / reference / explanation) for handing it off to engineers who weren't there for the decisions. Central discipline: separate the HOW (extractable from code) from the WHY (elicitable — owner/commit/ADR/Jira) and NEVER invent rationale — no source becomes an owner question, not a guess. Five owner-checkpointed phases: /docs:survey (read-only 4-front archaeology → gap-report), /docs:declutter (archive process-exhaust, demote rival front-doors), /docs:checkpoint (owner answers the WHY-gaps), /docs:author (write the grounded tree, Tutorial last), /docs:finalize (whole-tree consistency review). Path-lock keyed to docs/** + docs/_survey/. Standalone. Requires common@cepa. Pair with board-flow@cepa to open cards from the checkpoint.",
+      "description": "Documentation/onboarding topology \u2014 orchestrator + docs-lead + 8 workers that sweep an existing project and produce a Di\u00e1taxis doc tree (tutorial / how-to / reference / explanation) for handing it off to engineers who weren't there for the decisions. Central discipline: separate the HOW (extractable from code) from the WHY (elicitable \u2014 owner/commit/ADR/Jira) and NEVER invent rationale \u2014 no source becomes an owner question, not a guess. Five owner-checkpointed phases: /docs:survey (read-only 4-front archaeology \u2192 gap-report), /docs:declutter (archive process-exhaust, demote rival front-doors), /docs:checkpoint (owner answers the WHY-gaps), /docs:author (write the grounded tree, Tutorial last), /docs:finalize (whole-tree consistency review). Path-lock keyed to docs/** + docs/_survey/. Standalone. Requires common@cepa. Pair with board-flow@cepa to open cards from the checkpoint.",
       "version": "0.1.0",
-      "tags": ["agents", "documentation", "onboarding", "diataxis", "technical-writing"]
+      "tags": [
+        "agents",
+        "documentation",
+        "onboarding",
+        "diataxis",
+        "technical-writing"
+      ]
     },
     {
       "name": "design",
       "source": "./design",
-      "description": "Product-design topology — design-lead + 5 workers (ux-architect, visual-designer, design-system-keeper, prototyper, design-critic) that turn a feature brief into a build-ready design spec engineering can implement from. Sits between discovery and engineering: owns the UX + visual design, not the build. Path-lock keyed to docs/design/**; produces artifacts, never code. Prototyper is the sole holder of Gamma/Canva MCP tools. Two entry points: /design:explore-critique-spec (linear) and a per-column lifecycle via board-flow. Requires common@cepa. Pair with discovery for the upstream brief and build-team/build-hex for the downstream build.",
+      "description": "Product-design topology \u2014 design-lead + 5 workers (ux-architect, visual-designer, design-system-keeper, prototyper, design-critic) that turn a feature brief into a build-ready design spec engineering can implement from. Sits between discovery and engineering: owns the UX + visual design, not the build. Path-lock keyed to docs/design/**; produces artifacts, never code. Prototyper is the sole holder of Gamma/Canva MCP tools. Two entry points: /design:explore-critique-spec (linear) and a per-column lifecycle via board-flow. Requires common@cepa. Pair with discovery for the upstream brief and build-team/build-hex for the downstream build.",
       "version": "0.1.0",
-      "tags": ["agents", "design", "ux", "visual-design", "prototyping"]
+      "tags": [
+        "agents",
+        "design",
+        "ux",
+        "visual-design",
+        "prototyping"
+      ]
     },
     {
       "name": "review-gate",
       "source": "./review-gate",
-      "description": "Pre-merge review gate — code reaches main through a reviewed pull request, not a direct merge. Two doors owned here: open (hygiene gate via /code-review) and merge (QA gate via the topology's proof-reviewer). One quarantined adapter (bitbucket-expert) owns all Bitbucket REST via bundled bin/open-pr.sh + bin/merge-pr.sh. A fence hook (no-direct-main) blocks direct push/merge to the default branch and redirects to the flow; a nudge hook (push-nudge) suggests a PR after a feature-branch push; auto_merge merges on a PROVEN QA verdict. Optional board-flow seam maps open→In Review, merge→Done. Standalone otherwise. Pair with board-flow@cepa for the Jira lifecycle.",
+      "description": "Pre-merge review gate \u2014 code reaches main through a reviewed pull request, not a direct merge. Two doors owned here: open (hygiene gate via /code-review) and merge (QA gate via the topology's proof-reviewer). One quarantined adapter (bitbucket-expert) owns all Bitbucket REST via bundled bin/open-pr.sh + bin/merge-pr.sh. A fence hook (no-direct-main) blocks direct push/merge to the default branch and redirects to the flow; a nudge hook (push-nudge) suggests a PR after a feature-branch push; auto_merge merges on a PROVEN QA verdict. Optional board-flow seam maps open\u2192In Review, merge\u2192Done. Standalone otherwise. Pair with board-flow@cepa for the Jira lifecycle.",
       "version": "0.1.0",
-      "tags": ["pull-request", "code-review", "bitbucket", "workflow", "pre-merge"]
+      "tags": [
+        "pull-request",
+        "code-review",
+        "bitbucket",
+        "workflow",
+        "pre-merge"
+      ]
     },
     {
       "name": "maestro",
       "source": "./maestro",
-      "description": "Multi-harness orchestration — plan a universe of demands into waves of concurrent Claude Code sessions and land them with one action. Ships /maestro:program-plan (BACKLOG → .claude/programs/<name>/plan.yaml, schema v2 — annotated in common/plan-schema.yaml and shared with board-flow's single-track mode, v1 still read so nothing on disk needs migrating, gated by the invocable Definition-of-Ready common/bin/cepa-dor), /maestro:run (gc → intake → gatekeeper → fork each slice into a herdr worktree with generated settings + normative wrapper → file-based event loop → merge train reusing worktree-merge guards) and /maestro:resume (crash recovery from wave-state). Deterministic cores tested (fork-settings, gatekeeper, poll, wave-state); end-to-end herdr spawn is construction step 4. Requires common@cepa.",
+      "description": "Multi-harness orchestration \u2014 plan a universe of demands into waves of concurrent Claude Code sessions and land them with one action. Ships /maestro:program-plan (BACKLOG \u2192 .claude/programs/<name>/plan.yaml, schema v2 \u2014 annotated in common/plan-schema.yaml and shared with board-flow's single-track mode, v1 still read so nothing on disk needs migrating, gated by the invocable Definition-of-Ready common/bin/cepa-dor), /maestro:run (gc \u2192 intake \u2192 gatekeeper \u2192 fork each slice into a herdr worktree with generated settings + normative wrapper \u2192 file-based event loop \u2192 merge train reusing worktree-merge guards) and /maestro:resume (crash recovery from wave-state). Deterministic cores tested (fork-settings, gatekeeper, poll, wave-state); end-to-end herdr spawn is construction step 4. Requires common@cepa.",
       "version": "0.2.0",
-      "tags": ["orchestration", "multi-session", "waves", "worktrees", "gatekeeper"]
+      "tags": [
+        "orchestration",
+        "multi-session",
+        "waves",
+        "worktrees",
+        "gatekeeper"
+      ]
     }
   ]
 }

@@ -399,6 +399,33 @@ re-validates it against the board's current state. Re-running triage merges into
 the plan rather than overwriting it: `done` items keep their `human_pending`,
 and cancelled cards become `dropped` so the plan still explains why they left.
 
+### Reading the plan: `/board-flow:next`
+
+The plan answers the question only if something asks it. Three moments do:
+
+| When | What answers |
+|---|---|
+| A card closes | `execute` / `fix` / `prove` end with "And now?" |
+| Mid-session, thread lost | **`/board-flow:next`** |
+| The order needs deciding | `/board-flow:triage` writes it |
+
+`/board-flow:next` reconciles the plan against the live board before answering —
+a card marked `pending` may already be done, and one marked `done` may have
+bounced back. Every divergence is named rather than absorbed, because each one
+means something happened outside the plan, and a plan that silently absorbs
+reality is a plan that lies. Cards sitting in To Do but absent from the plan are
+reported, never folded in: they were never given a position or a rationale, and
+inventing one would forge the decision this whole mechanism exists to preserve.
+
+It ends with **one** recommendation and its `why` — never a menu, since a list
+of equally-weighted options is precisely the state you're stuck in when you run
+it. Read-only unless you pass `--sync`.
+
+**Closing human debt is the user's move alone.** A `human_pending` clears by
+becoming `null`, and only the person who ran the route can say it ran — never a
+green test, a card status, or elapsed time. A list that closes itself is
+decoration, and the debt goes back to being invisible.
+
 ## Composition rules
 
 - **Lead-based commands** (`/board-flow:execute`,
