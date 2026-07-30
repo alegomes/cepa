@@ -138,7 +138,7 @@ camada única é contornável. A filha roda sob TRÊS camadas, nomeadas:
    - **gc no início de todo run**: lista e oferece limpar restos de programas
      anteriores (worktrees em ~/.herdr/worktrees, porteiro órfão por
      pidfile/lease, panes zumbis, escalações expiradas) — o análogo do que o
-     cepa-doctor faz para ccw-worktrees.
+     cepa-doctor faz para cepa-worktrees.
 
 3. **Porteiro** (`maestro/bin/maestro-gatekeeper`, processo próprio; paths da
    fila e da superfície **parametrizados por CLI/env**, contrato documentado
@@ -289,9 +289,9 @@ validação. Em troca, três dívidas ficam nomeadas:
 
 1. O contrato do wrapper (marcadores `MAESTRO-EXIT:*`) é string-match — fica
    versionado junto do plugin e testado contra cada upgrade do herdr.
-2. Segundo sistema de worktrees (~/.herdr/worktrees vs ~/ccw-worktrees): o
+2. Segundo sistema de worktrees (~/.herdr/worktrees vs ~/cepa-worktrees): o
    worktree do herdr DEVE herdar o single-owner guard e o .env seeding do
-   modelo ccw (o maestro roda o seed no fork); o que não herdar é exceção
+   modelo do launcher `cepa` (o maestro roda o seed no fork); o que não herdar é exceção
    nomeada no código.
 3. `agent_status` unknown para filhas headless: sincronização por arquivo é
    a fonte de verdade; pane report-agent é melhoria opcional.

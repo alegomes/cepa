@@ -1,5 +1,5 @@
 ---
-description: Spin up an isolated git worktree so a parallel `claude` window works on its own slice of the repo without colliding with other windows. /common:worktree-start <slice> creates ~/ccw-worktrees/<repo>-<slice> (outside the repo, to dodge cloud-sync races) on branch session/<slice> and tells you where to open the new session. Merge it back with /common:worktree-merge.
+description: Spin up an isolated git worktree so a parallel `claude` window works on its own slice of the repo without colliding with other windows. /common:worktree-start <slice> creates ~/cepa-worktrees/<repo>-<slice> (outside the repo, to dodge cloud-sync races) on branch session/<slice> and tells you where to open the new session. Merge it back with /common:worktree-merge.
 argument-hint: <slice>   (a short kebab-case name for the slice of work, e.g. billing-api)
 ---
 
@@ -7,10 +7,10 @@ argument-hint: <slice>   (a short kebab-case name for the slice of work, e.g. bi
 
 ## Purpose
 
-> **Most of the time you don't need this command.** Launch with `ccw` instead of
-> `claude` and isolation is automatic — `ccw` starts a normal session in the
+> **Most of the time you don't need this command.** Launch with `cepa` instead of
+> `claude` and isolation is automatic — `cepa` starts a normal session in the
 > current directory and only spins up a worktree when another live session is
-> already here. `ccw -s <slice>` forces a named worktree in one step (create +
+> already here. `cepa -s <slice>` forces a named worktree in one step (create +
 > launch). Reach for `/common:worktree-start` when you want to *prepare* a
 > worktree from inside an existing session without launching into it yet.
 
@@ -36,9 +36,10 @@ branch back into your integration branch and pruning the worktree.
 - `$ARGUMENTS` — `<slice>`: a short kebab-case name for this slice of work
   (e.g. `billing-api`, `tenant-cache`). Used for both the branch name
   (`session/<slice>`) and the worktree directory (`<repo>-<slice>`).
-- `CCW_WORKTREE_HOME` (env, optional) — parent directory for session worktrees.
-  Defaults to `~/ccw-worktrees`. Set it to relocate where worktrees are created.
-- `CCW_SEED` (env, optional) — space/colon-separated globs of gitignored files
+- `CEPA_WORKTREE_HOME` (env, optional) — parent directory for session worktrees.
+  Defaults to `~/cepa-worktrees`. Set it to relocate where worktrees are created.
+  The pre-rename `CCW_WORKTREE_HOME` is still read as a fallback.
+- `CEPA_SEED` (env, optional; legacy `CCW_SEED` still read) — space/colon-separated globs of gitignored files
   to copy into a fresh worktree. Overrides `.claude/worktree-seed`; both fall
   back to `.env`, `.env.local`. A `seed:` list in `.claude/env.yaml` (see
   `docs/env-manifest.md`) is always **added** on top of whichever source won.
@@ -53,7 +54,7 @@ branch back into your integration branch and pruning the worktree.
 
 2. **Derive names.**
    - Branch: `session/<slice>`.
-   - Worktree home: `$CCW_WORKTREE_HOME` if set, else `~/ccw-worktrees`. Worktrees
+   - Worktree home: `$CEPA_WORKTREE_HOME` if set, else `~/cepa-worktrees`. Worktrees
      live **outside the repo tree on purpose** — a repo under a cloud-sync folder
      (Insync/Dropbox/iCloud) would otherwise have its sibling worktrees synced
      too, and the sync daemon's own move/replace/conflict-copy races delete live
@@ -78,7 +79,7 @@ branch back into your integration branch and pruning the worktree.
 5. **Seed gitignored essentials.** A fresh worktree carries only tracked
    content, so files like `.env` are missing. Copy them in:
    `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/seed-worktree.py" "<worktree-home>/<repo>-<slice>"`
-   (Configurable via `$CCW_SEED` or a `.claude/worktree-seed` file; defaults to
+   (Configurable via `$CEPA_SEED` or a `.claude/worktree-seed` file; defaults to
    `.env`, `.env.local`; a `seed:` list in `.claude/env.yaml` is added on top.
    Best-effort — never blocks worktree creation.) Mention any files it seeded.
 

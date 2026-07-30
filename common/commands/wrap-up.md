@@ -7,7 +7,7 @@ argument-hint: [--discard] [commit message]   (no args = land the current sessio
 
 ## Purpose
 
-The shutdown ritual in one word. A session in a `ccw` worktree normally ends
+The shutdown ritual in one word. A session in a `cepa` worktree normally ends
 with the same five steps typed by hand — *commit it, merge it, push, handoff,
 exit*. This chains them behind a **single confirmation**, reusing the existing
 commands' logic so every safety check still fires:

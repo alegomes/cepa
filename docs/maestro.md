@@ -238,8 +238,8 @@ terminal state; a merge already in `landed` is skipped.
   plugin and smoke-tested against every `herdr` **and** Claude Code upgrade
   (`--permission-prompt-tool` was undocumented in the CLI `--help` as of 2.1.210
   but functional).
-- Two worktree homes exist (`~/.herdr/worktrees` vs `~/ccw-worktrees`); the herdr
-  worktree inherits the single-owner guard and `.env` seeding from the ccw model.
+- Two worktree homes exist (`~/.herdr/worktrees` vs `~/cepa-worktrees`); the herdr
+  worktree inherits the single-owner guard and `.env` seeding from the cepa model.
 - Step 4 (first real wave) is unrun — the end-to-end path is authored and its
   deterministic cores are tested, but no real program has exercised the herdr
   spawn + full wave yet.

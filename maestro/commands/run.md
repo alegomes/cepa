@@ -37,7 +37,7 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
    `common/plan-schema.yaml`). Selecione a onda alvo (`--wave` ou a primeira
    pending).
 
-2. **gc de órfãos** (o análogo do que o cepa-doctor faz para ccw-worktrees —
+2. **gc de órfãos** (o análogo do que o cepa-doctor faz para cepa-worktrees —
    restos de programas anteriores custam a próxima onda):
    - `herdr worktree list --json` → worktrees de programas já concluídos;
    - porteiro órfão: `PROGDIR/gatekeeper/gatekeeper.pid` de PID morto;
@@ -66,11 +66,11 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
 
 6. **Fork por slice** (respeitando `max_concurrent_slices`):
    Para cada slice READY da onda:
-   a. **Worktree herdr**, herdando o modelo ccw (single-owner guard + seed):
+   a. **Worktree herdr**, herdando o modelo do launcher `cepa` (single-owner guard + seed):
       `herdr worktree create --base <fork_point> --branch session/<PROG>-<slice> --json`.
       Rode o seed (`.env` etc.) copiando do main — NÃO symlink (recopla ao tree
       sincronizado). Dívida nomeada: o worktree do herdr fica em `~/.herdr/...`,
-      não `~/ccw-worktrees` — herda o guard e o seed; o que não herdar é exceção.
+      não `~/cepa-worktrees` — herda o guard e o seed; o que não herdar é exceção.
    b. **Settings geradas** (camada 1):
       `python3 maestro/bin/maestro-fork-settings PROGDIR/plan.yaml <slice> --port <P>`
       → grave em `<worktree>/.claude/settings.json`. Sem as regras `ask` o

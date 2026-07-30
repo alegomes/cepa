@@ -25,7 +25,7 @@ topology is wired.
 
 ### Per-session worktree lifecycle
 
-For running parallel `claude` windows on one repo without collisions. The `ccw`
+For running parallel `claude` windows on one repo without collisions. The `cepa`
 launcher auto-isolates a session into its own worktree when another live session
 already occupies the tree; these commands manage that lifecycle by hand.
 

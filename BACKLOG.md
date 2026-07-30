@@ -169,7 +169,7 @@ CLI = wrappers JSON do socket):
 - `herdr wait output <pane> --match <marcador> --timeout` é a primitiva de
   sincronização do maestro — bloqueia até a filha imprimir o marcador. ✓
 - `herdr worktree create --branch --base` cria worktree via socket em
-  `~/.herdr/worktrees/<repo>/` (fora do repo/Insync, mesmo princípio do ccw),
+  `~/.herdr/worktrees/<repo>/` (fora do repo/Insync, mesmo princípio do launcher `cepa`),
   com workspace próprio; `worktree remove` limpa. ✓
 - `agent send` / `pane send-text` injetam input em sessões interativas. ✓ (não testado
   a fundo)

@@ -71,7 +71,7 @@ Todos os campos são opcionais. Um manifesto só com `ports:` já paga o custo.
   leitura; quem roda healthcheck é você (ou um comando interativo que peça
   permissão).
 - **`seed-worktree.py`** (hook de criação de worktree): soma os globs de
-  `seed:` às fontes existentes (`$CCW_SEED` > `.claude/worktree-seed` >
+  `seed:` às fontes existentes (`$CEPA_SEED` > `.claude/worktree-seed` >
   default `.env`/`.env.local`). Fail-silent: manifesto ausente ou malformado
   nunca quebra a criação da worktree.
 - **`/common:worktree-start`** (passo "Preflight de ambiente"): quando o
