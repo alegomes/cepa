@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Launch-time decision core for the `ccw` launcher.
+"""Launch-time decision core for the `cepa` launcher.
 
-Run by `ccw` BEFORE `claude` starts, inside an fcntl lock (macOS has no `flock`
+Run by `cepa` BEFORE `claude` starts, inside an fcntl lock (macOS has no `flock`
 CLI, so the critical section lives here in Python). Decides — atomically — whether
 this new session should run in the main tree or be auto-isolated into its own
 git worktree, then writes a claim file the SessionStart hook will adopt.
@@ -11,13 +11,13 @@ Decision:
   - another LIVE session already in tree  → isolate (auto-named worktree)
   - otherwise                             → run in place (main tree)
 
-The claim file is keyed by a generated claim-id. `ccw` passes that id to claude
+The claim file is keyed by a generated claim-id. `cepa` passes that id to claude
 via CLAUDE_WT_CLAIM (survives `exec`, inherited by the hook), and the SessionStart
 hook renames the claim to the real session_id.
 
 Env in:  CLAUDE_WT_ROOT (repo root, required), CLAUDE_WT_SLICE (optional name)
-Stdout:  one line  "<launch-dir>\t<claim-id>"   (launch-dir = where ccw should cd)
-Exit:    0 on success; non-zero → ccw falls back to launching in place.
+Stdout:  one line  "<launch-dir>\t<claim-id>"   (launch-dir = where cepa should cd)
+Exit:    0 on success; non-zero → cepa falls back to launching in place.
 """
 
 import fcntl
@@ -63,7 +63,7 @@ def main() -> int:
             entry = {
                 "session_id": claim_id,
                 "claim": True,
-                "pid": os.getppid(),  # ccw's pid → becomes claude's pid after exec
+                "pid": os.getppid(),  # cepa's pid → becomes claude's pid after exec
                 "hostname": L.host(),
                 "started_at": L.now_iso(),
                 "last_seen": L.now_iso(),
@@ -82,12 +82,16 @@ def main() -> int:
             # under a cloud-sync folder (Insync/Dropbox/iCloud) would otherwise
             # have its sibling worktrees synced too, and the sync daemon's own
             # move/replace/conflict-copy races delete live worktrees mid-step.
-            # Default home is ~/ccw-worktrees; override with CCW_WORKTREE_HOME.
+            # Default home is ~/cepa-worktrees; override with CEPA_WORKTREE_HOME
+            # (the pre-rename CCW_WORKTREE_HOME is still honoured, so a shell
+            # that still exports it keeps working instead of silently relocating
+            # every worktree to the new default).
             name = slice_name or neutral_name(root)
             branch = f"session/{name}"
             repo_name = os.path.basename(os.path.abspath(root))
-            wt_home = os.environ.get("CCW_WORKTREE_HOME", "").strip() \
-                or os.path.expanduser("~/ccw-worktrees")
+            wt_home = os.environ.get("CEPA_WORKTREE_HOME", "").strip() \
+                or os.environ.get("CCW_WORKTREE_HOME", "").strip() \
+                or os.path.expanduser("~/cepa-worktrees")
             wt_home = os.path.abspath(wt_home)
             os.makedirs(wt_home, exist_ok=True)
             wt_path = os.path.join(wt_home, f"{repo_name}-{name}")

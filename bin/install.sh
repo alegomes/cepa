@@ -285,42 +285,45 @@ else
   fi
 fi
 
-# --- Launcher: ccw (auto-isolating claude) ---
+# --- Launcher: cepa (auto-isolating claude) ---
 
-CCW="${REPO_DIR}/common/bin/ccw"
-if [ -f "${CCW}" ]; then
-  chmod +x "${CCW}" 2>/dev/null || true
+CEPA_BIN="${REPO_DIR}/common/bin/cepa"
+if [ -f "${CEPA_BIN}" ]; then
+  chmod +x "${CEPA_BIN}" 2>/dev/null || true
   echo ""
-  echo "▶ Worktree launcher available: ${CCW}"
+  echo "▶ Worktree launcher available: ${CEPA_BIN}"
   echo "  Use it instead of 'claude' to auto-isolate parallel sessions into their"
   echo "  own git worktrees (only when another live session shares the tree)."
   echo "  Add to your shell rc (you run the shell yourself):"
   echo ""
-  echo "    alias claude='${CCW}'"
+  echo "    alias claude='${CEPA_BIN}'"
   echo ""
-  echo "  Aliasing 'claude' is recommended; ccw falls back to the real binary via"
-  echo "  CLAUDE_WT_CLAUDE_BIN. Prefer not to override 'claude'? Alias it as 'ccw':"
-  echo "    alias ccw='${CCW}'"
+  echo "  Aliasing 'claude' is recommended; cepa falls back to the real binary via"
+  echo "  CLAUDE_WT_CLAUDE_BIN. Prefer not to override 'claude'? Alias it as 'cepa':"
+  echo "    alias cepa='${CEPA_BIN}'"
+  echo ""
+  echo "  Renamed from 'ccw' on 2026-07-30. If your rc still aliases the old name,"
+  echo "  update it — the old path no longer exists and the alias will break."
 fi
 
-# --- Shell completion for ccw (zsh) ---
-# Tab-completes `ccw -s <slice>` with existing session/* worktrees, newest first,
+# --- Shell completion for cepa (zsh) ---
+# Tab-completes `cepa -s <slice>` with existing session/* worktrees, newest first,
 # each captioned with its label (the branch's git description). Resume a recent
 # worktree without remembering its timestamp name. You run your own shell, so we
 # print the line to add rather than editing your rc.
 
 COMPLETIONS_DIR="${REPO_DIR}/common/completions"
-if [ -f "${COMPLETIONS_DIR}/_ccw" ]; then
+if [ -f "${COMPLETIONS_DIR}/_cepa" ]; then
   echo ""
-  echo "▶ zsh completion for ccw available: ${COMPLETIONS_DIR}/_ccw"
-  echo "  Tab-completes 'ccw -s <slice>' from your recent session/* worktrees."
+  echo "▶ zsh completion for cepa available: ${COMPLETIONS_DIR}/_cepa"
+  echo "  Tab-completes 'cepa -s <slice>' from your recent session/* worktrees."
   echo "  Add to ~/.zshrc BEFORE the 'compinit' line, then restart your shell:"
   echo ""
   echo "    fpath=(${COMPLETIONS_DIR} \$fpath)"
   echo "    autoload -U compinit && compinit"
   echo ""
   echo "  Note: Warp uses its own completion engine and ignores zsh completions,"
-  echo "  so Tab won't work there. In ANY terminal (Warp included), run 'ccw -s'"
+  echo "  so Tab won't work there. In ANY terminal (Warp included), run 'cepa -s'"
   echo "  with no name to pick a recent worktree interactively instead."
 fi
 

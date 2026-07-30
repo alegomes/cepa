@@ -192,7 +192,7 @@ def main():
                         f"New terms now: {', '.join(fresh) or '—'}. "
                         "This is a heuristic, not a verdict — judge it against the "
                         "actual conversation. If the user has genuinely pivoted to a "
-                        "NEW task, briefly suggest isolating it (a fresh `ccw` session "
+                        "NEW task, briefly suggest isolating it (a fresh `cepa` session "
                         "/ `/common:worktree-start <slice>`) so the two land "
                         "separately. If it's the same thread of work, ignore this "
                         "silently."

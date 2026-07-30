@@ -283,7 +283,9 @@ def check_project(cwd: Path):
                         if d > 14:
                             warn("worktrees", f"{Path(wt_path).name} ({branch.strip()}) sem commit há {d:.0f}d — merge ou /common:worktree-discard")
                 wt_path = None
-    wt_home = Path(os.environ.get("CCW_WORKTREE_HOME") or (Path.home() / "ccw-worktrees"))
+    wt_home = Path(os.environ.get("CEPA_WORKTREE_HOME")
+                   or os.environ.get("CCW_WORKTREE_HOME")
+                   or (Path.home() / "cepa-worktrees"))
     if wt_home.is_dir():
         prefix = f"{root.name}-"
         orphans = [d.name for d in wt_home.iterdir()

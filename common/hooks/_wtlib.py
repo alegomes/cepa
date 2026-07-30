@@ -44,7 +44,7 @@ from pathlib import Path
 STALE_HOURS = 24
 
 # Gitignored files copied into a fresh worktree by default (override via
-# $CCW_SEED or a .claude/worktree-seed file). A fresh worktree starts without
+# $CEPA_SEED or a .claude/worktree-seed file). A fresh worktree starts without
 # any gitignored files (checkout only carries tracked content), so essentials
 # like .env would otherwise have to be recreated by hand and get lost on discard.
 DEFAULT_SEED_GLOBS = [".env", ".env.local"]
@@ -464,12 +464,14 @@ def env_manifest_list(main_root: str, key: str):
 def seed_globs(main_root: str):
     """Globs of gitignored files to copy into a fresh worktree.
 
-    Precedence: $CCW_SEED (space/colon-separated) > .claude/worktree-seed
+    Precedence: $CEPA_SEED (or the legacy $CCW_SEED, still read;
+    space/colon-separated) > .claude/worktree-seed
     (one glob per line, '#' comments) > DEFAULT_SEED_GLOBS.
     A `seed:` list in .claude/env.yaml (see docs/env-manifest.md) is
     ADDITIVE: its globs are appended to whichever source won, deduped.
     """
-    env = os.environ.get("CCW_SEED", "").strip()
+    env = (os.environ.get("CEPA_SEED", "").strip()
+           or os.environ.get("CCW_SEED", "").strip())
     if env:
         base = [g for g in re.split(r"[:\s]+", env) if g]
     else:

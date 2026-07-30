@@ -1,5 +1,6 @@
 #!/bin/sh
-# ccw — "claude-worktree" launcher.
+# cepa — the worktree-aware `claude` launcher. (Was `ccw`, renamed 2026-07-30
+# with the rest of the product; the old name is gone, not aliased.)
 #
 # Use this instead of `claude` and stop thinking about worktrees. It starts a
 # normal session in the current directory UNLESS another live session already
@@ -7,19 +8,20 @@
 # own git worktree so the two can't collide. You decide nothing; isolation
 # appears only when it would actually save you from a clash.
 #
-#   ccw                 # auto: isolate only if needed
-#   ccw -s billing-api  # force a named worktree (session/billing-api), reuse to resume
-#   ccw -s              # no name → pick a recent worktree to resume (fzf, or a
-#                       #   numbered menu) — terminal-agnostic, unlike Tab
-#                       #   completion which Warp's own engine ignores
-#   ccw --resume        # any other args pass straight through to claude
+#   cepa                 # auto: isolate only if needed
+#   cepa -s billing-api  # force a named worktree (session/billing-api), reuse to resume
+#   cepa -s              # no name → pick a recent worktree to resume (fzf, or a
+#                        #   numbered menu) — terminal-agnostic, unlike Tab
+#                        #   completion which Warp's own engine ignores
+#   cepa --resume        # any other args pass straight through to claude
 #
-# Install: alias claude='/path/to/common/bin/ccw'   (or put this on PATH)
+# Install: alias claude='/path/to/common/bin/cepa'   (or put this on PATH)
 # Override the real binary with CLAUDE_WT_CLAUDE_BIN if you aliased `claude`.
 #
-# Worktrees are created under ~/ccw-worktrees (override: CCW_WORKTREE_HOME),
-# deliberately OUTSIDE the repo tree — keeping them out of a cloud-sync folder
-# (Insync/Dropbox/iCloud), whose move/replace races otherwise delete live ones.
+# Worktrees are created under ~/cepa-worktrees (override: CEPA_WORKTREE_HOME,
+# or the legacy CCW_WORKTREE_HOME, still read), deliberately OUTSIDE the repo
+# tree — keeping them out of a cloud-sync folder (Insync/Dropbox/iCloud), whose
+# move/replace races otherwise delete live ones.
 
 set -e
 
@@ -37,7 +39,7 @@ done
 SCRIPT_DIR=$(cd "$(dirname "$SELF")" && pwd)
 LAUNCH_PY="$SCRIPT_DIR/../hooks/session-launch.py"
 
-# Interactive picker for `ccw -s` with no name: choose an existing session/*
+# Interactive picker for `cepa -s` with no name: choose an existing session/*
 # worktree to resume, newest commit first, each captioned with its label (the
 # branch's git description). Uses fzf when present, else a numbered /dev/tty
 # menu. Prints the chosen slice on stdout; returns non-zero when there's nothing
@@ -48,7 +50,7 @@ pick_slice() {
   _refs=$(git -C "$_root" for-each-ref --sort=-committerdate \
             --format='%(refname:short)' refs/heads/session/ 2>/dev/null || true)
   if [ -z "$_refs" ]; then
-    printf '✗ No session worktrees to resume. Create one with: ccw -s <name>\n' >&2
+    printf '✗ No session worktrees to resume. Create one with: cepa -s <name>\n' >&2
     return 1
   fi
 
@@ -109,7 +111,7 @@ case "$BRANCH" in
   session/*) exec "$CLAUDE_BIN" "$@" ;;
 esac
 
-# `ccw -s` with no name → pick a recent worktree to resume. Cancel or an empty
+# `cepa -s` with no name → pick a recent worktree to resume. Cancel or an empty
 # list aborts cleanly (launch nothing) rather than starting a surprise session.
 if [ "$PICK" = "1" ]; then
   SLICE=$(pick_slice "$ROOT") || exit 0

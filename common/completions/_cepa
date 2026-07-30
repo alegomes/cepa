@@ -1,6 +1,7 @@
-#compdef ccw
+#compdef cepa
 # ---------------------------------------------------------------------------
-# zsh completion for `ccw` — the claude-worktree launcher (common/bin/ccw).
+# zsh completion for `cepa` — the worktree-aware claude launcher
+# (common/bin/cepa; was `ccw` until 2026-07-30).
 #
 # Completes the -s/--slice value with the session/* worktrees that already
 # exist in the current repo, NEWEST FIRST, each annotated with its label (the
@@ -17,15 +18,15 @@
 # `bin/install.sh` prints the exact line with the resolved absolute path.
 # ---------------------------------------------------------------------------
 
-_ccw() {
+_cepa() {
   _arguments -C \
-    '(-s --slice)'{-s,--slice}'[force/resume a named worktree (session/<slice>)]:slice:_ccw_slices' \
+    '(-s --slice)'{-s,--slice}'[force/resume a named worktree (session/<slice>)]:slice:_cepa_slices' \
     '*:: :_default'
 }
 
 # Offer existing session/* slices as completion candidates, newest commit first,
 # captioned with the branch label when one is set. Silent no-op outside a repo.
-_ccw_slices() {
+_cepa_slices() {
   local root
   root=$(git rev-parse --show-toplevel 2>/dev/null) || return 1
 
@@ -49,4 +50,4 @@ _ccw_slices() {
   _describe -V -t slices 'session worktree' slices
 }
 
-_ccw "$@"
+_cepa "$@"

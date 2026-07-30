@@ -3,7 +3,7 @@
 
 SessionStart:
   1. Adopt the launcher's claim (CLAUDE_WT_CLAIM) → rekey it to this session_id,
-     or register a fresh entry if claude was started without `ccw`.
+     or register a fresh entry if claude was started without `cepa`.
   2. Reclaim dead entries (PID-checked).
   3. Warn if another LIVE session shares this exact working tree.
   4. Auto-clean session worktrees that are provably safe to drop, and remind the
@@ -119,7 +119,7 @@ def on_start(session_id: str, cwd: str) -> None:
             f"{'are' if n > 1 else 'is'} running in this same working tree "
             f"(`{cwd}`). You share one copy of the source and one `.claude/` "
             f"state dir — same-file edits will silently clobber each other. "
-            f"For parallel work, launch with `ccw` (it auto-isolates) or run "
+            f"For parallel work, launch with `cepa` (it auto-isolates) or run "
             f"`/common:worktree-start <slice>`."
         )
 
