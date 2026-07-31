@@ -39,19 +39,46 @@ MARKER = r"(?:\*\*|__|#{1,6}\s*|h[1-6]\.\s*|[-*+]\s+)"
 # A bounce is any comment whose HEADING announces a return. Matching on the
 # heading (not anywhere in the body) is what keeps a PROVEN summary that
 # merely mentions the word from being gated.
+#
+# Both halves of that sentence were false until 2026-07-31, and each alone was
+# enough to bar an APPROVAL comment whose body said "que devolveria 403":
+#   1. `devolv\w*` matched `devolveria`/`devolver` — a method returning a
+#      VALUE, not a card being returned. Only the forms that actually announce
+#      a card coming back are listed now.
+#   2. `{MARKER}?` was optional, so `^{MARKER}?[^\n]*?` matched ANY line, and
+#      the "heading, not anywhere in the body" promise never held. The heading
+#      is now a real position: the first non-empty line, or a line that OPENS
+#      with a heading/bold/bullet marker.
 BOUNCE_MARKERS = (
     r"UNPROVEN",
     r"returning\s+for\s+rework",
     r"returning\s+to\b",
     r"sending\s+back",
     r"bounce(?:[-\s]?back)?",
-    r"devolv\w*",              # devolvendo / devolvido / devolução
+    r"devolvend[oa]",          # devolvendo / devolvenda
+    r"devolvid[oa]",           # devolvido / devolvida
+    r"devolu[çc][ãa]o",        # devolução
     r"retornando\s+para",
 )
-BOUNCE_HEADING_RE = re.compile(
-    rf"^{MARKER}?[^\n]*?(?:{'|'.join(BOUNCE_MARKERS)})",
-    re.MULTILINE | re.IGNORECASE,
+_BOUNCE_ALT = "|".join(BOUNCE_MARKERS)
+
+# A line that OPENS with a marker and announces a return.
+BOUNCE_MARKED_RE = re.compile(
+    rf"^{MARKER}[^\n]*?(?:{_BOUNCE_ALT})", re.MULTILINE | re.IGNORECASE
 )
+# The same announcement in an unmarked heading — checked ONLY against the
+# comment's first non-empty line, never the body.
+BOUNCE_PLAIN_RE = re.compile(rf"(?:{_BOUNCE_ALT})", re.IGNORECASE)
+
+
+def is_bounce(body: str) -> bool:
+    """True when the comment's HEADING announces a card coming back."""
+    if BOUNCE_MARKED_RE.search(body):
+        return True
+    for line in body.splitlines():
+        if line.strip():
+            return bool(BOUNCE_PLAIN_RE.search(line))
+    return False
 
 REASON_LABELS = (r"Reason", r"Motivo", r"Raz[ãa]o")
 
@@ -123,7 +150,7 @@ def main():
         # Can't see the comment body -> can't gate. Never spuriously block.
         sys.exit(0)
 
-    if not BOUNCE_HEADING_RE.search(body):
+    if not is_bounce(body):
         sys.exit(0)
 
     value = reason_value(body)

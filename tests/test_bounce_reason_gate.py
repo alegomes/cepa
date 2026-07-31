@@ -139,6 +139,73 @@ for name, body in [
     r = run_hook(CLOUD_TOOL, {"commentBody": body})
     check(f"{name} passa intocado", r.returncode == 0, r.stderr[:200])
 
+# ── "devolver um valor" is not "devolver um card" (2026-07-31) ──────────────
+# A real approval comment was barred because its BODY said "devolveria 403".
+# Two independent defects did it: the stem `devolv\w*` swallowed verb forms
+# that talk about a returned VALUE, and `{MARKER}?` being optional meant the
+# "heading only" rule matched any line at all. Both are guarded here.
+
+APPROVAL_MENTIONING_A_RETURNED_VALUE = """**PROVEN**
+
+O teste exercita o endpoint e confirma que devolveria 403 para token expirado.
+"""
+
+APPROVAL_PROSE_ONLY = """Resumo da verificação
+
+Verifiquei que o adapter devolveria 403 nesse caminho, e que devolver o
+recurso ao pool não vaza conexão.
+"""
+
+APPROVAL_BODY_SAYS_SENDING_BACK = """**PROVEN**
+
+The gateway is sending back a 429 with Retry-After, as the card asked.
+"""
+
+# Isolates the STEM half of the fix: this line does open with a marker (a
+# bullet), so the heading rule alone would not save it — only `devolv\w*` no
+# longer matching `devolveria` does.
+APPROVAL_BULLET_RETURNED_VALUE = """**PROVEN**
+
+- o adapter devolveria 403 quando o token expira
+- o retry devolve a conexão ao pool
+"""
+
+for name, body in (
+    ("aprovação com 'devolveria 403' no corpo", APPROVAL_MENTIONING_A_RETURNED_VALUE),
+    ("prosa com 'devolveria'/'devolver' sem marcador", APPROVAL_PROSE_ONLY),
+    ("'sending back' no corpo, não no heading", APPROVAL_BODY_SAYS_SENDING_BACK),
+    ("bullet com 'devolveria'/'devolve' um valor", APPROVAL_BULLET_RETURNED_VALUE),
+):
+    r = run_hook(CLOUD_TOOL, {"commentBody": body})
+    check(f"{name} passa", r.returncode == 0, r.stderr[:300])
+
+# …and the real bounces are still caught, in every heading shape.
+BOUNCE_PT_MARKED = """**UNPROVEN** — devolvendo para In Progress
+
+Sem motivo estruturado aqui.
+"""
+BOUNCE_PT_UNMARKED_FIRST_LINE = """Devolução para In Progress
+
+Sem motivo estruturado aqui.
+"""
+BOUNCE_UNMARKED_FIRST_LINE = """UNPROVEN, returning for rework
+
+Sem motivo estruturado aqui.
+"""
+
+for name, body in (
+    ("bounce pt-BR com marcador", BOUNCE_PT_MARKED),
+    ("bounce pt-BR em heading sem markup", BOUNCE_PT_UNMARKED_FIRST_LINE),
+    ("bounce em heading sem markup", BOUNCE_UNMARKED_FIRST_LINE),
+):
+    r = run_hook(CLOUD_TOOL, {"commentBody": body})
+    check(f"{name} sem razão → BLOCKED", r.returncode == 2, f"rc={r.returncode}")
+
+r = run_hook(CLOUD_TOOL, {"commentBody": BOUNCE_PT_MARKED.replace(
+    "Sem motivo estruturado aqui.",
+    "**Motivo:** o teste de aceite usa dublê no lugar do adapter corrigido.")})
+check("bounce pt-BR com Motivo passa", r.returncode == 0, r.stderr[:300])
+
 # ── fail-open ───────────────────────────────────────────────────────────────
 r = run_hook("mcp__claude_ai_Atlassian__transitionJiraIssue", {"issueIdOrKey": "X-1"})
 check("outra tool é ignorada", r.returncode == 0)
