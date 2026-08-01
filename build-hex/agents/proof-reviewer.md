@@ -179,6 +179,48 @@ assertion covers. **Blocked when the test double swallows the signal** — e.g. 
 no-op mock of an external client means the defect cannot be observed at the HTTP
 surface; record `skipped` with that reason. L4 only ever routes to NEEDS-HUMAN.
 
+### The double-substitution check (do this BEFORE believing any green)
+
+A test double at the **far boundary** — WireMock standing in for PlugSign — is
+correct and expected. A double standing in for **the class the card changed** is
+not a shortcut, it is a different experiment: the test then measures the double,
+and production can be broken on purpose while the suite stays green.
+
+That is not a hypothetical slip. On 2026-08-01 a sweep of four cards
+(WEGO-1726, 1770, 1779, 1783) found the test presented as end-to-end proof
+substituting a double for the very piece the card fixed; production was broken
+deliberately and every one stayed green. In two of them the test's own comments
+already admitted it. This is the dominant testing pattern in that repository —
+treat it as the default suspicion, not the exception.
+
+So, for **every** entry in `scope.changed_classes`:
+
+1. Find the test the card offers as proof and read its wiring — profile,
+   `mock.enabled`, `@InjectMock`, `@Alternative`, `QuarkusTestProfile`
+   overrides, hand-rolled fakes injected in place of the class.
+2. Record the answer in the artifact, always, as an explicit value:
+
+   ```yaml
+   scope:
+     changed_classes:
+       - class: "...PlugSignAdapter"
+         module: infrastructure
+         external_observable: true
+         substituted_by_double: null        # null = the real class runs
+       - class: "...TasyGateway"
+         substituted_by_double: "MockTasyAlternative (@Alternative, test profile)"
+   ```
+
+3. A non-null value makes `verdict: proven` **structurally unavailable** — the
+   external proof does not exist yet, whatever colour the suite shows. Re-run
+   the acceptance test with the real adapter (`mock.enabled=false`) and WireMock
+   at the vendor boundary, then perturb the changed class and require RED. Only
+   that green→red is proof.
+
+`proof-verdict-guard.py` enforces this mechanically, and an **omitted** field
+blocks exactly like a declared double: silence is not an answer, same
+explicit-null discipline as the Implementation Summary.
+
 ### Bug cards — regression-red-at-base (the proven special case)
 
 If issue type is `Bug`: this is perturbation where the "hunk" is the whole fix.

@@ -92,8 +92,44 @@ def collect_statuses(node, out):
             collect_statuses(item, out)
 
 
+def double_offenders(data) -> list:
+    """Changed classes whose covering test replaces THEM with a test double.
+
+    The dominant false-green in this repo, found across four cards on
+    2026-08-01: the test presented as end-to-end proof substitutes a double for
+    the very class the card fixed, so production could be broken on purpose and
+    the test stayed green. A double at the far boundary (the vendor) is normal
+    and correct; a double standing in for the changed class means the proof
+    measures the double.
+
+    Returns a list of (class, double) for offenders, plus (class, None) for a
+    changed class that never declared the field at all — explicit-null
+    discipline, same as summary-nulls-gate: silence is not an answer.
+    """
+    scope = data.get("scope") if isinstance(data, dict) else None
+    classes = (scope or {}).get("changed_classes") if isinstance(scope, dict) else None
+    if not isinstance(classes, list):
+        return []
+    out = []
+    for c in classes:
+        if not isinstance(c, dict):
+            continue
+        name = str(c.get("class", "?"))
+        if "substituted_by_double" not in c:
+            out.append((name, None))
+            continue
+        v = c.get("substituted_by_double")
+        if v is None:
+            continue  # explicit null → declared clean
+        s = str(v).strip().lower()
+        if s in ("none", "no", "false", "n/a", "na", "~", ""):
+            continue
+        out.append((name, str(c.get("substituted_by_double")).strip()))
+    return out
+
+
 def parse_with_yaml(content: str):
-    """Return (verdict, [statuses]) using pyyaml. Raises if unavailable/invalid."""
+    """Return (verdict, [statuses], [double offenders]). Raises if invalid."""
     import yaml  # noqa: deferred so absence falls back instead of crashing
     data = yaml.safe_load(content)
     if not isinstance(data, dict):
@@ -101,7 +137,7 @@ def parse_with_yaml(content: str):
     verdict = data.get("verdict")
     statuses: list = []
     collect_statuses(data.get("levels", {}), statuses)
-    return verdict, statuses
+    return verdict, statuses, double_offenders(data)
 
 
 def parse_with_lines(content: str):
@@ -120,7 +156,10 @@ def parse_with_lines(content: str):
         m = re.match(r"^\s+status:\s*([A-Za-z0-9_-]+)", line)
         if m:
             statuses.append(m.group(1).strip().lower())
-    return verdict, statuses
+    # The line parser cannot see `scope.changed_classes` structure, so it
+    # reports no double offenders — biased toward allowing, like the rest
+    # of this fallback.
+    return verdict, statuses, []
 
 
 def main():
@@ -146,10 +185,10 @@ def main():
         sys.exit(0)
 
     try:
-        verdict, statuses = parse_with_yaml(content)
+        verdict, statuses, doubles = parse_with_yaml(content)
     except Exception:
         try:
-            verdict, statuses = parse_with_lines(content)
+            verdict, statuses, doubles = parse_with_lines(content)
         except Exception:
             sys.exit(0)  # can't understand it → never block
 
@@ -160,6 +199,31 @@ def main():
     if not isinstance(verdict, str) or verdict.strip().lower() != "proven":
         _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict=declared)
         sys.exit(0)  # only `proven` can be contradicted
+
+    if doubles:
+        undeclared = [c for c, d in doubles if d is None]
+        substituted = [(c, d) for c, d in doubles if d is not None]
+        lines = "".join(f"    - {c}  ← substituído por {d}\n" for c, d in substituted)
+        lines += "".join(f"    - {c}  ← `substituted_by_double` não declarado\n"
+                         for c in undeclared)
+        print(
+            f"[build-hex proof-verdict-guard] BLOCKED: {file_path} declares "
+            f"verdict: proven, but the covering test does not exercise the changed "
+            f"code:\n{lines}"
+            f"  Um dublê no lugar da classe que o card corrigiu faz o teste medir o\n"
+            f"  DUBLÊ, não a correção — quebrar produção de propósito deixa o teste\n"
+            f"  verde. Foi o padrao dominante em quatro cards (1726, 1770, 1779, 1783).\n"
+            f"  Dublê na fronteira do fornecedor (WireMock no lugar da PlugSign) é\n"
+            f"  correto; dublê no lugar do adapter alterado invalida a prova.\n"
+            f"  Rode o teste de aceite com o adapter REAL (mock.enabled=false) e o\n"
+            f"  WireMock no lugar do fornecedor, perturbe a classe alterada e exija\n"
+            f"  VERMELHO. Depois declare `substituted_by_double: none` em cada classe.\n"
+            f"  Um campo ausente é bloqueio igual: silêncio nao e resposta.",
+            file=sys.stderr,
+        )
+        _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven",
+                blocked="double_substitution")
+        sys.exit(2)
 
     forbidding = sorted({s for s in statuses if s in FORBIDDING_STATUSES})
     if not forbidding:
