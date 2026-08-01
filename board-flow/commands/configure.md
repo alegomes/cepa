@@ -80,6 +80,25 @@ If customize:
 
 Optional validation: delegate to `atlassian-expert` to call `getJiraIssue` on a known card and read the available statuses from its `getTransitionsForJiraIssue` output. If a name the user gave isn't reachable from your typical entry points, warn — don't auto-correct.
 
+### 5b. Resolve transition_ids
+
+`status_map` names statuses; this names the **transitions that reach them**, by id. Jira's transition payload carries only an opaque id (`transition.id` / `transition_id`) and no status name, so without this map a hook cannot tell a card moving FORWARD from one being sent BACK.
+
+That is not hypothetical: `acceptance-gate` was direction-blind until 2026-08-01 and blocked WEGO-1782 from returning to In Progress *because* its acceptance audit was incomplete — barring the exact movement an incomplete audit should cause. The gate now fails **closed** when the target is unresolvable, so a project without this map keeps its teeth but also keeps that trap.
+
+While still in the `atlassian-expert` call above, ask for `getTransitionsForJiraIssue` on a representative card and read off the `id` → `to.name` pairs. Then propose:
+
+```yaml
+  transition_ids:
+    "11": to_do
+    "31": in_progress
+    "41": in_review
+    "51": done
+    "231": wont_do
+```
+
+The **value** is the `status_map` key (not the Jira name), so the two maps stay consistent. Ids that lead nowhere in `status_map` can be omitted. Warn the user that transition ids are workflow-specific: they differ per project and change if the workflow is edited — which is why `/common:doctor --live` re-checks them.
+
 ### 6. Resolve issue_types
 
 Show current values (or defaults): `story: "Story"`, `bug: "Bug"`, `epic: "Epic"`, `task: "Task"`.

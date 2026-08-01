@@ -6,24 +6,45 @@ The structural teeth of the `acceptance-completeness` discipline — the same
 hook+state+gate pattern as `gate-advance.py`, but the state is per-card
 acceptance evidence instead of build greenness.
 
-Mechanism (why this needs no knowledge of WHICH status is being targeted):
+Mechanism — artifact presence, THEN direction:
 
   The `completion-auditor` writes `.claude/acceptance/<KEY>.yaml` only AFTER
   implementation, right before the flow tries to move the card to In Review.
-  So:
-    - Earlier transitions (To Do -> In Progress) happen with NO artifact on
-      disk -> this gate fails OPEN (nothing to enforce yet).
-    - The In-Review transition happens with the artifact present -> this gate
-      reads its `status` and BLOCKS unless it is `complete`.
-  The artifact's temporal existence is the signal; we never have to decode the
-  numeric transition id.
+  So an artifact on disk means "the audit has run"; its `status` says whether
+  the card earned the forward move.
+
+  That alone used to be the whole gate, on the theory that it never needed to
+  know WHICH status was targeted. The theory was wrong, and 2026-07-31 showed
+  how: WEGO-1782's audit was correctly `incomplete`, and the gate therefore
+  blocked the card from going BACK to In Progress — it barred the exact
+  movement an incomplete audit is supposed to cause. The card sat stuck in
+  Review with its UNPROVEN comment already posted.
+
+  Direction cannot be inferred from the payload: both MCP transition tools
+  (`transitionJiraIssue`, `jira_transition_issue`) carry an opaque transition
+  id and no status name. So the project declares the mapping once, in
+  `board-flow.yaml`:
+
+      defaults:
+        transition_ids:
+          "41": in_review
+          "31": in_progress
+
+  - target is an ENFORCED status (in_review / done) -> gate applies
+  - target is any other declared status              -> ALLOW: a bounce is the
+                                                        correct consequence of
+                                                        an incomplete audit
+  - id absent, unmapped, or no board-flow.yaml       -> ENFORCE (fail closed;
+                                                        never lose teeth to a
+                                                        missing config)
 
 Matches the Atlassian MCP transition tool (any server prefix). Extracts the
 issue key from the tool input, looks for `.claude/acceptance/<KEY>.yaml`:
 
   - absent                       -> allow (audit hasn't run; not gated)
   - present, status: complete    -> allow
-  - present, status: <anything>  -> BLOCK (incomplete / malformed audit)
+  - present, status: <anything>  -> BLOCK, unless the target status is
+                                    declared and is not an enforced one
   - key not extractable          -> allow (can't gate meaningfully; never
                                     spuriously block a Jira transition)
 
@@ -41,7 +62,17 @@ from pathlib import Path
 STATUS_RE = re.compile(r"^status:\s*([A-Za-z_-]+)", re.MULTILINE)
 GAP_RE = re.compile(r"^\s*gap:\s*(?!null\b)(?!~\s*$)[\"']?(.+?)[\"']?\s*$", re.MULTILINE)
 # Possible field names the MCP tool may use for the issue key.
-KEY_FIELDS = ("issueIdOrKey", "issueKey", "issueId", "issue", "key")
+# Both dialects: the cloud connector is camelCase, mcp-atlassian is snake_case.
+# `issue_key` was missing, so even once the tool matched, the card was not
+# identifiable and the gate failed open.
+KEY_FIELDS = ("issueIdOrKey", "issueKey", "issue_key", "issueId", "issue_id",
+              "issue", "key")
+
+# The statuses this gate has teeth for. Everything else declared in
+# transition_ids is a backward/lateral move and is never blocked here.
+ENFORCED_TARGETS = {"in_review", "done"}
+
+CONFIG_NAMES = ("board-flow.yaml", ".claude/board-flow.lifecycle.yaml")
 
 
 def extract_key(tool_input: dict) -> str | None:
@@ -50,6 +81,50 @@ def extract_key(tool_input: dict) -> str | None:
         if isinstance(v, str) and v.strip():
             return v.strip()
     return None
+
+
+def extract_transition_id(tool_input: dict) -> str | None:
+    """The transition id, from either MCP dialect.
+
+    cloud connector: {"transition": {"id": "41"}}   mcp-atlassian: {"transition_id": "41"}
+    """
+    t = tool_input.get("transition")
+    if isinstance(t, dict):
+        v = t.get("id")
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    for f in ("transition_id", "transitionId"):
+        v = tool_input.get(f)
+        if v is not None and str(v).strip():
+            return str(v).strip()
+    return None
+
+
+def transition_map(cwd: Path) -> dict:
+    """`defaults.transition_ids` from the project's board-flow config.
+
+    Absent file, absent key, or unreadable YAML all yield {} — which makes
+    every id unresolvable and therefore keeps the gate enforcing. A config
+    problem must never silently open the gate.
+    """
+    for name in CONFIG_NAMES:
+        path = cwd / name
+        if not path.is_file():
+            continue
+        try:
+            import yaml  # noqa: deferred so absence falls back instead of crashing
+
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        defaults = data.get("defaults")
+        raw = (defaults or {}).get("transition_ids") if isinstance(defaults, dict) else None
+        if not isinstance(raw, dict):
+            return {}
+        return {str(k).strip(): str(v).strip().lower() for k, v in raw.items()}
+    return {}
 
 
 def main():
@@ -61,7 +136,11 @@ def main():
         sys.exit(0)
 
     tool_name = payload.get("tool_name", "")
-    if "transitionJiraIssue" not in tool_name:
+    # BOTH dialects. Matching only the cloud connector's `transitionJiraIssue`
+    # left this gate with zero teeth on `mcp-atlassian`, which is the server
+    # the local Jira runs use — every transition there sailed through
+    # regardless of the audit. Found by the direction tests, 2026-08-01.
+    if "transitionJiraIssue" not in tool_name and "jira_transition_issue" not in tool_name:
         sys.exit(0)
 
     tool_input = payload.get("tool_input") or {}
@@ -91,6 +170,32 @@ def main():
     if status == "complete":
         sys.exit(0)
 
+    # The audit is incomplete. Which way is this card moving?
+    tid = extract_transition_id(tool_input)
+    tmap = transition_map(cwd)
+    target = tmap.get(tid) if tid else None
+
+    if target is not None and target not in ENFORCED_TARGETS:
+        # Backward / lateral move (In Progress, To Do, Won't Do). Sending the
+        # card back is precisely what an incomplete audit should cause — the
+        # gate exists to stop it going FORWARD on unproven work, not to trap it.
+        sys.exit(0)
+
+    unresolved_note = ""
+    if target is None:
+        unresolved_note = (
+            f"\n  NOTE: the target status could not be resolved"
+            f"{f' (transition id {tid})' if tid else ' (no transition id in the payload)'},"
+            f" so this gate\n"
+            f"  enforced by default. If you are BOUNCING the card back, that is legitimate and\n"
+            f"  the gate should not be in the way — declare the mapping once in board-flow.yaml:\n"
+            f"      defaults:\n"
+            f"        transition_ids:\n"
+            f"          \"<id>\": in_progress   # and in_review / to_do / done\n"
+            f"  Get the ids from getTransitionsForJiraIssue. Never work around this by editing\n"
+            f"  the acceptance artifact."
+        )
+
     # Present but not complete -> BLOCK. Surface the gaps so the agent can route
     # the fix instead of guessing.
     gaps = GAP_RE.findall(text)
@@ -105,7 +210,8 @@ def main():
         f"  surface end-to-end and was run green — not when the parts are covered in\n"
         f"  isolation. Close the gap (add the missing altitude test), re-run the\n"
         f"  completion-auditor, and retry. Override by demonstrating the criterion, not\n"
-        f"  by editing the artifact.",
+        f"  by editing the artifact."
+        f"{unresolved_note}",
         file=sys.stderr,
     )
     sys.exit(2)

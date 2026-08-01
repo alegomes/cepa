@@ -49,6 +49,26 @@ defaults:
                                   #          auto-advances a PROVEN card here. Leave unset (or null)
                                   #          for triage-only: PROVEN gets a ✅ comment but stays in
                                   #          Review for you to move manually.
+  transition_ids:
+    # Which transition REACHES which status, by id. `status_map` names the
+    # statuses; this names the doors. A Jira transition payload carries only an
+    # opaque id and no status name, so without this map a hook cannot tell a
+    # card moving forward from one being sent back — and `acceptance-gate`
+    # spent until 2026-08-01 blocking legitimate bounces for exactly that
+    # reason (WEGO-1782, stuck in Review because its audit was incomplete).
+    #
+    # Keys are the ids from getTransitionsForJiraIssue; values are the
+    # `status_map` KEY (not the Jira name), so the two maps can't drift apart.
+    # Ids are workflow-specific: they differ per project and change when the
+    # workflow is edited. /common:doctor --live re-checks them.
+    #
+    # Absent or unmapped -> gates that need direction fail CLOSED (they keep
+    # enforcing). Nothing breaks without this block; bounces just stay awkward.
+    "11":  to_do
+    "31":  in_progress
+    "41":  in_review
+    "51":  done
+    "231": wont_do
   issue_types:
     story: "Story"
     bug: "Bug"
