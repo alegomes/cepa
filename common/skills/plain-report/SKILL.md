@@ -1,6 +1,6 @@
 ---
 name: plain-report
-description: O formato obrigatório do relatório de trabalho feito — abertura leiga de até 3 frases, o que é do usuário, e só então o detalhe técnico. Use ao fechar uma tarefa, entregar um veredito ou reportar um diagnóstico. Não se aplica a conversa, pergunta curta ou ida-e-volta de design.
+description: O formato obrigatório do relatório de trabalho feito — abertura leiga de até 3 frases, o que é do usuário, o detalhe técnico, e no fim a lista objetiva de decisões e próximos passos. Use ao fechar uma tarefa, entregar um veredito ou reportar um diagnóstico. Não se aplica a conversa, pergunta curta ou ida-e-volta de design.
 ---
 
 # Skill: plain-report
@@ -29,10 +29,15 @@ seria pior que o problema.
 ```
 <Abertura: até 3 frases, zero jargão. O resultado, não o mecanismo.>
 
-**Pra você:** <a decisão pendente ou a ação manual — ou "nada">
+**Pra você:** <quantas decisões e quantos passos esperam por você — ou "nada">
 
 ### Detalhe técnico
 <livre: arquivos, nomes, evidência, mecanismo>
+
+### Decisões e próximos passos
+- **Decidir —** <a escolha>. Recomendo: <opção>.
+- **Você faz —** <ação manual que só você pode fazer>.
+- **Eu faço, se mandar —** <próximo passo já claro>.
 ```
 
 Regras duras:
@@ -43,11 +48,42 @@ Regras duras:
   que o entendimento deveria fazer.
 - **`Pra você:` sempre presente**, mesmo quando a resposta é "nada pra
   decidir". O usuário precisa saber que pode parar de ler ali.
+- **`### Decisões e próximos passos` sempre presente, e sempre por último.**
+  Nada vem depois dela — é o lugar onde o usuário volta quando terminou de ler.
 - **Teto de 200 palavras** somando abertura e `Pra você:`. O detalhe técnico é
   livre — quem não quer, para no cabeçalho.
 - **Ordem: resultado antes de mecanismo.** Nunca abra por como funciona.
 - **Abertura diz o que mudou, não o que eu fiz.** Lista de passos executados
   não é resultado — ver "O teste do 'e daí?'" abaixo.
+
+## A lista do fim
+
+Pedido do usuário em 03/08/2026: *"ao final de cada report, uma lista objetiva
+de decisões a serem tomadas ou próximos passos a serem seguidos"*. O `Pra
+você:` do topo respondia *se* existe algo pendente; ele não respondia *o que
+fazer agora*, e estava em prosa no meio de um parágrafo.
+
+Os dois convivem sem repetir: **o topo dá a contagem, o fim dá a lista.**
+
+> **Pra você:** uma decisão e um passo manual — lista no fim.
+
+Cada item cabe em uma linha e começa por um verbo. Três tipos, e nada mais:
+
+| Tipo | Quando usar | Obrigação |
+|---|---|---|
+| **Decidir —** | existe escolha real, com mais de um caminho defensável | trazer a recomendação default explícita ("Recomendo: X") |
+| **Você faz —** | ação que só o usuário pode executar (instalar, aprovar, rotacionar segredo, validar à mão) | dizer o que quebra se não for feita |
+| **Eu faço, se mandar —** | trabalho já claro, só esperando o "vai" | dizer o custo aproximado (tempo, cards, arquivos) |
+
+Regras da lista:
+
+- **Nunca vazia.** Sem nada pendente, escreva uma linha só: *Nada pendente.*
+- **Item é ação, não assunto.** "Revisar o glossário" não é item; "decidir se
+  o medidor passa a bloquear em vez de avisar" é.
+- **Sem item que só manda ler.** "Ver o detalhe técnico" não é próximo passo.
+- **Ordenada por quem trava o quê:** o que bloqueia os outros vem primeiro.
+- **Fora do teto de 200 palavras** — o teto vale só até o detalhe técnico. Mas
+  lista de mais de 5 itens é sinal de que o turno fez coisa demais junto.
 
 ## A regra que vale no texto inteiro
 
@@ -125,7 +161,13 @@ A mesma coisa dentro do formato:
 > lista de proibidas — um erro de digitação virava aprovação. Agora ele só
 > aceita as palavras previstas.
 >
-> **Pra você:** nada pra decidir; precisa reinstalar pra valer."
+> **Pra você:** nada pra decidir, um passo manual — lista no fim.
+>
+> [...]
+>
+> ### Decisões e próximos passos
+> - **Você faz —** rodar `bin/install.sh`; sem isso a correção não vale na
+>   sessão de amanhã."
 
 ## Relação com as outras skills
 

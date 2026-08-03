@@ -14,6 +14,9 @@ Garantias:
   - jargão no bloco de detalhe técnico -> permitido; na abertura -> sinalizado;
   - higiene ("árvore limpa", "memória atualizada") no topo -> sinalizada; a
     mesma frase no detalhe técnico -> permitida;
+  - a lista final `### Decisões e próximos passos` é obrigatória, é a última
+    seção, tem itens de lista (ou "Nada pendente.") e fica fora do teto de 200
+    palavras;
   - resposta de subagente (sidechain) nunca é confundida com o relatório;
   - o hook NUNCA bloqueia: exit 0 em todos os casos.
 """
@@ -33,13 +36,21 @@ TMP = Path(tempfile.mkdtemp(prefix="report-style-"))
 STATE = TMP / "state"
 TELEM = TMP / "telemetry"
 
+# A lista do fim, obrigatória desde 03/08/2026. Como todo relatório de
+# trabalho feito precisa dela, ela entra em todos os fixtures; os testes que
+# medem OUTRA coisa não devem falhar por falta dela.
+PASSOS = ("\n\n### Decisões e próximos passos\n"
+          "- **Você faz —** rodar `bin/install.sh`; sem isso a mudança não vale.\n")
+
+
 BOM = ("O verificador de provas aceitava qualquer palavra fora de uma lista de "
        "proibidas, então um erro de digitação virava aprovação. Agora ele só "
        "aceita as palavras previstas para cada checagem, e recusa o resto.\n\n"
        "**Pra você:** nada pra decidir agora; precisa reinstalar pra valer.\n\n"
        "### Detalhe técnico\n"
        "O portão passou a comparar contra um enum fechado por nível; o dublê "
-       "segue barrado e cada perturbação foi ao vermelho sozinha. " * 6)
+       "segue barrado e cada perturbação foi ao vermelho sozinha. " * 6
+       + PASSOS)
 
 RUIM = ("O portão agora falha fechado. Cada status é conferido contra o enum "
         "fechado do seu nível, não contra uma lista de proibidos. O coletor "
@@ -162,7 +173,8 @@ check("…e cita as expressões encontradas",
       "sinal mecânico" in aviso and "caminho indireto" in aviso, repr(aviso[:400]))
 
 aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
-              "**Pra você:** nada.\n\n### Detalhe técnico\n" + "detalhe " * 90)
+              "**Pra você:** nada.\n\n### Detalhe técnico\n" + "detalhe " * 90
+              + PASSOS)
 check("detalhe técnico sem abstração → nenhum aviso", aviso.strip() == "",
       repr(aviso[:300]))
 
@@ -173,7 +185,7 @@ check("detalhe técnico sem abstração → nenhum aviso", aviso.strip() == "",
 aviso = ciclo("Os três cards que estavam presos passaram e foram para Done. "
               "A árvore de trabalho ficou limpa e nenhum worktree sobrou.\n\n"
               "**Pra você:** nada pra decidir. Memória atualizada.\n\n"
-              "### Detalhe técnico\n" + "detalhe " * 90)
+              "### Detalhe técnico\n" + "detalhe " * 90 + PASSOS)
 check("higiene na abertura → avisa", "higiene" in aviso, repr(aviso[:300]))
 check("…e cita as frases encontradas",
       "árvore de trabalho limpa" in aviso or "nenhum worktree" in aviso,
@@ -183,7 +195,7 @@ aviso = ciclo("Os três cards que estavam presos passaram, agora com prova "
               "refeita do zero.\n\n**Pra você:** nada pra decidir.\n\n"
               "### Detalhe técnico\n"
               "Commit feito; a árvore de trabalho ficou limpa e nenhum "
-              "worktree sobrou. " + "detalhe " * 80)
+              "worktree sobrou. " + "detalhe " * 80 + PASSOS)
 check("mesma higiene DENTRO do detalhe técnico → não avisa",
       aviso.strip() == "", repr(aviso[:300]))
 
@@ -196,9 +208,42 @@ check("quatro passivas → avisa", "passivas" in aviso, repr(aviso[:300]))
 
 aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
               "**Pra você:** nada.\n\n### Detalhe técnico\n"
-              "O arquivo foi criado pelo hook. " + "detalhe " * 80)
+              "O arquivo foi criado pelo hook. " + "detalhe " * 80 + PASSOS)
 check("uma passiva só → não avisa (é português normal)", aviso.strip() == "",
       repr(aviso[:300]))
+
+# ── a lista do fim ─────────────────────────────────────────────────────────
+# Pedido do usuário em 03/08/2026: "ao final de cada report, uma lista objetiva
+# de decisões a serem tomadas ou próximos passos a serem seguidos".
+CORPO = ("Resultado dito de forma clara em uma frase.\n\n"
+         "**Pra você:** um passo manual — lista no fim.\n\n"
+         "### Detalhe técnico\n" + "detalhe " * 90)
+
+aviso = ciclo(CORPO)
+check("sem a seção final → avisa", "Decisões e próximos passos" in aviso,
+      repr(aviso[:300]))
+
+aviso = ciclo(CORPO + PASSOS +
+              "\n### Uma observação final\nnão devia existir aqui.\n")
+check("seção final que não é a última → avisa",
+      "não é a última seção" in aviso, repr(aviso[:400]))
+
+aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+              "Precisa reinstalar e depois decidir se aperta.\n")
+check("lista do fim escrita em prosa → avisa",
+      "itens de lista" in aviso, repr(aviso[:400]))
+
+aviso = ciclo(CORPO + "\n\n### Próximos passos\nNada pendente.\n")
+check("\"Nada pendente.\" satisfaz a lista", aviso.strip() == "",
+      repr(aviso[:300]))
+
+# O teto de 200 palavras vale até o detalhe técnico; a lista do fim não entra
+# nele nem quando o relatório não tem bloco técnico nenhum.
+aviso = ciclo("Resultado em uma frase clara.\n\n**Pra você:** um passo.\n\n"
+              "### Decisões e próximos passos\n"
+              + "- **Você faz —** rodar o install.\n" * 40)
+check("lista longa sem bloco técnico → não estoura o teto",
+      "palavras antes do detalhe" not in aviso, repr(aviso[:300]))
 
 # ── resposta de subagente não é o relatório ────────────────────────────────
 aviso = ciclo(BOM, sidechain_extra=RUIM)

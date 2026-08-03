@@ -44,6 +44,13 @@ MAX_PASSIVAS = 3               # densidade, não caça: uma passiva é normal
 MARCADOR_TECNICO = re.compile(r"^\s{0,3}#{1,6}\s*detalhe\s+t[ée]cnico", re.I | re.M)
 MARCADOR_PRA_VOCE = re.compile(r"(^\s{0,3}#{1,6}\s*pra\s+voc[êe]|\*\*\s*pra\s+voc[êe]\s*:?\s*\*\*)",
                                re.I | re.M)
+# A lista do fim (pedido do usuário, 03/08/2026). Aceita "Próximos passos",
+# "Decisões" ou as duas juntas — o título canônico da skill é o terceiro.
+MARCADOR_PASSOS = re.compile(
+    r"^\s{0,3}#{1,6}\s*(decis(?:ões|oes)(?:\s+e\s+pr[óo]ximos\s+passos)?|"
+    r"pr[óo]ximos\s+passos)\s*$", re.I | re.M)
+CABECALHO = re.compile(r"^\s{0,3}#{1,6}\s+\S", re.M)
+ITEM_DE_LISTA = re.compile(r"^\s{0,3}([-*+]|\d+[.)])\s+\S", re.M)
 
 STATE_DIR = Path(os.environ.get("CEPA_REPORT_STYLE_DIR")
                  or (Path.home() / ".claude" / "cepa-report-style"))
@@ -248,8 +255,11 @@ def medir(relatorio: str, jargao: list, abstracoes: list = (),
     relatório dentro do formato."""
     desvios = []
 
-    m = MARCADOR_TECNICO.search(relatorio)
-    cabeca = relatorio[:m.start()] if m else relatorio
+    # O topo vai até o primeiro dos dois cabeçalhos — sem o detalhe técnico, a
+    # lista do fim não pode cair dentro do teto de 200 palavras.
+    cortes = [x.start() for x in (MARCADOR_TECNICO.search(relatorio),
+                                  MARCADOR_PASSOS.search(relatorio)) if x]
+    cabeca = relatorio[:min(cortes)] if cortes else relatorio
 
     abertura = primeiro_paragrafo(relatorio)
     if not abertura:
@@ -271,6 +281,24 @@ def medir(relatorio: str, jargao: list, abstracoes: list = (),
         desvios.append(("sem-pra-voce",
                         "falta a linha `**Pra você:**` — mesmo que seja "
                         "\"nada pra decidir\""))
+
+    # A lista do fim: existe, é a última seção, e traz itens de verdade.
+    mp = MARCADOR_PASSOS.search(relatorio)
+    if not mp:
+        desvios.append(("sem-proximos-passos",
+                        "falta a seção final `### Decisões e próximos passos` — "
+                        "uma linha por ação (Decidir / Você faz / Eu faço), ou "
+                        "\"Nada pendente.\" quando não há nenhuma"))
+    else:
+        cauda = relatorio[mp.end():]
+        if CABECALHO.search(cauda):
+            desvios.append(("passos-nao-sao-o-fim",
+                            "`### Decisões e próximos passos` não é a última seção — "
+                            "nada vem depois dela"))
+        if not ITEM_DE_LISTA.search(cauda) and "nada pendente" not in cauda.lower():
+            desvios.append(("passos-em-prosa",
+                            "a seção final não tem itens de lista — cada ação em "
+                            "uma linha começando por verbo, não em prosa"))
 
     palavras = conta_palavras(cabeca)
     if palavras > MAX_PALAVRAS_ANTES_DO_TECNICO:
@@ -363,7 +391,8 @@ def on_prompt(payload) -> None:
           "`plain-report`:\n" +
           "".join(f"  - {d}\n" for d in desvios) +
           "  Formato: abertura de até 3 frases sem jargão → **Pra você:** → "
-          "### Detalhe técnico. Isso é um aviso, não um bloqueio: aplique no "
+          "### Detalhe técnico → ### Decisões e próximos passos (a lista, por "
+          "último). Isso é um aviso, não um bloqueio: aplique no "
           "próximo relatório em vez de reescrever o anterior.")
 
 
