@@ -1,0 +1,45 @@
+card: WEGO-1812
+verdict: needs-human
+schema_version: 2
+issue_type: Task
+base_commit: 3001edaa2704f898bff9f49923a7fe83a93c036f
+head_commit: e10200cdd2b276bfea370cc67603d82248969468
+scope:
+  base_commit_resolved: true
+routing_reason: 'A prova interna (unitária, por reflexão) é real e verificada por mim: RED quando a prioridade
+  é revertida, GREEN com o código atual — o commit e10200cd cumpre a promessa que fez para esse nível.
+  Mas a mudança mexe na ordem de dois filtros JAX-RS que rodam em toda requisição HTTP não-cross-tenant
+  — é externally-observable pela definição do gate, e nesta área do repo já houve P0 de vazamento cross-tenant
+  (precedente citado na tarefa). O próprio commit do card admite que os dois E2Es mais próximos "não provam
+  isso" porque passam de qualquer forma via acidente de ordenação alfabética — e não foi escrito nenhum
+  @QuarkusTest substituto que exercite o cenário que a ordenação protege (cliente_id válido mas inexistente
+  batendo em /admin/tipos-documento depois do re-escopo do Admin filter). Não houve remoção de prova pelo
+  commit 9c69aec4 (WEGO-1813) — o probe removido lá é de outra propriedade (fail-closed sem header), não
+  da ordenação. Sem external proof, PROVEN está estruturalmente indisponível; sem nenhuma prova externa
+  ter ficado verde-quando-quebrada (nenhuma rodou), UNPROVEN também não se aplica. NEEDS-HUMAN.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: perturbation (inner, reflection-based unit test)
+    perturbation:
+      status: pass
+      results:
+      - 'GREEN unperturbado: ./mvnw -pl infrastructure -am test -Dtest=TenantFilterOrderingTest -Dsurefire.failIfNoSpecifiedTests=false
+        -Dquarkus.jacoco.enabled=false (worktree /private/tmp/proof-WEGO-1812, HEAD 018b1b1c) -> Tests
+        run: 3, Failures: 0'
+      - 'Perturbação: em ClienteExistenceGateFilter.java linha 44, revertido @Priority(1003) -> @Priority(1002)
+        (simulando o empate pré-fix). Mesmo comando -> Tests run: 3, Failures: 2. adminFilterPriorityIsStrictlyLessThanGateFilterPriority
+        e exactPriorityValues foram para RED com a mensagem exata anunciada'
+      note: Esta prova confirma que o teste de reflexão É capaz de virar RED quando as prioridades colidem
+        — o commit cumpre a promessa que fez para ESTE nível (unitário/inner).
+  l2_coverage:
+    status: assumed
+    run: Sem quarkus-jacoco medindo este pacote nesta prova; cobertura do valor exato de @Priority é 100%
+      pelo teste de reflexão (inner); cobertura do EFEITO da ordenação na cadeia HTTP real não está medida
+      por nenhum teste — mesma lacuna do L3 externo.
+  l4_adversarial_input:
+    status: n/a
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a

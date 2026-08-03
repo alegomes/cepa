@@ -1,0 +1,66 @@
+card: WEGO-1763
+verdict: needs-human
+schema_version: 2
+issue_type: Bug
+base_commit: 909473ad (f4c52829^, no .claude/cards/WEGO-1763.yaml exists — resolved from single commit
+  tagged WEGO-1763)
+head_commit: f4c52829
+scope:
+  base_commit_resolved: false
+routing_reason: 'AC1 está provado por perturbação (RED→GREEN) na altitude interna (PlugSignFoldersErrorMatrixTest/PlugSignAdapterFolderTest,
+  inert-CDI) mas getOrResolveFolderId é alcançável por endpoint HTTP real e não há @QuarkusTest+WireMock
+  cobrindo esse caminho especificamente — falta a prova externa. AC2 não tem prova real: nos dois métodos
+  de lembrete não existe @Retry (a alegação do AC não se aplica), e para getOrResolveFolderId a única
+  contagem de chamadas existente roda fora de CDI, onde @Retry é inerte por construção — não é evidência
+  do comportamento em produção; falta um teste no padrão de PlugSignCancelarRetryWireMockE2ETest (WEGO-1958)
+  para este caminho. AC3 está provado (PlugSignRemindersContractTest, 46/46 verde). Nenhuma interação
+  nociva com WEGO-1726 (aquele card só redigiu o TEXTO da mensagem em cenários de 5xx/id-vazio; não tocou
+  a hierarquia de tipos nem o catch que WEGO-1763 corrigiu). Sem falha determinística (nada foi verde-quando-quebrado
+  na prova que rodou) — a rota correta é NEEDS-HUMAN, não UNPROVEN.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: perturbation (inner altitude only; PIT does not mutate catch-clauses so it is complementary,
+      not substitutive)
+    perturbation:
+      status: pass (inner altitude) / skipped (external altitude)
+      results:
+      - 'GREEN (baseline, HEAD f4c52829): ./mvnw -pl infrastructure -am test -Dtest=PlugSignFoldersErrorMatrixTest,PlugSignAdapterFolderTest,PlugSignRemindersContractTest
+        -Dsurefire.failIfNoSpecifiedTests=false → Tests run: 46, Failures: 0.'
+      - 'PERTURBAÇÃO (worktree /tmp/proof-WEGO-1763): removido o bloco `catch (PlugSignClientException
+        e) { throw e; }` de getOrResolveFolderId (linhas 166-167), reintroduzindo o catch(Exception) genérico
+        que mascara em PlugSignException base. RED: 3 falhas — PlugSignFoldersErrorMatrixTest.deveTratar401Token'
+      - 'SKIPPED (external/@QuarkusTest altitude): getOrResolveFolderId é alcançável a partir de endpoints
+        HTTP reais (POST /assinaturas single-doc e /lotes/requests, via uploadFile/criarLoteRequest/criarLoteRequestChain).
+        Nenhum @QuarkusTest+WireMock exercita um 4xx do vendor em GET/POST /api/folders atravé'
+    pit:
+      status: ran
+      results:
+      - 'infrastructure/PlugSignAdapter (targetTests=PlugSignFoldersErrorMatrixTest,PlugSignAdapterFolderTest,PlugSignRemindersContractTest):
+        233 mutations gerados, 50 killed (21%), test strength 70% sobre as linhas cobertas. Mutantes em
+        getOrResolveFolderId (linhas 153/154/159, guard clauses) todos KILLED. '
+  l2_coverage:
+    status: pass
+    run: getOrResolveFolderId (152-172) e enviarLembreteWhatsApp/Email (664-691) integralmente cobertos
+      por PlugSignFoldersErrorMatrixTest/PlugSignAdapterFolderTest/PlugSignRemindersContractTest — confirmado
+      pela execução acima e pelos mutantes NO_COVERAGE=0 nas linhas do guard de getOrResolveFolderId.
+  l4_adversarial_input:
+    status: skipped
+    note: Não executado — o gap já identificado em L3 (ausência de @QuarkusTest para o caminho de resolução
+      de pasta) é suficiente para NEEDS-HUMAN; L4 adicionaria ruído sem mudar a rota.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Não aplicável no formato clássico (checkout base + trazer teste de HEAD) porque base_commit é
+      o pai imediato do único commit do card — a perturbação L3 acima já cumpre o mesmo papel probatório
+      (RED ao reintroduzir o defeito, GREEN com o fix).
+  ac2_retry_abort:
+    status: gap
+    results:
+    - 'enviarLembreteWhatsApp/enviarLembreteEmail NÃO têm @Retry — AC2 como escrito (''@Retry(abortOn=PlugSignClientException.class)
+      não re-tenta 4xx nesses caminhos'') não se aplica a esses dois métodos: não há decorator de retry
+      a abortar. O teste PlugSignRemindersContractTest.whatsApp401DeveAbortarSemRetr'
+    - 'Para getOrResolveFolderId (usado por uploadFile/criarLoteRequest/criarLoteRequestChain, que TÊM
+      @Retry(abortOn=PlugSignClientException.class)): a única evidência de contagem de chamadas é PlugSignFoldersErrorMatrixTest
+      (deveTratar401.../deveTratar403...), que instancia o adapter via `new PlugSignAda'

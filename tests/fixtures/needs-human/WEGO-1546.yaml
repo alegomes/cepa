@@ -1,0 +1,56 @@
+card: WEGO-1546
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 712ab1dd378744775f661a447833c50f93b03bbd
+head_commit: 2669ab838faba131bbe7517c7c21507089f4e4b5
+scope:
+  base_commit_resolved: true
+routing_reason: 'O card entrega um adapter de dev-experience (MockTasyGatewayAdapter) cujo comportamento
+  observavel — sentinels "404*", "500*", fixture YAML e fallback hardcoded — nao e coberto por nenhum
+  teste que va vermelho se o adapter for removido ou corrompido. A suite @QuarkusTest usa um mock de test-scope
+  (@io.quarkus.test.Mock) que shadowa o adapter de infra, portanto a perturbacao direta do adapter nao
+  afeta os testes automatizados. Nao ha testes unitarios (nao-Quarkus) para o adapter. O gating por property
+  e testado apenas perifericamente (BootConfigValidatorUnitTest prova que o boot nao aborta com wego.tasy.mock.enabled=true,
+  nao que o adapter e instanciado corretamente). Nao e UNPROVEN (nenhuma falha deterministica detectada)
+  mas e NEEDS-HUMAN porque: (1) L2 mostra gap total de cobertura nas linhas changed; (2) a perturbacao
+  L3 nao pode correr — nenhum teste guarda o comportamento; (3) um revisor humano deve decidir se aceita
+  a ausencia de testes para um adapter de dev-experience puro, ou se exige ao menos um teste unitario
+  dos sentinels. Sugestao para fechar o gap: um teste unitario POJO (sem @QuarkusTest) que instancie MockTasyGatewayAdapter
+  com um stub de TasyMockFixtureLoader e ver'
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: skipped
+      results:
+      - 'Perturbacao L3 — arquivo removido do worktree descartavel (/tmp/proof-WEGO-1546, HEAD 2669ab83),
+        rodado: ./mvnw -pl bootstrap -am test -Dtest=com.wego.assinatura.config.BootConfigValidatorUnitTest
+        -Dsurefire.failIfNoSpecifiedTests=false Resultado: Tests run: 16, Failures: 0, Errors: 0, Skipped:
+        0 — '
+      - 'Causa estrutural: nos @QuarkusTest (bootstrap/src/test), o MockTasyGatewayAdapter de bootstrap/src/test/java/com/wego/assinatura/mock/MockTasyGatewayAdapter.java
+        (com @io.quarkus.test.Mock) sobrepoe completamente o adapter de infra/src/main. O adapter entregue
+        por este card NUNCA executa na suite de'
+      - 'O gating por property (wego.tasy.mock.enabled) e testado indiretamente pelo BootConfigValidatorUnitTest
+        (16 testes, incluindo ac3_devComMocksOn_bootNaoAborta) mas esses testes exercem o BootConfigValidator,
+        nao o MockTasyGatewayAdapter em si. Eles provam que a property nao causa abort de boot — nao '
+    pit:
+      status: n/a
+      results:
+      - 'PIT minion falhou em infrastructure (UNKNOWN_ERROR — classpath gap conhecido com micrometer).
+        Nao ha testes unitarios para MockTasyGatewayAdapter em infrastructure/src/test: a classe nao tem
+        nenhuma cobertura por testes nao-Quarkus. PIT nao pode gerar mutacoes.
+
+        '
+  l2_coverage:
+    status: gap
+    run: 'Determinado estruturalmente: nenhum teste em infrastructure/src/test referencia MockTasyGatewayAdapter.
+      O @QuarkusTest de bootstrap usa @Mock alternativo em test-scope que shadowa o adapter de producao/dev.
+      Zero linhas do adapter de infra/main sao atingidas por qualquer teste.
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a

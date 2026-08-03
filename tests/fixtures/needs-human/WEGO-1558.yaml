@@ -1,0 +1,62 @@
+card: WEGO-1558
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: f42c1c5f
+head_commit: 4abccfb1
+scope:
+  base_commit_resolved: true
+routing_reason: "Os hunks de producao load-bearing (enviarLembreteWhatsApp, enviarLembreteEmail, cancelarRequest,\
+  \ writeJson em PlugSignAdapter) sao PROVADOS pelo ciclo green->red->green: 88 testes passam em 4abccfb1;\
+  \ reverter para f42c1c5f faz 4+ testes irem a vermelho; restaurar volta ao verde.\nO que impede PROVEN\
+  \ e encaminha para NEEDS-HUMAN:\n1. PlugSignVendorDriftTest (13 testes, @EnabledIfSystemProperty) NUNCA\
+  \ roda no gate\n   automatizado — exige PLUGSIGN_API_KEY + acesso real a https://assinador.wego.com.vc.\n\
+  \   Esta e a entrega CENTRAL do card (suite de deteccao de vendor-drift). So um humano\n   com credenciais\
+  \ e conectividade pode validar que os 13 testes passam contra a API real\n   pelo menos uma vez.\n\n\
+  2. Pendencias OPERACIONAIS manuais declaradas no proprio pipeline YAML:\n   - Configurar schedule no\
+  \ Bitbucket UI (Pipelines -> Schedules, cadencia diaria 06:00 UTC)\n   - Definir PLUGSIGN_API_KEY como\
+  \ variavel secured no repositorio\n   - Configurar webhook/alerta para falhas consecutivas (Slack/email/Jira)\n\
+  \   Sem isso, o pipeline custom \"vendor-drift\" existe mas nunca disparara automaticamente.\n\n3. L2:\
+  \ assumed (sem quarkus-jacoco configurado); nao gatea isoladamente mas contribui\n   para a impo"
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'PRE-FLIGHT GREEN (worktree 4abccfb1): ./mvnw -pl infrastructure -am test -Dtest="PlugSignRemindersContractTest,PlugSignStatusDownloadCancelContractTest,
+        PlugSignBuscarHistoricoContractTest,PlugSignCriarRequestErrorMatrixTest, PlugSignFoldersErrorMatrixTest,PlugSignLoteFlowErrorMatrixTest,PlugSignUpl'
+      - 'PERTURBACAO 1 — enviarLembreteWhatsApp + enviarLembreteEmail + writeJson: git checkout f42c1c5f
+        -- infrastructure/src/main/java/.../PlugSignAdapter.java ./mvnw -pl infrastructure -am test -Dtest="PlugSignRemindersContractTest"
+        -Dsurefire.failIfNoSpecifiedTests=false --> Tests run: 12, Failures: 0, E'
+      - 'PERTURBACAO 2 — cancelarRequest: git checkout f42c1c5f -- infrastructure/src/main/java/.../PlugSignAdapter.java
+        ./mvnw -pl infrastructure -am test -Dtest="PlugSignStatusDownloadCancelContractTest#cancelarRequestComSigningKeyContendoCharsEspeciaisDeveProduzirJsonValido"
+        -Dsurefire.failIfNoSpecifiedTe'
+      - 'PlugSignPort.java: mudanca exclusivamente Javadoc + @Deprecated — zero comportamento load-bearing.
+        Perturbacao nao aplicavel.
+
+        '
+    pit:
+      status: absent
+      results:
+      - pitest-maven nao configurado em nenhum modulo neste commit — perturbacao manual usada
+  l2_coverage:
+    status: assumed
+    run: 'quarkus-jacoco nao configurado neste commit. Os hunks alterados de producao (enviarLembreteWhatsApp,
+      enviarLembreteEmail, cancelarRequest, writeJson) sao alcancados pelos contratos mock correspondentes
+      — reachability confirmada estruturalmente via perturbacao L3. Linhas sem callers em producao (buscarHistorico):
+      codigo morto per Javadoc e comentarios dos testes.
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    reason: 'Os metodos alterados sao chamadores de adapter (infra → PlugSign), nao endpoints HTTP proprios.
+      A superficie adversarial (PlugSign aceitando payloads malformados) so e observavel contra a API
+      real — bloqueada por ausencia de PLUGSIGN_API_KEY e conectividade no gate. Vendor-drift suite (e10/e11)
+      exercita exatamente esse caminho em runtime manual/scheduled.
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: issue_type = Story — nao aplicavel

@@ -1,0 +1,70 @@
+card: WEGO-1611
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 9bc5f0a4267118e0f55f8fa8763f65d2c5498495
+head_commit: f74b9560fd4718d4a72813435c39ad76e7d141db
+scope:
+  base_commit_resolved: true
+routing_reason: 'NEEDS-HUMAN. Seis das sete hunks externamente-observaveis do WEGO-1611 sao load-bearing
+  (P1..P6): cada perturbacao derruba AdminSubjectPadraoE2ETest (tc1, green->red) com evidencia de run.
+  A hunk nao coberta e o ramo ''tenant lookup'' em PlugSignAdapter.resolveSubject (P7): o MockPlugSignAlternative
+  substitui o adapter inteiro, tornando esse ramo invisivel a qualquer @QuarkusTest. Nenhum teste de unidade/contract
+  exercita esse ramo com tenantContext nao-nulo. O gap e estrutural — requer decisao humana: (a) aceitar
+  que a feature e provada ate a borda do repositorio (CRUD round-trip, P1..P6) e o uso do subject no payload
+  PlugSign sera coberto em follow-up, ou (b) exigir um unit test em PlugSignAdapterContractTest com stub
+  de TenantContext+ClienteRepository retornando Cliente com subjectPadraoAssinatura preenchido, verificando
+  que o JSON capturado contem esse valor como ''subject''. O ''clean verify'' completo mostrou uma falha
+  em AtendimentoSubstituirDocumentoE2ETest (Flyway sem DB/DevServices) e um flake em DependencyProbeServiceTest$PlugSignProbe.http503_retornaDEGRADED
+  — ambos sao pre-existentes e nao relacionados ao WEGO-1611.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass-with-gap
+      results:
+      - label: P1 — Cliente.atualizarSubjectPadrao ignora novoSubject (retorna copia com campo antigo)
+        baseline: './mvnw -pl bootstrap -am test -Dtest=AdminSubjectPadraoE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+          → Tests run: 5, Failures: 0 (GREEN)'
+        perturbed: './mvnw -pl bootstrap -am test -Dtest=AdminSubjectPadraoE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+          → Tests run: 5, Failures: 1 (RED — tc1_patchSubjectPadrao_retorna204_eGetRefleteMudanca: Expected
+          ''Por favor assine seu documento — Hospital Teste'' but was null)'
+        result: pass
+      - label: P2 — ClienteAdminResource.atualizarSubjectPadrao sempre passa null ao use case
+        baseline: GREEN (5/5, mesma baseline)
+        perturbed: './mvnw -pl bootstrap -am test -Dtest=AdminSubjectPadraoE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+          → Tests run: 5, Failures: 1 (RED — tc1 falhou)'
+        result: pass
+      - label: P3 — Cliente.getSubjectPadraoAssinatura sempre retorna Optional.empty()
+        baseline: GREEN (5/5)
+        perturbed: './mvnw -pl bootstrap -am test -Dtest=AdminSubjectPadraoE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+          → Tests run: 5, Failures: 1 (RED — tc1 falhou)'
+        result: pass
+      - label: P4 — ClienteRepositoryAdapter.toDomain nao mapeia subjectPadraoAssinatura (passa null)
+        baseline: GREEN (5/5)
+        perturbed: './mvnw -pl bootstrap -am test -Dtest=AdminSubjectPadraoE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+          → Tests run: 5, Failures: 1 (RED — tc1 falhou)'
+        result: pass
+    pit:
+      status: n/a
+      results:
+      - 'Nao executado: PIT e ineficaz para as classes externamente-observaveis (cobertas pelo @QuarkusTest).
+        Classes de domain/application cobertas via perturbacao no ciclo bootstrap.'
+  l2_coverage:
+    status: gap
+    run: 'Determinacao estrutural: MockPlugSignAlternative no TestProfile impede a execucao de PlugSignAdapter;
+      PlugSignAdapterContractTest.newAdapter() constroi o adapter sem tenantContext/ clienteRepository,
+      portanto o ramo de tenant-lookup jamais e executado em nenhum teste.
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    reason: 'MockPlugSignAlternative e um no-op para PlugSignAdapter.resolveSubject; o comportamento de
+      subject no payload PlugSign e inobservavel no nivel HTTP via @QuarkusTest.
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a

@@ -1,0 +1,59 @@
+card: WEGO-1529
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 584585d
+head_commit: c8b4654
+scope:
+  base_commit_resolved: true
+routing_reason: "Happy-path of GET /api/v1/atendimentos/{nrAtendimento} is proven load-bearing at the\
+  \ @QuarkusTest external surface: perturbation of BuscarHistoricoAtendimentoService.execute() produces\
+  \ GREEN→RED→GREEN via AtendimentoResourceE2ETest#tc1 (statusCode 200 + nrAtendimento + paciente.nome\
+  \ assertions).\nHowever three gaps block PROVEN:\n1. 404 path is NOT load-bearing externally: TC-8 uses\
+  \ a loose assertion (200 || 404 acceptable),\n   so the test passes even when the service unconditionally\
+  \ returns 404. The not-found behavior\n   of BuscarHistoricoAtendimentoService is proven only by the\
+  \ Mockito unit test (AtendimentoResourceTest#\n   get_atendimentoInexistente_retorna404), which is an\
+  \ inner-layer proof only.\n\n2. documentos and pedidos fetch lines (service lines 47-48) have no @QuarkusTest\
+  \ assertion; PIT\n   killed 0/2 mutations in the service (0%). These two behaviors — fetching archivos\
+  \ and pedidos\n   and returning them in the response — are not proven load-bearing at any surface.\n\
+  \n3. The @QuarkusTest coverage (AtendimentoResourceE2ETest) was added POST-MERGE in WEGO-1545\n   (commit\
+  \ 712bb47, one day after the merge). At the time WEGO-1529 was merged, no external\n   proof existed\
+  \ for this end"
+levels:
+  l3_load_bearing:
+    technique: pit+perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'GREEN baseline: ./mvnw -pl bootstrap -am test -Dtest=''AtendimentoResourceE2ETest#tc1_patchContato_atorPaciente_retorna204EGetRetornaAtendimento''
+        -Dsurefire.failIfNoSpecifiedTests=false → Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 — BUILD
+        SUCCESS (worktree /tmp/proof-WEGO-1529-head at main)'
+      - 'PERTURBATION: BuscarHistoricoAtendimentoService.execute() replaced with unconditional throw AtendimentoNaoEncontradoException
+        (written via python3 in /tmp/proof-WEGO-1529-head, never touching primary working tree)'
+      - 'RED result: ./mvnw -pl bootstrap -am test -Dtest=''AtendimentoResourceE2ETest#tc1_patchContato_atorPaciente_retorna204EGetRetornaAtendimento''
+        -Dsurefire.failIfNoSpecifiedTests=false → Tests run: 1, Failures: 1, Errors: 0, Skipped: 0 <<<
+        FAILURE! AtendimentoResourceE2ETest.tc1_patchContato_atorPacient'
+      - 'RESTORE: git checkout -- applied in worktree; GREEN confirmed: Tests run: 1, Failures: 0, Errors:
+        0, Skipped: 0 — BUILD SUCCESS'
+    pit:
+      status: ran
+      results:
+      - 'api-rest/AtendimentoResource: 18 mutations generated, 16 killed (89%) — run: ./mvnw -pl api-rest
+        -am test-compile org.pitest:pitest-maven:mutationCoverage -DtargetClasses=''com.wego.assinatura.api.resource.AtendimentoResource''
+        -DtargetTests=''com.wego.assinatura.api.resource.AtendimentoResourceTest'' -'
+      - '2 surviving mutants: both in parseDate() helper (AtendimentoResource.java lines 106-107) — NOT
+        in buscar() or any WEGO-1529 changed line. These pre-date the card.'
+      - 'application/BuscarHistoricoAtendimentoService: 2 mutations generated, 0 killed (0%) — run: ./mvnw
+        -pl application -am test-compile org.pitest:pitest-maven:mutationCoverage -DtargetClasses=''com.wego.assinatura.application.service.BuscarHistoricoAtendimentoService''
+        -DfailWhenNoMutations=false → BUILD '
+  l2_coverage:
+    status: assumed
+    run: quarkus-jacoco not independently run; structural analysis — AtendimentoResourceE2ETest TC-1 does
+      not assert on documentos or pedidos fields; PIT confirms 0/2 mutations killed in the service class
+  l4_adversarial_input:
+    status: skipped
+    reason: Scope not required for the current verdict; not reached given NEEDS-HUMAN routing from L3
+      gaps.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a

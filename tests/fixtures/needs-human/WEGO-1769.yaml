@@ -1,0 +1,60 @@
+card: WEGO-1769
+verdict: needs-human
+schema_version: 2
+issue_type: Bug
+base_commit: not_found_in_.claude/cards
+head_commit: d3f4ccd5e298d82b8c71180b6a6f1fdc18f49dda
+scope:
+  base_commit_resolved: false
+routing_reason: 'A parte deste repo (client-credentials + @OidcClientFilter anexando o Bearer na chamada
+  ao gateway) está PROVADA por perturbação: GREEN no HEAD, RED quando a anotação é removida, GREEN restaurado
+  — evidência real, asserção não-vácua (verifica presença do header Authorization esperado). O guard contra
+  o landmine WEGO-1791 (enabled=false build-time) também foi checado no application.properties atual:
+  os profiles dev/test/staging usam o trio discovery-enabled=false + auth-server-url/token-path dummy
+  (localhost:0), não mais a chave enabled=false — mascaramento do WEGO-1791 NÃO está presente aqui. Porém
+  as 3 pendências externas do NEEDS-HUMAN de 2026-06-15 só têm evidência verificável (memória de sessão,
+  não artefato deste repo) de terem sido atendidas em QUA, um ambiente que o próprio registro da validação
+  chama de "temporário, decisão do usuário" — e essa mesma fonte diz textualmente que a réplica em DEV
+  (o ambiente citado no summary do card) ainda não foi feita. Sem confirmação de que o gateway em DEV
+  está na imagem pós-926c5f5 com sessão Tasy estável, e sem confirmação de que a role wego-tasy-reader
+  foi atribuída à service account no Keycloak de DEV (não QUA), não há evidência para '
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'GREEN (baseline, HEAD d3f4ccd5, worktree /tmp/proof-WEGO-1769): ./mvnw -pl bootstrap -am test
+        -Dtest=TasyGatewayBearerTokenWireMockE2ETest -Dsurefire.failIfNoSpecifiedTests=false -> Tests
+        run: 1, Failures: 0, Errors: 0, BUILD SUCCESS.'
+      - 'Perturbação: removida a linha ''@OidcClientFilter("tasy-gateway")'' da interface TasyGatewayRestClient.java
+        via git apply (patch cirúrgico de uma linha, import e restante do arquivo intactos) — worktree
+        descartável, nunca a árvore principal.'
+      - 'RED (perturbado): mesmo comando -> Tests run: 1, Failures: 1 -- TasyGatewayBearerTokenWireMockE2ETest.tc1_buscarAtendimento_formaB_deveAnexarBearerTokenAoGateway:239
+        ''No requests exactly matched'' (o WireMock não recebeu o header Authorization: Bearer esperado).
+        BUILD FAILURE.'
+      - 'Restaurado infrastructure/.../TasyGatewayRestClient.java via git checkout HEAD -- <file> dentro
+        do worktree; git worktree remove --force /tmp/proof-WEGO-1769 executado. Árvore principal nunca
+        tocada (confirmada limpa: git status --short vazio pós-remoção).'
+    pit:
+      status: n/a
+      results:
+      - TasyGatewayRestClient é interface @RegisterRestClient (contrato HTTP), não classe de lógica pura
+        — não é alvo natural de PIT; a superfície certa é a external @QuarkusTest, já usada abaixo.
+  l2_coverage:
+    status: pass
+    run: A única linha de produção mudada relevante (a anotação @OidcClientFilter na interface) é exercida
+      pela única chamada do rest-client no teste WireMock; sem quarkus-jacoco configurado para bootstrap,
+      reachability confirmada estruturalmente (perturbação直接 sobre essa linha produziu RED).
+  l4_adversarial_input:
+    status: skipped
+    reason: Fora do escopo pedido pelo orquestrador para este card; a interrogação do card é sobre uma
+      mudança de fiação (auth), não sobre payload/contrato de negócio já coberto por outros cards (WEGO-1782/1815).
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: 'Não aplicável no sentido estrito do template (o ''bug'' original é uma falha de infraestrutura
+      externa — imagem velha do gateway + sessão Tasy — não reproduzível por um teste de regressão dentro
+      deste repo). A prova equivalente é a perturbação L3 acima: sem o fix de código, a chamada sai sem
+      token e o gateway (real, com OIDC inbound do main) devolveria 401 — comportamento reproduzido pelo
+      WireMock RED.'

@@ -1,0 +1,66 @@
+card: WEGO-1538
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 3c4c7e04cbf108bdf0c45808a4dd5a86a1908624
+head_commit: 2669ab838faba131bbe7517c7c21507089f4e4b5
+scope:
+  base_commit_resolved: true
+routing_reason: 'Inner-layer proof é excelente: perturbação green→red(6/14)→green confirmada; PIT 11/11
+  mutantes mortos (100%), cobertura de linha 33/33 (100%). O comportamento de coletar signatários requeridos,
+  filtrar inativos, fazer dedup e reordenar PRESTADOR-no-fim é load-bearing contra os unit tests.
+
+  Gap que impede PROVEN: RegrasSignatarioService é externally_observable — seu output controla SignatariosFaltantesException
+  → HTTP 422 em POST /api/v1/assinaturas (SolicitarAssinaturaService.java:128). A regra de prova exige
+  que quebrar o serviço cause RED em um @QuarkusTest que observe o endpoint. Nenhum @QuarkusTest no HEAD
+  afirma 422 SIGNATARIOS_FALTANTES; a prova externa não pode ser executada. Um @QuarkusTest que faça POST
+  /api/v1/assinaturas com signatarios=[] (ou omitindo MEDICO) para um documento GUIA_CONSULTA e afirme
+  statusCode(422) com errorCode="SIGNATARIOS_FALTANTES" fecharia esse gap.
+
+  SUGESTÃO DE DECISÃO PARA HUMAN: Se o revisor considera que (a) a prova inner-layer 100% kill PIT é suficiente
+  para este serviço de aplicação puro, e (b) o path externo é coberto implicitamente pelos E2E de happy
+  path (que passam papéis corretos e chegam ao 201), o waiver é razoável. O human decide; este'
+levels:
+  l3_load_bearing:
+    technique: perturbation+pit
+    perturbation:
+      status: pass
+      note: 'Perturbação inner layer: pass. Perturbação external layer: skipped (ver abaixo).'
+      results:
+      - 'PRE-FLIGHT GREEN (worktree /tmp/proof-WEGO-1538, HEAD 2669ab83): ./mvnw -pl application -am test
+        -Dtest=RegrasSignatarioServiceTest -Dsurefire.failIfNoSpecifiedTests=false → Tests run: 14, Failures:
+        0, Errors: 0, Skipped: 0 — BUILD SUCCESS
+
+        '
+      - 'PERTURBATION: ambos ''conjunto.addAll(tipo.getSignatariosRequeridos())'' comentados nos métodos
+        signatariosRequeridosPara e signatariosRequeridosPorCodigos (via sed na worktree descartável).
+        ./mvnw -pl application -am test -Dtest=RegrasSignatarioServiceTest -Dsurefire.failIfNoSpecifiedTests=false
+        → Te'
+      - 'RESTORE GREEN: arquivo restaurado do backup. ./mvnw -pl application -am test -Dtest=RegrasSignatarioServiceTest
+        -Dsurefire.failIfNoSpecifiedTests=false → Tests run: 14, Failures: 0, Errors: 0, Skipped: 0 —
+        BUILD SUCCESS
+
+        '
+      - 'EXTERNAL SURFACE PROOF: skipped. Nenhum @QuarkusTest no HEAD afirma HTTP 422 com errorCode SIGNATARIOS_FALTANTES
+        ao enviar POST /api/v1/assinaturas com papéis insuficientes frente ao TipoDocumento configurado
+        no banco. Busca confirmada: grep SIGNATARIOS_FALTANTES em bootstrap/src/test/java/**/*.java'
+    pit:
+      status: ran
+      results:
+      - ./mvnw -pl application -am test-compile org.pitest:pitest-maven:mutationCoverage -DtargetClasses="com.wego.assinatura.application.service.signatario.RegrasSignatarioService"
+        -DtargetTests="com.wego.assinatura.application.service.signatario.RegrasSignatarioServiceTest"
+        -DfailWhenNoMutations=false → L
+  l2_coverage:
+    status: pass
+    run: PIT reportou Line Coverage 33/33 (100%) para RegrasSignatarioService
+  l4_adversarial_input:
+    status: skipped
+    note: 'L4 bloqueado: o pré-requisito (prova external confirmada) não foi satisfeito. Sem @QuarkusTest
+      para SIGNATARIOS_FALTANTES, adversarial inputs no endpoint não podem distinguir gap de comportamento
+      de ausência de asserção.
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: issue_type=Story; teste de regressão red-at-base não se aplica

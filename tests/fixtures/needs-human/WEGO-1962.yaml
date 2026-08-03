@@ -1,0 +1,70 @@
+card: WEGO-1962
+verdict: needs-human
+schema_version: 2
+issue_type: Bug
+base_commit: 0174f80e56268b675ee6273374528427263e0005
+head_commit: 018b1b1c
+scope:
+  base_commit_resolved: true
+routing_reason: 'Todo o comportamento está provado com evidência direta e reproduzida por mim (não só
+  aceita do relatório do worker): (1) amostra própria de 3 dos 8 pontos novos, perturbados individualmente
+  em worktree descartável, confirmou isolamento 1-para-1; (2) SigningKeyRedactor é o utilitário único,
+  com teste cobrindo tanto o campo JSON dedicado quanto a forma embutida em query string dentro do corpo
+  cru; (3) os 16 testes rodados contra o commit pré-fix real (c2b70214) caem 16/16 vermelhos, satisfazendo
+  literalmente "vermelho antes do fix". L2 e L3 fecham sem gap. O único motivo do NEEDS-HUMAN é estrutural,
+  não substantivo: o schema deste gate não tem valor "n/a" para L4, e o guard mecânico (`proof-verdict-guard.py`)
+  recusa `verdict: proven` sempre que algum nível está `skipped` — mesmo quando, como aqui, o skip é porque
+  a categoria de checagem (fuzzing HTTP adversarial) não se aplica a um defeito de vazamento em log de
+  um adaptador de saída sem superfície HTTP própria. Recomendação: humano confirma que "L4 não aplicável
+  a log-leak sem endpoint HTTP" é aceitável e promove para Done: não há achado pendente para fechar, é
+  uma lacuna de expressividade do schema, não do comportamento provado.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'Baseline GREEN confirmado no worktree /tmp/proof-WEGO-1962: `./mvnw test -pl infrastructure -am
+        -Dtest=PlugSignAdapterSigningKeyRedactionTest -Dsurefire.failIfNoSpecifiedTests=false` -> Tests
+        run: 16, Failures: 0.'
+      - 'Amostra própria (não copiada da matriz do worker) — 3 dos 8 pontos novos perturbados individualmente,
+        restaurado a cada rodada via `git checkout HEAD -- <arquivo>`:'
+      - ':468 (o ponto que o gate original usou para demonstrar a lacuna) — `SigningKeyMasker.mask(signingKey)`
+        -> `signingKey`: Tests run: 16, Failures: 1 (só `criarLoteRequestComSucessoNaoDeveLogarSigningKeyInteiraEmInfo`).'
+      - ':600 — `SigningKeyRedactor.redact(responseBody)` -> `responseBody`: Tests run: 16, Failures:
+        1 (só `criarLoteRequestChainSemSigningKeyNaoDeveLogarCorpoCruComSigningKeyEmWarn`).'
+  l2_coverage:
+    status: pass
+    run: 'Inventário próprio via grep em PlugSignAdapter.java (todas as ocorrências de signing_key/LOG.*f)
+      reconcilia com os 15 pontos listados em docs/tasks/wego-1962-signing-key-log-leak/04-cobertura-dos-8-pontos-descobertos.md:
+      7 já tinham teste dedicado antes desta rodada, os 8 restantes ganharam teste nesta rodada. buscarHistorico
+      (:943-964) extrai signing_key mas nunca a loga crua — é devolvida como campo de domínio, fora do
+      escopo de vazamento em log deste card. Nenhuma linha de redação ficou sem teste correspondente no
+      PlugSignAdapter nem no ExternalLogger (5 testes em ExternalLoggerSigningKeyRedactionTest cobrindo
+      responseError e appendBody/TRACE).
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    note: 'Não rodado. A superfície do defeito é o log stream de um adaptador de saída (PlugSignAdapter),
+      não um endpoint HTTP exposto pelo WeGo — não há @QuarkusTest+RestAssured contra o qual gerar fuzzing
+      adversarial no sentido usual de L4. Não é um "test double engolindo o sinal" (motivo comum de skip);
+      é ausência estrutural de superfície HTTP própria para este defeito. Mesmo assim, o schema não tem
+      "n/a" para L4 e o guard mecânico do gate trata "skipped" como bloqueio de `proven` — respeitado
+      aqui sem contornar.
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: 'Worktree /tmp/proof-WEGO-1962: `git checkout c2b70214 -- infrastructure/.../PlugSignAdapter.java
+      infrastructure/.../ExternalLogger.java` (o pré-fix real, ancestral confirmado de 0174f80e) + os
+      16 testes de HEAD -> `./mvnw test -pl infrastructure -am -Dtest=PlugSignAdapterSigningKeyRedactionTest
+      -Dsurefire.failIfNoSpecifiedTests=false`: Tests run: 16, Failures: 16 — TODOS vermelhos contra o
+      código pré-fix, batendo com o critério do card ("o teste falha, vermelho, contra o código atual,
+      antes do fix"). Restaurado para HEAD e revalidado GREEN (`./mvnw test -pl infrastructure -am`: BUILD
+      SUCCESS) antes de remover o worktree.
+
+      '

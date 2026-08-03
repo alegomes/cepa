@@ -1,0 +1,102 @@
+card: WEGO-1698
+verdict: needs-human
+schema_version: 1
+issue_type: Bug
+base_commit: a47c52f
+head_commit: ca030f7
+scope:
+  base_commit_resolved: true
+routing_reason: 'All deterministic levels pass with verified evidence: L2 structural coverage of the primary
+
+  bug path is established via AtualizarContatoSignatarioE2ETest.tc1 at the HTTP surface; the
+
+  bugfix regression check is proven RED-at-base / GREEN-at-HEAD with actual build output.
+
+  L4 is clean (no unasserted adversarial findings). NEEDS-HUMAN solely because L3 = assumed:
+
+  PIT is absent from the entire project (a known project-wide tooling gap, not a WEGO-1698
+
+  specific issue). There is no code-level deficiency. The human reviewer should decide whether
+
+  the project-wide PIT absence is an acceptable known constraint. If accepted, this card can
+
+  be cleared — no additional code changes are required.
+
+  '
+levels:
+  l2_external_coverage:
+    status: pass
+    run: 'Structural assessment (JaCoCo not configured project-wide — no IT-isolated coverage
+
+      report is producible). AtualizarContatoSignatarioE2ETest.tc1 issues a real
+
+      PATCH /api/v1/assinaturas/{id}/signatarios/{signatarioId} through the full HTTP stack
+
+      via RestAssured + @QuarkusTest. The handler calls AtualizarContatoSignatarioService.execute(),
+
+      which traverses the coalesce guard at lines 63-65
+
+      (AtualizarContatoSignatarioService.java: mensagemRaw/LembreteDefaults.MENSAGEM_PADRAO)
+
+      and then calls MockPlugSignAlternative.enviarLembreteEmail(signingKey, email, mensagem).
+
+      The mock throws PlugSignException on blank message (MockPlugSignAlternative.java lines 94-98),
+
+      which DomainExceptionMapper maps to HTTP 502 PLUGSIGN_ERROR. TC1 asserts 200 — this
+
+      assertion is only satisfiable if the coalesce guard fires on every PATCH call without
+
+      a mensagem. Primary bug path is externally covered.
+
+      Note: PlugSignAda'
+  l3_diff_mutation:
+    status: assumed
+    run: 'PIT (org.pitest:pitest-maven) is not present in any module pom.xml across the entire
+
+      project — confirmed by inspection of root, domain, application, api-rest, infrastructure,
+
+      and bootstrap pom.xml files. This is a project-wide tooling gap, not specific to
+
+      WEGO-1698. L3 cannot run. This is the ONLY remaining gap that prevents verdict PROVEN.
+
+      There is no code-level deficiency in the fix or the tests. The test design
+
+      (mock throws on blank message → HTTP 502, TC1 asserts 200) would constructively kill
+
+      the conditional-coalesce mutants in AtualizarContatoSignatarioService lines 63-65,
+
+      but this cannot be claimed as verified evidence without running the tool.
+
+      '
+  l4_adversarial_input:
+    status: clean
+    run: 'TC1 IS the adversarial input: PATCH with mensagem omitted from the body (null path),
+
+      which was the exact failure mode reported in WEGO-1698. MockPlugSignAlternative now
+
+      mimics PlugSign 422 on blank/null message. No unasserted 5xx or unexpected response
+
+      shapes were observed: TC1 returned 200 and the recorded mock call had a non-blank
+
+      message. TC2 (random signatarioId not belonging to pedido -> 404) and TC3 (random
+
+      pedidoId -> 404 PEDIDO_NAO_ENCONTRADO) cover the primary 404 error paths. WhatsApp
+
+      path exercised within TC1 (body includes telefone=5511999990001 alongside email).
+
+      No adversarial findings.
+
+      '
+    findings: []
+  bugfix_regression_red_on_base:
+    status: pass
+    run: "Worktrees created at HEAD (ca030f7) and base (a47c52f). Remediated test files\n(MockPlugSignAlternative.java\
+      \ and AtualizarContatoSignatarioE2ETest.java) transplanted\nfrom ca030f7 into the base worktree;\
+      \ production code at base remained at a47c52f\n(AtualizarContatoSignatarioService without coalesce\
+      \ guard, LembreteDefaults absent).\n\n[BASE a47c52f — RED expected]\nCommand: cd /tmp/proof-WEGO-1698-base\
+      \ && ./mvnw -pl bootstrap -am\n         -Dsurefire.failIfNoSpecifiedTests=false\n         -Dtest=\"\
+      AtualizarContatoSignatarioE2ETest#tc1_atualizarContato_semMensagem_retorna200_nao502\"\n       \
+      \  test\nResult: FAILURE — \"Expected status code <200> but was <502>\"\n        Tests run: 1, Failures:\
+      \ 1 — BUILD FAILURE.\nThe 502 at base proves that without the coalesce guard, null mensagem reaches\n\
+      MockPlugSignAlternative which throws PlugSignException, surfacing as 502 PLUGSIGN_ERROR.\n\n[HEAD\
+      \ ca030f7 — GREEN expe"

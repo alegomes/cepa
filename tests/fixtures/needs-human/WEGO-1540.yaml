@@ -1,0 +1,102 @@
+card: WEGO-1540
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 841711d
+head_commit: 538366d
+scope:
+  base_commit_resolved: true
+routing_reason: 'Inner-layer proof is solid: all three perturbation targets (CPF validation, EQUIPE_CLINICA
+  ordering, signAsAdmin in both casoC and webhook paths) go RED at their respective unit/application/api-rest
+  Mockito tests. The unit tests for signAsAdmin are behaviorally load-bearing.
+
+  The external-surface gap is structural and confirmed by direct perturbation: removing signAsAdmin from
+  SolicitarAssinaturaService.executarCasoC() leaves the @QuarkusTest for Caso C GREEN (verified: ./mvnw
+  -pl bootstrap -am test with -Dquarkus.flyway.clean-at-start=true, perturbed run = Tests run: 1, Failures:
+  0). The mock is a no-op and the test only asserts on HTTP response fields that are set regardless of
+  whether signAsAdmin is called. The same gap exists for the webhook→signAsAdmin path: no @QuarkusTest
+  sends POST /webhooks/plugsign with status=Signed + a pedido that has EQUIPE_CLINICA pending.
+
+  Additionally, Caso A (chain paciente→médico) and the criarRequestChain/criarLoteRequestChain adapter
+  methods are dead code at this commit — executarCasoA throws unconditionally. There is no proof that
+  chain ordering reaches the HTTP endpoint; it cannot until WEGO-1539 delivers getMedico().
+
+  Escalating to human with tw'
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      pre_flight_green:
+      - 'domain SignatarioTest (41 tests): ./mvnw -pl domain -am test -Dtest=SignatarioTest -Dsurefire.failIfNoSpecifiedTests=false
+        → Tests run: 41, Failures: 0, BUILD SUCCESS'
+      - 'domain PacienteTest+ResponsavelTest (22 tests): ./mvnw -pl domain -am test -Dtest=PacienteTest,ResponsavelTest
+        -Dsurefire.failIfNoSpecifiedTests=false → Tests run: 22, Failures: 0, BUILD SUCCESS'
+      - 'application SolicitarAssinaturaServiceTest+RegrasSignatarioServiceTest (44 tests): ./mvnw -pl
+        application -am test -Dtest=SolicitarAssinaturaServiceTest,RegrasSignatarioServiceTest -Dsurefire.failIfNoSpecifiedTests=false
+        → Tests run: 44, Failures: 0, BUILD SUCCESS'
+      - 'api-rest WebhookResourceTest (22 tests): ./mvnw -pl api-rest -am test -Dtest=WebhookResourceTest
+        -Dsurefire.failIfNoSpecifiedTests=false → Tests run: 22, Failures: 0, BUILD SUCCESS'
+      results:
+      - hunk: Signatario.isCpfValido() — homogeneous sequence rejection
+        perturbation: 'Removed: if (cpf.chars().distinct().count() == 1) return false;'
+        run: ./mvnw -pl domain -am test -Dtest=SignatarioTest
+        result: 'Tests run: 41, Failures: 2 (isCpfValidoRetornaFalseParaSequenciaHomogenea, cpfTodosIguaisRejeitado)
+          — RED, load-bearing'
+        altitude: inner (domain unit test)
+      - hunk: RegrasSignatarioService.reordenarEquipeClinicaNoFim() — EQUIPE_CLINICA ordering
+        perturbation: 'Disabled: changed EQUIPE_CLINICA branch check to ''if (false)'''
+        run: ./mvnw -pl application -am test -Dtest=RegrasSignatarioServiceTest
+        result: 'Tests run: 14, Failures: 1 (cenario7_equipeCliniciaPrimeiraNoTipo_reordenadaParaOFim)
+          — RED, load-bearing'
+        altitude: inner (application unit test)
+      - hunk: SolicitarAssinaturaService.executarCasoC() — signAsAdmin 1-doc path
+        perturbation: 'Removed: plugSign.signAsAdmin(doc.plugSignDocumentKey(), ...) from 1-doc branch'
+        run_inner: ./mvnw -pl application -am test -Dtest=SolicitarAssinaturaServiceTest
+        result_inner: 'Tests run: 30, Failures: 1 (casoC_umDocumento_signAsAdminChamado_signatarioEquipeAssinado_criarRequestNuncaChamado)
+          — RED, load-bearing at inner surface'
+        run_external: ./mvnw -pl bootstrap -am test -Dtest=AssinaturaFlowTest#casoC_pedidoComTipoDocumentoSoEquipe_ficaEnviadoSincronamente
+          -Dquarkus.flyway.clean-at-start=true
+        result_external: 'Tests run: 1, Failures: 0, BUILD SUCCESS — GREEN-WHEN-BROKEN. The @QuarkusTest
+          only asserts HTTP 201 + status=ASSINADO + plugSignSigningKey=CASO_C_AUTO_SIGNED. MockPlugSignAlternative.signAsAdmin()
+          is a no-op (records nothing), so removing the actual call does not change the HTTP response.
+          External '
+        altitude_gap: signAsAdmin call to PlugSign /api/files/sign is NOT proven at the external (HTTP)
+          surface via @QuarkusTest
+      - hunk: WebhookResource.dispararSignAsAdminParaEquipe() — signAsAdmin after paciente Signed
+        perturbation: Replaced plugSign.signAsAdmin(...) with a no-op placeholder
+        run_inner: ./mvnw -pl api-rest -am test -Dtest=WebhookResourceTest
+        result_inner: 'Tests run: 22, Failures: 2 (signedPaciente_comEquipePendente_disparaSignAsAdminParaCadaDoc,
+          signedPaciente_signAsAdminFalha_marcaEquipeErro_pacientePermaneceAssinado) — RED, load-bearing
+          at inner surface'
+        run_external: No @QuarkusTest covers POST /api/v1/webhooks/plugsign with Signed status + EQUIPE_CLINICA
+          signatario → signAsAdmin path. AssinaturaFlowTest.deveProcessarWebhook() sends 'Open' status,
+          not 'Signed'.
+        altitude_gap: webhook→signAsAdmin path to PlugSign /api/files/sign is NOT proven at the @QuarkusTest
+          surface
+    pit:
+      status: n/a
+      results:
+      - PIT not present in worktree at 538366d (pitest was added in a later commit per memory notes).
+        Fell back to manual perturbation for all layers.
+  l2_coverage:
+    status: assumed
+    run: 'quarkus-jacoco not wired in worktree at 538366d. Coverage assessed structurally: SolicitarAssinaturaServiceTest
+      covers 30 cases of SolicitarAssinaturaService (Mockito). WebhookResourceTest covers 22 cases of
+      WebhookResource (Mockito). RegrasSignatarioServiceTest covers 14 cases of RegrasSignatarioService.
+      SignatarioTest covers 41 cases of Signatario domain entity. Line coverage of the externally-observable
+      signAsAdmin paths (both in SolicitarAssinaturaService.executarCasoC and in WebhookResource.dispararSignAsAdminParaEquipe)
+      is confirmed reachable from the respective unit tests by perturbation (both went RED).
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    reason: 'Both external signAsAdmin paths have a no-op test double (MockPlugSignAlternative.signAsAdmin()
+      does nothing, records nothing). Any adversarial HTTP request that would trigger signAsAdmin cannot
+      produce an observable difference at the HTTP surface — the defect is unobservable. L4 adds no signal
+      on top of the already-identified L3 gap.
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Not a bug card — Story type.

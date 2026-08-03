@@ -1,0 +1,93 @@
+card: WEGO-1614
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 17b8e46c2e5d620853957b819729bdfec25acff5
+head_commit: 30abf6da4b45f31cf90e1cab31da4a9f6a1a0006
+scope:
+  base_commit_resolved: true
+routing_reason: 'Três perturbações produziram vermelho claro nos cenários corretos — os testes são load-bearing
+
+  para os 5 endpoints: isolamento multi-tenant (P1, 4 falhas), 404 em PATCH (P2, 1 falha),
+
+  transição de status (P3, 1 falha). clean verify final é verde.
+
+
+  NEEDS-HUMAN pelo seguinte gap estrutural: o commit 30abf6da — conforme especificado no card —
+
+  NÃO COMPILA standalone. A assinatura criarRequest/criarRequestChain na interface PlugSignPort
+
+  e no PlugSignAdapter nesse commit ainda exige (xPos, yPos, page), mas MockPlugSignAlternative
+
+  e PlugSignCriarRequestErrorMatrixTest (ambos modificados no 30abf6da) já removeram esses
+
+  parâmetros. O commit seguinte 9b4556cb corrige a interface. A mensagem do commit 30abf6da
+
+  afirma "BUILD SUCCESS: 108 tests" — afirmação falsa para build limpa.
+
+
+  Decisão necessária do humano: aceitar 9b4556cb como head efetivo da entrega
+
+  (os dois commits juntos formam a entrega coerente) e atualizar o card, ou exigir
+
+  rebase/squash que torne 30abf6da compilável de forma independente.
+
+
+  Se a decisão for aceitar 9b4556cb como head efetivo: os testes são PROVEN como
+
+  load-bearing. O L2 é assumed (sem jacoco), mas perturbações substituem com evidência
+
+  mais forte. Nenhum outro bloque'
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'GREEN BASELINE (unperturbed, 9b4556cb):
+
+        ./mvnw -pl bootstrap -am test -Dtest=ArquivoAtendimentoE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+
+        Tests run: 17, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS
+
+        '
+      - 'P1 — Removido ensureFilterActive() de ArquivoAtendimentoRepositoryAdapter.findById()
+
+        (simula quebra do filtro Hibernate multi-tenant no lookup por PK)
+
+        ./mvnw -pl bootstrap -am test -Dtest=ArquivoAtendimentoE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+
+        Tests run: 17, Failures: 4, Errors: 0, Skipped'
+      - 'P2 — Removido orElseThrow de AtualizarStatusFaturamentoService.execute()
+
+        (simula ausência de 404 quando arquivo inexistente é passado ao PATCH)
+
+        ./mvnw -pl bootstrap -am test -Dtest=ArquivoAtendimentoE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+
+        Tests run: 17, Failures: 2, Errors: 0, Skipped: 0 — B'
+      - 'P3 — Removido bloco cancelar(motivo) de AtualizarStatusFaturamentoService.execute()
+
+        (simula transição ATIVO→CANCELADO sem efeito)
+
+        ./mvnw -pl bootstrap -am test -Dtest=ArquivoAtendimentoE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+
+        Tests run: 17, Failures: 1, Errors: 0, Skipped: 0 — BUILD FAILURE
+
+        V'
+    pit:
+      status: n/a
+      note: Diff é exclusivamente teste; PIT não aplica (não há produção nova no diff). Classes de produção
+        perturbadas manualmente.
+  l2_coverage:
+    status: assumed
+    run: Não há quarkus-jacoco configurado. O diff é exclusivamente testes @QuarkusTest; cobertura confirmada
+      estruturalmente via perturbação — todas as perturbações geraram vermelho, demonstrando que as linhas
+      perturbadas são alcançadas pelo teste.
+  l4_adversarial_input:
+    status: skipped
+    note: 'Não executado: perturbações já demonstraram que todos os 5 endpoints possuem guarda load-bearing.
+      L4 não alteraria o veredicto.'
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Card é Story de cobertura E2E, não Bug.

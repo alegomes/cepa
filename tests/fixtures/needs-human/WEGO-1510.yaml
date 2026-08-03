@@ -1,0 +1,73 @@
+card: WEGO-1510
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 26765bc
+head_commit: 1c58fce
+scope:
+  base_commit_resolved: true
+routing_reason: "The inner-layer proof is solid: 14/14 tests GREEN at HEAD; PIT ran diff-scoped; parseFolderId\
+  \ 'replaced long return with 0' mutant is KILLED by the new test (confirmed by manual worktree perturbation\
+  \ — GREEN->RED->GREEN). The only survived folder-method mutant (findFolderByName boundary page<=100\
+  \ vs page<100) is a pagination-limit off-by-one with no correctness impact on folder isolation.\nNEEDS-HUMAN\
+  \ because PlugSignAdapter.uploadFile is externally-observable (the folder id reaches the live PlugSign\
+  \ HTTP API), and the external surface proof (PlugSignFolderE2ETest) is gated behind @EnabledIfSystemProperty(runRealE2E=true),\
+  \ disabled in CI. The only available external evidence is the out-of-gate live run recorded in the commit\
+  \ message for 1c58fce.\nPer the altitude rule: inner-layer PIT passing does not substitute for an external\
+  \ proof on an externally-observable adapter. PROVEN is structurally unavailable until a human decides\
+  \ whether the documented live run is acceptable as the external criterion, or the live test is brought\
+  \ into the automated gate.\nHuman review queue: (a) Decide whether the documented live run (commit message:\
+  \ \"verificado AO VIVO,\n    pasta e2e-pasta-teste id 286904"
+levels:
+  l3_load_bearing:
+    technique: pit+perturbation
+    perturbation:
+      status: pass
+      description: 'Injected the PIT mutant manually into throwaway worktree at base_commit (26765bc):
+        replaced Long.parseLong(id) with return 0L in parseFolderId. Copied HEAD test file. Ran the guarding
+        test. Confirmed GREEN->RED. Restored and removed worktree.
+
+        '
+      green_at_head:
+        run: '(HEAD, no mutant) ./mvnw -pl infrastructure -am test -Dtest=PlugSignAdapterFolderTest#uploadFile_deveEnviarFolderIdNumericoExatoNoPayload
+          -Dsurefire.failIfNoSpecifiedTests=false → Tests run: 1, Failures: 0 (PASS)
+
+          '
+      red_with_mutant:
+        run: 'worktree /tmp/proof-WEGO-1510 at 26765bc + HEAD test + parseFolderId mutant (return 0L):
+          ./mvnw -pl infrastructure -am test -Dtest=PlugSignAdapterFolderTest#uploadFile_deveEnviarFolderIdNumericoExatoNoPayload
+          -Dsurefire.failIfNoSpecifiedTests=false → BUILD FAILURE — AssertionFailedError: "campo ''fol'
+      conclusion: parseFolderId is load-bearing against PlugSignAdapterFolderTest. GREEN->RED->GREEN confirmed.
+    pit:
+      status: ran
+      scope: PlugSignAdapter targeted against PlugSignAdapterFolderTest
+      run: ./mvnw -pl infrastructure -am test-compile org.pitest:pitest-maven:mutationCoverage -DtargetClasses="com.wego.assinatura.infrastructure.plugsign.PlugSignAdapter"
+        -DtargetTests="com.wego.assinatura.infrastructure.plugsign.PlugSignAdapterFolderTest" -DfailWhenNoMutations=false
+        → Generated 195 mutation
+      results:
+      - 'parseFolderId line 966: KILLED — ''replaced long return with 0'' killed by uploadFile_deveEnviarFolderIdNumericoExatoNoPayload'
+      - 'findFolderByName line 196: SURVIVED — ''changed conditional boundary'' (page <= 100 changed to
+        page < 100). Off-by-one on pagination limit; no test exercises the 100-page cutoff. Not a correctness
+        gap for the folder-isolation behavior.'
+      - 'findFolderByName lines 199/201/204: KILLED — negated conditionals and empty-return mutations
+        killed by existing tests'
+      - 'findFolderByName line 209: NO_COVERAGE — return null after 100 pages (pagination exhaustion path)'
+  l2_coverage:
+    status: gap
+    run: 'No quarkus-jacoco wired; coverage assessed via PIT line-coverage report. parseFolderId (line
+      966): covered, mutation killed. findFolderByName: partially covered (lines 195-208 exercised by
+      lookup tests; line 209 pagination-exhaustion path has NO_COVERAGE). resolveFolderId race-condition
+      branch (lines 186-189): NO_COVERAGE.
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    reason: 'The live PlugSign surface is not reachable in the automated context. The mock server in PlugSignAdapterFolderTest
+      is fully controlled — adversarial inputs would test the test harness, not the production surface.
+      Skipped.
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    note: Story card, not a Bug — regression-red-at-base check not applicable.

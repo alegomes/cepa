@@ -1,0 +1,38 @@
+card: WEGO-1709
+verdict: needs-human
+schema_version: 2
+issue_type: Task
+base_commit: de1e517c847cc866f3166b7e13f777ec6e4bf0ce
+head_commit: 1a5b52d9fc2a55730a1b2f4b6542f5db2c7fba99
+scope:
+  base_commit_resolved: true
+routing_reason: "WEGO-1709 is a pure ADR commit: one markdown file, no code. The decisions recorded (reject\
+  \ `ordem` for MEDICO → 400; auto-sign MEDICO/PRESTADOR via /api/files by certificate) are explicitly\
+  \ deferred to follow-up implementation cards (FUP-1 through FUP-7 listed in the ADR). None of those\
+  \ decisions are enforced by any changed class in this diff — the referenced source files (AssinaturaResource.java,\
+  \ SolicitarAssinaturaService.java, Signatario.java, PlugSignAdapter.java) are untouched at head commit\
+  \ 1a5b52d.\nThere is no executable behavior to prove load-bearing. A design decision is adjudicated\
+  \ by a human reviewer, not by a perturbation gate. Verdict is NEEDS-HUMAN: a human must confirm the\
+  \ ADR was reviewed, agreed upon, and that the referenced follow-up cards (FUP-1..FUP-7) have been opened\
+  \ before this card can be considered Done.\nSuggested human review checklist:\n  1. Is ADR-0004 technically\
+  \ sound and agreed upon by the team?\n  2. Have FUP-1..FUP-7 been created as Jira cards? (Memory notes\
+  \ WEGO-1716..1722\n     as having been opened in a parallel session — verify those cards exist and\n\
+  \     cover the FUPs.)\n  3. Is this card's \"Done\" criterion purely the decision record, or does it\
+  \ al"
+levels:
+  l3_load_bearing:
+    status: n/a
+    technique: n/a
+    note: 'No production code changed. There is nothing to perturb. PIT has no target classes. The proof
+      gate is structurally inapplicable.
+
+      '
+  l2_coverage:
+    status: n/a
+    note: No changed lines in any instrumented source tree.
+  l4_adversarial_input:
+    status: skipped
+    note: No HTTP surface touched by this card.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a

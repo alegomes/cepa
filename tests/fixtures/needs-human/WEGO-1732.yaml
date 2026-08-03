@@ -1,0 +1,48 @@
+card: WEGO-1732
+verdict: needs-human
+schema_version: 2
+issue_type: Epic
+base_commit: 11c444882a10de85f2087ccb4b28ba05543348fb
+head_commit: 993a17225d6ac1936246f85b4a8a7044ff3a51d9
+scope:
+  base_commit_resolved: true
+routing_reason: 'Story A (boot fail-fast) e Story B (endpoint /api/v1/admin/health/dependencies, contrato
+  básico: 4 deps, sempre 200, sem auth, sem vazamento de segredo, desacoplado da readiness) foram provadas
+  por perturbação verde->vermelho->verde na altitude certa. Duas questões permanecem abertas e nenhuma
+  delas é um "não provado" no sentido de código errado: (1) a classificação de status real (UP/DEGRADED/DOWN
+  via HTTP verdadeiro de PlugSign/Tasy) em DependencyProbeService só é coberta por teste não-Quarkus (WireMock),
+  com 4 mutantes sobreviventes ali — nenhum @QuarkusTest com mocks OFF prova esse caminho na superfície
+  HTTP hoje; (2) a pendência operacional de NetworkPolicy restringindo o endpoint sem-auth a faixas internas
+  (declarada no próprio state.yaml do run autônomo) não tem nenhum artefato correspondente no repo de
+  GitOps (clinic-manager-gitops) — busquei por NetworkPolicy e por ''assinatura'' lá e não há nada; isso
+  está fora do alcance deste gate (repo de código), mas é um risco real e aberto: hoje o endpoint responde
+  publicamente sem autenticação a quem alcançar a rede.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: perturbation (universal) + pit (fast path, infrastructure)
+    pit:
+      status: survived
+      results:
+      - 'infrastructure/DependencyProbeService: 54 mutações, 38 killed (70%), 128/164 linhas cobertas
+        (78%). `./mvnw -pl infrastructure -am test-compile org.pitest:pitest-maven:mutationCoverage -DtargetClasses=com.wego.assinatura.infrastructure.diagnostics.DependencyProbeService
+        -DtargetTests=com.wego.assina'
+      - 4 mutantes NegateConditionalsMutator sobreviventes em probePlugSign() linhas 232/246/253 e probeTasy()
+        linha 283 — exatamente na lógica que classifica o status real (UP/DEGRADED/DOWN) a partir do código
+        HTTP de resposta de PlugSign/Tasy reais.
+      - 'GAP: DependencyHealthE2ETest (o teste externo que passou acima) roda SEMPRE com wego.plugsign.mock.enabled=true
+        / wego.tasy.mock.enabled=true (profile de teste) — ou seja, o caminho de classificação de status
+        REAL (não-mock) nunca é exercitado por um @QuarkusTest. Só DependencyProbeServiceTest (infr'
+  l2_coverage:
+    status: assumed
+    run: sem quarkus-jacoco configurado para bootstrap/api-rest neste run; cobertura julgada estruturalmente
+      (existência de teste cobrindo a classe), não medida por ferramenta.
+  l4_adversarial_input:
+    status: skipped
+    run: não executado — L3 já revelou o gap relevante (classificação de status real sem prova externa);
+      adversarial input adicional não mudaria o veredito.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Epic, não Bug.

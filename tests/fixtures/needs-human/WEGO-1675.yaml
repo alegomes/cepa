@@ -1,0 +1,77 @@
+card: WEGO-1675
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 479a599
+head_commit: 7bf094c
+scope:
+  base_commit_resolved: true
+routing_reason: "Four perturbations confirmed load-bearing (P1 401-retry RED, P3 gateway migration RED\
+  \ compile,\nP4 invoke()-method RED compile, P5 class-removal RED compile). All 9 @QuarkusTest baseline\n\
+  tests are GREEN.\n\nHowever, four source-level perturbations (P2 through P8: 500-branch, content-type\
+  \ check,\ninvokeVo body shape, log-sanitization) could not be executed. The bash-path-lock hook blocked\n\
+  all file writes to the throwaway worktree (/tmp/proof-WEGO-1675/**) — the hook scans for shell\nredirect\
+  \ operators and matched '>= 500' as a redirect target. Write tool also restricted to\n.claude/proof/**\
+  \ only. This is NOT a hook/allowlist edit the proof-reviewer is permitted to make.\n\nSpecific block:\
+  \ agent 'proof-reviewer', target /tmp/proof-WEGO-1675/src/main/java/...\nTasyRpcClient.java, hooks/bash-path-lock.py\
+  \ and hooks/path-lock.py (both fired).\n\nThe skipped perturbations cover real behavioral assertions:\n\
+  \  - fiveHundredSurfacesAsTasyUpstream (AC: \"500 → upstream\")\n  - nonJsonContentTypeIsRejectedAsUpstream\
+  \ (AC: \"Content-Type text/html → upstream\")\n  - invokeVoBuildsExpectedTwoElementBody (AC: \"invokeVo\
+  \ body shape\")\n  - doesNotLogSensitiveHeadersOrAuthMaterial (AC: \"no sensitive headers in logs\"\
+  )\nTh"
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: partial
+      baseline:
+        status: pass
+        run: 'mvn -f /tmp/proof-WEGO-1675/pom.xml test -Dtest=TasyRpcClientTest -Dsurefire.failIfNoSpecifiedTests=false
+          → Tests run: 9, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS'
+      results:
+      - id: P1_401_retry_removal
+        hunk: TasyRpcClient.doCall — entire 401-retry block (outer if + inner double-401 check)
+        technique: python3 string-patch on worktree copy
+        result: RED
+        run: 'Tests run: 9, Failures: 1, Errors: 1 — retriesOnceAfter401ThenReturnsSuccess ERROR (TasyIntegrationException);
+          doubleConsecutive401SurfacesAsTasyUnauthorized FAIL (wrong exception type)'
+        verdict: pass
+      - id: P3_RawGateway_base_revert
+        hunk: RawTasyAtendimentoGateway.fetchAtendimentoVo — reverted to pre-migration (calls removed
+          lerAtendimentoGWT)
+        technique: git checkout 479a599 -- RawTasyAtendimentoGateway.java
+        result: RED
+        run: 'COMPILATION ERROR: cannot find symbol method lerAtendimentoGWT(List<Object>) — BUILD FAILURE'
+        verdict: pass
+      - id: P4_TasyRemoteClient_invoke_removal
+        hunk: TasyRemoteClient.invoke() method — reverted to 479a599 (method absent)
+        technique: git checkout 479a599 -- TasyRemoteClient.java
+        result: RED
+        run: 'COMPILATION ERROR: cannot find symbol method invoke(String,String,List<Object>) in TasyRpcClient.java:123
+          — BUILD FAILURE'
+        verdict: pass
+      - id: P5_TasyRpcClient_class_removal
+        hunk: TasyRpcClient class — deleted entirely (git rm)
+        technique: git rm TasyRpcClient.java
+        result: RED
+        run: 'COMPILATION ERROR: package tasy.raw.rpc does not exist; cannot find symbol class TasyRpcClient
+          — BUILD FAILURE'
+        verdict: pass
+    pit:
+      status: n/a
+      results:
+      - pitest not in pom.xml; all covering tests are @QuarkusTest — PIT cannot instrument them. Not provisioned
+        per policy.
+  l2_coverage:
+    status: assumed
+    run: No quarkus-jacoco or jacoco-maven-plugin in pom.xml. Coverage assessed structurally from test
+      source. invokeVoid and GenericType overload delegate to doCall() which is covered; these are pass-through
+      delegation paths, low risk, but uncovered.
+  l4_adversarial_input:
+    status: skipped
+    run: TasyRpcClient has no @Path/@GET/@POST — it is a CDI bean with no direct HTTP endpoint. No endpoint
+      to probe adversarially. L4 not applicable.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Issue type is Story, not Bug.

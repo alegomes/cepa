@@ -1,0 +1,68 @@
+card: WEGO-1710
+verdict: needs-human
+schema_version: 1
+issue_type: Bug
+base_commit: cc574d9a792fda616ea8ce2896c320f9d0415089
+head_commit: ea9e1ac5bfd906fb285f36e7d71ffe30a304a0c9
+scope:
+  base_commit_resolved: true
+routing_reason: "L2: PASS — 13/13 E2E tests pass (3 in AtualizarContatoSignatarioE2ETest +\n  10 in AtualizarContatoSignatarioNotificarE2ETest\
+  \ including b1/b2 and all AC/TC tests).\n  Prior L4-#2 and L4-#3 findings are confirmed CLOSED by passing\
+  \ tests.\nL3: PASS — PIT run against unit-only scope (AtualizarContatoSaveUnitTest +\n  AtualizarContatoSignatarioServiceTest):\
+  \ 23/27 mutants killed (85%), test strength 92%.\n  The prior gap (SaveUnit had zero unit coverage)\
+  \ is closed. All functional mutants KILLED.\n  2 SURVIVED mutants are in LOG.infof() non-behavioral\
+  \ boolean expressions.\n  2 NO_COVERAGE mutants are defensive guards unreachable in unit scope.\n  Note:\
+  \ PIT cannot target @QuarkusTest E2E classes; L3 was run against the unit-testable\n  scope only. The\
+  \ despacharLembrete dispatch logic IS covered by AtualizarContatoSignatarioServiceTest\n  (a pure Mockito\
+  \ test), so PIT does reach it. The structural isolation guarantee\n  (REQUIRES_NEW transaction) is tested\
+  \ by TC6 at E2E.\nL4: CLEAN — both prior L4 findings are closed with passing tests. No new findings.\n\
+  \  L4-#1 (?notificar=garbage) is accepted as product decision per card instructions.\nBugfix regression:\
+  \ ASSUMED — tests cannot compile against base com"
+levels:
+  l2_external_coverage:
+    status: pass
+    run: "Worktree: /tmp/proof-WEGO-1710 at ea9e1ac\n./mvnw clean install -DskipTests -q (full multi-module\
+      \ build)\n./mvnw test -pl bootstrap\n  -Dtest=\"AtualizarContatoSignatarioNotificarE2ETest,AtualizarContatoSignatarioE2ETest\"\
+      \nResult:\n  AtualizarContatoSignatarioE2ETest:          Tests run: 3,  Failures: 0, Errors: 0,\
+      \ Skipped: 0\n  AtualizarContatoSignatarioNotificarE2ETest: Tests run: 10, Failures: 0, Errors:\
+      \ 0, Skipped: 0\n  Total: 13/13 passed. BUILD SUCCESS.\nTest methods confirmed by surefire XML\n\
+      (bootstrap/target/surefire-reports/TEST-...NotificarE2ETest.xml):\n  tc1_semNotificar_retorna200_lembreteNaoSolicitado_semChamarPlugSign\
+      \            PASS (AC1)\n  tc1b_notificarFalseExplicito_retorna200_lembreteNaoSolicitado_semChamarPlugSign\
+      \ PASS (AC1)\n  tc2_notificarTrue_lembreteAceito_retorna200_lembreteEnviado                    PASS\
+      \ (AC2)\n  tc3_notificarTrue_plugSignRejeita_retorna200_lembreteFalhou_"
+  l3_diff_mutation:
+    status: pass
+    run: "Worktree: /tmp/proof-WEGO-1710 at ea9e1ac\n./mvnw org.pitest:pitest-maven:mutationCoverage\n\
+      \  -pl application\n  -DtargetClasses=\"com.wego.assinatura.application.service.AtualizarContatoSaveUnit,\n\
+      \                    com.wego.assinatura.application.service.AtualizarContatoSignatarioService\"\
+      \n  -DtargetTests=\"com.wego.assinatura.application.service.AtualizarContatoSaveUnitTest,\n    \
+      \              com.wego.assinatura.application.service.AtualizarContatoSignatarioServiceTest\"\n\
+      Result: Generated 27 mutations, Killed 23 (85%), Test strength 92%\n         Line Coverage for mutated\
+      \ classes: 51/52 (98%)\n         Survived: 2  No-coverage: 2  BUILD SUCCESS\nUnit test suite (23\
+      \ tests ran):\n  AtualizarContatoSaveUnitTest      (6 tests):  l3a_caminhoFeliz, l3a_pedidoAberto,\n\
+      \    l3b_pedidoNaoEncontrado, l3b_pedidoTerminal, l3b_signatarioNaoEncontrado,\n    l3b_signatarioNaoPertenceAoPedido\
+      \ — all PASS\n  Atualiza"
+  l4_adversarial_input:
+    status: clean
+    run: "Re-verification of the two previously flagged findings:\n\nL4-#2 CLOSED — per-channel dispatch\
+      \ (email fails, whatsApp still called):\n  Unit evidence (A1 test in AtualizarContatoSignatarioServiceTest):\n\
+      \    wego1710_a1_emailFalha_whatsappOk_retornaFalhou_whatsAppFoiChamado_motivoContemEmail\n    →\
+      \ email throws PlugSignClientException; verify(plugSign).enviarLembreteWhatsApp(...) passes;\n \
+      \     status=FALHOU; motivo contains \"email:\" but not \"whatsapp:\". PASS.\n    wego1710_a2_emailEWhatsappAmbosfalham:\
+      \ both channels attempted, both in motivo. PASS.\n    wego1710_a3_emailEWhatsappAmbosOk: both called,\
+      \ status=ENVIADO. PASS.\n  E2E surface evidence: tc3 (single-channel forced failure) PASS — 200\
+      \ not 502, FALHOU.\n  The per-channel try/catch fix is verified at both unit and E2E levels.\n\n\
+      L4-#3 CLOSED — body {} now returns 400:\n  b1_bodyVazio_semEmailSemTelefone_retorna400: PATCH with\
+      \ {} → 400. PASS.\n  "
+    findings: []
+  bugfix_regression_red_on_base:
+    status: assumed
+    run: "CONSTRAINT: Regression tests do not compile at base_commit (cc574d9).\nAtualizarContatoResultado,\
+      \ LembreteResultado, and the 3-arg AtualizarContatoCommand\nconstructor exist only at HEAD. Compile\
+      \ failure confirmed in the proof worktree:\n  ./mvnw clean test -pl application,bootstrap (base\
+      \ UseCase + HEAD test sources)\n  → [ERROR] cannot find symbol: class AtualizarContatoResultado\n\
+      \  → [ERROR] package LembreteResultado does not exist\n  → [ERROR] AtualizarContatoCommand(...boolean)\
+      \ cannot be applied to given types\nFull worktree at base (cc574d9): ./mvnw clean install -DskipTests\
+      \ → BUILD SUCCESS\nBase TC1 with base artifacts: ./mvnw test -pl bootstrap\n  -Dtest=\"AtualizarContatoSignatarioE2ETest#tc1_atualizarContato_semMensagem_retorna200_nao502\"\
+      \n  → Tests run: 1, Failures: 0 (base service calls PlugSign normally, returns 200).\nThis confirms\
+      \ the base service is executable and calls lembrete uncon"

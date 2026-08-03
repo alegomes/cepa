@@ -1,0 +1,54 @@
+card: WEGO-1770
+verdict: needs-human
+schema_version: 2
+issue_type: Bug
+base_commit: ae423a1
+head_commit: 926f164
+scope:
+  base_commit_resolved: true
+routing_reason: 'O fix e load-bearing na camada onde foi testado: perturbando o hunk alterado (GlobalExceptionMapper.java
+  linha ~55) o teste unitario que deveria capturar a distincao vai VERMELHO (mapsInboundRouteNotFoundToRouteNotFound),
+  e o regression-red-at-base confirma que o bug realmente existia no commit pai (ae423a1). O lado inverso
+  da distincao (recurso ausente -> not_found) ja tem cobertura HTTP real via 14 testes @QuarkusTest existentes
+  (nao perturbados porque esse ramo nao foi tocado por este diff) e continua verde. Porem GlobalExceptionMapperTest
+  NAO e um @QuarkusTest: ele instancia o mapper a mao e chama toResponse() diretamente, pulando o roteador
+  HTTP do Quarkus. Isso significa que a prova de que route_not_found aparece de fato quando alguem bate
+  um path inexistente (ex.: GET /rota/inventada) via HTTP real NAO EXISTE no repo. E exatamente o caso
+  que a skill ''nunca deixe uma prova de camada interna substituir uma externa'' cobre: pode ser que o
+  roteador RESTEasy Reactive do Quarkus trate rota nao mapeada ANTES do GlobalExceptionMapper, sem nunca
+  lancar jakarta.ws.rs.NotFoundException — e ninguem testou isso. NEEDS-HUMAN: falta um teste @QuarkusTest+RestAssured
+  batendo um path realment'
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'GREEN pre-perturbacao (HEAD 926f164, worktree /tmp/proof-WEGO-1770-pert): mvn -q test -Dtest=GlobalExceptionMapperTest
+        -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 10, Failures: 0'
+      - 'Hunk revertido (git checkout ae423a1 -- .../GlobalExceptionMapper.java, restaura ''not_found''/''Recurso
+        nao encontrado.'' para jakarta.ws.rs.NotFoundException): mvn -q test -Dtest=GlobalExceptionMapperTest
+        -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 10, Failures: 1 -- mapsInboundRouteNotFound'
+      - Restaurado (git checkout HEAD -- ...) -> git diff limpo, worktree de volta ao estado 926f164.
+    pit:
+      status: absent
+      results: []
+  l2_coverage:
+    status: assumed
+    run: sem quarkus-jacoco/jacoco wired para leitura neste passe; cobertura da linha alterada (GlobalExceptionMapper.java,
+      ramo jakarta.ws.rs.NotFoundException) confirmada estruturalmente so pelo unit test GlobalExceptionMapperTest;
+      altitude HTTP nao coberta (ver external_perturbation acima).
+  l4_adversarial_input:
+    status: skipped
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: 'Worktree /tmp/proof-WEGO-1770-base em ae423a1 (pai de 926f164, codigo pre-fix). Trazido o teste
+      de 926f164 (git checkout 926f164 -- .../GlobalExceptionMapperTest.java). mvn -q test -Dtest=GlobalExceptionMapperTest
+      -Dsurefire.failIfNoSpecifiedTests=false -> Tests run: 10, Failures: 1 -- mapsInboundRouteNotFoundToRouteNotFound:
+      expected <route_not_found> but was <not_found>. RED confirmado na base.'
+  full_suite:
+    status: pass
+    run: 'Worktree /tmp/proof-WEGO-1770-pert em 926f164 (HEAD do fix). mvn -q test (suite completa) ->
+      soma de target/surefire-reports/*.txt: Tests run=138, Failures=0, Errors=0, Skipped=0. Confirma
+      o numero alegado (138/138) com exatidao.'

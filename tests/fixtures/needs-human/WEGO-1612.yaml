@@ -1,0 +1,63 @@
+card: WEGO-1612
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 6968a421ff81d9007b61b53abc778db9ef75ed2a
+head_commit: c404ddc7fd88b3c9f6b7e9c4ce8cfdc0e22421e1
+scope:
+  base_commit_resolved: true
+routing_reason: "The syncStatus guard in AcompanharPedidosService.listar() IS load-bearing at the external\
+  \ surface:\nperturbation (remove guard) → 6 RED in GetAssinaturasSpecSyncE2ETest → restore → 32/32 GREEN.\n\
+  This proves the guard is wired to the HTTP endpoint in the negative direction (syncStatus=false\ndoes\
+  \ NOT sync, which is the default — the @QuarkusTests depend on it).\n\nHowever, the positive direction\
+  \ (syncStatus=true DOES sync) has no @QuarkusTest coverage.\nGetAssinaturasSpecSyncE2ETest never passes\
+  \ ?syncStatus=true and never asserts a status change\nresulting from on-demand sync. PIT confirms listar()\
+  \ syncStatus=true branch (lines 90-93)\nsurvives all unit tests in AcompanharPedidosServiceTest. The\
+  \ unit-layer proof\n(AssinaturaResourceTest.devePassarSyncStatusTrueParaListar + service unit tests\
+  \ for\nmarcarAberto/marcarAssinado) is present but does NOT constitute external-surface proof per the\n\
+  altitude rule.\n\nNEEDS-HUMAN because:\n1. The positive syncStatus=true path has no @QuarkusTest that\
+  \ calls GET /api/v1/assinaturas?syncStatus=true\n   and asserts status change (e.g. ENVIADO → ABERTO\
+  \ after mock returns Open).\n2. PIT surviving mutants on lines 90-96 confirm the unit tests do not guard\
+  \ this path"
+levels:
+  l3_load_bearing:
+    technique: pit+perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'perturbation-1A [syncStatus guard in listar()]: removed if (filtros.syncStatus()) guard, making
+        sync unconditional. Pre-flight: 32/32 GREEN. Post-perturbation: 6 FAILURES in GetAssinaturasSpecSyncE2ETest
+        (statusRuntime_0001_enviado, statusRuntime_0002_enviado, statusRuntime_0011_enviado, happyPath_p'
+      - 'restore: git checkout HEAD -- application/src/main/java/com/wego/assinatura/application/service/AcompanharPedidosService.java.
+        Confirmed clean worktree.'
+      - 'Command: cd /tmp/proof-WEGO-1612 && ./mvnw -pl bootstrap -am test -Dtest=GetAssinaturasSpecSyncE2ETest
+        -Dsurefire.failIfNoSpecifiedTests=false'
+      - 'green-after-restore: 32/32 GREEN confirmed.'
+    pit:
+      status: ran
+      results:
+      - 'application/AcompanharPedidosService: 37 mutations, 30 killed (81%). Surviving mutants: lines
+        90-93 (if (filtros.syncStatus()) guard + forEach + syncComPlugSign call) — unit tests in AcompanharPedidosServiceTest
+        do NOT cover listar() with syncStatus=true.'
+      - 'api-rest/AssinaturaResource: 35 mutations, 20 killed (57%). 9 with no coverage. Surviving mutant
+        line=117 (lambda$listar$0 — filter predicate). @DefaultValue annotation not instrumentable by
+        PIT.'
+      - 'Command: cd /tmp/proof-WEGO-1612 && ./mvnw -pl application -am test-compile org.pitest:pitest-maven:mutationCoverage
+        -DtargetClasses=''com.wego.assinatura.application.service.AcompanharPedidosService'' -DtargetTests=''com.wego.assinatura.application.service.AcompanharPedidosServiceTest''
+        -DfailWhenNoMut'
+  l2_coverage:
+    status: assumed
+    run: PIT surviving mutants on lines 90-93 confirm listar() syncStatus=true path has no unit test coverage.
+      @QuarkusTest coverage not measurable (no quarkus-jacoco configured in bootstrap pom).
+  l4_adversarial_input:
+    status: findings
+    findings:
+    - 'GET /api/v1/assinaturas?syncStatus=true with ENVIADO seed pedidos: mock buscarRequest returns Open
+      for all pre-seeded keys (keys not registered in mock''s in-memory map). This would transit ENVIADO
+      → ABERTO. No @QuarkusTest asserts this transition explicitly. The behavior is reachable via the
+      real en'
+    - 'GET /api/v1/assinaturas/{id} with syncStatus=true (default): buscarPorId guard (line 65) is covered
+      by AcompanharPedidosServiceTest unit tests. No @QuarkusTest for /{id} specifically tests the sync
+      side-effect observability.'
+  bugfix_regression_red_at_base:
+    status: n/a

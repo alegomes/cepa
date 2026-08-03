@@ -1,0 +1,79 @@
+card: WEGO-1682
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 52b49ae
+head_commit: d634236
+scope:
+  base_commit_resolved: true
+routing_reason: 'Core load-bearing proofs all passed with verified evidence: (1) Reverting the batch HTTP
+  handler to single-file signature causes compile-time RED in the api-rest test layer and test-framework
+  RED in the bootstrap E2E layer. (2) Removing saveAll causes external @QuarkusTest RED. (3) Removing
+  empty-batch validation causes unit test RED. Auth companion classes (401/403) also GREEN.
+
+  L2 coverage is ''assumed'' (no JaCoCo instrumentation available) — this structural gap alone is sufficient
+  to block PROVEN per the verdict routing rules. L4 produced findings (content-type inconsistency on errors,
+  memory-intensive tag risk, downloadUrl not validated by URL). None of these are deterministic failures,
+  but they require a human decision on acceptance.
+
+  NEEDS-HUMAN because: L2 is ''assumed'' (not ''pass''), and L4 has findings to triage. The three load-bearing
+  perturbations passed; the human reviewer''s call is whether the L2 gap and L4 findings are acceptable
+  to ship.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+      - "PERTURBATION-1 (external, DocumentoAtendimentoResource batch handler): GREEN baseline:\n  ./mvnw\
+        \ -pl bootstrap -am test -Dtest=UploadDocumentoBatchE2ETest\n  -Dsurefire.failIfNoSpecifiedTests=false\n\
+        \  Result: Tests run: 18, Failures: 0, Errors: 0, Skipped: 2 — BUILD SUCCESS.\nPerturb: reverted\
+        \ Documento"
+      - 'PERTURBATION-2 (external, persistence wiring): GREEN baseline confirmed (same run as above).
+        Perturb: replaced repository.saveAll(documentos) with empty ArrayList in UploadDocumentosBatchService.
+        Result: Tests run: 1, Failures: 1 <<< FAILURE (happy_multi_3_arquivos_201_envelope assertion failure
+        — d'
+      - "PERTURBATION-3 (inner, empty-batch validation): GREEN baseline:\n  ./mvnw -pl application -am\
+        \ test -Dtest=UploadDocumentosBatchServiceTest\n  -Dsurefire.failIfNoSpecifiedTests=false\n  Result:\
+        \ Tests run: 9, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS.\nPerturb: removed BATCH_VAZIO\
+        \ guard from Uplo"
+      - "COMPANION AUTH TESTS: GREEN baseline:\n  ./mvnw -pl bootstrap -am test\n  -Dtest=UploadDocumentoBatchNoAuthE2ETest,UploadDocumentoBatchWrongRoleE2ETest\n\
+        \  -Dsurefire.failIfNoSpecifiedTests=false\n  Result: Tests run: 2, Failures: 0, Errors: 0, Skipped:\
+        \ 0 — BUILD SUCCESS.\n401 (no-auth) and 403 (wrong-rol"
+    pit:
+      status: n/a
+      results:
+      - PIT configured in pluginManagement with pitest-junit5-plugin 1.2.2 (version present in ~/.m2),
+        but command-line invocation (-pl application -am org.pitest:pitest-maven:mutationCoverage) fails
+        with 'Pitest could not run any tests — JUnit 5 plugin not installed'. pluginManagement <dependencies>
+        not in
+  l2_coverage:
+    status: assumed
+    run: 'quarkus-jacoco not wired; vanilla jacoco not configured. Coverage determined structurally: every
+      changed production class has at least one covering test at the appropriate altitude — UploadDocumentosBatchService
+      covered by UploadDocumentosBatchServiceTest (9 cases); DocumentoAtendimentoResource covered by DocumentoAtendimentoResourceBatchTest
+      (Mockito, api-rest layer) and UploadDocumentoBatchE2ETest (@QuarkusTest, external); DocumentoAtendimentoRepositoryAdapter
+      covered by DocumentoAtendimentoRepositoryAdapterBatchTest (@QuarkusTest with DB). Precision of per-line
+      coverage is assumed, not measured.
+
+      '
+  l4_adversarial_input:
+    status: findings
+    findings:
+    - 'FINDING-L4-1 (Content-Type on error responses not asserted): BatchValidationExceptionMapper returns
+      MediaType.APPLICATION_JSON (''application/json'') on all 4xx/413 responses. Other endpoints in this
+      project use ''application/problem+json'' (WegoExceptionMapper from wego-platform-commons). The E2E
+      tests'
+    - 'FINDING-L4-2 (TC-V5/TC-V7 marked @Tag("memory-intensive") — CI exclusion risk): arquivo_muito_grande_413
+      (21 MB byte[]) and payload_total_413_PAYLOAD_TOTAL_EXCEDIDO (11 × 10 MB temp files) are tagged memory-intensive
+      for optional CI exclusion. If these tags are excluded in a CI profile, the 413 stat'
+    - 'FINDING-L4-3 (TC-T3/TC-T4 skipped in main class via Assumptions.assumeTrue(false)): Two test methods
+      in UploadDocumentoBatchE2ETest are stub-skipped (sem_token_401, sem_role_403) with explicit Assumptions.assumeTrue(false).
+      The actual 401/403 coverage lives in UploadDocumentoBatchNoAuthE2ETest and U'
+    - 'FINDING-L4-4 (No assertion on downloadUrl format or reachability): TC-H1 asserts downloadUrl is
+      notNullValue() but does not assert the URL resolves to the correct document (e.g. /api/v1/atendimentos/{nrAtendimento}/documentos/{id}).
+      TC-H4 does GET each id directly (using the id field), not the downl'
+  bugfix_regression_red_at_base:
+    status: n/a

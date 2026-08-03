@@ -1,0 +1,80 @@
+card: WEGO-1683
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: f82376fe58ccc06c29e34108e769aca45bffafd0
+head_commit: 657fc654e1586f5fa484245ac1f4f875b79c203e
+scope:
+  base_commit_resolved: true
+routing_reason: "All three behaviors (refresh-on-dispatch, normalizer, diff-and-block) are load-bearing\
+  \ at the HTTP surface: P2 (external perturbation) turned TC-2/TC-3/TC-4 RED when the block guard was\
+  \ disabled; P4 turned normalizer unit tests RED; P6 turned HisAtendimentoDiff + unit- integration tests\
+  \ RED. GREEN→RED→GREEN chain is complete for the critical safety path.\nNEEDS-HUMAN is routed for two\
+  \ reasons: 1. The feature flag (wego.refresh-on-dispatch.enabled) defaults to false. The proof\n   demonstrates\
+  \ the mechanism works when the flag is on, but production protection\n   is contingent on the flag being\
+  \ enabled in the deployment config. This is a\n   deployment-config gap, not a code gap — a human must\
+  \ verify the flag is set in\n   staging/prod or accept the current opt-in posture as intentional.\n\
+  2. The worktree's pom.xml at commit 657fc65 does not include pitest (added later in\n   cc574d9). PIT\
+  \ was not run; perturbation was used throughout. The perturbation\n   proofs are sufficient (GREEN→RED→GREEN\
+  \ for each changed surface) but PIT from\n   the primary tree was not re-run to validate kill ratios\
+  \ — a reviewer may want\n   to run PIT from the current branch tip against these classes.\n"
+levels:
+  l2_coverage:
+    status: pass
+    run: "@QuarkusTest SolicitarAssinaturaRefreshOnDispatchE2ETest covers POST /api/v1/assinaturas for:\n\
+      \  TC-1 (no drift → 201), TC-2 (nome drift → 409), TC-3 (cpf drift → 409),\n  TC-4 (multi-field\
+      \ drift → 409 x2), TC-5 (HIS timeout → 503),\n  TC-6 (HIS 404 → 409 _existencia_no_his), TC-7 (first-touch\
+      \ → 201).\nUnit tests (SolicitarAssinaturaServiceTest#refreshOnDispatch*, HisAtendimentoDiffTest\
+      \ x23,\nAtendimentoNormalizerTest x19) cover all inner branches.\nAll drift/block paths at HTTP\
+      \ surface are exercised by the @QuarkusTest.\n"
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      evidence: verified
+      results:
+      - label: P1 — baseline GREEN (external, @QuarkusTest)
+        run: 'cd /tmp/proof-WEGO-1683 && TESTCONTAINERS_REUSE_ENABLE=false ./mvnw -pl bootstrap -am test
+          -Dtest=SolicitarAssinaturaRefreshOnDispatchE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+
+          '
+        result: 'Tests run: 7, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS'
+      - label: 'P2 — perturb diff-and-block guard (SolicitarAssinaturaService line 104: if (!divergencias.isEmpty())
+          → if (false && !divergencias.isEmpty()))'
+        run: 'cd /tmp/proof-WEGO-1683 && TESTCONTAINERS_REUSE_ENABLE=false ./mvnw -pl bootstrap -am test
+          -Dtest=SolicitarAssinaturaRefreshOnDispatchE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+
+          '
+        result: "Tests run: 7, Failures: 3, Errors: 0 — BUILD FAILURE. RED: drift_nomePaciente_lanca_409_HIS_DATA_DRIFT\
+          \ (TC-2),\n     drift_cpfPaciente_lanca_409 (TC-3),\n     drift_multiplos_campos_todosNoPayload\
+          \ (TC-4).\nTC-6 (_existencia_no_his) remained green because its block is in refreshFromHis()\
+          \ (HIS 404 path),"
+      - label: P3 — baseline GREEN (inner, AtendimentoNormalizerTest x19)
+        run: 'cd /tmp/proof-WEGO-1683 && ./mvnw -pl domain -am test -Dtest=AtendimentoNormalizerTest -Dsurefire.failIfNoSpecifiedTests=false
+
+          '
+        result: 'Tests run: 19, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS'
+      - label: 'P4 — perturb normalizeCpf (AtendimentoNormalizer line 105: replaceAll removed)'
+        run: 'cd /tmp/proof-WEGO-1683 && ./mvnw -pl domain -am test -Dtest=AtendimentoNormalizerTest -Dsurefire.failIfNoSpecifiedTests=false
+
+          '
+        result: "Tests run: 19, Failures: 2, Errors: 0 — BUILD FAILURE. RED: normalizeCpf_deveRemoverPontuacao,\n\
+          \     normalizeAtendimento_deveNormalizarTodosOsCamposD1_pacienteEMedico.\n"
+    pit:
+      status: absent
+      results:
+      - 'pitest-maven plugin not present in worktree pom.xml at commit 657fc65. PIT was added in commit
+        cc574d9 (post-1683, on current branch). Fallback: perturbation for all layers.'
+  l4_adversarial_input:
+    status: findings
+    findings:
+    - finding: Feature flag defaults to false. The @ConfigProperty wego.refresh-on-dispatch.enabled defaults
+        to "false" in SolicitarAssinaturaService; no %prod or %staging config override found in bootstrap/src/main/resources/application.properties.
+        Production deployments receive NO drift protection unless the fla
+    - finding: 'TC-6 perturbation gap: P2 did not turn TC-6 RED when the drift-and-block guard was disabled.
+        This is expected because TC-6''s block (HIS 404 → HisDataDriftException) is in refreshFromHis()
+        not in the divergencias.isEmpty() guard. The TC-6 path IS load-bearing (removing the HisDataDriftException
+        throw'
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Story card — no regression test required

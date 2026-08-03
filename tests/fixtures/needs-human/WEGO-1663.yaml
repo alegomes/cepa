@@ -1,0 +1,116 @@
+card: WEGO-1663
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 6fcf87e
+head_commit: e9f8fa6
+scope:
+  base_commit_resolved: true
+routing_reason: "Both production changes (obterResumo JPQL fix, null-check guard) are load-bearing at\
+  \ the HTTP surface: perturbation drove the expected @QuarkusTest failures. All 8 new enabled test classes\
+  \ pass GREEN baseline. Green->red->green is satisfied for the two production changes.\nNEEDS-HUMAN for\
+  \ three reasons: 1. AtendimentoSyncE2ETest (14 @Disabled tests, commit e9f8fa6) — a whole class of disabled\n\
+  \   tests was shipped as part of WEGO-1663. The card's title is \"cobertura E2E completa\". A\n   human\
+  \ must decide whether Out-of-Scope sync endpoints mean the card is Done, or whether\n   the 14 dead\
+  \ skeletons must be removed or enabled before closure.\n2. UploadDocumentoBatchE2ETest TC-T3/TC-T4 use\
+  \ Assumptions.assumeTrue(false) — permanently\n   skipped 401/403 paths deferred to WEGO-1682. Human\
+  \ must decide whether WEGO-1682 blocks\n   this card.\n3. L2 coverage is assumed (no quarkus-jacoco)\
+  \ — perturbation evidence compensates but\n   structural coverage cannot be mechanically verified.\n\
+  \nL4 findings that are NOT blockers (identified for completeness): - AssinaturaResumoE2ETest TC1 loose\
+  \ assertions (notNullValue + >=0) — compensated by\n  TenantIsolationSweepE2ETest's equalTo(6)/equalTo(8).\n\
+  - Documento"
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+      - perturbation_1:
+          target: PedidoAssinaturaRepositoryAdapter.obterResumo() — native SQL path (reverted JPQL fix
+            via git apply -R of 6fcf87e diff)
+          guarding_test: TenantIsolationSweepE2ETest
+          green_unperturbed: 'Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS'
+          red_perturbed: 'Tests run: 4, Failures: 2, Errors: 0, Skipped: 0 — BUILD FAILURE. TC-RI1 failed:
+            Expected <6>, Actual <14>. TC-RI2 failed: JSON path totalGeral Expected <6>, Actual <14>.
+            Native SQL bypasses Hibernate @Filter so all 14 pedidos across both tenants are counted, not
+            the per-tenant 6/8.'
+          run_green: cd /tmp/proof-WEGO-1663 && ./mvnw -pl bootstrap -am test -Dtest=TenantIsolationSweepE2ETest
+            -Dsurefire.failIfNoSpecifiedTests=false → 4/4 PASS
+          run_red: cd /tmp/proof-WEGO-1663 (with native SQL reverted) && ./mvnw -pl bootstrap -am test
+            -Dtest=TenantIsolationSweepE2ETest -Dsurefire.failIfNoSpecifiedTests=false → 2 FAILURES
+      - perturbation_2:
+          target: DocumentoAtendimentoResource — file==null guard removed from upload() and substituir()
+            (reverted 48e4088 diff via git apply -R)
+          guarding_test: DocumentoUploadErrorsE2ETest
+          green_unperturbed: 'Tests run: 7, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS'
+          red_perturbed: 'Tests run: 7, Failures: 1, Errors: 0, Skipped: 0 — BUILD FAILURE. TC-UP2 (upload_semCampoFile_retorna400):
+            Expected status code <400> but was <500>. NPE when file is null.'
+          run_green: cd /tmp/proof-WEGO-1663 && ./mvnw -pl bootstrap -am test -Dtest=DocumentoUploadErrorsE2ETest
+            -Dsurefire.failIfNoSpecifiedTests=false → 7/7 PASS
+          run_red: cd /tmp/proof-WEGO-1663 (with null-check reverted) && ./mvnw -pl bootstrap -am test
+            -Dtest=DocumentoUploadErrorsE2ETest -Dsurefire.failIfNoSpecifiedTests=false → 1 FAILURE
+      - green_baselines_sampled:
+        - 'AssinaturaResumoE2ETest: Tests run: 8, Failures: 0 — BUILD SUCCESS'
+        - 'AdminGapsE2ETest: Tests run: 12, Failures: 0 — BUILD SUCCESS'
+        - 'AdminSubjectPadraoE2ETest: Tests run: 5, Failures: 0 — BUILD SUCCESS'
+        - 'MedicoContatoSeedE2ETest: Tests run: 2, Failures: 0 — BUILD SUCCESS'
+    pit:
+      status: n/a
+      note: All new production code is in externally-observable classes (infrastructure adapter, api-rest
+        controller). PIT is not applicable as a substitute for the external @QuarkusTest proof per the
+        altitude rule.
+  l2_coverage:
+    status: assumed
+    note: 'No quarkus-jacoco wired in this project. Coverage determined structurally: each new @QuarkusTest
+      exercises the changed production classes via HTTP (RestAssured). All changed production lines are
+      reachable from the new tests (confirmed by perturbation driving RED on both changed classes). Precision
+      on exact line coverage is assumed, not measured.
+
+      '
+  l4_adversarial_input:
+    status: findings
+    findings:
+    - finding_1:
+        severity: low
+        location: AssinaturaResumoE2ETest TC1 (resumo_semFiltros_retorna200ComTodosOsCampos)
+        description: TC1 uses notNullValue() + greaterThanOrEqualTo(0) for all five count fields — these
+          are loose assertions. They would pass even if the JPQL returned all zeros for pendentes/assinados/expirados/erro/revogados
+          and only totalGeral > 0 held. The tenant isolation test (TenantIsolationSweepE2ETest TC-RI1/T
+        disposable: true
+        recommendation: Low risk — TenantIsolationSweepE2ETest carries the specific-count load. No action
+          required for PROVEN.
+    - finding_2:
+        severity: medium
+        location: DocumentoUploadErrorsE2ETest TC-UP3 (upload_arquivoVazio_retorna400ArquivoVazio)
+        description: 'TC-UP3 uses .statusCode(anyOf(equalTo(400), equalTo(422))). This is a two-way OR:
+          any status in {400, 422} is accepted. It would pass even if the behavior drifted from one code
+          to the other, masking a regression. The spec at line 407 says "HTTP 422 ou 400", so the OR is
+          intentional per spec ambiguit'
+        disposable: false
+        recommendation: Acceptable per spec ambiguity (spec says 422 or 400). WEGO-1663 did not change
+          this path; the null-check perturbation only targets the absent-file case. Not a blocker for
+          this card.
+    - finding_3:
+        severity: high
+        location: AtendimentoSyncE2ETest — all 14 tests @Disabled
+        description: 'AtendimentoSyncE2ETest (380 lines, added in e9f8fa6) contains 14 tests, every one
+          annotated @Disabled("WEGO-1663: sync endpoints exist but were Out of Scope in planning — enable
+          and verify"). These are skeleton placeholders. They NEVER run in surefire. The commit message
+          says "sync endpoints classif'
+        disposable: false
+        recommendation: 'Human decision: (a) accept that sync endpoints are Out of Scope and delete or
+          move AtendimentoSyncE2ETest to a follow-up card (WEGO-1663 does not declare them in scope per
+          specs/e2e-wego-1663.md line 51-52), OR (b) require the tests to be enabled before Done. The
+          audit in specs/e2e-wego-1663.md expl'
+    - finding_4:
+        severity: medium
+        location: UploadDocumentoBatchE2ETest — TC-T3 and TC-T4 (sem_token_401, sem_role_403)
+        description: 'Two tests use Assumptions.assumeTrue(false, ...) — they are permanently skipped
+          via unconditional abort. The skip reason is architectural (class-level @TestSecurity prevents
+          per-method role override). These are explicitly deferred to WEGO-1682. UploadDocumentoBatchE2ETest
+          is NOT a new test class in '
+        disposable: false
+        recommendation: These are pre-existing limitations acknowledged before WEGO-1663. The card's new
+          DocumentoUploadErrorsE2ETest does cover upload errors at the happy-path and absence-of-file
+          (null-file 400) level. The 401/403 gap is tracked in WEGO-1682. Human should confirm whether
+          WEGO-1682 is a blocker for this ca

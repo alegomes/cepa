@@ -1,0 +1,69 @@
+card: WEGO-1564
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 8a047e578f26f64e4c64853f8565a734d9e588ef
+head_commit: ddd11caa
+scope:
+  base_commit_resolved: true
+routing_reason: "L3 perturbação passou green→red→green para os 3 hunks de maior risco (status derivado\
+  \ ASSINADO_PARCIAL, DocumentoAnexo validação FK, admin CRUD listar). PIT rodou no domínio (60% kill,\
+  \ strength 90%).\nDois gaps bloqueiam PROVEN:\n1. Mutante SURVIVED em linha 199 (consolidarLifecycleStatus):\
+  \ 'totalAssinados + totalErro == total'\n   sobrevive à subtração. Não é código @Deprecated — é produção.\
+  \ Um teste explícito\n   consolidar_assinadoMaisErro_completaTotal_setAssinado deve garantir que totalAssinados=1,\n\
+  \   totalErro=1, total=2 retorna ASSINADO e que totalAssinados=1, totalErro=0, total=2 não retorna ASSINADO.\n\
+  \n2. @QuarkusTest externos (AdminE2ETest, GetAssinaturasSpecSyncE2ETest) não foram executados neste\
+  \ round\n   — registrados como 'assumed'. Ambos existem e têm asserções corretas para os comportamentos\n\
+  \   externamente observáveis. Um humano deve confirmar que esses testes passam na suíte completa antes\n\
+  \   de PROVEN.\n\nRecomendação para o revisor humano: (a) fechar o gap do mutante SURVIVED na linha\
+  \ 199 com um teste unitário; (b) confirmar que ./mvnw -pl bootstrap -am test -Dtest=AdminE2ETest,GetAssinaturasSpecSyncE2ETest\
+  \ passa verde. Se ambos confirmados, o card pode ser movido para "
+levels:
+  l3_load_bearing:
+    technique: pit+perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'L3-P1 (status derivado ASSINADO_PARCIAL — hunk de maior risco): GREEN pre-perturbation: ./mvnw
+        -pl domain -am test -Dtest=PedidoAssinaturaStatusComputadoTest -Dsurefire.failIfNoSpecifiedTests=false
+        → 12/12 PASS. PERTURBATION: comentou o bloco ''if (totalAssinados > 0) { return StatusAssinatura.ASSINA'
+      - 'L3-P2 (DocumentoAnexo validação de código FK — enum→FK): GREEN pre-perturbation: ./mvnw -pl domain
+        -am test -Dtest=DocumentoAnexoTest → 20/20 PASS. PERTURBATION: desabilitou CODIGO_PATTERN check
+        via ''if (false && !CODIGO_PATTERN...) // PERTURBADO'' em DocumentoAnexo.java. RED post-perturbation:
+        ''Test'
+      - 'L3-P3 (TipoDocumentoAdminResource — admin CRUD listar com filtro): GREEN pre-perturbation: ./mvnw
+        -pl api-rest -am test -Dtest=TipoDocumentoAdminResourceTest → 16/16 PASS. PERTURBATION: substituiu
+        Optional.ofNullable(ativo) por Optional.empty() em TipoDocumentoAdminResource.listar(). RED post-pertur'
+      - 'NOTA EXTERNA — admin CRUD TipoDocumento: Existe AdminE2ETest (@QuarkusTest @TestProfile) com
+        TC1 (POST criar), TC3 (GET buscar), TC12 (PATCH atualizar), TC13 (PATCH 404), TC14 (DELETE 204).
+        Cobre externamente o endpoint admin CRUD. O teste unitário TipoDocumentoAdminResourceTest prova
+        o roteamento i'
+    pit:
+      status: ran
+      results:
+      - 'domain/PedidoAssinatura: 92 mutations generated, 55 killed (60%); test strength 90%; 31 no-coverage;
+        6 survived'
+      - 'Surviving mutant on changed logic (line 199, consolidarLifecycleStatus): ''Replaced long addition
+        with subtraction'' — totalAssinados + totalErro == total became totalAssinados - totalErro ==
+        total. Killing test absent. This path is in non-deprecated production code.'
+      - 'Surviving mutant classes: getters (getBeneficiario, getCriadoEm, getNrAtendimento, getMensagem,
+        getPrazoAssinatura, isCancelado, isVencidoFlag) and @Deprecated bridge methods (marcarAssinado,
+        marcarRecusado, getAssinadoEm). Getters and bridge methods accepted as low-risk uncovered; line
+        199 is a gap'
+      - 'run: ./mvnw -pl domain -am test-compile org.pitest:pitest-maven:mutationCoverage -DtargetClasses=com.wego.assinatura.domain.model.PedidoAssinatura
+        -DtargetTests=com.wego.assinatura.domain.model.PedidoAssinaturaStatusComputadoTest,com.wego.assinatura.domain.model.PedidoAssinaturaTest
+        -DfailWhenNoMuta'
+  l2_coverage:
+    status: gap
+    run: 'Cobertura determinada via PIT (linhas sem test-hit = NO_COVERAGE 31 mutações). Linha 199 (consolidarLifecycleStatus)
+      tem mutante sobrevivente com 6 testes rodados — a lógica totalAssinados + totalErro == total não
+      é testada na variante subtração.
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    reason: Não executado — não há comportamento adversarialmente relevante adicional identificado além
+      do coberto em L3.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a

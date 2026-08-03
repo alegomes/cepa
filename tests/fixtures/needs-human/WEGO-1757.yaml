@@ -1,0 +1,74 @@
+card: WEGO-1757
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: d16eac14
+head_commit: d3f4ccd5
+scope:
+  base_commit_resolved: true
+routing_reason: 'ACs 1-4, codificáveis e sob controle deste card, estão TODOS verificados no artefato
+  em main via perturbação estática reexecutada de forma independente (diff antes/depois, sh -n, validação
+  de YAML, recomputação da conta de 16 chamadas linha a linha contra PlugSignAdapter.java). Não há defeito
+  de código a apontar. MAS o card é de OPERABILIDADE — seu critério de sucesso real é "o job que roda
+  de fato tem o comportamento certo" — e isso não é verdade hoje: o schedule criado pelo dono aponta para
+  origin/develop, que está 184 commits atrás de main e ainda roda a versão pré-fix do script (com -q,
+  sem -am, sem identificar o endpoint que driftou). Isso não é um defeito de código perturbável (não há
+  hunk que vire vermelho); é um descompasso de configuração/deploy entre o artefato corrigido e o ambiente
+  que o executa, fora do meu poder de fixar (não faço merge/promote de branch nem edito o schedule do
+  Bitbucket) e é uma decisão operacional do humano (mover o schedule para branch=main, ou promover main->develop
+  antes). Por isso NEEDS-HUMAN, e não UNPROVEN: o código não falhou nenhuma prova; o gap é de ambiente.
+  Adicionalmente, AC5 (quota) é suposição não confirmada com a Tecnospeed, registrad'
+levels:
+  l3_load_bearing:
+    technique: static-diff-and-syntax-perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'AC1 (remove -q): `git diff d16eac14..3ea6efc8 -- scripts/run-vendor-drift.sh` confirma remoção
+        de `-q` da linha `./mvnw -q test -pl infrastructure`; scripts/run-vendor-drift.sh:44 hoje é `./mvnw
+        test -pl infrastructure -am \` sem -q. Comentário scripts/run-vendor-drift.sh:40-43 justifica
+        com WEGO-19'
+      - 'AC2 (-am): mesma linha 44 confirma `-am` presente junto com `-pl infrastructure`; comentário
+        nomeia WEGO-1949 e explica o risco de jar stale virando ''bug de feature'' em vez de NoClassDefFound.'
+      - 'AC2 (failIfNoSpecifiedTests): scripts/run-vendor-drift.sh linha subsequente traz `-Dsurefire.failIfNoSpecifiedTests=false`,
+        com comentário explicando que o -am traz domain/application ao reator e sem essa flag o surefire
+        abortaria antes de alcançar infrastructure.'
+      - sh -n scripts/run-vendor-drift.sh -> saída limpa (script POSIX sh válido, sem erro de sintaxe).
+        Reexecutado pelo agente, não apenas herdado do artifact anterior.
+    pit:
+      status: n/a
+      results:
+      - Não aplicável — não há classes de produção Java mudando comportamento de domínio neste card; o
+        artefato provado é script sh + YAML + doc.
+  l2_coverage:
+    status: assumed
+    run: 'Não há cobertura automatizada possível para script de CI que bate em produção externa (PlugSignVendorDriftTest
+      só roda sob RunVendorDrift=true, deliberadamente fora do build normal). A única guarda real é a
+      leitura humana do stdout no momento da falha — o que é exatamente o que o AC1 corrige. Estrutural,
+      não uma lacuna deste card.
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+  operational_deployment_gap:
+    status: gap
+  sibling_context_not_credited_to_this_card:
+    status:
+    - 'WEGO-1973 (Review): PlugSignAdapter não trata HTTP 429 — eleva o risco da suposição de quota do
+      AC5, mas não é escopo deste card.'
+    - 'WEGO-1975 (Review): a própria suíte PlugSignVendorDriftTest tinha defeitos autorais (assert por
+      string, 5xx tratado como drift) sendo corrigidos em paralelo nos commits ef6f51c3..d3f4ccd5. Isso
+      não afeta os ACs 1-4 deste card (que são sobre script/pipeline/doc, não sobre a suíte em si), mas
+      afeta a utilidade prática do schedule: mesmo rodando a versão certa do script, o resultado do job
+      pode ser ruído até 1975 fechar.'
+  assumption_ac5_quota:
+    status: assumed
+    note: 'AC5 (quota) foi resolvido pelo dono como suposição (16/dia aceitável) SEM confirmação da Tecnospeed
+      — registrado aqui como dívida explícita, não como critério verificado. Gatilho de revisita sugerido:
+      primeira vez que o job vendor-drift falhar com padrão de rate-limit/429 (agravado por WEGO-1973
+      estar aberto e não tratar 429 hoje).
+
+      '

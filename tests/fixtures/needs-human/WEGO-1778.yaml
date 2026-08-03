@@ -1,0 +1,71 @@
+card: WEGO-1778
+verdict: needs-human
+schema_version: 2
+issue_type: Task
+base_commit: 1478a03f
+head_commit: 051179ae
+scope:
+  base_commit_resolved: true
+routing_reason: "The tests ARE load-bearing but not in the single-layer way the design doc comments claim.\n\
+  Perturbation reveals a LAYERED-DEFENSE structure:\n- Either @RolesAllowed alone OR permit-all.policy=authenticated\
+  \ alone independently produces 401.\n- The tests only go RED when BOTH security layers are simultaneously\
+  \ absent.\n- This means the new tests do not independently prove the @RolesAllowed gate is wired (a\
+  \ separate test class could silently pass if only @PermitAll replaced @RolesAllowed),\n  nor do they\
+  \ independently prove the profile override is load-bearing (a profile without the authenticated override\
+  \ still produces 401 via @RolesAllowed).\n- The JOINT behavior is proven: the 401 path fires under the\
+  \ actual production security model.\n  No single perturbation breaks them, but the double-perturbation\
+  \ (both gates gone) does.\n\nThis is a real structural finding: the tests cannot distinguish between\
+  \ \"401 from @RolesAllowed\" and \"401 from Vert.x HTTP auth policy\". Both mechanisms are present in\
+  \ production, so the 401 IS correct in production, but the test does not isolate which gate is the authoritative\
+  \ one.\n\nWhether this double-guard architecture is acceptable as proof of AC1 is a human judgm"
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: findings
+      results:
+      - 'GREEN baseline (HEAD, unperturbed):
+
+        ./mvnw -pl bootstrap -am test -Dtest=AtendimentoSyncNoAuthE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+
+        → Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS
+
+        '
+      - 'PERTURBATION 1 — profile policy only: removed ''permit-all.policy=authenticated'' from NoAuthProfile.getConfigOverrides(),
+        leaving @RolesAllowed intact.
+
+        Result: Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS (still GREEN).
+
+        Finding: @RolesAllowed on the endpoint independently produces'
+      - 'PERTURBATION 2 — @RolesAllowed only: replaced @RolesAllowed({"admin","user"}) with @PermitAll
+        on both sync endpoints, keeping permit-all.policy=authenticated in the profile.
+
+        Result: Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS (still GREEN).
+
+        Finding: The authenticated policy in t'
+      - 'PERTURBATION 3 — DOUBLE: @PermitAll on both sync endpoints + permit-all.policy=permit (both gates
+        removed simultaneously).
+
+        ./mvnw -pl bootstrap -am test -Dtest=AtendimentoSyncNoAuthE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+
+        → Tests run: 2, Failures: 2, Errors: 0, Skipped: 0 — BUILD FAILURE
+
+        WEGO'
+    pit:
+      status: n/a
+      results:
+      - No changed production-class lines in the diff. PIT diff-scoped mutation has no target. Structurally
+        N/A — not a gap.
+  l2_coverage:
+    status: pass
+    run: Changed lines are exclusively test sources and a YAML doc artifact. No production lines exist
+      to measure coverage against. L2 is vacuously satisfied — there are no uncovered production lines
+      in the diff.
+  l4_adversarial_input:
+    status: skipped
+    note: No new production behavior to probe adversarially. The new tests themselves are the adversarial
+      inputs (unauthenticated requests). L4 does not apply to a test-only diff.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Issue type is Task, not Bug. Regression-red-at-base protocol not applicable.

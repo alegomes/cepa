@@ -1,0 +1,81 @@
+card: WEGO-1958
+verdict: needs-human
+schema_version: 2
+issue_type: Task
+base_commit: 2e29d046686bf0a8aa8118e6f18f2416f91d0ed4
+head_commit: 876fd1667b7f0e4110e7d59a69c3eb7c895b9efc
+scope:
+  base_commit_resolved: true
+routing_reason: 'NEEDS-HUMAN (não UNPROVEN, não PROVEN). Os quatro pontos da tarefa: (1) o achado do L4
+  da rodada 2 está FECHADO -- reproduzido pelo próprio teste do time (DuploDeleteNaoAuditaPlugSignFalhoDeAuditoriaE2ETest)
+  e por mim, green->red->green, com o HTTP 409/PEDIDO_JA_TERMINAL preservado; (2) nenhuma regressão --
+  CA1-CA5 revalidados contra o novo HEAD (perturbações novas nas partes que tocam CancelarPedidoService:
+  CA2 nos dois caminhos, CA3 no DELETE; CA4/CA5 citados por não haver mudança de produção nesses trechos),
+  e PIT confirma 24/26 (92%) sem sobrevivente NOVO -- os 2 sobreviventes remanescentes são os mesmos endereços
+  já adjudicados na rodada 2 (equivalente e fora-do-diff), só deslocados pelo diff; (3) o contrapositivo
+  está vivo -- TC-A/TC-B/TC-C confirmam que falha REAL do PlugSign continua auditada nos dois endpoints;
+  (4) o lenient() não é decoração -- reverti só o hunk de 876fd166 e os dois testes novos foram a RED
+  apontando exatamente para a interação com auditTrail. O que impede PROVEN mecânico: a extensão do fix
+  ao caminho revogar para cobrir VENCIDO/ASSINADO_PARCIAL/RECUSADO é externally-observable (endpoint PATCH
+  /revogar) mas só está provada em nível unitário -- não há com'
+levels:
+  l4_regression_check:
+    status: closed
+    run: "Worktree /tmp/proof-WEGO-1958 (git worktree add ... 876fd166; removido ao final).\nNovo teste\
+      \ do próprio time reproduz a sonda:\nbootstrap/src/test/java/.../e2e/DuploDeleteNaoAuditaPlugSignFalhoDeAuditoriaE2ETest.java\n\
+      ./mvnw -pl bootstrap -am test -Dtest=DuploDeleteNaoAuditaPlugSignFalhoDeAuditoriaE2ETest \\\n  -Dsurefire.failIfNoSpecifiedTests=false\
+      \ -Dquarkus.jacoco.enabled=false\nGREEN (unperturbed): Tests run: 1, Failures: 0. 2a chamada DELETE\
+      \ -> HTTP 409\ntitle=PEDIDO_JA_TERMINAL (contrato inalterado); audit_trail sem\nPLUGSIGN_CANCELAMENTO_FALHOU;\
+      \ PEDIDO_CANCELADO da 1a chamada preservado;\nnenhuma linha nova. Log confirma PlugSign NÃO chamado\
+      \ na 2a tentativa.\nPerturbação (revertido o hunk de 876fd166 via git apply -R, restaurando a\n\
+      ordem antiga) -> RED: \"audit_trail NÃO pode conter PLUGSIGN_CANCELAMENTO_FALHOU\n... expected:\
+      \ <true> but was: <false>\". Restaurado (git checkout HEAD -- ...).\n"
+  l3_load_bearing:
+    technique: perturbation (universal) + PIT (fast path)
+    perturbation:
+      status: pass
+      results:
+      - 'GREEN pré-perturbação: CancelarPedidoServiceTest 28/28 passou em 876fd166.'
+      - 'lenient()-trap (ponto 4 da tarefa): revertido SÓ o hunk de 876fd166 (ordem antiga restaurada)
+        -> ./mvnw -pl application -am test -Dtest=CancelarPedidoServiceTest -Dsurefire.failIfNoSpecifiedTests=false
+        => RED nos DOIS testes novos: deveNaoAuditarFalhaPlugSignQuandoPedidoJaTerminal (NoInteractionsWan'
+      - 'CA2+CA3+masking (DELETE), contra o novo HEAD: removida a chamada auditarFalhaCancelamento(...)
+        do catch em execute(UUID,...) -> ./mvnw -pl bootstrap -am test -Dtest=CancelamentoPlugSignFalhaAuditoriaE2ETest
+        -Dsurefire.failIfNoSpecifiedTests=false -Dquarkus.jacoco.enabled=false => RED (Tests run: 4, '
+      - 'CA3 isolado (best-effort não falha o fluxo), contra o novo HEAD: removido o try/catch inteiro
+        em torno de plugSign.cancelarRequest(...) no DELETE -> CancelamentoPlugSignFalhaAuditoriaE2ETest
+        => RED (Tests run: 4, Failures: 2, Errors: 1 -- TC-A e TC-B quebraram: 502 propagado em vez de
+        204). Restaura'
+    pit:
+      status: ran
+      results:
+      - 'Re-executado no worktree contra 876fd166: ./mvnw -pl application -am test-compile org.pitest:pitest-maven:mutationCoverage
+        -DtargetClasses=com.wego.assinatura.application.service.CancelarPedidoService -DtargetTests=com.wego.assinatura.application.service.CancelarPedidoServiceTest
+        -DfailWhenNoMutatio'
+      - '2 sobreviventes confirmados via mutations.xml (parseado, não lido do console): (a) detalhes:134
+        ConditionalsBoundaryMutator (era :128 na rodada 2 -- deslocado +6 linhas pelo diff desta rodada;
+        conteúdo idêntico: ''detalhes.length() > 1000 ? ... : ...''); (b) execute:55 VoidMethodCallMutator
+        ''removed c'
+      - 'Nenhum sobrevivente NOVO nas linhas alteradas por esta rodada (a reordenação de pedido.cancelar()
+        nas linhas 41 e 84 -- NegateConditionalsMutator: 11/11 killed, 100%).'
+  l2_coverage:
+    status: assumed
+    run: 'Sem quarkus-jacoco no bootstrap (mesma lacuna estrutural das rodadas 1 e 2 -- nenhuma ferramenta
+      de projeto foi provisionada por mim). Cobertura das linhas alteradas confirmada por leitura estrutural
+      + perturbações desta rodada (todas RED) + PIT.
+
+      '
+  l4_adversarial_input:
+    status: closed
+    note: 'O achado ''double-delete-audit-pollution'' da rodada 2 foi fechado -- ver l4_regression_check
+      acima. Nenhuma nova sonda adversarial rodada nesta rodada além da re-execução direcionada ao achado
+      anterior (escopo desta rodada é re-prova do fix, não descoberta ampla).
+
+      '
+    findings: []
+  l3_new_structural_gap_revogar_vencido_recusado:
+    status: unit_only
+    run: Ver l3_load_bearing.perturbation item lenient()-trap para o RED do teste unitário.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Issue type Task, não Bug -- não obrigatório.

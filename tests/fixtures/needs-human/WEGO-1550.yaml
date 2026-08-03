@@ -1,0 +1,44 @@
+card: WEGO-1550
+verdict: needs-human
+schema_version: 2
+issue_type: Epic
+base_commit: null
+head_commit: null
+scope:
+  base_commit_resolved: false
+routing_reason: 'WEGO-1550 e um Epic sem diff proprio: nenhum commit de codigo referencia a chave (so
+  2 commits de documentacao de sessao), e nao existe .claude/cards/WEGO-1550.yaml com base_commit para
+  ancorar o mecanismo change-driven deste agente. Perturbacao, PIT e L4 nao tem hunk sobre o qual operar
+  neste nivel — por definicao de "one card, one verdict", o agente NAO fabrica um diff sintetico agregando
+  as 8 Stories filhas para produzir uma prova do Epic.
+
+  DECISAO HUMANA NECESSARIA (exatamente isto): confirmar se o Epic deve ser fechado por AGREGACAO EDITORIAL
+  das Stories filhas (7 proven + 1 needs-human) em vez de prova propria — e, se sim, decidir o que fazer
+  com a Story WEGO-1558 ainda needs-human, que carrega justamente a entrega central do Epic (vendor-drift
+  contra API real + job agendado). Fechar o Epic sem resolver 1558 primeiro deixaria "cobertura real +
+  job agendado" — os dois criterios mais especificos do AC do proprio Epic — sem verificacao.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: n/a
+    perturbation:
+      status: skipped
+      results:
+      - 'Sem diff proprio atribuivel a WEGO-1550, nao ha hunk para perturbar neste nivel. Perturbacao
+        so pode ser feita — e ja foi feita — no nivel das Stories filhas (ver contexto abaixo).
+
+        '
+    pit:
+      status: n/a
+      results: []
+  l2_coverage:
+    status: assumed
+    run: Nao aplicavel a um Epic sem diff proprio.
+  l4_adversarial_input:
+    status: skipped
+    reason: Nao aplicavel a um Epic sem diff proprio.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: issue_type = Epic — nao aplicavel

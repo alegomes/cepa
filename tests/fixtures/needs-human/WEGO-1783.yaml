@@ -1,0 +1,66 @@
+card: WEGO-1783
+verdict: needs-human
+schema_version: 2
+issue_type: Bug
+base_commit: 4ae3d454
+head_commit: d3f4ccd5
+scope:
+  base_commit_resolved: true
+routing_reason: 'O mecanismo do fix (@Fallback com applyOn=TimeoutException.class em TasyGatewayAdapter.buscarAtendimento)
+  é genuinamente load-bearing — provado por perturbação real (RED em TasyGatewayFallbackTimeoutE2ETest
+  quando quebrado). Mas esse teste chama o adapter diretamente, sem HTTP, e prova o mecanismo UMA VEZ
+  — não por endpoint. Para os dois endpoints que ESTE card reivindica (GET .../sync/diff, PUT .../sync),
+  o único teste citado (AtendimentoSyncGatewayUnavailableE2ETest) usa um mock que lança a exceção de domínio
+  diretamente e por isso permanece VERDE mesmo com o @Fallback real quebrado — green-when-broken, confirmado
+  por perturbação nesta sessão. Não existe no repositório nenhum teste que combine adapter real + WireMock
+  com delay + chamada HTTP a qualquer um dos dois endpoints de sync. Como o card também admite textualmente
+  ser "resolvido junto com o WEGO-1779, mesma mudança" e nenhum código endpoint-específico foi tocado,
+  a evidência disponível para 1783 é estruturalmente idêntica à de 1779 — não há prova aditiva que pertença
+  só a este card. NEEDS-HUMAN: decisão de tratar como duplicata (fechar 1783 quando 1779 fechar, sem prova
+  externa própria) ou encomendar o teste HTTP+adapter-r'
+levels:
+  l3_load_bearing:
+    technique: perturbation (universal — PIT não instrumenta @QuarkusTest)
+    perturbation:
+      status: survived
+      results:
+      - 'GREEN baseline (não-perturbado): AtendimentoSyncGatewayUnavailableE2ETest TC-1 (GET .../sync/diff)
+        e TC-2 (PUT .../sync) — ''mvn -pl bootstrap -am test -Dtest=AtendimentoSyncGatewayUnavailableE2ETest
+        -Dsurefire.failIfNoSpecifiedTests=false -Dquarkus.jacoco.enabled=false'' → Tests run: 2, Failures:
+        0, '
+      - 'Perturbação aplicada no worktree /tmp/proof-WEGO-1783: TasyGatewayAdapter.java linha 40, applyOn
+        trocado de TimeoutException.class para IllegalStateException.class (neutraliza o @Fallback para
+        o cenário real de timeout — reproduz o defeito original, FT TimeoutException crua não é mais traduzida).'
+      - 'RED confirmado na altitude certa (adapter real, T3.1): ''mvn -pl bootstrap -am test -Dtest=TasyGatewayFallbackTimeoutE2ETest
+        -Dsurefire.failIfNoSpecifiedTests=false -Dquarkus.jacoco.enabled=false'' → FAILURE: ''Unexpected
+        exception type thrown, expected: TasyGatewayUnavailableException but was: org.ecl'
+      - 'GAP — GREEN-QUANDO-QUEBRADO na altitude externa dos dois endpoints deste card: com a MESMA perturbação,
+        ''mvn -pl bootstrap -am test -Dtest=AtendimentoSyncGatewayUnavailableE2ETest -Dsurefire.failIfNoSpecifiedTests=false
+        -Dquarkus.jacoco.enabled=false'' → Tests run: 2, Failures: 0, BUILD SUCCESS (idên'
+    pit:
+      status: n/a
+      results:
+      - TasyGatewayAdapter só é exercitado por @QuarkusTest (T3.1/T3.2/BuscarAtendimentoGatewayUnavailableE2ETest);
+        PIT não instrumenta essa camada.
+  l2_coverage:
+    status: pass
+    run: 'obterDiffComHis/aplicarSyncDoHis (AtendimentoService) não têm try/catch — propagam a exceção
+      do adapter tal qual importarDoHis; wiring genérico via WegoExceptionMapper (confirmado no log do
+      run GREEN: ''WegoException mapped: code=TASY_GATEWAY_UNAVAILABLE status=503''). Coberto por T3.2
+      (mock) na altitude de wiring; não coberto na altitude de mecanismo real (ver l3).'
+  l4_adversarial_input:
+    status: skipped
+    findings:
+    - Não executado — a lacuna já identificada em L3 (ausência de prova real-adapter+HTTP nos dois endpoints)
+      é suficiente para NEEDS-HUMAN; L4 não muda o roteamento.
+  bugfix_regression_red_at_base:
+    status: skipped
+    run: 'Revert literal de TasyGatewayAdapter.java para 4ae3d454 (via git show 4ae3d454:... em worktree
+      isolado) não compila contra HEAD — GuiaTISS ganhou campos/shape aninhados via WEGO-1780/1782/1815
+      (posteriores ao fix deste card), e TasyGatewayRestClient.AtendimentoResponse mudou de plano p/ aninhado.
+      Revert full-tree para 4ae3d454 também tentado e descartado: 252 arquivos de diff, drift de meses
+      de desenvolvimento não relacionado (StatusFaturamento.INVALIDADO, PapelSignatario.isMedico(), etc.)
+      — recompor o estado de base é impraticável sem reverter dezenas de cards não relacionados. Usei
+      a perturbação equivalente (quebrar applyOn no hunk exato do fix, ver l3) como substituto semântico
+      do ''red-at-base'' — ela reproduz fielmente o defeito original (FT TimeoutException crua não traduzida)
+      sem precisar reconstruir o schema antigo.'

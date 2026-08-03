@@ -1,0 +1,70 @@
+card: WEGO-1619
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 64eefc8052a173da9361a7a437bd5f6f1ca42528
+head_commit: ddd11caa
+scope:
+  base_commit_resolved: true
+routing_reason: 'The inner-layer proof (ValidarCoordenadasAssinaturaService unit tests via PIT: 23/25
+  killed, 92%) is solid for the service class itself. Two surviving mutants on stream-filter lambdas are
+  minor but worth noting. The critical gap is external: SolicitarAssinaturaService.execute() is externally-observable
+  (wired to POST /api/v1/assinaturas), and its new Fase 2c call (validarCoordenadas.validar) has no @QuarkusTest
+  that goes RED when that call is removed. SolicitarAssinaturaServiceTest mocks ValidarCoordenadasAssinaturaService,
+  so it cannot detect the wiring gap. The V032 seed pre-configures camposAssinatura for all standard tipos,
+  causing all E2E assinatura tests to hit AC1 (pre-configured field) — the rejection path (AC3: no field
+  AND no request coordinates → 400) is never exercised at the HTTP surface. NEEDS-HUMAN: a @QuarkusTest
+  asserting HTTP 400 with error body when coordenadas are absent for a tipo that requires them is structurally
+  missing.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: pit+perturbation
+    perturbation:
+      status: gap
+      results:
+      - 'inner-layer perturbation (GREEN with perturbation on SolicitarAssinaturaServiceTest): removed
+        validarCoordenadas.validar(arquivosSolicitados) call at SolicitarAssinaturaService line 203; ran
+        SolicitarAssinaturaServiceTest — 57/57 PASS. This is expected: SolicitarAssinaturaServiceTest
+        mocks ValidarCo'
+      - 'run: ./mvnw -pl application -am test -Dtest=SolicitarAssinaturaServiceTest -Dsurefire.failIfNoSpecifiedTests=false
+        → 57 tests, 0 failures (with validate() call commented out)'
+      - 'external-surface perturbation: NOT EXECUTED. No @QuarkusTest covers the scenario ''POST /api/v1/assinaturas
+        with tipoDocumento that requires coordinates but none provided → HTTP 400''. AssinaturaFlowTest
+        only exercises the happy-path (seed V032 pre-populates camposAssinatura for all standard tipos,
+        so'
+      - 'gap conclusion: the hunk in SolicitarAssinaturaService (the Fase 2c call) is externally-observable
+        but has no @QuarkusTest that goes RED when that call is removed. The inner-layer unit tests (ValidarCoordenadasAssinaturaServiceTest)
+        prove the service logic in isolation but cannot substitute for the '
+    pit:
+      status: ran
+      results:
+      - 'application/ValidarCoordenadasAssinaturaService: 25 mutations generated, 23 killed (92%)'
+      - 'run: ./mvnw -pl application -am test-compile org.pitest:pitest-maven:mutationCoverage -DtargetClasses=com.wego.assinatura.application.service.signatario.ValidarCoordenadasAssinaturaService
+        -DtargetTests=com.wego.assinatura.application.service.signatario.ValidarCoordenadasAssinaturaServiceTest
+        -Dfail'
+      - '2 surviving mutants — both are BooleanTrueReturnValsMutator on lambda predicates in stream filters
+        (line 92: resolverEfetivas lambda; line 121: validarArquivo lambda). These survive because the
+        unit tests exercise the relevant branches via NegateConditionals but not via forced-true returns
+        on those '
+      - 'Surviving mutant detail 1: line 92 (resolverEfetivas — filter c -> c.papel() == papel), replaced
+        boolean return with true. No test constructs a scenario where this filter returning true for all
+        campos causes an observable divergence.'
+  l2_coverage:
+    status: assumed
+    run: 'No quarkus-jacoco wired. Structural analysis: ValidarCoordenadasAssinaturaServiceTest covers
+      all 11 test cases (unit, PIT 98% line coverage). SolicitarAssinaturaServiceTest covers the wiring
+      with @Mock. No @QuarkusTest reaches the changed hunk in SolicitarAssinaturaService at the HTTP surface
+      without the mock bypass.'
+  l4_adversarial_input:
+    status: skipped
+    reason: 'Skipped: the most adversarial scenario (POST without coordenadas for a tipo that requires
+      them) cannot be observed at the HTTP surface without a @QuarkusTest. The mock (MockPlugSignAlternative)
+      is not a no-op — it has real upload/createRequest implementations — but the V032 migration seed
+      pre-populates camposAssinatura for all standard tipos, causing ValidarCoordenadasAssinaturaService
+      to always satisfy AC1 in E2E tests and masking the AC3 gap at the endpoint.'
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Story card, not a Bug — regression-red-at-base not applicable.

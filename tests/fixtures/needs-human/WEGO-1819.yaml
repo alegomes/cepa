@@ -1,0 +1,84 @@
+card: WEGO-1819
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: a4bb2107467e24361ee1d10eee94a56a498a31a9
+head_commit: 4c4c5ac8f457a0abb10beea35a75b18a13251ab9
+scope:
+  base_commit_resolved: true
+routing_reason: 'L3 perturbation: all 5 probed behaviors are load-bearing — the new case-insensitive sentinel
+  matching (Perturbation NEW: 8 RED failures on revert to case-sensitive), the abort branch, sentinel
+  detection, secret masking, and OBRIG_PROD classification all produced RED when broken. PIT absent from
+  pom.xml; perturbation is the equivalent path and was exhaustive. Full suite: 292 tests, 0 failures —
+  criterion (j) confirmed. L2: coverage confirmed structurally via perturbation outcomes. L4: the case-sensitivity
+  finding from the prior proof is NOW CLOSED — equalsIgnoreCase fix is in place and load-bearing. ONE
+  finding remains open: the OIDC-discovery race on the Keycloak abort path in live prod boot. This is
+  a design-documented operational question (not a logic defect, not a test gap), not addressable by perturbation
+  or any unit test. Human decision required: accept the documented race, or mitigate with quarkus.oidc.discovery-enabled=false.
+  This is the ONLY remaining open item. NEEDS-HUMAN on the single open L4 finding.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'GREEN baseline (pre-perturbation, full config suite, HEAD 4c4c5ac):
+
+        cmd: cd /tmp/proof-WEGO-1819 && mvn test -pl . -Dtest="ConfigItemSentinelTest,BootConfigValidatorUnitTest,SecretMaskerTest,ConfigCatalogClassificationTest,TasyUrlStripperTest"
+        -Dsurefire.failIfNoSpecifiedTests=false
+
+        result: Tests ru'
+      - 'Perturbation NEW — ConfigItem.isSentinel() reverted to case-sensitive (git checkout e6e4bfd --
+        ConfigItem.java; sentinelValues.contains(value) instead of equalsIgnoreCase loop).
+
+        cmd: cd /tmp/proof-WEGO-1819 && mvn test -pl . -Dtest="ConfigItemSentinelTest,BootConfigValidatorUnitTest"
+        -Dsurefire.fail'
+      - 'Perturbation 1 (carried from prior proof e6e4bfd) — abort branch in BootConfigValidator.onStart()
+        removed.
+
+        cmd: cd /tmp/proof-WEGO-1819 && mvn test -Dtest=BootConfigValidatorUnitTest
+
+        result: Tests run: 11, Failures: 6 — RED (6 assertThrows tests failed: prodOidcOn_tudoFaltando,
+        prodOidcOn_mensagemAb'
+      - 'Perturbation 2 (carried) — ConfigItem.isSentinel() hardcoded to return false.
+
+        cmd: cd /tmp/proof-WEGO-1819 && mvn test -Dtest=ConfigItemSentinelTest,BootConfigValidatorUnitTest
+
+        result: Tests run: 35, Failures: 7 — RED (4 ConfigItemSentinelTest + 3 BootConfigValidatorUnitTest
+        sentinel-abort tests fai'
+    pit:
+      status: absent
+      results:
+      - pitest-maven not present in pom.xml; perturbation used for all classes
+  l2_coverage:
+    status: pass
+    run: 'All changed classes are pure POJO with no external dependencies (no CDI, no Quarkus augmentation).
+      Reachability confirmed structurally via perturbation outcomes — every perturbed hunk produced RED
+      in the guarding test, which proves the test reaches the code. The new equalsIgnoreCase loop in ConfigItem.isSentinel()
+      is covered by the 7 new casing-positive tests (tasyUrl_variantesDeCasing_saoSentinela, tasyScope_variantesDeCasing_saoSentinela,
+      keycloakClientSecret_variantesDeCasing_saoSentinela), confirmed by Perturbation NEW above. quarkus-jacoco
+      is wired in pom.xml but not run standalone; coverage confirmed structurally.
+
+      '
+  l4_adversarial_input:
+    status: findings
+    findings:
+    - 'CLOSED — case-sensitivity of sentinel comparison (L4 finding from prior proof).
+
+      isSentinel() now uses equalsIgnoreCase over each sentinel value. Mixed-case inputs
+
+      (https://TESTE.opty.tasy.com.br, CHANGEME, wtasyaws_tst, wtasyAWS_TST, ChangeMe,
+
+      Changeme, cHaNgEmE) are now correctly treated as sentine'
+    - 'OPEN — OIDC-discovery race (criterion b, Keycloak vars):
+
+      BootConfigValidator.java lines 41-49 document an open structural race: quarkus-oidc
+
+      may attempt JWKS/metadata discovery before StartupEvent fires. If KEYCLOAK_URL is
+
+      absent or blank in prod, Quarkus can fail with a framework-level network/blan'
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Issue type is Story, not Bug.

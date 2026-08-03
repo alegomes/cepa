@@ -1,0 +1,87 @@
+card: WEGO-1785
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: fd05dd1bedb5bbf4fe8d14c03202a2ea5fa106ea
+head_commit: ba34a2e
+scope:
+  base_commit_resolved: true
+routing_reason: "Three external-surface perturbations passed with green-to-red-to-green chains (P1: CPF\
+  \ block removal RED at RestAssured; P2: compile-level RED on Paciente.cpf/enrichPacienteWithCpf; P3:\
+  \ cpf propagation removal RED at RestAssured). L2 coverage is now MEASURED via quarkus-jacoco — all\
+  \ CPF block lines have ci>0 with no structural gaps. L4 clean.\nThe single gap blocking PROVEN: the\
+  \ LGPD no-leak perturbation (P4) is SKIPPED for two compounding reasons — (1) the existing cpfWarnLogDoesNotContainCpfValue\
+  \ test is vacuously green for the CPF-leak property (CPF value never in scope during the tested code\
+  \ path, so assertNoneContains(\"99988877766\") is trivially true), and (2) the path-lock hook blocks\
+  \ the source Write needed to inject a leaking variant for falsification.\nNEEDS-HUMAN: adjudicate one\
+  \ of:\n  (a) Require a non-vacuous LGPD test: redesign cpfWarnLogDoesNotContainCpfValue so the CPF\n\
+  \      value IS in scope (stub buscarPessoas to return the patient row, force the warn path to\n   \
+  \   fire, assert the CPF is absent from logs). Then re-prove with the path-lock relaxed for\n      worktree\
+  \ source, or with explicit worktree write access granted to proof-reviewer.\n  (b) Waive the perturbation-"
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+      - 'GREEN baseline (unperturbed, worktree ba34a2e):
+
+        cmd: mvn test -Dtest="AtendimentoDetalheE2ETest,AtendimentoQueryServiceTest,TasyDomainMapperTest"
+        -Dsurefire.failIfNoSpecifiedTests=false
+
+        result: Tests run: 22, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS (2026-06-11T09:10:32)
+
+        '
+      - 'P1 — CPF block in AtendimentoQueryService reverted to base:
+
+        method: git checkout fd05dd1 -- AtendimentoQueryService.java
+
+        guard_test: AtendimentoDetalheE2ETest#cpfEPopuladoQuandoCpanel700835RetornaLinhaCorrespondente
+        (@QuarkusTest+RestAssured)
+
+        cmd: mvn test -Dtest="AtendimentoDetalheE2ETest#cpfEPopul'
+      - 'P2 — TasyDomainMapper.enrichPacienteWithCpf + Paciente.cpf slot reverted to base:
+
+        method: git checkout fd05dd1 -- TasyDomainMapper.java Paciente.java
+
+        cmd: mvn test -Dtest="AtendimentoDetalheE2ETest#cpfEPopuladoQuandoCpanel700835RetornaLinhaCorrespondente"
+        -Dsurefire.failIfNoSpecifiedTests=false
+
+        resu'
+      - 'P3 — ApiResponseMapper cpf propagation + PacienteResponse.cpf field reverted to base:
+
+        method: git checkout fd05dd1 -- ApiResponseMapper.java PacienteResponse.java
+
+        guard_test: AtendimentoDetalheE2ETest#cpfEPopuladoQuandoCpanel700835RetornaLinhaCorrespondente
+        (@QuarkusTest+RestAssured)
+
+        cmd: mvn test -'
+    pit:
+      status: n/a
+      results:
+      - pitest not present in pom.xml — not provisioned per protocol
+  l2_coverage:
+    status: pass
+    run: 'Worktree: /tmp/proof-WEGO-1785-jacoco (HEAD 07ac76f, quarkus-jacoco wired at 014ee5a)
+
+      cmd: mvn test -Dtest="AtendimentoDetalheE2ETest,AtendimentoQueryServiceTest,TasyDomainMapperTest"
+      -Dsurefire.failIfNoSpecifiedTests=false
+
+      result: Tests run: 27, Failures: 0. JaCoCo exec: target/jacoco-quarkus.exec produced.
+
+      '
+  l4_adversarial_input:
+    status: clean
+    run: "cmd: mvn test -Dtest=\"AtendimentoDetalheE2ETest\" in worktree ba34a2e\nresult: Tests run: 4,\
+      \ Failures: 0, Errors: 0 (2026-06-11T09:16:50)\nScenarios exercised:\n  - VO without CD_PESSOA_FISICA/NR_PRONTUARIO:\
+      \ CPF block skipped, 200 OK, cpf absent. PASS.\n  - 700835 stub returns empty list: cpf null, 200\
+      \ OK. Graceful degrade confirmed at HTTP surface.\n  - 700835 stub returns two rows, second matches\
+      \ CD_PESSOA_FISICA: correct CPF selected. PASS.\n  - Empty VO: 404 not_found, unrelated to CPF.\
+      \ PASS.\n  - Incidental: getByNumeroFluiAteOTasyEMapeiaOVo has no CAMPO 38 stub registered;\n  \
+      \  WireMock returns 404 to the 700835 call; TasyIntegrationException caught; endpoint\n    returns\
+      \ 200 with cpf absent. Degrade under unexpected upstream error confirmed.\nNo unexpected 5xx, no\
+      \ CPF leakage observable at HTTP surface.\n"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Story type — regression-red-at-base not applicable per protocol.

@@ -1,0 +1,68 @@
+card: WEGO-1949
+verdict: needs-human
+schema_version: 2
+issue_type: Bug
+base_commit: null
+head_commit: 2510fa081da8baf8e6a2e395a46e81590b74e3c7
+scope:
+  base_commit_resolved: false
+routing_reason: 'L3 (o coração do AC "barreira mecânica") está PROVADO por perturbação ao vivo, nesta
+  própria sessão, contra o hook realmente instalado e habilitado hoje (common@cepa 0.22.0): -pl sem -am
+  bloqueou (RED), -pl com -am passou (GREEN), -pl com `# stale-ok` passou (GREEN) — fechando inclusive
+  a dívida declarada ("escape hatch não verificado"). Os ACs 1 (doc) e 3 (memória) também verificados
+  diretamente (README.md commit 2510fa08; memória preexisting-broken-tests-atendimento-normalizer.md indexada
+  em MEMORY.md). Mas por protocolo este gate nunca certifica `proven` com um nível `assumed`/`skipped`
+  presente: L2 (cobertura formal do hook — a suíte de 25 casos declarada vive no repo `cepa`, que não
+  tenho como acessar/rodar daqui) está `assumed`, e L4 (busca adversarial por bypass do parser do hook)
+  está `skipped` por escopo. NEEDS-HUMAN não é dúvida sobre se a barreira funciona — funciona, e eu vi
+  funcionar ao vivo — é a lacuna estrutural entre "provei no ambiente onde estou sentado agora" e "provei
+  que a suíte formal do artefato-fonte, noutro repo, está verde". Minha recomendação default: aceitar
+  como PROVEN por decisão humana (waiver), já que a prova ao vivo é evidência mais forte que a suí'
+levels:
+  l3_load_bearing:
+    technique: perturbation (live, in-environment — not worktree-simulated)
+    perturbation:
+      status: pass
+      results:
+      - 'RED: `./mvnw -pl domain -o validate` (sem -am) executado via Bash tool desta própria sessão foi
+        BLOQUEADO pelo hook PreToolUse/Bash `maven-reactor-guard.py` (plugin common@cepa, versão 0.22.0,
+        instalada 2026-07-30T12:41:11Z, enabled=true em ~/.claude/plugins/installed_plugins.json). Saída
+        do hook: "'
+      - 'GREEN (via -am): `./mvnw -pl domain -am -o validate` → liberado, "BUILD SUCCESS".
+
+        '
+      - 'GREEN (via escape hatch): `./mvnw -pl domain -o validate # stale-ok` → liberado, "BUILD SUCCESS".
+        Isto também fecha a dívida declarada no Implementation Summary de 2026-07-21 ("escape hatch stale-ok
+        não verificado") — verificado agora, funciona conforme documentado.
+
+        '
+    pit:
+      status: n/a
+      results:
+      - Não aplicável — o artefato provado é um hook de harness (Python), não uma classe de produção Java
+        coberta por PIT.
+  l2_coverage:
+    status: assumed
+    run: 'Cobertura de linha não se aplica a um hook shell/PreToolUse; a prova de L3 acima (bloqueio real,
+      ao vivo, no PreToolUse/Bash desta sessão) é estruturalmente mais forte que cobertura de linha teria
+      sido. Marcado `assumed` porque não há métrica formal de cobertura do hook neste repo — o hook e
+      sua suíte declarada de 25 casos (`tests/test_maven_reactor_guard.py`) vivem no repo `cepa`, fora
+      do alcance deste gate; não confirmei aqui que essa suíte existe/passa (não tenho acesso ao repo
+      `cepa` neste ambiente além do artefato instalado em ~/.claude/plugins/cache).
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    findings:
+    - 'Não explorei variações adversariais do parser do hook (ex.: mvn dentro de subshell `$(...)`, aliases,
+      `xargs mvn`, `sh -c "mvn ..."`) — fora do escopo seguro de um teste ao vivo sem risco de efeito
+      colateral silencioso na sessão. O próprio código do hook (lido) trata wrappers (`timeout`, `env`,
+      `sud'
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: 'Não é o padrão clássico de regressão-red-at-base (a "correção" não é um diff de código de produção
+      neste repo revertível a um base_commit) — é um mecanismo de infraestrutura de harness cuja eficácia
+      foi provada por perturbação ao vivo (ver l3_load_bearing), o que é evidência estritamente mais forte
+      que checkout+run em worktree teria dado.
+
+      '

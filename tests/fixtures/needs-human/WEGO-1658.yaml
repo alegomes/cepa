@@ -1,0 +1,54 @@
+card: WEGO-1658
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: d7d089a8a60c8d3011417b457dc65aaa9a0a9438
+head_commit: 9a6bc93d9f81757fc712bbee8d6136859f729e27
+scope:
+  base_commit_resolved: true
+routing_reason: 'NEEDS-HUMAN. The card''s deliverable is a doc-only audit (NOT-AN-ISSUE conclusion). No
+  production class was changed, so L3 perturbation and PIT have no subject — both are structurally skipped.
+  My independent grep fully corroborates the audit''s claims: all 13 adapters at HEAD use parameterized
+  queries; the single dynamic identifier concatenation (sort) is whitelisted; no user input is ever spliced
+  into JPQL/SQL text. However, no adversarial injection test exists to prove the conclusion is load-bearing
+  at the HTTP surface — there is no test that sends "'' OR ''1''=''1" to an endpoint and asserts safe
+  treatment. The gap is: the audit is correct by code inspection, but there is no executable proof (green->red->green)
+  that would catch a future regression to string concatenation. A human reviewer must decide whether code-inspection
+  evidence alone is sufficient to close this card as PROVEN, or whether adversarial @QuarkusTest coverage
+  is required. The two unescaped LIKE patterns for the `nome` filter (AtendimentoRepositoryAdapter:206,
+  MedicoRepositoryAdapter:122/131) represent DoS-risk (wildcard fan-out, not SQL injection) and are surfaced
+  as low-priority hardening follow-ups per the audit doc'
+levels:
+  l3_load_bearing:
+    technique: grep-audit (doc-only card — no production hunk to perturb)
+    perturbation:
+      status: skipped
+      results:
+      - 'Skipped: doc-only card. No production line was modified, so green->red->green perturbation has
+        no subject. This is the structural reason this level cannot be ''pass''.
+
+        '
+    pit:
+      status: n/a
+      results:
+      - No production class changed; PIT has no target.
+  l2_coverage:
+    status: assumed
+    run: 'No changed production lines exist. Coverage pre-filter is vacuous. Structural reachability of
+      the audited query sites was confirmed via grep (all adapters wired through @ApplicationScoped CDI
+      beans invoked by use-case services invoked by JAX-RS resources).
+
+      '
+  l4_adversarial_input:
+    status: skipped
+    findings:
+    - 'No adversarial injection test payloads found anywhere in the test tree (grep for "OR ''1''=''1",
+      "''; DROP", "--", case-insensitive "injection" in .java files returned zero hits against SQL injection
+      vectors). The audit concluded NOT-AN-ISSUE and proposed no injection tests because no vulnerability
+      was '
+    - 'Independent spot-check (my own grep + full read of all 13 adapters at HEAD): every createQuery/createNativeQuery
+      call uses named (:param) or positional (?1) parameters. The one dynamic identifier (sort field in
+      PedidoAssinaturaRepositoryAdapter:163-166) is whitelisted before concatenation (SORTABLE_'
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: Issue type is Story, not Bug.
