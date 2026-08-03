@@ -146,6 +146,37 @@ aviso = ciclo("Resultado em uma frase clara.\n\n**Pra você:** nada.\n\n" +
 check("mais de 200 palavras antes do detalhe técnico → avisa",
       "palavras antes do detalhe" in aviso, repr(aviso[:300]))
 
+# ── abstração no lugar do fato (vale no texto INTEIRO) ─────────────────────
+# O bloco técnico era zona franca na v1, e foi exatamente lá que o usuário
+# achou as três frases obscuras em 03/08/2026.
+aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
+              "**Pra você:** nada.\n\n"
+              "### Detalhe técnico\n"
+              "O escopo virou um sinal mecânico e o aviso chega por um "
+              "caminho indireto. " + "detalhe " * 70)
+check("abstração DENTRO do detalhe técnico → avisa", "abstração" in aviso,
+      repr(aviso[:300]))
+check("…e cita as expressões encontradas",
+      "sinal mecânico" in aviso and "caminho indireto" in aviso, repr(aviso[:400]))
+
+aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
+              "**Pra você:** nada.\n\n### Detalhe técnico\n" + "detalhe " * 90)
+check("detalhe técnico sem abstração → nenhum aviso", aviso.strip() == "",
+      repr(aviso[:300]))
+
+# ── voz passiva: densidade, não caça ───────────────────────────────────────
+aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
+              "**Pra você:** nada.\n\n### Detalhe técnico\n"
+              "O arquivo foi criado, o teste foi rodado, a regra é aplicada "
+              "e a saída é verificada pelo hook. " + "detalhe " * 70)
+check("quatro passivas → avisa", "passivas" in aviso, repr(aviso[:300]))
+
+aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
+              "**Pra você:** nada.\n\n### Detalhe técnico\n"
+              "O arquivo foi criado pelo hook. " + "detalhe " * 80)
+check("uma passiva só → não avisa (é português normal)", aviso.strip() == "",
+      repr(aviso[:300]))
+
 # ── resposta de subagente não é o relatório ────────────────────────────────
 aviso = ciclo(BOM, sidechain_extra=RUIM)
 check("texto de subagente (sidechain) é ignorado", aviso.strip() == "",

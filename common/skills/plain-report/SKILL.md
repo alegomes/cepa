@@ -47,6 +47,34 @@ Regras duras:
   livre — quem não quer, para no cabeçalho.
 - **Ordem: resultado antes de mecanismo.** Nunca abra por como funciona.
 
+## A regra que vale no texto inteiro
+
+O bloco de detalhe técnico tem liberdade de **tamanho**, não de clareza. A
+primeira versão desta skill o tratava como zona franca, e o usuário achou lá
+dentro, no mesmo dia: *"virou um sinal mecânico"*, *"nunca são medidas"*,
+*"chega por um caminho indireto"*. Nenhuma delas é jargão do projeto — são
+categorias inventadas na hora que ocupam o lugar do fato.
+
+**Nomeie a coisa, não a categoria da coisa.** Toda frase precisa sobreviver à
+pergunta *"que sinal? que caminho? medido como?"*:
+
+| Categoria | A coisa |
+|---|---|
+| "virou um sinal mecânico" | "o hook olha se o turno usou Edit ou Write" |
+| "nunca são medidas" | "o hook não conta as frases nem procura os termos" |
+| "chega por um caminho indireto" | "grava num arquivo e lê no turno seguinte" |
+
+Dois corolários:
+
+- **Quem age vem antes do que aconteceu.** "são medidas" esconde quem mede.
+  Diga o sujeito: *o hook conta*, *o guard bloqueia*, *o teste falha*.
+- **Se dá para nomear o arquivo, a classe ou o comando, nomeie.** "a peça
+  responsável" custa as mesmas palavras que `report-style-lint.py`.
+
+A lista de abstrações vive na seção "Abstrações a evitar" do
+`common/glossario.md` e cresce com evidência: toda vez que o usuário apontar
+uma frase obscura, ela entra lá.
+
 ## O erro característico
 
 Abertura real, de um relatório de 03/08/2026:

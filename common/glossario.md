@@ -44,6 +44,35 @@ detalhe técnico, use a tradução.
 - **enum fechado** — lista fixa de valores aceitos; qualquer outro é recusado
 - **altitude leiga** — explicado para quem não conhece o assunto
 
+## Abstrações a evitar
+
+Diferente da seção acima: aqui não são termos do projeto, são **categorias
+inventadas na hora** que ocupam o lugar do fato. "O escopo virou um sinal
+mecânico" não diz nada; "o hook olha se usei Edit ou Write" diz tudo, e é a
+mesma frase em número de palavras.
+
+Regra: **nomeie a coisa, não a categoria da coisa.** Se a frase sobrevive à
+pergunta "que sinal? que caminho? medido como?", ela está pronta.
+
+Isto vale no texto **inteiro**, inclusive no detalhe técnico — foi exatamente
+ali que o usuário achou os três exemplos abaixo, em 03/08/2026.
+
+- **sinal mecânico** — diga qual é o sinal: "o hook olha se o turno usou Edit"
+- **caminho indireto** — diga qual é o caminho: "grava num arquivo e lê no
+  turno seguinte"
+- **é medido / são medidas** — diga o que a coisa faz: "conta as frases e
+  procura os termos do glossário"
+- **camada adicional** — diga o que a camada faz e onde ela fica
+- **de forma estrutural** — diga qual estrutura
+- **a nível de** — diga onde
+- **em termos de** — diga o quê
+- **aspecto importante / ponto central** — diga qual, direto
+- **abordagem / estratégia** (sem dizer qual) — descreva o que se faz
+- **superfície** (fora de "superfície de API") — diga qual código
+- **peça / elemento / componente** (quando dá para nomear o arquivo)
+- **contexto** (quando dá para dizer qual situação)
+- **natureza de / do tipo** — corte a frase e diga a coisa
+
 ## Aceitos sem tradução
 
 Vocabulário corrente entre o usuário e o harness. Não são sinalizados.

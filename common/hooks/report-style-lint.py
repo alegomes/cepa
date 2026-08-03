@@ -19,10 +19,11 @@ Dois eventos, um arquivo:
                       no contexto do próximo turno e apaga a pendência. É assim
                       que o aviso chega ao modelo sem travar o turno.
 
-Escopo (decisão do usuário, 03/08/2026): só relatório de TRABALHO FEITO. O sinal
-mecânico é o turno ter alterado alguma coisa (Edit/Write/MultiEdit/NotebookEdit
-ou um `git commit`). Conversa, pergunta curta e discussão de design ficam de
-fora — formatar um "sim, existe" em três blocos seria pior que o problema.
+Escopo (decisão do usuário, 03/08/2026): só relatório de TRABALHO FEITO. Para
+saber se a resposta é um relatório, o hook olha se o turno usou Edit, Write,
+MultiEdit, NotebookEdit ou rodou `git commit`. Se não usou, ele nem abre o
+texto: conversa, pergunta curta e discussão de design ficam de fora, porque
+formatar um "sim, existe" em três blocos seria pior que o problema.
 
 Saída: sempre exit 0. Este hook mede; ele não é um portão.
 """
@@ -38,6 +39,7 @@ from pathlib import Path
 MAX_FRASES_ABERTURA = 3
 MAX_PALAVRAS_ANTES_DO_TECNICO = 200
 MIN_PALAVRAS_PARA_MEDIR = 80   # abaixo disso não é relatório, é recado
+MAX_PASSIVAS = 3               # densidade, não caça: uma passiva é normal
 
 MARCADOR_TECNICO = re.compile(r"^\s{0,3}#{1,6}\s*detalhe\s+t[ée]cnico", re.I | re.M)
 MARCADOR_PRA_VOCE = re.compile(r"(^\s{0,3}#{1,6}\s*pra\s+voc[êe]|\*\*\s*pra\s+voc[êe]\s*:?\s*\*\*)",
@@ -75,13 +77,8 @@ def _t_emit(event: str, cwd: str = None, **fields) -> None:
 
 
 # ── glossário ───────────────────────────────────────────────────────────────
-def load_jargao() -> list:
-    """Termos da seção 'Traduzir sempre' do common/glossario.md.
-
-    Só a PRIMEIRA seção é lida: a segunda ('Aceitos sem tradução') existe
-    justamente para o vocabulário que já é corrente entre o usuário e o
-    harness, e sinalizá-lo geraria ruído que faria o medidor ser ignorado.
-    """
+def _secao(titulo: str) -> list:
+    """Os termos em negrito de uma seção do common/glossario.md."""
     for base in (Path(__file__).resolve().parent.parent,          # common/
                  Path(__file__).resolve().parent.parent.parent):  # repo/common
         f = base / "glossario.md"
@@ -94,8 +91,8 @@ def load_jargao() -> list:
     except Exception:
         return []
 
-    m = re.search(r"^##\s*Traduzir sempre\s*$(.*?)(?=^##\s|\Z)", texto,
-                  re.S | re.M | re.I)
+    m = re.search(r"^##\s*" + re.escape(titulo) + r"\s*$(.*?)(?=^##\s|\Z)",
+                  texto, re.S | re.M | re.I)
     if not m:
         return []
     termos = []
@@ -103,12 +100,43 @@ def load_jargao() -> list:
         m2 = re.match(r"^\s*-\s*\*\*(.+?)\*\*", linha)
         if not m2:
             continue
-        # "portão", "falha aberto / falha fechado", "perturbar / perturbação"
+        # "portão", "falha aberto / falha fechado", "é medido / são medidas"
         for termo in m2.group(1).split("/"):
             termo = termo.strip().lower()
             if len(termo) >= 4:
                 termos.append(termo)
     return termos
+
+
+def load_jargao() -> list:
+    """Termos internos do projeto — sinalizados só na ABERTURA.
+
+    A seção 'Aceitos sem tradução' fica de fora de propósito: é o vocabulário
+    já corrente entre o usuário e o harness, e sinalizá-lo geraria ruído que
+    faria o medidor ser ignorado. No detalhe técnico esses termos são
+    permitidos: lá eles são densos e úteis.
+    """
+    return _secao("Traduzir sempre")
+
+
+def load_abstracoes() -> list:
+    """Categorias inventadas que ocupam o lugar do fato — sinalizadas no texto
+    INTEIRO, inclusive no detalhe técnico.
+
+    Motivo (03/08/2026): a primeira versão deste hook tratava o bloco técnico
+    como zona franca, e foi exatamente lá que o usuário achou "virou um sinal
+    mecânico", "nunca são medidas" e "chega por um caminho indireto" — nenhuma
+    delas é jargão do projeto, todas são abstração inventada na hora. Bloco
+    técnico tem liberdade de TAMANHO, não de clareza.
+    """
+    return _secao("Abstrações a evitar")
+
+
+# Voz passiva e nominalização escondem quem faz o quê: "são medidas" não diz
+# quem mede nem como. Regex proposital sobre ser + particípio.
+PASSIVA = re.compile(
+    r"\b(é|são|foi|foram|será|serão|era|eram|seja|sejam|sendo|ser)\s+"
+    r"(\w{3,}(?:ad|id)[oa]s?)\b", re.I)
 
 
 # ── leitura do transcript ───────────────────────────────────────────────────
@@ -135,8 +163,8 @@ def _is_user_prompt(row) -> bool:
 def turno_alterou_algo(rows) -> bool:
     """Houve escrita, edição ou commit desde o último prompt do usuário?
 
-    É o sinal mecânico de 'relatório de trabalho feito'. Inclui sidechain de
-    propósito: trabalho feito por subagente é trabalho feito.
+    Se sim, a resposta final conta como relatório de trabalho feito. Olha
+    também o que subagente fez: trabalho de subagente é trabalho feito.
     """
     inicio = 0
     for i in range(len(rows) - 1, -1, -1):
@@ -200,7 +228,7 @@ def primeiro_paragrafo(texto: str) -> str:
     return " ".join(linhas).strip()
 
 
-def medir(relatorio: str, jargao: list) -> list:
+def medir(relatorio: str, jargao: list, abstracoes: list = ()) -> list:
     """Devolve os desvios como (categoria, mensagem). Categoria é rótulo
     estável para a telemetria; mensagem é o que o modelo lê. Lista vazia =
     relatório dentro do formato."""
@@ -237,6 +265,26 @@ def medir(relatorio: str, jargao: list) -> list:
                         f"(teto {MAX_PALAVRAS_ANTES_DO_TECNICO}) — o resto desce "
                         f"para `### Detalhe técnico`"))
 
+    # Estas duas valem no texto INTEIRO. O bloco técnico tem liberdade de
+    # tamanho, não de clareza — foi lá dentro que o usuário achou as três
+    # frases obscuras que motivaram esta versão.
+    baixo = relatorio.lower()
+    vagas = sorted({a for a in abstracoes if a in baixo})
+    if vagas:
+        mostra = ", ".join(f"\"{v}\"" for v in vagas[:4])
+        resto = f" (+{len(vagas) - 4})" if len(vagas) > 4 else ""
+        desvios.append(("abstracao",
+                        f"abstração no lugar do fato: {mostra}{resto} — nomeie a "
+                        f"coisa, não a categoria da coisa (ver a seção "
+                        f"\"Abstrações a evitar\" do glossário)"))
+
+    passivas = PASSIVA.findall(relatorio)
+    if len(passivas) > MAX_PASSIVAS:
+        exemplos = ", ".join(f"\"{a} {b}\"" for a, b in passivas[:3])
+        desvios.append(("passiva",
+                        f"{len(passivas)} construções passivas ({exemplos}...) — "
+                        f"escondem quem faz o quê; diga quem age"))
+
     return desvios
 
 
@@ -255,7 +303,7 @@ def on_stop(payload) -> None:
     if conta_palavras(relatorio) < MIN_PALAVRAS_PARA_MEDIR:
         return
 
-    desvios = medir(relatorio, load_jargao())
+    desvios = medir(relatorio, load_jargao(), load_abstracoes())
     cwd = payload.get("cwd") or os.getcwd()
     _t_emit("report_style", cwd=cwd,
             palavras=conta_palavras(relatorio),
