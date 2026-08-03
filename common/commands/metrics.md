@@ -14,6 +14,10 @@ hooks (`gate-advance`, `capture-build-result`, `session-registry`,
 respostas: onde o gate bloqueia demais, qual repo queima mais builds, quantos
 `proven` sobre-declarados o guard barrou.
 
+Desde 03/08/2026 inclui a seção **Formato de relatório** — quantas respostas de
+trabalho feito saíram do padrão `plain-report` e por qual motivo. É o número que
+decide se o aviso do `report-style-lint` precisa virar bloqueio.
+
 ## Steps
 
 1. Rode o agregador, repassando os argumentos do usuário verbatim:

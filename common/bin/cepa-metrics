@@ -130,8 +130,23 @@ def main():
         elif e.get("event") == "proof_block":
             proof_blocks[e.get("repo") or "?"] += 1
 
+    # Formato de relatório: o usuário escolheu "avisa e mede" (03/08/2026) — o
+    # número que decide se o aviso vira bloqueio é a fração de relatórios fora
+    # do formato ao longo do tempo, não o total de medições.
+    relatorios = 0
+    relatorios_fora = 0
+    desvios_tipo = Counter()
+    for e in events:
+        if e.get("event") != "report_style":
+            continue
+        relatorios += 1
+        if (e.get("desvios") or 0) > 0:
+            relatorios_fora += 1
+        for t in (e.get("tipos") or []):
+            desvios_tipo[t] += 1
+
     known = {"session_start", "session_end", "build_result", "gate_block", "gate_warn",
-             "proof_verdict", "proof_block"}
+             "proof_verdict", "proof_block", "report_style"}
     custom = Counter(e.get("event") for e in events if e.get("event") not in known)
 
     if args.as_json:
@@ -145,6 +160,8 @@ def main():
             "gate_warns": {" ".join(k): v for k, v in gate_warns.items()},
             "proof_verdicts": {" ".join(k): v for k, v in proof_verdicts.items()},
             "proof_blocks": dict(proof_blocks),
+            "report_style": {"medidos": relatorios, "fora": relatorios_fora,
+                             "desvios_por_tipo": dict(desvios_tipo)},
             "custom_events": dict(custom),
         }, indent=2, ensure_ascii=False, default=str))
         return 0
@@ -178,12 +195,26 @@ def main():
         print("\n## Proof gate — `proven` sobre-declarado barrado pelo guard ⚠")
         print(fmt_counter(proof_blocks))
 
+    if relatorios:
+        pct = 100.0 * relatorios_fora / relatorios
+        print(f"\n## Formato de relatório — {relatorios_fora}/{relatorios} fora do "
+              f"padrão ({pct:.0f}%)")
+        print(f"    memória de cálculo: {relatorios_fora} relatórios com ao menos "
+              f"um desvio ÷ {relatorios} medidos × 100 = {pct:.0f}%")
+        if desvios_tipo:
+            print(fmt_counter(desvios_tipo))
+
     if custom:
         print("\n## Eventos custom (emitidos por comandos/skills)")
         print(fmt_counter(custom))
 
     # ── Leituras sugeridas ─────────────────────────────────────────────
     hints = []
+    if relatorios >= 20 and relatorios_fora / relatorios > 0.3:
+        hints.append(f"- formato de relatório: {relatorios_fora} de {relatorios} "
+                     f"fora do padrão ({100.0*relatorios_fora/relatorios:.0f}%) — o "
+                     f"aviso não está bastando; considere passar o "
+                     f"report-style-lint para bloqueio.")
     for (repo, tier, reason), n in gate_blocks.items():
         if reason in ("stale", "failure") and n >= 5:
             hints.append(f"- {repo}: {n} bloqueios por build {reason.upper()} — loop de verify lento ou baseline com escopo errado.")
