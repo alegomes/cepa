@@ -132,6 +132,19 @@ def load_abstracoes() -> list:
     return _secao("Abstrações a evitar")
 
 
+def load_higiene() -> list:
+    """Frases que só interessam quando falham — sinalizadas na abertura e no
+    `Pra você:`, nunca no detalhe técnico.
+
+    Motivo (03/08/2026): o usuário leu um relatório inteiro dentro do formato e
+    ainda assim perguntou "so what?". Quatro linhas dele diziam que a árvore
+    ficou limpa, que nenhum worktree sobrou e que a memória foi atualizada —
+    nenhuma delas muda alguma coisa para quem lê. No detalhe técnico uma oração
+    dessas é barata; nas 200 palavras do topo ela toma o lugar da consequência.
+    """
+    return _secao("Higiene (não relatar)")
+
+
 # Voz passiva e nominalização escondem quem faz o quê: "são medidas" não diz
 # quem mede nem como. Regex proposital sobre ser + particípio.
 PASSIVA = re.compile(
@@ -228,7 +241,8 @@ def primeiro_paragrafo(texto: str) -> str:
     return " ".join(linhas).strip()
 
 
-def medir(relatorio: str, jargao: list, abstracoes: list = ()) -> list:
+def medir(relatorio: str, jargao: list, abstracoes: list = (),
+          higiene: list = ()) -> list:
     """Devolve os desvios como (categoria, mensagem). Categoria é rótulo
     estável para a telemetria; mensagem é o que o modelo lê. Lista vazia =
     relatório dentro do formato."""
@@ -264,6 +278,17 @@ def medir(relatorio: str, jargao: list, abstracoes: list = ()) -> list:
                         f"{palavras} palavras antes do detalhe técnico "
                         f"(teto {MAX_PALAVRAS_ANTES_DO_TECNICO}) — o resto desce "
                         f"para `### Detalhe técnico`"))
+
+    # Higiene: só no topo (abertura + `Pra você:`). No detalhe técnico "commit
+    # 8827471" é informação barata e útil; aqui em cima ela empurra para fora a
+    # frase que diz o que mudou para o leitor.
+    limpas = sorted({h for h in higiene if h in cabeca.lower()})
+    if limpas:
+        mostra = ", ".join(f"\"{v}\"" for v in limpas[:3])
+        desvios.append(("higiene",
+                        f"higiene relatada como resultado: {mostra} — só interessa "
+                        f"quando falha ou quando exige algo do usuário; no topo, "
+                        f"escreva no lugar o que mudou para ele"))
 
     # Estas duas valem no texto INTEIRO. O bloco técnico tem liberdade de
     # tamanho, não de clareza — foi lá dentro que o usuário achou as três
@@ -303,7 +328,7 @@ def on_stop(payload) -> None:
     if conta_palavras(relatorio) < MIN_PALAVRAS_PARA_MEDIR:
         return
 
-    desvios = medir(relatorio, load_jargao(), load_abstracoes())
+    desvios = medir(relatorio, load_jargao(), load_abstracoes(), load_higiene())
     cwd = payload.get("cwd") or os.getcwd()
     _t_emit("report_style", cwd=cwd,
             palavras=conta_palavras(relatorio),

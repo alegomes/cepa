@@ -2,8 +2,10 @@
 
 Este arquivo tem duas funções:
 
-1. **Dar ao `report-style-lint.py` uma lista concreta** do que contar como
-   jargão na abertura de um relatório. Só a primeira seção é lida pelo hook.
+1. **Dar ao `report-style-lint.py` listas concretas** do que contar como
+   desvio. O hook lê três seções: "Traduzir sempre" (só na abertura),
+   "Abstrações a evitar" (no texto inteiro) e "Higiene (não relatar)" (na
+   abertura e no `Pra você:`). "Aceitos sem tradução" ele nunca lê.
 2. **Ser o lugar onde termo é aposentado.** Hoje o vocabulário só cresce: cada
    sessão inventa dois termos e nenhum morre. Termo que ninguém mais usa sai
    daqui; termo que virou senso comum entre o usuário e o harness desce para a
@@ -72,6 +74,24 @@ ali que o usuário achou os três exemplos abaixo, em 03/08/2026.
 - **peça / elemento / componente** (quando dá para nomear o arquivo)
 - **contexto** (quando dá para dizer qual situação)
 - **natureza de / do tipo** — corte a frase e diga a coisa
+
+## Higiene (não relatar)
+
+Coisas que só interessam quando **falham**. Relatadas no sucesso, ocupam o
+espaço da consequência: o leitor gasta uma frase para descobrir que nada mudou
+para ele.
+
+Regra: se a resposta a *"e daí?"* é "e daí que está tudo normal", corte a
+frase. Se falhou, ou se exige uma ação sua, aí sim vira o assunto.
+
+Isto vale na **abertura e no `Pra você:`** — no detalhe técnico, uma oração
+basta ("commit `8827471`"), nunca um parágrafo.
+
+- **memória atualizada / memória gravada / atualizei a memória**
+- **árvore de trabalho limpa / árvore limpa / working tree limpa**
+- **nenhum worktree / worktree sobrou / sem worktrees pendentes**
+- **commit feito / deixei commitado**
+- **nada sobrou para trás / sem sobras**
 
 ## Aceitos sem tradução
 

@@ -46,6 +46,8 @@ Regras duras:
 - **Teto de 200 palavras** somando abertura e `Pra você:`. O detalhe técnico é
   livre — quem não quer, para no cabeçalho.
 - **Ordem: resultado antes de mecanismo.** Nunca abra por como funciona.
+- **Abertura diz o que mudou, não o que eu fiz.** Lista de passos executados
+  não é resultado — ver "O teste do 'e daí?'" abaixo.
 
 ## A regra que vale no texto inteiro
 
@@ -75,6 +77,40 @@ A lista de abstrações vive na seção "Abstrações a evitar" do
 `common/glossario.md` e cresce com evidência: toda vez que o usuário apontar
 uma frase obscura, ela entra lá.
 
+## O teste do "e daí?"
+
+Um relatório pode passar em tudo acima — frases curtas, zero jargão, cada coisa
+nomeada — e ainda assim o usuário fechar a leitura pensando *"so what?"*. Foi o
+que aconteceu em 03/08/2026 com o relatório da drenagem de Review: ele contava
+**o que eu fiz**, passo a passo, e em nenhum momento **o que aquilo mudou**.
+
+Toda frase tem que sobreviver à pergunta *"e daí?"*. A resposta é sempre uma
+destas três, e cada uma tem um destino:
+
+| Resposta a "e daí?" | O que fazer |
+|---|---|
+| "e daí que agora você pode X" / "e daí que Y deixou de ser risco" | escreva **isso** — é a frase que faltava |
+| "e daí que está tudo normal" | corte a frase (ver "Higiene (não relatar)" no glossário) |
+| "e daí que preciso que você decida" | é `Pra você:`, não abertura |
+
+Os três jeitos de errar, todos no mesmo relatório:
+
+**Procedimento no lugar do efeito.** *"Confirmei a correção no disco, reexecutei
+o portão nos três cards, os três passaram, e foram para Done."* É o roteiro do
+que fiz. O efeito: *"o verificador tinha um defeito que reprovava card bom;
+corrigido, os três cards presos passaram — desta vez com prova refeita, então o
+Done deles vale."*
+
+**Evidência sem a conclusão que ela sustenta.** *"de 21 verdes para 4 falhas,
+incluindo exatamente os dois testes do card"* prova alguma coisa — mas o
+relatório nunca diz qual: *"o teste do card pega o bug de verdade"*. Número e
+log vêm **depois** da frase que eles sustentam, nunca no lugar dela.
+
+**Número sem consequência.** *"3 de 15 cards fechados nesta rodada (20%)"* soa
+como progresso e não é: os 3 eram exatamente os que estavam presos, os outros 12
+nunca chegaram a ser tentados. A conta obrigatória (regra do CLAUDE.md) precisa
+vir com o que ela significa, ou vira ruído com aparência de rigor.
+
 ## O erro característico
 
 Abertura real, de um relatório de 03/08/2026:
@@ -100,3 +136,9 @@ leitor é o usuário. Onde as duas se aplicam, esta ganha.
 O `report-style-lint.py` mede o resultado ao fim do turno e devolve o desvio no
 turno seguinte. Ele **avisa, não bloqueia** — a decisão de apertar depende do
 que a telemetria mostrar (`/common:metrics`).
+
+O que ele consegue medir do "e daí?" é só a parte literal: as frases de higiene
+da lista do glossário, e apenas na abertura e no `Pra você:`. Distinguir
+"reexecutei o portão nos três cards" (procedimento) de "os três cards presos
+passaram" (efeito) exige entender o assunto, e nenhuma regex faz isso — essa
+parte é minha, não do hook.

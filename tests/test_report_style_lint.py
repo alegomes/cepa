@@ -12,6 +12,8 @@ Garantias:
   - turno de CONVERSA (nada alterado) -> nunca medido, por pior que seja;
   - relatório curto -> nunca medido (é recado, não relatório);
   - jargão no bloco de detalhe técnico -> permitido; na abertura -> sinalizado;
+  - higiene ("árvore limpa", "memória atualizada") no topo -> sinalizada; a
+    mesma frase no detalhe técnico -> permitida;
   - resposta de subagente (sidechain) nunca é confundida com o relatório;
   - o hook NUNCA bloqueia: exit 0 em todos os casos.
 """
@@ -163,6 +165,27 @@ aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
               "**Pra você:** nada.\n\n### Detalhe técnico\n" + "detalhe " * 90)
 check("detalhe técnico sem abstração → nenhum aviso", aviso.strip() == "",
       repr(aviso[:300]))
+
+# ── higiene relatada como resultado ────────────────────────────────────────
+# 03/08/2026: relatório dentro do formato, e o usuário mesmo assim perguntou
+# "so what?" — quatro linhas dele diziam que a árvore ficou limpa, que nenhum
+# worktree sobrou e que a memória foi atualizada.
+aviso = ciclo("Os três cards que estavam presos passaram e foram para Done. "
+              "A árvore de trabalho ficou limpa e nenhum worktree sobrou.\n\n"
+              "**Pra você:** nada pra decidir. Memória atualizada.\n\n"
+              "### Detalhe técnico\n" + "detalhe " * 90)
+check("higiene na abertura → avisa", "higiene" in aviso, repr(aviso[:300]))
+check("…e cita as frases encontradas",
+      "árvore de trabalho limpa" in aviso or "nenhum worktree" in aviso,
+      repr(aviso[:400]))
+
+aviso = ciclo("Os três cards que estavam presos passaram, agora com prova "
+              "refeita do zero.\n\n**Pra você:** nada pra decidir.\n\n"
+              "### Detalhe técnico\n"
+              "Commit feito; a árvore de trabalho ficou limpa e nenhum "
+              "worktree sobrou. " + "detalhe " * 80)
+check("mesma higiene DENTRO do detalhe técnico → não avisa",
+      aviso.strip() == "", repr(aviso[:300]))
 
 # ── voz passiva: densidade, não caça ───────────────────────────────────────
 aviso = ciclo("Resultado dito de forma clara em uma frase.\n\n"
