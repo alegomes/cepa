@@ -46,9 +46,16 @@ MARKER = r"(?:\*\*|__|#{1,6}\s*|h[1-6]\.\s*|[-*+]\s+)"
 #      VALUE, not a card being returned. Only the forms that actually announce
 #      a card coming back are listed now.
 #   2. `{MARKER}?` was optional, so `^{MARKER}?[^\n]*?` matched ANY line, and
-#      the "heading, not anywhere in the body" promise never held. The heading
-#      is now a real position: the first non-empty line, or a line that OPENS
-#      with a heading/bold/bullet marker.
+#      the "heading, not anywhere in the body" promise never held.
+#
+# The second fix was only half a fix, and the other half broke again on
+# 2026-08-03: requiring a marker still let ANY marked line in the body count as
+# a heading, so a bullet or a bold note saying *not* to fail the card —
+# `* Não marcar como UNPROVEN: a cobertura externa existe.` — was read as the
+# card being failed. Same family as (1): a MENTION taken for a DECLARATION.
+# The heading is now one position and only one: the first non-empty line.
+# A marker on it is optional — `## Proof gate — UNPROVEN` and a bare
+# `UNPROVEN, returning for rework` are both headings; neither is body.
 BOUNCE_MARKERS = (
     r"UNPROVEN",
     r"returning\s+for\s+rework",
@@ -62,19 +69,18 @@ BOUNCE_MARKERS = (
 )
 _BOUNCE_ALT = "|".join(BOUNCE_MARKERS)
 
-# A line that OPENS with a marker and announces a return.
-BOUNCE_MARKED_RE = re.compile(
-    rf"^{MARKER}[^\n]*?(?:{_BOUNCE_ALT})", re.MULTILINE | re.IGNORECASE
-)
-# The same announcement in an unmarked heading — checked ONLY against the
-# comment's first non-empty line, never the body.
+# The announcement itself, wherever it sits in the heading line. Whether the
+# heading carries a `##` / `**` / bullet marker makes no difference — the
+# position is what qualifies it as a heading, so the marker is not matched.
 BOUNCE_PLAIN_RE = re.compile(rf"(?:{_BOUNCE_ALT})", re.IGNORECASE)
 
 
 def is_bounce(body: str) -> bool:
-    """True when the comment's HEADING announces a card coming back."""
-    if BOUNCE_MARKED_RE.search(body):
-        return True
+    """True when the comment's HEADING announces a card coming back.
+
+    The heading is the first non-empty line, and nothing else. A return
+    announced further down is body text — a mention, not the verdict.
+    """
     for line in body.splitlines():
         if line.strip():
             return bool(BOUNCE_PLAIN_RE.search(line))

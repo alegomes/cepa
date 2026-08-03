@@ -170,11 +170,34 @@ APPROVAL_BULLET_RETURNED_VALUE = """**PROVEN**
 - o retry devolve a conexão ao pool
 """
 
+# ── mencionar o veredito não é declarar o veredito (2026-08-03) ─────────────
+# Três comentários barrados numa sessão real por dizerem, no corpo, para NÃO
+# reprovar o card. Cada um mora numa linha que abre com marcador — bullet ou
+# negrito — que a regra antiga contava como heading em qualquer posição.
+APPROVAL_BULLET_SAYS_NOT_UNPROVEN = """h3. Proof gate — PROVEN
+
+O card segue aprovado.
+* Não marcar como UNPROVEN: a cobertura externa existe.
+"""
+APPROVAL_BOLD_SAYS_NOT_UNPROVEN = """## Resumo de implementação
+
+**Nota:** não devolver como UNPROVEN — o teste externo cobre.
+"""
+# O mesmo em prosa solta. Já passava antes do fix; fica como par de controle,
+# para que uma regressão futura mostre se quebrou o marcador ou a posição.
+APPROVAL_PROSE_SAYS_NOT_UNPROVEN = """h3. Proof gate — PROVEN
+
+Não há motivo para marcar UNPROVEN aqui.
+"""
+
 for name, body in (
     ("aprovação com 'devolveria 403' no corpo", APPROVAL_MENTIONING_A_RETURNED_VALUE),
     ("prosa com 'devolveria'/'devolver' sem marcador", APPROVAL_PROSE_ONLY),
     ("'sending back' no corpo, não no heading", APPROVAL_BODY_SAYS_SENDING_BACK),
     ("bullet com 'devolveria'/'devolve' um valor", APPROVAL_BULLET_RETURNED_VALUE),
+    ("bullet dizendo para NÃO marcar UNPROVEN", APPROVAL_BULLET_SAYS_NOT_UNPROVEN),
+    ("negrito dizendo para NÃO devolver", APPROVAL_BOLD_SAYS_NOT_UNPROVEN),
+    ("prosa dizendo para NÃO marcar UNPROVEN", APPROVAL_PROSE_SAYS_NOT_UNPROVEN),
 ):
     r = run_hook(CLOUD_TOOL, {"commentBody": body})
     check(f"{name} passa", r.returncode == 0, r.stderr[:300])
@@ -192,11 +215,26 @@ BOUNCE_UNMARKED_FIRST_LINE = """UNPROVEN, returning for rework
 
 Sem motivo estruturado aqui.
 """
+# Heading com marcador de bullet: continua sendo heading porque é a primeira
+# linha não-vazia, não porque abre com `-`.
+BOUNCE_BULLET_FIRST_LINE = """- UNPROVEN, returning for rework
+
+Sem motivo estruturado aqui.
+"""
+# Linha em branco antes do heading não o empurra para o corpo.
+BOUNCE_AFTER_BLANK_LINES = """
+
+## Proof gate — UNPROVEN, returning for rework
+
+Sem motivo estruturado aqui.
+"""
 
 for name, body in (
     ("bounce pt-BR com marcador", BOUNCE_PT_MARKED),
     ("bounce pt-BR em heading sem markup", BOUNCE_PT_UNMARKED_FIRST_LINE),
     ("bounce em heading sem markup", BOUNCE_UNMARKED_FIRST_LINE),
+    ("bounce em heading com bullet", BOUNCE_BULLET_FIRST_LINE),
+    ("bounce após linhas em branco", BOUNCE_AFTER_BLANK_LINES),
 ):
     r = run_hook(CLOUD_TOOL, {"commentBody": body})
     check(f"{name} sem razão → BLOCKED", r.returncode == 2, f"rc={r.returncode}")
