@@ -35,9 +35,10 @@ seria pior que o problema.
 <livre: arquivos, nomes, evidência, mecanismo>
 
 ### Decisões e próximos passos
-- **Decidir —** <a escolha>. Recomendo: <opção>.
-- **Você faz —** <ação manual que só você pode fazer>.
-- **Eu faço, se mandar —** <próximo passo já claro>.
+*Responda por número: sim, não, ou "vamos falar".*
+1. **<A pergunta fechada, respondível sem abrir nada.>**
+   Recomendo **sim/não** — <o porquê em uma linha>.
+   Se **<a outra resposta>**: <o que acontece então>.
 ```
 
 Regras duras:
@@ -65,25 +66,62 @@ fazer agora*, e estava em prosa no meio de um parágrafo.
 
 Os dois convivem sem repetir: **o topo dá a contagem, o fim dá a lista.**
 
-> **Pra você:** uma decisão e um passo manual — lista no fim.
+> **Pra você:** duas perguntas e um passo manual — lista no fim.
 
-Cada item cabe em uma linha e começa por um verbo. Três tipos, e nada mais:
+### Todo item é uma pergunta fechada
 
-| Tipo | Quando usar | Obrigação |
-|---|---|---|
-| **Decidir —** | existe escolha real, com mais de um caminho defensável | trazer a recomendação default explícita ("Recomendo: X") |
-| **Você faz —** | ação que só o usuário pode executar (instalar, aprovar, rotacionar segredo, validar à mão) | dizer o que quebra se não for feita |
-| **Eu faço, se mandar —** | trabalho já claro, só esperando o "vai" | dizer o custo aproximado (tempo, cards, arquivos) |
+Segunda correção do usuário, no mesmo dia: a primeira versão da lista dizia o
+**assunto** e devolvia a decisão. *"Qual de fato é a decisão que tenho que
+tomar? Do jeito que está, preciso interpretar o texto, acessar o card, entender
+todo o contexto, para poder elaborar uma próxima instrução."*
+
+O item que ele reprovou:
+
+> - **Decidir —** WEGO-1631, critério 6 (recusar pedido de documento com tipo
+>   nulo, havendo linhas legadas em base). Derivei isso da sua regra "recusar
+>   documento sem tipo"; se não tiver opinião, mantenha e confira o volume em
+>   produção antes de implementar.
+
+Não tem pergunta, e o "confira o volume antes" devolve trabalho em vez de
+resolver. O mesmo item mastigado:
+
+> 3. **Mantenho no WEGO-1631 o critério que recusa pedido sem tipo de
+>    documento, mesmo que isso passe a barrar os pedidos legados?**
+>    Recomendo **sim** — é a sua regra "sem tipo, não emite", e o critério só
+>    vale na entrada nova.
+>    Se **não**: tiro o critério 6 do card e os pedidos sem tipo seguem
+>    passando como hoje.
 
 Regras da lista:
 
+- **Numerada.** O usuário responde "1 sim, 2 não, 3 vamos falar" sem citar
+  texto. Lista com marcador obriga ele a copiar o item de volta.
+- **Uma pergunta fechada por item, terminando em `?`.** Se você não consegue
+  fechar a pergunta, você ainda não entendeu a escolha — investigue antes em
+  vez de repassar a dúvida.
+- **Respondível sem abrir nada.** O fato que a resposta exige (o critério em
+  português, o número, o arquivo) vem dentro do item. Se responder obriga a
+  abrir o card, o item está incompleto.
+- **Sempre com `Recomendo sim` ou `Recomendo não`**, e o porquê em uma linha.
+  Vale para os três tipos de item — inclusive "rodo o prove-drain?".
+- **"Vamos falar" é sempre a terceira resposta**, dita uma vez no cabeçalho da
+  seção, nunca repetida item a item.
+- **Proibido devolver a decisão.** "Avalie na implementação", "confira o volume
+  antes", "vale checar" não são recomendações: são o meu trabalho voltando pra
+  ele. Ou eu recomendo, ou o item vira uma pergunta sobre investigar
+  ("Investigo o volume de linhas legadas antes de decidir?").
 - **Nunca vazia.** Sem nada pendente, escreva uma linha só: *Nada pendente.*
-- **Item é ação, não assunto.** "Revisar o glossário" não é item; "decidir se
-  o medidor passa a bloquear em vez de avisar" é.
-- **Sem item que só manda ler.** "Ver o detalhe técnico" não é próximo passo.
 - **Ordenada por quem trava o quê:** o que bloqueia os outros vem primeiro.
 - **Fora do teto de 200 palavras** — o teto vale só até o detalhe técnico. Mas
   lista de mais de 5 itens é sinal de que o turno fez coisa demais junto.
+
+Os três tipos continuam existindo; agora eles só mudam **o verbo da pergunta**:
+
+| Tipo | A pergunta soa assim |
+|---|---|
+| escolha de mérito | "Mantenho o critério X?" · "Troco Y por Z?" |
+| ação que só ele faz | "Você roda `bin/install.sh --clean` agora?" — e o item diz o que quebra se não rodar |
+| trabalho meu esperando o "vai" | "Rodo o `/board-flow:prove-drain` nos dois cards de In Review?" — e o item diz o custo |
 
 ## A regra que vale no texto inteiro
 
@@ -166,8 +204,10 @@ A mesma coisa dentro do formato:
 > [...]
 >
 > ### Decisões e próximos passos
-> - **Você faz —** rodar `bin/install.sh`; sem isso a correção não vale na
->   sessão de amanhã."
+> *Responda por número: sim, não, ou "vamos falar".*
+> 1. **Você roda `bin/install.sh --clean` agora?** Recomendo **sim** — sem
+>    isso a correção não vale na sessão de amanhã. Se **não**: o verificador
+>    segue aceitando erro de digitação como aprovação."
 
 ## Relação com as outras skills
 

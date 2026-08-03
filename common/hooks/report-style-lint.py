@@ -51,6 +51,10 @@ MARCADOR_PASSOS = re.compile(
     r"pr[óo]ximos\s+passos)\s*$", re.I | re.M)
 CABECALHO = re.compile(r"^\s{0,3}#{1,6}\s+\S", re.M)
 ITEM_DE_LISTA = re.compile(r"^\s{0,3}([-*+]|\d+[.)])\s+\S", re.M)
+# Item numerado: o usuário responde "1 sim, 2 não, 3 vamos falar" sem ter de
+# copiar o texto de volta. Marcador solto ("- ") não dá número para citar.
+ITEM_NUMERADO = re.compile(r"^\s{0,3}\d+[.)]\s+\S", re.M)
+RECOMENDACAO = re.compile(r"recomendo\b", re.I)
 
 STATE_DIR = Path(os.environ.get("CEPA_REPORT_STYLE_DIR")
                  or (Path.home() / ".claude" / "cepa-report-style"))
@@ -248,6 +252,65 @@ def primeiro_paragrafo(texto: str) -> str:
     return " ".join(linhas).strip()
 
 
+def itens_da_lista(cauda: str) -> list:
+    """Os itens da seção final, um por número. Linhas de continuação (indentadas
+    ou soltas) pertencem ao item aberto — a recomendação quase sempre está na
+    segunda linha."""
+    itens, atual = [], None
+    for linha in cauda.splitlines():
+        if ITEM_NUMERADO.match(linha):
+            if atual is not None:
+                itens.append(atual)
+            atual = linha
+        elif atual is not None:
+            if linha.strip():
+                atual += " " + linha.strip()
+            else:
+                itens.append(atual)
+                atual = None
+    if atual is not None:
+        itens.append(atual)
+    return itens
+
+
+def medir_itens(cauda: str) -> list:
+    """Cada item da lista do fim é uma pergunta fechada com recomendação.
+
+    Motivo (03/08/2026, segunda correção do usuário no mesmo dia): a primeira
+    versão da lista nomeava o assunto e devolvia a decisão — *"qual de fato é a
+    decisão que tenho que tomar? preciso interpretar o texto, acessar o card,
+    entender todo o contexto, para poder elaborar uma próxima instrução"*. Ele
+    quer responder "1 sim, 2 não, 3 vamos falar".
+    """
+    if "nada pendente" in cauda.lower():
+        return []
+    if not ITEM_DE_LISTA.search(cauda):
+        return []          # a falta de itens já virou desvio em quem chamou
+
+    desvios = []
+    itens = itens_da_lista(cauda)
+    if not itens:
+        return [("passos-nao-numerados",
+                 "a lista do fim não é numerada — numere para o usuário poder "
+                 "responder \"1 sim, 2 não\" sem citar o texto de volta")]
+
+    sem_pergunta = [i for i in itens if "?" not in i]
+    if sem_pergunta:
+        desvios.append(("item-sem-pergunta",
+                        f"{len(sem_pergunta)} de {len(itens)} itens não fazem uma "
+                        f"pergunta fechada (ex.: {sem_pergunta[0][:70].strip()}…) — "
+                        f"o usuário precisa poder responder sim ou não sem "
+                        f"interpretar o assunto"))
+
+    sem_reco = [i for i in itens if not RECOMENDACAO.search(i)]
+    if sem_reco:
+        desvios.append(("item-sem-recomendacao",
+                        f"{len(sem_reco)} de {len(itens)} itens não trazem "
+                        f"\"Recomendo sim/não\" — decisão crua sem recomendação "
+                        f"devolve o trabalho para o usuário"))
+    return desvios
+
+
 def medir(relatorio: str, jargao: list, abstracoes: list = (),
           higiene: list = ()) -> list:
     """Devolve os desvios como (categoria, mensagem). Categoria é rótulo
@@ -299,6 +362,7 @@ def medir(relatorio: str, jargao: list, abstracoes: list = (),
             desvios.append(("passos-em-prosa",
                             "a seção final não tem itens de lista — cada ação em "
                             "uma linha começando por verbo, não em prosa"))
+        desvios += medir_itens(cauda)
 
     palavras = conta_palavras(cabeca)
     if palavras > MAX_PALAVRAS_ANTES_DO_TECNICO:
@@ -391,8 +455,9 @@ def on_prompt(payload) -> None:
           "`plain-report`:\n" +
           "".join(f"  - {d}\n" for d in desvios) +
           "  Formato: abertura de até 3 frases sem jargão → **Pra você:** → "
-          "### Detalhe técnico → ### Decisões e próximos passos (a lista, por "
-          "último). Isso é um aviso, não um bloqueio: aplique no "
+          "### Detalhe técnico → ### Decisões e próximos passos (numerada, uma "
+          "pergunta fechada por item, cada uma com \"Recomendo sim/não\"). "
+          "Isso é um aviso, não um bloqueio: aplique no "
           "próximo relatório em vez de reescrever o anterior.")
 
 

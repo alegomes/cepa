@@ -17,6 +17,8 @@ Garantias:
   - a lista final `### Decisões e próximos passos` é obrigatória, é a última
     seção, tem itens de lista (ou "Nada pendente.") e fica fora do teto de 200
     palavras;
+  - cada item da lista final é numerado, faz uma pergunta fechada e traz
+    "Recomendo sim/não" -> item que só nomeia o assunto é sinalizado;
   - resposta de subagente (sidechain) nunca é confundida com o relatório;
   - o hook NUNCA bloqueia: exit 0 em todos os casos.
 """
@@ -40,7 +42,9 @@ TELEM = TMP / "telemetry"
 # trabalho feito precisa dela, ela entra em todos os fixtures; os testes que
 # medem OUTRA coisa não devem falhar por falta dela.
 PASSOS = ("\n\n### Decisões e próximos passos\n"
-          "- **Você faz —** rodar `bin/install.sh`; sem isso a mudança não vale.\n")
+          "*Responda por número: sim, não, ou \"vamos falar\".*\n"
+          "1. **Você roda `bin/install.sh --clean` agora?** Recomendo **sim** — "
+          "sem isso a mudança não vale.\n")
 
 
 BOM = ("O verificador de provas aceitava qualquer palavra fora de uma lista de "
@@ -244,6 +248,39 @@ aviso = ciclo("Resultado em uma frase clara.\n\n**Pra você:** um passo.\n\n"
               + "- **Você faz —** rodar o install.\n" * 40)
 check("lista longa sem bloco técnico → não estoura o teto",
       "palavras antes do detalhe" not in aviso, repr(aviso[:300]))
+
+# ── cada item é uma pergunta fechada com recomendação ──────────────────────
+# Segunda correção do usuário no mesmo dia: "qual de fato é a decisão que tenho
+# que tomar? Do jeito que está, preciso interpretar o texto, acessar o card,
+# entender todo o contexto". O item real que ele reprovou está no primeiro caso.
+aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+              "1. **Decidir —** WEGO-1631, critério 6 (recusar pedido de "
+              "documento com tipo nulo). Se não tiver opinião, mantenha e "
+              "confira o volume em produção antes de implementar.\n")
+check("item que nomeia o assunto sem perguntar → avisa",
+      "pergunta fechada" in aviso, repr(aviso[:400]))
+
+aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+              "1. **Mantenho no WEGO-1631 o critério que recusa pedido sem "
+              "tipo de documento?** Ele passa a barrar os pedidos legados.\n")
+check("pergunta sem recomendação → avisa", "Recomendo" in aviso,
+      repr(aviso[:400]))
+
+aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+              "- **Você roda o install agora?** Recomendo **sim**.\n")
+check("lista com marcador em vez de número → avisa",
+      "numerada" in aviso, repr(aviso[:400]))
+
+aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
+              "*Responda por número: sim, não, ou \"vamos falar\".*\n"
+              "1. **Mantenho no WEGO-1631 o critério que recusa pedido sem "
+              "tipo de documento?**\n"
+              "   Recomendo **sim** — é a sua regra \"sem tipo, não emite\".\n"
+              "   Se **não**: tiro o critério 6 do card.\n\n"
+              "2. **Rodo o prove-drain nos dois cards de In Review?** "
+              "Recomendo **não** — a triagem roteou por evidência.\n")
+check("item mastigado, com a recomendação na linha seguinte → nenhum aviso",
+      aviso.strip() == "", repr(aviso[:400]))
 
 # ── resposta de subagente não é o relatório ────────────────────────────────
 aviso = ciclo(BOM, sidechain_extra=RUIM)
