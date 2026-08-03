@@ -93,6 +93,34 @@ ALLOWED_STATUSES = {
 }
 KNOWN_STATUSES = set().union(*ALLOWED_STATUSES.values())
 
+# Os nomes de nível também são um conjunto fechado. Artefatos escritos por
+# versões anteriores usam outra grafia para os MESMOS níveis
+# (`l2_external_coverage`, `l3_diff_mutation`, `bugfix_regression_red_on_base`),
+# e as duas convivem no disco hoje. Quem lê esses arquivos precisa conhecer as
+# duas ou lê metade da base: o classificador de `/board-flow:decide` classificou
+# 7 de 33 cards errado por isso, incluindo o WEGO-1698 que a própria
+# documentação usa de exemplo. A grafia antiga fica aceita para LEITURA e
+# bloqueada para ESCRITA — parar de produzir divergência nova é o que faz a
+# dívida encolher sozinha.
+LEVEL_NAMES = {
+    "l2_coverage", "l3_load_bearing", "l4_adversarial_input",
+    "bugfix_regression_red_at_base",
+}
+LEVEL_RENAMES = {
+    "l2_external_coverage": "l2_coverage",
+    "l3_diff_mutation": "l3_load_bearing",
+    "bugfix_regression_red_on_base": "bugfix_regression_red_at_base",
+}
+
+
+def unknown_levels(data) -> list:
+    """(nome escrito, nome canônico ou None) para cada nível fora do conjunto."""
+    levels = data.get("levels") if isinstance(data, dict) else None
+    if not isinstance(levels, dict):
+        return []
+    return [(name, LEVEL_RENAMES.get(name))
+            for name in levels if name not in LEVEL_NAMES]
+
 # `n/a` on the adversarial-input level means "this diff exposes no NEW input
 # surface". That is a claim the diff itself can refute: a changed class in an
 # input-bearing module (controller, DTO, filter) is exactly a new input surface.
@@ -211,8 +239,8 @@ def double_offenders(data) -> list:
 
 
 def parse_with_yaml(content: str):
-    """Return (verdict, [(path, status)], [doubles], [l4 n/a violations]).
-    Raises if invalid."""
+    """Return (verdict, [(path, status)], [doubles], [l4 n/a violations],
+    [níveis com nome fora do conjunto fechado]). Raises if invalid."""
     import yaml  # noqa: deferred so absence falls back instead of crashing
     data = yaml.safe_load(content)
     if not isinstance(data, dict):
@@ -220,7 +248,8 @@ def parse_with_yaml(content: str):
     verdict = data.get("verdict")
     statuses: list = []
     collect_statuses(data.get("levels", {}), statuses)
-    return verdict, statuses, double_offenders(data), l4_na_violations(data)
+    return (verdict, statuses, double_offenders(data),
+            l4_na_violations(data), unknown_levels(data))
 
 
 def parse_with_lines(content: str):
@@ -247,7 +276,9 @@ def parse_with_lines(content: str):
     violations = (["o artefato não pôde ser lido como YAML, então a "
                    "justificativa do `n/a` não pôde ser verificada"]
                   if na else [])
-    return verdict, statuses, [], violations
+    # sem pyyaml não dá para ver os nomes de nível: falha aberto, como o resto
+    # deste fallback.
+    return verdict, statuses, [], violations, []
 
 
 def main():
@@ -273,16 +304,37 @@ def main():
         sys.exit(0)
 
     try:
-        verdict, statuses, doubles, na_violations = parse_with_yaml(content)
+        verdict, statuses, doubles, na_violations, bad_levels = parse_with_yaml(content)
     except Exception:
         try:
-            verdict, statuses, doubles, na_violations = parse_with_lines(content)
+            verdict, statuses, doubles, na_violations, bad_levels = parse_with_lines(content)
         except Exception:
             sys.exit(0)  # can't understand it → never block
 
     card = Path(file_path).stem
     hook_cwd = payload.get("cwd") or os.getcwd()
     declared = verdict.strip().lower() if isinstance(verdict, str) else "?"
+
+    # Nome de nível fora do conjunto fechado bloqueia em QUALQUER veredito: o
+    # ponto é parar de gerar grafia nova divergente, e um `needs-human` escrito
+    # com a grafia antiga envenena a leitura igual.
+    if bad_levels:
+        linhas = "".join(
+            f"    - {escrito}" + (f"  → escreva `{canonico}`\n" if canonico
+                                  else "  (nível que o esquema não conhece)\n")
+            for escrito, canonico in bad_levels)
+        print(
+            f"[build-hex proof-verdict-guard] BLOCKED: {file_path} usa nome de "
+            f"nível fora do conjunto fechado:\n{linhas}"
+            f"  Os níveis são: {', '.join(sorted(LEVEL_NAMES))}.\n"
+            f"  A grafia antiga segue LIDA por quem consome os artefatos, mas não\n"
+            f"  pode ser escrita de novo: duas grafias para o mesmo nível fizeram o\n"
+            f"  classificador de motivos errar 7 de 33 cards, entre eles o WEGO-1698.",
+            file=sys.stderr,
+        )
+        _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict=declared,
+                blocked="unknown_level_name")
+        sys.exit(2)
 
     if not isinstance(verdict, str) or verdict.strip().lower() != "proven":
         _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict=declared)

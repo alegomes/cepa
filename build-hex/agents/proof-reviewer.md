@@ -333,6 +333,15 @@ when you Write the artifact and **blocks** a `verdict: proven` that any
 `skipped`/`assumed`/`survived`/`gap`/`findings` level contradicts, naming the
 verdict you must write instead.
 
+**Os nomes dos níveis também são um conjunto fechado** — `l2_coverage`,
+`l3_load_bearing`, `l4_adversarial_input`, `bugfix_regression_red_at_base`.
+Artefatos antigos no disco usam outra grafia para os mesmos níveis
+(`l2_external_coverage`, `l3_diff_mutation`, `bugfix_regression_red_on_base`);
+quem lê os arquivos aceita as duas, mas escrever a antiga é bloqueado pelo
+guard. As duas grafias convivendo fizeram o classificador de motivos de
+`/board-flow:decide` errar 7 de 33 cards, incluindo o WEGO-1698 que a
+documentação usava de exemplo.
+
 **Every `status:` is checked against the closed enum of its level.** A value
 outside the enum — including an invented one, a typo, or an `n/a` on a level
 that doesn't offer it — blocks the write. Do not reach for a status the comment

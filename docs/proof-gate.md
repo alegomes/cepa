@@ -69,11 +69,16 @@ tests can still never reach the endpoint — and that gap lives precisely in the
 perturbation-vs-`@QuarkusTest` proof clears it. A low PIT kill ratio on the inner
 layers is reported as a complementary finding (weak unit tests), not the verdict.
 
-> Validated on `wego-assinatura-backend` (Quarkus 3.17.5), WEGO-1698: the
-> regression-red-at-base check passed cleanly; PIT ran on application (81% killed)
-> and infrastructure (42% — weak adapter tests, a finding in itself); but the
-> external proof was blocked because the PlugSign test double is a no-op, so the
-> 422 is unobservable at the HTTP surface → correctly NEEDS-HUMAN.
+> Validated on `wego-assinatura-backend` (Quarkus 3.17.5), WEGO-1540: the inner
+> proof is solid — all three perturbation targets go RED at their unit tests —
+> but both `signAsAdmin` paths sit behind a no-op double
+> (`MockPlugSignAlternative.signAsAdmin()` does nothing and records nothing), so
+> no adversarial HTTP request can observe the behavior → correctly NEEDS-HUMAN.
+>
+> (This example used to cite WEGO-1698. The artifact on disk for that card gives
+> a different reason — PIT absent from the whole project — so it illustrates
+> "the tool wasn't there", not "the double swallows the signal". Checked
+> 2026-08-03 against `.claude/proof/WEGO-1698.yaml`.)
 
 ### Why L4 can be set to max without flooding you
 

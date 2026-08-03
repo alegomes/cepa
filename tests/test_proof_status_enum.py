@@ -144,6 +144,24 @@ check("regra do dublê segue bloqueando", r.returncode == 2, f"rc={r.returncode}
 r = run(artifact(), file_path=str(Path(tempfile.gettempdir()) / "notes.yaml"))
 check("arquivo fora de .claude/proof → PASSA", r.returncode == 0, r.stderr[:200])
 
+# --- nomes de nível: conjunto fechado (2026-08-03) --------------------------
+# Duas grafias para os mesmos níveis convivem no disco e fizeram o classificador
+# de motivos errar 7 de 33 cards. A antiga segue lida; escrever de novo bloqueia.
+antigo = artifact().replace("  l2_coverage:\n", "  l2_external_coverage:\n")
+r = run(antigo)
+check("grafia antiga de nível → BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
+check("bloqueio diz a grafia canônica", "l2_coverage" in r.stderr, r.stderr[:200])
+
+r = run(antigo.replace("verdict: proven", "verdict: needs-human"))
+check("grafia antiga bloqueia mesmo fora de proven", r.returncode == 2,
+      f"rc={r.returncode}")
+
+r = run(artifact().replace("  l4_adversarial_input:\n", "  l5_inventado:\n"))
+check("nível inventado → BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
+
+r = run(artifact())
+check("grafia canônica segue passando", r.returncode == 0, r.stderr[:200])
+
 print()
 if FAILURES:
     print(f"{len(FAILURES)} failure(s): {FAILURES}")
