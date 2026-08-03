@@ -101,6 +101,10 @@ every deterministic level passed (verified), L4 clean, nothing assumed
 `evidence-over-assumption` discipline as the `completion-auditor`. Lack of
 evidence routes to the human, not to a clear.
 
+`NEEDS-HUMAN` is one label over five different situations — half of which are
+not a decision at all (the Docker that didn't come up). The five, and who
+actually decides each: [needs-human-motivos](needs-human-motivos.md).
+
 ## How a card maps to its diff
 
 There is no branch-per-card convention. Instead:

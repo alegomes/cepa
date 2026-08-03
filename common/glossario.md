@@ -45,6 +45,12 @@ detalhe técnico, use a tradução.
 - **nulo explícito** — obrigar a declarar "não se aplica" em vez de omitir
 - **enum fechado** — lista fixa de valores aceitos; qualquer outro é recusado
 - **altitude leiga** — explicado para quem não conhece o assunto
+- **hunk** — um pedaço contíguo do diff (o bloco de linhas que o `git diff`
+  mostra sob um cabeçalho `@@`); a prova quebra um por vez
+- **prova interna** — quebro a classe e um teste dela fica vermelho: a peça
+  funciona sozinha
+- **prova externa** — quebro a classe e chamo o endpoint HTTP como um cliente
+  chamaria: a peça está ligada ao que o usuário vê
 
 ## Abstrações a evitar
 
