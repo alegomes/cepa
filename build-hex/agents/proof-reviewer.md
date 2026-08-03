@@ -177,7 +177,17 @@ Generate adversarial inputs against the touched endpoints (`@QuarkusTest` +
 RestAssured, or properties) looking for externally-observable behavior no
 assertion covers. **Blocked when the test double swallows the signal** — e.g. a
 no-op mock of an external client means the defect cannot be observed at the HTTP
-surface; record `skipped` with that reason. L4 only ever routes to NEEDS-HUMAN.
+surface; record `skipped` with that reason. `skipped` routes to NEEDS-HUMAN.
+
+**When the diff opens no input surface at all** — a test-only round, a rename, a
+build-file change, nothing that parses anything coming from outside — the honest
+encoding is `n/a`, not `skipped`. `n/a` does NOT block `proven`, so it carries
+two conditions the guard checks mechanically: a `reason:` saying why the diff
+exposes no input, and no changed class in an input-bearing module (`api-rest`).
+If either fails, the write is blocked. `n/a` is a claim about the diff; `skipped`
+is a check you couldn't run. Never use one for the other — the divergence
+between WEGO-1779 (`n/a`, PROVEN) and WEGO-1962 (`skipped`, NEEDS-HUMAN) on the
+same scenario is exactly what this distinction exists to stop.
 
 ### The double-substitution check (do this BEFORE believing any green)
 
@@ -291,7 +301,9 @@ levels:
     uncovered_lines: []
     run: "no quarkus-jacoco; changed lines reached only by surefire unit tests, not by @QuarkusTest"
   l4_adversarial_input:
-    status: skipped             # clean | findings | skipped
+    status: skipped             # clean | findings | skipped | n/a
+    reason: ""                  # obrigatório quando n/a: por que o diff não
+                                # abre superfície de entrada
     findings: []
   bugfix_regression_red_at_base:
     status: pass                # pass | green-at-base | n/a
@@ -319,7 +331,15 @@ This rule is now enforced mechanically: a PreToolUse guard
 (`hooks/proof-verdict-guard.py`) recomputes the verdict from the level statuses
 when you Write the artifact and **blocks** a `verdict: proven` that any
 `skipped`/`assumed`/`survived`/`gap`/`findings` level contradicts, naming the
-verdict you must write instead. The guard is a backstop for the rule above, not
+verdict you must write instead.
+
+**Every `status:` is checked against the closed enum of its level.** A value
+outside the enum — including an invented one, a typo, or an `n/a` on a level
+that doesn't offer it — blocks the write. Do not reach for a status the comment
+next to the field doesn't list: if none of them fits, the answer is NEEDS-HUMAN
+with the reason in prose, never a new word in the status. And an
+`l4_adversarial_input.status: n/a` additionally needs its `reason:` and a diff
+that touches no input-bearing module. The guard is a backstop for the rule above, not
 a substitute for it — and like every enforcement surface, it is never yours to
 edit to get unblocked (see [[bash-pathlock-bypass]] / the self-grant entry in
 your mental model).

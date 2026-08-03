@@ -14,10 +14,17 @@ Write, recomputes the verdict mechanically from the level statuses, and BLOCKS
 the write when the declared `verdict: proven` contradicts them — telling the
 agent the verdict it must write instead.
 
-It is deliberately conservative: it acts ONLY on a confirmed contradiction
-(verdict is literally `proven` AND a forbidding status is present). Anything it
-cannot parse, a non-proof file, a missing verdict, or a verdict that is already
-`unproven` / `needs-human` → fail OPEN (exit 0). It never invents a block.
+It acts ONLY on an artifact that declares `verdict: proven`. A non-proof file,
+an unparseable one, a missing verdict, or a verdict already `unproven` /
+`needs-human` → fail OPEN (exit 0).
+
+Within a `proven`, though, it fails CLOSED: statuses are checked against a
+closed enum PER LEVEL, so an unrecognized value blocks instead of passing. The
+first version used a denylist of forbidden statuses, and WEGO-1779/1793 walked
+straight through it with an `l4_adversarial_input.status: n/a` the schema never
+offered — while WEGO-1962 encoded the same situation as `skipped` and was routed
+to NEEDS-HUMAN. Honest encoding punished, invented value rewarded; `banana`
+would have passed too.
 
 This is NOT agent-scoped: verdict integrity must hold no matter who writes the
 artifact, so there is no agent allowlist here.
@@ -70,26 +77,101 @@ UNPROVEN_STATUSES = {"survived", "green-at-base", "green_at_base"}
 NEEDS_HUMAN_STATUSES = {"skipped", "assumed", "gap", "findings"}
 FORBIDDING_STATUSES = UNPROVEN_STATUSES | NEEDS_HUMAN_STATUSES
 
+# The closed enum per level. A denylist let ANY unrecognized string through:
+# WEGO-1779 and WEGO-1793 reached `proven` with `l4_adversarial_input.status:
+# n/a` — a value the schema never offered — while WEGO-1962 encoded the same
+# situation as `skipped` and was routed to NEEDS-HUMAN. Same scenario, opposite
+# verdict, and a typo like `banana` would have passed just as easily. A gate
+# must fail CLOSED: a status this table does not know is a block, not a pass.
+ALLOWED_STATUSES = {
+    "l3_load_bearing.pit.status": {"ran", "absent", "n/a"},
+    "l3_load_bearing.perturbation.status": {"pass", "survived", "skipped"},
+    "l2_coverage.status": {"pass", "gap", "assumed"},
+    "l4_adversarial_input.status": {"clean", "findings", "skipped", "n/a"},
+    "bugfix_regression_red_at_base.status": {"pass", "green-at-base",
+                                             "green_at_base", "n/a"},
+}
+KNOWN_STATUSES = set().union(*ALLOWED_STATUSES.values())
+
+# `n/a` on the adversarial-input level means "this diff exposes no NEW input
+# surface". That is a claim the diff itself can refute: a changed class in an
+# input-bearing module (controller, DTO, filter) is exactly a new input surface.
+# Note this is deliberately NOT `external_observable` — that field says the
+# behavior is visible from outside, not that the change accepts new input.
+INPUT_MODULES = {"api-rest", "api", "rest", "api_rest"}
+
 
 def is_proof_artifact(file_path: str) -> bool:
     p = file_path.replace(os.sep, "/")
     return "/.claude/proof/" in p and p.endswith((".yaml", ".yml"))
 
 
-def collect_statuses(node, out):
-    """Recursively gather every value bound to a `status:` key. Using a real
-    parse (when pyyaml is present) means block-scalar prose that merely mentions
-    'status: skipped' inside a results string is a STRING value, never traversed
-    as a status key — so it can't cause a false block."""
+def collect_statuses(node, out, path=""):
+    """Recursively gather every `status:` value as a (dotted-path, value) pair.
+    Using a real parse (when pyyaml is present) means block-scalar prose that
+    merely mentions 'status: skipped' inside a results string is a STRING value,
+    never traversed as a status key — so it can't cause a false block.
+
+    The path is what lets the enum be checked PER LEVEL instead of globally:
+    `n/a` is legitimate for the PIT and regression levels and, since this
+    change, for L4 — but never for coverage or perturbation."""
     if isinstance(node, dict):
         for k, v in node.items():
             if k == "status" and isinstance(v, str):
-                out.append(v.strip().lower())
+                out.append((path, v.strip().lower()))
             else:
-                collect_statuses(v, out)
+                collect_statuses(v, out, f"{path}.{k}" if path else str(k))
     elif isinstance(node, list):
         for item in node:
-            collect_statuses(item, out)
+            collect_statuses(item, out, path)
+
+
+def unknown_statuses(pairs) -> list:
+    """(path, value) pairs whose value is outside the level's closed enum.
+
+    A path this table doesn't know falls back to the union of every legal
+    status — so an invented level can't smuggle an invented value either.
+    """
+    bad = []
+    for path, value in pairs:
+        allowed = ALLOWED_STATUSES.get(f"{path}.status", KNOWN_STATUSES)
+        if value not in allowed:
+            bad.append((path or "levels", value, sorted(allowed)))
+    return bad
+
+
+def l4_na_violations(data) -> list:
+    """Reasons an `l4_adversarial_input.status: n/a` must not stand.
+
+    `n/a` is the honest encoding of "this diff opens no new input surface"
+    (WEGO-1779, WEGO-1793), which is why the enum now offers it. But a
+    self-declared n/a with nothing behind it is the same hole by another name,
+    so it carries two mechanical conditions: a written justification, and a diff
+    that doesn't contradict it.
+    """
+    levels = data.get("levels") if isinstance(data, dict) else None
+    l4 = (levels or {}).get("l4_adversarial_input") if isinstance(levels, dict) else None
+    if not isinstance(l4, dict):
+        return []
+    if str(l4.get("status", "")).strip().lower() != "n/a":
+        return []
+
+    out = []
+    reason = l4.get("reason")
+    if not isinstance(reason, str) or len(reason.strip()) < 15:
+        out.append("falta `reason:` — n/a sem justificativa escrita não vale "
+                   "(mínimo: por que o diff não abre superfície de entrada)")
+
+    scope = data.get("scope") if isinstance(data, dict) else None
+    classes = (scope or {}).get("changed_classes") if isinstance(scope, dict) else []
+    if isinstance(classes, list):
+        offenders = [str(c.get("class", "?")) for c in classes
+                     if isinstance(c, dict)
+                     and str(c.get("module", "")).strip().lower() in INPUT_MODULES]
+        if offenders:
+            out.append("o diff toca módulo de entrada (" + ", ".join(offenders) +
+                       ") — isso É superfície de entrada nova; use clean/findings")
+    return out
 
 
 def double_offenders(data) -> list:
@@ -129,7 +211,8 @@ def double_offenders(data) -> list:
 
 
 def parse_with_yaml(content: str):
-    """Return (verdict, [statuses], [double offenders]). Raises if invalid."""
+    """Return (verdict, [(path, status)], [doubles], [l4 n/a violations]).
+    Raises if invalid."""
     import yaml  # noqa: deferred so absence falls back instead of crashing
     data = yaml.safe_load(content)
     if not isinstance(data, dict):
@@ -137,7 +220,7 @@ def parse_with_yaml(content: str):
     verdict = data.get("verdict")
     statuses: list = []
     collect_statuses(data.get("levels", {}), statuses)
-    return verdict, statuses, double_offenders(data)
+    return verdict, statuses, double_offenders(data), l4_na_violations(data)
 
 
 def parse_with_lines(content: str):
@@ -153,13 +236,18 @@ def parse_with_lines(content: str):
         if m:
             verdict = m.group(1).strip().strip("\"'")
             continue
-        m = re.match(r"^\s+status:\s*([A-Za-z0-9_-]+)", line)
+        m = re.match(r"^\s+status:\s*([^\s#]+)", line)
         if m:
-            statuses.append(m.group(1).strip().lower())
+            statuses.append(("", m.group(1).strip().strip("\"'").lower()))
     # The line parser cannot see `scope.changed_classes` structure, so it
     # reports no double offenders — biased toward allowing, like the rest
-    # of this fallback.
-    return verdict, statuses, []
+    # of this fallback. The one thing it must NOT wave through is an `n/a`,
+    # whose justification lives in exactly the structure it can't read.
+    na = [p for p, v in statuses if v == "n/a"] if statuses else []
+    violations = (["o artefato não pôde ser lido como YAML, então a "
+                   "justificativa do `n/a` não pôde ser verificada"]
+                  if na else [])
+    return verdict, statuses, [], violations
 
 
 def main():
@@ -185,10 +273,10 @@ def main():
         sys.exit(0)
 
     try:
-        verdict, statuses, doubles = parse_with_yaml(content)
+        verdict, statuses, doubles, na_violations = parse_with_yaml(content)
     except Exception:
         try:
-            verdict, statuses, doubles = parse_with_lines(content)
+            verdict, statuses, doubles, na_violations = parse_with_lines(content)
         except Exception:
             sys.exit(0)  # can't understand it → never block
 
@@ -199,6 +287,43 @@ def main():
     if not isinstance(verdict, str) or verdict.strip().lower() != "proven":
         _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict=declared)
         sys.exit(0)  # only `proven` can be contradicted
+
+    unknown = unknown_statuses(statuses)
+    if unknown:
+        lines = "".join(
+            f"    - {p}.status: {v!r} — legítimos: {', '.join(allowed)}\n"
+            for p, v, allowed in unknown)
+        print(
+            f"[build-hex proof-verdict-guard] BLOCKED: {file_path} declares "
+            f"verdict: proven with a status outside the level's closed enum:\n{lines}"
+            f"  O portão compara contra o enum FECHADO de cada nível, não contra\n"
+            f"  uma lista de proibidos — valor desconhecido bloqueia. Foi assim que\n"
+            f"  WEGO-1779 e 1793 chegaram a `proven` com um `n/a` que o esquema do L4\n"
+            f"  não oferecia, enquanto o 1962 codificou o MESMO cenário como\n"
+            f"  `skipped` e foi para NEEDS-HUMAN. Um typo não pode virar aprovação.\n"
+            f"  Escolha um valor do enum ou devolva NEEDS-HUMAN dizendo o que falta.",
+            file=sys.stderr,
+        )
+        _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven",
+                blocked="unknown_status")
+        sys.exit(2)
+
+    if na_violations:
+        lines = "".join(f"    - {v}\n" for v in na_violations)
+        print(
+            f"[build-hex proof-verdict-guard] BLOCKED: {file_path} declares "
+            f"verdict: proven with `l4_adversarial_input.status: n/a`, but the "
+            f"n/a doesn't hold up:\n{lines}"
+            f"  `n/a` no L4 significa \"este diff não abre superfície de entrada\"\n"
+            f"  — é uma afirmação sobre o diff, não uma dispensa. Ela exige um\n"
+            f"  `reason:` escrito e um diff que não a contradiga.\n"
+            f"  Se a superfície existe, rode a checagem e declare clean/findings.\n"
+            f"  Se não consegue rodar, `skipped` → NEEDS-HUMAN é a saída honesta.",
+            file=sys.stderr,
+        )
+        _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven",
+                blocked="l4_na_unjustified")
+        sys.exit(2)
 
     if doubles:
         undeclared = [c for c, d in doubles if d is None]
@@ -225,7 +350,7 @@ def main():
                 blocked="double_substitution")
         sys.exit(2)
 
-    forbidding = sorted({s for s in statuses if s in FORBIDDING_STATUSES})
+    forbidding = sorted({v for _, v in statuses if v in FORBIDDING_STATUSES})
     if not forbidding:
         _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven")
         sys.exit(0)  # proven is consistent with the levels
