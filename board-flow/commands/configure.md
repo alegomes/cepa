@@ -105,6 +105,12 @@ Show current values (or defaults): `story: "Story"`, `bug: "Bug"`, `epic: "Epic"
 
 Ask: "Use standard issue type names (Story / Bug / Epic / Task) or customize? (standard / customize)". If customize: walk through each and ask. Most projects use the defaults.
 
+The config key stays `issue_types` and the API field stays `issuetype`, but newer
+Jira interfaces call these **work types**, inside a menu called **Work items**,
+in a **Space** rather than a project. If the user says they can't find "issue
+types", that rename is why — see "UI vocabulary" in `agents/atlassian-expert.md`
+before walking them through any menu path.
+
 ### 7. Resolve default_topology
 
 Read `.claude/topology` if present. If found: confirm with user: "Default topology for `/board-flow:execute` and `/board-flow:plan-track-build-validate`: `<value from .claude/topology>` (matches `.claude/topology`). Keep? (yes / type different)".

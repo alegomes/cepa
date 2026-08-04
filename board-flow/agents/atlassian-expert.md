@@ -226,10 +226,52 @@ Used by single-card commands to warn (never block) when a named card sits outsid
 3. Else `searchJiraIssuesUsingJql` with `key = <KEY> AND (<effective scope>)`. One hit → `scope: in`. Zero hits → `scope: OUT (effective: <jql>)`.
 4. Return the one-line verdict alongside the card details; do not refuse — the orchestrator owns the warn-and-proceed decision.
 
+### UI vocabulary — what the human sees is not what the API calls it
+
+Jira's interface renamed its two central nouns. The REST API, JQL and every
+config key kept the old ones. Mixing the two sends the user to a screen that
+doesn't exist, which is exactly what happened on 2026-08-04: a walkthrough
+written as "Project settings → Issue types" got the reply "there is no *project*
+in Jira, there are Spaces".
+
+| Talking to the API / JQL / `board-flow.yaml` | Talking to a human about the UI |
+|---|---|
+| `project = WEGO`, `project_key`, `projects` | **Space** ("Space settings", breadcrumb `Spaces / WeGo`) |
+| `issue`, `issuetype`, `issuelinks`, "issue key" | **work item** ("Work items", "work type") |
+| `getJiraIssue`, `searchJiraIssuesUsingJql` | (tool names never change — quote them as-is) |
+
+Rules:
+
+- **Never rename an identifier.** `project_key` stays `project_key`; JQL stays
+  `project = WEGO`; the field is still `issuetype`. Renaming those breaks the
+  query.
+- **Always use the UI words when the sentence is an instruction to click.**
+  "Space settings → Work items → Fields", never "Project settings → Issues".
+- The card reference itself is still **key** (`WEGO-1426`) in both worlds.
+- The old words survive inside URLs (`/plugins/servlet/project-config/WEGO/...`)
+  and inside the admin area (`Jira admin settings`). Seeing "project" in a URL
+  is not evidence the UI still says it — read the breadcrumb, not the address
+  bar.
+- When unsure whether a given deployment renamed things, **ask for a screenshot
+  instead of guessing a menu path**. A wrong path costs the user a hunt through
+  settings; a screenshot costs one message.
+
 ### Block / abort scenarios
 - Project key missing → ask the orchestrator.
 - Issue key invalid / not found → report back, don't fabricate.
 - Transition not available (e.g., card is already In Review when asked to move to In Progress) → report back; let the orchestrator decide.
+- **`Field 'X' cannot be set. It is not on the appropriate screen, or unknown.`** → do
+  NOT repeat this message to the user as the diagnosis. It names one cause ("not
+  on the screen") and hides the other ("unknown"), and it is wrong often enough
+  to matter: on 2026-08-04 it fired for `labels` on a project whose edit screen
+  visibly *contained* Labels, sending the owner to reconfigure a screen that was
+  already correct. Before reporting, spend one read: fetch the card's **editmeta**
+  (and `getJiraIssueTypeMetaWithFields` for the create side) and say plainly
+  whether the field is present among the settable fields. Absent from editmeta
+  while present on the screen means the field is hidden by the **field
+  configuration** — a different setting, on a different page, from the screen.
+  Report the evidence ("`labels` não está no editmeta de Story nem de Sub-task"),
+  not the API's guess.
 
 ## Output shape
 
