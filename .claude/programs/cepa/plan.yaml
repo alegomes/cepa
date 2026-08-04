@@ -167,9 +167,23 @@ items:
       Conserto provável: no classificador, checar issue_type antes da regra de
       commit-base ausente. Precisa de caso na suíte de regressão — os 33
       artefatos que a alimentam vieram todos de cards de código.
-    status: pending
+    # done em 2026-08-04, commit ace2195 — minutos depois de o item ser criado,
+    # na mesma sessão. O conserto saiu como previsto no `why`: a regra checa
+    # issue_type antes da de commit-base ausente. A guarda ficou ESTREITA de
+    # propósito, e isso não estava previsto aqui: só pega Epic SEM commit-base.
+    # Epic COM diff próprio (WEGO-1732, que tem mutantes sobreviventes de
+    # verdade) segue sujeito a todas as regras seguintes — varrer todo Epic para
+    # `nada-a-provar` esconderia prova real. O teste novo cobre os dois lados,
+    # inclusive o caso construído do 1732 sem commit-base. Suíte: 40 passaram.
+    # Verificado contra a Review do wego: o WEGO-1550 passou a sair como
+    # `nada-a-provar` ("Epic agrega Stories filhas e não tem diff próprio").
+    status: done
     blocked_by: []
-    human_pending: null
+    human_pending: >-
+      rodar bin/install.sh --clean e reiniciar — o conserto está no repo, mas o
+      cache serve board-flow 0.11.0, então o comando instalado ainda manda Epic
+      para `nao-rodou`. Falha se o /board-flow:decide no wego voltar a
+      classificar o WEGO-1550 como "commit-base não resolvido".
 
   - id: "onboarding-maestro-blocos-1-3"
     title: "Retomar a sessão de onboarding do Maestro (blocos 1-3)"
