@@ -201,7 +201,20 @@ def classify(d: dict) -> tuple[str, str]:
     if ev:
         return "nada-a-provar", ev
 
-    if scope.get("base_commit_resolved") is False or not d.get("base_commit"):
+    sem_base = scope.get("base_commit_resolved") is False or not d.get("base_commit")
+
+    # Um Epic-mãe não tem diff próprio: o trabalho mora nas Stories filhas, cada
+    # uma com seu base_commit e seu artefato. Sem esta guarda ele cai na regra de
+    # commit-base ausente logo abaixo e sai como `nao-rodou` — o ÚNICO motivo que
+    # dispensa o humano sem perguntar, e cuja saída prescrita é re-rodar a prova.
+    # Re-rodar num Epic devolve o mesmo resultado para sempre e o card fica em
+    # Review em silêncio. Achado no primeiro run real do comando (WEGO-1550,
+    # 2026-08-04), cujo artefato já dizia em prosa "um Epic-mãe, por definição,
+    # não produz esse diff" — o campo issue_type é o que faltava a regra olhar.
+    if sem_base and str(d.get("issue_type") or "").strip().lower() == "epic":
+        return "nada-a-provar", "Epic agrega Stories filhas e não tem diff próprio"
+
+    if sem_base:
         return "nao-rodou", "commit-base não resolvido"
     ev = _casa(NAO_RODOU, blob)
     if ev:

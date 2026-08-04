@@ -29,7 +29,6 @@ FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures", "needs-human")
 # card -> motivo esperado
 ESPERADO = {
     # A prova não chegou a rodar — ninguém decide nada aqui
-    "WEGO-1550": "nao-rodou",   # commit-base não resolvido
     "WEGO-1558": "nao-rodou",
     "WEGO-1612": "nao-rodou",
     "WEGO-1663": "nao-rodou",
@@ -58,6 +57,13 @@ ESPERADO = {
     "WEGO-1614": "teste-cego",  # reverter só o pedaço não compila no commit-base
     "WEGO-1619": "teste-cego",  # falta o @QuarkusTest que asserta o 400 na rejeição
     # Não havia o que provar aqui
+    # Epic-mãe sem commit-base próprio. Classificado `nao-rodou` até 2026-08-04,
+    # quando o primeiro run real do /board-flow:decide mostrou o custo: `nao-rodou`
+    # é o único motivo que sai da frente do humano sem perguntar, e sua saída
+    # prescrita é re-rodar a prova — que num Epic devolve o mesmo resultado para
+    # sempre. O artefato já dizia em prosa "não fabrica um diff sintético agregando
+    # as 8 Stories filhas"; faltava a regra olhar issue_type.
+    "WEGO-1550": "nada-a-provar",
     "WEGO-1658": "nada-a-provar",   # card só de documentação
     "WEGO-1709": "nada-a-provar",   # ADR puro
     "WEGO-1962": "nada-a-provar",   # fuzzer HTTP não cabe em vazamento de log
@@ -98,6 +104,25 @@ def test_nenhum_artefato_real_cai_em_sem_motivo():
     """
     orfaos = [c for c in ESPERADO if classify(_carrega(c))[0] == "sem-motivo"]
     assert not orfaos, f"artefatos sem motivo: {orfaos}"
+
+
+def test_epic_so_sai_do_nao_rodou_quando_nao_tem_commit_base():
+    """A guarda de Epic é estreita de propósito.
+
+    Ela existe para o Epic-mãe que nunca terá diff próprio (WEGO-1550). Um Epic
+    COM commit-base resolvido tem diff e continua sujeito a todas as regras
+    seguintes — varrer todo Epic para `nada-a-provar` esconderia prova real.
+    O WEGO-1732 é esse caso: Epic, base_commit resolvido, e o artefato aponta
+    mutantes sobreviventes de verdade.
+    """
+    mil732 = _carrega("WEGO-1732")
+    assert mil732["issue_type"] == "Epic"
+    assert mil732["base_commit"], "fixture perdeu o commit-base que faz o caso"
+    assert classify(mil732)[0] != "nada-a-provar"
+
+    # e o mesmo Epic, se perdesse o commit-base, cairia na guarda
+    sem_base = dict(mil732, base_commit=None, scope={"base_commit_resolved": False})
+    assert classify(sem_base)[0] == "nada-a-provar"
 
 
 def test_so_nao_rodou_deixa_de_virar_pergunta():
