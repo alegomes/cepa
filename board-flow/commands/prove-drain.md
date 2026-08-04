@@ -118,6 +118,21 @@ every option description — never a bare `L4` / `waiver` / `altitude` in a labe
 Suggest re-running for the next batch if cards remain, and point the user at the
 NEEDS-HUMAN set as their actual review queue.
 
+**When the NEEDS-HUMAN count is 1 or more, the last line of the report hands the
+set to `/board-flow:decide`** — verbatim, naming the count:
+
+> `<N>` card(s) pararam em NEEDS-HUMAN. `/board-flow:decide` transforma esse
+> conjunto numa lista curta de perguntas fechadas — agrupa por motivo, tira da
+> frente o que não é decisão de ninguém (Docker fora, ferramenta ausente) e
+> aceita resposta em lote ("1 sim, 2 não").
+
+This is the seam the drain used to leave open. Held cards are the drain's
+*output*, not a leftover: the run that produced them is the run that knows how
+many there are, and without this line the set goes back to being a column the
+user opens card by card — the exact cost `/board-flow:decide` exists to remove.
+Do not print the line when the count is zero: an offer to triage nothing trains
+the user to skip the last paragraph.
+
 ## Coupled closure — the batch is not the unit of evidence
 
 Draining N cards in one run creates a standing temptation: prove once, close
