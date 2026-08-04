@@ -73,6 +73,104 @@ items:
     blocked_by: ["instalar-leva-fio-condutor"]
     human_pending: null
 
+  # Os três itens abaixo são a sequência de validação do /board-flow:decide,
+  # construído na sessão de 03-04/08 (4 commits: os sete motivos de NEEDS-HUMAN,
+  # o classificador, o comando da fila, as dispensas em .claude/waivers) e já
+  # live — decide.md, classify_needs_human.py e waivers.py estão no cache
+  # instalado, board-flow 0.11.0. A sequência estava só no handoff, como as três
+  # perguntas que o dono deixou sem responder em 04/08; entra aqui como itens
+  # para não depender de alguém reler o handoff.
+
+  - id: "decide-rodar-no-wego"
+    title: "Rodar /board-flow:decide no wego-assinatura-backend, percurso inteiro"
+    why: >-
+      o comando NUNCA rodou. Está escrito e apoiado em módulos testados, mas
+      commands/decide.md é prosa: o percurso de ponta a ponta (Jira →
+      classificação → agrupamento → resposta em lote → escrita) nunca foi
+      exercitado. É o caminho mais barato de exercitar — o handoff de 04/08
+      registra 1 card em Review no wego (confirmar, é hipótese) e já existem 33
+      artefatos NEEDS-HUMAN nos três repos. NÃO depende do proof gate: o decide
+      lê artefatos que já existem, não precisa que o gate produza novos.
+      Sinal para vigiar durante o run: `sem-motivo` aparecendo — o classificador
+      tem um resíduo em prosa que casa expressão em routing_reason e degrada em
+      silêncio se o proof-reviewer mudar o jeito de escrever.
+    # done em 2026-08-04 — o comando RODOU de ponta a ponta no wego pela primeira
+    # vez: Jira → artefato → classificação → agrupamento. Não travou em passo
+    # nenhum. O `sem-motivo` que estava sob vigia NÃO apareceu.
+    #
+    # Mas a fila real não era o que o comando pressupõe: dos 20 cards em Review
+    # (de 30), 19 NÃO TÊM artefato de prova nenhum — nunca foram provados, são
+    # trabalho para /board-flow:prove, não decisão para humano. Sobrou 1 card
+    # classificável, e ele expôs um defeito de classificação: o WEGO-1550 é um
+    # Epic-mãe, que por desenho nunca terá base_commit, e caiu em `nao-rodou`
+    # ("commit-base não resolvido") — motivo cuja saída prescrita é re-rodar a
+    # prova. Re-rodar num Epic dá o mesmo resultado para sempre. O motivo certo
+    # seria `nada-a-provar`, e o próprio artefato já diz isso em prosa
+    # ("Um Epic-mãe, por definição, não produz esse diff").
+    #
+    # Ou seja: o resíduo em prosa não era o único risco. Um card pode cair no
+    # motivo errado por um campo VAZIO (base_commit null) sem que nada em prosa
+    # esteja envolvido — e `nao-rodou` é justamente o único motivo que sai da
+    # frente do humano sem perguntar nada. Errar PARA DENTRO dele é o erro mais
+    # caro da tabela, porque é silencioso. Ver decide-nao-rodou-vs-nada-a-provar.
+    status: done
+    blocked_by: []
+    human_pending: null
+
+  - id: "decide-costura-com-prove-drain"
+    title: "Fazer o /board-flow:prove-drain terminar apontando para o /board-flow:decide"
+    why: >-
+      verificado em 04/08: prove-drain.md não cita `decide` em lugar nenhum.
+      Sem essa costura, quem acabou de provar a fila não descobre que existe um
+      comando para o resto — e o NEEDS-HUMAN volta a ser lista para abrir card
+      a card, que é a dor que originou tudo. Depois do run real porque o run é
+      quem diz o que a costura deve prometer.
+    # done em 2026-08-04, commit 0bd1293. O dono pediu para fazer ANTES do run no
+    # wego, invertendo a ordem proposta aqui — a costura nao dependia do run para
+    # ser escrita, so para ser conferida. Evidencia: prove-drain.md agora fecha o
+    # relatorio entregando o conjunto NEEDS-HUMAN ao /board-flow:decide, com a
+    # contagem, e so quando ha pelo menos um card retido.
+    status: done
+    blocked_by: ["decide-rodar-no-wego"]
+    human_pending: null
+
+  - id: "decide-publicar-0-12-0"
+    title: "Registrar o decide na descrição do plugin e subir board-flow para 0.12.0"
+    why: >-
+      verificado em 04/08: plugin.json ainda diz 0.11.0 e lista os comandos um
+      a um (configure, capture, ..., advance) sem o decide. Comando que não
+      aparece na descrição do plugin é comando que só quem o escreveu encontra.
+      Por último porque o texto da descrição deve descrever o comando como ele
+      ficou depois do run e da costura, não como foi desenhado.
+    # done em 2026-08-04, commit 0bd1293, tambem antecipado a pedido do dono.
+    # board-flow 0.11.0 -> 0.12.0; decide entrou na lista de comandos e ganhou
+    # paragrafo proprio em plugin.json e em .claude-plugin/marketplace.json.
+    # NAO esta live: exige bin/install.sh --clean + restart.
+    status: done
+    blocked_by: ["decide-costura-com-prove-drain"]
+    human_pending: >-
+      rodar bin/install.sh --clean e reiniciar a sessão — board-flow 0.12.0 está
+      no repo, o cache ainda serve 0.11.0. Falha se /board-flow:prove-drain
+      terminar sem citar o /board-flow:decide.
+
+  - id: "decide-nao-rodou-vs-nada-a-provar"
+    title: "Impedir que card estruturalmente improvável (Epic-mãe) caia em `nao-rodou`"
+    why: >-
+      achado do primeiro run real, 2026-08-04. `nao-rodou` é o único dos sete
+      motivos que sai da frente do humano sem virar pergunta — a saída prescrita
+      é re-rodar a prova. O WEGO-1550 caiu nele por ter `base_commit: null`,
+      mas é um Epic-mãe: nunca terá commit-base, então re-rodar dá o mesmo
+      resultado para sempre e o card fica em Review em silêncio. O artefato já
+      carrega o campo que distingue os dois casos — `scope.base_commit_resolved:
+      false` COM `issue_type: Epic` (e a nota em prosa dizendo que um Epic-mãe
+      por definição não produz diff) é `nada-a-provar`, não `nao-rodou`.
+      Conserto provável: no classificador, checar issue_type antes da regra de
+      commit-base ausente. Precisa de caso na suíte de regressão — os 33
+      artefatos que a alimentam vieram todos de cards de código.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
   - id: "onboarding-maestro-blocos-1-3"
     title: "Retomar a sessão de onboarding do Maestro (blocos 1-3)"
     why: >-
