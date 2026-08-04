@@ -91,13 +91,22 @@ Os `nao-rodou` não viram pergunta. Para eles:
 
 ### 5. Aplique os waivers que você já deu
 
-Antes de perguntar qualquer coisa, leia `.claude/waivers/*.yaml`. Um waiver
-casa quando **motivo E escopo** batem (mesmo slug, mesma classe/nível). Casou:
-aplique a decisão registrada, e apenas **informe** — não pergunte de novo. Esse
-é o mecanismo que impede a fila de repetir a mesma pergunta toda semana.
+Antes de perguntar qualquer coisa, use `board-flow/bin/waivers.py`:
+`carregar(repo)` e, por grupo, `aplicavel(waivers, motivo, escopo)`. Voltou um
+waiver: aplique a decisão registrada e apenas **informe** — não pergunte de
+novo. É este passo que impede a fila de repetir a mesma pergunta toda semana.
 
-Waiver vencido (passou do `revisit_trigger`) volta a ser pergunta, dizendo que
-venceu e por quê.
+O casamento é por **motivo + escopo**, nunca por card (todo card é novo; casar
+por card não pouparia pergunta nenhuma). `PlugSignAdapter` e `plugsign adapter`
+são o mesmo escopo.
+
+Vencimento só acontece por **data** dentro do `revisit_trigger`. Gatilho em
+prosa ("quando o adapter mudar") é mostrado a você e nunca interpretado pelo
+código — um código que decidisse sozinho que a condição ocorreu estaria
+dispensando por conta própria. Vencido volta a ser pergunta, dizendo que venceu.
+
+Waiver malformado (sem autor, razão ou gatilho) é ignorado, não vale como
+dispensa.
 
 ### 6. Agrupe por motivo e pergunte UMA vez por grupo
 
@@ -131,10 +140,12 @@ da resposta para quem quiser conferir.
 O usuário responde numa linha (`1 sim, 2 não, 3 sim`). Só então você escreve.
 Por grupo aceito:
 
-- **aceitar a prova como está** → grava `.claude/waivers/<slug>-<escopo>.yaml`
-  com motivo, escopo, razão do usuário e `revisit_trigger`; avança os cards via
-  `atlassian-expert`. O waiver é **do humano** — o `proof-reviewer` continua sem
-  poder dispensar nada, e o artefato da prova continua sem campo de dispensa.
+- **aceitar a prova como está** → `waivers.gravar(...)` com motivo, escopo,
+  razão do usuário, autor e `revisit_trigger` (todos obrigatórios — dispensa sem
+  prazo nem condição é dispensa para sempre, e ninguém decidiu isso); depois
+  avança os cards via `atlassian-expert`. A dispensa é **do humano**: o
+  `proof-reviewer` continua sem poder dispensar nada e o artefato da prova
+  continua sem campo para isso.
 - **não aceitar** → cria o card do teste que falta (um por lacuna real, não um
   por card travado) e devolve os cards com `**Reason:**` **por card** — o
   `bounce-reason-gate` bloqueia comentário sem isso, e razão colada igual em N
