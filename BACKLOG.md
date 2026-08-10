@@ -782,3 +782,146 @@ Nesta mesma sessão o dono perguntou "o que devo fazer?" sobre os follow-ups, e 
 sessão terminou com quatro cards novos abertos (1962, 1963, 1964, 1965) — todos
 com ordem relativa indefinida e nenhum vínculo com a priorização original que
 gerou o WEGO-1958. A dor se reproduz sozinha a cada card executado.
+
+---
+
+## Atrito de decisão — o harness pergunta demais, e pergunta cedo demais
+
+**Status:** pendente · **Lar provável:** `common` (faixas de autonomia, registro de
+atestados) + `board-flow` (auditar antes de perguntar, perguntas por sub-task)
+· **Origem:** sessão de triagem/drain do WEGO em 2026-08-03 a 2026-08-10, e um pedido
+literal do dono ao fim dela: *"Eu só quero que as tarefas fluam pelo quadro, com o
+menor atrito possível. Toda vez que você aponta alguma pendência em um card eu tenho
+que parar tudo, abrir o card, interpretá-lo, verificar o código e tomar a decisão."*
+
+### Problema
+
+Naquela sessão o dono foi interrompido cerca de **20 vezes**. Classificando as
+interrupções depois:
+
+- **5 eram genuinamente dele** — decisão de produto (staging deve recusar requisição
+  sem tenant?), atestado sobre o que não está no código (o SMTP está configurado no
+  painel do fornecedor?), e priorização entre cards.
+- **~10 eram mecânica reversível** que o agente já havia recomendado e o dono apenas
+  carimbou: rodar o build curto, criar um card de dívida, empurrar branch ou mesclar,
+  commitar 7 documentos de processo, apagar 6 branches órfãos já contidos no `main`,
+  apagar 3 handoffs vencidos. Em todas o relatório dizia "Recomendo sim" e em todas a
+  resposta foi "sim". A pergunta não carregava informação.
+- **~4 eram defeito do próprio harness travestido de tarefa do dono** — instruções
+  passo a passo para expor o campo Labels na tela de Task do Jira; o `last-build.json`
+  que não grava quando o build roda em segundo plano (e o build do módulo `bootstrap`
+  leva 26 min, ou seja, NUNCA cabe em primeiro plano); o `bounce-reason-gate` barrando
+  um comentário por conter a palavra "UNPROVEN" numa frase que dizia justamente para
+  *não* reprovar; o `summary-nulls-gate` exigindo os quatro rótulos em inglês num
+  comentário escrito em pt-BR.
+- **1 foi pergunta feita cedo demais, e custou uma reversão.** O agente pediu ao dono
+  para decidir o fechamento do Epic WEGO-1406 olhando uma fatia de 15 cards. O dono
+  respondeu "pode concluir". Só então o agente auditou e encontrou **41 filhas, 22
+  ainda abertas**, das quais 10 eram desenvolvimento não entregue — inclusive os três
+  primeiros itens da fila de execução do próprio plano. A resposta certa era mecânica:
+  bastava enumerar as filhas ANTES de perguntar.
+
+### Esboço de solução
+
+**1. Faixas de autonomia por reversibilidade.** Hoje "pergunto ou faço?" é julgamento
+do agente a cada turno, e o viés observado é perguntar demais. Escrever na configuração:
+
+- *Executa e reporta* (reversível): rodar build, commit local, criar card, apagar
+  branch já contido na base, mover arquivo dentro do repo, escrever/atualizar plano.
+- *Sempre pergunta* (irreversível ou de fora): empurrar para remoto, mesclar em branch
+  de integração, descartar trabalho, transição terminal no board, qualquer coisa que
+  envolva segredo, qualquer coisa que saia para terceiros.
+
+O relatório continua listando o que foi feito na faixa automática — o ganho é que vira
+*informação*, não *pergunta*.
+
+**2. Auditar antes de perguntar.** Regra dura, no `board-flow:triage` e no
+`board-flow:decide`: card com filhos nunca vira pergunta sem enumerar os filhos e o
+status de cada um; card que cita `arquivo:linha` nunca vira pergunta sem conferir a
+linha. O custo da auditoria é de um minuto; o custo de pular foi uma decisão errada do
+dono e a reversão dela.
+
+**3. Registro de atestados.** Quando o dono afirma "isso está concluído", isso vira
+fato datado e com escopo num arquivo durável (candidato: `.claude/attestations.yaml`),
+não uma frase no chat. Em 2026-08-03 o dono atestou que o pacote operacional do
+onboarding PlugSign estava concluído; em 2026-08-04 outra sessão triou o mesmo cluster
+como fila de desenvolvimento e tirou 10 cards do escopo por lista de chaves. A
+contradição só apareceu em 08-10. Um atestado registrado teria evitado as duas coisas.
+
+**4. Perguntas objetivas por sub-task quando o Epic não decide.** Pedido explícito do
+dono (2026-08-10): *"quando um epic possuir subtasks e você não conseguir decidir o
+que está e o que não está feito, crie perguntas objetivas para cada card."*
+
+Ou seja: o fallback de um Epic indecidível NÃO é uma pergunta genérica sobre o Epic
+("posso fechar?"), e também não é silêncio. É **uma pergunta fechada por sub-task**,
+cada uma respondível com sim/não sem abrir o card — no formato que o
+`board-flow:decide` já usa para a coluna Review, respondidas em lote ("1 sim, 2 não").
+A pergunta tem de citar o que o agente já verificou, para o dono não refazer o
+trabalho. **E o nível de detalhe não é fixo: a pergunta mostra exatamente aquilo de que
+a decisão depende, e nada além.** Refinamento pedido pelo dono em 2026-08-10, ao ler a
+primeira versão deste item: *"seria interessante me mostrar quais são os 5 critérios"*.
+Sem isso, dizer "os 5 critérios estão ausentes" obriga a abrir o card para saber o que
+se está decidindo — o atrito volta inteiro, só que uma camada abaixo.
+
+A regra que sai daí:
+
+- **Quando a recomendação é fechar**, uma linha basta — o dono só confirma:
+  *"WEGO-1436 (`POST /upload`): o endpoint existe em `PlugSignAdapter:253`, com
+  cobertura mock e vendor-drift. Fecho? Recomendo sim."*
+- **Quando a recomendação é manter aberto**, o motivo É a lista — cada critério com o
+  estado verificado e o lugar onde foi conferido:
+
+  > **WEGO-1437 (`POST /send-request`) — manter aberto. Recomendo sim.**
+  > Os 5 critérios que você escreveu em 2026-08-03 (comentário 36883, na reabertura
+  > depois do proof gate reprovar em 07-30). Verificados no código em 2026-08-04, HEAD
+  > `018b1b1c` — nenhum atendido:
+  >
+  > 1. *"Data de nascimento passa a ser invariante obrigatória do signatário, no mesmo
+  >    nível do CPF (`PlugSignPort.Signatario`), com mensagem de erro equivalente."*
+  >    → ausente: `PlugSignPort.java:201-226` ainda documenta "dataNascimento e
+  >    mensagem são opcionais".
+  > 2. *"Os caminhos que hoje toleram data de nascimento ausente são tratados: os
+  >    fallbacks best-effort a partir do Atendimento em
+  >    `SolicitarAssinaturaService.java:684,696,762,770` precisam falhar de forma
+  >    explícita quando o dado não existe, em vez de seguir com nulo. Avaliar o impacto
+  >    sobre pedidos que hoje passam sem o dado e escalar ao dono se houver volume
+  >    relevante."* → ausente: os 4 fallbacks seguem passando nulo adiante; o ramo
+  >    MÉDICO (`:717-718`) já falha explícito e é o padrão a replicar.
+  > 3. *"`allow_birth_date` no payload da PlugSign deixa de ser condicional à presença
+  >    do campo."* → ausente: segue condicional em `PlugSignAdapter.java:984,1010,1018`.
+  > 4. *"O ramo PRESTADOR → `signature_type = "Contratado"` passa a ser afirmado por
+  >    teste."* → ausente: o ramo existe em `PlugSignAdapter.java:1021`, mas há zero
+  >    ocorrências de "Contratado" em arquivos de teste.
+  > 5. *"Cobertura E2E (@QuarkusTest + RestAssured/WireMock): pedido sem data de
+  >    nascimento é recusado, e o payload efetivamente enviado à PlugSign carrega
+  >    `birthdate` e o `signature_type` correto por papel."* → ausente.
+
+Repare que os critérios 4 e 5 são de **cobertura**, não de implementação — o código do
+ramo PRESTADOR já existe. Foi exatamente essa distinção que derrubou o card em
+2026-07-30: perturbar `PlugSignAdapter.java` manteve os testes verdes porque o contract
+test só instancia `PapelSignatario.PACIENTE`. Uma pergunta que dissesse apenas "está
+implementado?" teria recebido "sim" e estaria errada.
+
+Custo aceito: uma pergunta dessas é longa. Por isso o detalhe só aparece no ramo
+"manter aberto", que é a minoria — no WEGO-1406, 12 das 22 filhas são operacionais e
+cabem em uma linha cada.
+
+O caso WEGO-1406 é o teste de aceitação natural desta parte: 22 filhas abertas, 12 de
+operação e 10 de desenvolvimento, e o dono conseguindo despachar todas numa sentada.
+
+**5. Fila própria para defeito do harness.** O que trava o fluxo por culpa da
+ferramenta vira item deste BACKLOG automaticamente, e não uma tarefa apresentada ao
+dono no meio de um card de produto.
+
+### O que NÃO some, e é honesto dizer
+
+Decisão de produto e atestado sobre o que vive fora do código continuam sendo do dono.
+O ganho não é eliminá-los: é que passem a chegar **agrupados, uma vez por rodada, com
+recomendação e default**, em vez de pingados no meio do trabalho.
+
+### Peça que já existe
+
+O `board-flow:decide` já faz exatamente a forma desejada — agrupa a coluna Review por
+motivo e faz uma pergunta fechada por grupo, respondida em lote. O que falta é (a)
+estender essa forma ao resto do fluxo, (b) parar de perguntar o que é reversível, e
+(c) o modo por sub-task do item 4.
