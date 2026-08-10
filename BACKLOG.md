@@ -925,3 +925,101 @@ O `board-flow:decide` já faz exatamente a forma desejada — agrupa a coluna Re
 motivo e faz uma pergunta fechada por grupo, respondida em lote. O que falta é (a)
 estender essa forma ao resto do fluxo, (b) parar de perguntar o que é reversível, e
 (c) o modo por sub-task do item 4.
+
+---
+
+## O plano de execução morre com o worktree, e o nome do programa colide
+
+**Status:** pendente · **Lar provável:** `common` (`plan-schema.yaml`, `/common:next`)
++ `maestro` (`program-plan`, `run`, `resume`) · **Origem:** sessão de 2026-08-10, a
+partir do relato de uma sessão do WEGO: *"O plano desta sessão morre com o worktree. O
+`plan.yaml` que escrevi vive em `.claude/`, que o repositório ignora, e o `.claude/`
+deste worktree some quando ele for removido. E o worktree do main tem outro plano para
+o mesmo programa WEGO."*
+
+### Problema
+
+Verificado em disco em 2026-08-10, no `wego-assinatura-backend`: existem **três**
+`plan.yaml`, todos com o nome de programa `WEGO`, todos não-rastreados, e todos com
+escopos diferentes.
+
+| onde | escopo declarado no `source:` | itens |
+|---|---|---|
+| worktree do main | To Do, triado 29/07 e de novo 04/08 (15 de 171) | 19 |
+| `session/todo` | To Do, triado 03/08 | 3 |
+| `session/in_review` | follow-ups de In Review, 03/08 | 10 |
+
+São dois defeitos distintos que se somaram:
+
+**1. O arquivo mora no lugar errado.** O `.gitignore:79` do wego ignora `.claude`
+inteiro — é regra do time, não do dono do harness. Então lá o plano nunca teve chance
+de ser versionado, e um plano escrito dentro de um worktree de sessão desaparece no
+`worktree-merge` levando junto a ordem e o porquê. Os 13 itens priorizados de
+`session/todo` e `session/in_review` estão nessa situação agora.
+
+No `cepa` o mesmo padrão parece funcionar: `.claude/programs/**` está rastreado de
+propósito, com comentário no `.gitignore` dizendo isso. Mas o `cepa` tem **um worktree
+só** — o arranjo nunca foi exposto a paralelismo. Ele não resolve o problema, apenas
+ainda não o encontrou.
+
+**2. O nome do programa é o projeto, não a fatia de trabalho.** Os três arquivos não
+são cópias divergentes de um mesmo plano: são três recortes distintos que receberam o
+mesmo nome. E isso não foi descuido das sessões — a regra 2 de resolução do
+`/common:next` (`common/commands/next.md:53`) manda usar
+`.claude/programs/<project_key>/plan.yaml` quando existe `board-flow.yaml`. A convenção
+manda chamar de `WEGO`. Toda triagem futura colide com a anterior mesmo depois de
+resolvido o lugar do arquivo.
+
+### Esboço de solução
+
+**Um arquivo físico por programa, sempre no worktree principal.** Todo worktree —
+inclusive os efêmeros — resolve o mesmo caminho com uma linha, sem configuração e sem
+symlink:
+
+```sh
+dirname $(git rev-parse --path-format=absolute --git-common-dir)
+```
+
+Verificado em 2026-08-10: de `session/todo` isso devolve o worktree principal do wego;
+do `cepa` devolve o `cepa`.
+
+Por que essa e não as outras:
+
+- **Sobrevive.** O worktree principal não é removido pelo `worktree-merge` nem pelo
+  `wrap-up`. O plano morre com o clone, não com a sessão.
+- **Não pode divergir.** Não existe "o plano do meu worktree" — existe um arquivo.
+  Escrita de status vai direto nele, sem branch e sem merge no caminho.
+- **Independe de o repo permitir versionar.** No `cepa` fica exatamente onde já está e
+  continua rastreado, migração zero. No wego continua ignorado pelo `.gitignore` do
+  time e mesmo assim durável. Mesma mecânica nos dois, sem negociar `.gitignore` alheio
+  nem usar `git add -f` brigando com a regra para sempre.
+
+Descartadas, com o motivo:
+
+- *Cada worktree com seu plano* — é o estado atual, e é o defeito.
+- *Na main, versionado, atualizado por branch* — transforma cada `status: done` em
+  commit numa branch de sessão mais um merge, e conflita por construção quando duas
+  sessões fecham itens diferentes do mesmo plano. É o custo sem o benefício: a história
+  de um item concluído não vale um conflito de YAML.
+- *Fora do repo (`~/.claude/programs/<repo>/`)* — resolve durabilidade mas separa o
+  plano do clone e quebra com dois clones do mesmo repo (o dono tem: `~/coding/wego` e
+  o do Insync).
+
+**Distinção a fixar junto:** `plan.yaml` é a fila + ordem + porquê, compartilhado, vai
+para o worktree principal. O `wave-state.yaml` do Maestro é estado **de um run** — esse
+pode e deve morrer com o run. Nada muda para ele.
+
+**Nome de programa = fatia de trabalho**, não project key: `wego-todo-agosto`,
+`wego-review-followups`. Exige corrigir a regra 2 do `/common:next`.
+
+### Superfícies a tocar
+
+`common/plan-schema.yaml` (documentar o lugar canônico), `common/commands/next.md`
+(resolução de caminho + regra 2), `maestro/commands/program-plan.md`,
+`maestro/commands/run.md`, `maestro/commands/resume.md`, `docs/execution-plan.md`.
+
+### Dívida imediata, independente do código
+
+Consolidar os três `plan.yaml` do wego em três programas de nomes distintos no worktree
+principal. Os de `session/todo` e `session/in_review` somem no próximo merge e levam 13
+itens priorizados junto.
