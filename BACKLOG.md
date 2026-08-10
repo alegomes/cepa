@@ -1023,3 +1023,63 @@ pode e deve morrer com o run. Nada muda para ele.
 Consolidar os três `plan.yaml` do wego em três programas de nomes distintos no worktree
 principal. Os de `session/todo` e `session/in_review` somem no próximo merge e levam 13
 itens priorizados junto.
+
+### Por que ele evaporou sem aviso — mecanismo verificado em 2026-08-10
+
+O gatilho relatado pelo dono foi fechar o herdr e o Ghostty. Ou seja: quem removeu o
+worktree não foi um comando digitado, foi o caminho automático. São dois, os dois com
+o mesmo furo:
+
+- `common/hooks/session-registry.py:256` — `do_prune_on_exit`, o reap diferido que o
+  `/common:wrap-up` agenda por marcador (ele não pode remover o worktree em que está
+  de pé).
+- `common/hooks/_wtlib.py:413` — `auto_clean`, que varre worktrees não-vivos, limpos e
+  sem commits pendentes.
+
+**O furo é arquivo ignorado, e ele é invisível para todas as camadas de proteção que
+existem hoje.** Verificado com dois repos de teste montados para isso:
+
+| arquivo solto no worktree | `git status --porcelain` | `git worktree remove` sem `--force` |
+|---|---|---|
+| não-rastreado e **não** ignorado | `?? solto.txt` | **recusa**, `rc=128`, arquivo sobrevive |
+| não-rastreado e **ignorado** | vazio | **remove calado**, `rc=0`, arquivo morre |
+
+No `wego-assinatura-backend` o `.gitignore:79` ignora `.claude` inteiro, então o plano
+caiu na segunda linha. E as três defesas falharam em cascata, todas pelo mesmo motivo:
+
+1. `is_dirty()` (`_wtlib.py:143`) usa `git status --porcelain`, que **não lista
+   ignorados** → o worktree parecia limpo.
+2. O WIP-autosave de `on_end` (`session-registry.py:280`) só dispara se `is_dirty` →
+   não disparou.
+3. O guard do próprio git não viu nada para barrar → `rc=0`, sem sequer chegar ao
+   fallback `--force`.
+
+Corolário importante: **tirar o `--force` não teria salvado nada**. O fallback
+`rc != 0 → --force` (`session-registry.py:258`, `_wtlib.py:415`) é um furo separado e
+real — ele converte a recusa do git em destruição silenciosa no caso não-ignorado — mas
+não é o que aconteceu aqui.
+
+Segundo corolário: a rede **precisa morar no hook**, não nos comandos
+`worktree-merge` / `worktree-discard` / `wrap-up`. Nenhum deles rodou nessa perda.
+
+### Camadas propostas
+
+**Camada 0 — prevenção, e é a que resolve este caso.** O `plan.yaml` nunca é escrito
+dentro de um worktree de sessão (a solução principal deste item). Fim do problema para
+o plano.
+
+**Camada 1 — resgate antes de remover, para todo o resto.** A camada 0 só cobre o
+plano. Tudo o mais que o harness escreve num `.claude/` ignorado tem exatamente o mesmo
+furo: `.claude/proof/<KEY>.yaml` do proof gate, `.claude/acceptance/<KEY>.yaml` do
+completion-auditor, e os handoffs (ignorados de propósito até no `.gitignore` do
+próprio cepa). Antes de qualquer `worktree remove`, enumerar com
+`git status --porcelain --ignored` o que morre sob `.claude/**`, descontar o efêmero
+conhecido (`last-build.json`, `session-log.md`, `sessions/`) e copiar o resto para o
+worktree principal — reportando o que foi resgatado. Um helper só em `_wtlib.py`,
+chamado pelos dois caminhos automáticos e pelos três comandos.
+
+**Camada 2 — nunca forçar às cegas.** Com a camada 1 no lugar, o fallback `--force`
+deixa de destruir o que não foi resgatado.
+
+Ordem de valor: a 0 resolve a perda que aconteceu; a 1 é a que impede a próxima, que
+vai ser com um artefato de prova em vez de um plano.
