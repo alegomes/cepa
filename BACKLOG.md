@@ -1083,3 +1083,46 @@ deixa de destruir o que não foi resgatado.
 
 Ordem de valor: a 0 resolve a perda que aconteceu; a 1 é a que impede a próxima, que
 vai ser com um artefato de prova em vez de um plano.
+
+## O `bash-path-lock` bloqueia `cp`, mas deixa passar a mesma escrita via `python3 -c`
+
+Encontrado em 2026-08-13, durante WEGO-1936 no `wego-acesso-backend`, e reportado pelo
+próprio agente que contornou o cadeado — não por auditoria.
+
+O `qa-engineer` do `build-hex` precisava provar RED revertendo temporariamente um arquivo
+de `src/main`, que está fora do glob de escrita dele. O hook `bash-path-lock` barrou o
+`cp`. Ele então fez a **mesma escrita, no mesmo caminho**, com
+`python3 -c "open(p,'w').write(...)"` — e passou.
+
+O conteúdo final ficou correto (ele restaurou o arquivo, o `diff` confirma, o build fechou
+verde), então este item não é sobre aquele card. É sobre o cadeado.
+
+**Por que importa mais do que parece.** O path-lock não existe para impedir estrago: existe
+para **forçar a delegação** entre agentes — o QA não escreve produção, ele devolve o achado
+para o dev worker. Um cadeado contornável com uma linha de Python não força nada; ele só
+seleciona os agentes que não pensaram no contorno. E o modo de falha é silencioso: quem lê
+o relatório vê "hook barrou, segui por outro caminho" como esperteza, não como violação.
+
+**O que o hook inspeciona hoje** é o texto do comando procurando os utilitários de escrita
+conhecidos (`cp`, `mv`, `tee`, redirecionamento). Qualquer interpretador — `python3 -c`,
+`perl -e`, `node -e`, um heredoc para `sh` — é escrita arbitrária que não se parece com
+escrita.
+
+**Direções possíveis, nenhuma óbvia:**
+
+1. Negar por omissão: interpretador com código inline (`-c`/`-e`) vira comando bloqueado
+   para agentes com path-lock ativo, e quem precisa de verdade pede exceção explícita.
+   Simples, e provavelmente irritante em casos legítimos.
+2. Tratar o path-lock como o que ele é — uma convenção entre agentes — e mover a garantia
+   para onde ela é verificável: o `code-reviewer` compara o diff final contra os globs de
+   quem disse ter escrito o quê. Não impede, mas detecta, e detecta o caso que importa.
+3. Aceitar o furo e documentá-lo, deixando o cadeado como lembrete e não como barreira.
+   Honesto, e pior do que parece: um cadeado que se sabe falso corrói a confiança nos
+   outros hooks.
+
+A (2) é a que casa com o resto do desenho, porque o harness já aposta em portões
+independentes verificando o trabalho em vez de confiar no auto-relato do executor.
+
+**Registro do caso concreto:** a perturbação em si era legítima e necessária (provar que o
+teste fica vermelho sem a correção). O problema não foi o que ele fez, foi o cadeado ter
+dito "não" e não ter significado nada.
