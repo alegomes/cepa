@@ -97,7 +97,24 @@ CHECAGEM_INAPLICAVEL = [
 ]
 
 NAO_RODOU = [
-    (r"docker|dev services|testcontainer", "Docker/Dev Services indisponível"),                      # WEGO-1683
+    # A polaridade é obrigatória. A versão anterior casava a palavra "docker"
+    # solta e, num projeto Quarkus, TODO artefato de prova externa bem-feita cita
+    # Testcontainers — inclusive dizendo "Docker OK". Como `nao-rodou` é o único
+    # motivo que sai da fila sem passar pelo humano, a regra apagava justamente
+    # as provas que rodaram direito. Achado em 14/08/2026 no prove-drain de
+    # wego-acesso-backend: WEGO-1894 e WEGO-1897, ambos com Postgres real e
+    # achado de segurança, foram classificados "Docker indisponível" por causa da
+    # frase "Docker OK". As demais regras deste bloco sempre exigiram o marcador
+    # de indisponibilidade ("jacoco ausente", "pit absent"); esta era a exceção.
+    (r"(docker|dev services|testcontainers?)[^.\n]{0,60}"
+     r"(indispon[íi]vel|unavailable|not (available|running|started|installed)|"
+     r"n[ãa]o (subiu|iniciou|est[áa] (dispon[íi]vel|rodando)|dispon[íi]vel)|"
+     r"fora do ar|ausente|down)"
+     r"|(?:sem|no|without) (docker|dev services|testcontainers?)"
+     r"|(?:cannot|could not|unable to|n[ãa]o (?:consegui|foi poss[íi]vel)) "
+     r"(?:connect to |start |iniciar |subir |conectar (?:a|ao|no) )?"
+     r"(?:the )?(docker|dev services|testcontainers?)",
+     "Docker/Dev Services indisponível"),                                                            # WEGO-1683
     (r"jacoco (ausente|absent|n[ãa]o|missing)|no quarkus-jacoco|sem quarkus-jacoco|jacoco not (configured|wired)|no quarkus-jacoco wired",
      "ferramenta de cobertura ausente no projeto"),
     (r"pit is absent|pit ausente|pitest (absent|ausente|not configured)|no pit plugin",
@@ -186,6 +203,24 @@ def classify(d: dict) -> tuple[str, str]:
         bug.get("run"), bug.get("note"),
     )
 
+    # ESTRUTURAL, e por isso vem antes de qualquer casador de prosa: se o L4
+    # registrou achado, a prova rodou E encontrou defeito na superfície mudada.
+    # Isso é decisão do humano por definição, e nenhuma frase pode reroteá-lo.
+    #
+    # Esta checagem existia, mas lá embaixo, depois dos casadores de texto — e o
+    # blob inclui `l4.findings`, isto é, a PROSA DO PRÓPRIO ACHADO. Um achado que
+    # descrevesse "jacoco ausente" ou "docker" era classificado pela sua própria
+    # descrição e caía em `nao-rodou`, o único balde que dispensa o humano.
+    # Achado em 14/08/2026 no prove-drain de wego-acesso-backend: WEGO-1894
+    # (colisão de hash) e WEGO-1897 (NUL byte derrubando a API) sumiam da fila,
+    # os dois achados mais graves do lote. O fato vence o texto.
+    #
+    # `findings` guarda prosa, não estado: WEGO-1819 está marcado `findings` e o
+    # texto diz que o achado já foi fechado. Por isso a evidência devolvida é o
+    # próprio texto — quem lê é o humano; o comando não afirma que está aberto.
+    if l4.get("status") == "findings":
+        return "sem-cobertura", str(l4.get("findings") or "")[:200]
+
     # A ordem é precedência, não gosto. "Depende de alguém de fora" e "diff sem
     # produção" vêm primeiro porque também citam ambiente na prosa e seriam
     # engolidos por "não rodou".
@@ -238,11 +273,9 @@ def classify(d: dict) -> tuple[str, str]:
     if len(travados) == 1 and _casa(CHECAGEM_INAPLICAVEL, blob):
         return "nada-a-provar", f"{travados[0][0]} não cabe nesse tipo de mudança"
 
-    # `findings` guarda prosa, não estado: WEGO-1819 está marcado `findings` e o
-    # texto diz que o achado já foi fechado. Por isso a evidência devolvida é o
-    # próprio texto — quem lê é o humano; o comando não afirma que está aberto.
-    if l4.get("status") == "findings":
-        return "sem-cobertura", str(l4.get("findings") or "")[:200]
+    # (A checagem de `l4.status == "findings"` que ficava aqui subiu para antes
+    # dos casadores de prosa — ver o comentário lá em cima. Daqui ela nunca era
+    # alcançada quando o texto do próprio achado casava outra regra.)
 
     for r in ((l3.get("pit") or {}).get("results") or []):
         m = re.search(r"\((\d+)%\)", str(r))
