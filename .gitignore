@@ -23,6 +23,9 @@ common/expertise/expertise
 .claude/last-build.json
 .claude/sessions/
 .claude/handoffs/
+# Artefatos salvos de um worktree removido (rescue do session-registry). Caixa
+# de entrada: você move o que interessa para o lugar certo e apaga o resto.
+.claude/rescued/
 
 # Symlink criado pelo bin/install.sh apontando para o clone canônico
 # (~/coding/cepa/common/expertise). Scaffolding de instalação, não fonte.

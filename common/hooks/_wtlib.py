@@ -400,6 +400,120 @@ def default_base(root: str) -> str:
     return "main"
 
 
+# ── rescuing harness artifacts before a worktree is destroyed ─────────────
+
+# Under .claude/, what is machine state that regenerates, or that has its own
+# lifecycle, and is therefore NOT worth carrying out of a dying worktree. A
+# trailing slash means "this directory and everything under it". Everything
+# else under .claude/ is rescued — the point of the net is the artifact we
+# haven't thought of yet, so this is a denylist, never an allowlist.
+RESCUE_SKIP = (
+    "sessions/",          # registry, keyed by a session that is ending anyway
+    "handoffs/",          # deliberately reaped when the branch lands
+    "plugins/",           # installed copies of the plugins themselves
+    "cepa-telemetry/",    # append-only ledger, canonical copy lives in $HOME
+    "ui-proof/runs/",     # regenerated per run from the manifest
+    "expertise",          # symlink to the canonical clone
+    "last-build.json",
+    "doctor-last-run",
+    "session-log.md",
+    "worktree-seed",
+    "settings.local.json",
+    "__pycache__/",
+)
+
+
+def doomed_artifacts(wt_path: str):
+    """Files under .claude/ that removing this worktree would destroy.
+
+    Why this has to exist: an IGNORED file is invisible to every guard on the
+    removal path. `git status --porcelain` doesn't list it, so is_dirty() reads
+    clean and the WIP-autosave never fires; and `git worktree remove` deletes
+    it and returns 0 even WITHOUT --force — git only refuses for content that
+    is untracked *and not ignored*. So a repo whose .gitignore covers `.claude`
+    (common, since it is usually someone else's repo) loses every plan, proof
+    and acceptance artifact the harness wrote there, with no error anywhere.
+    Verified 2026-08-10, after a WEGO execution plan evaporated exactly so.
+
+    Walks the disk instead of parsing `git status`: when the ignore pattern is
+    the directory itself, git collapses the whole tree to one `!! .claude/`
+    line and never names the files. Tracked files are skipped — those live in
+    a commit and survive the worktree. Returns worktree-relative paths.
+    """
+    base = Path(wt_path) / ".claude"
+    if not base.is_dir():
+        return []
+    rc, out, _ = git(["ls-files", "--", ".claude"], cwd=wt_path)
+    tracked = set(out.splitlines()) if rc == 0 else set()
+
+    def skipped(tail: str) -> bool:
+        return any(tail == s or tail.startswith(s if s.endswith("/") else s + "/")
+                   for s in RESCUE_SKIP)
+
+    found = []
+    for dirpath, dirnames, filenames in os.walk(base):
+        rel_dir = os.path.relpath(dirpath, base)
+        rel_dir = "" if rel_dir == "." else rel_dir + "/"
+        # Prune skipped subtrees so we never descend into e.g. plugins/.
+        dirnames[:] = [d for d in dirnames if not skipped(rel_dir + d + "/")]
+        for name in filenames:
+            tail = rel_dir + name
+            if skipped(tail):
+                continue
+            rel = ".claude/" + tail
+            if rel not in tracked:
+                found.append(rel)
+    return sorted(found)
+
+
+def rescue_artifacts(wt_path: str, base_root: str, branch: str):
+    """Copy a dying worktree's .claude/ artifacts into the main worktree.
+
+    Lands in .claude/rescued/<branch>/<same relative path> and never on top of
+    the live file: the main worktree normally has its OWN .claude/programs/...,
+    and overwriting that would trade one silent loss for another. Returns the
+    worktree-relative paths actually saved.
+    """
+    doomed = doomed_artifacts(wt_path)
+    if not doomed:
+        return []
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", branch or "unknown").strip("-") or "unknown"
+    dest_root = Path(base_root) / ".claude" / "rescued" / slug
+    saved = []
+    for rel in doomed:
+        dest = dest_root / rel[len(".claude/"):]
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            n = 1
+            while dest.exists():
+                dest = dest.with_name(f"{dest.name}.{n}")
+                n += 1
+            shutil.copy2(Path(wt_path) / rel, dest)
+            saved.append(rel)
+        except OSError:
+            continue    # one unreadable file must not abort the whole rescue
+    return saved
+
+
+def rescued_dirs(root: str):
+    """What rescue_artifacts saved and nobody has claimed yet.
+
+    Surfaced at SessionStart rather than reported when it happens: the two
+    automatic removal paths run at SessionEnd or before the first prompt, where
+    stderr goes nowhere anyone reads. Returns [(slug, file_count), ...].
+    """
+    base = Path(root) / ".claude" / "rescued"
+    if not base.is_dir():
+        return []
+    out = []
+    for d in sorted(base.iterdir()):
+        if d.is_dir():
+            n = sum(1 for p in d.rglob("*") if p.is_file())
+            if n:
+                out.append((d.name, n))
+    return out
+
+
 def auto_clean(root: str):
     """Remove session worktrees that are provably safe to drop:
     not alive AND clean AND (fully merged or zero commits). Returns names removed.
@@ -410,6 +524,7 @@ def auto_clean(root: str):
             continue
         if info["ahead"] != 0:   # has unmerged commits (or unknown) → keep
             continue
+        rescue_artifacts(info["path"], root, info["branch"])
         rc, _, _ = git(["worktree", "remove", info["path"]], cwd=root)
         if rc != 0:
             git(["worktree", "remove", "--force", info["path"]], cwd=root)

@@ -129,6 +129,19 @@ def on_start(session_id: str, cwd: str) -> None:
         if cleaned:
             notices.append(f"🧹 Auto-removed {len(cleaned)} finished session "
                            f"worktree(s): {', '.join(cleaned)}.")
+        # Artifacts carried out of a removed worktree. Announced here because
+        # the rescue itself happens at SessionEnd / before the first prompt,
+        # where nothing it prints reaches the user.
+        rescued = L.rescued_dirs(root)
+        if rescued:
+            bits = ", ".join(f"{slug} ({n})" for slug, n in rescued)
+            notices.append(
+                f"🛟 `.claude/rescued/` holds artifacts saved from removed "
+                f"worktrees: {bits}. They were gitignored, so the worktree "
+                f"would have deleted them without a word — plans, proof and "
+                f"acceptance files. Move what you want to keep to its real "
+                f"place and delete the folder."
+            )
         pending = [c for c in L.classify(root) if c["ahead"] != 0 or c["dirty"]]
         if pending:
             lines = ["📋 Unmerged session worktrees (don't forget to land them):"]
@@ -249,10 +262,15 @@ def do_prune_on_exit(root: str, session_id: str, cwd: str, spec: dict) -> None:
         print(f"[session-registry] prune-on-exit marker incomplete; skipping "
               f"({session_id[:8]})", file=sys.stderr)
     elif discard:
+        # Rescue even here: the user threw away the CODE, not the plan/proof
+        # artifacts the harness wrote alongside it.
+        saved = L.rescue_artifacts(session_wt, base_wt, branch)
         L.git(["worktree", "remove", "--force", session_wt], cwd=base_wt)
         L.git(["branch", "-D", branch], cwd=base_wt)
-        print(f"[session-registry] discarded worktree {branch} on exit", file=sys.stderr)
+        print(f"[session-registry] discarded worktree {branch} on exit "
+              f"({len(saved)} .claude artifact(s) rescued)", file=sys.stderr)
     elif base_branch and L.is_merged(base_wt, base_branch, branch):
+        L.rescue_artifacts(session_wt, base_wt, branch)
         rc, _, _ = L.git(["worktree", "remove", session_wt], cwd=base_wt)
         if rc != 0:
             L.git(["worktree", "remove", "--force", session_wt], cwd=base_wt)
