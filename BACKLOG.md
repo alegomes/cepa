@@ -926,6 +926,56 @@ motivo e faz uma pergunta fechada por grupo, respondida em lote. O que falta é 
 estender essa forma ao resto do fluxo, (b) parar de perguntar o que é reversível, e
 (c) o modo por sub-task do item 4.
 
+### Direção escolhida (2026-08-15) — via piloto Gauntlet Loop nº2
+
+Design completo em `docs/internals/gauntlet-pilot-atrito-decisao.md` (3 designs
+concorrentes escritos por agentes isolados, julgados às cegas por 3 avaliadores contra
+uma barra de qualidade escrita antes; os 3 avaliadores escolheram o mesmo vencedor, e a
+versão final incorporou as melhores ideias dos dois perdedores). O escolhido foi o que
+estende as peças que o harness já tem, em vez de criar estruturas novas. Quatro peças:
+
+1. **`common/autonomy.yaml` — a lista do que o agente faz sem perguntar.** Um arquivo
+   de configuração versionado com duas listas: ações que o agente executa e apenas
+   reporta (rodar build, commit local, criar card, apagar branch já mesclada, apagar
+   handoff vencido, atualizar plano — as ~10 que o dono só carimbava com "sim"), e
+   ações que sempre esperam pergunta (push, merge em branch de integração, descartar
+   trabalho, fechar card em definitivo, qualquer coisa com segredo ou terceiros). Cada
+   ação da lista carrega um campo `detect:` — a "impressão digital" da ação: o padrão
+   do comando de terminal ou o nome da ferramenta que a realiza — para que um hook
+   (script que o Claude Code roda automaticamente antes de cada ferramenta) reconheça a
+   ação mecanicamente, sem depender do julgamento do agente no turno. Quando a
+   permissão depende de uma condição ("apagar branch SÓ SE já estiver mesclada"), quem
+   verifica a condição é o próprio hook, rodando o comando git de conferência. Ação que
+   não está em lista nenhuma: pergunta, sempre.
+2. **`ask-audit-gate.py` — pergunta só sai auditada.** Um hook que intercepta o momento
+   em que o agente vai fazer uma pergunta ao dono e a barra se faltar o dever de casa:
+   pergunta sobre card que tem sub-cards precisa vir com todos os sub-cards enumerados
+   e o status de cada um; pergunta que cita `arquivo:linha` precisa da linha conferida
+   no disco. Isso torna irrepetível o caso do Epic WEGO-1406 (o dono aprovou fechar
+   vendo 15 cards, quando havia 41 sub-cards, 22 abertos). **Depende de um spike de 30
+   min:** confirmar que o Claude Code dispara hooks para a ferramenta de perguntas
+   (AskUserQuestion); se não disparar, o plano B é embutir a exigência no comando que
+   monta a pergunta.
+3. **`.claude/attestations.yaml` — o que o dono afirma vira registro.** Quando o dono
+   atesta algo que não está no código ("o SMTP está configurado no painel", "esse
+   pacote está concluído"), a afirmação vira um fato datado e com escopo num arquivo
+   durável. Os comandos de triagem e decisão leem o arquivo antes de agir; se o código
+   contradisser um atestado, a contradição é apresentada ao dono — nunca resolvida em
+   silêncio por nenhum dos lados (foi o descompasso de 08-03/08-04 no caso PlugSign).
+4. **Modo por sub-task e fila de defeitos** — os itens 4 e 5 do esboço acima entram
+   como estão: pergunta fechada por sub-card quando o Epic é indecidível, e defeito do
+   harness vira item deste BACKLOG em vez de interrupção.
+
+Gaps a fechar na implementação (lista completa no doc): o spike do hook de perguntas;
+incluir `.claude/decisions/` e `attestations.yaml` na lista de resgate do
+worktree-artifact-rescue (são arquivos ignorados sob `.claude/`, a classe que some
+calada quando um worktree é removido); completar o mapa de ferramentas Jira nos campos
+`detect:` (edição trivial de card hoje cairia em "pergunta sempre").
+
+**Implementação da Fase 1 aprovada pelo dono em 2026-08-15** (o `autonomy.yaml` + a
+extensão do `decide`), começando pelo spike de 30 min, para uma próxima sessão de
+build.
+
 ---
 
 ## O plano de execução morre com o worktree, e o nome do programa colide
@@ -1126,3 +1176,97 @@ independentes verificando o trabalho em vez de confiar no auto-relato do executo
 **Registro do caso concreto:** a perturbação em si era legítima e necessária (provar que o
 teste fica vermelho sem a correção). O problema não foi o que ele fez, foi o cadeado ter
 dito "não" e não ter significado nada.
+
+---
+
+## `/common:gauntlet` — competição de designs com julgamento cego
+
+**Status:** pendente (aprovado para cristalizar em 2026-08-15, após 2 pilotos) ·
+**Lar provável:** `common` · **Origem:** pergunta do dono "how can we add Gauntlet Loop
+abilities into Cepa?" (2026-08-14) + 2 pilotos rodados via tool Workflow em 2026-08-15.
+
+### O que é
+
+Gauntlet Loop é uma técnica de orquestração (de Matt Shumer): em vez de UMA tentativa
+verificada, várias tentativas COMPETEM e um julgamento cego escolhe. O fluxo, como
+validado nos pilotos:
+
+1. **Barra antes de tudo** — um agente escreve os critérios de qualidade (5-8, cada um
+   com rubrica de nota) e uma "referência inatingível" que dá direção, ANTES de
+   qualquer design existir.
+2. **Builders concorrentes** — 3 agentes isolados (não veem uns aos outros), cada um
+   com um ângulo distinto (ex.: prevenção / estender-o-que-existe / livre), produzem
+   designs completos lendo o repo de verdade.
+3. **Juízes cegos** — 3 agentes de contexto limpo recebem SÓ objetivo + barra + designs
+   anonimizados (rotulados A/B/C, ordem rodada por juiz), dão nota por critério,
+   ranqueiam e nomeiam o maior gap de cada design. Vencedor por contagem de Borda
+   (1º lugar = 3 pontos, 2º = 2, 3º = 1, somado entre juízes).
+4. **Revisão** — o vencedor é revisado fechando os gaps apontados e enxertando as
+   melhores ideias dos perdedores (com crédito).
+5. **Checagem final** — um crítico fresco confere se a barra foi atingida, verificando
+   as citações de código NO DISCO.
+
+### Evidência dos 2 pilotos (por que cristalizar)
+
+- Piloto 1 (furo do bash-path-lock): `docs/internals/gauntlet-pilot-bash-path-lock.md`.
+- Piloto 2 (atrito de decisão): `docs/internals/gauntlet-pilot-atrito-decisao.md`.
+- Nos dois: juízes **unânimes** no vencedor; barra atingida na primeira revisão; e o
+  design final foi uma **síntese** (vencedor + enxerto de rival) que nenhum builder
+  produziu sozinho — o valor não é só best-of-3, é o julgamento comparativo forçando
+  a mesma fratura a aparecer em 3 avaliações independentes.
+- Custo real: ~600k tokens e ~13 min por rodada (9 agentes). Por isso é opt-in.
+
+### Quando usar / não usar
+
+- **Usar:** decisão de design aberta e julgável em texto ("nenhuma direção é óbvia"),
+  naming, prosa estratégica, arquitetura. O ganho vem da variância entre tentativas.
+- **Não usar:** trabalho provável (código com teste — o proof gate já domina), fix
+  pontual, tarefa mecânica. Nem como default de nada: ~600k tokens por uso.
+
+### Esboço de entrega
+
+1. Comando `common:gauntlet <alvo> [--builders=3] [--angulos=a,b,c]` que monta e lança
+   o script de Workflow (o template validado está nos 2 scripts dos pilotos, em
+   `~/.claude/projects/.../workflows/scripts/gauntlet-pilot-*.js` — copiar o canônico
+   para `common/` antes que evaporem).
+2. Saída durável padrão: `docs/internals/gauntlet-<slug>.md` (barra, designs,
+   vereditos, design final, gaps) — nunca só no resultado efêmero do task.
+3. Relatório final em pt-BR leigo, com a recomendação e as perguntas fechadas.
+
+### Pendências de design
+
+- Onde mora o script canônico (arquivo em `common/` que o comando parametriza vs.
+  gerar o script a cada invocação).
+- Como o usuário declara os ângulos dos builders (default validado:
+  mecanismo-novo / estender-o-que-existe / livre) — parente do registry de lentes do
+  item Advisors.
+- Relação com `/common:advisors`: advisors julga UM artefato por N lentes; gauntlet
+  GERA N artefatos e julga comparativamente. São complementares (advisors pode ser a
+  fase de julgamento de um gauntlet?) — decidir se compartilham registry.
+- A tarefa entra como argumento livre ou aponta para um item do BACKLOG (os 2 pilotos
+  usaram itens do BACKLOG e funcionou bem como âncora de contexto).
+
+### Direção escolhida (2026-08-15) — via piloto Gauntlet Loop
+
+Design completo em `docs/internals/gauntlet-pilot-bash-path-lock.md` (barra pré-declarada,
+3 designs concorrentes, 3 juízes cegos unânimes, revisão, barra atingida na checagem final).
+O escolhido combina as direções 1 e 2 do esboço acima em três camadas:
+
+1. **Camada 1 — prevenção default (dia 1):** classificador deny-by-default de "quatro
+   baldes" no próprio `bash-path-lock.py` (5 cópias): todo comando de agente trancado ou é
+   escritor analisável (alvo vs. globs), ou verbo sabidamente inofensivo (lista de
+   inocentes, com deny-list de flags), ou está fora da jurisdição do repo (carve-out
+   out-of-root intacto), ou é **negado**. Interpretador inline e vetores não listados caem
+   no deny por construção. Perturbação RED legítima ganha caminho oficial: worktree
+   descartável fora da raiz.
+2. **Camada 2 — write-fence por diff:** detecção pós-fato independente do vetor, com
+   contorno virando evento no ledger de telemetria (consumidor: `/common:metrics`).
+3. **Camada 3 — sandbox de SO:** endurecimento opcional; nada depende dele.
+
+Gaps conhecidos a fechar na implementação (lista completa no doc): `$(...)`/backtick em
+argumento de verbo seguro; teste anti-drift das 5 cópias precisa derivar `PLUGIN_NAME` do
+path; atribuição `VAR=$(mktemp -d)` na receita canônica do worktree.
+
+**Implementação da camada 1 aprovada pelo dono em 2026-08-15** para uma próxima sessão de
+build (estimativa: 1-2 sessões, testes nos moldes de `tests/test_bash_path_lock_redir.py`
+varrendo as 5 cópias).
