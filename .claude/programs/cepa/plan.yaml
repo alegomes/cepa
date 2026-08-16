@@ -215,3 +215,44 @@ items:
     status: pending
     blocked_by: []
     human_pending: null
+
+  # Os três itens abaixo saíram dos 2 pilotos Gauntlet Loop de 2026-08-15
+  # (docs/internals/gauntlet-pilot-*.md) e foram aprovados pelo dono na mesma
+  # data. Inseridos no plano em 2026-08-16, no fim da fila, com anuência dele.
+
+  - id: "bash-path-lock-camada-1"
+    title: "Construir o deny-by-default de 4 baldes no bash-path-lock (5 cópias + testes)"
+    why: >-
+      fecha o furo real do WEGO-1936 (agente contornou o cadeado com python3 -c)
+      pela raiz: a lista passa a ser de comandos inocentes, não de culpados, e
+      vetor novo cai no bloqueio por construção. Design julgado e aprovado no
+      piloto 1 (BACKLOG "Direção escolhida"); estimativa 1-2 sessões. Antes dos
+      dois abaixo porque é o único que conserta enforcement já em produção.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "atrito-decisao-fase-1"
+    title: "Spike do hook em AskUserQuestion (30 min) + autonomy.yaml com detect: + extensão do decide"
+    why: >-
+      absorve as ~10 perguntas por sessão que o dono só carimbava com "sim".
+      Design julgado e aprovado no piloto 2. O spike vem primeiro porque a peça
+      central (ask-audit-gate) depende de o Claude Code disparar hook para a
+      ferramenta de perguntas — se não disparar, o plano B já está escrito.
+      Cuidado herdado: .claude/decisions/ e attestations.yaml precisam entrar
+      na lista de resgate do worktree-artifact-rescue.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "comando-gauntlet"
+    title: "Cristalizar /common:gauntlet a partir dos scripts dos 2 pilotos"
+    why: >-
+      técnica validada em 2 amostras (juízes unânimes, barra atingida nas duas),
+      critério de cristalização que o próprio dono estabeleceu. Por último dos
+      três porque é ferramenta de decisão, não conserto: nada em produção sofre
+      enquanto ele não existe — os pilotos podem ser repetidos à mão pelo
+      script em docs/internals/. Pendências de design no item do BACKLOG.
+    status: pending
+    blocked_by: []
+    human_pending: null
