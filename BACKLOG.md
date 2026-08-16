@@ -1134,6 +1134,33 @@ deixa de destruir o que não foi resgatado.
 Ordem de valor: a 0 resolve a perda que aconteceu; a 1 é a que impede a próxima, que
 vai ser com um artefato de prova em vez de um plano.
 
+**⚠ CONFIRMADO em 2026-08-16 — a camada 1 não cobre dois dos três comandos, e o furo
+já comeu um worktree no primeiro dia.** O caso: no `wego-acesso-backend`, o worktree
+de sessão `triage-16081131` (com o `plan.yaml` de 47 itens da triagem do dia, ignorado
+sob `.claude/`) foi removido às 19:50 por um merge de outra sessão (reflog do main:
+`merge session/triage-16081131`), e nenhum `.claude/rescued/` apareceu no principal.
+O plano sobreviveu por duas redes manuais e independentes: uma cópia feita por esta
+sessão às 18:25, e a própria sessão do wego, que percebeu a perda e versionou um
+retrato fora do `.claude/` (commits `65147f0`, `99c84d6`, `ffd79ce` de lá).
+
+O mecanismo, verificado no código:
+
+- `session-registry.py:267/273` — `do_prune_on_exit` chama `rescue_artifacts` nas
+  duas pernas. O caminho diferido do `/common:wrap-up` (marcador `.prune-on-exit`)
+  desagua aqui → **protegido**. `auto_clean` idem.
+- `common/commands/worktree-merge.md:89` — passo 7 manda `git worktree remove` cru
+  → **desprotegido**. Foi este o caminho da perda de 19:50.
+- `common/commands/worktree-discard.md:42` — `git worktree remove --force` cru →
+  **desprotegido**, e com `--force` (pior: nem a recusa do git para não-ignorados).
+
+Ou seja: o desenho da camada 1 dizia "dois caminhos automáticos E três comandos"; o
+construído (`e3a8bc5`) cobriu só os automáticos. Conserto: dar um modo de linha de
+comando ao `_wtlib.py` (hoje não tem `__main__`) — ex.
+`python3 _wtlib.py rescue <worktree> <branch>` — e os passos de remoção de
+`worktree-merge.md` e `worktree-discard.md` passarem a chamá-lo ANTES do
+`git worktree remove`. Teste: remover via comando um worktree com arquivo ignorado sob
+`.claude/` e exigir o arquivo em `.claude/rescued/`.
+
 ## O `bash-path-lock` bloqueia `cp`, mas deixa passar a mesma escrita via `python3 -c`
 
 Encontrado em 2026-08-13, durante WEGO-1936 no `wego-acesso-backend`, e reportado pelo
