@@ -1374,3 +1374,194 @@ o harness.** Sinais confirmatórios: `.claude/sessions/` com mtime anterior à
 remoção (ninguém iniciou sessão, logo `auto_clean` não rodou), ausência de
 marcador `*.prune-on-exit`, e `.git/worktrees/<nome>` também removido (apagar a
 pasta na mão deixaria esse resto).
+
+---
+
+# Achados da revisão profunda do harness (2026-08-17)
+
+Os quatro itens abaixo saíram de `docs/internals/harness-review-2026-08.md` —
+revisão da Cepa como sistema agêntico, pedida pelo dono. São os achados que
+**não tinham item existente**; os demais já moram no BACKLOG (bash-path-lock
+camada 1, atrito de decisão, `/common:gauntlet`). Aprovados pelo dono em
+17/08 para entrar no backlog E começar a execução na mesma sessão.
+
+---
+
+## O aviso de versão só existe se alguém rodar o doctor (P0-4 da revisão)
+
+**Status:** pendente · **Lar provável:** `common/hooks/session-registry.py`
+· **Origem:** revisão 2026-08-17, §7 gargalo nº 5.
+
+### Problema
+
+A falha mais recorrente da história do projeto não é técnica, é epistêmica:
+**um conserto é commitado, não é instalado, e todo mundo — dono e agente —
+segue operando como se estivesse valendo.** A memória do projeto tem pelo menos
+seis itens marcados "FIXED, not live until reinstall", e no dia da própria
+revisão o `common` 0.27.1 (resgate de artefatos nos comandos de worktree)
+estava nessa situação: consertado no repo, ausente na máquina, com dados
+realmente em risco no intervalo.
+
+Existe hoje um detector correto — o `check_plugins` do `cepa-doctor`
+(`common/bin/cepa-doctor:151-184`) compara a versão de cada `plugin.json` do
+repo contra a maior versão no cache e avisa "edições não valem". Mas ele **só
+fala quando alguém decide perguntar**. O gargalo não é a detecção; é o gatilho
+ser voluntário, justamente na situação em que ninguém suspeita de nada.
+
+### Esboço de solução
+
+Mover a pergunta para o único momento em que ela é sempre feita: o
+`SessionStart`. O `session-registry.py` já roda ali e já injeta contexto
+(`emit_context`) para o handoff. Adicionar uma linha — e só uma linha — quando
+e somente quando houver divergência: qual plugin, repo em X, cache em Y, e a
+frase que importa, *o que não está valendo agora*.
+
+Cuidados que o desenho precisa respeitar:
+
+- **Barato e fail-silent.** É um hook de boot; ler N `plugin.json` + listar
+  diretórios do cache é aceitável, qualquer exceção é engolida. Um check que
+  atrasa ou quebra o boot será desligado, e aí não protege nada.
+- **Silêncio quando está tudo certo.** Aviso que aparece toda sessão vira
+  ruído e treina o olho a pular. Só fala na divergência.
+- **Não é o doctor.** O doctor continua sendo o diagnóstico completo; isto é
+  o alarme de um sinal só, o que sobra depois de tirar tudo que pode esperar.
+- Reaproveitar a lógica do doctor em vez de reimplementar (senão nasce a
+  segunda cópia do comparador, que é a mesma doença do item dos locks).
+
+---
+
+## O path-lock existe em 5 cópias, e a correção depende de disciplina (P0-3)
+
+**Status:** pendente · **Lar provável:** `common/hooks/` (motor) +
+`bin/install.sh` (geração) · **Origem:** revisão 2026-08-17, §17 e §22.
+
+### Problema
+
+`path-lock.py` e `bash-path-lock.py` existem em cinco cópias, uma por topologia
+com hook (`build-team`, `build-hex`, `discovery`, `design`, `docs-topology`).
+A regra hoje é humana: "todo fix aterrissa nas 5 cópias". Ela já falhou —
+o conserto do falso-positivo `>=` (bash-path-lock lia o `>` de `>=` como
+redirecionamento e bloqueava comandos legítimos) precisou ser propagado à mão,
+e a memória do projeto registra o episódio em que uma cópia ficou para trás.
+
+O agravante é o assunto: estes são **os dois hooks que sustentam a garantia
+central do produto** (workers escrevem só na própria pista, leads delegam em
+vez de codar). Uma cópia defasada não falha ruidosamente — ela simplesmente
+permite o que as outras quatro bloqueiam, e o relatório do agente lê como
+sucesso.
+
+Medição de 2026-08-17: as 4 cópias não-hex do `bash-path-lock` são idênticas a
+menos de três substituições (`PLUGIN_NAME`, o caminho do log de cobertura, o
+nome do módulo importado); a de `build-hex` difere **apenas na prosa do
+docstring**. Já o `path-lock.py` diverge de verdade: `build-hex` tem 442 linhas
+contra 146–188 das outras, porque carrega o leitor de `build-hex.yaml` que
+remapeia papéis arquiteturais para nomes de módulo. Ou seja: o motor é comum, a
+configuração é que é própria.
+
+### Esboço de solução
+
+Separar **motor** de **descritor**:
+
+- O motor (identificação do agente chamador, checagem estrutural do arquivo de
+  expertise, casamento de globs, o fluxo do `main`, e no caso do Bash toda a
+  extração de alvos de escrita) vira fonte única em `common/hooks/`.
+- Cada topologia mantém só o que é dela: `PLUGIN_NAME`, o mapa de globs por
+  agente e — no caso do `build-hex` — o carregamento do `build-hex.yaml`.
+- Como plugins são independentes no disco (cada um instalado sob sua própria
+  versão no cache), o motor precisa estar **fisicamente presente** em cada
+  `hooks/`. Logo: geração/cópia no `bin/install.sh`, mais um teste que falha
+  quando uma cópia diverge da fonte.
+
+Ordem sugerida pela segurança: **primeiro o detector de divergência** (um teste
+que compara as cópias com a fonte e fica vermelho na primeira que sair da
+linha), depois a geração. O detector sozinho já mata a classe "4 de 5
+consertadas" e não corre o risco de quebrar o enforcement enquanto é escrito.
+
+---
+
+## Os loops de qualidade não têm teto, e o mesmo erro repetido não é detectado (P0-2)
+
+**Status:** pendente · **Lar provável:** `common/hooks/` (contador) +
+`build-hex/agents/engineering-lead.md` · **Origem:** revisão 2026-08-17, §14.
+
+### Problema
+
+`engineering-lead.md:23` manda "iterate until each Task is APPROVED", e
+`till-done` reforça a disciplina de não parar cedo. Não existe **teto**, nem
+detecção de repetição: um card patológico — teste que não passa por um motivo
+que o worker não enxerga — pode ciclar dev→qa→dev indefinidamente, com a mesma
+falha, consumindo a sessão inteira. O `/board-flow:drain` tem o comportamento
+irmão: para no primeiro BLOCKED, mas nada limita quanto um único card gasta
+antes de chegar lá.
+
+O ponto sutil: o remédio *não* é afrouxar o `till-done`. Parar cedo continua
+sendo o erro mais comum e mais caro. O que falta é a distinção entre **iterar**
+(cada volta traz informação nova) e **repetir** (a mesma volta, com o mesmo
+vermelho). A segunda não é persistência, é loop — e o sinal de que ela começou
+está disponível: o erro é o mesmo.
+
+### Esboço de solução
+
+Duas camadas, na ordem de sempre (mecânica primeiro, prosa depois):
+
+1. **Contador fora do alcance do agente.** Um hook conta as delegações por
+   unidade de trabalho e escreve num arquivo de estado; ao cruzar o teto,
+   avisa — e, no limite duro, bloqueia com uma mensagem que diz o que fazer
+   (declarar BLOCKED com diagnóstico, não tentar de novo). Mesmo padrão do
+   `last-build.json`: o agente não escreve o número que o julga.
+2. **Regra no prompt do lead**, com o critério explícito: mesma falha duas
+   vezes seguidas ⇒ o próximo passo é diagnóstico ou BLOCKED, nunca a terceira
+   tentativa idêntica.
+
+Pendências de design: qual é a unidade contada (Task? card? par agente+alvo?),
+onde mora o estado (`.claude/`, e portanto entra na lista de resgate do
+worktree), o teto default, e como o contador é zerado sem virar botão de
+escape trivial.
+
+---
+
+## Não existe modo de saber se uma mudança no harness melhorou alguma coisa (P1-4)
+
+**Status:** pendente · **Lar provável:** `tests/eval/` + runner via tool
+Workflow · **Origem:** revisão 2026-08-17, §16 — apontado como o elo mais fraco
+do sistema inteiro.
+
+### Problema
+
+O harness audita cards, builds e provas, e não sabe **nada sobre si mesmo** em
+termos de resultado. O `_telemetry.py` diz isso na primeira linha do próprio
+docstring: "Every improvement was anecdotal."
+
+O que existe hoje cobre outras perguntas:
+
+- os testes de contrato de prompt (`test_fio_condutor.py` e irmãos) provam que
+  uma frase **continua escrita** no comando — regressão de texto, não de
+  comportamento;
+- a telemetria conta bloqueios de gate e vereditos — sinal operacional, não
+  taxa de sucesso;
+- o Gauntlet julga **designs**, antes de existir código, uma vez por decisão.
+
+Nenhum deles responde: *esta mudança no prompt / na orquestração / no
+roteamento de modelo fez os agentes terminarem mais tarefas, com menos voltas e
+menos tokens?* Enquanto isso não existir, toda evolução do harness — inclusive
+as recomendadas na própria revisão — é decidida por intuição, e as regressões
+só aparecem quando custam uma tarefa real.
+
+### Esboço de solução
+
+Uma **suíte de tarefas douradas**: 8 a 12 cards já resolvidos, com diff
+conhecido e um comando de aceite executável, re-executáveis do zero numa
+worktree limpa a partir do commit anterior ao conserto original.
+
+- **Runner** via tool Workflow (a mesma que rodou os dois pilotos Gauntlet —
+  técnica já dominada nesta casa), uma tarefa por agente, isoladas.
+- **Métricas por tarefa:** passou/não passou pelo `acceptance_cmd`; número de
+  invocações de subagente; tokens; bloqueios de gate disparados; intervenções
+  humanas necessárias.
+- **Uso:** A/B contra uma mudança de harness — mesma suíte, dois estados do
+  repo, comparação por número.
+
+Cuidados: a suíte precisa ser barata o bastante para rodar (senão nunca roda) e
+honesta o bastante para não virar teatro — tarefa dourada que o harness acerta
+sempre não mede nada, e tarefa que ele erra sempre também não. Começar pequeno,
+com casos onde o resultado hoje é **conhecido e misto**.
