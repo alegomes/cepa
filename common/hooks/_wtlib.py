@@ -643,3 +643,35 @@ def seed_worktree(main_root: str, wt_path: str):
             except OSError:
                 pass
     return copied
+
+
+# ── CLI ────────────────────────────────────────────────────────────────────
+# The COMMAND removal paths (worktree-merge step 7, worktree-discard step 4)
+# run a raw `git worktree remove`, which skips the rescue the automatic paths
+# get inside session-registry — that gap ate a 47-item triage plan on
+# 2026-08-16, the first day the net was live. This entry point lets the
+# command prose run the same net first:
+#
+#   python3 _wtlib.py rescue <worktree-path> [<branch>]
+#
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) >= 3 and sys.argv[1] == "rescue":
+        wt = sys.argv[2]
+        branch = (sys.argv[3] if len(sys.argv) > 3 else current_branch(wt))
+        base = main_root(wt)
+        if not base or os.path.realpath(base) == os.path.realpath(wt):
+            print(f"rescue: refusing — {wt} resolves as the main worktree",
+                  file=sys.stderr)
+            sys.exit(2)
+        saved = rescue_artifacts(wt, base, branch)
+        if saved:
+            print(f"rescued {len(saved)} artifact(s) into "
+                  f"{os.path.join(base, '.claude', 'rescued')}:")
+            for rel in saved:
+                print(f"  {rel}")
+        else:
+            print("rescue: nothing under .claude/ to save")
+        sys.exit(0)
+    print("usage: _wtlib.py rescue <worktree-path> [<branch>]", file=sys.stderr)
+    sys.exit(2)

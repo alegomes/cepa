@@ -39,6 +39,12 @@ and requires confirmation first.
    (per the registry), stop — tell the user to close that window first.
 
 4. **Discard.** On confirmation:
+   - `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_wtlib.py" rescue "<worktree-path>"`
+     FIRST — the user is throwing away the CODE, not the evidence: plans,
+     proof and acceptance artifacts under a gitignored `.claude/` would die
+     silently with the worktree (git returns 0 for ignored content even
+     without `--force`). The rescue copies them to the main worktree's
+     `.claude/rescued/<branch>/`. Relay whatever it prints.
    - `git worktree remove --force <worktree-path>`
    - `git branch -D session/<name>`
    - Report what was removed.

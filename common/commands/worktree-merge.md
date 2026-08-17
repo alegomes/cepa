@@ -86,6 +86,12 @@ session worktree, tell them to switch to the integration session/worktree first.
      expected, healthy outcome when two slices touched the same code.
 
 7. **Prune.** Once the merge is committed:
+   - `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_wtlib.py" rescue "<worktree-path>"`
+     FIRST — copies the worktree's gitignored `.claude/` artifacts (plans,
+     proofs, acceptances) into the main worktree's `.claude/rescued/<branch>/`.
+     A raw remove destroys them silently: git returns 0 for ignored content
+     even without `--force`, and that is how a 47-item triage plan was lost on
+     2026-08-16. Relay whatever the rescue prints.
    - `git worktree remove "<worktree-path>"` (use `--force` only if the user
      confirms there's nothing unsaved there).
    - `git branch -d session/<slice>` (use `-D` only with explicit user

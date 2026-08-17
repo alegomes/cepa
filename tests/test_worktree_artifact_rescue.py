@@ -137,6 +137,35 @@ def test_rescued_dirs_reports_for_session_start(tmp):
           got == [("session-todo", 2)], got)
 
 
+def test_cli_rescues_on_command_removal_path(tmp):
+    """The gap of 2026-08-16: worktree-merge/discard run a raw `git worktree
+    remove`, bypassing session-registry's in-process rescue. The commands now
+    call `python3 _wtlib.py rescue <worktree>` first — pin that entry point."""
+    r, w = make_repo(Path(tmp) / "cli")
+    res = subprocess.run(
+        [sys.executable, str(REPO / "common" / "hooks" / "_wtlib.py"),
+         "rescue", str(w)], capture_output=True, text=True)
+    check("CLI exits 0", res.returncode == 0, res.stderr)
+    check("CLI names what it saved",
+          "programs/WEGO/plan.yaml" in res.stdout, res.stdout)
+    res2 = git(["worktree", "remove", str(w)], r)
+    check("subsequent raw removal still succeeds",
+          res2.returncode == 0, res2.stderr)
+    plan = (r / ".claude" / "rescued" / "session-todo" / "programs" / "WEGO"
+            / "plan.yaml")
+    check("plan survived the command-path removal", plan.exists())
+
+
+def test_cli_refuses_the_main_worktree(tmp):
+    r, _ = make_repo(Path(tmp) / "cli-main")
+    res = subprocess.run(
+        [sys.executable, str(REPO / "common" / "hooks" / "_wtlib.py"),
+         "rescue", str(r)], capture_output=True, text=True)
+    check("CLI refuses to 'rescue' the main worktree onto itself",
+          res.returncode == 2, f"rc={res.returncode} {res.stdout}")
+    check("and explains why", "main worktree" in res.stderr, res.stderr)
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         for fn in (test_ignored_file_dies_silently,
@@ -144,7 +173,9 @@ def main():
                    test_tracked_artifacts_are_not_rescued,
                    test_rescue_survives_removal,
                    test_rescue_never_clobbers_the_live_plan,
-                   test_rescued_dirs_reports_for_session_start):
+                   test_rescued_dirs_reports_for_session_start,
+                   test_cli_rescues_on_command_removal_path,
+                   test_cli_refuses_the_main_worktree):
             print(f"\n{fn.__name__}")
             fn(tmp)
     if FAILURES:
