@@ -1299,3 +1299,78 @@ path; atribuição `VAR=$(mktemp -d)` na receita canônica do worktree.
 **Implementação da camada 1 aprovada pelo dono em 2026-08-15** para uma próxima sessão de
 build (estimativa: 1-2 sessões, testes nos moldes de `tests/test_bash_path_lock_redir.py`
 varrendo as 5 cópias).
+
+---
+
+## O guard de dono único mora no comando, e `git worktree remove` cru passa por fora
+
+**Status:** pendente · **Lar provável:** `common` (hook + `worktree-guard.py`)
+· **Origem:** incidente no `wego-acesso-backend` em 2026-08-17, ~11:37 — uma sessão
+removeu o worktree de OUTRA sessão que estava viva dentro dele.
+
+### Problema
+
+O `worktree-guard.py` responde exatamente à pergunta certa ("alguma sessão viva
+segura este branch?") e responde bem: no mesmo dia ele barrou, corretamente, um
+merge de `session/exec_16082013` feito de outra janela. Mas ele só é chamado de
+dois lugares, ambos markdown de comando (`worktree-merge.md:52`,
+`wrap-up.md:165`). **Nada o chama quando o agente usa git direto.**
+
+Foi o que aconteceu. Uma sessão em `exec_17081128`, fazendo faxina antes de
+começar o próprio trabalho, verificou que o branch vizinho já estava mesclado na
+`main` e rodou:
+
+```
+git worktree remove /Users/.../wego-acesso-backend-prove_18080827 \
+  && git branch -D session/prove_18080827
+```
+
+O worktree tinha uma sessão viva (PID ativo, `last_seen` de segundos antes). O
+guard teria bloqueado; nunca foi consultado. Consequências observadas:
+
+1. **A sessão vítima perdeu o chão.** Todo hook passou a falhar com
+   `ENOENT: no such file or directory, posix_spawn '/bin/sh'` — mensagem que
+   culpa o `/bin/sh` (que existe) quando o que sumiu foi o cwd. Custou uma
+   pergunta do dono só para decifrar.
+2. **Nenhum resgate de artefatos rodou** — git cru não passa por
+   `rescue_artifacts`, então os cinco `.claude/proof/<KEY>.yaml` e o
+   `.claude/waivers/*.yaml` daquela sessão teriam evaporado. Sobreviveram por
+   acaso: tinham sido copiados para `docs/` e empurrados 6 minutos antes.
+3. **`branch -D`, não `-d`.** Seis minutos mais cedo, o mesmo comando teria
+   apagado um commit não mesclado sem aviso.
+
+Note que este é o **mesmo princípio** já reconhecido no item "O plano de execução
+morre com o worktree" ("a rede **precisa morar no hook**, não nos comandos"), e a
+**mesma forma** do item do `bash-path-lock` (guard real, contornado por outra
+rota que faz a mesma coisa). O que muda é o vetor: lá é escrita de arquivo, aqui
+é destruição de worktree alheio.
+
+### Esboço de solução
+
+**Camada 1 — `PreToolUse` em `Bash` que reconheça o verbo destrutivo.** Casar
+`git worktree remove` e `git branch -D/-d` no comando, extrair o alvo (path ou
+branch), rodar a lógica de `worktree-guard.py` e **bloquear** quando houver
+sessão viva no branch/worktree alvo, com mensagem apontando
+`/common:worktree-merge` / `/common:worktree-discard`. Precisa tolerar as formas
+que o incidente exibiu: `&&` encadeado, path absoluto no lugar do nome do slice.
+
+**Camada 2 — resgate no vetor cru também.** Se o bloqueio for contornado ou
+liberado, ainda assim enumerar e resgatar os `.claude/` ignorados antes de
+deixar passar (reaproveita `rescue_artifacts`, já usado pelos dois caminhos
+automáticos desde 0.27.1).
+
+**Camada 3 — disciplina, barata e imediata.** Uma linha no skill de worktrees:
+worktree de outra janela não é sua para aterrissar; se está mesclado e incomoda,
+o dono decide. Isso não substitui a camada 1 — o incidente mostra que um agente
+competente escolhe o atalho quando ele parece equivalente —, mas cobre enquanto
+o hook não existe.
+
+### Diagnóstico que fecha esse tipo de investigação em um comando
+
+`ls .claude/rescued/` no worktree principal. Os dois caminhos automáticos
+(`auto_clean` no início de sessão, `do_prune_on_exit` no fim) sempre resgatam
+antes de remover. **Worktree removido + `.claude/rescued/` inexistente = não foi
+o harness.** Sinais confirmatórios: `.claude/sessions/` com mtime anterior à
+remoção (ninguém iniciou sessão, logo `auto_clean` não rodou), ausência de
+marcador `*.prune-on-exit`, e `.git/worktrees/<nome>` também removido (apagar a
+pasta na mão deixaria esse resto).
