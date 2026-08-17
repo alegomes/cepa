@@ -41,6 +41,14 @@ from pathlib import Path
 CLAUDE_DIR = Path.home() / ".claude"
 RESULTS = []  # (level, area, message)  level: "ok" | "warn" | "fail"
 
+# O comparador repo↔cache é compartilhado com session-registry.py, que faz a
+# mesma pergunta no boot da sessão. Fonte única, em hooks/ (ver _pluginver.py).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+try:
+    import _pluginver as PV
+except Exception:  # noqa: BLE001 — doctor degrada, nunca morre por causa disso
+    PV = None
+
 
 def ok(area, msg):
     RESULTS.append(("ok", area, msg))
@@ -55,6 +63,8 @@ def fail(area, msg):
 
 
 def semver(v: str):
+    if PV is not None:
+        return PV.semver(v)
     try:
         return tuple(int(x) for x in re.findall(r"\d+", v)[:3])
     except Exception:
@@ -154,34 +164,24 @@ def check_plugins(settings, rec=None):
         fail("plugins", "marketplace 'cepa' não encontrado em known_marketplaces.json")
         return
     enabled = settings.get("enabledPlugins", {})
-    cache_root = CLAUDE_DIR / "plugins" / "cache" / "cepa"
-    for pj in sorted(repo.glob("*/.claude-plugin/plugin.json")):
-        try:
-            meta = json.loads(pj.read_text())
-            repo_v = meta.get("version", "0")
-            # o nome do plugin vem do manifest, não do diretório (ex.: o
-            # diretório docs-topology/ é a fonte do plugin "docs")
-            name = meta.get("name") or pj.parent.parent.name
-        except Exception as e:
-            fail("plugins", f"{pj.parent.parent.name}: plugin.json do repo inválido ({e})")
-            continue
-        key = f"{name}@cepa"
-        if enabled.get(key) is not True:
-            warn("plugins", f"{key} NÃO habilitado em enabledPlugins — cards/hooks desse plugin não funcionam")
-        cdir = cache_root / name
-        versions = sorted((d.name for d in cdir.iterdir() if d.is_dir()), key=semver) if cdir.is_dir() else []
-        if not versions:
+    if PV is None:
+        fail("plugins", "comparador de versões (_pluginver.py) não carregou — "
+                        "não dá para dizer se o cache é o repo")
+        return
+    for p in PV.scan(repo, enabled):
+        name, repo_v, cache_v = p["name"], p["repo_version"], p["cache_version"]
+        if not p["enabled"]:
+            warn("plugins", f"{name}@cepa NÃO habilitado em enabledPlugins — cards/hooks desse plugin não funcionam")
+        if p["missing"]:
             fail("plugins", f"{name}: nenhuma versão no cache — rode bin/install.sh")
-            continue
-        latest = versions[-1]
-        if semver(repo_v) > semver(latest):
+        elif p["drift"]:
             # A idade do drift é o que separa "acabei de editar" de "faz duas
             # semanas que trabalho contra um harness que não é o instalado".
             a = age_days((rec or {}).get("finished_at") or (rec or {}).get("started_at"))
             atxt = f"; o último install foi há {a:.0f}d" if a is not None else ""
-            warn("plugins", f"{name}: repo está em {repo_v} mas o cache instalado é {latest}{atxt} — edições não valem; rode bin/install.sh")
+            warn("plugins", f"{name}: repo está em {repo_v} mas o cache instalado é {cache_v}{atxt} — edições não valem; rode bin/install.sh")
         else:
-            ok("plugins", f"{name} {latest} instalado e habilitado")
+            ok("plugins", f"{name} {cache_v} instalado e habilitado")
 
 
 def check_hooks_compile():

@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
 import _handoff as H  # noqa: E402
+import _pluginver as V  # noqa: E402
 
 
 def emit_context(text: str) -> None:
@@ -109,6 +110,14 @@ def on_start(session_id: str, cwd: str) -> None:
     L.prune_dead(root, keep_key=session_id)
 
     notices = []
+
+    # 2b. Versão: o repo é o que está rodando? PRIMEIRO da lista, de propósito.
+    # Um drift aqui contamina a leitura de todo o resto — se o hook live não é
+    # o do repo, qualquer outra conclusão desta sessão pode estar medindo a
+    # coisa errada. Silencioso quando está em dia (o caso normal).
+    drift_notice = V.boot_notice()
+    if drift_notice:
+        notices.append(drift_notice)
 
     # 3. Overlap warning — another live session in THIS working tree.
     others = L.live_sessions_in(root, str(cwd), exclude_key=session_id)

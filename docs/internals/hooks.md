@@ -340,11 +340,30 @@ handoff checkpoint's "areas touched" line.
 
 Owner: `common/hooks/`. The live-session registry + worktree hygiene, plus
 **transparent handoff resume**. On start: registers the session (capturing
-`start_commit`), prunes dead entries, warns on same-tree overlap, auto-cleans
+`start_commit`), prunes dead entries, **warns when the repo's plugin code isn't
+what's installed** (see below), warns on same-tree overlap, auto-cleans
 finished worktrees, and — via a direct branch-keyed lookup — injects the
 previous session's handoff as background with a "don't announce, just continue"
 rule (suppressed when a live peer shares the tree or the handoff is >48h old).
 On end: WIP-autosaves a dirty `session/*` worktree and deregisters.
+
+**The version notice (`_pluginver.py`).** The most recurring failure in this
+project's history is epistemic, not technical: a fix is committed, never
+installed, and everyone — owner and agent — keeps operating as if it were live.
+`cepa-doctor` has always detected this, but only when someone chose to ask,
+which is never the moment you suspect anything. `_pluginver.boot_notice()`
+compares every repo `plugin.json` against the newest version in the cache and
+returns **one line** naming what isn't live — or `None`, which is the normal
+case and deliberate: a notice that fires every session trains the eye to skip
+it. It is the **first** notice in the list, because a version drift contaminates
+how you should read every other conclusion in that session.
+
+`cepa-doctor` and this hook share the comparator through `_pluginver.py` rather
+than each carrying a copy — the same single-source discipline the path-locks
+still owe. Cache *ahead* of the repo is silent (another clone installed newer;
+that's the doctor's business, not an alarm). Tests:
+`tests/test_pluginver_boot.py` (17 checks; perturbation: dropping the call from
+`session-registry.py` turns 2 red).
 
 ### session-checkpoint.py (Stop)
 
