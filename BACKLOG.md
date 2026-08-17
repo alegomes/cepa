@@ -1154,12 +1154,14 @@ O mecanismo, verificado no código:
   **desprotegido**, e com `--force` (pior: nem a recusa do git para não-ignorados).
 
 Ou seja: o desenho da camada 1 dizia "dois caminhos automáticos E três comandos"; o
-construído (`e3a8bc5`) cobriu só os automáticos. Conserto: dar um modo de linha de
-comando ao `_wtlib.py` (hoje não tem `__main__`) — ex.
-`python3 _wtlib.py rescue <worktree> <branch>` — e os passos de remoção de
-`worktree-merge.md` e `worktree-discard.md` passarem a chamá-lo ANTES do
-`git worktree remove`. Teste: remover via comando um worktree com arquivo ignorado sob
-`.claude/` e exigir o arquivo em `.claude/rescued/`.
+construído (`e3a8bc5`) cobriu só os automáticos.
+
+**CONSTRUÍDO em 2026-08-17 (`1a9017a`, common 0.27.1):** `_wtlib.py` ganhou o modo de
+linha de comando `python3 _wtlib.py rescue <worktree> [<branch>]` (deriva o worktree
+principal sozinho e recusa rodar no principal), e os passos de remoção de
+`worktree-merge.md` e `worktree-discard.md` o chamam ANTES do `git worktree remove`.
+Suíte de 21 → 25 checks; perturbação: sem o CLI, 4 ficam vermelhos. **Não live até
+`bin/install.sh`** — até lá, merge/discard manuais seguem furados.
 
 ## O `bash-path-lock` bloqueia `cp`, mas deixa passar a mesma escrita via `python3 -c`
 
