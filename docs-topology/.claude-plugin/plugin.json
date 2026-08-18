@@ -1,6 +1,6 @@
 {
   "name": "docs",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Documentation/onboarding topology — orchestrator + docs-lead + 8 workers that sweep an existing project and produce a Diátaxis doc tree (tutorial / how-to / reference / explanation) for handing the project off to engineers who weren't there when the decisions were made. Central discipline: separate the HOW (extractable from code) from the WHY (elicitable — owner/commits/Jira) and NEVER invent rationale — no source becomes a question, not a guess. Five phases with an owner checkpoint between each: /docs:survey (read-only 4-front archaeology → gap-report), /docs:declutter (structural ROI moves — archive process-exhaust, demote rival front-doors), /docs:checkpoint (owner answers the WHY-gaps; pairs with board-flow to open cards for drift), /docs:author (write the grounded tree, Tutorial last), /docs:finalize (whole-tree consistency review). Path-lock keyed to docs/** and the docs/_survey/ scratch. Standalone. Requires common@cepa. Pair with board-flow@cepa to open cards from the checkpoint.",
   "author": {
     "name": "alegomes"

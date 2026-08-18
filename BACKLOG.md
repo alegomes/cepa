@@ -1432,9 +1432,21 @@ Cuidados que o desenho precisa respeitar:
 
 ## O path-lock existe em 5 cópias, e a correção depende de disciplina (P0-3)
 
-**Status:** METADE CONSTRUÍDA 2026-08-17 (`aeaaa16`) — o detector existe
-(`tests/test_lock_copies_drift.py`); a GERAÇÃO das cópias no `bin/install.sh`
-continua pendente · **Lar:** `tests/` (detector) + `bin/install.sh` (geração) · **Origem:** revisão 2026-08-17, §17 e §22.
+**Status:** CONSTRUÍDO 2026-08-17/18 (`aeaaa16` detector + `bin/gen-locks.py`
+gerador) · **Lar:** `tests/test_lock_copies_drift.py` +
+`common/hooks/_templates/bash-path-lock.py.tmpl` + `bin/gen-locks.py`
+
+**Desvio do esboço, com o motivo:** a geração NÃO foi para dentro do
+`bin/install.sh`. Ela roda em tempo de desenvolvimento (`--write`) e o `--check`
+entra na suíte de testes. Assim o repositório continua auto-contido — as cópias
+estão commitadas e funcionam instaladas por qualquer via — e nenhuma
+complexidade nova entra no instalador. O invariante ("as 5 saem de um lugar só")
+é o mesmo; o risco é menor.
+
+**E o `path-lock.py` segue NÃO gerado, de propósito:** ele carrega o
+`ALLOWED_WRITES`, que é dado da topologia e precisa morar perto dos agentes que
+governa, para alguém conferir contra o `Writes:` de cada um. Ali a garantia
+continua sendo o detector. · **Origem:** revisão 2026-08-17, §17 e §22.
 
 ### Problema
 

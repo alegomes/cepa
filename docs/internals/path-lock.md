@@ -184,9 +184,25 @@ is a decision; a silent one is the disease.
 Perturbation proof: re-introducing the Bug-4-era `>=` regression
 (`(?![&=])` → `(?!&)`) in a single copy turns the detector red.
 
-**Still owed** (second half of the BACKLOG item): generating the copies from
-one source at install time. The detector catches drift after it happens; the
-generator would make it unrepresentable.
+**The generator** (same day, second half of the item). `bin/gen-locks.py`
+renders all five `bash-path-lock.py` from
+`common/hooks/_templates/bash-path-lock.py.tmpl` plus a per-topology table
+(plugin name, importlib alias, log slug, the noun the block message uses, and
+how the copy reaches the allowlist). `--check` is wired into the drift test, so
+a hand-edited copy fails the suite; `--write` regenerates.
+
+Building it found what the detector's own exemption had hidden: `discovery` and
+`docs-topology` told a blocked agent "Writing **source** via Bash" when those
+agents write documents, not code — copied from `build-team` and never adjusted.
+The copy-vs-copy comparison had that noun declared as a legitimate per-topology
+difference; the template forces someone to say which word is right for each.
+
+`path-lock.py` is deliberately **not** generated. It carries `ALLOWED_WRITES` —
+who may write where — which is topology *data*, not engine. Centralising it
+would move the allowlist away from the agents it governs, which is exactly
+where a reader needs it to check against each agent's `Writes:` row. There the
+guarantee stays the detector, and that choice is written down rather than
+assumed.
 
 ## Role-based allowlists (build-hex only)
 

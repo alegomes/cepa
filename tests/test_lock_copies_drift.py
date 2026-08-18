@@ -55,6 +55,7 @@ nomeando a cópia divergente. Se ficar verde, ele não está provando nada.
 
 import ast
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -341,8 +342,34 @@ def _report_first_diff(ref_label, ref, other_label, other):
         return
 
 
+def test_bash_path_lock_sai_do_molde():
+    """As 5 cópias têm de ser exatamente o molde renderizado.
+
+    Esta é a garantia FORTE, e ela substitui a comparação entre cópias para
+    este arquivo: comparar cópias entre si prova que elas concordam; comparar
+    com o molde prova que elas vêm de um lugar só. A diferença importa quando
+    alguém edita as cinco à mão de um jeito consistente e errado.
+
+    Construir o gerador rendeu um achado que a comparação entre cópias não
+    tinha dado: `discovery` e `docs-topology` diziam "Writing source via Bash"
+    na mensagem de bloqueio, sendo que os agentes deles escrevem documento, não
+    código — vieram copiados do build-team sem ajustar a palavra. A comparação
+    entre cópias tratava esse substantivo como diferença legítima por
+    topologia; o molde obriga a declarar qual é o certo para cada uma.
+    """
+    gen = REPO / "bin" / "gen-locks.py"
+    check("bin/gen-locks.py existe", gen.exists())
+    if not gen.exists():
+        return
+    r = subprocess.run([sys.executable, str(gen), "--check"],
+                       capture_output=True, text=True, cwd=str(REPO))
+    check("as 5 cópias são exatamente o molde renderizado",
+          r.returncode == 0, (r.stdout + r.stderr).strip()[:300])
+
+
 def main():
     test_todas_as_copias_existem()
+    test_bash_path_lock_sai_do_molde()
     test_bash_path_lock_identico()
     test_path_lock_nucleo_identico()
     test_main_do_pathlock_bate_fora_do_hex()

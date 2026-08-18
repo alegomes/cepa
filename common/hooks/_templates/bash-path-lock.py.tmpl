@@ -1,5 +1,22 @@
+# GERADO — não edite as cópias, edite este molde.
+#
+# As cinco cópias de bash-path-lock.py (build-team, build-hex, discovery,
+# design, docs-topology) saem daqui via `python3 bin/gen-locks.py --write`.
+# Antes disto a propagação era humana ("todo fix aterrissa nas 5") e já falhou:
+# o conserto do falso-positivo do `>=` precisou ir a mão, e o tratamento de
+# `git mv` como escrita ficou anos só na cópia do docs — nas outras quatro,
+# mover arquivo para fora da pista com `git mv` passava batido.
+#
+# Marcas substituídas por topologia (tabela em bin/gen-locks.py):
+#   @@PLUGIN@@                nome do plugin, como aparece no agent_type
+#   @@ALIAS@@                 prefixo do módulo importado via importlib
+#   @@LOGSLUG@@               nome do log de construções indecidíveis em /tmp
+#   @@NOUN@@                  o que a topologia escreve: source | artifacts
+#   @@ALLOWLIST_RESOLUTION@@  como o allowlist é obtido do path-lock irmão
+#                             (o build-hex resolve papéis→módulos pelo
+#                             build-hex.yaml; as outras leem o dict fixo)
 #!/usr/bin/env python3
-"""PreToolUse hook for the docs topology — the BASH half of the path-lock.
+"""PreToolUse hook for the @@PLUGIN@@ topology — the BASH half of the path-lock.
 
 WHY THIS EXISTS
 ---------------
@@ -38,7 +55,7 @@ Parsing shell to know what it writes is undecidable. We cannot see writes
 done by `python -c`, `perl -e`, `ruby -e`, `node -e`, `awk -i inplace`, `ed`,
 `patch`, or a heredoc body fed to an interpreter. When we detect such a
 construct we let the command through (fail-open) but record a line in the
-coverage log (BASH_PATHLOCK_COVERAGE_LOG, default /tmp/docs-bash-pathlock-
+coverage log (BASH_PATHLOCK_COVERAGE_LOG, default /tmp/@@LOGSLUG@@-bash-pathlock-
 uncovered.log) so the gap is visible, never silent. Layer A (the agent's own
 discipline, encoded in its prompt + expertise) remains the primary control;
 this is defense-in-depth under it.
@@ -56,7 +73,7 @@ import shlex
 import sys
 from pathlib import Path
 
-PLUGIN_NAME = "docs"
+PLUGIN_NAME = "@@PLUGIN@@"
 
 # ─── reuse path-lock.py as the single source of truth for allowlists ──────────
 
@@ -64,7 +81,7 @@ def _load_pathlock_module():
     """Import the sibling path-lock.py (hyphen in the filename → importlib)."""
     here = Path(__file__).resolve().parent
     spec = importlib.util.spec_from_file_location(
-        "docs_path_lock", str(here / "path-lock.py")
+        "@@ALIAS@@_path_lock", str(here / "path-lock.py")
     )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -177,7 +194,7 @@ def extract_write_targets(command: str) -> tuple:
 
 def log_uncovered(command: str, agent: str) -> None:
     log_path = os.environ.get(
-        "BASH_PATHLOCK_COVERAGE_LOG", "/tmp/docs-bash-pathlock-uncovered.log"
+        "BASH_PATHLOCK_COVERAGE_LOG", "/tmp/@@LOGSLUG@@-bash-pathlock-uncovered.log"
     )
     try:
         with open(log_path, "a") as f:
@@ -191,7 +208,7 @@ def main():
     try:
         payload = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
-        print("[docs bash-path-lock] could not parse hook payload; allowing",
+        print("[@@PLUGIN@@ bash-path-lock] could not parse hook payload; allowing",
               file=sys.stderr)
         sys.exit(0)
 
@@ -210,8 +227,7 @@ def main():
 
     pl = _load_pathlock_module()
     project_root = Path(payload.get("cwd") or os.getcwd()).resolve()
-    agent = pl.detect_agent(payload)
-    allowed = pl.ALLOWED_WRITES.get(agent)
+@@ALLOWLIST_RESOLUTION@@
 
     targets, has_uncovered = extract_write_targets(command)
     if has_uncovered:
@@ -240,12 +256,12 @@ def main():
 
     allowed_disp = "\n  - ".join(allowed or ["(none — only own expertise file)"])
     print(
-        f"[docs bash-path-lock] BLOCKED: agent {agent!r} attempted a "
+        f"[@@PLUGIN@@ bash-path-lock] BLOCKED: agent {agent!r} attempted a "
         f"shell-level write to a path outside its allowlist via Bash.\n"
         f"  Offending target(s): {', '.join(violations)}\n"
         f"  Command: {command[:300]}\n"
         f"  Allowed write globs for {agent!r}:\n  - {allowed_disp}\n"
-        f"  Writing artifacts via Bash (sed -i / cat > / tee / heredoc) bypasses "
+        f"  Writing @@NOUN@@ via Bash (sed -i / cat > / tee / heredoc) bypasses "
         f"the path-lock — that is a delegation bypass, not a workaround.\n"
         f"  Use the Write tool (which the path-lock governs) for paths you own, "
         f"or delegate to the worker that owns this path.",

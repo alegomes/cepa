@@ -6,31 +6,42 @@ WHY THIS EXISTS
 `path-lock.py` gates Edit / Write / MultiEdit / NotebookEdit. It does NOT see
 Bash. An agent whose Write is blocked can reach for the shell — `sed -i`,
 `cat > file`, `tee`, a heredoc — and land the exact write the path-lock was
-meant to stop. A control enforced on one tool but not its equivalent is not a
-control. This hook is the SECOND lock.
+meant to stop. That is not a hypothetical: a lead once edited source via Bash
+because Write was locked and Bash wasn't. The artifact happened to be correct,
+so nothing in the pipeline flagged it. A control enforced on one tool but not
+its equivalent is not a control.
 
-It reuses path-lock.py's ALLOWED_WRITES (single source of truth — never
-re-declare globs here) and applies it to shell-level writes.
+This hook is the SECOND lock. It reuses path-lock.py's per-agent allowlist
+(single source of truth — never re-declare globs here) and applies it to
+shell-level writes.
 
 DESIGN — deliberately narrow, to keep false positives near zero
 ---------------------------------------------------------------
 - We only fire on writes the SHELL performs explicitly: redirections
   (`>`, `>>`), `tee`, `sed -i`, `cp`, `mv`, `install`, `dd of=`, `truncate`.
-- We do NOT inspect what a subprocess writes internally (a test runner, git,
-  a bundler) — those are invisible here, which is correct.
+- We do NOT inspect what a subprocess writes internally. `./mvnw test` and
+  `git merge` create files, but via the JVM / git, not via shell redirection,
+  so they are invisible here. That is correct: those are the lead's legitimate
+  Bash uses.
 - We only flag a target that resolves INSIDE the project tree. Writes to
-  /tmp, /dev/null, caches, $HOME — out of scope, always allowed.
+  /tmp, /dev/null, caches, $HOME — out of scope, always allowed. (The
+  Write-tool lock now applies the same out-of-root carve-out, so both halves
+  agree: writes outside the project tree are nobody's business here. Bash
+  always touched paths outside the repo legitimately; the Write lock had to
+  catch up so proof-reviewer could perturb code in its /tmp worktree.)
 - Main session / built-in agents (no plugin-prefixed agent_type) are NOT
   gated — same fail-open contract as path-lock.py.
 
-HONEST LIMITS (guardrail, not a sandbox)
-----------------------------------------
-We cannot see writes done by `python -c`, `perl -e`, `ruby -e`, `node -e`,
-`awk -i inplace`, `ed`, `patch`, or a heredoc body fed to an interpreter.
-When detected we fail open but log to BASH_PATHLOCK_COVERAGE_LOG (default
-/tmp/design-bash-pathlock-uncovered.log) so the gap is visible, never
-silent. The agent's own discipline (prompt + expertise) is the primary
-control; this is defense-in-depth under it.
+HONEST LIMITS (this is a guardrail, not a sandbox)
+--------------------------------------------------
+Parsing shell to know what it writes is undecidable. We cannot see writes
+done by `python -c`, `perl -e`, `ruby -e`, `node -e`, `awk -i inplace`, `ed`,
+`patch`, or a heredoc body fed to an interpreter. When we detect such a
+construct we let the command through (fail-open) but record a line in the
+coverage log (BASH_PATHLOCK_COVERAGE_LOG, default /tmp/design-bash-pathlock-
+uncovered.log) so the gap is visible, never silent. Layer A (the agent's own
+discipline, encoded in its prompt + expertise) remains the primary control;
+this is defense-in-depth under it.
 
 Exit codes:
   0 — allowed (or out of scope, or could not analyze → fail-open + logged)
@@ -47,6 +58,7 @@ from pathlib import Path
 
 PLUGIN_NAME = "design"
 
+# ─── reuse path-lock.py as the single source of truth for allowlists ──────────
 
 def _load_pathlock_module():
     """Import the sibling path-lock.py (hyphen in the filename → importlib)."""
@@ -66,6 +78,7 @@ def _load_pathlock_module():
 # `[[ $a >= $b ]]` capture junk targets and get falsely blocked).
 _REDIR_RE = re.compile(r"""(?<![0-9&])>>?\s*(?![&=])("[^"]+"|'[^']+'|[^\s;&|<>()]+)""")
 
+# Constructs we cannot statically analyze — fail open but log.
 _UNCOVERED_RE = re.compile(
     r"""(?:
         \bpython3?\s+-c\b | \bperl\s+-[eE]\b | \bruby\s+-e\b | \bnode\s+-e\b |
@@ -75,7 +88,9 @@ _UNCOVERED_RE = re.compile(
     re.VERBOSE,
 )
 
+# Targets that are never real files.
 _PSEUDO = ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty")
+
 _SEP_RE = re.compile(r"(?:\|\||&&|[;|&\n])")
 
 
@@ -90,10 +105,14 @@ def _is_flag(tok: str) -> bool:
 
 
 def _segment_targets(segment: str) -> list:
+    """Best-effort extraction of shell-write targets from one command segment."""
     targets = []
+
+    # 1. Redirections (covers `cat > f`, `echo .. >> f`, `cmd > f`, heredoc-to-file).
     for m in _REDIR_RE.finditer(segment):
         targets.append(_unquote(m.group(1)))
 
+    # 2. argv-shaped writers — tokenize; fall back silently if shlex chokes.
     try:
         argv = shlex.split(segment, posix=True)
     except ValueError:
@@ -106,17 +125,20 @@ def _segment_targets(segment: str) -> list:
     nonflags = [t for t in rest if not _is_flag(t)]
 
     if cmd == "tee":
+        # every non-flag arg is written (flags: -a/--append/-i…)
         targets.extend(nonflags)
     elif cmd == "sed":
         if any(t == "-i" or t.startswith("-i") or t == "--in-place"
                or t.startswith("--in-place") for t in rest):
+            # in-place edits its file operands — everything after the script.
+            # Heuristic: all non-flag args except the first (the sed program).
             if len(nonflags) >= 2:
                 targets.extend(nonflags[1:])
             elif nonflags:
-                targets.extend(nonflags)
+                targets.extend(nonflags)  # `sed -i'' file` form with no separate prog
     elif cmd in ("cp", "mv", "install"):
         if len(nonflags) >= 2:
-            targets.append(nonflags[-1])
+            targets.append(nonflags[-1])  # destination is the last operand
     elif cmd == "dd":
         for t in rest:
             if t.startswith("of="):
@@ -135,11 +157,13 @@ def _segment_targets(segment: str) -> list:
 
 
 def extract_write_targets(command: str) -> tuple:
+    """Return (targets, has_uncovered_construct)."""
     targets = []
     for seg in _SEP_RE.split(command):
         seg = seg.strip()
         if seg:
             targets.extend(_segment_targets(seg))
+    # de-dup, drop pseudo-devices and fd dups
     clean = []
     seen = set()
     for t in targets:
@@ -178,6 +202,8 @@ def main():
     if not command.strip():
         sys.exit(0)
 
+    # Only act on THIS plugin's subagents. No prefix → main session or a
+    # built-in agent → not ours. Same fail-open contract as path-lock.py.
     raw_agent_type = payload.get("agent_type", "") or ""
     if ":" not in raw_agent_type or raw_agent_type.split(":", 1)[0] != PLUGIN_NAME:
         sys.exit(0)
@@ -196,11 +222,12 @@ def main():
 
     violations = []
     for t in targets:
+        # Resolve against project root; out-of-tree targets are out of scope.
         cand = (project_root / t).resolve() if not os.path.isabs(t) else Path(t).resolve()
         try:
             cand.relative_to(project_root)
         except ValueError:
-            continue
+            continue  # /tmp, $HOME, etc. — not the path-lock's business
         cand_str = str(cand)
         if pl.is_own_expertise_file(cand_str, agent):
             continue
