@@ -37,6 +37,8 @@ deliberate difference from `/board-flow:drain`).
 
 - Max cards: parse `--max N`. Default 5.
 - Scope flags: detect `--no-scope` and `--scope "<jql>"` (mutually exclusive; if both appear, abort with "pass either --scope or --no-scope, not both"). Build the **scope directive**: `--no-scope` → `Scope: none`; `--scope "<jql>"` → `Scope: <jql>`; neither → omit the line (atlassian-expert resolves the effective scope from config).
+- **Claim id do run:** gere um, agora, como descrito em **Reserva do card**. Ele
+  identifica ESTE run em todos os cards que ele tocar.
 - Read `default_topology` and `defaults.status_map.in_review` from
   `board-flow.yaml`. Confirm the topology ships `proof-reviewer` (else abort as in
   `/board-flow:prove`).
@@ -78,10 +80,14 @@ Wait for confirmation.
 
 For each confirmed card, in priority order:
 
-  a. Run the equivalent of `/board-flow:prove <card-key>` (proof + verdict-driven
+  a. **Reserve o card primeiro** — releia status + comentários e publique o claim,
+     conforme **Reserva do card** abaixo. Se o card foi pulado (saiu da coluna ou
+     está reservado por outra sessão), registre `SKIPPED` e vá para o próximo
+     card SEM rodar prova nenhuma.
+  b. Run the equivalent of `/board-flow:prove <card-key>` (proof + verdict-driven
      transition).
-  b. Capture the verdict and the action taken.
-  c. **Continue regardless of verdict** — UNPROVEN does not stop the drain.
+  c. Capture the verdict and the action taken.
+  d. **Continue regardless of verdict** — UNPROVEN does not stop the drain.
      Every card returned on UNPROVEN carries its own `**Reason:**` — the
      concrete gap for THAT card, not the batch's. `bounce-reason-gate` blocks
      the comment without it, and a shared reason pasted across N cards is the
@@ -90,10 +96,12 @@ For each confirmed card, in priority order:
      something other than rework, name the real condition — **Blocked**
      (waiting on X) / **Deferred** (until Y) / **Dropped** (because Z).
      "Attention" is not a state.
-  d. If `proof-reviewer` returns a hard environmental failure for a card (can't
+  e. If `proof-reviewer` returns a hard environmental failure for a card (can't
      create a worktree, build infra down), record it as `ERROR` for that card
-     and continue to the next — one broken card shouldn't sink the batch.
-  e. Before recording any card's outcome, apply **Coupled closure** below. The
+     and continue to the next — one broken card shouldn't sink the batch. Um
+     card que termina em `ERROR` não recebeu veredito, então **publique a
+     liberação do claim** (`🔓`) antes de seguir.
+  f. Before recording any card's outcome, apply **Coupled closure** below. The
      batch is a scheduling convenience; it is never the unit of evidence.
 
 ### 5. Final report
@@ -104,6 +112,7 @@ Proved from Review (max <N>, scope: <effective scope, or "none">):
   UNPROVEN → returned:  <count>   (keys + one-line gap each)
   NEEDS-HUMAN → held:   <count>   (keys + what to look at)
   ERROR:                <count>   (keys + reason)
+  SKIPPED (reservado/movido): <count>   (keys + qual sessão ou qual status)
 
 Remaining in Review (not attempted this run): <count>
 ```
@@ -132,6 +141,56 @@ many there are, and without this line the set goes back to being a column the
 user opens card by card — the exact cost `/board-flow:decide` exists to remove.
 Do not print the line when the count is zero: an offer to triage nothing trains
 the user to skip the last paragraph.
+
+## Reserva do card — a fila é o recurso disputado
+
+A lista montada no passo 2 é uma **foto**, não uma reserva. Entre a listagem e o
+momento em que este run chega ao card N, outra sessão (outra worktree, outra
+máquina, o mesmo usuário em duas janelas) pode ter pegado o mesmo card — e o
+custo não é um conflito de arquivo, é o trabalho inteiro refeito. O recurso
+compartilhado é a coluna do board, então a reserva é feita no board.
+
+**Claim id.** Gere UM por run, no passo 1, e use o mesmo para todos os cards:
+
+```bash
+echo "$(basename "$PWD")-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:8])')"
+```
+
+**Antes de tocar em cada card** (é o primeiro passo do 4, antes de qualquer
+build, worktree ou delegação), delegue a `atlassian-expert`:
+
+> Leia o card `<KEY>`: status atual, responsável, e os comentários das últimas
+> 90 minutos. Devolva sem alterar nada.
+
+E decida, mecanicamente:
+
+- **Status ≠ `<coluna do run>`** → o card saiu da fila desde a listagem. **Pule**,
+  registre `SKIPPED (saiu da coluna: agora em <status>)` e siga para o próximo.
+- **Existe um comentário de claim de OUTRO claim id, com menos de 90 minutos e
+  sem o `🔓` de liberação** → outra sessão está nele agora. **Pule**, registre
+  `SKIPPED (reservado por <claim-id> às <hh:mm>)` e siga.
+- **Caso contrário** → reserve, publicando o comentário via `atlassian-expert`:
+
+  > `🔒 claim: <claim-id> — <nome do comando> em andamento desde <timestamp>.`
+  > `Outra sessão deve pular este card. A reserva expira em 90 minutos.`
+
+  Só depois desse comentário existir o card pode ser trabalhado.
+
+**Liberação.** O veredito do card encerra a reserva — o comentário de resultado
+(prova, bounce com `**Reason:**`, resumo de implementação) já é o sinal de que a
+reserva acabou. Quando o card termina SEM veredito (`ERROR`, interrupção, aborto
+do run), publique a liberação explícita, senão o card fica intocável por 90 min:
+
+> `🔓 claim <claim-id> liberado — <motivo>.`
+
+**Por que 90 minutos e não um lock permanente:** uma sessão que morre no meio
+não pode congelar a fila. A janela é maior que o tempo de um card (a prova leva
+de 9 a 12 minutos) e menor que um turno de trabalho, então uma reserva órfã se
+resolve sozinha sem ninguém precisar destravar nada à mão.
+
+**Cards pulados não consomem `--max`** — nenhum trabalho rodou neles. Eles
+aparecem no relatório final com o motivo, porque "sumiu da lista sem explicação"
+é exatamente o buraco que este mecanismo existe para fechar.
 
 ## Coupled closure — the batch is not the unit of evidence
 
@@ -177,6 +236,9 @@ once the failure is observed.
 - **No stop-on-failure.** UNPROVEN and NEEDS-HUMAN are normal outcomes; the drain
   processes the whole confirmed batch. (Contrast `/board-flow:drain`, which stops
   on BLOCKED.)
+- **Reserve antes de provar, card a card.** A listagem é uma foto; a reserva no
+  board é o que impede duas sessões de provarem o mesmo card. Sem o claim
+  publicado, o card não é trabalhado.
 - Always confirm before starting. Don't prove N cards without buy-in.
 - Per-card proof is FULL — don't shortcut to save time across cards.
 - **Scope narrows, never widens.** It only subtracts cards from Review; `--no-scope` returns the full sweep. Show the effective scope on the confirmation screen, and surface a rejected scope JQL fragment as a config/flag error — not an empty Review queue.

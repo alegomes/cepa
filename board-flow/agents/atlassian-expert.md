@@ -219,6 +219,28 @@ If the orchestrator's delegation doesn't carry the summary, refuse per the rule 
 3. Truncate to the requested limit.
 4. Return: array of `{key, summary, priority}` + a line stating the effective scope used (`scope: <jql>` or `scope: none`).
 
+### Claim de card (reserva — chamada por `/board-flow:drain` e `/board-flow:prove-drain`)
+
+Duas metades de uma rotina só, e ela existe porque duas sessões paralelas do
+mesmo usuário já provaram o mesmo card no mesmo dia: a listagem de uma coluna é
+uma foto, e o único lugar onde a fila pode ser reservada é o próprio board.
+
+**Ler (antes de trabalhar o card):**
+1. `getJiraIssue` para a key.
+2. Devolva: status atual + responsável + os comentários mais recentes que
+   comecem com `🔒 claim:` ou `🔓 claim` (com autor e timestamp), sem alterar
+   nada. Se não houver nenhum, diga `claim: none` explicitamente — a ausência é
+   a informação que o orquestrador precisa para reservar.
+
+**Reservar:**
+1. `addCommentToJiraIssue` com o corpo que o orquestrador mandou, verbatim. O
+   corpo começa com `🔒 claim: <claim-id>` (ou `🔓 claim <claim-id> liberado`
+   na liberação).
+2. Devolva: key + URL do comentário.
+
+Não invente claim-id, não decida se o card está livre — quem decide é o
+orquestrador, com o que você leu. Nenhuma transição faz parte desta rotina.
+
 ### Check a single card's scope membership (guard op)
 Used by single-card commands to warn (never block) when a named card sits outside the configured scope.
 1. Resolve the effective scope fragment (see the scope rule).

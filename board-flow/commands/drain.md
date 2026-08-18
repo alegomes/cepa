@@ -31,6 +31,7 @@ You are the orchestrator. Iterate through pending cards. Stop on first BLOCKED. 
 
 - Column name: `$ARGUMENTS` minus any flag (`--max N`, `--scope "..."`, `--no-scope`). If empty, read `defaults.status_map.to_do` from `board-flow.yaml`; if config missing entirely, fallback to literal `"To Do"`.
 - Max cards: parse `--max N` from `$ARGUMENTS`. Default: 5.
+- **Claim id do run:** gere um, agora, como descrito em **Reserva do card**. Ele identifica ESTE run em todos os cards que ele tocar.
 - Scope flags: detect `--no-scope` and `--scope "<jql>"`. They are mutually exclusive; if both appear, abort with "pass either --scope or --no-scope, not both." Build the **scope directive** to hand to `atlassian-expert`: `--no-scope` → `Scope: none`; `--scope "<jql>"` → `Scope: <jql>`; neither → omit the line (atlassian-expert resolves the effective scope from config).
 
 ### 2. List pending cards
@@ -65,15 +66,17 @@ Wait for user confirmation before proceeding.
 
 For each card the user confirmed:
 
-  a. Run the equivalent of `/board-flow:execute <card-key>` (full detail audit + build + validate + transitions).
-  b. Capture the verdict.
-  c. **If verdict is BLOCKED:**
+  a. **Reserve o card primeiro** — releia status + comentários e publique o claim, conforme **Reserva do card** abaixo. Se o card foi pulado (saiu da coluna ou está reservado por outra sessão), registre `SKIPPED` e vá para o próximo card SEM rodar nada.
+  b. Run the equivalent of `/board-flow:execute <card-key>` (full detail audit + build + validate + transitions).
+  c. Capture the verdict.
+  d. **If verdict is BLOCKED:**
      - Stop the drain. Don't process remaining cards.
+     - Se o card parou sem receber comentário de veredito, publique a liberação do claim (`🔓`) antes de parar.
      - Surface the blocked card + reason to the user.
      - Move to step 5 (final report).
-  d. **If READY-TO-SHIP or READY-WITH-CAVEATS:**
+  e. **If READY-TO-SHIP or READY-WITH-CAVEATS:**
      - Continue to the next card.
-  e. Record that card's **outcome terminal** before moving on (see below). A card
+  f. Record that card's **outcome terminal** before moving on (see below). A card
      you touched and cannot name an outcome for is an unfinished card, not a
      quiet success.
 
@@ -89,6 +92,7 @@ outcome. Every card you touched ends in exactly one of:
 | `DEFERRED` | deliberately postponed — name what must be true to pick it up |
 | `DROPPED` | will not be done — name why |
 | `ERROR` | the run itself failed (infra, permissions) — name the failure |
+| `SKIPPED` | outra sessão já tinha o card (reserva ativa) ou ele saiu da coluna — nomeie qual das duas |
 
 "In progress", "partially done", "needs attention" and silence are **not**
 outcomes. They are the absence of a decision wearing a status label, and they are
@@ -107,9 +111,62 @@ A single summary message:
 - **Cards attempted:** N — each with its outcome terminal (`SHIPPED` / `BLOCKED` / `DEFERRED` / `DROPPED` / `ERROR`). The count of attempted cards MUST equal the count of named outcomes; if it doesn't, the drain is not finished.
 - **Moved to In Review:** M (list keys + verdicts)
 - **Blocked:** 0 or 1 (key + reason)
+- **Skipped:** count (keys + reserva de qual sessão, ou para qual status o card já tinha ido)
 - **Remaining in column (not attempted this run):** count
 - **Approximate cost:** sum of per-card durations (informational)
 - **Next step suggestion:** if any blocked, surface the block; if all drained, suggest re-running for the next batch if more remain.
+
+## Reserva do card — a fila é o recurso disputado
+
+A lista montada no passo 2 é uma **foto**, não uma reserva. Entre a listagem e o
+momento em que este run chega ao card N, outra sessão (outra worktree, outra
+máquina, o mesmo usuário em duas janelas) pode ter pegado o mesmo card — e o
+custo não é um conflito de arquivo, é o trabalho inteiro refeito. O recurso
+compartilhado é a coluna do board, então a reserva é feita no board.
+
+**Claim id.** Gere UM por run, no passo 1, e use o mesmo para todos os cards:
+
+```bash
+echo "$(basename "$PWD")-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:8])')"
+```
+
+**Antes de tocar em cada card** (é o primeiro passo do 4, antes de qualquer
+build, worktree ou delegação), delegue a `atlassian-expert`:
+
+> Leia o card `<KEY>`: status atual, responsável, e os comentários das últimas
+> 90 minutos. Devolva sem alterar nada.
+
+E decida, mecanicamente:
+
+- **Status ≠ `<coluna do run>`** → o card saiu da fila desde a listagem. **Pule**,
+  registre `SKIPPED (saiu da coluna: agora em <status>)` e siga para o próximo.
+- **Existe um comentário de claim de OUTRO claim id, com menos de 90 minutos e
+  sem o `🔓` de liberação** → outra sessão está nele agora. **Pule**, registre
+  `SKIPPED (reservado por <claim-id> às <hh:mm>)` e siga.
+- **Caso contrário** → reserve, publicando o comentário via `atlassian-expert`:
+
+  > `🔒 claim: <claim-id> — <nome do comando> em andamento desde <timestamp>.`
+  > `Outra sessão deve pular este card. A reserva expira em 90 minutos.`
+
+  Só depois desse comentário existir o card pode ser trabalhado.
+
+**Liberação.** O veredito do card encerra a reserva — o comentário de resultado
+(resumo de implementação, bounce com `**Reason:**`) já é o sinal de que a reserva
+acabou. Quando o card termina SEM veredito (`ERROR`, `BLOCKED` sem comentário,
+interrupção do run), publique a liberação explícita, senão o card fica intocável
+por 90 minutos:
+
+> `🔓 claim <claim-id> liberado — <motivo>.`
+
+**Por que 90 minutos e não um lock permanente:** uma sessão que morre no meio não
+pode congelar a fila. A janela é maior que o tempo de um card e menor que um
+turno de trabalho, então uma reserva órfã se resolve sozinha sem ninguém precisar
+destravar nada à mão.
+
+**Cards pulados não consomem `--max`** — nenhum trabalho rodou neles. Eles
+aparecem no relatório final com o motivo, porque "sumiu da lista sem explicação"
+é exatamente o buraco que este mecanismo existe para fechar. Um `SKIPPED` também
+**não** para o drain: só `BLOCKED` para.
 
 ## Constraints
 
@@ -118,4 +175,5 @@ A single summary message:
 - Each card's per-Task loop is FULL — don't shortcut to "save time" across cards. The whole point of the topology is per-Task quality.
 - If `atlassian-expert` can't list cards (permissions issue, malformed column name, or a rejected scope JQL fragment), abort with a clear error — surface a rejected scope fragment as a config/flag problem, not an empty column.
 - **Scope narrows, never widens.** The effective scope only ever subtracts cards from the column; `--no-scope` is the way back to the full sweep. Always show the effective scope on the confirmation screen so the user sees what's being excluded.
+- **Reserve antes de executar, card a card.** A listagem é uma foto; a reserva no board é o que impede duas sessões de construírem o mesmo card. Sem o claim publicado, o card não é trabalhado.
 - Always confirm with the user before starting the drain. Don't auto-execute on N cards without buy-in.
