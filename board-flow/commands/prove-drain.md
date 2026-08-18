@@ -74,7 +74,14 @@ diff-scoped mutation + adversarial input, in a throwaway worktree).
 Reply yes / no / first-N to prove a subset.
 ```
 
-Wait for confirmation.
+Wait for confirmation. **Esta é a ÚNICA parada do run** — aplique `default-yes`:
+junte a esta confirmação tudo que você perguntaria depois (o que fazer com os
+cards que pararem em NEEDS-HUMAN: aplicar a recomendação de cada motivo, ou
+segurar todos para você). Uma pergunta no meio do drain custa ao usuário
+recarregar o contexto inteiro para responder.
+
+Se o run veio de `/common:session`, essas respostas já foram colhidas na largada
+— não pergunte de novo.
 
 ### 4. Iterate
 
@@ -127,20 +134,24 @@ every option description — never a bare `L4` / `waiver` / `altitude` in a labe
 Suggest re-running for the next batch if cards remain, and point the user at the
 NEEDS-HUMAN set as their actual review queue.
 
-**When the NEEDS-HUMAN count is 1 or more, the last line of the report hands the
-set to `/board-flow:decide`** — verbatim, naming the count:
+**Quando a contagem de NEEDS-HUMAN for 1 ou mais, NÃO mande o usuário rodar
+outro comando — faça o agrupamento aqui, no mesmo relatório.** Aplique a lógica
+de `/board-flow:decide` sobre o conjunto que ESTE run acabou de produzir:
+classifique cada card nos sete motivos de `docs/needs-human-motivos.md`, tire da
+frente o que não é decisão de ninguém (Docker fora, ferramenta ausente — resolva
+ou registre, não pergunte), agrupe o resto por motivo e faça **uma pergunta
+fechada por grupo, com recomendação**, aceitando resposta em lote ("1 sim, 2
+não").
 
-> `<N>` card(s) pararam em NEEDS-HUMAN. `/board-flow:decide` transforma esse
-> conjunto numa lista curta de perguntas fechadas — agrupa por motivo, tira da
-> frente o que não é decisão de ninguém (Docker fora, ferramenta ausente) e
-> aceita resposta em lote ("1 sim, 2 não").
+Se o usuário já respondeu essa política na confirmação do passo 3, **aplique-a**
+e apenas relate o que foi feito — sem nova pergunta.
 
-This is the seam the drain used to leave open. Held cards are the drain's
-*output*, not a leftover: the run that produced them is the run that knows how
-many there are, and without this line the set goes back to being a column the
-user opens card by card — the exact cost `/board-flow:decide` exists to remove.
-Do not print the line when the count is zero: an offer to triage nothing trains
-the user to skip the last paragraph.
+Por que aqui e não em outro comando: o run que produziu os cards é o run que
+sabe quais são e por quê. Encerrar dizendo "agora rode `/board-flow:decide`"
+devolve ao usuário um segundo ciclo de leitura e decisão sobre o mesmo material
+— o custo que o `decide` existia para remover, reintroduzido no ponto de
+entrega. `/board-flow:decide` continua existindo para quando a coluna Review
+acumulou fora de um drain (cards de outras sessões, de outro dia).
 
 ## Reserva do card — a fila é o recurso disputado
 
@@ -239,7 +250,9 @@ once the failure is observed.
 - **Reserve antes de provar, card a card.** A listagem é uma foto; a reserva no
   board é o que impede duas sessões de provarem o mesmo card. Sem o claim
   publicado, o card não é trabalhado.
-- Always confirm before starting. Don't prove N cards without buy-in.
+- Always confirm before starting. Don't prove N cards without buy-in. Mas
+  confirme **uma vez só**: a confirmação do passo 3 carrega também a política
+  para o que parar em NEEDS-HUMAN (`default-yes`).
 - Per-card proof is FULL — don't shortcut to save time across cards.
 - **Scope narrows, never widens.** It only subtracts cards from Review; `--no-scope` returns the full sweep. Show the effective scope on the confirmation screen, and surface a rejected scope JQL fragment as a config/flag error — not an empty Review queue.
 - `atlassian-expert` is the only Jira write path.
