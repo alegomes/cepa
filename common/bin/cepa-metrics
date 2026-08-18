@@ -145,8 +145,38 @@ def main():
         for t in (e.get("tipos") or []):
             desvios_tipo[t] += 1
 
+    # Atrito das pontas: quantos turnos o usuário gasta ANTES de conseguir
+    # disparar a rotina pela qual a sessão existe, e quantos gasta DEPOIS dela
+    # até encerrar. Os dois números existem porque a queixa ("gasto 15-20% do
+    # contexto só em preparação") era anedótica e precisava virar evidência.
+    prompts_por_sessao = defaultdict(list)
+    for e in events:
+        if e.get("event") == "prompt" and e.get("session"):
+            prompts_por_sessao[e["session"]].append(e)
+
+    antes, depois = [], []
+    for _sid, evs in prompts_por_sessao.items():
+        evs.sort(key=lambda x: x.get("ts", ""))
+        idx = [i for i, x in enumerate(evs) if x.get("kind") == "rotina"]
+        if not idx:
+            continue  # sessão sem rotina não mede atrito de rotina
+        antes.append(idx[0])                  # turnos digitados antes da 1ª rotina
+        cauda = evs[idx[-1] + 1:]             # o que veio depois da última
+        # o próprio wrap-up/handoff é o encerramento, não atrito: conta o que
+        # veio ANTES dele.
+        fim = next((i for i, x in enumerate(cauda) if x.get("kind") == "fechamento"),
+                   len(cauda))
+        depois.append(fim)
+
+    def mediana(xs):
+        if not xs:
+            return None
+        s = sorted(xs)
+        m = len(s) // 2
+        return s[m] if len(s) % 2 else (s[m - 1] + s[m]) / 2
+
     known = {"session_start", "session_end", "build_result", "gate_block", "gate_warn",
-             "proof_verdict", "proof_block", "report_style"}
+             "proof_verdict", "proof_block", "report_style", "prompt"}
     custom = Counter(e.get("event") for e in events if e.get("event") not in known)
 
     if args.as_json:
@@ -162,6 +192,11 @@ def main():
             "proof_blocks": dict(proof_blocks),
             "report_style": {"medidos": relatorios, "fora": relatorios_fora,
                              "desvios_por_tipo": dict(desvios_tipo)},
+            "atrito": {"sessoes_medidas": len(antes),
+                       "turnos_antes_da_rotina": antes,
+                       "turnos_depois_da_rotina": depois,
+                       "mediana_antes": mediana(antes),
+                       "mediana_depois": mediana(depois)},
             "custom_events": dict(custom),
         }, indent=2, ensure_ascii=False, default=str))
         return 0
@@ -188,6 +223,18 @@ def main():
     print(fmt_counter(Counter({f"{r} · {t} · {m}": v for (r, t, m), v in gate_blocks.items()})))
     print("\n## Gate-advance — avisos sem bloqueio")
     print(fmt_counter(Counter({f"{r} · {t} · {m}": v for (r, t, m), v in gate_warns.items()})))
+
+    if antes:
+        ma, md = mediana(antes), mediana(depois)
+        print(f"\n## Atrito das pontas ({len(antes)} sessão(ões) com rotina)")
+        print(f"    turnos ANTES da 1ª rotina:  mediana {ma}  (todas: {sorted(antes)})")
+        print(f"    turnos DEPOIS da última:    mediana {md}  (todas: {sorted(depois)})")
+        print("    memória de cálculo: por sessão, conta-se cada prompt do usuário;")
+        print("      ANTES = quantos vieram antes do primeiro comando de rotina")
+        print("      (drain, prove-drain, triage, execute, autonomous, session, ...);")
+        print("      DEPOIS = quantos vieram após o último, até o /wrap-up ou /handoff")
+        print("      (o próprio fechamento não conta). Mediana = valor do meio da lista.")
+        print("    Zero nos dois é o alvo: abrir, rodar, receber o relatório, encerrar.")
 
     print("\n## Proof gate — vereditos escritos (repo · veredito)")
     print(fmt_counter(Counter({f"{r} · {v}": n for (r, v), n in proof_verdicts.items()})))
