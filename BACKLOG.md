@@ -1578,3 +1578,41 @@ Cuidados: a suíte precisa ser barata o bastante para rodar (senão nunca roda) 
 honesta o bastante para não virar teatro — tarefa dourada que o harness acerta
 sempre não mede nada, e tarefa que ele erra sempre também não. Começar pequeno,
 com casos onde o resultado hoje é **conhecido e misto**.
+
+---
+
+## O log de pedidos da sessão se parte em pastas aleatórias (o hook grava relativo ao cwd)
+
+**Status:** pendente · **Lar provável:** `common/hooks/session-log.py` · **Origem:**
+observado ao vivo em 2026-08-18 — uma sessão que rodou `cd board-flow/commands` num
+comando de shell fez nascer um `board-flow/commands/.claude/session-log.md` com os
+pedidos daquele turno, fora do log do repo.
+
+### Problema
+
+`session-log.py` resolve o destino como `cwd / ".claude" / "session-log.md"`, onde
+`cwd` é o diretório em que o shell da sessão está naquele momento — não a raiz do
+repo (nem a da worktree). Como o diretório do Bash **persiste entre chamadas**, um
+único `cd` para uma subpasta desvia todo o resto da sessão para um log novo,
+enterrado ali, e ninguém percebe: o hook nunca bloqueia e não avisa.
+
+O prejuízo não é o arquivo solto, é quem lê esse arquivo. `/common:recap` monta a
+tabela "você pediu / eu entreguei" a partir de `.claude/session-log.md`; com o log
+partido, o recap mostra metade da sessão e apresenta isso como a sessão inteira —
+falta silenciosa, o pior tipo. O resgate de artefatos ao remover worktree
+(`_wtlib.py`, que lista `session-log.md` entre os arquivos a salvar) também procura
+o log num lugar só.
+
+### Esboço de solução
+
+Resolver o destino pela raiz da worktree corrente (`git rev-parse --show-toplevel`,
+já disponível como `_wtlib.repo_root`), com o cwd apenas como ponto de partida da
+pergunta e fallback quando não há git. Raiz da **worktree**, não do repo principal:
+cada worktree ter o seu log é intencional (é o que o resgate assume) — o que não é
+intencional é uma subpasta qualquer virar raiz.
+
+Vale checar de passagem os outros hooks que montam caminho a partir do cwd cru
+(`session-activity`, `session-checkpoint`, `capture-build-result`, `gate-advance`,
+`mark-build-stale`, entre outros): o mesmo `cd` que partiu o log pode estar
+espalhando `last-build.json` e companhia. Um helper único de "raiz da sessão" em
+`_wtlib` resolveria a classe inteira em vez de um arquivo.
