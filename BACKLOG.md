@@ -1123,6 +1123,22 @@ pode e deve morrer com o run. Nada muda para ele.
 **Nome de programa = fatia de trabalho**, não project key: `wego-todo-agosto`,
 `wego-review-followups`. Exige corrigir a regra 2 do `/common:next`.
 
+**Metade que a camada 0 NÃO fecha, e a evidência de 2026-08-18.** Ancorar o caminho na
+raiz principal resolve *onde* o plano mora; não resolve *quantos planos com nome
+parecido* disputam a mesma fila. No `wego-acesso-backend`, hoje, o clone principal tem
+os dois ao mesmo tempo:
+
+| programa | escopo | itens |
+|---|---|---|
+| `.claude/programs/WEGO/` | fila To Do, triada 16/08 (e a fusão de 18/08, 48 itens) | 47–48 |
+| `.claude/programs/WEGO-in-progress/` | recorte de In Progress, 16/08 | — |
+
+Com a âncora no lugar, a regra 3 do `/common:next` ("exatamente um `plan.yaml`
+single-track → esse") passa a achar DOIS e cair na regra 4, que pergunta ao dono qual
+usar — toda vez, para sempre. É o sintoma do nome: `WEGO` e `WEGO-in-progress` não são
+dois programas, são duas fatias do mesmo, e o project key não distingue fatia. A
+regra 2 (project key → programa) é justamente a que precisa sair.
+
 ### Superfícies a tocar
 
 `common/plan-schema.yaml` (documentar o lugar canônico), `common/commands/next.md`
