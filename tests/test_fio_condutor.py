@@ -97,8 +97,10 @@ def main():
     # ── produtor: triage persiste ordem + porquê (loss 1) ───────────────────
     triage = read(REPO / "board-flow" / "commands" / "triage.md")
     check("triage persiste o plano single-track",
-          ".claude/programs/<project_key>/plan.yaml" in triage
+          "<programs>/<project_key>/plan.yaml" in triage
           and "mode: single-track" in triage)
+    # `<programs>` resolve para o clone principal, nunca para a worktree — a
+    # regra e o guard mecânico moram em tests/test_plan_anchor_root.py.
     check("triage propõe a fila To Do em ORDEM",
           "in execution order" in triage)
     check("triage exige o `why` por item",

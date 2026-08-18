@@ -1039,7 +1039,9 @@ build.
 
 ## O plano de execução morre com o worktree, e o nome do programa colide
 
-**Status:** pendente · **Lar provável:** `common` (`plan-schema.yaml`, `/common:next`)
+**Status:** camada 0 FEITA em 2026-08-18 (ver "Camadas propostas" abaixo); a colisão
+de NOME de programa segue pendente · **Lar provável:** `common`
+(`plan-schema.yaml`, `/common:next`)
 + `maestro` (`program-plan`, `run`, `resume`) · **Origem:** sessão de 2026-08-10, a
 partir do relato de uma sessão do WEGO: *"O plano desta sessão morre com o worktree. O
 `plan.yaml` que escrevi vive em `.claude/`, que o repositório ignora, e o `.claude/`
@@ -1176,6 +1178,23 @@ Segundo corolário: a rede **precisa morar no hook**, não nos comandos
 **Camada 0 — prevenção, e é a que resolve este caso.** O `plan.yaml` nunca é escrito
 dentro de um worktree de sessão (a solução principal deste item). Fim do problema para
 o plano.
+
+**FEITA em 2026-08-18.** Todo comando que lê ou escreve plano resolve o caminho como
+`<raiz-principal>/.claude/programs/...`, com `<raiz-principal>` = pai de
+`git rev-parse --git-common-dir` sem o `/.git` final: `/common:next`,
+`/board-flow:{triage,execute,fix,prove}` e `/maestro:{run,program-plan,resume}`. A
+regra canônica está em `docs/execution-plan.md` ("Where the file lives"), com os DOIS
+modos de perda nomeados — escrever na worktree (perde alto) e copiar por worktree via
+seeding (perde calado, que foi o que quase aconteceu ao "restaurar" o resgate de
+18/08: 14 itens por cima de 47). Guard mecânico em `tests/test_plan_anchor_root.py`,
+inclusive uma varredura que barra qualquer `.claude/programs` sem prefixo de raiz nos
+8 comandos; 4 perturbações RED, uma por guarda.
+
+O `/common:next` ganhou junto o passo que faltava na LEITURA: antes de declarar "não
+há plano", olha `<raiz-principal>/.claude/programs/` e
+`<raiz-principal>/.claude/rescued/*/programs/*/plan.yaml`, e proíbe sobrescrever o
+plano vivo com o resgatado. Origem: em 18/08 uma sessão declarou morto um plano que
+estava no clone principal.
 
 **Camada 1 — resgate antes de remover, para todo o resto.** A camada 0 só cobre o
 plano. Tudo o mais que o harness escreve num `.claude/` ignorado tem exatamente o mesmo

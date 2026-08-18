@@ -47,17 +47,25 @@ comando é o único lugar onde BACKLOG.md (ou outra fonte) é interpretado.
    (onda · slice · demanda · superfície · gate humano · aceite) e discuta.
 
 4. **Escrever o plano.** Com o desenho acordado, escreva
-   `.claude/programs/<nome>/plan.yaml` seguindo `common/plan-schema.yaml`
-   (`schema_version: 2`, `mode: parallel-waves`). Um slice por demanda, salvo
-   demanda grande que o usuário concorde em fatiar. O `mode` é explícito porque
+   `<raiz-principal>/.claude/programs/<nome>/plan.yaml` seguindo
+   `common/plan-schema.yaml` (`schema_version: 2`, `mode: parallel-waves`). Um
+   slice por demanda, salvo demanda grande que o usuário concorde em fatiar. O `mode` é explícito porque
    o mesmo schema também serve o `single-track` do board-flow — é o campo que
    diz a quem lê qual dos dois este plano é. Planos v1 no disco (sem `mode`)
    continuam válidos e **não precisam ser migrados**.
 
+   **`<raiz-principal>`** é o pai de `git rev-parse --git-common-dir` sem o
+   `/.git` final — em worktree ligada isso aponta para o CLONE PRINCIPAL, não
+   para a árvore atual; fora dela é o mesmo que `git rev-parse --show-toplevel`.
+   O plano é estado do repo, não da sessão: escrito dentro de worktree de
+   sessão, morre com ela, e num repo cujo `.gitignore` cobre `.claude/` inteiro
+   nenhuma guarda do caminho de remoção enxerga o arquivo. Vale para ler e para
+   escrever. Ver `docs/execution-plan.md`, "Where the file lives".
+
 5. **Intake gate.** Rode:
 
    ```
-   python3 common/bin/cepa-dor .claude/programs/<nome>/plan.yaml --wave 1 --repo .
+   python3 common/bin/cepa-dor <raiz-principal>/.claude/programs/<nome>/plan.yaml --wave 1 --repo .
    ```
 
    Para cada NOT-READY, corrija COM o usuário (ajustar globs, registrar a
