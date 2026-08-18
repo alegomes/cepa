@@ -117,15 +117,17 @@ def _segment_targets(segment: str) -> list:
     elif cmd in ("cp", "mv", "install"):
         if len(nonflags) >= 2:
             targets.append(nonflags[-1])
-    elif cmd == "git":
-        # `git mv <src> <dst>` — structure-surgeon's primary move tool. The
-        # destination is the write target; the path-lock allowlist governs it.
-        if len(nonflags) >= 3 and nonflags[0] == "mv":
-            targets.append(nonflags[-1])
     elif cmd == "dd":
         for t in rest:
             if t.startswith("of="):
                 targets.append(t[3:])
+    elif cmd == "git":
+        # `git mv <src> <dst>` — move real de arquivo, que o path-lock precisa
+        # governar como qualquer outra escrita. Estava só na cópia do docs
+        # (structure-surgeon usa git mv para preservar histórico); as outras
+        # quatro deixavam passar. Encontrado pelo detector de divergência.
+        if len(nonflags) >= 3 and nonflags[0] == "mv":
+            targets.append(nonflags[-1])
     elif cmd == "truncate":
         targets.extend(nonflags[1:] if nonflags else [])
 

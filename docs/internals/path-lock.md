@@ -160,6 +160,34 @@ else:
     sys.exit(0)
 ```
 
+### Bug 5: `git mv` was a write only one copy could see (fixed 2026-08-17)
+
+**Symptom.** Nothing observed in production — this one was found by
+machine, not by an incident, which is the point.
+
+**Cause.** `docs-topology`'s `bash-path-lock.py` grew a branch for
+`git mv <src> <dst>` (the `structure-surgeon` agent moves docs with it
+to preserve history). The branch never propagated. In the other four
+topologies, an agent could move a file out of its lane with `git mv`
+and the lock saw nothing — the same write that `mv` would have blocked.
+
+**Cause of the cause — and the real fix.** These two hooks live in five
+copies, and the propagation rule was human ("every fix lands in all 5").
+`tests/test_lock_copies_drift.py` replaces the rule with a check: it
+compares each copy's **code** (AST, docstrings and comments excluded, so
+prose per topology stays free) and fails naming the copy that walked away.
+Legitimate divergences live in its `EXEMPT` table **with a written reason** —
+`build-hex`'s `main`, which resolves roles through `build-hex.yaml` before
+gating, and `debug_log`, which is diagnostic-only. An exemption with a reason
+is a decision; a silent one is the disease.
+
+Perturbation proof: re-introducing the Bug-4-era `>=` regression
+(`(?![&=])` → `(?!&)`) in a single copy turns the detector red.
+
+**Still owed** (second half of the BACKLOG item): generating the copies from
+one source at install time. The detector catches drift after it happens; the
+generator would make it unrepresentable.
+
 ## Role-based allowlists (build-hex only)
 
 `build-hex`'s path-lock differs from the others in one important way:

@@ -116,7 +116,7 @@ def main():
     except json.JSONDecodeError:
         # Malformed payload — fail open so we don't break the session.
         # Log to stderr so it surfaces in `claude --debug`.
-        print(f"[path-lock] could not parse hook payload; allowing", file=sys.stderr)
+        print("[design path-lock] could not parse hook payload; allowing", file=sys.stderr)
         sys.exit(0)
 
     tool_name = payload.get("tool_name", "")
@@ -163,9 +163,9 @@ def main():
     # Unknown agent — fail closed. Add it to ALLOWED_WRITES if it's legit.
     if allowed is None:
         print(
-            f"[path-lock] BLOCKED: unknown agent {agent!r} attempted "
+            f"[design path-lock] BLOCKED: unknown agent {agent!r} attempted "
             f"{tool_name} on {file_path}. Add {agent!r} to "
-            f".claude/hooks/path-lock.py if this is intentional.",
+            f"design/hooks/path-lock.py if this is intentional.",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -174,7 +174,7 @@ def main():
         sys.exit(0)
 
     print(
-        f"[path-lock] BLOCKED: agent {agent!r} cannot {tool_name} {file_path}.\n"
+        f"[design path-lock] BLOCKED: agent {agent!r} cannot {tool_name} {file_path}.\n"
         f"  Allowed write globs for {agent!r}:\n  - "
         + "\n  - ".join(allowed or ["(none — only own expertise file)"])
         + f"\n  Plus its own expertise file: .claude/expertise/{agent}-mental-model.yaml\n"

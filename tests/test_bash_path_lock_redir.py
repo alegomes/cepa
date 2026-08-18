@@ -48,6 +48,20 @@ CASES = [
      lambda t: "log.txt" in t,                "log.txt detected"),
     ("stderr 2> excluded", "./mvnw test 2> err.log",
      lambda t: "err.log" not in t,            "2>/stderr is out of scope"),
+
+    # --- `git mv` is a real write (only docs-topology handled it until
+    #     2026-08-17; the drift detector in test_lock_copies_drift.py found
+    #     the other four letting it through) ---
+    ("git mv destination", "git mv docs/old.md docs/new.md",
+     lambda t: "docs/new.md" in t,            "destination is the write target"),
+    ("git mv out of lane", "git mv README.md ../outside/README.md",
+     lambda t: "../outside/README.md" in t,   "escaping the lane is still a target"),
+    ("git status is not a write", "git status --short",
+     lambda t: t == [],                       "read-only git verbs write nothing"),
+    ("git log is not a write", "git log --oneline -3",
+     lambda t: t == [],                       "read-only git verbs write nothing"),
+    ("git commit is not a file write", "git commit -m 'x'",
+     lambda t: t == [],                       "commit writes via git, not the shell"),
 ]
 
 

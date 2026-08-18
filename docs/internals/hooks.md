@@ -114,8 +114,9 @@ path outside the agent's allowlist and exits 2.
 2. Reuse the sibling path-lock.py's allowlist (build_allowed_writes /
    ALLOWED_WRITES, imported via importlib — single source of truth).
 3. extract_write_targets(command): redirections (>, >>), tee, sed -i, cp, mv,
-   install, dd of=, truncate. Indecidable constructs (python -c, heredoc-to-
-   interpreter, ...) → fail open, but logged to BASH_PATHLOCK_COVERAGE_LOG.
+   install, dd of=, `git mv`, truncate. Indecidable constructs (python -c,
+   heredoc-to-interpreter, ...) → fail open, but logged to
+   BASH_PATHLOCK_COVERAGE_LOG.
 4. For each target inside project_root and outside the agent's allowlist
    (own expertise file exempt): BLOCK. Out-of-root targets (/tmp, $HOME,
    build caches) are out of scope — allowed.
