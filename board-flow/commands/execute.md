@@ -149,7 +149,7 @@ If READY-TO-SHIP or READY-WITH-CAVEATS, build the Implementation Summary from en
 
 The four explicit-null fields (**New debt introduced**, **Scope captured outside the card**, **Release needed**, **Human validation route**) are mandatory — a negative answer ("none", "no", "not applicable") is valid content; an omitted line is a silently skipped question and the summary-nulls-gate hook will block the comment. Fill them from evidence already in hand: refactor-advisor's findings (debt), scope-discipline captures (out-of-card findings), and whether the card's acceptance criteria name a user-facing surface (validation route) — do not invent a route for pure plumbing, and do not let green tests stand in for the route on user-facing work.
 
-If BLOCKED: leave the card where it is (in `<defaults.status_map.in_progress>`). If `defaults.status_map.blocked` is set (non-null), optionally also transition into the blocked column — ask the user once at session start which they prefer; default to leaving in `in_progress` with a comment. Delegate to `atlassian-expert`:
+If BLOCKED: leave the card where it is (in `<defaults.status_map.in_progress>`). If `defaults.status_map.blocked` is set (non-null), **mova para a coluna de bloqueados** — o board declarou essa coluna justamente para isso, e mover é reversível. Não pergunte a preferência: aplique `default-yes`, faça, e diga no relatório o que fez. Sem coluna declarada, o card fica em `in_progress` com o comentário do motivo. Delegate to `atlassian-expert`:
 
 > Add a comment to $ARGUMENTS with the specific block reason from validation-lead and any failing-test paths. Do NOT transition.
 

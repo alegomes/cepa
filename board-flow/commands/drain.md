@@ -60,7 +60,15 @@ Drain these? Each card runs the full execute flow (planning audit + build + vali
 Reply yes / no / first-N (e.g., "first-2") to drain only a subset.
 ```
 
-Wait for user confirmation before proceeding.
+Wait for user confirmation before proceeding. **Esta é a única parada
+planejada do run** — aplique `default-yes` e traga para esta mesma confirmação
+o que você perguntaria depois: se um card travar (BLOCKED), o run para e te
+chama (default) ou pula o card e segue com os demais? Perguntar isso na largada
+é o que evita interromper o usuário no card 3 de 5, quando ele já perdeu o
+contexto da lista.
+
+Se o run veio de `/common:session`, essas respostas já foram colhidas — siga
+sem perguntar.
 
 ### 4. Iterate
 
@@ -69,11 +77,12 @@ For each card the user confirmed:
   a. **Reserve o card primeiro** — releia status + comentários e publique o claim, conforme **Reserva do card** abaixo. Se o card foi pulado (saiu da coluna ou está reservado por outra sessão), registre `SKIPPED` e vá para o próximo card SEM rodar nada.
   b. Run the equivalent of `/board-flow:execute <card-key>` (full detail audit + build + validate + transitions).
   c. Capture the verdict.
-  d. **If verdict is BLOCKED:**
-     - Stop the drain. Don't process remaining cards.
-     - Se o card parou sem receber comentário de veredito, publique a liberação do claim (`🔓`) antes de parar.
-     - Surface the blocked card + reason to the user.
-     - Move to step 5 (final report).
+  d. **If verdict is BLOCKED:** siga a política escolhida na confirmação do
+     passo 3 — parar (default) ou pular o card e continuar. Em ambos os casos:
+     - Se o card parou sem receber comentário de veredito, publique a liberação do claim (`🔓`) antes de seguir.
+     - Registre o card e o motivo para o relatório final; **não pergunte nada
+       agora** — o usuário já respondeu essa pergunta na largada.
+     - Parando: vá para o passo 5 (relatório final). Pulando: próximo card.
   e. **If READY-TO-SHIP or READY-WITH-CAVEATS:**
      - Continue to the next card.
   f. Record that card's **outcome terminal** before moving on (see below). A card
