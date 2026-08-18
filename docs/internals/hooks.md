@@ -9,8 +9,8 @@ CC supports several hook events. This marketplace uses six:
 
 | Event | Fires | Marketplace usage |
 |---|---|---|
-| `PreToolUse` | Before a tool call lands. Hook can exit 2 to BLOCK the call. | `path-lock.py` + `bash-path-lock.py` (every topology), `gate-advance.py` + `enforcement-guard.py` + `maven-reactor-guard.py` + `lead-no-worktree.py` + `acceptance-gate.py` (common) |
-| `PostToolUse` | After a tool call returns. Hook can observe + write to disk. Cannot block (the call already happened). | `autonomous-checkpoint.py`, `mark-build-stale.py`, `capture-build-result.py`, `session-activity.py` (common) |
+| `PreToolUse` | Before a tool call lands. Hook can exit 2 to BLOCK the call. | `path-lock.py` + `bash-path-lock.py` (every topology), `gate-advance.py` + `enforcement-guard.py` + `maven-reactor-guard.py` + `lead-no-worktree.py` + `loop-budget.py` + `acceptance-gate.py` (common) |
+| `PostToolUse` | After a tool call returns. Hook can observe + write to disk. Cannot block (the call already happened). | `autonomous-checkpoint.py`, `mark-build-stale.py`, `capture-build-result.py`, `session-activity.py`, `loop-budget.py` (common) |
 | `UserPromptSubmit` | When the user submits a prompt. Hook can observe; can inject system reminders. | `session-log.py`, `session-subject.py` (common) |
 | `SessionStart` | Session boot. Hook can inject context. | `session-registry.py` (common) — registry hygiene + transparent handoff resume |
 | `SessionEnd` | Session teardown. | `session-registry.py` (common) — WIP-autosave + deregister |
@@ -374,6 +374,47 @@ this session, dirs touched, last intents from `session-log.md`). Crash-proof:
 the skeleton is always current, so a token-limit kill never loses the thread.
 The narrative (NOTE zone) is written separately by `/common:handoff`; the two
 zones are marker-delimited and never clobber each other (`_handoff.py`).
+
+### loop-budget.py (PreToolUse + PostToolUse, matcher `Task`)
+
+Owner: `common/hooks/`.
+
+Separates **iterating** (each round carries new information) from **repeating**
+(the same round, the same red). `engineering-lead` is told to "iterate until
+APPROVED" and `till-done` says not to stop early; neither has a ceiling, so a
+card whose failure the worker can't see can burn a whole session cycling
+dev→qa→dev.
+
+The signal that the loop started is available without guessing: **the failure is
+the same**. The fingerprint comes from the delegation's *result*, not its prompt
+— the prompt changes every round (it carries the feedback), the failure doesn't.
+
+```python
+PostToolUse: extract a failure signature from the result → count it in
+             .claude/loop-state.json. Volatile noise (timestamps, durations,
+             SHAs, /tmp paths) is normalized away first, or the same failure
+             would look new every round and the ceiling would never fire.
+             A SUCCESS in last-build.json clears the table.
+PreToolUse:  any signature at CEPA_LOOP_LIMIT (default 3) → exit 2, naming the
+             repeated failure and the three ways out (diagnose / go green /
+             declare BLOCKED with the diagnosis).
+```
+
+The counter lives outside the agent's reach for the same reason as
+`last-build.json`: whoever is being judged doesn't write the number that judges
+them. A signature absent for 6 delegations is forgotten (a red already fixed
+must not keep counting). Turning it off is an explicit decision
+(`CEPA_LOOP_BUDGET=off`), never an accident — same discipline as the
+`.claude/no-build` marker.
+
+`loop-state.json` is in `_wtlib.RESCUE_SKIP`: it describes the session that
+produced it, so carrying it into another tree would block a delegation over
+someone else's red.
+
+Tests: `tests/test_loop_budget.py` (16 checks). Half of them exist to prove it
+does **not** bite legitimate iteration — alternating failures, a green build, a
+clean run: all pass. A ceiling that bites real work gets switched off on day
+one, and then protects nothing.
 
 ### lead-no-worktree.py (PreToolUse, matcher `Task`)
 

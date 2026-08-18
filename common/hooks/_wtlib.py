@@ -415,6 +415,9 @@ RESCUE_SKIP = (
     "ui-proof/runs/",     # regenerated per run from the manifest
     "expertise",          # symlink to the canonical clone
     "last-build.json",
+    "loop-state.json",    # contador do loop-budget: vale para a sessão que o
+                          # produziu; carregado para outra árvore, bloquearia
+                          # uma delegação por um vermelho de outro contexto
     "doctor-last-run",
     "session-log.md",
     "worktree-seed",
