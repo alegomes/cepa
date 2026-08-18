@@ -82,8 +82,8 @@ def load_tasks(only=None) -> list:
     for p in sorted(TASKS_DIR.glob("*.yaml")):
         t = parse_task_yaml(p.read_text(encoding="utf-8"))
         t["_file"] = str(p)
-        missing = [k for k in ("id", "fix_commit", "base_commit",
-                               "acceptance_test", "acceptance_cmd", "prompt") if not t.get(k)]
+        missing = [k for k in ("id", "fix_commit", "base_commit", "acceptance_test",
+                               "acceptance_cmd", "prompt", "contrato") if not t.get(k)]
         if missing:
             print(f"⚠ {p.name}: campos ausentes {missing} — tarefa ignorada", file=sys.stderr)
             continue
@@ -110,6 +110,47 @@ def make_worktree(task: dict) -> Path:
 def drop_worktree(wt: Path):
     git("worktree", "remove", "--force", str(wt), check=False)
     shutil.rmtree(wt, ignore_errors=True)
+
+
+def worktree_summary(wt: Path) -> dict:
+    """O que o agente mexeu, em forma auditável depois que a corrida acabou."""
+    try:
+        status = git("status", "--porcelain", cwd=wt, check=False).stdout.strip()
+        stat = git("diff", "--stat", cwd=wt, check=False).stdout.strip()
+        return {
+            "arquivos": [l.strip() for l in status.splitlines()][:40],
+            "diff_stat": stat.splitlines()[-1] if stat else "",
+        }
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def build_prompt(task: dict) -> str:
+    """Enunciado + contrato de aceitação.
+
+    O contrato existe por causa da primeira corrida, que deu 0/3. A causa não
+    era dificuldade: os testes de aceitação exigem o caminho e o nome exatos do
+    arquivo do conserto original — e, na tarefa difícil, até a chave de
+    configuração `transition_ids` — enquanto os enunciados, de propósito, não
+    dizem nada disso. Nenhum agente passaria: a suíte estava medindo a
+    capacidade de ADIVINHAR o desenho original, não de resolver o problema.
+
+    Declarar o contrato é o que o desenvolvedor original tinha de graça na
+    cabeça (as convenções da casa). O trabalho — a lógica, os casos de borda,
+    o que fazer quando não dá para decidir — continua inteiro com o agente.
+    """
+    contrato = (task.get("contrato") or "").strip()
+    if not contrato:
+        return task["prompt"]
+    return (
+        task["prompt"].rstrip()
+        + "\n\n---\n\nCOMO O SEU TRABALHO SERÁ CONFERIDO\n\n"
+        + contrato
+        + "\n\nIsto é o contrato, não a solução: diz onde a verificação vai "
+          "procurar e com que nomes, do mesmo jeito que um colega da casa já "
+          "saberia. O que fazer, e como decidir os casos difíceis, continua "
+          "com você.\n"
+    )
 
 
 def bring_acceptance(task: dict, wt: Path) -> bool:
@@ -205,7 +246,7 @@ def cmd_run(tasks, label: str, timeout_min: int) -> int:
             wt = make_worktree(t)
             gates_before = telemetry_count()
             proc = subprocess.run(
-                ["claude", "-p", t["prompt"], "--output-format", "json"],
+                ["claude", "-p", build_prompt(t), "--output-format", "json"],
                 cwd=str(wt), capture_output=True, text=True, timeout=timeout_min * 60,
             )
             rec["agent_exit"] = proc.returncode
@@ -227,7 +268,17 @@ def cmd_run(tasks, label: str, timeout_min: int) -> int:
         finally:
             rec["duration_s"] = round(time.time() - started, 1)
             if wt:
-                drop_worktree(wt)
+                # O que o agente escreveu, resumido, ANTES de qualquer remoção.
+                # A primeira corrida (0/3) só pôde ser diagnosticada porque a
+                # causa estava nos testes de aceitação; se estivesse no trabalho
+                # do agente, não haveria como saber — a worktree já tinha ido
+                # embora. Worktree é barata; evidência perdida não é.
+                rec["agent_diff"] = worktree_summary(wt)
+                if rec.get("passed"):
+                    drop_worktree(wt)
+                else:
+                    rec["worktree_kept"] = str(wt)
+                    print(f"      evidência preservada em {wt}")
         results.append(rec)
         print(f"{'PASSOU' if rec.get('passed') else 'falhou'} "
               f"({rec['duration_s']}s, {rec.get('turns') or '?'} voltas, "

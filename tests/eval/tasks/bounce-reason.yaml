@@ -14,6 +14,19 @@ acceptance_test: tests/test_bounce_reason_gate.py
 acceptance_cmd: "python3 tests/test_bounce_reason_gate.py"
 dificuldade: baixa
 
+contrato: |
+  A verificação vai procurar um hook executável em
+  `common/hooks/bounce-reason-gate.py` e chamá-lo como o Claude Code chama:
+  o payload JSON do PreToolUse chega no stdin. O comentário que está sendo
+  postado vem em `tool_input`, e o nome do campo muda conforme o servidor MCP
+  em uso — os dois dialetos precisam funcionar.
+
+  Ela espera **exit 2** para barrar e **exit 0** para deixar passar, com a
+  explicação em stderr.
+
+  O teste que julga isso é `tests/test_bounce_reason_gate.py` e roda com
+  `python3 tests/test_bounce_reason_gate.py`.
+
 prompt: |
   Neste repositório (a Cepa, um harness de plugins para Claude Code), cards do
   Jira voltam da coluna de Review para retrabalho quando a prova falha.

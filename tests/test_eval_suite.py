@@ -110,19 +110,36 @@ def test_aceitacao_so_existe_depois_do_conserto():
 
 
 def test_enunciado_nao_entrega_a_solucao():
-    """Enunciado que nomeia o arquivo do conserto mede transcrição, não engenharia."""
+    """O ENUNCIADO descreve o problema; quem nomeia arquivo é o contrato.
+
+    A separação nasceu da primeira corrida de verdade, que deu 0/3. A causa não
+    era dificuldade: os testes de aceitação exigem o caminho e o nome exatos do
+    arquivo do conserto original, e os enunciados — de propósito — não diziam
+    nada disso. A suíte estava medindo a capacidade de ADIVINHAR o desenho
+    original, não a de resolver o problema, e nenhum agente passaria.
+
+    Então o manifesto tem dois campos com papéis opostos, e este caso guarda os
+    dois lados: o `prompt` segue proibido de nomear os arquivos do conserto
+    (senão vira transcrição), e o `contrato` é obrigado a nomeá-los (senão vira
+    adivinhação).
+    """
     m = load_runner()
     for t in m.load_tasks():
         tid = t["id"]
-        prompt = t["prompt"]
-        # os arquivos criados pelo conserto não podem aparecer no enunciado
         r = git("show", "--name-only", "--diff-filter=A", "--format=", t["fix_commit"])
-        created = [f for f in r.stdout.split() if f.endswith(".py")]
-        leaked = [f for f in created if Path(f).name in prompt]
+        created = [f for f in r.stdout.split() if f.endswith(".py")
+                   and not f.startswith("tests/")]
+        leaked = [f for f in created if Path(f).name in t["prompt"]]
         check(f"{tid}: o enunciado não nomeia os arquivos criados pelo conserto",
               not leaked, f"vazou: {leaked}")
         check(f"{tid}: o enunciado descreve o problema (tem tamanho de enunciado)",
-              len(prompt) > 400, f"{len(prompt)} chars")
+              len(t["prompt"]) > 400, f"{len(t['prompt'])} chars")
+        # o contrato tem de nomear o arquivo que a aceitação vai procurar
+        alvo = Path(t["acceptance_test"]).name
+        check(f"{tid}: o contrato nomeia o teste que julga o trabalho",
+              alvo in t["contrato"], f"{alvo} ausente do contrato")
+        check(f"{tid}: o contrato entra no que o agente recebe",
+              "COMO O SEU TRABALHO SERÁ CONFERIDO" in m.build_prompt(t))
 
 
 def test_dificuldade_variada():
@@ -136,8 +153,10 @@ def test_validate_e_obrigatorio_no_readme():
     """A trava contra tarefa vazia precisa estar documentada, não só existir."""
     readme = (EVAL / "README.md").read_text(encoding="utf-8")
     check("README explica o --validate", "--validate" in readme)
-    check("README diz que a suíte nunca rodou de verdade",
-          re.search(r"nunca rodada", readme, re.I) is not None)
+    check("README declara o estado real da suíte (rodou? tem A/B?)",
+          re.search(r"não re-rodada|nunca rodada", readme, re.I) is not None)
+    check("README registra o achado da 1ª corrida (0/3 mediu a própria suíte)",
+          "0/3" in readme and "contrato" in readme.lower())
 
 
 def main():

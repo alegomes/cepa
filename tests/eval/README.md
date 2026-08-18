@@ -1,9 +1,10 @@
 # Tarefas douradas — a suíte que mede o harness
 
-> Estado: **construída, nunca rodada de verdade.** As tarefas estão declaradas e
-> validadas (cada uma prova que fica vermelha sem o agente), o executor roda, e
-> nenhum A/B foi feito ainda. Essa distinção é a mesma que o resto do harness
-> cobra de todo mundo: contrato travado ≠ comportamento verificado.
+> Estado: **rodada uma vez (2026-08-18), e a primeira corrida mediu a própria
+> suíte.** Resultado: 0/3, US$ 8,82, ~7 min por tarefa. A causa não era
+> dificuldade — era um defeito de desenho aqui dentro, descrito em "A primeira
+> corrida" abaixo. Corrigido; **não re-rodada desde então**, então ainda não
+> existe um número de referência confiável nem um A/B.
 
 ## Por que existe
 
@@ -40,6 +41,47 @@ agente** e exigir **vermelho**. Uma tarefa que já passa no `base_commit` não
 mede nada; ficaria verde para sempre e daria a sensação de cobertura. É o mesmo
 `regression-red-at-base` que o proof-gate exige dos cards de bug, aplicado à
 suíte que julga o harness.
+
+## A primeira corrida: 0/3, e o que ela ensinou
+
+`baseline-0.28.0`, 18/08/2026, harness em `dea48e2`:
+
+| tarefa | dificuldade | resultado | voltas | custo | bloqueios de gate |
+|---|---|---|---|---|---|
+| acceptance-gate-direcao | alta | falhou | 30 | US$ 3,03 | 0 |
+| bounce-reason | baixa | falhou | 37 | US$ 3,07 | 1 |
+| reactor-guard | média | falhou | 25 | US$ 2,73 | 1 |
+
+A leitura preguiçosa seria "os agentes não dão conta". A leitura certa é outra:
+**os três testes de aceitação exigem o caminho e o nome exatos do arquivo do
+conserto original** — `common/hooks/maven-reactor-guard.py`,
+`common/hooks/bounce-reason-gate.py` — e, no caso difícil, exigem até que o
+agente invente a mesma chave de configuração (`transition_ids`), inclusive
+citada literalmente numa mensagem de erro. Os enunciados, de propósito, não
+diziam nada disso.
+
+Ou seja: a suíte estava medindo a capacidade de **adivinhar o desenho
+original**, não a de resolver o problema. Nenhum agente passaria, e um agente
+que resolvesse tudo com o arquivo chamado `mvn-reactor-guard.py` falharia
+igual. O 0/3 não fala sobre o harness; fala sobre esta pasta.
+
+O desenvolvedor original não adivinhou nada disso — ele tinha as convenções da
+casa na cabeça. **O campo `contrato:`** devolve essa informação ao agente:
+onde a verificação vai procurar, com que nomes, e qual é o contrato de
+chamada. O que continua inteiro com ele é o trabalho: a lógica, os casos de
+borda, o que fazer quando não dá para decidir.
+
+Duas mudanças saíram daí:
+
+1. **`contrato:` virou campo obrigatório** do manifesto, anexado ao enunciado
+   pelo executor sob o título "COMO O SEU TRABALHO SERÁ CONFERIDO".
+   `tests/test_eval_suite.py` guarda os dois lados: o `prompt` segue proibido
+   de nomear os arquivos do conserto, o `contrato` é obrigado a nomeá-los.
+2. **A worktree de uma tarefa que falha não é mais apagada.** O diagnóstico
+   acima só foi possível porque a causa estava nos testes, que continuam no
+   repositório; se estivesse no trabalho do agente, não haveria como saber —
+   a evidência já tinha ido embora. Agora o executor guarda a worktree e
+   registra no resultado o que o agente mexeu.
 
 ## Uso
 

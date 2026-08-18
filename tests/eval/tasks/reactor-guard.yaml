@@ -13,6 +13,18 @@ acceptance_test: tests/test_maven_reactor_guard.py
 acceptance_cmd: "python3 tests/test_maven_reactor_guard.py"
 dificuldade: media
 
+contrato: |
+  A verificação vai procurar um hook executável em
+  `common/hooks/maven-reactor-guard.py` e chamá-lo como o Claude Code chama:
+  o payload JSON do PreToolUse chega no stdin, com as chaves `tool_name`,
+  `tool_input.command` e `cwd`.
+
+  Ela espera **exit 2** quando o comando deve ser barrado e **exit 0** quando
+  deve passar, com a explicação em stderr.
+
+  O teste que julga isso é `tests/test_maven_reactor_guard.py` e roda com
+  `python3 tests/test_maven_reactor_guard.py`.
+
 prompt: |
   Neste repositório (a Cepa, um harness de plugins para Claude Code) existe um
   problema que já custou uma investigação inteira e um card acusando
