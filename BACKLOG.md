@@ -1389,7 +1389,7 @@ camada 1, atrito de decisão, `/common:gauntlet`). Aprovados pelo dono em
 
 ## O aviso de versão só existe se alguém rodar o doctor (P0-4 da revisão)
 
-**Status:** pendente · **Lar provável:** `common/hooks/session-registry.py`
+**Status:** CONSTRUÍDO 2026-08-17 (`1738aa8`, common 0.28.0) · **Lar:** `common/hooks/_pluginver.py` + `session-registry.py`
 · **Origem:** revisão 2026-08-17, §7 gargalo nº 5.
 
 ### Problema
@@ -1432,8 +1432,9 @@ Cuidados que o desenho precisa respeitar:
 
 ## O path-lock existe em 5 cópias, e a correção depende de disciplina (P0-3)
 
-**Status:** pendente · **Lar provável:** `common/hooks/` (motor) +
-`bin/install.sh` (geração) · **Origem:** revisão 2026-08-17, §17 e §22.
+**Status:** METADE CONSTRUÍDA 2026-08-17 (`aeaaa16`) — o detector existe
+(`tests/test_lock_copies_drift.py`); a GERAÇÃO das cópias no `bin/install.sh`
+continua pendente · **Lar:** `tests/` (detector) + `bin/install.sh` (geração) · **Origem:** revisão 2026-08-17, §17 e §22.
 
 ### Problema
 
@@ -1481,7 +1482,7 @@ consertadas" e não corre o risco de quebrar o enforcement enquanto é escrito.
 
 ## Os loops de qualidade não têm teto, e o mesmo erro repetido não é detectado (P0-2)
 
-**Status:** pendente · **Lar provável:** `common/hooks/` (contador) +
+**Status:** CONSTRUÍDO 2026-08-17 (`7f717b3`, common 0.28.0) · **Lar:** `common/hooks/loop-budget.py` +
 `build-hex/agents/engineering-lead.md` · **Origem:** revisão 2026-08-17, §14.
 
 ### Problema
@@ -1522,8 +1523,8 @@ escape trivial.
 
 ## Não existe modo de saber se uma mudança no harness melhorou alguma coisa (P1-4)
 
-**Status:** pendente · **Lar provável:** `tests/eval/` + runner via tool
-Workflow · **Origem:** revisão 2026-08-17, §16 — apontado como o elo mais fraco
+**Status:** CONSTRUÍDO, NUNCA RODADO 2026-08-17 (`bf95d47`) — 3 tarefas
+validadas (vermelhas sem agente), nenhum A/B feito · **Lar:** `tests/eval/` · **Origem:** revisão 2026-08-17, §16 — apontado como o elo mais fraco
 do sistema inteiro.
 
 ### Problema
