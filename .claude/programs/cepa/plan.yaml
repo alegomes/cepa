@@ -202,6 +202,22 @@ items:
       repo. Cuidado: em worktree ligada, o log deve seguir a worktree, não o
       clone principal — o mesmo cuidado que o handoff já toma com
       `--git-common-dir`. Precisa de teste com cwd em subdiretório.
+      Reincidiu em 2026-08-18: um `cd board-flow/commands` num comando de shell
+      criou `board-flow/commands/.claude/session-log.md` com os pedidos daquele
+      turno. Só apareceu, de novo, porque o diretório órfão saltou no
+      `git status` — nenhum aviso, nenhum bloqueio. Confirma que o defeito não é
+      um azar de um comando, e que o cwd do Bash PERSISTE entre chamadas: um
+      único `cd` desvia o resto da sessão inteira.
+      Duas coisas que o achado de 08-18 acrescenta ao conserto: (1) o prejuízo
+      concreto tem nome — `/common:recap` monta a tabela "você pediu / eu
+      entreguei" a partir desse arquivo, então log partido vira meia sessão
+      apresentada como a sessão toda; (2) provavelmente é uma CLASSE, não um
+      arquivo: cerca de vinte hooks montam caminho a partir do cwd cru
+      (`capture-build-result`, `gate-advance`, `mark-build-stale`,
+      `session-activity`, `session-checkpoint`, entre outros), e o mesmo `cd`
+      pode estar espalhando `last-build.json` do mesmo jeito. Um helper único de
+      "raiz da sessão" em `_wtlib` (ao lado de `repo_root`/`main_root`) resolve
+      todos de uma vez; consertar só o session-log deixa a classe de pé.
     status: pending
     blocked_by: []
     human_pending: null
