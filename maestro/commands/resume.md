@@ -15,7 +15,10 @@ aterrissou. Reusa o padrão do `/common:autonomous-resume` — não inventa outr
 ## Steps
 
 1. **Ler o estado.**
-   `python3 maestro/bin/maestro-wave-state get .claude/programs/$1 --json`.
+   `python3 maestro/bin/maestro-wave-state get <raiz-principal>/.claude/programs/$1 --json`
+   — `<raiz-principal>` é o pai de `git rev-parse --git-common-dir` sem o `/.git`
+   final (o clone principal, quando você está numa worktree ligada); o estado do
+   programa é do repo, não desta árvore.
    Se não existir, pare: não há onda em andamento para este programa (talvez
    queira `/maestro:run $1`).
 

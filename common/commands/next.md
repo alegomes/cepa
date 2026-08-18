@@ -34,7 +34,8 @@ plan and says plainly that the statuses are self-reported.
 
 ## Variables
 
-- `--plan NOME` — plan to read, i.e. `.claude/programs/NOME/plan.yaml`.
+- `--plan NOME` — plan to read, i.e. `<programs>/NOME/plan.yaml` (`<programs>`
+  defined in step 1 — always the main clone's, never the current worktree's).
 - `--offline` — skip the tracker round-trip even when one is configured. Use for
   an instant answer or with no network. Say in the report that the answer wasn't
   reconciled.
@@ -45,17 +46,45 @@ plan and says plainly that the statuses are self-reported.
 
 ### 1. Locate the plan
 
+**`<programs>` = `<main-root>/.claude/programs`**, where `<main-root>` is the
+parent of `git rev-parse --git-common-dir` with the trailing `/.git` removed —
+inside a linked worktree that is the MAIN clone, not this tree; anywhere else it
+equals `git rev-parse --show-toplevel`. Never resolve the plan against the
+current directory: the plan is repo state, and a session worktree's own
+`.claude/` starts empty in any repo whose `.gitignore` covers `.claude/`
+(rationale in `docs/execution-plan.md`, "Where the file lives").
+
 In order, first hit wins:
 
-1. `--plan NOME` → `.claude/programs/NOME/plan.yaml`.
+1. `--plan NOME` → `<programs>/NOME/plan.yaml`.
 2. `board-flow.yaml` at project root (else legacy
    `.claude/board-flow.lifecycle.yaml`) → `defaults.project_key` →
-   `.claude/programs/<project_key>/plan.yaml`, if it exists.
-3. Exactly one `.claude/programs/*/plan.yaml` with `mode: single-track` → that one.
+   `<programs>/<project_key>/plan.yaml`, if it exists.
+3. Exactly one `<programs>/*/plan.yaml` with `mode: single-track` → that one.
 4. More than one → list them and ask which; don't pick for the user.
 
-**No plan file at all.** Don't manufacture an order — an order nobody chose is
-worse than an admitted absence, because it reads as a decision. Say there is no
+**Before declaring absence, look where a lost plan actually is.** A session
+running in a worktree that reads only its own `.claude/` will report a plan dead
+that is sitting in the main clone — that happened on 2026-08-18 and cost a
+triage. Two cheap checks, in this order:
+
+1. `ls <main-root>/.claude/programs/*/plan.yaml` — the anchoring above already
+   points here, so this is a check that the resolution actually ran against
+   `<main-root>` and not against the current tree.
+2. `ls <main-root>/.claude/rescued/*/programs/*/plan.yaml` — artifacts the
+   rescue net carried out of a removed worktree (`_wtlib.rescue_artifacts`; the
+   🛟 SessionStart notice announces the folder). A hit here means a plan was
+   written inside a worktree that no longer exists.
+
+If a rescued plan turns up, **never copy it over the live one and never treat it
+as the newer truth.** Read the `source:` line and the header of both, count
+`items` in each, and put both counts in front of the user: a rescued file is
+often a partial run (on 2026-08-18 the rescued copy held 14 items and the live
+one 47, and overwriting would have been the real loss). Merging is the user's
+call, and `/common:next` doesn't do it silently.
+
+**No plan file anywhere, including those two places.** Don't manufacture an
+order — an order nobody chose is worse than an admitted absence, because it reads as a decision. Say there is no
 execution plan, then name the cheapest way to get one **for this repo**:
 
 - tracker wired (`board-flow.yaml` present) → `/board-flow:triage`, which grooms
