@@ -1,0 +1,53 @@
+# Tarefa dourada: barreira contra `-pl` sem `-am` no Maven.
+#
+# Escolhida porque o conserto real (b7a7c72) nasceu de um incidente caro e bem
+# documentado, e porque exige a parte difícil: decidir ONDE a barreira mora
+# (hook mecânico) em vez de mais uma linha de prosa num prompt — que é o que
+# tinha sido tentado antes e falhou.
+
+id: reactor-guard
+titulo: "Barreira mecânica contra `-pl` sem `-am` no Maven"
+fix_commit: b7a7c72
+base_commit: "2319856"
+acceptance_test: tests/test_maven_reactor_guard.py
+acceptance_cmd: "python3 tests/test_maven_reactor_guard.py"
+dificuldade: media
+
+prompt: |
+  Neste repositório (a Cepa, um harness de plugins para Claude Code) existe um
+  problema que já custou uma investigação inteira e um card acusando
+  indevidamente uma feature que estava entregue.
+
+  O sintoma, como apareceu:
+
+  Num projeto Maven multi-módulo (reator), rodar
+
+      ./mvnw test -pl <modulo>
+
+  SEM a flag `-am` faz o Maven resolver os módulos irmãos pelos jars que estão
+  no `~/.m2`, em vez de recompilar o reator a partir do código. Quando o cache
+  está defasado, os testes rodam contra código antigo. O vermelho que sai dali
+  é determinístico e reproduzível, mas irreal — e é justamente isso que o faz
+  se disfarçar de bug funcional.
+
+  Em 2026-07-21 (card WEGO-1949) isso aconteceu: o jar do módulo `application`
+  era de 16/jul e sequer continha o método que o teste exercitava. A sessão
+  concluiu que havia um bug de produto. Não havia.
+
+  Agravante: isso JÁ estava documentado no README do projeto afetado e na
+  memória do agente, e reincidiu mesmo assim.
+
+  Sua tarefa: fazer com que isso não possa mais acontecer nesta casa.
+
+  Restrições que o repositório impõe:
+  - Nenhuma dependência de terceiros; só a biblioteca padrão do Python.
+  - O que você construir precisa ter teste, rodável com `python3 tests/<arquivo>.py`,
+    saindo não-zero em falha.
+  - Falso positivo é caro: projeto de módulo único, `mvn` citado dentro de um
+    `echo`/`grep` (onde é texto, não execução) e comando ilegível não podem ser
+    barrados. Quando não der para decidir, o modo seguro é deixar passar.
+  - Precisa existir uma saída para quem ACABOU de rodar `mvnw install -DskipTests`
+    e sabe que o cache está bom.
+
+  Leia o repositório para descobrir como esta casa costuma resolver esse tipo
+  de coisa antes de escolher a sua abordagem.

@@ -30,3 +30,6 @@ common/expertise/expertise
 # Symlink criado pelo bin/install.sh apontando para o clone canônico
 # (~/coding/cepa/common/expertise). Scaffolding de instalação, não fonte.
 .claude/expertise
+
+# Resultados da suite de tarefas douradas: medicao local, nao artefato do repo
+tests/eval/results/

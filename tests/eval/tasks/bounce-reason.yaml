@@ -1,0 +1,40 @@
+# Tarefa dourada: card devolvido sem razão registrada.
+#
+# A mais fácil das três, e é por isso que ela está aqui: uma suíte só com
+# tarefas difíceis não distingue duas versões do harness na faixa em que a
+# maioria do trabalho real acontece. O caminho já existe no repo (há um gate
+# irmão, com a mesma técnica), então o que se mede é se o agente ACHA esse
+# precedente em vez de inventar um jeito próprio.
+
+id: bounce-reason
+titulo: "Devolução de card sem razão obriga re-arqueologia na sessão seguinte"
+fix_commit: f875ad6
+base_commit: a90272f
+acceptance_test: tests/test_bounce_reason_gate.py
+acceptance_cmd: "python3 tests/test_bounce_reason_gate.py"
+dificuldade: baixa
+
+prompt: |
+  Neste repositório (a Cepa, um harness de plugins para Claude Code), cards do
+  Jira voltam da coluna de Review para retrabalho quando a prova falha.
+
+  O problema: essa devolução chega como um comentário dizendo "not proven" e
+  mais nada. A sessão seguinte, que pode ser dias depois e com outra pessoa (ou
+  outro agente) na frente, precisa reconstruir do diff por que o card voltou.
+  Essa re-arqueologia é cara e às vezes chega na conclusão errada.
+
+  Sua tarefa: fazer com que uma devolução sem razão declarada não seja possível.
+
+  Restrições que o repositório impõe:
+  - Nenhuma dependência de terceiros; só a biblioteca padrão do Python.
+  - Teste rodável com `python3 tests/<arquivo>.py`, saindo não-zero em falha.
+  - Os comentários desta casa aparecem em português e em inglês, e em markdown
+    ou no markup de wiki do Jira. Todos precisam funcionar.
+  - Falso positivo aqui é caro: existem vários outros tipos de comentário
+    circulando (resumo de prova aprovada, escalação para humano, triagem,
+    resumo de implementação) e nenhum deles pode ser barrado.
+  - Um rótulo presente mas vazio não é uma razão.
+
+  Antes de desenhar do zero, procure no repositório se já existe um gate que
+  resolve um problema com esta mesma forma — campo obrigatório num comentário
+  de Jira. Se existir, siga a técnica dele.

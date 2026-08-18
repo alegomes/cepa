@@ -1,0 +1,50 @@
+# Tarefa dourada: o gate de aceitação era cego à direção da transição.
+#
+# A mais difícil das três, de propósito. O defeito RELATADO é um; escrever o
+# teste do conserto revelou mais dois, da mesma raiz (o hook fora escrito só
+# para um dos dois dialetos de MCP). Uma tarefa assim distingue um agente que
+# conserta o sintoma de um que investiga a causa — que é exatamente a diferença
+# que a suíte precisa conseguir medir.
+
+id: acceptance-gate-direcao
+titulo: "Auditoria incompleta prendia o card em Review em vez de devolvê-lo"
+fix_commit: d0a0f97
+base_commit: "9d54f23"
+acceptance_test: tests/test_acceptance_gate.py
+acceptance_cmd: "python3 tests/test_acceptance_gate.py"
+dificuldade: alta
+
+prompt: |
+  Neste repositório (a Cepa, um harness de plugins para Claude Code) existe um
+  hook chamado `acceptance-gate` que barra a transição de um card do Jira
+  quando a auditoria de aceitação daquele card está incompleta. A intenção é
+  impedir que trabalho pela metade entre na coluna de Review.
+
+  O que aconteceu na prática, no card WEGO-1782:
+
+  A auditoria estava `incomplete` — corretamente, o trabalho não estava pronto.
+  Por causa disso, o card NÃO conseguiu ser movido de volta para In Progress:
+  o hook barrou exatamente o movimento que uma auditoria incompleta deveria
+  causar. O card ficou preso em Review, com o veredito de reprovação já
+  comentado nele e ninguém conseguindo tirá-lo de lá.
+
+  Investigue e conserte. Duas pistas do terreno, ambas verificáveis no
+  repositório:
+
+  - O docstring atual do hook afirma que ele "não precisa saber qual status é
+    o alvo da transição". Vale checar se essa premissa se sustenta.
+  - Existem dois servidores MCP diferentes para Jira em uso nesta casa, e os
+    payloads deles não têm o mesmo formato. Os runs locais de um dos projetos
+    usam um; a nuvem usa outro.
+
+  Restrições que o repositório impõe:
+  - Nenhuma dependência de terceiros; só a biblioteca padrão do Python.
+  - O conserto precisa de teste rodável com `python3 tests/<arquivo>.py`,
+    saindo não-zero em falha.
+  - Decida conscientemente o que fazer quando faltar configuração ou ela estiver
+    quebrada, e deixe a decisão explícita no código — um gate que se abre por
+    problema de configuração e um que se fecha são escolhas diferentes, com
+    consequências diferentes.
+
+  Leia o repositório antes de escolher a abordagem: procure o que já existe
+  para o projeto declarar coisas desse tipo, em vez de inventar um lugar novo.
