@@ -547,21 +547,70 @@ def apply_fixes(max_passes=3):
 
 # ── Main ────────────────────────────────────────────────────────────────
 
-def stamp_run():
-    """Grava o carimbo que o nudge diário do session-registry consulta."""
+def stamp_path():
     rc, out, _ = git(["rev-parse", "--show-toplevel"], cwd=str(Path.cwd()))
     if rc != 0:
+        return None
+    return Path(out.strip()) / ".claude" / "doctor-last-run"
+
+
+def stamp_run():
+    """Grava o carimbo que o nudge diário do session-registry consulta."""
+    stamp = stamp_path()
+    if stamp is None:
         return
     try:
-        stamp = Path(out.strip()) / ".claude" / "doctor-last-run"
         stamp.parent.mkdir(parents=True, exist_ok=True)
         stamp.write_text(datetime.now(timezone.utc).isoformat(timespec="seconds") + "\n")
     except OSError:
         pass
 
 
+def fresh_within(hours: float) -> bool:
+    """O diagnóstico já rodou neste repo há menos de `hours`?
+
+    É o que permite pendurar o preflight na abertura de CADA sessão (o wrapper
+    `cepa`) sem cobrar o diagnóstico toda vez: a primeira sessão do dia paga,
+    as seguintes saem na hora.
+    """
+    stamp = stamp_path()
+    if stamp is None or not stamp.exists():
+        return False
+    try:
+        a = age_days(stamp.read_text().strip())
+    except OSError:
+        return False
+    return a is not None and a * 24 < hours
+
+
+def parse_if_stale(argv):
+    """`--if-stale H` (ou `--if-stale=H`): só rode se o último diagnóstico
+    neste repo tiver mais de H horas. Retorna as horas, ou None."""
+    for i, a in enumerate(argv):
+        if a.startswith("--if-stale="):
+            val = a.split("=", 1)[1]
+        elif a == "--if-stale" and i + 1 < len(argv):
+            val = argv[i + 1]
+        else:
+            continue
+        try:
+            return float(val)
+        except ValueError:
+            return None
+    return None
+
+
 def main():
-    do_fix = "--fix" in sys.argv[1:]
+    argv = sys.argv[1:]
+    do_fix = "--fix" in argv
+    brief = "--brief" in argv
+
+    # Preflight de abertura de sessão: silencioso e barato quando não há nada a
+    # dizer. Sem isso o wrapper cobraria o diagnóstico inteiro a cada `cepa`.
+    stale_h = parse_if_stale(argv)
+    if stale_h is not None and fresh_within(stale_h):
+        return 0
+
     run_checks()
 
     applied, failed = ([], [])
@@ -571,16 +620,29 @@ def main():
 
     icons = {"ok": "✓", "warn": "⚠", "fail": "✗"}
     order = {"fail": 0, "warn": 1, "ok": 2}
-    print("# cepa-doctor\n")
-    for level, area, msg, _fx in sorted(RESULTS, key=lambda r: (order[r[0]], r[1])):
-        print(f" {icons[level]} [{area}] {msg}")
-
     fails = sum(1 for r in RESULTS if r[0] == "fail")
     warns = sum(1 for r in RESULTS if r[0] == "warn")
-    print(f"\n{fails} falha(s), {warns} aviso(s), "
-          f"{sum(1 for r in RESULTS if r[0] == 'ok')} ok.")
 
-    if do_fix:
+    if not brief:
+        print("# cepa-doctor\n")
+        for level, area, msg, _fx in sorted(RESULTS, key=lambda r: (order[r[0]], r[1])):
+            print(f" {icons[level]} [{area}] {msg}")
+        print(f"\n{fails} falha(s), {warns} aviso(s), "
+              f"{sum(1 for r in RESULTS if r[0] == 'ok')} ok.")
+    elif not (applied or failed or fails or warns):
+        # Modo resumido e nada a dizer: não imprima nada. Uma linha "está tudo
+        # ok" em toda abertura de sessão é ruído que o usuário aprende a pular.
+        return 0
+    else:
+        print(f"cepa-doctor: {fails} falha(s), {warns} aviso(s)"
+              + (f", {len(applied)} corrigida(s) automaticamente" if applied else ""))
+
+    if do_fix and brief:
+        for kind, msg in applied:
+            print(f" ✓ {FIX_LABEL.get(kind, kind)}")
+        for kind, msg in failed:
+            print(f" ✗ {FIX_LABEL.get(kind, kind)} — {msg}")
+    elif do_fix:
         print("\n## Corrigido automaticamente")
         if applied:
             for kind, msg in applied:
@@ -591,7 +653,7 @@ def main():
             print("\n## Tentei corrigir e não deu")
             for kind, msg in failed:
                 print(f" ✗ {FIX_LABEL.get(kind, kind)} — {msg}")
-    else:
+    elif not brief:
         auto = pending_fixes()
         if auto:
             print(f"\n{len(auto)} achado(s) têm correção mecânica — "
@@ -604,7 +666,13 @@ def main():
     # e voltar), não uma tarefa mecânica — por isso nenhum é aplicado sozinho.
     manual = [(lvl, area, msg) for lvl, area, msg, fx in RESULTS
               if lvl != "ok" and not fx]
-    if manual:
+    if manual and brief:
+        # Na largada da sessão o usuário precisa saber QUE existe algo e o que
+        # é, não o parágrafo inteiro de cada achado.
+        print(f" ⚠ {len(manual)} pendência(s) que só você decide "
+              f"({', '.join(sorted({a for _l, a, _m in manual}))}) — "
+              f"veja com: /common:doctor")
+    elif manual:
         print("\n## Precisa de você (não mexi — cada um é uma decisão)")
         for _lvl, area, msg in manual:
             print(f" · [{area}] {msg}")

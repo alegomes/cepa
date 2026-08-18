@@ -123,11 +123,53 @@ def test_exit_code_preservado():
         check("depois de corrigir tudo que era mecânico, exit 0", rc == 0)
 
 
+def test_preflight_do_wrapper():
+    """O preflight pendurado no `cepa`: barato, calado e nunca bloqueante."""
+    wrapper = REPO / "common" / "bin" / "cepa"
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpp = Path(tmp)
+        root = make_repo(tmpp)
+
+        # 1ª chamada (carimbo inexistente = velho): corrige e fala
+        rc1, out1 = run_doctor(root, "--fix", "--brief", "--if-stale", "12")
+        check("preflight corrige o mecânico e resume em poucas linhas",
+              "arquivar handoff" in out1 and len(out1.strip().splitlines()) <= 4, out1)
+        check("preflight não despeja o diagnóstico inteiro",
+              "# cepa-doctor" not in out1, out1)
+
+        # 2ª chamada dentro da janela: silêncio total
+        _rc2, out2 = run_doctor(root, "--fix", "--brief", "--if-stale", "12")
+        check("dentro da janela, o preflight é MUDO", out2.strip() == "", repr(out2))
+
+        # o wrapper abre a sessão mesmo com o doctor quebrado
+        fake = tmpp / "fakeclaude"
+        fake.write_text("#!/bin/sh\necho SESSAO-ABRIU\n", encoding="utf-8")
+        fake.chmod(0o755)
+        bindir = tmpp / "broken" / "bin"
+        bindir.mkdir(parents=True)
+        (tmpp / "broken" / "hooks").mkdir()
+        (bindir / "cepa-doctor").write_text("raise SystemExit('boom')\n", encoding="utf-8")
+        (bindir / "cepa").write_text(wrapper.read_text(encoding="utf-8"), encoding="utf-8")
+        env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT_TTL="0")
+        p = subprocess.run(["sh", str(bindir / "cepa")], capture_output=True,
+                           text=True, cwd=str(root), env=env)
+        check("doctor quebrado NÃO impede a sessão de abrir",
+              "SESSAO-ABRIU" in p.stdout, p.stdout + p.stderr)
+
+        env_off = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
+        p = subprocess.run(["sh", str(wrapper)], capture_output=True, text=True,
+                           cwd=str(root), env=env_off)
+        check("CEPA_PREFLIGHT=off desliga o preflight",
+              "SESSAO-ABRIU" in p.stdout and "cepa-doctor" not in p.stderr,
+              p.stdout + p.stderr)
+
+
 def main():
     test_dry_run_nao_muta()
     test_fix_aplica_o_mecanico()
     test_fix_nao_toca_no_que_e_decisao()
     test_exit_code_preservado()
+    test_preflight_do_wrapper()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")
