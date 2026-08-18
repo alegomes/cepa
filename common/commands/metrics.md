@@ -1,5 +1,5 @@
 ---
-description: Relatório de telemetria do próprio harness — sessões por repo, taxa de builds vermelhos, bloqueios do gate-advance por motivo, distribuição de vereditos do proof gate e `proven` sobre-declarados barrados pelo guard. Lê o ledger em ~/.claude/cepa-telemetry/ alimentado automaticamente pelos hooks. Use para decidir com evidência onde o harness atrapalha em vez de ajudar.
+description: Relatório de telemetria do próprio harness — sessões por repo, taxa de builds vermelhos, bloqueios do gate-advance por motivo, distribuição de vereditos do proof gate, `proven` sobre-declarados barrados pelo guard, e o **atrito das pontas da sessão** (quantos turnos você gasta antes de conseguir disparar a rotina, e quantos gasta depois dela até encerrar). Lê o ledger em ~/.claude/cepa-telemetry/ alimentado automaticamente pelos hooks. Use para decidir com evidência onde o harness atrapalha em vez de ajudar.
 argument-hint: [--days N | --month YYYY-MM] [--repo <nome>]
 ---
 
@@ -9,7 +9,7 @@ argument-hint: [--days N | --month YYYY-MM] [--repo <nome>]
 
 O harness audita cards, builds e provas — este comando audita o harness. Os
 hooks (`gate-advance`, `capture-build-result`, `session-registry`,
-`proof-verdict-guard`) emitem eventos fail-silent para
+`proof-verdict-guard`, `session-log`) emitem eventos fail-silent para
 `~/.claude/cepa-telemetry/events-YYYY-MM.jsonl`; o agregador transforma isso em
 respostas: onde o gate bloqueia demais, qual repo queima mais builds, quantos
 `proven` sobre-declarados o guard barrou.

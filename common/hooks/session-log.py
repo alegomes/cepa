@@ -26,9 +26,43 @@ Format: markdown with date headers and timestamped prompt blocks.
 
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    import _telemetry as T
+except Exception:  # noqa: BLE001 — telemetria nunca quebra o hook
+    T = None
+
+# As rotinas: os comandos pelos quais uma sessão existe. Tudo que o usuário
+# digita ANTES da primeira delas é preparação; tudo depois da última é
+# fechamento. Medir esses dois números é o que permite dizer, com evidência,
+# se o atrito das pontas caiu — em vez de memória contra memória.
+ROTINAS = {
+    "board-flow:drain", "board-flow:prove-drain", "board-flow:triage",
+    "board-flow:execute", "board-flow:fix", "board-flow:prove",
+    "board-flow:decide", "board-flow:plan-track-build-validate",
+    "common:autonomous-start", "common:autonomous-resume", "common:session",
+    "docs:survey", "docs:author", "maestro:run", "review-gate:review",
+}
+FECHAMENTO = {"common:wrap-up", "common:handoff"}
+
+
+def classify(prompt: str):
+    """(kind, cmd) do prompt. Só o NOME do comando vai para a telemetria —
+    nunca o texto do prompt, que carregaria conteúdo do usuário."""
+    m = re.match(r"\s*/([a-z0-9:_-]+)", prompt, re.I)
+    if not m:
+        return "prosa", None
+    cmd = m.group(1).lower()
+    if cmd in ROTINAS:
+        return "rotina", cmd
+    if cmd in FECHAMENTO:
+        return "fechamento", cmd
+    return "comando", cmd
 
 
 def now() -> tuple[str, str]:
@@ -93,6 +127,14 @@ def main():
         append_entry(log_path, prompt)
     except OSError as e:
         print(f"[session-log] could not append to {log_path}: {e}", file=sys.stderr)
+
+    if T is not None:
+        try:
+            kind, cmd = classify(prompt)
+            T.emit("prompt", cwd=str(cwd), kind=kind, cmd=cmd or "",
+                   session=str(payload.get("session_id") or "")[:8])
+        except Exception:  # noqa: BLE001 — telemetria nunca quebra o hook
+            pass
 
     sys.exit(0)
 
