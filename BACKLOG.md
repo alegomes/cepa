@@ -5,6 +5,65 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ---
 
+## Política default-yes — matar as micro-interações nas pontas da sessão
+
+**Status:** pendente · **Lar provável:** `common` (skill `zero-micromanagement` + varredura
+dos comandos) · **Origem:** reclamação forte do usuário (2026-08-18, por voz): toda rotina
+(triage, drain, prove-drain, autonomous, doctor) exige ciclos de confirmação ANTES
+(preparação em cascata, ~15–20% do contexto) e DEPOIS (vaivém até "ter certeza que
+acabou") da operação principal — e ele quase sempre aceita a recomendação, então a
+pergunta não muda o resultado, só custa turno e foco.
+
+### Problema
+
+Os comandos codificam confirmação como virtude ("Always confirm before starting",
+"execute apenas as que o usuário confirmar", encaminhamentos para o próximo comando em
+vez de executá-lo). O efeito agregado é uma jornada fatiada em paradas: o usuário perde
+o fio do propósito da sessão e o contexto se esvai em preparação e fechamento.
+
+### Esboço de solução
+
+Uma **política transversal de decisão**, aplicada em três camadas:
+
+1. **Regra:** ação **reversível ou registrável** + recomendação default clara →
+   **executar e registrar** (decisão nomeada no relatório final, com o porquê).
+   Exemplo canônico do usuário: "achou uma falha → cria o card, não pergunta".
+   Perguntar **só** para irreversível/destrutivo (Won't Do, apagar branch com commits
+   únicos, force-push, publicação externa), custo real, ou bifurcação genuína de
+   preferência. Perguntas inevitáveis vão em **lote nas pontas** (largada ou relatório
+   final), nunca no meio.
+2. **Skill:** fortalecer `common:zero-micromanagement` com essa regra explícita
+   (hoje ela existe mas os comandos a contradizem).
+3. **Varredura:** revisar cada comando de rotina (doctor passo 4, drain/prove-drain
+   "confirm with user", triage "nothing is written until you confirm", decide, wrap-up)
+   e trocar confirmação-por-item por: default aplicado + registro + um único ponto de
+   confirmação quando sobrar algo irreversível. O `doctor` ganha `--fix` (aplica todas
+   as correções mecânicas em lote e re-roda até estabilizar).
+
+4. **Preparação fora da sessão:** job agendado (launchd, reaproveitando a infra do
+   Path A) roda o `cepa-doctor` de manhã em modo auto-fix mecânico e grava um arquivo
+   de status; o hook de SessionStart injeta uma linha ("harness verde às 07:00" ou
+   "N pendências que só você decide") em vez de mandar o usuário rodar o doctor e
+   seguir recomendações em cascata dentro da sessão.
+5. **Sessão com propósito declarado:** `/common:session <rotina>` (ou flag `--oneshot`
+   nas rotinas) encadeia a jornada inteira — checa o preflight, faz TODAS as perguntas
+   na largada (escopo, máximos, o que fazer com NEEDS-HUMAN, já embutindo as perguntas
+   que hoje ficam para o `/board-flow:decide` depois), executa sem parar, entrega UM
+   relatório final e oferece o wrap-up como último passo.
+6. **Disciplina de fio da sessão** (falhas observadas na conversa de origem): proposta
+   em aberto reaparece nos relatórios seguintes até ser resolvida (o session-log hook /
+   `/common:recap` já rastreiam pedidos — estender para rastrear propostas do agente);
+   e aviso lateral (worktree solto, handoff vencido) vai para um estacionamento exibido
+   só no wrap-up, nunca vira pergunta no meio de outra discussão.
+
+**Rede de segurança** (o que torna o default-yes seguro em vez de temerário): toda
+decisão auto-aplicada fica nomeada no relatório; o handoff e o `/common:debrief`
+(revisão keep/overrule a posteriori) são o canal de correção; `/common:metrics` ganha
+duas métricas para provar o efeito — "turnos até o primeiro comando de rotina" e
+"turnos entre o fim da rotina e o wrap-up".
+
+---
+
 ## Advisors — painel de perspectivas por área de decisão
 
 **Status:** pendente · **Lar provável:** `common` (transversal a todas as topologias)
