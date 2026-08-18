@@ -1,6 +1,6 @@
 ---
 description: Valida a instalação do harness contra a realidade em 30 segundos — plugins habilitados e na versão instalada, hooks compilando, board-flow.yaml estrutural, baseline de build (status + idade), worktrees stale/órfãs e handoffs vencidos. Com --live, também confere o board-flow.yaml contra o Jira vivo via atlassian-expert. Rode no início do dia ou quando algo do harness parecer errado — cada check existe porque a falha correspondente já custou uma tarefa.
-argument-hint: [--live]
+argument-hint: [--live] [--no-fix]
 ---
 
 # /common:doctor
@@ -15,13 +15,22 @@ para um momento em que consertar é barato.
 
 ## Steps
 
-1. Rode o diagnóstico mecânico:
+1. Rode o diagnóstico **já corrigindo o que é mecânico** (default; use
+   `--no-fix` para só diagnosticar):
 
    ```
-   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-doctor"
+   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-doctor" --fix
    ```
 
-2. Mostre a saída ao usuário na íntegra (✓/⚠/✗ por área, já em pt-BR).
+   `--fix` aplica, em lote e sem perguntar, só o que é mecânico E reversível
+   (reinstalar plugins quando o cache diverge do repo, arquivar handoff vencido
+   — move, não apaga —, limpar registro de worktree cujo diretório sumiu), e
+   re-roda o diagnóstico até parar de mudar. Isso existe porque a alternativa
+   era um achado por vez, cada um custando uma confirmação: a preparação
+   consumia mais atenção que a tarefa da sessão.
+
+2. Mostre a saída ao usuário na íntegra (✓/⚠/✗ por área, já em pt-BR),
+   incluindo os blocos finais **Corrigido automaticamente** e **Precisa de você**.
 
 3. **Se `--live` foi passado** e existe `board-flow.yaml` no projeto: delegue ao
    `board-flow:atlassian-expert` (se o plugin board-flow estiver instalado):
@@ -33,11 +42,12 @@ para um momento em que consertar é barato.
 
    Anexe o resultado ao relatório.
 
-4. Para cada ⚠/✗, proponha a correção específica (a própria mensagem já diz
-   qual é — reinstalar, rodar verify, criar `.claude/no-build`, discard de
-   worktree, apagar handoff). Execute **apenas** as que o usuário confirmar,
-   exceto correções triviais e reversíveis explicitamente pedidas na mesma
-   frase.
+4. O que sobrou no bloco **Precisa de você** são as correções que envolvem uma
+   escolha (descartar worktree com trabalho dentro, editar `board-flow.yaml`,
+   rodar o verify do projeto, criar `.claude/no-build`). Aplique o skill
+   `default-yes`: junte TODAS numa lista só, com sua recomendação por item, e
+   peça **uma** confirmação em lote no fim — nunca uma pergunta por achado, e
+   nunca uma cascata em que a resposta de um gera a próxima pergunta.
 
    **Área `ops` — trate com prioridade sobre as demais.** Ela responde "o
    harness que está rodando é o que eu acho que está?", e um ✗ aí contamina
@@ -53,8 +63,10 @@ para um momento em que consertar é barato.
 
 ## Notes
 
-- O script não toca em nada — é 100% leitura (o probe de telemetria cria e
-  apaga um arquivo próprio). Toda mutação passa pelo passo 4 com confirmação.
+- Sem `--fix` o script é 100% leitura (o probe de telemetria cria e apaga um
+  arquivo próprio) e lista, no fim, quais achados teriam correção mecânica.
+  Com `--fix` ele muta **apenas** os três tipos acima; todo o resto continua
+  passando pelo passo 4.
 - Checks de projeto rodam sobre o cwd; rode o comando de dentro do repo que
   quer diagnosticar.
 - O check `ops` é a exceção: ele lê `~/.claude/ops/last-install.json`, que é

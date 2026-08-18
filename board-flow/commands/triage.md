@@ -130,7 +130,18 @@ For IMPLEMENTED rows, show the specific `file:line` + commit in EVIDENCE, and th
 
 ### 6. Grill the NEEDS-DECISION bucket
 
-For each NEEDS-DECISION card, ask the user a focused question (use `AskUserQuestion` when the choices are discrete; ask in prose when open-ended). The question, every option label, and every option description are last-hop user-facing text — apply `conversational-response`'s "translate jargon at the human boundary" (plain headline, protocol code in parens; never a bare `L4` / `altitude` / `waiver` / `AC binário` in a label). Frame the actual decision and what each answer implies for routing — e.g.:
+**Não abra uma rodada de perguntas por card.** Aplique `default-yes`: junte
+TODAS as decisões deste balde numa única rodada, e junte a ela a confirmação do
+passo 7 e os Won't Do — o usuário responde uma vez só, em lote ("1 sim, 2
+admins, 3 não"). Uma pergunta por card, em turnos separados, é o que fazia o
+groom de um backlog consumir a sessão inteira antes de escrever qualquer coisa.
+
+Cada decisão vem com **sua recomendação explícita** e o porquê em uma linha;
+se a evidência já aponta um caminho claro, recomende-o em vez de devolver a
+escolha crua. Onde a resposta não muda o roteamento (só muda um comentário no
+card), **não pergunte** — decida e registre no relatório.
+
+Para cada card NEEDS-DECISION, formule a pergunta (use `AskUserQuestion` quando as escolhas são discretas; prosa quando aberto). The question, every option label, and every option description are last-hop user-facing text — apply `conversational-response`'s "translate jargon at the human boundary" (plain headline, protocol code in parens; never a bare `L4` / `altitude` / `waiver` / `AC binário` in a label). Frame the actual decision and what each answer implies for routing — e.g.:
 
 > WEGO-1237 — criteria conflict: criterion 2 says "any authenticated user", criterion 4 says "admins only". Which holds?
 > • Any authenticated user → card becomes READY (→ To Do)
@@ -164,7 +175,11 @@ is the moment the execution order exists; step 9 is what makes it survive the
 session. A list without `why` records the order but not the criterion, so the
 first "does this still make sense?" forces a re-priorisation from scratch.
 
-Wait for confirmation. For each Won't Do, confirm **individually** before cancelling.
+Wait for confirmation. Os Won't Do continuam exigindo um **sim explícito por
+card** — cancelar card é irreversível na prática, e essa é exatamente a
+fronteira que `default-yes` não cruza. Mas peça os K de uma vez, nomeando cada
+um com o motivo, e aceite a resposta em lote ("1 e 3 sim, 2 não"): o que estava
+errado era o vaivém de um turno por card, não a exigência do sim.
 
 ### 8. Execute transitions (via atlassian-expert only)
 
@@ -194,7 +209,7 @@ Group the work; every write delegation starts with `Topology: <default_topology>
 
 - **→ Won't Do** (only the individually-confirmed ones). Delegate the transition to the discard status, and first post a short comment with the obsolescence reason so the cancellation is auditable.
 
-- **No change.** For NEEDS-REFINEMENT cards, optionally post a comment naming what's missing (acceptance criteria, scope) so the next grooming pass is cheaper — ask the user once whether to annotate or stay silent.
+- **No change.** For NEEDS-REFINEMENT cards, **post** a comment naming what's missing (acceptance criteria, scope) so the next grooming pass is cheaper. Não pergunte se pode comentar: um comentário é registro, não mutação de estado — é o caso canônico de `default-yes`, e a alternativa (perguntar) custa um turno para uma resposta que é sempre sim. Diga no relatório quantos cards foram anotados.
 
 ### 9. Persist the execution plan
 

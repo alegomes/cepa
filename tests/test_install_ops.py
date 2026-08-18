@@ -181,7 +181,9 @@ def test_check_ops():
     def verdicts(rec):
         d.RESULTS.clear()
         d.check_ops(rec)
-        return [(lvl, msg) for lvl, area, msg in d.RESULTS]
+        # RESULTS carrega (level, area, msg, fix) desde o --fix do doctor;
+        # este teste só olha nível e mensagem.
+        return [(r[0], r[2]) for r in d.RESULTS]
 
     v = verdicts(None)
     check("sem registro → aviso (não silêncio)", v and v[0][0] == "warn", v)
