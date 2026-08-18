@@ -39,8 +39,9 @@ and I'll work them one at a time, across different sessions."
 
 ## The artifact
 
-One file: `.claude/programs/<nome>/plan.yaml`, `mode: single-track`, schema
-annotated in [`common/plan-schema.yaml`](../common/plan-schema.yaml).
+One file: `<main-root>/.claude/programs/<nome>/plan.yaml`, `mode: single-track`,
+schema annotated in [`common/plan-schema.yaml`](../common/plan-schema.yaml). The
+`<main-root>` prefix is not decoration — see "Where the file lives" below.
 
 ```yaml
 schema_version: 2
@@ -74,6 +75,32 @@ the `cepa` repo itself, which keeps its own plan at
 `.claude/programs/cepa/plan.yaml` — gets the order, the `why` and the human debt
 all the same. What it doesn't get is reconciliation, and the tooling says so
 rather than implying a verification that never happened.
+
+### Where the file lives
+
+`<programs>` = `<main-root>/.claude/programs`, where `<main-root>` is the parent
+of `git rev-parse --git-common-dir` with the trailing `/.git` removed. Inside a
+linked worktree that resolves to the MAIN clone, not to the current tree;
+anywhere else it is the same thing as `git rev-parse --show-toplevel`. Every
+command that touches a plan resolves the path this way — on read and on write
+alike.
+
+The plan is repo state, not session state, and the two obvious shortcuts each
+lose it:
+
+- **Writing it under the current worktree** hides the plan from every other
+  session and destroys it when the worktree goes. Where `.gitignore` covers
+  `.claude/` wholesale the file is invisible to git, so no guard on the removal
+  path even sees it — that is what the rescue net in `_wtlib.py` exists to catch
+  (BACKLOG, "camada 1"), and a net is worse than not needing one.
+- **Copying a plan per worktree** (adding it to the seeding list of
+  `seed_worktree`) trades a loud failure for a silent one: N copies, each
+  written by its own session, none of them wrong-looking. On 2026-08-18 two
+  copies of the same WEGO plan read 14 items and 47 items and both looked
+  authoritative.
+
+Anchoring at the main root is "camada 0" of the BACKLOG item on worktree
+artifact loss: the layer that prevents the loss instead of recovering from it.
 
 ## The three moments
 

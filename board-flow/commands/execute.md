@@ -177,13 +177,19 @@ user has to reconstruct the answer from memory. Two lines, always both:
   closes it" is the answer, not silence. Add any other human-only leftover the
   run produced (a secret to rotate, a PR to approve, a release to cut, an
   escalation left open).
-- **Next in the plan:** read `.claude/programs/<project_key>/plan.yaml` (schema
+- **Next in the plan:** read `<programs>/<project_key>/plan.yaml` (schema
   `common/plan-schema.yaml`, `mode: single-track`) and name the next `pending`
   item that is not `blocked_by` an unfinished one — key, title, and its `why`.
   Also mark the card just finished as `done` there, carrying its Human
   validation route into `human_pending`, so the leftover survives this session.
   No plan file? Say so and offer `/board-flow:triage` to create one; do not
   invent an order from the board's default sort.
+
+  `<programs>` = `<main-root>/.claude/programs`, where `<main-root>` is the
+  parent of `git rev-parse --git-common-dir` with the trailing `/.git` removed
+  — the MAIN clone when you are in a linked worktree. Resolving the plan
+  against the current tree instead loses it (`docs/execution-plan.md`,
+  "Where the file lives").
 
 ## Constraints
 

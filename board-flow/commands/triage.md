@@ -202,8 +202,17 @@ Triage is the moment the queue gets an order and a rationale. Both used to die
 in the chat: Jira stores the *queue* (To Do), never the *order* nor the *why*.
 Write them down.
 
-Update `.claude/programs/<project_key>/plan.yaml` — **one living plan per
-board**, schema `common/plan-schema.yaml`, `mode: single-track`:
+Update `<programs>/<project_key>/plan.yaml` — **one living plan per board**,
+schema `common/plan-schema.yaml`, `mode: single-track`.
+
+**`<programs>` = `<main-root>/.claude/programs`**, where `<main-root>` is the
+parent of `git rev-parse --git-common-dir` with the trailing `/.git` removed —
+the MAIN clone when you are running inside a linked worktree. Writing the plan
+under the current tree instead is how a triage dies: the worktree is removed and
+the order goes with it, invisible to git in any repo whose `.gitignore` covers
+`.claude/` (that is exactly what happened on 2026-08-18). One plan per board,
+one copy, at the main root — never a copy per worktree, which diverges in
+silence. See `docs/execution-plan.md`, "Where the file lives".
 
 ```yaml
 schema_version: 2
@@ -240,7 +249,7 @@ A single summary:
 - **Cards classified:** N
 - **→ In Review:** list of keys (or "none")
 - **→ To Do:** keys **in execution order**, each with its one-line `why`
-- **Execution plan:** `.claude/programs/<project_key>/plan.yaml` (written | updated: N new, M preserved)
+- **Execution plan:** `<programs>/<project_key>/plan.yaml` (written | updated: N new, M preserved)
 - **→ Won't Do:** list of keys (or "none — none confirmed")
 - **Stayed (needs-refinement):** list of keys
 - **Remaining in column (not classified this run):** count, if `--max` was hit
@@ -249,7 +258,7 @@ A single summary:
 ## Constraints
 
 - **Default `--max 15`.** Each card costs an evidence search; raise deliberately.
-- **The order and its `why` are outputs, not chat.** A triage run that transitions cards but leaves `.claude/programs/<project_key>/plan.yaml` unwritten has done half the job: the queue moved and the reasoning evaporated. Under `--max`, the plan holds only the cards actually classified — say so, never let a truncated plan read as the whole queue.
+- **The order and its `why` are outputs, not chat.** A triage run that transitions cards but leaves `<programs>/<project_key>/plan.yaml` unwritten has done half the job: the queue moved and the reasoning evaporated. Under `--max`, the plan holds only the cards actually classified — say so, never let a truncated plan read as the whole queue.
 - **Read-heavy, write-late.** No Jira write happens before the step-7 confirmation (and none at all under `--dry-run`).
 - **In Review here is a candidacy, not a verdict.** Triage routes by code evidence; `/board-flow:prove` is what proves load-bearing behavior at the surface. Never report a triaged-to-Review card as "done."
 - **PARTIAL never rounds up to IMPLEMENTED.** If a single acceptance criterion is unmet, the card is not done — bucket it READY or NEEDS-DECISION and name the gap.

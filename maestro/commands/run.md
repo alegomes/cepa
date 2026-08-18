@@ -10,7 +10,16 @@ argument-hint: <nome-do-programa> [--wave N] [--shadow] [--port P]
 A ação única do Maestro: sair de um `plan.yaml` aprovado para N sessões reais
 criadas, geridas e integradas. Este comando NÃO planeja (isso é
 `/maestro:program-plan`) e NÃO interpreta o BACKLOG — lê só
-`.claude/programs/<nome>/plan.yaml`.
+`PROGDIR/plan.yaml`.
+
+**`PROGDIR` = `<raiz-principal>/.claude/programs/<nome>`**, e `<raiz-principal>`
+é o pai de `git rev-parse --git-common-dir` sem o `/.git` final — em worktree
+ligada isso aponta para o CLONE PRINCIPAL, não para a árvore atual; fora dela é o
+mesmo que `git rev-parse --show-toplevel`. O plano é estado do repo, não da
+sessão: escrito dentro de worktree de sessão, morre com ela (e num repo cujo
+`.gitignore` cobre `.claude/` inteiro, nenhuma guarda do caminho de remoção
+enxerga o arquivo). Vale para ler e para escrever. Ver
+`docs/execution-plan.md`, "Where the file lives".
 
 **Pré-condições** (pare e diga ao usuário se faltar): herdr rodando
 (`herdr agent list` responde); plugin instalado após `bin/install.sh --clean`;
@@ -19,7 +28,7 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
 
 ## Variables
 
-- `PROG` = `$1` (nome do programa) · `PROGDIR` = `.claude/programs/$PROG`
+- `PROG` = `$1` (nome do programa) · `PROGDIR` = `<raiz-principal>/.claude/programs/$PROG`
 - `--wave N` (default: primeira onda `status: pending`)
 - `--shadow` — força shadow-mode do porteiro (default: shadow SE for o 1º
   programa executado, senão deny ativo — ver Passo 3)
