@@ -131,11 +131,87 @@ def test_reforma_orcamento():
               'orcamento: "só o módulo de auth"' in body, body)
 
 
+# --- hook session-mode.py ---------------------------------------------------
+HOOK = REPO / "common" / "hooks" / "session-mode.py"
+
+
+def run_hook(cwd, env=None):
+    import json as _json
+    e = {**os.environ}
+    e.update(env or {})
+    return subprocess.run(
+        [sys.executable, str(HOOK)], input=_json.dumps({"cwd": str(cwd)}),
+        capture_output=True, text=True, timeout=15, env=e,
+    )
+
+
+def ctx(proc):
+    """O texto que o modelo de fato recebe — decodificado, não o JSON cru."""
+    import json as _json
+    if not proc.stdout.strip():
+        return ""
+    return _json.loads(proc.stdout)["hookSpecificOutput"]["additionalContext"]
+
+
+def write_mode(repo, body):
+    d = repo.path / ".claude"
+    d.mkdir(exist_ok=True)
+    (d / "session-mode").write_text(body, encoding="utf-8")
+
+
+def test_hook_injeta_modo_e_saida():
+    with Repo() as r:
+        write_mode(r, "modo: construcao\nrotina: null\norcamento: null\n")
+        p = run_hook(r.path)
+        check("hook: rc=0", p.returncode == 0, p.stderr)
+        c = ctx(p)
+        check("hook: nomeia o modo", "construcao" in c, c)
+        check("hook: dá a condição de saída",
+              "completion-auditor" in c and "PROVEN" in c, c)
+        check("hook: manda capturar o desvio", "off-mode-capture" in c, c)
+
+
+def test_hook_reforma_mostra_orcamento():
+    with Repo() as r:
+        write_mode(r, 'modo: reforma\norcamento: "só o módulo de auth"\n')
+        p = run_hook(r.path)
+        c = ctx(p)
+        check("hook reforma: mostra o orçamento", "só o módulo de auth" in c, c)
+        check("hook reforma: cobra teste externo não editado",
+              "teste" in c and "externo" in c, c)
+
+
+def test_hook_silencioso_sem_modo():
+    with Repo() as r:
+        p = run_hook(r.path)
+        check("hook: silencioso sem arquivo de modo", p.stdout.strip() == "",
+              repr(p.stdout))
+        check("hook: rc=0 sem arquivo", p.returncode == 0, p.stderr)
+
+
+def test_hook_respeita_kill_switch():
+    with Repo() as r:
+        write_mode(r, "modo: construcao\n")
+        p = run_hook(r.path, env={"CEPA_MODO": "off"})
+        check("hook: CEPA_MODO=off silencia", p.stdout.strip() == "", repr(p.stdout))
+
+
+def test_hook_nunca_quebra_o_turno():
+    with Repo() as r:
+        write_mode(r, "lixo que não é yaml\n:::\n")
+        p = run_hook(r.path)
+        check("hook: arquivo corrompido não quebra", p.returncode == 0, p.stderr)
+        check("hook: arquivo corrompido não injeta nada",
+              p.stdout.strip() == "", repr(p.stdout))
+
 
 def main():
     print("test_cepa_modo")
     for fn in (test_modo_valido, test_modo_invalido, test_sem_modo_sem_tty,
-               test_kill_switch, test_reforma_orcamento):
+               test_kill_switch, test_reforma_orcamento,
+               test_hook_injeta_modo_e_saida, test_hook_reforma_mostra_orcamento,
+               test_hook_silencioso_sem_modo, test_hook_respeita_kill_switch,
+               test_hook_nunca_quebra_o_turno):
         fn()
     if failures:
         print(f"\n{len(failures)} falha(s): {', '.join(failures)}")
