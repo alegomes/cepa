@@ -59,9 +59,14 @@ def make_repo(tmp: Path):
 
 def run_doctor(root: Path, *args, worktree_home=None):
     env = dict(os.environ)
+    # Nenhuma suíte reinstala os plugins da máquina — ver
+    # tests/test_doctor_install_guard.py.
+    env["CEPA_DOCTOR_INSTALL"] = "off"
     if worktree_home:
         env["CEPA_WORKTREE_HOME"] = str(worktree_home)
-    p = subprocess.run([sys.executable, str(DOCTOR), *args],
+    # --projeto: o veredito da suíte não pode depender da instalação da máquina
+    # de quem roda (era isso que a reinstalação silenciosa "resolvia").
+    p = subprocess.run([sys.executable, str(DOCTOR), "--projeto", *args],
                        capture_output=True, text=True, cwd=str(root), env=env)
     return p.returncode, p.stdout + p.stderr
 

@@ -37,6 +37,7 @@ import py_compile
 import re
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -625,7 +626,43 @@ def check_env_manifest(root: Path):
 # tarefa. Aqui as correções mecânicas viram um lote só, aplicado de uma vez,
 # com o diagnóstico rodando de novo até parar de mudar.
 
+def install_automatico_permitido():
+    """O `--fix` pode reinstalar os plugins? Duas portas fechadas.
+
+    O `fix_install` roda o `bin/install.sh` do repo do cepa — a instalação REAL
+    da máquina, independente do diretório onde o doctor foi chamado. Isso é o
+    que se quer no preflight de uma sessão, e é exatamente o que NÃO se quer
+    quando quem chamou foi um teste: em 2026-08-19 a suíte do próprio doctor,
+    rodando em repositórios temporários, viu o repo à frente do cache e trocou
+    a instalação viva do dono no meio do `python3 tests/...`. Teste que troca o
+    harness instalado pode causar a falha que o doctor existe para achar.
+
+    Porta 1: CEPA_DOCTOR_INSTALL=off desliga explicitamente.
+    Porta 2: doctor chamado de dentro de um diretório temporário — ninguém
+    mantém projeto real ali, e é onde toda suíte roda. Vale como rede para o
+    teste que ainda não foi escrito e vai esquecer a porta 1.
+    """
+    if os.environ.get("CEPA_DOCTOR_INSTALL", "on").lower() == "off":
+        return False
+    try:
+        cwd = Path.cwd().resolve()
+    except OSError:
+        return False          # sem saber onde estamos, não se reinstala nada
+    # gettempdir() sozinho não basta: no macOS ele aponta para /var/folders/...
+    # e a suíte que rodar de /tmp passaria batido.
+    for base in (tempfile.gettempdir(), "/tmp", "/private/tmp", "/var/folders"):
+        try:
+            cwd.relative_to(Path(base).resolve())
+            return False
+        except (ValueError, OSError):
+            continue
+    return True
+
+
 def fix_install(fx):
+    if not install_automatico_permitido():
+        return False, ("reinstalar plugins é a única correção que sai do projeto e mexe "
+                       "na instalação da máquina — desligada aqui; rode bin/install.sh à mão")
     repo = fx.get("repo")
     script = Path(repo) / "bin" / "install.sh" if repo else None
     if not script or not script.is_file():
@@ -716,6 +753,10 @@ def pending_fixes():
     for level, _area, _msg, fx in RESULTS:
         if level == "ok" or not fx:
             continue
+        # Sem esta linha o install bloqueado viraria "falhou ao corrigir" em vez
+        # de "isto é com você" — e o relatório mentiria sobre o que aconteceu.
+        if fx["kind"] == "install" and not install_automatico_permitido():
+            continue
         key = (fx["kind"], fx.get("path") or fx.get("repo") or fx.get("root") or "")
         if key in seen:
             continue
@@ -724,8 +765,18 @@ def pending_fixes():
     return out
 
 
-def run_checks():
+def run_checks(somente_projeto=False):
+    """`--projeto` corta os checks globais (settings, plugins, hooks, telemetria).
+
+    Existe porque o veredito do doctor misturava duas perguntas: "este projeto
+    está são?" e "a instalação desta máquina está sã?". Para quem só quer olhar
+    o projeto — e para a suíte de testes, que não pode depender do estado da
+    máquina de quem roda — a segunda metade é ruído que muda o exit code.
+    """
     RESULTS.clear()
+    if somente_projeto:
+        check_project(Path.cwd())
+        return
     settings = check_settings()
     rec = last_install()
     check_ops(rec)
@@ -736,7 +787,7 @@ def run_checks():
     check_project(Path.cwd())
 
 
-def apply_fixes(max_passes=3):
+def apply_fixes(max_passes=3, somente_projeto=False):
     """Aplica tudo que é automático, re-diagnosticando entre as rodadas.
 
     Re-rodar é o ponto: uma correção muda o que os outros checks enxergam (o
@@ -754,7 +805,7 @@ def apply_fixes(max_passes=3):
                 continue
             good, msg = fixer(fx)
             (applied if good else failed).append((fx["kind"], msg))
-        run_checks()
+        run_checks(somente_projeto=somente_projeto)
     return applied, failed
 
 
@@ -817,6 +868,7 @@ def main():
     argv = sys.argv[1:]
     do_fix = "--fix" in argv
     brief = "--brief" in argv
+    somente_projeto = "--projeto" in argv
 
     # Preflight de abertura de sessão: silencioso e barato quando não há nada a
     # dizer. Sem isso o wrapper cobraria o diagnóstico inteiro a cada `cepa`.
@@ -824,11 +876,11 @@ def main():
     if stale_h is not None and fresh_within(stale_h):
         return 0
 
-    run_checks()
+    run_checks(somente_projeto=somente_projeto)
 
     applied, failed = ([], [])
     if do_fix:
-        applied, failed = apply_fixes()
+        applied, failed = apply_fixes(somente_projeto=somente_projeto)
     stamp_run()
 
     icons = {"ok": "✓", "warn": "⚠", "fail": "✗"}

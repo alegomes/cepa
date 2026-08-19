@@ -1,6 +1,6 @@
 ---
 description: Valida a instalação do harness contra a realidade em 30 segundos — plugins habilitados e na versão instalada, hooks compilando, board-flow.yaml estrutural, baseline de build (status + idade), worktrees stale/órfãs (inclusive a worktree de agente esquecida dentro do repo, que duplica o código-fonte) e handoffs vencidos. Com --live, também confere o board-flow.yaml contra o Jira vivo via atlassian-expert. Rode no início do dia ou quando algo do harness parecer errado — cada check existe porque a falha correspondente já custou uma tarefa.
-argument-hint: [--live] [--no-fix]
+argument-hint: [--live] [--no-fix] [--projeto]
 ---
 
 # /common:doctor
@@ -22,12 +22,22 @@ para um momento em que consertar é barato.
    python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-doctor" --fix
    ```
 
+   `--projeto` corta os checks globais (settings, plugins, hooks, telemetria) e
+   olha só este projeto — útil quando a pergunta é "este repo está são?" e não
+   "esta máquina está sã?".
+
    `--fix` aplica, em lote e sem perguntar, só o que é mecânico E reversível
    (reinstalar plugins quando o cache diverge do repo, arquivar handoff vencido
    — move, não apaga —, limpar registro de worktree cujo diretório sumiu, remover worktree de agente esquecida que já está contida na branch de integração e não guarda arquivo nenhum), e
    re-roda o diagnóstico até parar de mudar. Isso existe porque a alternativa
    era um achado por vez, cada um custando uma confirmação: a preparação
    consumia mais atenção que a tarefa da sessão.
+
+   A reinstalação é a única correção que sai do projeto e mexe na instalação da
+   máquina, então ela tem duas travas: `CEPA_DOCTOR_INSTALL=off` desliga, e o
+   doctor chamado de dentro de um diretório temporário nunca reinstala (é de lá
+   que as suítes rodam — em 2026-08-19 a suíte do próprio doctor trocou a
+   instalação viva do dono no meio de um `python3 tests/...`).
 
 2. Mostre a saída ao usuário na íntegra (✓/⚠/✗ por área, já em pt-BR),
    incluindo os blocos finais **Corrigido automaticamente** e **Precisa de você**.

@@ -72,9 +72,10 @@ def add_agent_worktree(root: Path, name="agent-a3494bc82de7f33a6", branch=None):
 
 
 def run_doctor(root: Path, *args):
-    p = subprocess.run([sys.executable, str(DOCTOR), *args],
+    p = subprocess.run([sys.executable, str(DOCTOR), "--projeto", *args],
                        capture_output=True, text=True, cwd=str(root),
-                       env=dict(os.environ, CEPA_WORKTREE_HOME=str(root / "no-such")))
+                       env=dict(os.environ, CEPA_WORKTREE_HOME=str(root / "no-such"),
+                                CEPA_DOCTOR_INSTALL="off"))
     return p.returncode, p.stdout + p.stderr
 
 
