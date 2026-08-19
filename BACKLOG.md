@@ -1672,3 +1672,47 @@ Cuidados: a suíte precisa ser barata o bastante para rodar (senão nunca roda) 
 honesta o bastante para não virar teatro — tarefa dourada que o harness acerta
 sempre não mede nada, e tarefa que ele erra sempre também não. Começar pequeno,
 com casos onde o resultado hoje é **conhecido e misto**.
+
+---
+
+## cepa-doctor não enxerga worktree de agente esquecida dentro de um repositório
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-doctor` (bloco "worktrees
+session/*", ~linha 335) · **Origem:** sessão de 2026-08-19 no `wego-acessos-extension`,
+onde o problema custou dois portões de qualidade para ser descoberto.
+
+### Problema
+
+O `cepa-doctor` rastreia worktrees `session/*` — as que o `/common:worktree-start` cria,
+fora do repo, em `~/cepa-worktrees/`. Ele **não** olha para as worktrees que a ferramenta
+de agente do Claude Code cria em `.claude/worktrees/agent-<id>`, **dentro** do próprio
+repositório, quando um subagente roda com `isolation: "worktree"`.
+
+Essas deveriam se limpar sozinhas quando nada muda, mas **sobrevivem se o agente
+commitar**. E, por morarem dentro da árvore, elas duplicam o código-fonte inteiro aos
+olhos de qualquer ferramenta que varra o repositório com `find`.
+
+O caso concreto: no `wego-acesso-backend`, a worktree `agent-a3494bc82de7f33a6` fez o
+`bin/run-dev.sh doctor` contar cada migration duas vezes e reportar **14 versões
+duplicadas que não existiam**. Ele barrou o boot do backend, o que derrubou o portão de
+prova de UI de outro repositório (`NEEDS-HUMAN`) e a auditoria de aceite de dois cards
+(`INCOMPLETE`). O diagnóstico verdadeiro — uma pasta esquecida — levou uma sessão inteira
+para aparecer, e o preflight do `cepa-doctor` tinha rodado limpo no começo dela.
+
+### Esboço de solução
+
+1. **Detectar:** no bloco de worktrees, sinalizar toda worktree registrada cujo caminho
+   caia **dentro** do próprio repositório (`.claude/worktrees/`), com quantos dias tem e
+   se a branch dela já está contida na branch de integração.
+2. **Corrigir sozinho quando for seguro** (`--fix`): branch já mesclada **e** working
+   tree sem arquivo não rastreado → `git worktree remove` + `git branch -d`. Nunca com
+   `-D`, e nunca quando houver arquivo não rastreado: no caso real havia um teste de
+   medição do WEGO-2037 que só existia ali e teria sido destruído.
+3. **Avisar sem corrigir** quando houver commit exclusivo ou arquivo não rastreado —
+   é decisão de quem é dono do trabalho, não do doctor.
+
+### Por que vale
+
+É o padrão que o `cepa-doctor` existe para atacar: falha barata de checar, cara de
+descobrir, e que se disfarça de outro problema (aqui, "migrations duplicadas") em vez de
+se apresentar pelo nome. O custo de não ter é medido — uma sessão.
