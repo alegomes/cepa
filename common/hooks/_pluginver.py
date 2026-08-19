@@ -119,6 +119,48 @@ def drifted(repo_root=None):
     return [p for p in scan(repo_root) if p["drift"] or p["missing"]]
 
 
+def loaded_now():
+    """Versão de cada plugin que uma sessão aberta AGORA carregaria do cache.
+
+    Fotografada no SessionStart e guardada na entrada da sessão. Sem essa foto,
+    ninguém consegue responder a pergunta que mais custou tempo neste harness:
+    "a sessão em que estou está rodando os hooks que acabei de instalar?".
+
+    `scan()` compara REPO com CACHE e pega o caso "editei e não reinstalei".
+    Ele não pega o caso oposto e mais traiçoeiro: reinstalei DURANTE a sessão,
+    o cache já está novo, e esta sessão segue executando os hooks velhos que
+    leu na abertura. Os dois parecem iguais no doctor e falham diferente.
+    """
+    out = {}
+    try:
+        for p in scan():
+            if p["cache_version"]:
+                out[p["name"]] = p["cache_version"]
+    except Exception:  # noqa: BLE001
+        pass
+    return out
+
+
+def session_stale(entry):
+    """Plugins que mudaram no cache DEPOIS que esta sessão abriu.
+
+    Recebe a entrada do registry. Devolve uma lista de
+    (nome, versão_carregada, versão_no_cache) — vazia quando a sessão está em
+    dia, ou quando ela é antiga demais para ter a foto (aí não há o que
+    comparar, e inventar um alerta seria pior que ficar calado).
+    """
+    booted = (entry or {}).get("plugin_versions") or {}
+    if not booted:
+        return []
+    agora = loaded_now()
+    fora = []
+    for nome, v_boot in sorted(booted.items()):
+        v_agora = agora.get(nome)
+        if v_agora and v_agora != v_boot:
+            fora.append((nome, v_boot, v_agora))
+    return fora
+
+
 def boot_notice():
     """A linha única do SessionStart, ou None quando está tudo em dia.
 
