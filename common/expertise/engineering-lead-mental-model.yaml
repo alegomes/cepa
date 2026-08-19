@@ -124,3 +124,10 @@ feedback:
     user_verdict: overrule
     user_reason: "Used `## Decision:` (H2) instead of the required `### Decision:` (H3) heading. The four fields were all present, but /common:debrief matches on the literal `### Decision:` heading — so those blocks are invisible to the tool that exists to surface them. Content compliance without heading compliance is silent invisibility, not a style nit. Future runs MUST use the exact `### Decision:` heading, even when nesting under another section."
     tag: principle
+
+  - run_id: 2026-08-18-wego-1916+2014+2024+2037
+    date: 2026-08-19
+    topic: campo Altitude do bloco Decision
+    user_verdict: overrule
+    user_reason: "O campo **Altitude:** aceita SO tres valores: strategic, tactical, implementation. Nos quatro runs de 18-19/08, 51 dos 57 blocos trouxeram palavra livre descritiva no lugar (contrato, schema, fronteira, retencao, semantica — 35 valores distintos). O campo nao pergunta DE QUE ASSUNTO e a decisao; pergunta QUEM precisa revisa-la: strategic = usuario/produto/contrato externo, tactical = lead, implementation = interno ao worker. Com palavra livre, o /common:debrief nao consegue filtrar e o usuario reve 3 decisoes em vez das ~41 que tinham consequencia. Se quiser registrar o assunto, use o proprio topico do bloco."
+    tag: principle
