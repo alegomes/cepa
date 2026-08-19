@@ -41,7 +41,7 @@ In short: if the answer to "would a competent peer in my role resolve this the s
 ```markdown
 ### Decision: <one-line topic>
 
-**Altitude:** strategic | tactical | implementation
+**Altitude:** <strategic|tactical|implementation>   ← exatamente uma destas três palavras
 
 **Options considered:**
 - Option A: <description> — pros: ... | cons: ...
@@ -52,7 +52,17 @@ In short: if the answer to "would a competent peer in my role resolve this the s
 **Rationale:** <why this option, what trade-off you accepted, what evidence supported it>
 ```
 
-**Altitude field** classifies who should review the decision at debrief time:
+**Altitude field** classifies WHO should review the decision at debrief time. It
+is a closed vocabulary of exactly three words — never a free-text description of
+what the decision is about. The subject of the decision belongs in the heading
+(`### Decision: <topic>`); writing it here ("contract", "schema", "retention")
+looks harmless and silently disables the debrief filter, which matches on these
+three literals. Measured on 2026-08-19: four autonomous runs wrote 57 decision
+blocks, 51 of them carried a free-text word in this field across 35 distinct
+values, and the debrief consequently offered the owner 3 decisions — all from
+the first card — while the highest-consequence ones stayed invisible. The
+`decision-altitude-gate` hook now blocks the write, so this can only be a
+transient mistake:
 
 - **`strategic`** — user / product / external-contract concerns. Scope, breaking changes, public naming, spec semantics, deferrals. The user reviews these at debrief.
 - **`tactical`** — orchestrator / lead concerns. Task decomposition, integration seams, merge strategy, dependency curation. Lead reviews; user may audit if interested.

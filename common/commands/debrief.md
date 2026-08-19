@@ -50,6 +50,17 @@ Walk every artifact produced during the run. The state file's `log` lists subage
 
 Tag each with: which agent wrote it (from the artifact's owner per path-lock rules), which Task / phase it belongs to, the artifact's path, and **the altitude** (read the `**Altitude:**` field from the block — `strategic`, `tactical`, or `implementation`). Blocks without an Altitude field (legacy or omitted) default to `tactical`.
 
+**A value that is NOT one of the three literals is `unclassified` — never
+silently treated as non-strategic.** Free text in this field ("contract",
+"schema", "boundary") is the 2026-08-19 failure: 51 of 57 blocks carried it, so
+the filter passed 3 decisions to the owner and buried the rest. For every
+`unclassified` block, classify by CONTENT using the markers the definition of
+strategic already names — scope, external contract, spec semantics, breaking
+change, public naming, deferral — and treat a hit as `strategic` for this
+debrief. Report the count of reclassified blocks in the walk header, so the
+owner sees the field was broken instead of trusting a filter that silently
+under-delivered.
+
 **Pass B — drift detection.** Re-scan the same artifacts looking for *informal* decision content the agent failed to put in a Decision block. Heuristics for "decision-like prose":
 
 - Sentences containing "I decided", "I chose", "we went with", "opted for", "picked X over Y", "rejected", "trade-off was".
@@ -68,7 +79,7 @@ For each candidate, capture: artifact path, line range, the prose, and a one-lin
 
 Filter the collected decisions according to the mode parsed in step 1:
 
-- **`mode = strategic-only`** (default): keep only decisions where `altitude == "strategic"`. Set aside tactical and implementation ones — they're still in the artifacts on disk; the user can re-run with `--all` later to revisit.
+- **`mode = strategic-only`** (default): keep decisions where `altitude == "strategic"`, plus every `unclassified` block whose content carries a strategic marker (previous step). Set aside tactical and implementation ones — they're still in the artifacts on disk; the user can re-run with `--all` later to revisit.
 - **`mode = all`**: keep all decisions regardless of altitude.
 
 Report the filtering result up front before walking. Example:
