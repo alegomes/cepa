@@ -1,5 +1,5 @@
 ---
-description: Valida a instalação do harness contra a realidade em 30 segundos — plugins habilitados e na versão instalada, hooks compilando, board-flow.yaml estrutural, baseline de build (status + idade), worktrees stale/órfãs e handoffs vencidos. Com --live, também confere o board-flow.yaml contra o Jira vivo via atlassian-expert. Rode no início do dia ou quando algo do harness parecer errado — cada check existe porque a falha correspondente já custou uma tarefa.
+description: Valida a instalação do harness contra a realidade em 30 segundos — plugins habilitados e na versão instalada, hooks compilando, board-flow.yaml estrutural, baseline de build (status + idade), worktrees stale/órfãs (inclusive a worktree de agente esquecida dentro do repo, que duplica o código-fonte) e handoffs vencidos. Com --live, também confere o board-flow.yaml contra o Jira vivo via atlassian-expert. Rode no início do dia ou quando algo do harness parecer errado — cada check existe porque a falha correspondente já custou uma tarefa.
 argument-hint: [--live] [--no-fix]
 ---
 
@@ -24,7 +24,7 @@ para um momento em que consertar é barato.
 
    `--fix` aplica, em lote e sem perguntar, só o que é mecânico E reversível
    (reinstalar plugins quando o cache diverge do repo, arquivar handoff vencido
-   — move, não apaga —, limpar registro de worktree cujo diretório sumiu), e
+   — move, não apaga —, limpar registro de worktree cujo diretório sumiu, remover worktree de agente esquecida que já está contida na branch de integração e não guarda arquivo nenhum), e
    re-roda o diagnóstico até parar de mudar. Isso existe porque a alternativa
    era um achado por vez, cada um custando uma confirmação: a preparação
    consumia mais atenção que a tarefa da sessão.
@@ -43,7 +43,7 @@ para um momento em que consertar é barato.
    Anexe o resultado ao relatório.
 
 4. O que sobrou no bloco **Precisa de você** são as correções que envolvem uma
-   escolha (descartar worktree com trabalho dentro, editar `board-flow.yaml`,
+   escolha (descartar worktree com trabalho dentro — inclusive a worktree de agente que ainda tem commit ou arquivo não rastreado —, editar `board-flow.yaml`,
    rodar o verify do projeto, criar `.claude/no-build`). Aplique o skill
    `default-yes`: junte TODAS numa lista só, com sua recomendação por item, e
    peça **uma** confirmação em lote no fim — nunca uma pergunta por achado, e

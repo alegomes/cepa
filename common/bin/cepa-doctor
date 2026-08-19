@@ -18,6 +18,8 @@ Checks do projeto (cwd):
   - board-flow.yaml: estrutura mínima do bloco defaults
   - .claude/last-build.json: status e idade do baseline
   - worktrees session/*: stale (>14d sem commit) e diretórios órfãos
+  - worktrees de agente esquecidas DENTRO do repo (.claude/worktrees/): elas
+    duplicam o código-fonte para toda ferramenta que varre o projeto com find
   - handoffs: arquivos sem update há >30d (fonte de fatos stale)
   - ambiente (.claude/env.yaml, ver docs/env-manifest.md): portas declaradas
     ocupadas por processo de OUTRO diretório (lsof) e containers de `services`
@@ -208,6 +210,123 @@ def main_worktree_root(cwd: Path):
         return None
 
 
+def parse_worktrees(porcelain: str):
+    """`git worktree list --porcelain` em registros — path, branch, detached,
+    prunable. O parse linha-a-linha antigo só enxergava quem tinha `branch`, e
+    worktree de agente costuma estar em HEAD destacado."""
+    out, cur = [], None
+    for line in porcelain.splitlines():
+        if line.startswith("worktree "):
+            if cur:
+                out.append(cur)
+            cur = {"path": line.split(" ", 1)[1], "branch": None,
+                   "detached": False, "prunable": False, "head": None}
+        elif cur is None:
+            continue
+        elif line.startswith("branch "):
+            cur["branch"] = line.split(" ", 1)[1].replace("refs/heads/", "")
+        elif line.startswith("HEAD "):
+            cur["head"] = line.split(" ", 1)[1]
+        elif line.startswith("detached"):
+            cur["detached"] = True
+        elif line.startswith("prunable"):
+            cur["prunable"] = True
+    if cur:
+        out.append(cur)
+    return out
+
+
+def dentro_do_repo(root: Path, path: str) -> bool:
+    try:
+        Path(path).resolve().relative_to(root.resolve())
+        return True
+    except (ValueError, OSError):
+        return False
+
+
+def base_branch(root: Path) -> str:
+    """A branch onde o trabalho desemboca — mesma heurística do _wtlib."""
+    rc, out, _ = git(["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], cwd=str(root))
+    if rc == 0 and out.strip():
+        return out.strip().replace("refs/remotes/origin/", "")
+    for cand in ("main", "master"):
+        rc, _, _ = git(["rev-parse", "--verify", "--quiet", cand], cwd=str(root))
+        if rc == 0:
+            return cand
+    return "main"
+
+
+def contido_na_base(root: Path, ref: str, base: str) -> bool:
+    """True quando `ref` não tem nada que a base já não tenha."""
+    if not ref:
+        return False
+    rc, _, _ = git(["merge-base", "--is-ancestor", ref, base], cwd=str(root))
+    return rc == 0
+
+
+def sujeira(path: str):
+    """Arquivos não rastreados + modificações pendentes na worktree.
+
+    Ignorados ficam de fora de propósito: build output nunca deixaria uma
+    worktree removível, e o que se quer proteger é trabalho que só existe ali.
+    """
+    rc, out, _ = git(["status", "--porcelain", "--untracked-files=all"], cwd=path)
+    if rc != 0:
+        return None          # não deu para saber → trata como perigoso
+    return [l for l in out.splitlines() if l.strip()]
+
+
+def check_worktree_interna(root: Path, wt):
+    """Worktree registrada DENTRO do próprio repositório.
+
+    A ferramenta de subagente do Claude Code cria worktree em
+    `.claude/worktrees/agent-<id>` — dentro da árvore, não em ~/cepa-worktrees/.
+    Deveria sumir sozinha quando nada muda, mas SOBREVIVE se o agente commitar.
+    E, por morar dentro do repo, ela duplica o código-fonte inteiro aos olhos de
+    qualquer ferramenta que varra o projeto com `find`.
+
+    O caso que pagou por este check (2026-08-19, wego-acesso-backend): a sobra
+    `agent-a3494bc82de7f33a6` fez o `bin/run-dev.sh doctor` contar cada migration
+    duas vezes e acusar 14 versões duplicadas inexistentes. Isso barrou o boot do
+    backend, derrubou o portão de prova de UI de outro repo e a auditoria de
+    aceite de dois cards — e o preflight do cepa-doctor tinha rodado limpo.
+    """
+    path = wt["path"]
+    rel = Path(path).resolve()
+    try:
+        rel = rel.relative_to(root.resolve())
+    except ValueError:
+        pass
+    ref = wt["branch"] or wt["head"]
+    base = base_branch(root)
+    idade = ""
+    rc, out, _ = git(["log", "-1", "--format=%ct"], cwd=path)
+    if rc == 0 and out.strip().isdigit():
+        d = (datetime.now(timezone.utc).timestamp() - int(out.strip())) / 86400
+        idade = f", último commit há {d:.0f}d"
+
+    dano = "duplica o código-fonte para qualquer ferramenta que varra o repo com find"
+    suja = sujeira(path)
+    if suja is None:
+        warn("worktrees", f"worktree de agente em {rel} — {dano}; "
+                          f"não deu para ler o estado dela, remova à mão se for lixo")
+        return
+    if suja:
+        warn("worktrees", f"worktree de agente em {rel} com {len(suja)} arquivo(s) "
+                          f"não rastreado(s)/modificado(s){idade} — {dano}; "
+                          f"salve o que importa antes de remover (decisão sua, não do doctor)")
+        return
+    if not contido_na_base(root, ref, base):
+        warn("worktrees", f"worktree de agente em {rel} com commit que {base} não tem{idade} "
+                          f"— {dano}; mescle ou descarte (decisão sua, não do doctor)")
+        return
+    alvo = f" e apaga a branch {wt['branch']}" if wt["branch"] else ""
+    warn("worktrees", f"worktree de agente esquecida em {rel} (já contida em {base}, "
+                      f"sem arquivo pendente){idade} — {dano}",
+         fix={"kind": "worktree_interna", "root": str(root), "path": path,
+              "branch": wt["branch"] or "", "base": base, "alvo": alvo})
+
+
 def check_sessoes_desatualizadas():
     """Sessões ABERTAS que carregaram uma versão que o cache já não tem.
 
@@ -345,20 +464,20 @@ def check_project(cwd: Path):
             warn("worktrees", f"{prunable} registro(s) de worktree apontando para diretório "
                               f"inexistente — git worktree prune limpa o ponteiro",
                  fix={"kind": "worktree_prune", "root": str(root)})
-        wt_path = None
-        for line in out.splitlines():
-            if line.startswith("worktree "):
-                wt_path = line.split(" ", 1)[1]
-            elif line.startswith("branch ") and wt_path:
-                branch = line.split("/", 2)[-1] if "refs/heads/" in line else line
-                if "session/" in line:
-                    registered.add(Path(wt_path).name)
-                    rc2, out2, _ = git(["log", "-1", "--format=%ct"], cwd=wt_path)
-                    if rc2 == 0 and out2.strip().isdigit():
-                        d = (datetime.now(timezone.utc).timestamp() - int(out2.strip())) / 86400
-                        if d > 14:
-                            warn("worktrees", f"{Path(wt_path).name} ({branch.strip()}) sem commit há {d:.0f}d — merge ou /common:worktree-discard")
-                wt_path = None
+        for wt in parse_worktrees(out):
+            wt_path, branch = wt["path"], wt["branch"]
+            if wt["prunable"] or Path(wt_path).resolve() == root.resolve():
+                continue
+            if dentro_do_repo(root, wt_path):
+                check_worktree_interna(root, wt)
+                continue
+            if branch and "session/" in branch:
+                registered.add(Path(wt_path).name)
+                rc2, out2, _ = git(["log", "-1", "--format=%ct"], cwd=wt_path)
+                if rc2 == 0 and out2.strip().isdigit():
+                    d = (datetime.now(timezone.utc).timestamp() - int(out2.strip())) / 86400
+                    if d > 14:
+                        warn("worktrees", f"{Path(wt_path).name} ({branch}) sem commit há {d:.0f}d — merge ou /common:worktree-discard")
     wt_home = Path(os.environ.get("CEPA_WORKTREE_HOME")
                    or os.environ.get("CCW_WORKTREE_HOME")
                    or (Path.home() / "cepa-worktrees"))
@@ -543,10 +662,43 @@ def fix_worktree_prune(fx):
     return True, "registros de worktree órfãos limpos"
 
 
+def fix_worktree_interna(fx):
+    """Remove worktree de agente esquecida — só quando ela não guarda trabalho.
+
+    As três travas são deliberadas e redundantes: o diagnóstico já checou, mas
+    entre diagnosticar e corrigir cabe uma sessão inteira, e o que se perde aqui
+    não volta. No caso real havia um teste de medição do WEGO-2037 que só existia
+    dentro da worktree.
+    """
+    path, root = fx["path"], fx["root"]
+    branch, base = fx.get("branch") or "", fx.get("base") or "main"
+
+    suja = sujeira(path)
+    if suja is None:
+        return False, f"não deu para ler o estado de {path} — nada removido"
+    if suja:
+        return False, (f"{Path(path).name} ganhou {len(suja)} arquivo(s) pendente(s) "
+                       f"desde o diagnóstico — nada removido")
+    if not contido_na_base(Path(root), branch or "HEAD", base):
+        return False, f"{Path(path).name} tem commit que {base} não tem — nada removido"
+
+    # sem --force de propósito: o próprio git recusa se ainda houver sujeira.
+    rc, _, err = git(["worktree", "remove", path], cwd=root)
+    if rc != 0:
+        return False, f"git worktree remove recusou: {err.strip()[:160]}"
+    msg = f"worktree de agente {Path(path).name} removida"
+    if branch:
+        # -d, nunca -D: se o git achar que a branch não está mesclada, ela fica.
+        rc, _, err = git(["branch", "-d", branch], cwd=root)
+        msg += f" e branch {branch} apagada" if rc == 0 else f" (branch {branch} mantida: {err.strip()[:80]})"
+    return True, msg
+
+
 FIXERS = {
     "install": fix_install,
     "archive_handoff": fix_archive_handoff,
     "worktree_prune": fix_worktree_prune,
+    "worktree_interna": fix_worktree_interna,
 }
 
 # Rótulo leigo por tipo de correção — o relatório fala do efeito, não do comando.
@@ -554,6 +706,7 @@ FIX_LABEL = {
     "install": "reinstalar os plugins (o que está valendo passa a ser o que está no repo)",
     "archive_handoff": "arquivar handoff vencido (move para archive/, não apaga)",
     "worktree_prune": "limpar registro de worktree cujo diretório já não existe",
+    "worktree_interna": "remover worktree de agente esquecida dentro do repo (só a que não guarda trabalho)",
 }
 
 

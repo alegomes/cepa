@@ -1677,9 +1677,11 @@ com casos onde o resultado hoje é **conhecido e misto**.
 
 ## cepa-doctor não enxerga worktree de agente esquecida dentro de um repositório
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-doctor` (bloco "worktrees
-session/*", ~linha 335) · **Origem:** sessão de 2026-08-19 no `wego-acessos-extension`,
-onde o problema custou dois portões de qualidade para ser descoberto.
+**Status:** FEITO (common 1.2.0) · **Lar:** `common/bin/cepa-doctor`
+(`check_worktree_interna` + `fix_worktree_interna`), teste em
+`tests/test_doctor_worktree_interna.py` · **Origem:** sessão de 2026-08-19 no
+`wego-acessos-extension`, onde o problema custou dois portões de qualidade para
+ser descoberto.
 
 ### Problema
 
