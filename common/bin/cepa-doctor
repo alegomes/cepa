@@ -192,6 +192,65 @@ def check_plugins(settings, rec=None):
             ok("plugins", f"{name} {cache_v} instalado e habilitado")
 
 
+def main_worktree_root(cwd: Path):
+    """Raiz da worktree PRINCIPAL — é lá que o registry de sessões vive, mesmo
+    quando o doctor roda de dentro de uma worktree de sessão."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=str(cwd),
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode != 0:
+            return None
+        gd = Path(r.stdout.strip())
+        if not gd.is_absolute():
+            gd = (Path(cwd) / gd).resolve()
+        return gd.parent if gd.name == ".git" else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def check_sessoes_desatualizadas():
+    """Sessões ABERTAS que carregaram uma versão que o cache já não tem.
+
+    O check de plugins acima compara repo com cache: pega quem editou e não
+    instalou. Este pega o oposto — instalou com a sessão aberta. O cache fica
+    novo, a sessão segue executando os hooks que leu na abertura, e nada na
+    tela distingue os dois. Foi assim que "isso já está valendo" virou a
+    afirmação mais cara deste harness.
+    """
+    if PV is None:
+        return
+    root = main_worktree_root(Path.cwd())
+    if root is None:
+        return
+    sdir = root / ".claude" / "sessions"
+    if not sdir.is_dir():
+        return
+    achou = False
+    sem_foto = 0
+    for f in sorted(sdir.glob("*.json")):
+        try:
+            entry = json.loads(f.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            continue
+        if not entry.get("plugin_versions"):
+            sem_foto += 1
+            continue
+        fora = PV.session_stale(entry)
+        if not fora:
+            continue
+        achou = True
+        quais = ", ".join(f"{n} {vb} → cache {va}" for n, vb, va in fora)
+        onde = entry.get("branch") or entry.get("cwd") or f.stem
+        warn("sessões", f"{onde}: carregou {quais} — os hooks dessa sessão são os "
+                        f"antigos; reinicie a sessão para valer")
+    if not achou:
+        if sem_foto:
+            ok("sessões", f"nenhuma sessão desatualizada ({sem_foto} sem foto de "
+                          f"versão — abertas antes deste check existir)")
+        else:
+            ok("sessões", "toda sessão aberta está na versão que o cache tem")
+
+
 def check_hooks_compile():
     cache_root = CLAUDE_DIR / "plugins" / "cache" / "cepa"
     if not cache_root.is_dir():
@@ -518,6 +577,7 @@ def run_checks():
     rec = last_install()
     check_ops(rec)
     check_plugins(settings, rec)
+    check_sessoes_desatualizadas()
     check_hooks_compile()
     check_telemetry()
     check_project(Path.cwd())

@@ -102,6 +102,10 @@ def on_start(session_id: str, cwd: str) -> None:
         }
     entry["session_id"] = session_id
     entry["last_seen"] = L.now_iso()
+    # Foto das versões que ESTA sessão carregou. Um reinstall no meio da sessão
+    # atualiza o cache mas não os hooks já lidos; sem a foto, nada distingue
+    # "está valendo" de "vai valer na próxima sessão".
+    entry.setdefault("plugin_versions", V.loaded_now())
     entry.setdefault("start_commit", L.current_commit(cwd))  # baseline for "commits this session"
     entry.pop("claim", None)
     L.write_entry(root, session_id, entry)
