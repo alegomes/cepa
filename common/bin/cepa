@@ -63,6 +63,82 @@ preflight() {
   return 0
 }
 
+# --- Modo de trabalho -------------------------------------------------------
+# Toda sessão declara em qual dos modos ela opera; o modo é um ESTADO que dura
+# a sessão inteira (a rotina é uma tarefa que acaba). Gravado em
+# .claude/session-mode para os hooks lerem. Desenho: docs/modos-de-trabalho.md.
+#
+# Sem modo o cepa NÃO sobe: um default silencioso reconstrói exatamente o
+# vazamento entre atividades que o modo existe para fechar. Escape:
+# CEPA_MODO=off (não grava, não pergunta, cepa se comporta como antes).
+MODOS="exploracao descoberta design construcao reforma reflexao documentacao"
+
+modo_valido() {
+  for _m in $MODOS; do [ "$_m" = "$1" ] && return 0; done
+  return 1
+}
+
+# Pergunta o modo em /dev/tty. Sem tty, não há como perguntar → falha com a
+# instrução, em vez de assumir um modo por você.
+ask_modo() {
+  if [ ! -t 0 ] || [ ! -r /dev/tty ]; then
+    printf '✗ cepa: nenhuma sessão sobe sem modo declarado.\n' >&2
+    printf '  Use: cepa --modo <%s>\n' "$(printf '%s' "$MODOS" | tr ' ' '|')" >&2
+    printf '  Ou desligue a exigência com CEPA_MODO=off\n' >&2
+    return 1
+  fi
+  printf 'Em qual modo esta sessão opera?\n' >&2
+  _i=0
+  for _m in $MODOS; do _i=$((_i+1)); printf '  %d) %s\n' "$_i" "$_m" >&2; done
+  printf 'modo? [número ou nome] > ' >&2
+  _ans=""
+  read -r _ans < /dev/tty || return 1
+  [ -n "$_ans" ] || return 1
+  case "$_ans" in
+    *[!0-9]*) printf '%s\n' "$_ans" ;;
+    *) printf '%s\n' "$MODOS" | tr ' ' '\n' | sed -n "${_ans}p" ;;
+  esac
+}
+
+# Reforma sem orçamento nunca termina — sempre tem mais um ajuste. O orçamento
+# é a lista fechada do que será reformado; ele É a condição de saída do modo.
+ask_orcamento() {
+  if [ ! -t 0 ] || [ ! -r /dev/tty ]; then
+    printf '✗ cepa: modo reforma exige --orcamento "<escopo fechado>"\n' >&2
+    return 1
+  fi
+  printf 'Orçamento da reforma (o que exatamente será reformado): ' >&2
+  _o=""
+  read -r _o < /dev/tty || return 1
+  [ -n "$_o" ] || return 1
+  printf '%s\n' "$_o"
+}
+
+# Todo caminho que lança o claude passa por aqui, para que o modo seja gravado
+# no diretório onde a sessão vai de fato rodar (raiz OU worktree isolada).
+launch_here() {
+  write_modo "$PWD"
+  exec "$CLAUDE_BIN" "$@"
+}
+
+write_modo() {
+  [ "${CEPA_MODO:-on}" = "off" ] && return 0
+  [ -n "$MODO" ] || return 0
+  mkdir -p "$1/.claude" 2>/dev/null || return 0
+  {
+    printf 'modo: %s\n' "$MODO"
+    printf 'rotina: null\n'
+    if [ -n "$ORCAMENTO" ]; then
+      printf 'orcamento: "%s"\n' "$(printf '%s' "$ORCAMENTO" | sed 's/"/\\"/g')"
+    else
+      printf 'orcamento: null\n'
+    fi
+    printf 'aberto_em: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$1/.claude/session-mode" 2>/dev/null || return 0
+  printf '◆ modo: %s\n' "$MODO" >&2
+  return 0
+}
+
 # Interactive picker for `cepa -s` with no name: choose an existing session/*
 # worktree to resume, newest commit first, each captioned with its label (the
 # branch's git description). Uses fzf when present, else a numbered /dev/tty
@@ -110,8 +186,18 @@ pick_slice() {
 # Parse our own flags; everything else goes to claude.
 SLICE=""
 PICK=0
+MODO="${CEPA_MODO_DEFAULT:-}"
+ORCAMENTO=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    -m|--modo)
+      [ $# -ge 2 ] || { printf '✗ cepa: --modo exige um valor\n' >&2; exit 2; }
+      MODO="$2"; shift 2 ;;
+    --modo=*)  MODO="${1#--modo=}"; shift ;;
+    --orcamento)
+      [ $# -ge 2 ] || { printf '✗ cepa: --orcamento exige um valor\n' >&2; exit 2; }
+      ORCAMENTO="$2"; shift 2 ;;
+    --orcamento=*) ORCAMENTO="${1#--orcamento=}"; shift ;;
     -s|--slice)
       # A real slice name follows only if the next arg exists, is non-empty,
       # and isn't itself a flag. Otherwise `-s` means "let me pick one".
@@ -128,14 +214,34 @@ done
 # Not a git repo, or can't find the helper → just be claude.
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exec "$CLAUDE_BIN" "$@"
 
+# Modo: exigido antes de qualquer coisa acontecer. Um modo inválido é erro (não
+# vira pergunta) — o erro é de quem digitou, e adivinhar seria o default
+# silencioso que este desenho recusa.
+if [ "${CEPA_MODO:-on}" != "off" ]; then
+  if [ -n "$MODO" ] && ! modo_valido "$MODO"; then
+    printf '✗ cepa: modo desconhecido: %s\n  válidos: %s\n' "$MODO" "$MODOS" >&2
+    exit 2
+  fi
+  if [ -z "$MODO" ]; then
+    MODO=$(ask_modo) || exit 2
+    modo_valido "$MODO" || {
+      printf '✗ cepa: modo desconhecido: %s\n  válidos: %s\n' "$MODO" "$MODOS" >&2
+      exit 2
+    }
+  fi
+  if [ "$MODO" = "reforma" ] && [ -z "$ORCAMENTO" ]; then
+    ORCAMENTO=$(ask_orcamento) || exit 2
+  fi
+fi
+
 preflight
 
-[ -f "$LAUNCH_PY" ] || exec "$CLAUDE_BIN" "$@"
+[ -f "$LAUNCH_PY" ] || launch_here "$@"
 
 # Already inside a session worktree → nothing to isolate.
 BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
 case "$BRANCH" in
-  session/*) exec "$CLAUDE_BIN" "$@" ;;
+  session/*) launch_here "$@" ;;
 esac
 
 # `cepa -s` with no name → pick a recent worktree to resume. Cancel or an empty
@@ -148,15 +254,16 @@ fi
 
 # Decide (atomic, under lock). On any failure, fall back to launching in place.
 RESULT=$(CLAUDE_WT_ROOT="$ROOT" CLAUDE_WT_SLICE="$SLICE" python3 "$LAUNCH_PY") \
-  || exec "$CLAUDE_BIN" "$@"
+  || launch_here "$@"
 
 DIR=$(printf '%s' "$RESULT" | cut -f1)
 CLAIM=$(printf '%s' "$RESULT" | cut -f2)
-[ -n "$DIR" ] || exec "$CLAUDE_BIN" "$@"
+[ -n "$DIR" ] || launch_here "$@"
 
-cd "$DIR" || exec "$CLAUDE_BIN" "$@"
+cd "$DIR" || launch_here "$@"
 if [ "$DIR" != "$ROOT" ]; then
   printf '⊕ Another session is live in %s\n  → isolated this one to %s\n' "$ROOT" "$DIR" >&2
 fi
 
+write_modo "$PWD"
 exec env CLAUDE_WT_CLAIM="$CLAIM" "$CLAUDE_BIN" "$@"

@@ -1,11 +1,26 @@
 ---
 name: suggest-capture
-description: Use when the user makes a new work request — a feature, bug fix, refactor, investigation, or anything that would normally become a Jira card — and no existing Jira key has been mentioned in the conversation. Suggest running /board-flow:capture to register the work before starting. Do NOT trigger for clarifying questions, opinion requests, code reads, or follow-ups on already-tracked work.
+description: Use ONLY when no work mode is active (no "[modo]" line in context). With a mode active, `common:off-mode-capture` takes over and captures silently instead of asking. Otherwise: use when the user makes a new work request — a feature, bug fix, refactor, investigation, or anything that would normally become a Jira card — and no existing Jira key has been mentioned in the conversation. Suggest running /board-flow:capture to register the work before starting. Do NOT trigger for clarifying questions, opinion requests, code reads, or follow-ups on already-tracked work.
 ---
 
 # Suggest capture
 
 When board-flow is active, Jira should be the source of truth for tracked work. But auto-creating a card on every user message is noisy and brittle (most messages aren't work items). This skill threads the needle: when the user clearly asks for new work and there's no card yet, **suggest** capturing — don't do it silently.
+
+## Precedence: a work mode outranks this skill
+
+If the context carries a `[modo] Esta sessão opera em ...` line, this skill does
+**not** fire — `common:off-mode-capture` owns the decision and captures without
+asking. Hand over, don't double up.
+
+The reason this skill asks in the first place is stated under "Why this exists":
+classifying every prompt as work-or-not would cost an LLM call per turn and still
+misclassify. **That cost disappears once a mode is declared.** The question stops
+being "is this work?" (a classification) and becomes "does this belong to the
+active mode?" (a comparison against a condition you already know, because you were
+the one about to act). No classification, no cost, no reason to ask.
+
+Without a mode, the original reasoning stands — keep asking.
 
 ## When to fire
 
