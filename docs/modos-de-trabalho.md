@@ -93,8 +93,17 @@ sem ela o modo é rótulo, não fronteira.
      você precisou mudar o teste que já passava, o comportamento observável
      mudou — não foi reforma, foi construção, e deveria ter tido critério de
      aceite.
-- **Gate:** **não existe.** A condição 3 é mecânica (o diff dos arquivos de
-  teste externo tem que ser vazio) e é o que precisa ser construído.
+- **Gate:** a condição 3 roda em `common/hooks/reforma-gate.py`, que **bloqueia**
+  a edição de teste externo enquanto o modo reforma está ativo — em Edit/Write/
+  MultiEdit e também em Bash (`>`, `>>`, `sed -i`, `tee`), porque bloquear só a
+  ferramenta de escrita já deixou agentes escaparem por `sed` neste repo.
+  Bloqueia em vez de avisar: o aviso chega depois do vazamento. Teste de unidade
+  segue livre (renomear uma classe obriga a mexer no teste dela, e isso é
+  reforma legítima); a lista do que conta como externo está no hook e cada repo
+  a sobrescreve em `.claude/external-tests`, um glob por linha.
+
+  As condições 1 e 2 não têm gate e não vão ter: orçamento é texto livre, e
+  build verde já é trabalho do `green-or-revert`.
 
 ### 6. Reflexão
 
