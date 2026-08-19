@@ -4,7 +4,7 @@ Achados que apareceram fora do modo da sessão em que nasceram. Registrados em
 vez de trabalhados, para não virarem o próprio vazamento que os modos existem
 para impedir (docs/modos-de-trabalho.md).
 
-- [ ] 2026-08-18 · modo: construcao · `/board-flow:triage` proíbe agrupar
+- [x] 2026-08-18 · modo: construcao · RESOLVIDO em board-flow 0.16.0 (a regra saiu; Won't Do entra na rodada única). `/board-flow:triage` proibia agrupar
   exatamente a decisão mais repetitiva da triagem: *"Nothing destructive without
   a per-card yes. OBSOLETE → Won't Do is never batch-applied. Each cancellation
   is confirmed individually"* (`board-flow/commands/triage.md:38`). Isso
