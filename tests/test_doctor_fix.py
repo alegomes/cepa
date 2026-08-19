@@ -150,15 +150,17 @@ def test_preflight_do_wrapper():
         (tmpp / "broken" / "hooks").mkdir()
         (bindir / "cepa-doctor").write_text("raise SystemExit('boom')\n", encoding="utf-8")
         (bindir / "cepa").write_text(wrapper.read_text(encoding="utf-8"), encoding="utf-8")
+        # --modo: desde common 1.0.0 nenhuma sessão sobe sem modo declarado, e
+        # sem tty o cepa não tem como perguntar.
         env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT_TTL="0")
-        p = subprocess.run(["sh", str(bindir / "cepa")], capture_output=True,
-                           text=True, cwd=str(root), env=env)
+        p = subprocess.run(["sh", str(bindir / "cepa"), "--modo", "construcao"],
+                           capture_output=True, text=True, cwd=str(root), env=env)
         check("doctor quebrado NÃO impede a sessão de abrir",
               "SESSAO-ABRIU" in p.stdout, p.stdout + p.stderr)
 
         env_off = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT="off")
-        p = subprocess.run(["sh", str(wrapper)], capture_output=True, text=True,
-                           cwd=str(root), env=env_off)
+        p = subprocess.run(["sh", str(wrapper), "--modo", "construcao"],
+                           capture_output=True, text=True, cwd=str(root), env=env_off)
         check("CEPA_PREFLIGHT=off desliga o preflight",
               "SESSAO-ABRIU" in p.stdout and "cepa-doctor" not in p.stderr,
               p.stdout + p.stderr)
