@@ -35,7 +35,7 @@ You are the orchestrator. You classify and route; you do not implement. Hard rul
 - **`atlassian-expert` is the only Jira write path.** Never call Atlassian MCP tools directly. If it isn't installed, abort.
 - **Evidence before verdict.** A card is `ALREADY-IMPLEMENTED` only with concrete code evidence (`file:line` + the commit that introduced it). "There's a comment saying it's done" is not evidence — it's a hint to go look. Apply `evidence-over-assumption` and `acceptance-completeness`: the evidence must demonstrate the card's acceptance criteria at the surface they're written at, not just that *some* related code exists.
 - **Triage ≠ proof.** Moving a card to In Review here means "looks done, queue it for proof," never "proven." Always end by pointing the freshly-moved cards at `/board-flow:prove-drain`. Don't let triage's confidence leak into a done claim.
-- **Nothing destructive without a per-card yes.** OBSOLETE → Won't Do is never batch-applied. Each cancellation is confirmed individually.
+- **Nothing destructive without a yes — mas UM yes, no lote.** Won't Do entra na rodada única do passo 6/7 como qualquer outra decisão, listando cada card com o motivo e o card canônico. O usuário responde em lote ("os dedups sim, o 1236 não"). **Não** peça confirmação card a card: Won't Do é reversível no Jira, e a confirmação individual custava mais atenção que o próprio risco — numa fila com K obsoletos eram K interrupções, contradizendo o `default-yes` que o passo 6 deste mesmo arquivo manda aplicar. Evidência: a sessão de triagem de 2026-08-18 começou 20:25 e às 21:45 ainda não tinha chegado ao plano de execução.
 - **Apply `scope-discipline`** across the sweep (never exceed `--max`) and `name-the-disagreement` when the evidence is mixed (e.g. partially implemented).
 
 ## Workflow
@@ -78,7 +78,7 @@ Then assign the bucket by this **precedence**:
 2. **ALREADY-IMPLEMENTED** — every *verbatim* acceptance criterion came back IMPLEMENTED with `file:line` + commit, AND the cited code targets the AC at the surface it's written at. (Mixed/PARTIAL does **not** qualify — name the gap and fall through; a partially-done card is usually READY or NEEDS-DECISION, not done.) For each Bucket-1 card also record two attributes, carried into steps 5–8 so the proof gate isn't blindsided:
    - **proof-strategy hint** — how the proof gate should later attack it, inferred from the card's type: **Bug** → the regression test must go RED at `base_commit` (highest false-positive risk — "code looks fixed + a test exists" is the classic false-green); **AC at an external surface (REST endpoint / outbound payload) but only a unit test covers it** → altitude gap, expect `completion-auditor` INCOMPLETE / an E2E is needed; **already has contract + E2E** → load-bearing proof should be cheap and pass; **boot/config behavior** → perturbation (force the bad config, e.g. the feature flag off in prod, require fail-fast abort).
    - **not-perturbable flag** — set it for cards whose "done" can't be shown by breaking prod code and re-running a test (seed / reference data, pure configuration). Their confidence comes from inspection/query, not proof — flag them so `/board-flow:prove-drain` treats them as inspect-not-prove instead of bouncing them UNPROVEN.
-3. **OBSOLETE** — superseded, a **duplicate of another card (dedup)**, or targets code/an area that no longer exists. A dedup card is **not** "done" even if the behavior exists — bucket it OBSOLETE, not In Review, and before proposing Won't Do confirm the **canonical** card's real state (it may itself be unfinished). Always cite the canonical key in the reason.
+3. **OBSOLETE** — superseded, a **duplicate of another card (dedup)**, or targets code/an area that no longer exists. A dedup card is **not** "done" even if the behavior exists — bucket it OBSOLETE, not In Review, and before proposing Won't Do confirm the **canonical** card's real state (it may itself be unfinished). Always cite the canonical key in the reason. O cancelamento entra na rodada única — cite a chave canônica ali, para o usuário decidir o lote com a evidência à vista.
 4. **READY** — clear outcome, acceptance criteria present, bounded scope; nothing blocks a developer from starting. Apply the same **BDD-or-substrate** test the maestro's intake gate applies (`cepa-dor`): if the card's acceptance criteria only name private implementation steps — no Given/When/Then observable at *some* surface — it is not READY unless the card explicitly declares itself substrate (technical work whose legitimate acceptance is technical). Otherwise it falls to NEEDS-REFINEMENT with that named as the gap. A card nobody can verify from outside is a card whose "done" will be argued about later.
 5. **NEEDS-REFINEMENT (stays in backlog)** — none of the above; too thin to start, not obsolete, not done.
 
@@ -161,7 +161,7 @@ Proposed transitions:
       1. WEGO-1235  — unblocks 1237 and 1240, which touch the same hook
       2. WEGO-1240  — needs the hook stabilised by 1235
       3. WEGO-1237  — independent; last because it is the largest
-  → Won't Do (K):  WEGO-1236  ← per-card confirm required
+  → Won't Do (K):  WEGO-1236  (dedup de WEGO-1240)   ← reversível no Jira
   No change (J):   WEGO-1238 (needs-refinement)
 
 Apply? yes / no / pick (e.g. "only the To Do moves").
@@ -207,7 +207,7 @@ Group the work; every write delegation starts with `Topology: <default_topology>
 
 - **→ To Do.** Delegate: `Transition Jira issue <KEY> to status \`<defaults.status_map.to_do>\`.`
 
-- **→ Won't Do** (only the individually-confirmed ones). Delegate the transition to the discard status, and first post a short comment with the obsolescence reason so the cancellation is auditable.
+- **→ Won't Do** (os que o usuário aprovou na rodada única — não os que ele tirou do lote). Delegate the transition to the discard status, and first post a short comment with the obsolescence reason so the cancellation is auditable.
 
 - **No change.** For NEEDS-REFINEMENT cards, **post** a comment naming what's missing (acceptance criteria, scope) so the next grooming pass is cheaper. Não pergunte se pode comentar: um comentário é registro, não mutação de estado — é o caso canônico de `default-yes`, e a alternativa (perguntar) custa um turno para uma resposta que é sempre sim. Diga no relatório quantos cards foram anotados.
 

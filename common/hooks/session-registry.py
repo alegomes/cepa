@@ -123,6 +123,30 @@ def on_start(session_id: str, cwd: str) -> None:
     if drift_notice:
         notices.append(drift_notice)
 
+    # 2c. Sessões VIZINHAS que ficaram para trás. A sessão que abre agora
+    # carrega o cache atual por definição; quem corre risco é a que já estava
+    # aberta quando o install rodou — ela segue executando os hooks antigos e
+    # nada na tela dela denuncia isso. Avisar aqui é o unico momento em que o
+    # dono está olhando e ainda pode reiniciar a outra janela.
+    try:
+        atrasadas = []
+        for f, other in L.read_entries(root):
+            if f.stem == session_id or not L.entry_is_live(other):
+                continue
+            fora = V.session_stale(other)
+            if fora:
+                onde = other.get("branch") or other.get("cwd") or "?"
+                quais = ", ".join(f"{n} {vb} → {va}" for n, vb, va in fora)
+                atrasadas.append(f"{onde} ({quais})")
+        if atrasadas:
+            notices.append(
+                "⚠ " + str(len(atrasadas)) + " sessão(ões) aberta(s) estão "
+                "rodando uma versão que o cache já não tem — os hooks delas são "
+                "os antigos, e só reiniciar resolve:\n  - "
+                + "\n  - ".join(atrasadas))
+    except Exception:  # noqa: BLE001
+        pass
+
     # 3. Overlap warning — another live session in THIS working tree.
     others = L.live_sessions_in(root, str(cwd), exclude_key=session_id)
     if others:
