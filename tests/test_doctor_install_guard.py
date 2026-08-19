@@ -168,6 +168,52 @@ def test_ponta_a_ponta_o_install_sh_nao_roda():
               not marcador.exists())
 
 
+def test_correcao_que_nao_resolve_roda_uma_vez_so():
+    """O lote tenta cada correção UMA vez, mesmo que o achado sobreviva.
+
+    O `--fix` re-diagnostica entre as passadas (uma correção muda o que as
+    outras enxergam). Sem memória do que já foi tentado, a correção que não
+    resolve o próprio achado voltava a ser aplicada a cada passada: três
+    execuções do install.sh e a mesma linha repetida três vezes no relatório.
+    """
+    import json
+    import subprocess
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpp = Path(tmp)
+        fake_home = tmpp / "home"
+        (fake_home / ".claude" / "plugins").mkdir(parents=True)
+        fake_repo = tmpp / "cepa-falso"
+        (fake_repo / "bin").mkdir(parents=True)
+        contador = tmpp / "execucoes"
+        (fake_repo / "bin" / "install.sh").write_text(
+            f"#!/bin/sh\necho x >> '{contador}'\n", encoding="utf-8")
+        (fake_repo / "bin" / "install.sh").chmod(0o755)
+        d = fake_repo / "common" / ".claude-plugin"
+        d.mkdir(parents=True)
+        (d / "plugin.json").write_text(
+            json.dumps({"name": "common", "version": "9.9.9"}), encoding="utf-8")
+        (fake_home / ".claude" / "plugins" / "known_marketplaces.json").write_text(
+            json.dumps({"cepa": {"installLocation": str(fake_repo)}}), encoding="utf-8")
+
+        proj = tmpp / "proj"
+        proj.mkdir()
+        subprocess.run(["git", "init", "-q", "-b", "main", "."], cwd=proj)
+        (proj / ".claude").mkdir()
+        (proj / ".claude" / "no-build").touch()
+
+        # HOME=temporário mas cwd=repo real: a trava do temporário não vale
+        # aqui, senão o install nem seria tentado e o teste não mediria nada.
+        env = dict(os.environ, HOME=str(fake_home))
+        env.pop("CEPA_DOCTOR_INSTALL", None)
+        out = subprocess.run([sys.executable, str(DOCTOR), "--fix"], capture_output=True,
+                             text=True, cwd=str(REPO), env=env)
+        n = len(contador.read_text().splitlines()) if contador.exists() else 0
+        check("a reinstalação que não resolve o achado roda UMA vez, não três",
+              n == 1, f"{n} execuções\n{out.stdout[-800:]}")
+        check("e o relatório não repete a mesma linha",
+              out.stdout.count("plugins reinstalados a partir do repo") <= 1, out.stdout[-800:])
+
+
 def main():
     test_variavel_desliga()
     test_diretorio_temporario_desliga()
@@ -175,6 +221,7 @@ def main():
     test_uso_real_continua_permitido()
     test_bloqueada_vira_decisao_do_dono_nao_falha()
     test_ponta_a_ponta_o_install_sh_nao_roda()
+    test_correcao_que_nao_resolve_roda_uma_vez_so()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")

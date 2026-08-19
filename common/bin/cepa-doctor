@@ -747,6 +747,11 @@ FIX_LABEL = {
 }
 
 
+def fix_key(fx):
+    """Identidade de uma correção — mesma chave usada para não repeti-la."""
+    return (fx["kind"], fx.get("path") or fx.get("repo") or fx.get("root") or "")
+
+
 def pending_fixes():
     """Correções automáticas dos achados atuais, sem repetir a mesma duas vezes."""
     seen, out = set(), []
@@ -757,7 +762,7 @@ def pending_fixes():
         # de "isto é com você" — e o relatório mentiria sobre o que aconteceu.
         if fx["kind"] == "install" and not install_automatico_permitido():
             continue
-        key = (fx["kind"], fx.get("path") or fx.get("repo") or fx.get("root") or "")
+        key = fix_key(fx)
         if key in seen:
             continue
         seen.add(key)
@@ -795,14 +800,20 @@ def apply_fixes(max_passes=3, somente_projeto=False):
     o usuário voltaria a ser o loop entre uma correção e a próxima.
     """
     applied, failed = [], []
+    tentadas = set()
     for _ in range(max_passes):
-        todo = pending_fixes()
+        todo = [fx for fx in pending_fixes() if fix_key(fx) not in tentadas]
         if not todo:
             break
         for fx in todo:
             fixer = FIXERS.get(fx["kind"])
             if not fixer:
                 continue
+            # Uma tentativa por correção, mesmo que o achado sobreviva. Sem
+            # isto, a correção que não resolve o próprio achado era refeita a
+            # cada passada: o relatório listava a mesma linha três vezes e o
+            # doctor rodava um install inteiro três vezes para nada.
+            tentadas.add(fix_key(fx))
             good, msg = fixer(fx)
             (applied if good else failed).append((fx["kind"], msg))
         run_checks(somente_projeto=somente_projeto)
