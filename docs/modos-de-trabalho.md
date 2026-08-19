@@ -138,8 +138,30 @@ sem ela o modo é rótulo, não fronteira.
 - **Saída:** **nenhum achado sem destino** — cada achado ou virou card, ou foi
   descartado com motivo escrito. Um relatório com achados soltos não fecha o
   modo, porque achado solto é exatamente o que volta como micro-ajuste depois.
-- **Gate:** **não existe.** Existem as ferramentas soltas (`investigate`,
-  `/code-review`, `advisors`, `debrief`), nenhuma fronteira.
+- **Gate:** `common/hooks/reflexao-gate.py`. A Reflexão grava o relatório em
+  `.claude/reflexao/<recorte>-<data>.yaml`, e o hook barra a gravação de um
+  relatório com `fechado: true` que ainda tenha achado sem `destino:` (um card)
+  nem `descartado:` (um motivo escrito). Motivo decorativo — "n/a", "-", "ok" —
+  conta como motivo nenhum: ele existe para você reencontrar a decisão daqui a
+  três meses. Enquanto a triagem corre, `fechado: false` passa sempre.
+
+  Formato do relatório:
+
+  ```yaml
+  recorte: fronteiras
+  lente: contrarian
+  fechado: true
+  achados:
+    - o_que: "o resolver duplica a query por contato"
+      onde: "ContactResolver.java:88"
+      destino: WEGO-1234
+    - o_que: "README aponta endpoint que mudou de nome"
+      descartado: "o endpoint sai no próximo release, não vale card agora"
+  ```
+
+  As ferramentas soltas que já existiam (`investigate`, `/code-review`,
+  `advisors`, `debrief`) continuam sendo como o achado nasce; o gate é o que
+  impede o relatório de fechar com achado solto.
 
 ### 7. Documentação
 
@@ -274,8 +296,8 @@ Em ordem:
 
 1. **`.claude/session-mode` + `cepa --modo`** — a declaração e a persistência.
 2. **A captura automática** — inverter a `suggest-capture` sob modo ativo.
-3. **Gate da Reforma** — a checagem mecânica de "nenhum teste externo editado".
-4. **Gate da Reflexão** — "nenhum achado sem destino".
+3. ~~**Gate da Reforma**~~ — feito: `common/hooks/reforma-gate.py`.
+4. ~~**Gate da Reflexão**~~ — feito: `common/hooks/reflexao-gate.py`.
 5. **Gate da Exploração** — o veredito que falta ao `advisors`.
 6. **Cobrança do critério de aceite na saída da Descoberta / entrada da
    Construção** — a peça que dá dente ao `completion-auditor`.
