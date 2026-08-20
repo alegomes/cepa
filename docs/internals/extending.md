@@ -306,9 +306,16 @@ operation to land.
 
 After any edit:
 
-1. Bump the plugin's version (`plugin.json` + the `marketplace.json`
-   entry). For early development at `0.1.0`, version stays at `0.1.0`
-   until first public release.
+1. Bump the plugin's version in `plugin.json` — and ONLY there. The
+   `marketplace.json` entry carries no version field: `install.sh` reads
+   that file for the plugin *names* only, `_pluginver.py` (which feeds
+   `/common:doctor` and the boot notice) reads `plugin.json`, and CC's
+   own installer records the `plugin.json` version. Anthropic's official
+   marketplaces omit the field entirely. This step used to say "both",
+   and every bump so far ignored the marketplace half — 8 of the 8
+   bumped plugins had drifted. An instruction nobody can follow and
+   nothing enforces teaches you to skim the list. For early development
+   at `0.1.0`, version stays at `0.1.0` until first public release.
 2. Commit (per the `user_preferences` "split commits along feature/doc
    lines" rule).
 3. `bin/install.sh --clean` in every host project that uses the
