@@ -47,6 +47,21 @@ Mapeie o primeiro token de `$ARGUMENTS` para o comando real: `prove-drain` →
 Se a rotina não existir ou o plugin dela não estiver instalado, pare aqui e
 diga qual é — é o único aborto silencioso permitido.
 
+**Rotina conversacional é recusada aqui.** Abra o arquivo do comando-alvo e
+olhe o campo `interaction:` do frontmatter. Se ele disser `conversational`,
+**não rode**: diga ao dono para chamar o comando direto e pare. O hook
+`session-routine-guard` já barra a invocação antes de você ver o prompt; esta
+regra existe para o caso de ele não estar instalado.
+
+O motivo é que os dois se contradizem, não que um seja pior. Este comando ativa
+a skill `default-yes` e antecipa no passo 3 tudo que o alvo perguntaria depois.
+Um comando conversacional como `/common:spec` carrega a skill
+`guided-interrogation`, que **suspende** a `default-yes`, e pergunta em rodadas
+porque cada resposta decide quais são as próximas — ninguém pergunta sobre
+migração de dado antes de saber a fronteira do escopo. Espremido numa rodada só,
+o resto do trabalho dele seria adivinhado, e sairia bem formatado o bastante
+para passar nos gates sem ninguém notar que as respostas não vieram do dono.
+
 ### 2. Preflight em lote (não delegue isso ao usuário)
 
 ```
