@@ -31,11 +31,16 @@ Run: python3 tests/test_session_routine_guard.py
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 HOOK = REPO / "common" / "hooks" / "session-routine-guard.py"
 PLUGIN_ROOT = REPO / "common"
+
+# HOME vazio: nenhum installed_plugins.json, entao o gate cai na varredura.
+_SEM_REGISTRO = tempfile.TemporaryDirectory()
+SEM_REGISTRO = Path(_SEM_REGISTRO.name)
 
 FAILURES = []
 
@@ -48,8 +53,17 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def run(prompt, plugin_root=PLUGIN_ROOT):
+def run(prompt, plugin_root=PLUGIN_ROOT, home=None):
+    """home isola o installed_plugins.json do CC.
+
+    Sem isso a suite leria o registro REAL da maquina de quem roda, e o
+    resultado dependeria de o dono ter o common instalado. Teste que muda de
+    cor conforme a maquina ensina a ignorar a cor.
+    """
     env = {"PATH": "/usr/bin:/bin", "CLAUDE_PLUGIN_ROOT": str(plugin_root)}
+    env["HOME"] = str(home) if home else str(SEM_REGISTRO)
+    if plugin_root is None:
+        env.pop("CLAUDE_PLUGIN_ROOT")
     p = subprocess.run([sys.executable, str(HOOK)],
                        input=json.dumps({"prompt": prompt}),
                        capture_output=True, text=True, env=env)
@@ -110,23 +124,48 @@ def test_falha_aberto():
     # Raiz que não leva a plugin nenhum. NB: uma raiz apenas inexistente DENTRO
     # do repo não serve de caso — o gate sobe dois níveis e acha o arquivo real,
     # e aí bloquear é o certo: ele encontrou o comando, não está no escuro.
-    import tempfile
     with tempfile.TemporaryDirectory() as vazio:
         rc, _ = run("/common:session common:spec",
                     plugin_root=Path(vazio) / "cepa" / "common")
         check("raiz sem plugin nenhum libera", rc == 0, f"rc={rc}")
 
-    env = {"PATH": "/usr/bin:/bin"}   # sem CLAUDE_PLUGIN_ROOT
-    p = subprocess.run([sys.executable, str(HOOK)],
-                       input=json.dumps({"prompt": "/common:session common:spec x"}),
-                       capture_output=True, text=True, env=env)
-    check("sem CLAUDE_PLUGIN_ROOT libera", p.returncode == 0, f"rc={p.returncode}")
+    rc, _ = run("/common:session common:spec x", plugin_root=None)
+    check("sem CLAUDE_PLUGIN_ROOT nem registro libera", rc == 0, f"rc={rc}")
 
     p = subprocess.run([sys.executable, str(HOOK)], input="{ not json",
                        capture_output=True, text=True,
-                       env={"PATH": "/usr/bin:/bin",
+                       env={"PATH": "/usr/bin:/bin", "HOME": str(SEM_REGISTRO),
                             "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT)})
     check("payload ilegível libera", p.returncode == 0, f"rc={p.returncode}")
+
+
+def test_le_a_versao_viva_e_nao_a_alfabeticamente_primeira():
+    """O cache do CC guarda as versões lado a lado.
+
+    A primeira versão deste hook varria com sorted() e lia
+    cache/cepa/common/1.5.0/commands/spec.md — a cópia ANTERIOR ao marcador —,
+    liberando calada a invocação que devia barrar. Os testes contra o repo não
+    podiam ver isso: o repo não tem diretório de versão. Quem pegou foi rodar
+    o hook instalado de verdade.
+    """
+    with tempfile.TemporaryDirectory() as d:
+        base = Path(d) / "cache" / "cepa" / "common"
+        for versao, marcador in (("1.5.0", ""), ("1.6.0", "interaction: conversational\n")):
+            cmds = base / versao / "commands"
+            cmds.mkdir(parents=True)
+            (base / versao / ".claude-plugin").mkdir()
+            (base / versao / ".claude-plugin" / "plugin.json").write_text(
+                json.dumps({"name": "common", "version": versao}), encoding="utf-8")
+            (cmds / "spec.md").write_text(
+                f"---\ndescription: x\n{marcador}---\n\ncorpo\n", encoding="utf-8")
+
+        rc, err = run("/common:session common:spec uma ideia",
+                      plugin_root=base / "1.6.0")
+        check("lê a versão viva, não a 1.5.0", rc == 2, f"rc={rc} err={err[:200]}")
+
+        # E pela varredura pura (sem CLAUDE_PLUGIN_ROOT apontando para a certa):
+        rc, _ = run("/common:session common:spec uma ideia", plugin_root=base)
+        check("varredura pega a maior versão", rc == 2, f"rc={rc}")
 
 
 def main():

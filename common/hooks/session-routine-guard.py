@@ -32,6 +32,13 @@ Mecanismo:
     plugin dono bate com o prefixo pedido — `capture.md` existe em board-flow E
     em discovery, e `docs` mora no diretório `docs-topology/` — e lê o campo
     `interaction:` do frontmatter.
+  - Qual CÓPIA ler não é detalhe: o cache do CC guarda as versões lado a lado
+    (cache/cepa/common/1.4.0, 1.5.0, 1.6.0), e varrer por ordem alfabética lê a
+    velha. Foi o que aconteceu na primeira versão deste hook: ele leu o spec.md
+    de 1.5.0, anterior ao marcador, e liberou calado a invocação que devia
+    barrar. Por isso a ordem é: o installed_plugins.json do CC, que é quem
+    sabe qual cópia está viva; depois a propria CLAUDE_PLUGIN_ROOT quando o
+    plugin pedido é este; e só então a varredura, da maior versão para a menor.
   - `interaction: conversational` → bloqueia dizendo para rodar direto.
   - Qualquer coisa inesperada (comando não encontrado, frontmatter ilegível,
     raiz desconhecida) → LIBERA. Este gate afirma um fato positivo sobre um
@@ -97,15 +104,60 @@ def nome_do_plugin(cmd_file: Path):
     return None
 
 
+def raiz_instalada(plugin: str):
+    """A cópia que o CC diz estar viva, segundo o installed_plugins.json.
+
+    É a unica fonte que sabe QUAL das versões guardadas lado a lado no cache
+    está de fato instalada. O nome do marketplace não é assumido: casa-se
+    `<plugin>@` seja qual for o sufixo.
+    """
+    reg = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
+    try:
+        d = json.loads(reg.read_text(encoding="utf-8")).get("plugins", {})
+    except Exception:  # noqa: BLE001
+        return None
+    for chave, entradas in d.items():
+        if not chave.startswith(f"{plugin}@") or not entradas:
+            continue
+        caminho = entradas[0].get("installPath")
+        if caminho and (Path(caminho) / "commands").is_dir():
+            return Path(caminho)
+    return None
+
+
+def versao_do(cand: Path):
+    """Chave de ordenação: a maior versão primeiro, o resto depois."""
+    for pai in cand.parents:
+        partes = pai.name.split(".")
+        if len(partes) == 3 and all(x.isdigit() for x in partes):
+            return tuple(int(x) for x in partes)
+    return (0, 0, 0)
+
+
 def acha_comando(plugin: str, cmd: str):
+    # 1. A cópia que o CC declara viva.
+    raiz = raiz_instalada(plugin)
+    if raiz:
+        f = raiz / "commands" / f"{cmd}.md"
+        if f.is_file() and nome_do_plugin(f) == plugin:
+            return f
+
+    # 2. A raiz de onde este hook está rodando, quando o alvo é este plugin.
+    aqui = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if aqui:
+        f = Path(aqui) / "commands" / f"{cmd}.md"
+        if f.is_file() and nome_do_plugin(f) == plugin:
+            return f
+
+    # 3. Varredura, da maior versão para a menor — nunca em ordem alfabética.
     for base in bases():
         for padrao in (f"{plugin}*/commands/{cmd}.md",
                        f"{plugin}*/*/commands/{cmd}.md",
                        f"*/commands/{cmd}.md",
                        f"*/*/commands/{cmd}.md"):
-            for cand in sorted(base.glob(padrao)):
-                if nome_do_plugin(cand) == plugin:
-                    return cand
+            achados = [c for c in base.glob(padrao) if nome_do_plugin(c) == plugin]
+            if achados:
+                return max(achados, key=versao_do)
     return None
 
 
