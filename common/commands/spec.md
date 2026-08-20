@@ -1,6 +1,7 @@
 ---
 description: Conduz um interrogatório até uma ideia de alto nível virar especificação construível — e para ali, sem escrever uma linha de código. Você descreve o que quer em prosa; o comando pergunta em rodadas, registra cada resposta num markdown versionado no repo, e só declara a especificação pronta quando todo critério de sucesso tem uma superfície observável (http/cli/ui/event/domain/application) e um teste vermelho declarado nela. Não exige Jira nem quadro configurado — ao fechar, oferece registrar Epic + Stories se board-flow estiver instalado. Retomável: rodar de novo sobre a mesma especificação continua de onde parou.
 argument-hint: <a ideia em prosa> | --continuar <slug> | --fechar <slug> | --lista
+interaction: conversational
 ---
 
 # /common:spec
