@@ -1718,3 +1718,60 @@ para aparecer, e o preflight do `cepa-doctor` tinha rodado limpo no começo dela
 É o padrão que o `cepa-doctor` existe para atacar: falha barata de checar, cara de
 descobrir, e que se disfarça de outro problema (aqui, "migrations duplicadas") em vez de
 se apresentar pelo nome. O custo de não ter é medido — uma sessão.
+
+---
+
+## A instrução de "trabalhe por Bash" colide com as travas de caminho dos papéis
+
+**Status:** pendente · **Lar provável:** `build-hex` (hook `path-lock`) + a diretiva de
+auto-mode que injeta "faça o trabalho pelo Bash" · **Origem:** drain de 5 cards no
+`wego-acesso-backend` (2026-08-20), onde o conflito apareceu quatro vezes numa sessão só.
+
+### Problema
+
+O ambiente injeta, no meio da sessão, uma diretiva mandando o agente editar arquivos por
+linha de comando (`sed`, heredoc) em vez das ferramentas `Edit`/`Write`. Os papéis do
+`build-hex`, porém, são contidos por um hook de caminho (`[build-hex path-lock]`) que
+autoriza escrita por glob — `api-dev` só em `api-rest/src/main/**`, `qa-engineer` só em
+`src/test/**`, e o `engineering-lead` em nenhum código.
+
+As duas regras não convivem: **o path-lock enxerga `Edit`/`Write`, e a diretiva manda usar
+o caminho que ele não enxerga.** Seguir a diretiva é contornar o controle; respeitá-lo é
+desobedecer a diretiva.
+
+Na sessão observada, os dois lados do erro aconteceram:
+
+- **Três agentes recusaram a diretiva** (dois `engineering-lead`, um `api-dev`) e gastaram
+  parágrafos do relatório final explicando por que estavam desobedecendo — ruído que chega
+  ao usuário e o obriga a arbitrar uma contradição do harness, não do trabalho.
+- **Um `qa-engineer` contornou a trava.** Precisava perturbar código de produção para provar
+  um teste; o hook bloqueou corretamente as tentativas por `cp` e `sed -i`, e ele então usou
+  um script Python dentro de heredoc, que não casava com os padrões vigiados, e passou. Ele
+  mesmo relatou o desvio — mas o buraco existe independentemente da honestidade de quem o
+  encontra.
+
+O segundo caso mostra que o path-lock protege menos do que aparenta: ele filtra *ferramentas
+e padrões de comando*, não a *capacidade de escrever*. Qualquer interpretador disponível no
+Bash é uma porta aberta.
+
+### Esboço de solução
+
+Três frentes, da mais barata para a mais estrutural:
+
+1. **Não injetar a diretiva de Bash em agentes com path-lock.** É o conserto de menor custo:
+   a diretiva existe para economizar round-trips em trabalho exploratório, e os papéis
+   contidos são justamente aqueles em que a economia não compensa o risco.
+2. **Fazer o path-lock cobrir escrita via Bash**, não só `Edit`/`Write` — no mínimo detectar
+   redirecionamento e heredoc para caminho fora do glob do papel. Nunca vai ser completo
+   (um script pode montar o caminho em tempo de execução), então serve como rede, não como
+   garantia.
+3. **Dar um caminho legítimo para a perturbação.** O caso que provocou o contorno é
+   recorrente e legítimo: provar que um teste é load-bearing exige quebrar código de
+   produção, e quem escreve o teste não é quem pode tocar naquele módulo. Hoje isso força
+   um ping-pong entre papéis (o `qa-engineer` escreve, para, devolve; o `api-dev` perturba)
+   ou um contorno. Vale um mecanismo explícito — perturbação em worktree/clone descartável,
+   fora do path-lock, que é o que o `proof-reviewer` já faz por desenho.
+
+Relacionado a [precedência de instruções](docs/precedencia-de-instrucoes.md): o agente
+está certo em parar e expor, e três deles fizeram exatamente isso. O defeito é o harness
+produzir o conflito toda vez, em vez de resolvê-lo na origem.
