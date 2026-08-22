@@ -108,13 +108,12 @@ levels are.
 
 ### 3b. UI gate — when the diff touches a declared UI surface
 
-If the repo has `.claude/ui-proof.yaml` AND the card's diff (touched files
+If the repo has `docs/ui-proof.yaml` (or, in a repo that hasn't moved it yet,
+`.claude/ui-proof.yaml`) AND the card's diff (touched files
 from the Implementation Summary) matches the `covers:` globs of at least one
 flow in it, the backend verdict alone is not enough — also delegate to
 `common:ui-proof-reviewer` (same diff context, slug = the card key; it writes
-`.claude/proof/ui-<KEY>.yaml` — still under `.claude/`, unlike the backend
-verdict, because the UI gate's pinned Playwright scripts and its manifest live
-there too and moving only the verdict would split the gate across two trees). Combine mechanically: **PROVEN requires BOTH
+`docs/proof/ui-<KEY>.yaml`, alongside the backend verdict). Combine mechanically: **PROVEN requires BOTH
 verdicts PROVEN**; any UNPROVEN → UNPROVEN; otherwise any NEEDS-HUMAN →
 NEEDS-HUMAN. Name which gate produced each part of the combined verdict in
 your report and in the Jira comment. If the manifest exists but no flow

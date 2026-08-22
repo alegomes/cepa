@@ -412,7 +412,14 @@ RESCUE_SKIP = (
     "handoffs/",          # deliberately reaped when the branch lands
     "plugins/",           # installed copies of the plugins themselves
     "cepa-telemetry/",    # append-only ledger, canonical copy lives in $HOME
-    "ui-proof/runs/",     # regenerated per run from the manifest
+    "ui-proof/runs/",     # scripts fixados do gate de UI, na LOCALIZAÇÃO ANTIGA.
+                          # Desde 22/08/2026 eles nascem em docs/ui-proof/runs/,
+                          # versionado, e nem chegam aqui. O que sobra sob
+                          # .claude/ é de árvore anterior à mudança: regenerável
+                          # a partir do manifesto, e o hash fixado de lá não
+                          # corresponde mais ao caminho que o agente cita no
+                          # veredito. Carregar isso para outra árvore só
+                          # ressuscitaria script órfão.
     "expertise",          # symlink to the canonical clone
     "last-build.json",
     "loop-state.json",    # contador do loop-budget: vale para a sessão que o

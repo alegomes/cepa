@@ -4,7 +4,7 @@
 Sibling of build-hex/hooks/proof-verdict-guard.py, one altitude up. That guard
 parses the backend proof artifact's `levels` schema; this one parses the
 ui-proof-reviewer's `flows` schema (schema_version 1) written to
-`.claude/proof/ui-<slug>.yaml`. The lesson is the same (WEGO-1711, WEGO-1785):
+`docs/proof/ui-<slug>.yaml`. The lesson is the same (WEGO-1711, WEGO-1785):
 prose rules that are already clear and still get violated need enforcement,
 not more prose.
 
@@ -76,12 +76,17 @@ PERTURBATION_OK = {"red", "n/a", "na", "n-a"}
 PERTURBATION_UNPROVEN = {"survived"}
 
 
-# Same two directories the backend guard recognizes (build-hex/hooks/
-# proof-verdict-guard.py). The ui-proof-reviewer still writes under
-# `.claude/proof/`; `docs/proof/` is accepted here so that the day a ui verdict
-# lands in the surviving directory it is still gated. A guard that recognizes
-# one path fewer is a guard that goes quiet, never a stricter one.
+# Both proof directories are recognized, and they are NOT equivalent.
+# `docs/proof/` is the destination (2026-08-22): `.claude/` is gitignored in the
+# projects that run this gate, so a verdict written there is invisible to git and
+# dies with the session's disposable worktree. `.claude/proof/` stays recognized
+# so this hook can BLOCK a write aimed at it — the ui-proof-reviewer is a
+# `common:` agent, and path-lock only gates agents whose plugin prefix matches a
+# topology that ships the lock, so this hook is the only place that can hold the
+# destination for the ui gate. Recognizing one path fewer would not make the
+# guard stricter; it would make it silent.
 _UI_PROOF_DIR_RE = re.compile(r"(?:^|/)(?:\.claude|docs)/proof/")
+_LEGACY_PROOF_DIR_RE = re.compile(r"(?:^|/)\.claude/proof/")
 
 
 def is_ui_proof_artifact(file_path: str) -> bool:
@@ -89,6 +94,11 @@ def is_ui_proof_artifact(file_path: str) -> bool:
     return (bool(_UI_PROOF_DIR_RE.search(p))
             and Path(p).name.startswith("ui-")
             and p.endswith((".yaml", ".yml")))
+
+
+def is_legacy_destination(file_path: str) -> bool:
+    """True for a ui proof artifact aimed at the directory that doesn't survive."""
+    return bool(_LEGACY_PROOF_DIR_RE.search(file_path.replace(os.sep, "/")))
 
 
 def parse_with_yaml(content: str):
@@ -167,6 +177,31 @@ def main():
     file_path = tool_input.get("file_path", "")
     if not file_path or not is_ui_proof_artifact(file_path):
         sys.exit(0)
+
+    # Destination before content. This fires on ANY verdict, not just `proven`:
+    # an honest `needs-human` written to `.claude/proof/` is lost just as
+    # completely as an over-claimed `proven`, and the loss is silent — the file
+    # is gitignored, so nothing reports it missing until the worktree is gone.
+    # Blocking here is what makes the move mechanical instead of a habit; the
+    # message names the destination so the agent retries and self-corrects.
+    if is_legacy_destination(file_path):
+        alvo = re.sub(r"(^|/)\.claude/proof/", r"\1docs/proof/",
+                      file_path.replace(os.sep, "/"))
+        print(
+            f"[common ui-proof-verdict-guard] BLOCKED: {file_path} grava o "
+            f"veredito em `.claude/proof/`, que é gitignored nos projetos que "
+            f"rodam este portão — o arquivo morre junto com a worktree "
+            f"descartável da sessão, sem aviso.\n"
+            f"  Escreva em: {alvo}\n"
+            f"  Vale para QUALQUER veredito, não só `proven`: um `needs-human` "
+            f"honesto se perde do mesmo jeito.\n"
+            f"  Não edite este hook para contornar. Se achar que o bloqueio "
+            f"está errado, devolva NEEDS-HUMAN dizendo isso.",
+            file=sys.stderr,
+        )
+        _t_emit("ui_proof_block", cwd=payload.get("cwd") or os.getcwd(),
+                slug=Path(file_path).stem, blocked="legacy_destination")
+        sys.exit(2)
 
     content = tool_input.get("content")
     if not isinstance(content, str) or not content.strip():

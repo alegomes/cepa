@@ -301,7 +301,7 @@ rides on top of — and that is exactly why it DOES ship agents when the
 concern is cross-topology: **`completion-auditor`** (independent last-mile
 acceptance gate, used by every board-flow lifecycle) and
 **`ui-proof-reviewer`** (independent proof gate for the UI/extension
-surface, driven by the host repo's `.claude/ui-proof.yaml` — any topology
+surface, driven by the host repo's `docs/ui-proof.yaml` — any topology
 can have a SPA/extension in front of what it builds, so pinning it to one
 topology would hide it from the rest). Agents whose knowledge is
 topology-specific still live in their topologies.
