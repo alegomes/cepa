@@ -50,10 +50,15 @@ Exit codes:
 """
 
 import json
-import os
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from _cmdmeta import CONVERSATIONAL, acha_comando, interaction
+except Exception:  # noqa: BLE001 — sem o helper este gate não sabe nada, e
+    CONVERSATIONAL = acha_comando = interaction = None  # não saber não barra.
 
 # Os apelidos que o passo 1 do session.md mapeia para comandos reais.
 APELIDOS = {
@@ -68,110 +73,6 @@ APELIDOS = {
 
 INVOCACAO_RE = re.compile(r"^\s*/common:session\s+(\S+)", re.IGNORECASE)
 
-FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-INTERACTION_RE = re.compile(
-    r"^interaction\s*:\s*[\"']?([A-Za-z-]+)[\"']?\s*$", re.MULTILINE
-)
-
-
-def bases():
-    """Diretórios onde procurar os plugins, no repo e no cache instalado.
-
-    No repo,  CLAUDE_PLUGIN_ROOT = <repo>/common          → irmãos em <repo>/
-    No cache, CLAUDE_PLUGIN_ROOT = <cache>/cepa/common/1.5.0 → irmãos dois
-    níveis acima, cada um com o seu próprio diretório de versão.
-    """
-    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if not root:
-        return []
-    p = Path(root)
-    return [d for d in (p.parent, p.parent.parent) if d and d.is_dir()]
-
-
-def nome_do_plugin(cmd_file: Path):
-    """O nome declarado no manifest do plugin dono deste arquivo de comando.
-
-    Vem do manifest e não do diretório de propósito: o plugin `docs` mora em
-    `docs-topology/`, e casar pelo diretório erraria.
-    """
-    for pai in cmd_file.parents:
-        mf = pai / ".claude-plugin" / "plugin.json"
-        if mf.is_file():
-            try:
-                return json.loads(mf.read_text(encoding="utf-8")).get("name")
-            except Exception:  # noqa: BLE001
-                return None
-    return None
-
-
-def raiz_instalada(plugin: str):
-    """A cópia que o CC diz estar viva, segundo o installed_plugins.json.
-
-    É a unica fonte que sabe QUAL das versões guardadas lado a lado no cache
-    está de fato instalada. O nome do marketplace não é assumido: casa-se
-    `<plugin>@` seja qual for o sufixo.
-    """
-    reg = Path.home() / ".claude" / "plugins" / "installed_plugins.json"
-    try:
-        d = json.loads(reg.read_text(encoding="utf-8")).get("plugins", {})
-    except Exception:  # noqa: BLE001
-        return None
-    for chave, entradas in d.items():
-        if not chave.startswith(f"{plugin}@") or not entradas:
-            continue
-        caminho = entradas[0].get("installPath")
-        if caminho and (Path(caminho) / "commands").is_dir():
-            return Path(caminho)
-    return None
-
-
-def versao_do(cand: Path):
-    """Chave de ordenação: a maior versão primeiro, o resto depois."""
-    for pai in cand.parents:
-        partes = pai.name.split(".")
-        if len(partes) == 3 and all(x.isdigit() for x in partes):
-            return tuple(int(x) for x in partes)
-    return (0, 0, 0)
-
-
-def acha_comando(plugin: str, cmd: str):
-    # 1. A cópia que o CC declara viva.
-    raiz = raiz_instalada(plugin)
-    if raiz:
-        f = raiz / "commands" / f"{cmd}.md"
-        if f.is_file() and nome_do_plugin(f) == plugin:
-            return f
-
-    # 2. A raiz de onde este hook está rodando, quando o alvo é este plugin.
-    aqui = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if aqui:
-        f = Path(aqui) / "commands" / f"{cmd}.md"
-        if f.is_file() and nome_do_plugin(f) == plugin:
-            return f
-
-    # 3. Varredura, da maior versão para a menor — nunca em ordem alfabética.
-    for base in bases():
-        for padrao in (f"{plugin}*/commands/{cmd}.md",
-                       f"{plugin}*/*/commands/{cmd}.md",
-                       f"*/commands/{cmd}.md",
-                       f"*/*/commands/{cmd}.md"):
-            achados = [c for c in base.glob(padrao) if nome_do_plugin(c) == plugin]
-            if achados:
-                return max(achados, key=versao_do)
-    return None
-
-
-def interaction(cmd_file: Path):
-    try:
-        texto = cmd_file.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        return None
-    m = FRONTMATTER_RE.match(texto)
-    if not m:
-        return None
-    achado = INTERACTION_RE.search(m.group(1))
-    return achado.group(1).lower() if achado else None
-
 
 def main():
     raw = sys.stdin.read()
@@ -179,6 +80,9 @@ def main():
         payload = json.loads(raw) if raw.strip() else {}
     except json.JSONDecodeError:
         sys.exit(0)
+
+    if acha_comando is None:
+        sys.exit(0)          # helper ausente: não sabe, não barra
 
     prompt = payload.get("prompt") or ""
     m = INVOCACAO_RE.match(prompt)
@@ -195,7 +99,7 @@ def main():
     if cmd_file is None:
         sys.exit(0)          # não achou o arquivo: não sabe, não barra
 
-    if interaction(cmd_file) != "conversational":
+    if interaction(cmd_file) != CONVERSATIONAL:
         sys.exit(0)
 
     print(
