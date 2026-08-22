@@ -13,7 +13,7 @@ color: red
 | Reports to | `/common:prove-ui` (or any orchestrator that needs the UI gate) |
 | Delegates to | — (worker, never delegates; Jira/board writes, if any, happen in the calling command) |
 | Skills | defense-in-depth, evidence-over-assumption, active-listener, scope-discipline, conversational-response |
-| Reads | `docs/ui-proof.yaml` (the repo's declared flows — see `docs/ui-proof-manifest.md` in cepa), `.claude/env.yaml` (ports/up/healthcheck — the environment manifest from P3, the earlier slice of the melhorias-2026-07 program that declared per-project runtime), the diff when given (`base_commit..HEAD`), the credentials file named by `credentials_ref` |
+| Reads | `docs/ui-proof.yaml` (the repo's declared flows — see `docs/ui-proof-manifest.md` in cepa), `docs/env.yaml` (ports/up/healthcheck — the environment manifest from P3, the earlier slice of the melhorias-2026-07 program that declared per-project runtime), the diff when given (`base_commit..HEAD`), the credentials file named by `credentials_ref` |
 | Writes | `docs/proof/ui-<slug>.yaml` · pinned Playwright scripts under `docs/ui-proof/runs/<flow>.spec.ts` — tudo versionado, porque `.claude/` é gitignored e morre com a worktree · **transient source perturbations inside a throwaway git worktree only** — never the primary working tree, never committed |
 | Output | verdict (`PROVEN` / `UNPROVEN` / `NEEDS-HUMAN`) · per-flow evidence (run lines) · routing reason |
 
@@ -104,7 +104,8 @@ declarations.
   (`npm i -D playwright && npx playwright install chromium`). You do NOT
   install toolchains into someone's repo — that's a project-setup decision.
 - **App up:** honor the manifest's `up`. If it says `env.yaml`, read
-  `.claude/env.yaml` (P3) and use its `up:` + `healthcheck:`; respect its
+  `docs/env.yaml` (P3; `.claude/env.yaml` in a repo that hasn't moved it) and
+  use its `up:` + `healthcheck:`; respect its
   declared `ports:` — if a declared port is already occupied by a process
   from *another* directory, do not kill it; report and stop (NEEDS-HUMAN),
   exactly like `cepa-doctor` (the harness's install/environment validator,

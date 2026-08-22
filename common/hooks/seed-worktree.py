@@ -5,7 +5,8 @@ A fresh worktree carries only tracked content, so gitignored files the main
 tree relies on (.env and friends) are missing — you'd recreate them by hand and
 lose them again on discard. This copies them in. Which files: $CEPA_SEED, else a
 `.claude/worktree-seed` file, else the built-in default (.env, .env.local) —
-plus, always, the `seed:` list of `.claude/env.yaml` when the project has an
+plus, always, the `seed:` list of the env manifest (`docs/env.yaml`, falling
+back to the legacy `.claude/env.yaml`) when the project has an
 environment manifest (docs/env-manifest.md).
 
 Usage:  seed-worktree.py <worktree-path> [<main-root>]

@@ -24,13 +24,13 @@ declara **o que provar**.
 > versionado.
 >
 > **Relação com o `env.yaml` (P3):** o **P3** é o slice do mesmo programa que
-> criou o [manifesto de ambiente](env-manifest.md) `.claude/env.yaml` — a
+> criou o [manifesto de ambiente](env-manifest.md) `docs/env.yaml` — a
 > declaração do runtime do projeto (portas, serviços, como subir). Este
 > manifesto declara outra coisa: os fluxos de UI e seus efeitos verificáveis.
 > Eles se complementam: o campo `up` daqui pode simplesmente dizer `env.yaml`
 > para reusar o `up:`/`healthcheck:` de lá, em vez de duplicar o comando.
 >
-> **Por que dois dialetos de YAML em `.claude/`?** O `env.yaml` é raso e
+> **Por que dois dialetos de YAML?** O `env.yaml` é raso e
 > parseado por hooks tolerantes-por-linha (sem pyyaml); este manifesto é
 > aninhado (`flows` → `steps`/`assert`) e lido por um agente com YAML de
 > verdade. A quebra é deliberada, não descuido: consumidores diferentes
@@ -136,7 +136,7 @@ aparecer no endpoint de auditoria do backend.
 ```yaml
 # docs/ui-proof.yaml — fluxos de UI declarados do projeto
 
-up: env.yaml                       # reusa up:/healthcheck: do .claude/env.yaml
+up: env.yaml                       # reusa up:/healthcheck: do docs/env.yaml
 base_url: http://localhost:8083
 build: "npm --prefix {dir}/extension run build"   # recompila do checkout em teste ({dir})
 serve: "npm run serve:app -- --port {port}"       # sobe o app compilado na porta escolhida

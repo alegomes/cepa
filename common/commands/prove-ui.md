@@ -37,7 +37,7 @@ veredito, não re-roda fluxo "para confirmar", não edita o artifact.
 
 Se `$ARGUMENTS` contém `--draft`, este run não prova nada — ele **propõe**.
 Inspecione a estrutura do repo (um `manifest.json` de extensão? um
-`package.json` com scripts `build`/`serve`/`preview`? um `.claude/env.yaml`
+`package.json` com scripts `build`/`serve`/`preview`? um `docs/env.yaml`
 com `up:`/`ports:`? rotas óbvias de SPA?) e escreva um esqueleto de
 `docs/ui-proof.yaml` **comentado** em `docs/ui-proof.draft.yaml`
 seguindo `docs/ui-proof-manifest.md` (do cepa): campos `up`, `base_url`,

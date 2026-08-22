@@ -1,4 +1,4 @@
-# Manifesto de ambiente — `.claude/env.yaml`
+# Manifesto de ambiente — `docs/env.yaml`
 
 O cepa modela código, não runtime — e as fricções de sessões paralelas são
 quase todas de runtime: dev server subindo numa porta já ocupada, worktree
@@ -7,9 +7,23 @@ stale. O manifesto de ambiente declara esse runtime **por projeto-hospedeiro**
 para que os rituais do harness o tratem mecanicamente, em vez de cada sessão
 redescobri-lo na base do erro.
 
-> **Onde mora:** no repo do *projeto que usa o cepa*, em `.claude/env.yaml`.
-> O cepa em si não tem um — ele documenta o formato (este arquivo) e o
-> consome (doctor, seed, preflight).
+> **Onde mora:** no repo do *projeto que usa o cepa*, em `docs/env.yaml` —
+> versionado. O cepa em si não tem um; ele documenta o formato (este arquivo)
+> e o consome (doctor, seed, preflight).
+>
+> **Morava em `.claude/env.yaml` até 22/08/2026.** Nesses projetos `.claude/`
+> é gitignored, então o manifesto era invisível para o git e sumia junto com a
+> worktree descartável da sessão — levando as portas, o comando de subida e a
+> lista `seed:` que só quem escreveu conhecia. Os consumidores leem
+> `docs/env.yaml` primeiro e caem no caminho antigo quando ele não existe, então
+> nada quebra enquanto você não move; mover é um `git mv`.
+>
+> Aqui, diferente do [veredito de prova](proof-gate.md) e do
+> [manifesto de prova de UI](ui-proof-manifest.md), **não há hook que trave o
+> destino** — e isso não é esquecimento. Aqueles dois são escritos por um
+> agente, então um hook consegue barrar a escrita no lugar errado. Este é
+> declarado à mão pelo dono do projeto: não existe escrita para barrar. O que
+> move a convenção é a ordem de leitura mais esta página.
 
 ## Formato
 
@@ -18,7 +32,7 @@ consumidores fazem parse tolerante por linhas (sem dependência de pyyaml),
 então **não use aninhamento** além de um nível de lista.
 
 ```yaml
-# .claude/env.yaml — runtime declarado do projeto
+# docs/env.yaml — runtime declarado do projeto
 
 # Portas TCP que o dev server / serviços locais do projeto usam.
 ports:
