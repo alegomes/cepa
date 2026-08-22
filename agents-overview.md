@@ -90,7 +90,7 @@ plan → (per-Task: build → qa → housekeeping → review) → cross-cutting 
 | `refactor-advisor` | worker (Housekeeping, advisory) | `engineering-lead` | — | Read, Glob, Grep, Write | `docs/housekeeping/**`, own expertise (no source edits) |
 | `security-reviewer` | worker | `validation-lead` | — | Read, Glob, Grep, Write | `docs/security-reviews/**`, own expertise |
 | `code-reviewer` | worker (final GATE) | `engineering-lead` | — | Read, Glob, Grep | — (advisory verdict only; no writes) |
-| `proof-reviewer` | worker (change-driven Review gate; called by `/board-flow:prove`) | `/board-flow:prove`, `/board-flow:prove-drain` | — | Read, Glob, Grep, Bash, Write | `.claude/proof/<KEY>.yaml` only (never code; works in a throwaway git worktree) |
+| `proof-reviewer` | worker (change-driven Review gate; called by `/board-flow:prove`) | `/board-flow:prove`, `/board-flow:prove-drain` | — | Read, Glob, Grep, Bash, Write | `docs/proof/<KEY>.yaml` only (versionado; never code; works in a throwaway git worktree) |
 
 **Models:** orchestrator + 3 leads = `opus`; 10 workers = `sonnet`.
 

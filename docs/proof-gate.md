@@ -127,7 +127,7 @@ There is no branch-per-card convention. Instead:
 
 | Piece | Lives in | Role |
 |---|---|---|
-| `proof-reviewer` (agent) | `build-hex` | The change-driven proof mechanics (L2/L3/L4 + bug check). Writes `.claude/proof/<KEY>.yaml`. Never edits code; works in a throwaway git worktree. |
+| `proof-reviewer` (agent) | `build-hex` | The change-driven proof mechanics (L2/L3/L4 + bug check). Writes `docs/proof/<KEY>.yaml`. Never edits code; works in a throwaway git worktree. |
 | `/board-flow:prove <KEY>` | `board-flow` | Topology-agnostic. Resolves the topology, delegates to `<topology>:proof-reviewer`, applies the verdict to the card via `atlassian-expert`. |
 | `/board-flow:prove-drain [--max N]` | `board-flow` | Iterates the Review column. Does NOT stop on UNPROVEN — a bounce is progress. |
 | `base_commit` capture | `board-flow` execute/fix | Records the change baseline at In Progress entry. |
@@ -155,10 +155,20 @@ accordingly or the prove commands find zero cards.
 
 ## The artifact
 
-`proof-reviewer` writes `.claude/proof/<KEY>.yaml` — the per-card evidence record
-(verdict, the diff scope, and per-level run lines). It is the proof-gate analogue
-of `.claude/acceptance/<KEY>.yaml`. A `pass` on any level is invalid without a
-`run:` line containing the literal command and its result.
+`proof-reviewer` writes `docs/proof/<KEY>.yaml` — the per-card evidence record
+(verdict, the diff scope, and per-level run lines). A `pass` on any level is
+invalid without a `run:` line containing the literal command and its result.
+
+**Why `docs/`, when the sibling `completion-auditor` writes to
+`.claude/acceptance/<KEY>.yaml`:** in the projects that run this gate `.claude/`
+is gitignored, so anything written there dies with the session's disposable
+worktree. The proof verdict was surviving only because a human copied it into
+`docs/proof/` after each card, and that copy is the step a closing session
+skips. `docs/proof/` is versioned, so it survives on its own; `path-lock` locks
+the agent to it. Artifacts written before this change stay under
+`.claude/proof/` and are still read — the verdict guard and
+`classify_needs_human.py` both accept either directory, and prefer `docs/proof/`
+when a card has both.
 
 **The `verdict` is mechanical — there is no waiver.** It is computed from the
 levels: any `assumed`/`skipped`/`gap`/`survived`/`green-at-base` level makes

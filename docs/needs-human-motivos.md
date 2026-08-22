@@ -6,7 +6,9 @@ razões muito diferentes, e a etiqueta única esconde a diferença: metade dos
 casos não é decisão de ninguém, é máquina que não subiu.
 
 Este arquivo fixa os sete motivos em que `/board-flow:decide` classifica cada
-card, lendo `.claude/proof/<KEY>.yaml` — nunca a descrição do card.
+card, lendo `docs/proof/<KEY>.yaml` — nunca a descrição do card. Os artefatos
+anteriores à mudança de destino seguem em `.claude/proof/` e continuam sendo
+lidos; quando o mesmo card tem os dois, `docs/proof/` vence.
 
 Cinco vieram do desenho; os motivos 6 e 7 vieram do piloto de 03/08/2026 sobre
 33 artefatos reais (`wego-assinatura-backend`, `wego-tasy-gateway`) — não
@@ -154,7 +156,7 @@ resolver.
 ## Dois esquemas de nome no disco
 
 Os artefatos existentes usam duas grafias para os mesmos níveis. Qualquer coisa
-que leia `.claude/proof/*.yaml` precisa aceitar as duas, ou lê metade da base:
+que leia artefato de prova precisa aceitar as duas, ou lê metade da base:
 
 | schema 2 (documentado) | grafia antiga, ainda no disco |
 |---|---|
