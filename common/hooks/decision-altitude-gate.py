@@ -22,6 +22,12 @@ escrita, quando o autor ainda está ali para corrigir.
 
 Mecanismo:
   - Fira em Write/Edit/MultiEdit; só olha conteúdo que tenha um campo Altitude.
+  - Só olha campo Altitude DENTRO de um bloco `### Decision:` — do cabeçalho até
+    o próximo cabeçalho de nível igual ou superior. Fora do bloco, `altitude:` é
+    outro vocabulário: no artefato de aceite (.claude/acceptance/<KEY>.yaml) ele
+    diz em que superfície o critério é observável (http/cli/ui/event/domain/
+    application), e o gate barrava aquela escrita em 2026-08-22, obrigando o
+    completion-auditor a renomear o campo na marra.
   - Valor aceito: strategic | tactical | implementation (só isso).
   - A linha-modelo da própria documentação ("strategic | tactical |
     implementation", ou um <placeholder>) passa — senão o gate impediria editar
@@ -37,6 +43,7 @@ Exit codes:
 import json
 import re
 import sys
+from pathlib import Path
 
 GATED_TOOLS = ("Write", "Edit", "MultiEdit")
 
@@ -55,6 +62,36 @@ ALTITUDE_RE = re.compile(
     rf"^{MARKER}?\s*(?:Altitude|Altitude do bloco)\s*(?:\*\*|__)?\s*:\s*{MARKER}?\s*(.+)$",
     re.MULTILINE | re.IGNORECASE,
 )
+
+
+# Cabeçalho markdown (`### Decision: ...`) e cabeçalho qualquer, para saber onde
+# o bloco termina. O nível é o número de `#`: o bloco vai até o próximo
+# cabeçalho de nível igual ou menor (`###` fecha em `###`, `##` ou `#`).
+DECISION_RE = re.compile(r"^(#{1,6})\s*Decision\s*:", re.IGNORECASE)
+HEADING_RE = re.compile(r"^(#{1,6})\s")
+
+
+def blocos_de_decisao(content: str):
+    """Os trechos que são bloco de decisão, um por cabeçalho `### Decision:`."""
+    linhas = content.splitlines()
+    blocos, atual, nivel = [], None, 0
+    for linha in linhas:
+        m = DECISION_RE.match(linha)
+        if m:
+            if atual is not None:
+                blocos.append("\n".join(atual))
+            atual, nivel = [linha], len(m.group(1))
+            continue
+        if atual is not None:
+            h = HEADING_RE.match(linha)
+            if h and len(h.group(1)) <= nivel:
+                blocos.append("\n".join(atual))
+                atual = None
+                continue
+            atual.append(linha)
+    if atual is not None:
+        blocos.append("\n".join(atual))
+    return blocos
 
 
 def extract_content(tool_input: dict):
@@ -108,12 +145,30 @@ def main():
     if not any(t in payload.get("tool_name", "") for t in GATED_TOOLS):
         sys.exit(0)
 
-    content = extract_content(payload.get("tool_input") or {})
+    tool_input = payload.get("tool_input") or {}
+    content = extract_content(tool_input)
     if content is None:
         sys.exit(0)          # sem ver o conteúdo, não se bloqueia nada
 
+    alvos = blocos_de_decisao(content)
+    if not alvos:
+        # Um Edit pode trazer só a linha do campo, sem o cabeçalho junto. Nesse
+        # caso o arquivo de destino decide: se ELE tem bloco de decisão, o
+        # fragmento é tratado como parte de um; se não tem (o .yaml de aceite,
+        # por exemplo), nada aqui é bloco de decisão e o gate não opina.
+        caminho = tool_input.get("file_path")
+        if isinstance(caminho, str) and caminho:
+            try:
+                destino = Path(caminho).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                destino = ""
+            if blocos_de_decisao(destino):
+                alvos = [content]
+    if not alvos:
+        sys.exit(0)
+
     fora = []
-    for valor in ALTITUDE_RE.findall(content):
+    for valor in ALTITUDE_RE.findall("\n".join(alvos)):
         if e_linha_modelo(valor):
             continue
         v = limpa(valor).lower()
