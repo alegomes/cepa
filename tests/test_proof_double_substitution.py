@@ -113,7 +113,15 @@ check("regra antiga (status survived) segue bloqueando", r.returncode == 2,
 # ── fail-open paths ────────────────────────────────────────────────────────
 r = run(artifact("proven", [{"class": "X", "double": '"Mock"'}]),
         file_path=str(Path(tempfile.gettempdir()) / "notes.yaml"))
-check("arquivo fora de .claude/proof → PASSA", r.returncode == 0)
+check("arquivo fora de qualquer diretório de prova → PASSA", r.returncode == 0)
+
+# ── docs/proof é o destino de escrita desde 22/08/2026 ─────────────────────
+# Ver o comentário longo em tests/test_proof_status_enum.py: o proof-reviewer
+# grava em docs/proof/ porque `.claude/` é gitignored, e um guarda cego para o
+# destino novo deixaria de checar exatamente os vereditos que passam a existir.
+r = run(artifact("proven", [{"class": "X", "double": '"Mock"'}]),
+        file_path=str(Path(tempfile.gettempdir()) / "repo" / "docs" / "proof" / "WEGO-1.yaml"))
+check("dublê em docs/proof → BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
 
 r = run("::: not yaml :::\nverdict: proven\n")
 check("conteúdo ilegível → PASSA (fallback não vê estrutura)", r.returncode == 0)

@@ -83,6 +83,22 @@ def main():
                  f"{pname}:proof-reviewer", other / "src/main/java/Foo.java", 0,
                  "proof-reviewer must be able to break code in its /tmp worktree")
             )
+            # O destino do veredito (22/08/2026). Nos projetos que rodam o
+            # portão `.claude/` é gitignored, então o veredito gravado lá some
+            # junto com a worktree descartável da sessão — sobrevivia só porque
+            # alguém copiava o arquivo para docs/ depois de cada card, e é o
+            # passo que se esquece ao fechar a sessão. Travar a escrita em
+            # docs/proof/ é o que torna isso mecânico em vez de disciplina: se o
+            # caminho velho continuasse liberado, o esquecimento voltaria calado.
+            cases += [
+                ("proof-reviewer docs/proof   -> allow",
+                 f"{pname}:proof-reviewer", proj / "docs/proof/WEGO-1.yaml", 0,
+                 "docs/proof/ é versionado — é onde o veredito sobrevive"),
+                ("proof-reviewer .claude/proof-> block",
+                 f"{pname}:proof-reviewer", proj / ".claude/proof/WEGO-1.yaml", 2,
+                 "o caminho antigo tem de BLOQUEAR, senão o veredito volta a "
+                 "morrer com a worktree sem ninguém notar"),
+            ]
 
         for label, agent_type, fp, want, why in cases:
             got = run(hook, agent_type, fp, proj)

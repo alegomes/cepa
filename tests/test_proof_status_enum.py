@@ -142,7 +142,28 @@ r = run(artifact(scope=CLEAN_CLASS.replace("      substituted_by_double: none\n"
 check("regra do dublê segue bloqueando", r.returncode == 2, f"rc={r.returncode}")
 
 r = run(artifact(), file_path=str(Path(tempfile.gettempdir()) / "notes.yaml"))
-check("arquivo fora de .claude/proof → PASSA", r.returncode == 0, r.stderr[:200])
+check("arquivo fora de qualquer diretório de prova → PASSA", r.returncode == 0,
+      r.stderr[:200])
+
+# ── docs/proof é o destino de escrita desde 22/08/2026 ─────────────────────
+# O proof-reviewer foi travado em docs/proof/ porque `.claude/` é gitignored e o
+# veredito morria com a worktree. Um guarda que só reconhecesse `.claude/proof/`
+# passaria a deixar TODO veredito novo escapar da checagem — o portão ficaria
+# mais fraco justamente na mudança que existia para preservar o artefato. Por
+# isso os dois diretórios contam, e o caminho velho segue reconhecido: é onde
+# está a base inteira que já existe no disco.
+DOCS_ART = str(Path(tempfile.gettempdir()) / "repo" / "docs" / "proof" / "WEGO-1.yaml")
+r = run(artifact(l4="    status: skipped\n"), file_path=DOCS_ART)
+check("proven sobre-declarado em docs/proof → BLOQUEIA", r.returncode == 2,
+      f"rc={r.returncode}")
+
+r = run(artifact(l4="    status: skipped\n"),
+        file_path=str(Path(tempfile.gettempdir()) / "repo" / ".claude" / "proof" / "WEGO-1.yaml"))
+check("…e o caminho antigo segue bloqueando igual", r.returncode == 2,
+      f"rc={r.returncode}")
+
+r = run(artifact(), file_path=DOCS_ART)
+check("proven consistente em docs/proof → PASSA", r.returncode == 0, r.stderr[:200])
 
 # --- nomes de nível: conjunto fechado (2026-08-03) --------------------------
 # Duas grafias para os mesmos níveis convivem no disco e fizeram o classificador
