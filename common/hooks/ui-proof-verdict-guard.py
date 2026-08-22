@@ -76,9 +76,17 @@ PERTURBATION_OK = {"red", "n/a", "na", "n-a"}
 PERTURBATION_UNPROVEN = {"survived"}
 
 
+# Same two directories the backend guard recognizes (build-hex/hooks/
+# proof-verdict-guard.py). The ui-proof-reviewer still writes under
+# `.claude/proof/`; `docs/proof/` is accepted here so that the day a ui verdict
+# lands in the surviving directory it is still gated. A guard that recognizes
+# one path fewer is a guard that goes quiet, never a stricter one.
+_UI_PROOF_DIR_RE = re.compile(r"(?:^|/)(?:\.claude|docs)/proof/")
+
+
 def is_ui_proof_artifact(file_path: str) -> bool:
     p = file_path.replace(os.sep, "/")
-    return ("/.claude/proof/" in p
+    return (bool(_UI_PROOF_DIR_RE.search(p))
             and Path(p).name.startswith("ui-")
             and p.endswith((".yaml", ".yml")))
 
