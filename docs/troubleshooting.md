@@ -304,7 +304,8 @@ project has no PIT plugin (L3 mutation) or no IT-isolated JaCoCo wiring
 (L2 coverage), or `.claude/cards/<KEY>.yaml` has no `base_commit` (cards
 that reached Review *before* the base-commit capture was added — only
 cards run through `/board-flow:execute`/`:fix` afterward carry it). Check
-the `levels:` block in `.claude/proof/<KEY>.yaml` — any `assumed`/
+the `levels:` block in `docs/proof/<KEY>.yaml` (or `.claude/proof/<KEY>.yaml`
+for cards proved before the destination moved) — any `assumed`/
 `skipped` status names what's missing. Older cards with no baseline can't
 be diff-scoped; re-running their build through the flow is the clean fix.
 

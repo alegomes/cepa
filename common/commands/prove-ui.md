@@ -1,5 +1,5 @@
 ---
-description: Prova a superfície de UI/extensão do projeto pelo gate mecânico — delega ao ui-proof-reviewer, que sobe o app, roda os fluxos declarados em .claude/ui-proof.yaml via Playwright (extensão Chrome unpacked incluída) e exige efeito verificável no backend, com prova green→red→green quando o diff da mudança é conhecido. Retorna PROVEN / UNPROVEN / NEEDS-HUMAN com relatório leigo em pt-BR. Sem manifesto, o comando não chuta — devolve NEEDS-HUMAN dizendo exatamente o que declarar. Com --draft, PROPÕE um esqueleto comentado de manifesto a partir da estrutura do repo (proposta explícita, nunca prova).
+description: Prova a superfície de UI/extensão do projeto pelo gate mecânico — delega ao ui-proof-reviewer, que sobe o app, roda os fluxos declarados em docs/ui-proof.yaml via Playwright (extensão Chrome unpacked incluída) e exige efeito verificável no backend, com prova green→red→green quando o diff da mudança é conhecido. Retorna PROVEN / UNPROVEN / NEEDS-HUMAN com relatório leigo em pt-BR. Sem manifesto, o comando não chuta — devolve NEEDS-HUMAN dizendo exatamente o que declarar. Com --draft, PROPÕE um esqueleto comentado de manifesto a partir da estrutura do repo (proposta explícita, nunca prova).
 argument-hint: [fluxo | --all | --draft]
 ---
 
@@ -12,7 +12,10 @@ superfície onde o usuário sofre — SPA e extensão Chrome. Ele é
 deliberadamente fino: **quem decide o veredito é o `common:ui-proof-reviewer`**,
 a partir de evidência; o comando só resolve o escopo, delega e aplica o
 contrato de relatório. O que provar mora no repo do projeto, em
-`.claude/ui-proof.yaml` (formato: `docs/ui-proof-manifest.md` no cepa).
+`docs/ui-proof.yaml` (formato: `docs/ui-proof-manifest.md` no cepa). Morava em
+`.claude/ui-proof.yaml` até 22/08/2026 e o agente ainda lê de lá quando o novo
+não existe — mas `.claude/` é gitignored nesses projetos, então o manifesto ia
+embora junto com a worktree da sessão.
 
 ## Variables
 
@@ -34,9 +37,9 @@ veredito, não re-roda fluxo "para confirmar", não edita o artifact.
 
 Se `$ARGUMENTS` contém `--draft`, este run não prova nada — ele **propõe**.
 Inspecione a estrutura do repo (um `manifest.json` de extensão? um
-`package.json` com scripts `build`/`serve`/`preview`? um `.claude/env.yaml`
+`package.json` com scripts `build`/`serve`/`preview`? um `docs/env.yaml`
 com `up:`/`ports:`? rotas óbvias de SPA?) e escreva um esqueleto de
-`.claude/ui-proof.yaml` **comentado** em `.claude/ui-proof.draft.yaml`
+`docs/ui-proof.yaml` **comentado** em `docs/ui-proof.draft.yaml`
 seguindo `docs/ui-proof-manifest.md` (do cepa): campos `up`, `base_url`,
 `build`, `serve`, `extension_dir` quando aplicável, e um ou dois `flows`
 placeholder com `steps`, `assert` (incluindo o `{nonce}` de frescor) e
@@ -44,7 +47,7 @@ placeholder com `steps`, `assert` (incluindo o `{nonce}` de frescor) e
 
 Deixe explícito no arquivo e no relatório: **proposta explícita ≠ prova.**
 O rascunho não vale como manifesto — o dono do produto revisa, ajusta e
-renomeia para `.claude/ui-proof.yaml`; até lá, o gate continua devolvendo
+renomeia para `docs/ui-proof.yaml`; até lá, o gate continua devolvendo
 NEEDS-HUMAN por manifesto ausente. Isso não viola a doutrina "o agente não
 inventa fluxos": inventar seria *provar* contra um chute; propor um rascunho
 para o humano validar é o oposto. Pare aqui — não delegue ao
@@ -67,11 +70,12 @@ Delegue ao subagente `common:ui-proof-reviewer` com:
 > Diff: <base_commit..HEAD + lista de arquivos tocados | "nenhum — rode sem perturbação">
 > Slug: <card key se houver; senão um slug curto do branch/feature>
 >
-> Leia `.claude/ui-proof.yaml`, rode os fluxos em escopo conforme sua
-> mecânica (preflight do Playwright, up via manifest/env.yaml, scripts em
-> `.claude/ui-proof/runs/`, efeito verificável obrigatório para prova forte,
+> Leia `docs/ui-proof.yaml` (ou `.claude/ui-proof.yaml`, se o repo ainda não
+> moveu o manifesto), rode os fluxos em escopo conforme sua mecânica
+> (preflight do Playwright, up via manifest/env.yaml, scripts em
+> `docs/ui-proof/runs/`, efeito verificável obrigatório para prova forte,
 > green→red→green onde o diff permitir) e grave
-> `.claude/proof/ui-<slug>.yaml`. Retorne o veredito computado.
+> `docs/proof/ui-<slug>.yaml`. Retorne o veredito computado.
 
 Não rode Playwright você mesmo; não "adiante" passos do agente.
 
@@ -88,7 +92,7 @@ Repasse ao usuário o relatório do agente **verificando o contrato** antes:
   como prova — com a sugestão concreta de `assert.backend` a adicionar no
   manifesto.
 - NEEDS-HUMAN por manifesto ausente vem com o esqueleto mínimo do
-  `.claude/ui-proof.yaml` a criar (campos `up`, `base_url`, `flows`) e o
+  `docs/ui-proof.yaml` a criar (campos `up`, `base_url`, `flows`) e o
   apontador para `docs/ui-proof-manifest.md` — e com a sugestão de rodar
   `/common:prove-ui --draft` para gerar um rascunho comentado a revisar.
 

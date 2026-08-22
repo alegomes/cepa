@@ -258,7 +258,20 @@ def build_allowed_writes(roles: dict, extra_write_globs: dict = None) -> dict:
         # agent" and every write — including its documented output — is
         # blocked, which is what drove it to edit this very file to whitelist
         # itself. See common/expertise/proof-reviewer-mental-model.yaml.
-        "proof-reviewer":      [".claude/proof/**"],
+        #
+        # The destination is `docs/proof/`, NOT `.claude/proof/`, and the old
+        # path is deliberately absent rather than kept alongside. In the
+        # projects that run this gate, `.claude/` is gitignored — so a verdict
+        # written there dies with the session's disposable worktree, unnoticed.
+        # It was survived by hand (the orchestrator copying each file into
+        # docs/proof/ after the card: 9 copies on 2026-08-20/21), and a manual
+        # step at the end of a session is the step that gets skipped. Leaving
+        # `.claude/proof/**` writable here would keep that loss one habit away,
+        # silently; blocking it makes the lock's own message point at the
+        # surviving path. READERS still accept both (proof-verdict-guard,
+        # classify_needs_human) — narrowing a reader would blind them to the
+        # artifacts already on disk.
+        "proof-reviewer":      ["docs/proof/**"],
     }
     if extra_write_globs:
         for agent_name, globs in extra_write_globs.items():

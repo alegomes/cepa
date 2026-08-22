@@ -93,9 +93,10 @@ Delegate to `<default_topology>:proof-reviewer`:
 > (adversarial input on the touched endpoints), and — if this is a Bug — the
 > regression-red-at-base check. Operate ONLY in a throwaway git worktree; never
 > touch the primary working tree or edit any code. Write
-> `.claude/proof/$ARGUMENTS.yaml` and return your verdict with evidence.
+> `docs/proof/$ARGUMENTS.yaml` (versionado; `.claude/` é gitignored e some
+> com a worktree) and return your verdict with evidence.
 
-Wait for the verdict. Then read `.claude/proof/$ARGUMENTS.yaml` yourself and
+Wait for the verdict. Then read `docs/proof/$ARGUMENTS.yaml` yourself and
 **cross-check it — do not trust the `verdict` field blindly.** Re-derive the
 verdict from the levels: if any level is `assumed`/`skipped`/`gap`/`survived`/
 `green-at-base`, the only valid verdicts are UNPROVEN or NEEDS-HUMAN — never
@@ -107,11 +108,12 @@ levels are.
 
 ### 3b. UI gate — when the diff touches a declared UI surface
 
-If the repo has `.claude/ui-proof.yaml` AND the card's diff (touched files
+If the repo has `docs/ui-proof.yaml` (or, in a repo that hasn't moved it yet,
+`.claude/ui-proof.yaml`) AND the card's diff (touched files
 from the Implementation Summary) matches the `covers:` globs of at least one
 flow in it, the backend verdict alone is not enough — also delegate to
 `common:ui-proof-reviewer` (same diff context, slug = the card key; it writes
-`.claude/proof/ui-<KEY>.yaml`). Combine mechanically: **PROVEN requires BOTH
+`docs/proof/ui-<KEY>.yaml`, alongside the backend verdict). Combine mechanically: **PROVEN requires BOTH
 verdicts PROVEN**; any UNPROVEN → UNPROVEN; otherwise any NEEDS-HUMAN →
 NEEDS-HUMAN. Name which gate produced each part of the combined verdict in
 your report and in the Jira comment. If the manifest exists but no flow
@@ -141,7 +143,7 @@ Read `defaults.status_map.done` from `board-flow.yaml` (optional).
   > - **L4 adversarial input:** no unasserted external behavior. `<run line>`
   > <- for Bug: **Regression:** red at base_commit, green at HEAD. `<run line>`>
   >
-  > Artifact: `.claude/proof/<KEY>.yaml`. Auto-advanced — change is load-bearing at the external surface.
+  > Artifact: `docs/proof/<KEY>.yaml`. Auto-advanced — change is load-bearing at the external surface.
   > ```
 
 - **If `done` is NOT set:** do not transition. Post the Proof Summary as a
@@ -167,7 +169,7 @@ The change is provably not load-bearing somewhere. Send it back. Read
 >
 > **Reason:** <the single concrete gap, in one sentence — `file:line` plus the external test that would close it>
 >
-> Artifact: `.claude/proof/<KEY>.yaml`. This is the recurring last-mile gap: the behavior exists in the code but no test proves it from outside.
+> Artifact: `docs/proof/<KEY>.yaml`. This is the recurring last-mile gap: the behavior exists in the code but no test proves it from outside.
 > ```
 
 The `Reason:` field is not decoration: `bounce-reason-gate` blocks the comment
@@ -206,7 +208,7 @@ Delegate to `atlassian-expert`:
 > - <L4 findings: input + observed response, each unasserted>
 > - <and/or: level(s) that couldn't run and why — e.g. "PIT not configured → mutation assumed">
 >
-> Artifact: `.claude/proof/<KEY>.yaml`. Left in Review for you to adjudicate.
+> Artifact: `docs/proof/<KEY>.yaml`. Left in Review for you to adjudicate.
 > ```
 
 ## Report

@@ -1,5 +1,5 @@
 ---
-description: Transforma a coluna Review em uma lista curta de perguntas fechadas, em vez de uma lista de cards para abrir um a um. Lê os cards que estão em Review AGORA, pega o artefato de prova de cada um (.claude/proof/<KEY>.yaml), classifica o motivo do NEEDS-HUMAN nos sete motivos de docs/needs-human-motivos.md, tira da sua frente o que não é decisão de ninguém (Docker fora, ferramenta ausente), agrupa o resto por motivo e faz UMA pergunta por grupo com recomendação. Você responde em lote ("1 sim, 2 não") e o comando aplica. Não roda prova nenhuma — quem prova é /board-flow:prove.
+description: Transforma a coluna Review em uma lista curta de perguntas fechadas, em vez de uma lista de cards para abrir um a um. Lê os cards que estão em Review AGORA, pega o artefato de prova de cada um (docs/proof/<KEY>.yaml), classifica o motivo do NEEDS-HUMAN nos sete motivos de docs/needs-human-motivos.md, tira da sua frente o que não é decisão de ninguém (Docker fora, ferramenta ausente), agrupa o resto por motivo e faz UMA pergunta por grupo com recomendação. Você responde em lote ("1 sim, 2 não") e o comando aplica. Não roda prova nenhuma — quem prova é /board-flow:prove.
 argument-hint: [--max N] [--scope "<jql>"] [--no-scope] [--dry-run]
 ---
 
@@ -48,7 +48,7 @@ Delegue ao `atlassian-expert`:
 > efetivo, por prioridade e rank. Limite <max>. Devolva key + summary + tipo +
 > prioridade, e o escopo efetivo usado.
 
-**Por que assim, e não varrendo `.claude/proof/*.yaml`:** o artefato registra o
+**Por que assim, e não varrendo `docs/proof/*.yaml`:** o artefato registra o
 veredito daquela rodada e não é reescrito quando o card anda depois. No
 levantamento de 03/08/2026, dos 33 cards com artefato `needs-human` no disco,
 **29 já estavam Done**. Uma fila montada a partir dos arquivos seria quase toda
@@ -59,7 +59,9 @@ filtro apertado demais não pode se passar por fila vazia.
 
 ### 2. Para cada card, o artefato entra como leitura de apoio
 
-Leia `.claude/proof/<KEY>.yaml`. Sem artefato, o card entra na fila como
+Leia `docs/proof/<KEY>.yaml` — e, se não houver, `.claude/proof/<KEY>.yaml`,
+onde ficam os artefatos das rodadas anteriores à mudança de destino. Sem
+artefato em nenhum dos dois, o card entra na fila como
 **"nunca foi provado"** — não é NEEDS-HUMAN, é trabalho para
 `/board-flow:prove`. Diga isso e siga.
 

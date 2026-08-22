@@ -37,6 +37,13 @@ feedback:
       entirely (unknown agent → all writes blocked) — fixed in the repo, entry
       ".claude/proof/**". See common/skills/zero-micromanagement +
       defense-in-depth, and the [[bash-pathlock-bypass]] memory.
+
+      UPDATE 2026-08-22 — the allowlist entry is now "docs/proof/**", and
+      ".claude/proof/**" is NO LONGER writable: ".claude/" is gitignored in the
+      consuming projects, so a verdict written there died with the session
+      worktree. Write your artifact to docs/proof/<KEY>.yaml. The principle
+      above is unchanged, and applies to this very entry: if the lock blocks
+      you, write where it points — never edit the lock.
     tag: principle
 
   - run_id: 2026-06-10-proof-reviewer-verdict-drift

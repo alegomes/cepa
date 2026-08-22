@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Classifica um veredito NEEDS-HUMAN em um dos sete motivos.
 
-Entrada: o dicionário de um `.claude/proof/<KEY>.yaml`.
+Entrada: o dicionário de um artefato de prova (`docs/proof/<KEY>.yaml`, ou o
+         `.claude/proof/<KEY>.yaml` das rodadas antigas).
 Saída:   (slug, evidência) — a evidência é a frase que fez a regra casar, para
          o comando mostrar sem o usuário abrir o arquivo.
 
@@ -288,13 +289,39 @@ def classify(d: dict) -> tuple[str, str]:
     return "sem-motivo", "needs-human sem nível bloqueado identificável"
 
 
+# Os dois diretórios de artefato, na ordem em que ganham. `docs/proof/` é onde
+# o proof-reviewer grava desde que o path-lock passou a travá-lo ali: nos
+# projetos que rodam o portão, `.claude/` é gitignored, então um veredito
+# gravado lá morre junto com a worktree descartável da sessão. `.claude/proof/`
+# segue LIDO porque é onde está a base inteira que já existe no disco — foi
+# sobre 33 desses artefatos que a suíte de regressão dos motivos foi montada.
+# Estreitar o leitor para um caminho só o cegaria para ela.
+PROOF_DIRS = ("docs/proof", ".claude/proof")
+
+
+def proof_artifacts(repo: str) -> list:
+    """Caminhos dos artefatos de um repo, um por card.
+
+    Quando o mesmo card tem artefato nos dois diretórios — o caso normal de um
+    card provado antes da mudança de destino e re-provado depois — o de
+    `docs/proof/` vence, porque é o que sobrevive à worktree e, sendo o destino
+    de escrita atual, é também o mais novo. O outro é ignorado em silêncio: não
+    é divergência a resolver, é a versão que ficou para trás.
+    """
+    escolhidos: dict = {}
+    for d in PROOF_DIRS:
+        for path in sorted(glob.glob(os.path.join(repo, d, "*.yaml"))):
+            escolhidos.setdefault(os.path.basename(path), path)
+    return [escolhidos[k] for k in sorted(escolhidos)]
+
+
 def _main(repos):
     import yaml
 
     buckets: dict[str, list] = {}
     total = 0
     for repo in repos:
-        for path in sorted(glob.glob(os.path.join(repo, ".claude/proof/*.yaml"))):
+        for path in proof_artifacts(repo):
             with open(path) as fh:
                 d = yaml.safe_load(fh)
             if not isinstance(d, dict):

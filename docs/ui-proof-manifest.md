@@ -1,4 +1,4 @@
-# Manifesto de prova de UI — `.claude/ui-proof.yaml`
+# Manifesto de prova de UI — `docs/ui-proof.yaml`
 
 Este é o artefato central do **P6** (o slice "ui-proof-gate" do programa
 `melhorias-2026-07`, que cria um gate mecânico de prova para a superfície de
@@ -11,18 +11,26 @@ unpacked, percorrer o fluxo, assertar efeito observável no backend). O que ele
 isso é conhecimento do repo, não do harness. Este manifesto é onde o repo
 declara **o que provar**.
 
-> **Onde mora:** no repo do *projeto que usa o cepa*, em `.claude/ui-proof.yaml`.
-> O cepa em si não tem um — ele documenta o formato (este arquivo) e o consome
-> (`ui-proof-reviewer`, `/common:prove-ui`).
+> **Onde mora:** no repo do *projeto que usa o cepa*, em `docs/ui-proof.yaml`
+> — versionado. O cepa em si não tem um; ele documenta o formato (este arquivo)
+> e o consome (`ui-proof-reviewer`, `/common:prove-ui`).
+>
+> **Morava em `.claude/ui-proof.yaml` até 22/08/2026.** Nesses projetos
+> `.claude/` é gitignored, então o manifesto era invisível para o git e sumia
+> junto com a worktree descartável da sessão, levando os fluxos declarados
+> embora. O mesmo valia para os scripts fixados e para o veredito. O agente
+> ainda LÊ o caminho antigo quando o novo não existe, e avisa no relatório que
+> o arquivo deve mudar de lugar; a partir daí tudo o que o gate produz é
+> versionado.
 >
 > **Relação com o `env.yaml` (P3):** o **P3** é o slice do mesmo programa que
-> criou o [manifesto de ambiente](env-manifest.md) `.claude/env.yaml` — a
+> criou o [manifesto de ambiente](env-manifest.md) `docs/env.yaml` — a
 > declaração do runtime do projeto (portas, serviços, como subir). Este
 > manifesto declara outra coisa: os fluxos de UI e seus efeitos verificáveis.
 > Eles se complementam: o campo `up` daqui pode simplesmente dizer `env.yaml`
 > para reusar o `up:`/`healthcheck:` de lá, em vez de duplicar o comando.
 >
-> **Por que dois dialetos de YAML em `.claude/`?** O `env.yaml` é raso e
+> **Por que dois dialetos de YAML?** O `env.yaml` é raso e
 > parseado por hooks tolerantes-por-linha (sem pyyaml); este manifesto é
 > aninhado (`flows` → `steps`/`assert`) e lido por um agente com YAML de
 > verdade. A quebra é deliberada, não descuido: consumidores diferentes
@@ -126,9 +134,9 @@ num backend. O fluxo abre uma página, aciona a extensão e o registro tem que
 aparecer no endpoint de auditoria do backend.
 
 ```yaml
-# .claude/ui-proof.yaml — fluxos de UI declarados do projeto
+# docs/ui-proof.yaml — fluxos de UI declarados do projeto
 
-up: env.yaml                       # reusa up:/healthcheck: do .claude/env.yaml
+up: env.yaml                       # reusa up:/healthcheck: do docs/env.yaml
 base_url: http://localhost:8083
 build: "npm --prefix {dir}/extension run build"   # recompila do checkout em teste ({dir})
 serve: "npm run serve:app -- --port {port}"       # sobe o app compilado na porta escolhida
@@ -169,7 +177,7 @@ Convenções do exemplo:
   interpola variáveis do arquivo de `credentials_ref`; `{nonce}` interpola o
   marcador de frescor do run. O agente faz a substituição antes de gerar o
   script — os valores de credencial **nunca** aparecem no script gerado em
-  `.claude/ui-proof/runs/` (o script lê do env em runtime).
+  `docs/ui-proof/runs/` (o script lê do env em runtime).
 - `assert.backend.check` também aceita a forma estruturada
   `{ method: GET, url: "{base_url}/api/acessos?limit=1" }` — equivalente ao
   `curl` acima; use a que preferir.
@@ -210,15 +218,15 @@ morreu antes do trap.
 - **`common/agents/ui-proof-reviewer.md`** — o agente que executa: sobe o app
   conforme `up`, gera (ou reusa — os scripts são **pinados** por hash dos
   steps) um script Playwright por fluxo em
-  `.claude/ui-proof/runs/<fluxo>.spec.ts`, roda, e computa PROVEN / UNPROVEN
-  / NEEDS-HUMAN mecanicamente, gravando `.claude/proof/ui-<slug>.yaml`.
+  `docs/ui-proof/runs/<fluxo>.spec.ts`, roda, e computa PROVEN / UNPROVEN
+  / NEEDS-HUMAN mecanicamente, gravando `docs/proof/ui-<slug>.yaml`.
 - **`/common:prove-ui [fluxo|--all|--draft]`** (`common/commands/prove-ui.md`)
   — o comando fino que delega ao agente e aplica o contrato de relatório em
   pt-BR. O modo `--draft` PROPÕE um esqueleto comentado deste manifesto a
   partir da estrutura do repo — proposta explícita para o humano revisar,
   nunca uma prova.
 - **`common/hooks/ui-proof-verdict-guard.py`** — guarda mecânica (PreToolUse
-  Write): bloqueia um `.claude/proof/ui-*.yaml` com `verdict: proven` que
+  Write): bloqueia um `docs/proof/ui-*.yaml` com `verdict: proven` que
   contradiga seus próprios statuses de fluxo/perturbação.
 
 > **Por que em `common/` e não numa topologia?** A superfície de UI é
@@ -229,7 +237,7 @@ morreu antes do trap.
 >
 > **Por que Playwright via Bash e não o MCP de browser?** O gate precisa de
 > execução **reprodutível e pinável** — um script versionável em
-> `.claude/ui-proof/runs/`, re-rodável idêntico no run RED e citável como
+> `docs/ui-proof/runs/`, re-rodável idêntico no run RED e citável como
 > evidência — e de recursos que a superfície MCP não expõe de forma estável
 > (contexto persistente com extensão unpacked, trap de teardown). Bash + npx
 > dá isso com o toolchain que o repo já declara.

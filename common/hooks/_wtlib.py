@@ -412,7 +412,14 @@ RESCUE_SKIP = (
     "handoffs/",          # deliberately reaped when the branch lands
     "plugins/",           # installed copies of the plugins themselves
     "cepa-telemetry/",    # append-only ledger, canonical copy lives in $HOME
-    "ui-proof/runs/",     # regenerated per run from the manifest
+    "ui-proof/runs/",     # scripts fixados do gate de UI, na LOCALIZAÇÃO ANTIGA.
+                          # Desde 22/08/2026 eles nascem em docs/ui-proof/runs/,
+                          # versionado, e nem chegam aqui. O que sobra sob
+                          # .claude/ é de árvore anterior à mudança: regenerável
+                          # a partir do manifesto, e o hash fixado de lá não
+                          # corresponde mais ao caminho que o agente cita no
+                          # veredito. Carregar isso para outra árvore só
+                          # ressuscitaria script órfão.
     "expertise",          # symlink to the canonical clone
     "last-build.json",
     "loop-state.json",    # contador do loop-budget: vale para a sessão que o
@@ -538,8 +545,30 @@ def auto_clean(root: str):
 
 # ── worktree seeding ──────────────────────────────────────────────────────
 
+# Onde o manifesto de ambiente pode estar, na ordem em que ganha. Desde
+# 22/08/2026 o lugar é `docs/env.yaml`: nos projetos que usam o harness
+# `.claude/` é gitignored, então um manifesto ali é invisível para o git e some
+# junto com a worktree descartável da sessão — levando junto as portas, o
+# comando de subida e a lista `seed:` que só quem escreveu conhecia.
+# `.claude/env.yaml` segue sendo LIDO, e essa é a única mecânica que existe
+# aqui: ninguém ESCREVE este arquivo, ele é declarado à mão pelo dono do
+# projeto. Não há hook que possa travar um destino que nenhum agente produz —
+# o que move a convenção é este leitor preferir o caminho novo, mais a
+# documentação em docs/env-manifest.md.
+ENV_MANIFEST_PATHS = (("docs", "env.yaml"), (".claude", "env.yaml"))
+
+
+def env_manifest_path(main_root: str):
+    """O manifesto de ambiente em uso, ou None. `docs/env.yaml` ganha."""
+    for parts in ENV_MANIFEST_PATHS:
+        p = Path(main_root).joinpath(*parts)
+        if p.is_file():
+            return p
+    return None
+
+
 def env_manifest_list(main_root: str, key: str):
-    """Read a top-level list key from the project's .claude/env.yaml.
+    """Read a top-level list key from the project's env manifest.
 
     The environment manifest (see docs/env-manifest.md) is deliberately
     shallow, so this is a tolerant line parser — no pyyaml dependency.
@@ -547,7 +576,9 @@ def env_manifest_list(main_root: str, key: str):
     Returns [] on any problem (missing file, unreadable, malformed):
     fail-silent by design, like everything else in the seeding path.
     """
-    path = Path(main_root) / ".claude" / "env.yaml"
+    path = env_manifest_path(main_root)
+    if path is None:
+        return []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -585,8 +616,9 @@ def seed_globs(main_root: str):
     Precedence: $CEPA_SEED (or the legacy $CCW_SEED, still read;
     space/colon-separated) > .claude/worktree-seed
     (one glob per line, '#' comments) > DEFAULT_SEED_GLOBS.
-    A `seed:` list in .claude/env.yaml (see docs/env-manifest.md) is
-    ADDITIVE: its globs are appended to whichever source won, deduped.
+    A `seed:` list in the env manifest (docs/env.yaml, or the legacy
+    .claude/env.yaml — see docs/env-manifest.md) is ADDITIVE: its globs are
+    appended to whichever source won, deduped.
     """
     env = (os.environ.get("CEPA_SEED", "").strip()
            or os.environ.get("CCW_SEED", "").strip())

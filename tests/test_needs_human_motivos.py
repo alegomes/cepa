@@ -30,10 +30,6 @@ FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures", "needs-human")
 ESPERADO = {
     # A prova não chegou a rodar — ninguém decide nada aqui
     "WEGO-1558": "nao-rodou",
-    "WEGO-1612": "nao-rodou",
-    "WEGO-1663": "nao-rodou",
-    "WEGO-1682": "nao-rodou",
-    "WEGO-1683": "nao-rodou",   # Docker fora
     "WEGO-1698": "nao-rodou",   # PIT ausente no projeto inteiro
     "WEGO-1732": "nao-rodou",
     "WEGO-1763": "nao-rodou",
@@ -71,6 +67,30 @@ ESPERADO = {
     "WEGO-1564": "guarda-fraca",    # PedidoAssinatura, 60% dos mutantes mortos
     # Apareceu comportamento que nenhum teste confere
     "WEGO-1819": "sem-cobertura",
+    # Estes quatro esperavam `nao-rodou` até 2026-08-22, e a expectativa era o
+    # que estava errado, não a regra. Em 14/08/2026 a checagem estrutural de
+    # `l4_adversarial_input.status == "findings"` subiu para ANTES dos casadores
+    # de prosa, porque o texto do próprio achado estava roteando o card: um
+    # artefato cuja prosa cita "quarkus-jacoco não configurado" ou "PIT ausente
+    # no pom do worktree" casava o padrão de "não rodou" e caía no ÚNICO balde
+    # que sai da frente do humano sem perguntar. Foi assim que o WEGO-1894
+    # (colisão de hash) e o WEGO-1897 (byte NUL derrubando a API) sumiram da
+    # fila do prove-drain de wego-acesso-backend.
+    #
+    # Nos quatro a prova RODOU — perturbação com verde→vermelho→verde registrado
+    # — e o L4 achou coisa que precisa de decisão humana:
+    #   1612: GET ?syncStatus=true transita ENVIADO→ABERTO e nenhum @QuarkusTest
+    #         asserta a transição.
+    #   1663: 14 testes @Disabled entregues dentro de um card cujo título é
+    #         "cobertura E2E completa" (achado de severidade alta).
+    #   1682: quatro achados que o próprio routing_reason manda triar.
+    #   1683: a flag wego.refresh-on-dispatch.enabled default false e sem
+    #         override em %prod — produção sem a proteção que o card entregou.
+    # Manter `nao-rodou` aqui seria pedir para o comando esconder os quatro.
+    "WEGO-1612": "sem-cobertura",
+    "WEGO-1663": "sem-cobertura",
+    "WEGO-1682": "sem-cobertura",
+    "WEGO-1683": "sem-cobertura",
     # Depende de alguém de fora
     "WEGO-1757": "fora-do-alcance",  # schedule no Bitbucket + quota da Tecnospeed
 }

@@ -129,9 +129,21 @@ def unknown_levels(data) -> list:
 INPUT_MODULES = {"api-rest", "api", "rest", "api_rest"}
 
 
+# Both proof directories count. `docs/proof/` is the destination the
+# proof-reviewer is now locked to (see build-hex/hooks/path-lock.py), because
+# `.claude/` is gitignored in the consuming projects and a verdict written there
+# dies with the session's disposable worktree. `.claude/proof/` stays RECOGNIZED
+# here on purpose: this hook is the gate that blocks a `verdict: proven` sitting
+# next to an `assumed`/`skipped` level, and a gate that stops recognizing a path
+# does not get stricter — it goes quiet. Every artifact already on disk lives
+# under the old path, and anything still writing there (the ui gate, a stale
+# plugin cache, a hand-written file) must keep being checked.
+_PROOF_DIR_RE = re.compile(r"(?:^|/)(?:\.claude|docs)/proof/")
+
+
 def is_proof_artifact(file_path: str) -> bool:
     p = file_path.replace(os.sep, "/")
-    return "/.claude/proof/" in p and p.endswith((".yaml", ".yml"))
+    return bool(_PROOF_DIR_RE.search(p)) and p.endswith((".yaml", ".yml"))
 
 
 def collect_statuses(node, out, path=""):
