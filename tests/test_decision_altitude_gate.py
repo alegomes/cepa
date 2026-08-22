@@ -123,6 +123,56 @@ def test_nao_bloqueia_os_documentos_que_definem_o_campo():
     check("linha-modelo com comentário ao lado passa", rc == 0, err)
 
 
+def test_so_vale_dentro_do_bloco_de_decisao():
+    """`Altitude` fora de bloco de decisão é OUTRO campo, com outro vocabulário.
+
+    Em 2026-08-22 o completion-auditor tentou gravar
+    `.claude/acceptance/WEGO-2085.yaml` com `altitude: http` — ali o campo diz em
+    que superfície o critério é observável (http/cli/ui/event/domain/application),
+    nada a ver com quem revisa a decisão. O gate barrou e o agente contornou
+    renomeando o campo na marra, o que faz cada sessão inventar um nome e os
+    artefatos de aceite deixarem de ser comparáveis.
+    """
+    rc, err = run(escrita("### Decision: mover o gate\n\n**Altitude:** operacional\n"))
+    check("dentro do bloco, palavra fora do vocabulário bloqueia", rc == 2, err)
+
+    yaml = ("key: WEGO-2085\ncriteria:\n  - id: AC1\n    altitude: http\n"
+            "    surface: POST /acessos\n")
+    rc, err = run({"tool_name": "Write", "tool_input": {
+        "file_path": "/tmp/WEGO-2085.yaml", "content": yaml}})
+    check("yaml de aceite sem bloco de decisão passa", rc == 0, err)
+
+    misto = ("### Decision: cortar a cadeia\n\n**Altitude:** tactical\n\n"
+             "### Critérios de aceite\n\ncriteria:\n  - altitude: http\n")
+    rc, err = run(escrita(misto))
+    check("altitude fora do bloco, no mesmo arquivo, passa", rc == 0, err)
+
+
+def test_edit_sem_cabecalho_usa_o_arquivo_de_destino():
+    """Um Edit pode trazer só a linha do campo; quem diz se é bloco é o arquivo.
+
+    Sem isto, corrigir a altitude de um bloco existente por Edit escaparia do
+    gate — que é exatamente o momento em que o autor está ali para consertar.
+    """
+    import tempfile, os
+    d = tempfile.mkdtemp()
+    md = os.path.join(d, "RESULT.md")
+    Path(md).write_text("### Decision: x\n\n**Altitude:** tactical\n", encoding="utf-8")
+    rc, _ = run({"tool_name": "Edit", "tool_input": {
+        "file_path": md, "new_string": "**Altitude:** contrato"}})
+    check("fragmento sem cabeçalho, em arquivo com bloco, bloqueia", rc == 2)
+
+    ya = os.path.join(d, "WEGO-2085.yaml")
+    Path(ya).write_text("key: WEGO-2085\ncriteria:\n  - altitude: cli\n", encoding="utf-8")
+    rc, err = run({"tool_name": "Edit", "tool_input": {
+        "file_path": ya, "new_string": "    altitude: http"}})
+    check("fragmento sem cabeçalho, em arquivo sem bloco, passa", rc == 0, err)
+
+    rc, err = run({"tool_name": "Edit", "tool_input": {
+        "file_path": os.path.join(d, "nao-existe.yaml"), "new_string": "altitude: http"}})
+    check("arquivo inexistente não vira bloco de decisão", rc == 0, err)
+
+
 def main():
     test_palavra_livre_bloqueia()
     test_vocabulario_passa()
@@ -131,6 +181,8 @@ def main():
     test_edit_e_multiedit()
     test_nunca_bloqueia_o_que_nao_ve()
     test_nao_bloqueia_os_documentos_que_definem_o_campo()
+    test_so_vale_dentro_do_bloco_de_decisao()
+    test_edit_sem_cabecalho_usa_o_arquivo_de_destino()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")
