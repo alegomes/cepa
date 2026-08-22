@@ -1,6 +1,7 @@
 ---
 description: Walk through autonomous-mode decisions from a run with the user — keep / overrule / refine each one. By default surfaces only strategic-altitude decisions (scope, contract, breaking change, user-facing naming); pass --all to include tactical and implementation decisions too. Verdicts get written to the relevant agent's expertise file as feedback so future runs are biased toward your preferences. Run after /common:autonomous-resume reports a completed run.
 argument-hint: [run-id] [--all]   (run-id defaults to most recent completed-but-not-debriefed run)
+interaction: conversational
 ---
 
 # /common:debrief

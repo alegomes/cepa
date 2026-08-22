@@ -1,6 +1,7 @@
 ---
 description: Spin up an isolated git worktree so a parallel `claude` window works on its own slice of the repo without colliding with other windows. /common:worktree-start <slice> creates ~/cepa-worktrees/<repo>-<slice> (outside the repo, to dodge cloud-sync races) on branch session/<slice> and tells you where to open the new session. Merge it back with /common:worktree-merge.
 argument-hint: <slice>   (a short kebab-case name for the slice of work, e.g. billing-api)
+interaction: routine
 ---
 
 # /common:worktree-start

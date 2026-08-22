@@ -1,6 +1,7 @@
 ---
 description: Propagate updates in specs/e2e-assertions.md to the corresponding E2E tests. After the spec evolves (someone edited assertions, added cases, or removed obsolete ones), this command re-aligns the tests to match. For one endpoint or `--all` to sweep every spec section. Writes test changes; runs the build to verify alignment lands green. Use when you've updated the spec and want the tests to follow.
 argument-hint: [--all] [<METHOD /path/to/endpoint>]   (mutually exclusive — one endpoint, or `--all`)
+interaction: routine
 ---
 
 # /build-hex:resync-e2e

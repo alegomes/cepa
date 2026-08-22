@@ -1,6 +1,7 @@
 ---
 description: Close a fork opened by /common:branch. In the side session it captures the conclusion of the side discussion into a resolution; back in the origin session it ingests only that resolution and pops the fork off the LIFO stack — so the origin thread comes back with the answer, not the whole detour. No-arg form operates on the top of the stack; pass a fork-id to target a specific frame.
 argument-hint: [<fork-id>]   (no id = top of the stack; mode is inferred from whether THIS session resumed the fork)
+interaction: routine
 ---
 
 # /common:return

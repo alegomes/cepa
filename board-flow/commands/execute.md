@@ -1,6 +1,7 @@
 ---
 description: Execute one existing Jira card. Auto-detects the issue type — Bug cards dispatch to /board-flow:fix (reproduce-fix-verify flow); Story/Task/Epic cards proceed with the canonical plan-build-validate flow (detail audit + build + validate). Override auto-dispatch with --force-feature-flow. Use /board-flow:plan-track-build-validate for abstract input that needs decomposition.
 argument-hint: <jira-key> [--force-feature-flow] [--no-scope]
+interaction: routine
 ---
 
 # /board-flow:execute

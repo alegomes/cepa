@@ -1,6 +1,7 @@
 ---
 description: Author an E2E behavior spec from INTENT (not from code). You describe what an endpoint should do — in prose, or via a TASK.md path — and integration-analyst produces the spec section in specs/e2e-assertions.md following project style. Use BEFORE implementation, when designing a new endpoint, or when re-specifying expected behavior independent of current code. For documenting an EXISTING endpoint's behavior from its code, use /build-hex:document-e2e.
 argument-hint: [--preview] [--task <path/to/TASK.md>] <METHOD /path/to/endpoint> ["<freeform intent description>"]
+interaction: routine
 ---
 
 # /build-hex:spec-e2e

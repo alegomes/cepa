@@ -1,6 +1,7 @@
 ---
 description: Advance a Jira card to the next column in its topology's lifecycle. Reads `board-flow.yaml` to know what "next" means and which agent (if any) runs on entry. Generic across topologies — used by discovery, build-hex with custom flows, etc. For the default To Do → In Progress → In Review flow, use /board-flow:execute instead.
 argument-hint: <jira-key> [--no-scope]
+interaction: routine
 ---
 
 # /board-flow:advance
@@ -62,6 +63,14 @@ If `board-flow.yaml` is missing → abort with: "No lifecycle file found. Create
 ## Instructions
 
 You are the orchestrator. Don't implement anything yourself; delegate to `atlassian-expert` for Jira reads/writes and to whichever `on_enter` agent the lifecycle names.
+
+Apply `default-yes`: este comando roda quase sempre DENTRO de um run maior
+(`/board-flow:drain`, `/board-flow:prove-drain`, `/common:session`), e uma
+pergunta feita aqui chega ao usuário no meio da fila — o ponto mais caro para
+interromper, porque responder exige recarregar o contexto inteiro da lista.
+Achado reversível, ou que só registra algo, com recomendação clara: execute e
+registre para o relatório de quem te chamou. Pergunta só para o irreversível, e
+ela sobe para o relatório final do run, nunca para o meio dele.
 
 `atlassian-expert` is the only Jira write path. If it isn't installed, abort.
 

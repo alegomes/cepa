@@ -1,6 +1,7 @@
 ---
 description: Run the canonical build-hex workflow — plan with planning-lead, decompose+build with engineering-lead (per-Task quality loop), validate with validation-lead.
 argument-hint: <task description>
+interaction: routine
 ---
 
 # /build-hex:plan-build-validate
@@ -31,6 +32,14 @@ when a worker should have pushed through. Route back rather than wrap
 with caveats. Apply `scope-discipline`: don't expand the task beyond
 what was asked. Apply `name-the-disagreement` when synthesizing
 conflicting reports.
+
+Apply `default-yes`: este comando roda quase sempre DENTRO de um run maior
+(`/board-flow:drain`, `/board-flow:prove-drain`, `/common:session`), e uma
+pergunta feita aqui chega ao usuário no meio da fila — o ponto mais caro para
+interromper, porque responder exige recarregar o contexto inteiro da lista.
+Achado reversível, ou que só registra algo, com recomendação clara: execute e
+registre para o relatório de quem te chamou. Pergunta só para o irreversível, e
+ela sobe para o relatório final do run, nunca para o meio dele.
 
 ## Worktree policy
 

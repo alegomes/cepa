@@ -1,6 +1,7 @@
 ---
 description: Executa a onda corrente de um plano do Maestro com uma ação — gc de órfãos, intake gate (cepa-dor), sobe o porteiro (shadow-mode no 1º programa), forka cada slice num worktree herdr com settings geradas + wrapper normativo, roda o event loop por arquivo, aterrissa a onda pelo merge train (reusa os guards do worktree-merge com verify pós-cada-merge) e relata. Morte da sessão é recuperável por /maestro:resume. Lê EXCLUSIVAMENTE o plan.yaml (invariante de costura). ⚠ Precisa do herdr rodando e do plugin instalado (bin/install.sh --clean).
 argument-hint: <nome-do-programa> [--wave N] [--shadow] [--port P]
+interaction: routine
 ---
 
 # /maestro:run

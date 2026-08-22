@@ -1,6 +1,7 @@
 ---
 description: Phase 1 — read-only archaeology of an existing project. Runs the four survey fronts in parallel (Diátaxis inventory · HOW extraction · flow tracing · WHY archaeology) and synthesizes them into docs/_survey/gap-report.md. Touches no source, moves no file. The anchor for the whole effort.
 argument-hint: "[optional scope note — e.g. 'focus on the signature flows']"
+interaction: routine
 ---
 
 # /docs:survey

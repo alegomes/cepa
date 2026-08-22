@@ -1,6 +1,7 @@
 ---
 description: Prova a superfície de UI/extensão do projeto pelo gate mecânico — delega ao ui-proof-reviewer, que sobe o app, roda os fluxos declarados em docs/ui-proof.yaml via Playwright (extensão Chrome unpacked incluída) e exige efeito verificável no backend, com prova green→red→green quando o diff da mudança é conhecido. Retorna PROVEN / UNPROVEN / NEEDS-HUMAN com relatório leigo em pt-BR. Sem manifesto, o comando não chuta — devolve NEEDS-HUMAN dizendo exatamente o que declarar. Com --draft, PROPÕE um esqueleto comentado de manifesto a partir da estrutura do repo (proposta explícita, nunca prova).
 argument-hint: [fluxo | --all | --draft]
+interaction: routine
 ---
 
 # /common:prove-ui

@@ -1,6 +1,7 @@
 ---
 description: Run the canonical design flow on a feature — explore (flows ∥ visual), systematize against the design system, prototype via Gamma/Canva, critique, and assemble a build-ready design spec. Each step delegates to the design team's workers. For single-step / board-driven work, delegate to design-lead directly or use /board-flow:advance.
 argument-hint: <feature description or docs/design/<slug>/ path>
+interaction: routine
 ---
 
 # /design:explore-critique-spec

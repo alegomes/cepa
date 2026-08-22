@@ -1,6 +1,7 @@
 ---
 description: Run ONLY the hygiene gate on the current local diff — lint/style/simplify/obvious bugs via /code-review — without opening a PR. Standalone pre-flight; use it to see (or fix) what the gate would catch before you commit to opening the PR. /review-gate:open runs this same gate and then opens the PR.
 argument-hint: [base-ref]   (optional: diff against this ref instead of the repo's default branch)
+interaction: routine
 ---
 
 # /review-gate:review

@@ -1,6 +1,7 @@
 ---
 description: Register a raw product signal as an Opportunity card on the discovery board. Lightweight — no framing, no research, just tracking. Lands in Inbox. Use /board-flow:advance once you're ready to start work on it.
 argument-hint: <one-line description of the signal>
+interaction: routine
 ---
 
 # /discovery:capture

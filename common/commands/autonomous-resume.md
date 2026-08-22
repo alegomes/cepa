@@ -1,6 +1,7 @@
 ---
 description: Resume an interrupted autonomous run. Reads docs/autonomous/<run-id>/state.yaml, restores topology + flow + last position, re-activates autonomous-mode, and continues from the next pending step. Use after a token-limit hit, a session crash, or when you start a fresh session and want the team to pick up where they left off.
 argument-hint: [run-id]   (defaults to most recent in-progress run)
+interaction: routine
 ---
 
 # /common:autonomous-resume

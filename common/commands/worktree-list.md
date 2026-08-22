@@ -1,6 +1,7 @@
 ---
 description: Show all session worktrees and their state — commits ahead, clean/dirty, live/idle, age, areas touched, conflict prediction against base, and build status. Read-only dashboard so you never lose track of parallel work or a pending merge.
 argument-hint: (no arguments)
+interaction: routine
 ---
 
 # /common:worktree-list

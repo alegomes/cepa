@@ -1,6 +1,6 @@
 {
   "name": "build-hex",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Hexagonal-architecture backend topology — 14 agents across 3 teams (planning, engineering, validation) with a per-Task quality loop (qa → refactor-advisor → code-reviewer), plus a standalone proof-reviewer that runs the change-driven proof gate for /board-flow:prove (JaCoCo/PIT/jqwik) and answers for exactly one card at a time — aggregate verdicts are refused, so a batch sharing one diff yields per-card evidence or NEEDS-HUMAN naming the cards it could not separate, never an unproven card riding a proven one out of Review. Path-lock keyed to the standard domain/application/api-rest/infrastructure/bootstrap Maven layout. No external tracker integration — pair with board-flow for Jira lifecycle.",
   "author": {
     "name": "alegomes"

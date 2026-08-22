@@ -1,6 +1,7 @@
 ---
 description: Consolidação periódica dos mental-models (common/expertise/*.yaml) — funde entries redundantes, aposenta os que o código atual contradiz (SEMPRE verificando contra o repo antes) e mantém intocado o que segue válido. Produz um diff antes/depois com a evidência de cada aposentadoria e SÓ grava após aprovação explícita do usuário. Complementa o prune por contagem do expertise-append.py, que evita crescimento mas nunca re-verifica fatos.
 argument-hint: [agente | --all]   (ex.: proof-reviewer, backend-dev; --all varre todos os *-mental-model.yaml)
+interaction: routine
 ---
 
 # /common:consolidate

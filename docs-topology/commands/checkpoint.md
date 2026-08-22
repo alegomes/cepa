@@ -1,6 +1,7 @@
 ---
 description: Phase 3 — the owner checkpoint. Walks the owner through the gap-report's WHY-gaps, "expected-or-deviation?" questions, and drifts. Their answers become SOURCED:owner rationale in the gap-report. Where an answer reveals a real defect or security gap, open a tracker card (pairs with board-flow). This is the make-or-break grounding step — no authoring until it's done.
 argument-hint: "(none — walks the gap-report's open questions)"
+interaction: routine
 ---
 
 # /docs:checkpoint

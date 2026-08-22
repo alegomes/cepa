@@ -1,6 +1,7 @@
 ---
 description: Run a read-only analysis flow on a build-hex codebase — examine the code/contracts, write a markdown findings report, conclude with a recommended next step (no-issue / bug / feature-or-refactor / design-decision-needed). Use when you're unsure whether something is wrong, duplicated, or missing.
 argument-hint: <question or hypothesis to investigate, e.g., "endpoints X and Y look duplicated, confirm or refute">
+interaction: routine
 ---
 
 # /build-hex:investigate

@@ -1,6 +1,7 @@
 ---
 description: Run the canonical build-team workflow — plan with planning-lead, build with engineering-lead, validate with validation-lead. Each step delegates further to its own workers.
 argument-hint: <task description>
+interaction: routine
 ---
 
 # /plan-build-validate

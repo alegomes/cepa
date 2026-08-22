@@ -1,6 +1,7 @@
 ---
 description: Abre uma sessão com propósito declarado e a leva do início ao fim sem pingue-pongue — deixa o harness pronto (doctor --fix em lote), faz TODAS as perguntas na largada (inclusive as que a rotina só encontraria no meio), executa a rotina inteira sem parar, entrega UM relatório final e oferece o wrap-up. Substitui o padrão "rode o doctor → siga as recomendações → rode a rotina → responda o vaivém do fim", que consumia mais atenção que a própria tarefa.
 argument-hint: <rotina> [args da rotina]   ex.: /common:session prove-drain --max 5
+interaction: routine
 ---
 
 # /common:session
