@@ -432,6 +432,17 @@ RESCUE_SKIP = (
     "__pycache__/",
 )
 
+# Diretórios que nunca são artefato do harness, em QUALQUER profundidade sob
+# .claude/. RESCUE_SKIP é ancorada no início do caminho, então não alcança
+# `.claude/ui-proof/node_modules/`: em 22/08/2026 o resgate de três worktrees
+# carregou 187 arquivos de node_modules do runner do Playwright junto com 8
+# artefatos de verdade, e o aviso de "204 arquivos" fez a limpeza parecer uma
+# triagem quando era uma conferência de cinco minutos. Dependência se
+# reinstala com um comando; nunca é o artefato em que não pensamos.
+RESCUE_SKIP_ANYWHERE = (
+    "node_modules",
+)
+
 
 def doomed_artifacts(wt_path: str):
     """Files under .claude/ that removing this worktree would destroy.
@@ -465,7 +476,9 @@ def doomed_artifacts(wt_path: str):
         rel_dir = os.path.relpath(dirpath, base)
         rel_dir = "" if rel_dir == "." else rel_dir + "/"
         # Prune skipped subtrees so we never descend into e.g. plugins/.
-        dirnames[:] = [d for d in dirnames if not skipped(rel_dir + d + "/")]
+        dirnames[:] = [d for d in dirnames
+                       if d not in RESCUE_SKIP_ANYWHERE
+                       and not skipped(rel_dir + d + "/")]
         for name in filenames:
             tail = rel_dir + name
             if skipped(tail):
