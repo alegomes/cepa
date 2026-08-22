@@ -1,6 +1,7 @@
 ---
 description: Bulk-execute Jira cards from a column (default = `defaults.status_map.to_do` from `board-flow.yaml`, fallback "To Do"). Iterates through up to N cards in priority order. Stops on first BLOCKED to avoid wasting budget on a stuck card. Heavy operation — each card runs the full execution flow. The split between Backlog (unrefined) and `to_do` (ready for dev) is intentional: drain only pulls from `to_do`, so unrefined Backlog items stay safe.
 argument-hint: [column] [--max N] [--scope "<jql>"] [--no-scope]
+interaction: routine
 ---
 
 # /board-flow:drain
@@ -55,17 +56,24 @@ Found N cards in <column> (scope: <effective scope, or "none — whole column">)
   WEGO-1235 (P2) — <summary>
   ...
 
-Drain these? Each card runs the full execute flow (planning audit + build + validate + Jira transitions). BLOCKED on any card stops the drain.
+Drain these? Each card runs the full execute flow (planning audit + build + validate + Jira transitions).
 
-Reply yes / no / first-N (e.g., "first-2") to drain only a subset.
+E se um card travar (BLOCKED — condição fora do card, que só você resolve):
+  (a) paro o run ali e te chamo                        ← default
+  (b) pulo o card, registro o motivo e sigo com os demais
+
+Reply yes / no / first-N (e.g., "first-2") to drain only a subset, e (a) ou (b)
+para o card travado. Só "sim" vale como sim + (a).
 ```
 
 Wait for user confirmation before proceeding. **Esta é a única parada
-planejada do run** — aplique `default-yes` e traga para esta mesma confirmação
-o que você perguntaria depois: se um card travar (BLOCKED), o run para e te
-chama (default) ou pula o card e segue com os demais? Perguntar isso na largada
-é o que evita interromper o usuário no card 3 de 5, quando ele já perdeu o
-contexto da lista.
+planejada do run** — aplique `default-yes`.
+
+**A alternativa (a)/(b) tem que estar ESCRITA na tela acima, não implícita.**
+Um "posso ir?" que só mostra a contagem de cards não colhe resposta nenhuma
+sobre o card travado: no card 3 de 5 o run para para perguntar, e aí o usuário
+já perdeu o contexto da lista — que é exatamente o custo que a parada única
+existe para evitar. Perguntar na largada custa duas linhas de tela.
 
 Se o run veio de `/common:session`, essas respostas já foram colhidas — siga
 sem perguntar.

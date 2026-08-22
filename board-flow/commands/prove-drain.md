@@ -1,6 +1,7 @@
 ---
 description: Bulk-prove the Review column. Iterates cards in `defaults.status_map.in_review` (priority order) and runs the equivalent of /board-flow:prove on each — change-driven proof, then routes the verdict. Unlike /board-flow:drain, it does NOT stop on a failed card: UNPROVEN bounces back and the drain continues, because clearing the queue is the whole point. PROVEN auto-advances (if a done status is configured), NEEDS-HUMAN stays for you. Use to triage a backlogged Review column.
 argument-hint: [--max N] [--scope "<jql>"] [--no-scope]
+interaction: routine
 ---
 
 # /board-flow:prove-drain
@@ -71,14 +72,26 @@ diff-scoped mutation + adversarial input, in a throwaway worktree).
   · UNPROVEN   → returned to In Progress with the gap (drain CONTINUES)
   · NEEDS-HUMAN→ stays in Review for you
 
-Reply yes / no / first-N to prove a subset.
+E, no fim, os que pararem em NEEDS-HUMAN (nem provados, nem devolvidos —
+os que dependem de uma decisão sua):
+  (a) aplico a recomendação de cada motivo e só te conto o que fiz   ← default
+  (b) seguro todos e te pergunto um por um no relatório
+
+Reply yes / no / first-N to prove a subset, e (a) ou (b) para os NEEDS-HUMAN.
+Só "sim" vale como sim + (a).
 ```
 
 Wait for confirmation. **Esta é a ÚNICA parada do run** — aplique `default-yes`:
-junte a esta confirmação tudo que você perguntaria depois (o que fazer com os
-cards que pararem em NEEDS-HUMAN: aplicar a recomendação de cada motivo, ou
-segurar todos para você). Uma pergunta no meio do drain custa ao usuário
-recarregar o contexto inteiro para responder.
+junte a esta confirmação tudo que você perguntaria depois. Uma pergunta no meio
+do drain custa ao usuário recarregar o contexto inteiro para responder.
+
+**A alternativa (a)/(b) tem que estar ESCRITA na tela acima, não implícita.**
+O passo 6 só dispensa a segunda rodada de perguntas "se o usuário já respondeu
+essa política na confirmação do passo 3" — e uma tela que mostra a contagem de
+cards e pergunta "posso ir?" não colhe resposta nenhuma sobre NEEDS-HUMAN. Um
+"sim" a ela não fecha aquela condicional, o passo 6 pergunta tudo de novo no
+fim, e o run que se anunciou como parada ÚNICA cobra duas. Foi assim até
+22/08/2026. Um "sim" seco continua valendo: é (a), o default.
 
 Se o run veio de `/common:session`, essas respostas já foram colhidas na largada
 — não pergunte de novo.
@@ -143,8 +156,10 @@ ou registre, não pergunte), agrupe o resto por motivo e faça **uma pergunta
 fechada por grupo, com recomendação**, aceitando resposta em lote ("1 sim, 2
 não").
 
-Se o usuário já respondeu essa política na confirmação do passo 3, **aplique-a**
-e apenas relate o que foi feito — sem nova pergunta.
+**Se o usuário respondeu (a) no passo 3 — ou respondeu só "sim", que é (a) —
+não pergunte nada aqui.** Aplique a recomendação de cada motivo e relate o que
+foi feito, card por card, com o motivo ao lado. As perguntas fechadas por grupo
+acima são o caminho (b), e só ele.
 
 Por que aqui e não em outro comando: o run que produziu os cards é o run que
 sabe quais são e por quê. Encerrar dizendo "agora rode `/board-flow:decide`"
