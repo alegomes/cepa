@@ -1,6 +1,7 @@
 ---
 description: Transforma a coluna Review em uma lista curta de perguntas fechadas, em vez de uma lista de cards para abrir um a um. Lê os cards que estão em Review AGORA, pega o artefato de prova de cada um (docs/proof/<KEY>.yaml), classifica o motivo do NEEDS-HUMAN nos sete motivos de docs/needs-human-motivos.md, tira da sua frente o que não é decisão de ninguém (Docker fora, ferramenta ausente), agrupa o resto por motivo e faz UMA pergunta por grupo com recomendação. Você responde em lote ("1 sim, 2 não") e o comando aplica. Não roda prova nenhuma — quem prova é /board-flow:prove.
 argument-hint: [--max N] [--scope "<jql>"] [--no-scope] [--dry-run]
+interaction: routine
 ---
 
 # /board-flow:decide

@@ -1,6 +1,7 @@
 ---
 description: Save a rich session handoff so a new session can pick up seamlessly. Writes the narrative (decisions, current state, next concrete step, caveats, open threads) into this branch's handoff file at .claude/handoffs/<branch-slug>.md, on top of the mechanical skeleton the checkpoint hook maintains. Replaces typing "salve a memória de handoff" by hand. The next session's SessionStart surfaces it automatically.
 argument-hint: (none) — captures the current session
+interaction: routine
 ---
 
 # /common:handoff

@@ -1,6 +1,6 @@
 {
   "name": "review-gate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pre-merge review gate — code reaches the main branch through a reviewed pull request, not a direct merge. Two doors, both owned here: open (hygiene gate via /code-review) and merge (QA gate via the topology's proof-reviewer). A single quarantined adapter (bitbucket-expert) owns all Bitbucket REST via bundled bin/open-pr.sh + bin/merge-pr.sh. A PreToolUse fence (no-direct-main) blocks direct push/merge to the default branch and redirects to the flow; a PostToolUse nudge (push-nudge) suggests opening a PR after a feature-branch push; auto_merge:true merges on a PROVEN QA verdict. Optional board-flow seam maps open→In Review and merge→Done. Run /review-gate:configure once to set host + default branch.",
   "author": {
     "name": "alegomes"

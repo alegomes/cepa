@@ -1,6 +1,7 @@
 ---
 description: Interactive setup for review-gate.yaml at project root. Walks the user through host, default destination branch, close-source behavior, and the review policy (effort + on_findings). Detects whether board-flow.yaml is present and offers to wire the optional Jira seam. Use once per repo after installing review-gate, before the first /review-gate:open.
 argument-hint: (no arguments)
+interaction: conversational
 ---
 
 # /review-gate:configure

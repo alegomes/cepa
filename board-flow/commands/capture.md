@@ -1,6 +1,7 @@
 ---
 description: Register a freeform user request as a Jira card without executing it. Use when the user describes new work and there's no card yet — keeps Jira as the source of truth without forcing the full plan-track-build-validate flow.
 argument-hint: <one-line description, optionally prefixed with "Epic:" / "Bug:" / "Task:" to override the default Story type>
+interaction: routine
 ---
 
 # /board-flow:capture

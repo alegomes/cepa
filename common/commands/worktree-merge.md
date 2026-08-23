@@ -1,6 +1,7 @@
 ---
 description: Fold a session worktree's branch back into your integration branch and prune the worktree. /common:worktree-merge <slice> verifies the branch is green, merges session/<slice> into the branch you're on, surfaces any conflict as a normal git conflict to resolve, optionally names the merge, and on success removes the worktree and deletes the branch. The landing half of the worktree lifecycle.
 argument-hint: <slice>   (the slice name, e.g. billing-api or session/billing-api; omit to infer from the current branch)
+interaction: routine
 ---
 
 # /common:worktree-merge

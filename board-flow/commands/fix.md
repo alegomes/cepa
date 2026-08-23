@@ -1,6 +1,7 @@
 ---
 description: Execute a Bug-type Jira card via the topology's reproduce-fix-verify flow (failing test first, fix, verify). Wraps the bug flow with Jira lifecycle — transitions through To Do → In Progress → In Review with Implementation Summary. Use directly for bugs, or rely on /board-flow:execute's auto-detect to route here when the card's issue type is Bug.
 argument-hint: <jira-key> [--no-scope]
+interaction: routine
 ---
 
 # /board-flow:fix

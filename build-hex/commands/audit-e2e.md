@@ -1,6 +1,7 @@
 ---
 description: Read-only 3-way alignment check between specs/e2e-assertions.md, the implementation code, and the existing E2E tests. Reports drift in any direction without propagating anything. Use when you suspect divergence but want to see the gaps before deciding which side is wrong. For one endpoint or `--all` to sweep every spec section.
 argument-hint: [--all] [<METHOD /path/to/endpoint>]   (mutually exclusive — one endpoint, or `--all`)
+interaction: routine
 ---
 
 # /build-hex:audit-e2e

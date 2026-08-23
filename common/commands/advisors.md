@@ -1,6 +1,7 @@
 ---
 description: Painel de advisors sobre um artefato de decisão (doc de design, ADR, plano, PR) — fan-out paralelo e ISOLADO de lentes de revisão (5 fixas + até 2 especialistas da área), seguido de síntese que NOMEIA as discordâncias entre lentes em vez de mediar. Prospectivo — roda ANTES de fechar a decisão. Para revisar decisões passadas de um run use /common:debrief; para caçar bugs no diff use /code-review.
 argument-hint: <artefato> [--area=seguranca|api-contrato|dados|ux|arquitetura] [--lentes=a,b,c]
+interaction: routine
 ---
 
 # /common:advisors

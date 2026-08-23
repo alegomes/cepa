@@ -1,6 +1,7 @@
 ---
 description: Fork the current discussion into its own isolated context to handle a side topic, then return cleanly to where you forked. /branch <assunto> snapshots the main thread into a checkpoint and opens a fork frame; /branch resume <id> picks that fork up in a fresh session so the side discussion never bloats the origin thread. Pairs with /common:return. Supports nested forks via a LIFO stack.
 argument-hint: <assunto>  |  resume [<fork-id>]   (no id on resume = top-most not-yet-resolved frame on the stack)
+interaction: routine
 ---
 
 # /common:branch

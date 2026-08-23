@@ -1,6 +1,7 @@
 ---
 description: Interactive setup for board-flow.yaml at project root. Walks the user through site, project_key, board_id, issue_types, and default_topology. Validates site against the user's actually-accessible Atlassian sites via atlassian-expert (no guessing). Use after `bin/install.sh --topology=NAME` to replace the placeholder values, or anytime atlassian-expert is refusing operations because of missing config.
 argument-hint: [--migrate]   (optional: detect legacy .claude/board-flow.lifecycle.yaml and offer to migrate it to project root)
+interaction: conversational
 ---
 
 # /board-flow:configure

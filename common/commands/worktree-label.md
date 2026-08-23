@@ -1,6 +1,7 @@
 ---
 description: Get or set a session worktree's free-text label — a short note of what it's *for*, so a timestamp branch like session/0609-2030 stops being a mystery. Set it once you know the purpose; read it any time. Stored as the branch's git description (durable, survives the session, never renames the branch).
 argument-hint: [<purpose…>]   (no args = show the current worktree's label; --clear to remove)
+interaction: routine
 ---
 
 # /common:worktree-label

@@ -1,6 +1,7 @@
 ---
 description: Merge the open PR for the current branch, gated by the QA gate. Finds the PR, runs the QA gate (the topology's proof-reviewer — proves every changed line is load-bearing at the surface), and on PROVEN merges via bitbucket-expert. With auto_merge:true it merges immediately on PROVEN; otherwise it stops at PROVEN and waits for your go-ahead. If board-flow is wired, also transitions the card In Review → Done.
 argument-hint: [pr-id]   (optional: merge this PR id instead of auto-detecting from the current branch)
+interaction: routine
 ---
 
 # /review-gate:merge

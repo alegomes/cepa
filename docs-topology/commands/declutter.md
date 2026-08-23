@@ -1,6 +1,7 @@
 ---
 description: Phase 2 — structural ROI moves. Archives process-exhaust out of docs/, demotes rival front-doors to links, consolidates doc chains. Moves files (git history preserved), rewrites no prose. Mutating — requires explicit owner approval of the gap-report's move list, and lands as its own commit(s).
 argument-hint: "(none — operates from the gap-report's move list)"
+interaction: routine
 ---
 
 # /docs:declutter

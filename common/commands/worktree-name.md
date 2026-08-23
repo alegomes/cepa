@@ -1,6 +1,7 @@
 ---
 description: Give the current (or a named) session worktree a meaningful name. Auto-isolated sessions get neutral names like session/0611-1430; rename one to session/<something-readable> once you know what it's about. Optional — naming is never required.
 argument-hint: <new-name>  [<old-name>]   (omit old-name to rename the worktree you're currently in)
+interaction: routine
 ---
 
 # /common:worktree-name

@@ -1,6 +1,7 @@
 ---
 description: Triage (groom) a backlog column — classify every card into one of four buckets and route it. Reads each card, inspects the codebase + git for evidence, and proposes per card: ALREADY-IMPLEMENTED → In Review (with an assembled Implementation Summary; the proof gate still applies), READY → To Do, OBSOLETE → Won't Do (list with reasons), or NEEDS-DECISION → grills you interactively. Read-heavy and scope-aware; nothing is written until you confirm the plan. Unlike /drain it does not build anything — it grooms the queue.
 argument-hint: [source-column] [--max N] [--scope "<jql>"] [--no-scope] [--dry-run]
+interaction: routine
 ---
 
 # /board-flow:triage

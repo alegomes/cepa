@@ -1,6 +1,7 @@
 ---
 description: Run a focused bug-fix flow on a build-hex codebase — reproduce the bug with a failing regression test, route the fix to the right dev worker, verify with green build evidence and code review. Use this for confirmed bugs, not for "I'm not sure if X is wrong" (use /build-hex:investigate for that).
 argument-hint: <bug description, error message, or steps to reproduce>
+interaction: routine
 ---
 
 # /build-hex:reproduce-fix-verify
@@ -30,6 +31,14 @@ and apply `acceptance-completeness` (the regression test must demonstrate the
 card's acceptance criterion **at the altitude it was written at** — if the
 criterion names an HTTP surface, "the failing test" is an HTTP test, not a
 mocked use-case test).
+
+Apply `default-yes`: este comando roda quase sempre DENTRO de um run maior
+(`/board-flow:drain`, `/board-flow:prove-drain`, `/common:session`), e uma
+pergunta feita aqui chega ao usuário no meio da fila — o ponto mais caro para
+interromper, porque responder exige recarregar o contexto inteiro da lista.
+Achado reversível, ou que só registra algo, com recomendação clara: execute e
+registre para o relatório de quem te chamou. Pergunta só para o irreversível, e
+ela sobe para o relatório final do run, nunca para o meio dele.
 
 ## Worktree policy
 

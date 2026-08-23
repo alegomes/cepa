@@ -1,6 +1,7 @@
 ---
 description: Valida a instalação do harness contra a realidade em 30 segundos — plugins habilitados e na versão instalada, hooks compilando, board-flow.yaml estrutural, baseline de build (status + idade), worktrees stale/órfãs (inclusive a worktree de agente esquecida dentro do repo, que duplica o código-fonte) e handoffs vencidos. Com --live, também confere o board-flow.yaml contra o Jira vivo via atlassian-expert. Rode no início do dia ou quando algo do harness parecer errado — cada check existe porque a falha correspondente já custou uma tarefa.
 argument-hint: [--live] [--no-fix] [--projeto]
+interaction: routine
 ---
 
 # /common:doctor

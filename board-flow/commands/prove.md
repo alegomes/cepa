@@ -1,6 +1,7 @@
 ---
 description: Prove one Jira card that is already in Review. Delegates to the topology's proof-reviewer, which interrogates the card's diff (base_commit..HEAD) and proves every changed line of behavior is load-bearing at the external surface — external coverage of the diff, diff-scoped mutation against the integration tests, adversarial input against the touched endpoints, and (for bugs) regression-red-at-base. Then applies the verdict to the card: PROVEN advances, UNPROVEN sends back, NEEDS-HUMAN stays for you. Use to clear the Review column without losing rigor.
 argument-hint: <jira-key> [--no-scope]
+interaction: routine
 ---
 
 # /board-flow:prove
@@ -34,6 +35,14 @@ You are the orchestrator. Drive a single card through the proof gate and apply
 the verdict. Apply `defense-in-depth`, `evidence-over-assumption`,
 `scope-discipline`. You do NOT decide the verdict — `proof-reviewer` does, from
 evidence. You only route the Jira transition off its verdict.
+
+Apply `default-yes`: este comando roda quase sempre DENTRO de um run maior
+(`/board-flow:drain`, `/board-flow:prove-drain`, `/common:session`), e uma
+pergunta feita aqui chega ao usuário no meio da fila — o ponto mais caro para
+interromper, porque responder exige recarregar o contexto inteiro da lista.
+Achado reversível, ou que só registra algo, com recomendação clara: execute e
+registre para o relatório de quem te chamou. Pergunta só para o irreversível, e
+ela sobe para o relatório final do run, nunca para o meio dele.
 
 ## Workflow
 

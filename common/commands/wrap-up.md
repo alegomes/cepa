@@ -1,6 +1,7 @@
 ---
 description: End-of-session one-shot — chain the whole shutdown ritual behind a single confirmation. /common:wrap-up commits the session worktree, writes the handoff, then lands the branch (merge into its integration branch + push + prune) — or, with --discard, throws a dead-end worktree away. Replaces typing "commit it / merge it / push / handoff" by hand. Reuses worktree-merge's guards (green-gate, single-owner, conflict-stop) so nothing unsafe slips through.
 argument-hint: [--discard] [commit message]   (no args = land the current session worktree)
+interaction: routine
 ---
 
 # /common:wrap-up

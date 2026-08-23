@@ -1,6 +1,7 @@
 ---
 description: Start an autonomous (unattended) run on whichever topology this project is wired to. Reads .claude/topology to dispatch into the right plan-build-validate / reproduce-fix-verify / investigate flow. If a Jira key (e.g. WEGO-1234) appears in the description and board-flow.yaml exists, also wraps the run with Jira lifecycle: transitions to In Progress before work, and to In Review with an Implementation Summary comment after. Generates a run-id, writes state, activates autonomous-mode, and dispatches.
 argument-hint: [--topology=NAME] [--flow=plan-build-validate|reproduce-fix-verify|investigate] [--no-jira] <task description, may include a Jira key like WEGO-1234>
+interaction: routine
 ---
 
 # /common:autonomous-start

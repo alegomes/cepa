@@ -1,6 +1,7 @@
 ---
 description: Render a "you asked / I delivered" recap of the current session. Reads .claude/session-log.md (intent log written by the session-log hook) and the conversation context (delivery — slash commands run, files written, commits made, blockers hit), then surfaces a structured per-request status. Use when you've forgotten what you asked for, or want to confirm everything's accounted for before stopping.
 argument-hint: [--since=YYYY-MM-DD]   (optional; defaults to "today" if the session-log has today's entries, otherwise the most recent date in the log)
+interaction: routine
 ---
 
 # /common:recap

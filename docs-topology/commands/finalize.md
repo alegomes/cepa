@@ -1,6 +1,7 @@
 ---
 description: Phase 5 — whole-tree consistency review then owner sign-off. consistency-reviewer checks terminology drift, broken cross-references, Diátaxis-shelf violations, and the critical check that every WHY is sourced (no surviving UNSOURCED). On PASS and owner sign-off, the docs/_survey/ scratch is deleted.
 argument-hint: "(none — reviews the whole docs/ tree)"
+interaction: routine
 ---
 
 # /docs:finalize

@@ -1,6 +1,7 @@
 ---
 description: Open a pull request for the current branch, gated by a hygiene review. Runs /code-review on the diff (handling findings per review-gate.yaml), drafts the PR title + body from the diff, then delegates the actual open to bitbucket-expert. If board-flow.yaml is present and the Jira seam is configured, also transitions the linked card In Progress → In Review.
 argument-hint: [dest-branch]   (optional: PR target; default = review-gate.yaml default_dest)
+interaction: routine
 ---
 
 # /review-gate:open

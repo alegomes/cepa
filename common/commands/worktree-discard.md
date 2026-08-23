@@ -1,6 +1,7 @@
 ---
 description: Discard a session worktree that was a dead end — remove the worktree and delete its branch, after showing you exactly what work would be lost. The "throw it away" half of the lifecycle, opposite /common:worktree-merge.
 argument-hint: <name>   (the session slice name, e.g. billing-api — with or without the session/ prefix)
+interaction: routine
 ---
 
 # /common:worktree-discard

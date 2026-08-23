@@ -1,6 +1,7 @@
 ---
 description: Relatório de telemetria do próprio harness — sessões por repo, taxa de builds vermelhos, bloqueios do gate-advance por motivo, distribuição de vereditos do proof gate, `proven` sobre-declarados barrados pelo guard, e o **atrito das pontas da sessão** (quantos turnos você gasta antes de conseguir disparar a rotina, e quantos gasta depois dela até encerrar). Lê o ledger em ~/.claude/cepa-telemetry/ alimentado automaticamente pelos hooks. Use para decidir com evidência onde o harness atrapalha em vez de ajudar.
 argument-hint: [--days N | --month YYYY-MM] [--repo <nome>]
+interaction: routine
 ---
 
 # /common:metrics

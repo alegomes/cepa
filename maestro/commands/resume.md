@@ -1,6 +1,7 @@
 ---
 description: Recupera uma onda do Maestro interrompida — reconstrói o estado a partir de .claude/programs/<nome>/wave-state.yaml (filhas vivas, estado por slice, porteiro, escalações pendentes, merges já aterrissados) e continua o event loop / merge train de onde parou. Nos moldes do /common:autonomous-resume. Use após morte da sessão, crash ou token-limit no meio de um /maestro:run.
 argument-hint: <nome-do-programa>
+interaction: routine
 ---
 
 # /maestro:resume

@@ -1,6 +1,7 @@
 ---
 description: Phase 4 — write the grounded Diátaxis tree from the survey ledgers. doc-author writes how-to/reference/explanation; tutorial-author writes the Tutorial last (it needs a real first-run). Every WHY traces to a source or is flagged UNSOURCED — never guessed. Preserves existing ADRs.
 argument-hint: "[optional — a single shelf or doc to (re)author, e.g. 'explanation/flows']"
+interaction: routine
 ---
 
 # /docs:author

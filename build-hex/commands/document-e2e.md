@@ -1,6 +1,7 @@
 ---
 description: Document the E2E behavior of an EXISTING endpoint by reading its current implementation (controller + use case + adapter + seed). Produces a descriptive spec section in specs/e2e-assertions.md reflecting what the code actually does today. Use to backfill specs for endpoints already shipped, or to capture current behavior before refactoring. For NEW endpoints (spec-first / spec drives implementation), use /build-hex:spec-e2e instead.
 argument-hint: [--preview] <METHOD /path/to/endpoint>   (e.g., "GET /api/v1/assinaturas/resumo")
+interaction: routine
 ---
 
 # /build-hex:document-e2e

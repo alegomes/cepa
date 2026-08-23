@@ -1,6 +1,7 @@
 ---
 description: Run plan → build → validate against any topology that ships planning-lead/engineering-lead/validation-lead, AND keep the Jira lifecycle in sync (Epic + Stories registered, Story transitions through To Do → In Progress → In Review). For abstract input that needs decomposition. Use /board-flow:execute for an existing card.
 argument-hint: <abstract task description>
+interaction: routine
 ---
 
 # /board-flow:plan-track-build-validate

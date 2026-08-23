@@ -1,6 +1,7 @@
 ---
 description: Show the current state of the documentation effort — which phases are done, in progress, awaiting owner review, or not started. Reads artifact STATUS markers and the gap-report from disk. No agents needed.
 argument-hint: "(none)"
+interaction: routine
 ---
 
 # /docs:status
