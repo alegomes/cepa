@@ -14,3 +14,4 @@ para impedir (docs/modos-de-trabalho.md).
   sessão session/triage_2025 começou 20:25 para triar a coluna To Do e montar um
   plano de execução noturna e às 21:45 ainda não tinha chegado ao plano.
 - [ ] 2026-08-23 · modo: descoberta · spec-readiness-gate só enxerga new_string numa Edit, então virar Status para pronta-para-construir por edição pontual é sempre bloqueado; só passa com Write do arquivo inteiro; vi em common/hooks/spec-readiness-gate.py:72-84
+- [ ] 2026-08-23 · modo: descoberta · o resgate de worktree salvou so marcadores efemeros (.claude/rescued/*/session-mode, 78 bytes, modo de sessao encerrada) e mesmo assim cobra atencao em todo SessionStart prometendo "planos, prova e aceite"; o filtro do que merece resgate esta largo demais
