@@ -62,6 +62,21 @@ CASES = [
      lambda t: t == [],                       "read-only git verbs write nothing"),
     ("git commit is not a file write", "git commit -m 'x'",
      lambda t: t == [],                       "commit writes via git, not the shell"),
+
+    # --- P4 / CS-5: rename counts as a write on BOTH the origin and the
+    #     destination — moving a file OUT of a slice's declared surface is a
+    #     write to that origin path even when the destination is allowed ---
+    ("git mv source", "git mv infrastructure/Foo.java domain/Foo.java",
+     lambda t: "infrastructure/Foo.java" in t, "origin is a write target too"),
+    ("git mv both paths", "git mv infrastructure/Foo.java domain/Foo.java",
+     lambda t: set(t) == {"infrastructure/Foo.java", "domain/Foo.java"},
+     "exactly origin + destination, nothing else"),
+    ("plain mv source", "mv src/old.py src/new.py",
+     lambda t: "src/old.py" in t and "src/new.py" in t,
+     "plain `mv` deletes its source too — both paths are targets"),
+    ("cp does not delete its source", "cp src/a.py src/b.py",
+     lambda t: t == ["src/b.py"],
+     "`cp` only reads its source — destination-only, unlike `mv`"),
 ]
 
 

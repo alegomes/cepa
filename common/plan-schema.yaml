@@ -90,6 +90,20 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
 # max_concurrent_slices: 3      # teto = atenção do humano; subir só com taxa de
 #                               # escalação comprovadamente baixa (gatilho medido)
 #
+# cartorios:                    # OPCIONAL, campo no TOPO do documento (irmão de
+#                               # schema_version/mode, não dentro de waves/slices).
+#                               # Lista de caminhos "arquivo-cartório" — o que
+#                               # concentra quase toda demanda por agregar
+#                               # contribuição de todas (ex.: openapi.yaml). Medido
+#                               # por `common/bin/cepa-hotspots <repo>` (refaz as
+#                               # fusões do histórico) e gravado aqui pelo modo de
+#                               # varrimento do /maestro:program-plan. Ausente ou
+#                               # vazio = nenhum dado — cepa-dor não veta nenhuma
+#                               # interseção de superfície, só avisa (afrouxa, não
+#                               # aperta; nenhuma migração de plano existente).
+#   - "api-rest/**/META-INF/openapi.yaml"
+#   - "docs/pendencias.md"
+#
 # waves:
 #   - id: 1
 #     mode: parallel-worktrees  # ou sequential-inline / interactive

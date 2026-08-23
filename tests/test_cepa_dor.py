@@ -5,7 +5,10 @@ No third-party deps beyond PyYAML (already required by the script itself) —
 run with `python3 tests/test_cepa_dor.py`. Exits non-zero on first failure.
 
 Guards the intake-gate contracts from the v1 design (Componente 4):
-  - surface intersection downs BOTH slices (the v0 merge-conflict lesson);
+  - surface intersection on a `cartorios` (arquivo-cartório) file downs BOTH
+    slices; intersection on any other file is a warning, not a veto (P3,
+    docs/spec/planejador-de-lotes-paralelos.md CS-4); no `cartorios` field
+    means no data, so nothing is vetoed on overlap — only warned;
   - enforcement zone is an unconditional veto;
   - open human_gate / missing acceptance_cmd in a no-build repo → NOT-READY;
   - D7 floor (<4 demandas) blocks the program;
@@ -51,7 +54,7 @@ def make_repo(tmp, no_build=True):
     """Tiny committed git repo the surfaces expand against."""
     repo = Path(tmp) / "r"
     repo.mkdir()
-    for p in ["src/a.py", "src/b.py", "docs/x.md", "plug/hooks/h.py"]:
+    for p in ["src/a.py", "src/b.py", "docs/x.md", "plug/hooks/h.py", "package-lock.json"]:
         (repo / p).parent.mkdir(parents=True, exist_ok=True)
         (repo / p).write_text("x")
     if no_build:
@@ -77,6 +80,12 @@ slices:
   S3: {{demanda: C, surface: ["docs/x.md"], human_gate: none, acceptance: ok, acceptance_form: substrate, acceptance_cmd: "true", context: [x]}}
   S4: {{demanda: D, surface: ["src/b.py"], human_gate: none, acceptance: ok, acceptance_form: substrate, acceptance_cmd: "true", context: [x]}}
 """
+
+
+def with_cartorios(plan_text, files):
+    """Insere o campo opcional `cartorios:` no topo de um plano já formatado."""
+    block = "cartorios:\n" + "".join(f'  - "{f}"\n' for f in files)
+    return plan_text.replace("program: t\n", "program: t\n" + block, 1)
 
 # Plano de 1 slice na onda (S2..S4 existem só para o piso D7) usado para
 # exercitar a forma do aceite isoladamente.
@@ -121,12 +130,55 @@ def main():
         check("disjunção só compara slices da MESMA onda",
               "intersecta a de S3" not in r.stdout, r.stdout)
 
-        # intersection downs BOTH
+        # sem `cartorios` no plano: interseção NÃO veta mais — só avisa
+        # (P3: afrouxamento do intake, docs/spec/planejador-de-lotes-paralelos.md)
         r = run_dor(PLAN_4D.format(s1='"src/*.py"', s2='"src/b.py"',
                                    hg1="none", ac1='acceptance_cmd: "true",'),
                     repo)
-        check("interseção derruba os DOIS slices", r.returncode == 2
-              and r.stdout.count("NOT-READY") == 2, r.stdout)
+        check("sem cartorios declarado, interseção não veta",
+              r.returncode != 2 or "NOT-READY" not in r.stdout, r.stdout)
+        check("sem cartorios declarado, interseção é avisada",
+              "cruzam fora de arquivo-cartório" in r.stdout, r.stdout)
+
+        # interseção NUM arquivo-cartório declarado derruba os DOIS slices
+        plan_cart = with_cartorios(
+            PLAN_4D.format(s1='"src/*.py"', s2='"src/b.py"',
+                           hg1="none", ac1='acceptance_cmd: "true",'),
+            ["src/b.py"])
+        r = run_dor(plan_cart, repo)
+        check("interseção num arquivo-cartório derruba os DOIS slices",
+              r.returncode == 2 and r.stdout.count("NOT-READY") == 2, r.stdout)
+        check("a lacuna nomeia o arquivo-cartório",
+              "arquivo-cartório" in r.stdout, r.stdout)
+
+        # interseção declarada como cartório MAS que não bate com o slice não veta
+        plan_cart_miss = with_cartorios(
+            PLAN_4D.format(s1='"src/*.py"', s2='"src/b.py"',
+                           hg1="none", ac1='acceptance_cmd: "true",'),
+            ["docs/x.md"])
+        r = run_dor(plan_cart_miss, repo)
+        check("cartório declarado que não intersecta os slices não veta",
+              r.returncode != 2 or "NOT-READY" not in r.stdout, r.stdout)
+
+        # arquivo-cartório que nenhum slice declara → aviso da onda, não veto
+        plan_undeclared = with_cartorios(
+            PLAN_4D.format(s1='"src/a.py"', s2='"docs/x.md"',
+                           hg1="none", ac1='acceptance_cmd: "true",'),
+            ["src/b.py"])  # S4 declara src/b.py só fora da onda 1
+        r = run_dor(plan_undeclared, repo)
+        check("cartório fora de toda superfície da onda é avisado",
+              "fora de toda superfície" in r.stdout, r.stdout)
+        check("cartório fora de toda superfície não veta",
+              r.returncode != 2 or "NOT-READY" not in r.stdout, r.stdout)
+
+        # sem `cartorios`, um arquivo que batia na heurística HIGH_FRICTION
+        # antiga (removida por P3) não gera aviso — trava contra a
+        # heurística voltar por engano ou um bug equivalente
+        r = run_dor(PLAN_4D.format(s1='"src/a.py"', s2='"docs/x.md"',
+                                   hg1="none", ac1='acceptance_cmd: "true",'),
+                    repo)
+        check("sem cartorios, arquivo da heurística antiga não gera aviso",
+              "fora de toda superfície" not in r.stdout, r.stdout)
 
         # enforcement zone veto
         r = run_dor(PLAN_4D.format(s1='"plug/hooks/h.py"', s2='"docs/x.md"',

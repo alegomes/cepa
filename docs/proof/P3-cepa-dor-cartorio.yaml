@@ -1,0 +1,94 @@
+schema_version: 2
+card: P3-cepa-dor-cartorio
+verdict: proven
+reviewed_at: 2026-08-23T00:00:00-03:00
+base_commit: 32aaaa4
+head_commit: 0568ee5
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-dor"
+      module: common-bin-cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python puro, sem JVM/pitest; a técnica aplicável aqui é perturbação direta do script, não PIT (mesmo padrão do proof anterior desta spec, docs/proof/P2-cepa-hotspots.yaml)."
+    perturbation:
+      status: pass
+      results:
+        - "CS-4 (veto só em arquivo-cartório): worktree descartável /tmp/proof-P3-cepa-dor-cartorio (git worktree add em 0568ee5). GREEN antes (`python3 tests/test_cepa_dor.py` -> all green). Neutralizei `if cartorio_hits:` (linha 317) para `if False:` — o veto por arquivo-cartório para de disparar. `python3 tests/test_cepa_dor.py` -> 2 falhas ('interseção num arquivo-cartório derruba os DOIS slices', 'a lacuna nomeia o arquivo-cartório'), exit=1. RED confirmado. Revertido (`git checkout -- common/bin/cepa-dor`), GREEN restaurado."
+        - "CS-4 (comportamento antigo não deve voltar): adicionei veto também em `other_hits` (append em per_slice[...]['gaps'] além do warning), replicando a lógica antiga de vetar QUALQUER interseção, não só a de arquivo-cartório. `python3 tests/test_cepa_dor.py` -> 2 falhas ('sem cartorios declarado, interseção não veta', 'cartório declarado que não intersecta os slices não veta'), exit=1. RED confirmado. Revertido, GREEN restaurado."
+        - "CS-3/heurística removida (aviso 'fora de toda superfície' não deve disparar sem `cartorios`): reintroduzi uma lista fixa `_HIGH_FRICTION = [\"package-lock.json\", \"*/migrations/*\"]` e fiz o aviso considerar `cartorio_files or _legacy_hits` em vez de só `cartorio_files`, equivalente à heurística antiga que o diff removeu. `python3 tests/test_cepa_dor.py` -> 1 falha ('sem cartorios, arquivo da heurística antiga não gera aviso'), exit=1. RED confirmado. Revertido, GREEN restaurado."
+        - "Worktree removido ao final (`git worktree remove --force /tmp/proof-P3-cepa-dor-cartorio`); `git status --porcelain` na árvore principal ficou limpo (só um arquivo untracked não relacionado, .claude/acceptance/P3-cepa-dor-cartorio.yaml, pré-existente à sessão) — nenhuma alteração de source vazou para fora do worktree descartável."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >
+      Repo Python sem ferramenta de cobertura instrumentada (mesma situação
+      do P2). Verificação por alcance estrutural + confirmação empírica via
+      perturbação: os três ramos centrais da mudança (veto condicionado a
+      cartorio_hits, não-veto de other_hits, e a ausência da heurística
+      antiga no aviso 'fora de toda superfície') foram cada um perturbado no
+      L3 e cada perturbação virou RED exatamente no teste que deveria
+      guardá-la — 'interseção num arquivo-cartório derruba os DOIS slices' /
+      'a lacuna nomeia o arquivo-cartório' cobrem o branch cartorio_hits;
+      'sem cartorios declarado, interseção não veta' / 'cartório declarado
+      que não intersecta os slices não veta' cobrem o branch other_hits;
+      'sem cartorios, arquivo da heurística antiga não gera aviso' cobre a
+      remoção da HIGH_FRICTION. O campo novo `cartorios:` em si (parsing,
+      validação de tipo lista) é exercitado indiretamente pelos fixtures
+      with_cartorios() usados nesses mesmos testes — não há linha nova
+      alcançável por eles que não tenha sido perturbada.
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings:
+      - >
+        Observação não bloqueante: se `cartorios` vier como lista mas com
+        itens não-string (ex.: número), `expand()` faz `str(c)` em cada item
+        antes de casar contra a árvore — não crasha, mas também não valida
+        que o item seja um glob plausível. Não é um bug (o comportamento é
+        tolerante por design), mas vale registrar caso um humano queira
+        validação de tipo por item no futuro.
+      - >
+        `cartorios` com tipo errado no topo do plano (ex.: string em vez de
+        lista) já é pego e reportado como `problems_global` — testado
+        manualmente, não crasha: `cartorios: "x"` -> "`cartorios` precisa
+        ser uma lista de caminhos (veio str)", exit=2 pelo piso D7 no plano
+        de teste mínimo usado na sondagem.
+    run: |
+      $ python3 -c "
+      import sys; sys.path.insert(0,'tests')
+      import test_cepa_dor as t, tempfile
+      with tempfile.TemporaryDirectory() as tmp:
+          repo = t.make_repo(tmp)
+          plan = t.PLAN_4D.format(s1='\"src/a.py\"', s2='\"docs/x.md\"', hg1='none', ac1='acceptance_cmd: \"true\",').replace('program: t\n', 'program: t\ncartorios: \"x\"\n', 1)
+          r = t.run_dor(plan, repo)
+          print(r.returncode); print(r.stdout)
+      "
+      2
+      ✗ [programa] `cartorios` precisa ser uma lista de caminhos (veio str)
+      ...
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type=Feature (item de backlog, não Bug) — nível não aplicável."
+routing_reason: >
+  Todos os níveis aplicáveis passaram com evidência verificada e
+  reproduzida por mim: green→red→green em três pontos distintos da mudança
+  central de CS-4 (veto restrito a arquivo-cartório, não-veto de outras
+  interseções, e a remoção intencional da heurística HIGH_FRICTION antiga),
+  rodado num worktree git descartável (/tmp/proof-P3-cepa-dor-cartorio,
+  criado a partir de 0568ee5) e removido ao final sem tocar a árvore
+  principal (git status --porcelain limpo). A superfície externa relevante
+  é a CLI, e tests/test_cepa_dor.py já invoca o binário `cepa-dor` como
+  subprocesso real via `run_dor()`, não chama função interna — é a prova
+  mais forte disponível para este tipo de artefato, equivalente ao papel do
+  @QuarkusTest+RestAssured em projetos Quarkus. Sondagem adversarial (L4)
+  não achou comportamento incorreto, só uma observação não bloqueante sobre
+  tolerância de tipo em itens de `cartorios`. PROVEN.

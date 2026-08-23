@@ -1,0 +1,65 @@
+card: P1-sweep-mode
+title: "Modo de varrimento no /maestro:program-plan"
+diff: 4614c5a..995625c
+spec: docs/spec/planejador-de-lotes-paralelos.md#CS-1
+status: complete
+note: >
+  program-plan.md é um comando interaction:conversational (frontmatter, linha 4)
+  — as instruções são seguidas por um agente Claude numa sessão interativa, não
+  há função Python "sweep()" para chamar nem interpretador que as execute. Não
+  existe superfície de código mais forte que a CLI para provar este critério;
+  a prova é um run real do agente seguindo o passo-a-passo e o veredito do
+  cepa-dor (a ferramenta CLI que decide se um plano pode ser forkado) sobre o
+  artefato resultante.
+
+criteria:
+  - id: CS-1
+    text: >
+      O varrimento produz uma proposta que o gate aprova. Rodar o modo de
+      varrimento sobre o BACKLOG.md do próprio cepa produz uma proposta de
+      ondas cuja onda 1, gravada como plan.yaml, sai READY no cepa-dor sem
+      nenhum NOT-READY.
+    altitude: cli
+    surface: "python3 common/bin/cepa-dor <plan.yaml> --wave 1 --repo ."
+    test: ".claude/programs/lotes-2026-08-23/plan.yaml (artefato real, não fixture sintético) + python3 common/bin/cepa-dor"
+    layer: cli (run real, não teste automatizado — o comando que gera o
+      artefato é conversacional, então a "demonstração" é a execução do
+      gate CLI sobre o artefato que o agente produziu seguindo a prosa)
+    evidence: verified
+    run: |
+      $ python3 common/bin/cepa-dor .claude/programs/lotes-2026-08-23/plan.yaml --wave 1 --repo .
+      # cepa-dor — onda 1 @ HEAD
+       ⚠ [onda] repo .claude/no-build: baseline dispensada; a verificação recai no acceptance_cmd de cada slice
+       ⚠ [onda] 6 arquivo(s)-cartório fora de toda superfície (ex.: build-hex/.claude-plugin/plugin.json) — nenhum slice declarou escrevê-los; confira se algum precisa
+       ✓ [S1] READY
+       ✓ [S2] READY
+       ✓ [S3] READY
+           ⚠ nenhum arquivo EXISTENTE casa com a superfície no fork point — ok se o slice só cria arquivos novos; confira os globs
+      3/3 slice(s) READY.
+      (exit code 1 = apenas avisos ⚠, não NOT-READY — confirmado lendo
+      common/bin/cepa-dor:365-370: `return 2` só em NOT-READY, `return 1` é
+      warnings-only. Nenhum slice ficou NOT-READY. O próprio passo 5 do
+      comando documenta que avisos são aceitáveis.)
+    prose_check: |
+      As 5 peças do modo --sweep documentadas em maestro/commands/program-plan.md
+      (relidas nesta auditoria, não assumidas do commit):
+        1. varre a fonte INTEIRA (linha 35, passo 1 [sweep])
+        2. para nas próximas 2-3 ondas, não particiona o backlog inteiro (linha 39)
+        3. demanda com superfície indeterminável/sensível entra sozinha na
+           própria onda (linhas 64-70, passo 2 [sweep]) — e a zona de
+           enforcement do cepa-dor é citada explicitamente como não-candidata
+           a fork autônomo (linhas 41-45)
+        4. sugere o teto de slices via arquivos-cartório, não fixa 3
+           (linhas 77-81, passo 3 [sweep])
+        5. grava `cartorios:` a partir de `cepa-hotspots --json`, campo
+           opcional no topo do plano (linhas 99-105, passo 4 [sweep]),
+           documentado também em common/plan-schema.yaml:93-96
+      Todas as 5 presentes na prosa que o próximo agente de fato lê.
+    regression_check: |
+      python3 tests/test_program_plan_sweep.py → "all green" (8/8 checks,
+      rodado nesta auditoria). Trava a prosa das 5 peças contra regressão
+      silenciosa; não substitui a prova de comportamento (o próprio arquivo
+      de teste diz isso na docstring), só a demonstração ao vivo acima faz isso.
+    gap: none
+
+gaps: []
