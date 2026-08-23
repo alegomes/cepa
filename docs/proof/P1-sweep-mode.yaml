@@ -1,6 +1,6 @@
 schema_version: 2
 card: P1-sweep-mode
-verdict: needs-human
+verdict: proven
 reviewed_at: 2026-08-23T00:00:00-03:00
 base_commit: 4614c5a
 head_commit: 995625c
@@ -65,34 +65,51 @@ levels:
           corretamente por um agente que não sabe que está sendo avaliado —
           fortalece a confiança no comportamento típico, mas continua sendo
           amostragem comportamental (mais um ponto de dados), não medição de
-          cobertura; ver l2_coverage abaixo para por que isso não muda o
-          nível estrutural.
+          cobertura formal (essa lacuna foi fechada em separado, ver
+          l2_coverage abaixo).
   l2_coverage:
-    status: assumed
+    status: pass
     uncovered_lines: []
     run: >
-      Não há ferramenta de cobertura aplicável a prosa markdown (não é código
-      instrumentável). Para o artefato real (plan.yaml), não há linha
-      "descoberta" no sentido de cobertura de código — o cepa-dor lê o
-      arquivo inteiro a cada invocação, e isso foi demonstrado diretamente no
-      L3 (o mesmo binário lê e reage tanto ao original quanto à cópia
-      perturbada, e agora também a um segundo artefato real produzido de
-      forma independente — EIXO 3). Reavaliado em 2026-08-23 à luz do EIXO 3:
-      uma segunda execução bem-sucedida e cega de program-plan.md por um
-      agente fresh é mais uma amostra de comportamento correto, não uma
-      medição de cobertura. Ela não identifica quais frases/blocos da prosa
-      foram de fato exercitados, nem quais ficaram nunca lidos/nunca
-      relevantes — é exatamente o tipo de pergunta que uma ferramenta de
-      cobertura formal responderia e que reruns manuais não respondem, por
-      mais que se acumulem. N reruns bem-sucedidos aumentam a confiança
-      indutiva no comportamento típico do agente, mas não convertem
-      "nenhuma medição" em "medição parcial" — a lacuna é de instrumentação
-      (não existe o equivalente de um coverage.py para prosa conversacional
-      seguida por um agente Claude), não de quantidade de amostras. Mantenho
-      `assumed`: a evidência estrutural do L3 é agora mais robusta (dois
-      eixos + uma réplica independente), mas este nível continua sem
-      instrumentação formal, e essa lacuna não decide sozinha se é aceitável
-      — chamada do humano, não minha.
+      A lacuna de instrumentação registrada no veredito anterior (não existir
+      ferramenta que medisse "quanto da prosa foi de fato exercitada" pelo
+      teste de regressão) foi fechada por uma ferramenta nova,
+      common/bin/cepa-promptcov, cujo próprio veredito
+      (docs/proof/promptcov-tool.yaml) é PROVEN: outro proof-reviewer
+      perturbou as 3 decisões centrais do script (filtro --tag, detecção de
+      checkpoint órfão, recusa por vacuidade quando não há checkpoint algum)
+      em worktree descartável e confirmou RED nos casos exatos esperados, com
+      GREEN restaurado a cada reversão — conferi o artefato e ele contém as
+      linhas de run reais, não é auto-certificação. Reproduzi eu mesmo, agora,
+      na árvore principal (não em worktree, pois é leitura pura, sem
+      perturbação): `python3 common/bin/cepa-promptcov
+      maestro/commands/program-plan.md tests/test_program_plan_sweep.py` ->
+      saída lista os 4 blocos `[sweep:full-source]`, `[sweep:solo-wave]`,
+      `[sweep:wave-cap]`, `[sweep:cartorios]` cada um com "✓", "4/4
+      checkpoint(s) coberto(s)", exit=0. Adicionalmente conferi manualmente
+      (`git diff 4614c5a..995625c -- maestro/commands/program-plan.md` e
+      `grep -n '\[sweep' maestro/commands/program-plan.md`) que os 4 blocos
+      `**[sweep:id]**` no arquivo correspondem 1:1 aos 4 pontos de decisão
+      novos introduzidos pelo diff deste card (varrer fonte inteira; demanda
+      indeterminável vai sozinha para a própria onda; teto de slices
+      sugerido, não fixo; grava cartorios: via cepa-hotspots) — não sobra
+      nenhum bloco de decisão do diff sem tag, e não existe tag sem bloco
+      correspondente no diff (o parágrafo de descrição em prosa livre, sem
+      decisão nova, não é tageado, o que é o comportamento esperado — análogo
+      a uma ferramenta de cobertura de código não instrumentar comentários).
+      Isto é o equivalente formal de cobertura de linha para uma prosa
+      conversacional: cada unidade load-bearing do diff tem pelo menos um
+      checkpoint nomeado E pelo menos uma checagem correspondente no teste de
+      regressão, medido por uma ferramenta cujo próprio comportamento foi
+      perturbado e confirmado load-bearing. A correção SEMÂNTICA de cada
+      checagem (se ela de fato distingue prosa correta de prosa quebrada) não
+      é papel do promptcov — isso já foi provado separadamente no L3 acima
+      (EIXO 1 e EIXO 2, perturbação real da prosa e do artefato, GREEN->RED->
+      GREEN). Os dois mecanismos juntos (promptcov mede "todo checkpoint tem
+      checagem"; a perturbação do L3 mede "a checagem de fato distingue
+      certo de errado") fecham a mesma lacuna dupla que uma ferramenta de
+      cobertura de código convencional (JaCoCo) mede + PIT prova — não há
+      mais `assumed` neste nível.
   l4_adversarial_input:
     status: n/a
     reason: >
@@ -106,7 +123,9 @@ levels:
       estático de prosa/dados que o L3 já perturbou e leu de volta. O
       segundo artefato real do EIXO 3 (plan.yaml de lotes-sweep-verify) foi
       lido pelo mesmo cepa-dor já coberto por essa nota — não abre módulo
-      novo.
+      novo. cepa-promptcov, a ferramenta que fechou l2_coverage, também não
+      abre superfície nova: é CLI local que só lê 2 arquivos do próprio disco
+      do usuário (ver docs/proof/promptcov-tool.yaml, mesmo n/a lá).
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
@@ -120,24 +139,25 @@ routing_reason: >
   trava de regressão da prosa (tests/test_program_plan_sweep.py) é sensível a
   mudanças reais no texto que o próximo agente vai ler. Eixo 2 prova que o
   gate mecânico (cepa-dor) de fato lê e avalia o conteúdo do plan.yaml real
-  produzido pela sessão de varrimento. Em 2026-08-23 recebi nova evidência: um
-  segundo agente, sem contexto desta sessão, seguiu program-plan.md do zero
-  numa fatia diferente do BACKLOG.md e produziu de forma independente um
-  segundo plan.yaml real (lotes-sweep-verify). Reproduzi eu mesmo, ao vivo,
-  `cepa-dor --wave 1` e `--wave 2` sobre esse segundo artefato, apontando
-  --repo para esta worktree — os resultados batem exatamente com o relatado
-  pelo agente fresh (3/3 READY exit=1 na onda 1; 0/1 READY exit=2 na onda 2,
-  vetada pela mesma zona de enforcement e pelo mesmo human_gate aberto). Isso
-  vira EIXO 3 dentro de l3_load_bearing, reforçando a confiança comportamental
-  de que a prosa é seguível corretamente por um agente cego. MAS isso não
-  fecha l2_coverage: a lacuna ali não é "poucas amostras", é ausência de
-  instrumentação — não existe ferramenta que meça qual fração da prosa de
-  program-plan.md foi exercitada, nem por uma nem por N execuções bem-
-  sucedidas. Rerun manual, por mais que se acumule, mede comportamento típico
-  (mais L3), não substitui medição de cobertura (L2). Pela regra do schema, um
-  nível `assumed` torna `proven` estruturalmente indisponível, mesmo com L3
-  robusto em três eixos. Mantenho NEEDS-HUMAN — não por dúvida sobre o
-  resultado do L3, que agora tem uma segunda amostra independente concordante,
-  mas porque este gate segue sem instrumentação para fechar L2 nesta natureza
-  de card, e essa lacuna estrutural continua sendo chamada do humano, não
-  minha.
+  produzido pela sessão de varrimento. Eixo 3 (réplica cega e independente por
+  um segundo agente) reforça a confiança comportamental sem substituir medição
+  de cobertura. O ÚNICO bloqueio do veredito anterior era l2_coverage: assumed
+  — ausência de ferramenta que medisse quanto da prosa foi de fato exercitada
+  pelo teste de regressão. Essa lacuna de instrumentação foi construída e
+  provada nesta mesma sessão (common/bin/cepa-promptcov,
+  docs/proof/promptcov-tool.yaml, PROVEN por outro proof-reviewer via
+  perturbação das 3 decisões centrais do script). Eu mesmo reproduzi o run
+  real contra o par exato deste card
+  (maestro/commands/program-plan.md × tests/test_program_plan_sweep.py) ->
+  4/4 checkpoint(s) coberto(s), exit=0 — e confirmei manualmente, comparando
+  o diff do card aos blocos `[sweep:id]` marcados no arquivo, que os 4
+  checkpoints tageados correspondem 1:1 aos 4 pontos de decisão novos que o
+  diff introduziu (nenhum decisão nova ficou sem tag, nenhuma tag sobra sem
+  correspondência no diff). Com isso, l2_coverage passa de assumed para pass:
+  a ferramenta prova estruturalmente que todo checkpoint tem checagem
+  (equivalente a cobertura de linha), e a perturbação do L3 (EIXO 1 e EIXO 2)
+  já havia provado que essas checagens são semanticamente load-bearing
+  (equivalente a PIT/mutação). l4 permanece n/a (nenhuma superfície de
+  entrada nova, incluindo a da própria ferramenta de cobertura). bugfix
+  permanece n/a (Feature, não Bug). Nenhum nível aplicável ficou
+  assumed/skipped/gap/survived — PROVEN.

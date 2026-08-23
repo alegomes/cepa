@@ -1,0 +1,80 @@
+card: promptcov-tool
+status: complete
+diff: e07ac84..c24425a
+notes: >
+  Card sem CS formal; critério de aceite extraído da prosa do dono (3
+  requisitos: a) detecção real de checkpoint órfão; b) recusa de declarar
+  100% por vacuidade; c) funcionamento real no par program-plan.md ×
+  test_program_plan_sweep.py). Todos avaliados na altitude de CLI (subprocess
+  real do binário common/bin/cepa-promptcov), que é a altitude que a própria
+  ferramenta define como seu contrato (stdout/exit code).
+
+criteria:
+  - id: AC1
+    text: >
+      A ferramenta detecta de verdade um checkpoint sem cobertura, não só
+      relata sucesso sempre.
+    altitude: cli
+    surface: "common/bin/cepa-promptcov <comando.md> <teste.py> via subprocess"
+    test: tests/test_cepa_promptcov.py (casos "checkpoint sem cobertura sai
+      exit 1", "nomeia exatamente o checkpoint sem cobertura (beta)",
+      "checkpoint coberto não aparece como sem cobertura")
+    layer: cli-subprocess (não é teste de função importada; invoca o binário
+      via subprocess.run, mesma superfície que um usuário real chamaria)
+    evidence: verified
+    run: "python3 tests/test_cepa_promptcov.py -> exit 0, incluindo 'ok
+      checkpoint sem cobertura sai exit 1' e 'ok nomeia exatamente o
+      checkpoint sem cobertura (beta)'"
+    detail: >
+      Confirmado por leitura: TEST_MISSING_BETA (linhas 68-72) omite
+      deliberadamente `sweep:beta`, que existe em CMD_TEXT (fixture do
+      comando, linha 56). Não é caminho feliz disfarçado — o fixture
+      força um checkpoint real sem checagem correspondente e o script
+      acusa `sem cobertura: sweep:beta` com returncode 1.
+    verdict: complete
+
+  - id: AC2
+    text: >
+      A ferramenta se recusa a declarar cobertura total quando não há
+      nenhum checkpoint para medir (nunca "100% de nada").
+    altitude: cli
+    surface: "common/bin/cepa-promptcov --tag <tag-inexistente> | comando
+      sem nenhum [tag:id]"
+    test: tests/test_cepa_promptcov.py (casos "tag sem nenhum checkpoint ->
+      exit 2 (recusa, não 100% falso)", "a recusa nomeia que não há dado
+      para medir", "comando sem checkpoint algum -> exit 2")
+    layer: cli-subprocess
+    evidence: verified
+    run: "python3 tests/test_cepa_promptcov.py -> exit 0, incluindo 'ok tag
+      sem nenhum checkpoint -> exit 2 (recusa, não 100% falso)' e 'ok
+      comando sem checkpoint algum -> exit 2'"
+    detail: >
+      Código-fonte (common/bin/cepa-promptcov linhas 97-108) retorna exit 2
+      e mensagem explícita "nenhum checkpoint **[tag:id]** encontrado" antes
+      de qualquer cálculo de cobertura — nunca chega a imprimir X/X coberto
+      no caso vazio.
+    verdict: complete
+
+  - id: AC3
+    text: >
+      A ferramenta funciona de verdade no par real que motivou o card —
+      maestro/commands/program-plan.md × tests/test_program_plan_sweep.py —
+      mostrando os 4 checkpoints do modo sweep cobertos.
+    altitude: cli
+    surface: "python3 common/bin/cepa-promptcov maestro/commands/program-plan.md
+      tests/test_program_plan_sweep.py"
+    test: tests/test_cepa_promptcov.py (caso "run real:
+      program-plan.md × test_program_plan_sweep.py cobre tudo") + invocação
+      manual direta feita nesta auditoria
+    layer: cli-subprocess, execução real sobre os arquivos de produção (não
+      fixtures sintéticas)
+    evidence: verified
+    run: >
+      python3 common/bin/cepa-promptcov maestro/commands/program-plan.md
+      tests/test_program_plan_sweep.py -> stdout " ✓ sweep:full-source /
+      ✓ sweep:solo-wave / ✓ sweep:wave-cap / ✓ sweep:cartorios / 4/4
+      checkpoint(s) coberto(s)." exit 0 (rodado diretamente pelo auditor,
+      fora da suíte automatizada, como segunda confirmação independente)
+    verdict: complete
+
+gaps: []

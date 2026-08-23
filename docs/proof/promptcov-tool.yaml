@@ -1,0 +1,41 @@
+schema_version: 2
+card: promptcov-tool
+verdict: proven
+reviewed_at: 2026-08-23T00:00:00-03:00
+base_commit: e07ac84
+head_commit: c24425a
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-promptcov"
+      module: infrastructure
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "script Python puro sem projeto Maven/pitest; perturbação direta substitui PIT (mesmo padrão de docs/proof/P2-cepa-hotspots.yaml)"
+    perturbation:
+      status: pass
+      results:
+        - "worktree /tmp/proof-promptcov-tool @ c24425a. Baseline: python3 tests/test_cepa_promptcov.py -> 18/18 ok, exit 0."
+        - "Perturbação 1 (find_checkpoints: 'if tag and m.group(\"tag\") != tag' -> 'if False') -> RED: 4 failures, exatamente os 4 casos que dependem de --tag ('--tag=sweep não mede a família outro', '--tag=outro mede só gamma... exit 0', 'tag sem nenhum checkpoint -> exit 2', 'a recusa nomeia que não há dado para medir'); exit 1. Revertido (git checkout c24425a -- common/bin/cepa-promptcov), GREEN restaurado (18/18)."
+        - "Perturbação 2 (main: 'uncovered = [c for c in ordered_checkpoints if c not in covered_ids]' -> 'uncovered = []') -> RED: 6 failures, exatamente os casos de detecção de órfão ('checkpoint sem cobertura sai exit 1', 'nomeia exatamente o checkpoint sem cobertura (beta)', 'checkpoint coberto não aparece como sem cobertura', '--tag=sweep ainda acusa beta sem cobertura', 'teste sem nenhuma cobertura -> exit 1, todos sem cobertura', '--json nomeia uncovered corretamente'); exit 1. Revertido, GREEN restaurado (18/18)."
+        - "Perturbação 3 (main: 'if not checkpoints:' -> 'if False:') -> RED: 3 failures, exatamente a recusa por vacuidade ('tag sem nenhum checkpoint -> exit 2', 'a recusa nomeia que não há dado para medir', 'comando sem checkpoint algum -> exit 2'); script declarou '0/0 checkpoint(s) coberto(s)' com exit 0 (sucesso falso por vacuidade) em vez de recusar com exit 2. Revertido, GREEN restaurado (18/18)."
+        - "worktree removido (git worktree remove --force /tmp/proof-promptcov-tool); git status --porcelain na árvore principal limpo (só arquivo pré-existente não relacionado .claude/acceptance/promptcov-tool.yaml)."
+        - "Aplicação real (motivadora da ferramenta), sem perturbação, na árvore principal: python3 common/bin/cepa-promptcov maestro/commands/program-plan.md tests/test_program_plan_sweep.py -> 4/4 checkpoint(s) coberto(s), exit 0."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "tests/test_cepa_promptcov.py exercita as 3 rotas de decisão de main() (checkpoints vazios -> exit 2, uncovered não-vazio -> exit 1, uncovered vazio -> exit 0) e o filtro --tag de find_checkpoints/find_covered; as 3 perturbações acima confirmam que cada rota é load-bearing (nenhuma sobrevive quebrada)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "CLI local que só lê 2 arquivos do próprio disco do usuário (não abre porta, não recebe payload de rede, não é chamada por outro serviço) — não há superfície de entrada externa para o card abrir. Nenhuma classe alterada pertence a módulo de entrada (api-rest); é ferramenta de linha de comando standalone (common/bin/)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Feature nova (ferramenta CLI), não bug. Perturbação direta nas 3 decisões centrais do script (filtro --tag, detecção de órfão, recusa por vacuidade) foi feita em worktree descartável e cada uma produziu RED nos casos exatos que deveriam guardá-la, com GREEN restaurado a cada reversão. A aplicação real sobre program-plan.md × test_program_plan_sweep.py (o par que motivou a ferramenta) confirma 4/4 checkpoints cobertos. Sem superfície de entrada externa (n/a, não skipped) e sem projeto Maven/pitest (n/a, perturbação direta é o mecanismo universal). Todos os níveis aplicáveis passaram com evidência 'verified' — PROVEN."
