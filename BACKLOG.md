@@ -1775,3 +1775,59 @@ Três frentes, da mais barata para a mais estrutural:
 Relacionado a [precedência de instruções](docs/precedencia-de-instrucoes.md): o agente
 está certo em parar e expor, e três deles fizeram exatamente isso. O defeito é o harness
 produzir o conflito toda vez, em vez de resolvê-lo na origem.
+
+---
+
+## Planejador de lotes paralelos do backlog
+
+**Status:** especificado · **Especificação:** `docs/spec/planejador-de-lotes-paralelos.md`
+**Lar:** `maestro/commands/program-plan.md` + `common/bin/` + `common/bin/cepa-dor`
+
+Varrer o BACKLOG.md inteiro e devolver uma proposta de ondas executáveis em paralelo,
+em vez de escolher as demandas a dedo. Fechado por interrogatório em 2026-08-23, com a
+regra de particionamento derivada de medição em `wego-assinatura-backend` e
+`wego-acesso-backend` (441 pares sem arquivo em comum, zero conflitos; 2 arquivos
+explicam 85% dos conflitos do assinatura). As demandas abaixo são os critérios de
+sucesso da especificação; cada uma carrega a camada onde é observável e o teste que
+hoje falharia.
+
+### P1. Modo de varrimento no /maestro:program-plan
+
+Lê o BACKLOG.md inteiro e devolve uma **proposta** de ondas (tabela
+onda·slice·demanda·arquivos) que entra na conversa do passo 3 do comando — nunca grava
+plan.yaml sozinho. Para nas próximas 2-3 ondas; sugere o teto de slices em vez de fixar
+3; demanda cujos arquivos não dá para derivar entra sozinha numa onda própria.
+Observável em: cli. Aceite (CS-1): varrimento no BACKLOG.md do próprio cepa produz onda
+1 que sai READY no `cepa-dor` sem NOT-READY. Hoje falha porque o modo não existe.
+
+### P2. common/bin/cepa-hotspots — medir os arquivos-cartório do repo
+
+Lê o `git log`, refaz as fusões do histórico e devolve os arquivos ordenados por quantos
+pares conflitantes cada um explica. "Arquivo-cartório" = o que quase toda demanda escreve
+porque agrega contribuição de todas (`openapi.yaml` no assinatura, `docs/pendencias.md`
+no acesso). Substitui a lista heurística de "alto atrito" que o `cepa-dor` usa hoje.
+Observável em: cli. Aceite (CS-2): num repositório-fixture com conflito plantado, aponta
+o arquivo certo. Aceite (CS-3): em repo com poucos pares, devolve lista vazia e
+"histórico insuficiente: N pares, mínimo M" — nunca heurística disfarçada de medição.
+
+### P3. cepa-dor: veto só no arquivo-cartório
+
+Hoje o gate derruba os dois slices em qualquer cruzamento de arquivo
+(`common/bin/cepa-dor:292`). Passa a derrubar só quando o cruzamento é num
+arquivo-cartório; cruzamento em qualquer outro arquivo vira aviso. O plan.yaml ganha um
+campo novo e **opcional** no topo com a lista de cartórios — sem bump de
+`schema_version`, plano sem o campo se comporta como hoje.
+Observável em: cli. Aceite (CS-4): dois slices que dividem um cartório saem NOT-READY;
+dois que se cruzam fora de cartório saem READY com aviso — hoje esta segunda metade
+falha. Motivo do afrouxamento: no assinatura a regra atual proibiria 184 de 461 pares
+(40%), e 132 deles (72%) teriam fundido limpo.
+
+### P4. Trava de escrita: renomear conta como escrita nos dois caminhos
+
+Um slice travado para escrever em `api-rest/**` que renomeia um arquivo para
+`application/**` escreveu fora do que prometeu, e hoje passa. Renomear passa a contar
+como escrita na origem E no destino.
+Observável em: cli. Aceite (CS-5): `git mv` de um caminho declarado para um não
+declarado é barrado. Acompanhante do planejador, não parte dele — surgiu da medição de
+renomeação (299 renomeações em 22 commits no assinatura, mas zero colisões com trabalho
+paralelo em 487 pares).
