@@ -1,0 +1,67 @@
+key: P2-cepa-hotspots
+spec: docs/spec/planejador-de-lotes-paralelos.md
+status: complete
+criteria:
+  - id: CS-2
+    text: >
+      common/bin/cepa-hotspots <repo> devolve os arquivos ordenados por
+      quantos pares conflitantes cada um explica, medidos refazendo as
+      fusões do histórico.
+    altitude: cli
+    surface: "common/bin/cepa-hotspots <repo> [--min-pairs N] [--json] (executável direto, invocado como subprocesso pelo teste)"
+    test: tests/test_cepa_hotspots.py::main (bloco "CS-2: planted conflict is found and ranked")
+    layer: cli-subprocess
+    verdict: complete
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_hotspots.py
+        ok  planted conflict repo exits 0
+        ok  cartorio.txt named as the top hotspot
+        ok  json: sufficient_history true
+        ok  json: pairs == 6
+        ok  json: top hotspot is cartorio.txt
+        ok  json: cartorio.txt explains all 6 conflicting pairs
+        ok  --limit 1 caps the list
+        all green
+    notes: >
+      O teste sobe um repositório-fixture real com git init, planta um
+      conflito real (6 merges reais que conflitam em cartorio.txt via
+      `git merge --no-edit`, resolvidos e commitados) e invoca o binário
+      como processo separado (subprocess.run([sys.executable, HOTSPOTS,
+      repo, ...])) — não chama função interna nem importa o módulo. Isso
+      exercita a superfície cli declarada no critério, não uma peça
+      isolada. Confirmei também que o executável funciona por caminho
+      direto (./common/bin/cepa-hotspots . --min-pairs 3), sem depender
+      de python3 explícito no invólucro do teste — mesmo comportamento.
+  - id: CS-3
+    text: >
+      Em repo com menos pares do que o mínimo, o script devolve lista
+      vazia e a frase "histórico insuficiente: N pares, mínimo M" —
+      nunca uma lista heurística.
+    altitude: cli
+    surface: "common/bin/cepa-hotspots <repo> --min-pairs N (executável direto, invocado como subprocesso pelo teste)"
+    test: tests/test_cepa_hotspots.py::main (bloco "CS-3: insufficient history never fabricates a list")
+    layer: cli-subprocess
+    verdict: complete
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_hotspots.py
+        ok  sparse repo exits 1 (insufficient)
+        ok  sparse repo names the exact shortfall message
+        ok  sparse repo json: sufficient_history false
+        ok  sparse repo json: hotspots empty
+        ok  non-git dir exits 2
+        all green
+    notes: >
+      Fixture com 2 commits e nenhum merge (make_sparse_repo). O teste
+      verifica exit code 1, a mensagem literal "histórico insuficiente:
+      0 pares, mínimo 3" no stdout, e no modo --json que
+      sufficient_history é false e hotspots é [] — cobre tanto o texto
+      humano quanto a saída estruturada, e confirma que nenhum arquivo é
+      listado (não é lista heurística disfarçada). Reproduzi manualmente
+      fora da suíte com um repositório distinto e obtive o mesmo
+      resultado (exit=1, mesma frase).
+overall_run: |
+  $ python3 tests/test_cepa_hotspots.py
+  (12 checks, all green, exit 0)
+gaps: []

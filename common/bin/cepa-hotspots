@@ -1,0 +1,202 @@
+#!/usr/bin/env python3
+"""cepa-hotspots — medir os arquivos-cartório de um repositório.
+
+Componente 2 do "planejador de lotes paralelos" (docs/spec/planejador-de-lotes-
+paralelos.md). "Arquivo-cartório" = arquivo que agrega contribuição de quase
+toda demanda e por isso quase toda demanda escreve nele (ex.: `openapi.yaml`
+no wego-assinatura-backend, `docs/pendencias.md` no wego-acesso-backend).
+
+Método: refaz, em memória, a fusão de cada par de merges reais do histórico
+com `git merge-tree` (sem tocar a working tree). Um par só entra na contagem
+se os dois lados tocaram pelo menos um arquivo em comum — a medição que
+fundamenta a especificação achou 0 conflitos em 441 pares sem arquivo comum,
+então pares sem sobreposição não ensinam nada sobre cartório. Cada arquivo que
+aparece como conflitado num par soma um ponto; o ranking final é esse total,
+decrescente.
+
+Sem histórico suficiente, o script devolve lista vazia e diz exatamente por
+quê — nunca uma heurística disfarçada de medição (CS-3).
+
+Uso:
+  cepa-hotspots <repo> [--ref REF] [--min-pairs N] [--limit N] [--json]
+
+Exit: 0 = lista produzida (mesmo que vazia por falta de conflito real)
+      1 = histórico insuficiente (menos pares que --min-pairs)
+      2 = erro (repo inexistente, não é repositório git, git falhou)
+"""
+import argparse
+import json
+import subprocess
+import sys
+from collections import Counter
+from pathlib import Path
+
+DEFAULT_MIN_PAIRS = 5
+
+
+def git(repo: Path, args: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(repo)] + args,
+                           capture_output=True, text=True)
+
+
+def merge_commits(repo: Path, ref: str) -> list[tuple[str, list[str]]]:
+    """Every merge commit reachable from ref, as (sha, [parent, ...])."""
+    out = git(repo, ["log", ref, "--merges", "--format=%H %P"])
+    if out.returncode != 0:
+        raise RuntimeError(f"git log --merges falhou: {out.stderr.strip()}")
+    commits = []
+    for line in out.stdout.splitlines():
+        parts = line.split()
+        if not parts:
+            continue
+        commits.append((parts[0], parts[1:]))
+    return commits
+
+
+def is_ancestor(repo: Path, maybe_ancestor: str, of: str) -> bool:
+    out = git(repo, ["merge-base", "--is-ancestor", maybe_ancestor, of])
+    return out.returncode == 0
+
+
+def changed_files(repo: Path, base: str, side: str) -> set[str]:
+    out = git(repo, ["diff", "--name-only", base, side])
+    if out.returncode != 0:
+        raise RuntimeError(f"git diff {base}..{side} falhou: {out.stderr.strip()}")
+    return {p for p in out.stdout.splitlines() if p.strip()}
+
+
+def real_pairs(repo: Path, ref: str) -> list[tuple[str, str]]:
+    """Two-parent merge pairs that are real merges (neither parent is an
+    ancestor of the other — a fast-forward doesn't test anything)."""
+    pairs = []
+    seen: set[tuple[str, str]] = set()
+    for _sha, parents in merge_commits(repo, ref):
+        if len(parents) != 2:
+            continue  # octopus merge — not a two-way pair, skip
+        p1, p2 = parents
+        key = tuple(sorted((p1, p2)))
+        if key in seen:
+            continue
+        seen.add(key)
+        if is_ancestor(repo, p1, p2) or is_ancestor(repo, p2, p1):
+            continue  # fast-forward-able, not a real pair
+        pairs.append((p1, p2))
+    return pairs
+
+
+def conflicting_files(repo: Path, p1: str, p2: str) -> set[str] | None:
+    """Redo the merge of p1/p2 in memory. None = clean (no conflict)."""
+    out = git(repo, ["merge-tree", "--write-tree", "--name-only", p1, p2])
+    if out.returncode == 0:
+        return None
+    if out.returncode != 1:
+        # ambiguous / couldn't compute — not evidence either way
+        return None
+    lines = out.stdout.splitlines()
+    files: set[str] = set()
+    for line in lines[1:]:  # line 0 is the (conflicted) tree OID
+        if not line.strip():
+            break  # blank line ends the conflicted-file block
+        files.add(line.strip())
+    return files
+
+
+def measure(repo: Path, ref: str, min_pairs: int):
+    pairs = real_pairs(repo, ref)
+    n = len(pairs)
+    if n < min_pairs:
+        return n, None
+
+    counts: Counter[str] = Counter()
+    conflicting_pairs = 0
+    merge_base_cache: dict[tuple[str, str], set[str] | None] = {}
+
+    for p1, p2 in pairs:
+        base_out = git(repo, ["merge-base", p1, p2])
+        if base_out.returncode != 0 or not base_out.stdout.strip():
+            continue
+        base = base_out.stdout.strip()
+        try:
+            a = changed_files(repo, base, p1)
+            b = changed_files(repo, base, p2)
+        except RuntimeError:
+            continue
+        if not (a & b):
+            continue  # no common file touched — 0 conflicts observed here, skip
+
+        try:
+            conflicted = conflicting_files(repo, p1, p2)
+        except RuntimeError:
+            continue
+        if conflicted:
+            conflicting_pairs += 1
+            counts.update(conflicted)
+
+    return n, (counts, conflicting_pairs)
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        prog="cepa-hotspots",
+        description="Mede os arquivos-cartório de um repo refazendo fusões do histórico.")
+    ap.add_argument("repo", help="caminho do repositório git")
+    ap.add_argument("--ref", default="HEAD", help="ref cujo histórico é varrido (default: HEAD)")
+    ap.add_argument("--min-pairs", type=int, default=DEFAULT_MIN_PAIRS,
+                     help=f"mínimo de pares para medir em vez de recusar (default: {DEFAULT_MIN_PAIRS})")
+    ap.add_argument("--limit", type=int, default=None, help="devolve só os N primeiros")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+
+    repo = Path(args.repo)
+    if not repo.is_dir():
+        print(f"✗ cepa-hotspots: repositório não encontrado: {repo}", file=sys.stderr)
+        sys.exit(2)
+    if git(repo, ["rev-parse", "--git-dir"]).returncode != 0:
+        print(f"✗ cepa-hotspots: {repo} não é um repositório git", file=sys.stderr)
+        sys.exit(2)
+
+    try:
+        n_pairs, result = measure(repo, args.ref, args.min_pairs)
+    except RuntimeError as e:
+        print(f"✗ cepa-hotspots: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    if result is None:
+        msg = f"histórico insuficiente: {n_pairs} pares, mínimo {args.min_pairs}"
+        if args.json:
+            print(json.dumps({
+                "sufficient_history": False,
+                "pairs": n_pairs,
+                "min_pairs": args.min_pairs,
+                "message": msg,
+                "hotspots": [],
+            }, ensure_ascii=False, indent=2))
+        else:
+            print(f"# cepa-hotspots @ {repo}\n")
+            print(f" ⚠ {msg}")
+        sys.exit(1)
+
+    counts, conflicting_pairs = result
+    ranked = counts.most_common(args.limit)
+
+    if args.json:
+        print(json.dumps({
+            "sufficient_history": True,
+            "pairs": n_pairs,
+            "conflicting_pairs": conflicting_pairs,
+            "hotspots": [{"path": p, "conflicting_pairs": c} for p, c in ranked],
+        }, ensure_ascii=False, indent=2))
+    else:
+        print(f"# cepa-hotspots @ {repo}\n")
+        print(f" {n_pairs} par(es) de merge real avaliado(s), "
+              f"{conflicting_pairs} conflitante(s)\n")
+        if not ranked:
+            print(" (nenhum arquivo-cartório — nenhum par conflitou)")
+        for path, c in ranked:
+            print(f" {c:>3}× {path}")
+
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
