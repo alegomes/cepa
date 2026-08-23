@@ -1,0 +1,143 @@
+schema_version: 2
+card: P1-sweep-mode
+verdict: needs-human
+reviewed_at: 2026-08-23T00:00:00-03:00
+base_commit: 4614c5a
+head_commit: 995625c
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "maestro/commands/program-plan.md"
+      module: maestro-commands-prosa
+      external_observable: true
+      substituted_by_double: null
+    - class: ".claude/programs/lotes-2026-08-23/plan.yaml"
+      module: maestro-programs-artefato-real
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_program_plan_sweep.py"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "program-plan.md é interaction:conversational (frontmatter) — prosa seguida por um agente Claude numa sessão interativa, não código executado por interpretador. Não há função/bytecode para PIT mutar; a técnica aplicável é perturbação textual da prosa + perturbação do artefato real que a prosa produziu, avaliado por um segundo mecanismo determinístico (cepa-dor)."
+    perturbation:
+      status: pass
+      results:
+        - "EIXO 1 (trava de regressão da prosa é real, não cosmética): worktree descartável /tmp/proof-P1-sweep-mode-axis1 (git worktree add em 995625c). GREEN antes (`python3 tests/test_program_plan_sweep.py` -> all green, 8/8 checks). Perturbação A: troquei 'Leia a fonte INTEIRA' por 'Leia um trecho qualquer' -> RED especificamente no check 'varre a fonte inteira (não só --demandas)', 1 failure, exit=1; os outros 7 checks continuaram ok (prova que o teste é específico, não um match genérico). Revertido (`git checkout 995625c -- maestro/commands/program-plan.md`)."
+        - "Perturbação B (mesmo worktree): troquei a menção a 'rode `python3 common/bin/cepa-hotspots`' por texto genérico -> RED especificamente no check 'invoca cepa-hotspots para popular cartorios', 1 failure, exit=1; os outros 7 continuaram ok. Revertido, `python3 tests/test_program_plan_sweep.py` -> all green de novo. Worktree removido (`git worktree remove --force`); `git status --porcelain` na árvore principal ficou limpo de qualquer alteração de source (só arquivos untracked pré-existentes de outros cards, não tocados nesta auditoria)."
+        - "EIXO 2 (o plan.yaml real não é aceito só por existir — o cepa-dor de fato o avalia): rodei `python3 common/bin/cepa-dor .claude/programs/lotes-2026-08-23/plan.yaml --wave 1 --repo .` sem perturbar nada na árvore principal -> 3/3 slices READY (S1, S2, S3), exit=1 (só avisos ⚠, nenhum NOT-READY) — isto É o CS-1 passando ao vivo, run real registrado abaixo."
+        - "Worktree descartável separado /tmp/proof-P1-sweep-mode-axis2 (git worktree add em 995625c). Copiei o plan.yaml real e o perturbei de propósito: adicionei 'board-flow/agents/atlassian-expert.md' (já presente em cartorios: e na surface de S1) também à surface de S2, forçando duas superfícies a intersectarem num arquivo-cartório real — exatamente o veto que P3-cepa-dor-cartorio provou existir. Rodei `cepa-dor --wave 1 --repo .` sobre a cópia perturbada -> S1 e S2 NOT-READY ('superfície intersecta a de S2/S1 num arquivo-cartório'), 1/3 READY, exit=2. RED confirmado no gate mecânico."
+        - "Contraste: rodei o cepa-dor de novo sobre o plan.yaml ORIGINAL (não perturbado, na árvore principal) -> voltou a 3/3 READY, exit=1 — o mesmo binário, mesmo comando, mesma lógica, aprovando o original e reprovando a cópia quebrada é a prova de que o gate está lendo o conteúdo real, não decorando um resultado fixo. Worktree removido (`git worktree remove --force`); `git status --porcelain` limpo."
+        - >-
+          EIXO 3 (2026-08-23, réplica independente e cega — não substitui L2,
+          reforça L3): um segundo agente, sem contexto desta sessão e sem
+          saber o que estava sendo provado, recebeu só a instrução de seguir
+          maestro/commands/program-plan.md do zero em --sweep, numa fatia do
+          BACKLOG.md diferente da já usada em
+          .claude/programs/lotes-2026-08-23/plan.yaml. Ele produziu de forma
+          independente um segundo artefato real,
+          <raiz-principal>/.claude/programs/lotes-sweep-verify/plan.yaml
+          (schema_version 2, mode parallel-waves, campo cartorios: com 7
+          arquivos populado via cepa-hotspots, onda 1 com 3 slices [S1,S2,S3],
+          onda 2 com a slice sensível S4 sozinha por tocar
+          build-hex/hooks/path-lock.py — zona de enforcement). EU MESMO
+          (proof-reviewer), não o agente que gerou o plano, rodei ao vivo
+          nesta sessão: `python3 common/bin/cepa-dor
+          /Users/alegomes/Insync/alegomes@gmail.com/GoogleDrive/2026/coding/cepa/.claude/programs/lotes-sweep-verify/plan.yaml
+          --wave 1 --repo /Users/alegomes/cepa-worktrees/cepa-parallel_batches`
+          -> 3/3 slices READY (S1, S2, S3), exit=1 (só avisos: baseline
+          dispensada por .claude/no-build, 7 arquivos-cartório fora de toda
+          superfície, e um aviso de que nenhum caminho existente casa com a
+          superfície de S1). Confirmei também `--wave 2` -> 0/1 READY, exit=2,
+          S4 NOT-READY por duas razões batendo com o relatado pelo agente
+          fresh: superfície intersecta a zona de enforcement (43 arquivos, ex.
+          build-hex/hooks/path-lock.py) e decisão estratégica em aberto
+          (human_gate: aberta). Os dois exit codes e as duas listas de motivo
+          batem exatamente com o que o agente fresh relatou, sem eu ter
+          alimentado nada do resultado esperado antes de rodar. Isto é uma
+          SEGUNDA amostra independente de que a prosa é seguível
+          corretamente por um agente que não sabe que está sendo avaliado —
+          fortalece a confiança no comportamento típico, mas continua sendo
+          amostragem comportamental (mais um ponto de dados), não medição de
+          cobertura; ver l2_coverage abaixo para por que isso não muda o
+          nível estrutural.
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: >
+      Não há ferramenta de cobertura aplicável a prosa markdown (não é código
+      instrumentável). Para o artefato real (plan.yaml), não há linha
+      "descoberta" no sentido de cobertura de código — o cepa-dor lê o
+      arquivo inteiro a cada invocação, e isso foi demonstrado diretamente no
+      L3 (o mesmo binário lê e reage tanto ao original quanto à cópia
+      perturbada, e agora também a um segundo artefato real produzido de
+      forma independente — EIXO 3). Reavaliado em 2026-08-23 à luz do EIXO 3:
+      uma segunda execução bem-sucedida e cega de program-plan.md por um
+      agente fresh é mais uma amostra de comportamento correto, não uma
+      medição de cobertura. Ela não identifica quais frases/blocos da prosa
+      foram de fato exercitados, nem quais ficaram nunca lidos/nunca
+      relevantes — é exatamente o tipo de pergunta que uma ferramenta de
+      cobertura formal responderia e que reruns manuais não respondem, por
+      mais que se acumulem. N reruns bem-sucedidos aumentam a confiança
+      indutiva no comportamento típico do agente, mas não convertem
+      "nenhuma medição" em "medição parcial" — a lacuna é de instrumentação
+      (não existe o equivalente de um coverage.py para prosa conversacional
+      seguida por um agente Claude), não de quantidade de amostras. Mantenho
+      `assumed`: a evidência estrutural do L3 é agora mais robusta (dois
+      eixos + uma réplica independente), mas este nível continua sem
+      instrumentação formal, e essa lacuna não decide sozinha se é aceitável
+      — chamada do humano, não minha.
+  l4_adversarial_input:
+    status: n/a
+    reason: >
+      A mudança não abre superfície de entrada externa nova: program-plan.md
+      é um comando conversacional (não parseia payload de rede/HTTP), e o
+      plan.yaml deste card é um artefato de sessão, não uma API pública.
+      cepa-dor (a superfície de entrada real, que já parseia YAML arbitrário)
+      não foi alterado por este diff (mudou em P3, já provado em
+      docs/proof/P3-cepa-dor-cartorio.yaml) — nenhum arquivo tocado por este
+      card pertence a um módulo input-bearing além do próprio conteúdo
+      estático de prosa/dados que o L3 já perturbou e leu de volta. O
+      segundo artefato real do EIXO 3 (plan.yaml de lotes-sweep-verify) foi
+      lido pelo mesmo cepa-dor já coberto por essa nota — não abre módulo
+      novo.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type=Feature (item de backlog, não Bug) — nível não aplicável."
+routing_reason: >
+  Os dois eixos originais aplicáveis a este card conversacional passaram com
+  evidência verificada e reproduzida por mim, green→red→green, em dois
+  worktrees git descartáveis distintos (/tmp/proof-P1-sweep-mode-axis1 e
+  -axis2, criados a partir de 995625c, ambos removidos ao final; git status
+  --porcelain limpo na árvore principal nos dois casos). Eixo 1 prova que a
+  trava de regressão da prosa (tests/test_program_plan_sweep.py) é sensível a
+  mudanças reais no texto que o próximo agente vai ler. Eixo 2 prova que o
+  gate mecânico (cepa-dor) de fato lê e avalia o conteúdo do plan.yaml real
+  produzido pela sessão de varrimento. Em 2026-08-23 recebi nova evidência: um
+  segundo agente, sem contexto desta sessão, seguiu program-plan.md do zero
+  numa fatia diferente do BACKLOG.md e produziu de forma independente um
+  segundo plan.yaml real (lotes-sweep-verify). Reproduzi eu mesmo, ao vivo,
+  `cepa-dor --wave 1` e `--wave 2` sobre esse segundo artefato, apontando
+  --repo para esta worktree — os resultados batem exatamente com o relatado
+  pelo agente fresh (3/3 READY exit=1 na onda 1; 0/1 READY exit=2 na onda 2,
+  vetada pela mesma zona de enforcement e pelo mesmo human_gate aberto). Isso
+  vira EIXO 3 dentro de l3_load_bearing, reforçando a confiança comportamental
+  de que a prosa é seguível corretamente por um agente cego. MAS isso não
+  fecha l2_coverage: a lacuna ali não é "poucas amostras", é ausência de
+  instrumentação — não existe ferramenta que meça qual fração da prosa de
+  program-plan.md foi exercitada, nem por uma nem por N execuções bem-
+  sucedidas. Rerun manual, por mais que se acumule, mede comportamento típico
+  (mais L3), não substitui medição de cobertura (L2). Pela regra do schema, um
+  nível `assumed` torna `proven` estruturalmente indisponível, mesmo com L3
+  robusto em três eixos. Mantenho NEEDS-HUMAN — não por dúvida sobre o
+  resultado do L3, que agora tem uma segunda amostra independente concordante,
+  mas porque este gate segue sem instrumentação para fechar L2 nesta natureza
+  de card, e essa lacuna estrutural continua sendo chamada do humano, não
+  minha.

@@ -1,0 +1,98 @@
+card: P4-write-lock-rename
+title: "Trava de escrita: renomear conta como escrita nos dois caminhos"
+status: complete
+diff: 15e3777..4614c5a
+source: docs/spec/planejador-de-lotes-paralelos.md (CS-5)
+
+criteria:
+  - id: AC1
+    text: >
+      `git mv` de um caminho declarado para um caminho NÃO declarado é
+      barrado (comportamento pré-existente, não pode regredir com a mudança).
+    altitude: cli
+    surface: "hook bash-path-lock.py invocado como subprocesso real (stdin
+      JSON de PreToolUse), avaliando um comando `git mv` cujo DESTINO cai
+      fora da superfície declarada do agente."
+    test: tests/test_write_lock_rename.py::"[build-hex] domain-dev: rename INTO disallowed dest is blocked"
+    layer: cli (subprocess, exit code real)
+    evidence: verified
+    run: "python3 tests/test_write_lock_rename.py -> 'ok  [build-hex] domain-dev: rename INTO disallowed dest is blocked' ; all green ; exit 0"
+    verdict: complete
+
+  - id: AC2
+    text: >
+      `git mv` de um caminho declarado para um caminho não declarado é
+      barrado PORQUE a origem também conta como escrita — o caso que hoje
+      passa batido é renomear de um caminho FORA da superfície do agente
+      para DENTRO dela (o destino permitido escondia que a origem não era).
+      Este é o teste vermelho citado no CS-5.
+    altitude: cli
+    surface: "hook bash-path-lock.py invocado como subprocesso real, avaliando
+      um `git mv infrastructure/src/main/Foo.java domain/src/main/Foo.java`
+      sob o agente domain-dev (cujo lane é domain/** + application/**, não
+      infrastructure/**) — destino ALLOWED, origem NÃO allowed."
+    test: tests/test_write_lock_rename.py::"[build-hex] domain-dev: rename FROM disallowed source is blocked"
+    layer: cli (subprocess, exit code real == 2, e o stderr nomeia o caminho de origem barrado)
+    evidence: verified
+    run: "python3 tests/test_write_lock_rename.py -> 'ok  [build-hex] domain-dev: rename FROM disallowed source is blocked' + 'ok  [build-hex] the block names the origin path' ; all green ; exit 0"
+    verdict: complete
+
+  - id: AC3
+    text: >
+      Rename totalmente dentro da própria pista do agente continua
+      permitido (não-regressão: a trava não deve ficar mais restritiva do
+      que o necessário).
+    altitude: cli
+    surface: hook bash-path-lock.py invocado como subprocesso real, `git mv domain/src/main/Old.java domain/src/main/New.java` sob domain-dev.
+    test: tests/test_write_lock_rename.py::"[build-hex] domain-dev: rename inside own lane is allowed"
+    layer: cli (subprocess, exit code real == 0)
+    evidence: verified
+    run: "python3 tests/test_write_lock_rename.py -> 'ok  [build-hex] domain-dev: rename inside own lane is allowed' ; all green ; exit 0"
+    verdict: complete
+
+  - id: AC4
+    text: >
+      A extração de alvos de escrita (`extract_write_targets` / `_segment_targets`)
+      trata `git mv` e `mv` puro simetricamente (origem+destino), e `cp`/`install`
+      continuam só-destino (só leem a origem) — checado em unidade, nas 5 cópias.
+    altitude: domain (função interna do hook, camada abaixo do CLI)
+    surface: chamada direta da função `extract_write_targets` nas 5 cópias geradas.
+    test: tests/test_bash_path_lock_redir.py (casos "git mv source", "git mv both paths", "plain mv source", "cp does not delete its source")
+    layer: unit (função pura, sem subprocess)
+    evidence: verified
+    run: "python3 tests/test_bash_path_lock_redir.py -> todas as linhas PASS para as 5 cópias (build-hex, build-team, design, discovery, docs-topology) ; exit 0"
+    verdict: complete
+    note: >
+      Este teste sozinho NÃO bastaria para o CS-5 (é unidade, não bate a
+      superfície cli descrita no critério) — mas o AC2, rodado via
+      subprocess real, já cobre a superfície certa. Este AC4 é companhia,
+      não substituto.
+
+  - id: AC5
+    text: >
+      As 5 cópias geradas (build-hex, build-team, discovery, design,
+      docs-topology) e o molde-fonte (common/hooks/_templates/bash-path-lock.py.tmpl)
+      permanecem idênticas após a mudança — sem deriva entre o molde e as cópias.
+    altitude: cli
+    surface: "bin/gen-locks.py --check comparando o molde renderizado contra as 5 cópias em disco."
+    test: tests/test_lock_copies_drift.py (via `python3 bin/gen-locks.py --check`)
+    layer: cli (subprocess, exit code real)
+    evidence: verified
+    run: "python3 bin/gen-locks.py --check -> '✓ as 5 cópias são exatamente o molde renderizado' ; exit 0"
+    verdict: complete
+
+summary: >
+  CS-5 pede altitude cli: um `git mv` real, executado, que hoje passa batido
+  quando a ORIGEM está fora da superfície declarada e o DESTINO está dentro.
+  tests/test_write_lock_rename.py bate exatamente essa superfície — invoca o
+  hook bash-path-lock.py como subprocesso real (stdin JSON de PreToolUse,
+  simulando o agente build-hex:domain-dev), lê o exit code real (2 = barrado,
+  0 = permitido) e confere que o stderr nomeia o caminho de origem. O caso
+  "renomear DE infrastructure/ (fora da pista) PARA domain/ (dentro da
+  pista)" é exatamente o teste vermelho citado no CS-5, e está verde.
+  test_bash_path_lock_redir.py cobre a mesma mudança em unidade (função
+  extract_write_targets), companhia útil mas não suficiente sozinha.
+  test_lock_copies_drift.py garante que a mudança não ficou só no molde ou
+  só numa cópia. Os três rodaram localmente, verdes, nesta auditoria.
+
+gaps: []

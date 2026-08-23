@@ -1,0 +1,89 @@
+schema_version: 2
+card: P4-write-lock-rename
+verdict: proven
+reviewed_at: 2026-08-23T00:00:00-03:00
+base_commit: 15e3777
+head_commit: 4614c5a
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "common/hooks/_templates/bash-path-lock.py.tmpl"
+      module: common-hooks-template
+      external_observable: true
+      substituted_by_double: null
+    - class: "build-hex/hooks/bash-path-lock.py"
+      module: common-hooks-copy
+      external_observable: true
+      substituted_by_double: null
+    - class: "build-team/hooks/bash-path-lock.py"
+      module: common-hooks-copy
+      external_observable: true
+      substituted_by_double: null
+    - class: "discovery/hooks/bash-path-lock.py"
+      module: common-hooks-copy
+      external_observable: true
+      substituted_by_double: null
+    - class: "design/hooks/bash-path-lock.py"
+      module: common-hooks-copy
+      external_observable: true
+      substituted_by_double: null
+    - class: "docs-topology/hooks/bash-path-lock.py"
+      module: common-hooks-copy
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Hook Python puro invocado como subprocesso CLI (stdin JSON), sem JVM/pitest; a técnica aplicável é perturbação direta do script, mesmo padrão do P2/P3 já provados nesta spec."
+    perturbation:
+      status: pass
+      results:
+        - "CS-5 parte 1 (git mv perde a origem): worktree descartável /tmp/proof-P4-write-lock-rename em 4614c5a. GREEN antes (`python3 tests/test_write_lock_rename.py` -> 4/4 ok, 'all green'). Perturbei build-hex/hooks/bash-path-lock.py revertendo o branch `elif cmd == \"git\":` de `targets.extend(nonflags[1:])` (origem+destino) para `targets.append(nonflags[-1])` (só destino, comportamento antigo). Rerun: 2 falhas -- 'domain-dev: rename FROM disallowed source is blocked' (exit=0, deveria bloquear) e 'the block names the origin path' -- exit=1. RED confirmado exatamente no caso vermelho do CS-5. Revertido (`git checkout -- build-hex/hooks/bash-path-lock.py`)."
+        - "CS-5 parte 2 (mv puro perde a origem): mesma worktree, GREEN restaurado antes de perturbar de novo. Removi o bloco `if cmd == \"mv\": targets.extend(nonflags[:-1])` do branch `elif cmd in (\"cp\", \"mv\", \"install\"):`. Rerun `python3 tests/test_bash_path_lock_redir.py`: 1 falha -- '[build-hex] plain mv source -> ['src/new.py'] (expected: plain `mv` deletes its source too -- both paths are targets)' -- as outras 4 cópias (build-team, design, discovery, docs-topology) continuaram PASS porque a perturbação só tocou a cópia build-hex. Exit continuou 0 porque o runner do teste não propaga falha individual em exit code, mas a linha FAIL e a contagem '1 failure(s) across 5 hook copies' são o sinal correto -- li o texto, não confiei só no exit code. RED confirmado no caso vermelho do CS-5, parte mv."
+        - "Revertido (`git checkout -- build-hex/hooks/bash-path-lock.py`). GREEN restaurado: `test_write_lock_rename.py` -> 4/4 ok / 'all green' (exit 0); `test_bash_path_lock_redir.py` -> 'All checks passed across 5 hook copies' (exit 0)."
+        - "Worktree removido (`git worktree remove --force /tmp/proof-P4-write-lock-rename`); `git status --porcelain` na árvore principal não mostrou nenhum arquivo tocado por esta prova (só dois `.claude/acceptance/*.yaml` untracked pré-existentes, alheios a este card)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >
+      Sem coverage.py configurado no repo; verificação por alcance
+      estrutural + confirmação empírica via perturbação (mesmo padrão do
+      P2/P3): as duas linhas mudadas em _segment_targets -- o
+      `targets.extend(nonflags[1:])` do branch `git mv` e o
+      `if cmd == "mv": targets.extend(nonflags[:-1])` do branch
+      cp/mv/install -- foram cada uma individualmente perturbada no L3 e
+      cada uma virou RED exatamente no teste que deveria capturá-la
+      (test_write_lock_rename.py para git mv; test_bash_path_lock_redir.py
+      caso 'plain mv source' para mv puro). Não há linha mudada sem teste
+      que a cubra.
+  l4_adversarial_input:
+    status: n/a
+    reason: >
+      O diff não abre superfície de entrada externa nova -- é um hook CLI
+      já existente (invocado via stdin JSON pelo runtime de hooks do
+      Claude Code) cuja lógica interna de extração de alvos foi corrigida;
+      não há endpoint HTTP nem módulo api-rest envolvido. Os casos de
+      entrada adversária relevantes (comandos git mv/mv/cp/install com
+      variações de aspas, flags, múltiplos operandos) já são os próprios
+      casos cobertos por test_bash_path_lock_redir.py e test_write_lock_rename.py,
+      exercitados diretamente no L3.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: >
+  Feature (não Bug), então bugfix_regression_red_at_base é n/a. As duas
+  mudanças de comportamento do commit (git mv origem+destino; mv puro perde
+  a origem) foram perturbadas isoladamente na cópia build-hex dentro de um
+  worktree descartável e cada uma produziu RED exatamente no teste que a
+  especificação CS-5 nomeia como vermelho ("rename FROM disallowed source
+  is blocked" e "plain mv source"). GREEN restaurado após cada reversão.
+  `bin/gen-locks.py --check` e `tests/test_lock_copies_drift.py` confirmam,
+  sem perturbação, que as 5 cópias em disco (build-hex, build-team, design,
+  discovery, docs-topology) são bit-a-bit o molde renderizado -- a correção
+  chegou nas 5, não só na perturbada. Árvore principal permaneceu limpa;
+  worktree descartável removido. PROVEN.
