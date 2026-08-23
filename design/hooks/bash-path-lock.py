@@ -91,7 +91,118 @@ _UNCOVERED_RE = re.compile(
 # Targets that are never real files.
 _PSEUDO = ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty")
 
-_SEP_RE = re.compile(r"(?:\|\||&&|[;|&\n])")
+# Separadores de comando, aplicados só FORA de aspas (ver _quoted_mask).
+_SEP_PAIRS = ("||", "&&")
+_SEP_CHARS = ";|&\n"
+
+
+def _quoted_mask(s: str) -> list:
+    """Um booleano por caractere: True onde ele está entre aspas ou escapado.
+
+    Existe porque o hook lia texto citado como se fosse shell. O caso real
+    (22/08/2026, WEGO-2087): `git commit -m "titulo\n\ncorpo com A -> B"`. O
+    `\n` do corpo era tratado como separador de comando, cada linha da mensagem
+    virava um "segmento", e o `->` de uma frase casava com _REDIR_RE — o hook
+    acusava escrita fantasma em `B` e barrava o commit. O dev só conseguiu
+    commitar depois de encurtar a mensagem para uma linha.
+
+    Aspas não fechadas mascaram o resto da string: é fail-open, coerente com o
+    contrato do hook, e um comando com aspas não fechadas não roda no shell.
+    """
+    mask = [False] * len(s)
+    quote = None
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if quote is None:
+            if c == "\\":
+                mask[i] = True
+                if i + 1 < len(s):
+                    mask[i + 1] = True
+                i += 2
+                continue
+            if c in "\"'":
+                quote = c
+                mask[i] = True
+            i += 1
+            continue
+        mask[i] = True
+        if quote == '"' and c == "\\":
+            if i + 1 < len(s):
+                mask[i + 1] = True
+            i += 2
+            continue
+        if c == quote:
+            quote = None
+        i += 1
+    return mask
+
+
+def _split_segments(command: str) -> list:
+    """Quebra em segmentos de comando ignorando separadores dentro de aspas."""
+    mask = _quoted_mask(command)
+    segments = []
+    start = i = 0
+    n = len(command)
+    while i < n:
+        if mask[i]:
+            i += 1
+            continue
+        if command[i:i + 2] in _SEP_PAIRS:
+            segments.append(command[start:i])
+            i += 2
+            start = i
+            continue
+        if command[i] in _SEP_CHARS:
+            segments.append(command[start:i])
+            i += 1
+            start = i
+            continue
+        i += 1
+    segments.append(command[start:])
+    return segments
+
+
+# Um redirecionamento inteiro — descritor opcional (`2>`), operador, `&`
+# opcional (`>&2`) e o operando. Serve só para APAGAR o redirecionamento antes
+# de tokenizar o comando: `tee saida.txt < entrada.txt` tokenizava como
+# `["tee", "saida.txt", "<", "entrada.txt"]`, e a regra do `tee` — todo
+# argumento que não é flag é escrito — registrava `<` e `entrada.txt` como
+# alvos de escrita. `entrada.txt` está sendo LIDO. Mesma família do falso
+# positivo do commit multilinha: um pedaço da linha lido como o que não é.
+_REDIR_STRIP_RE = re.compile(
+    r"""[0-9]?(?:>>?|<<?)&?\s*(?:"[^"]*"|'[^']*'|[^\s;&|<>()]+)?"""
+)
+
+
+def _strip_redirections(segment: str, mask: list) -> str:
+    """Remove os redirecionamentos FORA de aspas, preservando o resto intacto."""
+    cortes = [
+        (m.start(), m.end())
+        for m in _REDIR_STRIP_RE.finditer(segment)
+        if m.group() and not mask[m.start()]
+    ]
+    if not cortes:
+        return segment
+    out, pos = [], 0
+    for ini, fim in cortes:
+        out.append(segment[pos:ini])
+        pos = fim
+    out.append(segment[pos:])
+    return " ".join(p for p in out if p)
+
+
+def _unquoted_view(command: str) -> str:
+    """A linha de comando com o conteúdo citado trocado por espaço.
+
+    O detector de construção indecidível (_UNCOVERED_RE) varria a linha inteira,
+    aspas incluídas: uma mensagem de commit com a palavra `ed`, ou com um `<<`
+    no meio da prosa, gerava uma entrada falsa no log de cobertura. O log só
+    existe para dizer o que o hook NÃO conseguiu analisar — enchê-lo de prosa
+    ensina a ignorá-lo.
+    """
+    mask = _quoted_mask(command)
+    return "".join(" " if m else c for c, m in zip(command, mask))
 
 
 def _unquote(tok: str) -> str:
@@ -109,14 +220,21 @@ def _segment_targets(segment: str) -> list:
     targets = []
 
     # 1. Redirections (covers `cat > f`, `echo .. >> f`, `cmd > f`, heredoc-to-file).
+    #    O `>` precisa estar fora de aspas: um `->` no meio de uma mensagem de
+    #    commit é prosa, não redirecionamento.
+    redir_mask = _quoted_mask(segment)
     for m in _REDIR_RE.finditer(segment):
-        targets.append(_unquote(m.group(1)))
+        if not redir_mask[m.start()]:
+            targets.append(_unquote(m.group(1)))
 
     # 2. argv-shaped writers — tokenize; fall back silently if shlex chokes.
+    #    Sem os redirecionamentos: eles já viraram alvo no passo 1, e deixá-los
+    #    aqui faz o `tee` contar o operando de entrada como escrita.
+    sem_redir = _strip_redirections(segment, redir_mask)
     try:
-        argv = shlex.split(segment, posix=True)
+        argv = shlex.split(sem_redir, posix=True)
     except ValueError:
-        argv = segment.split()
+        argv = sem_redir.split()
     if not argv:
         return targets
 
@@ -159,7 +277,7 @@ def _segment_targets(segment: str) -> list:
 def extract_write_targets(command: str) -> tuple:
     """Return (targets, has_uncovered_construct)."""
     targets = []
-    for seg in _SEP_RE.split(command):
+    for seg in _split_segments(command):
         seg = seg.strip()
         if seg:
             targets.extend(_segment_targets(seg))
@@ -172,7 +290,7 @@ def extract_write_targets(command: str) -> tuple:
             continue
         seen.add(t)
         clean.append(t)
-    return clean, bool(_UNCOVERED_RE.search(command))
+    return clean, bool(_UNCOVERED_RE.search(_unquoted_view(command)))
 
 
 def log_uncovered(command: str, agent: str) -> None:

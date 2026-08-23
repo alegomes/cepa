@@ -40,6 +40,14 @@ Cobertura por arquivo:
 
 - **`bash-path-lock.py`: o módulo inteiro**, incluindo as tabelas de regex no
   nível do módulo — que é onde o bug do `>=` morava.
+- **`common/hooks/_shellscan.py` contra o `bash-path-lock`**: o motor de leitura
+  da linha de comando (máscara de aspas, quebra em segmentos, regex de
+  redirecionamento) existe em duas fontes — o molde das 5 cópias e este módulo,
+  de onde o `enforcement-guard` e o `maven-reactor-guard` importam. Duas fontes
+  porque hook de outro plugin não importa do `common`. Antes de 23/08/2026 eram
+  **sete cópias manuais** e este detector conhecia cinco: o falso-positivo do
+  `>=` ficou 2 meses sem conserto no `enforcement-guard`, e o commit de várias
+  linhas (WEGO-2087) repetiu a história.
 - **`path-lock.py`: o núcleo compartilhado** (`detect_agent`,
   `is_own_expertise_file`, `path_matches`) mais o `main` das topologias sem YAML
   próprio. O `main` do `build-hex` e o `debug_log` legitimamente diferem, e
@@ -318,6 +326,94 @@ def test_main_do_pathlock_bate_fora_do_hex():
             _report_first_diff(f"{ref_topo}:main", ref, t, mains[t])
 
 
+# O motor de leitura de linha de comando, nas duas fontes que restaram: o molde
+# das 5 cópias (representado pela do build-hex) e common/hooks/_shellscan.py,
+# de onde os dois guards do common importam.
+SHELLSCAN_FUNCS = ["_quoted_mask", "_split_segments", "_strip_redirections",
+                   "_unquoted_view", "_unquote", "_is_flag"]
+SHELLSCAN_CONSTS = ["_REDIR_RE", "_REDIR_STRIP_RE", "_SEP_PAIRS", "_SEP_CHARS",
+                    "_PSEUDO"]
+
+
+def named_constants(src: str, names: list) -> dict:
+    """nome → AST da atribuição, para as constantes pedidas."""
+    tree = _strip_docstrings(ast.parse(normalize(src)))
+    out = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name) and t.id in names:
+                    out[t.id] = ast.dump(node.value)
+    return out
+
+
+def test_motor_do_shellscan_bate_com_o_bash_path_lock():
+    """As duas fontes do motor de parsing têm de dizer a mesma coisa.
+
+    Perturbação: troque `(?![&=])` por `(?!&)` no `_REDIR_RE` de
+    `common/hooks/_shellscan.py` — o falso-positivo do `>=`, exatamente como ele
+    sobreviveu no enforcement-guard — e este caso fica vermelho nomeando a
+    constante. Se ficar verde, ele não está provando nada.
+    """
+    ref_p = REPO / "build-hex" / "hooks" / "bash-path-lock.py"
+    scan_p = REPO / "common" / "hooks" / "_shellscan.py"
+    check("common/hooks/_shellscan.py existe", scan_p.exists())
+    if not (ref_p.exists() and scan_p.exists()):
+        return
+    ref_src, scan_src = ref_p.read_text(encoding="utf-8"), scan_p.read_text(encoding="utf-8")
+
+    ref_c, scan_c = (named_constants(ref_src, SHELLSCAN_CONSTS),
+                     named_constants(scan_src, SHELLSCAN_CONSTS))
+    for name in SHELLSCAN_CONSTS:
+        check(f"_shellscan:{name} presente nas duas fontes",
+              name in ref_c and name in scan_c,
+              f"bash-path-lock={name in ref_c} _shellscan={name in scan_c}")
+        if name in ref_c and name in scan_c:
+            check(f"_shellscan:{name} idêntico ao bash-path-lock",
+                  ref_c[name] == scan_c[name],
+                  "a tabela divergiu entre as duas fontes do motor")
+
+    ref_f, scan_f = functions_of(ref_src), functions_of(scan_src)
+    for name in SHELLSCAN_FUNCS:
+        check(f"_shellscan:{name} presente nas duas fontes",
+              name in ref_f and name in scan_f,
+              f"bash-path-lock={name in ref_f} _shellscan={name in scan_f}")
+        if name in ref_f and name in scan_f:
+            igual = ref_f[name] == scan_f[name]
+            check(f"_shellscan:{name} idêntico ao bash-path-lock", igual,
+                  "o corpo divergiu entre as duas fontes do motor")
+            if not igual:
+                _report_first_diff(f"bash-path-lock:{name}", ref_f[name],
+                                   "_shellscan", scan_f[name])
+
+
+def test_guards_do_common_nao_recopiam_o_motor():
+    """Os dois guards importam o motor; não podem voltar a definir o seu.
+
+    Redefinir `_quoted_mask` ou `_REDIR_RE` num guard é exatamente como a
+    duplicação começou da primeira vez — e a cópia nova não seria vista por
+    nenhum dos casos acima, porque eles comparam as DUAS fontes declaradas.
+    """
+    for nome in ("enforcement-guard.py", "maven-reactor-guard.py"):
+        p = REPO / "common" / "hooks" / nome
+        check(f"{nome} existe", p.exists())
+        if not p.exists():
+            continue
+        src = p.read_text(encoding="utf-8")
+        check(f"{nome} importa _shellscan", "import _shellscan" in src,
+              "o guard precisa importar o motor em vez de copiá-lo")
+        tree = ast.parse(src)
+        redefinidos = [n.name for n in tree.body
+                       if isinstance(n, ast.FunctionDef)
+                       and n.name in SHELLSCAN_FUNCS]
+        redefinidos += [t.id for n in tree.body if isinstance(n, ast.Assign)
+                        for t in n.targets
+                        if isinstance(t, ast.Name) and t.id in SHELLSCAN_CONSTS
+                        and not (isinstance(n.value, ast.Attribute))]
+        check(f"{nome} não redefine nada do motor", not redefinidos,
+              f"redefinido localmente: {sorted(set(redefinidos))}")
+
+
 def _report_first_diff(ref_label, ref, other_label, other):
     """Mostra o TRECHO que difere — não o começo da linha, que é igual.
 
@@ -373,6 +469,8 @@ def main():
     test_bash_path_lock_identico()
     test_path_lock_nucleo_identico()
     test_main_do_pathlock_bate_fora_do_hex()
+    test_motor_do_shellscan_bate_com_o_bash_path_lock()
+    test_guards_do_common_nao_recopiam_o_motor()
     test_exempcoes_tem_motivo()
 
     print()

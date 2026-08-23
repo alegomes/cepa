@@ -41,34 +41,38 @@ Exit codes:
 
 import json
 import os
-import re
 import shlex
 import sys
 from pathlib import Path
 
-_REDIR_RE = re.compile(r"""(?<![0-9&])>>?\s*(?!&)("[^"]+"|'[^']+'|[^\s;&|<>()]+)""")
-_PSEUDO = ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty")
-_SEP_RE = re.compile(r"(?:\|\||&&|[;|&\n])")
+# O motor de leitura da linha de comando — máscara de aspas, quebra em segmentos,
+# regex de redirecionamento — vive em _shellscan.py e é COMPARTILHADO com o
+# maven-reactor-guard. Era cópia manual até 23/08/2026, e a cópia atrasou dois
+# consertos: o falso-positivo do `>=` ficou 2 meses aqui depois de resolvido nas
+# 5 cópias do bash-path-lock, e o commit de várias linhas repetiu a história.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _shellscan as S  # noqa: E402
+
+_REDIR_RE = S._REDIR_RE
+_PSEUDO = S._PSEUDO
+_quoted_mask = S._quoted_mask
+_split_segments = S._split_segments
+_strip_redirections = S._strip_redirections
+_unquote = S._unquote
+_is_flag = S._is_flag
 _SETTINGS_FILES = {"settings.json", "settings.local.json", "keybindings.json"}
 _GATED_FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 
-def _unquote(tok: str) -> str:
-    if len(tok) >= 2 and tok[0] in "\"'" and tok[-1] == tok[0]:
-        return tok[1:-1]
-    return tok
-
-
-def _is_flag(tok: str) -> bool:
-    return tok.startswith("-") and tok != "-"
-
-
 def _segment_targets(segment: str) -> list:
-    targets = [_unquote(m.group(1)) for m in _REDIR_RE.finditer(segment)]
+    redir_mask = _quoted_mask(segment)
+    targets = [_unquote(m.group(1)) for m in _REDIR_RE.finditer(segment)
+               if not redir_mask[m.start()]]
+    sem_redir = _strip_redirections(segment, redir_mask)
     try:
-        argv = shlex.split(segment, posix=True)
+        argv = shlex.split(sem_redir, posix=True)
     except ValueError:
-        argv = segment.split()
+        argv = sem_redir.split()
     if not argv:
         return targets
     cmd = os.path.basename(argv[0])
@@ -91,7 +95,7 @@ def _segment_targets(segment: str) -> list:
 
 def extract_bash_targets(command: str) -> list:
     out, seen = [], set()
-    for seg in _SEP_RE.split(command):
+    for seg in _split_segments(command):
         seg = seg.strip()
         if not seg:
             continue

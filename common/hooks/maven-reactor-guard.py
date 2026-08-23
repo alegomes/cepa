@@ -43,7 +43,6 @@ Exit codes:
 
 import json
 import os
-import re
 import shlex
 import sys
 from pathlib import Path
@@ -59,7 +58,16 @@ except Exception:  # telemetria nunca pode quebrar o gate
             pass
 
 
-_SEP_RE = re.compile(r"(?:\|\||&&|[;|&\n])")
+# O motor de leitura da linha de comando — máscara de aspas e quebra em
+# segmentos — vive em _shellscan.py e é COMPARTILHADO com o enforcement-guard.
+# Era cópia manual até 23/08/2026, e a cópia atrasou consertos: quebrar em `\n`
+# sem olhar aspas fazia cada linha do corpo de uma mensagem de commit virar um
+# "segmento", e uma linha começando com `./mvnw -pl core` era acusada de reator
+# parcial (22/08/2026, WEGO-2087). O sys.path já foi ajustado acima.
+import _shellscan as S  # noqa: E402
+
+_split_segments = S._split_segments
+
 _MAVEN_BIN = {"mvn", "mvnw", "mvnw.cmd"}
 # Envoltórios que só prefixam o comando real — o Maven depois deles ainda é
 # uma invocação de verdade. `echo`/`grep`/`cat` deliberadamente FORA da lista.
@@ -130,7 +138,7 @@ def is_multi_module(root: Path) -> bool:
 
 
 def offending_segment(command: str):
-    for seg in _SEP_RE.split(command):
+    for seg in _split_segments(command):
         seg = seg.strip()
         if not seg:
             continue
