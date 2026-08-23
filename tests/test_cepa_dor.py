@@ -54,7 +54,7 @@ def make_repo(tmp, no_build=True):
     """Tiny committed git repo the surfaces expand against."""
     repo = Path(tmp) / "r"
     repo.mkdir()
-    for p in ["src/a.py", "src/b.py", "docs/x.md", "plug/hooks/h.py"]:
+    for p in ["src/a.py", "src/b.py", "docs/x.md", "plug/hooks/h.py", "package-lock.json"]:
         (repo / p).parent.mkdir(parents=True, exist_ok=True)
         (repo / p).write_text("x")
     if no_build:
@@ -170,6 +170,15 @@ def main():
               "fora de toda superfície" in r.stdout, r.stdout)
         check("cartório fora de toda superfície não veta",
               r.returncode != 2 or "NOT-READY" not in r.stdout, r.stdout)
+
+        # sem `cartorios`, um arquivo que batia na heurística HIGH_FRICTION
+        # antiga (removida por P3) não gera aviso — trava contra a
+        # heurística voltar por engano ou um bug equivalente
+        r = run_dor(PLAN_4D.format(s1='"src/a.py"', s2='"docs/x.md"',
+                                   hg1="none", ac1='acceptance_cmd: "true",'),
+                    repo)
+        check("sem cartorios, arquivo da heurística antiga não gera aviso",
+              "fora de toda superfície" not in r.stdout, r.stdout)
 
         # enforcement zone veto
         r = run_dor(PLAN_4D.format(s1='"plug/hooks/h.py"', s2='"docs/x.md"',
