@@ -14,11 +14,18 @@ Checagens (cada uma existe porque a falha correspondente já custou uma onda):
     single-track é recusado apontando /board-flow:triage e /common:next —
     ver common/plan-schema.yaml
   - programa com >= 4 demandas (D7)
-  - superfície declarada e DISJUNTA dos demais slices da onda — globs
-    expandidos contra a árvore de arquivos no fork point (interseção
-    glob×glob no abstrato não é computável); interseção → NOT-READY dos DOIS
+  - superfície declarada e DISJUNTA dos demais slices da onda nos
+    arquivos-cartório do plano (globs expandidos contra a árvore de arquivos
+    no fork point; interseção glob×glob no abstrato não é computável) —
+    interseção num arquivo-cartório → NOT-READY dos DOIS; interseção em
+    qualquer outro arquivo → AVISO, não veto (medição em
+    docs/spec/planejador-de-lotes-paralelos.md: exigir disjunção total
+    proibiria 40% dos pares no wego-assinatura-backend, 72% dos quais
+    fundiriam limpo). "Arquivo-cartório" = campo opcional `cartorios:` no
+    topo do plan.yaml, medido por `common/bin/cepa-hotspots`; plano sem o
+    campo não veta nenhuma interseção, só avisa.
   - superfície não intersecta a zona de enforcement (deny incondicional)
-  - arquivos de alto atrito que nenhum slice declara → AVISO (não veto)
+  - arquivo-cartório que nenhum slice declara → AVISO (não veto)
   - critério de aceite declarado; em repo .claude/no-build o slice DEVE
     trazer acceptance_cmd executável (merge train não aterrissa N slices
     com verificação zero)
@@ -83,13 +90,6 @@ def has_bdd(text: str) -> bool:
                for triple in BDD_TRIPLES)
 
 
-HIGH_FRICTION = [
-    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock",
-    "Cargo.lock", "uv.lock", "Gemfile.lock", "composer.lock",
-    "*/migrations/*", "*/migration/*", "*/db/migrate/*",
-    "*/index.ts", "*/index.js", "*/__init__.py",
-    ".claude/settings*", "*settings.json",
-]
 
 
 def git_tree(repo: Path, ref: str) -> list[str]:
@@ -174,6 +174,17 @@ def main() -> int:
     slices_all: dict = plan.get("slices") or {}
     waves = plan.get("waves") or []
 
+    # arquivos-cartório (campo opcional no topo do plano, medido por
+    # common/bin/cepa-hotspots) — sem o campo, nenhuma interseção é vetada,
+    # só avisada (comportamento afrouxado, ver docstring do módulo)
+    cartorios_raw = plan.get("cartorios")
+    if cartorios_raw is None:
+        cartorios_raw = []
+    elif not isinstance(cartorios_raw, list):
+        problems_global.append(
+            f"`cartorios` precisa ser uma lista de caminhos (veio {type(cartorios_raw).__name__})")
+        cartorios_raw = []
+
     # D7 — piso de 4 demandas no PROGRAMA (memória de cálculo na decisão D7)
     demandas = {s.get("demanda", k) for k, s in slices_all.items()}
     if len(demandas) < 4:
@@ -205,6 +216,8 @@ def main() -> int:
     except RuntimeError as e:
         print(f"✗ {e}")
         return 2
+
+    cartorio_files = expand([str(c) for c in cartorios_raw], tree)
 
     no_build = (repo / ".claude" / "no-build").exists()
 
@@ -289,25 +302,39 @@ def main() -> int:
 
         per_slice[name] = {"gaps": gaps, "warns": warns}
 
-    # disjunção par a par — interseção derruba os DOIS slices
+    # disjunção par a par — interseção num arquivo-cartório derruba os DOIS
+    # slices; interseção em qualquer outro arquivo vira aviso, não veto
+    # (CS-4: exigir disjunção total proibiria 40% dos pares no
+    # wego-assinatura-backend, 72% dos quais fundiriam limpo)
     names = list(wave_slices)
     for i in range(len(names)):
         for j in range(i + 1, len(names)):
             inter = expanded[names[i]] & expanded[names[j]]
-            if inter:
-                msg = (f"superfície intersecta a de {{other}} "
-                       f"({len(inter)} arquivo(s), ex.: {sorted(inter)[0]})")
+            if not inter:
+                continue
+            cartorio_hits = inter & cartorio_files
+            other_hits = inter - cartorio_files
+            if cartorio_hits:
+                msg = (f"superfície intersecta a de {{other}} num arquivo-cartório "
+                       f"({len(cartorio_hits)} arquivo(s), ex.: {sorted(cartorio_hits)[0]})")
                 per_slice[names[i]]["gaps"].append(msg.format(other=names[j]))
                 per_slice[names[j]]["gaps"].append(msg.format(other=names[i]))
+            if other_hits:
+                warnings_global.append(
+                    f"[{names[i]}, {names[j]}] cruzam fora de arquivo-cartório "
+                    f"({len(other_hits)} arquivo(s), ex.: {sorted(other_hits)[0]}) — "
+                    "conflito incidental fica para o verify pós-merge do merge train")
 
-    # alto atrito que ninguém declara → aviso da onda, não veto
-    declared = set().union(*expanded.values()) if expanded else set()
-    friction = expand(HIGH_FRICTION, tree) - declared
-    if friction:
-        warnings_global.append(
-            f"{len(friction)} arquivo(s) de alto atrito fora de toda superfície "
-            f"(ex.: {sorted(friction)[0]}) — conflito incidental será pego pelo "
-            "verify pós-merge do merge train, não pelo intake")
+    # arquivo-cartório que ninguém declara → aviso da onda, não veto (sem
+    # `cartorios` no plano, não há dado — o aviso simplesmente não sai, CS-3)
+    if cartorio_files:
+        declared = set().union(*expanded.values()) if expanded else set()
+        friction = cartorio_files - declared
+        if friction:
+            warnings_global.append(
+                f"{len(friction)} arquivo(s)-cartório fora de toda superfície "
+                f"(ex.: {sorted(friction)[0]}) — nenhum slice declarou escrevê-los; "
+                "confira se algum precisa")
 
     # ── relatório ──────────────────────────────────────────────────────────
     verdicts = {n: ("NOT-READY" if per_slice[n]["gaps"] or problems_global
