@@ -257,6 +257,12 @@ def _segment_targets(segment: str) -> list:
     elif cmd in ("cp", "mv", "install"):
         if len(nonflags) >= 2:
             targets.append(nonflags[-1])  # destination is the last operand
+            if cmd == "mv":
+                # `mv` DELETES its source(s) — that is a write on the origin
+                # path too, not just the destination (P4, CS-5: renaming
+                # counts as a write on both paths). `cp`/`install` only READ
+                # their source, so they stay destination-only.
+                targets.extend(nonflags[:-1])
     elif cmd == "dd":
         for t in rest:
             if t.startswith("of="):
@@ -266,8 +272,15 @@ def _segment_targets(segment: str) -> list:
         # governar como qualquer outra escrita. Estava só na cópia do docs
         # (structure-surgeon usa git mv para preservar histórico); as outras
         # quatro deixavam passar. Encontrado pelo detector de divergência.
+        #
+        # Origem E destino contam como escrita (P4, CS-5): `git mv` apaga o
+        # caminho de origem tanto quanto cria o de destino — um slice travado
+        # para escrever em domain/** que renomeia infrastructure/Foo.java para
+        # domain/Foo.java "escreveu" fora da própria pista (removeu um arquivo
+        # de infrastructure/), mesmo o destino sendo permitido. Checar só o
+        # destino, como antes, deixava esse sentido passar batido.
         if len(nonflags) >= 3 and nonflags[0] == "mv":
-            targets.append(nonflags[-1])
+            targets.extend(nonflags[1:])
     elif cmd == "truncate":
         targets.extend(nonflags[1:] if nonflags else [])
 
