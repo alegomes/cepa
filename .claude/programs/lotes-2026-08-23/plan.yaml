@@ -1,0 +1,105 @@
+schema_version: 2
+mode: parallel-waves
+program: lotes-2026-08-23
+source: "BACKLOG.md, varrimento completo — CS-1 de docs/spec/planejador-de-lotes-paralelos.md"
+
+# Arquivos-cartório medidos por `common/bin/cepa-hotspots . --json` nesta sessão
+# (16 pares de merge real avaliados, 2 conflitantes). Nenhum entra em conflito
+# nesta onda — cada slice abaixo tem superfície própria — mas o campo já fica
+# gravado para as ondas seguintes do varrimento.
+cartorios:
+  - "build-hex/.claude-plugin/plugin.json"
+  - "common/.claude-plugin/plugin.json"
+  - "docs-topology/.claude-plugin/plugin.json"
+  - "discovery/.claude-plugin/plugin.json"
+  - "build-team/.claude-plugin/plugin.json"
+  - "design/.claude-plugin/plugin.json"
+  - "board-flow/agents/atlassian-expert.md"
+
+waves:
+  - id: 1
+    mode: parallel-worktrees
+    fork_after: null
+    slices: [S1, S2, S3]
+    status: pending
+  - id: 2
+    mode: parallel-worktrees
+    fork_after: "wave-1"
+    slices: [S4]
+    status: pending
+
+slices:
+  S1:
+    demanda: "Cascata multi-repo no board-flow (P5, BACKLOG.md#p5-cascata-multi-repo-no-board-flow)"
+    surface:
+      - "board-flow/agents/atlassian-expert.md"
+      - "board-flow/commands/advance.md"
+    human_gate: none
+    acceptance: |
+      Given um card pai com 2 filhos linkados por um tipo de link configurável
+      When o card pai é fechado
+      Then o atlassian-expert lista os filhos ainda abertos em outro repo e
+      PROPÕE o fechamento em cascata — nunca fecha sozinho
+    acceptance_form: bdd
+    acceptance_cmd: "python3 tests/test_cascata_multi_repo.py"
+    context:
+      - "BACKLOG.md#p5-cascata-multi-repo-no-board-flow"
+
+  S2:
+    demanda: "Auto Mode não injeta a diretiva de Bash em agentes com path-lock ativo (frente 1 do item de colisão, BACKLOG.md#a-instrucao-de-trabalhe-por-bash-colide-com-as-travas-de-caminho-dos-papeis)"
+    surface:
+      - "build-hex/agents/domain-dev.md"
+      - "build-hex/agents/api-dev.md"
+      - "build-hex/agents/adapter-dev.md"
+      - "build-hex/agents/qa-engineer.md"
+    human_gate: none
+    acceptance: >
+      Os 4 prompts de worker com path-lock ganham uma nota explícita dizendo
+      que a preferência por Bash do Auto Mode não se aplica a eles — decisão
+      registrada nesta onda: só a frente 1 (a mais barata), as frentes 2
+      (path-lock cobrir Bash) e 3 (caminho legítimo de perturbação) ficam para
+      onda futura, a segunda já parcialmente coberta por P4 desta sessão.
+      Nenhum teste automatizado prova prosa de prompt; o aceite é o marcador
+      presente nos 4 arquivos.
+    acceptance_form: substrate
+    acceptance_cmd: "grep -l 'Auto Mode' build-hex/agents/domain-dev.md build-hex/agents/api-dev.md build-hex/agents/adapter-dev.md build-hex/agents/qa-engineer.md | wc -l | grep -q 4"
+    context:
+      - "BACKLOG.md#a-instrucao-de-trabalhe-por-bash-colide-com-as-travas-de-caminho-dos-papeis"
+
+  S3:
+    demanda: "Baseline cega para builds longos — paliativo honesto documentado (frente 3 do item, BACKLOG.md#baseline-cega-para-builds-longos)"
+    surface:
+      - "docs/baseline-cega.md"
+    human_gate: none
+    acceptance: >
+      Documento descreve o paliativo escolhido (capture-build-result grava
+      estado pending/timestamp quando o tool_response vem "moved to
+      background", em vez de silêncio) e nomeia as duas frentes adiadas
+      (captura no fim do background; evidência em arquivo). Decisão registrada
+      nesta onda: só documentar agora — a implementação toca
+      common/hooks/capture-build-result.py, zona de enforcement do cepa-dor, e
+      por isso não é superfície de fork autônomo (mesma razão de S4).
+    acceptance_form: substrate
+    acceptance_cmd: "test -f docs/baseline-cega.md"
+    context:
+      - "BACKLOG.md#baseline-cega-para-builds-longos"
+
+  S4:
+    demanda: "Guard de dono único, camada 1 — PreToolUse em Bash reconhecendo git worktree remove / git branch -D (BACKLOG.md#o-guard-de-dono-unico-mora-no-comando-e-git-worktree-remove-cru-passa-por-fora)"
+    surface:
+      - "common/hooks/worktree-remove-guard.py"
+    human_gate: >
+      aberta: este slice escreve dentro da zona de enforcement do cepa-dor
+      (glob */hooks/*) — não é candidato a fork autônomo de maestro. Decisão a
+      registrar antes do fork: construir numa sessão supervisionada (mesmo
+      padrão desta sessão para P3/P4), não via /maestro:run. Por isso fica
+      sozinho na onda 2 e não entra no --wave 1 do cepa-dor.
+    acceptance: >
+      PreToolUse em Bash casa `git worktree remove` e `git branch -D/-d`,
+      extrai o alvo (path ou branch, tolerando `&&` encadeado e path absoluto),
+      roda a lógica de worktree-guard.py e bloqueia quando há sessão viva no
+      alvo, apontando /common:worktree-merge ou /common:worktree-discard.
+    acceptance_form: substrate
+    acceptance_cmd: "python3 tests/test_worktree_remove_guard.py"
+    context:
+      - "BACKLOG.md#o-guard-de-dono-unico-mora-no-comando-e-git-worktree-remove-cru-passa-por-fora"

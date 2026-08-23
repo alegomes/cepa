@@ -1,6 +1,6 @@
 ---
-description: Planeja um programa do Maestro — conversa sobre um universo de demandas (default BACKLOG.md), propõe ondas de slices com superfícies disjuntas e fork points, escreve .claude/programs/<nome>/plan.yaml (schema v2, canônico em common/plan-schema.yaml; v1 segue lida sem migração) e roda o intake gate (cepa-dor) até cada slice sair READY ou ter a lacuna nomeada. Não executa nada — /maestro:run (passo 3 da construção) é quem forka. Piso de uso: ≥4 demandas (D7); com menos, /board-flow:drain ou sessão única ganham.
-argument-hint: [nome-do-programa] [--source ARQUIVO] [--demandas "P9,P10,..."]
+description: Planeja um programa do Maestro — conversa sobre um universo de demandas (default BACKLOG.md), propõe ondas de slices com superfícies disjuntas e fork points, escreve .claude/programs/<nome>/plan.yaml (schema v2, canônico em common/plan-schema.yaml; v1 segue lida sem migração) e roda o intake gate (cepa-dor) até cada slice sair READY ou ter a lacuna nomeada. Não executa nada — /maestro:run (passo 3 da construção) é quem forka. Piso de uso: ≥4 demandas (D7); com menos, /board-flow:drain ou sessão única ganham. Com --sweep, varre a fonte INTEIRA em vez de uma lista de demandas escolhida a dedo e propõe as próximas 2-3 ondas sozinho.
+argument-hint: [nome-do-programa] [--source ARQUIVO] [--demandas "P9,P10,..."] [--sweep]
 interaction: conversational
 ---
 
@@ -18,12 +18,31 @@ e verificadas mecanicamente antes de qualquer fork.
 **Invariante de costura:** `/maestro:run` lê exclusivamente o plan.yaml. Este
 comando é o único lugar onde BACKLOG.md (ou outra fonte) é interpretado.
 
+**Modo `--sweep`:** em vez de uma lista de demandas escolhida a dedo, varre a
+fonte inteira e PROPÕE quais entram nas próximas ondas — ninguém hoje lê os
+109 títulos do backlog inteiro e devolve "isto dá para rodar em paralelo sem
+se atropelar" (docs/spec/planejador-de-lotes-paralelos.md, CS-1). Ainda é
+proposta, igual ao modo normal: entra na conversa do passo 3, nunca grava o
+plano sozinho. As diferenças ficam marcadas com **[sweep]** nos passos abaixo.
+
 ## Steps
 
 1. **Fonte e universo.** Leia a fonte (`--source`, default `BACKLOG.md`) e
    identifique as demandas candidatas (as passadas em `--demandas`, ou as que
    o usuário descrever). Menos de 4 demandas → pare e diga que o piso (D7) não
    foi atingido; recomende /board-flow:drain ou sessão única.
+
+   **[sweep]** Leia a fonte INTEIRA, do início ao fim — não só o trecho que o
+   usuário apontou. Descarte o que já tem `Status: FEITO/CONSTRUÍDO/✅` ou já
+   pertence a um plano existente (um `plan.yaml` em
+   `<raiz-principal>/.claude/programs/*/`); entre o resto, pare nas próximas
+   **2-3 ondas** (não tente particionar o backlog inteiro de uma vez — é
+   hipótese, revalidada por sessão). Prefira demandas
+   cuja superfície fica FORA da zona de enforcement do cepa-dor (`.claude/
+   settings*`, `.claude-plugin/*`, `*/hooks/*`, `*/plugins/*`) — o intake veta
+   essa zona incondicionalmente, então uma demanda cujo trabalho real é editar
+   um hook não é candidata a fork autônomo; nomeie isso ao usuário e sugira
+   sessão supervisionada em vez de forçar a onda.
 
 2. **Análise por demanda** (leitura do repo, sem escrever nada):
    - **superfície**: quais arquivos/globs a demanda realisticamente toca —
@@ -42,10 +61,24 @@ comando é o único lugar onde BACKLOG.md (ou outra fonte) é interpretado.
      (`acceptance_form: bdd`), ou o slice **assume** que é substrato
      (`acceptance_form: substrate`). Sem uma das duas, o intake reprova.
 
+   **[sweep]** Demanda cuja superfície não dá para derivar com confiança
+   (prosa vaga demais, ou toca área grande demais para um glob honesto) NÃO
+   entra dividindo onda com outras — vai **sozinha para sua própria onda**,
+   tratada como se tocasse o repo inteiro. É um custo aceito conscientemente:
+   cada demanda assim consome uma onda inteira; se o varrimento produzir muitas
+   ondas de uma slice só, esse é o sintoma a reportar ao usuário, não a
+   esconder forçando um glob dúbio.
+
 3. **Proposta de ondas.** Agrupe slices de superfícies disjuntas na mesma onda
    (teto `max_concurrent_slices`, default 3); dependências e decisões pesadas
    empurram para ondas posteriores. Apresente a proposta ao usuário em tabela
    (onda · slice · demanda · superfície · gate humano · aceite) e discuta.
+
+   **[sweep]** O teto de slices por onda não é fixo em 3 — **sugira** o teto
+   observando os arquivos-cartório medidos (passo 4): quanto mais concentrados
+   os conflitos em poucos arquivos, menor o teto seguro; repo sem cartório
+   claro sustenta onda maior. Proponha o número ao usuário com o porquê, não
+   grave sem revisão.
 
 4. **Escrever o plano.** Com o desenho acordado, escreva
    `<raiz-principal>/.claude/programs/<nome>/plan.yaml` seguindo
@@ -62,6 +95,14 @@ comando é o único lugar onde BACKLOG.md (ou outra fonte) é interpretado.
    sessão, morre com ela, e num repo cujo `.gitignore` cobre `.claude/` inteiro
    nenhuma guarda do caminho de remoção enxerga o arquivo. Vale para ler e para
    escrever. Ver `docs/execution-plan.md`, "Where the file lives".
+
+   **[sweep]** Antes de escrever, rode `python3 common/bin/cepa-hotspots
+   <raiz-principal> --json` e grave a lista `hotspots[].path` no campo novo e
+   opcional `cartorios:` no TOPO do plano (irmão de `schema_version`/`mode`,
+   documentado em `common/plan-schema.yaml`) — é o dado que o `cepa-dor` usa
+   para vetar só a interseção que cai num arquivo-cartório de verdade, em vez
+   de qualquer cruzamento. Histórico insuficiente → o script diz isso
+   explicitamente; deixe `cartorios:` ausente, não invente a lista.
 
 5. **Intake gate.** Rode:
 
