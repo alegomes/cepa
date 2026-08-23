@@ -41,121 +41,27 @@ Exit codes:
 
 import json
 import os
-import re
 import shlex
 import sys
 from pathlib import Path
 
-# `(?![&=])`: exclui `>&1` e o `>` do operador `>=` — a mesma correção que
-# o bash-path-lock levou em 2026-06-11 e que esta cópia não tinha.
-_REDIR_RE = re.compile(r"""(?<![0-9&])>>?\s*(?![&=])("[^"]+"|'[^']+'|[^\s;&|<>()]+)""")
-_PSEUDO = ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty")
-# Separadores de comando, aplicados só FORA de aspas (ver _quoted_mask).
-_SEP_PAIRS = ("||", "&&")
-_SEP_CHARS = ";|&\n"
+# O motor de leitura da linha de comando — máscara de aspas, quebra em segmentos,
+# regex de redirecionamento — vive em _shellscan.py e é COMPARTILHADO com o
+# maven-reactor-guard. Era cópia manual até 23/08/2026, e a cópia atrasou dois
+# consertos: o falso-positivo do `>=` ficou 2 meses aqui depois de resolvido nas
+# 5 cópias do bash-path-lock, e o commit de várias linhas repetiu a história.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _shellscan as S  # noqa: E402
 
-
-def _quoted_mask(s: str) -> list:
-    """Um booleano por caractere: True onde ele está entre aspas ou escapado.
-
-    Existe porque o hook lia texto citado como se fosse shell. O caso real
-    (22/08/2026, WEGO-2087): `git commit -m "titulo\n\ncorpo com A -> B"`. O
-    `\n` do corpo era tratado como separador de comando e cada linha da
-    mensagem virava um "segmento" analisado como comando.
-
-    Aspas não fechadas mascaram o resto da string: é fail-open, coerente com o
-    contrato do hook, e um comando com aspas não fechadas não roda no shell.
-    """
-    mask = [False] * len(s)
-    quote = None
-    i = 0
-    while i < len(s):
-        c = s[i]
-        if quote is None:
-            if c == "\\":
-                mask[i] = True
-                if i + 1 < len(s):
-                    mask[i + 1] = True
-                i += 2
-                continue
-            if c in "\"'":
-                quote = c
-                mask[i] = True
-            i += 1
-            continue
-        mask[i] = True
-        if quote == '"' and c == "\\":
-            if i + 1 < len(s):
-                mask[i + 1] = True
-            i += 2
-            continue
-        if c == quote:
-            quote = None
-        i += 1
-    return mask
-
-
-def _split_segments(command: str) -> list:
-    """Quebra em segmentos de comando ignorando separadores dentro de aspas."""
-    mask = _quoted_mask(command)
-    segments = []
-    start = i = 0
-    n = len(command)
-    while i < n:
-        if mask[i]:
-            i += 1
-            continue
-        if command[i:i + 2] in _SEP_PAIRS:
-            segments.append(command[start:i])
-            i += 2
-            start = i
-            continue
-        if command[i] in _SEP_CHARS:
-            segments.append(command[start:i])
-            i += 1
-            start = i
-            continue
-        i += 1
-    segments.append(command[start:])
-    return segments
+_REDIR_RE = S._REDIR_RE
+_PSEUDO = S._PSEUDO
+_quoted_mask = S._quoted_mask
+_split_segments = S._split_segments
+_strip_redirections = S._strip_redirections
+_unquote = S._unquote
+_is_flag = S._is_flag
 _SETTINGS_FILES = {"settings.json", "settings.local.json", "keybindings.json"}
 _GATED_FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
-
-
-# Um redirecionamento inteiro — descritor opcional (`2>`), operador, `&`
-# opcional e o operando. Serve só para APAGAR o redirecionamento antes de
-# tokenizar: `tee saida.txt < entrada.txt` fazia a regra do `tee` registrar
-# `entrada.txt`, que está sendo LIDO, como alvo de escrita.
-_REDIR_STRIP_RE = re.compile(
-    r"""[0-9]?(?:>>?|<<?)&?\s*(?:"[^"]*"|'[^']*'|[^\s;&|<>()]+)?"""
-)
-
-
-def _strip_redirections(segment: str, mask: list) -> str:
-    """Remove os redirecionamentos FORA de aspas, preservando o resto intacto."""
-    cortes = [
-        (m.start(), m.end())
-        for m in _REDIR_STRIP_RE.finditer(segment)
-        if m.group() and not mask[m.start()]
-    ]
-    if not cortes:
-        return segment
-    out, pos = [], 0
-    for ini, fim in cortes:
-        out.append(segment[pos:ini])
-        pos = fim
-    out.append(segment[pos:])
-    return " ".join(p for p in out if p)
-
-
-def _unquote(tok: str) -> str:
-    if len(tok) >= 2 and tok[0] in "\"'" and tok[-1] == tok[0]:
-        return tok[1:-1]
-    return tok
-
-
-def _is_flag(tok: str) -> bool:
-    return tok.startswith("-") and tok != "-"
 
 
 def _segment_targets(segment: str) -> list:

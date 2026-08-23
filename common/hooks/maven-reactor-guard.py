@@ -43,7 +43,6 @@ Exit codes:
 
 import json
 import os
-import re
 import shlex
 import sys
 from pathlib import Path
@@ -59,74 +58,16 @@ except Exception:  # telemetria nunca pode quebrar o gate
             pass
 
 
-# Separadores de comando, aplicados só FORA de aspas (ver _quoted_mask).
-_SEP_PAIRS = ("||", "&&")
-_SEP_CHARS = ";|&\n"
+# O motor de leitura da linha de comando — máscara de aspas e quebra em
+# segmentos — vive em _shellscan.py e é COMPARTILHADO com o enforcement-guard.
+# Era cópia manual até 23/08/2026, e a cópia atrasou consertos: quebrar em `\n`
+# sem olhar aspas fazia cada linha do corpo de uma mensagem de commit virar um
+# "segmento", e uma linha começando com `./mvnw -pl core` era acusada de reator
+# parcial (22/08/2026, WEGO-2087). O sys.path já foi ajustado acima.
+import _shellscan as S  # noqa: E402
 
+_split_segments = S._split_segments
 
-def _quoted_mask(s: str) -> list:
-    """Um booleano por caractere: True onde ele está entre aspas ou escapado.
-
-    Existe porque o hook lia texto citado como se fosse shell. O caso real
-    (22/08/2026, WEGO-2087): `git commit -m "titulo\n\ncorpo com A -> B"`. O
-    `\n` do corpo era tratado como separador de comando e cada linha da
-    mensagem virava um "segmento" analisado como comando.
-
-    Aspas não fechadas mascaram o resto da string: é fail-open, coerente com o
-    contrato do hook, e um comando com aspas não fechadas não roda no shell.
-    """
-    mask = [False] * len(s)
-    quote = None
-    i = 0
-    while i < len(s):
-        c = s[i]
-        if quote is None:
-            if c == "\\":
-                mask[i] = True
-                if i + 1 < len(s):
-                    mask[i + 1] = True
-                i += 2
-                continue
-            if c in "\"'":
-                quote = c
-                mask[i] = True
-            i += 1
-            continue
-        mask[i] = True
-        if quote == '"' and c == "\\":
-            if i + 1 < len(s):
-                mask[i + 1] = True
-            i += 2
-            continue
-        if c == quote:
-            quote = None
-        i += 1
-    return mask
-
-
-def _split_segments(command: str) -> list:
-    """Quebra em segmentos de comando ignorando separadores dentro de aspas."""
-    mask = _quoted_mask(command)
-    segments = []
-    start = i = 0
-    n = len(command)
-    while i < n:
-        if mask[i]:
-            i += 1
-            continue
-        if command[i:i + 2] in _SEP_PAIRS:
-            segments.append(command[start:i])
-            i += 2
-            start = i
-            continue
-        if command[i] in _SEP_CHARS:
-            segments.append(command[start:i])
-            i += 1
-            start = i
-            continue
-        i += 1
-    segments.append(command[start:])
-    return segments
 _MAVEN_BIN = {"mvn", "mvnw", "mvnw.cmd"}
 # Envoltórios que só prefixam o comando real — o Maven depois deles ainda é
 # uma invocação de verdade. `echo`/`grep`/`cat` deliberadamente FORA da lista.
