@@ -1,6 +1,6 @@
 {
   "name": "build-team",
-  "version": "0.3.1",
+  "version": "0.3.3",
   "description": "Multi-team agent topology — orchestrator + 3 leads + 6 workers, with path-lock hook. Adapted from indydev Dan's lead-agents pattern.",
   "author": {
     "name": "alegomes"
