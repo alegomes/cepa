@@ -1,0 +1,112 @@
+card: P3-cepa-dor-cartorio
+source: BACKLOG.md "## Planejador de lotes paralelos do backlog" > "### P3. cepa-dor: veto só no arquivo-cartório" (linhas ~1813-1823)
+spec: docs/spec/planejador-de-lotes-paralelos.md#CS-4
+diff_audited: 32aaaa4..0568ee5
+files_touched:
+  - common/bin/cepa-dor
+  - common/plan-schema.yaml
+  - tests/test_cepa_dor.py
+status: complete
+criteria:
+  - id: AC1
+    text: >-
+      CS-4a: dois slices da mesma onda que escrevem no mesmo arquivo-cartório
+      (declarado em `cartorios:` no topo do plan.yaml) saem NOT-READY.
+    altitude: cli
+    surface: "invocação real de `common/bin/cepa-dor <plan.yaml> --repo <repo>` como subprocesso"
+    test: tests/test_cepa_dor.py::main (checks "interseção num arquivo-cartório derruba os DOIS slices" e "a lacuna nomeia o arquivo-cartório")
+    layer: cli-subprocess (subprocess.run do binário real, sem mock)
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_dor.py
+      ok  interseção num arquivo-cartório derruba os DOIS slices
+      ok  a lacuna nomeia o arquivo-cartório
+      ...
+      all green
+      EXIT:0
+    verdict: complete
+
+  - id: AC2
+    text: >-
+      CS-4b: dois slices da mesma onda que se cruzam em qualquer OUTRO arquivo
+      (fora dos cartórios declarados, ou quando `cartorios` está ausente) saem
+      READY com aviso — não NOT-READY.
+    altitude: cli
+    surface: "invocação real de `common/bin/cepa-dor <plan.yaml> --repo <repo>` como subprocesso"
+    test: >-
+      tests/test_cepa_dor.py::main (checks "sem cartorios declarado, interseção
+      não veta" + "sem cartorios declarado, interseção é avisada" +
+      "cartório declarado que não intersecta os slices não veta")
+    layer: cli-subprocess (subprocess.run do binário real, sem mock)
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_dor.py
+      ok  sem cartorios declarado, interseção não veta
+      ok  sem cartorios declarado, interseção é avisada
+      ok  cartório declarado que não intersecta os slices não veta
+      ...
+      all green
+      EXIT:0
+    verdict: complete
+
+  - id: AC3
+    text: >-
+      Migração: `cartorios:` é campo opcional no TOPO do plan.yaml, sem bump
+      de `schema_version` (plano continua `schema_version: 1` e é aceito).
+      Plano sem o campo se comporta com AFROUXAMENTO (não veta por
+      interseção, só avisa) — não como o comportamento antigo (que vetava
+      qualquer interseção).
+    altitude: cli
+    surface: "invocação real de `common/bin/cepa-dor <plan.yaml> --repo <repo>` como subprocesso, com plano schema_version:1 + cartorios: no topo"
+    test: tests/test_cepa_dor.py::with_cartorios + main (todas as checks de "cartorios")
+    layer: cli-subprocess (subprocess.run do binário real, sem mock)
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_dor.py
+      ok  interseção num arquivo-cartório derruba os DOIS slices
+      ok  sem cartorios declarado, interseção não veta
+      ...
+      all green
+      EXIT:0
+    verdict: complete
+
+  - id: AC4
+    text: >-
+      A heurística HIGH_FRICTION (lista fixa de arquivos "de alto atrito") é
+      substituída pelo dado medido em `cartorios`; onde não há dado (plano sem
+      `cartorios`, ou `cartorios` vazio), o aviso "arquivo(s)-cartório fora de
+      toda superfície" simplesmente NÃO sai — não deve haver falso-positivo
+      herdado da heurística antiga.
+    altitude: cli
+    surface: "invocação real de `common/bin/cepa-dor <plan.yaml> --repo <repo>` como subprocesso, SEM `cartorios:` no plano, com um arquivo do fixture (package-lock.json) que batia na lista antiga"
+    test: >-
+      tests/test_cepa_dor.py::main, check "sem cartorios, arquivo da
+      heurística antiga não gera aviso" — roda PLAN_4D (S1=src/a.py,
+      S2=docs/x.md, sem `cartorios:`) contra o fixture make_repo, que agora
+      inclui `package-lock.json` (arquivo da HIGH_FRICTION removida, não
+      declarado por nenhum slice), e afirma que "fora de toda superfície"
+      NÃO aparece no stdout.
+    layer: cli-subprocess (subprocess.run do binário real, sem mock)
+    evidence: verified
+    run: |
+      $ python3 tests/test_cepa_dor.py
+      ok  sem cartorios, arquivo da heurística antiga não gera aviso
+      ...
+      all green
+      EXIT:0
+    note: >-
+      Gap da rodada anterior fechado por um teste real na suíte (não por
+      inspeção manual). Confirmei que o teste é uma trava efetiva, não uma
+      tautologia: a string afirmada ausente ("fora de toda superfície") é
+      compartilhada pela mensagem antiga ("arquivo(s) de alto atrito fora de
+      toda superfície...") e pela nova ("arquivo(s)-cartório fora de toda
+      superfície...") — se o código antigo (HIGH_FRICTION escaneando
+      `package-lock.json` no fixture) fosse reintroduzido, o teste voltaria a
+      falhar. `package-lock.json` foi adicionado ao fixture `make_repo` neste
+      diff especificamente para isso.
+    verdict: complete
+
+summary:
+  total_criteria: 4
+  complete: 4
+  incomplete: 0
