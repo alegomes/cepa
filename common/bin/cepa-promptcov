@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""cepa-promptcov — cobertura de checkpoints anotados num comando conversacional.
+
+Nasceu do card P1-sweep-mode (docs/spec/planejador-de-lotes-paralelos.md): um
+comando `interaction: conversational` (ex. `maestro/commands/program-plan.md`)
+é PROSA que um agente Claude segue numa sessão, não código que um interpretador
+executa. Não existe função para chamar, não existe linha para instrumentar com
+cobertura no sentido usual — e o proof-reviewer travou o veredito PROVEN desse
+card em `l2_coverage: assumed` por essa razão exata: nenhuma ferramenta media
+"quanto da prosa foi de fato exercitada".
+
+Este script mede uma coisa mais estreita e honesta: dado um comando cujos
+blocos de comportamento estão marcados com `**[tag:id]**` (convenção nova,
+ver `maestro/commands/program-plan.md`), e um teste de regressão cujas
+checagens embutem o mesmo `tag:id` no nome — cruza os dois conjuntos e aponta
+todo `id` do comando que NENHUMA checagem do teste referencia.
+
+O que isto NÃO prova: que a checagem existente é semanticamente correta, ou
+que um agente seguiu a prosa do jeito certo numa sessão real (isso é papel do
+proof-reviewer perturbando o teste, ou de uma execução independente — ver
+docs/proof/P1-sweep-mode.yaml). O que isto PROVA: que todo bloco de
+comportamento documentado tem PELO MENOS UMA checagem mecânica vigiando — a
+mesma pergunta que cobertura de linha responde para código, aplicada ao nível
+de granularidade que um comando conversacional tem: o parágrafo anotado, não
+a linha.
+
+Convenção:
+  - no comando: `**[sweep:full-source]** Leia a fonte INTEIRA...`
+  - no teste:   `check("[sweep:full-source] varre a fonte inteira", ...)`
+
+Sem nenhum `[tag:id]` no comando → nada para medir, o script diz isso
+explicitamente (nunca declara 100% de cobertura por vacuidade).
+
+Uso:
+  cepa-promptcov <comando.md> <teste.py> [--tag TAG] [--json]
+
+Exit: 0 = todo checkpoint tem cobertura · 1 = há checkpoint sem cobertura
+      2 = erro (arquivo inexistente, ou nenhum checkpoint do TAG pedido)
+"""
+import argparse
+import json
+import re
+import sys
+from pathlib import Path
+
+# `**[tag:id]**` no arquivo do comando — captura tag e id separadamente para
+# permitir filtrar por --tag (um comando pode ter mais de uma família de
+# anotação um dia).
+_CMD_TAG_RE = re.compile(r"\*\*\[(?P<tag>[\w-]+):(?P<id>[\w-]+)\]\*\*")
+
+# `tag:id` solto em qualquer lugar do texto do teste (comentário, docstring,
+# ou — convenção adotada aqui — dentro do primeiro argumento de check()).
+# Não exige que seja dentro de check() especificamente: um comentário
+# `# covers: sweep:full-source` também conta. Menos rígido de propósito —
+# rigidez de formato é o tipo de coisa que expulsa quem for manter isto.
+_TEST_TAG_RE = re.compile(r"\b(?P<tag>[\w-]+):(?P<id>[\w-]+)\b")
+
+
+def find_checkpoints(cmd_text: str, tag: str | None) -> list[str]:
+    ids = []
+    for m in _CMD_TAG_RE.finditer(cmd_text):
+        if tag and m.group("tag") != tag:
+            continue
+        ids.append(f"{m.group('tag')}:{m.group('id')}")
+    return ids
+
+
+def find_covered(test_text: str, tag: str | None) -> set[str]:
+    covered = set()
+    for m in _TEST_TAG_RE.finditer(test_text):
+        if tag and m.group("tag") != tag:
+            continue
+        covered.add(f"{m.group('tag')}:{m.group('id')}")
+    return covered
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(prog="cepa-promptcov")
+    ap.add_argument("comando", help="arquivo .md do comando conversacional")
+    ap.add_argument("teste", help="arquivo de teste que deveria cobrir os checkpoints")
+    ap.add_argument("--tag", default=None,
+                     help="restringe a uma família de anotação (ex.: sweep); "
+                          "default: todas as [tag:id] encontradas")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+
+    cmd_path = Path(args.comando)
+    test_path = Path(args.teste)
+    for p in (cmd_path, test_path):
+        if not p.is_file():
+            print(f"✗ cepa-promptcov: arquivo não encontrado: {p}", file=sys.stderr)
+            return 2
+
+    cmd_text = cmd_path.read_text(encoding="utf-8")
+    test_text = test_path.read_text(encoding="utf-8")
+
+    checkpoints = find_checkpoints(cmd_text, args.tag)
+    if not checkpoints:
+        msg = (f"nenhum checkpoint **[{args.tag}:id]** encontrado em {cmd_path}"
+               if args.tag else
+               f"nenhum checkpoint **[tag:id]** encontrado em {cmd_path}")
+        if args.json:
+            print(json.dumps({"measured": False, "message": msg,
+                              "checkpoints": [], "covered": [], "uncovered": []},
+                             ensure_ascii=False, indent=2))
+        else:
+            print(f"# cepa-promptcov @ {cmd_path}\n\n ⚠ {msg}")
+        return 2
+
+    covered_ids = find_covered(test_text, args.tag)
+    seen: set[str] = set()
+    ordered_checkpoints = [c for c in checkpoints if not (c in seen or seen.add(c))]
+    covered = [c for c in ordered_checkpoints if c in covered_ids]
+    uncovered = [c for c in ordered_checkpoints if c not in covered_ids]
+
+    if args.json:
+        print(json.dumps({
+            "measured": True,
+            "checkpoints": ordered_checkpoints,
+            "covered": covered,
+            "uncovered": uncovered,
+        }, ensure_ascii=False, indent=2))
+    else:
+        print(f"# cepa-promptcov @ {cmd_path} × {test_path}\n")
+        for c in ordered_checkpoints:
+            mark = "✓" if c in covered_ids else "✗"
+            print(f" {mark} {c}")
+        print(f"\n{len(covered)}/{len(ordered_checkpoints)} checkpoint(s) coberto(s).")
+        if uncovered:
+            print(f"sem cobertura: {', '.join(uncovered)}")
+
+    return 1 if uncovered else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

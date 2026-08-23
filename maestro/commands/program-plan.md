@@ -23,7 +23,11 @@ fonte inteira e PROPÕE quais entram nas próximas ondas — ninguém hoje lê o
 109 títulos do backlog inteiro e devolve "isto dá para rodar em paralelo sem
 se atropelar" (docs/spec/planejador-de-lotes-paralelos.md, CS-1). Ainda é
 proposta, igual ao modo normal: entra na conversa do passo 3, nunca grava o
-plano sozinho. As diferenças ficam marcadas com **[sweep]** nos passos abaixo.
+plano sozinho. As diferenças ficam marcadas nos passos abaixo com o rótulo
+`sweep` mais um identificador em negrito e colchetes — o identificador é usado
+por `common/bin/cepa-promptcov` para cruzar contra a trava de regressão
+(`tests/test_program_plan_sweep.py`) e apontar peça sem cobertura; ver
+docs/promptcov.md.
 
 ## Steps
 
@@ -32,7 +36,7 @@ plano sozinho. As diferenças ficam marcadas com **[sweep]** nos passos abaixo.
    o usuário descrever). Menos de 4 demandas → pare e diga que o piso (D7) não
    foi atingido; recomende /board-flow:drain ou sessão única.
 
-   **[sweep]** Leia a fonte INTEIRA, do início ao fim — não só o trecho que o
+   **[sweep:full-source]** Leia a fonte INTEIRA, do início ao fim — não só o trecho que o
    usuário apontou. Descarte o que já tem `Status: FEITO/CONSTRUÍDO/✅` ou já
    pertence a um plano existente (um `plan.yaml` em
    `<raiz-principal>/.claude/programs/*/`); entre o resto, pare nas próximas
@@ -61,7 +65,7 @@ plano sozinho. As diferenças ficam marcadas com **[sweep]** nos passos abaixo.
      (`acceptance_form: bdd`), ou o slice **assume** que é substrato
      (`acceptance_form: substrate`). Sem uma das duas, o intake reprova.
 
-   **[sweep]** Demanda cuja superfície não dá para derivar com confiança
+   **[sweep:solo-wave]** Demanda cuja superfície não dá para derivar com confiança
    (prosa vaga demais, ou toca área grande demais para um glob honesto) NÃO
    entra dividindo onda com outras — vai **sozinha para sua própria onda**,
    tratada como se tocasse o repo inteiro. É um custo aceito conscientemente:
@@ -74,7 +78,7 @@ plano sozinho. As diferenças ficam marcadas com **[sweep]** nos passos abaixo.
    empurram para ondas posteriores. Apresente a proposta ao usuário em tabela
    (onda · slice · demanda · superfície · gate humano · aceite) e discuta.
 
-   **[sweep]** O teto de slices por onda não é fixo em 3 — **sugira** o teto
+   **[sweep:wave-cap]** O teto de slices por onda não é fixo em 3 — **sugira** o teto
    observando os arquivos-cartório medidos (passo 4): quanto mais concentrados
    os conflitos em poucos arquivos, menor o teto seguro; repo sem cartório
    claro sustenta onda maior. Proponha o número ao usuário com o porquê, não
@@ -96,7 +100,7 @@ plano sozinho. As diferenças ficam marcadas com **[sweep]** nos passos abaixo.
    nenhuma guarda do caminho de remoção enxerga o arquivo. Vale para ler e para
    escrever. Ver `docs/execution-plan.md`, "Where the file lives".
 
-   **[sweep]** Antes de escrever, rode `python3 common/bin/cepa-hotspots
+   **[sweep:cartorios]** Antes de escrever, rode `python3 common/bin/cepa-hotspots
    <raiz-principal> --json` e grave a lista `hotspots[].path` no campo novo e
    opcional `cartorios:` no TOPO do plano (irmão de `schema_version`/`mode`,
    documentado em `common/plan-schema.yaml`) — é o dado que o `cepa-dor` usa
