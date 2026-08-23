@@ -1,0 +1,85 @@
+schema_version: 2
+card: P2-cepa-hotspots
+verdict: proven
+reviewed_at: 2026-08-23T00:00:00-03:00
+base_commit: 9eae667
+head_commit: 173064d
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-hotspots"
+      module: common-bin-cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python puro, sem JVM/pitest; a técnica aplicável aqui é perturbação direta do script, não PIT."
+    perturbation:
+      status: pass
+      results:
+        - "CS-2 (contagem de conflitos): worktree descartável /tmp/proof-P2-cepa-hotspots, substituí `counts.update(conflicted)` por `pass` em common/bin/cepa-hotspots:133. GREEN antes (12/12 ok). Após a perturbação: `python3 tests/test_cepa_hotspots.py` -> 3 falhas ('cartorio.txt named as the top hotspot', 'json: top hotspot is cartorio.txt', 'json: cartorio.txt explains all 6 conflicting pairs'), exit=1. RED confirmado. Revertido (`git checkout -- common/bin/cepa-hotspots`), GREEN restaurado."
+        - "CS-3 (mensagem exata de histórico insuficiente): troquei a f-string `histórico insuficiente: {n_pairs} pares, mínimo {args.min_pairs}` por `sem dados suficientes`. Após a perturbação: `python3 tests/test_cepa_hotspots.py` -> 1 falha ('sparse repo names the exact shortfall message'), exit=1. RED confirmado. Revertido, GREEN restaurado."
+        - "CS-3 (guarda min-pairs / não fabricar lista): neutralizei o `if n < min_pairs: return n, None` (virou `if False:`). Após a perturbação: `python3 tests/test_cepa_hotspots.py` -> 3 falhas ('sparse repo exits 1 (insufficient)', 'sparse repo names the exact shortfall message', 'sparse repo json: sufficient_history false'), exit=1. RED confirmado. Revertido, GREEN restaurado."
+        - "Worktree removido ao final (`git worktree remove --force /tmp/proof-P2-cepa-hotspots`); `git status --porcelain` na árvore principal ficou vazio — nenhuma alteração vazou para fora do worktree descartável."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >
+      Repo Python sem ferramenta de cobertura instrumentada (jacoco não se
+      aplica; não há equivalente coverage.py configurado no projeto). Em vez
+      de assumir, verifiquei por alcance estrutural + confirmação empírica
+      via perturbação: os três pontos perturbados no L3 (contagem de
+      conflitos em measure(), a mensagem de histórico insuficiente, e o
+      guard n<min_pairs) cobrem os três ramos centrais do script
+      (real_pairs/conflicting_files -> counts.update, o branch
+      "insuficiente", o branch "suficiente"); cada perturbação foi
+      exercitada pelos fixtures de tests/test_cepa_hotspots.py
+      (make_conflict_repo com 6 merges reais via `git merge --no-edit` e
+      make_sparse_repo com 0 merges) e cada uma virou RED exatamente onde
+      esperado. As demais funções (git(), merge_commits(), is_ancestor(),
+      changed_files()) são exercitadas indiretamente pelos mesmos dois
+      fixtures (são os únicos caminhos de dados até measure()). Os ramos de
+      erro (repo inexistente, não é git) são cobertos por checks explícitos
+      ("non-git dir exits 2") e por sondagem manual adicional (ver L4).
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings:
+      - >
+        Observação não bloqueante: `--min-pairs -1` é aceito sem validação
+        (qualquer histórico passa a ser "suficiente"). Não é um bug --  é
+        uma consequência direta e documentada do parâmetro ser um limiar
+        configurável -- mas vale registrar caso um humano queira uma
+        validação de min-pairs >= 0 no futuro.
+    run: |
+      $ python3 common/bin/cepa-hotspots /nonexistent/path
+      ✗ cepa-hotspots: repositório não encontrado: /nonexistent/path
+      exit=2
+
+      $ python3 common/bin/cepa-hotspots . --min-pairs -1 --json
+      {"sufficient_history": true, "pairs": 16, ...}   # aceito, sem crash, sem lista fabricada incorreta
+      exit=0
+
+      $ python3 common/bin/cepa-hotspots . --min-pairs abc
+      cepa-hotspots: error: argument --min-pairs: invalid int value: 'abc'
+      exit=2 (argparse rejeita antes de qualquer lógica de negócio)
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type=Feature (item de backlog, não Bug) — nível não aplicável."
+routing_reason: >
+  Todos os níveis aplicáveis passaram com evidência verificada e
+  reproduzida por mim: green→red→green em três pontos distintos da lógica
+  central (contagem de conflitos, mensagem exata de histórico insuficiente,
+  guard que impede fabricar lista com histórico raso), rodado num worktree
+  git descartável e removido ao final sem tocar a árvore principal. A
+  superfície externa relevante aqui é a CLI, e o teste já invoca o binário
+  como subprocesso real (não chama função interna) -- é a prova mais forte
+  disponível para este tipo de artefato, equivalente ao papel do
+  @QuarkusTest+RestAssured em projetos Quarkus. Sondagem adversarial (L4)
+  não achou comportamento incorreto, só uma lacuna de validação não
+  bloqueante. PROVEN.
