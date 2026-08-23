@@ -122,6 +122,32 @@ _SETTINGS_FILES = {"settings.json", "settings.local.json", "keybindings.json"}
 _GATED_FILE_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 
+# Um redirecionamento inteiro — descritor opcional (`2>`), operador, `&`
+# opcional e o operando. Serve só para APAGAR o redirecionamento antes de
+# tokenizar: `tee saida.txt < entrada.txt` fazia a regra do `tee` registrar
+# `entrada.txt`, que está sendo LIDO, como alvo de escrita.
+_REDIR_STRIP_RE = re.compile(
+    r"""[0-9]?(?:>>?|<<?)&?\s*(?:"[^"]*"|'[^']*'|[^\s;&|<>()]+)?"""
+)
+
+
+def _strip_redirections(segment: str, mask: list) -> str:
+    """Remove os redirecionamentos FORA de aspas, preservando o resto intacto."""
+    cortes = [
+        (m.start(), m.end())
+        for m in _REDIR_STRIP_RE.finditer(segment)
+        if m.group() and not mask[m.start()]
+    ]
+    if not cortes:
+        return segment
+    out, pos = [], 0
+    for ini, fim in cortes:
+        out.append(segment[pos:ini])
+        pos = fim
+    out.append(segment[pos:])
+    return " ".join(p for p in out if p)
+
+
 def _unquote(tok: str) -> str:
     if len(tok) >= 2 and tok[0] in "\"'" and tok[-1] == tok[0]:
         return tok[1:-1]
@@ -136,10 +162,11 @@ def _segment_targets(segment: str) -> list:
     redir_mask = _quoted_mask(segment)
     targets = [_unquote(m.group(1)) for m in _REDIR_RE.finditer(segment)
                if not redir_mask[m.start()]]
+    sem_redir = _strip_redirections(segment, redir_mask)
     try:
-        argv = shlex.split(segment, posix=True)
+        argv = shlex.split(sem_redir, posix=True)
     except ValueError:
-        argv = segment.split()
+        argv = sem_redir.split()
     if not argv:
         return targets
     cmd = os.path.basename(argv[0])

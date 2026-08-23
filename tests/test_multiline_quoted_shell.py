@@ -79,6 +79,22 @@ PATHLOCK_CASES = [
      lambda t: t == ["meu arquivo.txt"], "alvo citado continua detectado"),
     ("seta fora de aspas É redirecionamento", "echo A -> B",
      lambda t: t == ["B"], "sem aspas, `-> B` redireciona de verdade"),
+    # --- operando de LEITURA não é alvo de escrita (a regra do `tee` pegava
+    #     todo argumento sem flag, `<` e o arquivo de entrada inclusive) ---
+    ("tee com entrada redirecionada", "tee saida.txt < entrada.txt",
+     lambda t: t == ["saida.txt"], "entrada.txt está sendo lido, não escrito"),
+    ("tee com stderr desviado", "tee saida.txt 2> err.log",
+     lambda t: t == ["saida.txt"], "2> é fora de escopo, e não vira operando"),
+    ("tee com vários destinos", "tee a.txt b.txt",
+     lambda t: t == ["a.txt", "b.txt"], "os dois destinos continuam vistos"),
+]
+
+# (rótulo, comando, esperado para o sinal "não sei analisar isto")
+UNCOVERED_CASES = [
+    ("prosa citada não é construção indecidível",
+     'git commit -m "corpo com ed e << no meio da frase"', False),
+    ("python3 -c continua sinalizado", 'python3 -c "print(1)"', True),
+    ("heredoc continua sinalizado", "cat <<EOF > out.txt", True),
 ]
 
 ENFORCEMENT_CASES = [
@@ -91,6 +107,8 @@ ENFORCEMENT_CASES = [
      lambda t: t == ["plugins/common/hooks/y.py"], "alvo real detectado"),
     ("tee em settings", "echo hi | tee .claude/settings.json",
      lambda t: t == [".claude/settings.json"], "alvo real detectado"),
+    ("tee com entrada redirecionada", "tee plugins/x.py < entrada.txt",
+     lambda t: t == ["plugins/x.py"], "entrada.txt está sendo lido, não escrito"),
 ]
 
 MAVEN_CASES = [
@@ -126,6 +144,9 @@ def main():
         topo = hook.parent.parent.name
         mod = load(hook, f"bpl_{topo}")
         falhas += run(topo, lambda c: mod.extract_write_targets(c)[0], PATHLOCK_CASES)
+        falhas += run(topo, lambda c: mod.extract_write_targets(c)[1],
+                      [(lb, cmd, (lambda e: lambda got: got is e)(esp),
+                        f"sinal {esp}") for lb, cmd, esp in UNCOVERED_CASES])
 
     eg = load(REPO / "common" / "hooks" / "enforcement-guard.py", "enforcement_guard")
     falhas += run("enforcement-guard", eg.extract_bash_targets, ENFORCEMENT_CASES)
