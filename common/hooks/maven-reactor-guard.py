@@ -59,7 +59,74 @@ except Exception:  # telemetria nunca pode quebrar o gate
             pass
 
 
-_SEP_RE = re.compile(r"(?:\|\||&&|[;|&\n])")
+# Separadores de comando, aplicados só FORA de aspas (ver _quoted_mask).
+_SEP_PAIRS = ("||", "&&")
+_SEP_CHARS = ";|&\n"
+
+
+def _quoted_mask(s: str) -> list:
+    """Um booleano por caractere: True onde ele está entre aspas ou escapado.
+
+    Existe porque o hook lia texto citado como se fosse shell. O caso real
+    (22/08/2026, WEGO-2087): `git commit -m "titulo\n\ncorpo com A -> B"`. O
+    `\n` do corpo era tratado como separador de comando e cada linha da
+    mensagem virava um "segmento" analisado como comando.
+
+    Aspas não fechadas mascaram o resto da string: é fail-open, coerente com o
+    contrato do hook, e um comando com aspas não fechadas não roda no shell.
+    """
+    mask = [False] * len(s)
+    quote = None
+    i = 0
+    while i < len(s):
+        c = s[i]
+        if quote is None:
+            if c == "\\":
+                mask[i] = True
+                if i + 1 < len(s):
+                    mask[i + 1] = True
+                i += 2
+                continue
+            if c in "\"'":
+                quote = c
+                mask[i] = True
+            i += 1
+            continue
+        mask[i] = True
+        if quote == '"' and c == "\\":
+            if i + 1 < len(s):
+                mask[i + 1] = True
+            i += 2
+            continue
+        if c == quote:
+            quote = None
+        i += 1
+    return mask
+
+
+def _split_segments(command: str) -> list:
+    """Quebra em segmentos de comando ignorando separadores dentro de aspas."""
+    mask = _quoted_mask(command)
+    segments = []
+    start = i = 0
+    n = len(command)
+    while i < n:
+        if mask[i]:
+            i += 1
+            continue
+        if command[i:i + 2] in _SEP_PAIRS:
+            segments.append(command[start:i])
+            i += 2
+            start = i
+            continue
+        if command[i] in _SEP_CHARS:
+            segments.append(command[start:i])
+            i += 1
+            start = i
+            continue
+        i += 1
+    segments.append(command[start:])
+    return segments
 _MAVEN_BIN = {"mvn", "mvnw", "mvnw.cmd"}
 # Envoltórios que só prefixam o comando real — o Maven depois deles ainda é
 # uma invocação de verdade. `echo`/`grep`/`cat` deliberadamente FORA da lista.
@@ -130,7 +197,7 @@ def is_multi_module(root: Path) -> bool:
 
 
 def offending_segment(command: str):
-    for seg in _SEP_RE.split(command):
+    for seg in _split_segments(command):
         seg = seg.strip()
         if not seg:
             continue
