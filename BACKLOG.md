@@ -2158,3 +2158,231 @@ Nada decidido. As direções são: (a) o hook passar a derivar a lista do git na
 imprimir, descartando em silêncio as que não existem mais; (c) se a leitura ao vivo for
 cara, imprimir a data do retrato junto ("estado de <timestamp>"), para o agente saber
 que precisa conferir. A (a) parece certa e é barata neste tamanho de repo.
+---
+
+## Não há como executar em lote um plano `single-track` na ordem do plano
+
+**Status:** pendente · **Lar provável:** `common/commands/` (comando novo) ou
+`board-flow/commands/drain.md` · **Origem:** pergunta direta do dono na sessão de
+reflexão `session/doubt` (2026-08-24), ao lado da listagem do `/maestro:run`.
+
+### Problema
+
+O `mode: single-track` do `plan.yaml` existe para guardar duas coisas que o
+tracker perde: a **ordem** de execução e o **`why`** de cada item estar naquela
+posição (`common/plan-schema.yaml`: *"o Jira guarda a FILA (To Do) e não a ORDEM
+nem o PORQUÊ dela"*). Hoje nenhum comando executa essa fila em lote:
+
+- `/common:next` lê o plano e nomeia UM item, e é read-only por contrato
+  (*"Doesn't execute anything"*, `common/commands/next.md:248`);
+- `/board-flow:drain` executa em lote, mas a fonte dele é a coluna do Jira,
+  ordenada por `priority and rank` do board (`drain.md:45`) — exatamente a ordem
+  que o plano existe para substituir. Ele nunca abre o `plan.yaml`;
+- `/board-flow:execute` só toca o plano no fim, para nomear o próximo item e
+  marcar o recém-fechado como `done` (`execute.md:181-185`).
+
+Ou seja: o dono escreve a ordem no plano, e a única forma de executá-la em lote
+é uma que ignora essa ordem. Sem tracker (o plano `cepa` deste repo, com ids que
+não são cards) não há nem essa saída — sobra encadear `/common:next` +
+`/board-flow:execute` à mão, um por vez.
+
+### Solução decidida
+
+Direção (b), aprovada em 2026-08-24 junto do desenho maior: um
+`/common:drain-plan <nome>` próprio, que não exige tracker e executa a fila na
+ordem dela. É a etapa 3 do card "Cinco portas de planejamento" — construir
+depois do `/common:plan`, que é quem passa a escrever a fila. A direção (a) (um
+`--from-plan` no `/board-flow:drain`) foi descartada: prende ao Jira o comando
+que existe justamente para funcionar sem ele.
+
+Reaproveitar do `/board-flow:drain`: parar no primeiro BLOCKED e o teto `--max`.
+
+Em qualquer das duas, o item que não se resolve sozinho: `human_pending` aberto
+de um item deve ou não parar o lote? Hoje só o humano fecha essa pendência.
+
+---
+
+## Os dois planejadores dividem o mesmo namespace de arquivo sem nenhuma guarda
+
+**Status:** **RESOLVIDO em 2026-08-24** (commit `10a3a89`, mesma sessão que o
+abriu) — `maestro-programs --check-name` sai com 3 quando o nome já é fila
+`single-track` de um board, e o passo 4 do `/maestro:program-plan` chama a
+checagem antes de gravar; 4 testes, com quebra proposital dos dois lados. **Não
+está vivo até `bin/install.sh --clean`.** · **Origem:** revisão das estratégias
+de planejamento pedida na sessão `session/doubt` (2026-08-24).
+
+### Problema
+
+`/board-flow:triage` escreve `<raiz>/.claude/programs/<project_key>/plan.yaml`
+com `mode: single-track` — "one living plan per board" (`triage.md:221`).
+`/maestro:program-plan` escreve `<raiz>/.claude/programs/<nome>/plan.yaml` com
+`mode: parallel-waves` (`program-plan.md:87-88`). São dois documentos com
+significados diferentes, no mesmo diretório, distinguidos só por um campo
+interno — e o nome do programa é escolha livre do usuário.
+
+Num board `WEGO`, `/maestro:program-plan WEGO` sobrescreve a fila priorizada do
+board sem aviso: o passo 4 do program-plan não confere se o caminho já existe,
+nem qual `mode` o arquivo que está lá declara. O único lugar que olha planos
+existentes é o modo `--sweep`, e olha para outra coisa (descartar demandas já
+planejadas, `program-plan.md:41-42`).
+
+Que o risco é real já se vê no disco do `wego-acesso-backend`: convivem
+`.claude/programs/WEGO/` (fila do board) e `.claude/programs/WEGO-paralelo/`
+(ondas) — o sufixo saiu de uma escolha manual, não de uma guarda.
+
+### Esboço de solução
+
+Nada decidido. Direções: (a) o passo 4 do program-plan lê o `plan.yaml` que já
+existe no caminho e **recusa** quando o `mode` de lá é `single-track`, nomeando
+o conflito ("esse nome é o plano do board `WEGO`; escolha outro"); (b) separar
+os diretórios por tipo (`programs/` para ondas, `queues/` para single-track),
+o que quebra caminho já gravado em três comandos e no `docs/execution-plan.md`.
+A (a) é barata e cobre o acidente; a (b) resolve a ambiguidade de raiz.
+
+Vale para o `/common:next` também, que hoje aceita `--plan NOME` e confia no
+`mode` do arquivo — a recusa dele já existe e é o modelo a copiar.
+
+---
+
+## `docs/commands.md` não lista 8 comandos que existem
+
+**Status:** pendente, prioridade baixa · **Lar provável:** `docs/commands.md` ·
+**Origem:** mesma revisão da sessão `session/doubt`.
+
+### Problema
+
+O catálogo oficial de comandos (`docs/commands.md`, 189 linhas, uma tabela por
+plugin mais a seção "When to use which command") não menciona: `/common:spec`,
+`/common:session`, `/common:doctor`, `/common:metrics`, `/common:advisors`,
+`/common:consolidate`, `/common:prove-ui` e `/board-flow:decide`. Verificado por
+`grep -c` em 2026-08-24: zero ocorrências de cada um.
+
+São exatamente os comandos das duas pontas — o que abre a sessão e o que fecha —
+e os dois que respondem "e agora?" na coluna Review. Quem procura no catálogo
+conclui que não existem.
+
+Efeito colateral do mesmo buraco: a seção "When to use which command" não tem a
+entrada que a sessão de hoje mostrou faltar — a pergunta "quero *planejar*, qual
+das cinco portas eu uso?" (`/common:spec`, `/board-flow:capture`,
+`/board-flow:triage`, `/board-flow:plan-track-build-validate`,
+`/maestro:program-plan`), que hoje só se responde lendo os cinco arquivos.
+
+### Esboço de solução
+
+Acrescentar as 8 linhas nas tabelas e uma seção "quero planejar / quero
+executar" organizada pelo eixo entrada → documento produzido → quem lê aquele
+documento. O material está levantado no relatório da sessão `session/doubt`.
+
+---
+
+## O catálogo de comandos não tem guarda mecânica — e por isso volta a defasar
+
+**Status:** pendente · **Lar provável:** `tests/` (teste novo) · **Origem:**
+sessão `session/doubt` (2026-08-24), ao constatar 8 comandos ausentes de
+`docs/commands.md`.
+
+### Problema
+
+Corrigir a lista à mão conserta o sintoma de hoje e não impede o de amanhã:
+nada relaciona os arquivos `*/commands/*.md` (a verdade) com as tabelas de
+`docs/commands.md` (a cópia). Foi assim que 8 comandos sumiram do catálogo sem
+que nenhum teste piscasse.
+
+### Esboço de solução
+
+Um teste que lista `*/commands/*.md`, extrai `plugin:comando` de cada caminho e
+falha nomeando os que não aparecem em `docs/commands.md`. Barato, mecânico, e
+cabe no `tests/run-all.sh` que já roda tudo. A dúvida honesta: se o catálogo
+deve mesmo listar 100% dos comandos ou se alguns são internos — se forem, a
+lista de exceções fica no próprio teste, explícita, em vez de virar omissão.
+
+### Achados descartados na mesma revisão (com motivo)
+
+- **`/board-flow:capture` e `/discovery:capture` têm o mesmo nome** — o prefixo
+  de plugin já desambigua na invocação e os dois quadros são diferentes;
+  renomear custaria mais do que confunde.
+- **`--max` tem default diferente por comando** (drain 5, prove-drain 5, triage
+  15) — a diferença acompanha o custo de cada um: triar 15 cards é leitura,
+  drenar 15 é build. É calibragem, não inconsistência.
+- **A lista de rotinas do `/common:session` é fechada** (`prove-drain`, `drain`,
+  `triage`, `decide`, `execute`, `autonomous`, `docs`) — mas o próprio comando
+  aceita "qualquer comando de barra instalado" como alternativa, então um nome
+  fora da lista degrada para o caminho geral em vez de falhar.
+
+---
+
+## Cinco portas de planejamento, nenhuma conversão entre elas
+
+**Status:** **desenho APROVADO pelo dono em 2026-08-24**, não construído ·
+**Lar:** `common/commands/plan.md` (novo), `board-flow/commands/triage.md`,
+`maestro/commands/program-plan.md`, `common/commands/drain-plan.md` (novo) ·
+**Origem:** sessão `session/doubt` (2026-08-24).
+
+**Ordem de construção sugerida:** (1) `/common:plan` com `--from-spec` e a fila
+ditada à mão — sozinho já destrava repo sem tracker; (2) `--from-jira` + parar a
+escrita no `triage`, que é a única parte que mexe em comando existente; (3)
+`/common:drain-plan`; (4) `--from-plan` no `program-plan`. Cada etapa é útil
+sem a seguinte.
+
+### Problema
+
+Cada porta de entrada produz um documento próprio e nenhum caminho leva um
+documento ao formato do vizinho:
+
+| porta | produz |
+|---|---|
+| `/common:spec` | `docs/spec/<slug>.md` |
+| `/board-flow:capture` | um card no Jira |
+| `/board-flow:triage` | `plan.yaml` `single-track` (exige Jira) |
+| `/maestro:program-plan` | `plan.yaml` `parallel-waves` (exige `BACKLOG.md`) |
+| `/board-flow:plan-track-build-validate` | Epic + Stories no Jira |
+
+As três conversões que faltam: uma spec fechada não vira fila; um repo sem
+tracker não tem quem escreva `single-track` (o `docs/execution-plan.md` já
+registra isso como pergunta em aberto: *"who writes the plan in a repo with no
+tracker"*); e promover `single-track` → onda é manual por decisão declarada no
+mesmo documento.
+
+A primeira é a que dói: o `/common:spec` foi feito para não exigir tracker, e
+mesmo assim o que ele produz só continua andando com um.
+
+### Proposta
+
+Um escritor, várias fontes. Hoje a fila `single-track` tem exatamente um autor
+(`/board-flow:triage`) e ele exige Jira — é daí que sai todo o resto do
+problema. A proposta é tirar a escrita de dentro do plugin de tracker:
+
+1. **`/common:plan <nome>`** passa a ser o único comando que escreve
+   `.claude/programs/<nome>/plan.yaml` com `mode: single-track`, e aceita de
+   onde a fila vem:
+   - `--from-spec docs/spec/<slug>.md` — cada critério de sucesso da
+     especificação vira um item, com o `why` saindo da justificativa já escrita
+     lá (fecha a saída do `/common:spec`, que hoje não tem para onde ir sem
+     Jira);
+   - `--from-jira [coluna]` — delega a classificação ao `/board-flow:triage`,
+     que passa a **devolver a lista ordenada** em vez de gravar o arquivo;
+   - sem flag — a fila ditada à mão, para repo sem tracker e sem spec.
+2. **`/board-flow:triage` para de escrever `plan.yaml`.** Continua fazendo o que
+   só ele sabe (ler cards, achar evidência no código, rotear os 4 baldes) e
+   entrega a ordem para o `/common:plan`. Some a duplicação de responsabilidade
+   e some metade da ambiguidade de namespace do card anterior.
+3. **`/maestro:program-plan --from-plan <nome>`** lê a fila `single-track` em
+   vez de `BACKLOG.md`. É a promoção `single-track` → ondas, hoje declarada
+   manual por não ter um caminho — e é também a resposta a "como uso o
+   `program-plan` num projeto de Jira", que hoje não tem resposta boa: o
+   `--source` só aceita arquivo.
+4. **`/common:drain-plan <nome>`** (o card sobre executar em lote) executa a
+   fila na ordem dela. Fecha o ciclo sem tracker: escrever → apontar
+   (`/common:next`) → executar.
+
+O resultado: 1 documento de fila, 1 escritor, 3 fontes, 2 consumidores. O Jira
+vira uma fonte entre outras em vez de pré-requisito.
+
+**O que a proposta custa:** mexe em `triage` (deixa de escrever), cria dois
+comandos no `common` e um flag no `maestro`. Nada disso é migração de dado — o
+`plan.yaml` que já está no disco continua válido nos dois modos.
+
+**O que ela não resolve:** quem decide a ORDEM quando a fonte é uma spec. Os
+critérios de sucesso de uma spec não vêm priorizados entre si; ou o comando
+pergunta, ou herda a ordem do texto. Preferência: herdar a ordem do texto e
+dizer que herdou.

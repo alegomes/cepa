@@ -196,15 +196,31 @@ and carries on.
 ## Status
 
 The three pieces are built and guarded by `tests/test_fio_condutor.py`
-(prompt-contract assertions with perturbation proofs). **None has been exercised
-on a real board yet:** triage has never written a plan from live cards, and
-`next` has never reconciled against a live tracker. The tests lock the contract,
-not the behaviour in production — that distinction is tracked as an item in the
-`cepa` plan itself.
+(prompt-contract assertions with perturbation proofs). The two halves are at
+different stages, and saying "none of it ran" hid that:
 
-Two questions are deliberately left open, to be decided with use rather than
-guessed: whether the plan should surface at `SessionStart` alongside the handoff,
-and who writes the plan in a repo with no tracker.
+- **`/board-flow:triage` has run against live cards** — twice on the WEGO board
+  (2026-08-16 over the whole 55-card queue, 2026-08-18 over 15 of them), and the
+  merged result is on disk at `.claude/programs/WEGO/plan.yaml`: 77 ordered
+  items, each with its `why`. Checked 2026-08-24.
+- **`/common:next` has never reconciled against a live tracker.** That same file
+  says so in its own header ("rode `/common:next --sync` para reconciliar contra
+  o board antes de confiar"), and 76 of its 77 items still read `status:
+  pending` — the statuses are what triage declared, not what the board says.
+
+So the tests lock the contract, and one of the two consumers has now met a real
+board. `--sync` against a live tracker remains unexercised.
+
+One question is still deliberately open, to be decided with use rather than
+guessed: whether the plan should surface at `SessionStart` alongside the handoff.
+
+The other one — **who writes the plan in a repo with no tracker** — was answered
+on 2026-08-24: a new `/common:plan <name>`, the single writer of the
+`single-track` file, fed by `--from-spec`, by `--from-jira` (where
+`/board-flow:triage` classifies and hands back the order instead of writing the
+file itself), or dictated by hand. Design approved by the owner, not yet built;
+the card in `BACKLOG.md` ("Cinco portas de planejamento") holds the full shape
+and what it costs.
 
 ## See also
 
