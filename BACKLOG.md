@@ -371,9 +371,13 @@ silêncio — sem que ninguém precise abrir o `wave-state.yaml`.
 `tests/test_gatekeeper_classifica_linha_inteira.py`). Medido reprocessando o lote
 congelado: liberações que escrevem 8 → **0**, falso `delete-broad` 1 → **0**,
 escalações 43 → **29** (35 `read-only` + 10 `base-pipeline` + 29 zona cinza, soma 74).
-As 29 restantes são todas escrita de arquivo por shell — a zona cinza legítima. Falta
-o item 2 abaixo: liberar sozinho a escrita cujo alvo cai DENTRO da superfície da
-slice. · **Lar:** `maestro/bin/maestro-gatekeeper` (constantes `STRATEGIC` e
+As 29 restantes são todas escrita de arquivo por shell — a zona cinza legítima.
+
+**O QUE FALTA, adiado de propósito (2026-08-24, decisão do dono):** liberar sozinho a
+escrita cujo arquivo-alvo cai DENTRO da superfície declarada da slice — o item 2 abaixo.
+É a metade que muda o que passa SEM perguntar, então espera a 0.4.3 rodar pelo menos uma
+onda de verdade antes de entrar. Enquanto não entrar, essas 29 param a filha e pedem
+decisão humana uma a uma. · **Lar:** `maestro/bin/maestro-gatekeeper` (constantes `STRATEGIC` e
 `load_rules`) · **Origem:** onda 1 do programa `WEGO-paralelo` em wego-acesso-backend
 (2026-08-24) — a primeira vez que o porteiro rodou contra trabalho real.
 
