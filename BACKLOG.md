@@ -270,6 +270,53 @@ CLI = wrappers JSON do socket):
 
 ---
 
+## Onda termina e ninguém aterrissa: o merge train não roda sozinho
+
+**Status:** pendente · **Lar:** `maestro/commands/run.md` (passo 8, merge train) +
+`maestro/bin/maestro-wave-state` · **Origem:** onda 1 do programa `WEGO-paralelo`
+(2026-08-24). Duas branches prontas e verdes ficaram paradas até alguém reparar.
+
+### Problema
+
+O `/maestro:run` tem um último passo que aterrissa a onda: percorre as branches das
+slices que terminaram e as mescla na branch de integração, reusando os guards do
+`worktree-merge` com verificação depois de cada merge. Esse passo **só roda enquanto a
+sessão do maestro está viva e chega até ele**. Na onda 1 a sessão morreu antes (as
+filhas terminaram, o event loop nunca reconciliou — ver o defeito do `maestro-poll`,
+já consertado em 0.4.3), e o resultado foi:
+
+- S-2050, S-2059 e S-2070 aterrissaram porque uma pessoa mesclou à mão, horas depois;
+- S-2067 e S-2107 ficaram paradas até outra sessão notar, meio dia depois, e mesclar
+  também à mão (`0a92b95`, `26cec13`);
+- o `landed:` do `wave-state.yaml` seguiu `[]` o tempo todo, então nada em disco dizia
+  que faltava aterrissar — o estado parecia "onda rodando", não "onda esperando você".
+
+O modo de falha é o mesmo do falso TIMEOUT: **o estado não distingue "ainda
+trabalhando" de "terminou e ninguém veio buscar"**. A diferença é cara porque a
+segunda exige ação humana e a primeira não.
+
+### Esboço de solução
+
+1. `maestro-wave-state` ganha um estado terminal explícito por slice: `DONE` (a filha
+   terminou) e `LANDED` (a branch está na integração). Hoje só existe o primeiro, e o
+   `landed:` é uma lista solta no topo, fácil de ficar para trás.
+2. `/common:next` e `/common:doctor` passam a olhar programas com slice `DONE` e não
+   `LANDED` e a nomear isso como **ação humana pendente** — que é a distinção que o
+   `next` já sabe fazer para outros casos.
+3. O `/maestro:resume` reaterrissa: ao retomar um programa cuja onda inteira está
+   `DONE`, ele deve ir direto ao merge train em vez de concluir "não há nada rodando".
+4. Retentativa forkada durante a onda (S-2067R, S-2107R nasceram assim) precisa entrar
+   no `wave-state.yaml` no momento em que é criada. Na onda 1 elas apareceram só na
+   onda seguinte, o que é como duas sessões acabaram achando que eram donas delas.
+
+### Critério de pronto
+
+Matar a sessão do maestro logo depois de a última filha terminar e, na sessão
+seguinte, o `/common:next` dizer "5 slices terminadas esperando merge" em vez de
+silêncio — sem que ninguém precise abrir o `wave-state.yaml`.
+
+---
+
 ## Calibrar as regras do porteiro do Maestro com o 1º lote de sombra (43 escalações)
 
 **Status:** PARCIAL — o conserto do motor de classificação aterrissou (maestro 0.4.3,
