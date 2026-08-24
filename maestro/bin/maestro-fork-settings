@@ -13,8 +13,14 @@ e o `ask` catch-all manda o resto ao `--permission-prompt-tool`.
 
 Modelo de precedência do Claude Code: deny > allow > ask, por especificidade.
   - deny  : zona de enforcement (incondicional) — plugins/, hooks/, settings, cache
-  - allow : Write/Edit(<glob da superfície>), Bash(<base>:*) + bash_extra
+  - allow : Edit(<glob da superfície>), Bash(<base>:*) + bash_extra
   - ask   : Write, Edit, Bash (catch-all) → porteiro decide/escala
+
+ACHADO DA ONDA WEGO-paralelo (2026-08-24): regra com caminho só vale como
+`Edit(path)` — o Claude Code RECUSA `Write(path)` com aviso ("only Edit(path)
+rules are [matched by file permission checks]") e `Edit(path)` já cobre todas as
+ferramentas de escrita. Emitir o par Write+Edit era ruído que não abria nem
+fechava nada. Só o catch-all `ask` mantém o nome nu `Write`.
 
 Uso:
   maestro-fork-settings <plan.yaml> <slice> [--port P] [--host H]
@@ -59,15 +65,11 @@ def build_settings(plan: dict, slice_name: str, gk_url: str,
     surface = sl.get("surface") or []
     bash_extra = sl.get("bash_extra") or []
 
-    deny: list[str] = []
-    for z in enforcement_zone:
-        deny.append(f"Write({z})")
-        deny.append(f"Edit({z})")
+    # Só Edit(path): o Claude Code recusa Write(path) e Edit(path) já cobre
+    # toda ferramenta que edita arquivo (Write inclusive).
+    deny: list[str] = [f"Edit({z})" for z in enforcement_zone]
 
-    allow: list[str] = []
-    for g in surface:
-        allow.append(f"Write({g})")
-        allow.append(f"Edit({g})")
+    allow: list[str] = [f"Edit({g})" for g in surface]
     for cmd in BASE_BASH + list(bash_extra):
         # Bash(cmd:*) casa o comando e seus argumentos
         allow.append(f"Bash({cmd}:*)")

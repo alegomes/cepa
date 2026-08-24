@@ -55,7 +55,7 @@ def test_fork_settings(tmp):
     s = json.loads(r.stdout)
     perms = s["permissions"]
     check("allow inclui a superfície declarada",
-          "Write(src/a.py)" in perms["allow"] and "Edit(docs/*.md)" in perms["allow"],
+          "Edit(src/a.py)" in perms["allow"] and "Edit(docs/*.md)" in perms["allow"],
           perms["allow"])
     check("allow inclui bash_extra do slice",
           "Bash(./run-x.sh:*)" in perms["allow"], perms["allow"])
@@ -64,6 +64,11 @@ def test_fork_settings(tmp):
     check("deny cobre a zona de enforcement",
           any("hooks/**" in d for d in perms["deny"]) and
           any(".claude/settings.json" in d for d in perms["deny"]), perms["deny"])
+    # Regressão WEGO-paralelo 2026-08-24: o Claude Code RECUSA regra Write(path)
+    # ("only Edit(path) rules are matched"); Edit(path) já cobre toda escrita.
+    check("nenhuma regra Write(path) — só Edit(path) é aceita",
+          not [x for x in perms["allow"] + perms["deny"] if x.startswith("Write(")],
+          perms["allow"] + perms["deny"])
     check("identidade do slice vai na URL do porteiro (achado spike)",
           "slice=S1" in s["mcpServers"]["gatekeeper"]["url"], s["mcpServers"])
     r2 = sh([BIN / "maestro-fork-settings", plan, "NAO-EXISTE"])

@@ -152,8 +152,11 @@ Each child session runs under three layers:
 
 1. **Generated settings** (`maestro-fork-settings`, the primary layer): from the
    slice's `plan.yaml`, Maestro writes the worktree's `settings.json` —
-   deny-by-default; `Write`/`Edit` allowed only on the declared surface globs;
+   deny-by-default; file edits allowed only on the declared surface globs;
    `Bash` allowed to a conservative base set + the slice's `bash_extra`.
+   Path rules are emitted as `Edit(glob)` only: Claude Code rejects `Write(glob)`
+   ("only Edit(path) rules are matched by file permission checks") and `Edit`
+   already covers every file-editing tool.
    **Critically, it emits `ask` rules** that route everything else to the
    gatekeeper — without them the headless default pre-approves "safe" commands
    and the gatekeeper is never consulted (a real finding from the spike).
