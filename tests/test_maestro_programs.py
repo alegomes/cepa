@@ -191,6 +191,46 @@ def test_fora_de_repo_git_sai_2(tmp):
     check("e diz por quê", "git" in r.stderr, r.stderr)
 
 
+def test_check_name_recusa_fila_do_board(tmp):
+    repo = fixture_repo(tmp)
+    write_program(repo, "WEGO", SINGLE_TRACK)
+    r = run(repo, "--check-name", "WEGO")
+    check("nome ocupado por fila single-track sai com 3", r.returncode == 3, r.returncode)
+    check("a mensagem diz que a fila é do board",
+          "single-track" in r.stderr and "COLIS" in r.stderr, r.stderr)
+    check("e nomeia quem escreveu aquilo",
+          "/board-flow:triage" in r.stderr, r.stderr)
+
+
+def test_check_name_libera_replanejar_as_proprias_ondas(tmp):
+    repo = fixture_repo(tmp)
+    write_program(repo, "com-onda", ONDAS_PENDENTES)
+    r = run(repo, "--check-name", "com-onda")
+    check("reescrever plano de ondas é liberado", r.returncode == 0, r.stderr)
+    check("mas avisa que o nome está ocupado",
+          "ocupado" in r.stdout, r.stdout)
+
+
+def test_check_name_libera_nome_novo(tmp):
+    repo = fixture_repo(tmp)
+    r = run(repo, "--check-name", "ainda-nao-existe")
+    check("nome inédito é livre", r.returncode == 0, r.stderr)
+    check("e diz que o caminho não existe", "livre" in r.stdout, r.stdout)
+
+
+def test_program_plan_chama_a_checagem_antes_de_gravar(tmp):
+    """Contrato de prompt: o passo 4 do /maestro:program-plan tem que rodar a
+    checagem ANTES da escrita. Sem isto o script existe e ninguém o chama."""
+    cmd = (REPO / "maestro" / "commands" / "program-plan.md").read_text()
+    check("o passo 4 chama --check-name", "--check-name" in cmd)
+    check("e trata o exit 3 como parada", "Exit 3" in cmd and "pare" in cmd.lower())
+    i_check = cmd.find("--check-name")
+    i_write = cmd.find("escreva\n   `<raiz-principal>/.claude/programs/")
+    check("a checagem vem antes da escrita",
+          i_check != -1 and i_write != -1 and i_check < i_write,
+          f"check={i_check} write={i_write}")
+
+
 def main():
     tests = [test_elegivel_aponta_a_proxima_onda,
              test_ondas_todas_done_nao_roda,
@@ -198,7 +238,11 @@ def main():
              test_sem_schema_version_recusa_igual_ao_run,
              test_diretorio_sem_plano_aparece_como_tal,
              test_de_dentro_da_worktree_le_o_clone_principal,
-             test_fora_de_repo_git_sai_2]
+             test_fora_de_repo_git_sai_2,
+             test_check_name_recusa_fila_do_board,
+             test_check_name_libera_replanejar_as_proprias_ondas,
+             test_check_name_libera_nome_novo,
+             test_program_plan_chama_a_checagem_antes_de_gravar]
     for t in tests:
         print(t.__name__)
         with tempfile.TemporaryDirectory() as d:

@@ -84,7 +84,20 @@ docs/promptcov.md.
    claro sustenta onda maior. Proponha o número ao usuário com o porquê, não
    grave sem revisão.
 
-4. **Escrever o plano.** Com o desenho acordado, escreva
+4. **Escrever o plano.** Antes de gravar qualquer byte, confira que o nome
+   está livre:
+   ```
+   python3 maestro/bin/maestro-programs . --check-name <nome>
+   ```
+   **Exit 3 = pare.** Aquele caminho já guarda a fila `single-track` de um board
+   (é o `/board-flow:triage` que a escreve, um plano por board) e gravar ondas
+   por cima apaga a ordem dos itens e o `why` de cada um — o dado que o plano
+   existe para guardar, e que o Jira não tem. Mostre a mensagem ao usuário e
+   peça outro nome; não invente um sufixo por conta própria. Exit 0 com aviso de
+   "nome ocupado por um plano parallel-waves" é o caso normal de replanejar as
+   ondas do mesmo programa: siga.
+
+   Com o desenho acordado e o nome liberado, escreva
    `<raiz-principal>/.claude/programs/<nome>/plan.yaml` seguindo
    `common/plan-schema.yaml` (`schema_version: 2`, `mode: parallel-waves`). Um
    slice por demanda, salvo demanda grande que o usuário concorde em fatiar. O `mode` é explícito porque

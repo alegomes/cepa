@@ -14,9 +14,19 @@ Só lê. Nunca escreve, nunca sobe porteiro, nunca forka.
 
 Uso:
   maestro-programs [REPO] [--json]
+  maestro-programs [REPO] --check-name NOME
 Saída (humana): uma linha por programa com modo, próxima onda e o veredito
 `roda` / `não roda: <motivo>`. Exit 0 sempre que conseguiu listar (inclusive
 com zero programas); 2 se o diretório não é um repo git.
+
+`--check-name` responde OUTRA pergunta, antes de escrever: este nome de
+programa está livre? Os dois planejadores do harness gravam no MESMO
+diretório — /board-flow:triage escreve a fila do board em
+`.claude/programs/<project_key>/plan.yaml` (mode: single-track) e
+/maestro:program-plan escreve as ondas em `.claude/programs/<nome>/plan.yaml`
+(mode: parallel-waves) — e o nome do programa é escolha livre de quem chama.
+Sem esta checagem, `/maestro:program-plan WEGO` num board `WEGO` sobrescreve a
+fila priorizada e o `why` de cada item sem uma palavra. Exit 3 = colisão.
 """
 import argparse
 import json
@@ -184,16 +194,47 @@ def imprime(raiz, progs):
         print("Nenhum programa rodável — /maestro:program-plan <nome> cria um.")
 
 
+def cmd_check_name(raiz, nome):
+    """Exit 0 = nome livre (ou é o seu próprio plano de ondas). 3 = colisão."""
+    alvo = raiz / ".claude" / "programs" / nome / "plan.yaml"
+    if not alvo.is_file():
+        print(f"nome livre: {alvo} não existe")
+        return 0
+    try:
+        plan = yaml.safe_load(alvo.read_text()) or {}
+    except yaml.YAMLError as e:
+        print(f"{alvo} existe e está ilegível ({e.__class__.__name__}) — "
+              "não dá para dizer o que sobrescreveria", file=sys.stderr)
+        return 3
+    modo = plan.get("mode") or (
+        RUNNABLE_MODE if plan.get("schema_version") == 1 else None)
+    if modo == "single-track":
+        itens = plan.get("items") or []
+        print(f"COLISÃO: {alvo} já é a fila single-track do board "
+              f"'{plan.get('program', nome)}' ({len(itens)} itens, escrita por "
+              f"/board-flow:triage). Escrever ondas aqui apaga a ordem e o `why` "
+              f"de cada item. Escolha outro nome de programa.", file=sys.stderr)
+        return 3
+    print(f"nome ocupado por um plano '{modo}' — reescrever é o fluxo normal "
+          f"de replanejar as ondas de '{nome}'")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="lista os programas do Maestro neste repo")
     ap.add_argument("repo", nargs="?", default=".")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--check-name", metavar="NOME",
+                    help="o nome de programa está livre? exit 3 se colide com "
+                         "uma fila single-track")
     a = ap.parse_args(argv)
 
     raiz = raiz_principal(a.repo)
     if raiz is None:
         print(f"{a.repo} não é um repositório git", file=sys.stderr)
         return 2
+    if a.check_name:
+        return cmd_check_name(raiz, a.check_name)
     progs = coleta(raiz)
     if a.json:
         print(json.dumps({"raiz": str(raiz), "programas": progs},
