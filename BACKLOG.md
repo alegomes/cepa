@@ -2122,3 +2122,39 @@ Nada decidido. As direções são: (a) o `gc` de órfãos do `/maestro:run` pass
 o Space junto com a worktree ao aterrissar a onda; (b) aceitar os Spaces e só documentar
 que a barra lateral cresce por onda. A (a) parece certa, mas depende de conferir se
 `herdr worktree remove --workspace` derruba a worktree git com o Space ou só o Space.
+
+## O aviso de worktrees não mescladas do SessionStart mente
+
+**Status:** pendente, prioridade média · **Lar provável:** o hook de SessionStart que
+monta o bloco "📋 Unmerged session worktrees" · **Origem:** sessão de reflexão em
+`wego-acesso-backend`, 2026-08-24.
+
+### Problema
+
+O bloco listou três branches como não mescladas — `session/WEGO-paralelo-S-2067`,
+`-S-2067R` e `-S-2107`, esta última descrita como tendo alterações não commitadas — e
+**nenhuma das três existia**: `git branch -a` não as encontra. O mesmo bloco anunciou
+`session/2118` como sessão aberta rodando hooks velhos; também não existe.
+
+As worktrees vivas de verdade naquele momento eram `session/how_to_run`,
+`session/serialized` e `worktree/quiet-harbor-df65`, todas com **0 commits à frente da
+main** (`git rev-list --left-right --count main...<branch>`) — ou seja, zero pendências,
+o oposto do que o aviso dizia.
+
+O dano não é cosmético: o aviso é a primeira coisa que o agente lê na sessão, e a
+instrução transversal manda mencioná-lo ao usuário logo na abertura. O agente repassa
+como fato conferido uma lista que o git desmente, e o usuário decide em cima disso —
+neste caso, quase virou uma checagem de colisão contra branches fantasma.
+
+Hipótese: o bloco vem de um estado gravado quando as worktrees foram removidas (o mesmo
+ciclo que produz o `.claude/rescued/`), e não de uma leitura do git no instante do
+SessionStart. Se for isso, o aviso envelhece sozinho e nunca se corrige.
+
+### Esboço de solução
+
+Nada decidido. As direções são: (a) o hook passar a derivar a lista do git na hora —
+`git worktree list` + `rev-list --count` por branch — em vez de ler estado gravado;
+(b) manter o estado gravado, mas validar cada linha contra `git branch -a` antes de
+imprimir, descartando em silêncio as que não existem mais; (c) se a leitura ao vivo for
+cara, imprimir a data do retrato junto ("estado de <timestamp>"), para o agente saber
+que precisa conferir. A (a) parece certa e é barata neste tamanho de repo.
