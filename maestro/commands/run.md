@@ -1,6 +1,6 @@
 ---
 description: Executa a onda corrente de um plano do Maestro com uma ação — gc de órfãos, intake gate (cepa-dor), sobe o porteiro (shadow-mode no 1º programa), forka cada slice num worktree herdr com settings geradas + wrapper normativo, roda o event loop por arquivo, aterrissa a onda pelo merge train (reusa os guards do worktree-merge com verify pós-cada-merge) e relata. Morte da sessão é recuperável por /maestro:resume. Lê EXCLUSIVAMENTE o plan.yaml (invariante de costura). ⚠ Precisa do herdr rodando e do plugin instalado (bin/install.sh --clean).
-argument-hint: <nome-do-programa> [--wave N] [--shadow] [--port P]
+argument-hint: [nome-do-programa] [--wave N] [--shadow] [--port P] · sem argumento, lista o que dá para rodar
 interaction: routine
 ---
 
@@ -25,17 +25,34 @@ enxerga o arquivo). Vale para ler e para escrever. Ver
 **Pré-condições** (pare e diga ao usuário se faltar): herdr rodando
 (`herdr agent list` responde); plugin instalado após `bin/install.sh --clean`;
 plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
-`acceptance_cmd`.
+`acceptance_cmd`. **O modo listagem (Passo 0) não exige nada disso** — só lê
+arquivos, e é justamente o que responde antes de o usuário ter um nome na mão.
 
 ## Variables
 
-- `PROG` = `$1` (nome do programa) · `PROGDIR` = `<raiz-principal>/.claude/programs/$PROG`
+- `PROG` = `$1` (nome do programa). **Ausente = modo listagem, ver Passo 0** —
+  o comando não roda nada e imprime as opções. · `PROGDIR` =
+  `<raiz-principal>/.claude/programs/$PROG`
 - `--wave N` (default: primeira onda `status: pending`)
 - `--shadow` — força shadow-mode do porteiro (default: shadow SE for o 1º
   programa executado, senão deny ativo — ver Passo 3)
 - `--port` (default 8765) — porta do porteiro
 
 ## Steps
+
+0. **Sem `$1`: listar e parar.** Descobrir as opções custava dois comandos de
+   shell e o conhecimento de dois campos que um `ls` não mostra — `mode` (um
+   plano `single-track` não roda aqui) e o `status` das ondas (qual é a próxima
+   pendente). Rode:
+   ```
+   python3 maestro/bin/maestro-programs .
+   ```
+   Ele lê a MESMA raiz que os passos abaixo (o clone principal), imprime por
+   programa o modo, a próxima onda pendente e o veredito `RODA` / `não roda:
+   <motivo>` — com a linha de comando pronta para copiar — e sinaliza restos de
+   execução anterior (`wave-state.yaml`, porteiro órfão). Mostre a saída ao
+   usuário e **pare aqui**: sem nome de programa não há onda a forkar. Não
+   escolha um programa por conta própria.
 
 1. **Carregar e validar o plano.** Leia `PROGDIR/plan.yaml`. Aceite
    `schema_version` 1 (legado, só ondas) e 2 (`mode` explícito); recuse

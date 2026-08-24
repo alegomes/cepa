@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""maestro-programs — responde "o que eu posso rodar aqui?" antes de rodar.
+
+Existe porque descobrir as opções de /maestro:run custava dois comandos de
+shell e o conhecimento de dois campos que o `ls` não mostra: `mode` (um plano
+single-track NÃO roda aqui) e o `status` das ondas (qual é a próxima pendente).
+Sem isso o usuário chuta o nome do programa e descobre a recusa depois.
+
+Lê `<raiz-principal>/.claude/programs/*/plan.yaml` — a MESMA raiz que o
+/maestro:run usa (o pai de `git rev-parse --git-common-dir` sem o `/.git`
+final), para que a listagem e a execução nunca discordem de onde o plano mora.
+
+Só lê. Nunca escreve, nunca sobe porteiro, nunca forka.
+
+Uso:
+  maestro-programs [REPO] [--json]
+Saída (humana): uma linha por programa com modo, próxima onda e o veredito
+`roda` / `não roda: <motivo>`. Exit 0 sempre que conseguiu listar (inclusive
+com zero programas); 2 se o diretório não é um repo git.
+"""
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("maestro-programs precisa de PyYAML", file=sys.stderr)
+    sys.exit(2)
+
+# Modos de plano que ESTE comando sabe executar. O complemento não é erro do
+# usuário — é outro documento, com outro consumidor (single-track → /common:next).
+RUNNABLE_MODE = "parallel-waves"
+
+
+def raiz_principal(repo):
+    """O clone principal, mesmo chamado de dentro de uma worktree ligada.
+
+    `--git-common-dir` aponta para o .git do clone principal; o pai dele é a
+    raiz. Em repo comum dá o mesmo que `--show-toplevel`.
+    """
+    common = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "--git-common-dir"],
+        capture_output=True, text=True)
+    if common.returncode != 0:
+        return None
+    p = Path(common.stdout.strip())
+    if not p.is_absolute():
+        p = (Path(repo) / p).resolve()
+    return p.parent
+
+
+def _pid_vivo(pid):
+    try:
+        os.kill(int(pid), 0)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _run_em_curso(progdir):
+    """O que o disco diz sobre uma execução anterior deste programa."""
+    info = {"wave_state": None, "gatekeeper_pid": None, "gatekeeper_vivo": False}
+    ws = progdir / "wave-state.yaml"
+    if ws.is_file():
+        try:
+            data = yaml.safe_load(ws.read_text()) or {}
+        except yaml.YAMLError:
+            data = {}
+        slices = data.get("slices") or {}
+        if isinstance(slices, dict):
+            estados = {}
+            for nome, s in slices.items():
+                st = (s or {}).get("status") if isinstance(s, dict) else None
+                estados[nome] = st or "?"
+        else:
+            estados = {}
+        info["wave_state"] = {"wave": data.get("wave"), "slices": estados}
+    pidfile = progdir / "gatekeeper" / "gatekeeper.pid"
+    if pidfile.is_file():
+        pid = pidfile.read_text().strip()
+        info["gatekeeper_pid"] = pid
+        info["gatekeeper_vivo"] = _pid_vivo(pid)
+    return info
+
+
+def _avalia(plan):
+    """(elegivel, motivo, proxima_onda, resumo_ondas) para um plano carregado."""
+    sv = plan.get("schema_version")
+    if sv not in (1, 2):
+        falta = "sem `schema_version`" if sv is None else f"schema_version {sv!r} desconhecida"
+        return False, f"{falta} — /maestro:run recusa igual (declare 1 ou 2)", None, None
+    modo = plan.get("mode") or (RUNNABLE_MODE if sv == 1 else None)
+    if modo is None:
+        return False, "v2 sem `mode` — campo obrigatório no schema 2", None, None
+    if modo == "single-track":
+        itens = plan.get("items") or []
+        pend = [i for i in itens if (i or {}).get("status") in (None, "pending", "in_progress")]
+        prox = pend[0].get("id") if pend else None
+        motivo = "plano de um item por vez — quem responde o próximo é /common:next"
+        if prox:
+            motivo += f" (próximo: {prox})"
+        return False, motivo, None, None
+    if modo != RUNNABLE_MODE:
+        return False, f"mode {modo!r} não é válido (ver common/plan-schema.yaml)", None, None
+
+    ondas = plan.get("waves") or []
+    if not ondas:
+        return False, "sem `waves` — nada a forkar", None, None
+    resumo = [{"id": w.get("id"), "status": w.get("status") or "pending",
+               "slices": w.get("slices") or []} for w in ondas]
+    pendentes = [w for w in resumo if w["status"] not in ("done",)]
+    if not pendentes:
+        return False, f"todas as {len(resumo)} ondas já estão done", None, resumo
+    return True, None, pendentes[0], resumo
+
+
+def coleta(raiz):
+    progs = []
+    base = raiz / ".claude" / "programs"
+    if not base.is_dir():
+        return progs
+    for d in sorted(p for p in base.iterdir() if p.is_dir()):
+        item = {"nome": d.name, "dir": str(d), "elegivel": False,
+                "motivo": None, "mode": None, "schema_version": None,
+                "proxima_onda": None, "ondas": None}
+        item.update(_run_em_curso(d))
+        pf = d / "plan.yaml"
+        if not pf.is_file():
+            item["motivo"] = "sem plan.yaml"
+            progs.append(item)
+            continue
+        try:
+            plan = yaml.safe_load(pf.read_text()) or {}
+        except yaml.YAMLError as e:
+            item["motivo"] = f"plan.yaml ilegível: {e.__class__.__name__}"
+            progs.append(item)
+            continue
+        item["schema_version"] = plan.get("schema_version")
+        item["mode"] = plan.get("mode") or (
+            RUNNABLE_MODE if plan.get("schema_version") == 1 else None)
+        ok, motivo, prox, resumo = _avalia(plan)
+        item["elegivel"], item["motivo"] = ok, motivo
+        item["proxima_onda"], item["ondas"] = prox, resumo
+        progs.append(item)
+    return progs
+
+
+def imprime(raiz, progs):
+    print(f"Programas em {raiz}/.claude/programs\n")
+    if not progs:
+        print("  (nenhum) — crie um com /maestro:program-plan <nome>")
+        return
+    for p in progs:
+        cab = f"  {p['nome']}"
+        modo = p["mode"] or "?"
+        sv = p["schema_version"]
+        print(f"{cab}  [mode: {modo}{f', schema v{sv}' if sv else ''}]")
+        if p["elegivel"]:
+            w = p["proxima_onda"]
+            slices = ", ".join(str(s) for s in w["slices"]) or "(sem slices)"
+            feitas = sum(1 for x in p["ondas"] if x["status"] == "done")
+            print(f"      RODA  →  /maestro:run {p['nome']} --wave {w['id']}"
+                  f"   ({len(p['ondas'])} ondas, {feitas} done; onda {w['id']}"
+                  f" = {slices})")
+        else:
+            print(f"      não roda: {p['motivo']}")
+        ws = p.get("wave_state")
+        if ws:
+            estados = ", ".join(f"{k}={v}" for k, v in (ws["slices"] or {}).items())
+            print(f"      execução anterior: onda {ws['wave']}"
+                  + (f" · {estados}" if estados else ""))
+        if p.get("gatekeeper_pid"):
+            vivo = "VIVO" if p["gatekeeper_vivo"] else "morto (órfão — o gc do run limpa)"
+            print(f"      porteiro pid {p['gatekeeper_pid']}: {vivo}")
+    rodaveis = [p["nome"] for p in progs if p["elegivel"]]
+    print()
+    if rodaveis:
+        print("Rodáveis agora: " + ", ".join(rodaveis))
+    else:
+        print("Nenhum programa rodável — /maestro:program-plan <nome> cria um.")
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="lista os programas do Maestro neste repo")
+    ap.add_argument("repo", nargs="?", default=".")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+
+    raiz = raiz_principal(a.repo)
+    if raiz is None:
+        print(f"{a.repo} não é um repositório git", file=sys.stderr)
+        return 2
+    progs = coleta(raiz)
+    if a.json:
+        print(json.dumps({"raiz": str(raiz), "programas": progs},
+                         ensure_ascii=False, indent=2))
+    else:
+        imprime(raiz, progs)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
