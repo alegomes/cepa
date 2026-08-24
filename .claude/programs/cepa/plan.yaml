@@ -272,3 +272,78 @@ items:
     status: pending
     blocked_by: []
     human_pending: null
+
+  # ── Sessão session/doubt, 2026-08-24 ───────────────────────────────────────
+  # Desenho "um escritor de fila, três fontes" (BACKLOG.md, "Cinco portas de
+  # planejamento"), aprovado pelo dono nesta sessão. As quatro etapas estão em
+  # cadeia porque cada uma consome o que a anterior produz — mas cada uma serve
+  # sozinha, então parar no meio deixa o harness melhor, não pela metade.
+
+  - id: "common-plan-etapa1"
+    title: "/common:plan <nome> — escreve a fila single-track a partir de uma spec ou ditada à mão"
+    why: >-
+      é a etapa que sozinha destrava o caso que motivou o desenho: hoje o único
+      comando que escreve o plan.yaml single-track é o /board-flow:triage, e ele
+      exige Jira, então repo sem tracker não tem fila e o /common:next não tem o
+      que ler. Também dá saída ao /common:spec, que foi feito para não exigir
+      tracker e mesmo assim só continua andando com um. Primeira porque as
+      outras três consomem o arquivo que ela passa a escrever.
+      Decisão em aberto registrada no card: quando a fonte é uma spec, ninguém
+      priorizou os critérios entre si — preferência é herdar a ordem do texto e
+      dizer que herdou.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "common-plan-etapa2"
+    title: "--from-jira no /common:plan e /board-flow:triage devolvendo a ordem em vez de gravar"
+    why: >-
+      é a única etapa que mexe em comando já em produção, por isso vem depois de
+      a etapa 1 existir e estar em uso: o triage continua fazendo o que só ele
+      sabe (ler cards, achar evidência no código, rotear os 4 baldes) e entrega
+      a lista ordenada. Some a duplicação de quem escreve a fila e some a outra
+      metade da ambiguidade de nome de programa, já travada pelo --check-name.
+    status: pending
+    blocked_by: ["common-plan-etapa1"]
+    human_pending: null
+
+  - id: "common-drain-plan"
+    title: "/common:drain-plan <nome> — executa a fila single-track na ordem dela"
+    why: >-
+      fecha o ciclo sem tracker (escrever → apontar com /common:next → executar).
+      Hoje o único lote que existe é o /board-flow:drain, que puxa a coluna do
+      Jira ordenada por priority e rank do quadro — exatamente a ordem que o
+      plano existe para substituir. Depende da etapa 1 porque não faz sentido
+      drenar uma fila que ainda depende de Jira para nascer. Do drain vale
+      copiar: parar no primeiro item BLOQUEADO e o teto --max. Pergunta que
+      sobra: item com human_pending aberto deve parar o lote?
+    status: pending
+    blocked_by: ["common-plan-etapa1"]
+    human_pending: null
+
+  - id: "program-plan-from-plan"
+    title: "--from-plan no /maestro:program-plan — promove a fila single-track a ondas"
+    why: >-
+      é a resposta a "como uso o program-plan num projeto de Jira", que hoje não
+      tem resposta boa: o --source só aceita arquivo, e o program-plan é o único
+      lugar do harness que interpreta uma fonte de demandas. Também torna
+      possível a promoção fila → ondas, hoje declarada manual no
+      docs/execution-plan.md por não haver caminho. Por último porque é a única
+      das quatro que ninguém precisa para trabalhar sem Jira.
+    status: pending
+    blocked_by: ["common-plan-etapa1"]
+    human_pending: null
+
+  - id: "catalogo-guarda-mecanica"
+    title: "Teste que falha quando um comando existe e não está em docs/commands.md"
+    why: >-
+      8 comandos sumiram do catálogo sem que nenhum teste piscasse (spec,
+      session, doctor, metrics, advisors, consolidate, prove-ui, decide).
+      Corrigir a lista à mão conserta o sintoma de hoje e não impede o de
+      amanhã, porque nada relaciona os arquivos */commands/*.md com as tabelas
+      do doc. Independente das quatro acima; barato. Dúvida honesta a resolver
+      na construção: se algum comando é interno de propósito, a exceção fica
+      escrita no teste em vez de virar omissão.
+    status: pending
+    blocked_by: []
+    human_pending: null
