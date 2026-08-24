@@ -230,11 +230,26 @@ CLI = wrappers JSON do socket):
 - `herdr worktree create --branch --base` cria worktree via socket em
   `~/.herdr/worktrees/<repo>/` (fora do repo/Insync, mesmo princípio do launcher `cepa`),
   com workspace próprio; `worktree remove` limpa. ✓
+  **Ressalva (2026-08-24):** este ✓ foi medido em chamada isolada. Em uso real o
+  sucesso reportado NÃO implica worktree criada — ver a segunda pegadinha abaixo.
 - `agent send` / `pane send-text` injetam input em sessões interativas. ✓ (não testado
   a fundo)
 - **Pegadinha real:** o pane fecha quando o processo termina e o output some — filhas
   precisam de wrapper (`sh -c 'claude -p ... | tee resultado.txt; echo MAESTRO-EXIT:$?;
   sleep N'`) que persista o resultado em arquivo e segure o pane.
+- **Pegadinha real 2 (medida na onda WEGO-paralelo, 2026-08-24, herdr 0.7.3):** em
+  4 de 5 chamadas, `herdr worktree create --json` devolveu JSON de sucesso COMPLETO
+  (`path`, `branch`, `workspace_id`, `"is_prunable": false`) e o git não registrou
+  worktree nenhuma; os diretórios também não existiam. `herdr worktree list` seguia
+  mostrando as fantasmas, porque o herdr mantém registro próprio. Gatilho NÃO
+  reproduzido (base main, base já em checkout, 4 chamadas back-to-back: todas
+  funcionaram) e fora do nosso alcance — pode sumir numa versão futura do herdr. O
+  conserto daqui é de contrato, não de causa: o passo 6a do `/maestro:run` confere
+  o `path` devolvido contra `git worktree list` no clone principal antes do seed,
+  re-tenta uma vez e marca a slice como FAIL sem forkar as demais em silêncio
+  (guard mecânico em `tests/test_worktree_create_verify.py`). Mesmo princípio do
+  marcador `MAESTRO-EXIT`: sincronize pelo efeito verificável (arquivo, git), não
+  pelo que a ferramenta diz de si.
 - **Gap:** `agent_status` fica `unknown` para filhas headless; o status rico
   (working/blocked/idle) vem do hook `herdr integration install claude`, que cobre
   sessões interativas. Para headless, sincronizar por wait-output + arquivos — ou o
