@@ -1,0 +1,22 @@
+recorte: fronteiras
+alvo: fronteira entre o maestro (cepa) e o herdr
+lente: nenhuma declarada — investigação dirigida pela pergunta do dono sobre os panes
+fechado: true
+achados:
+  - o_que: >-
+      O /maestro:run forka as filhas com `herdr agent start --cwd <worktree>` sem passar
+      --tab nem --workspace, e o herdr então divide a aba que estiver em foco no momento
+      do spawn. Como passam minutos entre o intake e o fork, qualquer aba clicada nesse
+      intervalo vira o destino das filhas. Na onda WEGO-paralelo as 5 filhas nasceram em
+      portais_vs_operadoras em vez de onda2 (evidência: tab.focus wJ:tC às 13:01:01 e
+      cinco pane.spawn.start com cols 173→87→44→22→11 às 13:04:45).
+    onde: maestro/commands/run.md:94
+    destino: "BACKLOG.md § O /maestro:run forka as filhas sem dizer em que aba, e o herdr resolve pelo foco"
+  - o_que: >-
+      Cada slice criado por `herdr worktree create` vira um Space próprio na barra
+      lateral do herdr (o Space é uma identidade derivada do diretório, campo
+      identity_cwd no session.json), e os Spaces sobram depois que a onda aterrissa —
+      havia 11 em 2026-08-24, de duas ondas. Ruído de navegação, não a causa dos panes
+      na aba errada.
+    onde: maestro/commands/run.md:80
+    destino: "BACKLOG.md § Cada worktree do Maestro vira um Space próprio na barra lateral do herdr"

@@ -1903,3 +1903,99 @@ Observável em: cli. Aceite (CS-5): `git mv` de um caminho declarado para um nã
 declarado é barrado. Acompanhante do planejador, não parte dele — surgiu da medição de
 renomeação (299 renomeações em 22 commits no assinatura, mas zero colisões com trabalho
 paralelo em 487 pares).
+
+---
+
+# Achados da reflexão — fronteira Maestro ↔ herdr (2026-08-24)
+
+Recorte: **fronteiras** (onde o `maestro` toca o `herdr`). Origem: as cinco filhas da
+onda `WEGO-paralelo` nasceram numa aba que não era a do `/maestro:run`.
+
+## O `/maestro:run` forka as filhas sem dizer em que aba, e o herdr resolve pelo foco
+
+**Status:** pendente · **Lar provável:** `maestro/commands/run.md` (passo do spawn) ·
+**Origem:** reflexão 2026-08-24 sobre a onda `WEGO-paralelo` do `wego-acesso-backend`.
+
+### Problema
+
+O passo de spawn (`maestro/commands/run.md:94`) manda forkar cada slice assim:
+
+```
+herdr agent start <PROG>-<slice> --cwd <worktree> \
+  --env MAESTRO_LINGER=600 -- \
+  bash -c '...'
+```
+
+Só `--cwd`. Nenhum alvo de aba nem de Space. O `herdr agent start` aceita
+`--workspace ID` e `--tab ID` (conferido no `herdr agent --help`); sem nenhum dos dois,
+ele divide **a aba que estiver em foco** no momento do fork.
+
+O `--no-focus` que a receita passa não resolve isso: ele impede que o pane novo roube o
+foco depois de criado, não escolhe onde ele nasce.
+
+O resultado é uma corrida entre o clique do dono e o fork. O `/maestro:run` leva minutos
+entre o intake e o spawn; qualquer aba aberta ou clicada nesse intervalo vira o destino
+das cinco filhas.
+
+### Evidência (onda WEGO-paralelo, 2026-08-24, horários em UTC)
+
+Comando real disparado pela sessão `onda2` às 13:04:43, sem `--tab` nem `--workspace`
+(transcript `8d2cad77-…jsonl`). No `herdr-server.log`:
+
+```
+13:01:01.576  tab.focus  workspace_id="wJ" tab_id="wJ:tC"   ← portais_vs_operadoras ganha foco
+   (nenhum tab.focus em wJ nos 3 minutos seguintes)
+13:04:45.467  pane.spawn.start pane_id=54  cols=173
+13:04:45.799  pane.spawn.start pane_id=55  cols=87
+13:04:46.109  pane.spawn.start pane_id=56  cols=44
+13:04:46.504  pane.spawn.start pane_id=57  cols=22
+13:04:46.886  pane.spawn.start pane_id=58  cols=11
+```
+
+As larguras caindo pela metade a cada spawn são a assinatura de cinco divisões
+sucessivas da mesma aba. A aba do `/maestro:run` era a `wJ:t1` (`onda2`, renomeada às
+12:52:14, minutos antes de a sessão começar) e não recebeu foco nenhuma vez entre 13:01
+e 13:05 — por isso o fork passou por cima dela.
+
+### Esboço de solução
+
+1. O `/maestro:run` **captura o id da aba corrente no início da rotina** (antes do
+   intake gate), não na hora do fork. Esse é o ponto: o foco na hora do spawn é
+   exatamente o valor errado que causou o problema, porque já se passaram minutos.
+2. O passo de spawn passa esse id em `--tab` (e o Space em `--workspace`) no
+   `herdr agent start`.
+3. Se a aba capturada tiver deixado de existir quando o fork chegar, o comando abre uma
+   aba nova nomeada com o programa em vez de cair no foco corrente — falhar para um
+   lugar previsível, nunca para "onde o dono estava clicando".
+
+### Aceite
+
+Rodar `/maestro:run` numa aba A, clicar numa aba B durante o intake, e ver as filhas
+nascerem em A. Hoje falha: nascem em B.
+
+## Cada worktree do Maestro vira um Space próprio na barra lateral do herdr
+
+**Status:** pendente, prioridade baixa · **Lar provável:** `maestro/commands/run.md`
+(passo do `worktree create`) ou apenas nota de operação · **Origem:** mesma reflexão.
+
+### Problema
+
+Um Space do herdr não é uma gaveta que se escolhe: é uma identidade derivada do
+diretório. No `session.json` cada Space carrega `identity_cwd` (o diretório que o
+define) e `worktree_space` (o repositório git, com `is_linked_worktree` marcando se é
+worktree ligada). Como o `/maestro:run` cria cada slice com `herdr worktree create` — e
+o contrato do herdr trata worktree **como** Space, tanto que a remoção é
+`herdr worktree remove --workspace ID` — cada slice ganha um Space próprio.
+
+Efeito: uma onda de 5 slices acrescenta 5 Spaces à barra lateral, que sobram depois que
+a onda aterrissa. Em 2026-08-24 havia 11 desses (`w12`–`w1D`), de duas ondas.
+
+Isso é ruído de navegação, **não** é a causa das filhas nascerem na aba errada — essa é
+o item anterior. Fica registrado separado para não misturar os dois.
+
+### Esboço de solução
+
+Nada decidido. As direções são: (a) o `gc` de órfãos do `/maestro:run` passar a remover
+o Space junto com a worktree ao aterrissar a onda; (b) aceitar os Spaces e só documentar
+que a barra lateral cresce por onda. A (a) parece certa, mas depende de conferir se
+`herdr worktree remove --workspace` derruba a worktree git com o Space ou só o Space.
