@@ -272,7 +272,14 @@ CLI = wrappers JSON do socket):
 
 ## Calibrar as regras do porteiro do Maestro com o 1º lote de sombra (43 escalações)
 
-**Status:** pendente · **Lar:** `maestro/bin/maestro-gatekeeper` (constantes `STRATEGIC` e
+**Status:** PARCIAL — o conserto do motor de classificação aterrissou (maestro 0.4.3,
+`allow_mecanico` + `_shellscan`, teste
+`tests/test_gatekeeper_classifica_linha_inteira.py`). Medido reprocessando o lote
+congelado: liberações que escrevem 8 → **0**, falso `delete-broad` 1 → **0**,
+escalações 43 → **29** (35 `read-only` + 10 `base-pipeline` + 29 zona cinza, soma 74).
+As 29 restantes são todas escrita de arquivo por shell — a zona cinza legítima. Falta
+o item 2 abaixo: liberar sozinho a escrita cujo alvo cai DENTRO da superfície da
+slice. · **Lar:** `maestro/bin/maestro-gatekeeper` (constantes `STRATEGIC` e
 `load_rules`) · **Origem:** onda 1 do programa `WEGO-paralelo` em wego-acesso-backend
 (2026-08-24) — a primeira vez que o porteiro rodou contra trabalho real.
 
@@ -301,9 +308,9 @@ cinco `resultado.txt` — e uma dessas linhas terminava em
 `git add -A && git -c user.name=alegomes commit -q -m "..."`, ou seja o porteiro
 liberou um commit achando que era leitura. Em sombra não custou nada; ligado pra
 valer, é a camada 3 inteira decorativa para qualquer coisa escrita como
-`<comando-de-leitura> && <o-que-eu-quiser>`. **Este conserto vem primeiro**, e é o
-mesmo do achado 3 abaixo: classificar pelo `_shellscan`, que enxerga a linha inteira,
-em vez de regex na primeira palavra.
+`<comando-de-leitura> && <o-que-eu-quiser>`. **FEITO** (maestro 0.4.3): a regex saiu e
+entrou `allow_mecanico`, que usa o `_shellscan` para ler a linha inteira e só libera
+quando toda cabeça de comando está no conjunto pré-aprovado E nada é escrito.
 
 Do lado das escalações, três achados, cada um com um conserto diferente:
 
@@ -311,9 +318,11 @@ Do lado das escalações, três achados, cada um com um conserto diferente:
    test -Dtest=Y 2>&1 | tail -30` (11). Os dois comandos JÁ estão no `BASE_BASH` das
    settings geradas, mas o allow do Claude Code casa `Bash(cmd:*)` e não sobrevive ao
    pipe nem ao redirecionamento — então caem no catch-all `ask` e viram zona cinza.
-   Conserto: ensinar a regra `read-only` do porteiro a reconhecer o pipeline inteiro
-   (todo comando do pipe pertence à lista de leitura → allow), em vez de olhar só o
-   começo da string.
+   **FEITO** (maestro 0.4.3): a regra olha todas as cabeças da linha. Leitura pura sai
+   como `read-only`; build e teste saem como `base-pipeline`, nome próprio para "não é
+   leitura, mas é o trabalho que a slice existe para fazer". Detalhe que custou uma
+   rodada: os redirecionamentos têm de ser removidos ANTES de quebrar em segmentos,
+   porque `2>&1` tem um `&` e a quebra o lia como separador de comando.
 2. **Escrita por Bash, que é a zona cinza LEGÍTIMA (10+):** as filhas escreveram Java
    com `python3 - <<'EOF'` (heredoc), `perl -0pi -e`, `cp /tmp/X.bak <arquivo>` e
    `cat > <arquivo> <<'EOF'`. É exatamente a família `bash-pathlock-bypass` já conhecida
@@ -325,8 +334,9 @@ Do lado das escalações, três achados, cada um com um conserto diferente:
    foi classificado como remoção ampla porque o padrão `rm -rf?` casou com texto DENTRO
    do heredoc — o corpo do script sendo criado. É o mesmo defeito já corrigido nos hooks
    em 2026-08 ("texto citado não é shell"), cujo motor virou `common/hooks/_shellscan.py`.
-   Conserto: o porteiro passa a classificar pelo `_shellscan`, não por regex na string
-   crua. Sem isso, ligar o porteiro pra valer barra criação de arquivo por heredoc.
+   **FEITO** (maestro 0.4.3): `sem_corpo_de_heredoc` tira o corpo antes de qualquer
+   varredura, e os padrões estratégicos passaram a ler o texto sem aspas em vez do
+   payload cru. Um `rm -rf build/` de verdade continua visível.
 
 ### Critério de pronto
 

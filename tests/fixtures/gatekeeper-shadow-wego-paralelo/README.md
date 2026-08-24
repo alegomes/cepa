@@ -5,7 +5,8 @@ contra trabalho real: 5 slices em paralelo no repo wego-acesso-backend, porteiro
 em `--shadow` (aprova tudo, registra o que TERIA decidido), como o design manda
 para o 1º programa.
 
-- `decisions.jsonl` — 73 linhas, uma por decisão. Campos: `comando`, `regra`,
+- `decisions.jsonl` — 74 decisões, uma por linha (31 liberações + 43
+  escalações). Sem quebra de linha no fim, então `wc -l` diz 73. Campos: `comando`, `regra`,
   `decisao` (o veredito real do motor), `effective` (o que valeu — em sombra é
   sempre `allow`), `slice`, `escalation_id`, `latency_ms`.
 - `escalations/` — 43 YAMLs, um por escalação. Todos `estado: pending`: ninguém

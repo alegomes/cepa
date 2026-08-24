@@ -29,11 +29,46 @@ import argparse
 import json
 import os
 import re
+import shlex
 import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
+
+# --- motor de leitura de linha de comando, emprestado do common -------------
+# Classificar comando por regex ancorada na primeira palavra é o que fez o lote
+# de sombra de WEGO-paralelo (2026-08-24) liberar 8 escritas como "read-only" —
+# `cat > Arquivo.java <<'EOF'` casa por causa do `cat`, e uma das linhas
+# liberadas terminava em `git add -A && git commit`. O `_shellscan` já sabe ler
+# a linha inteira (máscara de aspas, quebra em segmentos, alvos de escrita) e é
+# a mesma fonte que o enforcement-guard e o maven-reactor-guard usam.
+_S = None
+_SHELLSCAN_ERRO = ""
+
+
+def _carregar_shellscan():
+    """Importa common/hooks/_shellscan.py — layout do repo E do cache de plugin.
+
+    Repo:  <repo>/maestro/bin/            → <repo>/common/hooks/
+    Cache: <mkt>/maestro/<ver>/bin/       → <mkt>/common/<ver>/hooks/
+    Falha aqui é FAIL-CLOSED: sem o motor, nenhuma regra mecânica de allow
+    dispara e tudo escala. Porteiro cego prefere perguntar a liberar.
+    """
+    global _S, _SHELLSCAN_ERRO
+    aqui = Path(__file__).resolve().parent
+    cands = [aqui.parent.parent / "common" / "hooks" / "_shellscan.py"]
+    cands += sorted(aqui.parent.parent.parent.glob("common/*/hooks/_shellscan.py"))
+    for c in cands:
+        if c.is_file():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("_shellscan", c)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _S = mod
+            return
+    _SHELLSCAN_ERRO = ("_shellscan.py do common não encontrado em: "
+                       + ", ".join(str(c) for c in cands))
 
 ARGS = None
 # Estado por slice para o "pós-deny vigiado" (design 3a): após um deny
@@ -49,30 +84,206 @@ STRATEGIC = [
 ]
 
 
+# Comandos cujo pior caso é ler. `sed`/`awk` entram porque a forma que ESCREVE
+# (`sed -i`, `awk > arquivo`) aparece como alvo de escrita e é pega lá.
+# `python3`, `perl` e `xargs` ficam de FORA de propósito: as filhas de
+# WEGO-paralelo editaram Java com `python3 - <<'EOF'` e `perl -0pi -e`, e não há
+# como saber o que um interpretador vai escrever sem executá-lo. Esse caso é a
+# zona cinza legítima — escala.
+CABECAS_LEITURA = {
+    "ls", "cat", "pwd", "echo", "grep", "rg", "find", "head", "tail", "wc",
+    "sed", "awk", "diff", "file", "stat", "basename", "dirname", "sort",
+    "uniq", "cut", "tr", "test", "true", "which", "env", "date", "printf",
+}
+# Build e teste: não são leitura (compilam, escrevem em target/ e no ~/.m2),
+# mas são o trabalho que a slice existe para fazer e já vêm pré-aprovados nas
+# settings geradas. Estavam escalando só porque `| tail -30` derruba o casamento
+# do allow do Claude Code — 11 das 42 escalações do 1º lote eram isso.
+CABECAS_BUILD = {
+    "mvn", "mvnw", "./mvnw", "gradle", "gradlew", "./gradlew", "make",
+    "pytest", "go", "cargo",
+}
+GIT_LEITURA = {"status", "diff", "log", "show", "rev-parse", "describe",
+               "ls-files", "blame"}
+
+# Corpo de heredoc não é shell — é conteúdo. O `trap 'rm -rf "${SANDBOX}"' EXIT`
+# DENTRO de um script de teste sendo escrito fez o 1º lote classificar
+# `mkdir -p bin/tests && cat > bin/tests/x.sh <<'EOF'` como delete-broad. Mesma
+# família do "texto citado não é shell" (WEGO-2087), um nível acima: ali era
+# mensagem de commit, aqui é arquivo inteiro.
+_HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+
+
+def sem_corpo_de_heredoc(cmd: str) -> str:
+    """A linha sem os corpos de heredoc — só o que o shell de fato executa.
+
+    O operador `<<TAG` sai junto com o corpo: ele não é alvo de escrita, e
+    deixá-lo para trás faria o laço reencontrar o mesmo heredoc para sempre.
+    O redirecionamento (`> arquivo`) fica intacto, que é o que precisa aparecer
+    na extração de alvos.
+    """
+    while True:
+        m = _HEREDOC_RE.search(cmd)
+        if not m:
+            return cmd
+        fim = re.search(r"^\s*" + re.escape(m.group(2)) + r"\s*$",
+                        cmd[m.end():], re.M)
+        resto = cmd[m.end():][fim.end():] if fim else ""
+        cmd = cmd[:m.start()] + "\n" + resto
+
+
+def texto_analisavel(tool_name: str, tool_input) -> str:
+    """O que os padrões estratégicos podem varrer sem ler prosa como comando."""
+    cmd = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
+    if tool_name != "Bash" or not cmd:
+        return json.dumps(tool_input, ensure_ascii=False)
+    limpo = sem_corpo_de_heredoc(cmd)
+    return _S._unquoted_view(limpo) if _S else limpo
+
+
+def _cabecas(cmd: str) -> list:
+    """As cabeças de comando da linha, uma por segmento.
+
+    Os redirecionamentos saem ANTES da quebra em segmentos: `_split_segments`
+    corta em `&`, e `2>&1` tem um — sem tirar o redirecionamento primeiro,
+    `./mvnw ... 2>&1 | tail -30` vira os segmentos `./mvnw ... 2>` e `1 | tail`,
+    a cabeça do segundo é "1" e a linha inteira é recusada. Era o que sobrava do
+    ruído das 11 escalações de `./mvnw` no 1º lote.
+    """
+    limpo = sem_corpo_de_heredoc(cmd)
+    sem_redir = _S._strip_redirections(limpo, _S._quoted_mask(limpo))
+    return [_cabeca(seg.strip()) for seg in _S._split_segments(sem_redir)
+            if seg.strip()]
+
+
+def _cabeca(segmento: str) -> str:
+    try:
+        argv = shlex.split(segmento, posix=True)
+    except ValueError:
+        argv = segmento.split()
+    if not argv:
+        return ""
+    c = argv[0]
+    if os.path.basename(c) == "git":
+        return "git " + (argv[1] if len(argv) > 1 else "")
+    return c if c.startswith("./") else os.path.basename(c)
+
+
+def escreve_alguma_coisa(cmd: str) -> bool:
+    """True se QUALQUER segmento da linha cria, sobrescreve ou versiona arquivo.
+
+    É esta função — e não a primeira palavra da linha — que separa leitura de
+    escrita. Sem ela, `cat > Arquivo.java <<'EOF'` e
+    `... && git add -A && git commit` passam como leitura.
+    """
+    if not _S:
+        return True                      # fail-closed: sem motor, assume escrita
+    limpo = sem_corpo_de_heredoc(cmd)
+    if _extrair_alvos(limpo):
+        return True
+    for cab in _cabecas(cmd):
+        if cab.startswith("git ") and cab.split(" ", 1)[1] not in GIT_LEITURA:
+            return True
+        if cab in ("mkdir", "touch", "rm", "rmdir", "ln", "chmod", "chown"):
+            return True
+    return False
+
+
+def _extrair_alvos(cmd: str) -> list:
+    """Alvos de escrita, pela mesma mecânica do enforcement-guard."""
+    alvos = []
+    for seg in _S._split_segments(cmd):
+        seg = seg.strip()
+        if not seg:
+            continue
+        mask = _S._quoted_mask(seg)
+        alvos += [_S._unquote(m.group(1)) for m in _S._REDIR_RE.finditer(seg)
+                  if not mask[m.start()]]
+        sem_redir = _S._strip_redirections(seg, mask)
+        try:
+            argv = shlex.split(sem_redir, posix=True)
+        except ValueError:
+            argv = sem_redir.split()
+        if not argv:
+            continue
+        cmd0 = os.path.basename(argv[0])
+        naoflag = [t for t in argv[1:] if not _S._is_flag(t)]
+        if cmd0 == "tee":
+            alvos += naoflag
+        elif cmd0 == "sed" and any(t.startswith(("-i", "--in-place"))
+                                   for t in argv[1:]):
+            alvos += naoflag[1:] if len(naoflag) >= 2 else naoflag
+        elif cmd0 in ("cp", "mv", "install") and len(naoflag) >= 2:
+            alvos.append(naoflag[-1])
+        elif cmd0 == "dd":
+            alvos += [t[3:] for t in argv[1:] if t.startswith("of=")]
+    return [a for a in alvos if a and a not in _S._PSEUDO
+            and not a.startswith("&")]
+
+
+def allow_mecanico(tool_name: str, tool_input):
+    """(regra, True) quando a linha inteira é segura; (None, False) se não.
+
+    Regra única, aplicada à linha TODA e não à primeira palavra: toda cabeça de
+    comando pertence ao conjunto pré-aprovado E nada é escrito.
+    """
+    if not _S or tool_name != "Bash":
+        return None, False
+    cmd = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
+    if not cmd.strip():
+        return None, False
+    if escreve_alguma_coisa(cmd):
+        return None, False
+    cabecas = _cabecas(cmd)
+    if not cabecas:
+        return None, False
+    so_leitura = True
+    for cab in cabecas:
+        if cab.startswith("git "):
+            if cab.split(" ", 1)[1] not in GIT_LEITURA:
+                return None, False
+        elif cab in CABECAS_LEITURA:
+            continue
+        elif cab in CABECAS_BUILD or cab.lstrip("./") in CABECAS_BUILD:
+            so_leitura = False
+        else:
+            return None, False
+    return ("read-only" if so_leitura else "base-pipeline"), True
+
+
 def load_rules(path):
-    """Regras mecânicas de allow (o resto escala). Formato JSON:
+    """Regras EXTRA de allow, opcionais. Formato JSON:
     {"allow": [{"rule":"name","tool":"Bash","pattern":"regex"}], ...}
-    Sem arquivo → base mínima (o intake+settings já pré-decidem o grosso)."""
+
+    A base não é mais regex: virou `allow_mecanico`, que lê a linha inteira.
+    Um arquivo aqui só ACRESCENTA — e um padrão escrito à mão volta a ter o
+    ponto cego da primeira palavra, então use com parcimônia.
+    """
     if path and Path(path).is_file():
         return json.loads(Path(path).read_text())
-    return {"allow": [
-        {"rule": "read-only", "tool": "Bash",
-         "pattern": r"^(ls|cat|pwd|echo|grep|rg|find|head|tail|wc|git (status|diff|log|show|rev-parse))\b"},
-    ]}
+    return {"allow": []}
 
 
 def decide(slice_name, tool_name, tool_input, rules):
     """Retorna (decisao, regra, esc_id|None). decisao ∈ allow|deny|escalate."""
     hay = json.dumps(tool_input, ensure_ascii=False)
     cmd = tool_input.get("command", "") if isinstance(tool_input, dict) else ""
+    # Os padrões estratégicos varrem só o que o shell executa — sem corpo de
+    # heredoc, sem texto entre aspas. Varrer o payload cru fazia um `rm -rf`
+    # escrito DENTRO de um script virar delete-broad.
+    alvo_scan = texto_analisavel(tool_name, tool_input)
 
     for rule, pat in STRATEGIC:
-        if re.search(pat, hay, re.I):
+        if re.search(pat, alvo_scan, re.I):
             return "escalate", rule, _escalate(slice_name, tool_name, hay, rule)
 
     if slice_name in DENIED_SLICES:
         return "escalate", "post-deny-watch", _escalate(
             slice_name, tool_name, hay, "post-deny-watch")
+
+    regra, ok = allow_mecanico(tool_name, tool_input)
+    if ok:
+        return "allow", regra, None
 
     for r in rules.get("allow", []):
         if r.get("tool") in ("*", tool_name) and re.search(r["pattern"], cmd or hay):
@@ -228,10 +439,13 @@ def main():
     ARGS = p.parse_args()
     Path(ARGS.state_dir).mkdir(parents=True, exist_ok=True)
     (Path(ARGS.state_dir) / "gatekeeper.pid").write_text(str(os.getpid()))
+    _carregar_shellscan()
     Handler.rules = load_rules(ARGS.rules)
     srv = ThreadingHTTPServer((ARGS.host, ARGS.port), Handler)
+    motor = "shellscan" if _S else f"AUSENTE ({_SHELLSCAN_ERRO}) — tudo escala"
     print(f"maestro-gatekeeper {ARGS.host}:{ARGS.port} "
-          f"shadow={ARGS.shadow} state={ARGS.state_dir}", flush=True)
+          f"shadow={ARGS.shadow} state={ARGS.state_dir} motor={motor}",
+          flush=True)
     try:
         srv.serve_forever()
     finally:
