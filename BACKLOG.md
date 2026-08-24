@@ -270,6 +270,61 @@ CLI = wrappers JSON do socket):
 
 ---
 
+## Calibrar as regras do porteiro do Maestro com o 1º lote de sombra (43 escalações)
+
+**Status:** pendente · **Lar:** `maestro/bin/maestro-gatekeeper` (constantes `STRATEGIC` e
+`load_rules`) · **Origem:** onda 1 do programa `WEGO-paralelo` em wego-acesso-backend
+(2026-08-24) — a primeira vez que o porteiro rodou contra trabalho real.
+
+O porteiro rodou em `--shadow` (modo sombra: aprova tudo e só registra o que TERIA
+mandado o dono decidir), como manda o design para o 1º programa. Produziu 73 decisões:
+31 liberadas pela regra `read-only` e **43 escalações que ninguém olhou** — o TTL de 1h
+venceu e o dado morre sem virar calibração se não for lido agora. Ledger:
+`<repo>/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl` (uma linha JSON por
+decisão, com `comando`, `regra`, `decisao`, `effective`, `slice`) + um YAML por escalação
+em `gatekeeper/escalations/`.
+
+### O que o lote mostra
+
+Distribuição por regra: 42 `gray-zone` (zona cinza = nenhuma regra mecânica casou, então
+escala por default) + 1 `delete-broad`. Por slice: S-2050 18, S-2059 8, S-2067 8,
+S-2070 8, S-2107 1 — ou seja, escalação é rotina, não exceção, e com o porteiro ligado
+pra valer a onda teria parado 43 vezes esperando o dono.
+
+Três achados, cada um com um conserto diferente:
+
+1. **Ruído puro (23 das 42):** `sed -n '340,420p' <arquivo>` (12) e `./mvnw -pl X -am
+   test -Dtest=Y 2>&1 | tail -30` (11). Os dois comandos JÁ estão no `BASE_BASH` das
+   settings geradas, mas o allow do Claude Code casa `Bash(cmd:*)` e não sobrevive ao
+   pipe nem ao redirecionamento — então caem no catch-all `ask` e viram zona cinza.
+   Conserto: ensinar a regra `read-only` do porteiro a reconhecer o pipeline inteiro
+   (todo comando do pipe pertence à lista de leitura → allow), em vez de olhar só o
+   começo da string.
+2. **Escrita por Bash, que é a zona cinza LEGÍTIMA (10+):** as filhas escreveram Java
+   com `python3 - <<'EOF'` (heredoc), `perl -0pi -e`, `cp /tmp/X.bak <arquivo>` e
+   `cat > <arquivo> <<'EOF'`. É exatamente a família `bash-pathlock-bypass` já conhecida
+   do repo — a superfície declarada da slice não protege nada se a filha escreve por
+   shell. Aqui o porteiro escalar está CERTO; o que falta é ele decidir sozinho o caso
+   fácil: extrair o arquivo-alvo do comando e liberar quando o alvo está dentro da
+   superfície da slice (o `slice=` já vem na URL), escalando só o que cai fora.
+3. **Falso positivo de `delete-broad` (1):** um `mkdir -p bin/tests && cat > ... <<'EOF'`
+   foi classificado como remoção ampla porque o padrão `rm -rf?` casou com texto DENTRO
+   do heredoc — o corpo do script sendo criado. É o mesmo defeito já corrigido nos hooks
+   em 2026-08 ("texto citado não é shell"), cujo motor virou `common/hooks/_shellscan.py`.
+   Conserto: o porteiro passa a classificar pelo `_shellscan`, não por regex na string
+   crua. Sem isso, ligar o porteiro pra valer barra criação de arquivo por heredoc.
+
+### Critério de pronto
+
+Reprocessar este mesmo `decisions.jsonl` com as regras novas e exigir: zero
+`delete-broad`, as 23 de ruído viram `allow`, e as escalações restantes são só escrita
+fora da superfície. O ledger serve de fixture e vive no repo principal (não numa
+worktree), então não some sozinho; o que é perecível são os worktrees das filhas em
+`~/.herdr/worktrees/wego-acesso-backend/session-wego-paralelo-*`, que guardam o
+`resultado.txt` de cada slice — o contexto de por que cada comando foi rodado.
+
+---
+
 ## Baseline cega para builds longos (> teto de foreground do Bash)
 
 **Status:** pendente · **Lar:** `common/hooks/capture-build-result.py` (+ possivelmente
