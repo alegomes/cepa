@@ -2299,10 +2299,43 @@ mesmo documento.
 A primeira é a que dói: o `/common:spec` foi feito para não exigir tracker, e
 mesmo assim o que ele produz só continua andando com um.
 
-### Esboço de solução
+### Proposta
 
-Nada decidido, e a decisão é de desenho, não de código. Vale primeiro responder
-se o alvo é uma quinta porta a menos (convergir para menos documentos) ou uma
-conversão a mais (`/common:spec --para-plano`). Relacionado ao card sobre
-executar em lote um `single-track`, que ataca o mesmo vazio pelo lado da
-execução.
+Um escritor, várias fontes. Hoje a fila `single-track` tem exatamente um autor
+(`/board-flow:triage`) e ele exige Jira — é daí que sai todo o resto do
+problema. A proposta é tirar a escrita de dentro do plugin de tracker:
+
+1. **`/common:plan <nome>`** passa a ser o único comando que escreve
+   `.claude/programs/<nome>/plan.yaml` com `mode: single-track`, e aceita de
+   onde a fila vem:
+   - `--from-spec docs/spec/<slug>.md` — cada critério de sucesso da
+     especificação vira um item, com o `why` saindo da justificativa já escrita
+     lá (fecha a saída do `/common:spec`, que hoje não tem para onde ir sem
+     Jira);
+   - `--from-jira [coluna]` — delega a classificação ao `/board-flow:triage`,
+     que passa a **devolver a lista ordenada** em vez de gravar o arquivo;
+   - sem flag — a fila ditada à mão, para repo sem tracker e sem spec.
+2. **`/board-flow:triage` para de escrever `plan.yaml`.** Continua fazendo o que
+   só ele sabe (ler cards, achar evidência no código, rotear os 4 baldes) e
+   entrega a ordem para o `/common:plan`. Some a duplicação de responsabilidade
+   e some metade da ambiguidade de namespace do card anterior.
+3. **`/maestro:program-plan --from-plan <nome>`** lê a fila `single-track` em
+   vez de `BACKLOG.md`. É a promoção `single-track` → ondas, hoje declarada
+   manual por não ter um caminho — e é também a resposta a "como uso o
+   `program-plan` num projeto de Jira", que hoje não tem resposta boa: o
+   `--source` só aceita arquivo.
+4. **`/common:drain-plan <nome>`** (o card sobre executar em lote) executa a
+   fila na ordem dela. Fecha o ciclo sem tracker: escrever → apontar
+   (`/common:next`) → executar.
+
+O resultado: 1 documento de fila, 1 escritor, 3 fontes, 2 consumidores. O Jira
+vira uma fonte entre outras em vez de pré-requisito.
+
+**O que a proposta custa:** mexe em `triage` (deixa de escrever), cria dois
+comandos no `common` e um flag no `maestro`. Nada disso é migração de dado — o
+`plan.yaml` que já está no disco continua válido nos dois modos.
+
+**O que ela não resolve:** quem decide a ORDEM quando a fonte é uma spec. Os
+critérios de sucesso de uma spec não vêm priorizados entre si; ou o comando
+pergunta, ou herda a ordem do texto. Preferência: herdar a ordem do texto e
+dizer que herdou.
