@@ -78,6 +78,34 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
    Para cada slice READY da onda:
    a. **Worktree herdr**, herdando o modelo do launcher `cepa` (single-owner guard + seed):
       `herdr worktree create --base <fork_point> --branch session/<PROG>-<slice> --json`.
+
+      **Confirme pelo git antes de seguir — o `--json` de sucesso não basta.**
+      Com o `path` devolvido pelo comando, rode no clone principal
+      (`<raiz-principal>`, o pai de `git rev-parse --git-common-dir` sem o `/.git`):
+      ```
+      git -C <raiz-principal> worktree list --porcelain | grep -qx "worktree <path>"
+      ```
+      Só passe adiante (seed, settings, spawn) se essa linha existir.
+      Por que a checagem existe: em 4 de 5 chamadas da onda WEGO-paralelo
+      (2026-08-24, herdr 0.7.3), o `herdr worktree create` devolveu JSON de
+      sucesso COMPLETO — com `path`, `branch`, `workspace_id` e
+      `"is_prunable": false` — e o git não registrou worktree nenhuma; os
+      diretórios também não existiam. O `herdr worktree list` seguia mostrando
+      as fantasmas, porque ele mantém registro próprio. O gatilho não foi
+      reproduzido e está fora do nosso alcance; o conserto daqui é não aceitar
+      a palavra de ferramenta externa sobre um efeito que o git confere em um
+      comando — mesmo padrão do marcador `MAESTRO-EXIT`, que sincroniza por
+      ARQUIVO e não pelo pane. Sem a conferência, o seed, as settings e o
+      `herdr agent start` rodam contra caminho inexistente e a onda inteira
+      nasce morta falhando como se fosse problema das filhas.
+
+      Se a linha não existir: remova o registro fantasma
+      (`herdr worktree remove <path>`, tolerando erro) e tente **uma** vez mais.
+      Persistindo, a slice é **FAIL** com detalhe nomeado —
+      `maestro-wave-state set-slice PROGDIR <slice> fail --detail "worktree create reportou sucesso mas <path> não aparece em git worktree list (2 tentativas)"`
+      — e as demais slices da onda **não** forkam em silêncio: pare o fork,
+      mostre ao dono quais slices ficaram de fora e por quê.
+
       Rode o seed (`.env` etc.) copiando do main — NÃO symlink (recopla ao tree
       sincronizado). Dívida nomeada: o worktree do herdr fica em `~/.herdr/...`,
       não `~/cepa-worktrees` — herda o guard e o seed; o que não herdar é exceção.
