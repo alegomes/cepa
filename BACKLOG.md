@@ -2162,3 +2162,74 @@ guards de reserva de card e o "para no primeiro BLOCKED".
 
 Em qualquer das duas, o item que não se resolve sozinho: `human_pending` aberto
 de um item deve ou não parar o lote? Hoje só o humano fecha essa pendência.
+
+---
+
+## Os dois planejadores dividem o mesmo namespace de arquivo sem nenhuma guarda
+
+**Status:** pendente, prioridade média · **Lar provável:**
+`maestro/commands/program-plan.md` (passo 4) + `board-flow/commands/triage.md`
+(passo do plano) · **Origem:** revisão das estratégias de planejamento pedida na
+sessão `session/doubt` (2026-08-24).
+
+### Problema
+
+`/board-flow:triage` escreve `<raiz>/.claude/programs/<project_key>/plan.yaml`
+com `mode: single-track` — "one living plan per board" (`triage.md:221`).
+`/maestro:program-plan` escreve `<raiz>/.claude/programs/<nome>/plan.yaml` com
+`mode: parallel-waves` (`program-plan.md:87-88`). São dois documentos com
+significados diferentes, no mesmo diretório, distinguidos só por um campo
+interno — e o nome do programa é escolha livre do usuário.
+
+Num board `WEGO`, `/maestro:program-plan WEGO` sobrescreve a fila priorizada do
+board sem aviso: o passo 4 do program-plan não confere se o caminho já existe,
+nem qual `mode` o arquivo que está lá declara. O único lugar que olha planos
+existentes é o modo `--sweep`, e olha para outra coisa (descartar demandas já
+planejadas, `program-plan.md:41-42`).
+
+Que o risco é real já se vê no disco do `wego-acesso-backend`: convivem
+`.claude/programs/WEGO/` (fila do board) e `.claude/programs/WEGO-paralelo/`
+(ondas) — o sufixo saiu de uma escolha manual, não de uma guarda.
+
+### Esboço de solução
+
+Nada decidido. Direções: (a) o passo 4 do program-plan lê o `plan.yaml` que já
+existe no caminho e **recusa** quando o `mode` de lá é `single-track`, nomeando
+o conflito ("esse nome é o plano do board `WEGO`; escolha outro"); (b) separar
+os diretórios por tipo (`programs/` para ondas, `queues/` para single-track),
+o que quebra caminho já gravado em três comandos e no `docs/execution-plan.md`.
+A (a) é barata e cobre o acidente; a (b) resolve a ambiguidade de raiz.
+
+Vale para o `/common:next` também, que hoje aceita `--plan NOME` e confia no
+`mode` do arquivo — a recusa dele já existe e é o modelo a copiar.
+
+---
+
+## `docs/commands.md` não lista 8 comandos que existem
+
+**Status:** pendente, prioridade baixa · **Lar provável:** `docs/commands.md` ·
+**Origem:** mesma revisão da sessão `session/doubt`.
+
+### Problema
+
+O catálogo oficial de comandos (`docs/commands.md`, 189 linhas, uma tabela por
+plugin mais a seção "When to use which command") não menciona: `/common:spec`,
+`/common:session`, `/common:doctor`, `/common:metrics`, `/common:advisors`,
+`/common:consolidate`, `/common:prove-ui` e `/board-flow:decide`. Verificado por
+`grep -c` em 2026-08-24: zero ocorrências de cada um.
+
+São exatamente os comandos das duas pontas — o que abre a sessão e o que fecha —
+e os dois que respondem "e agora?" na coluna Review. Quem procura no catálogo
+conclui que não existem.
+
+Efeito colateral do mesmo buraco: a seção "When to use which command" não tem a
+entrada que a sessão de hoje mostrou faltar — a pergunta "quero *planejar*, qual
+das cinco portas eu uso?" (`/common:spec`, `/board-flow:capture`,
+`/board-flow:triage`, `/board-flow:plan-track-build-validate`,
+`/maestro:program-plan`), que hoje só se responde lendo os cinco arquivos.
+
+### Esboço de solução
+
+Acrescentar as 8 linhas nas tabelas e uma seção "quero planejar / quero
+executar" organizada pelo eixo entrada → documento produzido → quem lê aquele
+documento. O material está levantado no relatório da sessão `session/doubt`.
