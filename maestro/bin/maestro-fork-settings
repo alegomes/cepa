@@ -22,10 +22,20 @@ rules are [matched by file permission checks]") e `Edit(path)` já cobre todas a
 ferramentas de escrita. Emitir o par Write+Edit era ruído que não abria nem
 fechava nada. Só o catch-all `ask` mantém o nome nu `Write`.
 
+ACHADO DA MESMA ONDA (custou a onda inteira): `mcpServers` em settings.json NÃO
+é lido pelo Claude Code — a filha subia sem a ferramenta do porteiro e morria na
+largada com `MCP tool mcp__gatekeeper__permission_prompt not found` (exit 1). O
+endereço do porteiro tem de sair num `.mcp.json` e a filha ser lançada com
+`--mcp-config .mcp.json --strict-mcp-config`. Por isso este gerador emite DOIS
+artefatos, não um.
+
 Uso:
   maestro-fork-settings <plan.yaml> <slice> [--port P] [--host H]
                         [--enforcement-zone GLOB ...]
-Emite o settings.json no stdout (o /maestro:run grava no worktree do slice).
+                        [--emit settings|mcp] [--out-dir WORKTREE]
+Sem --out-dir, emite no stdout o artefato pedido por --emit (default settings).
+Com --out-dir, grava os dois no worktree do slice: <dir>/.claude/settings.json
+e <dir>/.mcp.json (é assim que o /maestro:run chama).
 """
 import argparse
 import json
@@ -84,17 +94,23 @@ def build_settings(plan: dict, slice_name: str, gk_url: str,
             "allow": allow,
             "ask": ask,
         },
-        # a filha aponta o permission-prompt-tool para ESTE porteiro; a
-        # identidade do slice vai na URL (achado do spike: o payload não a traz)
-        "mcpServers": {
-            "gatekeeper": {"type": "http", "url": gk_url}
-        },
+        # NÃO declarar mcpServers aqui: settings.json não é lido para MCP.
+        # O porteiro vai no .mcp.json (build_mcp_config).
         "_maestro": {
             "slice": slice_name,
             "surface": surface,
             "gatekeeper_url": gk_url,
         },
     }
+
+
+def build_mcp_config(gk_url: str) -> dict:
+    """O .mcp.json da filha — a ÚNICA via pela qual ela enxerga o porteiro.
+
+    A filha aponta o --permission-prompt-tool para ESTE servidor; a identidade
+    do slice vai na URL (achado do spike: o payload não a traz).
+    """
+    return {"mcpServers": {"gatekeeper": {"type": "http", "url": gk_url}}}
 
 
 def main() -> int:
@@ -105,6 +121,11 @@ def main() -> int:
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--enforcement-zone", nargs="*",
                     default=DEFAULT_ENFORCEMENT_ZONE)
+    ap.add_argument("--emit", choices=("settings", "mcp"), default="settings",
+                    help="qual artefato vai ao stdout (ignorado com --out-dir)")
+    ap.add_argument("--out-dir",
+                    help="worktree do slice: grava .claude/settings.json E "
+                         ".mcp.json (o par que a filha precisa)")
     args = ap.parse_args()
 
     plan = yaml.safe_load(Path(args.plan).read_text())
@@ -124,7 +145,24 @@ def main() -> int:
     except KeyError as e:
         print(str(e), file=sys.stderr)
         return 2
-    print(json.dumps(settings, ensure_ascii=False, indent=2))
+    mcp = build_mcp_config(gk_url)
+
+    if args.out_dir:
+        wt = Path(args.out_dir)
+        if not wt.is_dir():
+            print(f"--out-dir não é diretório: {wt}", file=sys.stderr)
+            return 2
+        (wt / ".claude").mkdir(exist_ok=True)
+        (wt / ".claude" / "settings.json").write_text(
+            json.dumps(settings, ensure_ascii=False, indent=2) + "\n")
+        (wt / ".mcp.json").write_text(
+            json.dumps(mcp, ensure_ascii=False, indent=2) + "\n")
+        print(f"{wt}/.claude/settings.json e {wt}/.mcp.json gravados "
+              f"(slice {args.slice})")
+        return 0
+
+    print(json.dumps(mcp if args.emit == "mcp" else settings,
+                     ensure_ascii=False, indent=2))
     return 0
 
 

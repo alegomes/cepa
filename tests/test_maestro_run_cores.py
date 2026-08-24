@@ -69,8 +69,22 @@ def test_fork_settings(tmp):
     check("nenhuma regra Write(path) — só Edit(path) é aceita",
           not [x for x in perms["allow"] + perms["deny"] if x.startswith("Write(")],
           perms["allow"] + perms["deny"])
+    # Regressão da MESMA onda: mcpServers em settings.json é ignorado — a filha
+    # subia sem a ferramenta do porteiro e morria com exit 1 na largada.
+    check("settings.json NÃO declara mcpServers (não é lido para MCP)",
+          "mcpServers" not in s, list(s))
+    rm = sh([BIN / "maestro-fork-settings", plan, "S1", "--port", "9001",
+             "--emit", "mcp"])
+    m = json.loads(rm.stdout)
     check("identidade do slice vai na URL do porteiro (achado spike)",
-          "slice=S1" in s["mcpServers"]["gatekeeper"]["url"], s["mcpServers"])
+          "slice=S1" in m["mcpServers"]["gatekeeper"]["url"], m)
+    wt = Path(tmp) / "wt"
+    wt.mkdir()
+    rw = sh([BIN / "maestro-fork-settings", plan, "S1", "--port", "9001",
+             "--out-dir", wt])
+    check("--out-dir grava o PAR settings.json + .mcp.json no worktree",
+          rw.returncode == 0 and (wt / ".claude" / "settings.json").is_file()
+          and (wt / ".mcp.json").is_file(), rw.stdout + rw.stderr)
     r2 = sh([BIN / "maestro-fork-settings", plan, "NAO-EXISTE"])
     check("slice inexistente → erro", r2.returncode == 2, r2.stdout)
 
