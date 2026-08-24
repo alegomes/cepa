@@ -211,9 +211,16 @@ different stages, and saying "none of it ran" hid that:
 So the tests lock the contract, and one of the two consumers has now met a real
 board. `--sync` against a live tracker remains unexercised.
 
-Two questions are deliberately left open, to be decided with use rather than
-guessed: whether the plan should surface at `SessionStart` alongside the handoff,
-and who writes the plan in a repo with no tracker.
+One question is still deliberately open, to be decided with use rather than
+guessed: whether the plan should surface at `SessionStart` alongside the handoff.
+
+The other one — **who writes the plan in a repo with no tracker** — was answered
+on 2026-08-24: a new `/common:plan <name>`, the single writer of the
+`single-track` file, fed by `--from-spec`, by `--from-jira` (where
+`/board-flow:triage` classifies and hands back the order instead of writing the
+file itself), or dictated by hand. Design approved by the owner, not yet built;
+the card in `BACKLOG.md` ("Cinco portas de planejamento") holds the full shape
+and what it costs.
 
 ## See also
 

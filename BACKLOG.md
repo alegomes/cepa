@@ -2151,14 +2151,16 @@ Ou seja: o dono escreve a ordem no plano, e a única forma de executá-la em lot
 não são cards) não há nem essa saída — sobra encadear `/common:next` +
 `/board-flow:execute` à mão, um por vez.
 
-### Esboço de solução
+### Solução decidida
 
-Nada decidido. As direções são: (a) um `--from-plan` no `/board-flow:drain`, que
-troca a consulta JQL pela leitura do `plan.yaml` e respeita `blocked_by` e a
-ordem da lista; (b) um comando próprio no `common` (`/common:drain-plan`?), que
-não exige tracker nenhum e vale para plano sem Jira. A (b) cobre o caso do
-próprio repo do cepa, que é onde o incômodo apareceu; a (a) reaproveita os
-guards de reserva de card e o "para no primeiro BLOCKED".
+Direção (b), aprovada em 2026-08-24 junto do desenho maior: um
+`/common:drain-plan <nome>` próprio, que não exige tracker e executa a fila na
+ordem dela. É a etapa 3 do card "Cinco portas de planejamento" — construir
+depois do `/common:plan`, que é quem passa a escrever a fila. A direção (a) (um
+`--from-plan` no `/board-flow:drain`) foi descartada: prende ao Jira o comando
+que existe justamente para funcionar sem ele.
+
+Reaproveitar do `/board-flow:drain`: parar no primeiro BLOCKED e o teto `--max`.
 
 Em qualquer das duas, o item que não se resolve sozinho: `human_pending` aberto
 de um item deve ou não parar o lote? Hoje só o humano fecha essa pendência.
@@ -2274,8 +2276,16 @@ lista de exceções fica no próprio teste, explícita, em vez de virar omissão
 
 ## Cinco portas de planejamento, nenhuma conversão entre elas
 
-**Status:** pendente, prioridade média · **Lar provável:** decisão de desenho
-antes de código · **Origem:** sessão `session/doubt` (2026-08-24).
+**Status:** **desenho APROVADO pelo dono em 2026-08-24**, não construído ·
+**Lar:** `common/commands/plan.md` (novo), `board-flow/commands/triage.md`,
+`maestro/commands/program-plan.md`, `common/commands/drain-plan.md` (novo) ·
+**Origem:** sessão `session/doubt` (2026-08-24).
+
+**Ordem de construção sugerida:** (1) `/common:plan` com `--from-spec` e a fila
+ditada à mão — sozinho já destrava repo sem tracker; (2) `--from-jira` + parar a
+escrita no `triage`, que é a única parte que mexe em comando existente; (3)
+`/common:drain-plan`; (4) `--from-plan` no `program-plan`. Cada etapa é útil
+sem a seguinte.
 
 ### Problema
 
