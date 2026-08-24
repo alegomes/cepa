@@ -200,6 +200,20 @@ def test_poll(tmp):
     out = json.loads(sh([BIN / "maestro-poll", pd, "--now", str(1000 + 61)]).stdout)
     check("sem MAESTRO-EXIT após T_slice → TIMEOUT",
           out["transitions"][0]["to"] == "TIMEOUT", out)
+    # Regressão WEGO-paralelo 2026-08-24: o wrapper tee-a o resultado.txt NA RAIZ
+    # DO WORKTREE (--cwd), não em <progdir>/slices/<S>/. Procurar só sob slices/
+    # deixava 5 slices prontas eternamente "running" até virarem TIMEOUT.
+    pdw = _prog_with_running(tmp + "/g", marker=None, started=1000, timeout_min=45)
+    wt = Path(tmp + "/g") / "worktree-S1"
+    wt.mkdir(parents=True, exist_ok=True)
+    (wt / "resultado.txt").write_text("trabalho...\nMAESTRO-EXIT:0\n")
+    import yaml as _y
+    _ws = _y.safe_load((pdw / "wave-state.yaml").read_text())
+    _ws["slices"]["S1"]["worktree"] = str(wt)
+    (pdw / "wave-state.yaml").write_text(_y.safe_dump(_ws))
+    out = json.loads(sh([BIN / "maestro-poll", pdw, "--now", "1100"]).stdout)
+    check("lê o resultado.txt na raiz do worktree do slice",
+          out["transitions"] == [{"slice": "S1", "to": "DONE", "detail": 0}], out)
     # ainda rodando: sem marcador, dentro do prazo → alive
     pd = _prog_with_running(tmp + "/f", marker="progride...\n", started=1000, timeout_min=45)
     os.utime(pd / "slices" / "S1" / "resultado.txt", (1000, 1050))
