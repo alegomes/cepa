@@ -270,6 +270,53 @@ CLI = wrappers JSON do socket):
 
 ---
 
+## "Verde" sem teste nenhum: gate de aceite precisa exigir `Tests run:` > 0
+
+**Status:** pendente · **Lar:** `common/hooks/capture-build-result.py` (classificação do
+build) + `build-hex/agents/proof-reviewer` e `common/agents/completion-auditor` (o que
+eles aceitam como prova) · **Origem:** merge `00e0dda` no wego-acesso-backend
+(2026-08-24), medido na árvore mesclada.
+
+### Problema
+
+O wego passou a rodar com `surefire.failIfNoSpecifiedTests=false` no `pom.xml` — a
+correção certa para um sintoma real (o filtro `-Dtest=<Nome>` com `-pl/-am` abortava no
+primeiro módulo que não tem aquele teste). O efeito colateral, verificado:
+
+    $ ./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest
+    [INFO] BUILD SUCCESS          ← exit 0, e ZERO linhas "Tests run:"
+
+Ou seja: **errar o nome do teste agora produz verde**. E o harness inteiro trata verde
+como prova — o `capture-build-result` grava `last-build.json` verde, o `gate-advance`
+libera o commit, o comando de aceite de um card passa, e o card vira feito sem que
+nenhuma linha de teste tenha rodado.
+
+Não é hipótese: é exatamente o padrão do WEGO-2107 nesta mesma onda, onde o comando de
+aceite apontava para um arquivo já correto e passaria vazio — só que ali a slice
+percebeu e recusou. Uma máquina não percebe.
+
+O risco não é exclusivo do Maven: `pytest -k NomeErrado`, `go test -run NomeErrado` e
+`npm test -- -t NomeErrado` também saem com 0 e nenhum teste executado.
+
+### Esboço de solução
+
+1. `capture-build-result` deixa de classificar como verde um build cujo comando tem
+   filtro de teste (`-Dtest=`, `-k`, `-run`, `-t`) e cuja saída não traz contagem de
+   testes maior que zero. Grava um terceiro estado — verde-vazio — em vez de verde.
+2. O `proof-reviewer` e o `completion-auditor` passam a exigir a contagem: "o comando
+   de aceite passou" só vale com N > 0 testes executados. Verde-vazio vira UNPROVEN com
+   motivo nomeado, não NEEDS-HUMAN genérico.
+3. Onde o repo quiser o modo estrito de volta numa rodada, o caminho continua existindo
+   (`-Dsurefire.failIfNoSpecifiedTests=true` no wego) — mas o gate não pode depender de
+   alguém lembrar de passar a flag.
+
+### Critério de pronto
+
+Rodar um comando de aceite com nome de teste inexistente e o harness NÃO deixar o
+commit passar nem declarar o card feito — hoje deixa as duas coisas.
+
+---
+
 ## Onda termina e ninguém aterrissa: o merge train não roda sozinho
 
 **Status:** pendente · **Lar:** `maestro/commands/run.md` (passo 8, merge train) +
