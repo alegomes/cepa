@@ -1,0 +1,8 @@
+id: 01632c80
+slice: S-2059
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"sed -n '420,500p' bin/run-dev.sh; echo \\\"=== migrations dir ===\\\"; find . -path ./target -prune -o -name 'V*__*.sql' -print | head -20\"}"
+estado: pending
+criado_em: 2026-08-24T08:29:43-0300
+ttl: 3600

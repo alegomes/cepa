@@ -1,0 +1,8 @@
+id: d09d7061
+slice: S-2059
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"python3 - <<'PY'\\np='bin/tests/test_doctor_ignora_worktrees_orfas.sh'\\ns=open(p).read()\\ns=s.replace('''# Roda o doctor dentro do sandbox e devolve a saída inteira.\\ndoctor() { ( cd \\\"${SANDBOX}\\\" && bash bin/run-dev.sh doctor 2>&1 ) || true; }\\n''','''# Roda o doctor dentro do sandbox e devolve a saída inteira.\\ndoctor() { ( cd \\\"${SANDBOX}\\\" && bash bin/run-dev.sh doctor 2>&1 ) || true; }\\n\\n# A linha de acusação é \\\"versão de migration duplicada: <versões>\\\" — com dois\\n# pontos e a lista. Sem os dois pontos, o padrão casaria também com o veredito\\n# limpo (\\\"nenhuma versão de migration duplicada\\\") e o teste passaria sempre.\\nacusou() { grep -q \\\"versão de migration duplicada:\\\" <<< \\\"$1\\\"; }\\n''')\\ns=s.replace('if grep -q \\\"versão de migration duplicada\\\" <<< \\\"${saida}\\\"; then\\\\n  falhou','if acusou \\\"${saida}\\\"; then\\\\n  falhou')\\ns=s.replace('if grep -q \\\"versão de migration duplicada\\\" <<< \\\"${saida}\\\"; then\\\\n  passou','if acusou \\\"${saida}\\\"; then\\\\n  passou')\\nopen(p,'w').write(s)\\nPY\\nbash bin/tests/test_doctor_ignora_worktrees_orfas.sh\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:47-0300
+ttl: 3600

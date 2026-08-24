@@ -291,7 +291,21 @@ escala por default) + 1 `delete-broad`. Por slice: S-2050 18, S-2059 8, S-2067 8
 S-2070 8, S-2107 1 — ou seja, escalação é rotina, não exceção, e com o porteiro ligado
 pra valer a onda teria parado 43 vezes esperando o dono.
 
-Três achados, cada um com um conserto diferente:
+**O achado grave está do outro lado, nos ALLOWs.** Das 31 liberações automáticas,
+**8 escrevem arquivo** e o motor as classificou como `read-only`. A regra é uma
+expressão regular ancorada no INÍCIO da linha (`^(ls|cat|pwd|echo|grep|...)`), então
+tudo depois da primeira palavra é invisível para ela: `cat > <arquivo> <<'EOF'` casa
+por causa do `cat`. Passaram assim a escrita de um teste Java de verdade
+(`cat > api-rest/.../CaminhoNormalizadoPolicyTest.java`), dois arquivos em /tmp e
+cinco `resultado.txt` — e uma dessas linhas terminava em
+`git add -A && git -c user.name=alegomes commit -q -m "..."`, ou seja o porteiro
+liberou um commit achando que era leitura. Em sombra não custou nada; ligado pra
+valer, é a camada 3 inteira decorativa para qualquer coisa escrita como
+`<comando-de-leitura> && <o-que-eu-quiser>`. **Este conserto vem primeiro**, e é o
+mesmo do achado 3 abaixo: classificar pelo `_shellscan`, que enxerga a linha inteira,
+em vez de regex na primeira palavra.
+
+Do lado das escalações, três achados, cada um com um conserto diferente:
 
 1. **Ruído puro (23 das 42):** `sed -n '340,420p' <arquivo>` (12) e `./mvnw -pl X -am
    test -Dtest=Y 2>&1 | tail -30` (11). Os dois comandos JÁ estão no `BASE_BASH` das
@@ -318,10 +332,13 @@ Três achados, cada um com um conserto diferente:
 
 Reprocessar este mesmo `decisions.jsonl` com as regras novas e exigir: zero
 `delete-broad`, as 23 de ruído viram `allow`, e as escalações restantes são só escrita
-fora da superfície. O ledger serve de fixture e vive no repo principal (não numa
-worktree), então não some sozinho; o que é perecível são os worktrees das filhas em
+fora da superfície. Além disso: nenhum ALLOW pode escrever arquivo nem commitar.
+
+O lote está congelado em `tests/fixtures/gatekeeper-shadow-wego-paralelo/`
+(`decisions.jsonl` + os 43 YAMLs + um README que explica os campos), então o teste de
+calibração tem contra o que rodar. O que é perecível são os worktrees das filhas em
 `~/.herdr/worktrees/wego-acesso-backend/session-wego-paralelo-*`, que guardam o
-`resultado.txt` de cada slice — o contexto de por que cada comando foi rodado.
+`resultado.txt` de cada slice — a explicação de por que cada comando foi rodado.
 
 ---
 

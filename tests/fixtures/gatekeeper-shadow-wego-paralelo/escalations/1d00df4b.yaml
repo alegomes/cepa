@@ -1,0 +1,8 @@
+id: 1d00df4b
+slice: S-2067
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"python3 - <<'EOF'\\np='domain/src/test/java/com/wego/acesso/domain/model/SessaoAcessoTest.java'\\ns=open(p).read()\\nanchor='''    @Test\\n    void expiraEmDeveSerPosteriorACriadaEm() {'''\\nnovo='''    @Test\\n    void encerrarNaoSobrescreveSessaoJaExpirada() {\\n        SessaoAcesso sessao = novaSessao();\\n        sessao.expirar();\\n\\n        sessao.encerrar();\\n\\n        assertEquals(StatusSessao.EXPIRADA, sessao.status());\\n        assertFalse(sessao.estaValidaEm(T0.plusSeconds(60)));\\n    }\\n\\n    @Test\\n    void encerrarNaoSobrescreveSessaoExpiradaVindaDaPersistencia() {\\n        SessaoAcesso sessao = SessaoAcesso.reconstituir(SessaoId.nova(), TENANT, GEAP, \\\"func-1\\\",\\n                T0, T1, StatusSessao.EXPIRADA, T0);\\n\\n        sessao.encerrar();\\n\\n        assertEquals(StatusSessao.EXPIRADA, sessao.status());\\n    }\\n\\n    @Test\\n    void encerrarEhIdempotenteSobreSessaoJaEncerrada() {\\n        SessaoAcesso sessao = novaSessao();\\n        sessao.encerrar();\\n\\n        sessao.encerrar();\\n\\n        assertEquals(StatusSessao.ENCERRADA, sessao.status());\\n    }\\n\\n''' + anchor\\nassert anchor in s\\ns=s.replace(anchor, novo, 1)\\nopen(p,'w').write(s)\\nEOF\\ngrep -n \\\"void encerrar\\\" domain/src/test/java/com/wego/acesso/domain/model/SessaoAcessoTest.java\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:14-0300
+ttl: 3600

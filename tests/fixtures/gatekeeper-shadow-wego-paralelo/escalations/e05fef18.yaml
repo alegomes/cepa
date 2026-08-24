@@ -1,0 +1,8 @@
+id: e05fef18
+slice: S-2067
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"./mvnw -pl domain -am test -Dtest=SessaoAcessoTest 2>&1 | tail -30\", \"timeout\": 600000}"
+estado: pending
+criado_em: 2026-08-24T08:30:17-0300
+ttl: 3600

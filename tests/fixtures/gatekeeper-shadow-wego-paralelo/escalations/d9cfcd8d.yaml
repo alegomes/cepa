@@ -1,0 +1,8 @@
+id: d9cfcd8d
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"./mvnw -pl bootstrap -am test-compile -DskipTests 2>&1 | tail -18\", \"timeout\": 600000, \"description\": \"Compile all downstream consumers\"}"
+estado: pending
+criado_em: 2026-08-24T08:33:14-0300
+ttl: 3600

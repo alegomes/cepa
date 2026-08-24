@@ -1,0 +1,8 @@
+id: 701f3597
+slice: S-2070
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"python3 - <<'PY'\\np='api-rest/src/test/java/com/wego/acesso/api/rest/security/CaminhoNormalizadoPolicyTest.java'\\ns=open(p,encoding='utf-8').read()\\ns=s.replace(\\\"\\\"\\\"        assertSame(CheckResult.PERMIT, decidir(\\\"/apidocs/index.html\\\", anonimo()));\\n        assertSame(CheckResult.PERMIT, decidir(\\\"/q/health\\\", anonimo()));\\\"\\\"\\\",\\n\\\"\\\"\\\"        // Sem stub de isAnonymous de propósito: fora de /api/ a política nem chega a\\n        // consultar a identidade, e o Mockito estrito reprovaria um stub não usado.\\n        assertSame(CheckResult.PERMIT, decidir(\\\"/apidocs/index.html\\\", identidade));\\n        assertSame(CheckResult.PERMIT, decidir(\\\"/q/health\\\", identidade));\\\"\\\"\\\")\\nopen(p,'w',encoding='utf-8').write(s)\\nPY\\n./mvnw -pl api-rest -am test -Dtest=CaminhoNormalizadoPolicyTest 2>&1 | tail -40\", \"description\": \"Rodar o teste de aceite\"}"
+estado: pending
+criado_em: 2026-08-24T08:31:43-0300
+ttl: 3600

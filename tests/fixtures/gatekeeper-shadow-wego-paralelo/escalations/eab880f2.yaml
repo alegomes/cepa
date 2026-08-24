@@ -1,0 +1,8 @@
+id: eab880f2
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"./mvnw -pl application -am test -Dtest=RegistroOperacaoAdministrativaFabricasTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | grep -E \\\"ERROR|BUILD\\\" | head -15\", \"timeout\": 600000, \"description\": \"Compile with private canonical ctor\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:36-0300
+ttl: 3600

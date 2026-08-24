@@ -1,0 +1,8 @@
+id: 8ea7d828
+slice: S-2070
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"./mvnw -pl api-rest -am test -Dtest=TravaTokenInjecaoTest 2>&1 | grep -E \\\"No tests matching|BUILD\\\" | head -5\", \"description\": \"Confirmar que a falha do -am é pré-existente\"}"
+estado: pending
+criado_em: 2026-08-24T08:32:35-0300
+ttl: 3600

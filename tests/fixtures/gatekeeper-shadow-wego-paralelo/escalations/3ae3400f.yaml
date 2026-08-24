@@ -1,0 +1,8 @@
+id: 3ae3400f
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"sed -n '90,140p' infrastructure/src/main/java/com/wego/acesso/infrastructure/audit/TrilhaAuditoriaHashChain.java\", \"description\": \"Inspect adapter body\"}"
+estado: pending
+criado_em: 2026-08-24T08:31:43-0300
+ttl: 3600

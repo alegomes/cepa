@@ -1,0 +1,8 @@
+id: 1e7908a1
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"cp /tmp/TAP.bak application/src/main/java/com/wego/acesso/application/port/out/TrilhaAuditoriaPort.java && git diff --stat && grep -rn \\\"new RegistroOperacaoAdministrativa(\\\\|new TrilhaAuditoriaPort.RegistroOperacaoAdministrativa(\\\" --include=*.java . | grep -v '/target/'\", \"description\": \"Revert perturbation and find direct constructor callers\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:55-0300
+ttl: 3600

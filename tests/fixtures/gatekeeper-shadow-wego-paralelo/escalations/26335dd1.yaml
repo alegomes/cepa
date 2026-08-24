@@ -1,0 +1,8 @@
+id: 26335dd1
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"cd application/src/main/java/com/wego/acesso/application/port/out && cp TrilhaAuditoriaPort.java /tmp/TAP.bak && perl -0pi -e 's/        public RegistroOperacaoAdministrativa \\\\{/        private RegistroOperacaoAdministrativa {/' TrilhaAuditoriaPort.java && grep -n \\\"RegistroOperacaoAdministrativa {\\\" TrilhaAuditoriaPort.java\", \"description\": \"Perturb: make canonical constructor private\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:33-0300
+ttl: 3600

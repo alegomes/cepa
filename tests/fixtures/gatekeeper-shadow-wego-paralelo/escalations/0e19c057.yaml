@@ -1,0 +1,8 @@
+id: 0e19c057
+slice: S-2059
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"cp /tmp/run-dev.sh.bak bin/run-dev.sh\\nsed -i '' 's|falhou \\\"a seção Migrations nem rodou (o doctor morreu antes?)\\\"|falhou \\\"a seção Migrations não chegou ao veredito limpo (acusou algo, ou o doctor morreu antes)\\\"|' bin/tests/test_doctor_ignora_worktrees_orfas.sh\\necho \\\"=== RESTAURADO ===\\\" && bash bin/tests/test_doctor_ignora_worktrees_orfas.sh; echo \\\"exit=$?\\\"; git diff --stat\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:58-0300
+ttl: 3600

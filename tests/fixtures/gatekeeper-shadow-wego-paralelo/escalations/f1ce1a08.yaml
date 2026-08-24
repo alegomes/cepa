@@ -1,0 +1,8 @@
+id: f1ce1a08
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"./mvnw -pl application -am test -Dtest=RegistroOperacaoAdministrativaFabricasTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | tee /tmp/aceite.log | grep -E \\\"Tests run:|BUILD\\\" | head\", \"timeout\": 600000, \"description\": \"Final acceptance run after revert\"}"
+estado: pending
+criado_em: 2026-08-24T08:33:50-0300
+ttl: 3600

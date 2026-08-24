@@ -1,0 +1,8 @@
+id: 8a4cc701
+slice: S-2067
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"cp /tmp/SessaoAcesso.bak domain/src/main/java/com/wego/acesso/domain/model/SessaoAcesso.java && git diff --stat && ./mvnw -pl domain -am test -Dtest=SessaoAcessoTest 2>&1 | sed -n '/T E S T S/,/BUILD/p' | head -15\", \"timeout\": 600000}"
+estado: pending
+criado_em: 2026-08-24T08:30:31-0300
+ttl: 3600

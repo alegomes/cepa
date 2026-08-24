@@ -1,0 +1,8 @@
+id: 6427cb54
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"sed -n '83,86p' application/src/main/java/com/wego/acesso/application/port/out/TrilhaAuditoriaPort.java\", \"description\": \"Check line 84\"}"
+estado: pending
+criado_em: 2026-08-24T08:32:02-0300
+ttl: 3600

@@ -1,0 +1,8 @@
+id: 8ff76be4
+slice: S-2070
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"P=api-rest/src/main/java/com/wego/acesso/api/rest/security/CaminhoNormalizadoPolicy.java\\ncp \\\"$P\\\" /tmp/2070-original.java\\npython3 - <<'PY'\\np='api-rest/src/main/java/com/wego/acesso/api/rest/security/CaminhoNormalizadoPolicy.java'\\ns=open(p,encoding='utf-8').read()\\ns=s.replace(\\\"private static final int MAXIMO_PASSADAS_DECODE = 5;\\\",\\n            \\\"private static final int MAXIMO_PASSADAS_DECODE = 1; // PERTURBACAO WEGO-2070\\\")\\nopen(p,'w',encoding='utf-8').write(s)\\nPY\\ngrep -n \\\"MAXIMO_PASSADAS_DECODE = \\\" \\\"$P\\\"\\n./mvnw -pl api-rest -am test -Dtest=CaminhoNormalizadoPolicyTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | grep -E \\\"^\\\\[ERROR\\\\]|Tests run:|BUILD\\\" | head -30\", \"description\": \"Perturbar para uma passada e rodar\"}"
+estado: pending
+criado_em: 2026-08-24T08:32:13-0300
+ttl: 3600

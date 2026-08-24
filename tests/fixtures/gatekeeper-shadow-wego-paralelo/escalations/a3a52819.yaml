@@ -1,0 +1,8 @@
+id: a3a52819
+slice: S-2070
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"./mvnw -pl api-rest -am test -Dtest=CaminhoNormalizadoPolicyTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | tail -30\", \"description\": \"Rodar aceite com failIfNoSpecifiedTests=false\"}"
+estado: pending
+criado_em: 2026-08-24T08:32:01-0300
+ttl: 3600

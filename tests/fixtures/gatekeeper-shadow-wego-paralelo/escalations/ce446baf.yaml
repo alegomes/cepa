@@ -1,0 +1,8 @@
+id: ce446baf
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"./mvnw -pl application -am test -Dtest=RegistroOperacaoAdministrativaFabricasTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | tail -30\", \"timeout\": 600000, \"description\": \"Full output of perturbed build\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:38-0300
+ttl: 3600

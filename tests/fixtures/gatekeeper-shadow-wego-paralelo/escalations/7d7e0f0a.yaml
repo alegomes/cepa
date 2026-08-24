@@ -1,0 +1,8 @@
+id: 7d7e0f0a
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"F=application/src/main/java/com/wego/acesso/application/port/out/TrilhaAuditoriaPort.java\\nT=application/src/test/java/com/wego/acesso/application/port/out/RegistroOperacaoAdministrativaFabricasTest.java\\ncp /tmp/TAP.good $F && cp $T /tmp/TEST.good\\npython3 - \\\"$T\\\" <<'PY'\\nimport sys\\np=sys.argv[1]; s=open(p,encoding='utf-8').read()\\ns=s.rstrip()[:-1].rstrip('\\\\n') + \\\"\\\"\\\"\\n\\n    @Test\\n    void PERTURBACAO_construcaoDiretaDeForaDasFabricas() {\\n        RegistroOperacaoAdministrativa r = new RegistroOperacaoAdministrativa(\\n                OperacaoAdministrativa.HABILITACAO, CLIENTE, GEAP, CREDENCIAL_ID,\\n                \\\"admin-x\\\", OCORRIDA_EM, null);\\n        assertNull(r.funcionarioAfetadoId());\\n    }\\n}\\n\\\"\\\"\\\"\\nopen(p,'w',encoding='utf-8').write(s)\\nPY\\n./mvnw -pl application -am test -Dtest=RegistroOperacaoAdministrativaFabricasTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | grep -E \\\"\\\\[ERROR\\\\].*\\\\.java|BUILD\\\" | head -6\\ncp /tmp/TEST.good $T; git diff --stat\", \"timeout\": 600000, \"description\": \"Perturbation B: external direct construction must not compile\"}"
+estado: pending
+criado_em: 2026-08-24T08:33:40-0300
+ttl: 3600

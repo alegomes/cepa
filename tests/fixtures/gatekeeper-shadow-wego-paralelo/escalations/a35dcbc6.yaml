@@ -1,0 +1,8 @@
+id: a35dcbc6
+slice: S-2059
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"cp bin/run-dev.sh /tmp/run-dev.sh.bak\\npython3 - <<'PY'\\np='bin/run-dev.sh'\\ns=open(p).read()\\ns=s.replace(\\\"\\\"\\\"  dups=\\\"$(find . -type d \\\\\\\\( -name target -o -path '*/.claude/worktrees' \\\\\\\\) -prune \\\\\\\\\\n          -o -type f -name 'V*__*.sql' -print 2>/dev/null \\\\\\\\\\\"\\\"\\\",\\\"\\\"\\\"  dups=\\\"$(find . -type d -name target -prune \\\\\\\\\\n          -o -type f -name 'V*__*.sql' -print 2>/dev/null \\\\\\\\\\\"\\\"\\\")\\nopen(p,'w').write(s)\\nPY\\necho \\\"=== PERTURBADO (prune de .claude/worktrees removido) ===\\\"\\nbash bin/tests/test_doctor_ignora_worktrees_orfas.sh; echo \\\"exit=$?\\\"\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:53-0300
+ttl: 3600

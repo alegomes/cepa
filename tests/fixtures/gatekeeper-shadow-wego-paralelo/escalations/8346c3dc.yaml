@@ -1,0 +1,8 @@
+id: 8346c3dc
+slice: S-2059
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"sed -n '60,180p' bin/run-dev.sh\"}"
+estado: pending
+criado_em: 2026-08-24T08:29:53-0300
+ttl: 3600

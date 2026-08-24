@@ -1,0 +1,8 @@
+id: 29e84e20
+slice: S-2070
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"cp /tmp/2070-original.java api-rest/src/main/java/com/wego/acesso/api/rest/security/CaminhoNormalizadoPolicy.java\\ngrep -n \\\"MAXIMO_PASSADAS_DECODE = \\\" api-rest/src/main/java/com/wego/acesso/api/rest/security/CaminhoNormalizadoPolicy.java\\n./mvnw -pl api-rest -am test -Dtest=CaminhoNormalizadoPolicyTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | grep -E \\\"Tests run:|BUILD\\\"\", \"description\": \"Desfazer perturbação e reconfirmar verde\"}"
+estado: pending
+criado_em: 2026-08-24T08:32:24-0300
+ttl: 3600

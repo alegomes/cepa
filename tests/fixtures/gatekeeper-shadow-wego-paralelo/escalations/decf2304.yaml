@@ -1,0 +1,8 @@
+id: decf2304
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"F=application/src/main/java/com/wego/acesso/application/port/out/TrilhaAuditoriaPort.java\\ncp $F /tmp/TAP.good\\nperl -0pi -e 's/        private RegistroOperacaoAdministrativa\\\\(\\\\n/        public RegistroOperacaoAdministrativa(\\\\n/' $F\\ngrep -n \\\"RegistroOperacaoAdministrativa($\\\" $F | head\\n./mvnw -pl application -am test -Dtest=RegistroOperacaoAdministrativaFabricasTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | grep -E \\\"Tests run|construtor|BUILD|ERROR\\\\]   \\\" | head -20\", \"timeout\": 600000, \"description\": \"Perturbation A: make constructor public\"}"
+estado: pending
+criado_em: 2026-08-24T08:33:28-0300
+ttl: 3600

@@ -1,0 +1,8 @@
+id: 3ad3ee23
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"./mvnw -pl application -am test -Dtest=RegistroOperacaoAdministrativaFabricasTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | tail -25\", \"timeout\": 600000, \"description\": \"Run acceptance test with no-match tolerated\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:23-0300
+ttl: 3600

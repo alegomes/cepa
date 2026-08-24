@@ -1,0 +1,8 @@
+id: 16bc1a9a
+slice: S-2067
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"python3 - <<'EOF'\\nimport re\\np='domain/src/main/java/com/wego/acesso/domain/model/SessaoAcesso.java'\\ns=open(p).read()\\nold='''    /** Encerra explicitamente a sessão (logout/revogação). */\\n    public void encerrar() {\\n        status = StatusSessao.ENCERRADA;\\n    }\\n'''\\nnew='''    /**\\n     * Encerra explicitamente a sessão (logout/revogação). <strong>Condicional:</strong>\\n     * se a sessão já está {@link StatusSessao#EXPIRADA} (venceu sozinha por TTL ou por\\n     * falta de heartbeat), o status é preservado — encerrar não sobrescreve. Isso mantém\\n     * na trilha de auditoria a distinção entre \\\"a sessão venceu sozinha\\\" e \\\"o usuário\\n     * desligou\\\", que é o propósito do produto (rastrear quem fez o quê). Idempotente se\\n     * já ENCERRADA.\\n     */\\n    public void encerrar() {\\n        if (status == StatusSessao.ATIVA) {\\n            status = StatusSessao.ENCERRADA;\\n        }\\n    }\\n'''\\nassert old in s\\ns=s.replace(old,new)\\nold2='''     *   <li>o {@code status} nasce {@link StatusSessao#ATIVA} e só avança\\n *       (ATIVA → EXPIRADA/ENCERRADA); nunca retrocede.</li>'''\\ns=s.replace('''ATIVA → EXPIRADA/ENCERRADA); nunca retrocede.</li>''','''ATIVA → EXPIRADA/ENCERRADA); nunca retrocede nem troca de\\n *       estado final — EXPIRADA não vira ENCERRADA.</li>''')\\nopen(p,'w').write(s)\\nEOF\\nsed -n '15,22p;85,102p' domain/src/main/java/com/wego/acesso/domain/model/SessaoAcesso.java\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:07-0300
+ttl: 3600

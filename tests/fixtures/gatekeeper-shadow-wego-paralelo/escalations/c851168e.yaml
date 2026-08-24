@@ -1,0 +1,8 @@
+id: c851168e
+slice: S-2070
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"python3 - <<'PY'\\np='api-rest/src/main/java/com/wego/acesso/api/rest/security/CaminhoNormalizadoPolicy.java'\\ns=open(p,encoding='utf-8').read()\\ns=s.replace(\\\"\\\"\\\"       {@code %2F} quanto o duplamente codificado {@code %252F} virem a barra que\\n       realmente são (WEGO-2070);</li>\\\"\\\"\\\",\\n\\\"\\\"\\\" *       {@code %2F} quanto o duplamente codificado {@code %252F} virem a barra que\\n *       realmente são (WEGO-2070);</li>\\\"\\\"\\\")\\nopen(p,'w',encoding='utf-8').write(s)\\nPY\\nsed -n '36,44p;128,190p' api-rest/src/main/java/com/wego/acesso/api/rest/security/CaminhoNormalizadoPolicy.java\", \"description\": \"Corrigir asteriscos do javadoc e conferir\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:44-0300
+ttl: 3600

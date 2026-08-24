@@ -1,0 +1,8 @@
+id: 3ac60a51
+slice: S-2067
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"P=domain/src/main/java/com/wego/acesso/domain/model/SessaoAcesso.java\\ncp $P /tmp/SessaoAcesso.bak\\npython3 - <<'EOF'\\np='domain/src/main/java/com/wego/acesso/domain/model/SessaoAcesso.java'\\ns=open(p).read()\\nold='''    public void encerrar() {\\n        if (status == StatusSessao.ATIVA) {\\n            status = StatusSessao.ENCERRADA;\\n        }\\n    }'''\\nnew='''    public void encerrar() {\\n        status = StatusSessao.ENCERRADA;\\n    }'''\\nassert old in s\\nopen(p,'w').write(s.replace(old,new,1))\\nEOF\\n./mvnw -pl domain -am test -Dtest=SessaoAcessoTest 2>&1 | sed -n '/T E S T S/,/BUILD/p' | head -40\", \"timeout\": 600000}"
+estado: pending
+criado_em: 2026-08-24T08:30:25-0300
+ttl: 3600

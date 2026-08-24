@@ -1,0 +1,8 @@
+id: 8dc006a5
+slice: S-2050
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"cd /Users/alegomes/.herdr/worktrees/wego-acesso-backend/session-wego-paralelo-s-2050 && ./mvnw -pl application -am test -Dtest=RegistroOperacaoAdministrativaFabricasTest -Dsurefire.failIfNoSpecifiedTests=false 2>&1 | tail -25\", \"timeout\": 600000, \"description\": \"Build with perturbed file\"}"
+estado: pending
+criado_em: 2026-08-24T08:30:43-0300
+ttl: 3600

@@ -1,0 +1,8 @@
+id: 5a7715e1
+slice: S-2067
+acao: Bash
+regra: gray-zone
+contexto: "{\"command\": \"sed -n 20,60p application/src/main/java/com/wego/acesso/application/service/EncerrarSessoesInativasService.java; echo ====; sed -n 215,260p bootstrap/src/test/java/com/wego/acesso/e2e/RevogarSessaoDeOutroDonoE2ETest.java\"}"
+estado: pending
+criado_em: 2026-08-24T08:29:45-0300
+ttl: 3600
