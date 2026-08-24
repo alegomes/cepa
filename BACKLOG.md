@@ -2122,3 +2122,43 @@ Nada decidido. As direções são: (a) o `gc` de órfãos do `/maestro:run` pass
 o Space junto com a worktree ao aterrissar a onda; (b) aceitar os Spaces e só documentar
 que a barra lateral cresce por onda. A (a) parece certa, mas depende de conferir se
 `herdr worktree remove --workspace` derruba a worktree git com o Space ou só o Space.
+
+---
+
+## Não há como executar em lote um plano `single-track` na ordem do plano
+
+**Status:** pendente · **Lar provável:** `common/commands/` (comando novo) ou
+`board-flow/commands/drain.md` · **Origem:** pergunta direta do dono na sessão de
+reflexão `session/doubt` (2026-08-24), ao lado da listagem do `/maestro:run`.
+
+### Problema
+
+O `mode: single-track` do `plan.yaml` existe para guardar duas coisas que o
+tracker perde: a **ordem** de execução e o **`why`** de cada item estar naquela
+posição (`common/plan-schema.yaml`: *"o Jira guarda a FILA (To Do) e não a ORDEM
+nem o PORQUÊ dela"*). Hoje nenhum comando executa essa fila em lote:
+
+- `/common:next` lê o plano e nomeia UM item, e é read-only por contrato
+  (*"Doesn't execute anything"*, `common/commands/next.md:248`);
+- `/board-flow:drain` executa em lote, mas a fonte dele é a coluna do Jira,
+  ordenada por `priority and rank` do board (`drain.md:45`) — exatamente a ordem
+  que o plano existe para substituir. Ele nunca abre o `plan.yaml`;
+- `/board-flow:execute` só toca o plano no fim, para nomear o próximo item e
+  marcar o recém-fechado como `done` (`execute.md:181-185`).
+
+Ou seja: o dono escreve a ordem no plano, e a única forma de executá-la em lote
+é uma que ignora essa ordem. Sem tracker (o plano `cepa` deste repo, com ids que
+não são cards) não há nem essa saída — sobra encadear `/common:next` +
+`/board-flow:execute` à mão, um por vez.
+
+### Esboço de solução
+
+Nada decidido. As direções são: (a) um `--from-plan` no `/board-flow:drain`, que
+troca a consulta JQL pela leitura do `plan.yaml` e respeita `blocked_by` e a
+ordem da lista; (b) um comando próprio no `common` (`/common:drain-plan`?), que
+não exige tracker nenhum e vale para plano sem Jira. A (b) cobre o caso do
+próprio repo do cepa, que é onde o incômodo apareceu; a (a) reaproveita os
+guards de reserva de card e o "para no primeiro BLOCKED".
+
+Em qualquer das duas, o item que não se resolve sozinho: `human_pending` aberto
+de um item deve ou não parar o lote? Hoje só o humano fecha essa pendência.
