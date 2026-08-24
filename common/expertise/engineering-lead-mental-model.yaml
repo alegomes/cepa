@@ -131,3 +131,12 @@ feedback:
     user_verdict: overrule
     user_reason: "O campo **Altitude:** aceita SO tres valores: strategic, tactical, implementation. Nos quatro runs de 18-19/08, 51 dos 57 blocos trouxeram palavra livre descritiva no lugar (contrato, schema, fronteira, retencao, semantica — 35 valores distintos). O campo nao pergunta DE QUE ASSUNTO e a decisao; pergunta QUEM precisa revisa-la: strategic = usuario/produto/contrato externo, tactical = lead, implementation = interno ao worker. Com palavra livre, o /common:debrief nao consegue filtrar e o usuario reve 3 decisoes em vez das ~41 que tinham consequencia. Se quiser registrar o assunto, use o proprio topico do bloco."
     tag: principle
+
+  - run_id: 2026-08-18-wego-2037
+    date: 2026-08-19
+    topic: path-lock atrapalhou — afrouxar a politica ou acrescentar um passo ao laco
+    altitude: strategic
+    original_choice: "Opcao B — manter a politica de escrita intacta e acrescentar um passo ao laco por Task, roteando a escrita para quem tem o lock. Motivo: a trava existe para tornar impossivel o que a disciplina sozinha nao garante; afrouxa-la para destravar um caso a converte em sugestao. O proprio harness registra o incidente que a originou (um lead editou fonte via shell porque o Write estava travado; o artefato saiu correto e nada sinalizou)."
+    user_reason: "keep. Nao ficou no papel: tres workers desta sessao bateram na mesma trava e PARARAM E REPORTARAM em vez de contornar via sed/heredoc — inclusive contra instrucao de ambiente que mandava editar por shell. Recusar instrucao que contorna controle de permissao e o comportamento certo; repetir."
+    user_verdict: keep
+    tag: principle

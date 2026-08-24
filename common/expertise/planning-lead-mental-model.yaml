@@ -126,3 +126,48 @@ feedback:
     user_verdict: overrule
     user_reason: "O campo **Altitude:** aceita SO tres valores: strategic, tactical, implementation. Nos quatro runs de 18-19/08, 51 dos 57 blocos trouxeram palavra livre descritiva no lugar (contrato, schema, fronteira, retencao, semantica — 35 valores distintos). O campo nao pergunta DE QUE ASSUNTO e a decisao; pergunta QUEM precisa revisa-la: strategic = usuario/produto/contrato externo, tactical = lead, implementation = interno ao worker. Com palavra livre, o /common:debrief nao consegue filtrar e o usuario reve 3 decisoes em vez das ~41 que tinham consequencia. Se quiser registrar o assunto, use o proprio topico do bloco."
     tag: principle
+
+  - run_id: 2026-08-18-wego-2024
+    date: 2026-08-19
+    topic: como o canonico do hash lida com as linhas ja gravadas
+    altitude: strategic
+    original_choice: "Opcao B — corte de cadeia: o formato novo vale para todos, e toda linha gravada antes deixa de verificar (em vez de versionar o canonico)"
+    user_verdict: keep
+    user_reason: "(sem motivo dado)"
+    tag: example
+
+  - run_id: 2026-08-18-wego-2037
+    date: 2026-08-19
+    topic: teto de cardinalidade do lote de acoes
+    altitude: strategic
+    original_choice: "Opcao B — NAO adotar teto de quantidade de eventos por requisicao; limitar so por tamanho, campo a campo. Motivo: descartar o evento N+1 perde trilha pela mesma porta que o 4xx perde, e o vetor de disco e byte, nao contagem."
+    user_verdict: keep
+    user_reason: "(sem motivo dado)"
+    tag: example
+
+  - run_id: 2026-08-18-wego-2037
+    date: 2026-08-19
+    topic: o eco do valor do cliente no erro de enum invalido
+    altitude: strategic
+    original_choice: "Opcao B — mapper local devolvendo o formato padrao da API, sem ecoar o valor enviado pelo cliente. O security-reviewer nao viu risco de exploracao; o problema era inconsistencia de CONTRATO (dois formatos de erro de payload, um deles nao escolhido por ninguem). A medicao na implementacao mostrou que o defeito era maior que o descrito: nao era so o enum, era toda a familia de erro de tipo."
+    user_verdict: keep
+    user_reason: "(sem motivo dado)"
+    tag: example
+
+  - run_id: 2026-08-18-wego-2024
+    date: 2026-08-19
+    topic: cadastro/rotacao de credencial (WEGO-1910) entram no card ou viram follow-up
+    altitude: strategic
+    original_choice: "Opcao B — follow-up. Criterio de corte: o que se PERDE ao adiar, nao o que e mais barato. Em habilitar/desabilitar ha perda irreversivel (desabilitar apaga fisicamente o vinculo); em cadastro/rotacao o sobre-quem e a propria credencial, que ja esta gravada e nao e apagada."
+    user_verdict: keep
+    user_reason: "(sem motivo dado)"
+    tag: example
+
+  - run_id: 2026-08-18-wego-1916
+    date: 2026-08-19
+    topic: escopo extra pre-autorizado, condicional a um experimento
+    altitude: strategic
+    original_choice: "Opcao B — admitir de antemao uma guarda de boot estreita, CONDICIONAL ao experimento mostrar que a linha de perfil de producao sozinha nao aborta o boot para o secret OIDC. Nao se implementa a guarda sem antes ver o experimento vermelho."
+    user_reason: "keep. O desenho pre-autoriza o escopo extra E amarra o gatilho a uma medicao, entao nao vira porta aberta para o card crescer. Na pratica o experimento saiu no desfecho ruim (o servidor subiu limpo sem o segredo); sem essa clausula o card teria fechado verde com o problema em pe. Repetir este padrao quando o criterio de aceite depender de um comportamento nao verificado."
+    user_verdict: keep
+    tag: principle
