@@ -2233,3 +2233,76 @@ das cinco portas eu uso?" (`/common:spec`, `/board-flow:capture`,
 Acrescentar as 8 linhas nas tabelas e uma seção "quero planejar / quero
 executar" organizada pelo eixo entrada → documento produzido → quem lê aquele
 documento. O material está levantado no relatório da sessão `session/doubt`.
+
+---
+
+## O catálogo de comandos não tem guarda mecânica — e por isso volta a defasar
+
+**Status:** pendente · **Lar provável:** `tests/` (teste novo) · **Origem:**
+sessão `session/doubt` (2026-08-24), ao constatar 8 comandos ausentes de
+`docs/commands.md`.
+
+### Problema
+
+Corrigir a lista à mão conserta o sintoma de hoje e não impede o de amanhã:
+nada relaciona os arquivos `*/commands/*.md` (a verdade) com as tabelas de
+`docs/commands.md` (a cópia). Foi assim que 8 comandos sumiram do catálogo sem
+que nenhum teste piscasse.
+
+### Esboço de solução
+
+Um teste que lista `*/commands/*.md`, extrai `plugin:comando` de cada caminho e
+falha nomeando os que não aparecem em `docs/commands.md`. Barato, mecânico, e
+cabe no `tests/run-all.sh` que já roda tudo. A dúvida honesta: se o catálogo
+deve mesmo listar 100% dos comandos ou se alguns são internos — se forem, a
+lista de exceções fica no próprio teste, explícita, em vez de virar omissão.
+
+### Achados descartados na mesma revisão (com motivo)
+
+- **`/board-flow:capture` e `/discovery:capture` têm o mesmo nome** — o prefixo
+  de plugin já desambigua na invocação e os dois quadros são diferentes;
+  renomear custaria mais do que confunde.
+- **`--max` tem default diferente por comando** (drain 5, prove-drain 5, triage
+  15) — a diferença acompanha o custo de cada um: triar 15 cards é leitura,
+  drenar 15 é build. É calibragem, não inconsistência.
+- **A lista de rotinas do `/common:session` é fechada** (`prove-drain`, `drain`,
+  `triage`, `decide`, `execute`, `autonomous`, `docs`) — mas o próprio comando
+  aceita "qualquer comando de barra instalado" como alternativa, então um nome
+  fora da lista degrada para o caminho geral em vez de falhar.
+
+---
+
+## Cinco portas de planejamento, nenhuma conversão entre elas
+
+**Status:** pendente, prioridade média · **Lar provável:** decisão de desenho
+antes de código · **Origem:** sessão `session/doubt` (2026-08-24).
+
+### Problema
+
+Cada porta de entrada produz um documento próprio e nenhum caminho leva um
+documento ao formato do vizinho:
+
+| porta | produz |
+|---|---|
+| `/common:spec` | `docs/spec/<slug>.md` |
+| `/board-flow:capture` | um card no Jira |
+| `/board-flow:triage` | `plan.yaml` `single-track` (exige Jira) |
+| `/maestro:program-plan` | `plan.yaml` `parallel-waves` (exige `BACKLOG.md`) |
+| `/board-flow:plan-track-build-validate` | Epic + Stories no Jira |
+
+As três conversões que faltam: uma spec fechada não vira fila; um repo sem
+tracker não tem quem escreva `single-track` (o `docs/execution-plan.md` já
+registra isso como pergunta em aberto: *"who writes the plan in a repo with no
+tracker"*); e promover `single-track` → onda é manual por decisão declarada no
+mesmo documento.
+
+A primeira é a que dói: o `/common:spec` foi feito para não exigir tracker, e
+mesmo assim o que ele produz só continua andando com um.
+
+### Esboço de solução
+
+Nada decidido, e a decisão é de desenho, não de código. Vale primeiro responder
+se o alvo é uma quinta porta a menos (convergir para menos documentos) ou uma
+conversão a mais (`/common:spec --para-plano`). Relacionado ao card sobre
+executar em lote um `single-track`, que ataca o mesmo vazio pelo lado da
+execução.
