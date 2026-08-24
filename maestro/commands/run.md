@@ -81,20 +81,34 @@ plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
       Rode o seed (`.env` etc.) copiando do main — NÃO symlink (recopla ao tree
       sincronizado). Dívida nomeada: o worktree do herdr fica em `~/.herdr/...`,
       não `~/cepa-worktrees` — herda o guard e o seed; o que não herdar é exceção.
-   b. **Settings geradas** (camada 1):
-      `python3 maestro/bin/maestro-fork-settings PROGDIR/plan.yaml <slice> --port <P>`
-      → grave em `<worktree>/.claude/settings.json`. Sem as regras `ask` o
-      porteiro nunca é consultado (achado do spike — já embutido no gerador).
+   b. **Settings geradas** (camada 1) — o gerador grava o PAR de arquivos:
+      `python3 maestro/bin/maestro-fork-settings PROGDIR/plan.yaml <slice> --port <P> --out-dir <worktree>`
+      → `<worktree>/.claude/settings.json` (permissões) **e** `<worktree>/.mcp.json`
+      (endereço do porteiro). Os dois são obrigatórios: sem as regras `ask` o
+      porteiro nunca é consultado (achado do spike), e sem o `.mcp.json` a filha
+      não enxerga a ferramenta do porteiro e morre na largada (achado da onda
+      WEGO-paralelo, 2026-08-24 — `mcpServers` em settings.json é ignorado).
    c. **Spawn com o wrapper normativo** (pipefail + PIPESTATUS, senão toda
       filha que falha reporta sucesso — bug real da rev1):
       ```
       herdr agent start <PROG>-<slice> --cwd <worktree> \
         --env MAESTRO_LINGER=600 -- \
         bash -c 'set -o pipefail; claude -p "<prompt-do-slice>" \
+          --mcp-config .mcp.json --strict-mcp-config \
           --permission-prompt-tool mcp__gatekeeper__permission_prompt \
           2>&1 | tee resultado.txt; ec=${PIPESTATUS[0]}; \
-          echo "MAESTRO-EXIT:$ec"; sleep "$MAESTRO_LINGER"'
+          echo "MAESTRO-EXIT:$ec" | tee -a resultado.txt; \
+          sleep "$MAESTRO_LINGER"'
       ```
+      `--mcp-config .mcp.json --strict-mcp-config` NÃO é opcional: sem ele a
+      filha sobe sem o porteiro, `--permission-prompt-tool` aponta para ferramenta
+      inexistente e o processo aborta com
+      `MCP tool mcp__gatekeeper__permission_prompt not found` / exit 1 — a onda
+      inteira nasce morta (aconteceu em WEGO-paralelo, 2026-08-24). O
+      `--strict-mcp-config` ainda impede que os MCPs pessoais do dono vazem para
+      a filha headless.
+      O `tee -a` do marcador é o que deixa o `MAESTRO-EXIT:` no `resultado.txt`,
+      não só no painel — é por arquivo que o `maestro-poll` sincroniza.
       O `<prompt-do-slice>` traz a demanda, a superfície, o `acceptance`/
       `acceptance_cmd`, o `context` e a disciplina autonomous-mode.
       `maestro-wave-state set-slice PROGDIR <slice> running --pane <id> --worktree <path>`.

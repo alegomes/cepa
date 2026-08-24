@@ -57,6 +57,25 @@ def read_marker(resultado: Path):
     return ("DONE" if code == 0 else "FAIL"), code
 
 
+def resultado_path(program_dir: Path, name: str, st: dict) -> Path:
+    """Onde vive o resultado.txt da filha.
+
+    O wrapper normativo roda com `--cwd <worktree>` e faz `tee resultado.txt`,
+    então o arquivo nasce NA RAIZ DO WORKTREE — que o wave-state registra em
+    `worktree:`. Procurar só em `<progdir>/slices/<S>/` fazia o poll nunca ver
+    marcador nenhum: toda slice ficava `running` até estourar o T_slice e cair
+    em TIMEOUT, mesmo tendo terminado com MAESTRO-EXIT:0 (onda WEGO-paralelo,
+    2026-08-24 — 5 slices prontas e o estado dizendo running).
+    O caminho sob `slices/` segue valendo como fallback.
+    """
+    wt = st.get("worktree")
+    if wt:
+        cand = Path(wt) / "resultado.txt"
+        if cand.is_file():
+            return cand
+    return program_dir / "slices" / name / "resultado.txt"
+
+
 def poll(program_dir: Path, now: float, heartbeat_s: int):
     ws_path = program_dir / "wave-state.yaml"
     ws = yaml.safe_load(ws_path.read_text()) if ws_path.is_file() else {}
@@ -67,8 +86,7 @@ def poll(program_dir: Path, now: float, heartbeat_s: int):
     for name, st in slices.items():
         if st.get("status") != "running":
             continue
-        sdir = program_dir / "slices" / name
-        resultado = sdir / "resultado.txt"
+        resultado = resultado_path(program_dir, name, st)
         term, detail = read_marker(resultado)
         if term:
             tr = {"slice": name, "to": term, "detail": detail}

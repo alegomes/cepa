@@ -55,7 +55,7 @@ def test_fork_settings(tmp):
     s = json.loads(r.stdout)
     perms = s["permissions"]
     check("allow inclui a superfície declarada",
-          "Write(src/a.py)" in perms["allow"] and "Edit(docs/*.md)" in perms["allow"],
+          "Edit(src/a.py)" in perms["allow"] and "Edit(docs/*.md)" in perms["allow"],
           perms["allow"])
     check("allow inclui bash_extra do slice",
           "Bash(./run-x.sh:*)" in perms["allow"], perms["allow"])
@@ -64,8 +64,27 @@ def test_fork_settings(tmp):
     check("deny cobre a zona de enforcement",
           any("hooks/**" in d for d in perms["deny"]) and
           any(".claude/settings.json" in d for d in perms["deny"]), perms["deny"])
+    # Regressão WEGO-paralelo 2026-08-24: o Claude Code RECUSA regra Write(path)
+    # ("only Edit(path) rules are matched"); Edit(path) já cobre toda escrita.
+    check("nenhuma regra Write(path) — só Edit(path) é aceita",
+          not [x for x in perms["allow"] + perms["deny"] if x.startswith("Write(")],
+          perms["allow"] + perms["deny"])
+    # Regressão da MESMA onda: mcpServers em settings.json é ignorado — a filha
+    # subia sem a ferramenta do porteiro e morria com exit 1 na largada.
+    check("settings.json NÃO declara mcpServers (não é lido para MCP)",
+          "mcpServers" not in s, list(s))
+    rm = sh([BIN / "maestro-fork-settings", plan, "S1", "--port", "9001",
+             "--emit", "mcp"])
+    m = json.loads(rm.stdout)
     check("identidade do slice vai na URL do porteiro (achado spike)",
-          "slice=S1" in s["mcpServers"]["gatekeeper"]["url"], s["mcpServers"])
+          "slice=S1" in m["mcpServers"]["gatekeeper"]["url"], m)
+    wt = Path(tmp) / "wt"
+    wt.mkdir()
+    rw = sh([BIN / "maestro-fork-settings", plan, "S1", "--port", "9001",
+             "--out-dir", wt])
+    check("--out-dir grava o PAR settings.json + .mcp.json no worktree",
+          rw.returncode == 0 and (wt / ".claude" / "settings.json").is_file()
+          and (wt / ".mcp.json").is_file(), rw.stdout + rw.stderr)
     r2 = sh([BIN / "maestro-fork-settings", plan, "NAO-EXISTE"])
     check("slice inexistente → erro", r2.returncode == 2, r2.stdout)
 
@@ -181,6 +200,20 @@ def test_poll(tmp):
     out = json.loads(sh([BIN / "maestro-poll", pd, "--now", str(1000 + 61)]).stdout)
     check("sem MAESTRO-EXIT após T_slice → TIMEOUT",
           out["transitions"][0]["to"] == "TIMEOUT", out)
+    # Regressão WEGO-paralelo 2026-08-24: o wrapper tee-a o resultado.txt NA RAIZ
+    # DO WORKTREE (--cwd), não em <progdir>/slices/<S>/. Procurar só sob slices/
+    # deixava 5 slices prontas eternamente "running" até virarem TIMEOUT.
+    pdw = _prog_with_running(tmp + "/g", marker=None, started=1000, timeout_min=45)
+    wt = Path(tmp + "/g") / "worktree-S1"
+    wt.mkdir(parents=True, exist_ok=True)
+    (wt / "resultado.txt").write_text("trabalho...\nMAESTRO-EXIT:0\n")
+    import yaml as _y
+    _ws = _y.safe_load((pdw / "wave-state.yaml").read_text())
+    _ws["slices"]["S1"]["worktree"] = str(wt)
+    (pdw / "wave-state.yaml").write_text(_y.safe_dump(_ws))
+    out = json.loads(sh([BIN / "maestro-poll", pdw, "--now", "1100"]).stdout)
+    check("lê o resultado.txt na raiz do worktree do slice",
+          out["transitions"] == [{"slice": "S1", "to": "DONE", "detail": 0}], out)
     # ainda rodando: sem marcador, dentro do prazo → alive
     pd = _prog_with_running(tmp + "/f", marker="progride...\n", started=1000, timeout_min=45)
     os.utime(pd / "slices" / "S1" / "resultado.txt", (1000, 1050))

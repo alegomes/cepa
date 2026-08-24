@@ -152,8 +152,11 @@ Each child session runs under three layers:
 
 1. **Generated settings** (`maestro-fork-settings`, the primary layer): from the
    slice's `plan.yaml`, Maestro writes the worktree's `settings.json` —
-   deny-by-default; `Write`/`Edit` allowed only on the declared surface globs;
+   deny-by-default; file edits allowed only on the declared surface globs;
    `Bash` allowed to a conservative base set + the slice's `bash_extra`.
+   Path rules are emitted as `Edit(glob)` only: Claude Code rejects `Write(glob)`
+   ("only Edit(path) rules are matched by file permission checks") and `Edit`
+   already covers every file-editing tool.
    **Critically, it emits `ask` rules** that route everything else to the
    gatekeeper — without them the headless default pre-approves "safe" commands
    and the gatekeeper is never consulted (a real finding from the spike).
@@ -168,9 +171,14 @@ Each child session runs under three layers:
 `maestro-gatekeeper` is a small **separate process** (an interactive session
 can't serve an MCP endpoint while it's talking to you). It serves the
 `--permission-prompt-tool` MCP contract over **loopback HTTP**, one server per
-wave shared by all N children. Each child's generated settings point its
-`--permission-prompt-tool` at it, with the slice identity carried in the URL
+wave shared by all N children. Each child reaches it through a generated `.mcp.json` and is launched with
+`--mcp-config .mcp.json --strict-mcp-config --permission-prompt-tool
+mcp__gatekeeper__permission_prompt`, with the slice identity carried in the URL
 (`?slice=S1`) — because the permission payload itself doesn't name the child.
+**`mcpServers` inside `settings.json` is not read.** Declaring the gatekeeper
+there (and dropping the `--mcp-config` flag) is what killed wave 1 of
+WEGO-paralelo on 2026-08-24: every child aborted at startup with
+`MCP tool mcp__gatekeeper__permission_prompt not found` and exit 1.
 
 Its engine (decision `D5`): **mechanical rules; the gray zone always escalates**
 (no LLM in the permission path in v1). Explicit strategic patterns (editing a
@@ -224,7 +232,7 @@ terminal state; a merge already in `landed` is skipped.
 | `maestro/commands/{program-plan,run,resume}.md` | The three commands. |
 | `common/plan-schema.yaml` | Annotated plan.yaml (schema v2; v1 still read) — canonical, both modes. |
 | `maestro/plan-template.yaml` | Pointer to the above (kept so old links resolve). |
-| `maestro/bin/maestro-fork-settings` | Generates a child's `settings.json` (layer 1). |
+| `maestro/bin/maestro-fork-settings` | Generates a child's `settings.json` + `.mcp.json` pair (layer 1); `--out-dir <worktree>` writes both. |
 | `maestro/bin/maestro-gatekeeper` | The permission gatekeeper (MCP over loopback HTTP). |
 | `maestro/bin/maestro-poll` | One event-loop iteration (by file marker). |
 | `maestro/bin/maestro-wave-state` | Crash-recovery state store. |
