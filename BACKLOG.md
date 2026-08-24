@@ -2169,10 +2169,12 @@ de um item deve ou não parar o lote? Hoje só o humano fecha essa pendência.
 
 ## Os dois planejadores dividem o mesmo namespace de arquivo sem nenhuma guarda
 
-**Status:** pendente, prioridade média · **Lar provável:**
-`maestro/commands/program-plan.md` (passo 4) + `board-flow/commands/triage.md`
-(passo do plano) · **Origem:** revisão das estratégias de planejamento pedida na
-sessão `session/doubt` (2026-08-24).
+**Status:** **RESOLVIDO em 2026-08-24** (commit `10a3a89`, mesma sessão que o
+abriu) — `maestro-programs --check-name` sai com 3 quando o nome já é fila
+`single-track` de um board, e o passo 4 do `/maestro:program-plan` chama a
+checagem antes de gravar; 4 testes, com quebra proposital dos dois lados. **Não
+está vivo até `bin/install.sh --clean`.** · **Origem:** revisão das estratégias
+de planejamento pedida na sessão `session/doubt` (2026-08-24).
 
 ### Problema
 
