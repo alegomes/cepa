@@ -30,6 +30,10 @@ NEXT = REPO / "common" / "commands" / "next.md"
 # the main clone (English plugins vs the pt-BR maestro).
 COMMANDS = {
     REPO / "common" / "commands" / "next.md": "<main-root>",
+    # o ESCRITOR da fila: se ele resolver a raiz errada, o plano nasce dentro da
+    # worktree e morre com ela — a perda que a camada 0 existe para impedir,
+    # agora no lado da escrita e não só no da leitura.
+    REPO / "common" / "commands" / "plan.md": "<raiz-principal>",
     REPO / "board-flow" / "commands" / "triage.md": "<main-root>",
     REPO / "board-flow" / "commands" / "fix.md": "<main-root>",
     REPO / "board-flow" / "commands" / "prove.md": "<main-root>",

@@ -1,0 +1,236 @@
+---
+description: Escreve a fila de execução `single-track` do repo — `.claude/programs/<nome>/plan.yaml`, o documento que guarda a ORDEM e o PORQUÊ de cada item estar naquela posição, que é o que o tracker perde. Aceita duas fontes hoje: `--from-spec`, que transforma cada critério de sucesso de uma especificação do /common:spec num item herdando a ordem do texto (e dizendo que herdou), e a fila ditada à mão, para repo sem tracker e sem spec. Não exige Jira. É o único escritor da fila fora do /board-flow:triage, e recusa gravar por cima de um plano de ondas do /maestro:program-plan. Quem lê a fila depois é o /common:next.
+argument-hint: <nome> [--from-spec docs/spec/<slug>.md] [--dry-run] [--on-missing refuse|keep|drop]
+interaction: conversational
+---
+
+# /common:plan
+
+## Purpose
+
+Dar um autor à fila `single-track` em repo que não tem tracker.
+
+O documento existe desde 2026-07-28 e resolve uma dor real: o Jira guarda a
+FILA (a coluna To Do) e não guarda a ORDEM nem o PORQUÊ dela, então a
+priorização decidida numa sessão virava prosa no handoff e evaporava. Só que o
+único comando capaz de escrever esse arquivo era o `/board-flow:triage`, que
+exige Jira. O resultado é o buraco que este comando fecha:
+
+- **repo sem tracker não tinha fila** — e sem fila o `/common:next` não tem o
+  que ler, então a pergunta "e agora, o que eu faço?" volta a não ter resposta
+  escrita em lugar nenhum;
+- **o `/common:spec` não tinha saída** — ele foi feito de propósito para não
+  exigir quadro configurado, e mesmo assim o que ele produz (uma especificação
+  fechada, com critérios de sucesso já medidos) só continuava andando com um.
+
+É a etapa 1 do desenho "um escritor, três fontes" (`BACKLOG.md`, "Cinco portas
+de planejamento", aprovado pelo dono em 2026-08-24): uma fila, um autor, várias
+fontes. As outras três etapas consomem o arquivo que este comando passa a
+escrever.
+
+**Isto não planeja ondas.** `mode: parallel-waves` é outro documento, com outro
+autor (`/maestro:program-plan`) e outro executor (`/maestro:run`): tem
+superfície disjunta, fork point e aceite executável por slice. Os dois moram no
+mesmo diretório e são distinguidos por um campo interno, então este comando
+**recusa** gravar num nome que já é plano de ondas, em vez de apagá-lo.
+
+## Variables
+
+- `<nome>` — o nome do programa, que vira
+  `<raiz-principal>/.claude/programs/<nome>/plan.yaml`. Num repo com tracker, o
+  costume é usar a chave do projeto (`WEGO`); sem tracker, o nome do repo ou da
+  leva.
+- `--from-spec docs/spec/<slug>.md` — cada critério de sucesso da especificação
+  vira um item da fila.
+- `--source "texto"` — de onde as demandas vieram, para rastreio. Sem a flag, o
+  comando preenche a partir da fonte que usou.
+- `--dry-run` — mostra o arquivo que seria gravado e não grava.
+- `--on-missing refuse|keep|drop` — o que fazer com item que já está na fila do
+  disco e a lista nova não menciona. Default `refuse`: sumir com ele em silêncio
+  apaga posição e `why` que alguém decidiu.
+
+**`--from-jira` ainda não existe.** É a etapa 2 do mesmo desenho, e enquanto ela
+não for construída quem escreve a fila a partir de um board continua sendo o
+`/board-flow:triage` — ele lê os cards, procura evidência no código, roteia os
+quatro baldes e grava o plano. Não tente imitá-lo aqui a partir de uma consulta
+ao Jira: a ordem dele sai da classificação, não da coluna.
+
+## Instructions
+
+**A ordem e o `why` são do dono, nunca seus.** Este comando escreve o documento
+que registra uma decisão de priorização — inventar um `why` plausível é pior do
+que não ter nenhum, porque o texto inventado se lê, meses depois, como critério
+que alguém escolheu. Onde o `why` já está escrito (numa spec, num card, no
+`BACKLOG.md`), herde e diga de onde veio. Onde não está, pergunte.
+
+Por isso este comando é `conversational`: a política `default-yes` não é
+injetada aqui, e a skill `guided-interrogation` vale enquanto a fila estiver
+sendo ditada à mão. Perguntar a ordem é o trabalho, não o último recurso.
+
+**Não execute nada.** O comando escreve um arquivo. Quem aponta o próximo passo
+é o `/common:next`; quem executa em lote será o `/common:drain-plan` (etapa 3,
+ainda não construída).
+
+**A gravação é mecânica.** Quem valida, funde e grava é
+`common/bin/cepa-plan` — não escreva o YAML na mão com `Write`. O script recusa
+`why` vazio, `id` repetido, `blocked_by` apontando para item inexistente, ciclo
+de bloqueio e `human_pending` sem a chave; se você escrever o arquivo por fora,
+nenhuma dessas recusas acontece.
+
+## Workflow
+
+### 1. Resolver a raiz e conferir o nome
+
+A fila mora no **clone principal**: `<raiz-principal>/.claude/programs/<nome>/`,
+onde `<raiz-principal>` é o pai de `git rev-parse --git-common-dir` sem o
+`/.git` final — dentro de uma worktree ligada isso é o clone PRINCIPAL, não esta
+árvore. Gravar contra o diretório corrente é a perda de 2026-08-18: num repo
+cujo `.gitignore` cobre `.claude/`, o plano fica invisível ao git e morre junto
+com a worktree, sem uma palavra (`docs/execution-plan.md`, "Where the file
+lives").
+
+Você não precisa resolver isso à mão — o `cepa-plan` resolve pela mesma regra —
+mas precisa saber, porque é o caminho que vai no relatório.
+
+```
+python3 common/bin/cepa-plan check-name <nome> --repo .
+```
+
+Exit 3 é **colisão com um plano de ondas**: pare e diga o nome do programa que
+está lá. Não sugira `--force`, não existe: apagar as ondas é perder a superfície
+e o aceite de cada slice. Peça outro nome.
+
+Exit 0 com a nota "nome ocupado por uma fila" é reescrita, o fluxo normal de
+repriorizar — siga, sabendo que a fila de lá vai ser fundida no passo 4.
+
+### 2. Juntar os itens
+
+#### Com `--from-spec`
+
+Leia `docs/spec/<slug>.md`. **Um item por critério de sucesso** (`### CS-N`), na
+ordem em que aparecem no texto.
+
+- `id` — `CS-1`, `CS-2`… ou o slug do critério; o que importa é ser estável, é
+  por ele que o `blocked_by` aponta.
+- `title` — o critério em termos observáveis, a linha do próprio `### CS-N`.
+- `why` — sai do que a especificação já escreveu: a **Superfície** onde o
+  critério é observável, o **Teste vermelho** declarado, e o que na seção
+  Problema/Escopo põe aquele critério antes dos outros. Se o texto não disser
+  nada sobre por que ele vem antes, o `why` honesto é **"herdado da ordem do
+  texto da especificação; ninguém priorizou os critérios entre si"** — e o
+  relatório repete isso em voz alta.
+- `blocked_by` — só onde a spec declarar dependência entre critérios. Não
+  deduza dependência de dois critérios tocarem o mesmo arquivo.
+- `human_pending` — `null`. Na hora de planejar ainda não existe rota a cobrar;
+  o campo é preenchido depois, quando o item fecha e o Implementation Summary
+  diz qual é a rota de validação humana.
+
+**Ordem herdada, e dito.** Os critérios de uma spec não vêm priorizados entre
+si. A preferência registrada no desenho é herdar a ordem do texto e **dizer que
+herdou** — não perguntar item a item, que transfere ao dono um trabalho que ele
+já fez uma vez. Ofereça reordenar em UMA pergunta fechada no fim, com a fila
+inteira à vista.
+
+**Spec ainda em rascunho.** Se o `**Status:**` não for `pronta-para-construir`,
+diga quantas perguntas `- [ ]` ainda estão abertas e faça UMA pergunta fechada:
+fechar a especificação antes (`/common:spec --fechar <slug>`) ou escrever a fila
+assim mesmo. Recomende fechar antes — um critério sem superfície observável vira
+um item de fila que ninguém sabe quando terminou.
+
+#### Sem flag — a fila ditada à mão
+
+O caso do repo sem tracker e sem spec (este repo é um). Antes de perguntar
+qualquer coisa, **leia a fonte de demandas que o repo já tem**: `BACKLOG.md`, os
+documentos em `docs/`, os handoffs em `<raiz-principal>/.claude/handoffs/`.
+Pergunta cuja resposta estava no repo queima a paciência do dono.
+
+Depois, em rodadas de no máximo quatro perguntas:
+
+1. **quais demandas entram** — proponha a lista que você leu, com a âncora de
+   cada uma na fonte (`"P9 do BACKLOG"`, um ADR, um número de issue), e deixe o
+   dono cortar;
+2. **em que ordem** — proponha uma, com o motivo de cada posição, e deixe o dono
+   corrigir. Proposta com motivo é bem mais barata de responder que uma pergunta
+   aberta;
+3. **o `why` de cada posição** — o que você não conseguiu tirar da fonte,
+   pergunte. Um item sem `why` não é gravável, e o `cepa-plan` recusa a fila
+   inteira por causa dele.
+
+### 3. Mostrar a fila antes de gravar
+
+Sempre. Rode com `--dry-run` e mostre a fila em três colunas — posição, item,
+`why` em uma linha — mais o que a fila do disco já tinha, se for reescrita.
+**Uma pergunta fechada** ("grava assim?"), não uma revisão item a item.
+
+### 4. Gravar
+
+```
+python3 common/bin/cepa-plan write <nome> \
+  --items <arquivo.json> --source "<de onde veio>" --quando <YYYY-MM-DD> --repo .
+```
+
+Escreva os itens num arquivo JSON temporário (ou mande por stdin com `-`). O
+script:
+
+- valida tudo e **não grava nada** se qualquer item tiver lacuna — a fila é um
+  documento só, meia fila gravada é pior que nenhuma;
+- funde com o que já está no disco: a lista nova manda na ordem, no `title` e no
+  `why`, que são decisão de planejamento; o disco manda no `status` e no
+  `human_pending`, que vieram da execução. **Isso não é detalhe**: só o humano
+  fecha um `human_pending`, então uma reescrita que os zerasse apagaria dívida
+  que ninguém pagou;
+- copia o arquivo anterior para `plan.yaml.bak` antes de sobrescrever, porque os
+  comentários escritos à mão (a evidência de cada `done`, por exemplo) não
+  sobrevivem à reescrita.
+
+Exit 4 é item do disco que a lista nova não menciona: **não passe
+`--on-missing drop` por conta própria** — mostre os ids e pergunte.
+
+### 5. Relatar e apontar para frente
+
+Diga onde gravou, quantos itens, de que fonte, e o que **não** foi decidido
+aqui. Termine nomeando quem lê o arquivo agora: `/common:next`.
+
+## Report
+
+```
+Fila gravada: <raiz-principal>/.claude/programs/cepa/plan.yaml
+  7 itens · fonte: docs/spec/planejador-de-lotes.md (7 critérios de sucesso)
+
+Ordem herdada do texto da especificação. Ninguém priorizou os critérios entre
+si — se a ordem importa, é a hora de dizer.
+
+  1. CS-1 — planejador aceita uma fonte que não é o BACKLOG
+     porque: é o único critério que os outros seis pressupõem
+  2. CS-2 — ...
+
+Nada pendente com você: nenhum item nasceu com rota de validação humana; esse
+campo se preenche quando o item fecha.
+
+Próximo passo: /common:next (nomeia UM item e o porquê dele).
+```
+
+## Constraints
+
+- **Nunca inventa ordem nem `why`.** Herda de uma fonte escrita e diz de onde,
+  ou pergunta. Um `why` plausível escrito por você se lê depois como critério
+  que alguém escolheu, e é exatamente a mentira que a fila existe para não
+  contar.
+- **Nunca grava por cima de um plano de ondas.** Colisão é recusa nomeada, sem
+  escape.
+- **Nunca escreve o YAML à mão.** A gravação passa por `common/bin/cepa-plan`,
+  que é onde as recusas moram.
+- **Não fecha `human_pending` de ninguém.** Item que vem do disco com pendência
+  aberta continua com ela. Quem fecha é o dono, no `/common:next --sync`.
+- **Não executa e não mexe no tracker.** O único arquivo que este comando
+  escreve é o plano (mais o `.bak` da versão anterior).
+- **Uma fila por nome.** Ao encontrar uma existente, funde; não cria
+  `<nome>-2`.
+
+## See also
+
+- [`docs/execution-plan.md`](../../docs/execution-plan.md) — o mecanismo inteiro e por que o arquivo mora no clone principal
+- [`common/plan-schema.yaml`](../plan-schema.yaml) — o schema anotado, os dois modos
+- `/common:next` — o consumidor da fila
+- `/common:spec` — a fonte que `--from-spec` lê
+- `/board-flow:triage` — quem escreve a fila a partir de um board, enquanto a etapa 2 não existe

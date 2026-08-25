@@ -1,0 +1,511 @@
+#!/usr/bin/env python3
+"""cepa-plan — o escritor mecânico da fila `single-track` (.claude/programs/<nome>/plan.yaml).
+
+Existe porque a etapa 1 do desenho "um escritor, três fontes" (BACKLOG.md,
+"Cinco portas de planejamento", aprovado em 2026-08-24) não pode viver só na
+prosa de um comando: um `.md` que diz "valide os `why` antes de gravar" erode em
+silêncio, e o dano só aparece quando alguém abre o plano meses depois e a ordem
+não tem critério nenhum registrado. Aqui a recusa é código, e um teste a exercita.
+
+Quem chama: `/common:plan`. O comando conversa (lê a spec, pergunta a ordem, tira
+o `why` de onde ele já está escrito) e entrega a lista pronta para este script,
+que valida, resolve a raiz certa, recusa colisão e grava.
+
+Só sabe `mode: single-track`. Ondas são outro documento, com outro autor
+(`/maestro:program-plan`) e outro consumidor (`/maestro:run`).
+
+Subcomandos:
+
+  cepa-plan check-name <nome> [--repo DIR]
+      O nome de programa está livre para uma FILA? Espelho do
+      `maestro-programs --check-name`, que faz a mesma pergunta pelo outro lado.
+      Exit 0 = livre (ou já é fila, e reescrever é o fluxo normal de
+      replanejar); 3 = colisão com um plano de ONDAS — gravar a fila ali apaga
+      as ondas sem uma palavra.
+
+  cepa-plan validate <plan.yaml>
+      As checagens abaixo sobre um arquivo que já está no disco.
+      Exit 0 = válido; 2 = inválido, com as lacunas nomeadas.
+
+  cepa-plan write <nome> --items ARQUIVO|- [--source TEXTO] [--repo DIR]
+                  [--on-missing refuse|keep|drop] [--dry-run]
+      Grava a fila. Os itens entram por arquivo JSON ou YAML (uma lista de
+      objetos) ou por stdin com `-`.
+      Exit 0 = gravado; 2 = itens inválidos; 3 = colisão de nome; 4 = o arquivo
+      no disco tem itens que a lista nova não menciona (ver --on-missing).
+
+Checagens de item — cada uma existe porque a falha correspondente já custou
+alguma coisa a alguém:
+
+  - `id` presente e ÚNICO. Id repetido faz o `blocked_by` apontar para dois
+    itens e o /common:next escolher um deles em silêncio.
+  - `title` presente.
+  - `why` presente e não-vazio. É O campo do documento: o schema o chama de
+    "o campo que evapora hoje". Fila sem `why` guarda a ordem e perde o
+    critério, e a primeira dúvida ("ainda faz sentido?") obriga a repriorizar
+    do zero — que é exatamente a dor que o plano existe para tirar.
+  - `status` no vocabulário fechado (pending|in_progress|done|blocked|dropped).
+  - `blocked_by` aponta só para ids que existem NESTA fila. Id fantasma deixa o
+    item bloqueado para sempre por uma coisa que ninguém vai fechar.
+  - sem ciclo em `blocked_by`. Dois itens que se bloqueiam mutuamente somem da
+    resposta do /common:next sem nenhum aviso: nenhum é candidato, e a fila
+    parece simplesmente ter acabado.
+  - `human_pending` com a chave PRESENTE (o valor pode ser null). Nulo explícito
+    é resposta ("não aplicável, substrato interno"); a chave ausente é omissão,
+    e a dívida com o humano volta a ser invisível, que é a razão do campo.
+  - pelo menos um item.
+
+Reescrita (o nome já é uma fila): a lista nova manda na ORDEM, no `title` e no
+`why` — que são decisão de planejamento. O que veio da execução vem do disco:
+
+  - `status` do disco sempre ganha. Quem executou sabe onde o item está; quem
+    replaneja está decidindo ordem, não progresso.
+  - `human_pending` do disco ganha enquanto estiver ABERTO (não-nulo). Só o
+    humano fecha essa pendência, e a lista nova traz `null` em todo item por
+    default — tomá-la ao pé da letra apagaria a dívida justamente na hora de
+    repriorizar, que é quando ela mais precisa aparecer. Disco nulo aceita a
+    rota nova que a lista trouxer.
+
+O que a reescrita NÃO preserva: os comentários escritos à mão no arquivo (o
+plano `cepa` deste repo tem vários, com a evidência de cada `done`). Antes de
+sobrescrever, o arquivo anterior é copiado para `plan.yaml.bak` e o caminho sai
+no relatório.
+"""
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("cepa-plan precisa de PyYAML (pip install pyyaml)", file=sys.stderr)
+    sys.exit(2)
+
+MODE = "single-track"
+SCHEMA_VERSION = 2
+STATUSES = ("pending", "in_progress", "done", "blocked", "dropped")
+
+
+def raiz_principal(repo):
+    """O clone principal, mesmo chamado de dentro de uma worktree ligada.
+
+    Mesma resolução do /common:next, do /maestro:run e do maestro-programs: o
+    pai de `git rev-parse --git-common-dir` sem o `/.git` final. Gravar contra o
+    diretório corrente é o defeito da "camada 0" — em repo cujo .gitignore cobre
+    `.claude/`, o plano fica invisível ao git e morre com a worktree.
+    """
+    r = subprocess.run(["git", "-C", str(repo), "rev-parse", "--git-common-dir"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    p = Path(r.stdout.strip())
+    if not p.is_absolute():
+        p = (Path(repo) / p).resolve()
+    return p.parent if p.name == ".git" else p
+
+
+def caminho_do_plano(raiz, nome):
+    return raiz / ".claude" / "programs" / nome / "plan.yaml"
+
+
+def le_plano(path):
+    """Devolve (plano, erro). Arquivo ilegível não estoura: vira erro nomeado."""
+    try:
+        return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}), None
+    except (yaml.YAMLError, OSError) as e:
+        return None, f"{path} está ilegível ({e.__class__.__name__}: {e})"
+
+
+def modo_de(plan):
+    """v1 não tinha `mode`; ausente lá significa ondas (common/plan-schema.yaml)."""
+    return plan.get("mode") or (
+        "parallel-waves" if plan.get("schema_version") == 1 else None)
+
+
+# ── validação ────────────────────────────────────────────────────────────────
+
+def valida_itens(items):
+    """Lista de lacunas em pt-BR. Vazia = válido."""
+    faltas = []
+    if not isinstance(items, list) or not items:
+        return ["a fila não tem nenhum item — um plano vazio não responde "
+                "'o que eu faço agora?'"]
+
+    vistos = {}
+    for i, it in enumerate(items, 1):
+        onde = f"item {i}"
+        if not isinstance(it, dict):
+            faltas.append(f"{onde}: não é um objeto com campos, e sim {type(it).__name__}")
+            continue
+        ident = it.get("id")
+        onde = f"item {i} ({ident})" if ident else onde
+        if not ident or not str(ident).strip():
+            faltas.append(f"{onde}: sem `id` — o /common:next não tem como "
+                          "nomear o passo nem o `blocked_by` como apontar")
+        elif str(ident) in vistos:
+            faltas.append(f"{onde}: `id` repetido (já usado no item "
+                          f"{vistos[str(ident)]}) — `blocked_by` passa a apontar "
+                          "para dois itens e a escolha vira silenciosa")
+        else:
+            vistos[str(ident)] = i
+
+        if not str(it.get("title") or "").strip():
+            faltas.append(f"{onde}: sem `title`")
+        if not str(it.get("why") or "").strip():
+            faltas.append(f"{onde}: sem `why` — a fila guardaria a ordem e "
+                          "perderia o critério dela, que é o ponto do documento")
+
+        st = it.get("status", "pending")
+        if st not in STATUSES:
+            faltas.append(f"{onde}: `status` '{st}' fora do vocabulário "
+                          f"{'|'.join(STATUSES)}")
+
+        bb = it.get("blocked_by", [])
+        if not isinstance(bb, list):
+            faltas.append(f"{onde}: `blocked_by` tem que ser lista (veio "
+                          f"{type(bb).__name__})")
+        elif ident and str(ident) in [str(x) for x in bb]:
+            faltas.append(f"{onde}: `blocked_by` aponta para o próprio item")
+
+        if "human_pending" not in it:
+            faltas.append(f"{onde}: sem a chave `human_pending` — nulo explícito "
+                          "é resposta válida ('não aplicável (substrato interno)'), "
+                          "a chave ausente é omissão, e a dívida com o humano "
+                          "volta a ser invisível")
+
+    # referências fantasmas e ciclos só fazem sentido com os ids já coletados
+    ids = set(vistos)
+    grafo = {}
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        ident = str(it.get("id") or "")
+        bb = it.get("blocked_by", [])
+        if not isinstance(bb, list):
+            continue
+        alvos = [str(x) for x in bb]
+        for alvo in alvos:
+            if alvo not in ids:
+                faltas.append(f"item {ident}: `blocked_by` cita '{alvo}', que não "
+                              "existe nesta fila — o item ficaria bloqueado para "
+                              "sempre por algo que ninguém vai fechar")
+        grafo[ident] = [a for a in alvos if a in ids]
+
+    for ciclo in acha_ciclos(grafo):
+        faltas.append("ciclo em `blocked_by`: " + " → ".join(ciclo) +
+                      " — nenhum deles vira candidato, e a fila parece ter "
+                      "acabado em vez de estar travada")
+    return faltas
+
+
+def acha_ciclos(grafo):
+    """Ciclos do grafo de bloqueio, cada um como lista de ids fechando o laço."""
+    ciclos, estado, pilha = [], {}, []
+
+    def visita(n):
+        estado[n] = "abrindo"
+        pilha.append(n)
+        for m in grafo.get(n, []):
+            if estado.get(m) == "abrindo":
+                ciclos.append(pilha[pilha.index(m):] + [m])
+            elif m not in estado:
+                visita(m)
+        pilha.pop()
+        estado[n] = "fechado"
+
+    for n in grafo:
+        if n not in estado:
+            visita(n)
+    return ciclos
+
+
+def valida_plano(plan):
+    """Lacunas de um plano inteiro (cabeçalho + itens)."""
+    faltas = []
+    if plan.get("schema_version") not in (1, 2):
+        faltas.append(f"`schema_version` é {plan.get('schema_version')!r}; "
+                      "esperado 2")
+    if modo_de(plan) != MODE:
+        faltas.append(f"`mode` é {modo_de(plan)!r}, não '{MODE}' — este script "
+                      "só escreve e valida fila; ondas são do /maestro:program-plan")
+    if plan.get("schema_version") == 1 and plan.get("mode") == MODE:
+        faltas.append("um plano v1 não pode declarar 'single-track': o modo não "
+                      "existia lá. Suba `schema_version` para 2")
+    if not str(plan.get("program") or "").strip():
+        faltas.append("sem `program`")
+    if not str(plan.get("source") or "").strip():
+        faltas.append("sem `source` — de onde as demandas vieram é o que permite "
+                      "conferir a fila contra a fonte depois")
+    faltas.extend(valida_itens(plan.get("items")))
+    return faltas
+
+
+# ── escrita ──────────────────────────────────────────────────────────────────
+
+CABECALHO = """\
+# plan.yaml — fila `single-track`, escrita por /common:plan.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: {fonte}
+# Escrito em: {quando}
+"""
+
+
+def normaliza(it):
+    """Item com as chaves na ordem do schema, para o arquivo sair legível."""
+    return {
+        "id": it["id"],
+        "title": it["title"],
+        "why": it["why"],
+        "status": it.get("status", "pending"),
+        "blocked_by": [str(x) for x in it.get("blocked_by", [])],
+        "human_pending": it.get("human_pending", None),
+    }
+
+
+def funde(novos, antigos):
+    """A lista nova manda na ordem/title/why; o disco manda no que é execução.
+
+    Preservar `status` e `human_pending` não é conveniência: só o humano fecha
+    um `human_pending`, então uma reescrita que os zerasse apagaria dívida que
+    ninguém pagou — e a dívida some justamente do único lugar que a mostrava.
+    """
+    por_id = {str(a.get("id")): a for a in (antigos or []) if isinstance(a, dict)}
+    saida, reaproveitados = [], []
+    for it in novos:
+        base = normaliza(it)
+        velho = por_id.get(str(it["id"]))
+        if velho:
+            # `status` do disco SEMPRE ganha: quem executou sabe onde o item
+            # está; quem replaneja está decidindo ordem, não progresso.
+            if "status" in velho:
+                base["status"] = velho["status"]
+            # `human_pending` do disco ganha enquanto estiver ABERTO. Só o
+            # humano fecha essa pendência — e a lista nova traz `null` em todo
+            # item por default, então tomá-la ao pé da letra apagaria a dívida
+            # justamente na hora de repriorizar. Disco nulo aceita rota nova.
+            if velho.get("human_pending") is not None:
+                base["human_pending"] = velho["human_pending"]
+            reaproveitados.append(str(it["id"]))
+        saida.append(base)
+    return saida, reaproveitados
+
+
+def serializa(nome, fonte, itens, quando):
+    corpo = {
+        "schema_version": SCHEMA_VERSION,
+        "mode": MODE,
+        "program": nome,
+        "source": fonte,
+        "items": itens,
+    }
+    dump = yaml.dump(corpo, allow_unicode=True, sort_keys=False,
+                     default_flow_style=False, width=78)
+    return CABECALHO.format(fonte=fonte, quando=quando) + "\n" + dump
+
+
+def carrega_itens(origem):
+    """JSON ou YAML, de arquivo ou de stdin ('-'). Devolve (itens, erro)."""
+    try:
+        bruto = sys.stdin.read() if origem == "-" else Path(origem).read_text(encoding="utf-8")
+    except OSError as e:
+        return None, f"não deu para ler {origem}: {e}"
+    if not bruto.strip():
+        return None, f"{origem} veio vazio"
+    try:
+        dados = json.loads(bruto)
+    except json.JSONDecodeError:
+        try:
+            dados = yaml.safe_load(bruto)
+        except yaml.YAMLError as e:
+            return None, f"{origem} não é JSON nem YAML válido ({e})"
+    # aceita tanto a lista crua quanto um documento com `items:`
+    if isinstance(dados, dict) and "items" in dados:
+        dados = dados["items"]
+    if not isinstance(dados, list):
+        return None, (f"{origem} tem que trazer uma LISTA de itens (ou um "
+                      "documento com `items:`)")
+    return dados, None
+
+
+# ── subcomandos ──────────────────────────────────────────────────────────────
+
+def cmd_check_name(raiz, nome):
+    alvo = caminho_do_plano(raiz, nome)
+    if not alvo.is_file():
+        print(f"nome livre: {alvo} não existe")
+        return 0
+    plan, erro = le_plano(alvo)
+    if erro:
+        print(f"{erro} — não dá para dizer o que a fila sobrescreveria",
+              file=sys.stderr)
+        return 3
+    modo = modo_de(plan)
+    if modo == MODE:
+        itens = plan.get("items") or []
+        print(f"nome ocupado por uma fila single-track ({len(itens)} itens) — "
+              f"reescrever é o fluxo normal de repriorizar '{nome}'; o que veio "
+              f"da execução (status, human_pending) é preservado")
+        return 0
+    print(f"COLISÃO: {alvo} é um plano '{modo}' — as ondas do "
+          f"/maestro:program-plan. Gravar a fila aqui apaga as ondas e o "
+          f"aceite de cada slice. Escolha outro nome de programa.",
+          file=sys.stderr)
+    return 3
+
+
+def cmd_validate(caminho):
+    p = Path(caminho)
+    if not p.is_file():
+        print(f"{p} não existe", file=sys.stderr)
+        return 2
+    plan, erro = le_plano(p)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    faltas = valida_plano(plan)
+    if faltas:
+        print(f"{p}: {len(faltas)} lacuna(s)", file=sys.stderr)
+        for f in faltas:
+            print(f"  - {f}", file=sys.stderr)
+        return 2
+    print(f"{p}: fila válida, {len(plan.get('items') or [])} itens")
+    return 0
+
+
+def cmd_write(raiz, a):
+    itens, erro = carrega_itens(a.items)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    faltas = valida_itens(itens)
+    if faltas:
+        print(f"{len(faltas)} lacuna(s) na fila — nada foi gravado",
+              file=sys.stderr)
+        for f in faltas:
+            print(f"  - {f}", file=sys.stderr)
+        return 2
+
+    alvo = caminho_do_plano(raiz, a.nome)
+    antigos, fonte_antiga = [], None
+    if alvo.is_file():
+        plan, err = le_plano(alvo)
+        if err:
+            print(f"{err} — não dá para dizer o que seria sobrescrito",
+                  file=sys.stderr)
+            return 3
+        if modo_de(plan) != MODE:
+            print(f"COLISÃO: {alvo} é um plano '{modo_de(plan)}' — as ondas do "
+                  f"/maestro:program-plan. Gravar a fila aqui apaga as ondas e "
+                  f"o aceite de cada slice. Escolha outro nome de programa.",
+                  file=sys.stderr)
+            return 3
+        antigos = plan.get("items") or []
+        fonte_antiga = plan.get("source")
+
+        novos_ids = {str(i.get("id")) for i in itens}
+        sumidos = [str(x.get("id")) for x in antigos
+                   if isinstance(x, dict) and str(x.get("id")) not in novos_ids]
+        if sumidos and a.on_missing == "refuse":
+            print(f"a fila que está no disco tem {len(sumidos)} item(ns) que a "
+                  f"lista nova não menciona: {', '.join(sumidos)}.\n"
+                  "Sumir com eles em silêncio apaga posição e `why` que alguém "
+                  "decidiu. Inclua-os na lista, ou diga explicitamente o que "
+                  "fazer: --on-missing keep (mantém no fim, sem posição "
+                  "escolhida) ou --on-missing drop (marca status: dropped).",
+                  file=sys.stderr)
+            return 4
+
+    fundidos, reaproveitados = funde(itens, antigos)
+    if antigos:
+        novos_ids = {str(i["id"]) for i in fundidos}
+        sobras = [x for x in antigos
+                  if isinstance(x, dict) and str(x.get("id")) not in novos_ids]
+        if a.on_missing == "keep":
+            fundidos.extend(normaliza({**s, "why": s.get("why") or
+                                       "sem `why` registrado na fila anterior"}
+                                      ) for s in sobras)
+        elif a.on_missing == "drop":
+            for s in sobras:
+                d = normaliza({**s, "why": s.get("why") or
+                               "sem `why` registrado na fila anterior"})
+                d["status"] = "dropped"
+                fundidos.append(d)
+
+    fonte = a.source or fonte_antiga or "ditada à mão em /common:plan"
+    texto = serializa(a.nome, fonte, fundidos, a.quando or "(data não informada)")
+
+    if a.dry_run:
+        print(texto)
+        return 0
+
+    backup = None
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    if alvo.is_file():
+        backup = alvo.with_suffix(".yaml.bak")
+        backup.write_text(alvo.read_text(encoding="utf-8"), encoding="utf-8")
+    tmp = alvo.with_suffix(".yaml.tmp")
+    tmp.write_text(texto, encoding="utf-8")
+    tmp.replace(alvo)
+
+    print(f"gravado: {alvo}")
+    print(f"  {len(fundidos)} itens · fonte: {fonte}")
+    if reaproveitados:
+        print(f"  {len(reaproveitados)} item(ns) já existiam — status e "
+              f"human_pending preservados do disco: {', '.join(reaproveitados)}")
+    if backup:
+        print(f"  cópia do anterior em {backup} — comentários escritos à mão "
+              f"não sobrevivem à reescrita, estão lá")
+    return 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        description="escreve e valida a fila single-track do harness")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    c = sub.add_parser("check-name", help="o nome está livre para uma fila?")
+    c.add_argument("nome")
+    c.add_argument("--repo", default=".")
+
+    v = sub.add_parser("validate", help="valida um plan.yaml no disco")
+    v.add_argument("plano")
+
+    w = sub.add_parser("write", help="grava a fila")
+    w.add_argument("nome")
+    w.add_argument("--items", required=True,
+                   help="arquivo JSON/YAML com a lista de itens, ou '-' para stdin")
+    w.add_argument("--source", help="de onde as demandas vieram")
+    w.add_argument("--quando", help="data a registrar no cabeçalho (YYYY-MM-DD)")
+    w.add_argument("--repo", default=".")
+    w.add_argument("--on-missing", choices=("refuse", "keep", "drop"),
+                   default="refuse",
+                   help="o que fazer com item do disco que a lista nova não cita")
+    w.add_argument("--dry-run", action="store_true",
+                   help="imprime o arquivo que seria gravado, sem gravar")
+
+    a = ap.parse_args(argv)
+
+    if a.cmd == "validate":
+        return cmd_validate(a.plano)
+
+    raiz = raiz_principal(a.repo)
+    if raiz is None:
+        print(f"{a.repo} não é um repositório git — a fila mora no clone "
+              "principal, e sem git não dá para achá-lo", file=sys.stderr)
+        return 2
+    if a.cmd == "check-name":
+        return cmd_check_name(raiz, a.nome)
+    return cmd_write(raiz, a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
