@@ -228,8 +228,13 @@ def valida_plano(plan):
         faltas.append(f"`schema_version` é {plan.get('schema_version')!r}; "
                       "esperado 2")
     if modo_de(plan) != MODE:
-        faltas.append(f"`mode` é {modo_de(plan)!r}, não '{MODE}' — este script "
-                      "só escreve e valida fila; ondas são do /maestro:program-plan")
+        # Para AQUI de propósito: continuar listando lacunas de fila num
+        # documento que não é fila manda consertar a coisa errada — o dono
+        # leria "a fila não tem itens" sobre um plano de ondas perfeitamente
+        # válido e iria mexer nele.
+        return [f"`mode` é {modo_de(plan)!r}, não '{MODE}' — este script só "
+                "escreve e valida fila; ondas são do /maestro:program-plan, e "
+                "quem as executa é o /maestro:run"]
     if plan.get("schema_version") == 1 and plan.get("mode") == MODE:
         faltas.append("um plano v1 não pode declarar 'single-track': o modo não "
                       "existia lá. Suba `schema_version` para 2")

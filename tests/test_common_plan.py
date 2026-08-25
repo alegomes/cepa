@@ -270,6 +270,17 @@ def test_validate_recusa_plano_de_ondas(base):
     check("validate recusa um documento de ondas", r.returncode == 2)
     check("e diz de quem é esse documento",
           "/maestro:program-plan" in r.stderr, r.stderr)
+    # continuar listando lacunas de fila num documento que não é fila manda
+    # consertar a coisa errada: o dono leria "a fila não tem itens" sobre um
+    # plano de ondas perfeitamente válido e iria mexer nele.
+    check("para na primeira lacuna e não reclama de campo de fila",
+          "1 lacuna" in r.stderr and "nenhum item" not in r.stderr, r.stderr)
+
+    v1 = d / "v1.yaml"
+    v1.write_text("program: legado\nwaves: []\n")
+    r = run(d, "validate", str(v1))
+    check("um plano v1 (sem `mode`) também é lido como ondas, não como fila vazia",
+          r.returncode == 2 and "nenhum item" not in r.stderr, r.stderr)
 
 
 # ── contrato de prosa do comando ─────────────────────────────────────────────
