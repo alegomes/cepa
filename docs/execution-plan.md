@@ -218,14 +218,42 @@ The other one — **who writes the plan in a repo with no tracker** — was answ
 on 2026-08-24: a new `/common:plan <name>`, the single writer of the
 `single-track` file, fed by `--from-spec`, by `--from-jira` (where
 `/board-flow:triage` classifies and hands back the order instead of writing the
-file itself), or dictated by hand. Design approved by the owner, not yet built;
-the card in `BACKLOG.md` ("Cinco portas de planejamento") holds the full shape
-and what it costs.
+file itself), or dictated by hand. The card in `BACKLOG.md` ("Cinco portas de
+planejamento") holds the full shape and what it costs.
+
+**Stage 1 is built** (2026-08-24): `/common:plan` with `--from-spec` and the
+hand-dictated queue, plus `common/bin/cepa-plan` — the mechanical writer, so the
+refusals are code rather than prose. `--from-jira` is stage 2 and is not built,
+so a board-fed queue is still `/board-flow:triage`'s job; it keeps writing the
+file until that stage lands.
+
+### Who may write the queue, and what the writer refuses
+
+`cepa-plan` exists because the losses this document is about are all silent
+ones, and a `.md` telling the model to check the `why` before writing is exactly
+the kind of instruction that erodes without anyone noticing. It refuses an empty
+`why` (the queue would keep the order and lose its criterion — the one thing a
+tracker already failed to keep), a duplicate `id`, a `blocked_by` pointing at an
+item that isn't in the queue, and a blocking cycle, which is the nastiest of the
+four: with two items blocking each other nothing is ever a candidate, so
+`/common:next` reports the queue as finished rather than as stuck.
+
+It is also the mirror of `maestro-programs --check-name`. Both planners write
+into the same directory and the program name is the caller's free choice, so
+each side refuses to overwrite the other's document: waves never overwrite a
+queue, and a queue never overwrites waves.
+
+On a rewrite — repriorising is normal — the new list rules the order, the
+`title` and the `why`, which are planning decisions; the file on disk rules
+`status` and any OPEN `human_pending`, which came from execution. That second
+one matters more than it looks: only the human closes a `human_pending`, and a
+freshly planned list carries `null` in every item, so taking it literally would
+erase the debt at the exact moment someone is re-reading the queue.
 
 ## See also
 
 - [`common/plan-schema.yaml`](../common/plan-schema.yaml) — the annotated schema, both modes
-- [commands.md](commands.md) — `/common:next`, `/board-flow:triage`
+- [commands.md](commands.md) — `/common:plan` (the writer), `/common:next`, `/board-flow:triage`
 - [board-flow.md](board-flow.md) — the tracker half: config, Implementation Summary contract
 - [maestro.md](maestro.md) — the `parallel-waves` sibling
 - [handoff.md](handoff.md) — resuming *this* line of work (the plan handles the queue *around* it)
