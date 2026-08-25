@@ -283,6 +283,92 @@ def test_validate_recusa_plano_de_ondas(base):
           r.returncode == 2 and "nenhum item" not in r.stderr, r.stderr)
 
 
+SPEC_FIXTURE = """\
+# Especificação: exportar relatório
+
+**Status:** pronta-para-construir
+**Aberta em:** 2026-08-24            **Fechada em:** 2026-08-24
+
+## Problema
+Ninguém consegue exportar.
+
+## Critérios de sucesso
+
+### CS-1: o endpoint devolve o arquivo
+**Superfície:** http
+**Teste vermelho:** hoje `GET /relatorios/1/export` devolve 404 porque a rota
+não existe; passará quando devolver 200 com o CSV no corpo.
+
+### CS-2: a exportação registra quem pediu
+**Superfície:** domain
+**Teste vermelho:** hoje nada grava o solicitante.
+
+## Perguntas em aberto
+
+## Decidido sem perguntar
+- nada
+"""
+
+SPEC_RASCUNHO = SPEC_FIXTURE.replace("**Status:** pronta-para-construir",
+                                     "**Status:** rascunho").replace(
+    "## Perguntas em aberto\n", "## Perguntas em aberto\n- [ ] qual formato?\n")
+
+
+def test_from_spec_le_os_criterios(base):
+    """A conversão spec -> itens é CÓDIGO, não promessa de prompt.
+
+    O auditor de completude pegou isto em 2026-08-24: enquanto `--from-spec`
+    existia só como parágrafo de instrução no plan.md, o único teste possível
+    era grepar a prosa — ou seja, provar que o comando PROMETE herdar a ordem,
+    nunca que uma execução produz a fila prometida.
+    """
+    d = repo_git(base, "spec")
+    sp = d / "spec.md"
+    sp.write_text(SPEC_FIXTURE, encoding="utf-8")
+
+    r = run(d, "from-spec", str(sp))
+    check("lê a spec e devolve itens", r.returncode == 0, r.stderr)
+    itens = json.loads(r.stdout)
+    check("um item por critério de sucesso", len(itens) == 2, str(itens))
+    check("a ORDEM é a do texto", [i["id"] for i in itens] == ["CS-1", "CS-2"])
+    check("o título é o do critério",
+          itens[0]["title"] == "o endpoint devolve o arquivo", itens[0]["title"])
+    check("o `why` DIZ que a ordem foi herdada",
+          all("ninguém priorizou os critérios entre si" in i["why"] for i in itens),
+          "sem isso a fila apresenta como decisão uma ordem que ninguém tomou")
+    check("o `why` carrega a superfície declarada na spec",
+          "http" in itens[0]["why"] and "domain" in itens[1]["why"])
+    check("o `why` carrega o teste vermelho INTEIRO, não a primeira linha",
+          "passará quando devolver 200 com o CSV no corpo" in itens[0]["why"],
+          "campo cortado no meio da oração parece texto completo")
+    check("nasce sem rota humana a cobrar",
+          all(i["human_pending"] is None for i in itens))
+
+    r = run(d, "write", "daspec", "--from-spec", str(sp), "--repo", ".")
+    check("write --from-spec grava a fila", r.returncode == 0, r.stderr)
+    plan = plano_de(d, "daspec")
+    check("a fila gravada tem um item por critério, na ordem do texto",
+          [i["id"] for i in plan["items"]] == ["CS-1", "CS-2"])
+    check("a fonte registrada aponta o arquivo da spec",
+          "spec.md" in plan["source"], plan["source"])
+
+
+def test_from_spec_avisa_rascunho_e_recusa_vazia(base):
+    d = repo_git(base, "spec-ruim")
+    sp = d / "rascunho.md"
+    sp.write_text(SPEC_RASCUNHO, encoding="utf-8")
+    r = run(d, "from-spec", str(sp))
+    check("aceita a spec em rascunho mas AVISA", r.returncode == 0, r.stderr)
+    check("o aviso nomeia o status e a pergunta em aberto",
+          "rascunho" in r.stderr and "aberto" in r.stderr, r.stderr)
+
+    vazia = d / "vazia.md"
+    vazia.write_text("# Especificação: nada\n\n**Status:** rascunho\n", encoding="utf-8")
+    r = run(d, "from-spec", str(vazia))
+    check("recusa uma spec sem nenhum critério de sucesso", r.returncode == 2)
+    check("e diz o que faltou", "CS-" in r.stderr, r.stderr)
+
+
 # ── contrato de prosa do comando ─────────────────────────────────────────────
 
 def flat(txt):
@@ -306,6 +392,9 @@ def test_contrato_do_comando(_base):
           "por fora do script nenhuma das recusas acontece")
     check("proíbe inventar ordem e `why`",
           "Nunca inventa ordem nem `why`" in f)
+    check("manda a leitura da spec passar pelo `from-spec` (não pelos seus olhos)",
+          "cepa-plan from-spec" in f,
+          "leitura no olho não deixa evidência: só provaria que o comando promete")
     check("manda dizer quando a ordem foi HERDADA do texto da spec",
           "herdou" in f and "herdad" in f.lower(),
           "a preferência registrada no desenho: herdar e dizer que herdou")
@@ -336,7 +425,9 @@ def main():
                    test_recusa_id_repetido, test_colisao_com_ondas,
                    test_reescrita_preserva_execucao, test_item_sumido_nao_some_calado,
                    test_raiz_e_a_do_clone_principal, test_dry_run_nao_grava,
-                   test_validate_recusa_plano_de_ondas, test_contrato_do_comando):
+                   test_validate_recusa_plano_de_ondas, test_from_spec_le_os_criterios,
+                   test_from_spec_avisa_rascunho_e_recusa_vazia,
+                   test_contrato_do_comando):
             print(f"\n{fn.__name__}")
             fn(base)
     print()

@@ -107,20 +107,34 @@ repriorizar — siga, sabendo que a fila de lá vai ser fundida no passo 4.
 
 #### Com `--from-spec`
 
-Leia `docs/spec/<slug>.md`. **Um item por critério de sucesso** (`### CS-N`), na
-ordem em que aparecem no texto.
+**A leitura da spec é mecânica**, não sua:
+
+```
+python3 common/bin/cepa-plan from-spec docs/spec/<slug>.md
+```
+
+Ele devolve a lista de itens em JSON — **um item por critério de sucesso**
+(`### CS-N`), na ordem em que aparecem no texto — e avisa no stderr quando a
+spec ainda está em rascunho, quando sobrou pergunta `- [ ]` ou quando algum
+critério não declara **Teste vermelho:**. Não é enfeite que isso seja código: a
+frase que registra a herança da ordem precisa aparecer no arquivo gravado, e
+uma instrução em prosa só prova que o comando PROMETE escrevê-la.
+
+O que sai de lá é rascunho para você revisar com o dono, não resultado final:
 
 - `id` — `CS-1`, `CS-2`… ou o slug do critério; o que importa é ser estável, é
   por ele que o `blocked_by` aponta.
 - `title` — o critério em termos observáveis, a linha do próprio `### CS-N`.
-- `why` — sai do que a especificação já escreveu: a **Superfície** onde o
-  critério é observável, o **Teste vermelho** declarado, e o que na seção
-  Problema/Escopo põe aquele critério antes dos outros. Se o texto não disser
-  nada sobre por que ele vem antes, o `why` honesto é **"herdado da ordem do
-  texto da especificação; ninguém priorizou os critérios entre si"** — e o
-  relatório repete isso em voz alta.
-- `blocked_by` — só onde a spec declarar dependência entre critérios. Não
-  deduza dependência de dois critérios tocarem o mesmo arquivo.
+- `why` — o script monta com o que a especificação já escreveu: a
+  **Superfície** onde o critério é observável, o **Teste vermelho** declarado, e
+  a frase que registra a herança — **"herdado da ordem do texto da
+  especificação; ninguém priorizou os critérios entre si"**. Onde a seção
+  Problema/Escopo disser por que aquele critério vem antes dos outros, troque a
+  frase de herança por esse motivo, que é melhor. O relatório repete em voz alta
+  o que ficou herdado.
+- `blocked_by` — o script devolve sempre vazio: dependência entre critérios não
+  se lê do texto. Acrescente só onde a spec declarar uma, e não deduza
+  dependência de dois critérios tocarem o mesmo arquivo.
 - `human_pending` — `null`. Na hora de planejar ainda não existe rota a cobrar;
   o campo é preenchido depois, quando o item fecha e o Implementation Summary
   diz qual é a rota de validação humana.
@@ -168,6 +182,9 @@ Sempre. Rode com `--dry-run` e mostre a fila em três colunas — posição, ite
 python3 common/bin/cepa-plan write <nome> \
   --items <arquivo.json> --source "<de onde veio>" --quando <YYYY-MM-DD> --repo .
 ```
+
+Quando nada mudou no que o `from-spec` devolveu, `--from-spec <arquivo>` faz as
+duas coisas de uma vez, no lugar do `--items`.
 
 Escreva os itens num arquivo JSON temporário (ou mande por stdin com `-`). O
 script:

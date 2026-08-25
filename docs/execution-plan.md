@@ -223,7 +223,11 @@ planejamento") holds the full shape and what it costs.
 
 **Stage 1 is built** (2026-08-24): `/common:plan` with `--from-spec` and the
 hand-dictated queue, plus `common/bin/cepa-plan` — the mechanical writer, so the
-refusals are code rather than prose. `--from-jira` is stage 2 and is not built,
+refusals are code rather than prose. Reading the specification is mechanical too
+(`cepa-plan from-spec`, one item per `### CS-N`, in the order of the text): while
+it was only a paragraph of instruction, the only possible test was a grep over
+that paragraph, which proves the command *promises* to inherit the order and
+never that a run produces the queue it promised. `--from-jira` is stage 2 and is not built,
 so a board-fed queue is still `/board-flow:triage`'s job; it keeps writing the
 file until that stage lands.
 

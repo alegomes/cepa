@@ -23,6 +23,15 @@ Subcomandos:
       replanejar); 3 = colisão com um plano de ONDAS — gravar a fila ali apaga
       as ondas sem uma palavra.
 
+  cepa-plan from-spec <docs/spec/slug.md> [--json]
+      Lê uma especificação do /common:spec e devolve a lista de itens (JSON),
+      um por critério de sucesso `### CS-N`, NA ORDEM DO TEXTO. Não grava nada
+      — quem grava é o `write`, que também aceita `--from-spec` direto.
+      O `why` de cada item é montado do que a spec já escreveu (Superfície e
+      Teste vermelho) e, quando o texto não diz por que aquele critério vem
+      antes dos outros, carrega a frase que registra a herança em vez de um
+      critério inventado. Exit 2 = a spec não tem critério nenhum.
+
   cepa-plan validate <plan.yaml>
       As checagens abaixo sobre um arquivo que já está no disco.
       Exit 0 = válido; 2 = inválido, com as lacunas nomeadas.
@@ -73,6 +82,7 @@ no relatório.
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -341,6 +351,84 @@ def carrega_itens(origem):
     return dados, None
 
 
+# ── leitura de uma especificação do /common:spec ─────────────────────────────
+
+HERDADO = ("herdado da ordem do texto da especificação; ninguém priorizou os "
+           "critérios entre si")
+
+RE_CRITERIO = re.compile(r"^###\s+(CS-\d+)\s*:\s*(.+?)\s*$", re.M)
+# O campo pode ocupar VÁRIAS linhas — um "Teste vermelho" real costuma ser uma
+# frase inteira quebrada em três linhas. Capturar só a primeira produzia um
+# `why` cortado no meio de uma oração, que é pior que não ter o campo: parece
+# texto completo. Vai até a próxima linha que abre outro campo, um heading, ou
+# a linha em branco que fecha o parágrafo.
+RE_CAMPO = re.compile(
+    r"^\*\*(Superfície|Teste vermelho)[:]?\*\*[:]?[ \t]*(.*?)"
+    r"(?=\n[ \t]*\n|\n\*\*|\n#{2,}|\Z)", re.M | re.S)
+
+
+def itens_de_spec(texto):
+    """(itens, avisos). Um item por `### CS-N`, na ordem em que aparecem.
+
+    A ordem é a do texto e o `why` DIZ isso quando a spec não deu motivo de
+    posição — a preferência registrada no desenho. Inventar aqui uma prioridade
+    que ninguém declarou seria fabricar decisão, que é justamente o que este
+    documento existe para não fazer.
+    """
+    avisos = []
+    m = re.search(r"^\*\*Status:\*\*\s*(\S+)", texto, re.M)
+    status = m.group(1) if m else None
+    if status != "pronta-para-construir":
+        avisos.append(f"a especificação está com `Status: {status}` — só "
+                      "`pronta-para-construir` passou pelo crivo do /common:spec "
+                      "(toda superfície observável e todo teste vermelho "
+                      "declarados)")
+    abertas = len(re.findall(r"^-\s+\[ \]", texto, re.M))
+    if abertas:
+        avisos.append(f"{abertas} pergunta(s) ainda em aberto na spec — um "
+                      "critério cuja pergunta não foi respondida vira item de "
+                      "fila que ninguém sabe quando terminou")
+
+    achados = list(RE_CRITERIO.finditer(texto))
+    itens = []
+    for i, m in enumerate(achados):
+        corpo = texto[m.end():achados[i + 1].start() if i + 1 < len(achados) else len(texto)]
+        campos = {k: " ".join(v.split()) for k, v in RE_CAMPO.findall(corpo)}
+        pedacos = [HERDADO]
+        if campos.get("Superfície"):
+            pedacos.append(f"superfície onde se observa: {campos['Superfície']}")
+        if campos.get("Teste vermelho"):
+            pedacos.append(f"teste vermelho declarado: {campos['Teste vermelho']}")
+        else:
+            avisos.append(f"{m.group(1)} não declara **Teste vermelho:** — o "
+                          "item nasce sem a frase que diz quando ele terminou")
+        itens.append({
+            "id": m.group(1),
+            "title": m.group(2),
+            "why": " · ".join(pedacos),
+            "status": "pending",
+            "blocked_by": [],
+            "human_pending": None,
+        })
+    return itens, avisos
+
+
+def cmd_from_spec(caminho, como_json=True):
+    p = Path(caminho)
+    if not p.is_file():
+        print(f"{p} não existe", file=sys.stderr)
+        return 2
+    itens, avisos = itens_de_spec(p.read_text(encoding="utf-8"))
+    for a in avisos:
+        print(f"aviso: {a}", file=sys.stderr)
+    if not itens:
+        print(f"{p} não tem nenhum critério de sucesso (`### CS-N: ...`) — não "
+              "há fila a escrever a partir dela", file=sys.stderr)
+        return 2
+    print(json.dumps(itens, ensure_ascii=False, indent=2) if como_json else itens)
+    return 0
+
+
 # ── subcomandos ──────────────────────────────────────────────────────────────
 
 def cmd_check_name(raiz, nome):
@@ -387,7 +475,21 @@ def cmd_validate(caminho):
 
 
 def cmd_write(raiz, a):
-    itens, erro = carrega_itens(a.items)
+    if a.from_spec:
+        sp = Path(a.from_spec)
+        if not sp.is_file():
+            print(f"{sp} não existe", file=sys.stderr)
+            return 2
+        itens, avisos = itens_de_spec(sp.read_text(encoding="utf-8"))
+        for aviso in avisos:
+            print(f"aviso: {aviso}", file=sys.stderr)
+        if not itens:
+            print(f"{sp} não tem nenhum critério de sucesso (`### CS-N: ...`)",
+                  file=sys.stderr)
+            return 2
+        erro = None
+    else:
+        itens, erro = carrega_itens(a.items)
     if erro:
         print(erro, file=sys.stderr)
         return 2
@@ -445,7 +547,9 @@ def cmd_write(raiz, a):
                 d["status"] = "dropped"
                 fundidos.append(d)
 
-    fonte = a.source or fonte_antiga or "ditada à mão em /common:plan"
+    fonte = a.source or (
+        f"{a.from_spec} ({len(itens)} critérios de sucesso; ordem herdada do texto)"
+        if a.from_spec else None) or fonte_antiga or "ditada à mão em /common:plan"
     texto = serializa(a.nome, fonte, fundidos, a.quando or "(data não informada)")
 
     if a.dry_run:
@@ -484,10 +588,17 @@ def main(argv=None):
     v = sub.add_parser("validate", help="valida um plan.yaml no disco")
     v.add_argument("plano")
 
+    s = sub.add_parser("from-spec",
+                       help="lê uma spec do /common:spec e devolve os itens (JSON)")
+    s.add_argument("spec")
+
     w = sub.add_parser("write", help="grava a fila")
     w.add_argument("nome")
-    w.add_argument("--items", required=True,
+    w.add_argument("--items",
                    help="arquivo JSON/YAML com a lista de itens, ou '-' para stdin")
+    w.add_argument("--from-spec", metavar="ARQUIVO",
+                   help="lê os itens de uma especificação do /common:spec, um "
+                        "por critério de sucesso, na ordem do texto")
     w.add_argument("--source", help="de onde as demandas vieram")
     w.add_argument("--quando", help="data a registrar no cabeçalho (YYYY-MM-DD)")
     w.add_argument("--repo", default=".")
@@ -501,6 +612,10 @@ def main(argv=None):
 
     if a.cmd == "validate":
         return cmd_validate(a.plano)
+    if a.cmd == "from-spec":
+        return cmd_from_spec(a.spec)
+    if a.cmd == "write" and not (a.items or a.from_spec):
+        ap.error("write precisa de --items ou --from-spec")
 
     raiz = raiz_principal(a.repo)
     if raiz is None:
