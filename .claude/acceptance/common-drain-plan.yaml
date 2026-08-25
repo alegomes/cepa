@@ -1,0 +1,194 @@
+card: common-drain-plan
+title: "/common:drain-plan <nome> — executa a fila single-track na ordem dela"
+status: complete
+diff: "4bc68472856a9726e24d11af6b08dd73882e8098..HEAD (171420c, 8b39857, 1b2d855)"
+source: ".claude/programs/cepa/plan.yaml (common-drain-plan) + BACKLOG.md
+  'Não há como executar em lote um plano single-track na ordem do plano'"
+precedent: "mesma régua de altitude aplicada em common-plan-etapa1/etapa2
+  (.claude/acceptance/common-plan-etapa1.yaml, common-plan-etapa2.yaml): a
+  superfície `cli` que conta como demonstrada é o binário determinístico
+  (`cepa-plan`), exercitado via subprocess real contra fixtures escritos
+  pelo próprio `write` — não o grep da prosa do `.md` em si, que só prova
+  promessa. A checagem de prosa (contrato do comando, `test_contrato_do_
+  comando`) é aceita como complemento SÓ para a parte do critério que é
+  sobre o TEXTO exposto ao operador (ex.: 'não fala com tracker nenhum'),
+  nunca para a parte executável (montar o lote, reservar, dar desfecho)."
+
+criteria:
+  - id: AC1
+    text: >
+      Existe um `/common:drain-plan <nome>` que executa a fila
+      `single-track` NA ORDEM DELA, sem exigir tracker (nada de Jira em
+      nenhum caminho).
+    altitude: cli
+    surface: "a montagem do lote na ordem do arquivo: `cepa-plan queue
+      <nome> --repo . --json`, que lê `plan.yaml` e devolve `batch` na
+      ordem da lista, nunca reordenado. `/common:drain-plan` é o comando
+      de agente que chama esse binário; o binário é a parte determinística
+      e testável."
+    test: "tests/test_common_drain_plan.py::
+      test_lote_segue_a_ordem_da_fila_e_o_teto (ordem preservada e teto),
+      test_item_done_ou_dropped_nao_entra_e_nao_para,
+      test_contrato_do_comando (ausência de tracker: 'declara, como
+      restrição, que não fala com tracker nenhum' e 'não manda delegar ao
+      atlassian-expert')"
+    layer: "cli (subprocess real do binário cepa-plan, fila escrita pelo
+      próprio `cepa-plan write` em repo git temporário — não YAML
+      fabricado à mão) + grep de prosa só para a promessa textual de
+      trackerless, que é o mesmo padrão aceito nas etapas 1 e 2"
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 'all green' (rodei
+      pessoalmente); casos relevantes: 'monta o lote'; 'o lote sai NA
+      ORDEM da fila, não reordenado'; 'item já fechado não volta para o
+      lote'; 'declara, como restrição, que não fala com tracker nenhum';
+      'e não manda delegar ao agente que escreve no Jira'. exit 0."
+    verdict: complete
+    note: >
+      Grep confirmado à mão em common/commands/drain-plan.md: nenhuma
+      menção a Jira, board, atlassian-expert ou transição de card em
+      caminho nenhum do workflow — só a menção comparativa ao
+      /board-flow:drain para explicar por que ele não serve. A parte
+      "delegação de agente para agente executar de fato" continua prosa
+      (mesma lacuna estrutural aceita em etapa1/etapa2: não há como testar
+      ponta a ponta um comando conduzido por um agente sem rodar o próprio
+      agente), coberta por test_contrato_do_comando.
+
+  - id: AC2
+    text: >
+      Copiado do `/board-flow:drain`: parar no primeiro item BLOQUEADO e o
+      teto `--max`.
+    altitude: cli
+    surface: "`monta_lote()` em common/bin/cepa-plan: anda a lista do
+      início e para no primeiro item cujo `blocked_by` não está satisfeito
+      dentro do próprio lote (`bloqueado`), ou quando `--max` esgota
+      (`teto`) — nunca pula um item travado para alcançar o de baixo."
+    test: "tests/test_common_drain_plan.py::
+      test_bloqueio_para_o_lote_mas_dependencia_interna_nao (para no
+      primeiro bloqueado, não pula; dependência satisfeita DENTRO do lote
+      não bloqueia),
+      test_lote_segue_a_ordem_da_fila_e_o_teto (o teto --max para o lote e
+      nomeia o item que ficaria de fora)"
+    layer: "cli (subprocess real, fixtures com blocked_by cruzado)"
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> ok 'o teto para o
+      lote'; ok 'a parada NOMEIA o item que ficou de fora'; ok 'para no
+      primeiro item bloqueado por algo que vem DEPOIS'; ok 'nomeia o
+      bloqueador'; ok 'não pula o bloqueado para alcançar o de baixo —
+      isso reordenaria a fila em silêncio'; 'all green'. Rodei
+      pessoalmente, exit 0."
+    verdict: complete
+
+  - id: AC3
+    text: >
+      A pergunta que sobrava — item com `human_pending` aberto deve parar
+      o lote? — está respondida e IMPLEMENTADA: para.
+    altitude: cli
+    surface: "`monta_lote()`: item com `human_pending` não-nulo interrompe
+      a montagem do lote com `stop.reason == 'human_pending'`, repetindo a
+      rota verbatim no `detail`. `cepa-plan start` também recusa reservar
+      um item assim (defesa em profundidade, caso o lote tenha sido
+      montado antes de a rota abrir)."
+    test: "tests/test_common_drain_plan.py::
+      test_human_pending_aberto_para_o_lote,
+      test_start_recusa_item_fechado_e_item_com_rota_aberta"
+    layer: "cli (subprocess real)"
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> ok 'o lote pega o que
+      vem antes da dívida'; ok 'para na rota humana aberta'; ok 'a parada
+      REPETE a rota, em vez de só dizer que existe'; ok 'não passa por
+      cima de rota humana aberta'; ok 'a recusa repete a rota'; 'all
+      green'. Rodei pessoalmente, exit 0."
+    verdict: complete
+
+  - id: AC4
+    text: >
+      As regras mecânicas (o que é executável agora, onde o lote para,
+      como o item é reservado e como o desfecho é registrado) são CÓDIGO
+      com teste, não prosa de comando — mesmo padrão que as etapas 1 e 2
+      adotaram (`cepa-plan from-spec` / `from-triage`).
+    altitude: cli
+    surface: "três subcomandos novos em common/bin/cepa-plan: `queue`
+      (monta_lote), `start` (cmd_start — reserva pending→in_progress,
+      recusa reserva dupla, item não-pending e rota humana aberta),
+      `finish` (cmd_finish — exige --evidence não-vazia, abre human_pending
+      mas nunca fecha, preserva cabeçalho manual e campos fora do schema)."
+    test: "tests/test_common_drain_plan.py — 12 casos de comportamento
+      cobrindo queue/start/finish (test_lote_segue_a_ordem_da_fila_e_o_teto,
+      test_item_done_ou_dropped_nao_entra_e_nao_para,
+      test_human_pending_aberto_para_o_lote,
+      test_bloqueio_para_o_lote_mas_dependencia_interna_nao,
+      test_bloqueador_dropped_avisa_em_vez_de_prender_para_sempre,
+      test_in_progress_para_o_lote,
+      test_queue_recusa_ondas_e_fila_inexistente,
+      test_start_reserva_e_recusa_reserva_dupla,
+      test_start_recusa_item_fechado_e_item_com_rota_aberta,
+      test_finish_exige_evidencia,
+      test_finish_abre_divida_mas_nunca_fecha,
+      test_marcacao_preserva_cabecalho_e_campos_extras) + 1 caso de
+      contrato de prosa (test_contrato_do_comando) para a parte que só
+      pode ser texto (o comando manda usar o binário em vez do olho)."
+    layer: "cli (subprocess real do binário, sem mock; cada teste escreve
+      a fila pelo próprio `cepa-plan write` e relê do disco depois de
+      start/finish, nunca fabrica YAML nem confere estado em memória)"
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 13/13 funções, 'all
+      green' (rodei pessoalmente). bash tests/run-all.sh (suíte inteira,
+      50 arquivos) -> 'tudo verde', sem regressão nos vizinhos
+      (test_common_plan.py incluído). Rodei pessoalmente, exit 0 nos
+      dois."
+    verdict: complete
+
+  - id: AC5
+    text: "O comando recusa um plano `parallel-waves`."
+    altitude: cli
+    surface: "`cmd_queue()`: se `modo_de(plan) != 'single-track'`, devolve
+      exit 3 com a mensagem apontando para `/maestro:run` — não tenta
+      linearizar as ondas. É a checagem de entrada do workflow do
+      /common:drain-plan (passo 1); start/finish (abre_plano_para_marcar)
+      têm a mesma checagem como defesa em profundidade, mas não são
+      alcançados nesse fluxo porque o passo 1 já para o comando antes de
+      chegar lá."
+    test: "tests/test_common_drain_plan.py::
+      test_queue_recusa_ondas_e_fila_inexistente"
+    layer: "cli (subprocess real contra um plan.yaml de ondas escrito à
+      mão só para este teste, formato mode: parallel-waves)"
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> ok 'recusa montar
+      lote sobre um plano de ondas'; ok 'manda para o executor certo'.
+      Rodei pessoalmente, exit 0."
+    verdict: complete
+    note: >
+      A recusa em `start`/`finish` (abre_plano_para_marcar) não tem teste
+      dedicado com um plano parallel-waves — mas o workflow documentado em
+      drain-plan.md nunca chama start/finish sem passar primeiro por
+      `queue`, que já recusa com exit 3 no passo 1. Não registro isto como
+      gap: é defesa em profundidade não exercitada, não a superfície que o
+      critério nomeia.
+
+summary: >
+  A etapa 3 de "um escritor, três fontes" (BACKLOG.md) está construída na
+  mesma altitude que fechou as etapas 1 e 2: as quatro regras mecânicas do
+  lote (o que é executável agora, onde ele para, como o item é reservado,
+  como o desfecho é registrado) vivem em código real — três subcomandos
+  novos de `common/bin/cepa-plan` (`queue`, `start`, `finish`) — exercitado
+  via subprocess real contra filas escritas pelo próprio escritor mecânico,
+  nunca YAML fabricado à mão nem estado inspecionado em memória. O comando
+  `/common:drain-plan` (prosa de agente, como todo comando deste harness)
+  não fala com tracker nenhum em caminho nenhum, copia do
+  `/board-flow:drain` a parada no primeiro item travado e o teto `--max`,
+  responde e implementa a pergunta que a etapa deixou em aberto
+  (`human_pending` aberto PARA o lote, decisão do dono em 2026-08-25) e
+  recusa um plano `parallel-waves` na porta de entrada (`cepa-plan queue`,
+  exit 3).
+
+  Rodei pessoalmente: `python3 tests/test_common_drain_plan.py` -> '13/13
+  funções, all green'; `bash tests/run-all.sh` (suíte inteira, 50 arquivos,
+  família script + pytest) -> 'tudo verde', sem regressão em nenhum
+  vizinho (inclusive test_common_plan.py, que cobre as etapas 1 e 2). Também
+  conferi manualmente o diff de common/commands/plan.md (a referência
+  'ainda não construída' virou 'construída em 2026-08-25'), docs/commands.md
+  (drain-plan documentado com a mesma tabela dos outros comandos) e o bump
+  de versão do common/.claude-plugin/plugin.json (2.5.0 -> 2.6.0), coerentes
+  com "a fila ganhou um executor".
+
+gaps: []
