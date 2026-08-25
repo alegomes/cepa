@@ -21,6 +21,7 @@ common/expertise/expertise
 # (no-build, programs/**) segue rastreado de propósito.
 .claude/doctor-last-run
 .claude/last-build.json
+.claude/loop-state.json
 .claude/session-mode
 .claude/sessions/
 .claude/handoffs/
