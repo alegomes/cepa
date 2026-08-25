@@ -29,7 +29,9 @@ topology is wired.
 
 For running parallel `claude` windows on one repo without collisions. The `cepa`
 launcher auto-isolates a session into its own worktree when another live session
-already occupies the tree; these commands manage that lifecycle by hand.
+already occupies the tree; these commands manage that lifecycle by hand. The
+launcher also takes a custom system prompt — `cepa --prompt <nome|caminho>`, or
+the `CEPA_PROMPT` default — see [system-prompt-customizado.md](system-prompt-customizado.md).
 
 | Command | Argument | What it does |
 |---|---|---|

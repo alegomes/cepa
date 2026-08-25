@@ -15,6 +15,19 @@
 #                        #   completion which Warp's own engine ignores
 #   cepa --resume        # any other args pass straight through to claude
 #
+#   cepa --prompt smartass            # anexa um system prompt customizado
+#   cepa --prompt ~/prompts/x.md      # ...por caminho, ou por nome (ver abaixo)
+#   cepa --prompt-substitui base.md   # troca o system prompt INTEIRO (perigoso)
+#
+# System prompt customizado: `--prompt <nome|caminho>` lê um arquivo de texto e
+# o entrega ao claude via --append-system-prompt, ou seja, ele SOMA ao system
+# prompt padrão do Claude Code (que é o que ensina as ferramentas, os hooks e o
+# CLAUDE.md). `--prompt-substitui` usa --system-prompt e APAGA esse padrão —
+# só use com um prompt que se sustente sozinho. Um <nome> sem barra é procurado,
+# com e sem sufixo .md, em $CEPA_PROMPTS_HOME (default ~/.claude/cepa-prompts) e
+# em <repo>/.claude/prompts. Default persistente: CEPA_PROMPT=<nome|caminho>
+# (e CEPA_PROMPT_MODO=substitui para o modo destrutivo).
+#
 # Toda abertura passa por um preflight: o diagnóstico do harness roda (no
 # máximo uma vez a cada 12h por repo) já corrigindo o que é mecânico, para a
 # sessão nascer pronta em vez de você descobrir no meio da tarefa que o plugin
@@ -114,6 +127,49 @@ ask_orcamento() {
   printf '%s\n' "$_o"
 }
 
+# --- System prompt customizado ----------------------------------------------
+# Um diretório da biblioteca, com e sem o sufixo .md. Separado de
+# resolve_prompt só para o caminho com espaço no nome não quebrar a busca.
+_try() {
+  [ -d "$1" ] || return 1
+  [ -f "$1/$2" ] && { printf '%s\n' "$1/$2"; return 0; }
+  [ -f "$1/$2.md" ] && { printf '%s\n' "$1/$2.md"; return 0; }
+  return 1
+}
+
+# Resolve <nome|caminho> num arquivo legível e imprime o caminho. Um argumento
+# com barra (ou ~) é caminho e só ele é tentado — errar um caminho é erro de
+# quem digitou, não convite para procurar um homônimo na biblioteca. Um nome
+# solto é procurado, com e sem sufixo .md, na biblioteca do usuário
+# ($CEPA_PROMPTS_HOME, default ~/.claude/cepa-prompts) e na do repo
+# (<repo>/.claude/prompts), nessa ordem.
+resolve_prompt() {
+  _ref="$1"
+  case "$_ref" in
+    "~/"*) _ref="$HOME/${_ref#\~/}" ;;
+  esac
+  case "$_ref" in
+    */*)
+      [ -f "$_ref" ] && { printf '%s\n' "$_ref"; return 0; }
+      [ -f "$_ref.md" ] && { printf '%s\n' "$_ref.md"; return 0; }
+      return 1
+      ;;
+  esac
+  _repo=$(git rev-parse --show-toplevel 2>/dev/null || true)
+  _try "${CEPA_PROMPTS_HOME:-$HOME/.claude/cepa-prompts}" "$_ref" && return 0
+  [ -n "$_repo" ] && _try "$_repo/.claude/prompts" "$_ref" && return 0
+  return 1
+}
+
+# Erro de prompt é erro de digitação: recusa subir e diz onde procurou, em vez
+# de abrir a sessão calada sem o prompt que você pediu.
+prompt_erro() {
+  printf '✗ cepa: system prompt não encontrado: %s\n' "$1" >&2
+  printf '  procurei em: %s\n' \
+    "${CEPA_PROMPTS_HOME:-$HOME/.claude/cepa-prompts}, <repo>/.claude/prompts (e como caminho)" >&2
+  exit 2
+}
+
 # Todo caminho que lança o claude passa por aqui, para que o modo seja gravado
 # no diretório onde a sessão vai de fato rodar (raiz OU worktree isolada).
 launch_here() {
@@ -188,6 +244,8 @@ SLICE=""
 PICK=0
 MODO="${CEPA_MODO_DEFAULT:-}"
 ORCAMENTO=""
+PROMPT_REF="${CEPA_PROMPT:-}"
+PROMPT_MODO="${CEPA_PROMPT_MODO:-append}"
 while [ $# -gt 0 ]; do
   case "$1" in
     -m|--modo)
@@ -198,6 +256,15 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { printf '✗ cepa: --orcamento exige um valor\n' >&2; exit 2; }
       ORCAMENTO="$2"; shift 2 ;;
     --orcamento=*) ORCAMENTO="${1#--orcamento=}"; shift ;;
+    --prompt)
+      [ $# -ge 2 ] || { printf '✗ cepa: --prompt exige um valor\n' >&2; exit 2; }
+      PROMPT_REF="$2"; PROMPT_MODO="append"; shift 2 ;;
+    --prompt=*)    PROMPT_REF="${1#--prompt=}"; PROMPT_MODO="append"; shift ;;
+    --prompt-substitui)
+      [ $# -ge 2 ] || { printf '✗ cepa: --prompt-substitui exige um valor\n' >&2; exit 2; }
+      PROMPT_REF="$2"; PROMPT_MODO="substitui"; shift 2 ;;
+    --prompt-substitui=*)
+      PROMPT_REF="${1#--prompt-substitui=}"; PROMPT_MODO="substitui"; shift ;;
     -s|--slice)
       # A real slice name follows only if the next arg exists, is non-empty,
       # and isn't itself a flag. Otherwise `-s` means "let me pick one".
@@ -210,6 +277,25 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
+
+# System prompt customizado: vira flag do claude ANTES de qualquer caminho de
+# lançamento, para valer também quando o cepa se comporta como claude puro
+# (fora de repo) ou quando isola a sessão numa worktree.
+if [ -n "$PROMPT_REF" ]; then
+  case "$PROMPT_MODO" in
+    append)    PROMPT_FLAG="--append-system-prompt" ;;
+    substitui) PROMPT_FLAG="--system-prompt" ;;
+    *) printf '✗ cepa: CEPA_PROMPT_MODO inválido: %s (append|substitui)\n' \
+         "$PROMPT_MODO" >&2; exit 2 ;;
+  esac
+  PROMPT_FILE=$(resolve_prompt "$PROMPT_REF") || prompt_erro "$PROMPT_REF"
+  [ -s "$PROMPT_FILE" ] || {
+    printf '✗ cepa: system prompt vazio: %s\n' "$PROMPT_FILE" >&2
+    exit 2
+  }
+  set -- "$PROMPT_FLAG" "$(cat "$PROMPT_FILE")" "$@"
+  printf '◆ system prompt (%s): %s\n' "$PROMPT_MODO" "$PROMPT_FILE" >&2
+fi
 
 # Not a git repo, or can't find the helper → just be claude.
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || exec "$CLAUDE_BIN" "$@"
