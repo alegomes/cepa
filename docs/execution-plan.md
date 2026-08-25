@@ -111,6 +111,7 @@ The plan answers the question only if something asks it. Three moments do:
 | The order is being decided | [`/common:plan`](commands.md) | The single writer of the queue. From a spec, from a board (`--from-jira`, where [`/board-flow:triage`](commands.md) grooms the column by code evidence and hands back the order), or dictated by hand |
 | A card closes | `/board-flow:execute` · `/fix` · `/prove` | Close with **"And now?"** — the human route verbatim + the next unblocked item |
 | Mid-session, thread lost | [`/common:next`](commands.md) | Reconciles against the tracker (if any) and names **one** next step |
+| Several items are ready to run | [`/common:drain-plan`](commands.md) | Executes the queue **in its own order**, stopping at the first item it cannot resolve on its own |
 
 ### Writing it: `/common:plan`
 
@@ -248,8 +249,23 @@ into items. The same lesson as stage 1 decided the shape: the rules that say
 which bucket becomes a `pending` item (only `ready`; `implemented` belongs to
 the proof queue, `needs-refinement` stays in the backlog, `obsolete` is kept as
 `dropped` with its reason) were prose in `triage.md`, provable only by grepping
-the prose. Neither stage 3 (`/common:drain-plan`) nor stage 4
-(`--from-plan` on `/maestro:program-plan`) is built.
+the prose. **Stage 3 is built** (2026-08-25): `/common:drain-plan <name>` executes the
+queue in the order the queue keeps. Until then the only bulk executor was
+`/board-flow:drain`, whose source is the board column ordered by `priority and
+rank` — precisely the order this document exists to replace — so the owner wrote
+an order down and the only way to run it in bulk was one that ignored it. Which
+items are runnable *right now* is mechanical too (`cepa-plan queue`), for the
+same reason as stages 1 and 2: as prose, "respect the order" is provable only by
+grepping the prose. The batch walks the list from the top and **stops** at the
+first thing it cannot resolve alone — an open `human_pending` (the owner's call,
+2026-08-25: the next item usually builds on what that route validates), an item
+blocked by something outside the batch, one already `blocked` by an earlier run,
+one reserved by another session, or the `--max` ceiling. It never skips a stuck
+item to reach the one below, because that is reordering the queue in silence.
+Each item is reserved before it is touched (`cepa-plan start` — the trackerless
+equivalent of the claim `/board-flow:drain` posts on a card) and gets a named
+terminal outcome with evidence (`cepa-plan finish`). Stage 4 (`--from-plan` on
+`/maestro:program-plan`) is not built.
 
 ### Who may write the queue, and what the writer refuses
 
