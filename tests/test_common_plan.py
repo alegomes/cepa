@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Testes da etapa 1 de "um escritor, três fontes": /common:plan + cepa-plan.
+"""Testes das etapas 1 e 2 de "um escritor, três fontes": /common:plan + cepa-plan.
 
 Rode com `python3 tests/test_common_plan.py` (só precisa do PyYAML que o próprio
 script usa). Duas famílias, de propósito:
@@ -457,10 +457,23 @@ def test_contrato_do_comando(_base):
     check("não fecha `human_pending` de ninguém",
           "Não fecha `human_pending` de ninguém" in f,
           "lista que se fecha sozinha é decoração")
-    check("diz que `--from-jira` ainda não existe e para onde ir enquanto isso",
-          "`--from-jira` ainda não existe" in f and "/board-flow:triage" in f,
-          "sem isso o agente improvisa uma consulta ao Jira e a ordem sai da "
-          "coluna, não da classificação")
+    # Etapa 2: a flag existe. A guarda que importa deixou de ser "diga que não
+    # existe" e passou a ser "não consulte o Jira por conta própria" — o risco é
+    # o mesmo dos dois lados, uma fila cuja ordem saiu do rank do quadro.
+    check("manda a leitura do repasse passar pelo `from-triage`",
+          "cepa-plan from-triage" in f,
+          "leitura no olho não deixa evidência: só provaria que o comando promete")
+    check("proíbe montar a fila de uma consulta crua ao Jira",
+          "Nunca consulta o Jira direto" in f and "/board-flow:triage" in f,
+          "a ordem de uma fila vinda de board sai da CLASSIFICAÇÃO, não da "
+          "coluna — o rank do quadro é justamente a ordem que este documento "
+          "existe para substituir")
+    check("diz o que fazer quando falta board-flow ou board-flow.yaml",
+          "board-flow.yaml" in f and "não improvise" in f,
+          "sem saída nomeada o agente inventa uma consulta ao Jira")
+    check("diz que só card `ready` vira item da fila",
+          "só card `ready` vira item `pending`" in f,
+          "In Review pertence à fila de prova, não à de construção")
     check("aponta o consumidor da fila", "/common:next" in f)
     check("declara que não executa nada", "Não executa" in f)
 
@@ -470,6 +483,205 @@ def test_contrato_do_comando(_base):
     check("está no catálogo docs/commands.md", "`/common:plan`" in cat)
     plugin = (REPO / "common" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
     check("está na descrição do plugin common", "/plan" in plugin)
+
+
+# ── repasse de uma triagem (etapa 2) ─────────────────────────────────────────
+
+REPASSE_OK = {
+    "project_key": "WEGO",
+    "source_column": "Backlog",
+    "triaged_on": "2026-08-25",
+    "remaining_in_column": 12,
+    "cards": [
+        {"key": "WEGO-1235", "title": "hook estabilizado", "bucket": "ready",
+         "why": "destrava 1240 e 1237, que tocam o mesmo hook"},
+        {"key": "WEGO-1240", "title": "rota de validação humana", "bucket": "ready",
+         "why": "depende do hook do 1235", "blocked_by": ["WEGO-1235"]},
+        {"key": "WEGO-1234", "title": "cliente PlugSign", "bucket": "implemented"},
+        {"key": "WEGO-1236", "title": "dedup", "bucket": "obsolete",
+         "reason": "dedup de WEGO-1240"},
+        {"key": "WEGO-1238", "title": "vago", "bucket": "needs-refinement"},
+    ],
+}
+
+
+def repasse(d, dados, nome="repasse.json"):
+    p = Path(d) / nome
+    p.write_text(json.dumps(dados, ensure_ascii=False), encoding="utf-8")
+    return p
+
+
+def test_from_triage_so_ready_vira_item(base):
+    """A conversão triagem -> itens é CÓDIGO, pela mesma razão da etapa 1.
+
+    As regras exercitadas aqui viviam na prosa do `board-flow/commands/triage.md`
+    — "only → To Do cards become pending items", "Won't Do vira dropped, não
+    deleção", "sob --max, diga que a fila é um pedaço". Enquanto morarem só lá, o
+    único teste possível é grepar a instrução, que prova que o comando PROMETE
+    aplicá-las e nunca que uma execução as aplicou.
+    """
+    d = repo_git(base, "triagem")
+    r = run(d, "from-triage", str(repasse(d, REPASSE_OK)))
+    check("lê o repasse e devolve itens", r.returncode == 0, r.stderr)
+    itens = json.loads(r.stdout)
+
+    ids = [i["id"] for i in itens]
+    check("card `implemented` NÃO vira item da fila", "WEGO-1234" not in ids,
+          "In Review pertence à fila de prova; misturar manda construir o "
+          "que já está construído")
+    check("card `needs-refinement` NÃO vira item da fila", "WEGO-1238" not in ids)
+    check("e o aviso NOMEIA quem ficou de fora e para onde vai",
+          "WEGO-1234" in r.stderr and "prove-drain" in r.stderr, r.stderr)
+
+    check("a ORDEM é a que a triagem classificou",
+          ids == ["WEGO-1235", "WEGO-1240", "WEGO-1236"], str(ids))
+    check("card READY vira `pending`",
+          [i["status"] for i in itens[:2]] == ["pending", "pending"])
+    check("o `why` é o da triagem, não um inventado",
+          itens[0]["why"] == "destrava 1240 e 1237, que tocam o mesmo hook")
+    check("a dependência entre cards sobrevive",
+          itens[1]["blocked_by"] == ["WEGO-1235"])
+
+    obsoleto = itens[2]
+    check("card OBSOLETE fica na fila como `dropped`, não some",
+          obsoleto["status"] == "dropped",
+          "apagar faz a próxima varredura propor a mesma demanda de novo")
+    check("e carrega o motivo do descarte",
+          "dedup de WEGO-1240" in obsoleto["why"]
+          and obsoleto.get("evidence") == "dedup de WEGO-1240")
+
+    check("nasce sem rota humana a cobrar",
+          all(i["human_pending"] is None for i in itens))
+
+
+def test_from_triage_recusa_o_que_a_prosa_so_pedia(base):
+    d = repo_git(base, "triagem-ruim")
+
+    sem_why = {"cards": [{"key": "W-1", "title": "t", "bucket": "ready"}]}
+    r = run(d, "from-triage", str(repasse(d, sem_why, "a.json")))
+    check("recusa card READY sem `why`", r.returncode == 2)
+    check("e diz que a ordem sem critério é o que o Jira já guarda",
+          "W-1" in r.stderr and "inventar" in r.stderr, r.stderr)
+
+    sem_motivo = {"cards": [{"key": "W-1", "title": "t", "bucket": "ready", "why": "x"},
+                            {"key": "W-2", "title": "t", "bucket": "obsolete"}]}
+    r = run(d, "from-triage", str(repasse(d, sem_motivo, "b.json")))
+    check("recusa card OBSOLETE sem motivo", r.returncode == 2)
+    check("e nomeia o card", "W-2" in r.stderr, r.stderr)
+
+    na_grelha = {"cards": [{"key": "W-1", "title": "t", "bucket": "ready", "why": "x"},
+                           {"key": "W-2", "title": "t", "bucket": "needs-decision"}]}
+    r = run(d, "from-triage", str(repasse(d, na_grelha, "c.json")))
+    check("recusa card ainda parado em `needs-decision`", r.returncode == 2,
+          "a grelha do passo 6 não terminou, e a fila se leria como decidida")
+    check("e manda de volta para a grelha",
+          "W-2" in r.stderr and "grelha" in r.stderr, r.stderr)
+
+    balde_novo = {"cards": [{"key": "W-1", "title": "t", "bucket": "talvez", "why": "x"}]}
+    r = run(d, "from-triage", str(repasse(d, balde_novo, "d.json")))
+    check("recusa balde que a triagem não usa", r.returncode == 2,
+          "balde desconhecido ignorado em silêncio some com o card")
+    check("e lista os válidos", "ready" in r.stderr and "obsolete" in r.stderr)
+
+    vazio = {"cards": [{"key": "W-1", "title": "t", "bucket": "implemented"}]}
+    r = run(d, "from-triage", str(repasse(d, vazio, "e.json")))
+    check("recusa uma triagem que não deixou nada a enfileirar",
+          r.returncode == 2, r.stderr)
+
+
+def test_from_triage_dependencia_para_fora_da_fila(base):
+    """Depender de um card que foi para In Review não é id fantasma.
+
+    Recusar obrigaria o agente a apagar a informação à mão; deixar faria a
+    validação geral recusar a fila inteira por id inexistente. Sai do campo e é
+    DITO — sair calado é como uma dependência vira surpresa na execução.
+    """
+    d = repo_git(base, "dep-fora")
+    dados = {"cards": [
+        {"key": "W-1", "title": "t", "bucket": "ready", "why": "x",
+         "blocked_by": ["W-2"]},
+        {"key": "W-2", "title": "t", "bucket": "implemented"},
+    ]}
+    r = run(d, "from-triage", str(repasse(d, dados)))
+    check("não recusa a fila por causa dela", r.returncode == 0, r.stderr)
+    check("a dependência sai do `blocked_by`",
+          json.loads(r.stdout)[0]["blocked_by"] == [])
+    check("e o aviso nomeia os dois cards",
+          "W-1" in r.stderr and "W-2" in r.stderr, r.stderr)
+
+    fantasma = {"cards": [{"key": "W-1", "title": "t", "bucket": "ready", "why": "x",
+                           "blocked_by": ["W-9"]}]}
+    r = run(d, "from-triage", str(repasse(d, fantasma, "f.json")))
+    check("mas id que a triagem nunca viu segue sendo recusa",
+          r.returncode == 2 and "W-9" in r.stderr, r.stderr)
+
+
+def test_write_from_triage_grava_e_diz_que_e_parcial(base):
+    d = repo_git(base, "grava-triagem")
+    rp = repasse(d, REPASSE_OK)
+    r = run(d, "write", "WEGO", "--from-triage", str(rp), "--repo", ".",
+            "--quando", "2026-08-25")
+    check("write --from-triage grava a fila", r.returncode == 0, r.stderr)
+
+    plan = plano_de(d, "WEGO")
+    check("a fila gravada tem os itens na ordem da triagem",
+          [i["id"] for i in plan["items"]] == ["WEGO-1235", "WEGO-1240", "WEGO-1236"])
+    check("a fonte registra projeto, coluna e data",
+          all(x in plan["source"] for x in ("WEGO", "Backlog", "2026-08-25")),
+          plan["source"])
+    check("a fonte DIZ que a fila é um pedaço do quadro",
+          "PARCIAL" in plan["source"] and "12" in plan["source"],
+          "uma fila de 15 cards de 27 se lê, meses depois, como o quadro inteiro")
+    check("o cabeçalho lido a olho também carrega a parcialidade",
+          "PARCIAL" in (d / ".claude" / "programs" / "WEGO" / "plan.yaml"
+                        ).read_text(encoding="utf-8"))
+
+    # e a re-triagem não pode apagar o que a execução escreveu
+    p = d / ".claude" / "programs" / "WEGO" / "plan.yaml"
+    plan["items"][0]["status"] = "done"
+    plan["items"][0]["human_pending"] = "abrir /admin/devolucoes e conferir"
+    p.write_text(yaml.dump(plan, allow_unicode=True, sort_keys=False),
+                 encoding="utf-8")
+    r = run(d, "write", "WEGO", "--from-triage", str(rp), "--repo", ".")
+    check("re-triagem grava de novo", r.returncode == 0, r.stderr)
+    de_novo = plano_de(d, "WEGO")["items"][0]
+    check("o `done` do disco sobrevive à re-triagem", de_novo["status"] == "done")
+    check("e a dívida humana ABERTA sobrevive junto",
+          de_novo["human_pending"] == "abrir /admin/devolucoes e conferir",
+          "só o humano fecha essa pendência; uma re-triagem que a zerasse "
+          "apagaria dívida que ninguém pagou")
+
+
+def test_contrato_do_triage(_base):
+    """O `/board-flow:triage` deixou de ser o segundo escritor da fila.
+
+    Dois escritores da mesma regra divergem, e o que é feito de prosa diverge
+    sem nenhum teste ficar vermelho — que é a razão inteira da etapa 2.
+    """
+    tri = REPO / "board-flow" / "commands" / "triage.md"
+    f = flat(tri.read_text(encoding="utf-8"))
+
+    check("o comando existe", tri.is_file())
+    check("declara que NÃO escreve mais o plan.yaml",
+          "no longer writes `plan.yaml`" in f,
+          "enquanto ele escrever também, as regras vivem em dois lugares")
+    check("manda a gravação passar pelo cepa-plan --from-triage",
+          "cepa-plan write --from-triage" in f or "--from-triage" in f)
+    check("nomeia o repasse e onde ele mora",
+          "triagem-<YYYY-MM-DD>.json" in f)
+    check("entrega a ordem ao /common:plan", "/common:plan" in f)
+    check("manda a raiz ser a do clone principal",
+          "git rev-parse --git-common-dir" in f,
+          "gravar contra a árvore corrente é a perda de 2026-08-18")
+    check("diz que `needs-decision` não é balde válido no repasse",
+          "`needs-decision` is not a valid bucket" in f,
+          "sem isso a grelha inacabada vira fila que se lê como decidida")
+    check("manda reportar o `remaining_in_column`",
+          "remaining_in_column" in f,
+          "é o que impede uma fila truncada de se ler como o quadro inteiro")
+    check("proíbe escrever o YAML à mão aqui",
+          "do not work around it by writing the YAML by hand" in f
+          or "Triage never writes `plan.yaml`" in f)
 
 
 def main():
@@ -483,7 +695,11 @@ def main():
                    test_raiz_e_a_do_clone_principal, test_dry_run_nao_grava,
                    test_validate_recusa_plano_de_ondas, test_from_spec_le_os_criterios,
                    test_from_spec_avisa_rascunho_e_recusa_vazia,
-                   test_contrato_do_comando):
+                   test_from_triage_so_ready_vira_item,
+                   test_from_triage_recusa_o_que_a_prosa_so_pedia,
+                   test_from_triage_dependencia_para_fora_da_fila,
+                   test_write_from_triage_grava_e_diz_que_e_parcial,
+                   test_contrato_do_comando, test_contrato_do_triage):
             print(f"\n{fn.__name__}")
             fn(base)
     print()

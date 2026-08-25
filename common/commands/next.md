@@ -11,7 +11,8 @@ interaction: routine
 Answer the literal question — *what do I do next?* — at any moment, not only
 when a card happens to close.
 
-`/board-flow:triage` writes the order down and `execute`/`fix`/`prove` point
+`/common:plan` writes the order down (from a spec, from a `/board-flow:triage`
+classification, or dictated by hand) and `execute`/`fix`/`prove` point
 forward when a card ends. Neither helps in the middle of a long session, which
 is where the thread actually dissolves: three rounds of proof gate, four cards
 opened, two scope decisions, and the original objective is buried under the
@@ -88,8 +89,11 @@ call, and `/common:next` doesn't do it silently.
 order — an order nobody chose is worse than an admitted absence, because it reads as a decision. Say there is no
 execution plan, then name the cheapest way to get one **for this repo**:
 
-- tracker wired (`board-flow.yaml` present) → `/board-flow:triage`, which grooms
-  the column and writes the plan from the cards it just classified;
+- tracker wired (`board-flow.yaml` present) → `/common:plan <project_key>
+  --from-jira`, which runs `/board-flow:triage` (it grooms the column, hunts
+  code evidence and proposes the order) and writes the queue from what it
+  classified. `/board-flow:triage` on its own grooms and hands the order over,
+  but no longer writes the file;
 - no tracker → `/common:plan <nome>` is the writer: it builds the queue from a
   closed `/common:spec` specification (`--from-spec`, one item per success
   criterion) or from the repo's own source of demands dictated by hand
@@ -156,7 +160,7 @@ Write the reconciled statuses back to the plan. Merge, never overwrite: keep
 Cards found on the board but absent from the plan are **not** appended — they
 were never given a position or a rationale, and inventing one here would forge
 exactly the decision this whole mechanism exists to preserve. Say they're
-missing and that `/board-flow:triage` is what places them.
+missing and that `/common:plan <key> --from-jira` is what places them — `/board-flow:triage` classifies them and gives them a position, and the writer records it.
 
 **Closing human debt.** A `human_pending` is cleared by setting it to `null`,
 and **only the user clears it** — they are the only one who knows whether they
@@ -183,8 +187,9 @@ Default precedence, to be overridden with a stated reason:
    with it.
 
 If everything is `done` and no human debt is open, say the plan is finished and
-name how a next round gets planned (`/board-flow:triage` with a tracker;
-otherwise offer to write the next plan from the repo's source of demands). Do
+name how a next round gets planned (`/common:plan <key> --from-jira` with a
+tracker, which grooms the column through `/board-flow:triage` first; otherwise
+offer to write the next plan from the repo's source of demands). Do
 not manufacture a next step from an empty plan.
 
 ## Report
@@ -205,7 +210,7 @@ Pendente com você (2):
 Fila depois dele: WEGO-1237 (maior, por último)
 Bloqueado: nenhum
 ⚠ 2 cards em To Do fora do plano: WEGO-1962, WEGO-1963 — sem posição nem
-  porquê. /board-flow:triage é quem os coloca.
+  porquê. /common:plan WEGO --from-jira é quem os coloca (via triagem).
 ```
 
 Without a tracker the shape is the same, minus the divergence block, plus one

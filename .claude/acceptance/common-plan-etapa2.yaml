@@ -1,0 +1,149 @@
+card: common-plan-etapa2
+title: "--from-jira no /common:plan e /board-flow:triage devolvendo a ordem em vez de gravar"
+status: complete
+diff: "d95bd24..HEAD (f534097, ceac09a)"
+source: ".claude/programs/cepa/plan.yaml (common-plan-etapa2) + BACKLOG.md
+  'Cinco portas de planejamento', Proposta, pontos 1 e 2 (linha ~2353)"
+precedent: "mesma régua de altitude aplicada em common-plan-etapa1
+  (.claude/acceptance/common-plan-etapa1.yaml): a superfície `cli` que conta
+  como demonstrada é o binário determinístico (`cepa-plan`), exercitado via
+  subprocess real contra um fixture que reproduz o formato que o comando
+  vizinho (aqui, /board-flow:triage) promete produzir — não o grep da prosa
+  do `.md` em si, que só prova promessa. A checagem de prosa (contrato do
+  comando) é aceita como complemento SÓ para a parte do critério que é sobre
+  o TEXTO exposto ao operador (ex.: 'nunca consulta o Jira direto'), nunca
+  para a parte executável."
+
+criteria:
+  - id: AC1
+    text: >
+      `/common:plan <nome>` aceita `--from-jira [coluna]`, que delega a
+      classificação ao `/board-flow:triage` e escreve a fila a partir da
+      lista ordenada que ele devolve.
+    altitude: cli
+    surface: "a conversão do repasse (a classificação que /board-flow:triage
+      devolve, em JSON) para itens de fila e a gravação: `cepa-plan
+      from-triage <repasse.json>` e `cepa-plan write <nome> --from-triage
+      <repasse.json>`."
+    test: "tests/test_common_plan.py::test_from_triage_so_ready_vira_item,
+      test_from_triage_recusa_o_que_a_prosa_so_pedia,
+      test_from_triage_dependencia_para_fora_da_fila,
+      test_write_from_triage_grava_e_diz_que_e_parcial"
+    layer: "cli (subprocess real do binário cepa-plan, contra um fixture
+      REPASSE_OK cujo formato bate literalmente com o exemplo JSON que
+      board-flow/commands/triage.md, passo 9, promete produzir — key/title/
+      bucket/why/reason/blocked_by/remaining_in_column; a fila gravada é
+      relida do disco, não inferida)"
+    evidence: verified
+    run: "python3 tests/test_common_plan.py -> 'all green' (rodei
+      pessoalmente); casos relevantes: 'lê o repasse e devolve itens'; 'a
+      ORDEM é a que a triagem classificou'; 'card \\`implemented\\` NÃO vira
+      item da fila'; 'write --from-triage grava a fila'; 'a fonte DIZ que a
+      fila é um pedaço do quadro'; 're-triagem grava de novo'. exit 0."
+    verdict: complete
+    note: >
+      A ponte narrativa entre "/board-flow:triage decide os quatro baldes na
+      conversa" e "o arquivo JSON existe no disco no formato certo" continua
+      sendo prosa (não há como testar de ponta a ponta um comando conduzido
+      por um agente sem rodar o próprio agente) — mas essa é exatamente a
+      mesma lacuna estrutural que o AC2/AC3 da etapa 1 aceitou como completa
+      quando a peça mecânica (o script) é código real testado por subprocess
+      contra um fixture fiel ao formato documentado, e a orquestração
+      cross-comando permanece prosa com teste de contrato. Mantenho a régua
+      igual aqui: o critério nomeia "delega... e escreve a partir da lista
+      ordenada" — o "escreve a partir da lista ordenada" é a parte
+      executável e está coberta; a "delegação" (chamar /board-flow:triage) é
+      orquestração de agente para agente, coberta por
+      test_contrato_do_comando (grep da prosa que manda rodar o triage e
+      proíbe consulta crua ao Jira).
+
+  - id: AC2
+    text: >
+      `/board-flow:triage` PARA de escrever `plan.yaml`. Continua lendo os
+      cards, achando evidência no código e roteando os quatro baldes, e
+      entrega a ordem para o `/common:plan`.
+    altitude: cli
+    surface: "board-flow/commands/triage.md, passo 9 — não contém mais
+      instrução de gravar/atualizar `plan.yaml`; grava o repasse JSON e
+      chama `cepa-plan write --from-triage`. O que faz a gravação de fato
+      (merge, dropped, remaining_in_column) é o mesmo binário do AC1."
+    test: "tests/test_common_plan.py::test_contrato_do_triage;
+      tests/test_fio_condutor.py (bloco 'produtor: triage produz ordem e
+      ENTREGA')"
+    layer: "grep de prosa para a AUSÊNCIA da regra antiga (dupla escrita) +
+      cli real para a peça que passou a fazer a escrita de fato
+      (cepa-plan write --from-triage, mesmos testes do AC1)"
+    evidence: verified
+    run: "python3 tests/test_common_plan.py -> ok 'declara que NÃO escreve
+      mais o plan.yaml'; ok 'manda a gravação passar pelo cepa-plan
+      --from-triage'; ok 'proíbe escrever o YAML à mão aqui'; 'all green'.
+      python3 tests/test_fio_condutor.py -> ok 'triage entrega o repasse da
+      classificação, e não o plan.yaml'; ok 'e nomeia o escritor único da
+      fila'; 'all green'. Rodei os dois pessoalmente, exit 0 em ambos."
+    verdict: complete
+    note: >
+      Confirmado por leitura direta do diff (não só pelo teste): o passo 9
+      antigo de triage.md, que tinha um bloco YAML de exemplo e a lista de
+      regras "Merge, never overwrite" / "Only → To Do cards become pending
+      items" embutida em prosa duplicada, foi substituído por um bloco JSON
+      de repasse e a chamada ao `cepa-plan write --from-triage`; não sobrou
+      nenhuma instrução de gravação de `plan.yaml` no arquivo (`grep
+      plan.yaml board-flow/commands/triage.md` só bate na frase que diz que
+      ele NÃO escreve mais).
+
+  - id: AC3
+    text: "Some a duplicação de quem escreve a fila."
+    altitude: repo
+    surface: "as regras de conversão balde→item (só `ready` vira `pending`,
+      `obsolete` vira `dropped` com motivo, `needs-decision` é recusa, merge
+      preserva `status`/`human_pending`) existiam DUAS vezes: em prosa no
+      `triage.md` e em prosa no `plan.md`/código no `cepa-plan` (from-spec).
+      Depois da etapa 2, essas regras existem em UM lugar só —
+      `itens_de_triagem()`/`funde()` em `common/bin/cepa-plan` — e os dois
+      comandos apenas apontam para lá."
+    test: "leitura direta do diff (board-flow/commands/triage.md não
+      reproduz mais a lista de regras como implementação própria, só
+      descreve o que o cepa-plan faz) + tests/test_common_plan.py::
+      test_contrato_do_triage (checa 'proíbe escrever o YAML à mão aqui')"
+    layer: "verificação de diff + cli (mesma bateria do AC1/AC2)"
+    evidence: verified
+    run: "git diff d95bd24..HEAD -- board-flow/commands/triage.md mostra a
+      remoção do bloco 'Rules:' antigo (que tinha as regras como prosa
+      própria) e a substituição por uma chamada ao writer único, com a nota
+      explícita 'two writers drift, and the one made of prose drifts without
+      a test going red'. Único lugar que hoje IMPLEMENTA a conversão é
+      common/bin/cepa-plan (itens_de_triagem, funde) — confirmado por leitura
+      do arquivo inteiro."
+    verdict: complete
+
+summary: >
+  Etapa 2 de "um escritor, três fontes" (BACKLOG.md) está construída na mesma
+  altitude que fechou a etapa 1: a conversão classificação→fila
+  (`cepa-plan from-triage` / `cepa-plan write --from-triage`) é código real
+  em `common/bin/cepa-plan`, exercitada via subprocess contra um fixture cujo
+  formato bate literalmente com o JSON de exemplo que `board-flow/commands/
+  triage.md` (passo 9) promete gravar — key/title/bucket/why/reason/
+  blocked_by/remaining_in_column. `/board-flow:triage` não contém mais
+  nenhuma instrução de gravação de `plan.yaml`; grava o repasse e delega ao
+  escritor único. A duplicação de regras (que antes vivia em dois lugares de
+  prosa) foi removida: hoje só o cepa-plan implementa a conversão
+  balde→item e a fusão com o disco.
+
+  A lacuna estrutural que resta (a chamada real de `/common:plan --from-jira`
+  a `/board-flow:triage` dentro de uma sessão de agente) não é testável sem
+  rodar o próprio agente — a mesma limitação que a etapa 1 já tinha para
+  `--from-spec` e que foi aceita como completude quando a peça mecânica está
+  coberta e a orquestração tem contrato testado por grep de prosa (AC2/AC3
+  da etapa 1). Apliquei a mesma régua aqui, por consistência com o
+  precedente já registrado neste mesmo desenho.
+
+  Rodei pessoalmente: `python3 tests/test_common_plan.py` -> 'all green';
+  `python3 tests/test_fio_condutor.py` -> 'all green'; `bash tests/run-all.sh`
+  -> '49 de 49, tudo verde'. Também conferi manualmente (não só via teste): os
+  bumps de versão em `board-flow/.claude-plugin/plugin.json` (0.19.0 ->
+  0.20.0) e `common/.claude-plugin/plugin.json` (2.4.0 -> 2.5.0), e o texto
+  do `.claude-plugin/marketplace.json`, todos coerentes com "triage entrega,
+  /common:plan grava"; não sobrou nenhuma menção viva a "--from-jira ainda
+  não existe" em nenhum arquivo do repo.
+
+gaps: []

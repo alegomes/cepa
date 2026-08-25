@@ -212,50 +212,81 @@ Group the work; every write delegation starts with `Topology: <default_topology>
 
 - **No change.** For NEEDS-REFINEMENT cards, **post** a comment naming what's missing (acceptance criteria, scope) so the next grooming pass is cheaper. Não pergunte se pode comentar: um comentário é registro, não mutação de estado — é o caso canônico de `default-yes`, e a alternativa (perguntar) custa um turno para uma resposta que é sempre sim. Diga no relatório quantos cards foram anotados.
 
-### 9. Persist the execution plan
+### 9. Hand the order to `/common:plan`
 
 Triage is the moment the queue gets an order and a rationale. Both used to die
 in the chat: Jira stores the *queue* (To Do), never the *order* nor the *why*.
-Write them down.
+Write them down — but **this command no longer writes `plan.yaml` itself.**
 
-Update `<programs>/<project_key>/plan.yaml` — **one living plan per board**,
-schema `common/plan-schema.yaml`, `mode: single-track`.
+There is exactly one writer of the `single-track` queue, and it is
+`/common:plan` (etapa 2 of "um escritor, três fontes", `BACKLOG.md`). Triage
+keeps doing what only it can do — read the cards, hunt evidence in the code,
+route the four buckets, propose the order — and hands that result over. What
+disappears is the duplicated writer, not the order: before this step, the same
+rules lived in this file's prose *and* in `common/bin/cepa-plan`, and prose
+erodes without a single test going red.
+
+**Write the handoff** — the classification, in the execution order the user
+just confirmed at step 7 — to
+`<programs>/<project_key>/triagem-<YYYY-MM-DD>.json`. Same directory as the
+plan, same `<main-root>` rule, so the order is durable on disk from this moment
+even if the queue is written later.
 
 **`<programs>` = `<main-root>/.claude/programs`**, where `<main-root>` is the
 parent of `git rev-parse --git-common-dir` with the trailing `/.git` removed —
-the MAIN clone when you are running inside a linked worktree. Writing the plan
-under the current tree instead is how a triage dies: the worktree is removed and
-the order goes with it, invisible to git in any repo whose `.gitignore` covers
-`.claude/` (that is exactly what happened on 2026-08-18). One plan per board,
-one copy, at the main root — never a copy per worktree, which diverges in
-silence. See `docs/execution-plan.md`, "Where the file lives".
+the MAIN clone when you are running inside a linked worktree. Writing under the
+current tree instead is how a triage dies: the worktree is removed and the order
+goes with it, invisible to git in any repo whose `.gitignore` covers `.claude/`
+(that is exactly what happened on 2026-08-18). See `docs/execution-plan.md`,
+"Where the file lives".
 
-```yaml
-schema_version: 2
-mode: single-track
-program: <project_key>
-source: "Jira <project_key> · <source-column>, triaged <YYYY-MM-DD>"
-items:
-  - id: WEGO-1235
-    title: "<card summary>"
-    why: "unblocks 1237 and 1240, which touch the same hook"
-    status: pending
-    blocked_by: []
-    human_pending: null
+```json
+{
+  "project_key": "WEGO",
+  "source_column": "Backlog",
+  "scope": "component = billing",
+  "triaged_on": "2026-08-25",
+  "remaining_in_column": 12,
+  "cards": [
+    {"key": "WEGO-1235", "title": "<card summary>", "bucket": "ready",
+     "why": "unblocks 1237 and 1240, which touch the same hook",
+     "blocked_by": []},
+    {"key": "WEGO-1234", "title": "<card summary>", "bucket": "implemented"},
+    {"key": "WEGO-1236", "title": "<card summary>", "bucket": "obsolete",
+     "reason": "dedup of WEGO-1240 (canonical: in Review)"},
+    {"key": "WEGO-1238", "title": "<card summary>", "bucket": "needs-refinement"}
+  ]
+}
 ```
 
-Rules:
+`bucket` is one of `ready` / `implemented` / `obsolete` / `needs-refinement` —
+the four buckets of step 4, lowercased. **`needs-decision` is not a valid
+bucket here**: a card leaves the step-6 grill as one of the four, never still in
+doubt, and the writer refuses a handoff that still carries one rather than
+burying an unanswered question inside a queue that reads as decided.
 
-- **Merge, never overwrite.** Items already `done` stay, with their
-  `human_pending` intact — that field is the answer to "do I still have to
-  validate this by hand?", and a re-triage that wipes it re-creates the very
-  loss this plan exists to prevent. Cards moved to Won't Do become
-  `status: dropped` (kept, so the plan explains why they left), not deletions.
-- **Only `→ To Do` cards become `pending` items.** Cards routed to In Review
-  belong to the proof queue, not the build queue.
-- **The plan is a hypothesis, not a contract** (same rule as the maestro's):
-  whoever executes re-validates the item against the board's current state.
-- Say in the report that the file was written, and where.
+`remaining_in_column` is what `--max` left unclassified. It is not decoration:
+the writer stamps a `PARCIAL` note on the plan's `source` line, so a queue
+covering 15 of 27 cards can never be read later as the whole board.
+
+Then run the writer:
+
+```
+python3 common/bin/cepa-plan write <project_key> \
+  --from-triage <programs>/<project_key>/triagem-<YYYY-MM-DD>.json \
+  --quando <YYYY-MM-DD> --repo .
+```
+
+It merges with whatever is on disk (items already `done` keep their status and
+their `human_pending` — that field is the answer to "do I still have to validate
+this by hand?", and a re-triage that wiped it would re-create the very loss the
+plan exists to prevent), turns `obsolete` cards into `status: dropped` **with
+the reason kept**, and leaves `implemented` and `needs-refinement` cards out of
+the queue by design — In Review belongs to the proof queue, not the build queue.
+Exit 2 is a refusal with the gap named; do not work around it by writing the
+YAML by hand, which is where every one of those refusals stops existing.
+
+Under `--dry-run`, write neither the handoff nor the plan.
 
 ### 10. Final report
 
@@ -265,7 +296,7 @@ A single summary:
 - **Cards classified:** N
 - **→ In Review:** list of keys (or "none")
 - **→ To Do:** keys **in execution order**, each with its one-line `why`
-- **Execution plan:** `<programs>/<project_key>/plan.yaml` (written | updated: N new, M preserved)
+- **Order handed to `/common:plan`:** the handoff at `<programs>/<project_key>/triagem-<YYYY-MM-DD>.json`, and the queue `cepa-plan write --from-triage` produced at `<programs>/<project_key>/plan.yaml` (written | updated: N new, M preserved). Repeat the writer's own warnings verbatim — cards left out of the queue by bucket, dependencies dropped because they point outside it, and the `PARCIAL` note when `--max` truncated the column.
 - **→ Won't Do:** list of keys (or "none — none confirmed")
 - **Stayed (needs-refinement):** list of keys
 - **Remaining in column (not classified this run):** count, if `--max` was hit
@@ -274,7 +305,8 @@ A single summary:
 ## Constraints
 
 - **Default `--max 15`.** Each card costs an evidence search; raise deliberately.
-- **The order and its `why` are outputs, not chat.** A triage run that transitions cards but leaves `<programs>/<project_key>/plan.yaml` unwritten has done half the job: the queue moved and the reasoning evaporated. Under `--max`, the plan holds only the cards actually classified — say so, never let a truncated plan read as the whole queue.
+- **The order and its `why` are outputs, not chat.** A triage run that transitions cards but never reaches step 9 has done half the job: the queue moved and the reasoning evaporated. Under `--max`, the queue holds only the cards actually classified — `remaining_in_column` is what makes the writer say so, and leaving it out is how a truncated plan comes to read as the whole board.
+- **Triage never writes `plan.yaml`.** It writes the handoff and calls `common/bin/cepa-plan write --from-triage`, the single writer of the queue. Writing the YAML here — by hand or by a second set of rules — is what this step exists to stop: two writers drift, and the one made of prose drifts without a test going red.
 - **Read-heavy, write-late.** No Jira write happens before the step-7 confirmation (and none at all under `--dry-run`).
 - **In Review here is a candidacy, not a verdict.** Triage routes by code evidence; `/board-flow:prove` is what proves load-bearing behavior at the surface. Never report a triaged-to-Review card as "done."
 - **PARTIAL never rounds up to IMPLEMENTED.** If a single acceptance criterion is unmet, the card is not done — bucket it READY or NEEDS-DECISION and name the gap.

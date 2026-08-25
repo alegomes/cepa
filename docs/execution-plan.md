@@ -108,23 +108,34 @@ The plan answers the question only if something asks it. Three moments do:
 
 | When | What answers | What it does |
 |---|---|---|
-| The order is being decided | [`/board-flow:triage`](commands.md) | Grooms a column by code evidence **and persists the order + the `why`** |
+| The order is being decided | [`/common:plan`](commands.md) | The single writer of the queue. From a spec, from a board (`--from-jira`, where [`/board-flow:triage`](commands.md) grooms the column by code evidence and hands back the order), or dictated by hand |
 | A card closes | `/board-flow:execute` · `/fix` · `/prove` | Close with **"And now?"** — the human route verbatim + the next unblocked item |
 | Mid-session, thread lost | [`/common:next`](commands.md) | Reconciles against the tracker (if any) and names **one** next step |
 
-### Writing it: `/board-flow:triage`
+### Writing it: `/common:plan`
 
-Triage already read every card, gathered evidence, and routed the queue — it was
-simply emitting an *unordered* list and letting the ordering rationale die in the
-chat. It now proposes the To Do list **in execution order**, each item carrying
-the reason it sits where it sits, and writes the plan once you confirm.
+One document, one writer, three sources. Triage already read every card,
+gathered evidence, and routed the queue — it was simply emitting an *unordered*
+list and letting the ordering rationale die in the chat. It now proposes the To
+Do list **in execution order**, each item carrying the reason it sits where it
+sits, and — since stage 2 — hands that classification to `/common:plan` instead
+of writing the file itself.
 
 An order you merely approved still beats one that was never written down.
 
-Re-running triage **merges** rather than overwrites: `done` items keep their
+Re-running the writer **merges** rather than overwrites: `done` items keep their
 `human_pending`, cancelled cards become `dropped` (kept, so the plan still
-explains why they left). Under `--max`, the plan holds only the cards actually
-classified, and says so — a truncated plan must never read as the whole queue.
+explains why they left). Under `--max`, the queue holds only the cards actually
+classified, and the `source` line carries a `PARCIAL` note saying so — a
+truncated plan must never read as the whole board.
+
+Why the writer moved out of the tracker plugin: while `/board-flow:triage` was
+the only command able to write the file, a repo with no Jira had no queue at
+all, and the rules for turning a classified card into an item lived in that
+command's prose — where they erode without a single test going red. They are
+now in `cepa-plan from-triage`, which refuses a READY card with no `why`, an
+OBSOLETE card with no reason, and a card still sitting in `needs-decision` (a
+grill that never finished, buried inside a queue that reads as decided).
 
 ### Reading it: `/common:next`
 
@@ -227,9 +238,18 @@ refusals are code rather than prose. Reading the specification is mechanical too
 (`cepa-plan from-spec`, one item per `### CS-N`, in the order of the text): while
 it was only a paragraph of instruction, the only possible test was a grep over
 that paragraph, which proves the command *promises* to inherit the order and
-never that a run produces the queue it promised. `--from-jira` is stage 2 and is not built,
-so a board-fed queue is still `/board-flow:triage`'s job; it keeps writing the
-file until that stage lands.
+never that a run produces the queue it promised.
+
+**Stage 2 is built** (2026-08-25): `--from-jira`, and `/board-flow:triage` no
+longer writes `plan.yaml`. It writes a **handoff** —
+`<programs>/<project_key>/triagem-<YYYY-MM-DD>.json`, the four buckets in the
+execution order confirmed at its step 7 — and `cepa-plan from-triage` turns that
+into items. The same lesson as stage 1 decided the shape: the rules that say
+which bucket becomes a `pending` item (only `ready`; `implemented` belongs to
+the proof queue, `needs-refinement` stays in the backlog, `obsolete` is kept as
+`dropped` with its reason) were prose in `triage.md`, provable only by grepping
+the prose. Neither stage 3 (`/common:drain-plan`) nor stage 4
+(`--from-plan` on `/maestro:program-plan`) is built.
 
 ### Who may write the queue, and what the writer refuses
 
@@ -238,7 +258,10 @@ ones, and a `.md` telling the model to check the `why` before writing is exactly
 the kind of instruction that erodes without anyone noticing. It refuses an empty
 `why` (the queue would keep the order and lose its criterion — the one thing a
 tracker already failed to keep), a duplicate `id`, a `blocked_by` pointing at an
-item that isn't in the queue, and a blocking cycle, which is the nastiest of the
+item that isn't in the queue *and was never classified* (a dependency on a card
+the triage routed elsewhere is dropped from the field and named out loud
+instead, since `/common:next` can only wait on items of its own queue), and a
+blocking cycle, which is the nastiest of the
 four: with two items blocking each other nothing is ever a candidate, so
 `/common:next` reports the queue as finished rather than as stuck.
 
