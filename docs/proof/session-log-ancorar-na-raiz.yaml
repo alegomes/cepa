@@ -1,0 +1,75 @@
+schema_version: 2
+card: session-log-ancorar-na-raiz
+verdict: proven
+reviewed_at: 2026-08-25T00:00:00-03:00
+base_commit: d6d4f13
+head_commit: b2b500b
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "common/hooks/_wtlib.py::session_root"
+      module: infrastructure
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/hooks/session-log.py"
+      module: infrastructure
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/session-checkpoint.py"
+      module: infrastructure
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/capture-build-result.py"
+      module: infrastructure
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/gate-advance.py"
+      module: infrastructure
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/mark-build-stale.py"
+      module: infrastructure
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/loop-budget.py"
+      module: infrastructure
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/acceptance-gate.py"
+      module: infrastructure
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo não é Maven/Quarkus; sem projeto pitest. Hooks são scripts Python invocados via subprocess com payload JSON no stdin — a superfície externa aqui é o PROCESSO do hook, não uma classe Java. Perturbação direta (reverter cada hook para o cwd cru, rodar tests/test_session_anchor_root.py via subprocess real) é o substituto correto, mesmo padrão de docs/proof/promptcov-tool.yaml e P2-cepa-hotspots.yaml."
+    perturbation:
+      status: pass
+      results:
+        - "worktree /tmp/proof-cepa-anchor @ b2b500b (HEAD). Baseline: python3 tests/test_session_anchor_root.py -> 33/33 ok (verde), exit 0."
+        - "Perturbação 1/8 — session-log.py revertido para 'Path(payload.get(\"cwd\") or os.getcwd()).resolve()' (git apply -R do hunk do diff d6d4f13..HEAD) -> RED comportamental: 'log gravado na RAIZ', 'prompt está no log', 'nenhum .claude órfão no subdiretório', 'os dois turnos moram no mesmo log', 'log da worktree fica na raiz DELA' (5 casos, todos exercitam o hook via subprocess/payload real, não grep). Mais 2 falhas puramente estruturais (guarda de deriva: 'usa session_root' / 'nenhum Path cru'). Revertido (git checkout HEAD -- common/hooks/session-log.py), GREEN restaurado."
+        - "Perturbação 2/8 — capture-build-result.py revertido -> RED comportamental: 'baseline gravada na RAIZ' (o last-build.json não aparece na raiz do repo de teste), 'nenhum .claude órfão' (aparece .claude órfão em src/main). 2 falhas comportamentais + 2 estruturais. Revertido, GREEN restaurado."
+        - "Perturbação 3/8 — gate-advance.py revertido -> RED comportamental: 'push BARRADO mesmo com o cwd no subdiretório' vira exit=0 (push com baseline vermelha PASSA a ser permitido — o defeito descrito na doc do diff: 'push liberado'). 1 falha comportamental + 2 estruturais. Revertido, GREEN restaurado."
+        - "Perturbação 4/8 — mark-build-stale.py revertido -> RED comportamental: 'baseline virou STALE' falha, a baseline fica 'SUCCESS' para sempre em vez de 'STALE' após edição de arquivo na raiz com cwd no subdiretório — exatamente o defeito descrito ('a baseline NUNCA fica STALE'). 1 falha comportamental + 2 estruturais. Revertido, GREEN restaurado."
+        - "Perturbação 5/8 — loop-budget.py revertido -> RED comportamental: 'estado do loop gravado na RAIZ' e 'nenhum .claude órfão' falham (loop-state.json some da raiz, aparece .claude órfão em pkg/). 2 falhas comportamentais + 1 estrutural. Revertido, GREEN restaurado."
+        - "Perturbação 6/8 — acceptance-gate.py revertido -> RED comportamental: 'transição BARRADA com o cwd no subdiretório' vira exit=0 (transição de card com aceite INCOMPLETE deixa de ser barrada) e 'a lacuna aparece na mensagem' falha (stderr vazio). 2 falhas comportamentais + 2 estruturais. Revertido, GREEN restaurado."
+        - "Perturbação 7/8 — session-checkpoint.py revertido (leitor: 'Path(cwd) / \".claude\" / \"session-log.md\"' sem passar por session_root) -> RED comportamental: 'checkpoint acha a intenção lida do subdiretório' volta lista vazia ([]) — o leitor procura no lugar errado quando escritor e leitor divergem de âncora. 1 falha comportamental + 1 estrutural. Revertido, GREEN restaurado."
+        - "Perturbação 8/8 — helper session_root em _wtlib.py alterado para sempre devolver o cwd cru ('return os.path.abspath(str(cwd))', sem passar por repo_root), aplicado via git apply em cima do diff real (só o helper, os 7 hooks ficaram intactos) -> RED comportamental em CASCATA: 13 dos 33 casos falham simultaneamente, cobrindo os 7 hooks (session-log: 5 casos; capture-build-result: 2; mark-build-stale: 1 — baseline fica None em vez de STALE; gate-advance: 1 — push liberado de novo; loop-budget: 2; acceptance-gate: 2). Confirma que os 7 hooks dependem de fato do MESMO helper, não de cópias divergentes. Revertido (git checkout HEAD -- common/hooks/_wtlib.py), GREEN restaurado (33/33)."
+        - "Nenhuma das 8 perturbações ficou vermelha só na checagem estrutural ('guarda de deriva' / grep de 'session_root(' no código-fonte) — todas as 7 hooks e o helper têm pelo menos 1 caso comportamental (subprocess real com payload JSON, asserção sobre arquivo em disco ou exit code) que vai a RED. A checagem estrutural é redundante, não é a única prova em nenhum ponto — logo não há linha do diff travada apenas por guarda de deriva."
+        - "Suíte inteira sem perturbação (bash tests/run-all.sh, mesma worktree, HEAD b2b500b): 52 de 52 arquivos rodados. 1 arquivo reportado 'com falha' no resumo (tests/test_doctor_install_guard.py, 2 casos: 'fora do temporário e sem a variável, a reinstalação segue permitida' e 'a reinstalação que não resolve o achado roda UMA vez, não três'); confirmado pré-existente rodando o MESMO arquivo numa segunda worktree descartável /tmp/proof-cepa-base @ d6d4f13 (a base, antes do diff) — falha idêntica lá, sensível a HOME/ambiente real (settings.json, ops/last-install.json), sem relação com session_root. Ambas as worktrees removidas (git worktree remove --force) ao final; git status --porcelain na árvore principal (session/next) limpo antes e depois."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "as 7 linhas 'cwd = Path(L.session_root(...))' / 'cwd = L.session_root(...)' e a definição de session_root em _wtlib.py são todas exercitadas por tests/test_session_anchor_root.py, confirmado pelas 8 perturbações acima (cada uma isolou e derrubou exatamente a linha alterada)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff não abre superfície de entrada nova (nenhum parser de dado externo, nenhum endpoint); é substituição de âncora de caminho dentro de hooks já existentes, cujo único input é o payload JSON de stdin que os testes já cobrem."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "o teste de regressão (tests/test_session_anchor_root.py) é novo no diff, então não há um 'rodar o teste contra a base' literal; a evidência equivalente são as 8 perturbações acima, que recriam byte-a-byte o código de cada hook em d6d4f13 (via 'git apply -R' do próprio diff do commit 355b693) e mostram RED nos mesmos casos que o commit corrige — o mesmo efeito de green-at-base seria obtido rodando o teste contra a árvore de d6d4f13 com os 7 hooks no estado antigo, o que as perturbações já demonstram hook a hook."
+routing_reason: "Os 7 hooks e o helper session_root têm cada um pelo menos um caso comportamental (não apenas estrutural) que vira RED quando a linha do diff é revertida para o cwd cru, e volta a GREEN quando restaurada. A perturbação do próprio helper derruba os 7 hooks em cascata, confirmando dependência real (não cópias divergentes). A suíte inteira (52/52 arquivos) fica verde sem a perturbação; a única falha pré-existente (test_doctor_install_guard.py) já falhava na base d6d4f13, é sensível a ambiente e não toca session_root. Diff não abre superfície de input nova (L4 = n/a, legítimo: nenhum arquivo tocado é api-rest/parser de entrada externa). PROVEN."
