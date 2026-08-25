@@ -58,6 +58,9 @@ import os
 import re
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _wtlib as L  # noqa: E402
+
 
 STATUS_RE = re.compile(r"^status:\s*([A-Za-z_-]+)", re.MULTILINE)
 GAP_RE = re.compile(r"^\s*gap:\s*(?!null\b)(?!~\s*$)[\"']?(.+?)[\"']?\s*$", re.MULTILINE)
@@ -149,7 +152,10 @@ def main():
         # Can't identify the card -> can't gate. Never spuriously block.
         sys.exit(0)
 
-    cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
+    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
+    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
+    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
+    cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
     artifact = cwd / ".claude" / "acceptance" / f"{key}.yaml"
 
     if not artifact.exists():

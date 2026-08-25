@@ -55,6 +55,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _wtlib as L  # noqa: E402
+
 try:
     import _telemetry as T
 except Exception:  # noqa: BLE001 — telemetria nunca quebra o gate
@@ -262,7 +264,10 @@ def main():
         sys.exit(0)
     if payload.get("tool_name") != "Task":
         sys.exit(0)
-    cwd = payload.get("cwd") or os.getcwd()
+    # RAIZ da worktree: com o cwd cru, um `cd subdir` faz o load() achar
+    # `subdir/.claude/loop-state.json`, que não existe — a contagem volta
+    # a zero a cada delegação e o teto de 3 repetições nunca dispara.
+    cwd = L.session_root(payload.get("cwd") or os.getcwd())
     try:
         if payload.get("hook_event_name") == "PreToolUse":
             on_pre(payload, cwd)

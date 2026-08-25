@@ -32,6 +32,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _wtlib as L  # noqa: E402
+
 try:
     import _telemetry as T
 except Exception:  # noqa: BLE001 — telemetria nunca quebra o hook
@@ -120,7 +122,10 @@ def main():
     if not prompt.strip():
         sys.exit(0)
 
-    cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
+    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
+    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
+    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
+    cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
     log_path = cwd / ".claude" / "session-log.md"
 
     try:
