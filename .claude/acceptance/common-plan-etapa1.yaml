@@ -1,8 +1,12 @@
 card: common-plan-etapa1
 title: "/common:plan escreve a fila single-track sem exigir tracker (etapa 1 de 'Cinco portas de planejamento')"
-status: incomplete
-diff: ac5f72c..HEAD (c2c2e80, 7e70f1d)
+status: complete
+diff: ac5f72c..0bb75db (c2c2e80, 7e70f1d, 93423ec, 0bb75db)
 source: ".claude/programs/cepa/plan.yaml (common-plan-etapa1) + BACKLOG.md 'Cinco portas de planejamento'"
+reaudit_of: "AC2 e AC3, marcados INCOMPLETE na primeira passada (diff
+  ac5f72c..HEAD antes de 0bb75db); reauditados sozinhos contra o commit novo
+  0bb75db, que fecha a lacuna nomeada. AC1, AC4 e AC5 não foram reabertos —
+  seguem com o veredito da primeira auditoria, reconfirmado pela suíte cheia."
 
 criteria:
   - id: AC1
@@ -19,7 +23,7 @@ criteria:
       test_colisao_com_ondas"
     layer: cli (subprocess real do cepa-plan, arquivo lido de volta do disco)
     evidence: verified
-    run: "python3 tests/test_common_plan.py -> 'all green' (12 casos); exit 0"
+    run: "python3 tests/test_common_plan.py -> 'all green' (14 casos); exit 0"
     verdict: complete
 
   - id: AC2
@@ -28,80 +32,73 @@ criteria:
       critério de sucesso) e a fila ditada à mão. `--from-jira` NÃO faz parte
       desta etapa e o comando deve dizer isso em vez de improvisar.
     altitude: cli
-    surface: "para a fila ditada à mão: cepa-plan write recebendo um arquivo
-      de itens já montado — coberto. Para `--from-spec`: um comando de barra
-      que, dado docs/spec/<slug>.md, PARSEIA os critérios `### CS-N` do
-      arquivo e produz a lista de itens que o cepa-plan grava. Essa segunda
-      metade da superfície não existe em código: `common/bin/cepa-plan` não
-      tem flag `--from-spec` nem lê docs/spec/*.md (grep vazio), e
-      `common/commands/plan.md` só descreve em prosa o que o agente
-      conversacional deve fazer ao ler a spec (seção 'Com --from-spec')."
-    test: "a fila ditada à mão: tests/test_common_plan.py::test_grava_fila_valida
-      e outros (verified, acima). `--from-spec`: nenhum teste roda um arquivo
-      .md de verdade contra um parser; test_contrato_do_comando só grepa a
-      prosa de common/commands/plan.md checando frases como '--from-jira'
-      ainda não existe' e 'CS-N' — é checagem de que o TEXTO do comando
-      existe, não de que a conversão spec→itens acontece."
-    layer: "fila à mão: cli (subprocess real). --from-spec: nenhuma — é
-      grep de prosa em markdown, camada abaixo de qualquer execução."
-    evidence: assumed
-    run: "grep -n 'from.spec\\|from_spec\\|docs/spec' common/bin/cepa-plan
-      tests/test_common_plan.py -> nenhuma ocorrência de código; a única
-      menção a 'spec' em testes é no bloco de asserts de prosa de
-      test_contrato_do_comando (linha ~281 em diante)."
-    verdict: incomplete
-    gap: >
-      `/common:plan` é `interaction: conversational` por desenho explícito
-      (ver plan.md: "por isso este comando é conversational... perguntar a
-      ordem é o trabalho, não o último recurso") — a leitura da spec e a
-      extração dos CS-N é deliberadamente trabalho do agente durante a
-      conversa, não de um parser determinístico. Isso é uma escolha de
-      design defensável (a spec já é prosa; forçar um parser rígido de
-      markdown seria frágil). MAS a consequência é que a superfície legítima
-      do critério "--from-spec produz um item por critério de sucesso,
-      herdando a ordem" não é `cli` de forma automatizável hoje: é
-      `conversational`/prompt, e um teste NESSA altitude (rodar o comando de
-      verdade contra uma spec fixture e conferir a fila gravada) não existe
-      e não pode existir sem instanciar o agente. O que falta, no mínimo,
-      para fechar a lacuna real (e não apenas de altitude): um teste de
-      INTEGRAÇÃO fim-a-fim onde uma spec fixture com 2-3 `### CS-N` é
-      processada (manualmente pelo operador do teste, simulando o agente, OU
-      por uma função determinística extraída do prompt) e o resultado é
-      passado ao `cepa-plan write`, conferindo que a fila gravada tem um item
-      por CS, na ordem do texto, e `why` contendo a frase "herdado da ordem
-      do texto da especificação; ninguém priorizou os critérios entre si"
-      quando a spec não declarar motivo de posição. Hoje esse comportamento
-      só existe como instrução para o agente seguir, nunca verificado.
+    surface: "cepa-plan from-spec <spec.md> — LÊ a especificação e devolve os
+      itens em JSON (um por `### CS-N`, na ordem do texto); cepa-plan write
+      --from-spec <arquivo> faz leitura + gravação de uma vez. A fila ditada
+      à mão continua em cepa-plan write --items."
+    test: "tests/test_common_plan.py::test_from_spec_le_os_criterios (lê uma
+      spec-fixture real via subprocess, confere 1 item por CS-N na ordem,
+      grava com write --from-spec e relê a fila do disco) e
+      test_from_spec_avisa_rascunho_e_recusa_vazia (spec em rascunho avisa
+      mas aceita; spec sem CS-N recusa exit 2). A fila à mão segue coberta
+      por test_grava_fila_valida e afins."
+    layer: cli (subprocess real do binário, tanto `from-spec` isolado quanto
+      `write --from-spec`; a fila gravada é relida do disco, não inferida)
+    evidence: verified
+    run: "python3 tests/test_common_plan.py -> ok 'lê a spec e devolve itens';
+      ok 'um item por critério de sucesso'; ok 'a ORDEM é a do texto'; ok
+      'write --from-spec grava a fila'; ok 'a fila gravada tem um item por
+      critério, na ordem do texto'; ok 'aceita a spec em rascunho mas AVISA';
+      ok 'recusa uma spec sem nenhum critério de sucesso'; 'all green' (14
+      casos); exit 0. Também: python3 -c \"import re; print('from-spec' in
+      open('common/bin/cepa-plan').read())\" -> True (subcomando existe no
+      argparse, não só em prosa)."
+    verdict: complete
+    note: >
+      A lacuna da primeira auditoria era estrutural, não de cobertura: não
+      existia código nenhum que lesse docs/spec/*.md, só a promessa em
+      common/commands/plan.md. Agora `common/bin/cepa-plan from-spec` é a
+      superfície `cli` que faz essa leitura, e o teste bate essa superfície
+      via subprocess real (não grep de prosa). `--from-jira` continua fora
+      do escopo, e a checagem de que o comando DIZ isso em vez de improvisar
+      segue coberta por test_contrato_do_comando (grep de prosa é altitude
+      correta aqui, porque o critério é sobre o TEXTO que o comando expõe ao
+      operador, não sobre um comportamento executável — não há "--from-jira"
+      para rodar e recusar, ele simplesmente não existe).
 
   - id: AC3
     text: >
       Quando a fonte é uma spec, a ordem é HERDADA do texto e o comando DIZ
       que herdou (decisão registrada no `why` do item: "ninguém priorizou os
       critérios entre si").
-    altitude: cli/conversational (mesma superfície do AC2 — ver nota lá)
-    surface: "a frase exata que plan.md manda o agente escrever no `why`
-      quando a spec não declara motivo de posição."
-    test: "tests/test_common_plan.py::test_contrato_do_comando, o check
-      'manda dizer quando a ordem foi HERDADA do texto da spec' —
-      confirma que as strings 'herdou' e 'herdad' aparecem em
-      common/commands/plan.md."
-    layer: "grep de prosa em markdown — não executa o comando, não gera
-      uma fila a partir de spec nenhuma, não confere o `why` de um item
-      real gravado."
+    altitude: cli
+    surface: "o campo `why` de cada item devolvido por `cepa-plan from-spec`
+      e gravado por `write --from-spec` — precisa conter a frase de herança
+      literal, mais a Superfície e o Teste vermelho (campo inteiro, não só a
+      primeira linha) que a spec já declarou."
+    test: "tests/test_common_plan.py::test_from_spec_le_os_criterios"
+    layer: cli (subprocess real; assert sobre o why de itens JSON devolvidos
+      e sobre a fila relida do disco depois de write --from-spec)
     evidence: verified
-    run: "python3 tests/test_common_plan.py -> ok 'manda dizer quando a
-      ordem foi HERDADA do texto da spec'; exit 0 (mas o teste verifica a
-      instrução escrita, não o comportamento)."
-    verdict: incomplete
-    gap: >
-      Mesma lacuna do AC2: o teste prova que o *comando instrui* o agente a
-      registrar a herança no `why`, não que uma execução real produz um item
-      com esse `why`. Não existe hoje nenhum arquivo de fila gravado (nem
-      fixture, nem golden file) por um fluxo `--from-spec` de ponta a ponta.
-      Falta um teste (fixture de spec com CS sem motivo de posição declarado
-      -> fila gravada -> assert de que every item tem no `why` a frase
-      "herdado da ordem do texto da especificação; ninguém priorizou os
-      critérios entre si", na ordem em que os CS aparecem no arquivo).
+    run: "python3 tests/test_common_plan.py -> ok 'o \`why\` DIZ que a ordem
+      foi herdada' (confere 'ninguém priorizou os critérios entre si' em
+      todos os itens); ok 'o \`why\` carrega a superfície declarada na spec'
+      (confere 'http' e 'domain', os textos de Superfície da spec-fixture);
+      ok 'o \`why\` carrega o teste vermelho INTEIRO, não a primeira linha'
+      (confere a frase 'passará quando devolver 200 com o CSV no corpo',
+      que só existe se o campo multi-linha foi capturado por inteiro); 'all
+      green'; exit 0."
+    verdict: complete
+    note: >
+      Fecha a segunda metade da mesma lacuna do AC2: antes só existia a
+      instrução escrita mandando o agente registrar a herança; agora o
+      texto do `why` é produzido por `itens_de_spec()` (função determinística
+      em cepa-plan) e o teste confere o conteúdo literal do campo, não a
+      prosa que descreve a intenção. Um detalhe que fortalece a evidência:
+      o teste também prova que o campo multi-linha "Teste vermelho" é
+      capturado inteiro (RE_CAMPO em cepa-plan usa um lookahead até a
+      próxima linha em branco/heading/campo, não só a primeira linha) — a
+      falha mais provável de uma implementação ingênua de regex.
 
   - id: AC4
     text: >
@@ -117,7 +114,10 @@ criteria:
       test_validate_recusa_plano_de_ondas, test_colisao_com_ondas"
     layer: cli (subprocess real, exit code + arquivo lido do disco)
     evidence: verified
-    run: "python3 tests/test_common_plan.py -> 'all green' (12 casos); exit 0"
+    run: "python3 tests/test_common_plan.py -> 'all green' (14 casos); exit 0.
+      test_validate_recusa_plano_de_ondas ganhou reforço no commit 93423ec
+      ('validate para na primeira lacuna e não reclama de campo de fila' +
+      'um plano v1 sem mode também é lido como ondas') — também verde."
     verdict: complete
 
   - id: AC5
@@ -125,54 +125,45 @@ criteria:
       O `/board-flow:triage` NÃO foi alterado nesta etapa (mexer nele é a
       etapa 2).
     altitude: cli/repo
-    surface: "diff ac5f72c..HEAD não toca nenhum arquivo sob board-flow/."
-    test: "git diff --stat (auditoria direta, não um teste automatizado —
-      é uma checagem factual sobre o diff, não um comportamento a exercitar)"
+    surface: "diff ac5f72c..0bb75db não toca nenhum arquivo sob board-flow/."
+    test: "git diff --stat (auditoria direta sobre o diff, não um teste
+      automatizado)"
     layer: "verificação de diff"
     evidence: verified
-    run: "git diff ac5f72c..HEAD -- '*board-flow*' '*triage*' -> saída vazia
-      (nenhuma linha alterada); git diff --stat confirma os 9 arquivos
-      tocados são todos fora de board-flow/."
+    run: "git diff ac5f72c..0bb75db -- '*board-flow*' '*triage*' -> saída
+      vazia (nenhuma linha alterada)."
     verdict: complete
 
 summary: >
-  AC1 e AC4 são a superfície central da etapa (o escritor mecânico
-  `cepa-plan` e a fila à mão) e estão de fato demonstrados por
-  tests/test_common_plan.py rodando o binário como subprocesso real,
-  lendo o arquivo gravado de volta do disco — 12 casos, todos verdes, e
-  tests/run-all.sh confirma 49/49 verde no repo inteiro. AC5 é factual e
-  confirmado pelo diff.
+  Reauditoria de AC2 e AC3 contra o commit 0bb75db ('feat(cepa-plan): a
+  leitura da spec vira código, não promessa de prompt'). A lacuna nomeada na
+  primeira passada era exatamente esta: `--from-spec` não tinha NENHUM código
+  que lesse docs/spec/*.md, só a instrução em common/commands/plan.md, e o
+  único teste possível era grepar essa prosa — provando que o comando
+  PROMETE herdar a ordem, nunca que uma execução produz a fila prometida.
 
-  AC2 e AC3, sobre `--from-spec`, são a lacuna real desta auditoria: não é
-  que falte "um teste melhor" no formato certo, é que a conversão
-  spec→itens (ler docs/spec/<slug>.md, extrair um `### CS-N` por item, herdar
-  ordem, escrever o `why` de herança) não existe em nenhum lugar executável
-  hoje — nem no cepa-plan, nem em teste, nem em qualquer script auxiliar.
-  Existe só como instrução de prompt em common/commands/plan.md, e o único
-  teste que toca essa parte (test_contrato_do_comando) confirma que o TEXTO
-  da instrução está lá, não que a instrução produz o resultado quando
-  seguida. Isso é uma decisão de design plausível (o comando é
-  `interaction: conversational` de propósito, e a leitura de uma spec em
-  prosa por um agente é razoável não ser um parser rígido) — mas o efeito
-  é que hoje não há NENHUMA evidência rodada de que `--from-spec` funciona,
-  apenas a promessa em prosa. O card '--from-spec funciona' listado como
-  critério de aceite pede pelo menos um teste fim-a-fim com uma spec
-  fixture, mesmo que a etapa de "ler e interpretar" seja feita por fora do
-  cepa-plan (por uma função auxiliar determinística, por exemplo, extraída
-  do prompt) — sem isso, o critério 2 e o critério 3 continuam incompletos
-  por ausência total de evidência rodada, não por altitude errada de teste.
+  Agora existe `cepa-plan from-spec <spec.md>`, um subcomando real: lê a
+  especificação, extrai um item por `### CS-N` na ordem do texto, monta o
+  `why` com a Superfície e o Teste vermelho declarados na spec (capturando o
+  campo multi-linha inteiro) mais a frase de herança
+  ("herdado da ordem do texto da especificação; ninguém priorizou os
+  critérios entre si"), e avisa sobre spec em rascunho, pergunta em aberto
+  ou critério sem Teste vermelho. `write --from-spec` encadeia leitura e
+  gravação. tests/test_common_plan.py::test_from_spec_le_os_criterios e
+  test_from_spec_avisa_rascunho_e_recusa_vazia rodam o binário como
+  subprocesso real contra uma spec-fixture de verdade e conferem: 1 item por
+  critério, a ordem do texto, o `why` com a frase de herança, o Teste
+  vermelho INTEIRO (não cortado na primeira linha), e a fila relida do disco
+  depois de write --from-spec. Rodei pessoalmente:
+  `python3 tests/test_common_plan.py` -> 'all green' (14 casos, incluindo os
+  2 novos), exit 0; e `bash tests/run-all.sh` -> 49/49 arquivos, 'tudo
+  verde'. A altitude está correta: a superfície que o critério nomeia
+  (--from-spec produz itens) agora é exercitada via subprocess CLI real, não
+  via grep de markdown.
 
-gaps:
-  - id: AC2
-    gap: "nenhum teste roda --from-spec (nenhum código lê docs/spec/*.md);
-      falta ao menos uma fixture de spec + assert de que a fila gravada
-      tem 1 item por ### CS-N na ordem do texto"
-    follow_up: "card para extrair a conversão spec->itens do prompt para uma
-      função testável (ou para uma fixture de teste que simule o passo
-      manual do agente), cobrindo a etapa 1 antes de avançar para a etapa 2"
-  - id: AC3
-    gap: "a frase de herança do why só é checada como texto de instrução em
-      plan.md, nunca como conteúdo de um item de fila realmente gravado"
-    follow_up: "mesmo card do AC2 — o teste que fecha AC2 deve também
-      afirmar o texto exato do why quando a spec não declara motivo de
-      posição"
+  Com AC1, AC4 e AC5 reconfirmados (não reabertos, mas cobertos pela mesma
+  execução verde da suíte) e AC2/AC3 fechados por esta reauditoria, os 5
+  critérios de aceite estão `complete` com `evidence: verified`. Status do
+  card: complete.
+
+gaps: []
