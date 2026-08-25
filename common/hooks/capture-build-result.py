@@ -36,6 +36,9 @@ import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _wtlib as L  # noqa: E402
+
 
 
 # Shared markers for the JS/Node toolchain (npm/yarn/pnpm). CC's Bash
@@ -371,7 +374,10 @@ def main():
     if status is None:
         sys.exit(0)  # Not a build command we recognize, or result was ambiguous.
 
-    cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
+    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
+    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
+    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
+    cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
     build_dir = effective_build_dir(command, cwd)
     if build_dir != cwd and not build_dir.is_relative_to(cwd):
         # The build ran OUTSIDE the session tree — e.g. a proof worktree

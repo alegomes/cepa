@@ -43,7 +43,9 @@ def recent_commits(cwd: str, start_commit: str) -> list:
 
 def recent_intents(cwd: str) -> list:
     """The last few user prompts from the session-log (intent trail)."""
-    log = Path(cwd) / ".claude" / "session-log.md"
+    # Mesma âncora que o session-log usa para GRAVAR: se o leitor usar o
+    # cwd cru e o escritor a raiz, o checkpoint volta vazio em silêncio.
+    log = Path(L.session_root(cwd)) / ".claude" / "session-log.md"
     try:
         text = log.read_text(encoding="utf-8", errors="replace")
     except OSError:

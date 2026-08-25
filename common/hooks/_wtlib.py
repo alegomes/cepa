@@ -130,6 +130,31 @@ def main_root(cwd) -> str:
     return repo_root(cwd)
 
 
+def session_root(cwd) -> str:
+    """A raiz da worktree em que ESTA sessão roda — a âncora do estado por
+    sessão gravado sob `.claude/`.
+
+    Os hooks recebem `cwd` como o diretório CORRENTE do shell, e o diretório do
+    Bash PERSISTE entre chamadas: um único `cd common/hooks` dentro de um
+    comando desvia o resto da sessão inteira. Ancorar `.claude/<estado>` nesse
+    valor cru grava o estado no subdiretório em que a sessão por acaso estava
+    parada. Medido duas vezes neste repo (2026-08-04 e 2026-08-18): o
+    `session-log.md` partiu em dois e os turnos do desvio SUMIRAM do log real —
+    não era cópia, era perda, invisível ao git porque o `.gitignore` cobre
+    `.claude/`. Só apareceu porque o diretório órfão saltou no `git status`.
+
+    NÃO é o `main_root`: estado que pertence a ESTA worktree (o log da sessão,
+    a baseline de build) tem de seguir a worktree, não o clone principal — ler
+    o resultado de build de uma worktree como baseline de outra é a mesma
+    mentira ao contrário. O `main_root` continua sendo a âncora do que é
+    compartilhado entre worktrees (o registro de sessões, o plano de execução).
+
+    Fora de um repo, devolve o próprio cwd: um hook nunca morre por isto.
+    """
+    root = repo_root(cwd)
+    return root or os.path.abspath(str(cwd))
+
+
 def current_branch(cwd) -> str:
     rc, out, _ = git(["rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
     return out if rc == 0 else ""
