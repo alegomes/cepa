@@ -198,10 +198,12 @@ with tempfile.TemporaryDirectory() as tmp:
         "tool_response": {"content": "erro: NullPointerException em Foo.java:42"},
         "cwd": str(sub5),
     })
+    # Sem o `or`: com ele, um hook que não gravasse NADA em lugar nenhum
+    # passaria pelo segundo lado da disjunção (apontado pelo auditor de
+    # completude, 2026-08-25).
     check("estado do loop gravado na RAIZ",
-          (r5 / ".claude" / "loop-state.json").exists()
-          or not stray_dirs(r5, sub5),
-          stray_dirs(r5, sub5))
+          (r5 / ".claude" / "loop-state.json").exists(),
+          f"não existe: {r5 / '.claude' / 'loop-state.json'}")
     check("nenhum .claude órfão", not stray_dirs(r5, sub5), stray_dirs(r5, sub5))
 
     # ─────────────────────────────────────────────────────────────────────
@@ -231,31 +233,80 @@ with tempfile.TemporaryDirectory() as tmp:
     # ─────────────────────────────────────────────────────────────────────
     print("\n# session-checkpoint.py — o rastro de intenção não pode voltar vazio")
     # ─────────────────────────────────────────────────────────────────────
-    # `recent_intents` LÊ o mesmo arquivo que o session-log GRAVA. Se escritor e
-    # leitor usarem âncoras diferentes, o checkpoint volta vazio em silêncio.
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "session_checkpoint", HOOKS / "session-checkpoint.py")
-    mod = importlib.util.module_from_spec(spec)
-    sys.path.insert(0, str(HOOKS))
-    spec.loader.exec_module(mod)
-
+    # O checkpoint LÊ o mesmo arquivo que o session-log GRAVA. Se escritor e
+    # leitor usarem âncoras diferentes, o handoff volta vazio em silêncio.
+    #
+    # Exercitado como PROCESSO, e não importando `recent_intents` e chamando a
+    # função: o hook roda no Stop com um payload no stdin e o produto dele é o
+    # arquivo de handoff no disco. Chamar a função por dentro pularia justo o
+    # `main()`, que é onde a âncora é resolvida.
     r7 = make_repo(tmp / "r7")
     sub7 = r7 / "deep" / "nested"
     sub7.mkdir(parents=True)
     run_hook("session-log.py", {"prompt": "intenção do turno", "cwd": str(sub7)})
-    intents = mod.recent_intents(str(sub7))
-    check("checkpoint acha a intenção lida do subdiretório",
-          any("intenção do turno" in i for i in intents), intents)
+    r = run_hook("session-checkpoint.py",
+                 {"session_id": "sessao-de-teste", "cwd": str(sub7)})
+    check("checkpoint sai 0", r.returncode == 0, r.stderr)
+    handoffs = list((r7 / ".claude" / "handoffs").glob("*.md"))
+    check("handoff gravado", len(handoffs) == 1, [str(h) for h in handoffs])
+    hand = handoffs[0].read_text(encoding="utf-8") if handoffs else ""
+    check("a intenção do subdiretório chegou ao handoff",
+          "intenção do turno" in hand, hand[:300])
 
     # ─────────────────────────────────────────────────────────────────────
     print("\n# fora de um repo git — o hook não pode morrer por isto")
     # ─────────────────────────────────────────────────────────────────────
+    # O critério fala no plural — "hook NENHUM morre por isto" — então os SETE
+    # são exercitados, não só o session-log. Não havia bug em nenhum deles; o
+    # que faltava era a trava: uma regressão em qualquer um dos outros seis
+    # passaria despercebida (apontado pelo auditor de completude, 2026-08-25).
     bare = tmp / "sem-git"
     bare.mkdir()
+
     r = run_hook("session-log.py", {"prompt": "sem repo", "cwd": str(bare)})
-    check("hook sai 0 fora de repo", r.returncode == 0, r.stderr)
-    check("cai no próprio cwd", (bare / ".claude" / "session-log.md").exists())
+    check("session-log.py sai 0 fora de repo", r.returncode == 0, r.stderr)
+    check("session-log.py cai no próprio cwd",
+          (bare / ".claude" / "session-log.md").exists())
+
+    fora = [
+        ("capture-build-result.py", {
+            "tool_name": "Bash",
+            "tool_input": {"command": "./mvnw verify"},
+            "tool_response": {"stdout": "BUILD SUCCESS"},
+            "cwd": str(bare)}),
+        ("mark-build-stale.py", {
+            "tool_name": "Edit",
+            "tool_input": {"file_path": str(bare / "App.java")},
+            "cwd": str(bare)}),
+        ("gate-advance.py", {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push origin main"},
+            "cwd": str(bare)}),
+        ("acceptance-gate.py", {
+            "tool_name": "mcp__mcp-atlassian__jira_transition_issue",
+            "tool_input": {"issue_key": "WEGO-9999", "transition_id": "351"},
+            "cwd": str(bare)}),
+        ("loop-budget.py", {
+            "tool_name": "Task",
+            "tool_input": {"subagent_type": "x", "prompt": "y"},
+            "tool_response": {"content": "erro qualquer"},
+            "cwd": str(bare)}),
+        ("session-checkpoint.py", {
+            "session_id": "sessao-de-teste", "cwd": str(bare)}),
+    ]
+    # Um diretório POR hook: com um só, o capture-build-result grava uma
+    # baseline ali, o mark-build-stale a suja, e o gate-advance barra o push —
+    # o gate funcionando, mas medindo a coisa errada. O que este caso afirma é
+    # só que nenhum hook MORRE fora de um repo git.
+    for i, (nome, payload) in enumerate(fora):
+        alvo = tmp / f"sem-git-{i}"
+        alvo.mkdir()
+        payload = dict(payload, cwd=str(alvo))
+        ti = payload.get("tool_input")
+        if ti and "file_path" in ti:
+            payload["tool_input"] = dict(ti, file_path=str(alvo / "App.java"))
+        r = run_hook(nome, payload)
+        check(f"{nome} sai 0 fora de repo", r.returncode == 0, r.stderr[:200])
 
 
 # ─────────────────────────────────────────────────────────────────────────
