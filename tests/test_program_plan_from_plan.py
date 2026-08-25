@@ -152,6 +152,20 @@ def testes_de_comportamento(base):
     check("promote: dependência que aponta para frente na fila também sobe a onda",
           piso["A"] == 2 and piso["B"] == 1, str(piso))
 
+    # Fila INVERTIDA: a ordem do arquivo é o oposto da ordem da dependência
+    # (D depende de C, C de B, B de A, e A é o último item). Sem ponto-fixo, uma
+    # passada só resolveria os pisos errados — nos dois casos acima a ordem do
+    # arquivo coincide, por acaso, com a ordem em que a dependência precisa ser
+    # resolvida, então eles não distinguem uma implementação da outra. Achado do
+    # proof-reviewer em 2026-08-25.
+    d = repo_git(base, "invertida")
+    escreve_fila(d, [item("D", blocked_by=["C"]), item("C", blocked_by=["B"]),
+                     item("B", blocked_by=["A"]), item("A")])
+    r, s = promote(d)
+    piso = {x["id"]: x["onda_minima"] for x in s["demands"]}
+    check("promote: fila com a ordem inversa da dependência empilha as ondas igual",
+          piso == {"A": 1, "B": 2, "C": 3, "D": 4}, str(piso))
+
     # ── bloqueador que não é candidato ───────────────────────────────────────
     d = repo_git(base, "bloq-done")
     escreve_fila(d, [item("A", status="done"), item("B", blocked_by=["A"]),

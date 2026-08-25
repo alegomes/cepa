@@ -2343,7 +2343,7 @@ lista de exceções fica no próprio teste, explícita, em vez de virar omissão
 `tests/test_common_plan.py`), 3 em 2026-08-25 (`/common:drain-plan`, o executor
 da fila na ordem dela, com 13 casos em `tests/test_common_drain_plan.py`), 4 em
 2026-08-25 (`/maestro:program-plan --from-plan <nome>` + `cepa-plan promote`,
-com 31 casos em `tests/test_program_plan_from_plan.py` e os checkpoints
+com 44 casos em `tests/test_program_plan_from_plan.py` e os checkpoints
 `[from-plan:*]` medidos pelo `cepa-promptcov`). **Não está vivo até `bin/install.sh --clean`.** ·
 **Lar:** `common/commands/plan.md` (novo), `common/bin/cepa-plan` (novo),
 `board-flow/commands/triage.md`, `maestro/commands/program-plan.md`,

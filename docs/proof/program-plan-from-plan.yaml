@@ -1,0 +1,121 @@
+schema_version: 2
+card: program-plan-from-plan
+verdict: proven
+reviewed_at: 2026-08-25T17:35:00-03:00
+base_commit: 0013c76
+head_commit: 2e57cf0
+issue_type: Feature
+repo_kind: harness             # NOT Quarkus/Maven — Python CLI + prompt files, own test suite
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (demandas_da_fila, _human_gate, fonte_da_fila, cmd_promote)"
+      module: cli
+      external_observable: true    # a superfície externa é a linha de comando: exit code, stdout (JSON), stderr
+      substituted_by_double: null  # a CLI real roda de ponta a ponta, contra plan.yaml gravado pelo próprio escritor (cepa-plan write)
+    - class: "maestro/commands/program-plan.md (prosa: --from-plan, o piso D7, onda_minima como PISO, o carry-why, o human_gate)"
+      module: prompt
+      external_observable: false   # prosa não é executável; a evidência aqui é grep de contrato, deliberadamente fraca
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); perturbação manual é o único mecanismo aplicável, como nos cards anteriores da mesma série"
+    perturbation:
+      status: pass
+      results:
+        - "P1 — só `pending` vira demanda: `if st == \"pending\":` (em demandas_da_fila) trocado por `if True:` — 9 asserções foram para FAIL (in_progress/blocked/done/dropped voltaram a virar demanda, a cascata sumiu, o piso D7 relatou 4 demandas em fila que devia dar 2, o `source` mudou de 3-de-4 para 4-de-4) — RED confirmado, restaurado"
+        - "P2 — a ordem da fila é preservada: `ordenados = [it for it in candidatos if ...]` trocado por uma versão que ordena por `id` — a asserção 'promote: preserva a ordem da fila' (fila Z,Y,X,W) foi para FAIL — RED confirmado"
+        - "P3 — onda_minima sobe pelo `blocked_by`: `alvo = max([1] + [piso[b] + 1 ...])` trocado por `alvo = 1` — 4 asserções foram para FAIL (sobe de onda, dependência encadeada empilha 1→2→3, `ondas_minimas` do plano, e o caso 'aponta para item POSTERIOR na fila') — RED confirmado"
+        - "P4 — bloqueador `done` não segura: a guarda `if b in fechados: continue` desativada — a asserção 'bloqueador done não segura ninguém' foi para FAIL (B, que dependia de A `done`, virou candidato excluído em vez de onda_minima 1) — RED confirmado"
+        - "P5 — bloqueador `dropped` sai do campo com AVISO: o bloco inteiro que gera o aviso e faz `continue` foi removido — a asserção 'bloqueador dropped sai do campo mas vira AVISO' foi para FAIL (B, que dependia de A `dropped`, virou EXCLUÍDO em vez de demanda com aviso) — RED confirmado"
+        - "P6 — cascata (bloqueador aberto e fora da promoção tira o item junto, e quem depende dele): a linha `vivos.discard(ident); mudou = True; break` (dentro do laço de ponto-fixo) virou `pass` — 3 asserções foram para FAIL (B, que dependia de A `in_progress`, voltou a ser demanda; C, que dependia de B, também; o resto da fila passou a incluir B e C junto com D,E,F) — RED confirmado"
+        - "P7 — `human_pending` aberto vira `human_gate: \"open: <rota>\"` numa linha só: `_human_gate` reduzida a sempre `return \"none\"` — a asserção do gate aberto foi para FAIL (`none` em vez de `open: abrir /admin...`) — RED confirmado"
+        - "P8 — piso D7 (< 4 demandas = exit 4, JSON sai mesmo assim): `piso_ok = len(demandas) >= PISO_DEMANDAS` trocado por `piso_ok = True` — 4 asserções foram para FAIL (exit 0 em vez de 4 com 3 demandas, sem a recomendação de /common:drain-plan no stderr, `floor.atingido` mentindo True, e a fila só com item `done` deixou de recusar) — RED confirmado"
+        - "P9a — recusa de plano `parallel-waves` (exit 3): o bloco `if modo_de(plan) != MODE: ...; return 3` em `cmd_promote` desativado — a asserção 'recusa um plano de ondas (exit 3)' foi para FAIL (caiu no `valida_plano`, que devolveu 'mode é parallel-waves' via outro caminho, mas com a mensagem/exit errados) — RED confirmado"
+        - "P9b — recusa de fila inexistente (exit 2, apontando /common:plan): o bloco de checagem `if not alvo.is_file(): ...; return 2` no início de `cmd_promote` desativado — a asserção correspondente foi para FAIL (o comando estourou tentando ler um arquivo inexistente, com mensagem genérica de arquivo ilegível em vez da recusa nomeada) — RED confirmado"
+        - "P9c — recusa de fila inválida (`why` vazio, exit 2): a chamada `valida_plano(plan)` e a recusa correspondente em `cmd_promote` desativadas — a asserção 'recusa promover fila inválida' foi para FAIL (o comando seguiu adiante e devolveu PISO NÃO ATINGIDO em vez de recusar a fila inválida) — RED confirmado"
+        - "P10 — `source` de rastreio (fila, caminho, contagem, data, fonte da própria fila): `fonte_da_fila` substituída por uma versão que devolve texto fixo — 2 asserções foram para FAIL ('diz de qual fila, de qual caminho e quantos itens' e 'carrega a fonte da própria fila') — RED confirmado"
+        - "P11 — `promote` NÃO escreve na fila: `cmd_promote` alterado para marcar todo item `pending` como `in_progress` e chamar `grava_corpo` antes de calcular as demandas — a suíte quebrou com múltiplas asserções em FAIL e um traceback (KeyError) no meio do run, provando que o disco mudou sob o comando — RED confirmado (o precedente `[from-plan:queue-untouched]` da suíte, que compara bytes do arquivo antes/depois, é o teste desenhado exatamente para isto e também acusaria a quebra caso a suíte não tivesse abortado antes de chegar nele)"
+      run: >-
+        worktree descartável /tmp/proof-program-plan-from-plan (git worktree
+        add --detach HEAD, HEAD = 2e57cf0). GREEN de partida confirmado
+        primeiro: `python3 tests/test_program_plan_from_plan.py` →
+        "✓ todos os casos passaram" (41 checks). Cada uma das 13 perturbações
+        acima: aplicada via script Python descartável
+        (open(path).read().replace(old,new) com assert do trecho antigo antes
+        de escrever, e ast.parse para garantir sintaxe válida), depois
+        `python3 tests/test_program_plan_from_plan.py` exigindo pelo menos uma
+        asserção em FAIL (ou traceback), depois `git checkout --
+        common/bin/cepa-plan` para restaurar antes da perturbação seguinte.
+        GREEN final confirmado com `python3 tests/test_program_plan_from_plan.py`
+        e `python3 tests/test_cepa_promptcov.py` (ambos "all green" / "todos os
+        casos passaram") e `git status --porcelain` vazio no worktree antes de
+        removê-lo com `git worktree remove --force`.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (não há coverage tool wired neste repo Python): as 13
+      perturbações cobrem toda linha de decisão nova em `demandas_da_fila`
+      (filtro pending, ordem, cascata, done/dropped no blocked_by, ponto-fixo
+      de onda_minima), `_human_gate`, `fonte_da_fila` e `cmd_promote` (as três
+      recusas e o piso D7) — nenhuma ficou verde ao ser quebrada. RESSALVA
+      nomeada (não bloqueia o verdito, é achado): a alegação "por ponto-fixo"
+      do docstring de `demandas_da_fila` — convergência iterativa que lida com
+      `blocked_by` apontando tanto para trás quanto para a frente, mesmo com
+      cadeias mais longas que um passe resolve por acaso — não é distinguida
+      pelos 2 testes de `onda_minima` existentes: rodei manualmente (fora da
+      suíte, só para investigar) uma versão com `for _ in range(1)` (1 passe
+      em vez do ponto-fixo completo) contra as DUAS fixtures que a suíte usa
+      (cadeia A→B→C e o caso "aponta para item posterior") e o resultado ficou
+      IDÊNTICO ao ponto-fixo completo — a ordem de inserção nessas duas
+      fixtures coincide por acaso com a ordem que a dependência precisa. Uma
+      fixture com a ordem INVERSA da dependência (D bloqueado por C, C por B,
+      B por A, nessa ordem na fila) exigiria de fato mais de um passe — não
+      existe hoje, então esse detalhe do algoritmo (necessidade de múltiplos
+      passes, e não só o resultado correto nos casos testados) fica como
+      `assumed`, não `verified`, e é reportado separadamente da proteção geral
+      de onda_minima (P3 acima, que USA um alvo genuinamente independente de
+      ordem e por isso pega o mecanismo real).
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      a mudança abre uma superfície de entrada (o plan.yaml no disco e o
+      argumento `nome`/`--quando` da CLI), mas ela já é adversarialmente
+      coberta pelas próprias recusas exigidas e perturbadas em L3 (fila
+      inexistente, fila inválida, plano de ondas, item sem why) — o roteiro de
+      recusas do card É o roteiro de adversarial input desta CLI, no mesmo
+      padrão de common-plan-etapa2.yaml e common-drain-plan.yaml. `cli` não é
+      o módulo `api-rest` do vocabulário Quarkus (este repo não tem um), então
+      a condição estrutural do `n/a` (nenhuma classe mudada em módulo
+      input-bearing no sentido Quarkus) é vácua aqui — mas a condição de fundo
+      (razão nomeada, diff que abre superfície mas já coberta por L3) se
+      mantém.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  Todos os 13 comportamentos pedidos para o `cepa-plan promote` foram, cada
+  um, quebrados na CLI real (common/bin/cepa-plan) dentro de um worktree
+  descartável, e o caso de tests/test_program_plan_from_plan.py que deveria
+  acusar a quebra foi para RED em todas as 13 perturbações — depois restaurado
+  e a suíte confirmada GREEN de novo (junto com test_cepa_promptcov.py, que
+  cruza os checkpoints [from-plan:*] da prosa de program-plan.md). Cobertura:
+  só pending vira demanda, ordem preservada, onda_minima subindo pelo
+  blocked_by (inclusive apontando para frente e em cadeia), bloqueador done
+  não segura, bloqueador dropped sai do campo com aviso, cascata de exclusão,
+  human_gate numa linha só, piso D7 (exit 4, JSON mesmo assim), as três
+  recusas (ondas, fila inexistente, fila inválida), a linha `source` de
+  rastreio, e `promote` não escrevendo na fila. Nenhum nível ficou
+  assumed/skipped/gap/survived no que decide o verdito. Um único achado fica
+  reportado dentro de l2_coverage como ressalva nomeada (não como gap que
+  bloqueia): o mecanismo de ponto-fixo de `onda_minima` não é distinguido de
+  um único passe pelas duas fixtures existentes, porque a ordem delas coincide
+  por acaso com a ordem da dependência — isso não torna o COMPORTAMENTO
+  observável não-provado (P3 provou o mecanismo real, com um alvo que quebra
+  independente de ordem), só significa que uma fixture de ordem inversa ainda
+  não existe. PROVEN.
