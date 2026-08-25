@@ -190,9 +190,15 @@ Point a single-track plan at `/maestro:run` or `cepa-dor` and it refuses by
 **naming the right command**, instead of failing downstream with "no pending
 wave" — an error that says what went wrong but not what to do.
 
-Promoting single-track → a wave is deliberately manual: it requires declaring a
-disjoint surface and an executable acceptance per item, which is real work worth
-doing only against a real demand.
+Promoting single-track → a wave has a command since 2026-08-25:
+`/maestro:program-plan --from-plan <name>` (stage 4 below). What stays manual is
+the part that was the reason to call the whole promotion manual — declaring a
+disjoint surface and an executable acceptance per item is real work, worth doing
+only against a real demand, and no script invents it. What the command removed
+is the other half: which items may be promoted at all, and what the queue's
+`blocked_by` forces on the wave layout. That half was mechanical all along, and
+doing it by eye is how an item that another session had reserved ends up forked
+into a wave.
 
 ### Schema versions
 
@@ -264,8 +270,28 @@ one reserved by another session, or the `--max` ceiling. It never skips a stuck
 item to reach the one below, because that is reordering the queue in silence.
 Each item is reserved before it is touched (`cepa-plan start` — the trackerless
 equivalent of the claim `/board-flow:drain` posts on a card) and gets a named
-terminal outcome with evidence (`cepa-plan finish`). Stage 4 (`--from-plan` on
-`/maestro:program-plan`) is not built.
+terminal outcome with evidence (`cepa-plan finish`).
+
+**Stage 4 is built** (2026-08-25): `/maestro:program-plan --from-plan <name>`
+reads the `single-track` queue as its source instead of a prose file. This is
+the queue → waves promotion that the section below used to declare **manual**,
+and the answer to *"how do I use `program-plan` on a project with Jira"* — the
+`--source` flag only accepts a file, while the queue accepts the board (through
+`/common:plan --from-jira`). Reading the queue is mechanical too
+(`cepa-plan promote`), for the same reason as stages 1–3, and it decides three
+things prose cannot be trusted to keep: **who may become a slice** (only
+`pending` — `in_progress` is reserved by another session, so forking a wave on
+top duplicates someone's work; `blocked` stopped in an outside condition nobody
+has touched; `done`/`dropped` already left the queue), **what the `blocked_by`
+forces** (`onda_minima`, a floor: two items where one depends on the other
+cannot fork in the same wave even with disjoint surfaces, and excluding a
+blocker cascades to whoever depended on it), and **what happens to an open
+`human_pending`** (it becomes `human_gate: "open: …"`, which the intake gate
+refuses until somebody decides, instead of vanishing). Below the D7 floor of 4
+demands it stops and points at `/common:drain-plan`, which runs the same queue
+in series with no worktree at all. Promoting never writes to the queue: the
+items stay `pending` there, and the residual risk — the same item now having
+two possible executors — is said out loud rather than designed away.
 
 ### Who may write the queue, and what the writer refuses
 

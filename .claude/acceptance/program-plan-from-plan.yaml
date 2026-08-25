@@ -1,0 +1,127 @@
+card: program-plan-from-plan
+title: "--from-plan no /maestro:program-plan — promove a fila single-track a ondas"
+diff: 0013c76..HEAD
+status: complete
+auditor: completion-auditor
+date: 2026-08-25
+criteria:
+  - id: AC1
+    text: >
+      /maestro:program-plan --from-plan <nome> lê a fila single-track
+      (.claude/programs/<nome>/plan.yaml) como fonte de demandas, em vez de
+      BACKLOG.md/--source.
+    altitude: cli
+    surface: >
+      common/bin/cepa-plan promote <nome> --repo DIR --json — exit code +
+      stdout JSON (demands[]/excluded[]/source). É a metade mecânica que a
+      prosa do comando (interaction: conversational) delega, exatamente como
+      o próprio critério 3 exige: a conversão vira código, não fica só na
+      prosa que promete.
+    test: tests/test_program_plan_from_plan.py::testes_de_comportamento
+    layer: cli-subprocess (chama o binário via subprocess.run, lê exit code
+      e JSON de stdout — não é teste de unidade em cima da função Python)
+    evidence: verified
+    run: >
+      $ python3 tests/test_program_plan_from_plan.py
+      ... 31 casos de comportamento do `promote` (só-pending, in_progress
+      reservado, blocked/done/dropped excluídos com motivo, ordem da fila
+      preservada, onda_minima por blocked_by, piso D7 exit 4, colisão com
+      plano de ondas exit 3, fila inválida exit 2, campo `source`
+      rastreável) — todos "ok".
+      ✓ todos os casos passaram (exit 0)
+    verdict: complete
+    note: >
+      A prosa (linha 32-46 e bloco [from-plan:source] do
+      maestro/commands/program-plan.md) é o "cola" que diz ao agente para
+      chamar o promote em vez de ler BACKLOG.md; essa metade é auditada em
+      AC3, com evidência deliberadamente mais fraca (grep no texto).
+
+  - id: AC2
+    text: >
+      É a promoção fila → ondas que o docs/execution-plan.md declarava
+      manual por não haver caminho — e a resposta a "como uso o
+      program-plan num projeto com Jira".
+    altitude: cli + docs
+    surface: >
+      common/bin/cepa-plan promote (o caminho que passou a existir) +
+      docs/execution-plan.md (a declaração que precisava deixar de dizer
+      "manual").
+    test: tests/test_program_plan_from_plan.py (promote em si, mesmos 31
+      casos de AC1) + leitura direta de docs/execution-plan.md
+    layer: cli-subprocess (comportamento) + leitura de arquivo (docs)
+    evidence: verified
+    run: >
+      $ python3 tests/test_program_plan_from_plan.py → exit 0 (mesmo run de
+      AC1).
+      $ git show 2e57cf0 -- docs/execution-plan.md — confirma que a frase
+      que declarava a promoção MANUAL foi reescrita neste diff, separando a
+      metade mecânica (agora comando) da metade que continua manual de
+      propósito (declarar superfície/aceite por item, decisão humana).
+    verdict: complete
+    note: >
+      Este critério é mais "existe o caminho e o texto para de mentir" do
+      que uma superfície testável isolada; a evidência é a mesma do AC1
+      (o caminho existe e roda) mais a leitura do commit de docs, que é
+      prosa e não carrega verdict próprio — não inflar para "verified" além
+      do que uma leitura de arquivo garante.
+
+  - id: AC3
+    text: >
+      Lição herdada das etapas 1 e 2, imposta pelo próprio completion-auditor
+      em rodadas anteriores: a conversão precisa ser CÓDIGO, não prosa de
+      comando — um grep na instrução prova que o comando PROMETE, nunca que
+      uma execução entrega.
+    altitude: cli (mecânica) / prosa (o que resta, por natureza não-testável
+      além de grep, já que o comando é interaction: conversational)
+    surface: >
+      Dupla explícita: (a) a regra "só pending vira slice, blocked_by vira
+      onda_minima, human_pending aberto vira human_gate" está em
+      common/bin/cepa-plan promote, não no .md; (b) o .md só instrui o
+      agente a chamar o script e usar o JSON dele — os 7 checkpoints
+      [from-plan:*] marcam essa fronteira e são medidos por
+      common/bin/cepa-promptcov contra tests/test_cepa_promptcov.py (que
+      cruza cada família de anotação — sweep/from-plan — com o SEU teste,
+      via --tag, evitando falso-negativo cruzado).
+    test: >
+      tests/test_program_plan_from_plan.py::testes_de_comportamento (a regra
+      em código, via subprocess real) + tests/test_program_plan_from_plan.py
+      ::testes_de_prosa (grep dos 7 checkpoints [from-plan:*] no .md — EVIDÊNCIA
+      DELIBERADAMENTE FRACA, prova só que o texto existe) +
+      tests/test_cepa_promptcov.py (garante que os 7 checkpoints da prosa têm
+      grep correspondente, sem furo de cobertura)
+    layer: cli-subprocess (regra) / grep-em-arquivo (prosa, por design — não
+      há superfície mais forte para um comando conversational sem uma
+      execução real do agente)
+    evidence: verified
+    run: >
+      $ python3 tests/test_program_plan_from_plan.py → 43 "ok", exit 0
+      (31 de comportamento do promote + 12 de prosa/argument-hint).
+      $ python3 tests/test_cepa_promptcov.py → "run real: program-plan.md ×
+      test_program_plan_from_plan.py cobre tudo de `from-plan`" ok, "all
+      green", exit 0.
+      $ bash tests/run-all.sh → "arquivos rodados: 51 de 51 / tudo verde"
+      (suíte inteira, sem regressão nos vizinhos test_program_plan_sweep.py
+      e test_cepa_promptcov.py).
+    verdict: complete
+    note: >
+      O critério pede explicitamente que a PARTE QUE PODE ser código vire
+      código (satisfeito: promote é testado por execução real de CLI, exit
+      code + JSON) e reconhece que a parte que sobra em prosa só admite
+      grep — o card já nomeia essa evidência como fraca por natureza, não
+      por displicência do autor. Não há altitude mais alta disponível para
+      um comando `interaction: conversational` sem rodar o agente de fato;
+      isso fica registrado como limite conhecido, não como lacuna oculta.
+
+summary: >
+  Os 3 critérios têm demonstração na superfície certa: a metade mecânica da
+  promoção fila → ondas (quem vira demanda, exclusões com motivo, piso de
+  onda por blocked_by, piso D7, colisão de nome) é código
+  (common/bin/cepa-plan promote) exercitado por 31 casos que chamam o
+  binário via subprocess e leem exit code + JSON — não uma função Python
+  testada em isolamento. A metade que só pode ficar em prosa (porque o
+  comando é conversational, sem função a chamar) é coberta por grep nos 7
+  checkpoints [from-plan:*], evidência deliberadamente mais fraca, e essa
+  fraqueza é presa por cepa-promptcov (que barra checkpoint sem teste
+  correspondente). Suíte completa (tests/run-all.sh) roda 51/51 verde,
+  incluindo os 2 arquivos tocados por este diff e os vizinhos que a etapa
+  poderia ter quebrado (test_program_plan_sweep.py, test_cepa_promptcov.py).

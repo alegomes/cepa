@@ -43,6 +43,23 @@ Subcomandos:
       card READY sem `why`, card OBSOLETE sem motivo e card ainda parado em
       `needs-decision` (grelha inacabada). Exit 2 = recusado, com o motivo.
 
+  cepa-plan promote <nome> [--repo DIR] [--json] [--quando AAAA-MM-DD]
+      As demandas que a fila entrega ao `/maestro:program-plan --from-plan` —
+      a promoção fila → ondas, que até aqui era manual por não ter caminho.
+      Não escreve nada, não decide superfície nem aceite (isso é a conversa do
+      program-plan) e não toca na fila. Diz três coisas que só a fila sabe:
+      quais itens podem virar slice, quais NÃO podem e por quê, e qual o piso
+      de onda que o `blocked_by` impõe a cada um — item que depende de outro
+      da mesma promoção não pode forkar na mesma onda que ele.
+      Só `pending` vira demanda: `in_progress` está reservado por outra sessão
+      (forkar por cima duplica o trabalho), `blocked` saiu travado de um run
+      anterior numa condição de fora que ninguém mexeu, e `done`/`dropped` já
+      saíram da fila. Um `human_pending` aberto não some: vira
+      `human_gate: "open: <rota>"` no slice, que é o que o cepa-dor reprova até
+      alguém decidir. Exit 3 = o plano é de ondas (não há o que promover);
+      4 = piso D7 (< 4 demandas) — abaixo dele o fork perde para o
+      /common:drain-plan, que executa a mesma fila sem worktree nenhuma.
+
   cepa-plan queue <nome> [--max N] [--repo DIR] [--json]
       Os itens que o `/common:drain-plan` pode executar AGORA, na ordem da
       fila, e o motivo pelo qual o lote para onde para. Não executa e não grava
@@ -871,6 +888,230 @@ def cmd_queue(raiz, nome, teto, como_json):
     return 0
 
 
+# ── promoção: as demandas que a fila entrega ao /maestro:program-plan ────────
+
+# Piso D7 do Maestro (common/plan-schema.yaml, "Piso de uso"): abaixo de 4
+# demandas o custo de forkar worktree, subir porteiro e aterrissar merge train
+# perde para executar a mesma fila em série. O piso é checado AQUI, e não na
+# prosa do comando, porque prosa de comando erode sem nenhum teste ficar
+# vermelho — a lição que o auditor de completude deixou nas etapas 1 e 2.
+PISO_DEMANDAS = 4
+
+# Por que um item não vira slice. Cada motivo é uma perda diferente se o
+# promotor calar sobre ele.
+FORA_DA_PROMOCAO = {
+    "done": "já fechou — a fila guarda a evidência, não há trabalho a forkar",
+    "dropped": "descartado da fila; o `why` fica no documento, o trabalho não",
+    "in_progress": ("reservado por outra sessão (`cepa-plan start`) — forkar "
+                    "uma onda por cima duplica o trabalho de quem está nele"),
+    "blocked": ("saiu `blocked` de um run anterior, numa condição de fora que "
+                "ninguém mexeu desde então; forkar mede o mesmo travamento"),
+}
+
+
+def _human_gate(it):
+    """`human_pending` aberto vira gate ABERTO no slice, não vira silêncio.
+
+    O campo existe para a dívida com o humano não sumir. Um item promovido com
+    a rota em aberto e sem gate forkaria uma filha para construir em cima de
+    uma coisa que ninguém validou — e o `cepa-dor` (intake) é justamente quem
+    recusa `open:`, então declarar isso é o que faz o gate mecânico enxergar.
+    """
+    rota = it.get("human_pending")
+    if isinstance(rota, str) and rota.strip():
+        return "open: " + " ".join(rota.split())
+    return "none"
+
+
+def demandas_da_fila(items):
+    """(demandas, fora, avisos) — quem pode virar slice, quem não pode, por quê.
+
+    A ORDEM da fila é preservada: esta função nunca reordena. O que ela
+    acrescenta é `onda_minima`, o piso de onda que o `blocked_by` impõe — dois
+    itens da mesma promoção em que um depende do outro NÃO podem forkar juntos,
+    e agrupar por superfície disjunta sem olhar a dependência é o erro que o
+    plano de ondas paga com uma onda inteira refeita.
+
+    Bloqueador `done` não conta (já fechou). Bloqueador `dropped` também sai do
+    campo, mas AVISADO: sem isso o item ficaria preso para sempre a uma coisa
+    que ninguém vai fechar. Bloqueador que continua aberto e fora da promoção
+    (reservado, travado, ou id que não existe na fila) tira o item junto — e em
+    cascata, porque quem dependia dele também perde o pé.
+    """
+    avisos = []
+    candidatos, fora = [], []
+    por_id = {}
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        ident = str(it.get("id"))
+        por_id[ident] = it
+        st = status_de(it)
+        if st == "pending":
+            candidatos.append(it)
+        else:
+            fora.append({"id": ident, "status": st,
+                         "motivo": FORA_DA_PROMOCAO.get(st, f"status {st!r}")})
+
+    fechados = {i for i, it in por_id.items() if status_de(it) == "done"}
+    largados = {i for i, it in por_id.items() if status_de(it) == "dropped"}
+
+    # Cascata: tirar um candidato pode tirar quem dependia dele. Repete até o
+    # conjunto parar de mudar — a fila não tem ciclo (o `validate` recusa),
+    # então isto termina.
+    vivos = {str(it.get("id")) for it in candidatos}
+    deps = {}
+    while True:
+        mudou = False
+        for it in candidatos:
+            ident = str(it.get("id"))
+            if ident not in vivos:
+                continue
+            meus = []
+            for b in (it.get("blocked_by") or []):
+                b = str(b)
+                if b in fechados:
+                    continue
+                if b in largados:
+                    # A cascata roda a lista mais de uma vez; o aviso é sobre o
+                    # PAR (item, bloqueador), não sobre a passada.
+                    aviso = (f"{ident} depende de {b}, que está `dropped` na "
+                             "fila — a dependência saiu do campo; se ela ainda "
+                             "valer, o item não é candidato a onda")
+                    if aviso not in avisos:
+                        avisos.append(aviso)
+                    continue
+                if b in vivos:
+                    meus.append(b)
+                    continue
+                st = status_de(por_id[b]) if b in por_id else "inexistente"
+                fora.append({"id": ident, "status": "pending",
+                             "motivo": f"depende de {b} ({st}), que não entra "
+                                       "nesta promoção — a onda forkaria sobre "
+                                       "um pé que ninguém vai fechar"})
+                vivos.discard(ident)
+                mudou = True
+                break
+            else:
+                deps[ident] = meus
+        if not mudou:
+            break
+
+    ordenados = [it for it in candidatos if str(it.get("id")) in vivos]
+
+    # `onda_minima` por ponto-fixo: 1 para quem não depende de ninguém da
+    # promoção, 1 + o maior piso dos bloqueadores para o resto. Ponto-fixo, e
+    # não uma passada só, porque `blocked_by` pode apontar para item que vem
+    # DEPOIS na fila (a ordem é de execução, não topológica).
+    piso = {str(it.get("id")): 1 for it in ordenados}
+    for _ in range(len(ordenados) + 1):
+        estavel = True
+        for ident, meus in deps.items():
+            if ident not in piso:
+                continue
+            alvo = max([1] + [piso[b] + 1 for b in meus if b in piso])
+            if alvo != piso[ident]:
+                piso[ident] = alvo
+                estavel = False
+        if estavel:
+            break
+
+    demandas = []
+    for it in ordenados:
+        ident = str(it.get("id"))
+        demandas.append({
+            "id": ident,
+            "title": it.get("title"),
+            "why": it.get("why"),
+            "depends_on": deps.get(ident, []),
+            "onda_minima": piso[ident],
+            "human_gate": _human_gate(it),
+        })
+    return demandas, fora, avisos
+
+
+def fonte_da_fila(plan, nome, alvo, promovidas, total, quando):
+    """A linha `source:` do plano de ondas — rastreio de volta à fila.
+
+    Sem ela o plano de ondas nasce órfão: ninguém consegue dizer, meses depois,
+    de que fila aquele slice saiu nem em que estado ela estava. `demanda` de
+    cada slice é o `id` do item, e esta linha é a outra ponta do fio.
+    """
+    texto = (f"fila single-track '{nome}' ({alvo}) — {promovidas} de {total} "
+             f"itens promovidos a slice por /maestro:program-plan --from-plan")
+    if quando:
+        texto += f", em {quando}"
+    origem = plan.get("source")
+    if origem:
+        texto += f" · a fila veio de: {origem}"
+    return texto
+
+
+def cmd_promote(raiz, nome, como_json, quando):
+    alvo = caminho_do_plano(raiz, nome)
+    if not alvo.is_file():
+        print(f"{alvo} não existe — não há fila para promover. Quem escreve é "
+              "o /common:plan.", file=sys.stderr)
+        return 2
+    plan, erro = le_plano(alvo)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    if modo_de(plan) != MODE:
+        print(f"{alvo} já é um plano '{modo_de(plan)}' — ondas não se promovem "
+              "a ondas. Quem executa esse documento é o /maestro:run.",
+              file=sys.stderr)
+        return 3
+    faltas = valida_plano(plan)
+    if faltas:
+        print(f"{alvo}: {len(faltas)} lacuna(s) — não dá para promover uma fila "
+              "inválida", file=sys.stderr)
+        for f in faltas:
+            print(f"  - {f}", file=sys.stderr)
+        return 2
+
+    items = plan.get("items") or []
+    demandas, fora, avisos = demandas_da_fila(items)
+    ondas = max([d["onda_minima"] for d in demandas], default=0)
+    piso_ok = len(demandas) >= PISO_DEMANDAS
+    saida = {
+        "program": plan.get("program") or nome,
+        "path": str(alvo),
+        "source": fonte_da_fila(plan, nome, alvo, len(demandas), len(items), quando),
+        "demands": demandas,
+        "excluded": fora,
+        "warnings": avisos,
+        "floor": {"minimo": PISO_DEMANDAS, "demandas": len(demandas),
+                  "atingido": piso_ok},
+        "ondas_minimas": ondas,
+    }
+    if como_json:
+        print(json.dumps(saida, ensure_ascii=False, indent=2))
+    else:
+        print(f"fila {saida['program']} · {alvo}")
+        for d in demandas:
+            dep = f" (depois de {', '.join(d['depends_on'])})" if d["depends_on"] else ""
+            print(f"  onda ≥{d['onda_minima']}  {d['id']} — {d['title']}{dep}")
+            if d["human_gate"] != "none":
+                print(f"     gate humano ABERTO: {d['human_gate'][6:]}")
+        for f in fora:
+            print(f"  fora: {f['id']} ({f['status']}) — {f['motivo']}")
+        for a in avisos:
+            print(f"  aviso: {a}")
+        print(f"  {len(demandas)} demanda(s) · piso D7 = {PISO_DEMANDAS} · "
+              f"{ondas} onda(s) no mínimo pela dependência")
+
+    if not piso_ok:
+        detalhe = ("a fila não tem nenhum item `pending` para promover"
+                   if not demandas else
+                   f"só {len(demandas)} demanda(s) — o piso D7 é {PISO_DEMANDAS}")
+        print(f"PISO NÃO ATINGIDO: {detalhe}. Abaixo dele o fork perde para "
+              "executar a mesma fila em série: /common:drain-plan "
+              f"{nome}.", file=sys.stderr)
+        return 4
+    return 0
+
+
 # ── marcação: o lote reserva o item antes e registra o desfecho depois ───────
 
 def cabecalho_do_arquivo(texto):
@@ -1173,6 +1414,15 @@ def main(argv=None):
     q.add_argument("--repo", default=".")
     q.add_argument("--json", action="store_true", dest="como_json")
 
+    pr = sub.add_parser("promote",
+                        help="as demandas que a fila entrega ao "
+                             "/maestro:program-plan --from-plan")
+    pr.add_argument("nome")
+    pr.add_argument("--repo", default=".")
+    pr.add_argument("--json", action="store_true", dest="como_json")
+    pr.add_argument("--quando", help="data a registrar na linha `source` do "
+                                     "plano de ondas (AAAA-MM-DD)")
+
     st = sub.add_parser("start",
                         help="reserva um item do lote (status: in_progress)")
     st.add_argument("nome")
@@ -1233,6 +1483,8 @@ def main(argv=None):
         return cmd_check_name(raiz, a.nome)
     if a.cmd == "queue":
         return cmd_queue(raiz, a.nome, a.teto, a.como_json)
+    if a.cmd == "promote":
+        return cmd_promote(raiz, a.nome, a.como_json, a.quando)
     if a.cmd == "start":
         return cmd_start(raiz, a.nome, a.id)
     if a.cmd == "finish":

@@ -148,12 +148,18 @@ def main():
         check("--json nomeia uncovered corretamente",
               data.get("uncovered") == ["sweep:beta"], data)
 
-    # ── run real sobre o par que motivou a ferramenta ────────────────────
+    # ── run real sobre os pares de verdade ───────────────────────────────
+    # O mesmo comando carrega DUAS famílias de anotação (`sweep`, do modo de
+    # varrimento, e `from-plan`, da promoção fila → ondas), cada uma com o seu
+    # teste de regressão. Sem o `--tag` o cruzamento mede um teste contra os
+    # checkpoints do outro e acusa falta que não existe — que é exatamente o
+    # que o filtro existe para evitar.
     real_cmd = REPO / "maestro" / "commands" / "program-plan.md"
-    real_test = REPO / "tests" / "test_program_plan_sweep.py"
-    r = run(real_cmd, real_test)
-    check("run real: program-plan.md × test_program_plan_sweep.py cobre tudo",
-          r.returncode == 0, r.stdout)
+    for familia, arquivo in (("sweep", "test_program_plan_sweep.py"),
+                             ("from-plan", "test_program_plan_from_plan.py")):
+        r = run(real_cmd, REPO / "tests" / arquivo, ["--tag", familia])
+        check(f"run real: program-plan.md × {arquivo} cobre tudo de `{familia}`",
+              r.returncode == 0, r.stdout)
 
     print()
     if FAILURES:

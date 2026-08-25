@@ -2337,12 +2337,14 @@ lista de exceções fica no próprio teste, explícita, em vez de virar omissão
 
 ## Cinco portas de planejamento, nenhuma conversão entre elas
 
-**Status:** **etapas 1, 2 e 3 CONSTRUÍDAS** — 1 e 2 em 2026-08-24/25
+**Status:** **RESOLVIDO — as 4 etapas CONSTRUÍDAS.** 1 e 2 em 2026-08-24/25
 (`/common:plan` com `--from-spec`, `--from-jira` e a fila ditada à mão +
 `common/bin/cepa-plan`, o escritor mecânico, com os casos de
 `tests/test_common_plan.py`), 3 em 2026-08-25 (`/common:drain-plan`, o executor
-da fila na ordem dela, com 13 casos em `tests/test_common_drain_plan.py`); etapa
-4 (`--from-plan` no `program-plan`) pendente. **Não está vivo até `bin/install.sh --clean`.** ·
+da fila na ordem dela, com 13 casos em `tests/test_common_drain_plan.py`), 4 em
+2026-08-25 (`/maestro:program-plan --from-plan <nome>` + `cepa-plan promote`,
+com 44 casos em `tests/test_program_plan_from_plan.py` e os checkpoints
+`[from-plan:*]` medidos pelo `cepa-promptcov`). **Não está vivo até `bin/install.sh --clean`.** ·
 **Lar:** `common/commands/plan.md` (novo), `common/bin/cepa-plan` (novo),
 `board-flow/commands/triage.md`, `maestro/commands/program-plan.md`,
 `common/commands/drain-plan.md` (novo) ·
@@ -2351,8 +2353,26 @@ da fila na ordem dela, com 13 casos em `tests/test_common_drain_plan.py`); etapa
 **Ordem de construção sugerida:** (1) ✅ `/common:plan` com `--from-spec` e a fila
 ditada à mão — sozinho já destrava repo sem tracker; (2) ✅ `--from-jira` + parar a
 escrita no `triage`, que é a única parte que mexe em comando existente; (3) ✅
-`/common:drain-plan`; (4) `--from-plan` no `program-plan`. Cada etapa é útil
+`/common:drain-plan`; (4) ✅ `--from-plan` no `program-plan`. Cada etapa é útil
 sem a seguinte.
+
+**O que a etapa 4 fechou, e o que ela deixou em aberto de propósito.** A
+promoção fila → ondas era declarada MANUAL no `docs/execution-plan.md` por não
+haver caminho; agora a metade mecânica dela é código (`cepa-plan promote`): quem
+pode virar slice (só `pending` — `in_progress` está reservado por outra sessão,
+`blocked` travou num run anterior), o piso de onda que o `blocked_by` impõe
+(`onda_minima`, com a exclusão de um bloqueador cascateando para quem dependia
+dele) e o que fazer com `human_pending` aberto (vira `human_gate: "open: …"`, que
+o `cepa-dor` reprova, em vez de sumir). A outra metade continua manual de
+propósito, e é a razão original de a promoção ter sido chamada de manual:
+declarar superfície disjunta e aceite executável por item é trabalho de verdade,
+que só vale contra demanda de verdade — script nenhum inventa isso.
+
+**O que sobrou, e não é defeito:** promover não mexe na fila, então o mesmo item
+passa a ter dois executores possíveis (`/common:drain-plan` e a onda). Rodar os
+dois constrói duas vezes. A escolha foi dizer isso em voz alta no encerramento
+do comando, em vez de reservar o item automaticamente: reservar por antecipação
+travaria a fila em cima de um plano de ondas que talvez o dono nem grave.
 
 ### Problema
 
@@ -2367,11 +2387,11 @@ documento ao formato do vizinho:
 | `/maestro:program-plan` | `plan.yaml` `parallel-waves` (exige `BACKLOG.md`) |
 | `/board-flow:plan-track-build-validate` | Epic + Stories no Jira |
 
-As três conversões que faltam: uma spec fechada não vira fila; um repo sem
-tracker não tem quem escreva `single-track` (o `docs/execution-plan.md` já
-registra isso como pergunta em aberto: *"who writes the plan in a repo with no
-tracker"*); e promover `single-track` → onda é manual por decisão declarada no
-mesmo documento.
+As três conversões que faltavam: uma spec fechada não virava fila; um repo sem
+tracker não tinha quem escrevesse `single-track` (o `docs/execution-plan.md`
+registrava isso como pergunta em aberto: *"who writes the plan in a repo with no
+tracker"*); e promover `single-track` → onda era manual por decisão declarada no
+mesmo documento. As três estão construídas.
 
 A primeira é a que dói: o `/common:spec` foi feito para não exigir tracker, e
 mesmo assim o que ele produz só continua andando com um.
