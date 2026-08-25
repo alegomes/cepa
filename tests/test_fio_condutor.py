@@ -94,19 +94,29 @@ def main():
           "slices:" not in pointer_txt and "items:" not in pointer_txt,
           "o template voltou a duplicar o schema — front-door rival")
 
-    # ── produtor: triage persiste ordem + porquê (loss 1) ───────────────────
+    # ── produtor: triage produz ordem + porquê e ENTREGA (loss 1) ───────────
+    # Até a etapa 2 (2026-08-25) o triage também GRAVAVA o plan.yaml, e estas
+    # duas guardas cobravam isso. Ele parou: agora grava o repasse da
+    # classificação e o escritor é o /common:plan --from-jira. O que a fila não
+    # pode perder continua o mesmo — ordem, `why` por item, e a fusão que não
+    # apaga `human_pending` —, então as guardas apontam para onde essas três
+    # coisas passaram a morar, em vez de sumir com a etapa antiga.
     triage = read(REPO / "board-flow" / "commands" / "triage.md")
-    check("triage persiste o plano single-track",
-          "<programs>/<project_key>/plan.yaml" in triage
-          and "mode: single-track" in triage)
+    check("triage entrega o repasse da classificação, e não o plan.yaml",
+          "triagem-<YYYY-MM-DD>.json" in triage
+          and "no longer writes `plan.yaml`" in triage)
+    check("e nomeia o escritor único da fila",
+          "/common:plan" in triage and "--from-triage" in triage)
     # `<programs>` resolve para o clone principal, nunca para a worktree — a
     # regra e o guard mecânico moram em tests/test_plan_anchor_root.py.
     check("triage propõe a fila To Do em ORDEM",
           "in execution order" in triage)
     check("triage exige o `why` por item",
           "why" in triage and "re-priorisation from scratch" in triage)
-    check("triage funde em vez de sobrescrever (não apaga human_pending)",
-          "Merge, never overwrite" in triage)
+    check("a fusão que não apaga `human_pending` continua exigida",
+          "human_pending" in triage and "re-triage that wiped it" in triage,
+          "quem funde agora é o cepa-plan; o triage precisa continuar dizendo "
+          "o que está em jogo, senão a regra some do lugar onde ela é lida")
 
     # ── fechamento que aponta adiante (loss 2) ──────────────────────────────
     for cmd in ("execute", "fix", "prove"):

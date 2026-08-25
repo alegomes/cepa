@@ -32,11 +32,23 @@ Subcomandos:
       antes dos outros, carrega a frase que registra a herança em vez de um
       critério inventado. Exit 2 = a spec não tem critério nenhum.
 
+  cepa-plan from-triage <repasse.json|-> [--json]
+      Lê o repasse de uma triagem do /board-flow:triage — a classificação dos
+      cards em baldes, já na ordem de execução que o dono confirmou — e devolve
+      a lista de itens (JSON). Não grava nada; quem grava é o `write`, que
+      também aceita `--from-triage` direto.
+      Só card `ready` vira item `pending`: `implemented` pertence à fila de
+      PROVA e `needs-refinement` fica no backlog. `obsolete` entra como
+      `dropped`, com o motivo, para o descarte não sumir do documento. Recusa
+      card READY sem `why`, card OBSOLETE sem motivo e card ainda parado em
+      `needs-decision` (grelha inacabada). Exit 2 = recusado, com o motivo.
+
   cepa-plan validate <plan.yaml>
       As checagens abaixo sobre um arquivo que já está no disco.
       Exit 0 = válido; 2 = inválido, com as lacunas nomeadas.
 
-  cepa-plan write <nome> --items ARQUIVO|- [--source TEXTO] [--repo DIR]
+  cepa-plan write <nome> --items ARQUIVO|- | --from-spec F | --from-triage F
+                  [--source TEXTO] [--repo DIR]
                   [--on-missing refuse|keep|drop] [--dry-run]
       Grava a fila. Os itens entram por arquivo JSON ou YAML (uma lista de
       objetos) ou por stdin com `-`.
@@ -452,6 +464,228 @@ def cmd_from_spec(caminho, como_json=True):
     return 0
 
 
+# ── leitura do repasse de uma triagem do /board-flow:triage ──────────────────
+
+# Os cinco destinos que a triagem dá a um card. Os nomes são os do balde no
+# `/board-flow:triage`, em minúsculas — traduzir aqui seria criar um segundo
+# vocabulário para a mesma coisa.
+BALDES = ("ready", "implemented", "obsolete", "needs-refinement", "needs-decision")
+
+
+def itens_de_triagem(repasse):
+    """(itens, avisos, erros). A classificação é da triagem; a fila é daqui.
+
+    Cada recusa abaixo tranca uma regra que hoje só existe como prosa no
+    `board-flow/commands/triage.md` — e prosa de comando erode em silêncio, que
+    é a lição que o auditor de completude deixou na etapa 1: um `grep` na
+    instrução prova que o comando PROMETE aplicar a regra, nunca que uma
+    execução a aplicou.
+    """
+    avisos, erros = [], []
+    if not isinstance(repasse, dict):
+        return [], [], ["o repasse da triagem tem que ser um objeto JSON com "
+                        "`cards:` — veja `cepa-plan from-triage --exemplo`"]
+    cards = repasse.get("cards")
+    if not isinstance(cards, list) or not cards:
+        return [], [], ["o repasse não traz nenhum card em `cards:` — uma "
+                        "triagem que classificou zero cards não tem ordem a "
+                        "gravar"]
+
+    itens = []
+    sem_why, sem_motivo, baldes_ruins, na_grelha = [], [], [], []
+    fora_da_fila = {"implemented": [], "needs-refinement": []}
+
+    for i, c in enumerate(cards):
+        if not isinstance(c, dict):
+            erros.append(f"o card na posição {i + 1} não é um objeto")
+            continue
+        chave = str(c.get("key") or c.get("id") or "").strip()
+        if not chave:
+            erros.append(f"o card na posição {i + 1} não tem `key` — é por ela "
+                         "que o `blocked_by` e o /common:next apontam")
+            continue
+        balde = str(c.get("bucket") or "").strip().lower()
+        if balde not in BALDES:
+            baldes_ruins.append(f"{chave} (`{balde or 'vazio'}`)")
+            continue
+
+        # Um NEEDS-DECISION que chega aqui é a grelha do passo 6 inacabada. O
+        # próprio triage.md manda: "A NEEDS-DECISION card always leaves the
+        # grill as IMPLEMENTED / READY / OBSOLETE / stays". Gravar assim
+        # esconderia uma pergunta que ninguém respondeu dentro de uma fila que
+        # se lê como decidida.
+        if balde == "needs-decision":
+            na_grelha.append(chave)
+            continue
+
+        # Só `→ To Do` vira item `pending`. Card roteado para In Review pertence
+        # à fila de PROVA, não à de construção — misturar as duas faz o
+        # /common:next mandar construir o que já está construído.
+        if balde in fora_da_fila:
+            fora_da_fila[balde].append(chave)
+            continue
+
+        titulo = str(c.get("title") or c.get("summary") or "").strip()
+        if not titulo:
+            erros.append(f"{chave} não tem `title`")
+            continue
+
+        if balde == "ready":
+            porque = " ".join(str(c.get("why") or "").split())
+            if not porque:
+                sem_why.append(chave)
+                continue
+            itens.append({
+                "id": chave,
+                "title": titulo,
+                "why": porque,
+                "status": "pending",
+                "blocked_by": [str(x) for x in (c.get("blocked_by") or [])],
+                "human_pending": None,
+            })
+        else:  # obsolete
+            motivo = " ".join(str(c.get("reason") or c.get("why") or "").split())
+            if not motivo:
+                sem_motivo.append(chave)
+                continue
+            itens.append({
+                "id": chave,
+                "title": titulo,
+                # O card sai da fila, mas o documento continua explicando por
+                # quê: item apagado vira demanda que a próxima varredura propõe
+                # de novo, e a decisão de descartar se perde.
+                "why": f"descartado na triagem: {motivo}",
+                "status": "dropped",
+                "blocked_by": [],
+                "human_pending": None,
+                "evidence": motivo,
+            })
+
+    if baldes_ruins:
+        erros.append("card com balde que a triagem não usa: "
+                     + ", ".join(baldes_ruins)
+                     + f" — os válidos são {', '.join(BALDES)}")
+    if na_grelha:
+        erros.append(f"{len(na_grelha)} card(s) ainda em `needs-decision`: "
+                     + ", ".join(na_grelha)
+                     + " — a grelha do passo 6 do /board-flow:triage não "
+                       "terminou. Card que sai da grelha sai como ready, "
+                       "implemented ou obsolete, nunca ainda em dúvida; gravar "
+                       "assim esconde uma pergunta aberta dentro de uma fila "
+                       "que se lê como decidida.")
+    if sem_why:
+        erros.append(f"{len(sem_why)} card READY sem `why`: " + ", ".join(sem_why)
+                     + " — a ordem sem o critério que a escolheu é o que o Jira "
+                       "já guarda, e é exatamente o que esta fila existe para "
+                       "acrescentar. Peça o motivo de cada posição em vez de "
+                       "inventar um plausível.")
+    if sem_motivo:
+        erros.append(f"{len(sem_motivo)} card OBSOLETE sem `reason`: "
+                     + ", ".join(sem_motivo)
+                     + " — descarte sem motivo registrado é card que reaparece "
+                       "na próxima varredura.")
+
+    if not erros and not itens:
+        erros.append("nenhum card virou item: a triagem não deixou nenhum "
+                     "READY nem nenhum OBSOLETE. Não há fila a gravar (os "
+                     "IMPLEMENTED vão para /board-flow:prove-drain).")
+
+    # `blocked_by` apontando para card que a triagem tirou da fila (foi para In
+    # Review, ou ficou no backlog) não é id fantasma: é uma dependência real
+    # sobre um card que simplesmente não é item DESTA fila. Recusar seria
+    # obrigar o agente a apagar a informação à mão; manter faria a validação
+    # geral recusar a fila inteira por id inexistente. Some do campo e é DITO —
+    # some calado é como uma dependência vira surpresa na execução.
+    de_fora = {k for ks in fora_da_fila.values() for k in ks}
+    for it in itens:
+        cortados = [b for b in it["blocked_by"] if b in de_fora]
+        if cortados:
+            it["blocked_by"] = [b for b in it["blocked_by"] if b not in de_fora]
+            avisos.append(
+                f"{it['id']} dependia de {', '.join(cortados)}, que a triagem "
+                "tirou desta fila (foram para a fila de prova ou ficaram no "
+                "backlog) — a dependência saiu do `blocked_by` porque o "
+                "/common:next só sabe esperar por item da própria fila. Se ela "
+                "ainda vale, ela agora é sua para vigiar.")
+
+    for balde, chaves in fora_da_fila.items():
+        if chaves:
+            destino = ("a fila de prova (/board-flow:prove-drain)"
+                       if balde == "implemented"
+                       else "o backlog, sem mudança")
+            avisos.append(f"{len(chaves)} card(s) `{balde}` ficaram FORA da "
+                          f"fila, por desenho — o destino deles é {destino}: "
+                          + ", ".join(chaves))
+
+    # Truncamento nunca é silencioso: uma fila que cobre 15 de 27 cards se lê,
+    # meses depois, como a fila inteira do quadro.
+    resto = repasse.get("remaining_in_column")
+    if isinstance(resto, int) and resto > 0:
+        avisos.append(f"a triagem parou no teto e deixou {resto} card(s) na "
+                      "coluna sem classificar — esta fila é um pedaço do "
+                      "quadro, não o quadro. Está dito na linha `source`.")
+
+    return itens, avisos, erros
+
+
+def fonte_da_triagem(repasse):
+    """A linha `source` do plano, montada do que a própria triagem registrou."""
+    p = []
+    chave = repasse.get("project_key")
+    p.append(f"Jira {chave}" if chave else "Jira")
+    if repasse.get("source_column"):
+        p.append(f"coluna {repasse['source_column']}")
+    if repasse.get("scope"):
+        p.append(f"escopo {repasse['scope']}")
+    if repasse.get("triaged_on"):
+        p.append(f"triado em {repasse['triaged_on']}")
+    texto = " · ".join(p) + " (classificado por /board-flow:triage)"
+    resto = repasse.get("remaining_in_column")
+    if isinstance(resto, int) and resto > 0:
+        texto += (f" — PARCIAL: {resto} card(s) da coluna ficaram sem "
+                  "classificar neste run")
+    return texto
+
+
+def le_repasse(caminho):
+    """(repasse, erro). Arquivo JSON/YAML ou '-' para stdin."""
+    try:
+        bruto = sys.stdin.read() if caminho == "-" else Path(caminho).read_text(encoding="utf-8")
+    except OSError as e:
+        return None, f"não deu para ler {caminho}: {e}"
+    if not bruto.strip():
+        return None, f"{caminho} veio vazio"
+    try:
+        return json.loads(bruto), None
+    except json.JSONDecodeError:
+        try:
+            return yaml.safe_load(bruto), None
+        except yaml.YAMLError as e:
+            return None, f"{caminho} não é JSON nem YAML válido ({e})"
+
+
+def cmd_from_triage(caminho, como_json=True):
+    repasse, erro = le_repasse(caminho)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    itens, avisos, erros = itens_de_triagem(repasse)
+    for a in avisos:
+        print(f"aviso: {a}", file=sys.stderr)
+    if erros:
+        for e in erros:
+            print(f"recusa: {e}", file=sys.stderr)
+        return 2
+    faltas = valida_itens(itens)
+    if faltas:
+        print(f"{len(faltas)} lacuna(s) nos itens que a triagem produziu",
+              file=sys.stderr)
+        for f in faltas:
+            print(f"  - {f}", file=sys.stderr)
+        return 2
+    print(json.dumps(itens, ensure_ascii=False, indent=2) if como_json else itens)
+    return 0
+
 # ── subcomandos ──────────────────────────────────────────────────────────────
 
 def cmd_check_name(raiz, nome):
@@ -498,7 +732,20 @@ def cmd_validate(caminho):
 
 
 def cmd_write(raiz, a):
-    if a.from_spec:
+    if a.from_triage:
+        repasse, erro = le_repasse(a.from_triage)
+        if erro:
+            print(erro, file=sys.stderr)
+            return 2
+        itens, avisos, erros = itens_de_triagem(repasse)
+        for aviso in avisos:
+            print(f"aviso: {aviso}", file=sys.stderr)
+        if erros:
+            for e in erros:
+                print(f"recusa: {e}", file=sys.stderr)
+            return 2
+        erro = None
+    elif a.from_spec:
         sp = Path(a.from_spec)
         if not sp.is_file():
             print(f"{sp} não existe", file=sys.stderr)
@@ -572,7 +819,9 @@ def cmd_write(raiz, a):
 
     fonte = a.source or (
         f"{a.from_spec} ({len(itens)} critérios de sucesso; ordem herdada do texto)"
-        if a.from_spec else None) or fonte_antiga or "ditada à mão em /common:plan"
+        if a.from_spec else None) or (
+        fonte_da_triagem(repasse) if a.from_triage else None
+        ) or fonte_antiga or "ditada à mão em /common:plan"
     texto = serializa(a.nome, fonte, fundidos, a.quando or "(data não informada)")
 
     if a.dry_run:
@@ -615,6 +864,11 @@ def main(argv=None):
                        help="lê uma spec do /common:spec e devolve os itens (JSON)")
     s.add_argument("spec")
 
+    t = sub.add_parser("from-triage",
+                       help="lê o repasse de uma triagem do /board-flow:triage "
+                            "e devolve os itens (JSON)")
+    t.add_argument("repasse", help="arquivo JSON/YAML, ou '-' para stdin")
+
     w = sub.add_parser("write", help="grava a fila")
     w.add_argument("nome")
     w.add_argument("--items",
@@ -622,6 +876,9 @@ def main(argv=None):
     w.add_argument("--from-spec", metavar="ARQUIVO",
                    help="lê os itens de uma especificação do /common:spec, um "
                         "por critério de sucesso, na ordem do texto")
+    w.add_argument("--from-triage", metavar="ARQUIVO",
+                   help="lê os itens do repasse de uma triagem do "
+                        "/board-flow:triage, na ordem que ela classificou")
     w.add_argument("--source", help="de onde as demandas vieram")
     w.add_argument("--quando", help="data a registrar no cabeçalho (YYYY-MM-DD)")
     w.add_argument("--repo", default=".")
@@ -637,8 +894,10 @@ def main(argv=None):
         return cmd_validate(a.plano)
     if a.cmd == "from-spec":
         return cmd_from_spec(a.spec)
-    if a.cmd == "write" and not (a.items or a.from_spec):
-        ap.error("write precisa de --items ou --from-spec")
+    if a.cmd == "from-triage":
+        return cmd_from_triage(a.repasse)
+    if a.cmd == "write" and not (a.items or a.from_spec or a.from_triage):
+        ap.error("write precisa de --items, --from-spec ou --from-triage")
 
     raiz = raiz_principal(a.repo)
     if raiz is None:

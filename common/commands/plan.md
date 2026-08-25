@@ -1,6 +1,6 @@
 ---
-description: Escreve a fila de execução `single-track` do repo — `.claude/programs/<nome>/plan.yaml`, o documento que guarda a ORDEM e o PORQUÊ de cada item estar naquela posição, que é o que o tracker perde. Aceita duas fontes hoje: `--from-spec`, que transforma cada critério de sucesso de uma especificação do /common:spec num item herdando a ordem do texto (e dizendo que herdou), e a fila ditada à mão, para repo sem tracker e sem spec. Não exige Jira. É o único escritor da fila fora do /board-flow:triage, e recusa gravar por cima de um plano de ondas do /maestro:program-plan. Quem lê a fila depois é o /common:next.
-argument-hint: <nome> [--from-spec docs/spec/<slug>.md] [--dry-run] [--on-missing refuse|keep|drop]
+description: Escreve a fila de execução `single-track` do repo — `.claude/programs/<nome>/plan.yaml`, o documento que guarda a ORDEM e o PORQUÊ de cada item estar naquela posição, que é o que o tracker perde. Aceita três fontes: `--from-spec`, que transforma cada critério de sucesso de uma especificação do /common:spec num item herdando a ordem do texto (e dizendo que herdou); `--from-jira`, que pega a classificação do /board-flow:triage — quem lê os cards e caça evidência no código — e grava a ordem que ela propôs; e a fila ditada à mão, para repo sem tracker e sem spec. Não exige Jira. É o ÚNICO escritor da fila, e recusa gravar por cima de um plano de ondas do /maestro:program-plan. Quem lê a fila depois é o /common:next.
+argument-hint: <nome> [--from-spec docs/spec/<slug>.md | --from-jira [coluna|repasse.json]] [--dry-run] [--on-missing refuse|keep|drop]
 interaction: conversational
 ---
 
@@ -25,8 +25,12 @@ exige Jira. O resultado é o buraco que este comando fecha:
 
 É a etapa 1 do desenho "um escritor, três fontes" (`BACKLOG.md`, "Cinco portas
 de planejamento", aprovado pelo dono em 2026-08-24): uma fila, um autor, várias
-fontes. As outras três etapas consomem o arquivo que este comando passa a
-escrever.
+fontes. As outras etapas consomem o arquivo que este comando passa a escrever.
+
+A etapa 2 fechou o outro lado: o `/board-flow:triage` **parou de escrever** o
+`plan.yaml` e passou a entregar a classificação para cá. Desde então "um
+escritor" é literal — a fila tem um autor só, e a fonte Jira é uma das três em
+vez de o pré-requisito.
 
 **Isto não planeja ondas.** `mode: parallel-waves` é outro documento, com outro
 autor (`/maestro:program-plan`) e outro executor (`/maestro:run`): tem
@@ -42,6 +46,10 @@ mesmo diretório e são distinguidos por um campo interno, então este comando
   leva.
 - `--from-spec docs/spec/<slug>.md` — cada critério de sucesso da especificação
   vira um item da fila.
+- `--from-jira [coluna|repasse.json]` — a fila sai da classificação de uma
+  triagem. Com um arquivo, grava um repasse que uma triagem já produziu; com um
+  nome de coluna (ou nada, que é `Backlog`), roda o `/board-flow:triage` antes e
+  grava o repasse dele.
 - `--source "texto"` — de onde as demandas vieram, para rastreio. Sem a flag, o
   comando preenche a partir da fonte que usou.
 - `--dry-run` — mostra o arquivo que seria gravado e não grava.
@@ -49,11 +57,12 @@ mesmo diretório e são distinguidos por um campo interno, então este comando
   disco e a lista nova não menciona. Default `refuse`: sumir com ele em silêncio
   apaga posição e `why` que alguém decidiu.
 
-**`--from-jira` ainda não existe.** É a etapa 2 do mesmo desenho, e enquanto ela
-não for construída quem escreve a fila a partir de um board continua sendo o
-`/board-flow:triage` — ele lê os cards, procura evidência no código, roteia os
-quatro baldes e grava o plano. Não tente imitá-lo aqui a partir de uma consulta
-ao Jira: a ordem dele sai da classificação, não da coluna.
+**`--from-jira` não consulta o Jira por conta própria.** A ordem de uma fila
+vinda de um board sai da CLASSIFICAÇÃO, nunca da coluna: quem lê os cards,
+procura evidência no código e roteia os quatro baldes é o `/board-flow:triage`.
+Este comando grava o que ele classificou. Montar a fila aqui a partir de uma
+consulta crua ao Jira devolveria a ordem do rank do quadro — que é exatamente a
+ordem que este documento existe para substituir.
 
 ## Instructions
 
@@ -151,6 +160,68 @@ fechar a especificação antes (`/common:spec --fechar <slug>`) ou escrever a fi
 assim mesmo. Recomende fechar antes — um critério sem superfície observável vira
 um item de fila que ninguém sabe quando terminou.
 
+#### Com `--from-jira`
+
+A fonte aqui é a **classificação** de uma triagem, não a coluna do quadro.
+
+**Se veio um arquivo** (`--from-jira <repasse.json>`), uma triagem já rodou e o
+repasse dela está no disco — normalmente em
+`<raiz-principal>/.claude/programs/<nome>/triagem-<YYYY-MM-DD>.json`, onde o
+`/board-flow:triage` o deixa. Pule para o passo 3.
+
+**Se veio um nome de coluna** (ou nada, que é `Backlog`), a triagem ainda não
+rodou. Exija as duas coisas de que ela depende, e pare nomeando a que faltar:
+
+- o plugin `board-flow` instalado — sem ele não há quem fale com o Jira
+  (`atlassian-expert` é o único caminho de escrita do harness);
+- um `board-flow.yaml` na raiz do projeto (ou o legado
+  `.claude/board-flow.lifecycle.yaml`), de onde sai o `defaults.project_key` e
+  o `status_map`.
+
+Faltando qualquer uma, **não improvise uma consulta ao Jira**: diga que a fila
+por board precisa da triagem, e ofereça as duas saídas que existem sem ela —
+`--from-spec`, se houver especificação fechada, ou a fila ditada à mão.
+
+Com as duas presentes, rode o `/board-flow:triage <coluna>` e siga o workflow
+dele até o passo 9, que é onde ele grava o repasse. O que volta de lá é a
+classificação nos quatro baldes com a ordem de execução **que o dono confirmou
+no passo 7** — a ordem é dele e da evidência que a triagem juntou, não sua.
+
+**A leitura do repasse é mecânica**, não sua:
+
+```
+python3 common/bin/cepa-plan from-triage <repasse.json>
+```
+
+Pelo mesmo motivo do `from-spec`: as regras abaixo moravam na prosa do
+`triage.md`, e prosa de comando erode sem nenhum teste ficar vermelho. O script
+aplica, e recusa quando não dá:
+
+- **só card `ready` vira item `pending`.** Card `implemented` foi para In
+  Review e pertence à fila de PROVA (`/board-flow:prove-drain`); card
+  `needs-refinement` fica no backlog. Os dois saem da fila e o script DIZ
+  quais, com a contagem — repita isso no relatório.
+- **card `obsolete` entra como `dropped`, com o motivo.** O card sai da fila e
+  o documento continua explicando por quê; apagá-lo faz a próxima varredura
+  propor a mesma demanda de novo.
+- **card READY sem `why` é recusa**, não item com `why` inventado. O `why` de
+  cada posição já foi dito no passo 7 da triagem — se sumiu no caminho,
+  pergunte, não preencha.
+- **card ainda em `needs-decision` é recusa.** A grelha do passo 6 não
+  terminou, e gravar assim esconderia uma pergunta em aberto dentro de uma fila
+  que se lê como decidida.
+- **dependência para fora da fila sai do `blocked_by`, e é dita.** Um card
+  READY que dependia de um card que foi para In Review perde o `blocked_by`
+  (o `/common:next` só sabe esperar por item da própria fila) e o aviso nomeia
+  os dois — a partir daí a dependência é do dono, para vigiar.
+- **`--max` nunca é silencioso.** O `remaining_in_column` do repasse vira uma
+  nota `PARCIAL` na linha `source` do plano, e é o que impede uma fila de 15
+  cards de 27 de ser lida, meses depois, como o quadro inteiro.
+
+Quando nada mudou no que o `from-triage` devolveu, `--from-triage <arquivo>` faz
+a leitura e a gravação de uma vez, no lugar do `--items`. A linha `source` sai
+do próprio repasse (projeto, coluna, escopo, data, e a nota de parcialidade).
+
 #### Sem flag — a fila ditada à mão
 
 O caso do repo sem tracker e sem spec (este repo é um). Antes de perguntar
@@ -183,8 +254,9 @@ python3 common/bin/cepa-plan write <nome> \
   --items <arquivo.json> --source "<de onde veio>" --quando <YYYY-MM-DD> --repo .
 ```
 
-Quando nada mudou no que o `from-spec` devolveu, `--from-spec <arquivo>` faz as
-duas coisas de uma vez, no lugar do `--items`.
+Quando nada mudou no que o `from-spec` (ou o `from-triage`) devolveu,
+`--from-spec <arquivo>` / `--from-triage <arquivo>` faz as duas coisas de uma
+vez, no lugar do `--items`.
 
 Escreva os itens num arquivo JSON temporário (ou mande por stdin com `-`). O
 script:
@@ -235,6 +307,10 @@ Próximo passo: /common:next (nomeia UM item e o porquê dele).
   contar.
 - **Nunca grava por cima de um plano de ondas.** Colisão é recusa nomeada, sem
   escape.
+- **Nunca consulta o Jira direto.** Com `--from-jira`, quem lê os cards e
+  classifica é o `/board-flow:triage`; este comando grava o que ele classificou.
+  Uma fila montada de uma consulta crua à coluna herda a ordem do rank do
+  quadro, que é a ordem que este documento existe para substituir.
 - **Nunca escreve o YAML à mão.** A gravação passa por `common/bin/cepa-plan`,
   que é onde as recusas moram.
 - **Não fecha `human_pending` de ninguém.** Item que vem do disco com pendência
@@ -250,4 +326,4 @@ Próximo passo: /common:next (nomeia UM item e o porquê dele).
 - [`common/plan-schema.yaml`](../plan-schema.yaml) — o schema anotado, os dois modos
 - `/common:next` — o consumidor da fila
 - `/common:spec` — a fonte que `--from-spec` lê
-- `/board-flow:triage` — quem escreve a fila a partir de um board, enquanto a etapa 2 não existe
+- `/board-flow:triage` — a fonte que `--from-jira` lê: ele classifica os cards e entrega a ordem; desde a etapa 2 ele não escreve mais o `plan.yaml`
