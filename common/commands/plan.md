@@ -77,8 +77,8 @@ injetada aqui, e a skill `guided-interrogation` vale enquanto a fila estiver
 sendo ditada à mão. Perguntar a ordem é o trabalho, não o último recurso.
 
 **Não execute nada.** O comando escreve um arquivo. Quem aponta o próximo passo
-é o `/common:next`; quem executa em lote será o `/common:drain-plan` (etapa 3,
-ainda não construída).
+é o `/common:next`; quem executa em lote é o `/common:drain-plan` (etapa 3,
+construída em 2026-08-25), na ordem que esta fila guardar.
 
 **A gravação é mecânica.** Quem valida, funde e grava é
 `common/bin/cepa-plan` — não escreva o YAML na mão com `Write`. O script recusa

@@ -1,0 +1,110 @@
+schema_version: 2
+card: common-drain-plan
+verdict: proven
+reviewed_at: 2026-08-25T16:10:00-03:00
+base_commit: 4bc6847
+head_commit: 1b2d855
+issue_type: Feature
+repo_kind: harness             # NOT Quarkus/Maven — Python CLI + prompt files, own test suite
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (monta_lote, resumo_do_lote, cmd_queue)"
+      module: cli
+      external_observable: true    # a superfície externa é a linha de comando: exit code, stdout, stderr/JSON
+      substituted_by_double: null  # roda a CLI real de ponta a ponta, contra plan.yaml gravado pelo próprio escritor
+    - class: "common/bin/cepa-plan (cmd_start)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-plan (cmd_finish)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-plan (cabecalho_do_arquivo, grava_corpo, abre_plano_para_marcar)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/commands/drain-plan.md (prosa: manda usar cepa-plan queue/start/finish, proíbe editar o plan.yaml à mão, declara teto e restrição de tracker)"
+      module: prompt
+      external_observable: false   # prosa não é executável; a evidência aqui é grep de contrato, deliberadamente fraca
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); perturbação manual é o único mecanismo aplicável"
+    perturbation:
+      status: pass
+      results:
+        - "P1 — ordem do lote não reordena: em monta_lote, trocado o `break` de item bloqueado por `continue` (passa por cima do travado para pegar o de baixo) — 3 asserções de test_bloqueio_para_o_lote_mas_dependencia_interna_nao foram para FAIL (parada virou fim-da-fila em vez de bloqueado, e o batch passou a incluir Z e C pulando A) — RED confirmado, restaurado"
+        - "P2 — teto --max: `if len(lote) >= teto` trocado por `if False` — 5 asserções (ordem+teto, teto=quem para, item nomeado na parada, pendentes_fora_do_lote, teto com bloqueador fora do lote) foram para FAIL — RED confirmado"
+        - "P3 — parada em human_pending aberto: `if it.get(\"human_pending\") is not None` trocado por `if False` — as 3 asserções de test_human_pending_aberto_para_o_lote foram para FAIL (lote engoliu B e seguiu até C, parada virou fim-da-fila) — RED confirmado"
+        - "P4 — dependência de item que ESTÁ no lote não deve bloquear: removida a exceção `and str(b) not in {x['id'] for x in lote}` do cálculo de `pendentes` — a asserção 'dependência de item que já está no lote não trava o lote' foi para FAIL (B passou a parar o lote em vez de entrar junto com A) — RED confirmado"
+        - "P5 — parada em in_progress: `if st == \"in_progress\"` trocado por `if False` — as 2 asserções de test_in_progress_para_o_lote foram para FAIL (o item reservado por outra sessão entrou no lote) — RED confirmado"
+        - "P6 — parada em bloqueado-antes: `if st == \"blocked\"` trocado por `if False` — 2 asserções foram para FAIL (item que saiu blocked de um run anterior voltou a ser re-executado, parada virou fim-da-fila) — RED confirmado"
+        - "P7 — aviso de bloqueador dropped: removido o laço que gera o aviso 'dependia de Z, que está dropped' — a asserção 'mas o abandono é DITO, não absorvido' foi para FAIL (warnings veio vazio; o item seguiu liberado, mas em silêncio) — RED confirmado"
+        - "P8 — recusa de plano parallel-waves em queue: `if modo_de(plan) != MODE: ...; return 3` trocado por `if False`, em cmd_queue — a asserção 'recusa montar lote sobre um plano de ondas' foi para FAIL (exit 0 sobre um plano de ondas, em vez de 3) — RED confirmado"
+        - "P9 — recusa de reserva dupla no start: `if st == \"in_progress\": ...; return 5` trocado por `if False`, em cmd_start — a mensagem específica ('a recusa explica o custo (trabalho refeito)') foi para FAIL; a reserva dupla ainda foi recusada por acaso (cai no `if st != \"pending\"` seguinte com mensagem genérica), mas o teste pegou a perda da mensagem certa — RED confirmado, prova de que o teste é sensível ao texto, não só ao exit code"
+        - "P10 — exigência de --evidence no finish: bloco de recusa de evidência vazia trocado por `if False`, em cmd_finish — 3 asserções de test_finish_exige_evidencia foram para FAIL (gravou done sem evidência, e o disco mudou na recusa) — RED confirmado"
+        - "P11 — recusa de FECHAR human_pending (passar --human-pending vazio): o `if not str(human_pending).strip(): ...; return 2` removido, substituído por `it['human_pending'] = human_pending or None` (fecharia a dívida em silêncio) — 4 asserções de test_finish_abre_divida_mas_nunca_fecha foram para FAIL (a rota de B foi fechada pelo agente) — RED confirmado"
+        - "P12 — preservação do cabeçalho escrito à mão: cabecalho_do_arquivo() trocado para sempre devolver string vazia (regeneraria o corpo do zero a cada start/finish) — 2 asserções de test_marcacao_preserva_cabecalho_e_campos_extras foram para FAIL (o cabeçalho sumiu, a data de escrita '2026-08-25' não sobreviveu) — RED confirmado"
+      run: >-
+        worktree descartável /tmp/proof-common-drain-plan (git worktree add
+        --detach HEAD, HEAD = 1b2d855). GREEN de partida confirmado primeiro:
+        `python3 tests/test_common_drain_plan.py` → "all green" (13 funções de
+        teste, dezenas de asserções). Cada uma das 12 perturbações acima:
+        aplicada via script Python (heredoc + `open(p).read().replace(old,new)`
+        com `assert old in s` antes de escrever, para garantir que a
+        perturbação realmente bateu no trecho certo), depois
+        `python3 tests/test_common_drain_plan.py` exigindo pelo menos uma
+        asserção em FAIL, depois `git checkout -- common/bin/cepa-plan` para
+        restaurar antes da perturbação seguinte. GREEN final confirmado com
+        `python3 tests/test_common_drain_plan.py` ("all green") e
+        `git status --porcelain` vazio no worktree antes de removê-lo com
+        `git worktree remove --force`.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (não há coverage tool wired neste repo Python): as 12
+      perturbações cobrem toda linha de decisão nova em monta_lote (ordem,
+      teto, human_pending, bloqueado, bloqueado-antes, in_progress, dependência
+      interna ao lote, aviso de dropped), cmd_queue (recusa de parallel-waves),
+      cmd_start (recusa de reserva dupla) e cmd_finish (exigência de evidência,
+      recusa de fechar human_pending) e a marcação que preserva o cabeçalho
+      (cabecalho_do_arquivo/grava_corpo) — nenhuma ficou verde ao ser quebrada.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      a mudança abre uma superfície de entrada (o plan.yaml no disco, e os
+      argumentos `--max`/`--status`/`--evidence`/`--human-pending` da CLI),
+      mas ela já é adversarialmente coberta pelos próprios comportamentos
+      exigidos e perturbados em L3 (id fantasma, ciclo, item já reservado,
+      rota humana aberta, evidência vazia, human_pending vazio) — o roteiro de
+      recusas exigido pelo card É o roteiro de adversarial input desta CLI.
+      `cli` não é o módulo `api-rest` do vocabulário Quarkus (este repo não
+      tem um), então a condição estrutural do `n/a` (nenhuma classe mudada em
+      módulo input-bearing no sentido Quarkus) é vácua aqui — mas a condição
+      de fundo (razão nomeada, diff que abre superfície mas já coberta por L3)
+      se mantém, no mesmo padrão de common-plan-etapa2.yaml.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  Todos os comportamentos pedidos para a etapa 3 ("um escritor, três fontes")
+  foram, cada um, quebrados na CLI real (common/bin/cepa-plan) dentro de um
+  worktree descartável, e o caso de tests/test_common_drain_plan.py que deveria
+  acusar a quebra foi para RED em todas as 12 perturbações — depois restaurado
+  e a suíte confirmada GREEN de novo. Cobertura: ordem do lote (não reordenar),
+  teto --max, parada em human_pending aberto, parada em item bloqueado por algo
+  fora do lote, o caso oposto (dependência interna ao lote não bloqueia),
+  parada em in_progress, parada em bloqueado-antes, aviso de bloqueador
+  dropped, recusa de plano parallel-waves em queue, recusa de reserva dupla no
+  start, exigência de --evidence no finish, recusa de fechar human_pending, e
+  preservação do cabeçalho escrito à mão. Nenhum nível ficou
+  assumed/skipped/gap/survived; o único n/a estrutural (l4_adversarial_input)
+  tem razão nomeada e é honesto quanto ao motivo, no mesmo padrão do card
+  anterior da mesma série (common-plan-etapa2). PROVEN.

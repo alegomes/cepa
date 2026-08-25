@@ -2162,9 +2162,16 @@ que precisa conferir. A (a) parece certa e é barata neste tamanho de repo.
 
 ## Não há como executar em lote um plano `single-track` na ordem do plano
 
-**Status:** pendente · **Lar provável:** `common/commands/` (comando novo) ou
-`board-flow/commands/drain.md` · **Origem:** pergunta direta do dono na sessão de
-reflexão `session/doubt` (2026-08-24), ao lado da listagem do `/maestro:run`.
+**Status:** **RESOLVIDO em 2026-08-25** — `/common:drain-plan <nome>`
+(`common/commands/drain-plan.md`) mais os três subcomandos que ele usa em
+`common/bin/cepa-plan` (`queue`, `start`, `finish`), com 13 casos em
+`tests/test_common_drain_plan.py`. A pergunta que sobrava foi respondida pelo
+dono: `human_pending` aberto **para** o lote. **Não está vivo até
+`bin/install.sh --clean`** (common 2.6.0). · **Lar:** `common/commands/` (comando
+novo) — a direção `board-flow/commands/drain.md` foi descartada, prenderia ao
+Jira o comando que existe para funcionar sem ele · **Origem:** pergunta direta do
+dono na sessão de reflexão `session/doubt` (2026-08-24), ao lado da listagem do
+`/maestro:run`.
 
 ### Problema
 
@@ -2199,6 +2206,23 @@ Reaproveitar do `/board-flow:drain`: parar no primeiro BLOCKED e o teto `--max`.
 
 Em qualquer das duas, o item que não se resolve sozinho: `human_pending` aberto
 de um item deve ou não parar o lote? Hoje só o humano fecha essa pendência.
+**Respondido pelo dono em 2026-08-25: para.** O item seguinte da fila costuma se
+apoiar no que a rota valida, então seguir sem ela constrói sobre coisa que
+ninguém conferiu — e a dívida some do único lugar que a mostrava. Parar é
+reversível (o dono manda seguir); seguir calado não é.
+
+### O que ficou construído
+
+`cepa-plan queue` monta o lote e **para** na primeira coisa que não sabe
+resolver sozinho, em vez de pular para alcançar o item de baixo — pular é
+reordenar a fila em silêncio. Seis motivos de parada, cada um nomeado:
+`human_pending` (acima), `bloqueado` (depende de algo que não entra no lote),
+`bloqueado-antes` (saiu `blocked` de um run anterior e a condição de fora não
+mudou), `in_progress` (outra sessão, ou um run que morreu no meio), `teto` e
+`fim-da-fila`. `cepa-plan start` reserva o item antes de qualquer build — o
+equivalente sem tracker ao claim que o `/board-flow:drain` publica no card.
+`cepa-plan finish` exige evidência para qualquer desfecho, e **abre** rota
+humana sem nunca fechá-la.
 
 ---
 
@@ -2313,18 +2337,20 @@ lista de exceções fica no próprio teste, explícita, em vez de virar omissão
 
 ## Cinco portas de planejamento, nenhuma conversão entre elas
 
-**Status:** **etapa 1 CONSTRUÍDA em 2026-08-24** (`/common:plan` com
-`--from-spec` e a fila ditada à mão + `common/bin/cepa-plan`, o escritor
-mecânico, com 12 casos em `tests/test_common_plan.py`); etapas 2, 3 e 4
-pendentes. **Não está vivo até `bin/install.sh --clean`.** ·
+**Status:** **etapas 1, 2 e 3 CONSTRUÍDAS** — 1 e 2 em 2026-08-24/25
+(`/common:plan` com `--from-spec`, `--from-jira` e a fila ditada à mão +
+`common/bin/cepa-plan`, o escritor mecânico, com os casos de
+`tests/test_common_plan.py`), 3 em 2026-08-25 (`/common:drain-plan`, o executor
+da fila na ordem dela, com 13 casos em `tests/test_common_drain_plan.py`); etapa
+4 (`--from-plan` no `program-plan`) pendente. **Não está vivo até `bin/install.sh --clean`.** ·
 **Lar:** `common/commands/plan.md` (novo), `common/bin/cepa-plan` (novo),
 `board-flow/commands/triage.md`, `maestro/commands/program-plan.md`,
 `common/commands/drain-plan.md` (novo) ·
 **Origem:** sessão `session/doubt` (2026-08-24).
 
 **Ordem de construção sugerida:** (1) ✅ `/common:plan` com `--from-spec` e a fila
-ditada à mão — sozinho já destrava repo sem tracker; (2) `--from-jira` + parar a
-escrita no `triage`, que é a única parte que mexe em comando existente; (3)
+ditada à mão — sozinho já destrava repo sem tracker; (2) ✅ `--from-jira` + parar a
+escrita no `triage`, que é a única parte que mexe em comando existente; (3) ✅
 `/common:drain-plan`; (4) `--from-plan` no `program-plan`. Cada etapa é útil
 sem a seguinte.
 
