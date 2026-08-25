@@ -1,0 +1,180 @@
+card: session-log-ancorar-na-raiz
+status: complete
+diff: d6d4f13..HEAD (355b693 fix(hooks), b2b500b chore(common), ebe5dca test(hooks) — fecha os dois buracos apontados na 1a auditoria)
+notes: >
+  Item vem da fila single-track (.claude/programs/cepa/plan.yaml), sem card
+  Jira. Enunciado original fala só de session-log.py, mas o `why` já registra
+  que é uma CLASSE de sete hooks que montam `.claude/<estado>` a partir do
+  `cwd` cru do payload em vez da raiz da worktree (`_wtlib.session_root`).
+  10 critérios extraídos do enunciado da tarefa. Superfície declarada para
+  TODOS: cli/processo (o hook roda como script Python recebendo JSON no
+  stdin). Reauditoria após ebe5dca, que fechou os 2 gaps da 1a rodada
+  (AC8: session-checkpoint deixou de ser exercitado por importlib; AC9: os
+  7 hooks passaram a ser chamados fora de repo, cada um no seu diretório;
+  de quebra, AC7 perdeu o `or` frouxo). tests/test_session_anchor_root.py
+  roda sem dependência externa e a suíte completa (tests/run-all.sh) também
+  foi rodada nesta auditoria: 52/52 arquivos verdes.
+
+criteria:
+  - id: AC1
+    text: >
+      session-log.py grava o prompt em <raiz>/.claude/session-log.md com o
+      cwd num subdiretório; nenhum .claude órfão fora da raiz; dois turnos
+      (raiz + subdiretório) caem no mesmo arquivo.
+    altitude: cli
+    surface: "python3 common/hooks/session-log.py < payload JSON (cwd em subdiretório)"
+    test: tests/test_session_anchor_root.py (bloco "session-log.py — o defeito original", linhas 91-111)
+    layer: cli-subprocess (run_hook() invoca o script real via subprocess.run com stdin)
+    evidence: verified
+    run: "python3 tests/test_session_anchor_root.py -> exit 0, incluindo 'ok log gravado na RAIZ', 'ok nenhum .claude órfão no subdiretório', 'ok os dois turnos moram no mesmo log'"
+    verdict: complete
+
+  - id: AC2
+    text: >
+      Numa worktree ligada, o estado fica na raiz DA WORKTREE e não vaza
+      para o clone principal.
+    altitude: cli
+    surface: "python3 common/hooks/session-log.py < payload JSON, cwd dentro de uma worktree criada via `git worktree add`"
+    test: tests/test_session_anchor_root.py (bloco "worktree ligada", linhas 114-124)
+    layer: cli-subprocess, com `git worktree add` real (não simulado)
+    evidence: verified
+    run: "mesma execução acima -> 'ok log da worktree fica na raiz DELA', 'ok não vazou para o clone principal'"
+    verdict: complete
+
+  - id: AC3
+    text: >
+      mark-build-stale.py: edição de arquivo da raiz com cwd num
+      subdiretório marca a baseline como STALE (antes o relative_to
+      estourava e o hook saía calado).
+    altitude: cli
+    surface: "python3 common/hooks/mark-build-stale.py < payload JSON (tool_input.file_path na raiz, cwd em subdiretório)"
+    test: tests/test_session_anchor_root.py (bloco mark-build-stale, linhas 143-155)
+    layer: cli-subprocess
+    evidence: verified
+    run: "mesma execução -> 'ok hook sai 0', 'ok baseline virou STALE'"
+    verdict: complete
+
+  - id: AC4
+    text: >
+      gate-advance.py: baseline FAILURE na raiz + cwd em subdiretório barra
+      `git push` (exit 2); `.claude/no-build` da raiz continua valendo lido
+      do subdiretório.
+    altitude: cli
+    surface: "python3 common/hooks/gate-advance.py < payload JSON (tool_input.command=git push, cwd em subdiretório)"
+    test: tests/test_session_anchor_root.py (bloco gate-advance, linhas 157-187)
+    layer: cli-subprocess
+    evidence: verified
+    run: "mesma execução -> 'ok push BARRADO mesmo com o cwd no subdiretório' (exit 2), 'ok .claude/no-build da raiz vale no subdiretório' (exit 0)"
+    verdict: complete
+
+  - id: AC5
+    text: >
+      acceptance-gate.py: artefato de aceite INCOMPLETE na raiz + cwd em
+      subdiretório barra a transição para In Review (exit 2).
+    altitude: cli
+    surface: "python3 common/hooks/acceptance-gate.py < payload JSON (transição de Jira, cwd em subdiretório)"
+    test: tests/test_session_anchor_root.py (bloco acceptance-gate, linhas 207-229)
+    layer: cli-subprocess
+    evidence: verified
+    run: "mesma execução -> 'ok transição BARRADA com o cwd no subdiretório' (exit 2), 'ok a lacuna aparece na mensagem'"
+    verdict: complete
+
+  - id: AC6
+    text: capture-build-result.py grava a baseline na raiz.
+    altitude: cli
+    surface: "python3 common/hooks/capture-build-result.py < payload JSON (cwd em subdiretório)"
+    test: tests/test_session_anchor_root.py (bloco capture-build-result, linhas 126-140)
+    layer: cli-subprocess
+    evidence: verified
+    run: "mesma execução -> 'ok baseline gravada na RAIZ', 'ok nenhum .claude órfão'"
+    verdict: complete
+
+  - id: AC7
+    text: loop-budget.py grava o estado do loop na raiz.
+    altitude: cli
+    surface: "python3 common/hooks/loop-budget.py < payload JSON (Task com resultado de erro, cwd em subdiretório)"
+    test: tests/test_session_anchor_root.py (bloco loop-budget, linhas ~189-207)
+    layer: cli-subprocess
+    evidence: verified
+    run: "mesma execução -> 'ok estado do loop gravado na RAIZ', 'ok nenhum .claude órfão'"
+    detail: >
+      Fechado o gap registrado na 1a auditoria: a asserção trocou
+      `state.exists() or not stray_dirs(...)` (que passaria mesmo com o
+      hook não gravando nada em lugar nenhum) por `state.exists()` puro —
+      lida no código atual, linha "check(\"estado do loop gravado na
+      RAIZ\", (r5 / \".claude\" / \"loop-state.json\").exists(), ...)", sem
+      alternativa frouxa.
+    verdict: complete
+
+  - id: AC8
+    text: >
+      session-checkpoint.py acha a intenção que o session-log gravou a
+      partir de um subdiretório (escritor e leitor com a mesma âncora).
+    altitude: cli
+    surface: "python3 common/hooks/session-checkpoint.py < payload JSON (Stop hook, session_id + cwd), lendo o session-log.md gravado por session-log.py e produzindo o handoff em <raiz>/.claude/handoffs/<branch-slug>.md"
+    test: tests/test_session_anchor_root.py (bloco session-checkpoint, "checkpoint sai 0" / "handoff gravado" / "a intenção do subdiretório chegou ao handoff")
+    layer: >
+      cli-subprocess de verdade agora — session-checkpoint.py roda como
+      PROCESSO via run_hook() com payload completo no stdin
+      (session_id + cwd em subdiretório), passando por main(), por
+      L.main_root e por H.write; o teste então lê o arquivo de handoff
+      gravado no disco e confere que o prompt do session-log aparece nele.
+      Deixou de importar recent_intents() via importlib.
+    evidence: verified
+    run: "mesma execução -> 'ok checkpoint sai 0', 'ok handoff gravado', 'ok a intenção do subdiretório chegou ao handoff'"
+    perturbation: >
+      Reverti session-checkpoint.py (em cópia isolada fora do repo, não no
+      código de produção) para usar `Path(cwd)` cru em vez de
+      `Path(L.session_root(cwd))` na linha que lê o session-log.md. Rodei o
+      mesmo tests/test_session_anchor_root.py contra a cópia perturbada:
+      ficou vermelho tanto o caso comportamental ("a intenção do
+      subdiretório chegou ao handoff") quanto o estrutural ("session-checkpoint.py:
+      usa session_root"). Confirma que o caso de AC8 realmente prova o
+      comportamento, não só a forma do código.
+    verdict: complete
+
+  - id: AC9
+    text: >
+      Fora de um repo git o hook sai 0 e cai no próprio cwd — hook nenhum
+      morre por causa disto.
+    altitude: cli
+    surface: "cada um dos 7 hooks ancorados, rodado via subprocess com cwd fora de qualquer repo git, num diretório próprio por hook"
+    test: tests/test_session_anchor_root.py (bloco "fora de um repo git" — session-log.py com as duas checagens originais + laço `fora` sobre os outros 6, cada um em `tmp/sem-git-<i>`)
+    layer: cli-subprocess para os 7 hooks nomeados no `why`
+    evidence: verified
+    run: "mesma execução -> 'ok session-log.py sai 0 fora de repo', 'ok session-log.py cai no próprio cwd', e 'ok <hook>.py sai 0 fora de repo' para capture-build-result, mark-build-stale, gate-advance, acceptance-gate, loop-budget e session-checkpoint"
+    perturbation: >
+      Removi (em cópia isolada fora do repo) o fallback de `_wtlib.session_root`
+      para fora de um repo git — fazendo-o devolver só `repo_root(cwd)` (string
+      vazia fora de git) em vez de `root or os.path.abspath(cwd)`. Rodando a
+      suíte contra a cópia perturbada: só "session-log.py cai no próprio cwd"
+      fica vermelho; os outros 6 continuam saindo 0. Isso é esperado e não é
+      fraqueza do teste: os 6 hooks têm um `except Exception` amplo que sempre
+      sai 0 por design ("nunca bloqueia por erro próprio" — comentário em
+      loop-budget.py), e o texto do critério só amarra "cai no próprio cwd" ao
+      comportamento que o defeito original (session-log.md partindo em dois)
+      de fato exercitava; para os outros 6, o critério pede só "não morre", e
+      isso continua coberto pelos 7 casos "sai 0 fora de repo". Concordo com a
+      leitura do card: não é um buraco, é o critério fazendo exatamente o que
+      diz.
+    verdict: complete
+
+  - id: AC10
+    text: >
+      Guarda de deriva: fica vermelha se um hook voltar a montar `.claude/`
+      a partir de `Path(payload["cwd"])`, e se um dos sete deixar de usar
+      session_root.
+    altitude: "fonte (a própria criação da guarda é sobre a FORMA do código, não sobre comportamento em runtime — é o que o critério pede)"
+    surface: "grep estrutural sobre common/hooks/*.py: presença de `session_root(` e ausência do padrão `Path(payload.get(\"cwd\"...` "
+    test: tests/test_session_anchor_root.py (bloco "guarda de deriva")
+    layer: source-static-check (intencional — o próprio critério pede uma guarda estrutural, não um teste de comportamento)
+    evidence: verified
+    run: "mesma execução -> 14 checagens 'ok ... usa session_root' / 'ok ... nenhum Path(payload[\"cwd\"]) cru' + 'ok _wtlib expõe session_root'"
+    verdict: complete
+
+gaps: []
+
+full_suite:
+  command: bash tests/run-all.sh
+  result: "52/52 arquivos verdes (50 família script, incl. test_session_anchor_root.py; 2 família pytest, 52 casos)"
+  evidence: verified
