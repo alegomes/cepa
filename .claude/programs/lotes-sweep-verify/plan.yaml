@@ -1,0 +1,158 @@
+schema_version: 2
+mode: parallel-waves
+program: lotes-sweep-verify
+source: >-
+  BACKLOG.md, varrimento completo (--sweep) — segunda rodada de instrumentação
+  do /maestro:program-plan --sweep, evitando as demandas já usadas em
+  .claude/programs/lotes-2026-08-23/plan.yaml (cascata multi-repo P5, nota de
+  Auto Mode nos agents do build-hex, baseline cega, guard de dono único) e as
+  já cobertas por ariad-leva2 (A1-A10) e melhorias-2026-07 (P1-P8).
+
+# Arquivos-cartório medidos por `python3 common/bin/cepa-hotspots . --json`
+# nesta sessão (16 pares de merge real avaliados, 2 conflitantes — histórico
+# curto e conflito pouco concentrado). Nenhum entra em conflito com as 4
+# demandas abaixo: todas as 7 são plugin.json de plugins distintos ou o
+# atlassian-expert.md, e nenhum slice desta onda toca esses caminhos.
+cartorios:
+  - "build-hex/.claude-plugin/plugin.json"
+  - "common/.claude-plugin/plugin.json"
+  - "docs-topology/.claude-plugin/plugin.json"
+  - "discovery/.claude-plugin/plugin.json"
+  - "build-team/.claude-plugin/plugin.json"
+  - "design/.claude-plugin/plugin.json"
+  - "board-flow/agents/atlassian-expert.md"
+
+# Teto sugerido: 4, não o default de 3. Motivo: só 2 dos 16 pares medidos
+# conflitam (12.5%), e os 2 arquivos que explicam esses conflitos (plugin.json
+# por plugin, atlassian-expert.md) não entram na superfície de nenhum slice
+# desta onda — repo sem cartório concentrado nesta fatia sustenta onda maior.
+# As 3 primeiras demandas (S1-S3) têm superfície disjunta e fora da zona de
+# enforcement do cepa-dor; a quarta (S4) tem superfície que intersecta a zona
+# de enforcement (build-hex/hooks/path-lock.py) e por isso fica sozinha na
+# onda 2, mesmo com folga de teto na onda 1.
+max_concurrent_slices: 4
+
+waves:
+  - id: 1
+    mode: parallel-worktrees
+    fork_after: null
+    slices: [S1, S2, S3]
+    status: pending
+  - id: 2
+    mode: parallel-worktrees
+    fork_after: "wave-1"
+    slices: [S4]
+    status: pending
+
+slices:
+  S1:
+    demanda: >-
+      /common:gauntlet — competição de designs com julgamento cego
+      (BACKLOG.md#common-gauntlet-competicao-de-designs-com-julgamento-cego)
+    surface:
+      - "common/commands/gauntlet.md"
+      - "common/workflows/gauntlet.workflow.js"
+    human_gate: none
+    acceptance: |
+      Given um alvo de decisão (artefato ou item do BACKLOG) passado a
+      /common:gauntlet
+      When o comando roda os 5 passos (barra pré-declarada, 3 builders
+      isolados, 3 juízes cegos com voto de Borda, revisão do vencedor,
+      checagem final)
+      Then o comando grava docs/internals/gauntlet-<slug>.md com barra,
+      designs, vereditos e design final, e devolve recomendação + perguntas
+      fechadas em pt-BR
+    acceptance_form: bdd
+    acceptance_cmd: "python3 tests/test_gauntlet_command.py"
+    context:
+      - "BACKLOG.md#common-gauntlet-competicao-de-designs-com-julgamento-cego"
+      - "docs/internals/gauntlet-pilot-bash-path-lock.md"
+      - "docs/internals/gauntlet-pilot-atrito-decisao.md"
+      - "docs/internals/gauntlet-pilot-bash-path-lock.workflow.js"
+      - "docs/internals/gauntlet-pilot-atrito-decisao.workflow.js"
+
+  S2:
+    demanda: >-
+      Nome do programa = fatia de trabalho, não project key (metade pendente
+      de "O plano de execução morre com o worktree, e o nome do programa
+      colide", BACKLOG.md#o-plano-de-execucao-morre-com-o-worktree-e-o-nome-do-programa-colide)
+    surface:
+      - "common/commands/next.md"
+      - "docs/execution-plan.md"
+    human_gate: none
+    acceptance: |
+      Given um repo com board-flow.yaml configurado e um plan.yaml cujo nome
+      NÃO é o project_key (ex.: wego-todo-agosto em vez de WEGO)
+      When /common:next resolve qual plano usar
+      Then a regra 2 deixa de forçar <project_key>/plan.yaml como candidato
+      automático — o comando busca por fatia de trabalho nomeada, não por
+      project key, evitando a colisão de nome já registrada (WEGO vs
+      WEGO-in-progress no wego-acesso-backend)
+    acceptance_form: bdd
+    acceptance_cmd: "python3 tests/test_plan_program_naming.py"
+    context:
+      - "BACKLOG.md#o-plano-de-execucao-morre-com-o-worktree-e-o-nome-do-programa-colide"
+      - "docs/execution-plan.md"
+      - "common/commands/next.md"
+
+  S3:
+    demanda: >-
+      Atrito de decisão, Fase 1 aprovada — common/autonomy.yaml + extensão do
+      board-flow:decide (BACKLOG.md#atrito-de-decisao-o-harness-pergunta-demais-e-pergunta-cedo-demais)
+    surface:
+      - "common/autonomy.yaml"
+      - "board-flow/commands/decide.md"
+    human_gate: >-
+      none — decisão já tomada pelo dono em 2026-08-15 ("Implementação da Fase
+      1 aprovada... o autonomy.yaml + a extensão do decide"). Escopo desta
+      slice é SÓ a Fase 1: a lista de ações reversíveis/irreversíveis e a
+      leitura dela pelo decide.md. O ask-audit-gate.py (peça 2 do design) e o
+      .claude/attestations.yaml (peça 3) ficam fora — o primeiro é hook (zona
+      de enforcement do cepa-dor) e depende de spike não feito; o segundo não
+      foi aprovado nesta fase.
+    acceptance: |
+      Given common/autonomy.yaml listando ações reversíveis (executa e
+      reporta) e irreversíveis (sempre pergunta), cada uma com um campo
+      `detect:`
+      When board-flow:decide processa a coluna Review
+      Then ações da lista reversível são aplicadas e só registradas no
+      relatório; ações fora das duas listas ou na lista irreversível seguem
+      virando pergunta
+    acceptance_form: bdd
+    acceptance_cmd: "python3 tests/test_autonomy_yaml.py"
+    context:
+      - "BACKLOG.md#atrito-de-decisao-o-harness-pergunta-demais-e-pergunta-cedo-demais"
+      - "docs/internals/gauntlet-pilot-atrito-decisao.md"
+
+  S4:
+    demanda: >-
+      Aprovação humana não chega ao subagente — canal de consentimento
+      (BACKLOG.md#aprovacao-humana-nao-chega-ao-subagente-canal-de-consentimento)
+    surface:
+      - "common/**"
+      - "build-hex/hooks/path-lock.py"
+      - "build-hex/agents/*.md"
+    human_gate: >-
+      aberta: a superfície real desta demanda inclui
+      build-hex/hooks/path-lock.py — zona de enforcement do cepa-dor (glob
+      */hooks/*), veto incondicional. Não é candidato a fork autônomo de
+      maestro. Decisão a registrar antes do fork: (a) testar primeiro a
+      hipótese barata do BACKLOG — o worker aceita build-hex.yaml já
+      commitado? — e só then desenhar a solução estrutural (proibir
+      alargamento em voo / proveniência por git / canal atestado pelo
+      harness); (b) construir em sessão supervisionada, não via
+      /maestro:run, pelo mesmo motivo do S4 de lotes-2026-08-23. Fica sozinha
+      na onda 2 e não entra no --wave 1 do cepa-dor.
+    acceptance: |
+      Given um worker com path-lock ativo que recebe do orquestrador uma
+      instrução de escrita fora do próprio glob, acompanhada de alegação de
+      autorização do dono
+      When o worker verifica a autorização
+      Then ele só aceita uma fonte de autorização que não seja o próprio
+      texto do prompt (proveniência por git commitado, ou canal atestado
+      pelo harness) — nunca a alegação isolada — e a decisão de qual fonte é
+      a exigida fica registrada nesta slice antes do build
+    acceptance_form: substrate
+    acceptance_cmd: "python3 tests/test_worker_consent_channel.py"
+    context:
+      - "BACKLOG.md#aprovacao-humana-nao-chega-ao-subagente-canal-de-consentimento"
