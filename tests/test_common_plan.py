@@ -199,12 +199,66 @@ def test_reescrita_preserva_execucao(base):
     check("a nova ORDEM manda", [i["id"] for i in plan["items"]] == ["B", "A"])
     check("o novo `why` manda", por_id["B"]["why"].startswith("subiu"))
     check("o `status` da execução sobrevive", por_id["A"]["status"] == "done")
+    check("e a lista nova NÃO consegue reivindicar progresso que o disco não tem",
+          run(d, "write", "fila", "--repo", ".", "--items", str(escreve_itens(d, [
+              {"id": "B", "title": "segundo", "why": "w", "status": "done",
+               "human_pending": None},
+              {"id": "A", "title": "primeiro", "why": "w", "human_pending": None},
+          ]))).returncode == 0
+          and {i["id"]: i["status"] for i in plano_de(d)["items"]}["B"] == "pending",
+          "quem replaneja decide ordem, não progresso")
     check("o `human_pending` aberto sobrevive a uma repriorização",
           por_id["B"]["human_pending"] == ITENS_OK[1]["human_pending"],
           "zerá-lo apagaria dívida que só o humano fecha")
     check("guardou cópia do arquivo anterior",
           (d / ".claude" / "programs" / "fila" / "plan.yaml.bak").is_file(),
           "os comentários escritos à mão não sobrevivem à reescrita")
+
+
+def test_planejamento_pode_aposentar_item(base):
+    """`dropped` é a única palavra que o planejamento tem sobre o status.
+
+    Achado no 1º uso real (2026-08-25): a regra "o status do disco sempre
+    ganha" impedia aposentar um item que a própria entrega tornou obsoleto —
+    ele voltava `pending` a cada repriorização, e a fila só crescia.
+    """
+    d = repo_git(base, "aposenta")
+    run(d, "write", "fila", "--items", str(escreve_itens(d, ITENS_OK)), "--repo", ".")
+    novos = [
+        {"id": "A", "title": "primeiro", "why": "destrava o B", "human_pending": None},
+        {"id": "B", "title": "segundo", "why": "obsoleto: o A entregou junto",
+         "status": "dropped", "human_pending": None},
+    ]
+    r = run(d, "write", "fila", "--items", str(escreve_itens(d, novos)), "--repo", ".")
+    check("a repriorização consegue aposentar um item", r.returncode == 0, r.stderr)
+    por_id = {i["id"]: i for i in plano_de(d)["items"]}
+    check("o item aposentado fica no documento com o porquê",
+          por_id["B"]["status"] == "dropped" and "obsoleto" in por_id["B"]["why"],
+          "sumir com ele apagaria a razão de ele ter saído")
+
+
+def test_chave_extra_sobrevive(base):
+    """Campo que o schema não prevê não some na repriorização.
+
+    Achado ao usar o comando pela primeira vez de verdade: a evidência de um
+    item `done` mora hoje em comentário, e comentário não sobrevive à
+    reescrita. Um campo sobrevive — desde que o escritor não o descarte em
+    silêncio, que é o que ele fazia.
+    """
+    d = repo_git(base, "extra")
+    itens = [{"id": "A", "title": "x", "why": "w", "human_pending": None,
+              "evidence": "suíte 49/49 verde em 2026-08-24"}]
+    run(d, "write", "fila", "--items", str(escreve_itens(d, itens)), "--repo", ".")
+    check("a chave extra chega ao arquivo",
+          plano_de(d)["items"][0].get("evidence", "").startswith("suíte"))
+
+    # repriorização que NÃO menciona a chave: ela vem do disco
+    magros = [{"id": "A", "title": "x", "why": "outro motivo", "human_pending": None}]
+    run(d, "write", "fila", "--items", str(escreve_itens(d, magros)), "--repo", ".")
+    item = plano_de(d)["items"][0]
+    check("e sobrevive a uma reescrita que não a menciona",
+          item.get("evidence", "").startswith("suíte"), str(item))
+    check("sem impedir que o `why` novo entre", item["why"] == "outro motivo")
 
 
 def test_item_sumido_nao_some_calado(base):
@@ -423,7 +477,9 @@ def main():
         for fn in (test_grava_fila_valida, test_recusa_sem_why,
                    test_recusa_human_pending_ausente, test_recusa_ciclo_e_fantasma,
                    test_recusa_id_repetido, test_colisao_com_ondas,
-                   test_reescrita_preserva_execucao, test_item_sumido_nao_some_calado,
+                   test_reescrita_preserva_execucao, test_planejamento_pode_aposentar_item,
+                   test_chave_extra_sobrevive,
+                   test_item_sumido_nao_some_calado,
                    test_raiz_e_a_do_clone_principal, test_dry_run_nao_grava,
                    test_validate_recusa_plano_de_ondas, test_from_spec_le_os_criterios,
                    test_from_spec_avisa_rascunho_e_recusa_vazia,

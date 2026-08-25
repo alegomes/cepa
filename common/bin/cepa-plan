@@ -274,9 +274,19 @@ CABECALHO = """\
 """
 
 
+CHAVES_DO_SCHEMA = ("id", "title", "why", "status", "blocked_by", "human_pending")
+
+
 def normaliza(it):
-    """Item com as chaves na ordem do schema, para o arquivo sair legível."""
-    return {
+    """Item com as chaves do schema primeiro, e o resto PRESERVADO no fim.
+
+    Descartar em silêncio uma chave que alguém escreveu à mão é a falha desta
+    casa: o campo some na primeira repriorização e ninguém percebe, porque o
+    arquivo continua válido. Chave desconhecida não é erro — é alguém
+    registrando alguma coisa que o schema ainda não previu (a evidência de um
+    `done`, por exemplo).
+    """
+    base = {
         "id": it["id"],
         "title": it["title"],
         "why": it["why"],
@@ -284,6 +294,10 @@ def normaliza(it):
         "blocked_by": [str(x) for x in it.get("blocked_by", [])],
         "human_pending": it.get("human_pending", None),
     }
+    for k, v in it.items():
+        if k not in CHAVES_DO_SCHEMA:
+            base[k] = v
+    return base
 
 
 def funde(novos, antigos):
@@ -299,9 +313,15 @@ def funde(novos, antigos):
         base = normaliza(it)
         velho = por_id.get(str(it["id"]))
         if velho:
-            # `status` do disco SEMPRE ganha: quem executou sabe onde o item
-            # está; quem replaneja está decidindo ordem, não progresso.
-            if "status" in velho:
+            # Progresso é palavra da EXECUÇÃO; abandono é palavra do
+            # PLANEJAMENTO. Então o `status` do disco ganha — exceto quando a
+            # lista nova diz `dropped`, que é alguém decidindo que o item não
+            # pertence mais à fila. Sem essa exceção o escritor não consegue
+            # aposentar item nenhum, e a fila só cresce (achado no 1º uso real:
+            # um item que a própria etapa 1 tornou obsoleto voltava `pending`).
+            # O que ele continua não podendo é reivindicar progresso que o disco
+            # não tem: `done` vindo da lista nova é ignorado.
+            if velho.get("status") and it.get("status") != "dropped":
                 base["status"] = velho["status"]
             # `human_pending` do disco ganha enquanto estiver ABERTO. Só o
             # humano fecha essa pendência — e a lista nova traz `null` em todo
@@ -309,6 +329,9 @@ def funde(novos, antigos):
             # justamente na hora de repriorizar. Disco nulo aceita rota nova.
             if velho.get("human_pending") is not None:
                 base["human_pending"] = velho["human_pending"]
+            for k, v in velho.items():
+                if k not in CHAVES_DO_SCHEMA and k not in base:
+                    base[k] = v
             reaproveitados.append(str(it["id"]))
         saida.append(base)
     return saida, reaproveitados
