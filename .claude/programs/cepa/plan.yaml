@@ -280,9 +280,33 @@ items:
     e o mesmo `cd` pode estar espalhando `last-build.json` do mesmo jeito. Um helper
     único de "raiz da sessão" em `_wtlib` (ao lado de `repo_root`/`main_root`) resolve
     todos de uma vez; consertar só o session-log deixa a classe de pé.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: 'rodar bin/install.sh --clean e reiniciar o Claude Code: os quatro
+    portoes consertados sao de enforcement em producao e seguem com o comportamento
+    velho enquanto o cache servir common 2.7.0'
+  evidence: 'done em 2026-08-25, branch session/next (3 commits, 355b693 fix(hooks)
+    + b2b500b common 2.8.0 + ebe5dca test), NAO aterrissada em main ainda. O card
+    previa que era uma CLASSE e nao um arquivo, e era: sete hooks montavam `.claude/<estado>`
+    a partir do cwd cru do payload, e QUATRO falhavam ABRINDO um portao em silencio
+    — mark-build-stale (edicao na raiz com cwd em subdiretorio estourava relative_to,
+    o hook saia calado e a baseline NUNCA ficava STALE), gate-advance (nao achava
+    a baseline e liberava o push), acceptance-gate (nao achava o artefato e liberava
+    a transicao para In Review) e loop-budget (a contagem zerava e o teto de 3 falhas
+    iguais nunca disparava); mais capture-build-result, session-log e session-checkpoint.
+    O conserto e um helper unico, _wtlib.session_root, e NAO o main_root: estado
+    desta worktree segue a worktree — ler o build de uma worktree como baseline
+    de outra e a mesma mentira ao contrario. Nao previsto: (a) o proprio proof-reviewer
+    perturbou SO o helper e derrubou 13 casos cobrindo os sete de uma vez, que e
+    a prova de que nao ha sete copias divergentes; (b) a primeira rodada do completion-auditor
+    deu INCOMPLETE por dois buracos reais do teste — o caso do session-checkpoint
+    importava a funcao em vez de rodar o hook como processo, e o caso de fora-do-repo
+    exercitava so um dos sete —, fechados em ebe5dca. Vereditos: completion-auditor
+    COMPLETE (.claude/acceptance/session-log-ancorar-na-raiz.yaml, gaps vazio) e
+    proof-reviewer PROVEN (docs/proof/session-log-ancorar-na-raiz.yaml, sete hooks
+    perturbados um a um, todos vermelhos em COMPORTAMENTO e nenhum so na checagem
+    estrutural). 41 casos no arquivo novo; suite 52/52 arquivos verdes. NAO esta
+    live: exige bin/install.sh --clean (common 2.8.0).'
 - id: onboarding-maestro-blocos-1-3
   title: Retomar a sessão de onboarding do Maestro (blocos 1-3)
   why: pedidos em 23/07 e 27/07, mas o que ficou entendido não foi registrado em
