@@ -1,0 +1,77 @@
+schema_version: 2
+card: common-plan-etapa1
+verdict: proven
+reviewed_at: 2026-08-24T21:56:15-03:00
+base_commit: ac5f72c
+head_commit: 0bb75db
+issue_type: Feature
+note: >
+  Repo não-Java (harness de plugins, Python + markdown, `.claude/no-build`).
+  PIT e @QuarkusTest não se aplicam; a superfície observável é o processo CLI
+  `common/bin/cepa-plan` (exit code + arquivo no disco), então L3 usa só o
+  mecanismo universal de perturbação (quebrar a linha, exigir teste vermelho),
+  sem atalho de PIT. HEAD real da worktree (19d0891) trouxe 1 commit extra além
+  dos 4 pedidos, mas ele só reescreve `.claude/acceptance/common-plan-etapa1.yaml`
+  (artefato do completion-auditor) — não toca `common/bin/cepa-plan` nem os
+  testes, então não altera o escopo provado aqui.
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbacao
+    pit:
+      status: n/a
+      results:
+        - "repo Python sem pitest; PIT não se aplica (ver note)"
+    perturbation:
+      status: pass
+      results:
+        - "1) recusa de `why` vazio — comentei a checagem em valida_itens (linha ~166-168); GREEN prévio confirmado; `python3 tests/test_common_plan.py` → FAIL 'recusa item sem `why`' (item gravado quando deveria ser recusado, exit 2 esperado virou 0). Restaurado."
+        - "2) recusa de `human_pending` sem a chave — comentei a checagem (linha ~182-186); rerun → FAIL 'recusa item sem a chave `human_pending`' e FAIL 'a recusa explica que null explícito serve'. Restaurado."
+        - "3a) recusa de ciclo em `blocked_by` — removi o loop `for ciclo in acha_ciclos(...)` (linha ~206-209); rerun → FAIL 'recusa ciclo de bloqueio' e FAIL 'a recusa diz por que ciclo é pior que travamento visível' (checagem de fantasma continuou OK, como esperado — hunk isolado). Restaurado."
+        - "3b) recusa de `blocked_by` fantasma — neutralizei o corpo do loop que valida `alvo not in ids` (linha ~199-203); rerun → FAIL 'recusa `blocked_by` apontando para item inexistente'. Restaurado."
+        - "4) recusa de `id` repetido — removi o branch `elif str(ident) in vistos` em valida_itens (linha ~157-162); rerun → FAIL 'recusa `id` repetido' (item duplicado foi gravado). Restaurado."
+        - "5a) colisão com ondas no `check-name` — simplifiquei cmd_check_name para sempre devolver 0 (linha ~444-455); rerun → FAIL 'check-name devolve 3 na colisão com ondas' e FAIL 'a colisão nomeia o dono do arquivo'. Restaurado."
+        - "5b) colisão com ondas no `write` — removi o bloco `if modo_de(plan) != MODE` em cmd_write (linha ~512-517); rerun → FAIL 'write também recusa (a checagem não é só do comando)' e FAIL 'o plano de ondas ficou intacto' (o plano de ondas foi sobrescrito de fato). Restaurado."
+        - "6a) preservação do `status` do disco na reescrita — neutralizei `if \"status\" in velho: base[\"status\"] = velho[\"status\"]` em funde() (linha ~304-305); rerun → FAIL 'o `status` da execução sobrevive'. Restaurado."
+        - "6b) preservação do `human_pending` aberto na reescrita — neutralizei o branch equivalente para human_pending (linha ~310-311); rerun → FAIL 'o `human_pending` aberto sobrevive a uma repriorização'. Restaurado."
+        - "7) resolução da raiz por `--git-common-dir` — substituí raiz_principal() por `return Path(repo).resolve()` (linha ~109-116); rerun → FAIL 'o arquivo nasceu no clone principal' e FAIL 'e NÃO dentro da worktree' (o plano nasceu dentro da worktree, a perda exata que a função existe para impedir). Restaurado."
+        - "8) recusa `--on-missing refuse` quando item some — removi o bloco `if sumidos and a.on_missing == \"refuse\"` em cmd_write (linha ~524-532); rerun → FAIL 'recusa por default quando um item do disco não é mencionado' e a suíte lançou KeyError em seguida (falha capturada, não silenciosa) porque o item sumido nunca foi marcado dropped. Restaurado."
+        - "9a) from-spec: um item por CS-N NA ORDEM DO TEXTO — invertido `achados = list(RE_CRITERIO.finditer(texto))[::-1]` (linha ~392); rerun → FAIL 'a ORDEM é a do texto', FAIL 'o título é o do critério', FAIL 'o `why` carrega a superfície declarada na spec', FAIL 'o `why` carrega o teste vermelho INTEIRO'. Restaurado."
+        - "9b) from-spec: `why` com a frase de herança — troquei `pedacos = [HERDADO]` por `pedacos = []` (linha ~397); rerun → FAIL 'o `why` DIZ que a ordem foi herdada'. Restaurado."
+        - "9c) from-spec: captura do 'Teste vermelho' INTEIRO — troquei RE_CAMPO para capturar só a primeira linha (linha ~365-367); rerun → FAIL 'o `why` carrega o teste vermelho INTEIRO, não a primeira linha'. Restaurado."
+        - "GREEN final pós-restauração (na worktree /tmp/proof-common-plan-etapa1, antes de removê-la): `python3 tests/test_common_plan.py` → all green; `python3 tests/test_plan_anchor_root.py` → all green. `git status --short` limpo antes da remoção (`git worktree remove --force`)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Cada um dos 15 pontos de comportamento listados no pedido tem uma checagem própria em tests/test_common_plan.py que foi de fato exercitada (GREEN→RED→GREEN acima); nenhuma linha alterada ficou sem um caso que a alcançasse. Não há quarkus-jacoco/jacoco aqui (repo Python); a cobertura foi verificada estruturalmente pela própria perturbação, não por ferramenta."
+  l4_adversarial_input:
+    status: n/a
+    reason: >
+      O diff não abre superfície de entrada externa (HTTP/rede): é um binário
+      de linha de comando batch que lê um arquivo local (JSON/YAML de itens, ou
+      um markdown de spec) e grava outro arquivo local. Não há módulo
+      input-bearing (equivalente a `api-rest`) neste repo — é um harness de
+      plugins Python, não um serviço Quarkus. As entradas malformadas já
+      viradas caso de teste (JSON/YAML inválido, spec sem CS-N, arquivo vazio)
+      estão cobertas por `carrega_itens`/`cmd_from_spec` e não fazem parte do
+      pedido desta prova.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type: Feature — não há regressão a reproduzir contra o base_commit."
+routing_reason: >
+  Todas as 15 perturbações pedidas (why vazio, human_pending ausente, ciclo,
+  blocked_by fantasma, id repetido, colisão com ondas em check-name E em write,
+  preservação de status, preservação de human_pending aberto, resolução da raiz
+  pelo --git-common-dir, recusa --on-missing refuse, e as 3 propriedades do
+  from-spec) foram quebradas uma a uma numa worktree descartável e cada uma
+  produziu VERMELHO no teste que deveria pegá-la; nenhuma sobreviveu. Não há
+  double substituindo o script provado (os testes chamam o binário real via
+  subprocess). L4 é n/a por não haver superfície de entrada externa neste CLI.
+  Nenhum nível ficou assumed/skipped/gap. PROVEN.
