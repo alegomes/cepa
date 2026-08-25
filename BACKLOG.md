@@ -2436,3 +2436,71 @@ comandos no `common` e um flag no `maestro`. Nada disso é migração de dado �
 critérios de sucesso de uma spec não vêm priorizados entre si; ou o comando
 pergunta, ou herda a ordem do texto. Preferência: herdar a ordem do texto e
 dizer que herdou.
+
+---
+
+## Modo automático edita por `sed` e três hooks só escutam `Edit|Write`
+
+Encontrado em 2026-08-25, durante a triagem do backlog do wego-acesso-backend.
+A origem é um desvio que a sessão do WEGO-2118 registrou em 24/08 e que ficou
+sem destino: "o modo automático da sessão instrui edição via sed/heredoc, o que
+contorna o bloqueio que impede o lead de escrever código de produção".
+
+### O que já está resolvido — não reabrir
+
+A metade do desvio que fala do **path-lock** está fechada. O
+`build-hex/hooks/bash-path-lock.py` existe exatamente para isso, e o docstring
+dele descreve o mesmo incidente: "a lead once edited source via Bash because
+Write was locked and Bash wasn't". Ele intercepta redirecionamento, `tee`,
+`sed -i`, `cp`, `mv`, `install`, `dd of=` e `truncate`, reusando a allowlist do
+`path-lock.py` como fonte única. Os limites que ele mesmo declara (não enxerga
+`python -c`, `perl -e`, `awk -i inplace`, `ed`, `patch`) estão registrados e vão
+para um log de cobertura em vez de passarem em silêncio.
+
+### O que continua aberto
+
+Três hooks do `common` estão registrados **só** em `Edit|Write|MultiEdit`, e o
+único hook de `PostToolUse` com matcher `Bash` é o `capture-build-result.py`.
+Verificado em `common/.claude-plugin/plugin.json`:
+
+| hook | matcher registrado | o que deixa de acontecer numa edição por `sed` |
+|---|---|---|
+| `mark-build-stale.py` | `Edit\|Write\|MultiEdit` | a baseline de build **não** é invalidada |
+| `editorial-lint.py` | `Edit\|Write\|MultiEdit` | as regras editoriais não rodam no texto escrito |
+| `session-activity.py` | `Edit\|Write\|MultiEdit` | a sessão não conta como ativa |
+
+O primeiro é o que machuca. Sob modo automático — que instrui, com todas as
+letras, a preferir `sed`, heredoc e scripts curtos ao `Edit`/`Write` — o código
+muda e a baseline continua marcada como fresca. O `gate-advance.py` lê essa
+baseline. O resultado é um verde que descreve código que já não existe: o
+oposto exato do que o `mark-build-stale.py` foi escrito para garantir.
+
+Nota de honestidade sobre o achado: ele foi encontrado por uma sessão que estava
+ela mesma rodando em modo automático e editando por `sed`. As edições daquela
+sessão foram em `.claude/` e em `docs/`, fora do alcance da baseline de build,
+então não houve dano — mas foi por sorte de escopo, não por controle.
+
+### Esboço de solução
+
+Duas saídas, e a escolha é de desenho:
+
+1. **Um irmão de Bash para cada um dos três**, no molde do `bash-path-lock.py`:
+   reconhecer as mesmas construções de escrita do shell e disparar o mesmo
+   efeito. Custo: triplicar a análise de shell, que o próprio `bash-path-lock`
+   documenta como indecidível.
+2. **Um só interceptador de escrita por shell**, que reusa o `_shellscan.py` já
+   existente para dizer "este comando escreveu nestes caminhos do projeto" e
+   publica esse fato para os demais hooks consumirem. Um lugar para manter a
+   heurística de shell, N consumidores. Preferência: esta.
+
+Vale conferir na mesma passada os dois guardas de veredito
+(`build-hex/hooks/proof-verdict-guard.py` e `common/hooks/ui-proof-verdict-guard.py`),
+que gateiam em `tool_name != "Write"` — um veredito escrito por heredoc passaria
+sem guarda pela mesma porta.
+
+### Critério de pronto
+
+Editar um arquivo de código de produção por `sed -i` (e por heredoc) deixa a
+baseline de build marcada como suja, demonstrado por um teste que fica **verde
+antes e vermelho depois** de remover o interceptador. O contraste importa: sem
+ele, um hook que nunca dispara é indistinguível de um hook que sempre aprova.
