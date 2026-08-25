@@ -1,0 +1,103 @@
+schema_version: 2
+card: common-plan-etapa2
+verdict: proven
+reviewed_at: 2026-08-25T11:25:00-03:00
+base_commit: d95bd24
+head_commit: ceac09a
+issue_type: Feature
+repo_kind: harness             # NOT Quarkus/Maven — Python CLI + prompt files, own test suite
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (itens_de_triagem, fonte_da_triagem, cmd_from_triage, cmd_write --from-triage)"
+      module: cli
+      external_observable: true    # a superfície externa é a linha de comando: exit code, stdout, stderr
+      substituted_by_double: null  # o cepa-plan real roda contra fixtures de repasse; nenhuma classe/módulo substituída
+    - class: "board-flow/commands/triage.md (prosa: manda gravar o repasse e não mais o plan.yaml)"
+      module: prompt
+      external_observable: false   # prosa não é executável; a evidência aqui é grep de contrato, deliberadamente fraca
+      substituted_by_double: null
+    - class: "common/commands/plan.md (prosa: aceita --from-triage, proíbe consultar o Jira direto)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); perturbação manual é o único mecanismo aplicável"
+    perturbation:
+      status: pass
+      results:
+        - "comportamento 1 (só `ready` vira `pending`): removida a guarda `if balde in fora_da_fila` em itens_de_triagem — `python3 tests/test_common_plan.py` quebrou com JSONDecodeError (o comando passou a recusar a fila por `obsolete` sem `reason` nos cards implemented/needs-refinement que vazaram) — RED confirmado, restaurado, GREEN de novo"
+        - "comportamento 2 (obsolete vira `dropped` com motivo, não some): removido o `itens.append` do ramo obsolete, mantendo só o `continue` de refusal — `a ORDEM é a que a triagem classificou` e 4 outras asserções foram para FAIL (['WEGO-1235','WEGO-1240'] sem WEGO-1236) — RED confirmado, restaurado"
+        - "comportamento 3 (ordem = ordem da triagem): `return itens` trocado por `return sorted(itens, key=lambda x: x['id'])` — `a ORDEM é a que a triagem classificou` foi para FAIL (['WEGO-1235','WEGO-1236','WEGO-1240'], WEGO-1236 antes de WEGO-1240) — RED confirmado, restaurado"
+        - "comportamento 4 (READY sem `why` é recusa, não invenção): trocado `if not porque: sem_why.append(...); continue` por `porque = ... or \"priorizado na triagem\"` — `recusa card READY sem why` e a asserção de mensagem foram para FAIL (exit 0, why fabricado) — RED confirmado, restaurado"
+        - "comportamento 5 (OBSOLETE sem motivo é recusa): mesmo padrão, `motivo = ... or \"obsoleto\"` — `recusa card OBSOLETE sem motivo` foi para FAIL — RED confirmado, restaurado"
+        - "comportamento 6 (needs-decision é recusa): removida a checagem `if balde == \"needs-decision\": na_grelha.append(...); continue` — a recusa ainda ocorre (cai no ramo obsolete e falta reason), mas a mensagem `e manda de volta para a grelha` (que exige a palavra `grelha` no stderr) foi para FAIL — RED confirmado: o teste pegou que a MENSAGEM certa desapareceu, mesmo com exit code ainda 2 por acaso"
+        - "comportamento 7 (balde desconhecido é recusa nomeada, não card sumindo): removido `baldes_ruins.append(...)` do ramo `if balde not in BALDES` — `e lista os válidos` (checa que `ready` e `obsolete` aparecem no stderr) foi para FAIL; o card sumiu em silêncio e a recusa só sobreviveu por acidente (fallback 'nenhum card virou item') sem nomear o balde inválido — RED confirmado"
+        - "comportamento 8 (dependência para fora da fila sai do blocked_by e é avisada): removido o laço que corta `blocked_by` para ids em `fora_da_fila` — `não recusa a fila por causa dela` foi para FAIL: a fila inteira passou a ser recusada por `blocked_by` cita 'W-2', que não existe nesta fila, em vez de avisar e seguir — RED confirmado"
+        - "comportamento 9 (id que a triagem nunca viu continua recusa): removida a chamada `valida_itens(itens)` dentro de `cmd_from_triage` — `mas id que a triagem nunca viu segue sendo recusa` foi para FAIL (exit 0 com blocked_by fantasma) — RED confirmado"
+        - "comportamento 10 (remaining_in_column vira nota PARCIAL na `source`): removido o bloco `if isinstance(resto, int) and resto > 0` de `fonte_da_triagem` — `a fonte DIZ que a fila é um pedaço do quadro` e `o cabeçalho lido a olho também carrega a parcialidade` foram para FAIL — RED confirmado"
+        - "comportamento 11a (status do disco sobrevive à re-triagem, done não é reivindicado pela lista nova): removida a linha `if velho.get(\"status\") and it.get(\"status\") != \"dropped\": base[\"status\"] = velho[\"status\"]` em `funde` — `o status da execução sobrevive`, `e a lista nova NÃO consegue reivindicar progresso` (teste genérico da etapa 1) e `o done do disco sobrevive à re-triagem` (teste específico da etapa 2, test_write_from_triage_grava_e_diz_que_e_parcial) foram para FAIL — RED confirmado"
+        - "comportamento 11b (human_pending ABERTO do disco sobrevive à re-triagem): removida a linha `if velho.get(\"human_pending\") is not None: base[\"human_pending\"] = velho[\"human_pending\"]` — tanto o teste genérico (`o human_pending aberto sobrevive a uma repriorização`) quanto o específico de from-triage (`e a dívida humana ABERTA sobrevive junto`) foram para FAIL — RED confirmado"
+      run: >-
+        worktree descartável /tmp/proof-common-plan-etapa2 (git worktree add
+        ceac09a), 12 perturbações via script Python aplicado sobre
+        common/bin/cepa-plan (nunca sed/heredoc direto — path-lock bloqueou a
+        primeira tentativa por falso-positivo de alvo de escrita; contornado
+        escrevendo o script perturbador com a ferramenta Write e executando
+        com `python3 script.py`, nunca editando o hook). Cada perturbação:
+        `python3 -c "import ast; ast.parse(...)"` para garantir sintaxe válida,
+        `python3 tests/test_common_plan.py` para exigir RED, depois
+        `git checkout ceac09a -- common/bin/cepa-plan` para restaurar. GREEN
+        final confirmado com `python3 tests/test_common_plan.py` e
+        `python3 tests/test_fio_condutor.py` (ambos "all green") e
+        `git status --porcelain` vazio no worktree descartável antes de removê-lo
+        com `git worktree remove --force`.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (não há jacoco/coverage tool wired neste repo Python):
+      as 12 perturbações acima cobrem TODAS as linhas de decisão novas em
+      `itens_de_triagem`, `fonte_da_triagem`, `cmd_from_triage` e o trecho de
+      `funde` relevante à re-triagem — nenhuma delas ficou verde ao ser
+      quebrada. `cmd_write --from-triage` (write real em disco, testado por
+      test_write_from_triage_grava_e_diz_que_e_parcial) também foi exercitado
+      via os perturbations 10 e 11, que atravessam a escrita real do plan.yaml.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      a mudança abre uma superfície de entrada (repasse.json vindo do
+      /board-flow:triage), mas ela já é adversarialmente coberta pelas
+      recusas L3 acima (chave ausente, card não-dict, bucket inválido, blocked_by
+      fantasma, why/reason vazio) — o próprio conjunto de comportamentos exigidos
+      pelo card É o roteiro de adversarial input desta CLI. Gerar mais entradas
+      aleatórias contra um parser de ~250 linhas já perturbado exaustivamente
+      não teria alvo novo a nomear. `cli` não é o módulo `api-rest` do
+      vocabulário Quarkus (este repo não tem um), então a condição estrutural do
+      `n/a` (nenhuma classe mudada em módulo input-bearing no sentido Quarkus)
+      é vácua aqui — mas a condição de fundo (razão nomeada, diff que abre
+      superfície mas já coberta) se mantém.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  Os 11 comportamentos que o card promete foram, cada um, quebrados na CLI real
+  (common/bin/cepa-plan) dentro de um worktree descartável e o teste que deveria
+  acusar a quebra foi para RED — depois restaurado e confirmado GREEN de novo.
+  Isso cobre 1 (só ready), 2 (obsolete→dropped com motivo), 3 (ordem), 4 (READY
+  sem why recusa), 5 (OBSOLETE sem motivo recusa), 6 (needs-decision recusa),
+  7 (balde desconhecido recusa nomeada), 8 (dependência fora da fila sai do
+  blocked_by e avisa), 9 (id nunca visto continua recusa), 10 (remaining_in_column
+  vira nota PARCIAL na `source`) e 11 (status done + human_pending aberto
+  sobrevivem à re-triagem). A prova de prosa em triage.md e plan.md (grep de
+  frases) é evidência FRACA de propósito — documentado como tal, não usada para
+  decidir o veredito; o veredito descansa inteiramente nas 12 perturbações de
+  código. Nenhum nível ficou assumed/skipped/gap; o único n/a estrutural
+  (l4_adversarial_input) tem razão nomeada e é honesto quanto ao motivo (o
+  roteiro de adversarial input já é o próprio conjunto de recusas L3, e este
+  repo não tem módulo api-rest Quarkus). PROVEN.
