@@ -90,10 +90,11 @@ execution plan, then name the cheapest way to get one **for this repo**:
 
 - tracker wired (`board-flow.yaml` present) → `/board-flow:triage`, which grooms
   the column and writes the plan from the cards it just classified;
-- no tracker → the plan is a short file and this session can write it: offer to
-  build it from the repo's own source of demands (`BACKLOG.md` or whatever the
-  user names), asking for the order and the `why` per item. Write nothing until
-  the user confirms the order.
+- no tracker → `/common:plan <nome>` is the writer: it builds the queue from a
+  closed `/common:spec` specification (`--from-spec`, one item per success
+  criterion) or from the repo's own source of demands dictated by hand
+  (`BACKLOG.md` or whatever the user names), asking for the order and the `why`
+  per item. Offer it; write nothing here.
 
 Then, as a courtesy, list whatever candidates you can see (the `to_do` cards, or
 the source's open items) **as an unordered set**, labelled as such.

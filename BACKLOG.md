@@ -2313,12 +2313,16 @@ lista de exceções fica no próprio teste, explícita, em vez de virar omissão
 
 ## Cinco portas de planejamento, nenhuma conversão entre elas
 
-**Status:** **desenho APROVADO pelo dono em 2026-08-24**, não construído ·
-**Lar:** `common/commands/plan.md` (novo), `board-flow/commands/triage.md`,
-`maestro/commands/program-plan.md`, `common/commands/drain-plan.md` (novo) ·
+**Status:** **etapa 1 CONSTRUÍDA em 2026-08-24** (`/common:plan` com
+`--from-spec` e a fila ditada à mão + `common/bin/cepa-plan`, o escritor
+mecânico, com 12 casos em `tests/test_common_plan.py`); etapas 2, 3 e 4
+pendentes. **Não está vivo até `bin/install.sh --clean`.** ·
+**Lar:** `common/commands/plan.md` (novo), `common/bin/cepa-plan` (novo),
+`board-flow/commands/triage.md`, `maestro/commands/program-plan.md`,
+`common/commands/drain-plan.md` (novo) ·
 **Origem:** sessão `session/doubt` (2026-08-24).
 
-**Ordem de construção sugerida:** (1) `/common:plan` com `--from-spec` e a fila
+**Ordem de construção sugerida:** (1) ✅ `/common:plan` com `--from-spec` e a fila
 ditada à mão — sozinho já destrava repo sem tracker; (2) `--from-jira` + parar a
 escrita no `triage`, que é a única parte que mexe em comando existente; (3)
 `/common:drain-plan`; (4) `--from-plan` no `program-plan`. Cada etapa é útil

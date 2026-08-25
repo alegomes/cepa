@@ -20,6 +20,7 @@ topology is wired.
 | `/common:recap` | `[--since=YYYY-MM-DD]` (default: today) | Renders an "Asked / Status / Delivered" table for the current session. Reads `.claude/session-log.md` (intent log from `session-log` hook) and reasons over conversation context for delivery evidence. Read-only. |
 | `/common:handoff` | (none) | Saves a rich session handoff for seamless resume. Writes the narrative (decisions, current state, next concrete step, caveats, open threads) into this branch's `.claude/handoffs/<branch-slug>.md`, on top of the mechanical skeleton the `session-checkpoint` Stop hook keeps current every turn. The next session's `SessionStart` (`session-registry`) surfaces it automatically. Replaces hand-writing "salve a memória de handoff". See [handoff.md](handoff.md). |
 | `/common:next` | `[--plan NOME] [--offline] [--sync]` | Answers "what do I do next?" at any moment — the middle-of-session counterpart to `/common:recap`, which only reconstructs what was *done*. Reads the single-track execution plan (`.claude/programs/<nome>/plan.yaml`, schema `common/plan-schema.yaml`) and names **one** next step with the `why` recorded when it was prioritised — never a menu, since a list of equal options is the state you're stuck in when you run it. Separates the two kinds of "next" that compete in silence: **pending human action** (the aggregated `Human validation route` — validate by hand, approve a PR, rotate a secret) and **the next item**. **A tracker is optional**: with `board-flow.yaml` it reconciles against the live board and names every divergence; without one it answers from the plan and says the statuses are self-reported. Read-only unless `--sync`. Never invents an order — with no plan it offers to write one (`/board-flow:triage` where a tracker exists). See [execution-plan.md](execution-plan.md). |
+| `/common:plan` | `<nome> [--from-spec docs/spec/<slug>.md] [--dry-run] [--on-missing refuse\|keep\|drop]` | Writes the repo's **single-track execution queue** — `<main-root>/.claude/programs/<nome>/plan.yaml`, the document that keeps the ORDER and the `why` behind each position, which is exactly what a tracker does not keep. Two sources today: `--from-spec` turns each success criterion of a `/common:spec` specification into an item, inheriting the order of the text **and saying that it inherited** (a spec's criteria are not prioritised against each other); with no flag, the queue is dictated by hand — the case of a repo with no tracker and no spec. **No Jira required**: `--from-jira` is stage 2 of the design and is not built, so a board-fed queue is still `/board-flow:triage`'s job. Writing is mechanical (`common/bin/cepa-plan`): it refuses an empty `why`, a duplicate `id`, a `blocked_by` pointing at a ghost item, a blocking cycle, and — the mirror of `maestro-programs --check-name` — refuses to write the queue over a `parallel-waves` plan. On a rewrite the new list rules the order/title/`why` while the disk keeps `status` and any OPEN `human_pending`, because only the human closes that one. See [execution-plan.md](execution-plan.md). |
 | `/common:branch` | `<assunto>` \| `resume [<fork-id>]` | Fork the current discussion into an isolated context. `<assunto>` (origin session): snapshots the thread to `.claude/forks/<id>/context.md` and pushes an `open` frame — then stops, without discussing the topic. `resume [<id>]` (fresh session): loads the snapshot, marks `active`, starts the interactive side discussion. No id = top-most `open`/`active` frame. Pairs with `/common:return`. See [`context-forking.md`](context-forking.md). |
 | `/common:return` | `[<fork-id>]` (default: top of stack) | Close a fork. In the **side** session: distills the discussion into `resolution.md`, marks `resolved`. In the **origin** session: ingests only that resolution into the main thread, marks the frame `closed` in place (LIFO pop). Picks save-vs-ingest by reading its own conversation; asks if ambiguous. "Top of stack" = top-most non-`closed` frame, which drives both the nested-unwind order and re-ingest idempotence. |
 
@@ -115,10 +116,13 @@ Full guide: [maestro.md](maestro.md).
 | `/maestro:run` | `<name> [--wave N] [--shadow] [--port P]` | The single action for the current wave: gc of orphans → intake gate → bring up the gatekeeper (shadow-mode on the 1st program) → fork each slice into a `herdr` worktree with generated settings + the normative wrapper → file-based event loop (`DONE`/`FAIL`/`TIMEOUT`/`ESCALATED` per slice) → merge train reusing `worktree-merge`'s guards with a verify after **each** merge → report. Reads only `plan.yaml`. Requires `herdr` running. |
 | `/maestro:resume` | `<name>` | Rebuild an interrupted wave from `wave-state.yaml` (written on every transition), reconcile against reality (health-check gatekeeper, confirm live panes, re-read markers), continue the event loop / merge train. Idempotent. Modeled on `/common:autonomous-resume`. |
 
-Two helpers you can run by hand: `python3 common/bin/cepa-dor <plan> --wave N`
-(the intake gate — `READY`/`NOT-READY` per slice) and
+Three helpers you can run by hand: `python3 common/bin/cepa-dor <plan> --wave N`
+(the intake gate — `READY`/`NOT-READY` per slice),
 `python3 maestro/bin/maestro-fork-settings <plan> <slice>` (preview a child's
-generated `settings.json`).
+generated `settings.json`), and `python3 common/bin/cepa-plan validate <plan>`
+(the single-track queue's own checks — empty `why`, ghost `blocked_by`, blocking
+cycle; `check-name <nome>` answers whether a program name is free for a queue
+before you write one).
 
 ## When to use which command
 
@@ -187,3 +191,12 @@ generated `settings.json`).
   a single session instead — the orchestration overhead isn't worth it. See
   [maestro.md](maestro.md). (Not yet live end-to-end — needs `bin/install.sh
   --clean` + `herdr`.)
+
+### "I know the order I want to work in, and there is no tracker here"
+
+- `/common:plan <nome>` writes the queue: `--from-spec docs/spec/<slug>.md` when
+  a `/common:spec` specification already closed (one item per success criterion,
+  order inherited from the text and said so), or dictated by hand when the
+  demands live in `BACKLOG.md` or in your head. Then `/common:next` names ONE
+  step at a time from it. With a Jira board, the writer is still
+  `/board-flow:triage` — `--from-jira` is stage 2 of the design and is not built.
