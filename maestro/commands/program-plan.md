@@ -1,6 +1,6 @@
 ---
-description: Planeja um programa do Maestro — conversa sobre um universo de demandas (default BACKLOG.md), propõe ondas de slices com superfícies disjuntas e fork points, escreve .claude/programs/<nome>/plan.yaml (schema v2, canônico em common/plan-schema.yaml; v1 segue lida sem migração) e roda o intake gate (cepa-dor) até cada slice sair READY ou ter a lacuna nomeada. Não executa nada — /maestro:run (passo 3 da construção) é quem forka. Piso de uso: ≥4 demandas (D7); com menos, /board-flow:drain ou sessão única ganham. Com --sweep, varre a fonte INTEIRA em vez de uma lista de demandas escolhida a dedo e propõe as próximas 2-3 ondas sozinho.
-argument-hint: [nome-do-programa] [--source ARQUIVO] [--demandas "P9,P10,..."] [--sweep]
+description: Planeja um programa do Maestro — conversa sobre um universo de demandas (default BACKLOG.md), propõe ondas de slices com superfícies disjuntas e fork points, escreve .claude/programs/<nome>/plan.yaml (schema v2, canônico em common/plan-schema.yaml; v1 segue lida sem migração) e roda o intake gate (cepa-dor) até cada slice sair READY ou ter a lacuna nomeada. Não executa nada — /maestro:run (passo 3 da construção) é quem forka. Piso de uso: ≥4 demandas (D7); com menos, /board-flow:drain ou sessão única ganham. Com --sweep, varre a fonte INTEIRA em vez de uma lista de demandas escolhida a dedo e propõe as próximas 2-3 ondas sozinho. Com --from-plan NOME, a fonte é a fila `single-track` do repo (.claude/programs/NOME/plan.yaml) em vez de um arquivo de prosa — é a promoção fila → ondas, e a resposta a "como uso o program-plan num projeto com Jira", já que a fila aceita o Jira como fonte e o --source não.
+argument-hint: [nome-do-programa] [--source ARQUIVO] [--demandas "P9,P10,..."] [--sweep] [--from-plan NOME]
 interaction: conversational
 ---
 
@@ -29,6 +29,22 @@ por `common/bin/cepa-promptcov` para cruzar contra a trava de regressão
 (`tests/test_program_plan_sweep.py`) e apontar peça sem cobertura; ver
 docs/promptcov.md.
 
+**Modo `--from-plan NOME`:** a fonte é a fila `single-track` que já existe no
+repo (`<raiz-principal>/.claude/programs/NOME/plan.yaml`), escrita pelo
+`/common:plan` a partir de uma spec, de uma triagem de Jira ou ditada à mão.
+É a etapa 4 do desenho "um escritor, três fontes" (BACKLOG.md, "Cinco portas
+de planejamento") e a única promoção que faltava: fila → ondas era declarada
+manual em `docs/execution-plan.md` por não haver caminho. Também é a resposta a
+*"como uso o program-plan num projeto com Jira"* — o `--source` só aceita
+arquivo, e a fila aceita o board como fonte.
+
+Quem lê a fila é `common/bin/cepa-plan promote`, não esta prosa. A regra de
+quem pode virar slice mora no código pelo mesmo motivo das etapas 1 e 2: um
+parágrafo que manda "promova só os `pending`" só pode ser provado por um grep
+nele mesmo, que mostra a PROMESSA e nunca a execução. Os blocos anotados com a
+família `from-plan` abaixo dizem o que fazer com o que o script devolve — a
+mesma convenção do `--sweep`, medida pelo `cepa-promptcov`.
+
 ## Steps
 
 1. **Fonte e universo.** Leia a fonte (`--source`, default `BACKLOG.md`) e
@@ -48,6 +64,22 @@ docs/promptcov.md.
    um hook não é candidata a fork autônomo; nomeie isso ao usuário e sugira
    sessão supervisionada em vez de forçar a onda.
 
+   **[from-plan:source]** Com `--from-plan NOME`, não leia `BACKLOG.md`: rode
+
+   ```
+   python3 common/bin/cepa-plan promote <NOME> --repo . --json
+   ```
+
+   e trate `demands[]` como o universo — na ORDEM em que vêm, que é a ordem da
+   fila. O que ficou de fora vem em `excluded[]` com o motivo por item
+   (`done`/`dropped` já saíram da fila, `in_progress` está reservado por outra
+   sessão, `blocked` travou num run anterior); **mostre essa lista ao usuário**
+   em vez de calar — um item que ele espera ver na onda e não aparece é a
+   pergunta que ele vai fazer, e a resposta já está no JSON. O piso D7 é
+   mecânico aqui: **exit 4 = pare** e recomende `/common:drain-plan <NOME>`,
+   que executa a mesma fila em série, sem worktree nenhuma. Exit 3 = o nome
+   aponta para um plano de ondas, não para uma fila.
+
 2. **Análise por demanda** (leitura do repo, sem escrever nada):
    - **superfície**: quais arquivos/globs a demanda realisticamente toca —
      derive do texto da demanda + grep/glob no código; na dúvida, declare o
@@ -65,6 +97,21 @@ docs/promptcov.md.
      (`acceptance_form: bdd`), ou o slice **assume** que é substrato
      (`acceptance_form: substrate`). Sem uma das duas, o intake reprova.
 
+   **[from-plan:carry-why]** O `why` de cada demanda vem pronto da fila e é
+   COPIADO, nunca reescrito: ele é o critério que colocou aquele item naquela
+   posição, e reescrevê-lo aqui apaga a priorização que a fila existe para
+   guardar. Ele vai para o `context:` do slice (ou para o `demanda:`, junto do
+   `id`); o que esta conversa acrescenta é o que a fila não tem — superfície,
+   aceite e gate humano.
+
+   **[from-plan:human-gate]** Demanda que chega com `human_gate` diferente de
+   `none` traz uma rota que só o humano fecha (`human_pending` da fila). Ou a
+   decisão é tomada AGORA, na conversa, e o `human_gate` do slice registra o
+   que foi decidido — ou o slice fica fora da onda. Não copie o `open:` para o
+   plano esperando resolver depois: o `cepa-dor` reprova, e com razão, porque
+   forkar uma filha em cima de uma coisa que ninguém validou é construir no
+   escuro.
+
    **[sweep:solo-wave]** Demanda cuja superfície não dá para derivar com confiança
    (prosa vaga demais, ou toca área grande demais para um glob honesto) NÃO
    entra dividindo onda com outras — vai **sozinha para sua própria onda**,
@@ -77,6 +124,14 @@ docs/promptcov.md.
    (teto `max_concurrent_slices`, default 3); dependências e decisões pesadas
    empurram para ondas posteriores. Apresente a proposta ao usuário em tabela
    (onda · slice · demanda · superfície · gate humano · aceite) e discuta.
+
+   **[from-plan:deps-to-waves]** Com `--from-plan`, o `onda_minima` de cada
+   demanda é PISO, não sugestão: ele sai do `blocked_by` da fila, e dois itens
+   em que um depende do outro não podem forkar na mesma onda mesmo que as
+   superfícies sejam disjuntas — a filha de baixo forkaria antes de existir o
+   que ela consome. Agrupe por superfície DENTRO do piso, nunca por cima dele,
+   e use `fork_after: "wave-<N-1>"` na onda N. Um item pode subir de onda
+   (superfície colidiu, teto cheio); descer, nunca.
 
    **[sweep:wave-cap]** O teto de slices por onda não é fixo em 3 — **sugira** o teto
    observando os arquivos-cartório medidos (passo 4): quanto mais concentrados
@@ -96,6 +151,22 @@ docs/promptcov.md.
    peça outro nome; não invente um sufixo por conta própria. Exit 0 com aviso de
    "nome ocupado por um plano parallel-waves" é o caso normal de replanejar as
    ondas do mesmo programa: siga.
+
+   **[from-plan:other-name]** Com `--from-plan NOME`, o `--check-name <NOME>`
+   dá exit 3 SEMPRE — `NOME` é a fila, e é dela que as demandas vieram. Isso é
+   o mecanismo funcionando, não um erro a contornar: gravar as ondas ali
+   apagaria a fila que acabou de ser promovida. O plano de ondas precisa de um
+   nome PRÓPRIO, e quem escolhe é o usuário — não invente um sufixo por conta
+   própria (`NOME-ondas` parece inofensivo e vira um segundo documento que
+   ninguém sabe de onde veio). Peça, e rode o `--check-name` de novo com o nome
+   escolhido.
+
+   **[from-plan:traceable-source]** Grave em `source:` a linha que o
+   `cepa-plan promote` devolve em `source` — ela diz de qual fila, de qual
+   caminho e quantos itens dos quantos vieram, e é a outra ponta do fio que o
+   `demanda:` de cada slice (o `id` do item) começa. Sem ela o plano de ondas
+   nasce órfão: meses depois ninguém sabe de que fila aquele slice saiu, nem em
+   que estado ela estava quando foi promovida.
 
    Com o desenho acordado e o nome liberado, escreva
    `<raiz-principal>/.claude/programs/<nome>/plan.yaml` seguindo
@@ -140,6 +211,12 @@ docs/promptcov.md.
 ## Notes
 
 - Este comando NÃO executa demandas, não cria worktrees, não sobe porteiro.
+- **[from-plan:queue-untouched]** Promover não mexe na fila: `cepa-plan promote`
+  só lê, e os itens continuam `pending` lá. A fila segue sendo o documento da
+  ORDEM; o plano de ondas é uma hipótese sobre um recorte dela. O risco que
+  sobra é humano e vale dizer em voz alta ao usuário no encerramento: o mesmo
+  item agora tem dois executores possíveis (`/common:drain-plan` e a onda), e
+  rodar os dois constrói duas vezes.
 - Superfície é promessa de escrita, não de leitura — a filha pode ler o repo
   inteiro; só escreve dentro dos globs (camada 1 das settings geradas).
 - A zona de enforcement (plugins/, hooks/, .claude/settings*, plugin-cache) é
