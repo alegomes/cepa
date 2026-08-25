@@ -43,6 +43,29 @@ Subcomandos:
       card READY sem `why`, card OBSOLETE sem motivo e card ainda parado em
       `needs-decision` (grelha inacabada). Exit 2 = recusado, com o motivo.
 
+  cepa-plan queue <nome> [--max N] [--repo DIR] [--json]
+      Os itens que o `/common:drain-plan` pode executar AGORA, na ordem da
+      fila, e o motivo pelo qual o lote para onde para. Não executa e não grava
+      nada. Anda a lista do começo e para na primeira coisa que não sabe
+      resolver sozinha — `human_pending` aberto, item bloqueado por algo que
+      não entra no lote, item já reservado por outra sessão, ou o teto. Pular
+      um item travado para alcançar o de baixo seria reordenar a fila em
+      silêncio, que é o que este documento existe para impedir.
+
+  cepa-plan start <nome> <id>
+      Reserva o item: `pending` → `in_progress`. É a reserva que impede duas
+      sessões de construírem o mesmo item — o equivalente, sem tracker, ao
+      claim que o /board-flow:drain publica no card. Recusa item que já está
+      reservado, item que não está `pending` e item com rota humana aberta.
+
+  cepa-plan finish <nome> <id> --status done|blocked|pending --evidence TEXTO
+                   [--human-pending ROTA]
+      Registra o desfecho. `--evidence` é obrigatório: `done` sem o que
+      aconteceu é uma palavra, e a fila deste repo tem a evidência de cada
+      item fechado. `--human-pending` ABRE uma rota que só o humano fecha;
+      fechar (passar vazio) é recusado, porque só quem rodou a rota sabe se
+      ela passou.
+
   cepa-plan validate <plan.yaml>
       As checagens abaixo sobre um arquivo que já está no disco.
       Exit 0 = válido; 2 = inválido, com as lacunas nomeadas.
@@ -108,6 +131,11 @@ except ImportError:
 MODE = "single-track"
 SCHEMA_VERSION = 2
 STATUSES = ("pending", "in_progress", "done", "blocked", "dropped")
+TETO_PADRAO = 3
+
+
+def status_de(it):
+    return it.get("status", "pending")
 
 
 def raiz_principal(repo):
@@ -686,6 +714,272 @@ def cmd_from_triage(caminho, como_json=True):
     print(json.dumps(itens, ensure_ascii=False, indent=2) if como_json else itens)
     return 0
 
+# ── o lote: o que o /common:drain-plan pode executar AGORA ───────────────────
+
+PARADAS = ("fim-da-fila", "teto", "human_pending", "bloqueado",
+           "bloqueado-antes", "in_progress")
+
+
+def monta_lote(items, teto):
+    """(lote, parada, avisos) — os itens executáveis agora, NA ORDEM DA FILA.
+
+    A ordem é o dado do documento, então esta função nunca reordena e nunca
+    pula um item para alcançar outro mais adiante: ela anda a lista do começo
+    e PARA na primeira coisa que não sabe resolver sozinha. Passar por cima de
+    um item travado é reordenar a fila em silêncio — que é exatamente o que o
+    `/board-flow:drain` faz por não ter uma (ele pega o rank do quadro), e o
+    motivo de este comando existir.
+
+    Cada motivo de parada existe por uma falha diferente:
+
+      - `human_pending` aberto — só o humano fecha essa pendência, e o item
+        seguinte costuma se apoiar no que ela valida. Seguir sem ela é
+        construir sobre uma coisa que ninguém conferiu, e a dívida some do
+        único lugar que a mostrava. (Decisão do dono, 2026-08-25.)
+      - `bloqueado` — o item depende de algo que não está feito NEM entra
+        neste lote. Copiado do `/board-flow:drain`: não se empurra trabalho
+        travado.
+      - `bloqueado-antes` — o item já saiu `blocked` de um run anterior, numa
+        condição de fora que ninguém mexeu desde então. Voltar a executá-lo
+        gasta orçamento no mesmo travamento; devolvê-lo para `pending` é
+        decisão de quem resolveu a condição.
+      - `in_progress` — o item está reservado. Ou outra sessão está nele agora,
+        ou um run morreu no meio e deixou o status para trás. Nenhum dos dois
+        se resolve executando por cima.
+      - `teto` — o `--max`, também copiado do drain: cada item aqui é um build
+        inteiro com gate de aceite e de prova.
+
+    Um `blocked_by` que aponta para item JÁ ESCOLHIDO neste lote não bloqueia:
+    ele vai fechar antes, porque a ordem da lista é respeitada. Sem isso o lote
+    teria sempre no máximo um item em qualquer fila com dependência encadeada.
+    """
+    avisos = []
+    resolvidos = {str(it.get("id")) for it in items
+                  if isinstance(it, dict) and status_de(it) in ("done", "dropped")}
+    largados = {str(it.get("id")) for it in items
+                if isinstance(it, dict) and status_de(it) == "dropped"}
+
+    lote, parada = [], {"reason": "fim-da-fila", "item": None, "detail":
+                        "a fila acabou — nenhum item pendente sobrou"}
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        ident, st = str(it.get("id")), status_de(it)
+        if st in ("done", "dropped"):
+            continue
+        if st == "in_progress":
+            parada = {"reason": "in_progress", "item": ident, "detail":
+                      f"{ident} está `in_progress` — ou outra sessão está nele "
+                      "agora, ou um run morreu no meio e deixou o status para "
+                      "trás. Confirme qual dos dois; devolver para `pending` é "
+                      "decisão sua, não minha"}
+            break
+        if st == "blocked":
+            motivo = str(it.get("evidence") or "").strip()
+            parada = {"reason": "bloqueado-antes", "item": ident, "detail":
+                      f"{ident} saiu `blocked` de um run anterior"
+                      + (f": {motivo}" if motivo else " (sem motivo registrado)")
+                      + ". Enquanto a condição de fora não mudar, re-executar "
+                      "gasta orçamento no mesmo travamento — devolver o item "
+                      "para `pending` é de quem resolveu a condição"}
+            break
+        if it.get("human_pending") is not None:
+            parada = {"reason": "human_pending", "item": ident, "detail":
+                      f"{ident} tem uma rota que só você fecha: "
+                      f"{it['human_pending']}"}
+            break
+        pendentes = [b for b in (it.get("blocked_by") or [])
+                     if str(b) not in resolvidos
+                     and str(b) not in {x["id"] for x in lote}]
+        if pendentes:
+            parada = {"reason": "bloqueado", "item": ident, "detail":
+                      f"{ident} depende de {', '.join(pendentes)}, que não "
+                      "está feito nem entra neste lote"}
+            break
+        for b in (it.get("blocked_by") or []):
+            if str(b) in largados:
+                avisos.append(
+                    f"{ident} depende de {b}, que está `dropped` — ninguém vai "
+                    "fechar esse item, então a dependência não está satisfeita, "
+                    "está abandonada. Tratei como resolvida para o item não "
+                    "ficar preso para sempre; confira se ela ainda vale.")
+        if len(lote) >= teto:
+            parada = {"reason": "teto", "item": ident, "detail":
+                      f"o teto --max {teto} foi atingido; {ident} seria o "
+                      "próximo"}
+            break
+        lote.append({"id": ident, "title": it.get("title"), "why": it.get("why"),
+                     "blocked_by": [str(b) for b in (it.get("blocked_by") or [])]})
+
+    return lote, parada, avisos
+
+
+def resumo_do_lote(items, lote, parada):
+    conta = {"pending": 0, "in_progress": 0, "done": 0, "blocked": 0, "dropped": 0}
+    for it in items:
+        if isinstance(it, dict):
+            conta[status_de(it)] = conta.get(status_de(it), 0) + 1
+    restantes = conta["pending"] - len(lote)
+    return {"por_status": conta, "no_lote": len(lote),
+            "pendentes_fora_do_lote": max(restantes, 0)}
+
+
+def cmd_queue(raiz, nome, teto, como_json):
+    alvo = caminho_do_plano(raiz, nome)
+    if not alvo.is_file():
+        print(f"{alvo} não existe — não há fila para executar. Quem escreve é "
+              "o /common:plan.", file=sys.stderr)
+        return 2
+    plan, erro = le_plano(alvo)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    if modo_de(plan) != MODE:
+        print(f"COLISÃO: {alvo} é um plano '{modo_de(plan)}' — ondas do "
+              "/maestro:program-plan, que quem executa é o /maestro:run. Este "
+              "lote só sabe fila.", file=sys.stderr)
+        return 3
+    faltas = valida_plano(plan)
+    if faltas:
+        print(f"{alvo}: {len(faltas)} lacuna(s) — não dá para montar lote sobre "
+              "uma fila inválida", file=sys.stderr)
+        for f in faltas:
+            print(f"  - {f}", file=sys.stderr)
+        return 2
+
+    items = plan.get("items") or []
+    lote, parada, avisos = monta_lote(items, teto)
+    saida = {"program": plan.get("program"), "path": str(alvo), "max": teto,
+             "batch": lote, "stop": parada, "warnings": avisos,
+             "totals": resumo_do_lote(items, lote, parada)}
+    if como_json:
+        print(json.dumps(saida, ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"fila {saida['program']} · {alvo}")
+    if not lote:
+        print("  lote VAZIO — nada a executar agora")
+    for i, it in enumerate(lote, 1):
+        print(f"  {i}. {it['id']} — {it['title']}")
+        print(f"     porque: {it['why']}")
+    print(f"  parada: {parada['reason']} — {parada['detail']}")
+    for a in avisos:
+        print(f"  aviso: {a}")
+    t = saida["totals"]
+    print(f"  {t['no_lote']} no lote · {t['pendentes_fora_do_lote']} pendente(s) "
+          f"fora dele · {t['por_status'].get('done', 0)} done")
+    return 0
+
+
+# ── marcação: o lote reserva o item antes e registra o desfecho depois ───────
+
+def cabecalho_do_arquivo(texto):
+    """Os comentários do topo, verbatim.
+
+    Reescrever o arquivo inteiro pelo `serializa` regeneraria o cabeçalho a
+    partir de um `--quando` que a marcação não tem — e datar o documento com a
+    data de HOJE toda vez que um item fecha apaga quando a fila foi escrita.
+    """
+    linhas = []
+    for linha in texto.splitlines(keepends=True):
+        if linha.startswith("#") or not linha.strip():
+            linhas.append(linha)
+        else:
+            break
+    return "".join(linhas)
+
+
+def grava_corpo(alvo, plan, itens):
+    corpo = dict(plan)
+    corpo["items"] = itens
+    dump = yaml.dump(corpo, allow_unicode=True, sort_keys=False,
+                     default_flow_style=False, width=78)
+    texto = cabecalho_do_arquivo(alvo.read_text(encoding="utf-8"))
+    if texto and not texto.endswith("\n\n"):
+        texto += "\n"
+    tmp = alvo.with_suffix(".yaml.tmp")
+    tmp.write_text(texto + dump, encoding="utf-8")
+    tmp.replace(alvo)
+
+
+def abre_plano_para_marcar(raiz, nome):
+    """(alvo, plan, item_por_id, erro_exit) — a leitura comum de start/finish."""
+    alvo = caminho_do_plano(raiz, nome)
+    if not alvo.is_file():
+        print(f"{alvo} não existe — não há fila para marcar", file=sys.stderr)
+        return None, None, None, 2
+    plan, erro = le_plano(alvo)
+    if erro:
+        print(erro, file=sys.stderr)
+        return None, None, None, 2
+    if modo_de(plan) != MODE:
+        print(f"{alvo} é um plano '{modo_de(plan)}', não uma fila", file=sys.stderr)
+        return None, None, None, 3
+    return alvo, plan, {str(i.get("id")): i for i in (plan.get("items") or [])
+                        if isinstance(i, dict)}, 0
+
+
+def cmd_start(raiz, nome, ident):
+    alvo, plan, por_id, rc = abre_plano_para_marcar(raiz, nome)
+    if rc:
+        return rc
+    it = por_id.get(str(ident))
+    if it is None:
+        print(f"a fila {nome} não tem item '{ident}' — os que ela tem: "
+              + ", ".join(por_id) or "(nenhum)", file=sys.stderr)
+        return 2
+    st = status_de(it)
+    if st == "in_progress":
+        print(f"{ident} JÁ está `in_progress` — outra sessão pode estar nele "
+              "agora, ou um run morreu e deixou o status para trás. Executar "
+              "por cima refaz trabalho; a reserva é o que impede isso.",
+              file=sys.stderr)
+        return 5
+    if st != "pending":
+        print(f"{ident} está `{st}`, não `pending` — o lote só reserva item "
+              "pendente", file=sys.stderr)
+        return 5
+    if it.get("human_pending") is not None:
+        print(f"{ident} tem uma rota aberta que só você fecha "
+              f"({it['human_pending']}) — o lote não passa por cima dela",
+              file=sys.stderr)
+        return 5
+    it["status"] = "in_progress"
+    grava_corpo(alvo, plan, plan.get("items") or [])
+    print(f"{ident} reservado (`in_progress`) em {alvo}")
+    return 0
+
+
+def cmd_finish(raiz, nome, ident, status, evidencia, human_pending):
+    alvo, plan, por_id, rc = abre_plano_para_marcar(raiz, nome)
+    if rc:
+        return rc
+    it = por_id.get(str(ident))
+    if it is None:
+        print(f"a fila {nome} não tem item '{ident}'", file=sys.stderr)
+        return 2
+    if not str(evidencia or "").strip():
+        print(f"desfecho sem evidência não fecha item nenhum: `{status}` é uma "
+              "palavra, e o que torna ela auditável é o que aconteceu (commits, "
+              "vereditos, o que travou). Todo item `done` desta fila carrega a "
+              "dele.", file=sys.stderr)
+        return 2
+    it["status"] = status
+    it["evidence"] = evidencia
+    if human_pending is not None:
+        if not str(human_pending).strip():
+            print("`--human-pending` vazio seria FECHAR a dívida, e só o humano "
+                  "fecha: ele é o único que sabe se rodou a rota. Para abrir "
+                  "uma, passe o texto dela.", file=sys.stderr)
+            return 2
+        it["human_pending"] = human_pending
+    grava_corpo(alvo, plan, plan.get("items") or [])
+    print(f"{ident} → `{status}` em {alvo}")
+    if human_pending:
+        print(f"  rota aberta para você: {human_pending}")
+    return 0
+
+
 # ── subcomandos ──────────────────────────────────────────────────────────────
 
 def cmd_check_name(raiz, nome):
@@ -869,6 +1163,37 @@ def main(argv=None):
                             "e devolve os itens (JSON)")
     t.add_argument("repasse", help="arquivo JSON/YAML, ou '-' para stdin")
 
+    q = sub.add_parser("queue",
+                       help="quais itens o lote pode executar agora, na ordem "
+                            "da fila, e onde ele para")
+    q.add_argument("nome")
+    q.add_argument("--max", type=int, default=TETO_PADRAO, dest="teto",
+                   help=f"teto de itens no lote (default {TETO_PADRAO}: cada "
+                        "item é um build inteiro com gate de aceite e de prova)")
+    q.add_argument("--repo", default=".")
+    q.add_argument("--json", action="store_true", dest="como_json")
+
+    st = sub.add_parser("start",
+                        help="reserva um item do lote (status: in_progress)")
+    st.add_argument("nome")
+    st.add_argument("id")
+    st.add_argument("--repo", default=".")
+
+    fi = sub.add_parser("finish",
+                        help="registra o desfecho de um item do lote")
+    fi.add_argument("nome")
+    fi.add_argument("id")
+    fi.add_argument("--status", required=True,
+                    choices=("done", "blocked", "pending"),
+                    help="done = fechou; blocked = travou em condição de fora; "
+                         "pending = volta para a fila sem ter fechado")
+    fi.add_argument("--evidence", required=True,
+                    help="o que aconteceu: commits, vereditos, o que travou")
+    fi.add_argument("--human-pending", dest="human_pending",
+                    help="ABRE uma rota que só o humano fecha (validar à mão, "
+                         "aprovar PR). Nunca fecha uma: só o humano faz isso")
+    fi.add_argument("--repo", default=".")
+
     w = sub.add_parser("write", help="grava a fila")
     w.add_argument("nome")
     w.add_argument("--items",
@@ -906,6 +1231,13 @@ def main(argv=None):
         return 2
     if a.cmd == "check-name":
         return cmd_check_name(raiz, a.nome)
+    if a.cmd == "queue":
+        return cmd_queue(raiz, a.nome, a.teto, a.como_json)
+    if a.cmd == "start":
+        return cmd_start(raiz, a.nome, a.id)
+    if a.cmd == "finish":
+        return cmd_finish(raiz, a.nome, a.id, a.status, a.evidence,
+                          a.human_pending)
     return cmd_write(raiz, a)
 
 
