@@ -1,0 +1,300 @@
+#!/usr/bin/env python3
+"""cepa-feedback — o caderno de reclamações do próprio harness.
+
+O problema que ele resolve: o incômodo com o harness aparece SEMPRE no meio de
+outra coisa. O gate barra o que não devia, o comando pergunta demais, o relatório
+sai ilegível — e nesse instante existem duas saídas, largar a tarefa para abrir o
+BACKLOG.md do repo da Cepa (que quase nunca é o repo onde você está), ou seguir e
+esquecer. Seguir e esquecer sempre ganha. Este arquivo é a terceira saída.
+
+Desenho, e o porquê de cada escolha:
+
+  - **Global, não por repo.** O alvo do feedback é a Cepa, e o incômodo acontece
+    no repo do cliente. Um `.claude/feedback.md` por repo espalharia a mesma
+    queixa por cinco lugares que ninguém relê. Tudo cai em
+    ~/.claude/cepa-feedback/feedback-AAAA-MM.jsonl (CEPA_FEEDBACK_DIR sobrescreve).
+  - **Append-only.** Registro nunca é reescrito; a triagem é OUTRA linha que cita
+    o id. O estado ("aberto" / "triado") é replay do ledger, como na telemetria.
+  - **Contexto capturado sozinho** — repo, branch, modo da sessão. Se o registro
+    depender de você lembrar onde estava, ele nasce inútil: a queixa de agosto
+    lida em outubro sem o comando que a causou não vira card nenhum.
+  - **Texto é do dono, não do agente.** O comando não resume nem reescreve o que
+    você disse; grava verbatim.
+
+Uso:
+    cepa-feedback add "o gate X barrou o commit legítimo" --alvo modo-escrita-gate
+    cepa-feedback list                     # os abertos
+    cepa-feedback list --status todos --json
+    cepa-feedback triar fb-20260826-1 --destino "BACKLOG.md § Gate de escrita"
+
+Saídas: 0 ok · 2 uso inválido · 3 id inexistente · 4 já triado.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+MIN_TEXTO = 12  # queixa de uma palavra não se reconstrói meses depois
+ORIGENS = ("comando", "skill", "hook", "manual")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+try:
+    import _telemetry as T
+except Exception:  # noqa: BLE001 — telemetria nunca decide se o registro acontece
+    T = None
+
+BOLD, DIM, AMARELO, VERDE, RESET = "\033[1m", "\033[2m", "\033[33m", "\033[32m", "\033[0m"
+
+
+def dir_ledger():
+    d = os.environ.get("CEPA_FEEDBACK_DIR")
+    return Path(d) if d else Path.home() / ".claude" / "cepa-feedback"
+
+
+def _git(args, cwd):
+    try:
+        out = subprocess.run(["git", "-C", str(cwd)] + args,
+                             capture_output=True, text=True, timeout=5)
+        return out.stdout.strip() if out.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def contexto(cwd):
+    """Repo, branch e modo — o que faz a queixa ser reconstruível depois."""
+    raiz = _git(["rev-parse", "--show-toplevel"], cwd) or str(cwd)
+    comum = _git(["rev-parse", "--path-format=absolute", "--git-common-dir"], cwd)
+    if comum.endswith("/.git"):
+        repo = Path(comum).parent.name
+    elif comum:
+        repo = Path(comum).name
+    else:
+        repo = Path(raiz).name
+    branch = _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd) or None
+    modo = None
+    arq = Path(raiz) / ".claude" / "session-mode"
+    if arq.is_file():
+        try:
+            for linha in arq.read_text(encoding="utf-8", errors="replace").splitlines():
+                k, _, v = linha.partition(":")
+                if k.strip() == "modo":
+                    v = v.strip().strip('"')
+                    modo = v if v and v != "null" else None
+        except OSError:
+            pass
+    return {"repo": repo or None, "branch": branch, "modo": modo}
+
+
+def arquivos():
+    d = dir_ledger()
+    return sorted(d.glob("feedback-*.jsonl")) if d.is_dir() else []
+
+
+def eventos():
+    """Todas as linhas do ledger, em ordem de arquivo. Linha corrompida é pulada:
+    um ledger que morre por uma linha ruim perde o resto do que estava certo."""
+    for arq in arquivos():
+        try:
+            texto = arq.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for linha in texto.splitlines():
+            linha = linha.strip()
+            if not linha:
+                continue
+            try:
+                ev = json.loads(linha)
+            except ValueError:
+                continue
+            if isinstance(ev, dict) and ev.get("id"):
+                yield ev
+
+
+def registros():
+    """Replay do ledger: id → registro com `status` e a triagem, quando houve."""
+    out = {}
+    for ev in eventos():
+        tipo = ev.get("tipo")
+        if tipo == "feedback":
+            r = dict(ev)
+            r["status"] = "aberto"
+            r["triagem"] = None
+            out.setdefault(ev["id"], r)
+        elif tipo == "triagem" and ev["id"] in out:
+            out[ev["id"]]["status"] = "triado"
+            out[ev["id"]]["triagem"] = {
+                "destino": ev.get("destino"), "nota": ev.get("nota"), "ts": ev.get("ts"),
+            }
+    return out
+
+
+def novo_id(agora):
+    dia = agora.strftime("%Y%m%d")
+    n = sum(1 for ev in eventos() if ev.get("tipo") == "feedback"
+            and str(ev.get("id", "")).startswith(f"fb-{dia}-"))
+    return f"fb-{dia}-{n + 1}"
+
+
+def grava(ev):
+    d = dir_ledger()
+    d.mkdir(parents=True, exist_ok=True)
+    arq = d / f"feedback-{datetime.now(timezone.utc):%Y-%m}.jsonl"
+    with open(arq, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(ev, ensure_ascii=False) + "\n")
+    return arq
+
+
+def cmd_add(args):
+    texto = " ".join(args.texto).strip()
+    if not texto:
+        print("✗ feedback vazio: diga o que incomodou.", file=sys.stderr)
+        return 2
+    if len(texto) < MIN_TEXTO:
+        print(f"✗ feedback curto demais ({len(texto)} caracteres, mínimo {MIN_TEXTO}).\n"
+              "  Uma palavra não se reconstrói meses depois — diga o que o harness "
+              "fez e o que você esperava.", file=sys.stderr)
+        return 2
+    if args.origem not in ORIGENS:
+        print(f"✗ origem inválida: {args.origem} (válidas: {', '.join(ORIGENS)})",
+              file=sys.stderr)
+        return 2
+
+    agora = datetime.now(timezone.utc)
+    ev = {
+        "ts": agora.isoformat(),
+        "tipo": "feedback",
+        "id": novo_id(agora),
+        "texto": texto,
+        "alvo": args.alvo or None,
+        "origem": args.origem,
+    }
+    ev.update(contexto(args.repo or os.getcwd()))
+    arq = grava(ev)
+    if T:
+        try:
+            T.emit("feedback_capturado", origem=args.origem, alvo=args.alvo or "none")
+        except Exception:  # noqa: BLE001
+            pass
+
+    if args.as_json:
+        print(json.dumps({"id": ev["id"], "arquivo": str(arq)}, ensure_ascii=False))
+    else:
+        print(f"✔ feedback {ev['id']} registrado ({arq}).")
+    return 0
+
+
+def _linha(r, cor):
+    marca = VERDE + "aberto" + RESET if r["status"] == "aberto" else DIM + "triado" + RESET
+    if not cor:
+        marca = r["status"]
+    cab = f"{BOLD}{r['id']}{RESET}  {marca}  {DIM}{r['ts'][:16]}{RESET}"
+    ctx = " · ".join(x for x in (r.get("repo"), r.get("branch"), r.get("modo"),
+                                 r.get("alvo")) if x)
+    corpo = [cab, f"  {r['texto']}"]
+    if ctx:
+        corpo.append(f"  {DIM}{ctx}{RESET}")
+    if r["status"] == "triado" and r.get("triagem"):
+        corpo.append(f"  {DIM}→ {r['triagem'].get('destino')}{RESET}")
+    return "\n".join(corpo)
+
+
+def cmd_list(args):
+    todos = list(registros().values())
+    todos.sort(key=lambda r: r.get("ts", ""))
+    sel = [r for r in todos
+           if (args.status == "todos" or r["status"] == args.status)
+           and (not args.repo_nome or r.get("repo") == args.repo_nome)]
+    if args.max:
+        sel = sel[-args.max:]
+
+    if args.as_json:
+        print(json.dumps(sel, ensure_ascii=False, indent=2))
+        return 0
+
+    cor = sys.stdout.isatty() and not args.sem_cor
+    if not cor:
+        global BOLD, DIM, AMARELO, VERDE, RESET
+        BOLD = DIM = AMARELO = VERDE = RESET = ""
+    if not sel:
+        d = dir_ledger()
+        print(f"Nenhum feedback {args.status} em {d}."
+              if d.is_dir() else f"Nenhum feedback registrado ainda ({d} não existe).")
+        return 0
+    for r in sel:
+        print(_linha(r, cor))
+        print()
+    abertos = sum(1 for r in todos if r["status"] == "aberto")
+    print(f"{DIM}{len(sel)} exibido(s) · {abertos} aberto(s) no total.{RESET}")
+    return 0
+
+
+def cmd_triar(args):
+    destino = (args.destino or "").strip()
+    if not destino:
+        print("✗ triagem sem destino: diga onde o item foi parar "
+              "(card, seção do BACKLOG.md, commit).", file=sys.stderr)
+        return 2
+    regs = registros()
+    r = regs.get(args.id)
+    if not r:
+        print(f"✗ id inexistente: {args.id}", file=sys.stderr)
+        return 3
+    if r["status"] == "triado":
+        anterior = (r.get("triagem") or {}).get("destino")
+        print(f"✗ {args.id} já foi triado → {anterior}", file=sys.stderr)
+        return 4
+    ev = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "tipo": "triagem",
+        "id": args.id,
+        "destino": destino,
+        "nota": (args.nota or None),
+    }
+    grava(ev)
+    if T:
+        try:
+            T.emit("feedback_triado")
+        except Exception:  # noqa: BLE001
+            pass
+    print(f"✔ {args.id} → {destino}")
+    return 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        prog="cepa-feedback",
+        description="Registra e acompanha o feedback sobre o próprio harness.")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    a = sub.add_parser("add", help="registra um feedback (texto verbatim)")
+    a.add_argument("texto", nargs="+")
+    a.add_argument("--alvo", help="comando/hook/agente que causou o incômodo")
+    a.add_argument("--origem", default="manual", choices=ORIGENS)
+    a.add_argument("--repo", help="diretório de onde tirar repo/branch/modo (default: cwd)")
+    a.add_argument("--json", action="store_true", dest="as_json")
+    a.set_defaults(func=cmd_add)
+
+    l = sub.add_parser("list", help="lista os feedbacks registrados")
+    l.add_argument("--status", default="aberto", choices=("aberto", "triado", "todos"))
+    l.add_argument("--repo", dest="repo_nome", help="filtra pelo nome do repo")
+    l.add_argument("--max", type=int, help="só os N mais recentes")
+    l.add_argument("--json", action="store_true", dest="as_json")
+    l.add_argument("--sem-cor", action="store_true")
+    l.set_defaults(func=cmd_list)
+
+    t = sub.add_parser("triar", help="marca um feedback como triado, com destino")
+    t.add_argument("id")
+    t.add_argument("--destino", required=True, help="onde o item foi parar")
+    t.add_argument("--nota")
+    t.set_defaults(func=cmd_triar)
+
+    args = ap.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
