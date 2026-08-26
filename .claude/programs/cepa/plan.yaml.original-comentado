@@ -1,0 +1,367 @@
+# plan.yaml — o próprio cepa, em modo single-track.
+#
+# Primeiro uso real do mecanismo, e de propósito num repo SEM Jira: se o plano
+# só funcionasse com tracker, o repo onde a dor foi sentida não poderia usá-lo.
+# Os status aqui são auto-declarados — não há board conferindo. /common:next
+# diz isso ao responder, em vez de fingir que verificou.
+#
+# Fonte das demandas: BACKLOG.md e o que ficou aberto na sessão de 28-29/07.
+
+schema_version: 2
+mode: single-track
+program: cepa
+source: "BACKLOG.md + sessão 2026-07-28/29 (fio condutor)"
+
+items:
+ # ── Sessão session/doubt, 2026-08-24 ───────────────────────────────────────
+  # Desenho "um escritor de fila, três fontes" (BACKLOG.md, "Cinco portas de
+  # planejamento"), aprovado pelo dono nesta sessão. As quatro etapas estão em
+  # cadeia porque cada uma consome o que a anterior produz — mas cada uma serve
+  # sozinha, então parar no meio deixa o harness melhor, não pela metade.
+
+  - id: "common-plan-etapa1"
+    title: "/common:plan <nome> — escreve a fila single-track a partir de uma spec ou ditada à mão"
+    why: >-
+      é a etapa que sozinha destrava o caso que motivou o desenho: hoje o único
+      comando que escreve o plan.yaml single-track é o /board-flow:triage, e ele
+      exige Jira, então repo sem tracker não tem fila e o /common:next não tem o
+      que ler. Também dá saída ao /common:spec, que foi feito para não exigir
+      tracker e mesmo assim só continua andando com um. Primeira porque as
+      outras três consomem o arquivo que ela passa a escrever.
+      Decisão em aberto registrada no card: quando a fonte é uma spec, ninguém
+      priorizou os critérios entre si — preferência é herdar a ordem do texto e
+      dizer que herdou.
+    # done em 2026-08-24, branch session/common_plan (5 commits, c2c2e80..35d2029).
+    # A decisão em aberto do `why` acima foi fechada como a preferência dizia: o
+    # `why` de cada item carrega a frase "herdado da ordem do texto da
+    # especificação; ninguém priorizou os critérios entre si".
+    #
+    # O que não estava previsto aqui: a leitura da spec virou CÓDIGO, não prosa
+    # de comando. O completion-auditor barrou a primeira versão com dois
+    # critérios INCOMPLETE — enquanto `--from-spec` era só um parágrafo de
+    # instrução no plan.md, o único teste possível era grepar essa prosa, que
+    # prova que o comando PROMETE herdar a ordem e nunca que uma execução produz
+    # a fila prometida. Virou `cepa-plan from-spec`, com spec-fixture no teste.
+    #
+    # Vereditos: completion-auditor COMPLETE (5 critérios, .claude/acceptance/
+    # common-plan-etapa1.yaml) e proof-reviewer PROVEN (docs/proof/
+    # common-plan-etapa1.yaml — 15 linhas de comportamento perturbadas uma a
+    # uma, todas ficaram vermelhas). Suíte: 49/49 arquivos verdes.
+    #
+    # NÃO está live: exige bin/install.sh --clean + restart (common 2.4.0).
+    status: done
+    blocked_by: []
+    human_pending: null
+
+  - id: "common-plan-etapa2"
+    title: "--from-jira no /common:plan e /board-flow:triage devolvendo a ordem em vez de gravar"
+    why: >-
+      é a única etapa que mexe em comando já em produção, por isso vem depois de
+      a etapa 1 existir e estar em uso: o triage continua fazendo o que só ele
+      sabe (ler cards, achar evidência no código, rotear os 4 baldes) e entrega
+      a lista ordenada. Some a duplicação de quem escreve a fila e some a outra
+      metade da ambiguidade de nome de programa, já travada pelo --check-name.
+    status: pending
+    blocked_by: ["common-plan-etapa1"]
+    human_pending: null
+
+  - id: "common-drain-plan"
+    title: "/common:drain-plan <nome> — executa a fila single-track na ordem dela"
+    why: >-
+      fecha o ciclo sem tracker (escrever → apontar com /common:next → executar).
+      Hoje o único lote que existe é o /board-flow:drain, que puxa a coluna do
+      Jira ordenada por priority e rank do quadro — exatamente a ordem que o
+      plano existe para substituir. Depende da etapa 1 porque não faz sentido
+      drenar uma fila que ainda depende de Jira para nascer. Do drain vale
+      copiar: parar no primeiro item BLOQUEADO e o teto --max. Pergunta que
+      sobra: item com human_pending aberto deve parar o lote?
+    status: pending
+    blocked_by: ["common-plan-etapa1"]
+    human_pending: null
+
+  - id: "program-plan-from-plan"
+    title: "--from-plan no /maestro:program-plan — promove a fila single-track a ondas"
+    why: >-
+      é a resposta a "como uso o program-plan num projeto de Jira", que hoje não
+      tem resposta boa: o --source só aceita arquivo, e o program-plan é o único
+      lugar do harness que interpreta uma fonte de demandas. Também torna
+      possível a promoção fila → ondas, hoje declarada manual no
+      docs/execution-plan.md por não haver caminho. Por último porque é a única
+      das quatro que ninguém precisa para trabalhar sem Jira.
+    status: pending
+    blocked_by: ["common-plan-etapa1"]
+    human_pending: null
+
+  - id: "instalar-leva-fio-condutor"
+    title: "bin/install.sh --clean + restart, e rodar /common:doctor"
+    why: >-
+      primeiro de tudo porque NADA desta leva está live — o cache serve common
+      0.19.0 / board-flow 0.8.1 / maestro 0.3.0 contra 0.21.0 / 0.11.0 / 0.4.0
+      no repo. Todo item abaixo depende de o harness instalado ser este.
+    # done em 2026-07-29 por /common:next --sync. Evidência: /common:doctor na
+    # mesma sessão — install ok há 0d, com common 0.21.0 / board-flow 0.11.0 /
+    # maestro 0.4.0 instalados e habilitados, exatamente as versões cobradas.
+    status: done
+    blocked_by: []
+    human_pending: null
+
+  - id: "validar-fio-condutor-em-board-real"
+    title: "Rodar /board-flow:triage num board com fila real e ver a ordem sobreviver à revisão"
+    why: >-
+      a primeira validação honesta das 3 peças. Os testes travam contrato de
+      prompt, não comportamento: o triage nunca escreveu um plano de verdade e
+      o next nunca reconciliou contra Jira vivo. Antes disto, "pronto" é
+      code-exists (L0 da escada de confiança), não funciona.
+    status: pending
+    blocked_by: ["instalar-leva-fio-condutor"]
+    human_pending: null
+
+  - id: "produtor-de-plano-sem-tracker"
+    title: "Decidir quem escreve o plano single-track num repo sem Jira"
+    why: >-
+      registrado como ITEM, e não como parágrafo no BACKLOG, porque o receio do
+      dono era exatamente este: adiar e esquecer — a falha que esta iniciativa
+      inteira existe para atacar. Fica DEPOIS da validação de propósito: são
+      três desenhos plausíveis (o agente escreve sob pedido; program-plan
+      --single-track, que arrasta superfície/fork/cepa-dor junto; ou um
+      /common:plan novo) e nenhum uso real ainda para escolher entre eles.
+      Gatilho para promover: a segunda vez que pedir o plano na mão incomodar.
+    status: pending
+    blocked_by: ["validar-fio-condutor-em-board-real"]
+    human_pending: null
+
+  - id: "stale-e-reactor-no-wego"
+    title: "Investigar os 5 bloqueios STALE + 86 maven_reactor_block do wego-assinatura-backend"
+    why: >-
+      maior sinal isolado da telemetria (28/07): o reactor_block é 20% de todos
+      os eventos do mês e provavelmente é a mesma causa dos STALE vista de outro
+      ângulo. Independente das peças acima — pode furar a fila se um dia de
+      trabalho no wego travar de novo.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "proof-gate-nunca-disse-proven"
+    title: "Re-exercitar o proof gate depois do fix de path-lock out-of-root"
+    why: >-
+      7 vereditos no mês, todos needs-human ou unproven, nenhum PROVEN — padrão
+      consistente com o fix de path-lock que existe no repo mas nunca foi
+      re-exercitado. Um gate caro que nunca conclui é pior que gate nenhum,
+      porque consome orçamento e não fecha card.
+    status: pending
+    blocked_by: ["instalar-leva-fio-condutor"]
+    human_pending: null
+
+  # Os três itens abaixo são a sequência de validação do /board-flow:decide,
+  # construído na sessão de 03-04/08 (4 commits: os sete motivos de NEEDS-HUMAN,
+  # o classificador, o comando da fila, as dispensas em .claude/waivers) e já
+  # live — decide.md, classify_needs_human.py e waivers.py estão no cache
+  # instalado, board-flow 0.11.0. A sequência estava só no handoff, como as três
+  # perguntas que o dono deixou sem responder em 04/08; entra aqui como itens
+  # para não depender de alguém reler o handoff.
+
+  - id: "decide-rodar-no-wego"
+    title: "Rodar /board-flow:decide no wego-assinatura-backend, percurso inteiro"
+    why: >-
+      o comando NUNCA rodou. Está escrito e apoiado em módulos testados, mas
+      commands/decide.md é prosa: o percurso de ponta a ponta (Jira →
+      classificação → agrupamento → resposta em lote → escrita) nunca foi
+      exercitado. É o caminho mais barato de exercitar — o handoff de 04/08
+      registra 1 card em Review no wego (confirmar, é hipótese) e já existem 33
+      artefatos NEEDS-HUMAN nos três repos. NÃO depende do proof gate: o decide
+      lê artefatos que já existem, não precisa que o gate produza novos.
+      Sinal para vigiar durante o run: `sem-motivo` aparecendo — o classificador
+      tem um resíduo em prosa que casa expressão em routing_reason e degrada em
+      silêncio se o proof-reviewer mudar o jeito de escrever.
+    # done em 2026-08-04 — o comando RODOU de ponta a ponta no wego pela primeira
+    # vez: Jira → artefato → classificação → agrupamento. Não travou em passo
+    # nenhum. O `sem-motivo` que estava sob vigia NÃO apareceu.
+    #
+    # Mas a fila real não era o que o comando pressupõe: dos 20 cards em Review
+    # (de 30), 19 NÃO TÊM artefato de prova nenhum — nunca foram provados, são
+    # trabalho para /board-flow:prove, não decisão para humano. Sobrou 1 card
+    # classificável, e ele expôs um defeito de classificação: o WEGO-1550 é um
+    # Epic-mãe, que por desenho nunca terá base_commit, e caiu em `nao-rodou`
+    # ("commit-base não resolvido") — motivo cuja saída prescrita é re-rodar a
+    # prova. Re-rodar num Epic dá o mesmo resultado para sempre. O motivo certo
+    # seria `nada-a-provar`, e o próprio artefato já diz isso em prosa
+    # ("Um Epic-mãe, por definição, não produz esse diff").
+    #
+    # Ou seja: o resíduo em prosa não era o único risco. Um card pode cair no
+    # motivo errado por um campo VAZIO (base_commit null) sem que nada em prosa
+    # esteja envolvido — e `nao-rodou` é justamente o único motivo que sai da
+    # frente do humano sem perguntar nada. Errar PARA DENTRO dele é o erro mais
+    # caro da tabela, porque é silencioso. Ver decide-nao-rodou-vs-nada-a-provar.
+    status: done
+    blocked_by: []
+    human_pending: null
+
+  - id: "decide-costura-com-prove-drain"
+    title: "Fazer o /board-flow:prove-drain terminar apontando para o /board-flow:decide"
+    why: >-
+      verificado em 04/08: prove-drain.md não cita `decide` em lugar nenhum.
+      Sem essa costura, quem acabou de provar a fila não descobre que existe um
+      comando para o resto — e o NEEDS-HUMAN volta a ser lista para abrir card
+      a card, que é a dor que originou tudo. Depois do run real porque o run é
+      quem diz o que a costura deve prometer.
+    # done em 2026-08-04, commit 0bd1293. O dono pediu para fazer ANTES do run no
+    # wego, invertendo a ordem proposta aqui — a costura nao dependia do run para
+    # ser escrita, so para ser conferida. Evidencia: prove-drain.md agora fecha o
+    # relatorio entregando o conjunto NEEDS-HUMAN ao /board-flow:decide, com a
+    # contagem, e so quando ha pelo menos um card retido.
+    status: done
+    blocked_by: ["decide-rodar-no-wego"]
+    human_pending: null
+
+  - id: "decide-publicar-0-12-0"
+    title: "Registrar o decide na descrição do plugin e subir board-flow para 0.12.0"
+    why: >-
+      verificado em 04/08: plugin.json ainda diz 0.11.0 e lista os comandos um
+      a um (configure, capture, ..., advance) sem o decide. Comando que não
+      aparece na descrição do plugin é comando que só quem o escreveu encontra.
+      Por último porque o texto da descrição deve descrever o comando como ele
+      ficou depois do run e da costura, não como foi desenhado.
+    # done em 2026-08-04, commit 0bd1293, tambem antecipado a pedido do dono.
+    # board-flow 0.11.0 -> 0.12.0; decide entrou na lista de comandos e ganhou
+    # paragrafo proprio em plugin.json e em .claude-plugin/marketplace.json.
+    # NAO esta live: exige bin/install.sh --clean + restart.
+    status: done
+    blocked_by: ["decide-costura-com-prove-drain"]
+    # rota cumprida pelo dono em 2026-08-04 ("já rodei"), conferida no disco:
+    # ~/.claude/plugins/cache/cepa/board-flow/ serve 0.12.0, e o prove-drain.md
+    # do cache cita /board-flow:decide.
+    human_pending: null
+
+  - id: "decide-nao-rodou-vs-nada-a-provar"
+    title: "Impedir que card estruturalmente improvável (Epic-mãe) caia em `nao-rodou`"
+    why: >-
+      achado do primeiro run real, 2026-08-04. `nao-rodou` é o único dos sete
+      motivos que sai da frente do humano sem virar pergunta — a saída prescrita
+      é re-rodar a prova. O WEGO-1550 caiu nele por ter `base_commit: null`,
+      mas é um Epic-mãe: nunca terá commit-base, então re-rodar dá o mesmo
+      resultado para sempre e o card fica em Review em silêncio. O artefato já
+      carrega o campo que distingue os dois casos — `scope.base_commit_resolved:
+      false` COM `issue_type: Epic` (e a nota em prosa dizendo que um Epic-mãe
+      por definição não produz diff) é `nada-a-provar`, não `nao-rodou`.
+      Conserto provável: no classificador, checar issue_type antes da regra de
+      commit-base ausente. Precisa de caso na suíte de regressão — os 33
+      artefatos que a alimentam vieram todos de cards de código.
+    # done em 2026-08-04, commit ace2195 — minutos depois de o item ser criado,
+    # na mesma sessão. O conserto saiu como previsto no `why`: a regra checa
+    # issue_type antes da de commit-base ausente. A guarda ficou ESTREITA de
+    # propósito, e isso não estava previsto aqui: só pega Epic SEM commit-base.
+    # Epic COM diff próprio (WEGO-1732, que tem mutantes sobreviventes de
+    # verdade) segue sujeito a todas as regras seguintes — varrer todo Epic para
+    # `nada-a-provar` esconderia prova real. O teste novo cobre os dois lados,
+    # inclusive o caso construído do 1732 sem commit-base. Suíte: 40 passaram.
+    # Verificado contra a Review do wego: o WEGO-1550 passou a sair como
+    # `nada-a-provar` ("Epic agrega Stories filhas e não tem diff próprio").
+    status: done
+    blocked_by: []
+    # rota cumprida pelo dono em 2026-08-04 ("já rodei"), conferida no disco:
+    # o classify_needs_human.py do cache 0.12.0 contém a guarda do Epic.
+    human_pending: null
+
+  - id: "session-log-ancorar-na-raiz"
+    title: "session-log.py grava no diretório corrente e fatia o log quando um comando faz cd"
+    why: >-
+      achado em 2026-08-04. `common/hooks/session-log.py:89-90` resolve o destino
+      como `Path(payload["cwd"]) / ".claude" / "session-log.md"` — o cwd do
+      MOMENTO, não a raiz do repo. Um `cd .claude/programs` num comando meu fez
+      dois turnos (00:37 e 00:40 UTC) irem parar em
+      `.claude/programs/.claude/session-log.md`, e eles NÃO estavam no log real:
+      não era cópia, era perda. Resgatados à mão para a posição cronológica
+      certa antes de eu apagar o diretório.
+      O dano é silencioso — ninguém percebe turno faltando no log até precisar
+      dele, e o `/common:recap` e o `/common:handoff` leem exatamente esse
+      arquivo para reconstruir o que foi pedido. Só apareceu porque o diretório
+      órfão surgiu no `git status`.
+      Conserto provável: ancorar em `git rev-parse --show-toplevel` (ou no
+      `CLAUDE_PROJECT_DIR`) em vez do cwd, caindo no cwd só quando não houver
+      repo. Cuidado: em worktree ligada, o log deve seguir a worktree, não o
+      clone principal — o mesmo cuidado que o handoff já toma com
+      `--git-common-dir`. Precisa de teste com cwd em subdiretório.
+      Reincidiu em 2026-08-18: um `cd board-flow/commands` num comando de shell
+      criou `board-flow/commands/.claude/session-log.md` com os pedidos daquele
+      turno. Só apareceu, de novo, porque o diretório órfão saltou no
+      `git status` — nenhum aviso, nenhum bloqueio. Confirma que o defeito não é
+      um azar de um comando, e que o cwd do Bash PERSISTE entre chamadas: um
+      único `cd` desvia o resto da sessão inteira.
+      Duas coisas que o achado de 08-18 acrescenta ao conserto: (1) o prejuízo
+      concreto tem nome — `/common:recap` monta a tabela "você pediu / eu
+      entreguei" a partir desse arquivo, então log partido vira meia sessão
+      apresentada como a sessão toda; (2) provavelmente é uma CLASSE, não um
+      arquivo: cerca de vinte hooks montam caminho a partir do cwd cru
+      (`capture-build-result`, `gate-advance`, `mark-build-stale`,
+      `session-activity`, `session-checkpoint`, entre outros), e o mesmo `cd`
+      pode estar espalhando `last-build.json` do mesmo jeito. Um helper único de
+      "raiz da sessão" em `_wtlib` (ao lado de `repo_root`/`main_root`) resolve
+      todos de uma vez; consertar só o session-log deixa a classe de pé.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "onboarding-maestro-blocos-1-3"
+    title: "Retomar a sessão de onboarding do Maestro (blocos 1-3)"
+    why: >-
+      pedidos em 23/07 e 27/07, mas o que ficou entendido não foi registrado em
+      lugar nenhum — este item existe para a dúvida não se perder de novo.
+      Antes de retomar, confirmar com o dono onde parou, em vez de repetir.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  # Os três itens abaixo saíram dos 2 pilotos Gauntlet Loop de 2026-08-15
+  # (docs/internals/gauntlet-pilot-*.md) e foram aprovados pelo dono na mesma
+  # data. Inseridos no plano em 2026-08-16, no fim da fila, com anuência dele.
+
+  - id: "bash-path-lock-camada-1"
+    title: "Construir o deny-by-default de 4 baldes no bash-path-lock (5 cópias + testes)"
+    why: >-
+      fecha o furo real do WEGO-1936 (agente contornou o cadeado com python3 -c)
+      pela raiz: a lista passa a ser de comandos inocentes, não de culpados, e
+      vetor novo cai no bloqueio por construção. Design julgado e aprovado no
+      piloto 1 (BACKLOG "Direção escolhida"); estimativa 1-2 sessões. Antes dos
+      dois abaixo porque é o único que conserta enforcement já em produção.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "atrito-decisao-fase-1"
+    title: "Spike do hook em AskUserQuestion (30 min) + autonomy.yaml com detect: + extensão do decide"
+    why: >-
+      absorve as ~10 perguntas por sessão que o dono só carimbava com "sim".
+      Design julgado e aprovado no piloto 2. O spike vem primeiro porque a peça
+      central (ask-audit-gate) depende de o Claude Code disparar hook para a
+      ferramenta de perguntas — se não disparar, o plano B já está escrito.
+      Cuidado herdado: .claude/decisions/ e attestations.yaml precisam entrar
+      na lista de resgate do worktree-artifact-rescue.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "comando-gauntlet"
+    title: "Cristalizar /common:gauntlet a partir dos scripts dos 2 pilotos"
+    why: >-
+      técnica validada em 2 amostras (juízes unânimes, barra atingida nas duas),
+      critério de cristalização que o próprio dono estabeleceu. Por último dos
+      três porque é ferramenta de decisão, não conserto: nada em produção sofre
+      enquanto ele não existe — os pilotos podem ser repetidos à mão pelo
+      script em docs/internals/. Pendências de design no item do BACKLOG.
+    status: pending
+    blocked_by: []
+    human_pending: null
+
+  - id: "catalogo-guarda-mecanica"
+    title: "Teste que falha quando um comando existe e não está em docs/commands.md"
+    why: >-
+      8 comandos sumiram do catálogo sem que nenhum teste piscasse (spec,
+      session, doctor, metrics, advisors, consolidate, prove-ui, decide).
+      Corrigir a lista à mão conserta o sintoma de hoje e não impede o de
+      amanhã, porque nada relaciona os arquivos */commands/*.md com as tabelas
+      do doc. Independente das quatro acima; barato. Dúvida honesta a resolver
+      na construção: se algum comando é interno de propósito, a exceção fica
+      escrita no teste em vez de virar omissão.
+    status: pending
+    blocked_by: []
+    human_pending: null

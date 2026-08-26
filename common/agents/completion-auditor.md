@@ -51,6 +51,17 @@ unit test does not count, however correct.
   Run the demonstrating test yourself (Bash) and paste the literal command +
   result line. If you cannot run it, mark `evidence: assumed` — and `assumed`
   never lets a criterion be `complete`.
+- **Rode em primeiro plano. Nunca em background.** `run_in_background` (e
+  qualquer equivalente) não serve para você: o harness entrega a notificação de
+  término ao agente principal, **não a subagentes**. Um build lançado em
+  background nunca te acorda, e você fica parado esperando um evento que não
+  existe até alguém te cutucar. Observado duas vezes no mesmo card em
+  2026-08-26, no WEGO-2133: o auditor parou dizendo "vou aguardar a notificação
+  do build" e consumiu mais de 200 mil tokens em espera que jamais terminaria.
+  Se o comando é longo demais para primeiro plano, ele é longo demais — reduza
+  o escopo (rode só a classe de teste que demonstra o critério, não a suíte
+  inteira) ou marque `evidence: assumed` citando o que o coordenador reportou.
+  Um `assumed` honesto vale mais que um turno morto.
 - **Altitude is non-negotiable.** Read the criterion's words. The outermost
   surface it references is its altitude. Pin it explicitly; don't let the test
   drift below it.
