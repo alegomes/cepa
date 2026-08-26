@@ -36,7 +36,7 @@ de modos é a doença que aquele arquivo trata.
 construção quem cobra são o completion-auditor e o proof-reviewer, e na reforma
 o `reforma-gate.py`.
 
-Três decisões que vieram de estrago já pago neste repo:
+Quatro decisões que vieram de estrago já pago neste repo:
 
 1. **Bash também.** Barrar só `Write`/`Edit` deixa `sed -i`, `cat >`, `tee` e
    `git mv` passarem — memória `bash-pathlock-bypass`, que custou um conserto em
@@ -46,7 +46,18 @@ Três decisões que vieram de estrago já pago neste repo:
    e o scratchpad não pertencem a modo nenhum; estreitar o gate para fora da
    raiz foi o que travou o proof-reviewer em 18/06/2026 e deixou 5 cards presos
    em NEEDS-HUMAN (memória `path-lock-out-of-root`).
-3. **O escape não é barato e não é anunciado.** Um `# modo-ok` no comando seria a
+3. **Construção indecidível vira AVISO, não bloqueio.** `python3 -c`, `patch`,
+   `ed` e heredoc escrevem sem que o destino dê para ler estaticamente — o
+   `_shellscan` já sinalizava isso e ninguém consumia o sinal, então essas
+   linhas furavam o gate em silêncio (achado do proof-reviewer, 26/08/2026).
+   Barrar seria coerente com a doutrina do repo ("efeito que não dá para
+   auditar → barra"), e é a decisão que NÃO foi tomada: a lista inclui heredoc,
+   que é como este repo roda script, e um modo que barra todo `python3 - <<PY`
+   é um modo que ninguém usa. O aviso torna o furo visível e emite
+   `modo_escrita_indecidivel` na telemetria; o bloqueio de verdade fica para um
+   card próprio, com a lista de construções revista uma a uma. Aviso é controle
+   mais fraco que bloqueio, e isto está registrado como tal.
+4. **O escape não é barato e não é anunciado.** Um `# modo-ok` no comando seria a
    mesma fuga de novo — o agente digita e segue. O escape honesto é encerrar o
    modo e abrir o modo do trabalho que se quer fazer, que é uma sessão nova, e é
    o custo certo: trocar de atividade DEVERIA custar. O `CEPA_MODO=off` desliga
@@ -68,6 +79,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _modos  # noqa: E402
 import _shellscan as S  # noqa: E402
+import _telemetry as T  # noqa: E402
 import _wtlib  # noqa: E402
 
 _TOOLS_ARQUIVO = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
@@ -90,14 +102,19 @@ def modo_ativo(root):
 
 
 def alvos(tool, inp):
-    """Caminhos que esta chamada vai escrever."""
+    """(caminhos que esta chamada escreve, a linha é indecidível?)
+
+    O segundo valor é o que o `_shellscan` já sabia e ninguém usava: há
+    construções cujo destino não dá para ler estaticamente — `python3 -c`,
+    `patch`, `ed`, heredoc. O `bash-path-lock` as registra num log de cobertura;
+    aqui elas viram AVISO, pelo motivo do cabeçalho.
+    """
     if tool in _TOOLS_ARQUIVO:
         t = inp.get("file_path") or inp.get("notebook_path")
-        return [t] if t else []
+        return ([t] if t else []), False
     if tool == "Bash":
-        encontrados, _ = S.extract_write_targets(inp.get("command") or "")
-        return encontrados
-    return []
+        return S.extract_write_targets(inp.get("command") or "")
+    return [], False
 
 
 def relativo(alvo, root):
@@ -158,8 +175,9 @@ def main():
         if not padroes or padroes == "tudo":
             sys.exit(0)
 
-        for alvo in alvos(payload.get("tool_name", ""),
-                          payload.get("tool_input", {}) or {}):
+        encontrados, indecidivel = alvos(payload.get("tool_name", ""),
+                                         payload.get("tool_input", {}) or {})
+        for alvo in encontrados:
             rel = relativo(alvo, root)
             if rel is None or permitido(rel, padroes):
                 continue
@@ -178,6 +196,23 @@ def main():
                 file=sys.stderr,
             )
             sys.exit(2)
+
+        # Nenhum alvo LEGÍVEL fora da lista — mas a linha pode ter escrito onde
+        # o gate não consegue enxergar. Avisar em vez de barrar é uma escolha
+        # com custo declarado (ver o cabeçalho): barrar acertaria a intenção e
+        # levaria junto todo heredoc, que é como este repo roda script.
+        if indecidivel:
+            T.emit("modo_escrita_indecidivel", cwd=cwd, modo=modo)
+            print(
+                f"[modo-escrita-gate] AVISO: esta sessão opera em modo {modo}, "
+                f"e este comando usa uma construção cujo destino de escrita não "
+                f"dá para ler (python -c, perl -e, ed, patch ou heredoc).\n"
+                f"  O gate NÃO barrou, e também não conferiu: se o comando "
+                f"escreve fora de {', '.join(padroes)}, ele acabou de furar o "
+                f"modo sem que nada registrasse o desvio.\n"
+                f"  Se for esse o caso, registre pelo skill off-mode-capture.",
+                file=sys.stderr,
+            )
     except Exception as e:  # noqa: BLE001
         print(f"[modo-escrita-gate] {e}", file=sys.stderr)
 

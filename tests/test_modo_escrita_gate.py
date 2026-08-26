@@ -22,6 +22,9 @@ Contratos guardados aqui:
     bash-path-lock, que silenciou perturbações por 2 meses);
   - escrita FORA da raiz da sessão passa — a worktree de perturbação em /tmp e o
     scratchpad da sessão não são governados por modo (path-lock-out-of-root);
+  - construção indecidível (`python3 -c`, `patch`, heredoc) NÃO bloqueia e
+    AVISA — barrar levaria junto todo heredoc, que é como este repo roda
+    script; o silêncio de antes deixava a linha furar o modo sem rastro;
   - a mensagem diz o que fazer (registrar pelo off-mode-capture, ou encerrar o
     modo) e NÃO anuncia o kill switch: escape barato é a mesma fuga de novo;
   - CEPA_MODO=off desliga o gate.
@@ -35,6 +38,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# O hook emite `modo_escrita_indecidivel`, e esta suíte o executa: sem isolar, o
+# ensaio vira linha no relatório do /common:metrics de quem rodar os testes.
+from _telemetria_isolada import isola
+
+isola()
 
 REPO = Path(__file__).resolve().parent.parent
 GATE = REPO / "common" / "hooks" / "modo-escrita-gate.py"
@@ -173,6 +182,55 @@ def test_bash_libera_o_que_o_modo_produz():
             check(f"bash liberado: {cmd[:30]}", p.returncode == 0, p.stderr[:160])
 
 
+def test_construcao_indecidivel_avisa_sem_barrar():
+    """`python3 -c`, `patch` e heredoc escrevem onde o gate não enxerga.
+
+    Achado do proof-reviewer (26/08/2026): o sinal existia no `_shellscan` e o
+    gate o descartava, então essas linhas passavam sem bloqueio E sem rastro.
+    A decisão foi avisar, não barrar — a lista inclui heredoc, e um modo que
+    barra todo `python3 - <<PY` é um modo que ninguém usa.
+    """
+    with Repo() as r:
+        r.modo("exploracao")
+        for cmd in ('python3 -c "open(\'common/hooks/evil.py\',\'w\').write(1)"',
+                    'patch common/bin/cepa < /tmp/p.diff',
+                    "python3 - <<'PY'\nprint(1)\nPY"):
+            p = r.bash(cmd)
+            check(f"indecidível não barra: {cmd[:26]}", p.returncode == 0,
+                  p.stderr[:160])
+            check(f"indecidível avisa: {cmd[:26]}", "AVISO" in p.stderr,
+                  p.stderr[:160] or "(stderr vazio)")
+            check(f"aviso diz que não conferiu: {cmd[:22]}",
+                  "não conferiu" in p.stderr, p.stderr[:200])
+
+
+def test_comando_legivel_nao_avisa():
+    """O aviso só vale se ele for raro — um que grita sempre ensina a ignorá-lo."""
+    with Repo() as r:
+        r.modo("exploracao")
+        for cmd in ('echo x > docs/estrategia.md', 'grep -rn modo common/'):
+            p = r.bash(cmd)
+            check(f"sem aviso em comando legível: {cmd[:24]}",
+                  "AVISO" not in p.stderr, p.stderr[:160])
+
+
+def test_indecidivel_e_mudo_em_modo_sem_lista():
+    with Repo() as r:
+        r.modo("construcao")
+        p = r.bash('python3 -c "open(\'x.py\',\'w\')"')
+        check("construcao: nem aviso", p.returncode == 0 and "AVISO" not in p.stderr,
+              p.stderr[:160])
+
+
+def test_indecidivel_nao_engole_bloqueio():
+    """Alvo legível fora da lista barra mesmo quando a linha também é opaca."""
+    with Repo() as r:
+        r.modo("exploracao")
+        p = r.bash('echo x > common/hooks/n.py && python3 -c "pass"')
+        check("alvo legível fora da lista ainda barra", p.returncode == 2,
+              p.stderr[:160])
+
+
 def test_ge_nao_e_redirecionamento():
     with Repo() as r:
         r.modo("exploracao")
@@ -238,6 +296,10 @@ def main():
     for fn in (test_lista_branca_por_modo, test_modos_sem_lista_sao_mudos,
                test_sem_modo_e_mudo, test_todas_as_ferramentas_de_escrita,
                test_bash_nao_e_rota_de_fuga, test_bash_libera_o_que_o_modo_produz,
+               test_construcao_indecidivel_avisa_sem_barrar,
+               test_comando_legivel_nao_avisa,
+               test_indecidivel_e_mudo_em_modo_sem_lista,
+               test_indecidivel_nao_engole_bloqueio,
                test_ge_nao_e_redirecionamento, test_fora_da_raiz_passa,
                test_mensagem_diz_o_que_fazer, test_kill_switch,
                test_tabela_vem_de_modos_py):

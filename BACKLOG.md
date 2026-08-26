@@ -828,6 +828,18 @@ Três desvios do esboço, todos deliberados:
    5 cópias: a forma BSD `sed -i '' 's/a/b/' arquivo` deixa o `''` como
    operando, e o SCRIPT do sed era contado como arquivo escrito.
 
+**Construção indecidível avisa, não barra.** Achado do proof-reviewer: `python3
+-c`, `patch`, `ed` e heredoc escrevem sem que o destino dê para ler
+estaticamente, e passavam sem bloqueio E sem rastro — o `_shellscan` já
+sinalizava e o gate descartava o sinal. Barrar seria coerente com a doutrina do
+repo ("efeito que não dá para auditar → barra") e foi a decisão NÃO tomada: a
+lista inclui heredoc, que é como este repo roda script, e um modo que barra todo
+`python3 - <<PY` é um modo que ninguém usa. Agora o gate imprime um aviso
+dizendo que não conferiu, e emite `modo_escrita_indecidivel` na telemetria.
+**Aviso é controle mais fraco que bloqueio, e isto fica registrado como tal:** o
+bloqueio de verdade é um card próprio, com a lista de construções revista uma a
+uma.
+
 **Dívida deixada de pé, de propósito:** o `enforcement-guard.py` mantém a versão
 própria e mais pobre dessas duas funções. Fazê-lo importar do `_shellscan` muda
 o comportamento de um gate de enforcement (passaria a barrar `git mv` e a origem

@@ -323,6 +323,13 @@ do trabalho que se quer fazer — uma sessão nova, e é o custo certo, porque
 trocar de atividade deveria custar. O `CEPA_MODO=off` continua desligando a
 mecânica inteira, e a mensagem de bloqueio não o oferece.
 
+**Construção indecidível avisa, não barra.** `python3 -c`, `patch`, `ed` e
+heredoc escrevem sem que o destino dê para ler estaticamente. O gate imprime um
+aviso dizendo que não conferiu e emite `modo_escrita_indecidivel` na telemetria,
+em vez de bloquear: barrar levaria junto todo `python3 - <<PY`, que é como este
+repo roda script. Aviso é controle mais fraco que bloqueio; o bloqueio de
+verdade é card próprio.
+
 **O que este gate não alcança:** a metade "não vira pergunta". Isso é texto do
 agente, não chamada de ferramenta, e nenhum hook lê a redação de uma resposta.
 Mas a trava de escrita torna a pergunta inútil — não há o que oferecer quando o
