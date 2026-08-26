@@ -163,7 +163,13 @@ def test_bash_nao_e_rota_de_fuga():
                     'cat foo >> common/commands/run.md',
                     "sed -i '' 's/a/b/' common/bin/cepa",
                     'tee tests/test_x.py < /dev/null',
-                    'git mv common/hooks/a.py common/hooks/b.py'):
+                    'git mv common/hooks/a.py common/hooks/b.py',
+                    # Baixar/criar/sincronizar também escreve, e o destino está
+                    # explícito no argv — achado do proof-reviewer.
+                    'curl -o common/hooks/novo.py https://e.com/f',
+                    'wget -O tests/test_x.py https://e.com/f',
+                    'touch common/hooks/novo.py',
+                    'rsync -a /tmp/x/ common/hooks/'):
             p = r.bash(cmd)
             check(f"bash bloqueado: {cmd[:30]}", p.returncode == 2, p.stderr[:120])
 
@@ -177,7 +183,9 @@ def test_bash_libera_o_que_o_modo_produz():
                     # A forma BSD do sed deixa o `''` como operando: sem filtrar
                     # o token vazio, o SCRIPT `s/a/b/` era contado como arquivo
                     # escrito e este comando legítimo bloqueava.
-                    "sed -i '' 's/a/b/' docs/estrategia.md"):
+                    "sed -i '' 's/a/b/' docs/estrategia.md",
+                    'curl -o docs/baixado.md https://e.com/f',
+                    'touch docs/nota.md'):
             p = r.bash(cmd)
             check(f"bash liberado: {cmd[:30]}", p.returncode == 0, p.stderr[:160])
 

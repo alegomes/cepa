@@ -840,6 +840,17 @@ dizendo que não conferiu, e emite `modo_escrita_indecidivel` na telemetria.
 bloqueio de verdade é um card próprio, com a lista de construções revista uma a
 uma.
 
+**Quatro verbos entraram na tabela de escritores.** Segundo achado do
+proof-reviewer: `curl -o`, `wget -O`, `touch` e `rsync` escrevem arquivo com o
+destino explícito no argv — estaticamente decidíveis, do mesmo tamanho de
+`tee`/`dd`/`truncate`, que já estavam lá — e passavam calados, nem bloqueados
+nem avisados. Entraram no `_segment_targets`, o que significa o molde, as 5
+cópias do `bash-path-lock` e o `_shellscan`: os cadeados de escrita das outras
+cinco topologias passam a barrar um `curl -o` que grave fora da pista do agente.
+É aperto, do mesmo tipo que elas já fazem para `tee`. Ficou de fora a forma sem
+destino no argv (`curl -O`, `wget <url>`, que gravam com o nome remoto no
+diretório corrente): ali o nome não está na linha de comando.
+
 **Dívida deixada de pé, de propósito:** o `enforcement-guard.py` mantém a versão
 própria e mais pobre dessas duas funções. Fazê-lo importar do `_shellscan` muda
 o comportamento de um gate de enforcement (passaria a barrar `git mv` e a origem

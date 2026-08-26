@@ -94,6 +94,27 @@ CASES = [
     ("sed -i GNU: script is not a file", "sed -i 's/a/b/' docs/x.md",
      lambda t: t == ["docs/x.md"],
      "a forma GNU já estava certa; fica travada junto"),
+
+    # --- baixar/criar/sincronizar também é escrever ---
+    #     Achado do proof-reviewer em 26/08/2026: estes quatro verbos são
+    #     estaticamente decidíveis — o destino está explícito no argv, como em
+    #     `tee`/`dd`/`truncate` — e mesmo assim passavam calados pelos cadeados.
+    ("curl -o", "curl -o src/Foo.java https://e.com/f",
+     lambda t: t == ["src/Foo.java"], "o destino do -o é o alvo"),
+    ("curl --output=", "curl --output=src/Foo.java https://e.com/f",
+     lambda t: t == ["src/Foo.java"], "a forma com = também"),
+    ("wget -O", "wget -O src/Foo.java https://e.com/f",
+     lambda t: t == ["src/Foo.java"], "o destino do -O é o alvo"),
+    ("touch", "touch src/Foo.java src/Bar.java",
+     lambda t: set(t) == {"src/Foo.java", "src/Bar.java"},
+     "criar arquivo vazio é escrever nele"),
+    ("rsync destination", "rsync -a build/ dist/",
+     lambda t: t == ["dist/"], "como cp: só o ultimo operando"),
+    ("curl sem destino no argv", "curl -sS https://e.com/f | jq .",
+     lambda t: t == [],
+     "sem -o o destino não está na linha; fora de escopo, não inventar alvo"),
+    ("wget sem destino no argv", "wget https://e.com/f",
+     lambda t: t == [], "idem — grava com o nome remoto, que o argv não diz"),
 ]
 
 

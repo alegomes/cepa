@@ -260,6 +260,27 @@ def _segment_targets(segment: str) -> list:
             targets.extend(nonflags[1:])
     elif cmd == "truncate":
         targets.extend(nonflags[1:] if nonflags else [])
+    elif cmd in ("curl", "wget"):
+        # Baixar para um arquivo é escrever nele. Achado do proof-reviewer em
+        # 26/08/2026: `curl -o` e `wget -O` são estaticamente decidíveis — o
+        # destino está explícito no argv — e mesmo assim passavam calados, nem
+        # bloqueados nem registrados. A forma sem destino explícito (`curl -O`,
+        # `wget <url>`, que gravam com o nome remoto no diretório corrente)
+        # continua fora: ali o nome não está na linha de comando.
+        destino = ("-o", "--output") if cmd == "curl" else ("-O", "--output-document")
+        prefixos = tuple(f"{d}=" for d in destino if d.startswith("--"))
+        for i, t in enumerate(rest):
+            if t in destino and i + 1 < len(rest):
+                targets.append(rest[i + 1])
+            elif t.startswith(prefixos):
+                targets.append(t.split("=", 1)[1])
+    elif cmd == "touch":
+        # Cria o arquivo se ele não existe: é escrita, mesmo com conteúdo vazio.
+        targets.extend(nonflags)
+    elif cmd == "rsync":
+        # Como `cp`: lê a origem, escreve no último operando.
+        if len(nonflags) >= 2:
+            targets.append(nonflags[-1])
 
     return targets
 
