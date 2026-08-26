@@ -703,6 +703,39 @@ real quase nunca produz summary com campo faltando, porque quem escreve está te
 acertar — o cenário de omissão só aparece em teste sintético. Vale registrar como padrão:
 *gate de omissão não se valida por uso, só por teste.*
 
+## `prove-drain` não tem disjuntor: falha de ambiente reprova a coluna inteira
+
+**Status:** 🔵 ABERTO · **Lar:** `board-flow/commands/prove-drain.md` · **Origem:**
+painel de advisors sobre `docs/estrategia-drain-plan-velocidade.md`, 2026-08-26
+(discordância D2, levantada pelas lentes `operador-sre` e `contrarian`). Decisão do dono
+no mesmo dia: registrar, não construir agora.
+
+O `/board-flow:prove-drain` **não para no primeiro UNPROVEN**, e isso é de propósito:
+esvaziar a coluna Review é o ponto, e um card não provado não deve bloquear os outros. O
+buraco é que a política não distingue **card ruim** de **ambiente quebrado**. Se o Docker
+está fora, ou uma ferramenta do gate sumiu, a prova falha por motivo que não é do card —
+e o lote segue reprovando um card atrás do outro, em série, gastando o orçamento inteiro
+e devolvendo uma coluna de UNPROVEN que não significa nada.
+
+O `/board-flow:drain` não tem esse risco porque para no primeiro BLOCKED. O `prove-drain`
+abriu mão dessa parada sem colocar nada no lugar.
+
+### Esboço de solução
+
+Um disjuntor por UNPROVEN **consecutivos**, não por total: 2 seguidos param o lote e
+pedem olho humano. Card ruim isolado não dispara (o próximo passa); ambiente quebrado
+dispara na segunda tentativa. O mesmo teto cabe no `/common:drain-plan`, se ele algum dia
+ganhar o lote de prova separado — que hoje NÃO é recomendado, pelos motivos no documento
+de estratégia.
+
+### Por que não foi feito junto
+
+A sessão que levantou isso estava medindo por que o `/common:drain-plan` demora, e a
+resposta foi outra (espera ativa dos leads, corrigida em `9ce9760`). O disjuntor é
+problema real e menor, de outra rotina — misturar os dois inflaria um diagnóstico que já
+tinha entregado o que precisava.
+
+
 ---
 
 # Programa melhorias-2026-07

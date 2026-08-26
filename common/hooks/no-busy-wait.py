@@ -29,8 +29,12 @@ O padrão, verbatim do transcript do drain-plan-0840:
 Duas patologias distintas, as duas caras:
 
 1. **Sondar o disco esperando o worker.** O lead delega e depois fica olhando o
-   arquivo aparecer, em blocos de 5 a 10 minutos. O retorno da delegação já
-   chega pronto — a sondagem é latência pura. `until [ -f /dev/null ]` é o caso
+   arquivo aparecer, em blocos de 5 a 10 minutos. A raiz é que a chamada `Agent`
+   é assíncrona — devolve `Async agent launched successfully`, não o resultado —
+   e as specs dos leads foram escritas como se delegar fosse síncrono. Sem um
+   "aguarde meu subagente", o lead inventa a sondagem. O conserto da causa está
+   na seção "Delegação é assíncrona" das 10 specs que delegam; este hook é a
+   rede. `until [ -f /dev/null ]` é o caso
    extremo: espera por condição que já era verdadeira, ou seja, o agente já não
    sabia o que estava esperando.
 2. **Laço de queima como `sleep` improvisado.** `sleep` em primeiro plano é
@@ -160,9 +164,11 @@ def main():
         "  medido neste harness: 19% a 52% do tempo de 5 runs, quase tudo em lead\n"
         "  sondando arquivo de worker (medição de 2026-08-26).\n\n"
         "  Faça uma destas, na ordem:\n"
-        "    1. Se você está esperando um agente que VOCÊ delegou — não espere. O\n"
-        "       retorno da delegação chega pronto; sondar o disco só adiciona\n"
-        "       latência ao que já ia chegar.\n"
+        "    1. Se você está esperando um agente que VOCÊ delegou — ENCERRE O TURNO.\n"
+        "       A chamada `Agent` é assíncrona: ela devolve `Async agent launched\n"
+        "       successfully`, não o resultado. O subagente roda em segundo plano e\n"
+        "       a notificação de término REINVOCA você com o resultado na mão. Não\n"
+        "       há nada para fazer no meio, e sondar o disco não antecipa nada.\n"
         "    2. Se o trabalho é longo e você quer seguir enquanto ele roda, use\n"
         "       `run_in_background` no Bash: a sessão é reinvocada quando terminar.\n"
         "    3. Se você precisa aguardar uma CONDIÇÃO, use a ferramenta `Monitor`\n"
