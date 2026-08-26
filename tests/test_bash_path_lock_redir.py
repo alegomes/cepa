@@ -77,6 +77,23 @@ CASES = [
     ("cp does not delete its source", "cp src/a.py src/b.py",
      lambda t: t == ["src/b.py"],
      "`cp` only reads its source — destination-only, unlike `mv`"),
+
+    # --- a forma BSD do `sed -i`: o sufixo vazio é um OPERANDO ---
+    #     `sed -i '' 's/a/b/' arquivo` (macOS) deixa o `''` na lista de
+    #     não-flags, então o SCRIPT do sed passava a ser o 1º operando e o
+    #     arquivo real vinha depois — `nonflags[1:]` registrava `s/a/b/` como
+    #     arquivo escrito. Fail-closed, e por isso invisível: o alvo de mentira
+    #     só bloqueia MAIS. Consertado em 26/08/2026 filtrando o token vazio,
+    #     e sem este caso o conserto só era visto pelo detector de divergência
+    #     — que compara as duas fontes ENTRE SI e ficaria verde se as duas
+    #     regredissem juntas, que é exatamente o que uma restauração de branch
+    #     antigo faria.
+    ("sed -i BSD: script is not a file", "sed -i '' 's/a/b/' docs/x.md",
+     lambda t: t == ["docs/x.md"],
+     "só o arquivo — o script do sed não é alvo de escrita"),
+    ("sed -i GNU: script is not a file", "sed -i 's/a/b/' docs/x.md",
+     lambda t: t == ["docs/x.md"],
+     "a forma GNU já estava certa; fica travada junto"),
 ]
 
 

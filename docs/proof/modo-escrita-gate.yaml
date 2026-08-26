@@ -1,0 +1,74 @@
+schema_version: 2
+card: "O modo é prosa — gate de escrita por modo"
+verdict: unproven
+reviewed_at: 2026-08-26T00:00:00-03:00
+base_commit: bc9d1eb
+head_commit: 05d0523
+issue_type: Feature
+note_projeto: >
+  Repo Python de plugins do Claude Code (.claude/no-build commitado). Não há
+  Maven/PIT/JUnit/Quarkus. A "superfície externa" aqui é o HOOK como
+  PROCESSO: lê JSON de PreToolUse em stdin, responde exit 0 (libera) / 2
+  (bloqueia) + mensagem em stderr. Suíte: python3 tests/<arquivo>.py,
+  invocada via `tests/run-all.sh` (não roda neste ambiente por erro de sintaxe
+  zsh-vs-bash no script, não relacionado a este card — rodei os arquivos de
+  teste individualmente).
+scope:
+  changed_classes:
+    - class: common/hooks/modo-escrita-gate.py
+      module: common/hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: common/hooks/_modos.py (campo `escrita`)
+      module: common/hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: common/hooks/_shellscan.py (_segment_targets, extract_write_targets)
+      module: common/hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "5 cópias + molde de bash-path-lock.py (filtro de token vazio)"
+      module: "build-hex|build-team|design|discovery|docs-topology/hooks + common/hooks/_templates"
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pytest/coverage tool no repo; PIT não se aplica a hooks Python standalone"
+    perturbation:
+      status: survived
+      results:
+        - "PASS — relativo(): removi a exclusão fora-da-raiz (raiz/startswith) → test_modo_escrita_gate.py::test_fora_da_raiz_passa fica RED (2 falhas)"
+        - "PASS — alvos(): removi a chamada a S.extract_write_targets no ramo Bash → test_bash_nao_e_rota_de_fuga (5 casos) fica RED"
+        - "PASS — _modos.py: removi o campo `escrita` do modo reflexao → 3 casos ficam RED (2 em test_lista_branca_por_modo + test_tabela_vem_de_modos_py)"
+        - "PASS — main(): troquei _wtlib.session_root(cwd) por cwd cru → test_session_anchor_root.py::ANCORADOS fica RED (checagem estrutural)"
+        - "N/A — permitido(): removi o caso especial 'docs/**' como prefixo e caí no fnmatch puro → NENHUM teste ficou RED, mas não é gap: fnmatch já cruza '/' com '*' simples, então não há diferença de comportamento observável para os padrões hoje usados em _modos.py (todos terminam em /** ou são nomes exatos). Achado nulo, registrado para não repetir a checagem."
+        - "SURVIVED — a mudança nas 5 cópias + molde de bash-path-lock.py (`nonflags = [t for t in rest if t and not _is_flag(t)]`, filtro de token vazio do sed BSD `-i ''`) NÃO tem teste próprio: revertendo essa linha nas 5 cópias + molde (E em common/hooks/_shellscan.py, para simular o estado do base_commit de forma consistente nas duas fontes), `tests/test_bash_path_lock_redir.py` — o arquivo de teste dedicado ao comportamento de extract_write_targets nas 5 cópias — permanece 100% verde (nenhum caso em CASES exercita `sed -i '' 's/a/b/' arquivo`, a forma BSD). A ÚNICA falha observada foi em test_lock_copies_drift.py, e só porque as duas fontes (as 5 cópias vs _shellscan.py) DIVERGIRAM entre si nesse experimento controlado — se alguém reverter as duas fontes JUNTAS e de forma consistente (exatamente o estado real do base_commit), o detector de divergência não pega nada, porque ele compara as fontes ENTRE SI, não contra o comportamento correto."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "sem coverage tool no repo (não é Python com pytest-cov nem Java/Quarkus); alcançabilidade confirmada estruturalmente linha a linha via as perturbações acima, não por instrumentação"
+  l4_adversarial_input:
+    status: findings
+    reason: ""
+    findings:
+      - "modo-escrita-gate.py descarta o segundo valor de S.extract_write_targets() (`encontrados, _ = ...`) — a flag has_uncovered_construct que _shellscan.py calcula justamente para sinalizar `python3 -c`, `patch`, `ed`, `awk -i inplace` como INDECIDÍVEIS estaticamente. Testado ao vivo (hook real, payload real, modo exploracao): `python3 -c \"open('common/hooks/evil.py','w').write('x')\"` → rc=0 (libera, sem log); `patch common/hooks/evil.py < x.patch` → rc=0 (libera, sem log). Isso contradiz a Decisão 1 do próprio docstring do hook ('Bash também... Barrar só Write/Edit deixa sed -i, cat >, tee e git mv passarem'). Nenhum caso em test_modo_escrita_gate.py exercita python3 -c, patch, ed ou awk -i."
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: >
+  UNPROVEN por regra 1 (perturbação sobrevivente): a mudança nas 5 cópias +
+  molde de bash-path-lock.py (filtro de token vazio, que fecha o falso-bloqueio
+  do sed BSD `-i ''`) não tem cobertura própria em test_bash_path_lock_redir.py
+  — só existe cobertura INDIRETA via a cópia paralela em _shellscan.py, testada
+  através do modo-escrita-gate. Se as duas fontes regredirem JUNTAS (o estado
+  real do base_commit, ou uma futura edição feita nas duas ao mesmo tempo), o
+  detector de divergência entre fontes (test_lock_copies_drift.py) não acusa
+  nada, porque ele compara as fontes ENTRE SI, não o comportamento certo.
+  Além disso, L4 achou um escape real e silencioso (python3 -c, patch) que
+  contradiz a promessa do próprio hook de fechar o Bash como rota de fuga —
+  registrado como finding, não como segundo motivo do veredito (o motivo
+  mecânico já é a perturbação sobrevivente).
