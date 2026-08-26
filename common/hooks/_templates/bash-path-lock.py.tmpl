@@ -298,6 +298,21 @@ def _segment_targets(segment: str) -> list:
         # destino, como antes, deixava esse sentido passar batido.
         if len(nonflags) >= 3 and nonflags[0] == "mv":
             targets.extend(nonflags[1:])
+        elif nonflags and nonflags[0] in ("checkout", "restore"):
+            # `git checkout <ref> -- arquivo` e `git restore arquivo`
+            # SOBRESCREVEM o arquivo no disco com a versão de outro lugar —
+            # mesmo efeito do `git mv` acima, na mesma ferramenta já vigiada,
+            # e era a forma mais fácil de reverter em silêncio um arquivo fora
+            # da pista (achado do proof-reviewer, 26/08/2026).
+            #
+            # Sem `--`, o `checkout` é troca de branch: escreve muita coisa,
+            # mas não é escrita dirigida a um caminho, e tratá-lo como alvo
+            # transformaria todo `git checkout main` num bloqueio.
+            if "--" in rest:
+                targets.extend(t for t in rest[rest.index("--") + 1:]
+                               if not _is_flag(t))
+            elif nonflags[0] == "restore":
+                targets.extend(nonflags[1:])
     elif cmd == "truncate":
         targets.extend(nonflags[1:] if nonflags else [])
     elif cmd in ("curl", "wget"):

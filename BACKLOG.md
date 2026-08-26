@@ -851,6 +851,22 @@ cinco topologias passam a barrar um `curl -o` que grave fora da pista do agente.
 destino no argv (`curl -O`, `wget <url>`, que gravam com o nome remoto no
 diretório corrente): ali o nome não está na linha de comando.
 
+**`git checkout -- ` e `git restore` também entraram.** Terceiro achado do
+proof-reviewer, e o de maior risco: os dois sobrescrevem um arquivo do disco com
+a versão de outro branch ou commit — mesmo efeito do `git mv`, que já era
+vigiado, na mesma ferramenta. Era a forma mais fácil de reverter em silêncio um
+arquivo fora da pista. `git checkout <branch>` sem `--` continua fora: troca de
+branch escreve muita coisa, mas não é escrita dirigida a um caminho, e tratá-la
+como alvo barraria todo `git checkout`.
+
+**Rotas de escrita ainda não cobertas, nomeadas em vez de esquecidas:** `scp
+origem host:destino` (o primo por rede do `rsync`, mesmo formato de destino
+explícito) e `python3 arquivo.py` — este último é a dívida grande de "qualquer
+interpretador escreve disfarçado", que não tem solução barata e não é deste
+card. Enquanto elas existirem, o proof-reviewer devolve NEEDS-HUMAN por
+definição: a regra dele dispara com qualquer rota de escrita não mapeada, e a
+lista de comandos que escrevem não tem fim conhecido.
+
 **Dívida deixada de pé, de propósito:** o `enforcement-guard.py` mantém a versão
 própria e mais pobre dessas duas funções. Fazê-lo importar do `_shellscan` muda
 o comportamento de um gate de enforcement (passaria a barrar `git mv` e a origem

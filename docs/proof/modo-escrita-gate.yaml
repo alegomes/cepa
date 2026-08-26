@@ -3,7 +3,7 @@ card: "O modo é prosa — gate de escrita por modo"
 verdict: needs-human
 reviewed_at: 2026-08-26T00:00:00-03:00
 base_commit: bc9d1eb
-head_commit: 380725b
+head_commit: 7bbb59c
 issue_type: Feature
 note_projeto: >
   Repo Python de plugins do Claude Code (.claude/no-build commitado). Não há
@@ -11,21 +11,32 @@ note_projeto: >
   PROCESSO: lê JSON de PreToolUse em stdin, responde exit 0 (libera) / 2
   (bloqueia) + mensagem em stderr. Suíte: python3 tests/<arquivo>.py; rodei
   cada arquivo tocado individualmente (test_modo_escrita_gate.py,
-  test_bash_path_lock_redir.py, test_lock_copies_drift.py,
-  test_session_anchor_root.py) em worktree descartável.
+  test_bash_path_lock_redir.py, test_lock_copies_drift.py) em worktree
+  descartável.
 historico:
-  - "1ª rodada (base_commit bc9d1eb..05d0523): verdict unproven — 2 achados
-     (perturbação sobrevivente na correção das 5 cópias do bash-path-lock;
-     python3 -c/patch furando o modo em silêncio, sem log)."
-  - "2ª rodada (base_commit bc9d1eb..380725b, este arquivo): os dois commits
-     novos (d1bdd46, 380725b) tratam os dois achados. Refiz as duas
-     perturbações de forma independente, confirmei as duas RESOLVIDAS, e
-     testei 3 perturbações adicionais sobre o código novo do aviso — as 3
-     ficaram vermelhas. Ao testar a cobertura do 'aviso' contra outras
-     construções fora da lista de indecidíveis, achei uma 3ª classe de rota
-     silenciosa (curl -o, wget -O, rsync, touch, `python3 arquivo.py`) que
-     não cai nem no bloqueio nem no aviso — nova, não fazia parte dos 2
-     achados anteriores."
+  - "1ª rodada (bc9d1eb..05d0523): verdict unproven — 2 achados (perturbação
+     sobrevivente na correção das 5 cópias do bash-path-lock; python3 -c/patch
+     furando o modo em silêncio, sem log)."
+  - "2ª rodada (bc9d1eb..380725b): os dois achados da 1ª rodada foram tratados
+     e reverificados RESOLVIDOS de forma independente. Achado um 3º gap não
+     pedido: curl -o, wget -O, rsync, touch e `python3 arquivo.py` escrevendo
+     sem bloqueio, sem aviso e sem log. Verdict: needs-human."
+  - "3ª rodada (bc9d1eb..7bbb59c, este arquivo): curl -o/--output=, wget -O e
+     as variantes com '=', touch e rsync entraram na tabela de escritores
+     conhecidos do _shellscan (molde + 5 cópias + common/hooks/_shellscan.py).
+     Reverifiquei de forma independente: RESOLVIDO. A exclusão declarada
+     (curl -O sem destino explícito / wget <url> sem -O — o nome vem do
+     servidor, não do argv) está coberta por teste de verdade, não só por
+     prosa: perturbei os 7 arquivos JUNTOS inventando um alvo fictício para
+     essa forma, e test_bash_path_lock_redir.py::'wget sem destino no argv'
+     pegou sozinho, sem depender do detector de divergência. Fui atrás da 4ª
+     rota pedida pelo coordenador e achei: `scp <origem> <host>:<destino>` e
+     `git checkout <ref> -- <destino>` / `git restore <destino>` escrevem com
+     destino explícito no argv e continuam silenciosos — nem bloqueiam, nem
+     avisam. `python3 arquivo.py` (rodar um script, diferente do achado
+     anterior `python3 -c`) segue sem tratamento algum: nem na tabela de
+     escritores, nem no regex de indecidíveis — não é nem aviso, é silêncio
+     puro, igual estava na 2ª rodada."
 scope:
   changed_classes:
     - class: common/hooks/modo-escrita-gate.py
@@ -40,7 +51,7 @@ scope:
       module: common/hooks
       external_observable: true
       substituted_by_double: null
-    - class: "5 cópias + molde de bash-path-lock.py (filtro de token vazio)"
+    - class: "5 cópias + molde de bash-path-lock.py (filtro de token vazio; ramos curl/wget/touch/rsync)"
       module: "build-hex|build-team|design|discovery|docs-topology/hooks + common/hooks/_templates"
       external_observable: true
       substituted_by_double: null
@@ -59,13 +70,12 @@ levels:
     perturbation:
       status: pass
       results:
-        - "PASS — relativo(): removi a exclusão fora-da-raiz → test_modo_escrita_gate.py::test_fora_da_raiz_passa fica RED (2 falhas). Restaurado, GREEN."
-        - "PASS — alvos(): removi a chamada a S.extract_write_targets no ramo Bash → test_bash_nao_e_rota_de_fuga (5 casos) fica RED. Restaurado, GREEN."
-        - "PASS — _modos.py: removi o campo `escrita` do modo reflexao → 3 casos ficam RED. Restaurado, GREEN."
-        - "PASS — main(): troquei _wtlib.session_root(cwd) por cwd cru → test_session_anchor_root.py fica RED (checagem estrutural). Restaurado, GREEN."
-        - "N/A — permitido(): caso especial 'docs/**' como prefixo — removido e nenhum teste ficou RED; achado nulo, fnmatch já cruza '/' com '*' simples, sem diferença observável para os padrões usados hoje. Restaurado."
-        - "RESOLVIDO (era SURVIVED na 1ª rodada) — revertendo `nonflags = [t for t in rest if t and not _is_flag(t)]` → `[t for t in rest if not _is_flag(t)]` NOS 7 ARQUIVOS AO MESMO TEMPO (5 cópias + molde + _shellscan.py, simulando o estado do base_commit de forma consistente nas duas fontes): `tests/test_bash_path_lock_redir.py` fica RED — 5 falhas, uma por cópia, no novo caso 'sed -i BSD: script is not a file' (`['s/a/b/', 'docs/x.md']` em vez de `['docs/x.md']`). O detector de divergência (test_lock_copies_drift.py) continua verde nesse mesmo experimento, confirmando o diagnóstico original: ele só pega divergência ENTRE as duas fontes, não erro que as duas compartilham. A cobertura própria agora existe e é ela quem pega. Restaurado, GREEN nas duas suítes."
-        - "RESOLVIDO (era o achado 2 na 1ª rodada, tratado como escopo declarado) — três perturbações independentes sobre common/hooks/modo-escrita-gate.py, todas RED: (a) `if indecidivel:` → `if False:` (suprime o aviso) → 6 falhas em test_construcao_indecidivel_avisa_sem_barrar; (b) descartar o 2º valor de alvos() (`indecidivel = False` forçado após a chamada real) → mesmas 6 falhas; (c) mover o bloco `if indecidivel: ...; sys.exit(0)` para ANTES do loop de bloqueio, fazendo o aviso engolir um bloqueio legítimo → 4 falhas, incluindo 'alvo legível fora da lista ainda barra' (test_indecidivel_nao_engole_bloqueio). As três restauradas, GREEN."
+        - "PASS — relativo(), alvos(), campo `escrita` de _modos.py, âncora session_root — 4 perturbações da 1ª rodada, todas RED, restauradas GREEN (ver artefato anterior; não repetidas nesta rodada)."
+        - "N/A — permitido(): caso especial 'docs/**' — achado nulo (fnmatch já cruza '/'), sem diferença observável. Registrado para não repetir a checagem."
+        - "RESOLVIDO (2ª rodada) — filtro de token vazio nas 5 cópias + molde: revertendo nos 7 arquivos juntos, test_bash_path_lock_redir.py fica RED (5 falhas) e o detector de divergência continua verde — confirma que agora existe cobertura própria, não só estrutural."
+        - "RESOLVIDO (2ª rodada) — aviso de construção indecidível: 3 perturbações independentes (suprimir print, descartar sinal, aviso engolindo bloqueio legítimo) — todas RED."
+        - "RESOLVIDO (3ª rodada, este ciclo) — ramos curl/wget/touch/rsync em _segment_targets: removi os 4 ramos novos de uma cópia (build-hex) → test_bash_path_lock_redir.py fica RED (5 falhas, uma por caso novo). Removi os mesmos 4 ramos só de common/hooks/_shellscan.py → test_modo_escrita_gate.py::test_bash_nao_e_rota_de_fuga fica RED (4 falhas: curl, wget, touch, rsync). Restaurado, GREEN nas duas suítes."
+        - "VERIFICADO NÃO-VÁCUO (3ª rodada) — a exclusão declarada (curl -O / wget <url> sem destino explícito no argv): patchei os 7 arquivos JUNTOS para inventar um alvo fictício ('index.html') quando wget não tem flag de destino, simulando exatamente o erro que a exclusão existe para prevenir → test_bash_path_lock_redir.py::'wget sem destino no argv' (lambda t: t == []) fica RED sozinho (5 falhas, uma por cópia), SEM precisar do detector de divergência. A exclusão é coberta por comportamento, não só por prosa no commit."
   l2_coverage:
     status: assumed
     uncovered_lines: []
@@ -74,22 +84,28 @@ levels:
     status: findings
     reason: ""
     findings:
-      - "RESOLVIDO na 2ª rodada: python3 -c e patch agora emitem AVISO (verificado ao vivo: hook real, payload real, modo exploracao — rc=0, stderr contém 'AVISO' e 'não conferiu', T.emit('modo_escrita_indecidivel', ...) é chamado). Comando legível continua sem aviso (sem ruído). Alvo legível fora da lista continua bloqueando mesmo quando a mesma linha também tem trecho indecidível (rc=2, sem aviso competindo)."
-      - "NOVO (2ª rodada) — 3ª classe de rota de escrita: comandos que ESCREVEM de forma estaticamente decidível mas não estão na tabela de escritores conhecidos do _shellscan (`tee`, `sed`, `cp/mv/install`, `dd`, `git mv`, `truncate`) NEM no regex de construções indecidíveis (`python3 -c`, `perl -e`, `ed`, `patch`, heredoc). Testado ao vivo, todos rc=0 e SEM aviso E sem bloqueio: `curl -o common/hooks/evil.py <url>`, `wget -O common/hooks/evil.py <url>`, `rsync -a src/ common/hooks/`, `touch common/hooks/evil.py`, `python3 write_evil.py` (rodar um SCRIPT, ao contrário de `-c` inline). Diferente do achado 2 original: isto não é uma decisão de projeto declarada — não há aviso, não há telemetria, não há registro de que o gate não sabe opinar. É debt PRÉ-EXISTENTE no _shellscan (a tabela de escritores conhecidos já era assim desde a212e59, antes deste card), mas o card em questão elegeu justamente fechar 'Bash como rota de fuga' como sua tese central, e BACKLOG.md (linha ~1627, achado do qa-engineer/build-hex) já registra a classe geral do problema ('qualquer interpretador... é escrita arbitrária que não se parece com escrita') sem cobrir explicitamente curl/wget/rsync/touch — que nem são interpretadores, são utilitários comuns e estaticamente decidíveis, o que torna essa omissão mais barata de fechar que o caso geral."
+      - "RESOLVIDO (2ª rodada): python3 -c e patch emitem AVISO. Verificado de novo ao vivo nesta rodada: continua funcionando."
+      - "RESOLVIDO (3ª rodada): curl -o/--output=, wget -O/--output-document=, touch e rsync agora bloqueiam fora da lista branca e liberam dentro dela. Verificado ao vivo com o hook real (rc=2 fora da lista, rc=0 dentro), e por perturbação (ver l3 acima)."
+      - "ABERTO (achado da 2ª rodada, NÃO tratado nesta 3ª) — `python3 arquivo.py` (executar um SCRIPT, diferente de `python3 -c \"...\"`): continua rc=0, sem AVISO e sem BLOQUEADO. Nem a tabela de escritores conhecidos nem o regex de indecidíveis cobrem esse caso. É simples de perder de vista porque é muito parecido com o achado já fechado (`python3 -c`) e o commit 7bbb59c não menciona esta forma."
+      - "NOVO (4ª rota, pedida explicitamente pelo coordenador nesta rodada) — `scp <origem> <host>:<destino>`: cliente de cópia remota, irmão direto do `rsync` que acabou de ganhar cobertura nesta rodada. Destino está explícito no argv (depois do último ':'), estaticamente decidível. Testado ao vivo: rc=0, sem AVISO, sem BLOQUEADO."
+      - "NOVO (4ª rota) — `git checkout <ref> -- <caminho>` e `git restore <caminho>`: escrevem conteúdo antigo/de outro ref no caminho indicado, argv explícito. O ramo `elif cmd == \"git\":` de _segment_targets já existe e já trata `git mv` especificamente — mas não `checkout`/`restore`, que são o MESMO tipo de escrita (sobrescrever um arquivo do working tree) pela mesma ferramenta já instrumentada. É o gap mais preocupante dos dois: pode ser usado para reverter silenciosamente um arquivo em modo restrito para uma versão antiga, sem que o gate diga uma palavra. Testado ao vivo: rc=0, sem AVISO, sem BLOQUEADO."
+      - "checados e OK (não são gap): `mkdir -p` (cria diretório, não escreve conteúdo — fora do escopo do gate por definição), `git add` (só atualiza o índice, não o working tree), `curl | bash` (é execução remota, categoria completamente diferente de 'escrita com destino no argv' — fora do que foi pedido nesta rodada, citado só para registro)."
   bugfix_regression_red_at_base:
     status: n/a
 routing_reason: >
-  NEEDS-HUMAN por regra 2 (L4 achou algo). Os dois achados da 1ª rodada estão
-  RESOLVIDOS e reverificados de forma independente: a correção nas 5 cópias do
-  bash-path-lock agora tem cobertura própria (test_bash_path_lock_redir.py fica
-  RED perturbando as 7 fontes juntas, o que antes só o detector de divergência
-  falhava em pegar), e o aviso de construção indecidível (python3 -c, patch,
-  heredoc) está implementado, testado e não engole bloqueio legítimo nem é
-  descartável em silêncio — 3 perturbações próprias confirmam. Nenhuma condição
-  de UNPROVEN (regra 1) permanece: nenhuma perturbação sobrevive, nenhuma linha
-  mudada por este diff ficou sem teste. Mas a checagem pedida pelo coordenador
-  ("sobrou alguma rota que não cai nem no bloqueio nem no aviso?") achou uma
-  resposta que ainda é sim: curl -o, wget -O, rsync, touch e `python3
-  arquivo.py` escrevem sem bloqueio, sem aviso e sem log — uma 3ª categoria,
-  distinta dos dois achados fechados nesta rodada, que o card não cobriu e a
-  suíte não documenta como escopo aceito.
+  NEEDS-HUMAN por regra 2 (L4 achou algo), mesma regra da rodada anterior — o
+  motivo mudou de conteúdo, não de forma. Os achados 1, 2 e 3 (perturbação
+  sobrevivente nas 5 cópias; python3 -c/patch silenciosos; curl/wget/touch/
+  rsync silenciosos) estão todos RESOLVIDOS e reverificados de forma
+  independente nesta rodada — nenhuma condição de UNPROVEN (regra 1)
+  permanece: nenhuma perturbação sobrevive, nenhuma linha mudada por este
+  diff ficou sem teste, e a exclusão declarada (curl -O / wget sem destino) é
+  coberta por comportamento, não só por prosa. Mas a pergunta desta rodada —
+  "sobra uma 4ª rota?" — tem resposta sim, e mais especificamente: `git
+  checkout -- <caminho>` / `git restore <caminho>` reabrem exatamente o
+  padrão de risco do `git mv` (mesma ferramenta, já parcialmente
+  instrumentada, mesmo efeito de sobrescrever fora da lista) sem gerar
+  nenhum sinal — nem bloqueio nem aviso —, e `scp` é o irmão não-coberto do
+  `rsync` que acabou de ganhar tratamento nesta mesma rodada. `python3
+  arquivo.py` (rodar um script) segue como débito aberto desde a rodada
+  anterior, não mencionado no commit desta.

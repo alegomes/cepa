@@ -115,6 +115,23 @@ CASES = [
      "sem -o o destino não está na linha; fora de escopo, não inventar alvo"),
     ("wget sem destino no argv", "wget https://e.com/f",
      lambda t: t == [], "idem — grava com o nome remoto, que o argv não diz"),
+
+    # --- `git checkout -- ` e `git restore` sobrescrevem o arquivo no disco ---
+    #     Mesmo efeito do `git mv` acima, na mesma ferramenta já vigiada: era a
+    #     forma mais fácil de reverter em silêncio um arquivo fora da pista.
+    ("git checkout ref -- path", "git checkout main -- src/Foo.java",
+     lambda t: t == ["src/Foo.java"], "o caminho depois do -- é sobrescrito"),
+    ("git checkout -- path", "git checkout -- src/Foo.java src/Bar.java",
+     lambda t: set(t) == {"src/Foo.java", "src/Bar.java"}, "todos os caminhos"),
+    ("git restore", "git restore src/Foo.java",
+     lambda t: t == ["src/Foo.java"], "restore sem -- também escreve"),
+    ("git restore --source", "git restore --source=HEAD~2 docs/x.md",
+     lambda t: t == ["docs/x.md"], "a flag não vira caminho"),
+    ("git checkout branch is not a file write", "git checkout main",
+     lambda t: t == [],
+     "troca de branch escreve muito, mas não é escrita dirigida a um caminho"),
+    ("git checkout -b is not a file write", "git checkout -b session/nova",
+     lambda t: t == [], "criar branch não escreve arquivo nenhum"),
 ]
 
 

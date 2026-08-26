@@ -169,7 +169,11 @@ def test_bash_nao_e_rota_de_fuga():
                     'curl -o common/hooks/novo.py https://e.com/f',
                     'wget -O tests/test_x.py https://e.com/f',
                     'touch common/hooks/novo.py',
-                    'rsync -a /tmp/x/ common/hooks/'):
+                    'rsync -a /tmp/x/ common/hooks/',
+                    # Reverter um arquivo travado para uma versão antiga é
+                    # escrever nele — mesma ferramenta que o `git mv` vigiado.
+                    'git checkout main -- common/hooks/novo.py',
+                    'git restore tests/test_x.py'):
             p = r.bash(cmd)
             check(f"bash bloqueado: {cmd[:30]}", p.returncode == 2, p.stderr[:120])
 
@@ -185,7 +189,11 @@ def test_bash_libera_o_que_o_modo_produz():
                     # escrito e este comando legítimo bloqueava.
                     "sed -i '' 's/a/b/' docs/estrategia.md",
                     'curl -o docs/baixado.md https://e.com/f',
-                    'touch docs/nota.md'):
+                    'touch docs/nota.md',
+                    'git checkout main -- docs/estrategia.md',
+                    # Troca de branch não é escrita dirigida a caminho: se
+                    # virasse alvo, o modo barraria todo `git checkout`.
+                    'git checkout main'):
             p = r.bash(cmd)
             check(f"bash liberado: {cmd[:30]}", p.returncode == 0, p.stderr[:160])
 
