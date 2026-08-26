@@ -368,3 +368,44 @@ o documento do agente agora descreve dois prefixos com vocabulário único.
 promovido, então o corte não derrubou nada em uso. Isso está registrado no próprio documento do
 agente, junto com as duas formas de reativá-lo — porque afirmar que ele existe sem conferir é
 exatamente o hábito que este repo já decidiu não repetir.
+
+## Item 3 — R1 verificado em execução, não citado de doc
+
+Rotina cloud `trig_01R3zzWAZSRn6U9CTi6XAKHH`, sessão `cse_01WGSACu7LA28d5c1pwJdutW`,
+somente leitura, 2026-08-26T13:28Z. Saídas literais:
+
+| Pergunta | Resposta |
+|---|---|
+| `which twg; twg --version` | `/bin/bash: line 1: twg: command not found` · `rc=127` |
+| `ls -la ~/.config/twg/ ; ls -la ~/.twg` | `No such file or directory` nos dois |
+| prefixo MCP presente | `mcp__Atlassian__` (exatamente esse, e só esse) |
+| `atlassianUserInfo` | respondeu: conta ativa de Alexandre Gomes |
+| `getAccessibleAtlassianResources` | respondeu: cloudId `35ef53be-…`, site `sea-solutions.atlassian.net` |
+| `getVisibleJiraProjects` | respondeu: `total: 5` projetos |
+
+**R1 deixa de ser hipótese e passa a fato:** no ambiente cloud a CLI não existe, não há
+credencial dela em disco, e o único caminho até o Jira é o prefixo `mcp__Atlassian__` — que
+funciona, sem intervenção humana. A rejeição de O1 (substituição total) agora se apoia em
+execução, não no `loop-engineering.md` de 2026-06-30. A discordância **D2** está resolvida a
+favor do contrarian: R1 é bloqueio de fato.
+
+Isso também valida a decisão do item 2 de manter os 16 nomes `mcp__Atlassian__*` intactos: são
+exatamente os que o ambiente cloud expõe.
+
+**Achado lateral, não perseguido:** o `scopes` devolvido por `getAccessibleAtlassianResources`
+lista apenas escopos de Confluence, e ainda assim as chamadas de Jira responderam. Não investiguei;
+fica registrado porque um dia pode explicar uma falha de permissão que pareça inexplicável.
+
+## Placar final das lentes
+
+| Discordância | Resolução |
+|---|---|
+| **D1** expansionista × custo-de-manutencao (tamanho da mudança) | custo-de-manutencao nesta rodada; a tese do expansionista é a rodada seguinte |
+| **D2** contrarian × fundamentalista (R1 é fato ou citação?) | **resolvida por execução**: é fato |
+| **D3** outsider × demais (o documento é legível?) | outsider venceu: a opacidade de F1 escondia um erro real de 74% |
+
+Achados críticos endereçados: **C1** (denylist furada → lista branca), **C3** (unidade trocada →
+medição real), **F7** (gates mortos → reconhecimento por efeito), **R2 presente** (corrigido no
+texto e fechado pelo item 1), **D2** (verificado). Continuam **abertos**: **C4** (versão da CLI
+que se autoatualiza, sem controle) e **C5** (detector de contexto de execução) — ambos só viram
+pré-requisito se O3 for retomado.
