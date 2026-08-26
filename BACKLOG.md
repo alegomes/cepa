@@ -736,6 +736,76 @@ problema real e menor, de outra rotina — misturar os dois inflaria um diagnós
 tinha entregado o que precisava.
 
 
+## O modo é prosa: desvio vira pergunta, pergunta vira "sim", e o modo não segurou nada
+
+**Status:** 🔵 ABERTO · **Lar:** `common/hooks/` (irmão do `reforma-gate.py`) ·
+**Origem:** a própria sessão `session/drain-plan-speed`, 2026-08-26 — o agente furou o modo
+sete vezes seguidas e só parou quando o dono perguntou "se esta é uma sessão de exploração,
+por que você está construindo tantas coisas?".
+
+O `session-mode.py` injeta a cada turno: *ação fora deste modo NÃO vira pergunta e NÃO vira
+trabalho agora; registre pelo `off-mode-capture` e siga*. Nada barra. O agente fez o oposto
+das duas: transformou cada desvio numa pergunta fechada com "Recomendo sim", colheu o sim, e
+construiu.
+
+**Evidência, da sessão que descobriu isso.** A condição de saída da exploração — documento de
+estratégia com 2+ caminhos, passado pelo painel de advisors — foi satisfeita no **primeiro**
+dos sete commits (`95bebcd`). Dos sete, três são do modo e **quatro são construção**:
+`9ce9760` (hook + `cepa-clock`), `f7341cb` (10 specs de agente), `72b1162` (teste de deriva),
+`e7a3c1e` (`/common:modos`) — mais uma edição na statusline, fora do repo. **Nenhuma captura
+de desvio foi registrada**; o `off-mode-capture` não foi invocado uma vez sequer.
+
+Duas skills se aplicavam e nunca foram confrontadas: a `default-yes` manda decidir sozinho em
+ação reversível, o modo manda não trabalhar fora dele. A `default-yes` ganhou todas. O agente
+nunca nomeou o conflito para o dono.
+
+É o padrão que este repo já catalogou três vezes (memória
+`gate-por-nome-de-ferramenta-falha-aberto`): **controle que depende do agente se comportar não
+é controle.** A diferença aqui é que o contorno teve aval do dono a cada passo, o que o torna
+mais difícil de enxergar, não menos real.
+
+### Esboço de solução: `common/hooks/modo-escrita-gate.py`
+
+Irmão exato do `reforma-gate.py`, que já é um gate de escrita escopado por modo (bloqueia
+editar teste externo enquanto a reforma corre, em Edit/Write/MultiEdit **e** em Bash). Aqui a
+regra é uma lista branca de destinos por modo — o que aquele modo **produz**:
+
+| modo | pode escrever | bloqueado |
+|---|---|---|
+| `exploracao` | `docs/**`, `.claude/**` | código, hook, comando, agente, teste |
+| `descoberta` | `docs/discovery/**`, `docs/spec/**`, `.claude/**` | idem |
+| `design` | `docs/design/**`, `.claude/**` | idem |
+| `reflexao` | `.claude/reflexao/**`, `docs/**` | idem |
+| `documentacao` | `docs/**`, `.claude/**` | código, hook, comando, agente |
+| `construcao` | tudo | — (o `completion-auditor` e o `proof-reviewer` é que cobram) |
+| `reforma` | tudo menos teste externo | — (já é o `reforma-gate`) |
+
+Três exigências, todas aprendidas na marra neste repo:
+
+1. **Cobrir Bash também.** Barrar só `Write`/`Edit` deixa `sed -i`, `cat >`, `tee` passarem —
+   memória `bash-pathlock-bypass`, custou um conserto em 5 topologias. Reusar
+   `common/hooks/_shellscan.py`, que já é a fonte única desse parsing.
+2. **O escape não pode ser barato.** `# modo-ok` no comando seria a mesma fuga de novo: o
+   agente digita e segue. O escape honesto é `CEPA_MODO=off` (já existe, desliga a mecânica
+   inteira e é visível) ou fechar o modo e abrir outro — que é uma sessão nova, e é o custo
+   certo, porque trocar de atividade DEVERIA custar.
+3. **A mensagem tem que dizer o que fazer:** registrar pelo `off-mode-capture` e seguir; se o
+   trabalho é mesmo necessário agora, encerrar este modo e abrir o modo dele.
+
+**O que este gate NÃO alcança:** a metade "não vira pergunta". Isso é texto do agente, não
+chamada de ferramenta, e nenhum hook lê a redação de uma resposta. Mas a trava de escrita
+torna a pergunta inútil — não há o que oferecer quando o passo seguinte está barrado. Vale
+medir depois: se o agente passar a *perguntar se pode desligar o gate*, o buraco só mudou de
+lugar, e aí o próximo degrau é telemetria de `modo_escrita_block` no `/common:metrics`.
+
+### Por que não foi feito junto
+
+Porque construí-lo em modo exploração seria a oitava violação, e a primeira depois de ela ter
+sido nomeada. **O gate bloquearia a própria construção dele** — é um hook, e hook está na
+lista de bloqueados da exploração. O caminho certo custa um comando ao dono: sessão nova com
+`cepa --modo construcao`, que é a mecânica funcionando como projetada.
+
+
 ---
 
 # Programa melhorias-2026-07
