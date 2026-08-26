@@ -59,4 +59,33 @@ for desc, payload, exp, kind in CASES:
     else:
         print(f"  ok  [{str(exp or 'ignora'):6}] {desc}")
 print(f"\n{len(CASES)-fail}/{len(CASES)} passaram")
-sys.exit(1 if fail else 0)
+
+# --- Bitbucket: quem pode decidir o destino de um PR ---
+BB = [
+ ("dev aprova proprio PR",        "build-hex:domain-dev",            "twg bitbucket pull-requests approve 42",        2),
+ ("dev mergeia",                  "build-hex:domain-dev",            "twg bitbucket pull-requests merge --id 42",     2),
+ ("dev recusa",                   "build-team:backend-dev",          "twg bitbucket pull-requests decline 42",        2),
+ ("alias bb/pr escondido apos ;", "build-hex:domain-dev",            "echo oi; twg bb pr approve 42",                 2),
+ ("bitbucket-expert aprova",      "review-gate:bitbucket-expert",    "twg bitbucket pull-requests approve 42",        0),
+ ("dev le o diff",                "build-hex:domain-dev",            "twg bitbucket pull-requests diff 42",           0),
+ ("dev consulta PRs",             "build-hex:domain-dev",            "twg bitbucket pull-requests query --state OPEN",0),
+ ("sessao principal (humano)",    "",                                "twg bitbucket pull-requests merge --id 42",     0),
+ ("comentar nao e decidir",       "build-hex:domain-dev",            "twg bitbucket pull-requests comment create 42 --content x", 0),
+ ("sem twg",                      "build-hex:domain-dev",            "git log",                                       0),
+]
+import subprocess, json as _json
+HOOK = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "common", "hooks", "bitbucket-decision-lock.py")
+bfail = 0
+print("\n--- bitbucket-decision-lock ---")
+for desc, agent, cmd, want in BB:
+    payload = _json.dumps({"tool_name": "Bash", "agent_type": agent,
+                           "tool_input": {"command": cmd}})
+    rc = subprocess.run([sys.executable, HOOK], input=payload, capture_output=True,
+                        text=True).returncode
+    if rc != want:
+        bfail += 1; print(f"  FALHOU: {desc} — esperado exit={want}, obtido {rc}")
+    else:
+        print(f"  ok  [exit {want}] {desc}")
+print(f"{len(BB)-bfail}/{len(BB)} passaram")
+sys.exit(1 if (fail or bfail) else 0)

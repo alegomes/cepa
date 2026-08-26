@@ -109,7 +109,33 @@ any repo without per-repo copies.
 - No title in the delegation (open) → refuse, ask the command to re-delegate.
 - Merge without a stated PROVEN verdict → refuse (the gate isn't yours to skip).
 - 400 duplicate (open) → ALREADY OPEN, surface the existing PR, don't double-open.
-- An operation with no bundled script (find PR by branch, comment) → say so and ask; never improvise curl.
+- An operation with no bundled script → use `twg` (see below). Still never improvise curl.
+
+## O que os scripts não cobrem: a CLI `twg`
+
+Abrir e mergear PR continuam nos scripts empacotados — são o caminho provado, e
+não se mexe neles. O que **não** tinha script (achar PR por branch, ler o diff,
+comentar, aprovar, pedir mudanças) agora tem, pela CLI oficial da Atlassian:
+
+| Preciso de | Comando |
+|---|---|
+| achar PR por branch | `twg bitbucket pull-requests query --source-branch <branch> -o json` |
+| ler um PR | `twg bitbucket pull-requests get <id> -o json` |
+| ver o diff | `twg bitbucket pull-requests diff <id>` |
+| comentar | `twg bitbucket pull-requests comment create <id> --content '<texto>'` |
+| aprovar | `twg bitbucket pull-requests approve <id>` |
+| pedir mudanças | `twg bitbucket pull-requests request-changes <id>` |
+
+A CLI já vem autenticada (`twg doctor` → `Bitbucket token: present`) e detecta
+workspace e repositório pelo remote do git. Confirme a superfície com
+`twg bitbucket pull-requests --help` antes de assumir uma flag — a CLI é nova e o
+`--help` é a fonte, não a memória.
+
+**Você é o único agente autorizado a aprovar, mergear, recusar ou pedir mudanças.**
+Isso não é mais convenção: o hook `common/hooks/bitbucket-decision-lock.py` barra
+esses quatro verbos para qualquer outro agente, porque a CLI os deixou a uma linha
+de distância de qualquer agente com `Bash` — inclusive de quem escreveu o código.
+Se você for barrado, é bug do hook, não do seu pedido: relate em vez de contornar.
 
 ## Output shape
 

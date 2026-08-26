@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""_jiramut — reconhece mutação de Jira por EFEITO, não por nome de ferramenta.
+"""_jiramut — reconhece mutação de Jira (e de Bitbucket) por EFEITO, não por nome de ferramenta.
 
 ## Por que existe
 
@@ -94,6 +94,64 @@ _TWG_JIRA_READ = frozenset({
 _TWG_COMMENT_WRITE = frozenset({"create", "update"})
 
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+
+# `twg bitbucket pull-requests ...` que sao comprovadamente leitura. LISTA BRANCA,
+# pelo mesmo motivo do Jira. Verificado no --help da CLI 1.2.5.
+_TWG_BB_PR_READ = frozenset({
+    "get", "query", "list", "activity", "commits", "diff", "diffstat", "patch",
+    "for-commit", "merge-status", "effective-default-reviewer",
+})
+
+# Verbos de PR que decidem o destino do codigo. Aprovar e mergear o proprio PR e
+# exatamente o que o review-gate existe para impedir.
+_TWG_BB_PR_DECIDE = frozenset({
+    "approve", "merge", "decline", "request-changes", "remove-request-changes",
+})
+
+
+def classify_bitbucket(command: str):
+    """Mutacao de Bitbucket via `twg`. None quando nao ha nenhuma.
+
+    Devolve {"verb", "decides", "reason"} — `decides` marca os verbos que
+    determinam se o codigo entra (approve/merge/decline/request-changes), que sao
+    os que so o agente do review-gate pode executar.
+    """
+    if not command or "twg" not in command:
+        return None
+    for seg in _split_segments(command):
+        seg = seg.strip()
+        if not seg:
+            continue
+        try:
+            argv = shlex.split(seg)
+        except ValueError:
+            if re.search(r"(^|/)twg\b", seg) and "bitbucket" in seg:
+                return {"verb": "<ilegivel>", "decides": True,
+                        "reason": "linha com aspas nao fechadas, impossivel de ler"}
+            continue
+        while argv and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0]):
+            argv.pop(0)
+        if not argv or os.path.basename(argv[0]) != "twg":
+            continue
+        rest = [a for a in argv[1:] if a]
+        if not rest or rest[0] not in ("bitbucket", "bb"):
+            continue
+        words = [a for a in rest[1:] if not a.startswith("-")]
+        if len(words) < 2:
+            continue
+        resource, verb = words[0], words[1]
+        if resource in ("pull-requests", "pr"):
+            if verb in _TWG_BB_PR_READ:
+                return None
+            return {"verb": f"{resource} {verb}",
+                    "decides": verb in _TWG_BB_PR_DECIDE,
+                    "reason": f"`twg bitbucket {resource} {verb}` escreve no pull request"}
+        # repo/branch/deployment/pipeline: leitura conhecida passa, resto e escrita
+        if verb in ("get", "query", "list", "url", "file", "contributors", "search"):
+            return None
+        return {"verb": f"{resource} {verb}", "decides": False,
+                "reason": f"`twg bitbucket {resource} {verb}` nao esta na lista de leituras conhecidas"}
+    return None
 
 
 def _flag(argv, *names):
