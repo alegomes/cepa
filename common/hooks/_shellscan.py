@@ -30,7 +30,9 @@ Uso, seguindo o padrão dos outros helpers privados desta pasta:
     import _shellscan as S
 """
 
+import os
 import re
+import shlex
 
 # Redirection: `>` or `>>`, NOT preceded by a digit or `&` (excludes `2>`,
 # `&>`, `1>&2`), and the target must not start with `&` (excludes `>&1`) or `=`
@@ -165,3 +167,117 @@ def _unquote(tok: str) -> str:
 def _is_flag(tok: str) -> bool:
     return tok.startswith("-") and tok != "-"
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Extração de ALVOS DE ESCRITA — o degrau acima do parsing.
+#
+# Portado verbatim do `bash-path-lock.py` do build-hex em 26/08/2026, quando o
+# `modo-escrita-gate` precisou da mesma pergunta que os locks já respondiam:
+# "que arquivos esta linha de comando ESCREVE?". A cópia que existia no
+# `enforcement-guard.py` já havia divergido em silêncio — ela não conhece
+# `git mv` nem conta a ORIGEM de um `mv` como escrita, então um agente move um
+# arquivo para fora da pista e o guard vê só o destino. Copiar uma terceira vez
+# seria repetir a doença que este módulo trata; `tests/test_lock_copies_drift.py`
+# compara estas duas funções entre as duas fontes do motor.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Constructs we cannot statically analyze — fail open but log.
+_UNCOVERED_RE = re.compile(
+    r"""(?:
+        \bpython3?\s+-c\b | \bperl\s+-[eE]\b | \bruby\s+-e\b | \bnode\s+-e\b |
+        \bawk\b[^|;&]*\b-i\b | \b-i\s+inplace\b | \bgawk\b[^|;&]*\binplace\b |
+        \bed\b | \bpatch\b | <<-?\s*['"]?\w+   # heredoc
+    )""",
+    re.VERBOSE,
+)
+
+
+def _segment_targets(segment: str) -> list:
+    """Best-effort extraction of shell-write targets from one command segment."""
+    targets = []
+
+    # 1. Redirections (covers `cat > f`, `echo .. >> f`, `cmd > f`, heredoc-to-file).
+    #    O `>` precisa estar fora de aspas: um `->` no meio de uma mensagem de
+    #    commit é prosa, não redirecionamento.
+    redir_mask = _quoted_mask(segment)
+    for m in _REDIR_RE.finditer(segment):
+        if not redir_mask[m.start()]:
+            targets.append(_unquote(m.group(1)))
+
+    # 2. argv-shaped writers — tokenize; fall back silently if shlex chokes.
+    #    Sem os redirecionamentos: eles já viraram alvo no passo 1, e deixá-los
+    #    aqui faz o `tee` contar o operando de entrada como escrita.
+    sem_redir = _strip_redirections(segment, redir_mask)
+    try:
+        argv = shlex.split(sem_redir, posix=True)
+    except ValueError:
+        argv = sem_redir.split()
+    if not argv:
+        return targets
+
+    cmd = os.path.basename(argv[0])
+    rest = argv[1:]
+    nonflags = [t for t in rest if t and not _is_flag(t)]
+
+    if cmd == "tee":
+        # every non-flag arg is written (flags: -a/--append/-i…)
+        targets.extend(nonflags)
+    elif cmd == "sed":
+        if any(t == "-i" or t.startswith("-i") or t == "--in-place"
+               or t.startswith("--in-place") for t in rest):
+            # in-place edits its file operands — everything after the script.
+            # Heuristic: all non-flag args except the first (the sed program).
+            if len(nonflags) >= 2:
+                targets.extend(nonflags[1:])
+            elif nonflags:
+                targets.extend(nonflags)  # `sed -i'' file` form with no separate prog
+    elif cmd in ("cp", "mv", "install"):
+        if len(nonflags) >= 2:
+            targets.append(nonflags[-1])  # destination is the last operand
+            if cmd == "mv":
+                # `mv` DELETES its source(s) — that is a write on the origin
+                # path too, not just the destination (P4, CS-5: renaming
+                # counts as a write on both paths). `cp`/`install` only READ
+                # their source, so they stay destination-only.
+                targets.extend(nonflags[:-1])
+    elif cmd == "dd":
+        for t in rest:
+            if t.startswith("of="):
+                targets.append(t[3:])
+    elif cmd == "git":
+        # `git mv <src> <dst>` — move real de arquivo, que o path-lock precisa
+        # governar como qualquer outra escrita. Estava só na cópia do docs
+        # (structure-surgeon usa git mv para preservar histórico); as outras
+        # quatro deixavam passar. Encontrado pelo detector de divergência.
+        #
+        # Origem E destino contam como escrita (P4, CS-5): `git mv` apaga o
+        # caminho de origem tanto quanto cria o de destino — um slice travado
+        # para escrever em domain/** que renomeia infrastructure/Foo.java para
+        # domain/Foo.java "escreveu" fora da própria pista (removeu um arquivo
+        # de infrastructure/), mesmo o destino sendo permitido. Checar só o
+        # destino, como antes, deixava esse sentido passar batido.
+        if len(nonflags) >= 3 and nonflags[0] == "mv":
+            targets.extend(nonflags[1:])
+    elif cmd == "truncate":
+        targets.extend(nonflags[1:] if nonflags else [])
+
+    return targets
+
+
+def extract_write_targets(command: str) -> tuple:
+    """Return (targets, has_uncovered_construct)."""
+    targets = []
+    for seg in _split_segments(command):
+        seg = seg.strip()
+        if seg:
+            targets.extend(_segment_targets(seg))
+    # de-dup, drop pseudo-devices and fd dups
+    clean = []
+    seen = set()
+    for t in targets:
+        t = _unquote(t).strip()
+        if not t or t in _PSEUDO or t.startswith("&") or t in seen:
+            continue
+        seen.add(t)
+        clean.append(t)
+    return clean, bool(_UNCOVERED_RE.search(_unquoted_view(command)))

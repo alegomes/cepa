@@ -257,7 +257,7 @@ def _segment_targets(segment: str) -> list:
 
     cmd = os.path.basename(argv[0])
     rest = argv[1:]
-    nonflags = [t for t in rest if not _is_flag(t)]
+    nonflags = [t for t in rest if t and not _is_flag(t)]
 
     if cmd == "tee":
         # every non-flag arg is written (flags: -a/--append/-i…)

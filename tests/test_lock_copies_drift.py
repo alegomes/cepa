@@ -341,7 +341,16 @@ def test_main_do_pathlock_bate_fora_do_hex():
 SHELLSCAN_FUNCS = ["_quoted_mask", "_split_segments", "_strip_redirections",
                    "_unquoted_view", "_unquote", "_is_flag"]
 SHELLSCAN_CONSTS = ["_REDIR_RE", "_REDIR_STRIP_RE", "_SEP_PAIRS", "_SEP_CHARS",
-                    "_PSEUDO"]
+                    "_PSEUDO", "_UNCOVERED_RE"]
+
+# O degrau acima do parsing: quais arquivos a linha de comando ESCREVE. Entrou
+# no `_shellscan` em 26/08/2026 para o `modo-escrita-gate`, portado do
+# bash-path-lock. Fica FORA de SHELLSCAN_FUNCS de propósito: o
+# `enforcement-guard` mantém uma versão própria e mais pobre destas duas (não
+# conhece `git mv`, não conta a origem de um `mv`), e o caso
+# `test_guards_do_common_nao_recopiam_o_motor` ficaria vermelho por uma dívida
+# que não é deste detector resolver — ela está registrada no BACKLOG.
+SHELLSCAN_ALVO_FUNCS = ["_segment_targets", "extract_write_targets"]
 
 
 def named_constants(src: str, names: list) -> dict:
@@ -383,7 +392,7 @@ def test_motor_do_shellscan_bate_com_o_bash_path_lock():
                   "a tabela divergiu entre as duas fontes do motor")
 
     ref_f, scan_f = functions_of(ref_src), functions_of(scan_src)
-    for name in SHELLSCAN_FUNCS:
+    for name in SHELLSCAN_FUNCS + SHELLSCAN_ALVO_FUNCS:
         check(f"_shellscan:{name} presente nas duas fontes",
               name in ref_f and name in scan_f,
               f"bash-path-lock={name in ref_f} _shellscan={name in scan_f}")
