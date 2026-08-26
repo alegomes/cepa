@@ -14,6 +14,13 @@ import tempfile
 
 import pytest
 
+from _telemetria_isolada import isola
+
+# A família pytest não passa pelo tests/sitecustomize.py (quando o interpretador
+# arranca, `tests/` ainda não está no sys.path), então o isolamento da
+# telemetria precisa ser pedido aqui também. Ver tests/_telemetria_isolada.py.
+isola()
+
 # Os subdiretórios que o main() de test_maestro_run_cores.py cria antes de
 # chamar as funções: cada cenário de poll precisa do seu, senão um vaza no outro.
 SUBDIRS = "a b c d e f g".split()

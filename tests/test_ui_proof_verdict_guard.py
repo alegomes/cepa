@@ -37,6 +37,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Este teste executa hook que emite telemetria; sem isto os eventos cairiam
+# em ~/.claude/cepa-telemetry/ e entrariam no relatório do /common:metrics
+# como se fossem uso real. Ver tests/_telemetria_isolada.py.
+from _telemetria_isolada import isola
+
+isola()
+
+
 HOOK = Path(__file__).resolve().parent.parent / "common" / "hooks" / "ui-proof-verdict-guard.py"
 TMP = Path(tempfile.gettempdir()) / "repo"
 NOVO = str(TMP / "docs" / "proof" / "ui-wego-acesso.yaml")
