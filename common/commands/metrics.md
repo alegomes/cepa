@@ -39,6 +39,21 @@ decide se o aviso do `report-style-lint` precisa virar bloqueio.
 
 ## Notes
 
+- **Para onde foi o relógio de UMA sessão**, o agregador não serve — ele conta
+  eventos, não mede tempo. Quem mede é o `cepa-clock`, que lê o transcript da
+  sessão (e o de cada subagente) e reparte o relógio em espera ativa, build,
+  bash normal e geração dos agentes:
+
+  ```
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-clock"            # a última sessão deste repo
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-clock" --emit     # e grava no ledger
+  ```
+
+  Com `--emit`, a repartição entra aqui como a seção "Relógio medido". Rode-o
+  depois de uma rotina longa que pareceu lenta — foi assim que se descobriu, em
+  2026-08-26, que o gargalo era lead sondando disco (19% a 52% do relógio) e não
+  build (3% a 17%).
+
 - Comandos e skills podem registrar eventos próprios (aparecem em "Eventos
   custom") via:
   `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_telemetry.py" emit <evento> chave=valor ...`
