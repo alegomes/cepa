@@ -371,3 +371,56 @@ O1 a O4 poderiam entregar somadas, e não custa nenhum degrau da escada de confi
    terceira variante — que é exatamente o que a memória
    `gate-por-nome-de-ferramenta-falha-aberto` descreve.
 3. **Só depois** reabrir O2/O3, com os 13% de Maven na mão como teto realista.
+
+---
+
+# Confirmação: a espera é sistemática (2026-08-26)
+
+O passo 1 da sequência revisada pedia confirmar que M1 não era azar de um run.
+Medi mais cinco sessões já gravadas em `~/.claude/projects/`:
+
+| Sessão | Relógio | Espera ativa | % | Onde |
+|---|---|---|---|---|
+| `drain-plan-0840` | 328 min | 155 min | 47% | engineering-lead 149 |
+| `todo-1413` | 1098 min | 241 min | 22% | engineering-lead 232 |
+| `todo-21081818` | 924 min | 194 min | 21% | engineering-lead 190 |
+| `todo-22081827` | 913 min | 176 min | 19% | engineering-lead 161 |
+| `exec-17081128` | 636 min | 146 min | 23% | engineering-lead 114 |
+| `credentials-crud` | 2393 min | 33 min | 1% | validation-lead 25 |
+| `prove-1940` (sem lead) | 116 min | **0** | 0% | — |
+| `drain-1107-0920` (sem lead) | — | **0** | 0% | — |
+
+Ressalva de método: o relógio vai do primeiro ao último evento da sessão, então
+sessão interativa inclui o tempo parada esperando o dono, e o percentual sai
+diluído. **Os minutos absolutos são o número confiável.** Somados, os cinco runs
+com lead perderam **912 minutos — 15 horas — em comando que não fazia nada.**
+
+Os dois runs sem lead têm espera **zero**. Isso localiza o defeito com precisão:
+não é a topologia nem o gate, é o lead. E o `credentials-crud`, com o lead
+presente mas em 0 minutos de espera, mostra que o comportamento não é obrigatório
+— é um hábito que aparece quando o lead delega em paralelo.
+
+## O que foi construído a partir disso (commit `9ce9760`)
+
+- **`common/hooks/no-busy-wait.py`** — recusa, no Bash, laço com `sleep`,
+  `while true`, laço de queima (`for i in $(seq 1 N)` com N ≥ 200) e `sleep`
+  de 30s ou mais. A recusa diz o que fazer no lugar, na ordem: aguardar o retorno
+  da delegação, usar `run_in_background`, usar a ferramenta `Monitor`, ou marcar
+  `# espera-ok` se for mesmo estado externo sem notificação. Barra o **efeito**
+  (bloquear a sessão sem trabalhar), não uma lista de comandos — a lição da
+  memória `gate-por-nome-de-ferramenta-falha-aberto`.
+- **`tests/test_no_busy_wait.py`** — 8 casos de bloqueio copiados verbatim dos
+  transcripts e 9 de liberação (build de verdade, texto citado, `sleep` curto,
+  escape hatch).
+- **`common/bin/cepa-clock`** — reparte o relógio de uma sessão lendo o
+  transcript dela e o de cada subagente, unindo intervalos sobrepostos para não
+  contar o mesmo minuto duas vezes. Com `--emit`, grava no ledger e a repartição
+  passa a aparecer no `/common:metrics`.
+
+Validação contra os transcripts reais: o detector bloquearia **161 comandos, 632
+minutos de relógio**, e liberaria **3.436 comandos, 348 minutos** — e os
+liberados mais lentos são todos `mvnw verify` de verdade, entre 3 e 5 minutos.
+Nenhum build foi confundido com espera.
+
+**Nada disso está no ar até o `bin/install.sh --clean` e o restart do Claude
+Code.** Sessão em execução segura os hooks antigos em memória.
