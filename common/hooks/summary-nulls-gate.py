@@ -173,10 +173,15 @@ def main():
     tool_name = payload.get("tool_name", "")
     # Reconhecimento por EFEITO, nao por nome de ferramenta (ver _jiramut).
     _mut = J.classify(payload)
-    if _mut is None or _mut["kind"] != "comment":
+    if _mut is None:
         sys.exit(0)
+    # A opacidade se checa ANTES de filtrar por tipo: uma mutacao que nao da
+    # para ler pode ser justamente a que este gate guarda. Filtrar primeiro
+    # deixava `twg api ... -X POST` escapar por nao ser classificavel.
     if _mut["opaque"]:
         J.block(_mut, "summary-nulls-gate")
+    if _mut["kind"] != "comment":
+        sys.exit(0)
 
     body = extract_body(_mut["tool_input"])
     if body is None:

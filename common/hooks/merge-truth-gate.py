@@ -124,10 +124,15 @@ def main():
     # Reconhecimento por EFEITO, nao por nome de ferramenta. O nome MCP so
     # cobria MCP; a CLI `twg` chega como Bash e passava calada por aqui.
     _mut = J.classify(payload)
-    if _mut is None or _mut["kind"] != "transition":
+    if _mut is None:
         sys.exit(0)
+    # A opacidade se checa ANTES de filtrar por tipo: uma mutacao que nao da
+    # para ler pode ser justamente a que este gate guarda. Filtrar primeiro
+    # deixava `twg api ... -X POST` escapar por nao ser classificavel.
     if _mut["opaque"]:
         J.block(_mut, "merge-truth-gate")
+    if _mut["kind"] != "transition":
+        sys.exit(0)
 
     tool_input = _mut["tool_input"]
     key = extract_key(tool_input)
