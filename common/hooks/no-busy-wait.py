@@ -31,8 +31,12 @@ Duas patologias distintas, as duas caras:
 1. **Sondar o disco esperando o worker.** O lead delega e depois fica olhando o
    arquivo aparecer, em blocos de 5 a 10 minutos. A raiz é que a chamada `Agent`
    é assíncrona — devolve `Async agent launched successfully`, não o resultado —
-   e as specs dos leads foram escritas como se delegar fosse síncrono. Sem um
-   "aguarde meu subagente", o lead inventa a sondagem. O conserto da causa está
+   e as specs dos leads são SILENCIOSAS sobre isso: nenhuma das 10 menciona
+   assincronia, notificação ou fim de turno, e todas descrevem delegar → ler o
+   resultado → sintetizar como um fluxo contínuo. Sem um passo dizendo "seu
+   turno acaba aqui", o lead preenche o silêncio com sondagem. (O que está
+   verificado é o silêncio e o fluxo contínuo; o que o autor original acreditava
+   não dá para saber.) O conserto da causa está
    na seção "Delegação é assíncrona" das 10 specs que delegam; este hook é a
    rede. `until [ -f /dev/null ]` é o caso
    extremo: espera por condição que já era verdadeira, ou seja, o agente já não

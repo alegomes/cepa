@@ -424,3 +424,20 @@ Nenhum build foi confundido com espera.
 
 **Nada disso está no ar até o `bin/install.sh --clean` e o restart do Claude
 Code.** Sessão em execução segura os hooks antigos em memória.
+
+## Duas ressalvas sobre o que está escrito acima
+
+**1. "As specs assumiam delegação síncrona" era forte demais.** O que se verificou é que
+nenhuma das 10 menciona assincronia, segundo plano, notificação ou fim de turno, e que
+todas descrevem delegar → ler o resultado → sintetizar como um fluxo contínuo
+(`build-hex/agents/validation-lead.md`: "You read their report and the build output and
+decide"). Isso é **silêncio**, e silêncio é compatível com assincronia — só não diz onde o
+turno termina. O que o autor original acreditava não dá para saber, e a frase foi corrigida
+aqui, no cabeçalho do hook e na memória do projeto.
+
+**2. A correção nunca foi observada funcionando.** Ela está escrita e commitada, mas
+nenhum run aconteceu depois dela — os hooks e as specs só entram em vigor após
+`bin/install.sh --clean` e restart. A prova é rodar um `/common:drain-plan` novo e passar
+o `cepa-clock` nele: se a espera ativa não cair para perto de zero, a correção não pegou.
+Até lá, o que existe é evidência de que o detector acerta nos transcripts antigos (161
+comandos, 632 minutos), não de que o comportamento mudou.
