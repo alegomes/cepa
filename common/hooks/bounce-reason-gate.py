@@ -30,6 +30,9 @@ Exit codes:
 import json
 import re
 import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _jiramut as J  # noqa: E402
 
 # Same structural markers as summary-nulls-gate: Jira comments arrive in wiki
 # markup (`h3. Label`) as often as in markdown, and a markdown-only gate is
@@ -148,10 +151,14 @@ def main():
         sys.exit(0)
 
     tool_name = payload.get("tool_name", "")
-    if "addCommentToJiraIssue" not in tool_name and "jira_add_comment" not in tool_name:
+    # Reconhecimento por EFEITO, nao por nome de ferramenta (ver _jiramut).
+    _mut = J.classify(payload)
+    if _mut is None or _mut["kind"] != "comment":
         sys.exit(0)
+    if _mut["opaque"]:
+        J.block(_mut, "bounce-reason-gate")
 
-    body = extract_body(payload.get("tool_input") or {})
+    body = extract_body(_mut["tool_input"])
     if body is None:
         # Can't see the comment body -> can't gate. Never spuriously block.
         sys.exit(0)

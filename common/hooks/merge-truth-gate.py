@@ -46,6 +46,8 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _jiramut as J  # noqa: E402
 
 KEY_FIELDS = ("issueIdOrKey", "issueKey", "issue_key", "issueId", "issue_id",
               "issue", "key")
@@ -119,17 +121,24 @@ def main():
         sys.exit(0)
 
     tool_name = payload.get("tool_name", "")
-    if "transitionJiraIssue" not in tool_name and "jira_transition_issue" not in tool_name:
+    # Reconhecimento por EFEITO, nao por nome de ferramenta. O nome MCP so
+    # cobria MCP; a CLI `twg` chega como Bash e passava calada por aqui.
+    _mut = J.classify(payload)
+    if _mut is None or _mut["kind"] != "transition":
         sys.exit(0)
+    if _mut["opaque"]:
+        J.block(_mut, "merge-truth-gate")
 
-    tool_input = payload.get("tool_input") or {}
+    tool_input = _mut["tool_input"]
     key = extract_key(tool_input)
     if not key:
         sys.exit(0)
 
     cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
     tid = extract_transition_id(tool_input)
-    target = transition_map(cwd).get(tid) if tid else None
+    # A CLI aceita o NOME do status no lugar do id; nesse caso o alvo ja veio
+    # resolvido e nao ha o que procurar no transition_ids do board-flow.yaml.
+    target = _mut["target_status"] or (transition_map(cwd).get(tid) if tid else None)
     if target not in CLOSING_TARGETS:
         # Not a close. Every other movement is somebody else's gate.
         sys.exit(0)
