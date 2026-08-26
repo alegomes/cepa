@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""cepa-clock — para onde foi o relógio de uma sessão.
+
+## Por que existe
+
+Até 2026-08-26 ninguém neste harness sabia onde o tempo de uma rotina longa era
+gasto; o palpite corrente era "build". A primeira medição real, sobre cinco runs
+gravados, disse outra coisa:
+
+| run                     | relógio | espera ativa | build |
+|-------------------------|---------|--------------|-------|
+| session/drain-plan-0840 |  299min |  155min (52%)|   16% |
+| session/exec-17081128   |  636min |  146min (23%)|    9% |
+| session/todo-21081818   |  924min |  194min (21%)|    6% |
+| session/todo-1413       | 1098min |  241min (22%)|   11% |
+| session/todo-22081827   |  913min |  176min (19%)|    9% |
+
+"Espera ativa" é comando de Bash que fica bloqueado sem trabalhar: `until ...;
+do sleep; done` (o lead sondando o disco atrás do arquivo de um worker) e laço
+de queima (`for i in $(seq 1 6000); do git log; done`) usado como `sleep`
+improvisado. O `no-busy-wait.py` passou a barrar os dois; este script é como se
+confere que a barreira valeu, e como se mede o próximo suspeito.
+
+## Como lê
+
+A fonte é o transcript que o Claude Code grava em `~/.claude/projects/<slug>/`,
+mais um arquivo por subagente em `<sessão>/subagents/`. A duração de uma chamada
+de ferramenta é o intervalo entre a mensagem do agente que a disparou e o
+registro do resultado. Agentes rodam em paralelo, então intervalos sobrepostos
+são UNIDOS antes de somar — sem isso o mesmo minuto seria contado uma vez por
+agente e a soma passaria do relógio.
+
+Ressalva honesta: `relógio` é do primeiro ao último evento da sessão. Numa
+sessão interativa isso inclui o tempo em que ela ficou parada esperando VOCÊ, e
+aí os percentuais saem diluídos. Os MINUTOS ABSOLUTOS são o número confiável;
+o percentual só é comparável entre runs não-interativos.
+
+Uso:
+    cepa-clock                      # a sessão mais recente deste repo
+    cepa-clock --slug <slug>        # uma sessão nomeada
+    cepa-clock --todas --days 7     # todas as sessões da última semana
+    cepa-clock --emit               # grava no ledger da telemetria
+    cepa-clock --json
+"""
+
+import argparse
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+from collections import Counter
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+PROJETOS = Path.home() / ".claude" / "projects"
+ESPERA_RE = re.compile(r"\buntil\b|\bsleep\b|\bwhile\b|\bfor\b.*\bseq\b")
+BUILD_RE = re.compile(r"\bmvn|\bgradle|npm (run )?(test|build)|\bpytest\b|\bcargo (test|build)")
+
+
+def _t(s):
+    return datetime.fromisoformat(s.replace("Z", "+00:00"))
+
+
+def _linhas(f):
+    try:
+        for l in open(f, errors="replace"):
+            l = l.strip()
+            if not l:
+                continue
+            try:
+                yield json.loads(l)
+            except ValueError:
+                continue
+    except OSError:
+        return
+
+
+def _chamadas(f):
+    """(nome, comando, t0, t1) de cada chamada de ferramenta que teve resultado."""
+    uses, ts = {}, []
+    for l in _linhas(f):
+        if l.get("timestamp"):
+            ts.append(_t(l["timestamp"]))
+        msg = l.get("message")
+        if not isinstance(msg, dict) or not isinstance(msg.get("content"), list):
+            continue
+        for c in msg["content"]:
+            if not isinstance(c, dict):
+                continue
+            if l.get("type") == "assistant" and c.get("type") == "tool_use":
+                uses[c["id"]] = {"n": c.get("name", "?"),
+                                 "c": (c.get("input") or {}).get("command", "") or "",
+                                 "t0": _t(l["timestamp"])}
+            elif l.get("type") == "user" and c.get("type") == "tool_result":
+                u = uses.get(c.get("tool_use_id"))
+                if u:
+                    u["t1"] = _t(l["timestamp"])
+    return [u for u in uses.values() if "t1" in u], ts
+
+
+def _uniao(intervalos):
+    if not intervalos:
+        return 0.0
+    iv = sorted(intervalos)
+    out = [list(iv[0])]
+    for a, b in iv[1:]:
+        if a <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return sum((b - a).total_seconds() for a, b in out)
+
+
+def medir(sessao: Path):
+    """sessao = o .jsonl da sessão principal; os subagentes ficam no dir irmão."""
+    arqs = [str(sessao)] + sorted(glob.glob(str(sessao.with_suffix("")) + "/subagents/agent-*.jsonl"))
+    espera, build, outro, todos = [], [], [], []
+    por_agente, n = Counter(), Counter()
+    for f in arqs:
+        meta = f.replace(".jsonl", ".meta.json")
+        tipo = "main"
+        if os.path.exists(meta):
+            try:
+                tipo = json.load(open(meta)).get("agentType") or "?"
+            except (OSError, ValueError):
+                tipo = "?"
+        chamadas, ts = _chamadas(f)
+        todos += ts
+        for u in chamadas:
+            iv = (u["t0"], u["t1"])
+            if u["n"] != "Bash":
+                if u["n"] != "Task":       # Task envolve os outros; contaria em dobro
+                    outro.append(iv)
+                continue
+            if BUILD_RE.search(u["c"]):
+                build.append(iv)
+                n["build"] += 1
+            elif ESPERA_RE.search(u["c"]):
+                espera.append(iv)
+                n["espera"] += 1
+                por_agente[tipo] += (u["t1"] - u["t0"]).total_seconds()
+            else:
+                outro.append(iv)
+                n["outro"] += 1
+    if not todos:
+        return None
+    relogio = (max(todos) - min(todos)).total_seconds()
+    return {"slug": sessao.parent.name, "sessao": sessao.stem,
+            "inicio": min(todos).isoformat(timespec="seconds"),
+            "relogio_s": relogio, "espera_s": _uniao(espera), "build_s": _uniao(build),
+            "outro_s": _uniao(outro), "agentes": len(arqs) - 1,
+            "n": dict(n), "por_agente": dict(por_agente.most_common(4))}
+
+
+def _slug_do_cwd():
+    try:
+        raiz = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        raiz = ""
+    return (raiz or os.getcwd()).replace("/", "-").replace(".", "-")
+
+
+def sessoes(slug=None, todas=False, days=30):
+    corte = datetime.now(timezone.utc) - timedelta(days=days)
+    dirs = [PROJETOS / slug] if slug else sorted(PROJETOS.glob("*"))
+    if not slug and not todas:
+        alvo = _slug_do_cwd()
+        dirs = [d for d in dirs if d.name == alvo] or dirs
+    achados = []
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for f in d.glob("*.jsonl"):
+            if datetime.fromtimestamp(f.stat().st_mtime, timezone.utc) >= corte:
+                achados.append(f)
+    achados.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+    return achados if todas else achados[:1]
+
+
+def relatorio(r):
+    w = r["relogio_s"] or 1
+    def linha(rot, s, extra=""):
+        return f"  {rot:24}{s/60:7.1f} min  {s/w*100:5.1f}%  {extra}"
+    out = [f"{r['sessao'][:8]} · {r['slug'][:52]}",
+           f"  início {r['inicio']} · {r['agentes']} subagentes · "
+           f"relógio {r['relogio_s']/60:.0f} min",
+           linha("espera ativa", r["espera_s"], f"({r['n'].get('espera', 0)} chamadas)"),
+           linha("build", r["build_s"], f"({r['n'].get('build', 0)} chamadas)"),
+           linha("bash normal", r["outro_s"], f"({r['n'].get('outro', 0)} chamadas)"),
+           linha("fora de ferramenta", max(0.0, w - r["espera_s"] - r["build_s"] - r["outro_s"]),
+                 "(geração dos agentes)")]
+    if r["por_agente"]:
+        top = ", ".join(f"{k}={v/60:.0f}min" for k, v in r["por_agente"].items())
+        out.append(f"  espera por agente: {top}")
+    return "\n".join(out)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Para onde foi o relógio de uma sessão.")
+    ap.add_argument("--slug", help="diretório em ~/.claude/projects (default: o deste repo)")
+    ap.add_argument("--todas", action="store_true", help="todas as sessões, não só a última")
+    ap.add_argument("--days", type=int, default=30)
+    ap.add_argument("--emit", action="store_true", help="grava no ledger da telemetria")
+    ap.add_argument("--json", action="store_true", dest="as_json")
+    args = ap.parse_args()
+
+    arqs = sessoes(args.slug, args.todas, args.days)
+    if not arqs:
+        print("Nenhum transcript encontrado. Passe --slug, ou --todas para varrer tudo.",
+              file=sys.stderr)
+        return 2
+
+    rs = [r for r in (medir(f) for f in arqs) if r and r["relogio_s"] >= 300]
+    if not rs:
+        print("Nenhuma sessão com 5+ minutos de relógio no período.", file=sys.stderr)
+        return 0
+
+    if args.as_json:
+        print(json.dumps(rs, indent=2, ensure_ascii=False))
+    else:
+        for r in rs:
+            print(relatorio(r))
+            print()
+        if len(rs) > 1:
+            tw = sum(r["relogio_s"] for r in rs)
+            te = sum(r["espera_s"] for r in rs)
+            print(f"TOTAL: {len(rs)} sessões, {tw/60:.0f} min de relógio, "
+                  f"{te/60:.0f} min de espera ativa ({te/tw*100:.0f}%)")
+
+    if args.emit:
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+        try:
+            import _telemetry as T
+        except ImportError:
+            print("telemetria indisponível; nada gravado", file=sys.stderr)
+            return 0
+        for r in rs:
+            T.emit("clock_breakdown", relogio_s=int(r["relogio_s"]),
+                   espera_s=int(r["espera_s"]), build_s=int(r["build_s"]),
+                   outro_s=int(r["outro_s"]), agentes=r["agentes"], sessao=r["sessao"][:8])
+        print(f"gravado no ledger: {len(rs)} sessão(ões)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -251,6 +251,32 @@ def main():
         if desvios_tipo:
             print(fmt_counter(desvios_tipo))
 
+    # ── Relógio: espera ativa e onde foi o tempo ───────────────────────
+    espera_blocks = Counter(
+        e.get("reason", "?") for e in events if e.get("event") == "busy_wait_block")
+    if espera_blocks:
+        print("\n## Espera ativa barrada pelo no-busy-wait (por padrão)")
+        print(fmt_counter(espera_blocks))
+        print("    cada bloqueio é um `until/sleep` ou laço de queima que não rodou —\n"
+              "    a medição de 2026-08-26 pôs esses comandos entre 19% e 52% do relógio.")
+
+    clocks = [e for e in events if e.get("event") == "clock_breakdown"]
+    if clocks:
+        def _s(e, k):
+            try:
+                return float(e.get(k) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+        tw = sum(_s(e, "relogio_s") for e in clocks)
+        te = sum(_s(e, "espera_s") for e in clocks)
+        tb = sum(_s(e, "build_s") for e in clocks)
+        print(f"\n## Relógio medido — {len(clocks)} sessão(ões) via cepa-clock")
+        print(f"    relógio total : {tw/3600:.1f} h")
+        if tw:
+            print(f"    espera ativa  : {te/60:.0f} min ({te/tw*100:.0f}%)")
+            print(f"    build         : {tb/60:.0f} min ({tb/tw*100:.0f}%)")
+            print(f"    memória de cálculo: soma de espera_s ÷ soma de relogio_s × 100")
+
     if custom:
         print("\n## Eventos custom (emitidos por comandos/skills)")
         print(fmt_counter(custom))
@@ -270,6 +296,10 @@ def main():
     for (repo, tier, reason), n in gate_warns.items():
         if reason == "no-build-manifest" and n >= 3:
             hints.append(f"- {repo}: {n} avisos de repo sem build — commite `.claude/no-build` e silencie.")
+    if espera_blocks and sum(espera_blocks.values()) >= 5:
+        hints.append(f"- espera ativa: {sum(espera_blocks.values())} bloqueios — o hook "
+                     f"está segurando o vazamento, mas o agente segue tentando esperar; "
+                     f"vale ver se algum lead ainda delega e sonda em vez de aguardar o retorno.")
     for repo, n in proof_blocks.items():
         hints.append(f"- {repo}: {n} artefato(s) `proven` contraditório(s) barrados — prompt drift no proof-reviewer; vale investigar.")
     if hints:
