@@ -10,11 +10,16 @@ medição, não de mais prosa — mesmo princípio do proof-verdict-guard.
 
 Dois eventos, um arquivo:
 
-  Stop              — lê a última mensagem do assistente no transcript, mede, e
-                      grava o desvio (telemetria + pendência da sessão). NUNCA
-                      bloqueia: sai 0 sempre. O usuário escolheu "avisa e mede"
-                      justamente para ver, pela telemetria, se o aviso basta
-                      antes de decidir apertar.
+  Stop              — lê a última mensagem do assistente no transcript, mede e,
+                      havendo desvio, BLOQUEIA a parada: devolve
+                      {"decision": "block"} com os desvios, e o turno continua
+                      para reescrever o relatório no formato. Aperto decidido em
+                      25/08/2026: um mês de "avisa e mede" deu 247 relatórios
+                      fora do padrão em 501 medidos (49%) — o aviso não bastou.
+                      Trava anti-loop: se a parada JÁ veio de um bloqueio deste
+                      hook (`stop_hook_active`), ele não bloqueia de novo; grava
+                      a pendência e deixa passar, para o aviso chegar no turno
+                      seguinte sem prender a sessão.
   UserPromptSubmit  — se houver desvio pendente da vez anterior, injeta o aviso
                       no contexto do próximo turno e apaga a pendência. É assim
                       que o aviso chega ao modelo sem travar o turno.
@@ -25,7 +30,8 @@ MultiEdit, NotebookEdit ou rodou `git commit`. Se não usou, ele nem abre o
 texto: conversa, pergunta curta e discussão de design ficam de fora, porque
 formatar um "sim, existe" em três blocos seria pior que o problema.
 
-Saída: sempre exit 0. Este hook mede; ele não é um portão.
+Saída: exit 0 sempre. O bloqueio viaja no JSON de stdout, não no código de
+saída — o hook nunca derruba o turno por erro próprio.
 """
 
 import json
@@ -411,26 +417,42 @@ def pendencia_path(session_id: str) -> Path:
     return STATE_DIR / f"{slug}.json"
 
 
-def on_stop(payload) -> None:
+def on_stop(payload):
+    """Devolve o motivo do bloqueio, ou None para deixar a parada seguir."""
     rows = read_rows(payload.get("transcript_path", ""))
     if not rows or not turno_alterou_algo(rows):
-        return
+        return None
 
     relatorio = ultimo_relatorio(rows)
     if conta_palavras(relatorio) < MIN_PALAVRAS_PARA_MEDIR:
-        return
+        return None
 
     desvios = medir(relatorio, load_jargao(), load_abstracoes(), load_higiene())
     cwd = payload.get("cwd") or os.getcwd()
+
+    # Trava anti-loop: esta parada já é consequência de um bloqueio deste hook.
+    # Bloquear de novo prenderia a sessão num par reescreve-bloqueia sem fim.
+    reincidente = bool(payload.get("stop_hook_active"))
+    vai_bloquear = bool(desvios) and not reincidente
+
     _t_emit("report_style", cwd=cwd,
             palavras=conta_palavras(relatorio),
             desvios=len(desvios),
-            tipos=[cat for cat, _ in desvios])
+            tipos=[cat for cat, _ in desvios],
+            bloqueou=vai_bloquear,
+            reincidente=reincidente)
 
     p = pendencia_path(payload.get("session_id", ""))
     if not desvios:
         p.unlink(missing_ok=True)
-        return
+        return None
+
+    if vai_bloquear:
+        # O relatório é reescrito AGORA, no mesmo turno: nada de pendência para
+        # o turno seguinte, senão o usuário leva o aviso de um texto já corrigido.
+        p.unlink(missing_ok=True)
+        return motivo_bloqueio([m for _, m in desvios])
+
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps({"desvios": [m for _, m in desvios]},
@@ -438,6 +460,19 @@ def on_stop(payload) -> None:
                      encoding="utf-8")
     except Exception:
         pass
+    return None
+
+
+def motivo_bloqueio(desvios) -> str:
+    return ("Seu relatório final saiu do formato `plain-report`:\n" +
+            "".join(f"  - {d}\n" for d in desvios) +
+            "Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
+            "turno: abertura de até 3 frases sem jargão → **Pra você:** → "
+            "### Detalhe técnico → ### Decisões e próximos passos (lista "
+            "numerada, uma pergunta fechada por item, cada uma com "
+            "\"Recomendo sim/não\" e o porquê em uma linha, ou "
+            "\"Nada pendente.\"). Não peça desculpa e não explique a "
+            "reescrita — entregue o relatório corrigido e nada mais.")
 
 
 def on_prompt(payload) -> None:
@@ -457,8 +492,9 @@ def on_prompt(payload) -> None:
           "  Formato: abertura de até 3 frases sem jargão → **Pra você:** → "
           "### Detalhe técnico → ### Decisões e próximos passos (numerada, uma "
           "pergunta fechada por item, cada uma com \"Recomendo sim/não\"). "
-          "Isso é um aviso, não um bloqueio: aplique no "
-          "próximo relatório em vez de reescrever o anterior.")
+          "Este é o caminho de aviso — o relatório anterior já tinha sido "
+          "bloqueado uma vez e a reescrita ainda desviou. Aplique no próximo "
+          "relatório em vez de reescrever o anterior.")
 
 
 def main():
@@ -471,11 +507,14 @@ def main():
     evento = payload.get("hook_event_name") or ""
     try:
         if evento == "Stop":
-            on_stop(payload)
+            motivo = on_stop(payload)
+            if motivo:
+                print(json.dumps({"decision": "block", "reason": motivo},
+                                 ensure_ascii=False))
         elif evento == "UserPromptSubmit":
             on_prompt(payload)
     except Exception:
-        pass  # medidor nunca atrapalha o turno
+        pass  # o medidor nunca derruba o turno por erro próprio
     sys.exit(0)
 
 

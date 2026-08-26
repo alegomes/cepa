@@ -93,24 +93,42 @@ def turno(relatorio, alterou=True, sidechain_extra=None):
     return transcript(*rows)
 
 
-def run(evento, transcript_path="", session="s1"):
+def run(evento, transcript_path="", session="s1", stop_hook_active=False):
     payload = json.dumps({"hook_event_name": evento, "session_id": session,
-                          "transcript_path": transcript_path, "cwd": str(TMP)})
+                          "transcript_path": transcript_path, "cwd": str(TMP),
+                          "stop_hook_active": stop_hook_active})
     env = dict(os.environ, CEPA_REPORT_STYLE_DIR=str(STATE),
                CEPA_TELEMETRY_DIR=str(TELEM))
     return subprocess.run([sys.executable, str(HOOK)], input=payload,
                           capture_output=True, text=True, env=env)
 
 
+def motivo_do_bloqueio(saida: str) -> str:
+    """O texto do desvio quando o Stop bloqueia; string vazia quando não."""
+    if not saida.strip():
+        return ""
+    try:
+        dado = json.loads(saida)
+    except json.JSONDecodeError:
+        return ""
+    return dado.get("reason", "") if dado.get("decision") == "block" else ""
+
+
 def ciclo(relatorio, **kw):
-    """Stop (mede) seguido de UserPromptSubmit (avisa). Devolve o aviso."""
+    """Stop (mede e, havendo desvio, bloqueia) seguido de UserPromptSubmit.
+
+    Devolve o texto do desvio venha ele por qual caminho vier — bloqueio no
+    Stop (o normal desde 25/08/2026) ou aviso no turno seguinte (reincidência).
+    Os casos abaixo checam O QUE o hook diz, não por qual porta ele diz.
+    """
     r1 = run("Stop", turno(relatorio, **kw))
-    check(f"Stop nunca bloqueia (rc=0) — {relatorio[:24]!r}", r1.returncode == 0,
-          f"rc={r1.returncode} {r1.stderr[:200]}")
+    check(f"Stop sai com rc=0 mesmo bloqueando — {relatorio[:24]!r}",
+          r1.returncode == 0, f"rc={r1.returncode} {r1.stderr[:200]}")
+    bloqueio = motivo_do_bloqueio(r1.stdout)
     r2 = run("UserPromptSubmit")
     check("UserPromptSubmit nunca bloqueia (rc=0)", r2.returncode == 0,
           f"rc={r2.returncode}")
-    return r2.stdout
+    return bloqueio or r2.stdout
 
 
 def check(name, cond, detail=""):
@@ -123,8 +141,8 @@ def check(name, cond, detail=""):
 
 # ── o caso que motivou tudo ────────────────────────────────────────────────
 aviso = ciclo(RUIM)
-check("relatório com jargão na abertura → avisa", "report-style" in aviso,
-      repr(aviso[:200]))
+check("relatório com jargão na abertura → cobra o formato",
+      "plain-report" in aviso, repr(aviso[:200]))
 check("…e nomeia os termos que precisam de tradução",
       "portão" in aviso and "falha fechado" in aviso, repr(aviso[:400]))
 check("…e cobra a linha Pra você", "Pra você" in aviso, repr(aviso[:400]))
@@ -288,11 +306,35 @@ check("texto de subagente (sidechain) é ignorado", aviso.strip() == "",
       repr(aviso[:300]))
 
 # ── a pendência é consumida uma única vez ──────────────────────────────────
-run("Stop", turno(RUIM))
-primeiro = run("UserPromptSubmit").stdout
-segundo = run("UserPromptSubmit").stdout
+# Pendência só existe no caminho de aviso (reincidência); o bloqueio corrige
+# o texto no próprio turno e não deixa recado para o turno seguinte.
+run("Stop", turno(RUIM), session="s-uma-vez", stop_hook_active=True)
+primeiro = run("UserPromptSubmit", session="s-uma-vez").stdout
+segundo = run("UserPromptSubmit", session="s-uma-vez").stdout
 check("aviso é entregue uma vez só", primeiro.strip() != "" and segundo.strip() == "",
       repr(segundo[:200]))
+
+# ── o aperto de 25/08/2026: o Stop bloqueia ────────────────────────────────
+r = run("Stop", turno(RUIM), session="s-bloqueio")
+check("relatório fora do formato → Stop devolve decision=block",
+      motivo_do_bloqueio(r.stdout) != "", repr(r.stdout[:200]))
+check("…e o motivo manda reescrever agora, não no próximo turno",
+      "Reescreva o relatório inteiro" in motivo_do_bloqueio(r.stdout),
+      repr(r.stdout[:400]))
+check("…e não deixa pendência para o turno seguinte (o texto já foi corrigido)",
+      run("UserPromptSubmit", session="s-bloqueio").stdout.strip() == "")
+
+r = run("Stop", turno(BOM), session="s-bloqueio-bom")
+check("relatório no formato → Stop não bloqueia",
+      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:200]))
+
+# ── trava anti-loop: a reescrita que ainda desvia não bloqueia de novo ─────
+r = run("Stop", turno(RUIM), session="s-loop", stop_hook_active=True)
+check("parada já vinda de bloqueio → não bloqueia de novo",
+      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:200]))
+aviso = run("UserPromptSubmit", session="s-loop").stdout
+check("…e cai no caminho de aviso, no turno seguinte",
+      "plain-report" in aviso, repr(aviso[:200]))
 
 # ── telemetria ─────────────────────────────────────────────────────────────
 eventos = []
@@ -302,6 +344,11 @@ check("cada medição vira evento de telemetria",
       any(e.get("event") == "report_style" for e in eventos), str(eventos[:2]))
 check("…com relatório bom registrando zero desvios",
       any(e.get("event") == "report_style" and e.get("desvios") == 0 for e in eventos))
+check("…e o evento diz se aquela medição bloqueou",
+      any(e.get("event") == "report_style" and e.get("bloqueou") is True
+          for e in eventos) and
+      any(e.get("event") == "report_style" and e.get("bloqueou") is False
+          for e in eventos), str([e.get("bloqueou") for e in eventos][:6]))
 
 # ── entrada corrompida não derruba o turno ─────────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))

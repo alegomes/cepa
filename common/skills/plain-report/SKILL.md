@@ -215,9 +215,12 @@ A mesma coisa dentro do formato:
 delegação (worker → lead). Esta aqui é mais estrita e vale na ponta, onde o
 leitor é o usuário. Onde as duas se aplicam, esta ganha.
 
-O `report-style-lint.py` mede o resultado ao fim do turno e devolve o desvio no
-turno seguinte. Ele **avisa, não bloqueia** — a decisão de apertar depende do
-que a telemetria mostrar (`/common:metrics`).
+O `report-style-lint.py` mede o resultado ao fim do turno e **bloqueia a
+parada** quando o relatório sai do formato: o turno continua e o relatório é
+reescrito ali mesmo, antes de você ler. Ele passou de aviso a bloqueio em
+25/08/2026, quando `/common:metrics` mostrou 247 de 501 relatórios (49%) fora do
+padrão em um mês de aviso. Bloqueia uma vez por relatório: se a reescrita ainda
+desviar, o desvio vira aviso no turno seguinte em vez de prender a sessão.
 
 O que ele consegue medir do "e daí?" é só a parte literal: as frases de higiene
 da lista do glossário, e apenas na abertura e no `Pra você:`. Distinguir
