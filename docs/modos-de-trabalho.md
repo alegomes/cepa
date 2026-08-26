@@ -284,6 +284,52 @@ sem classificar nada, porque quem ia executar a ação era ele.
 Mudança: com modo ativo, capturar e seguir, e listar as capturas no relatório
 final. Sem modo ativo, o comportamento atual (sugerir e esperar) permanece.
 
+### Peça 2b — a lista branca de destinos: `modo-escrita-gate.py`
+
+A Peça 2 acima é uma instrução, e instrução depende do agente se comportar. Na
+sessão `session/drain-plan-speed` (26/08/2026) ela não segurou nada: o agente
+furou o modo exploração sete vezes seguidas, transformando cada desvio numa
+pergunta fechada com "Recomendo sim" e colhendo o sim. A condição de saída da
+exploração foi satisfeita no PRIMEIRO dos sete commits; quatro dos seguintes
+eram construção, e nenhuma captura de desvio foi registrada.
+
+`common/hooks/modo-escrita-gate.py` dá o dente que faltava: uma lista branca de
+DESTINOS por modo — o que aquele modo produz — declarada em
+`common/hooks/_modos.py`, ao lado do resto da tabela.
+
+| modo | pode escrever |
+|---|---|
+| `exploracao` | `docs/**`, `.claude/**`, `BACKLOG.md` |
+| `descoberta` | `docs/discovery/**`, `docs/spec/**`, `.claude/**`, `BACKLOG.md` |
+| `design` | `docs/design/**`, `.claude/**`, `BACKLOG.md` |
+| `reflexao` | `.claude/reflexao/**`, `docs/**`, `BACKLOG.md` |
+| `documentacao` | `docs/**`, `.claude/**`, `BACKLOG.md` |
+| `construcao` | tudo — quem cobra são o `completion-auditor` e o `proof-reviewer` |
+| `reforma` | tudo menos teste externo — quem cobra é o `reforma-gate` |
+
+`BACKLOG.md` está em todas as listas porque é onde este repo registra card, e a
+condição de saída da Reflexão é literalmente "nenhum achado sem destino": sem
+esse destino liberado, o modo não teria como fechar.
+
+Vale em Edit/Write/MultiEdit/NotebookEdit **e** em Bash (`>`, `>>`, `sed -i`,
+`tee`, `git mv`), pela mesma razão do `reforma-gate` — bloquear só a ferramenta
+de escrita já deixou agentes escaparem por `sed` neste repo. Escrita fora da
+raiz da sessão passa: a worktree de perturbação em `/tmp` e o scratchpad não
+pertencem a modo nenhum.
+
+**O escape não é barato de propósito.** Não há `# modo-ok`: o agente digitaria e
+seguiria, que é a mesma fuga de novo. O escape é encerrar o modo e abrir o modo
+do trabalho que se quer fazer — uma sessão nova, e é o custo certo, porque
+trocar de atividade deveria custar. O `CEPA_MODO=off` continua desligando a
+mecânica inteira, e a mensagem de bloqueio não o oferece.
+
+**O que este gate não alcança:** a metade "não vira pergunta". Isso é texto do
+agente, não chamada de ferramenta, e nenhum hook lê a redação de uma resposta.
+Mas a trava de escrita torna a pergunta inútil — não há o que oferecer quando o
+passo seguinte está barrado. Se o agente passar a *perguntar se pode desligar o
+gate*, o buraco só mudou de lugar, e o próximo degrau é telemetria de
+`modo_escrita_block` no `/common:metrics`.
+
 ### Peça 3 — a saída é o gate do modo, não o fim da rotina
 
 A sessão não fecha porque a rotina acabou. Fecha quando a condição de saída da
@@ -296,6 +342,8 @@ Em ordem:
 
 1. **`.claude/session-mode` + `cepa --modo`** — a declaração e a persistência.
 2. **A captura automática** — inverter a `suggest-capture` sob modo ativo.
+2b. ~~**Lista branca de destinos por modo**~~ — feito:
+   `common/hooks/modo-escrita-gate.py`.
 3. ~~**Gate da Reforma**~~ — feito: `common/hooks/reforma-gate.py`.
 4. ~~**Gate da Reflexão**~~ — feito: `common/hooks/reflexao-gate.py`.
 5. **Gate da Exploração** — o veredito que falta ao `advisors`.

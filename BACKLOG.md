@@ -738,7 +738,9 @@ tinha entregado o que precisava.
 
 ## O modo é prosa: desvio vira pergunta, pergunta vira "sim", e o modo não segurou nada
 
-**Status:** 🔵 ABERTO · **Lar:** `common/hooks/` (irmão do `reforma-gate.py`) ·
+**Status:** ✅ FEITO em 2026-08-26 (`common/hooks/modo-escrita-gate.py`, common
+2.11.0 — **não está live até `bin/install.sh --clean` + restart**) · **Lar:**
+`common/hooks/` (irmão do `reforma-gate.py`) ·
 **Origem:** a própria sessão `session/drain-plan-speed`, 2026-08-26 — o agente furou o modo
 sete vezes seguidas e só parou quando o dono perguntou "se esta é uma sessão de exploração,
 por que você está construindo tantas coisas?".
@@ -797,6 +799,41 @@ chamada de ferramenta, e nenhum hook lê a redação de uma resposta. Mas a trav
 torna a pergunta inútil — não há o que oferecer quando o passo seguinte está barrado. Vale
 medir depois: se o agente passar a *perguntar se pode desligar o gate*, o buraco só mudou de
 lugar, e aí o próximo degrau é telemetria de `modo_escrita_block` no `/common:metrics`.
+
+### O que foi construído
+
+A tabela acima virou o campo `escrita` de cada modo em `common/hooks/_modos.py`
+(a tabela de modos já era fonte única; uma segunda no hook seria a doença que
+aquele arquivo trata) e o hook `common/hooks/modo-escrita-gate.py`, registrado
+em `PreToolUse` para Bash e para Edit|Write|MultiEdit|NotebookEdit.
+
+Três desvios do esboço, todos deliberados:
+
+1. **`BACKLOG.md` entrou em todas as listas brancas.** A tabela do esboço não o
+   previa, e sem ele a Reflexão não consegue cumprir a própria condição de saída
+   — "nenhum achado sem destino, cada um virou card" — porque é aqui que este
+   repo registra card. O mesmo vale para exploração e descoberta, que produzem
+   achado e oportunidade.
+2. **Escrita fora da raiz da sessão passa.** Não estava no esboço. Sem isso, a
+   worktree de perturbação em `/tmp` e o scratchpad ficariam sob o modo, que é
+   exatamente o estrago da memória `path-lock-out-of-root` (5 cards presos em
+   NEEDS-HUMAN) repetido de outro ângulo.
+3. **A exigência 1 (reusar o `_shellscan.py`) cobrava mais do que o módulo
+   tinha.** Ele parava no parsing; a pergunta "que arquivos esta linha escreve?"
+   estava respondida em duas versões divergentes — a do `bash-path-lock` (que
+   conhece `git mv` e conta a origem de um `mv`) e uma mais pobre no
+   `enforcement-guard`. A do `bash-path-lock` foi portada para o `_shellscan.py`
+   e o detector de divergência passou a comparar as duas fontes também nessas
+   funções. Um defeito real apareceu no caminho e foi consertado no molde e nas
+   5 cópias: a forma BSD `sed -i '' 's/a/b/' arquivo` deixa o `''` como
+   operando, e o SCRIPT do sed era contado como arquivo escrito.
+
+**Dívida deixada de pé, de propósito:** o `enforcement-guard.py` mantém a versão
+própria e mais pobre dessas duas funções. Fazê-lo importar do `_shellscan` muda
+o comportamento de um gate de enforcement (passaria a barrar `git mv` e a origem
+de um `mv`) e não é deste card. A telemetria de `modo_escrita_block` no
+`/common:metrics`, que o esboço já colocava como degrau seguinte, também segue
+aberta.
 
 ### Por que não foi feito junto
 
