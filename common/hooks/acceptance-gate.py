@@ -60,6 +60,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _wtlib as L  # noqa: E402
+import _jiramut as J  # noqa: E402
 
 
 STATUS_RE = re.compile(r"^status:\s*([A-Za-z_-]+)", re.MULTILINE)
@@ -143,10 +144,20 @@ def main():
     # left this gate with zero teeth on `mcp-atlassian`, which is the server
     # the local Jira runs use — every transition there sailed through
     # regardless of the audit. Found by the direction tests, 2026-08-01.
-    if "transitionJiraIssue" not in tool_name and "jira_transition_issue" not in tool_name:
+    # Reconhecimento por EFEITO, nao por nome de ferramenta. O nome MCP so
+    # cobria MCP; a CLI `twg` chega como Bash e passava calada por aqui.
+    _mut = J.classify(payload)
+    if _mut is None:
+        sys.exit(0)
+    # A opacidade se checa ANTES de filtrar por tipo: uma mutacao que nao da
+    # para ler pode ser justamente a que este gate guarda. Filtrar primeiro
+    # deixava `twg api ... -X POST` escapar por nao ser classificavel.
+    if _mut["opaque"]:
+        J.block(_mut, "acceptance-gate")
+    if _mut["kind"] != "transition":
         sys.exit(0)
 
-    tool_input = payload.get("tool_input") or {}
+    tool_input = _mut["tool_input"]
     key = extract_key(tool_input)
     if not key:
         # Can't identify the card -> can't gate. Never spuriously block.
@@ -179,7 +190,7 @@ def main():
     # The audit is incomplete. Which way is this card moving?
     tid = extract_transition_id(tool_input)
     tmap = transition_map(cwd)
-    target = tmap.get(tid) if tid else None
+    target = _mut["target_status"] or (tmap.get(tid) if tid else None)
 
     if target is not None and target not in ENFORCED_TARGETS:
         # Backward / lateral move (In Progress, To Do, Won't Do). Sending the

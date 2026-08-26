@@ -2504,3 +2504,90 @@ Editar um arquivo de código de produção por `sed -i` (e por heredoc) deixa a
 baseline de build marcada como suja, demonstrado por um teste que fica **verde
 antes e vermelho depois** de remover o interceptador. O contraste importa: sem
 ele, um hook que nunca dispara é indistinguível de um hook que sempre aprova.
+
+---
+
+## Fixar a versão da CLI `twg`, que se autoatualiza sob os pés dos agentes
+
+**Status:** pendente · **Lar provável:** `common` (doctor + manifesto de ambiente) ·
+**Origem:** achado C4 do painel /common:advisors sobre `docs/estrategia-twg-vs-mcp.md`
+(2026-08-26), levantado por 4 das 7 lentes de forma independente.
+
+### Problema
+
+A CLI `twg` da Atlassian instala um agendador `launchd`
+(`com.atlassian.twg.upkeep.plist`) que roda **a cada 12 minutos** e faz duas coisas:
+renova o token OAuth (desejável) e **checa atualização** (perigoso). Uma CLI que troca de
+versão sozinha é contrato instável para qualquer agente que leia a saída dela.
+
+O vetor concreto é pior do que "um dia muda": a versão pode trocar **entre dois cards do
+mesmo `/board-flow:drain`** de 20 cards, sem intervenção humana e sem sinal nenhum no log
+do run. Um artefato de prova gerado antes e outro depois teriam sido produzidos por
+ferramentas diferentes, e nada no registro diria isso.
+
+Hoje nada no repo sabe qual versão da CLI está instalada. A avaliação de
+`docs/estrategia-twg-vs-mcp.md` inteira foi feita contra a **1.2.5**, e esse número só
+existe naquele documento, em prosa.
+
+### Esboço de solução
+
+Três peças, todas baratas:
+
+1. **Registrar a versão em cada artefato que dependa da CLI** — um campo `twg_version:`
+   nos YAMLs de prova, do mesmo jeito que já se registra commit base. Sem isso, "essa
+   prova rodou com qual ferramenta?" não tem resposta.
+2. **Check no `/common:doctor`** — comparar a versão instalada com a declarada no
+   manifesto de ambiente do repo e avisar na divergência. O doctor já existe para
+   exatamente essa classe de "a realidade saiu de baixo da configuração".
+3. **Decidir sobre o auto-update** — ou desligar a checagem de atualização do agendador
+   (mantendo a renovação de token, que é o que serve), ou aceitá-la e compensar com (1) e
+   (2). Não decidido.
+
+### Por que não foi feito junto
+
+Os três itens executados em 2026-08-26 (conserto dos gates, poda do binding, verificação
+de R1) não tocam nisso. Vira pré-requisito de verdade se o caminho **O3** do documento de
+estratégia for retomado — usar `twg` como caminho canônico em execução local.
+
+---
+
+## Detector de contexto de execução, se o `twg` virar caminho canônico local
+
+**Status:** pendente (condicional a O3) · **Lar provável:** `board-flow`
+(`atlassian-expert`) · **Origem:** achado C5 do painel /common:advisors (2026-08-26),
+levantado por 4 lentes independentes.
+
+### Problema
+
+Hoje o `atlassian-expert` escolhe entre **dois prefixos MCP** (`mcp__Atlassian__*` no
+cloud, `mcp__claude_ai_Atlassian__*` local interativo) por uma regra de bolso em prosa —
+e os dois falam o mesmo vocabulário, então errar a escolha é barato.
+
+O caminho **O3** trocaria isso por uma bifurcação entre **dois mecanismos diferentes**:
+`Bash` chamando `twg` localmente, ferramenta MCP no cloud. Aí errar deixa de ser barato,
+e o modo de falha é silencioso na direção pior: se o agente aplicar o caminho local dentro
+de uma rotina cloud, o `Bash` retorna `command not found` — verificado em execução real em
+2026-08-26 (`rc=127`) — e um agente com instrução de persistência tende a ler isso como
+problema transitório e contornar, em vez de "estou no ambiente errado". Justamente o
+caminho que ninguém está olhando (rotina desatendida) é o que quebra.
+
+Nenhum detector foi especificado no documento de estratégia. A menção a "caminho `twg`
+como default local" não diz **como** o agente descobre que está local.
+
+### Esboço de solução
+
+Um sinal mecânico, não uma regra de prosa. Candidatos, do mais barato ao mais robusto:
+
+- presença de `~/.config/twg/auth.conf` (ausente no cloud — verificado);
+- `which twg` com `rc != 0` como prova negativa explícita, tratada como
+  "contexto errado", nunca como erro a contornar;
+- variável de ambiente declarada pelo próprio harness na largada da sessão.
+
+Junto, um **critério de rollback**: hoje o passo 2 de O3 removeria o caminho MCP local
+antes de o passo 3 provar que o cloud continua de pé, e não existe kill-switch descrito.
+
+### Por que não foi feito junto
+
+O3 não foi executado. O corte aplicado em 2026-08-26 foi o **O0** (podar as 14 ferramentas
+`snake_case` sem trocar de mecanismo), que não cria bifurcação nenhuma — os dois prefixos
+que sobraram são ambos MCP e falam o mesmo vocabulário.

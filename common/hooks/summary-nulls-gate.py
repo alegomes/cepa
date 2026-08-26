@@ -44,6 +44,9 @@ Exit codes:
 import json
 import re
 import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _jiramut as J  # noqa: E402
 
 # Structural markers that can introduce a heading or a labeled field.
 # Jira comments are written in WIKI markup (`h3. Label`), not markdown, so a
@@ -168,10 +171,19 @@ def main():
         sys.exit(0)
 
     tool_name = payload.get("tool_name", "")
-    if "addCommentToJiraIssue" not in tool_name and "jira_add_comment" not in tool_name:
+    # Reconhecimento por EFEITO, nao por nome de ferramenta (ver _jiramut).
+    _mut = J.classify(payload)
+    if _mut is None:
+        sys.exit(0)
+    # A opacidade se checa ANTES de filtrar por tipo: uma mutacao que nao da
+    # para ler pode ser justamente a que este gate guarda. Filtrar primeiro
+    # deixava `twg api ... -X POST` escapar por nao ser classificavel.
+    if _mut["opaque"]:
+        J.block(_mut, "summary-nulls-gate")
+    if _mut["kind"] != "comment":
         sys.exit(0)
 
-    body = extract_body(payload.get("tool_input") or {})
+    body = extract_body(_mut["tool_input"])
     if body is None:
         # Can't see the comment body -> can't gate. Never spuriously block.
         sys.exit(0)
