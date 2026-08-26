@@ -30,6 +30,15 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Este teste cita hook emissor de telemetria. Hoje ele não chega a executá-lo,
+# mas citar e executar são um passo um do outro, e foi essa distância que
+# deixou 7 testes poluindo o ledger real por um mês. Ver
+# tests/_telemetria_isolada.py.
+from _telemetria_isolada import isola
+
+isola()
+
+
 REPO = Path(__file__).resolve().parent.parent
 MOD = REPO / "common" / "hooks" / "_pluginver.py"
 

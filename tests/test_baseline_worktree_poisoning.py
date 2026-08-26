@@ -27,6 +27,14 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Este teste executa hook que emite telemetria; sem isto os eventos cairiam
+# em ~/.claude/cepa-telemetry/ e entrariam no relatório do /common:metrics
+# como se fossem uso real. Ver tests/_telemetria_isolada.py.
+from _telemetria_isolada import isola
+
+isola()
+
+
 REPO = Path(__file__).resolve().parent.parent
 CAPTURE = REPO / "common" / "hooks" / "capture-build-result.py"
 STALE = REPO / "common" / "hooks" / "mark-build-stale.py"

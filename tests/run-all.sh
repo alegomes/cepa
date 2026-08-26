@@ -34,6 +34,14 @@ set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 PYTHON="${PYTHON:-python3}"
 
+# ── telemetria da suíte não entra no seu ledger ───────────────────────────
+# Os hooks gravam eventos em ~/.claude/cepa-telemetry/, e esta suíte executa os
+# hooks. Sem isto, um `run-all.sh` inventa repos ("main-repo", "r3", "sem-git")
+# no relatório do /common:metrics e desloca as conclusões dele — foi o que
+# aconteceu até 26/08/2026. tests/sitecustomize.py faz o mesmo para quem roda um
+# teste solto; aqui é explícito para ficar à vista de quem lê o runner.
+export CEPA_TELEMETRY_DIR="${CEPA_TELEMETRY_DIR:-${TMPDIR:-/tmp}/cepa-telemetry-tests}"
+
 # ── seleção ───────────────────────────────────────────────────────────────
 todos=(tests/test_*.py)
 if [ "$#" -gt 0 ]; then
