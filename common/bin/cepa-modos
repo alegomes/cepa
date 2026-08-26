@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""cepa-modos — a tabela dos modos de trabalho, para consultar no meio da sessão.
+
+Toda sessão declara um modo, e o modo é um ESTADO que dura até a condição de
+saída ser satisfeita. Quem esquece o propósito de um modo no meio do trabalho
+não vai abrir `docs/modos-de-trabalho.md`, que tem 307 linhas — vai chutar. Este
+comando é a tabela, e nada além dela.
+
+A fonte é `common/hooks/_modos.py`, o mesmo arquivo que o `session-mode.py` lê
+para injetar a condição de saída a cada turno. Uma tabela, dois leitores.
+
+Uso:
+    cepa-modos              # a tabela toda; marca o modo da sessão atual
+    cepa-modos <nome>       # só um modo, com entrada/produz/saída/gate
+    cepa-modos --json
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+try:
+    from _modos import MODOS
+except ImportError:
+    print("✗ cepa-modos: não achei common/hooks/_modos.py", file=sys.stderr)
+    sys.exit(2)
+
+BOLD, DIM, AMARELO, VERDE, RESET = "\033[1m", "\033[2m", "\033[33m", "\033[32m", "\033[0m"
+
+
+def modo_da_sessao():
+    """O modo declarado nesta árvore, se houver — o mesmo arquivo do hook."""
+    try:
+        out = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5)
+        raiz = out.stdout.strip() if out.returncode == 0 else os.getcwd()
+    except (OSError, subprocess.SubprocessError):
+        raiz = os.getcwd()
+    arq = Path(raiz) / ".claude" / "session-mode"
+    if not arq.is_file():
+        return None
+    for linha in arq.read_text(encoding="utf-8", errors="replace").splitlines():
+        k, _, v = linha.partition(":")
+        if k.strip() == "modo":
+            v = v.strip().strip('"')
+            return v if v and v != "null" else None
+    return None
+
+
+def bloco(nome, d, atual, cor):
+    marca = f"  {VERDE}◀ esta sessão{RESET}" if nome == atual else ""
+    saida = [f"{BOLD}{AMARELO}{nome}{RESET}{marca}"]
+    for rot, chave in (("entra com", "entrada"), ("produz", "produz"),
+                       ("fecha quando", "saida"), ("gate", "gate")):
+        corpo = textwrap.fill(d[chave], width=78,
+                              initial_indent="", subsequent_indent=" " * 16)
+        rotulo = f"{DIM}{rot:>13}{RESET} " if cor else f"{rot:>13} "
+        saida.append(f"  {rotulo}{corpo}")
+    return "\n".join(saida)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Os modos de trabalho e suas fronteiras.")
+    ap.add_argument("modo", nargs="?", help="só este modo")
+    ap.add_argument("--json", action="store_true", dest="as_json")
+    ap.add_argument("--sem-cor", action="store_true")
+    args = ap.parse_args()
+
+    cor = not args.sem_cor and sys.stdout.isatty()
+    if not cor:
+        global BOLD, DIM, AMARELO, VERDE, RESET
+        BOLD = DIM = AMARELO = VERDE = RESET = ""
+
+    if args.modo and args.modo not in MODOS:
+        print(f"✗ modo desconhecido: {args.modo}\n  válidos: {', '.join(MODOS)}",
+              file=sys.stderr)
+        return 2
+
+    alvo = {args.modo: MODOS[args.modo]} if args.modo else MODOS
+    if args.as_json:
+        print(json.dumps(alvo, indent=2, ensure_ascii=False))
+        return 0
+
+    atual = modo_da_sessao()
+    print(f"{BOLD}Modos de trabalho{RESET} — um estado que dura até a condição de "
+          f"saída ser satisfeita.")
+    print(f"{DIM}Nenhuma sessão sobe sem modo. Desenho completo: "
+          f"docs/modos-de-trabalho.md{RESET}\n")
+    for nome, d in alvo.items():
+        print(bloco(nome, d, atual, cor))
+        print()
+    if not args.modo:
+        if atual:
+            print(f"{DIM}Modo desta sessão: {RESET}{AMARELO}{atual}{RESET}"
+                  f"{DIM} — trocar exige nova sessão (`cepa --modo <x>`).{RESET}")
+        else:
+            print(f"{DIM}Esta árvore não tem modo declarado.{RESET}")
+        print(f"{DIM}Falta o 8º, `deploy`: fora da rodada por decisão do dono — "
+              f"é o único que depende de infra externa.{RESET}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

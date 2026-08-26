@@ -22,20 +22,14 @@ import subprocess
 import sys
 
 # Condição de saída de cada modo — o que precisa ser verdade para ele fechar.
-# Sem isso o modo é rótulo, não fronteira.
-SAIDA = {
-    "exploracao": "um documento de estratégia com 2+ caminhos considerados, "
-                  "passado pelo painel /common:advisors com as discordâncias nomeadas",
-    "descoberta": "evidence-auditor Confirmed nas suposições de risco + os "
-                  "critérios de aceite escritos na altitude + o teste vermelho de cada um",
-    "design": "design-critic devolvendo SHIP",
-    "construcao": "completion-auditor COMPLETE e proof-reviewer PROVEN",
-    "reforma": "o orçamento declarado exaurido, build verde, e NENHUM teste "
-               "externo editado (teste editado = mudou comportamento = não era reforma)",
-    "reflexao": "nenhum achado sem destino — cada um virou card ou foi "
-                "descartado com motivo escrito",
-    "documentacao": "consistency-reviewer PASS e sua assinatura em /docs:finalize",
-}
+# Sem isso o modo é rótulo, não fronteira. A tabela mora em `_modos.py` (fonte
+# única, compartilhada com o `cepa-modos`); aqui só se lê.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from _modos import SAIDA
+except Exception:  # noqa: BLE001 — o hook roda todo turno; nunca pode quebrar
+    SAIDA = {}
+
 
 
 def repo_root(cwd):
