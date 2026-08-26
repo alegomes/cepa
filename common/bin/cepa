@@ -15,6 +15,9 @@
 #                        #   completion which Warp's own engine ignores
 #   cepa --resume        # any other args pass straight through to claude
 #
+#   cepa --modo ajuda    # o propósito de cada modo, e sai (não abre sessão);
+#                        #   no menu interativo, `?` faz o mesmo e reapresenta
+#
 #   cepa --prompt smartass            # anexa um system prompt customizado
 #   cepa --prompt ~/prompts/x.md      # ...por caminho, ou por nome (ver abaixo)
 #   cepa --prompt-substitui base.md   # troca o system prompt INTEIRO (perigoso)
@@ -59,6 +62,7 @@ done
 SCRIPT_DIR=$(cd "$(dirname "$SELF")" && pwd)
 LAUNCH_PY="$SCRIPT_DIR/../hooks/session-launch.py"
 DOCTOR="$SCRIPT_DIR/cepa-doctor"
+MODOS_BIN="$SCRIPT_DIR/cepa-modos"
 
 # Preflight: deixa o harness pronto ANTES da sessão começar, em vez de o
 # usuário descobrir no meio da tarefa que o plugin instalado não é o do repo.
@@ -93,24 +97,45 @@ modo_valido() {
 
 # Pergunta o modo em /dev/tty. Sem tty, não há como perguntar → falha com a
 # instrução, em vez de assumir um modo por você.
+# O propósito de cada modo, uma linha por modo, lido da fonte única
+# (common/hooks/_modos.py) pelo cepa-modos. O menu listava só os sete nomes, e
+# quem não lembra o que "reforma" cobra escolhia pelo nome — o modo, que é
+# fronteira, virava rótulo. Sem python3 ou sem o script, a ajuda degrada para os
+# nomes e o caminho do documento; ela nunca some calada.
+mostra_propositos() {
+  if command -v python3 >/dev/null 2>&1 && [ -f "$MODOS_BIN" ]; then
+    python3 "$MODOS_BIN" --propositos --sem-cor >&2 2>/dev/null && return 0
+  fi
+  printf 'modos: %s\n' "$MODOS" >&2
+  printf 'o propósito de cada um está em docs/modos-de-trabalho.md\n' >&2
+  return 0
+}
+
 ask_modo() {
   if [ ! -t 0 ] || [ ! -r /dev/tty ]; then
     printf '✗ cepa: nenhuma sessão sobe sem modo declarado.\n' >&2
     printf '  Use: cepa --modo <%s>\n' "$(printf '%s' "$MODOS" | tr ' ' '|')" >&2
+    printf '  Veja o propósito de cada um: cepa --modo ajuda\n' >&2
     printf '  Ou desligue a exigência com CEPA_MODO=off\n' >&2
     return 1
   fi
-  printf 'Em qual modo esta sessão opera?\n' >&2
-  _i=0
-  for _m in $MODOS; do _i=$((_i+1)); printf '  %d) %s\n' "$_i" "$_m" >&2; done
-  printf 'modo? [número ou nome] > ' >&2
-  _ans=""
-  read -r _ans < /dev/tty || return 1
-  [ -n "$_ans" ] || return 1
-  case "$_ans" in
-    *[!0-9]*) printf '%s\n' "$_ans" ;;
-    *) printf '%s\n' "$MODOS" | tr ' ' '\n' | sed -n "${_ans}p" ;;
-  esac
+  while :; do
+    printf 'Em qual modo esta sessão opera?\n' >&2
+    _i=0
+    for _m in $MODOS; do _i=$((_i+1)); printf '  %d) %s\n' "$_i" "$_m" >&2; done
+    printf '  ?) ajuda — o propósito de cada modo\n' >&2
+    printf 'modo? [número, nome ou ?] > ' >&2
+    _ans=""
+    read -r _ans < /dev/tty || return 1
+    # Enter vazio continua sendo desistir; `?` mostra os propósitos e o menu
+    # volta, porque quem pediu ajuda ainda não escolheu.
+    [ -n "$_ans" ] || return 1
+    case "$_ans" in
+      "?"|h|help|ajuda) mostra_propositos; printf '\n' >&2; continue ;;
+      *[!0-9]*) printf '%s\n' "$_ans"; return 0 ;;
+      *) printf '%s\n' "$MODOS" | tr ' ' '\n' | sed -n "${_ans}p"; return 0 ;;
+    esac
+  done
 }
 
 # Reforma sem orçamento nunca termina — sempre tem mais um ajuste. O orçamento
@@ -277,6 +302,12 @@ while [ $# -gt 0 ]; do
     *) break ;;
   esac
 done
+
+# `cepa --modo ajuda` é consulta, não abertura de sessão: imprime o propósito de
+# cada modo e sai, sem tocar em worktree, preflight ou claude.
+case "$MODO" in
+  ajuda|help|"?") mostra_propositos; exit 0 ;;
+esac
 
 # System prompt customizado: vira flag do claude ANTES de qualquer caminho de
 # lançamento, para valer também quando o cepa se comporta como claude puro

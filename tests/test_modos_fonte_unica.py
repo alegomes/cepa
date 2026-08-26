@@ -17,9 +17,11 @@ continuem falando dos mesmos modos: um modo novo aceito pelo `--modo` mas ausent
 da tabela sobe uma sessão cujo hook não sabe dizer quando ela fecha, e um modo na
 tabela que o `cepa` recusa é documentação de algo que ninguém consegue usar.
 
-Confere também que cada modo tem os quatro campos preenchidos: entrada, produz,
-saída e gate. Um modo sem condição de saída é rótulo, não fronteira — que é a
-tese inteira de `docs/modos-de-trabalho.md`.
+Confere também que cada modo tem os cinco campos preenchidos: propósito,
+entrada, produz, saída e gate. O propósito é o que a ajuda do menu do `cepa`
+mostra — um modo sem ele volta a ser escolhido pelo nome. Um modo sem condição
+de saída é rótulo, não fronteira — que é a tese inteira de
+`docs/modos-de-trabalho.md`.
 """
 
 import re
@@ -29,7 +31,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 
-CAMPOS = ("entrada", "produz", "saida", "gate")
+CAMPOS = ("proposito", "entrada", "produz", "saida", "gate")
 
 
 def modos_do_cepa():

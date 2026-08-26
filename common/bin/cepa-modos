@@ -12,6 +12,7 @@ para injetar a condição de saída a cada turno. Uma tabela, dois leitores.
 Uso:
     cepa-modos              # a tabela toda; marca o modo da sessão atual
     cepa-modos <nome>       # só um modo, com entrada/produz/saída/gate
+    cepa-modos --propositos # uma linha por modo: para que ele serve
     cepa-modos --json
 """
 
@@ -55,7 +56,7 @@ def modo_da_sessao():
 def bloco(nome, d, atual, cor):
     marca = f"  {VERDE}◀ esta sessão{RESET}" if nome == atual else ""
     saida = [f"{BOLD}{AMARELO}{nome}{RESET}{marca}"]
-    for rot, chave in (("entra com", "entrada"), ("produz", "produz"),
+    for rot, chave in (("serve para", "proposito"), ("entra com", "entrada"), ("produz", "produz"),
                        ("fecha quando", "saida"), ("gate", "gate")):
         corpo = textwrap.fill(d[chave], width=78,
                               initial_indent="", subsequent_indent=" " * 16)
@@ -68,6 +69,8 @@ def main():
     ap = argparse.ArgumentParser(description="Os modos de trabalho e suas fronteiras.")
     ap.add_argument("modo", nargs="?", help="só este modo")
     ap.add_argument("--json", action="store_true", dest="as_json")
+    ap.add_argument("--propositos", action="store_true",
+                    help="uma linha por modo: para que ele serve")
     ap.add_argument("--sem-cor", action="store_true")
     args = ap.parse_args()
 
@@ -84,6 +87,17 @@ def main():
     alvo = {args.modo: MODOS[args.modo]} if args.modo else MODOS
     if args.as_json:
         print(json.dumps(alvo, indent=2, ensure_ascii=False))
+        return 0
+
+    if args.propositos:
+        print(f"{BOLD}Modos de trabalho{RESET} — para que serve cada um:")
+        larg = max(len(n) for n in alvo)
+        for nome, d in alvo.items():
+            corpo = textwrap.fill(d["proposito"], width=78,
+                                  initial_indent="", subsequent_indent=" " * (larg + 4))
+            print(f"  {AMARELO}{nome:<{larg}}{RESET}  {corpo}")
+        print(f"\n{DIM}A tabela inteira (entra com / produz / fecha quando / gate): "
+              f"cepa-modos{RESET}")
         return 0
 
     atual = modo_da_sessao()

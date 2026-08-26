@@ -205,10 +205,95 @@ def test_hook_nunca_quebra_o_turno():
               p.stdout.strip() == "", repr(p.stdout))
 
 
+# --- ajuda do menu de modos -------------------------------------------------
+# O menu do `cepa` listava os sete nomes e mais nada. Quem não lembra o que
+# "reforma" cobra escolhia pelo nome — e o modo, que é fronteira, virava rótulo.
+# A ajuda mostra o propósito de cada modo lido de _modos.py (fonte única), sem
+# abrir o doc de 307 linhas.
+
+def test_ajuda_nao_interativa():
+    """`cepa --modo ajuda` imprime os propósitos e NÃO sobe sessão nenhuma."""
+    with Repo() as r:
+        p = r.run("--modo", "ajuda")
+        saida = p.stdout + p.stderr
+        check("ajuda: rc=0", p.returncode == 0, str(p.returncode) + saida)
+        check("ajuda: não lança o claude", "CLAUDE_ARGS" not in p.stdout, p.stdout)
+        check("ajuda: não grava modo", not r.mode_file.exists())
+        check("ajuda: nomeia os sete modos",
+              all(m in saida for m in
+                  ("exploracao", "descoberta", "design", "construcao",
+                   "reforma", "reflexao", "documentacao")), saida)
+        check("ajuda: diz o propósito, não só o nome",
+              "comportamento externo" in saida or "sem mudar nada que se veja" in saida,
+              saida)
+
+
+def _pty_run(repo, teclado):
+    """Roda o cepa com um terminal de verdade e digita `teclado` nele.
+
+    O `cepa` lê de /dev/tty, então não basta um pipe: o processo precisa de um
+    terminal de controle próprio (setsid + TIOCSCTTY), senão /dev/tty apontaria
+    para o terminal de quem roda os testes.
+    """
+    import fcntl, pty, termios, time
+    mestre, escravo = pty.openpty()
+
+    def ctty():
+        os.setsid()
+        fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+
+    proc = subprocess.Popen(
+        [str(CEPA), "--resume"], cwd=repo.path,
+        env={**os.environ, "CLAUDE_WT_CLAUDE_BIN": str(repo.fake),
+             "CEPA_PREFLIGHT": "off"},
+        stdin=escravo, stdout=escravo, stderr=escravo,
+        preexec_fn=ctty, close_fds=True,
+    )
+    os.close(escravo)
+    for tecla in teclado:
+        time.sleep(0.4)
+        os.write(mestre, tecla.encode())
+    buf = b""
+    fim = time.time() + 20
+    while time.time() < fim:
+        try:
+            pedaco = os.read(mestre, 65536)
+        except OSError:
+            break
+        if not pedaco:
+            break
+        buf += pedaco
+        if proc.poll() is not None and b"CLAUDE_ARGS" in buf:
+            break
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    os.close(mestre)
+    return proc.returncode, buf.decode("utf-8", "replace")
+
+
+def test_ajuda_no_menu_e_reapresenta():
+    """No menu, `?` mostra os propósitos e o menu volta — não é escolha inválida."""
+    with Repo() as r:
+        rc, saida = _pty_run(r, ["?\n", "construcao\n"])
+        check("menu: oferece a ajuda", "?" in saida and "ajuda" in saida, saida)
+        check("menu ?: mostra o propósito",
+              "comportamento externo" in saida or "sem mudar nada que se veja" in saida,
+              saida)
+        check("menu ?: não trata como modo desconhecido",
+              "modo desconhecido" not in saida, saida)
+        check("menu ?: pergunta de novo", saida.count("modo?") >= 2, saida)
+        check("menu ?: a escolha seguinte vale", rc == 0, str(rc) + saida)
+        body = r.mode_file.read_text() if r.mode_file.exists() else ""
+        check("menu ?: grava o modo escolhido", "modo: construcao" in body, body)
+
+
 def main():
     print("test_cepa_modo")
     for fn in (test_modo_valido, test_modo_invalido, test_sem_modo_sem_tty,
                test_kill_switch, test_reforma_orcamento,
+               test_ajuda_nao_interativa, test_ajuda_no_menu_e_reapresenta,
                test_hook_injeta_modo_e_saida, test_hook_reforma_mostra_orcamento,
                test_hook_silencioso_sem_modo, test_hook_respeita_kill_switch,
                test_hook_nunca_quebra_o_turno):
