@@ -77,6 +77,61 @@ CASES = [
     ("cp does not delete its source", "cp src/a.py src/b.py",
      lambda t: t == ["src/b.py"],
      "`cp` only reads its source — destination-only, unlike `mv`"),
+
+    # --- a forma BSD do `sed -i`: o sufixo vazio é um OPERANDO ---
+    #     `sed -i '' 's/a/b/' arquivo` (macOS) deixa o `''` na lista de
+    #     não-flags, então o SCRIPT do sed passava a ser o 1º operando e o
+    #     arquivo real vinha depois — `nonflags[1:]` registrava `s/a/b/` como
+    #     arquivo escrito. Fail-closed, e por isso invisível: o alvo de mentira
+    #     só bloqueia MAIS. Consertado em 26/08/2026 filtrando o token vazio,
+    #     e sem este caso o conserto só era visto pelo detector de divergência
+    #     — que compara as duas fontes ENTRE SI e ficaria verde se as duas
+    #     regredissem juntas, que é exatamente o que uma restauração de branch
+    #     antigo faria.
+    ("sed -i BSD: script is not a file", "sed -i '' 's/a/b/' docs/x.md",
+     lambda t: t == ["docs/x.md"],
+     "só o arquivo — o script do sed não é alvo de escrita"),
+    ("sed -i GNU: script is not a file", "sed -i 's/a/b/' docs/x.md",
+     lambda t: t == ["docs/x.md"],
+     "a forma GNU já estava certa; fica travada junto"),
+
+    # --- baixar/criar/sincronizar também é escrever ---
+    #     Achado do proof-reviewer em 26/08/2026: estes quatro verbos são
+    #     estaticamente decidíveis — o destino está explícito no argv, como em
+    #     `tee`/`dd`/`truncate` — e mesmo assim passavam calados pelos cadeados.
+    ("curl -o", "curl -o src/Foo.java https://e.com/f",
+     lambda t: t == ["src/Foo.java"], "o destino do -o é o alvo"),
+    ("curl --output=", "curl --output=src/Foo.java https://e.com/f",
+     lambda t: t == ["src/Foo.java"], "a forma com = também"),
+    ("wget -O", "wget -O src/Foo.java https://e.com/f",
+     lambda t: t == ["src/Foo.java"], "o destino do -O é o alvo"),
+    ("touch", "touch src/Foo.java src/Bar.java",
+     lambda t: set(t) == {"src/Foo.java", "src/Bar.java"},
+     "criar arquivo vazio é escrever nele"),
+    ("rsync destination", "rsync -a build/ dist/",
+     lambda t: t == ["dist/"], "como cp: só o ultimo operando"),
+    ("curl sem destino no argv", "curl -sS https://e.com/f | jq .",
+     lambda t: t == [],
+     "sem -o o destino não está na linha; fora de escopo, não inventar alvo"),
+    ("wget sem destino no argv", "wget https://e.com/f",
+     lambda t: t == [], "idem — grava com o nome remoto, que o argv não diz"),
+
+    # --- `git checkout -- ` e `git restore` sobrescrevem o arquivo no disco ---
+    #     Mesmo efeito do `git mv` acima, na mesma ferramenta já vigiada: era a
+    #     forma mais fácil de reverter em silêncio um arquivo fora da pista.
+    ("git checkout ref -- path", "git checkout main -- src/Foo.java",
+     lambda t: t == ["src/Foo.java"], "o caminho depois do -- é sobrescrito"),
+    ("git checkout -- path", "git checkout -- src/Foo.java src/Bar.java",
+     lambda t: set(t) == {"src/Foo.java", "src/Bar.java"}, "todos os caminhos"),
+    ("git restore", "git restore src/Foo.java",
+     lambda t: t == ["src/Foo.java"], "restore sem -- também escreve"),
+    ("git restore --source", "git restore --source=HEAD~2 docs/x.md",
+     lambda t: t == ["docs/x.md"], "a flag não vira caminho"),
+    ("git checkout branch is not a file write", "git checkout main",
+     lambda t: t == [],
+     "troca de branch escreve muito, mas não é escrita dirigida a um caminho"),
+    ("git checkout -b is not a file write", "git checkout -b session/nova",
+     lambda t: t == [], "criar branch não escreve arquivo nenhum"),
 ]
 
 

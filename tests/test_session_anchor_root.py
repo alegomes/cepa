@@ -327,6 +327,10 @@ ANCORADOS = [
     "session-log.py", "session-checkpoint.py", "capture-build-result.py",
     "gate-advance.py", "mark-build-stale.py", "loop-budget.py",
     "acceptance-gate.py",
+    # Lê `.claude/session-mode` em vez de escrever, e por isso mesmo entra: um
+    # `cd` que desvie a leitura faz o hook não achar o modo e liberar TUDO em
+    # silêncio, que é a falha ABRINDO um portão — a mesma dos outros quatro.
+    "modo-escrita-gate.py",
 ]
 
 for name in ANCORADOS:

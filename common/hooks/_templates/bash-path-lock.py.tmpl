@@ -257,7 +257,7 @@ def _segment_targets(segment: str) -> list:
 
     cmd = os.path.basename(argv[0])
     rest = argv[1:]
-    nonflags = [t for t in rest if not _is_flag(t)]
+    nonflags = [t for t in rest if t and not _is_flag(t)]
 
     if cmd == "tee":
         # every non-flag arg is written (flags: -a/--append/-i…)
@@ -298,8 +298,44 @@ def _segment_targets(segment: str) -> list:
         # destino, como antes, deixava esse sentido passar batido.
         if len(nonflags) >= 3 and nonflags[0] == "mv":
             targets.extend(nonflags[1:])
+        elif nonflags and nonflags[0] in ("checkout", "restore"):
+            # `git checkout <ref> -- arquivo` e `git restore arquivo`
+            # SOBRESCREVEM o arquivo no disco com a versão de outro lugar —
+            # mesmo efeito do `git mv` acima, na mesma ferramenta já vigiada,
+            # e era a forma mais fácil de reverter em silêncio um arquivo fora
+            # da pista (achado do proof-reviewer, 26/08/2026).
+            #
+            # Sem `--`, o `checkout` é troca de branch: escreve muita coisa,
+            # mas não é escrita dirigida a um caminho, e tratá-lo como alvo
+            # transformaria todo `git checkout main` num bloqueio.
+            if "--" in rest:
+                targets.extend(t for t in rest[rest.index("--") + 1:]
+                               if not _is_flag(t))
+            elif nonflags[0] == "restore":
+                targets.extend(nonflags[1:])
     elif cmd == "truncate":
         targets.extend(nonflags[1:] if nonflags else [])
+    elif cmd in ("curl", "wget"):
+        # Baixar para um arquivo é escrever nele. Achado do proof-reviewer em
+        # 26/08/2026: `curl -o` e `wget -O` são estaticamente decidíveis — o
+        # destino está explícito no argv — e mesmo assim passavam calados, nem
+        # bloqueados nem registrados. A forma sem destino explícito (`curl -O`,
+        # `wget <url>`, que gravam com o nome remoto no diretório corrente)
+        # continua fora: ali o nome não está na linha de comando.
+        destino = ("-o", "--output") if cmd == "curl" else ("-O", "--output-document")
+        prefixos = tuple(f"{d}=" for d in destino if d.startswith("--"))
+        for i, t in enumerate(rest):
+            if t in destino and i + 1 < len(rest):
+                targets.append(rest[i + 1])
+            elif t.startswith(prefixos):
+                targets.append(t.split("=", 1)[1])
+    elif cmd == "touch":
+        # Cria o arquivo se ele não existe: é escrita, mesmo com conteúdo vazio.
+        targets.extend(nonflags)
+    elif cmd == "rsync":
+        # Como `cp`: lê a origem, escreve no último operando.
+        if len(nonflags) >= 2:
+            targets.append(nonflags[-1])
 
     return targets
 

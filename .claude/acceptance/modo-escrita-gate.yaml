@@ -1,0 +1,180 @@
+key: modo-escrita-gate
+titulo: >
+  O modo é prosa: desvio vira pergunta, pergunta vira "sim", e o modo não
+  segurou nada
+status: complete
+auditor: completion-auditor
+data: 2026-08-26
+diff_auditado: bc9d1eb..HEAD (a212e59, d159876, 05d0523)
+build: "sem build neste repo; verificação = tests/run-all.sh"
+run_geral: "bash tests/run-all.sh -> 'arquivos rodados: 59 de 59 / tudo verde' (executado por mim)"
+
+criterios:
+  - id: AC1
+    descricao: >
+      O gate cobre Bash também, reusando common/hooks/_shellscan.py (não uma
+      cópia nova do parsing de linha de comando).
+    altitude: process
+    surface: >
+      invocar common/hooks/modo-escrita-gate.py como subprocesso com um
+      payload PreToolUse {tool_name: "Bash", tool_input: {command: ...}} e
+      conferir o código de saída
+    test: tests/test_modo_escrita_gate.py::test_bash_nao_e_rota_de_fuga,
+      test_bash_libera_o_que_o_modo_produz, test_ge_nao_e_redirecionamento
+    layer: subprocess / hook-de-processo (altitude correta: é assim que o
+      hook roda em produção via PreToolUse)
+    evidence: verified
+    run: "python3 tests/test_modo_escrita_gate.py -> 'tudo verde' (18/18 ok, incluindo os 5 casos de bash: >, >>, sed -i, tee, git mv bloqueados; sed -i com script BSD vazio liberado)"
+    reuso_shellscan: >
+      Confirmado por leitura + teste de deriva: modo-escrita-gate.py importa
+      _shellscan.py (`import _shellscan as S`) e chama
+      `S.extract_write_targets`. A extração de alvos de escrita
+      (_segment_targets/extract_write_targets) foi PORTADA do
+      build-hex/hooks/bash-path-lock.py para _shellscan.py nesta mesma leva
+      (a212e59), e tests/test_lock_copies_drift.py::
+      test_motor_do_shellscan_bate_com_o_bash_path_lock compara as duas
+      fontes função a função (AST) e fica vermelho se divergirem — rodei
+      pytest e o caso passa.
+    veredito: complete
+
+  - id: AC2
+    descricao: >
+      O escape não pode ser barato — nada de `# modo-ok`; a única saída
+      honesta é CEPA_MODO=off (visível, desliga tudo) ou encerrar o modo e
+      abrir outro.
+    altitude: process
+    surface: >
+      mesma invocação de processo do AC1, variando env CEPA_MODO e o
+      conteúdo textual do comando Bash
+    test: tests/test_modo_escrita_gate.py::test_kill_switch (CEPA_MODO=off
+      libera) + test_mensagem_diz_o_que_fazer (stderr NÃO contém "CEPA_MODO")
+    layer: subprocess / hook-de-processo
+    evidence: verified
+    run: >
+      (a) suíte do repo: python3 tests/test_modo_escrita_gate.py -> ok em
+      "CEPA_MODO=off desliga o gate" e em "mensagem NÃO anuncia o kill
+      switch";
+      (b) prova adicional que eu mesmo rodei (não estava na suíte): chamei o
+      hook com um comando Bash carregando um comentário
+      `echo x > common/hooks/novo.py  # modo-ok` em modo exploracao — saída
+      `rc 2` (bloqueado), confirmando que um comentário não é rota de fuga.
+      Comando: script Python ad-hoc via subprocess, payload
+      {"tool_name":"Bash","tool_input":{"command":"echo x > common/hooks/novo.py  # modo-ok"}}
+      -> "rc 2 [modo-escrita-gate] BLOQUEADO...".
+    veredito: complete
+
+  - id: AC3
+    descricao: >
+      A mensagem de bloqueio tem que dizer o que fazer: registrar pelo
+      off-mode-capture e seguir, ou encerrar o modo e abrir o modo certo.
+    altitude: process
+    surface: >
+      mesma invocação de processo, lendo o texto de stderr devolvido pelo
+      hook
+    test: tests/test_modo_escrita_gate.py::test_mensagem_diz_o_que_fazer
+    layer: subprocess / hook-de-processo
+    evidence: verified
+    run: "python3 tests/test_modo_escrita_gate.py -> ok em 'mensagem nomeia o modo ativo', 'mensagem nomeia o alvo', 'mensagem oferece a captura do desvio', 'mensagem oferece encerrar o modo', 'mensagem NÃO anuncia o kill switch'"
+    veredito: complete
+
+  - id: AC4
+    descricao: >
+      Desvio declarado 1 do esboço: BACKLOG.md entra em TODAS as listas
+      brancas (exploracao, descoberta, design, reflexao, documentacao),
+      porque é onde o repo registra card e é a condição de saída literal da
+      Reflexão.
+    altitude: process
+    surface: mesma invocação de processo, alvo = "BACKLOG.md" em Edit, um
+      teste por modo
+    test: tests/test_modo_escrita_gate.py::test_lista_branca_por_modo
+      (dicionário PERMITIDO inclui "BACKLOG.md" para os 5 modos com lista)
+    layer: subprocess / hook-de-processo
+    evidence: verified
+    run: "python3 tests/test_modo_escrita_gate.py -> ok em '<modo>: libera BACKLOG.md' para os 5 modos"
+    veredito: complete
+
+  - id: AC5
+    descricao: >
+      Desvio declarado 2 do esboço: escrita fora da raiz da sessão passa
+      (worktree de perturbação em /tmp, scratchpad) — não estava no esboço
+      original da tabela.
+    altitude: process
+    surface: mesma invocação de processo, alvo fora da raiz da sessão
+      (/tmp/...)
+    test: tests/test_modo_escrita_gate.py::test_fora_da_raiz_passa
+    layer: subprocess / hook-de-processo
+    evidence: verified
+    run: "python3 tests/test_modo_escrita_gate.py -> ok em 'fora da raiz passa: /tmp/perturba/App.java' e '/tmp/scratch/nota.py'"
+    veredito: complete
+
+  - id: AC6
+    descricao: >
+      Desvio declarado 3 do esboço: a exigência 1 cobrava mais do que
+      _shellscan.py tinha; a divergência entre a versão do bash-path-lock e a
+      versão mais pobre do enforcement-guard é reconhecida, e a dívida de NÃO
+      migrar o enforcement-guard é registrada (não escondida) no detector de
+      deriva.
+    altitude: process + estrutural
+    surface: tests/test_lock_copies_drift.py compara as duas fontes do motor
+      função a função (AST), e documenta em comentário por que
+      enforcement-guard.py fica fora da comparação de propósito
+    test: tests/test_lock_copies_drift.py::
+      test_motor_do_shellscan_bate_com_o_bash_path_lock +
+      test_guards_do_common_nao_recopiam_o_motor
+    layer: pytest (comparação estrutural de AST) — apropriado aqui porque o
+      critério é "as duas fontes concordam / a dívida está nomeada", não um
+      comportamento observável em runtime
+    evidence: verified
+    run: "bash tests/run-all.sh -> família pytest, 52 passed in 0.20s (inclui os dois casos acima); dívida do enforcement-guard citada em BACKLOG.md e em comentário SHELLSCAN_ALVO_FUNCS do teste"
+    veredito: complete
+
+  - id: AC7
+    descricao: >
+      Registro do hook no PreToolUse do plugin.json, para Bash e para
+      Edit|Write|MultiEdit|NotebookEdit — sem isso o gate existe no disco mas
+      não roda em sessão real.
+    altitude: config/plugin
+    surface: common/.claude-plugin/plugin.json, chave hooks.PreToolUse
+    test: leitura direta do plugin.json (não há um "teste" de framework para
+      isto; é config estática lida pelo próprio Claude Code)
+    layer: leitura de arquivo (não há altitude de processo mais alta
+      disponível para config de plugin — a validação real seria rodar uma
+      sessão instalada, fora do escopo desta auditoria)
+    evidence: verified
+    run: >
+      grep confirma "modo-escrita-gate.py" nos dois matchers ("Bash" e
+      "Edit|Write|MultiEdit|NotebookEdit") de hooks.PreToolUse em
+      common/.claude-plugin/plugin.json.
+    nota: >
+      Isto NÃO é um critério isolado do esboço, é um pré-requisito
+      operacional que citei porque o card cobra "registro do hook" na lista
+      de entrega. Fica fora do cômputo do veredito de status (é config, não
+      comportamento), mas registrado para rastreabilidade.
+    veredito: complete
+
+gaps: []
+
+nota_geral: >
+  Todos os critérios foram checados na ALTITUDE certa: invocação de
+  common/hooks/modo-escrita-gate.py como PROCESSO, com um payload de
+  PreToolUse ({tool_name, tool_input, cwd}) via subprocess, lendo o código de
+  saída (0=libera, 2=bloqueia) e o texto de stderr — nunca por leitura de
+  fonte como prova de comportamento (a única checagem por leitura de fonte,
+  em test_tabela_vem_de_modos_py, audita arquitetura interna — "o hook
+  importa em vez de copiar" — e não um critério de aceite do card). Rodei
+  tests/run-all.sh (59/59 arquivos, família pytest 52/52) e isoladamente
+  tests/test_modo_escrita_gate.py e tests/test_lock_copies_drift.py; todos
+  verdes. Para o AC2 fiz uma prova adicional própria (comentário
+  "# modo-ok" em Bash), porque a suíte prova a AUSÊNCIA de anúncio do kill
+  switch mas não tinha um caso positivo de "comentário não engana o parser";
+  rodei eu mesma e confirmei rc=2.
+
+  Os três desvios declarados na seção "O que foi construído" do card foram
+  auditados individualmente (AC4, AC5, AC6) e nenhum deles esvazia um
+  critério do esboço: BACKLOG.md nas listas brancas é uma correção
+  necessária apontada pelo próprio texto (sem ela a Reflexão não fecha);
+  liberar escrita fora da raiz da sessão é uma decisão de escopo consistente
+  com a memória path-lock-out-of-root; e a dívida do enforcement-guard não
+  migrado está nomeada e propositalmente fora do escopo deste card, tanto no
+  BACKLOG.md quanto no comentário do teste de deriva — não é um critério
+  escondido, é um débito às claras.

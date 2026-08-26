@@ -45,6 +45,7 @@ EMISSORES = [
     "test_proof_status_enum.py",
     "test_session_anchor_root.py",
     "test_ui_proof_verdict_guard.py",
+    "test_modo_escrita_gate.py",
 ]
 COBAIA = TESTES / "test_proof_status_enum.py"
 
@@ -52,8 +53,8 @@ COBAIA = TESTES / "test_proof_status_enum.py"
 # destes e não isole é o próximo poluidor.
 HOOKS_EMISSORES = [
     "capture-build-result", "gate-advance", "loop-budget", "maven-reactor-guard",
-    "proof-verdict-guard", "report-style-lint", "session-log", "session-registry",
-    "ui-proof-verdict-guard",
+    "modo-escrita-gate", "proof-verdict-guard", "report-style-lint", "session-log",
+    "session-registry", "ui-proof-verdict-guard",
 ]
 
 
