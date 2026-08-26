@@ -311,6 +311,35 @@ UTC time headers.
 `/common:recap` reads this file to render its "Asked / Status /
 Delivered" table.
 
+### feedback-nudge.py (UserPromptSubmit)
+
+Owner: `common/hooks/`.
+
+Notices when a prompt is a complaint **about the harness** and injects one line
+telling the agent to record it (`common:feedback-capture` skill →
+`cepa-feedback add`) before getting on with the turn's actual work.
+
+**Logic:**
+
+```python
+1. CEPA_FEEDBACK_NUDGE=off → silent (kill switch).
+2. Require BOTH regexes on the prompt:
+   - QUEIXA: complaint shape ("me irrita", "para de", "não devia", ...)
+   - ALVO:   a harness target (cepa|hook|gate|comando|skill|agente|
+             worktree|plugin|/plugin:command|...)
+   Either one alone → silent. "That vendor API is broken" is a project
+   card, not harness feedback.
+3. Once per session: marker file `.claude/feedback-nudge` (anchored with
+   _wtlib.session_root, never the raw cwd) holds the session_id.
+4. Inject additionalContext. Never blocks, never answers the complaint.
+```
+
+Why a hook and not just the skill: the same lesson this repo has catalogued
+three times — a control that depends on the agent remembering is not a control.
+The skill says *how* to record; the hook makes sure the moment gets noticed.
+Once per session, because a line repeated every turn is how you teach an agent
+to ignore it.
+
 ### session-subject.py (UserPromptSubmit)
 
 Owner: `common/hooks/`.
