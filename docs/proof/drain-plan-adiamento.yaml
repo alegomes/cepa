@@ -1,0 +1,105 @@
+schema_version: 2
+card: drain-plan-adiamento
+verdict: proven
+reviewed_at: 2026-08-28T23:55:00-03:00
+base_commit: 76ed76d
+head_commit: 978e533
+issue_type: Feature
+repo_kind: harness             # NOT Quarkus/Maven — Python CLI (common/bin/cepa-plan) + prompt files, own test suite
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (cmd_queue — endurecido para provar NÃO-escrita via st_mtime_ns/st_ino, não só bytes)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-plan (cmd_reconcile --apply — teste endurecido para reler plan.yaml do disco e provar que `faltantes` não é anexado)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/commands/drain-plan.md (prosa: reconciliação vira passo 0, `--offline`, transição ao fechar, ordem nunca vem do quadro)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/commands/next.md (prosa: leitura delegada a atlassian-expert, comparação via `cepa-plan reconcile`, nunca fecha human_pending, nunca anexa)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+    - class: "tests/test_common_drain_plan.py (test_contrato_do_comando — checagem da ordem dos passos 0/1 trocada de corte de string para posição numérica; este é o ÚNICO código tocado por 978e533, além de docs/proof e .claude/acceptance de outros agentes)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); perturbação manual é o único mecanismo aplicável"
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida confirmado antes de qualquer perturbação: `python3 tests/test_common_drain_plan.py` → all green, `python3 tests/test_common_next.py` → all green, no worktree em 978e533."
+        - "P19-reteste (a sobrevivente do ciclo anterior, 853b67e) — reordenados fisicamente os blocos '### 0. Reconciliar' e '### 1. Resolver a fila' em drain-plan.md (bloco 0 movido para DEPOIS do bloco 1) — agora FICA VERMELHO: 'o passo 0 existe e vem ANTES do passo 1' falhou com i0=7628 i1=4839, e 'e a reconciliação acontece DENTRO dele, antes de resolver a fila' falhou junto. A checagem trocou o corte por string (`split('### 0.')[-1]`, que degradava para o texto inteiro quando o marcador some antes do passo 1) por posição numérica explícita (`f.find('### 0.')`, `f.find('### 1.')`, exigindo `i0 < i1`). Lacuna fechada."
+        - "P23 (nova — mantém a ORDEM correta dos blocos, mas retira a chamada `cepa-plan reconcile <nome> --board ... --apply --repo .` de DENTRO do passo 0, reinserindo-a logo após o cabeçalho do passo 1) — FICOU VERMELHO: 'e a reconciliação acontece DENTRO dele, antes de resolver a fila' falhou (a checagem 'o passo 0 existe e vem ANTES do passo 1' continuou verde, corretamente — só a checagem sobre o CONTEÚDO do intervalo caiu). Prova que a segunda checagem nova (`\"cepa-plan reconcile\" in f[i0:i1]`) é load-bearing por si — não é redundante com a primeira."
+        - "P3b-reteste (RECONFIRMAÇÃO da amostra do ciclo anterior) — reinjetado `grava_corpo(alvo, plan, items)` dentro de cmd_queue — FICA VERMELHO: 'e o arquivo não foi sequer TOCADO — o queue é read-only' falhou, porque test_adiar_nao_reescreve_a_ordem_gravada continua comparando st_mtime_ns/st_ino, não só o conteúdo. Nada afrouxou."
+        - "P17-reteste (RECONFIRMAÇÃO da amostra do ciclo anterior) — reinjetado, antes de `if aplicar and div:`, um bloco `if aplicar and faltantes: items.append(...)` que anexa cada card de `faltantes` — FICA VERMELHO: 'e NÃO entra na fila gravada' falhou com ['W-1', 'W-9'], porque test_reconcile_nunca_anexa_card_nem_fecha_divida_humana continua relendo plan.yaml do disco depois do --apply. Nada afrouxou."
+      run: >-
+        worktree descartável /tmp/proof-drain-plan-978e533 (git worktree add
+        /tmp/proof-drain-plan-978e533 978e533), removido ao final com
+        `git worktree remove --force`. Cada perturbação: script Python
+        (open(caminho).read(), assert old in s, .replace(old, new, 1) com
+        assert de que o texto mudou, antes de escrever de volta) usando SEMPRE
+        caminho absoluto sob /tmp/proof-drain-plan-978e533/... — inclusive
+        para o `git checkout --` de restauração entre perturbações. Depois de
+        cada perturbação: `python3 tests/test_common_drain_plan.py` exigindo
+        pelo menos uma falha nomeada (RED), depois restauração
+        (`git checkout -- <caminho absoluto>`) antes da perturbação seguinte.
+        GREEN final confirmado (`all green` em test_common_drain_plan.py e em
+        test_common_next.py) e `git status --short` vazio no worktree antes de
+        removê-lo. A árvore principal
+        (/Users/alegomes/cepa-worktrees/cepa-jira-sync) nunca foi tocada — só
+        o worktree em /tmp foi editado e depois descartado.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (não há coverage tool wired neste repo Python): a
+      única mudança de código deste commit (978e533) é exatamente a checagem
+      de ordem dos passos em test_contrato_do_comando, e as duas
+      perturbações desenhadas para ela (P19-reteste e P23) cobrem as duas
+      metades da nova lógica — "passo 0 vem antes do passo 1" e "a chamada ao
+      reconcile está dentro do intervalo [i0, i1)". A reamostragem de P3b e
+      P17 confirma que o endurecimento anterior (853b67e) não afrouxou.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      mesma leitura dos dois ciclos anteriores: a superfície de entrada
+      (plan.yaml, --board, argumentos da CLI, e agora o próprio texto de
+      drain-plan.md como "entrada" da checagem de contrato) já é
+      adversarialmente coberta pelos comportamentos exigidos e perturbados em
+      L3 — o roteiro de recusas pedido pelo card É o roteiro de adversarial
+      input desta CLI. `cli`/`prompt`/`test-harness` não são `api-rest` no
+      vocabulário Quarkus (este repo não tem um), então a condição estrutural
+      do `n/a` é vácua aqui, mas a condição de fundo (razão nomeada, diff que
+      não abre superfície nova além do já coberto por L3) se mantém. Este
+      commit não toca nenhum módulo `api-rest`.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  A única sobrevivente do ciclo anterior (853b67e) — a checagem "e a
+  reconciliação é o passo 0, ANTES de resolver a fila" que passava por
+  acidente quando o corte de string degradava para o arquivo inteiro — foi
+  fechada exatamente pela rota sugerida: trocada por duas checagens
+  posicionais explícitas (`f.find("### 0.")` / `f.find("### 1.")`, exigindo
+  `i0 < i1`, mais uma segunda checagem de que "cepa-plan reconcile" ocorre
+  especificamente dentro de `f[i0:i1]`). As duas perturbações desenhadas para
+  reprovar essa correção (P19-reteste: reordenar os blocos inteiros;
+  P23: manter a ordem mas tirar a chamada ao reconcile de dentro do passo 0)
+  ficaram VERMELHAS. A reamostragem das duas lacunas fechadas no ciclo
+  anterior (P3b, P17) confirma que nada afrouxou desde então. Nenhum código
+  de produção foi tocado neste commit — só o teste. Todos os níveis
+  aplicáveis (L2, L3) passaram com evidência `verified`; L4 e o nível de
+  bugfix são `n/a` pela mesma leitura estrutural já registrada nos dois
+  ciclos anteriores. PROVEN.

@@ -1,0 +1,224 @@
+key: drain-plan-adiamento
+commit: 853b67e
+base: 76ed76d
+audited_at: "2026-08-28"
+auditor: completion-auditor
+status: complete   # complete SOMENTE se todo criterio abaixo for complete
+
+criteria:
+  - id: CA-1
+    text: >
+      Uma human_pending aberta num item da fila single-track NAO para mais o
+      lote do /common:drain-plan: ela ADIA aquele item e o lote segue.
+    altitude: cli
+    surface: "python3 common/bin/cepa-plan queue <nome> --json"
+    test: tests/test_common_drain_plan.py::test_human_pending_aberto_ADIA_o_item_e_o_lote_segue
+    layer: cli-subprocess (chama o binario de verdade via subprocess.run)
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 'all green' (rodado nesta reauditoria, HEAD 853b67e)"
+    verdict: complete
+
+  - id: CA-2
+    text: >
+      Adiar um item adia em cascata todo item que dependa dele via blocked_by.
+    altitude: cli
+    surface: "python3 common/bin/cepa-plan queue <nome> --json"
+    test: tests/test_common_drain_plan.py::test_adiar_um_item_adia_quem_depende_dele
+    layer: cli-subprocess
+    evidence: verified
+    run: "all green (mesma execucao acima)"
+    verdict: complete
+
+  - id: CA-3
+    text: >
+      Adiar NUNCA reescreve a ordem gravada em plan.yaml.
+    altitude: cli
+    surface: "python3 common/bin/cepa-plan queue <nome> --json, comparando plan.yaml byte a byte"
+    test: tests/test_common_drain_plan.py::test_adiar_nao_reescreve_a_ordem_gravada
+    layer: cli-subprocess
+    evidence: verified
+    run: >
+      all green (mesma execucao acima); o commit 853b67e endureceu este teste
+      para tambem conferir mtime_ns+inode do arquivo (linha 188), nao so o
+      conteudo — resistente a um "grava igual mas toca o arquivo" que o gate
+      de prova teria deixado passar antes.
+    verdict: complete
+
+  - id: CA-4
+    text: >
+      Todo item adiado e reportado no fim do lote, com o motivo (unico lugar
+      onde aparece).
+    altitude: cli + prosa-do-comando
+    surface: >
+      campo `deferred` do JSON de `cepa-plan queue`, e a secao "Adiados:" do
+      contrato de prosa em common/commands/drain-plan.md
+    test: >
+      tests/test_common_drain_plan.py::test_human_pending_aberto_ADIA_o_item_e_o_lote_segue
+      (checa out["deferred"] e out["totals"]["adiados"]);
+      tests/test_common_drain_plan.py::test_contrato_do_comando (checa rotulo
+      DEFERRED no contrato de prosa)
+    layer: cli-subprocess + string-match no .md (unica altitude possivel para um
+      comando que e prompt, nao codigo)
+    evidence: verified
+    run: "all green (mesma execucao acima)"
+    verdict: complete
+
+  - id: CA-5
+    text: >
+      cepa-plan start passa a registrar QUEM reservou (claimed_by).
+    altitude: cli
+    surface: "python3 common/bin/cepa-plan start <fila> <id>, lendo plan.yaml depois"
+    test: tests/test_common_drain_plan.py::test_start_grava_o_dono_e_o_finish_o_apaga
+    layer: cli-subprocess
+    evidence: verified
+    run: "all green (mesma execucao acima)"
+    verdict: complete
+
+  - id: CA-6
+    text: >
+      in_progress com dono vivo e adiado nomeando a sessao; com dono morto e
+      reserva orfa e volta a ser executavel com aviso; sem dono registrado e
+      adiado admitindo que nao da para saber.
+    altitude: cli
+    surface: "python3 common/bin/cepa-plan queue <nome> --json e start <fila> <id>"
+    test: >
+      tests/test_common_drain_plan.py::test_reserva_com_dono_vivo_adia_e_NOMEIA_quem_esta_nele,
+      test_reserva_orfa_e_recuperada_em_vez_de_travar_a_fila,
+      test_in_progress_sem_dono_registrado_adia_e_admite_que_nao_sabe,
+      test_start_recupera_reserva_orfa_e_recusa_a_viva
+    layer: cli-subprocess
+    evidence: verified
+    run: "all green (mesma execucao acima)"
+    verdict: complete
+
+  - id: CA-7
+    text: >
+      Reserva de outra maquina, onde nao da para sondar o pid, e decidida por
+      idade.
+    altitude: cli
+    surface: "python3 common/bin/cepa-plan queue <nome> --json"
+    test: tests/test_common_drain_plan.py::test_reserva_de_outra_maquina_vence_por_idade
+    layer: cli-subprocess
+    evidence: verified
+    run: "all green (mesma execucao acima)"
+    verdict: complete
+
+  - id: CA-8
+    text: >
+      A reconciliacao plano x quadro Jira existe como CODIGO chamavel
+      (cepa-plan reconcile), usada tanto pelo /common:next --sync quanto pelo
+      /common:drain-plan, e nao como prosa duplicada.
+    altitude: cli (o binario) + prosa-do-comando (os dois pontos de chamada)
+    surface: >
+      python3 common/bin/cepa-plan reconcile <nome> --board ARQUIVO [--apply];
+      e as duas prosas que devem chama-lo: common/commands/next.md (passo
+      "Sync", com --sync) e common/commands/drain-plan.md (passo 0)
+    test: >
+      O binario `reconcile` esta testado
+      (tests/test_common_drain_plan.py::test_reconcile_traz_o_quadro_para_a_fila
+      e outros). O lado drain-plan.md esta testado em
+      tests/test_common_drain_plan.py::test_contrato_do_comando (checa
+      "cepa-plan reconcile" no texto). O lado common/commands/next.md AGORA TEM
+      teste dedicado: tests/test_common_next.py (novo neste commit), com 10
+      checagens que leem common/commands/next.md e confirmam: (1) a leitura do
+      quadro e delegada ao atlassian-expert, nao lida direto; (2) a comparacao
+      passa por `cepa-plan reconcile` em vez de "comparar de olho"; (3) o passo
+      Sync grava pelo mesmo comparador com `--apply`; (4) proibe editar o YAML
+      a mao; (5) declara que o comparador nunca fecha human_pending — so o
+      usuario fecha; (6) card do quadro ausente do plano nao e anexado, e diz
+      quem os coloca (--from-jira); (7) sem --sync o comando e read-only; (8)
+      sem tracker, o status e declaradamente auto-declarado.
+    layer: cli-subprocess (reconcile) + string-match no .md (as duas prosas de chamada)
+    evidence: verified
+    run: "python3 tests/test_common_next.py -> 'all green' (rodado nesta reauditoria, HEAD 853b67e, 11 checagens todas ok)"
+    verdict: complete
+
+  - id: CA-9
+    text: >
+      reconcile NUNCA fecha um human_pending e NUNCA anexa a fila um card que
+      existe no quadro e nao no plano.
+    altitude: cli
+    surface: "python3 common/bin/cepa-plan reconcile <nome> --board ARQUIVO --apply"
+    test: tests/test_common_drain_plan.py::test_reconcile_nunca_anexa_card_nem_fecha_divida_humana
+    layer: cli-subprocess
+    evidence: verified
+    run: >
+      all green (mesma execucao acima); o commit 853b67e endureceu este teste
+      para reler o plan.yaml do disco depois do --apply (nao so confiar no
+      JSON de relatorio) — o comentario no proprio teste explica por que:
+      "o relatorio dizer que nao anexou nao prova que o disco nao recebeu".
+    verdict: complete
+
+  - id: CA-10
+    text: >
+      reconcile nao inventa papel para status fora do defaults.status_map, e
+      recusa operar sem esse mapa.
+    altitude: cli
+    surface: "python3 common/bin/cepa-plan reconcile <nome> --board ARQUIVO --apply"
+    test: tests/test_common_drain_plan.py::test_reconcile_recusa_status_que_o_mapa_nao_conhece
+    layer: cli-subprocess
+    evidence: verified
+    run: "all green (mesma execucao acima)"
+    verdict: complete
+
+  - id: CA-11
+    text: >
+      O /common:drain-plan reconcilia ANTES de montar o lote e transiciona o
+      card no Jira ao fechar um item cujo id e chave de card (quando ha
+      quadro e nao veio --offline).
+    altitude: prosa-do-comando
+    surface: common/commands/drain-plan.md (comando e prompt, nao executa como codigo)
+    test: tests/test_common_drain_plan.py::test_contrato_do_comando
+    layer: string-match no .md
+    evidence: verified
+    run: "all green (mesma execucao acima)"
+    verdict: complete
+    detalhe: >
+      O commit 853b67e acrescentou tres checagens novas a
+      test_contrato_do_comando que fecham exatamente a lacuna apontada na
+      auditoria anterior: (1) fatia o texto entre "### 0." e "### 1." e
+      confirma que "cepa-plan reconcile" aparece dentro dessa fatia — ou seja,
+      a reconciliacao esta DENTRO do passo 0, antes do passo 1 que monta a
+      fila via `cepa-plan queue`; (2) confirma que a substring `--offline`
+      aparece no arquivo; (3) confirma que `--offline` aparece pelo menos 3
+      vezes no texto limpo (sem crases), o que forca a opcao a aparecer em
+      mais de um lugar em vez de so na lista de variaveis. Conferido no
+      arquivo fonte: `--offline` aparece nas linhas 47 (declaracao da
+      variavel), 89 (condicao "sem quadro nao ha..., ou com --offline", no
+      passo 0) e 258 (condicao da transicao do card no passo 3.d) de
+      common/commands/drain-plan.md — as duas pontas citadas no criterio
+      (leitura do quadro e transicao do card) estao cobertas, e o teste
+      falharia se qualquer uma delas voltasse a ignorar a flag.
+
+  - id: CA-12
+    text: >
+      A ORDEM de execucao continua vindo da fila, nunca do rank do quadro.
+    altitude: cli + prosa-do-comando
+    surface: >
+      python3 common/bin/cepa-plan queue <nome> --json (a funcao monta_lote
+      nunca le o quadro) e a frase explicita em drain-plan.md
+    test: >
+      tests/test_common_drain_plan.py::test_lote_segue_a_ordem_da_fila_e_o_teto,
+      test_adiar_nao_reescreve_a_ordem_gravada, e
+      test_contrato_do_comando (checa "a ordem nunca vem do quadro" no texto)
+    layer: cli-subprocess + string-match no .md
+    evidence: verified
+    run: "all green (mesma execucao acima)"
+    verdict: complete
+
+summary: >
+  12 de 12 criterios tem teste rodando na altitude correta e verificado nesta
+  reauditoria (HEAD 853b67e): python3 tests/test_common_drain_plan.py -> "all
+  green" (23 funcoes de teste) e python3 tests/test_common_next.py -> "all
+  green" (11 checagens). As duas lacunas da auditoria anterior (b71a404)
+  fecharam: CA-8 ganhou tests/test_common_next.py, novo neste commit, cobrindo
+  a metade do criterio que fala do /common:next --sync (antes sem nenhum
+  teste); CA-11 ganhou tres checagens novas em test_contrato_do_comando que
+  confirmam a reconciliacao dentro do passo 0 (antes do passo 1, que monta a
+  fila) e a condicional --offline nas duas pontas citadas pelo criterio
+  (leitura do quadro no passo 0 e transicao do card no passo 3.d). Os 10
+  criterios ja fechados na auditoria anterior continuam fechando; dois dos
+  testes que os demonstram (CA-3 e CA-9) foram endurecidos neste commit por
+  causa do gate de prova (mtime+inode em vez de so conteudo; releitura do
+  disco em vez de confiar so no JSON de relatorio apos --apply) — mudanca que
+  reforca a evidencia, nao a enfraquece.

@@ -69,11 +69,27 @@ Subcomandos:
       um item travado para alcançar o de baixo seria reordenar a fila em
       silêncio, que é o que este documento existe para impedir.
 
+  cepa-plan reconcile <nome> --board ARQUIVO [--apply] [--repo DIR] [--json]
+      A fila contra o quadro: quem fechou fora do plano, quem voltou atrás,
+      quem sumiu, e quais cards existem no quadro sem posição na fila. Era a
+      tabela em prosa do /common:next; virou código para o lote poder
+      reconciliar sem reescrever a regra — e para a regra ter teste.
+      Não fala com o Jira: quem lê o quadro é o `atlassian-expert`, e o
+      resultado dele chega aqui pelo `--board`. `--apply` grava; sem ele,
+      relata. NUNCA fecha um `human_pending` (só o humano fecha) e NUNCA anexa
+      card que a fila não tem (posição sem `why` é a decisão que a fila guarda
+      — quem coloca é o /common:plan --from-jira).
+
   cepa-plan start <nome> <id>
-      Reserva o item: `pending` → `in_progress`. É a reserva que impede duas
-      sessões de construírem o mesmo item — o equivalente, sem tracker, ao
-      claim que o /board-flow:drain publica no card. Recusa item que já está
-      reservado, item que não está `pending` e item com rota humana aberta.
+      Reserva o item: `pending` → `in_progress`, e ASSINA a reserva com a
+      sessão dona (`claimed_by`: session_id, pid, hostname, cwd, horário). É a
+      reserva que impede duas sessões de construírem o mesmo item — o
+      equivalente, sem tracker, ao claim que o /board-flow:drain publica no
+      card. Com dono vivo, a recusa NOMEIA quem está no item; com dono morto,
+      a reserva é órfã e reivindicá-la é o certo, senão a fila trava para
+      sempre por causa de um run que acabou. Liveness é a do `_wtlib`
+      (pid vivo no mesmo host, horizonte de 24h), a mesma do sistema de
+      worktrees — duas cópias da regra divergem.
 
   cepa-plan finish <nome> <id> --status done|blocked|pending --evidence TEXTO
                    [--human-pending ROTA]
@@ -134,9 +150,11 @@ no relatório.
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 try:
@@ -153,6 +171,95 @@ TETO_PADRAO = 3
 
 def status_de(it):
     return it.get("status", "pending")
+
+
+def agora_iso():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+# ── quem está com o item: a reserva tem dono, e o dono tem liveness ──────────
+#
+# Até 2026-08-28 o `start` gravava só `status: in_progress`, e nada mais. Com
+# isso a pergunta "outra sessão está nele agora, ou um run morreu e deixou o
+# status para trás?" era INDECIDÍVEL a partir do arquivo — o `queue` só sabia
+# oferecer as duas leituras e parar o lote. O registro de sessões que o sistema
+# de worktrees já mantém (`.claude/sessions/<key>.json`, com `pid`, `hostname` e
+# `last_seen`) responde exatamente essa pergunta, e o `_wtlib.entry_is_live`
+# já implementa a regra: PID vivo no mesmo host, e nada além do horizonte de
+# 24h (`_wtlib.STALE_HOURS`). Reservar aqui é gravar uma entrada com esse mesmo
+# formato, para a liveness ser a MESMA função — duas cópias da regra divergem,
+# e este repo já pagou por isso.
+
+def _wt():
+    """O `_wtlib`, importado do irmão `common/hooks/`. None se indisponível."""
+    global _WTLIB
+    try:
+        return _WTLIB
+    except NameError:
+        pass
+    caminho = Path(__file__).resolve().parent.parent / "hooks"
+    if str(caminho) not in sys.path:
+        sys.path.insert(0, str(caminho))
+    try:
+        import _wtlib as m
+    except ImportError:
+        m = None
+    _WTLIB = m
+    return m
+
+
+def dono_atual(raiz, cwd):
+    """A entrada de sessão que vai assinar a reserva.
+
+    Preferência pela sessão VIVA registrada nesta árvore: o pid dela é o do
+    processo `claude`, que é o que continua existindo depois que este script
+    morre. Sem registro (harness não instalado, chamada solta), cai no processo
+    que chamou — pior, mas nomeado, e melhor que assinar com um pid que morre
+    no mesmo segundo.
+    """
+    w = _wt()
+    if w:
+        for e in w.live_sessions_in(str(raiz), str(cwd)):
+            return {"session_id": e.get("session_id"), "pid": e.get("pid"),
+                    "hostname": e.get("hostname") or w.host(),
+                    "cwd": e.get("cwd") or str(cwd), "branch": e.get("branch"),
+                    "started_at": agora_iso()}
+    return {"session_id": os.environ.get("CLAUDE_SESSION_ID")
+            or os.environ.get("CLAUDE_WT_CLAIM") or "sessão não registrada",
+            "pid": os.getppid(), "hostname": w.host() if w else "?",
+            "cwd": str(cwd), "branch": None, "started_at": agora_iso()}
+
+
+def reserva_de(it):
+    """(estado, detalhe) de um item `in_progress`.
+
+      - `viva`     — tem dono e o dono responde. Executar por cima duplicaria
+                     o trabalho de quem está nele agora.
+      - `orfa`     — tem dono e o dono não existe mais (pid morto no mesmo
+                     host, ou entrada além do horizonte de 24h; de outra
+                     máquina não dá para sondar pid, então lá vale só a idade).
+                     A reserva é recuperável.
+      - `sem-dono` — `in_progress` sem `claimed_by`: fila marcada antes deste
+                     registro existir, ou escrita à mão. Indecidível, e o
+                     honesto é dizer isso em vez de chutar um dos dois.
+    """
+    c = it.get("claimed_by")
+    if not isinstance(c, dict) or not c:
+        return "sem-dono", (
+            "reservado sem dono registrado — a marcação é anterior ao registro "
+            "de dono, ou foi escrita à mão. Não dá para dizer se é sessão viva "
+            "ou run morto; devolver para `pending` é decisão sua "
+            "(`cepa-plan finish <fila> <id> --status pending --evidence ...`)")
+    quem = c.get("session_id") or "?"
+    onde = c.get("cwd") or "?"
+    desde = c.get("started_at") or "?"
+    w = _wt()
+    viva = w.entry_is_live(c) if w else True
+    if viva:
+        return "viva", (f"sessão {quem} está nele desde {desde} "
+                        f"(host {c.get('hostname')}, pid {c.get('pid')}, {onde})")
+    return "orfa", (f"a sessão {quem} que reservou em {desde} não existe mais "
+                    f"(host {c.get('hostname')}, pid {c.get('pid')})")
 
 
 def raiz_principal(repo):
@@ -737,44 +844,62 @@ PARADAS = ("fim-da-fila", "teto", "human_pending", "bloqueado",
            "bloqueado-antes", "in_progress")
 
 
-def monta_lote(items, teto):
-    """(lote, parada, avisos) — os itens executáveis agora, NA ORDEM DA FILA.
+def monta_lote(items, teto, estado_da_reserva=reserva_de):
+    """(lote, parada, avisos, adiados) — o que roda agora, NA ORDEM DA FILA.
 
     A ordem é o dado do documento, então esta função nunca reordena e nunca
-    pula um item para alcançar outro mais adiante: ela anda a lista do começo
-    e PARA na primeira coisa que não sabe resolver sozinha. Passar por cima de
-    um item travado é reordenar a fila em silêncio — que é exatamente o que o
-    `/board-flow:drain` faz por não ter uma (ele pega o rank do quadro), e o
-    motivo de este comando existir.
+    promove um item para a frente de outro. O que ela faz, desde 2026-08-28, é
+    distinguir duas coisas que antes eram a mesma:
 
-    Cada motivo de parada existe por uma falha diferente:
+      - **parar** o lote — o que vem depois não é executável enquanto aquilo
+        não for resolvido, e seguir gastaria orçamento no mesmo travamento;
+      - **adiar** um item — ele não roda agora, mas não impede os seguintes.
+        O item sai deste lote e volta no próximo `queue`, e a ORDEM GRAVADA no
+        `plan.yaml` não é tocada: adiar é decisão de execução, reordenar é do
+        `/common:plan`.
 
-      - `human_pending` aberto — só o humano fecha essa pendência, e o item
-        seguinte costuma se apoiar no que ela valida. Seguir sem ela é
-        construir sobre uma coisa que ninguém conferiu, e a dívida some do
-        único lugar que a mostrava. (Decisão do dono, 2026-08-25.)
-      - `bloqueado` — o item depende de algo que não está feito NEM entra
-        neste lote. Copiado do `/board-flow:drain`: não se empurra trabalho
-        travado.
-      - `bloqueado-antes` — o item já saiu `blocked` de um run anterior, numa
-        condição de fora que ninguém mexeu desde então. Voltar a executá-lo
-        gasta orçamento no mesmo travamento; devolvê-lo para `pending` é
-        decisão de quem resolveu a condição.
-      - `in_progress` — o item está reservado. Ou outra sessão está nele agora,
-        ou um run morreu no meio e deixou o status para trás. Nenhum dos dois
-        se resolve executando por cima.
-      - `teto` — o `--max`, também copiado do drain: cada item aqui é um build
-        inteiro com gate de aceite e de prova.
+    O que ADIA (decisão do dono, 2026-08-28 — antes disso os dois primeiros
+    paravam o lote inteiro):
+
+      - `human_pending` aberto — só o humano fecha a rota, e travar a fila até
+        ele voltar é o que fazia um lote de 3 virar um lote de 1. A dívida não
+        some: o item é adiado com a rota verbatim, e o relatório do lote cobra
+        todas no fim.
+      - `in_progress` com dono VIVO — outra sessão está nele agora. Aqui o
+        adiamento diz QUEM, o que a parada antiga não sabia dizer.
+      - item que depende (`blocked_by`) de um item ADIADO neste passo — a
+        cascata. Sem ela, adiar B faria C parar o lote por dependência, e o
+        adiamento não teria servido para nada.
+
+    O que ainda PARA:
+
+      - `blocked` de um run anterior — condição de fora que ninguém mexeu.
+        Re-executar mede o mesmo travamento; devolver para `pending` é de quem
+        resolveu a condição.
+      - `bloqueado` por item que não está feito nem entra no lote — copiado do
+        `/board-flow:drain`: não se empurra trabalho travado.
+      - `teto` — o `--max`. Cada item aqui é um build inteiro com gate de
+        aceite e de prova.
+
+    E o que RECUPERA: `in_progress` cuja sessão dona não existe mais é uma
+    reserva órfã (run morto). Ela volta a ser executável, com aviso — a
+    alternativa é a fila travar para sempre por causa de uma sessão que acabou.
 
     Um `blocked_by` que aponta para item JÁ ESCOLHIDO neste lote não bloqueia:
     ele vai fechar antes, porque a ordem da lista é respeitada. Sem isso o lote
     teria sempre no máximo um item em qualquer fila com dependência encadeada.
     """
-    avisos = []
+    avisos, adiados = [], []
     resolvidos = {str(it.get("id")) for it in items
                   if isinstance(it, dict) and status_de(it) in ("done", "dropped")}
     largados = {str(it.get("id")) for it in items
                 if isinstance(it, dict) and status_de(it) == "dropped"}
+    ids_adiados = set()
+
+    def adia(ident, it, motivo, detalhe):
+        ids_adiados.add(ident)
+        adiados.append({"id": ident, "title": it.get("title"),
+                        "reason": motivo, "detail": detalhe})
 
     lote, parada = [], {"reason": "fim-da-fila", "item": None, "detail":
                         "a fila acabou — nenhum item pendente sobrou"}
@@ -785,12 +910,15 @@ def monta_lote(items, teto):
         if st in ("done", "dropped"):
             continue
         if st == "in_progress":
-            parada = {"reason": "in_progress", "item": ident, "detail":
-                      f"{ident} está `in_progress` — ou outra sessão está nele "
-                      "agora, ou um run morreu no meio e deixou o status para "
-                      "trás. Confirme qual dos dois; devolver para `pending` é "
-                      "decisão sua, não minha"}
-            break
+            estado, detalhe = estado_da_reserva(it)
+            if estado == "orfa":
+                avisos.append(
+                    f"{ident} estava `in_progress` mas a reserva é órfã: "
+                    f"{detalhe}. Tratei como executável — o `start` reivindica "
+                    "a reserva antes de qualquer trabalho.")
+            else:
+                adia(ident, it, "reservado", f"{ident}: {detalhe}")
+                continue
         if st == "blocked":
             motivo = str(it.get("evidence") or "").strip()
             parada = {"reason": "bloqueado-antes", "item": ident, "detail":
@@ -801,10 +929,17 @@ def monta_lote(items, teto):
                       "para `pending` é de quem resolveu a condição"}
             break
         if it.get("human_pending") is not None:
-            parada = {"reason": "human_pending", "item": ident, "detail":
-                      f"{ident} tem uma rota que só você fecha: "
-                      f"{it['human_pending']}"}
-            break
+            adia(ident, it, "human_pending",
+                 f"{ident} tem uma rota que só você fecha: {it['human_pending']}")
+            continue
+        em_espera = [str(b) for b in (it.get("blocked_by") or [])
+                     if str(b) in ids_adiados]
+        if em_espera:
+            adia(ident, it, "depende-de-adiado",
+                 f"{ident} depende de {', '.join(em_espera)}, que ficou de fora "
+                 "deste lote — executá-lo agora seria construir sobre o que não "
+                 "fechou")
+            continue
         pendentes = [b for b in (it.get("blocked_by") or [])
                      if str(b) not in resolvidos
                      and str(b) not in {x["id"] for x in lote}]
@@ -828,16 +963,21 @@ def monta_lote(items, teto):
         lote.append({"id": ident, "title": it.get("title"), "why": it.get("why"),
                      "blocked_by": [str(b) for b in (it.get("blocked_by") or [])]})
 
-    return lote, parada, avisos
+    if parada["reason"] == "fim-da-fila" and adiados:
+        parada["detail"] = (
+            f"a fila acabou — nenhum item executável sobrou, e {len(adiados)} "
+            "ficaram adiados (cada um com o motivo, no relatório)")
+    return lote, parada, avisos, adiados
 
 
-def resumo_do_lote(items, lote, parada):
+def resumo_do_lote(items, lote, parada, adiados=()):
     conta = {"pending": 0, "in_progress": 0, "done": 0, "blocked": 0, "dropped": 0}
     for it in items:
         if isinstance(it, dict):
             conta[status_de(it)] = conta.get(status_de(it), 0) + 1
     restantes = conta["pending"] - len(lote)
     return {"por_status": conta, "no_lote": len(lote),
+            "adiados": len(adiados),
             "pendentes_fora_do_lote": max(restantes, 0)}
 
 
@@ -865,10 +1005,11 @@ def cmd_queue(raiz, nome, teto, como_json):
         return 2
 
     items = plan.get("items") or []
-    lote, parada, avisos = monta_lote(items, teto)
+    lote, parada, avisos, adiados = monta_lote(items, teto)
     saida = {"program": plan.get("program"), "path": str(alvo), "max": teto,
-             "batch": lote, "stop": parada, "warnings": avisos,
-             "totals": resumo_do_lote(items, lote, parada)}
+             "batch": lote, "stop": parada, "deferred": adiados,
+             "warnings": avisos,
+             "totals": resumo_do_lote(items, lote, parada, adiados)}
     if como_json:
         print(json.dumps(saida, ensure_ascii=False, indent=2))
         return 0
@@ -879,12 +1020,15 @@ def cmd_queue(raiz, nome, teto, como_json):
     for i, it in enumerate(lote, 1):
         print(f"  {i}. {it['id']} — {it['title']}")
         print(f"     porque: {it['why']}")
+    for ad in adiados:
+        print(f"  adiado: {ad['id']} ({ad['reason']}) — {ad['detail']}")
     print(f"  parada: {parada['reason']} — {parada['detail']}")
     for a in avisos:
         print(f"  aviso: {a}")
     t = saida["totals"]
-    print(f"  {t['no_lote']} no lote · {t['pendentes_fora_do_lote']} pendente(s) "
-          f"fora dele · {t['por_status'].get('done', 0)} done")
+    print(f"  {t['no_lote']} no lote · {t['adiados']} adiado(s) · "
+          f"{t['pendentes_fora_do_lote']} pendente(s) fora dele · "
+          f"{t['por_status'].get('done', 0)} done")
     return 0
 
 
@@ -1160,7 +1304,7 @@ def abre_plano_para_marcar(raiz, nome):
                         if isinstance(i, dict)}, 0
 
 
-def cmd_start(raiz, nome, ident):
+def cmd_start(raiz, nome, ident, cwd="."):
     alvo, plan, por_id, rc = abre_plano_para_marcar(raiz, nome)
     if rc:
         return rc
@@ -1170,13 +1314,20 @@ def cmd_start(raiz, nome, ident):
               + ", ".join(por_id) or "(nenhum)", file=sys.stderr)
         return 2
     st = status_de(it)
+    recuperada = ""
     if st == "in_progress":
-        print(f"{ident} JÁ está `in_progress` — outra sessão pode estar nele "
-              "agora, ou um run morreu e deixou o status para trás. Executar "
-              "por cima refaz trabalho; a reserva é o que impede isso.",
-              file=sys.stderr)
-        return 5
-    if st != "pending":
+        # A reserva agora tem dono, então a recusa deixa de ser genérica: com
+        # dono vivo ela NOMEIA quem está no item; com dono morto, a reserva é
+        # órfã e reivindicá-la é o certo — a alternativa era a fila travar para
+        # sempre por causa de um run que acabou.
+        estado, detalhe = reserva_de(it)
+        if estado != "orfa":
+            print(f"{ident} JÁ está `in_progress`: {detalhe}. Executar por cima "
+                  "refaz trabalho; a reserva é o que impede isso.",
+                  file=sys.stderr)
+            return 5
+        recuperada = f"  reserva órfã recuperada: {detalhe}"
+    elif st != "pending":
         print(f"{ident} está `{st}`, não `pending` — o lote só reserva item "
               "pendente", file=sys.stderr)
         return 5
@@ -1186,8 +1337,15 @@ def cmd_start(raiz, nome, ident):
               file=sys.stderr)
         return 5
     it["status"] = "in_progress"
+    it["claimed_by"] = dono_atual(raiz, cwd)
     grava_corpo(alvo, plan, plan.get("items") or [])
     print(f"{ident} reservado (`in_progress`) em {alvo}")
+    if recuperada:
+        print(recuperada)
+    dono = it["claimed_by"]
+    print(f"  dono: {dono['session_id']} (host {dono['hostname']}, "
+          f"pid {dono['pid']}) — é o que responde \"outra sessão está nele "
+          "agora ou um run morreu?\" no próximo `queue`")
     return 0
 
 
@@ -1207,6 +1365,7 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending):
         return 2
     it["status"] = status
     it["evidence"] = evidencia
+    it.pop("claimed_by", None)
     if human_pending is not None:
         if not str(human_pending).strip():
             print("`--human-pending` vazio seria FECHAR a dívida, e só o humano "
@@ -1222,6 +1381,202 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending):
 
 
 # ── subcomandos ──────────────────────────────────────────────────────────────
+
+# ── reconcile: o plano contra o quadro, em código ────────────────────────────
+#
+# A reconciliação existia só na PROSA do /common:next (a tabela "plano diz /
+# board diz"), o que dava dois problemas de uma vez: um lote não tinha como
+# reconciliar sem virar um segundo reconciliador com a regra reescrita, e a
+# própria regra não tinha teste — um `.md` prova que o comando PROMETE, nunca
+# que uma execução cumpriu. Aqui a comparação é código, e quem chama é tanto o
+# `/common:next --sync` quanto o `/common:drain-plan` antes de montar o lote.
+#
+# O acesso ao Jira NÃO está aqui: quem fala com o Jira é o `atlassian-expert`,
+# o único agente com as ferramentas. O comando delega a leitura, salva o
+# resultado num arquivo e passa `--board`. Este script compara e grava.
+
+# Papel de cada status do quadro na vida da fila. As chaves são as do
+# `defaults.status_map` do board-flow.yaml, cujos VALORES são os nomes literais
+# do Jira daquele time ("Doing", "Code Review"...) — por isso o mapa é lido do
+# arquivo, nunca chutado.
+PAPEL_DO_STATUS = {
+    "done": "done",
+    "in_review": "em-andamento",
+    "in_progress": "em-andamento",
+    "to_do": "a-fazer",
+    "blocked": "a-fazer",
+    "wont_do": "descartado",
+    "cancelled": "descartado",
+}
+
+
+def status_map_do_repo(raiz, config=None):
+    """(mapa nome-literal → papel, caminho, erro). Sem quadro configurado, ({}, ...)."""
+    candidatos = ([Path(config)] if config else
+                  [raiz / "board-flow.yaml",
+                   raiz / ".claude" / "board-flow.lifecycle.yaml"])
+    for c in candidatos:
+        if not c.is_file():
+            continue
+        try:
+            cfg = yaml.safe_load(c.read_text(encoding="utf-8")) or {}
+        except (yaml.YAMLError, OSError) as e:
+            return {}, str(c), f"{c} está ilegível ({e.__class__.__name__}: {e})"
+        mapa = ((cfg.get("defaults") or {}).get("status_map") or {})
+        return ({str(v): PAPEL_DO_STATUS[k] for k, v in mapa.items()
+                 if k in PAPEL_DO_STATUS and v}, str(c), None)
+    return {}, None, None
+
+
+def le_board(caminho):
+    """(cards, ausentes, erro) do arquivo que o atlassian-expert produziu.
+
+    Formatos aceitos: uma lista de `{"key": ..., "status": ...}`, ou um objeto
+    com `cards` (a mesma lista) e `missing` (as chaves que o Jira disse não
+    existir). `missing` é explícito de propósito: chave que simplesmente não foi
+    consultada não pode ser lida como card apagado — a diferença entre as duas
+    é `dropped` na fila de alguém.
+    """
+    try:
+        texto = sys.stdin.read() if caminho == "-" else Path(caminho).read_text(encoding="utf-8")
+        dados = yaml.safe_load(texto)
+    except (yaml.YAMLError, OSError) as e:
+        return None, None, f"{caminho} está ilegível ({e.__class__.__name__}: {e})"
+    if isinstance(dados, list):
+        cards, ausentes = dados, []
+    elif isinstance(dados, dict):
+        cards, ausentes = (dados.get("cards") or []), (dados.get("missing") or [])
+    else:
+        return None, None, (f"{caminho} não tem nem uma lista de cards nem um "
+                            "objeto com `cards` — não dá para reconciliar contra nada")
+    saida = {}
+    for c in cards:
+        if isinstance(c, dict) and c.get("key"):
+            saida[str(c["key"])] = str(c.get("status") or "")
+    return saida, [str(a) for a in ausentes], None
+
+
+def reconcilia(items, board, ausentes, papel_de):
+    """(divergências, em_dia, faltantes, avisos) — a tabela plano × quadro.
+
+    Nunca fecha `human_pending` (só o humano fecha), nunca anexa card que o
+    plano não tem (posição sem `why` é a decisão que a fila existe para
+    guardar) e nunca inventa papel para status que o mapa não conhece.
+    """
+    div, em_dia, avisos = [], [], []
+    vistos = set()
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        ident, st = str(it.get("id")), status_de(it)
+        vistos.add(ident)
+        if ident in ausentes:
+            div.append({"id": ident, "de": st, "para": "dropped",
+                        "board": "(não existe mais)", "leitura":
+                        f"{ident} não existe mais no quadro — some da fila como "
+                        "`dropped`, com o motivo, em vez de sumir calado"})
+            continue
+        if ident not in board:
+            continue
+        bruto = board[ident]
+        papel = papel_de.get(bruto)
+        if papel is None:
+            avisos.append(
+                f"{ident} está em '{bruto}', um status que o `status_map` do "
+                "board-flow.yaml não descreve — não reconciliei este item, "
+                "porque adivinhar o papel dele é inventar o estado do trabalho")
+            continue
+        if papel == "descartado":
+            div.append({"id": ident, "de": st, "para": "dropped", "board": bruto,
+                        "leitura": f"o quadro descartou {ident} ({bruto})"})
+        elif papel == "done" and st != "done":
+            div.append({"id": ident, "de": st, "para": "done", "board": bruto,
+                        "leitura": f"{ident} fechou fora deste plano ({bruto}). "
+                        "A rota de validação humana dele NÃO veio junto: se "
+                        "havia uma, ela está perdida — só você sabe dizer"})
+        elif papel != "done" and st == "done":
+            div.append({"id": ident, "de": st, "para": "pending", "board": bruto,
+                        "leitura": f"{ident} voltou atrás no quadro ({bruto}) — "
+                        "bounce (UNPROVEN, reaberto). Volta a ser trabalho, e "
+                        "provavelmente o próximo"})
+        elif papel == "em-andamento" and st == "pending":
+            avisos.append(
+                f"{ident} está '{bruto}' no quadro e `pending` aqui — uma "
+                "sessão pode estar nele agora; conferir antes de começá-lo")
+            em_dia.append(ident)
+        else:
+            em_dia.append(ident)
+    faltantes = sorted(k for k in board if k not in vistos)
+    return div, em_dia, faltantes, avisos
+
+
+def cmd_reconcile(raiz, nome, arquivo, config, aplicar, como_json):
+    alvo = caminho_do_plano(raiz, nome)
+    if not alvo.is_file():
+        print(f"{alvo} não existe — não há fila para reconciliar. Quem escreve "
+              "é o /common:plan.", file=sys.stderr)
+        return 2
+    plan, erro = le_plano(alvo)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    if modo_de(plan) != MODE:
+        print(f"{alvo} é um plano '{modo_de(plan)}', não uma fila — ondas se "
+              "reconciliam pelo /maestro:resume", file=sys.stderr)
+        return 3
+    board, ausentes, erro = le_board(arquivo)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    papel_de, cfg, erro = status_map_do_repo(raiz, config)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    if not papel_de:
+        print("nenhum `defaults.status_map` encontrado (board-flow.yaml ou "
+              ".claude/board-flow.lifecycle.yaml) — sem ele os nomes de status "
+              "deste time são desconhecidos, e mapear 'Doing' para um papel no "
+              "chute é inventar o estado do trabalho", file=sys.stderr)
+        return 2
+
+    items = plan.get("items") or []
+    div, em_dia, faltantes, avisos = reconcilia(items, board, ausentes, papel_de)
+
+    aplicadas = []
+    if aplicar and div:
+        por_id = {str(i.get("id")): i for i in items if isinstance(i, dict)}
+        for d in div:
+            it = por_id.get(d["id"])
+            if it is None:
+                continue
+            it["status"] = d["para"]
+            it["reconciled"] = {"at": agora_iso(), "board": d["board"],
+                                "de": d["de"], "para": d["para"]}
+            aplicadas.append(d["id"])
+        grava_corpo(alvo, plan, items)
+
+    saida = {"program": plan.get("program"), "path": str(alvo), "config": cfg,
+             "divergences": div, "in_sync": em_dia, "missing_from_plan": faltantes,
+             "warnings": avisos, "applied": aplicadas, "wrote": bool(aplicadas)}
+    if como_json:
+        print(json.dumps(saida, ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"fila {saida['program']} · {alvo} × quadro ({cfg})")
+    if not div:
+        print("  nenhuma divergência — o plano descreve o que o quadro mostra")
+    for d in div:
+        print(f"  {d['id']}: {d['de']} → {d['para']} · {d['leitura']}")
+    if faltantes:
+        print("  no quadro e FORA da fila (não anexados — posição sem `why` é "
+              "a decisão que a fila guarda): " + ", ".join(faltantes))
+        print("  quem os coloca é o /common:plan <nome> --from-jira")
+    for a in avisos:
+        print(f"  aviso: {a}")
+    print(f"  {len(aplicadas)} gravada(s)" if aplicar else
+          "  nada gravado (rode com --apply para gravar)")
+    return 0
+
 
 def cmd_check_name(raiz, nome):
     alvo = caminho_do_plano(raiz, nome)
@@ -1424,7 +1779,8 @@ def main(argv=None):
                                      "plano de ondas (AAAA-MM-DD)")
 
     st = sub.add_parser("start",
-                        help="reserva um item do lote (status: in_progress)")
+                        help="reserva um item do lote (status: in_progress) e "
+                             "assina a reserva com a sessão dona")
     st.add_argument("nome")
     st.add_argument("id")
     st.add_argument("--repo", default=".")
@@ -1443,6 +1799,22 @@ def main(argv=None):
                     help="ABRE uma rota que só o humano fecha (validar à mão, "
                          "aprovar PR). Nunca fecha uma: só o humano faz isso")
     fi.add_argument("--repo", default=".")
+
+    rc = sub.add_parser("reconcile",
+                        help="compara a fila com o quadro e (com --apply) "
+                             "grava a reconciliação")
+    rc.add_argument("nome")
+    rc.add_argument("--board", required=True, metavar="ARQUIVO",
+                    help="JSON/YAML que o atlassian-expert produziu: lista de "
+                         "{key, status}, ou {cards: [...], missing: [...]}. "
+                         "'-' lê da entrada padrão")
+    rc.add_argument("--config", help="board-flow.yaml a usar (default: o do "
+                                     "repo)")
+    rc.add_argument("--apply", action="store_true", dest="aplicar",
+                    help="grava os status reconciliados no plano. Nunca fecha "
+                         "`human_pending` e nunca anexa card novo")
+    rc.add_argument("--repo", default=".")
+    rc.add_argument("--json", action="store_true", dest="como_json")
 
     w = sub.add_parser("write", help="grava a fila")
     w.add_argument("nome")
@@ -1485,8 +1857,11 @@ def main(argv=None):
         return cmd_queue(raiz, a.nome, a.teto, a.como_json)
     if a.cmd == "promote":
         return cmd_promote(raiz, a.nome, a.como_json, a.quando)
+    if a.cmd == "reconcile":
+        return cmd_reconcile(raiz, a.nome, a.board, a.config, a.aplicar,
+                             a.como_json)
     if a.cmd == "start":
-        return cmd_start(raiz, a.nome, a.id)
+        return cmd_start(raiz, a.nome, a.id, a.repo)
     if a.cmd == "finish":
         return cmd_finish(raiz, a.nome, a.id, a.status, a.evidence,
                           a.human_pending)

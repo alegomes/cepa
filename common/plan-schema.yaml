@@ -53,6 +53,25 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # e a primeira dúvida ("ainda faz sentido?")
                                 # obriga a refazer a priorização do zero.
     status: done                # pending | in_progress | done | blocked | dropped
+    claimed_by:                 # QUEM reservou o item, gravado pelo
+                                # `cepa-plan start` e apagado pelo `finish`.
+                                # Só existe enquanto o status é in_progress.
+                                # Sem ele, "outra sessão está nele agora ou um
+                                # run morreu?" é indecidível a partir do
+                                # arquivo — e era, até 2026-08-28.
+      session_id: abc123        # a sessão do registro .claude/sessions/
+      pid: 12345                # o processo `claude` (sonda de liveness)
+      hostname: macbook         # pid só é sondável no mesmo host
+      cwd: /abs/worktree        # em que árvore ela está trabalhando
+      branch: session/0828-1010
+      started_at: "2026-08-28T10:10:00+00:00"
+                                # Liveness = `_wtlib.entry_is_live`, a MESMA do
+                                # sistema de worktrees: pid vivo no mesmo host e
+                                # dentro do horizonte de 24h (de outra máquina
+                                # não dá para sondar pid, então lá vale só a
+                                # idade). Dono vivo => o lote ADIA o item e diz
+                                # quem está nele; dono morto => reserva órfã,
+                                # recuperada automaticamente com aviso.
     blocked_by: []              # ids de outros items; um item bloqueado não é
                                 # "o próximo" mesmo estando no topo da fila
     human_pending: |            # o que sobrou PRA VOCÊ depois do card fechar.
@@ -65,6 +84,15 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # Um item com human_pending aberto NÃO some da
                                 # vista quando vira `done` — é o que responde
                                 # "tenho que testar à mão ou puxo o próximo?".
+                                # No LOTE (/common:drain-plan) uma rota aberta
+                                # ADIA o item e segue para o próximo, em vez de
+                                # parar o lote inteiro (decisão do dono,
+                                # 2026-08-28): quem depende dele por
+                                # `blocked_by` é adiado junto, em cascata, e
+                                # todas as rotas abertas são cobradas no
+                                # relatório do fim. A ordem GRAVADA aqui não
+                                # muda — adiar é execução, reordenar é do
+                                # /common:plan.
                                 # FECHAR a pendência = trocar o texto por null.
                                 # Só o humano fecha: ele é o único que sabe se
                                 # rodou a rota. /common:next lista as
