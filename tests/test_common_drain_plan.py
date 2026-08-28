@@ -168,13 +168,26 @@ def test_adiar_um_item_adia_quem_depende_dele(base):
 
 def test_adiar_nao_reescreve_a_ordem_gravada(base):
     """Adiar é decisão de execução. Reordenar o documento é do /common:plan —
-    um executor que mexe na ordem é o que a fila existe para impedir."""
+    um executor que mexe na ordem é o que a fila existe para impedir.
+
+    Comparar só o CONTEÚDO não prova isso: o `grava_corpo` é idempotente, então
+    um `queue` que regravasse o arquivo com os mesmos bytes passaria calado (o
+    gate de prova pegou exatamente essa perturbação sobrevivendo). Por isso o
+    teste olha também se o arquivo foi TOCADO — a garantia é que o `queue` não
+    escreve, não que ele escreve a mesma coisa.
+    """
     d = repo_git(base, "ordem-intacta")
     alvo = escreve_fila(d, [item("A"), item("B", human_pending="rota"), item("C")])
     antes = Path(alvo).read_text(encoding="utf-8")
+    marca = os.stat(alvo)
     queue(d)
+    depois = os.stat(alvo)
     check("o plan.yaml sai do `queue` byte a byte igual",
           Path(alvo).read_text(encoding="utf-8") == antes)
+    check("e o arquivo não foi sequer TOCADO — o `queue` é read-only",
+          (depois.st_mtime_ns, depois.st_ino) == (marca.st_mtime_ns, marca.st_ino),
+          "o queue regravou o arquivo; conteúdo igual não é o mesmo que não "
+          "escrever, e a próxima regravação pode não ser idempotente")
 
 
 def test_bloqueio_para_o_lote_mas_dependencia_interna_nao(base):
@@ -437,6 +450,19 @@ def test_contrato_do_comando(base):
           "cepa-plan reconcile" in f,
           "sem reconciliar, o lote executa item que alguém já fechou em outro "
           "lugar")
+    passo0 = f.split("### 1.")[0].split("### 0.")[-1] if "### 0." in f else ""
+    check("e a reconciliação é o passo 0, ANTES de resolver a fila",
+          "cepa-plan reconcile" in passo0,
+          "reconciliar DEPOIS de montar o lote não evita executar o que já "
+          "fechou em outro lugar — a ordem dos passos é o comportamento")
+    check("declara o `--offline` como a condição que desliga quadro",
+          "--offline" in f,
+          "sem a saída offline declarada, um Jira fora do ar trava o lote "
+          "inteiro num repo que sabe rodar sem tracker")
+    check("e o --offline desliga as DUAS pontas (leitura e transição)",
+          limpo.count("--offline") >= 3,
+          "declarar a opção só nas variáveis deixa os passos 0 e 3.d livres "
+          "para ignorá-la")
     check("manda transicionar o card ao fechar, quando há quadro",
           "status_map.in_review" in f,
           "sem a transição, cada lote drenado PRODUZ a divergência que a "
@@ -565,9 +591,17 @@ def test_reconcile_nunca_anexa_card_nem_fecha_divida_humana(base):
     arq = board(d, [{"key": "W-1", "status": "Concluído"},
                     {"key": "W-9", "status": "To Do"}])
     _, out = reconcile(d, arq, "--apply")
-    check("card do quadro sem posição na fila NÃO é anexado",
+    check("card do quadro sem posição na fila é NOMEADO",
           out["missing_from_plan"] == ["W-9"], out)
-    it = por_id(plano_de(alvo))["W-1"]
+    # O relatório dizer que não anexou não prova que o disco não recebeu: o
+    # gate de prova viu um `--apply` que anexava passar com este teste verde.
+    # Quem responde a pergunta é o plan.yaml gravado.
+    no_disco = plano_de(alvo)
+    check("e NÃO entra na fila gravada — posição sem `why` é a decisão que a "
+          "fila existe para guardar",
+          "W-9" not in por_id(no_disco),
+          [i["id"] for i in no_disco["items"]])
+    it = por_id(no_disco)["W-1"]
     check("a dívida humana continua aberta — só o humano fecha",
           it["human_pending"] == "conferir /admin à mão", it)
     check("e o relatório avisa que a rota humana do que fechou fora não veio",
