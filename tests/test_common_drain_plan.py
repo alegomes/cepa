@@ -450,9 +450,19 @@ def test_contrato_do_comando(base):
           "cepa-plan reconcile" in f,
           "sem reconciliar, o lote executa item que alguém já fechou em outro "
           "lugar")
-    passo0 = f.split("### 1.")[0].split("### 0.")[-1] if "### 0." in f else ""
-    check("e a reconciliação é o passo 0, ANTES de resolver a fila",
-          "cepa-plan reconcile" in passo0,
+    # Por posição, não por corte de string: `split("### 0.")[-1]` devolve o
+    # texto INTEIRO quando o marcador não vem antes do passo 1, e o texto
+    # inteiro cita `cepa-plan reconcile` na introdução — a checagem passava por
+    # acidente exatamente no caso que ela existe para pegar (o gate de prova
+    # inverteu a ordem dos dois passos e viu isto verde).
+    i0 = f.find("### 0.")
+    i1 = f.find("### 1.")
+    check("o passo 0 existe e vem ANTES do passo 1",
+          i0 != -1 and i1 != -1 and i0 < i1,
+          f"i0={i0} i1={i1}")
+    check("e a reconciliação acontece DENTRO dele, antes de resolver a fila",
+          i0 != -1 and i1 != -1 and i0 < i1
+          and "cepa-plan reconcile" in f[i0:i1],
           "reconciliar DEPOIS de montar o lote não evita executar o que já "
           "fechou em outro lugar — a ordem dos passos é o comportamento")
     check("declara o `--offline` como a condição que desliga quadro",
