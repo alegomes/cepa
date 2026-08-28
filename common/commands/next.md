@@ -130,17 +130,27 @@ guess: git history proves a commit exists, never that an item is *done*, and
 inferring `done` from a commit message is exactly the false confidence the
 `done`-confidence ladder exists to prevent.
 
-With a tracker, delegate to `atlassian-expert`:
+With a tracker, delegate the read to `atlassian-expert` — the only agent that
+talks to Jira — and ask for it as a file, not as prose:
 
 > Command: next
 >
-> Fetch the current status of these Jira issues: `<keys in the plan>`. Also list
+> Read the current status of these Jira issues: `<keys in the plan>`. Also list
 > the keys currently in `<defaults.status_map.to_do>` for project
-> `<project_key>`. Reply as a compact key → status table, verbatim, no
-> interpretation.
+> `<project_key>`. Return JSON: `{"cards": [{"key": ..., "status": "<the
+> literal Jira status name>"}], "missing": ["<keys Jira reports as
+> nonexistent>"]}`. Do not transition anything.
 
-Compare, and name every divergence — each means something happened outside this
-plan, and silently absorbing it is how the plan starts lying:
+Then hand it to the comparator — **do not compare by eye**:
+
+```
+python3 common/bin/cepa-plan reconcile <nome> --board <arquivo.json> --repo .
+```
+
+The rule below is what that command implements. It lives in code (and has
+tests) so that the batch runner — `/common:drain-plan`, which reconciles before
+mounting a batch — uses the same rule instead of a second, drifting copy of it.
+Read its output; don't re-derive it:
 
 | Plan says | Board says | Reading |
 |---|---|---|
@@ -155,15 +165,25 @@ not after.
 
 ### 4. Sync (only with `--sync`)
 
-Write the reconciled statuses back to the plan. Merge, never overwrite: keep
-`why` and `human_pending` on every item, keep `dropped` items with their reason.
+Write the reconciled statuses back to the plan by re-running the same command
+with `--apply` — never by editing the YAML by hand, which bypasses every
+refusal it makes:
+
+```
+python3 common/bin/cepa-plan reconcile <nome> --board <arquivo.json> --apply --repo .
+```
+
+It merges, never overwrites: `why` and `human_pending` survive on every item,
+`dropped` items keep their reason, and each write leaves a `reconciled` stamp
+saying the status came from the board rather than from work done here.
 Cards found on the board but absent from the plan are **not** appended — they
 were never given a position or a rationale, and inventing one here would forge
 exactly the decision this whole mechanism exists to preserve. Say they're
 missing and that `/common:plan <key> --from-jira` is what places them — `/board-flow:triage` classifies them and gives them a position, and the writer records it.
 
-**Closing human debt.** A `human_pending` is cleared by setting it to `null`,
-and **only the user clears it** — they are the only one who knows whether they
+**Closing human debt.** `reconcile` never touches `human_pending` — closing one
+is the user's, and this command's, alone. A `human_pending` is cleared by
+setting it to `null`, and **only the user clears it** — they are the only one who knows whether they
 actually ran the route. Ask, one item at a time, naming the route verbatim
 ("did you open /admin/devolucoes and confirm the refusal?"). Never infer it from
 a green test, a card status, or the passage of time: a list that closes itself
