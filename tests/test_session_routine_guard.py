@@ -29,6 +29,7 @@ Run: python3 tests/test_session_routine_guard.py
 """
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -166,6 +167,26 @@ def test_le_a_versao_viva_e_nao_a_alfabeticamente_primeira():
         # E pela varredura pura (sem CLAUDE_PLUGIN_ROOT apontando para a certa):
         rc, _ = run("/common:session common:spec uma ideia", plugin_root=base)
         check("varredura pega a maior versão", rc == 2, f"rc={rc}")
+
+
+def test_apelidos_nao_divergem_do_session_md():
+    """A tabela APELIDOS do hook e a lista do passo 1 do session.md são duas
+    cópias da mesma coisa. Se uma ganhar um apelido e a outra não, o gate
+    resolve para um comando diferente do que o session vai rodar — e falha
+    aberto calado, que é o modo de falha que este arquivo inteiro combate."""
+    hook = HOOK.read_text(encoding="utf-8")
+    bloco = hook.split("APELIDOS = {", 1)[1].split("}", 1)[0]
+    do_hook = dict(re.findall(r'"([^"]+)":\s*"([^"]+)"', bloco))
+
+    md = (REPO / "common" / "commands" / "session.md").read_text(encoding="utf-8")
+    passo1 = md.split("### 1. Resolver a rotina", 1)[1].split("###", 1)[0]
+    do_md = dict(re.findall(r'`([a-z-]+)` →\s*`/([a-z-]+:[a-z-]+)`', passo1))
+
+    for apelido, alvo in do_hook.items():
+        check(f"apelido {apelido} está no session.md apontando para {alvo}",
+              do_md.get(apelido) == alvo, f"session.md diz {do_md.get(apelido)!r}")
+    check("drain-plan é um apelido do hook",
+          do_hook.get("drain-plan") == "common:drain-plan", f"{do_hook.get('drain-plan')!r}")
 
 
 def main():

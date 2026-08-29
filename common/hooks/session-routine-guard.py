@@ -64,6 +64,7 @@ except Exception:  # noqa: BLE001 — sem o helper este gate não sabe nada, e
 APELIDOS = {
     "prove-drain": "board-flow:prove-drain",
     "drain": "board-flow:drain",
+    "drain-plan": "common:drain-plan",
     "triage": "board-flow:triage",
     "decide": "board-flow:decide",
     "execute": "board-flow:execute",
