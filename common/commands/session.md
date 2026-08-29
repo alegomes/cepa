@@ -20,9 +20,9 @@ Não é um modo autônomo: você continua decidindo o que é irreversível. Muda
 ## Variables
 
 - `$ARGUMENTS` — o nome da rotina e os argumentos dela.
-  Rotinas reconhecidas: `prove-drain`, `drain`, `triage`, `decide`, `execute`,
-  `autonomous`, `docs`, ou qualquer comando de barra instalado (passe o nome
-  sem o `/`, ex.: `board-flow:prove-drain`).
+  Rotinas reconhecidas: `prove-drain`, `drain`, `drain-plan`, `triage`,
+  `decide`, `execute`, `autonomous`, `docs`, ou qualquer comando de barra
+  instalado (passe o nome sem o `/`, ex.: `board-flow:prove-drain`).
 
 ## Instructions
 
@@ -40,7 +40,8 @@ bloquear literalmente a continuação da rotina.
 ### 1. Resolver a rotina (sem perguntar)
 
 Mapeie o primeiro token de `$ARGUMENTS` para o comando real: `prove-drain` →
-`/board-flow:prove-drain`, `drain` → `/board-flow:drain`, `triage` →
+`/board-flow:prove-drain`, `drain` → `/board-flow:drain`, `drain-plan` →
+`/common:drain-plan` (o lote da fila do plano, sem Jira), `triage` →
 `/board-flow:triage`, `decide` → `/board-flow:decide`, `execute` →
 `/board-flow:execute`, `autonomous` → `/common:autonomous-start`, `docs` →
 `/docs:survey`. Um nome com `:` é usado literalmente.
