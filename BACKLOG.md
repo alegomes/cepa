@@ -2770,3 +2770,66 @@ antes de o passo 3 provar que o cloud continua de pé, e não existe kill-switch
 O3 não foi executado. O corte aplicado em 2026-08-26 foi o **O0** (podar as 14 ferramentas
 `snake_case` sem trocar de mecanismo), que não cria bifurcação nenhuma — os dois prefixos
 que sobraram são ambos MCP e falam o mesmo vocabulário.
+
+---
+
+## A reconciliação do `cepa-plan` lê "In Review" como "reprovado e reaberto"
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-plan` (`PAPEL_DO_STATUS` e
+`reconcilia()`) · **Origem:** `/common:session drain-plan` no repo wego-acesso-backend em
+2026-08-29 — a reconciliação do passo 0 reabriu 11 cards que estavam prontos, e o lote
+seguinte apontou para refazê-los.
+
+### Problema
+
+`PAPEL_DO_STATUS` mapeia `in_review` para o papel `em-andamento`. Em `reconcilia()`, um
+item `done` no plano cujo card está num status de papel diferente de `done` cai neste ramo:
+
+```python
+elif papel != "done" and st == "done":
+    div.append({... "para": "pending", "leitura":
+        f"{ident} voltou atrás no quadro ({bruto}) — bounce (UNPROVEN, reaberto)."})
+```
+
+A leitura é falsa neste projeto, e provavelmente em qualquer um que use o portão de
+Done do board-flow. O portão exige o código em `origin/main` ANTES de permitir a
+transição para Done (registrado na memória do projeto em `done-exige-codigo-no-origin-main.md`),
+então **card implementado, provado e aprovado fica legitimamente parado em "In Review"**
+por todo o intervalo entre o fechamento e o merge. Não é bounce; é a fila normal.
+
+O efeito medido: 11 cards (WEGO-1907, 1908, 1914, 1915, 1917, 2071, 2072, 2093, 2106,
+2124, 2126) voltaram de `done` para `pending` de uma vez, com a leitura "bounce
+(UNPROVEN, reaberto)". Um deles, o WEGO-1907, tinha os vereditos COMPLETE e PROVEN
+commitados na própria branch da sessão. O `queue` seguinte montou um lote com três
+deles, e executá-lo teria significado reimplementar trabalho pronto.
+
+O estrago também não tem desfazer barato: o `plan.yaml` mora em `.claude/`, que é
+gitignorado, então não há `git checkout` para reverter. O conserto foi manual, por
+script, removendo os blocos `reconciled:` com `de: done` / `para: pending` e devolvendo
+o status.
+
+### Esboço de solução
+
+O sinal que falta é a diferença entre "ainda não chegou em done" e "estava em done e
+voltou". Três caminhos, em ordem de preferência:
+
+1. **Não rebaixar `done` → `pending` quando o papel do quadro é `em-andamento`.** Emitir
+   um AVISO ("o plano diz done e o quadro diz In Review — provavelmente esperando merge")
+   e deixar o item como está. Só rebaixar quando o papel for `a-fazer`, que é o único
+   estado que de fato significa "voltou para a fila". É a correção de menor risco e
+   resolve o caso observado inteiro.
+2. **Ler o changelog do card** (o `atlassian-expert` já tem `jira_batch_get_changelogs`)
+   e distinguir "nunca esteve em Done" de "esteve e saiu". Mais fiel, mais caro, e exige
+   passar o histórico junto do `--board`.
+3. **Deixar o repo declarar** no `board-flow.yaml` quais status são "terminal para o
+   plano" — aqui seriam `Done` e `In Review` —, já que o que conta como pronto para a
+   fila é decisão do time, não do script.
+
+O (1) sozinho já teria evitado o incidente. O (3) é o que deixa a regra explícita em vez
+de embutida.
+
+### Teste que falta
+
+A regra não tem teste que a exercite com um card em `in_review`. Um caso de
+`reconcilia()` com plano `done` + quadro `In Review` esperando NENHUMA divergência (ou
+um aviso) é o vermelho que teria pegado isto antes de rodar contra um plano de 110 itens.
