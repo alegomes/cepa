@@ -504,6 +504,7 @@ def check_project(cwd: Path):
     if hdir.is_dir() and not stale:
         ok("handoffs", "sem handoffs vencidos")
 
+    check_arvore_suja(root)
     check_env_manifest(root)
 
 
@@ -570,6 +571,57 @@ def port_holder(port: str):
     except Exception:
         pass
     return pid, cmd or "?", cwd
+
+
+def fila_com_pendente(root: Path):
+    """Nome da 1ª fila `single-track` do repo que tem item `pending`, ou None.
+
+    Leitura rasa, sem pyyaml — mesma escolha do `env_manifest_list`: o doctor
+    roda em toda abertura de sessão e não pode depender de dependência
+    instalada. O que se procura é literal e ancorado na coluna zero do bloco de
+    item, então regex basta; qualquer problema vira None (fail-silent), porque
+    um diagnóstico não pode quebrar a largada da sessão.
+    """
+    d = root / ".claude" / "programs"
+    if not d.is_dir():
+        return None
+    for plano in sorted(d.glob("*/plan.yaml")):
+        try:
+            texto = plano.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if not re.search(r"^mode:\s*single-track\s*$", texto, re.M):
+            continue
+        if re.search(r"^\s+status:\s*pending\s*$", texto, re.M):
+            return plano.parent.name
+    return None
+
+
+def check_arvore_suja(root: Path):
+    """Árvore suja com uma fila esperando execução desatendida.
+
+    O aviso é GATEADO na fila de propósito. Árvore suja é o estado normal de
+    quem está trabalhando, e um aviso em toda abertura de sessão é exatamente o
+    ruído que o usuário aprende a pular — a mesma razão de o modo resumido não
+    imprimir "está tudo ok". O que não é normal é ter fila pendente E árvore
+    suja, porque aí o `cepa-until` RECUSA a largada, e descobrir isso às 23h
+    custa a janela inteira. Então o doctor cobra antes, na abertura.
+    """
+    fila = fila_com_pendente(root)
+    if not fila:
+        return
+    suja = sujeira(str(root))
+    if suja is None:
+        return
+    if not suja:
+        ok("execucao", f"fila `{fila}` pendente e árvore limpa — "
+                       f"`cepa-until {fila} --for 12h` larga sem recusa")
+        return
+    warn("execucao",
+         f"árvore com {len(suja)} arquivo(s) pendente(s) e a fila `{fila}` com "
+         f"item a executar — o `cepa-until` RECUSA largar assim (é como ele "
+         f"separa o que o run fez do que já estava aqui). Commite, limpe, ou "
+         f"largue com --sujo-ok. Achar isso na hora de dormir custa a janela")
 
 
 def check_env_manifest(root: Path):
