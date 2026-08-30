@@ -408,11 +408,20 @@ def test_marcacao_preserva_cabecalho_e_campos_extras(base):
     check("o arquivo marcado continua válido para o próprio validador",
           run(d, "validate", str(alvo)).returncode == 0)
     out = queue(d)[1]
-    check("item que saiu `blocked` de um run anterior PARA o lote seguinte, "
+    # Decisão do dono 2026-08-30: `blocked` ADIA, não para. Não re-executar
+    # continua valendo (seria o mesmo travamento); o que mudou é que ele deixou
+    # de travar a fila atrás dele — numa janela desatendida isso custava a noite.
+    adiados = {a["id"]: a for a in out["deferred"]}
+    check("item que saiu `blocked` de um run anterior é ADIADO, "
           "em vez de ser re-executado no mesmo travamento",
-          out["stop"]["reason"] == "bloqueado-antes", out["stop"])
-    check("a parada repete o motivo registrado no desfecho",
-          "docker" in out["stop"]["detail"], out["stop"])
+          "A" in adiados and adiados["A"]["reason"] == "bloqueado-antes",
+          out["deferred"])
+    check("o adiamento repete o motivo registrado no desfecho",
+          "docker" in adiados.get("A", {}).get("detail", ""), out["deferred"])
+    check("e ele NÃO aparece no lote", "A" not in {i["id"] for i in out["batch"]},
+          out["batch"])
+    check("e a parada não é mais `bloqueado-antes`",
+          out["stop"]["reason"] != "bloqueado-antes", out["stop"])
 
 
 # ── contrato de prosa do comando ─────────────────────────────────────────────

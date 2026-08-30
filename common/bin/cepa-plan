@@ -840,8 +840,11 @@ def cmd_from_triage(caminho, como_json=True):
 
 # ── o lote: o que o /common:drain-plan pode executar AGORA ───────────────────
 
-PARADAS = ("fim-da-fila", "teto", "human_pending", "bloqueado",
-           "bloqueado-antes", "in_progress")
+# O que PARA o lote. `human_pending`, `in_progress` e `bloqueado-antes` já
+# saíram daqui: os três ADIAM o item e deixam os seguintes rodarem.
+PARADAS = ("fim-da-fila", "teto", "bloqueado")
+ADIAMENTOS = ("human_pending", "reservado", "depende-de-adiado",
+              "bloqueado-antes")
 
 
 def monta_lote(items, teto, estado_da_reserva=reserva_de):
@@ -867,15 +870,18 @@ def monta_lote(items, teto, estado_da_reserva=reserva_de):
         todas no fim.
       - `in_progress` com dono VIVO — outra sessão está nele agora. Aqui o
         adiamento diz QUEM, o que a parada antiga não sabia dizer.
+      - `blocked` de um run anterior — condição de fora que ninguém mexeu.
+        Re-executar mede o mesmo travamento, então o item não roda; mas travar
+        a fila inteira atrás dele é pior, e numa janela desatendida (o
+        `cepa-until`) custa a noite toda. Decisão do dono, 2026-08-30, revendo
+        a herança do /board-flow:drain: o item é adiado com o motivo verbatim
+        e o relatório do fim cobra todos.
       - item que depende (`blocked_by`) de um item ADIADO neste passo — a
         cascata. Sem ela, adiar B faria C parar o lote por dependência, e o
         adiamento não teria servido para nada.
 
     O que ainda PARA:
 
-      - `blocked` de um run anterior — condição de fora que ninguém mexeu.
-        Re-executar mede o mesmo travamento; devolver para `pending` é de quem
-        resolveu a condição.
       - `bloqueado` por item que não está feito nem entra no lote — copiado do
         `/board-flow:drain`: não se empurra trabalho travado.
       - `teto` — o `--max`. Cada item aqui é um build inteiro com gate de
@@ -921,13 +927,14 @@ def monta_lote(items, teto, estado_da_reserva=reserva_de):
                 continue
         if st == "blocked":
             motivo = str(it.get("evidence") or "").strip()
-            parada = {"reason": "bloqueado-antes", "item": ident, "detail":
-                      f"{ident} saiu `blocked` de um run anterior"
-                      + (f": {motivo}" if motivo else " (sem motivo registrado)")
-                      + ". Enquanto a condição de fora não mudar, re-executar "
-                      "gasta orçamento no mesmo travamento — devolver o item "
-                      "para `pending` é de quem resolveu a condição"}
-            break
+            adia(ident, it, "bloqueado-antes",
+                 f"{ident} saiu `blocked` de um run anterior"
+                 + (f": {motivo}" if motivo else " (sem motivo registrado)")
+                 + ". Não re-executo — enquanto a condição de fora não mudar, "
+                 "seria o mesmo travamento; devolver o item para `pending` é de "
+                 "quem resolveu a condição. Mas ele também não para os "
+                 "seguintes")
+            continue
         if it.get("human_pending") is not None:
             adia(ident, it, "human_pending",
                  f"{ident} tem uma rota que só você fecha: {it['human_pending']}")

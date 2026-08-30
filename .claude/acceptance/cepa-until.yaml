@@ -1,0 +1,184 @@
+card: cepa-until
+title: >
+  Opção no Cepa para rodar grandes fluxos de execução sem interrupção,
+  aproveitando ociosidade computacional (à noite), com teto de TEMPO em vez
+  de contagem.
+diff: b6dbb23..HEAD (ab691e1, c5342cd, ba531ea, 7fd8798, 75129bc)
+status: complete
+auditor: completion-auditor
+data: 2026-08-30
+
+caveat_global:
+  texto: >
+    Nenhum teste (nem manual, nem automatizado) prova que uma janela de 12h
+    REAL aguenta ponta a ponta — o que existe são janelas curtas (segundos)
+    exercitando o mesmo código de relógio (datetime.now() real, não mockado)
+    com um `claude` falso no PATH. Isso é aceitável como demonstração de
+    MECANISMO (o laço, o parser de duração, a comparação de prazo), porque o
+    próprio código do teste é honesto sobre o limite (docstring de
+    tests/test_cepa_until.py: "O que estes testes NÃO provam: que uma noite
+    de 12h de verdade aguenta. Isso é uma noite de calendário, e só o
+    primeiro run real diz."). NÃO torna nenhum critério INCOMPLETE por si
+    só — não dá para testar 12h reais em CI, e nomear o limite é a coisa
+    certa a fazer.
+  aviso_suite: >
+    tests/test_cepa_modo.py e tests/test_cepa_prompt.py já estavam vermelhos
+    em b6dbb23, sem relação com este diff (registrado em .claude/desvios.md
+    no commit 7fd8798). Não afetam este veredito — nenhum dos dois toca
+    cepa-until, cepa-plan ou cepa-doctor.
+
+criteria:
+  - id: AC1
+    texto: >
+      Teto de TEMPO, não de contagem: `--for 12h` / `--until 07:00`.
+    altitude: cli
+    surface: "cepa-until <fila> --for <duração> | --until <HH:MM> — exit code, stdout, plan.yaml"
+    test: >
+      tests/test_cepa_until.py::test_until_calcula_o_proximo_horario (inclui
+      o caso de horário já passado hoje virar amanhã) e
+      ::test_until_mal_formado_e_recusado_nomeando_a_flag, somados à
+      cobertura pré-existente via `--for` (test_reserva_minima_impede_...,
+      test_fila_inteira_executa_ate_esvaziar, test_dry_run_nao_executa_nada
+      etc.)
+    layer: integration (subprocess real de cepa-until, claude substituído por fake no PATH)
+    evidence: verified
+    run: "python3 tests/test_cepa_until.py → '✓ tudo verde' (79 checks, 0 falhas), 2026-08-30. Especificamente: 'ok  --until aceita HH:MM', 'ok  ...e o prazo é o horário pedido, no dia certo', 'ok  horário já passado hoje vira o de amanhã', 'ok  --until '\''7h'\'' é recusado' / '\''25:00'\'' / '\''abc'\'', cada um com 'ok  ...e a recusa nomeia --until e o valor'."
+    status: complete
+    obs: >
+      Lacuna da auditoria anterior fechada: a lacuna era que só `--for` tinha
+      cobertura. Agora `--until` tem tanto o caminho feliz (calcula o prazo
+      certo, inclusive o corte de virada de dia) quanto a recusa nomeando a
+      flag.
+
+  - id: AC2
+    texto: >
+      Sobrevive à morte da sessão: cada item roda num subprocesso `claude -p`
+      novo, para que estouro de contexto não encerre a janela.
+    altitude: cli/processo
+    surface: "monta_comando() → `claude -p '/common:drain-plan <fila> --max 1'`, um Popen por item"
+    test: tests/test_cepa_until.py::test_fila_inteira_executa_ate_esvaziar
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_cepa_until.py → 'três itens, três subprocessos' ok; 'um item por subprocesso (--max 1 no prompt)' ok"
+    status: complete
+
+  - id: AC3
+    texto: >
+      A fonte é a fila em disco (`/common:drain-plan`), nunca o quadro do
+      Jira.
+    altitude: cli/arquitetura
+    surface: "consulta_fila() chama só `cepa-plan queue --json` (leitura de plan.yaml); nenhuma referência a Jira/atlassian em common/bin/cepa-until"
+    test: toda a suíte tests/test_cepa_until.py roda 100% offline, sem credencial nem mock de Jira
+    layer: integration
+    evidence: verified
+    run: "grep -i jira common/bin/cepa-until → nenhum resultado; suíte inteira passa sem qualquer stub de Jira"
+    status: complete
+    obs: >
+      Demonstrado por AUSÊNCIA (nenhuma chamada a Jira em todo o código e em
+      toda a suíte), não por uma asserção positiva "não chamei o Jira". Para
+      este critério, ausência de acoplamento é a evidência correta.
+
+  - id: AC4
+    texto: >
+      Disjuntor: 3 falhas SEGUIDAS encerram o run.
+    altitude: cli
+    surface: "cepa-until --max-falhas (default 3) — exit e stdout do run, motivo `disjuntor` no relatório e no ledger .jsonl"
+    test: tests/test_cepa_until.py (test_disjuntor_para_depois_de_n_falhas_seguidas, test_progresso_zera_o_disjuntor)
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_cepa_until.py → 'para na 3ª falha seguida' ok; 'o sucesso do meio zerou a contagem' ok"
+    status: complete
+
+  - id: AC5
+    texto: >
+      Commit por item numa branch só (sem trem de merge, sem N branches
+      penduradas).
+    altitude: cli/git
+    surface: "branch do repo gravada na largada do run (branch_atual antes do laço), conferida a cada item antes de disparar o próximo subprocesso; o run encerra em motivo `branch-mudou` se ela mudou"
+    test: tests/test_cepa_until.py::test_branch_diferente_da_largada_encerra_o_run
+    layer: integration
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until.py → 'test_branch_diferente_da_largada_encerra_o_run:
+      ok  o run para quando a branch muda / ok  e o motivo é `branch-mudou` /
+      ok  ...e o detalhe nomeia as duas branches / ok  os itens seguintes NÃO
+      foram executados' — 2026-08-30, 79 checks totais na suíte, 0 falhas.
+    status: complete
+    obs: >
+      A lacuna anterior era estrutural: `branch_atual(repo)` só era lida para
+      IMPRIMIR no banner e no ledger, sem guarda nenhuma. O commit 75129bc
+      trocou isso por código novo — não só teste: `common/bin/cepa-until`
+      agora grava `branch_largada = branch_atual(repo)` antes do laço, e a
+      cada volta compara com `branch_atual(repo)` de novo; se mudou, encerra
+      com `motivo_fim = "branch-mudou"` e um `detalhe_fim` nomeando as duas
+      branches, ANTES de consultar a fila para o próximo item — então os
+      itens seguintes ficam `pending`, não disparam. O teste prova isso
+      simulando dentro do próprio subprocesso falso (`claude -p` fake) um
+      `git checkout -b outra` no item `a1`, e confere que `a2`/`a3` nunca
+      rodam.
+
+  - id: AC6
+    texto: >
+      `--dangerously-skip-permissions` ligado por default (sem ele o
+      subprocesso trava no 1º pedido de permissão).
+    altitude: cli
+    surface: "monta_comando() — presença/ausência da flag no argv passado a `claude -p`, e o banner"
+    test: tests/test_cepa_until.py::test_permissoes_liberadas_por_default_e_desligaveis
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_cepa_until.py → 'por default o subprocesso nasce sem pedir permissão' ok; '--com-permissoes tira a flag' ok"
+    status: complete
+
+  - id: AC7
+    texto: >
+      `--folga` default de 60min.
+    altitude: cli
+    surface: "argparse default de --folga, e o efeito no limite de kill do item em voo (SIGTERM→SIGKILL)"
+    test: >
+      tests/test_cepa_until.py::test_folga_e_reserva_tem_os_defaults_declarados
+      + test_item_que_estoura_a_folga_e_morto_com_o_grupo_todo +
+      test_processo_que_ignora_sigterm_e_morto_no_sigkill
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_cepa_until.py → 'a folga default é 60min' ok; 'o processo-filho morreu junto (kill do grupo, não só do pai)' ok; 'quem ignora o SIGTERM morre no SIGKILL' ok"
+    status: complete
+
+  - id: AC8
+    texto: >
+      Checagem de sujeira da árvore no preflight (o `cepa-doctor`).
+    altitude: cli
+    surface: "cepa-doctor --projeto — stdout (aviso [execucao] ⚠) quando há fila single-track pendente E árvore suja; silêncio nos outros três casos"
+    test: tests/test_doctor_arvore_suja.py (4 cenários) + tests/test_cepa_until.py::test_arvore_suja_recusa_o_run (o próprio cepa-until recusa, não só o doctor)
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_doctor_arvore_suja.py → '✓ tudo verde' (8 checks); python3 tests/test_cepa_until.py → 'árvore suja recusa' / '--sujo-ok deixa passar' ok"
+    status: complete
+
+  - id: AC9
+    texto: >
+      Item `blocked` ADIA em vez de PARAR o lote (mudança no cepa-plan,
+      decisão que sobrepôs a recomendação contrária do agente).
+    altitude: cli
+    surface: "cepa-plan queue --json (campo deferred vs. stop) e o efeito de ponta a ponta em cepa-until (itens seguintes ao `blocked` continuam rodando na mesma janela)"
+    test: >
+      tests/test_common_drain_plan.py::test_marcacao_preserva_cabecalho_e_campos_extras
+      (altitude do cepa-plan/drain-plan) +
+      tests/test_cepa_until.py::test_item_blocked_nao_trava_a_noite_atras_dele
+      (altitude do supervisor de janela, ponta a ponta — e agora confere
+      também que `blocked` conta como PROGRESSO, não como falha do
+      disjuntor)
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py → 'item que saiu blocked de um run anterior é ADIADO' ok, 'e ele NÃO aparece no lote' ok; python3 tests/test_cepa_until.py → 'o item travado NÃO encerra a janela' ok, 'os seguintes fecharam' ok, 'o item travado conta como PROGRESSO, não como falha' ok"
+    status: complete
+
+resumo_da_reauditoria: >
+  As duas lacunas da auditoria anterior (AC1 sem cobertura de `--until`; AC5
+  sem guarda nenhuma, só impressão no banner) foram fechadas no commit
+  75129bc: dois testes novos cobrem `--until` (incluindo a virada de dia) e
+  um teste novo + CÓDIGO NOVO em `common/bin/cepa-until` grava a branch na
+  largada, confere a cada item, e encerra o run em `branch-mudou` se ela
+  mudou — antes de disparar o próximo item. Suíte completa rodada
+  (`python3 tests/test_cepa_until.py`, `test_common_drain_plan.py`,
+  `test_doctor_arvore_suja.py`) em 2026-08-30: 79 + 18 + 8 checks, todos
+  verdes. Os nove critérios de aceite estão `complete`.
