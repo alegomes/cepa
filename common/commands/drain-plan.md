@@ -143,18 +143,18 @@ Os motivos de parada, e o que cada um quer de você:
 | `teto` | o `--max` encheu; o item nomeado seria o próximo. Rode de novo depois. |
 | `fim-da-fila` | não sobrou item pendente. Ofereça `/common:plan` para a próxima leva. |
 | `bloqueado` | o item depende de algo que não está feito nem entra neste lote. |
-| `bloqueado-antes` | o item saiu `blocked` de um run anterior e a condição de fora não mudou. |
 
 E o `queue` devolve também `deferred` — os itens **adiados**, que não rodam
 agora e **não param o lote**. Adiar é decisão de execução: o item sai deste
 lote e volta no próximo `queue`, e a ordem gravada no `plan.yaml` não muda.
-Os três motivos:
+Os quatro motivos:
 
 | motivo do adiamento | o que aconteceu |
 |---|---|
 | `human_pending` | o item tem uma rota que **só você** fecha. Decisão do dono (2026-08-28, revendo a de 08-25): a rota não barra mais o fluxo — travar a fila até o humano voltar transformava um lote de 3 num lote de 1. A dívida não some: ela é cobrada no relatório do fim. |
 | `reservado` | outra sessão **viva** está no item agora — o adiamento diz qual sessão, em que árvore, desde quando. |
 | `depende-de-adiado` | o item depende (`blocked_by`) de um que ficou de fora. A cascata é o que faz o adiamento valer: sem ela, adiar B faria C parar o lote. |
+| `bloqueado-antes` | o item saiu `blocked` de um run anterior e a condição de fora não mudou. Ele não é re-executado — seria o mesmo travamento — mas desde 2026-08-30 também não trava os seguintes. Decisão do dono, revendo a herança do `/board-flow:drain`: numa janela desatendida (`cepa-until`), um item travado no começo da fila custava a noite inteira. |
 
 Uma quarta situação não é adiamento nem parada: `in_progress` cuja sessão dona
 **não existe mais** (pid morto no mesmo host, ou reserva de outra máquina além
@@ -320,11 +320,17 @@ Um relatório só, no formato `plain-report`, e em pt-BR:
 
 - **Default `--max 3`.** Cada item é o flow inteiro mais dois gates; valores
   altos arriscam um run caro que ninguém acompanha.
-- **Parar no primeiro item travado é de propósito.** Não se empurra trabalho
-  travado — copiado do `/board-flow:drain`, pelo mesmo motivo.
+- **Só uma coisa ainda para o lote: dependência não satisfeita** (`bloqueado`)
+  — não se empurra trabalho que depende do que não fechou.
 - **`human_pending` aberto ADIA o item; não para o lote.** Decisão do dono em
   2026-08-28, revendo a de 08-25. Quem depende do item adiado é adiado junto,
   em cascata, e toda rota aberta é cobrada no relatório do fim.
+- **`blocked` de um run anterior ADIA o item; não para o lote.** Decisão do
+  dono em 2026-08-30, pelo mesmo raciocínio um passo adiante: o item travado
+  não é re-executado (seria o mesmo travamento), mas travar a fila atrás dele
+  numa janela desatendida custa a janela inteira. Herança do
+  `/board-flow:drain` revista de propósito — lá a ordem vem do quadro, aqui
+  vem do plano.
 - **Adiar nunca reescreve a ordem do `plan.yaml`.** Adiar é execução;
   reordenar é do `/common:plan`. Um executor que mexe na ordem é o que a fila
   existe para impedir.
