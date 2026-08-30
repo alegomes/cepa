@@ -1,40 +1,38 @@
 schema_version: 2
 card: cepa-until
-verdict: unproven
-reviewed_at: 2026-08-30T17:45:00-03:00
+verdict: needs-human
+reviewed_at: 2026-08-30T18:10:00-03:00
 base_commit: b6dbb23
-head_commit: 7fd8798
+head_commit: 75129bc      # commit que responde aos 4 achados da rodada anterior + 1 lacuna nova.
+                            # Nota: a árvore tem, além deste, um commit posterior (79baa82, "hook de
+                            # feedback dispara em notificação de subagente") e uma edição em disco
+                            # (não commitada) em .claude/acceptance/cepa-until.yaml — ambos fora do
+                            # escopo desta reprova (não tocam cepa-until/cepa-plan/cepa-doctor); a
+                            # segunda parece ser o completion-auditor atualizando o próprio veredito
+                            # dele em paralelo. Não interferi em nenhum dos dois.
 issue_type: Feature
 repo_kind: harness             # NOT Quarkus/Maven — Python CLI + prompt files, própria suíte em tests/
 scope:
   changed_classes:
-    - class: "common/bin/cepa-until (relógio: parse_duracao, parse_ate)"
-      module: cli
-      external_observable: true    # superfície externa é a linha de comando: exit code, stdout, stderr, ledger em disco
-      substituted_by_double: null  # roda o binário real via subprocess; o único double é o `claude` no PATH (a borda externa correta), nunca a classe sob teste
-    - class: "common/bin/cepa-until (executa_item: subprocesso, timeout, matar grupo com SIGTERM/SIGKILL)"
+    - class: "common/bin/cepa-until (TERMINAIS — contagem de blocked/dropped como progresso)"
       module: cli
       external_observable: true
       substituted_by_double: null
-    - class: "common/bin/cepa-until (o laço principal: disjuntor, TERMINAIS/progresso, warnings, ledger, banner)"
+    - class: "common/bin/cepa-until (executa_item — kill do GRUPO por timeout, escalada SIGTERM→SIGKILL, GRACA_SIGTERM)"
       module: cli
       external_observable: true
       substituted_by_double: null
-    - class: "common/bin/cepa-until (guardas de largada: arvore_suja, fila inexistente, --sujo-ok)"
+    - class: "common/bin/cepa-until (parse_ate — flag --until HH:MM, horário já passado vira amanhã)"
       module: cli
       external_observable: true
       substituted_by_double: null
-    - class: "common/bin/cepa-plan (monta_lote — PARADAS/ADIAMENTOS: `blocked` de run anterior passa a ADIAR em vez de parar)"
+    - class: "common/bin/cepa-until (propagação de dados['warnings'] do cepa-plan queue para print+ledger)"
       module: cli
       external_observable: true
       substituted_by_double: null
-    - class: "common/bin/cepa-doctor (check_arvore_suja, fila_com_pendente — aviso gateado em fila pendente + árvore suja)"
+    - class: "common/bin/cepa-until (guarda de branch: branch_largada gravada e conferida entre itens, encerra em branch-mudou)"
       module: cli
       external_observable: true
-      substituted_by_double: null
-    - class: "common/commands/drain-plan.md (prosa: tabela de paradas/adiamentos, `bloqueado-antes` deixa de constar como parada)"
-      module: prompt
-      external_observable: false
       substituted_by_double: null
   base_commit_resolved: true
 levels:
@@ -45,89 +43,84 @@ levels:
       results:
         - "não há pitest neste repo (não é JVM); perturbação manual no binário real, via subprocess, é o único mecanismo aplicável"
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "PASS (RED confirmado) — disjuntor nunca zera falha: `if progresso:` trocado por `if True:` em cepa-until — causou LOOP INFINITO (o item nunca sai do lugar e o supervisor reagenda o mesmo item para sempre); `python3 tests/test_cepa_until.py` sob timeout de 90s estourou (exit 124). Tratado como VERMELHO, conforme o aviso de disjuntor-como-única-defesa contra fila-devolve-o-mesmo-item-para-sempre. Restaurado."
-        - "PASS (RED) — reserva mínima nunca corta: `if restante < reserva:` trocado por `if False:` — 3 asserções de test_reserva_minima_impede_comecar_item_que_nao_cabe foram para FAIL (disparou item que não cabia na janela). Restaurado."
-        - "PASS (RED) — cascata de adiamento em cepa-plan: removido o `continue` depois de `adia(...,\"bloqueado-antes\",...)` — a asserção 'e ele NÃO aparece no lote' de test_marcacao_preserva_cabecalho_e_campos_extras foi para FAIL (o item bloqueado voltou a entrar no lote, além de adiado). Restaurado."
-        - "SURVIVED — o bloco inteiro de matar item por timeout (`os.killpg` com SIGTERM/SIGKILL, a `folga` estendendo o prazo) foi trocado por um `except` que finge sucesso silencioso (`matou=False; codigo=0`, sem matar o processo). `tests/test_cepa_until.py` continuou 100% verde: NENHUM teste força um item a estourar o prazo e ser morto. Esse é o mecanismo que a folga (default 60min) e o `--folga` inteiros dependem para existir — está descrito em detalhe no docstring do arquivo e nunca é exercitado. GAP real."
-        - "SURVIVED — `parse_ate` (a flag `--until HH:MM`, um dos dois modos de uso documentados: `cepa-until fila --until 07:00`) trocado para sempre lançar `ValueError('quebrado')` — suíte continuou 100% verde. Nenhum teste chama `--until`; só `--for` é exercitado. GAP real: o segundo modo de uso documentado não tem prova alguma."
-        - "SURVIVED — o laço que propaga `warnings` do `cepa-plan queue` (ex.: aviso de reserva órfã recuperada) para o print e para o ledger (`registra({'evento':'aviso',...})`) removido por completo — suíte continuou 100% verde. Nenhum teste popula `warnings` no fake `claude`/fake fila. GAP real, embora de severidade menor (o item ainda é executado corretamente; só o aviso desaparece)."
-        - "SURVIVED (parcial) — `TERMINAIS = {\"done\",\"blocked\",\"dropped\"}` reduzido para `{\"done\"}` (retirando `blocked` e `dropped` da contagem de progresso): `tests/test_cepa_until.py` continuou 100% verde, INCLUSIVE `test_item_blocked_nao_trava_a_noite_atras_dele`, o teste que existe especificamente para este comportamento. Medido à parte (fora da suíte, replicando o mesmo cenário): com a perturbação, o item `blocked` some da contagem `com_progresso` e entra em `sem_progresso` (`com_progresso=2, sem_progresso=1` vs. `com_progresso=3, sem_progresso=0` sem a perturbação) — nenhuma asserção do teste olha esses dois campos neste cenário. Efeito real: uma sequência de itens que saem `blocked` (não um único) tropeça o disjuntor (default 3) e encerra a janela sozinha — exatamente o incidente que a decisão do dono de 2026-08-30 diz ter resolvido (\"era o último jeito de um item só travar uma janela inteira\"). GAP real e de maior risco: é o comportamento CENTRAL da mudança, sub-provado."
+        - "PASS (RED) — achado 1/4 fechado: `TERMINAIS = {\"done\",\"blocked\",\"dropped\"}` reduzido para `{\"done\",\"dropped\"}` — a NOVA asserção de test_item_blocked_nao_trava_a_noite_atras_dele (`fim[\"com_progresso\"] == 3 and fim[\"sem_progresso\"] == 0`) foi para FAIL. É a asserção que faltava na rodada anterior — antes dela o mesmo corte de código ficava verde. Restaurado."
+        - "PASS (RED) — achado 2/4 fechado: o kill do GRUPO (`os.killpg` + escalada SIGTERM→SIGKILL) trocado por `proc.terminate()`/`proc.kill()` (mata só o pai) — 2 asserções caíram: `test_item_que_estoura_a_folga_e_morto_com_o_grupo_todo` ('o processo-filho morreu junto') e `test_processo_que_ignora_sigterm_e_morto_no_sigkill` ('quem ignora o SIGTERM morre no SIGKILL'). Restaurado."
+        - "PASS (RED) — achado 3/4 fechado: `parse_ate` sem o `if alvo <= agora: alvo += timedelta(days=1)` — a asserção 'horário já passado hoje vira o de amanhã' de test_until_calcula_o_proximo_horario foi para FAIL. Restaurado."
+        - "PASS (RED) — achado 4/4 fechado: o laço `for aviso in dados.get(\"warnings\")...` removido — as 3 asserções de test_aviso_da_fila_chega_ao_registro_e_a_tela ('o aviso é gravado no registro', '...diz que a reserva era órfã', '...aparece na tela também') foram para FAIL juntas. Restaurado."
+        - "PASS (RED) — lacuna estrutural nova (achada pelo gate de aceite) fechada: o bloco inteiro da guarda de branch (`agora_branch = branch_atual(repo); if agora_branch != branch_largada: ...`) removido — as 4 asserções de test_branch_diferente_da_largada_encerra_o_run caíram juntas ('o run para quando a branch muda', 'motivo branch-mudou', 'detalhe nomeia as duas branches', 'itens seguintes não executados'). Restaurado."
+        - "Não reperturbado nesta rodada (arquivos não mudaram entre 7fd8798 e 75129bc, confirmado por `git diff --stat`): cepa-plan (monta_lote/blocked-adia), cepa-doctor (check_arvore_suja/fila_com_pendente), drain-plan.md — os 3 permanecem PASS herdado da rodada anterior (RED confirmado então, sem alteração de código desde então)."
+        - "AVALIADO, não é achado: `GRACA_SIGTERM` (env `CEPA_UNTIL_GRACA_SIGTERM`, default 30s) é um botão de teste em código de produção — mas com default seguro (30s, igual ao comportamento antes de existir a variável), documentado no comentário acima da constante, e só sobrescrito explicitamente pelo teste que precisa exercer a escalada SIGTERM→SIGKILL sem esperar meio minuto. Não é um backdoor de segurança nem muda o comportamento sem opt-in explícito do operador. Aceito como padrão de \"costura de teste\" (test seam), não como gap."
       run: >-
-        worktree descartável /tmp/proof-cepa-until (git worktree add --detach,
-        base em HEAD=7fd8798, depois em b6dbb23 para a baseline). GREEN de
-        partida confirmado primeiro nos três testes do diff:
-        `python3 tests/test_cepa_until.py`, `python3
-        tests/test_doctor_arvore_suja.py`, `python3
-        tests/test_common_drain_plan.py` — os três "tudo verde"/"all green" em
-        HEAD. Baseline em b6dbb23 confirmada à parte: `python3
-        tests/test_cepa_prompt.py` (13 falhas) e `python3
-        tests/test_cepa_modo.py` (2 falhas) — mesmas 15 falhas descritas em
-        .claude/desvios.md, não relacionadas a este diff, presentes ANTES dele.
-        Cada perturbação: edição via script Python com `assert old in s` antes
-        de escrever (garante que bateu no trecho certo), depois
-        `timeout 90 python3 <teste>` exigindo pelo menos uma asserção em FAIL
-        OU timeout (tratado como vermelho, por causa do disjuntor de proteção
-        contra loop infinito), depois `git checkout -- <arquivo>` para
-        restaurar e `git status --porcelain` vazio antes da perturbação
-        seguinte. Perturbações executadas via caminho absoluto no worktree
-        descartável (não na árvore principal) — necessário porque o path-lock
-        do harness (fora do escopo desta prova) bloqueia escrita por caminho
-        relativo fora de docs/proof/**, mas libera escrita fora da raiz do
-        repo principal (comportamento documentado/esperado, não editado por
-        mim). Ao final, worktree removido com `git worktree remove --force` e
-        a árvore principal nunca tocada (confirmado: nenhum `git status`
-        sujo no repo em /Users/alegomes/cepa-worktrees/cepa-continuidade
-        durante toda a prova).
+        worktree descartável /tmp/proof-cepa-until-2 (`git worktree add
+        --detach HEAD` em 75129bc, worktree principal nunca tocado — todo
+        `git checkout`/`git status` de perturbação usou caminho ABSOLUTO
+        dentro do worktree descartável; caminho relativo é bloqueado pelo
+        path-lock deste agente mesmo fora da raiz do repo principal — não
+        editei o hook, só usei caminho absoluto). GREEN de partida confirmado
+        primeiro: `python3 tests/test_cepa_until.py` → "✓ tudo verde" (79
+        checks, ~84s). Cada perturbação: edição via script Python com
+        `assert old in s` antes de escrever (garante que bateu no trecho
+        certo), depois `timeout 90 python3 tests/test_cepa_until.py`
+        exigindo pelo menos uma asserção em FAIL, depois `git checkout --
+        <caminho absoluto>` para restaurar e `git status --porcelain` vazio
+        antes da perturbação seguinte. As 5 perturbações acima cobrem os 5
+        pontos que a rodada anterior (verdict unproven, head 7fd8798) listou
+        como sobreviventes ou lacunas — todas foram para VERMELHO desta vez.
+        Não refiz as outras 12 perturbações da rodada anterior (disjuntor,
+        reserva mínima, cascata de adiamento no cepa-plan, gate do doctor
+        etc.) porque os arquivos que elas cobrem não mudaram entre 7fd8798 e
+        75129bc (`git diff --stat 7fd8798..75129bc` mostra só
+        common/bin/cepa-until, tests/test_cepa_until.py,
+        .claude/acceptance/cepa-until.yaml e docs/proof/cepa-until.yaml) —
+        confio no PASS já registrado para elas na rodada anterior.
   l2_coverage:
-    status: gap
-    uncovered_lines:
-      - "common/bin/cepa-until: bloco de morte por timeout em executa_item() (os.killpg SIGTERM/SIGKILL) e o efeito da --folga sobre o prazo do subprocesso"
-      - "common/bin/cepa-until: parse_ate() / --until HH:MM inteiro"
-      - "common/bin/cepa-until: propagação de dados['warnings'] para print+ledger"
-      - "common/bin/cepa-until: contagem de com_progresso/sem_progresso quando o item sai `blocked` (a asserção existe no teste dedicado, mas não cobre estes dois campos)"
+    status: pass
+    uncovered_lines: []
     run: >-
-      leitura estrutural + perturbação (não há coverage tool wired neste repo
-      Python): as 4 lacunas acima ficaram verdes ao serem quebradas, conforme
-      l3_load_bearing.perturbation acima.
+      As 4 lacunas de cobertura da rodada anterior (kill por timeout/grupo,
+      `--until`, propagação de warnings, com_progresso/sem_progresso em
+      blocked) e a lacuna estrutural nova (guarda de branch) ficaram
+      VERMELHAS ao serem quebradas, conforme l3_load_bearing.perturbation
+      acima — deixaram de estar descobertas. Não há coverage tool wired
+      neste repo Python; leitura estrutural do diff entre 7fd8798 e 75129bc
+      não achou hunk novo sem teste correspondente.
   l4_adversarial_input:
     status: skipped
     reason: >-
-      a superfície de entrada real (o subprocesso `claude -p ...` disparado de
-      verdade, com Docker/Testcontainers/permissões de escrita reais) não pôde
-      ser testada adversarialmente sem executar um agente real por horas — o
-      próprio design assume isso (docstring do arquivo: "o que estes testes
-      NÃO provam: que uma noite de 12h de verdade aguenta"). Testar contra o
-      `claude` falso do PATH mediria o double, não o comportamento adversarial
-      do subprocesso real. `skipped` por decisão de escopo, não por double
-      manco — mas ainda assim não é evidência positiva.
+      Igual à rodada anterior, por decisão explícita de escopo (instrução do
+      solicitante nesta reprova: "NÃO prove que uma janela de 12h real
+      aguenta"): a superfície de entrada real (o subprocesso `claude -p ...`
+      disparado de verdade, com permissões reais, por até 12h) não pode ser
+      testada adversarialmente sem executar um agente real por horas. Testar
+      contra o `claude` falso do PATH mediria o double, não o comportamento
+      adversarial do subprocesso real. `skipped` por decisão de escopo, não
+      por double manco — mas segue sem ser evidência positiva, e é o único
+      motivo que impede `proven` nesta rodada.
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
     run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
 routing_reason: >-
-  A maior parte dos comportamentos declarados pelo implementador (relógio de
-  --for, reserva mínima, disjuntor com progresso zerando a contagem,
-  human_pending como progresso, guardas de largada, cascata de adiamento no
-  cepa-plan, gate do doctor) foi perturbada por mim, de forma independente, e
-  cada perturbação foi para VERMELHO (uma delas via timeout/loop infinito,
-  tratado como vermelho por instrução explícita). Mas achei, procurando
-  especificamente o que NÃO foi perturbado, quatro comportamentos
-  externally-observable que sobrevivem quebrados: (1) o bloco inteiro de matar
-  um item por timeout — o mecanismo que a `--folga` (default 60min) inteira
-  depende para existir, e que o próprio arquivo descreve como central
-  ("Onde o corte acontece"); (2) a flag `--until HH:MM`, um dos dois modos de
-  uso documentados no próprio `Uso:` do arquivo, sem UM teste sequer; (3) a
-  propagação de avisos (`warnings`) do `cepa-plan queue` para o log/ledger; e
-  (4), o mais sério, a contagem de `blocked` como progresso no disjuntor — o
-  comportamento CENTRAL da decisão do dono de 2026-08-30 ("era o último jeito
-  de um item só travar uma janela inteira") tem um teste dedicado
-  (`test_item_blocked_nao_trava_a_noite_atras_dele`) que passa mesmo quando
-  esse comportamento é removido, porque nenhuma asserção olha
-  `com_progresso`/`sem_progresso` nesse cenário — uma sequência de itens
-  `blocked` (não um só) pode tropeçar o disjuntor sozinha, sem nenhum teste
-  acusando. Isso são hunks externally-observable sobrevivendo à perturbação
-  externa (green-when-broken) — por regra de roteamento, isso é UNPROVEN, não
-  NEEDS-HUMAN: são gaps determinísticos e nomeáveis, seguros para devolver ao
-  time.
+  Os 4 achados da rodada anterior (kill por timeout/grupo nunca exercido,
+  `--until` sem teste, avisos da fila somem calados, `blocked` saindo da
+  contagem de progresso sem nenhuma asserção acusar) foram perturbados de
+  novo, de forma independente, e todos foram para VERMELHO — inclusive a
+  quinta lacuna que o gate de aceite achou depois (guarda de branch). Duas
+  armadilhas de relógio/vacuidade que o implementador relatou ter caído
+  também foram conferidas: o teste do kill agora espera passar a hora em que
+  o órfão teria escrito o marcador antes de cobrar o silêncio (perturbação
+  confirmou: sem essa espera o teste passava com o kill errado); e a
+  variável `GRACA_SIGTERM` foi avaliada como costura de teste aceitável, não
+  achado, porque tem default seguro e só muda com opt-in explícito do
+  ambiente. Não achei nenhum comportamento externally-observable sobrevivendo
+  quebrado nesta rodada — por isso não é UNPROVEN. Mas o nível L4
+  (adversarial) segue `skipped` por decisão de escopo (não dá para rodar um
+  agente real 12h em CI, e a própria instrução desta reprova proíbe tentar
+  provar a janela real) — por regra de roteamento, um nível `skipped` nunca
+  vira `proven` por si só, mesmo quando não há falha determinística: vira
+  NEEDS-HUMAN. Recomendação para o humano: aceitar a prova de mecanismo (o
+  relógio, o disjuntor, o kill, as guardas — todos provados load-bearing) e
+  tratar a resistência de uma noite real de 12h como risco operacional
+  monitorado no primeiro run de verdade, não como bloqueio de merge.

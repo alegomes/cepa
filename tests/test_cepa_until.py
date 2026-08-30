@@ -88,8 +88,12 @@ def fake_claude(tmp, corpo):
     binv = Path(tmp) / "bin"
     binv.mkdir(exist_ok=True)
     script = binv / "claude"
+    # Shebang com o interpretador DESTA suíte, não `env python3`: o python3 do
+    # sistema pode não ter PyYAML, e o teste adversário fixa o PATH de
+    # propósito. Com `env python3` o falso morria por import e o caso medido
+    # virava outro. (2026-08-30.)
     script.write_text(
-        "#!/usr/bin/env python3\n"
+        f"#!{sys.executable}\n"
         "import os, sys, yaml, json, time\n"
         "PLANO = os.environ['FAKE_PLANO']\n"
         "ARGS = sys.argv[1:]\n"

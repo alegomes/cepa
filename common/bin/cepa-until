@@ -209,9 +209,19 @@ def executa_item(nome, repo, permissoes, limite_seg, log):
         saida.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} "
                     f"· {' '.join(cmd)}\n".encode("utf-8"))
         saida.flush()
-        proc = subprocess.Popen(cmd, cwd=str(repo), stdout=saida,
-                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                start_new_session=True)
+        try:
+            proc = subprocess.Popen(cmd, cwd=str(repo), stdout=saida,
+                                    stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL,
+                                    start_new_session=True)
+        except OSError as e:
+            # O `claude` sumiu do PATH, ficou sem permissão ou o binário está
+            # corrompido DEPOIS da largada. Estourar aqui mataria o supervisor
+            # e a janela junto, deixando o registro pela metade — o oposto do
+            # que ele existe para fazer. Vira item sem progresso: o disjuntor
+            # encerra em 3, com o motivo escrito.
+            saida.write(f"MAESTRO-SPAWN-FALHOU: {e}\n".encode("utf-8"))
+            return -2, False, time.monotonic() - inicio
         try:
             codigo = proc.wait(timeout=max(limite_seg, 1))
             matou = False
@@ -440,8 +450,10 @@ def main(argv=None):
         else:
             falhas_seguidas += 1
             falhados.append((ident, estado, codigo, matou))
-            razao = "morto por timeout" if matou else \
-                (f"claude saiu {codigo}" if codigo else "o item não saiu do lugar")
+            razao = ("morto por timeout" if matou else
+                     "não consegui nem lançar o `claude`" if codigo == -2 else
+                     f"claude saiu {codigo}" if codigo else
+                     "o item não saiu do lugar")
             print(f"          → SEM PROGRESSO: {razao} "
                   f"(status ainda `{estado}`) · {falhas_seguidas}/{a.max_falhas}")
             if falhas_seguidas >= a.max_falhas:
