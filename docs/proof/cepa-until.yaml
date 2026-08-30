@@ -1,38 +1,39 @@
 schema_version: 2
 card: cepa-until
-verdict: needs-human
-reviewed_at: 2026-08-30T18:10:00-03:00
+verdict: proven
+reviewed_at: 2026-08-30T18:35:00-03:00
 base_commit: b6dbb23
-head_commit: 75129bc      # commit que responde aos 4 achados da rodada anterior + 1 lacuna nova.
-                            # Nota: a árvore tem, além deste, um commit posterior (79baa82, "hook de
-                            # feedback dispara em notificação de subagente") e uma edição em disco
-                            # (não commitada) em .claude/acceptance/cepa-until.yaml — ambos fora do
-                            # escopo desta reprova (não tocam cepa-until/cepa-plan/cepa-doctor); a
-                            # segunda parece ser o completion-auditor atualizando o próprio veredito
-                            # dele em paralelo. Não interferi em nenhum dos dois.
+head_commit: 739721b       # 3ª rodada: fecha o nível l4 (entrada adversária) que
+                             # ficou `skipped` na rodada anterior (head 75129bc,
+                             # needs-human sem achado). Escopo desta rodada = o
+                             # diff 75129bc..739721b: tests/test_cepa_until_adversarial.py
+                             # (novo), o `except OSError` em common/bin/cepa-until,
+                             # e a correção de shebang em fake_claude
+                             # (tests/test_cepa_until.py). As 5 classes de
+                             # comportamento já provadas em rodadas anteriores
+                             # (kill de grupo, --until, warnings, blocked,
+                             # guarda de branch) não mudaram entre 75129bc e
+                             # 739721b (`git diff --stat` confirma) e não foram
+                             # reperturbadas — herdam o PASS já registrado.
 issue_type: Feature
 repo_kind: harness             # NOT Quarkus/Maven — Python CLI + prompt files, própria suíte em tests/
 scope:
   changed_classes:
-    - class: "common/bin/cepa-until (TERMINAIS — contagem de blocked/dropped como progresso)"
+    - class: "common/bin/cepa-until (executa_item — Popen sem tratamento estourava quando o `claude` some/corrompe DEPOIS da largada; agora `except OSError` devolve -2, sem progresso, disjuntor encerra)"
       module: cli
       external_observable: true
       substituted_by_double: null
-    - class: "common/bin/cepa-until (executa_item — kill do GRUPO por timeout, escalada SIGTERM→SIGKILL, GRACA_SIGTERM)"
+    - class: "common/bin/cepa-until (main — mapeamento do código -2 para a razão de relatório 'não consegui nem lançar o `claude`', distinta de 'claude saiu <código>')"
       module: cli
       external_observable: true
       substituted_by_double: null
-    - class: "common/bin/cepa-until (parse_ate — flag --until HH:MM, horário já passado vira amanhã)"
-      module: cli
-      external_observable: true
+    - class: "tests/test_cepa_until_adversarial.py (novo — nível l4: linha de comando + estado em disco mutável)"
+      module: test-harness
+      external_observable: false
       substituted_by_double: null
-    - class: "common/bin/cepa-until (propagação de dados['warnings'] do cepa-plan queue para print+ledger)"
-      module: cli
-      external_observable: true
-      substituted_by_double: null
-    - class: "common/bin/cepa-until (guarda de branch: branch_largada gravada e conferida entre itens, encerra em branch-mudou)"
-      module: cli
-      external_observable: true
+    - class: "tests/test_cepa_until.py (fake_claude — shebang trocado de `env python3` para sys.executable, para não depender do python3 do sistema ter PyYAML)"
+      module: test-harness
+      external_observable: false
       substituted_by_double: null
   base_commit_resolved: true
 levels:
@@ -45,82 +46,69 @@ levels:
     perturbation:
       status: pass
       results:
-        - "PASS (RED) — achado 1/4 fechado: `TERMINAIS = {\"done\",\"blocked\",\"dropped\"}` reduzido para `{\"done\",\"dropped\"}` — a NOVA asserção de test_item_blocked_nao_trava_a_noite_atras_dele (`fim[\"com_progresso\"] == 3 and fim[\"sem_progresso\"] == 0`) foi para FAIL. É a asserção que faltava na rodada anterior — antes dela o mesmo corte de código ficava verde. Restaurado."
-        - "PASS (RED) — achado 2/4 fechado: o kill do GRUPO (`os.killpg` + escalada SIGTERM→SIGKILL) trocado por `proc.terminate()`/`proc.kill()` (mata só o pai) — 2 asserções caíram: `test_item_que_estoura_a_folga_e_morto_com_o_grupo_todo` ('o processo-filho morreu junto') e `test_processo_que_ignora_sigterm_e_morto_no_sigkill` ('quem ignora o SIGTERM morre no SIGKILL'). Restaurado."
-        - "PASS (RED) — achado 3/4 fechado: `parse_ate` sem o `if alvo <= agora: alvo += timedelta(days=1)` — a asserção 'horário já passado hoje vira o de amanhã' de test_until_calcula_o_proximo_horario foi para FAIL. Restaurado."
-        - "PASS (RED) — achado 4/4 fechado: o laço `for aviso in dados.get(\"warnings\")...` removido — as 3 asserções de test_aviso_da_fila_chega_ao_registro_e_a_tela ('o aviso é gravado no registro', '...diz que a reserva era órfã', '...aparece na tela também') foram para FAIL juntas. Restaurado."
-        - "PASS (RED) — lacuna estrutural nova (achada pelo gate de aceite) fechada: o bloco inteiro da guarda de branch (`agora_branch = branch_atual(repo); if agora_branch != branch_largada: ...`) removido — as 4 asserções de test_branch_diferente_da_largada_encerra_o_run caíram juntas ('o run para quando a branch muda', 'motivo branch-mudou', 'detalhe nomeia as duas branches', 'itens seguintes não executados'). Restaurado."
-        - "Não reperturbado nesta rodada (arquivos não mudaram entre 7fd8798 e 75129bc, confirmado por `git diff --stat`): cepa-plan (monta_lote/blocked-adia), cepa-doctor (check_arvore_suja/fila_com_pendente), drain-plan.md — os 3 permanecem PASS herdado da rodada anterior (RED confirmado então, sem alteração de código desde então)."
-        - "AVALIADO, não é achado: `GRACA_SIGTERM` (env `CEPA_UNTIL_GRACA_SIGTERM`, default 30s) é um botão de teste em código de produção — mas com default seguro (30s, igual ao comportamento antes de existir a variável), documentado no comentário acima da constante, e só sobrescrito explicitamente pelo teste que precisa exercer a escalada SIGTERM→SIGKILL sem esperar meio minuto. Não é um backdoor de segurança nem muda o comportamento sem opt-in explícito do operador. Aceito como padrão de \"costura de teste\" (test seam), não como gap."
+        - "PASS (RED) — defeito real desta rodada fechado: removido o `try/except OSError` ao redor do `subprocess.Popen` em executa_item — sem ele, `test_claude_corrompido_no_meio_e_falha_contada_nao_traceback` não falha graciosamente: o `PermissionError` sobe sem tratamento, o supervisor estoura no meio do item, e o teste TAMBÉM quebra (IndexError ao procurar um `run_end` que nunca foi escrito, porque o processo morreu antes de fechar o registro). Restaurado."
+        - "PASS (RED) — a mensagem específica de relatório também é load-bearing, não só o código de saída: removido o ramo `'não consegui nem lançar o `claude`' if codigo == -2` (cai no genérico 'claude saiu -2') — a asserção '...e o relatório nomeia que nem deu para lançar' (checa a palavra 'lançar' no stdout) foi para FAIL sozinha, as outras 3 do mesmo teste continuaram verdes. Confirma que o teste distingue a causa raiz (falha ao lançar) de um exit code genérico, não só verifica 'terminou mal'. Restaurado."
+        - "REVISADO ESTRUTURALMENTE, NÃO EXECUTADO (por instrução explícita desta reprova — 'NÃO rode nada que possa invocar o claude real'): o achado (a) do próprio implementador (`PATH` herdado deixava o `execvp` cair no `claude` DE VERDADE quando o falso virava diretório) foi conferido sem repetir o acidente. `roda()` monta `PATH = f'{binv}:{PATH herdado}'`; `echo $PATH` neste ambiente mostra `/Users/alegomes/.local/bin` — onde `which claude` aponta o binário real — na 1ª posição do PATH herdado. Editei `test_claude_corrompido_no_meio_e_falha_contada_nao_traceback` para remover o `\"PATH\": \"/usr/bin:/bin\"` do `extra_env` (deixando o PATH herdado passar), mas NÃO executei esse teste perturbado — rodar significaria repetir os 87s de agente real que o implementador relatou. A leitura estática do `roda()` e do `PATH` do ambiente é suficiente para confirmar que, sem a correção, o teste chamaria o binário real; não contabilizo isso como perturbação verde→vermelho completa, é evidência estrutural complementar."
+        - "grep em tests/*.py confirma que nenhum OUTRO teste da suíte substitui um binário por um diretório nem depende de fallback de PATH — os dois usos remanescentes de PATH herdado (test_install_ops.py:118,157) só prependem um stub válido, nunca simulam corrupção; não há mais nenhum caso da mesma família."
+        - "Não reperturbado nesta rodada (arquivos não mudaram entre 75129bc e 739721b, `git diff --stat` confirma escopo restrito a common/bin/cepa-until, tests/test_cepa_until.py, tests/test_cepa_until_adversarial.py, .claude/acceptance/cepa-until.yaml): as 5 perturbações da rodada anterior (kill de grupo/timeout, --until, propagação de warnings, contagem blocked, guarda de branch) permanecem PASS herdado."
       run: >-
-        worktree descartável /tmp/proof-cepa-until-2 (`git worktree add
-        --detach HEAD` em 75129bc, worktree principal nunca tocado — todo
-        `git checkout`/`git status` de perturbação usou caminho ABSOLUTO
-        dentro do worktree descartável; caminho relativo é bloqueado pelo
-        path-lock deste agente mesmo fora da raiz do repo principal — não
-        editei o hook, só usei caminho absoluto). GREEN de partida confirmado
-        primeiro: `python3 tests/test_cepa_until.py` → "✓ tudo verde" (79
-        checks, ~84s). Cada perturbação: edição via script Python com
-        `assert old in s` antes de escrever (garante que bateu no trecho
-        certo), depois `timeout 90 python3 tests/test_cepa_until.py`
-        exigindo pelo menos uma asserção em FAIL, depois `git checkout --
-        <caminho absoluto>` para restaurar e `git status --porcelain` vazio
-        antes da perturbação seguinte. As 5 perturbações acima cobrem os 5
-        pontos que a rodada anterior (verdict unproven, head 7fd8798) listou
-        como sobreviventes ou lacunas — todas foram para VERMELHO desta vez.
-        Não refiz as outras 12 perturbações da rodada anterior (disjuntor,
-        reserva mínima, cascata de adiamento no cepa-plan, gate do doctor
-        etc.) porque os arquivos que elas cobrem não mudaram entre 7fd8798 e
-        75129bc (`git diff --stat 7fd8798..75129bc` mostra só
-        common/bin/cepa-until, tests/test_cepa_until.py,
-        .claude/acceptance/cepa-until.yaml e docs/proof/cepa-until.yaml) —
-        confio no PASS já registrado para elas na rodada anterior.
+        worktree descartável /tmp/proof-cepa-until-3 (`git worktree add
+        --detach 739721b`, worktree principal nunca tocado; edições de
+        perturbação usaram caminho ABSOLUTO por causa do path-lock deste
+        agente, que bloqueia caminho relativo mesmo fora da raiz do repo
+        principal — não editei o hook). GREEN de partida confirmado nos dois
+        arquivos primeiro: `timeout 100 python3 tests/test_cepa_until.py` →
+        "✓ tudo verde"; `timeout 90 python3
+        tests/test_cepa_until_adversarial.py` → "✓ tudo verde" (45 checks, 0
+        FAIL). Cada perturbação: edição via script Python com `assert old in
+        s` antes de escrever, depois `timeout 90 python3
+        tests/test_cepa_until_adversarial.py` exigindo FAIL, depois `git -C
+        /tmp/proof-cepa-until-3 checkout -- <caminho absoluto>` restaurando e
+        confirmando GREEN de novo antes da perturbação seguinte.
   l2_coverage:
     status: pass
     uncovered_lines: []
     run: >-
-      As 4 lacunas de cobertura da rodada anterior (kill por timeout/grupo,
-      `--until`, propagação de warnings, com_progresso/sem_progresso em
-      blocked) e a lacuna estrutural nova (guarda de branch) ficaram
-      VERMELHAS ao serem quebradas, conforme l3_load_bearing.perturbation
-      acima — deixaram de estar descobertas. Não há coverage tool wired
-      neste repo Python; leitura estrutural do diff entre 7fd8798 e 75129bc
-      não achou hunk novo sem teste correspondente.
+      O `except OSError` novo e o ramo de mensagem `codigo == -2` ficaram
+      VERMELHOS ao serem quebrados (ver l3 acima) — não estão descobertos.
+      Leitura estrutural do diff 75129bc..739721b em common/bin/cepa-until
+      (22 linhas) não achou hunk sem teste correspondente.
   l4_adversarial_input:
-    status: skipped
-    reason: >-
-      Igual à rodada anterior, por decisão explícita de escopo (instrução do
-      solicitante nesta reprova: "NÃO prove que uma janela de 12h real
-      aguenta"): a superfície de entrada real (o subprocesso `claude -p ...`
-      disparado de verdade, com permissões reais, por até 12h) não pode ser
-      testada adversarialmente sem executar um agente real por horas. Testar
-      contra o `claude` falso do PATH mediria o double, não o comportamento
-      adversarial do subprocesso real. `skipped` por decisão de escopo, não
-      por double manco — mas segue sem ser evidência positiva, e é o único
-      motivo que impede `proven` nesta rodada.
-    findings: []
+    status: clean
+    reason: ""
+    findings:
+      - "kill ratio informal: das 7 entradas de `--for` testadas como absurdas (0h, 0m, -3h, 1e9h, h, 12hh, vazio), todas as 7 foram recusadas com rc=2 e zero disparo — nenhuma escapou para a aritmética ou para o subprocess."
+      - "janela gigante (99999h, 1000000m) não estourou `OverflowError`: ou vira uma data válida ou é recusada, sempre com veredito (rc 0 ou 2), nunca traceback."
+      - "metacaractere de shell no nome da fila (`fila; touch <canário>`) não executou nada — confirma que o comando é lista, nunca `shell=True`."
+      - "plan.yaml corrompido/apagado NO MEIO do run (não na largada) encerra por `fila-ilegivel` com o registro fechado, não trava nem estoura."
+      - "o `claude` virando diretório DEPOIS da largada — a superfície mais perigosa, porque quebra sem qualquer aviso prévio — agora é contida: item sem progresso, disjuntor encerra em 3, relatório nomeia a causa raiz."
+      - "achado colateral aceito, não é gap do produto: os 2 defeitos que o PRÓPRIO implementador descreveu nos testes (PATH herdado achando o claude real; shebang sem PyYAML) eram do arnês de teste, não do cepa-until — confirmados via leitura estrutural acima, não reintroduzidos."
+    run: >-
+      `timeout 90 python3 tests/test_cepa_until_adversarial.py` → "✓ tudo
+      verde" (45 checks, 0 FAIL) na baseline 739721b, worktree descartável.
+      As duas superfícies de entrada da instrução desta reprova (linha de
+      comando E estado em disco mutável) estão cobertas pelo arquivo; ver
+      l3_load_bearing.perturbation para as 2 perturbações verde→vermelho que
+      confirmam que o mecanismo de defesa (não só a suite) é load-bearing.
   bugfix_regression_red_at_base:
     status: n/a
     run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
 routing_reason: >-
-  Os 4 achados da rodada anterior (kill por timeout/grupo nunca exercido,
-  `--until` sem teste, avisos da fila somem calados, `blocked` saindo da
-  contagem de progresso sem nenhuma asserção acusar) foram perturbados de
-  novo, de forma independente, e todos foram para VERMELHO — inclusive a
-  quinta lacuna que o gate de aceite achou depois (guarda de branch). Duas
-  armadilhas de relógio/vacuidade que o implementador relatou ter caído
-  também foram conferidas: o teste do kill agora espera passar a hora em que
-  o órfão teria escrito o marcador antes de cobrar o silêncio (perturbação
-  confirmou: sem essa espera o teste passava com o kill errado); e a
-  variável `GRACA_SIGTERM` foi avaliada como costura de teste aceitável, não
-  achado, porque tem default seguro e só muda com opt-in explícito do
-  ambiente. Não achei nenhum comportamento externally-observable sobrevivendo
-  quebrado nesta rodada — por isso não é UNPROVEN. Mas o nível L4
-  (adversarial) segue `skipped` por decisão de escopo (não dá para rodar um
-  agente real 12h em CI, e a própria instrução desta reprova proíbe tentar
-  provar a janela real) — por regra de roteamento, um nível `skipped` nunca
-  vira `proven` por si só, mesmo quando não há falha determinística: vira
-  NEEDS-HUMAN. Recomendação para o humano: aceitar a prova de mecanismo (o
-  relógio, o disjuntor, o kill, as guardas — todos provados load-bearing) e
-  tratar a resistência de uma noite real de 12h como risco operacional
-  monitorado no primeiro run de verdade, não como bloqueio de merge.
+  O nível que travava a rodada anterior em NEEDS-HUMAN (l4_adversarial_input:
+  skipped) está fechado: existe agora um arquivo de teste dedicado
+  (tests/test_cepa_until_adversarial.py) cobrindo as duas superfícies de
+  entrada — linha de comando e estado em disco mutável durante o run — e ele
+  roda GREEN na baseline. O defeito real que motivou esta rodada (Popen sem
+  tratamento estourando quando o `claude` some/corrompe depois da largada)
+  foi perturbado (removido o `except OSError`) e foi para VERMELHO, junto com
+  a mensagem de relatório que nomeia a causa raiz. O achado (a) do próprio
+  implementador (isolamento de teste vazando pelo PATH herdado) foi conferido
+  por leitura estrutural, sem repetir a invocação do agente real — não
+  encontrei nenhum outro teste da suíte com a mesma dependência de PATH
+  herdado. Não achei nenhum comportamento externally-observable sobrevivendo
+  quebrado nesta rodada, e o único gap estrutural que impedia `proven` na
+  rodada anterior foi fechado com evidência real (não assumida). Por isso
+  PROVEN — a única ressalva que continua fora de escopo, por decisão
+  explícita desde o início, é que uma janela real de 12h com o agente de
+  verdade nunca foi exercida; isso é risco operacional monitorado no primeiro
+  run de produção, não um gap de prova.
