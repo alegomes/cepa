@@ -1,0 +1,458 @@
+#!/usr/bin/env python3
+"""cepa-until — executa a fila do repo por uma JANELA DE TEMPO, sem ninguém acordado.
+
+## Por que existe
+
+Os três executores em lote do harness (`/board-flow:drain`, `/common:drain-plan`,
+`/board-flow:prove-drain`) são limitados por CONTAGEM: `--max N`. Contagem é a
+forma errada para aproveitar ociosidade — você não sabe quantos itens cabem numa
+noite, sabe quantas horas tem. O que falta é um teto de relógio.
+
+Mas relógio sozinho não resolve, porque o que mata uma sessão longa não é o
+tempo: é o CONTEXTO. Uma sessão de 12h estoura muito antes das 12h, e quem
+retoma hoje é uma pessoa digitando `/common:autonomous-resume` — às 3h da manhã,
+ninguém digita.
+
+Daí o desenho: **um item por subprocesso**. Este supervisor dispara
+
+    claude -p "/common:drain-plan <fila> --max 1"
+
+uma vez por item, num processo novo a cada vez. Estouro de contexto deixa de ser
+uma falha e vira o fim normal de um subprocesso — o supervisor dispara o
+próximo, com a janela de contexto limpa. É isso, e só isso, que torna 12h
+possíveis.
+
+## O que ele NÃO faz, de propósito
+
+Ele não reserva item, não registra desfecho, não conhece a topologia e não sabe
+o que é um card. Quem faz tudo isso é o `/common:drain-plan` + o `cepa-plan`,
+que já têm a máquina de estado necessária, construída e testada:
+
+  - `cepa-plan start` reserva o item ASSINANDO a reserva (sessão, pid, host);
+  - `cepa-plan queue` devolve como executável a reserva cujo pid morreu — a
+    "reserva órfã". É o que impede um subprocesso morto de travar a fila para
+    sempre, e é exatamente a garantia de que um supervisor precisa;
+  - `cepa-plan finish` grava o desfecho, inclusive a rota que só o humano fecha.
+
+Este arquivo é a fiação em volta disso: relógio, disjuntor e registro.
+
+## As quatro decisões do dono (2026-08-30)
+
+1. **A fonte é a fila em disco** (`/common:drain-plan`), não a coluna do quadro.
+   A fila guarda a ORDEM e o PORQUÊ, e não depende do Jira estar de pé às 3h.
+2. **Disjuntor em 3 falhas seguidas.** Abaixo disso é azar; acima é queimar a
+   janela inteira num problema sistêmico.
+3. **Commit por item, numa branch só.** Sem trem de merge e sem N branches
+   penduradas esperando alguém reparar — que é o defeito medido do Maestro na
+   onda 1 do WEGO-paralelo (5 branches verdes paradas, 2 delas por meio dia).
+4. **`--dangerously-skip-permissions` ligado.** Sem isso o subprocesso trava no
+   primeiro pedido de permissão e a noite morre em silêncio. Fica explícito no
+   banner e desligável por `--com-permissoes`.
+
+## Onde o corte acontece
+
+Entre itens, NUNCA no meio de um. Matar um item pela metade deixa árvore suja e
+reserva pendurada. Duas folgas controlam isso:
+
+  - `--reserva-minima` (default 25min): não COMEÇA um item se sobra menos que
+    isso. Um item que não cabe na janela é trabalho jogado fora.
+  - `--folga` (default 60min): quanto um item JÁ RODANDO pode passar do prazo
+    antes de ser morto. Passou disso, é morte por timeout — registrada, e a
+    reserva órfã volta para a fila no próximo run.
+
+## Quando ele para
+
+Para no primeiro de: prazo atingido, fila sem item executável (a razão vem do
+`cepa-plan queue` — `fim-da-fila`, `bloqueado`, `bloqueado-antes`), ou disjuntor.
+Um item que sai `blocked` PARA o lote — regra do `cepa-plan`, herdada do
+`/board-flow:drain`: re-executar mede o mesmo travamento.
+
+Uso:
+    cepa-until minha-fila --for 12h
+    cepa-until minha-fila --until 07:00
+    cepa-until minha-fila --for 3h --dry-run     # o plano do run, sem executar
+"""
+
+import argparse
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("cepa-until precisa de PyYAML (pip install pyyaml)", file=sys.stderr)
+    sys.exit(2)
+
+AQUI = Path(__file__).resolve().parent
+CEPA_PLAN = AQUI / "cepa-plan"
+
+RESERVA_MINIMA_PADRAO = "25m"
+FOLGA_PADRAO = "60m"
+MAX_FALHAS_PADRAO = 3
+
+# Status que contam como PROGRESSO no item. `dropped` entra porque o item saiu
+# da fila por decisão registrada, não por falha do run.
+TERMINAIS = {"done", "blocked", "dropped"}
+
+
+# ── relógio ─────────────────────────────────────────────────────────────────
+
+_DUR = re.compile(r"^(\d+(?:\.\d+)?)\s*([hm])$", re.I)
+
+
+def parse_duracao(texto, flag="--for"):
+    """'12h' / '90m' → timedelta. Sem unidade não passa: '12' é ambíguo e a
+    ambiguidade aqui custa uma noite inteira na unidade errada.
+
+    `flag` existe porque três opções passam por aqui (--for, --reserva-minima,
+    --folga) e uma recusa que nomeia a flag errada manda você conferir o
+    argumento certo — foi o que uma perturbação flagrou em 2026-08-30.
+    """
+    m = _DUR.match(texto.strip())
+    if not m:
+        raise ValueError(
+            f"{flag} {texto!r} não é uma duração: use '12h' ou '90m' (a unidade "
+            "é obrigatória)")
+    valor, unidade = float(m.group(1)), m.group(2).lower()
+    if valor <= 0:
+        raise ValueError(f"{flag} {texto!r} não é positivo")
+    return timedelta(hours=valor) if unidade == "h" else timedelta(minutes=valor)
+
+
+def parse_ate(texto, agora):
+    """'07:00' → o próximo 07:00 no futuro. Se já passou hoje, é amanhã."""
+    try:
+        hh, mm = texto.strip().split(":")
+        alvo = agora.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
+    except Exception:
+        raise ValueError(f"--until {texto!r} não é um horário: use 'HH:MM'")
+    if alvo <= agora:
+        alvo += timedelta(days=1)
+    return alvo
+
+
+def humano(td):
+    total = int(max(td.total_seconds(), 0))
+    h, m = total // 3600, (total % 3600) // 60
+    return f"{h}h{m:02d}" if h else f"{m}min"
+
+
+# ── leitura da fila ─────────────────────────────────────────────────────────
+
+def consulta_fila(nome, repo):
+    """`cepa-plan queue --max 1 --json`. Devolve (dados, erro)."""
+    try:
+        p = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "queue", nome,
+             "--max", "1", "--repo", str(repo), "--json"],
+            capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        return None, "o `cepa-plan queue` não respondeu em 60s"
+    if p.returncode != 0:
+        return None, (p.stderr or p.stdout or "").strip() or \
+            f"`cepa-plan queue` saiu {p.returncode}"
+    try:
+        return json.loads(p.stdout), None
+    except json.JSONDecodeError as e:
+        return None, f"o `cepa-plan queue` não devolveu JSON ({e})"
+
+
+def le_item(caminho_plano, ident):
+    """Status atual do item no disco. A verdade do desfecho é o PLANO, não o
+    código de saída do subprocesso — sincronize pelo efeito verificável."""
+    try:
+        plan = yaml.safe_load(Path(caminho_plano).read_text(encoding="utf-8"))
+    except Exception as e:
+        return None, f"não consegui reler {caminho_plano}: {e}"
+    for it in (plan or {}).get("items") or []:
+        if isinstance(it, dict) and str(it.get("id")) == str(ident):
+            return it, None
+    return None, f"o item {ident} sumiu do plano durante o run"
+
+
+# ── execução de um item ─────────────────────────────────────────────────────
+
+def monta_comando(nome, repo, permissoes):
+    cmd = ["claude", "-p", f"/common:drain-plan {nome} --max 1"]
+    if not permissoes:
+        cmd.append("--dangerously-skip-permissions")
+    return cmd
+
+
+def executa_item(nome, repo, permissoes, limite_seg, log):
+    """Dispara UM subprocesso. Devolve (codigo, matou_por_timeout, segundos)."""
+    cmd = monta_comando(nome, repo, permissoes)
+    inicio = time.monotonic()
+    with open(log, "ab", buffering=0) as saida:
+        saida.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} "
+                    f"· {' '.join(cmd)}\n".encode("utf-8"))
+        saida.flush()
+        proc = subprocess.Popen(cmd, cwd=str(repo), stdout=saida,
+                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                start_new_session=True)
+        try:
+            codigo = proc.wait(timeout=max(limite_seg, 1))
+            matou = False
+        except subprocess.TimeoutExpired:
+            # Mata o GRUPO: o claude spawna filhos (builds, mvn), e matar só o
+            # pai deixa build órfão segurando a árvore.
+            matou = True
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+                proc.wait(timeout=30)
+            except Exception:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except Exception:
+                    pass
+            codigo = proc.returncode if proc.returncode is not None else -1
+    return codigo, matou, time.monotonic() - inicio
+
+
+# ── guardas de largada ──────────────────────────────────────────────────────
+
+def arvore_suja(repo):
+    try:
+        p = subprocess.run(["git", "status", "--porcelain"], cwd=str(repo),
+                           capture_output=True, text=True, timeout=30)
+    except Exception:
+        return None
+    if p.returncode != 0:
+        return None
+    return [l for l in p.stdout.splitlines() if l.strip()]
+
+
+def branch_atual(repo):
+    try:
+        p = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                           cwd=str(repo), capture_output=True, text=True, timeout=30)
+        return p.stdout.strip() if p.returncode == 0 else "?"
+    except Exception:
+        return "?"
+
+
+# ── o laço ──────────────────────────────────────────────────────────────────
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        description="executa a fila single-track do repo por uma janela de tempo")
+    ap.add_argument("fila", help="nome da fila em .claude/programs/<nome>/plan.yaml")
+    janela = ap.add_mutually_exclusive_group(required=True)
+    janela.add_argument("--for", dest="duracao", metavar="12h",
+                        help="quanto tempo rodar (ex.: 12h, 90m)")
+    janela.add_argument("--until", dest="ate", metavar="07:00",
+                        help="até que horas rodar (próximo HH:MM)")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--max-falhas", type=int, default=MAX_FALHAS_PADRAO,
+                    dest="max_falhas",
+                    help=f"disjuntor: falhas SEGUIDAS que encerram o run "
+                         f"(default {MAX_FALHAS_PADRAO})")
+    ap.add_argument("--reserva-minima", default=RESERVA_MINIMA_PADRAO,
+                    dest="reserva",
+                    help=f"não começa item se sobra menos que isso "
+                         f"(default {RESERVA_MINIMA_PADRAO})")
+    ap.add_argument("--folga", default=FOLGA_PADRAO,
+                    help=f"quanto um item já rodando pode passar do prazo antes "
+                         f"de ser morto (default {FOLGA_PADRAO})")
+    ap.add_argument("--com-permissoes", action="store_true", dest="permissoes",
+                    help="NÃO passa --dangerously-skip-permissions. O "
+                         "subprocesso vai travar no primeiro pedido de "
+                         "permissão — só use com alguém olhando")
+    ap.add_argument("--sujo-ok", action="store_true", dest="sujo_ok",
+                    help="começa mesmo com a árvore suja (por default recusa: "
+                         "sem isso não dá para separar o que o run fez do que "
+                         "já estava lá)")
+    ap.add_argument("--dry-run", action="store_true", dest="dry",
+                    help="mostra o plano do run e sai sem executar nada")
+    a = ap.parse_args(argv)
+
+    repo = Path(a.repo).resolve()
+    agora = datetime.now()
+
+    try:
+        prazo = (agora + parse_duracao(a.duracao)) if a.duracao \
+            else parse_ate(a.ate, agora)
+        reserva = parse_duracao(a.reserva, "--reserva-minima")
+        folga = parse_duracao(a.folga, "--folga")
+    except ValueError as e:
+        print(f"cepa-until: {e}", file=sys.stderr)
+        return 2
+
+    if a.max_falhas < 1:
+        print("cepa-until: --max-falhas precisa ser >= 1", file=sys.stderr)
+        return 2
+    if not shutil.which("claude"):
+        print("cepa-until: `claude` não está no PATH — sem ele não há o que "
+              "supervisionar", file=sys.stderr)
+        return 2
+
+    dados, erro = consulta_fila(a.fila, repo)
+    if erro:
+        print(f"cepa-until: a fila {a.fila!r} não está executável — {erro}",
+              file=sys.stderr)
+        return 2
+
+    sujeira = arvore_suja(repo)
+    if sujeira and not a.sujo_ok:
+        print(f"cepa-until: a árvore tem {len(sujeira)} arquivo(s) modificado(s). "
+              "Commite ou limpe antes — de manhã não dá para separar o que o run "
+              "fez do que já estava aqui. (--sujo-ok ignora este guarda.)",
+              file=sys.stderr)
+        for l in sujeira[:10]:
+            print(f"    {l}", file=sys.stderr)
+        return 2
+
+    ledger_dir = repo / ".claude" / "programs" / a.fila / "until"
+    ledger_dir.mkdir(parents=True, exist_ok=True)
+    run_id = agora.strftime("%Y-%m-%d-%H%M")
+    ledger = ledger_dir / f"{run_id}.jsonl"
+    log = ledger_dir / f"{run_id}.log"
+
+    print(f"cepa-until · fila {dados.get('program')} · {repo}")
+    print(f"  branch      : {branch_atual(repo)}")
+    print(f"  janela      : agora → {prazo.strftime('%d/%m %H:%M')} "
+          f"({humano(prazo - agora)})")
+    print(f"  disjuntor   : {a.max_falhas} falhas seguidas")
+    print(f"  reserva     : não começa item com menos de {humano(reserva)}")
+    print(f"  folga       : mata item que passar {humano(folga)} do prazo")
+    print(f"  permissões  : "
+          + ("PEDE (vai travar sem alguém olhando)" if a.permissoes
+             else "--dangerously-skip-permissions LIGADO"))
+    print(f"  registro    : {ledger}")
+    prox = (dados.get("batch") or [{}])[0]
+    print(f"  1º item     : {prox.get('id', '(nenhum — fila sem item executável)')}"
+          + (f" — {prox.get('title')}" if prox.get("id") else ""))
+    t = dados.get("totals") or {}
+    print(f"  fila        : {t.get('por_status', {}).get('pending', 0)} pendente(s), "
+          f"{t.get('por_status', {}).get('done', 0)} done")
+
+    if a.dry:
+        print("\n(--dry-run: nada foi executado)")
+        return 0
+    if not dados.get("batch"):
+        parada = dados.get("stop") or {}
+        print(f"\nnada a fazer: {parada.get('reason')} — {parada.get('detail')}")
+        return 0
+
+    def registra(evento):
+        evento["quando"] = datetime.now().isoformat(timespec="seconds")
+        with ledger.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(evento, ensure_ascii=False) + "\n")
+
+    registra({"evento": "run_start", "fila": a.fila, "prazo": prazo.isoformat(),
+              "max_falhas": a.max_falhas, "branch": branch_atual(repo)})
+
+    falhas_seguidas = 0
+    feitos, falhados, itens = [], [], 0
+    motivo_fim, detalhe_fim = None, None
+
+    print()
+    while True:
+        restante = prazo - datetime.now()
+        if restante < reserva:
+            motivo_fim = "prazo"
+            detalhe_fim = (f"sobram {humano(restante)}, menos que a reserva "
+                           f"mínima de {humano(reserva)} — começar um item "
+                           "agora seria trabalho jogado fora")
+            break
+
+        dados, erro = consulta_fila(a.fila, repo)
+        if erro:
+            motivo_fim, detalhe_fim = "fila-ilegivel", erro
+            break
+        for aviso in dados.get("warnings") or []:
+            print(f"  aviso: {aviso}")
+            registra({"evento": "aviso", "texto": aviso})
+        if not dados.get("batch"):
+            parada = dados.get("stop") or {}
+            motivo_fim = parada.get("reason") or "fim-da-fila"
+            detalhe_fim = parada.get("detail") or "a fila não tem item executável"
+            break
+
+        item = dados["batch"][0]
+        ident = item["id"]
+        caminho_plano = dados.get("path")
+        itens += 1
+
+        print(f"[{datetime.now().strftime('%H:%M')}] {ident} — {item.get('title')} "
+              f"({humano(restante)} restantes)")
+        registra({"evento": "item_start", "id": ident, "title": item.get("title"),
+                  "restante_seg": int(restante.total_seconds())})
+
+        limite = (restante + folga).total_seconds()
+        codigo, matou, gasto = executa_item(a.fila, repo, a.permissoes, limite, log)
+
+        depois, erro_item = le_item(caminho_plano, ident)
+        if erro_item:
+            estado, progresso = "?", False
+            pendencia = None
+        else:
+            estado = str(depois.get("status") or "pending").strip().lower()
+            pendencia = depois.get("human_pending")
+            progresso = estado in TERMINAIS or pendencia is not None
+
+        registra({"evento": "item_end", "id": ident, "status": estado,
+                  "human_pending": pendencia, "exit_code": codigo,
+                  "timeout": matou, "segundos": int(gasto),
+                  "progresso": progresso})
+
+        if progresso:
+            falhas_seguidas = 0
+            feitos.append((ident, estado, pendencia))
+            marca = estado
+            if pendencia:
+                marca += " · rota humana em aberto"
+            print(f"          → {marca} ({humano(timedelta(seconds=gasto))})")
+        else:
+            falhas_seguidas += 1
+            falhados.append((ident, estado, codigo, matou))
+            razao = "morto por timeout" if matou else \
+                (f"claude saiu {codigo}" if codigo else "o item não saiu do lugar")
+            print(f"          → SEM PROGRESSO: {razao} "
+                  f"(status ainda `{estado}`) · {falhas_seguidas}/{a.max_falhas}")
+            if falhas_seguidas >= a.max_falhas:
+                motivo_fim = "disjuntor"
+                detalhe_fim = (f"{falhas_seguidas} itens seguidos sem progresso — "
+                               "isso é sistêmico, não azar; seguir queimaria a "
+                               "janela no mesmo problema")
+                break
+
+    registra({"evento": "run_end", "motivo": motivo_fim, "detalhe": detalhe_fim,
+              "itens": itens, "com_progresso": len(feitos),
+              "sem_progresso": len(falhados)})
+
+    print(f"\n── fim às {datetime.now().strftime('%H:%M')} · {motivo_fim}")
+    print(f"   {detalhe_fim}")
+    print(f"   {itens} item(ns) tentado(s) · {len(feitos)} com progresso · "
+          f"{len(falhados)} sem")
+    abertas = [(i, p) for i, _, p in feitos if p]
+    if abertas:
+        print(f"\n   Espera por você ({len(abertas)}):")
+        for ident, rota in abertas:
+            print(f"     - {ident}: {rota}")
+    if falhados:
+        print(f"\n   Sem progresso ({len(falhados)}):")
+        for ident, estado, codigo, matou in falhados:
+            print(f"     - {ident}: status `{estado}`"
+                  + (" · morto por timeout" if matou else f" · exit {codigo}"))
+    print(f"\n   registro: {ledger}")
+    print(f"   saída do claude: {log}")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        print("\ncepa-until: interrompido. O item em voo pode ter ficado "
+              "reservado — o próximo `queue` o devolve como reserva órfã.",
+              file=sys.stderr)
+        sys.exit(130)
