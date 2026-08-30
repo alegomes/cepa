@@ -29,6 +29,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 try:
@@ -119,8 +120,9 @@ def fake_claude(tmp, corpo):
     return binv
 
 
-def roda(raiz, binv, plano, args, timeout=120):
+def roda(raiz, binv, plano, args, timeout=120, extra_env=None):
     env = dict(os.environ)
+    env.update(extra_env or {})
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plano)
     chamadas = Path(raiz).parent / "chamadas.jsonl"
@@ -302,6 +304,13 @@ def test_item_blocked_nao_trava_a_noite_atras_dele():
               fim["motivo"] == "fim-da-fila", str(fim))
         check("...e a razão do fim cita os adiados",
               "adiado" in (fim.get("detalhe") or "").lower(), str(fim))
+        # Sem estas duas, tirar `blocked` da contagem de progresso passava
+        # despercebido: os três itens rodavam igual, mas o travado passava a
+        # contar como FALHA e, numa noite com vários `blocked` em sequência, o
+        # disjuntor encerraria a janela cedo sem ninguém saber por quê.
+        # (Achado pelo proof gate, 2026-08-30.)
+        check("o item travado conta como PROGRESSO, não como falha",
+              fim["com_progresso"] == 3 and fim["sem_progresso"] == 0, str(fim))
 
 
 # ── 3. guardas de largada ───────────────────────────────────────────────────
@@ -365,6 +374,46 @@ def test_permissoes_liberadas_por_default_e_desligaveis():
               str(chamadas2))
 
 
+def test_until_calcula_o_proximo_horario():
+    """`--until 07:00` é uma das duas formas documentadas de dar a janela, e
+    não tinha um teste sequer — toda a cobertura passava por `--for`."""
+    from datetime import datetime, timedelta
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, "pass")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+
+        alvo = datetime.now() + timedelta(hours=3)
+        p, _ = roda(raiz, binv, plano,
+                    ["--until", alvo.strftime("%H:%M"), "--dry-run"])
+        check("--until aceita HH:MM", p.returncode == 0, p.stderr[:300])
+        check("...e o prazo é o horário pedido, no dia certo",
+              alvo.strftime("%d/%m %H:%M") in p.stdout, p.stdout[:800])
+
+        # Horário já passado hoje = amanhã. Sem isto, `--until 07:00` digitado
+        # às 23h daria uma janela NEGATIVA e o run morreria na largada.
+        passado = datetime.now() - timedelta(hours=2)
+        amanha = passado + timedelta(days=1)
+        p2, _ = roda(raiz, binv, plano,
+                     ["--until", passado.strftime("%H:%M"), "--dry-run"])
+        check("horário já passado hoje vira o de amanhã",
+              amanha.strftime("%d/%m %H:%M") in p2.stdout, p2.stdout[:800])
+
+
+def test_until_mal_formado_e_recusado_nomeando_a_flag():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, "pass")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        for ruim in ("7h", "25:00", "abc"):
+            p, chamadas = roda(raiz, binv, plano, ["--until", ruim])
+            check(f"--until {ruim!r} é recusado", p.returncode == 2,
+                  f"saiu {p.returncode}")
+            check(f"...e a recusa nomeia --until e o valor",
+                  f"--until {ruim!r}" in p.stderr, p.stderr[:300])
+            check("...e nada foi disparado", not chamadas, str(chamadas))
+
+
 def test_folga_e_reserva_tem_os_defaults_declarados():
     """Os dois números que decidem o corte nas pontas da janela. Ficam pinados
     porque são a diferença entre um item morto pela metade e um item que
@@ -393,6 +442,146 @@ def test_dry_run_nao_executa_nada():
         check("...e a fila fica intacta",
               all(it["status"] == "pending"
                   for it in yaml.safe_load(plano.read_text())["items"]))
+
+
+def test_item_que_estoura_a_folga_e_morto_com_o_grupo_todo():
+    """A folga (60min por default) só existe porque há quem a faça valer: o
+    kill do GRUPO de processos. O grupo, e não só o `claude`, porque o que
+    segura a árvore é o build que ele disparou — matar o pai deixaria o filho
+    órfão rodando a noite inteira. Nada exercia esse caminho.
+
+    Janela em segundos (o parser aceita fração de minuto), senão o teste
+    levaria uma hora. (Achado pelo proof gate, 2026-08-30.)"""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        marca = Path(tmp) / "filho-sobreviveu.txt"
+        corpo = (
+            'import subprocess, time\n'
+            'filho = [sys.executable, \'-c\', \'import sys,time; time.sleep(25); open(sys.argv[1], "w").write("vivo")\', os.environ[\'FAKE_FILHO\']]\n'
+            'subprocess.Popen(filho)\n'
+            'time.sleep(120)\n')
+        binv = fake_claude(tmp, corpo)
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano,
+                           ["--for", "0.2m", "--reserva-minima", "0.05m",
+                            "--folga", "0.05m"],
+                           timeout=180, extra_env={"FAKE_FILHO": str(marca)})
+        check("o item foi disparado", len(chamadas) == 1, str(chamadas))
+        fins = [e for e in ledger_de(raiz) if e.get("evento") == "item_end"]
+        check("o item que estourou a folga é registrado como timeout",
+              fins and fins[0]["timeout"] is True, str(fins))
+        check("...e timeout NÃO é progresso",
+              fins and fins[0]["progresso"] is False, str(fins))
+        check("...e o item continua pendente na fila",
+              yaml.safe_load(plano.read_text())["items"][0]["status"] == "pending")
+        # ATENÇÃO ao relógio: o filho só escreveria aos ~25s, e o run inteiro
+        # acaba aos ~15s. Conferir o marcador na hora daria "não existe" mesmo
+        # com o kill errado — foi o buraco que uma perturbação (matar só o pai,
+        # `proc.terminate()`) atravessou VERDE. Então esperamos passar a hora
+        # em que o órfão teria escrito, e só então cobramos o silêncio.
+        limite = time.monotonic() + 20
+        while time.monotonic() < limite and not marca.exists():
+            time.sleep(0.5)
+        check("o processo-filho morreu junto (kill do grupo, não só do pai)",
+              not marca.exists(),
+              "o filho sobreviveu ao kill — killpg não pegou o grupo")
+        check("o run termina reconhecendo o prazo",
+              [e for e in ledger_de(raiz)
+               if e.get("evento") == "run_end"][0]["motivo"] == "prazo",
+              str(ledger_de(raiz)[-1]))
+
+
+def test_processo_que_ignora_sigterm_e_morto_no_sigkill():
+    """O SIGTERM é um PEDIDO, e um build com trap pode recusá-lo. Sem a
+    escalada para SIGKILL, o supervisor acharia que matou e o processo seguiria
+    rodando a noite inteira. Só um processo que IGNORA o SIGTERM exercita esse
+    caminho — sem ele a escalada podia sumir sem nenhum teste acusar.
+    (Achado perturbando a perturbação, 2026-08-30.)"""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        marca = Path(tmp) / "filho-sobreviveu.txt"
+        corpo = (
+            'import signal, subprocess, time\n'
+            'signal.signal(signal.SIGTERM, signal.SIG_IGN)\n'
+            'filho = [sys.executable, \'-c\', \'import sys,signal,time; \'\n'
+            '         \'signal.signal(signal.SIGTERM, signal.SIG_IGN); \'\n'
+            '         \'time.sleep(25); open(sys.argv[1], "w").write("vivo")\',\n'
+            '         os.environ[\'FAKE_FILHO\']]\n'
+            'subprocess.Popen(filho)\n'
+            'time.sleep(120)\n')
+        binv = fake_claude(tmp, corpo)
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano,
+                           ["--for", "0.2m", "--reserva-minima", "0.05m",
+                            "--folga", "0.05m"],
+                           timeout=200,
+                           extra_env={"FAKE_FILHO": str(marca),
+                                      "CEPA_UNTIL_GRACA_SIGTERM": "2"})
+        fins = [e for e in ledger_de(raiz) if e.get("evento") == "item_end"]
+        check("o item que ignora SIGTERM ainda é registrado como timeout",
+              fins and fins[0]["timeout"] is True, str(fins))
+        limite = time.monotonic() + 22
+        while time.monotonic() < limite and not marca.exists():
+            time.sleep(0.5)
+        check("quem ignora o SIGTERM morre no SIGKILL", not marca.exists(),
+              "o processo sobreviveu à escalada — o SIGKILL não chegou")
+
+
+def test_aviso_da_fila_chega_ao_registro_e_a_tela():
+    """Reserva órfã (run morto que largou o item reservado) é devolvida pelo
+    `queue` como AVISO. De manhã, esse aviso é a única pista de que uma sessão
+    anterior morreu no meio — some calado se ninguém o repassar."""
+    import socket
+    from datetime import datetime, timezone
+    morto = subprocess.Popen([sys.executable, "-c", "pass"])
+    morto.wait()
+    dono = {"session_id": "sessao-morta", "pid": morto.pid,
+            "hostname": socket.gethostname(), "cwd": "/tmp",
+            "started_at": datetime.now(timezone.utc).isoformat()}
+    with tempfile.TemporaryDirectory() as tmp:
+        it = item("a1")
+        it.update(status="in_progress", claimed_by=dono)
+        raiz = monta_repo(tmp, [it])
+        binv = fake_claude(tmp, "marca(primeiro_pendente() or 'a1', status='done')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("a reserva órfã volta a ser executável", len(chamadas) == 1,
+              f"disparou {len(chamadas)}x")
+        avisos = [e for e in ledger_de(raiz) if e.get("evento") == "aviso"]
+        check("o aviso da fila é gravado no registro", avisos, str(ledger_de(raiz)))
+        check("...e diz que a reserva era órfã",
+              any("órfã" in (a.get("texto") or "") for a in avisos), str(avisos))
+        check("...e aparece na tela também",
+              "órfã" in p.stdout, p.stdout[:900])
+
+
+def test_branch_diferente_da_largada_encerra_o_run():
+    """Decisão do dono: commit por item numa branch só. O supervisor não
+    commita nem cria branch — quem faz isso é o fluxo dentro do subprocesso —,
+    então sem conferência a noite podia se espalhar em branches caladas.
+    (Achado pelo gate de aceite, 2026-08-30.)"""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        corpo = ("ident = primeiro_pendente()\n"
+                 "marca(ident, status='done')\n"
+                 "if ident == 'a1':\n"
+                 "    import subprocess\n"
+                 "    subprocess.run(['git', 'checkout', '-q', '-b', 'outra'],\n"
+                 "                   cwd=os.path.dirname(os.path.dirname(\n"
+                 "                       os.path.dirname(os.path.dirname(PLANO)))))\n")
+        binv = fake_claude(tmp, corpo)
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("o run para quando a branch muda", len(chamadas) == 1,
+              f"disparou {len(chamadas)}x")
+        fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
+        check("e o motivo é `branch-mudou`", fim["motivo"] == "branch-mudou",
+              str(fim))
+        check("...e o detalhe nomeia as duas branches",
+              "outra" in (fim.get("detalhe") or "")
+              and "main" in (fim.get("detalhe") or ""), str(fim))
+        check("os itens seguintes NÃO foram executados",
+              yaml.safe_load(plano.read_text())["items"][1]["status"] == "pending")
 
 
 def test_registro_grava_um_evento_por_item():

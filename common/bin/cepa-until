@@ -45,6 +45,12 @@ Este arquivo é a fiação em volta disso: relógio, disjuntor e registro.
 3. **Commit por item, numa branch só.** Sem trem de merge e sem N branches
    penduradas esperando alguém reparar — que é o defeito medido do Maestro na
    onda 1 do WEGO-paralelo (5 branches verdes paradas, 2 delas por meio dia).
+   Isso é GUARDA, não intenção: a branch da largada é gravada e conferida entre
+   itens, e o run encerra se ela mudou. O supervisor não commita nem cria
+   branch — quem faz isso é o fluxo dentro do subprocesso —, então sem a
+   conferência a noite podia se espalhar em branches caladas e o banner
+   continuaria imprimindo a branch certa. (Lacuna achada pelo gate de aceite,
+   2026-08-30.)
 4. **`--dangerously-skip-permissions` ligado.** Sem isso o subprocesso trava no
    primeiro pedido de permissão e a noite morre em silêncio. Fica explícito no
    banner e desligável por `--com-permissoes`.
@@ -97,6 +103,14 @@ CEPA_PLAN = AQUI / "cepa-plan"
 RESERVA_MINIMA_PADRAO = "25m"
 FOLGA_PADRAO = "60m"
 MAX_FALHAS_PADRAO = 3
+
+# Quanto esperar entre o SIGTERM e o SIGKILL ao matar um item que estourou a
+# folga. O SIGTERM educado é o primeiro pedido; o SIGKILL existe porque um
+# processo pode IGNORAR o primeiro (build com trap, wrapper de shell), e sem a
+# escalada ele seguiria rodando a noite inteira enquanto o supervisor achava
+# que tinha matado. Ajustável só para o teste conseguir exercer a escalada sem
+# esperar meio minuto por caso.
+GRACA_SIGTERM = float(os.environ.get("CEPA_UNTIL_GRACA_SIGTERM", "30"))
 
 # Status que contam como PROGRESSO no item. `dropped` entra porque o item saiu
 # da fila por decisão registrada, não por falha do run.
@@ -207,7 +221,7 @@ def executa_item(nome, repo, permissoes, limite_seg, log):
             matou = True
             try:
                 os.killpg(proc.pid, signal.SIGTERM)
-                proc.wait(timeout=30)
+                proc.wait(timeout=GRACA_SIGTERM)
             except Exception:
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
@@ -347,8 +361,9 @@ def main(argv=None):
         with ledger.open("a", encoding="utf-8") as f:
             f.write(json.dumps(evento, ensure_ascii=False) + "\n")
 
+    branch_largada = branch_atual(repo)
     registra({"evento": "run_start", "fila": a.fila, "prazo": prazo.isoformat(),
-              "max_falhas": a.max_falhas, "branch": branch_atual(repo)})
+              "max_falhas": a.max_falhas, "branch": branch_largada})
 
     falhas_seguidas = 0
     feitos, falhados, itens = [], [], 0
@@ -362,6 +377,17 @@ def main(argv=None):
             detalhe_fim = (f"sobram {humano(restante)}, menos que a reserva "
                            f"mínima de {humano(reserva)} — começar um item "
                            "agora seria trabalho jogado fora")
+            break
+
+        agora_branch = branch_atual(repo)
+        if agora_branch != branch_largada:
+            motivo_fim = "branch-mudou"
+            detalhe_fim = (
+                f"a largada foi em `{branch_largada}` e agora estamos em "
+                f"`{agora_branch}` — alguém trocou de branch no meio do run. "
+                "Seguir espalharia os commits da noite por branches que "
+                "ninguém vai buscar de manhã, que é exatamente o que a decisão "
+                "de commitar por item numa branch só existe para impedir")
             break
 
         dados, erro = consulta_fila(a.fila, repo)
