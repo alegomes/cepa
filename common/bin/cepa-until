@@ -142,6 +142,13 @@ LIMITE_DE_USO = re.compile(
 # janela ou desistir da noite, e some se o supervisor só registrar "bateu limite".
 RESET_DO_LIMITE = re.compile(r"resets?(?:\s+at)?\s+([^\n(]{1,40})", re.I)
 
+# A marca de "você está dentro de uma janela desatendida", exportada para cada
+# subprocesso. O hook `no-background-build` só existe quando ela está no
+# ambiente: numa sessão interativa mandar o build para o segundo plano é a
+# coisa certa (a notificação reinvoca a sessão), e sob `claude -p` é perder o
+# item, porque não há turno seguinte para colher o resultado.
+ENV_JANELA = "CEPA_UNTIL_RUN"
+
 # Quanto da saída do subprocesso o reconhecedor de limite olha. Ler o pedaço
 # final DESTA tentativa (e não o log inteiro, que é append) é o que impede
 # reagir à mensagem de uma tentativa anterior; ler só o fim é o que impede
@@ -271,6 +278,7 @@ def executa_item(nome, repo, permissoes, limite_seg, log):
             proc = subprocess.Popen(cmd, cwd=str(repo), stdout=saida,
                                     stderr=subprocess.STDOUT,
                                     stdin=subprocess.DEVNULL,
+                                    env=dict(os.environ, **{ENV_JANELA: "1"}),
                                     start_new_session=True)
         except OSError as e:
             # O `claude` sumiu do PATH, ficou sem permissão ou o binário está
