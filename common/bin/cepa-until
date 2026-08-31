@@ -116,6 +116,45 @@ GRACA_SIGTERM = float(os.environ.get("CEPA_UNTIL_GRACA_SIGTERM", "30"))
 # da fila por decisão registrada, não por falha do run.
 TERMINAIS = {"done", "blocked", "dropped"}
 
+# Quantos subprocessos a MESMA janela gasta no MESMO item antes de tirá-lo da
+# frente. O `queue` sempre entrega o primeiro item executável, e um subprocesso
+# morto devolve a reserva como órfã — então um item que não sai do lugar é
+# reoferecido para sempre. Em 2026-08-30 o WEGO-1941 consumiu 3 das 5
+# tentativas do run com 15 pendentes atrás dele. Duas é o teto porque a segunda
+# tentativa tem valor medido: o WEGO-2206 falhou parado num build em segundo
+# plano e fechou na repetição, quando o build já tinha acabado.
+TENTATIVAS_POR_ITEM_PADRAO = 2
+
+# O que o `claude` imprime quando a CONTA bateu o teto de uso — não o item, não
+# a fila, não a topologia. Sem reconhecer isto o supervisor lê só "saiu 1 e o
+# item não andou" e culpa o card: em 2026-08-30 duas tentativas de 92s e 4s
+# entraram no disjuntor como se o WEGO-1941 fosse sistematicamente ruim, e o
+# relatório da manhã mandava investigar o item errado. Repetir também não
+# levanta o teto — quem levanta é o relógio —, então o run PARA aqui, com
+# motivo próprio, em vez de gastar a janela batendo na mesma porta.
+LIMITE_DE_USO = re.compile(
+    r"(?:you'?ve|you have)\s+(?:hit|reached)\s+your\s+[\w\s-]{0,24}\blimit\b"
+    r"|\busage limit reached\b"
+    r"|\blimit reached\b\s*[\u00b7\u2022\u2219|-]\s*resets\b",
+    re.I)
+
+# O horário do reset, quando a mensagem traz — é o dado que decide se remarcar a
+# janela ou desistir da noite, e some se o supervisor só registrar "bateu limite".
+RESET_DO_LIMITE = re.compile(r"resets?(?:\s+at)?\s+([^\n(]{1,40})", re.I)
+
+# A marca de "você está dentro de uma janela desatendida", exportada para cada
+# subprocesso. O hook `no-background-build` só existe quando ela está no
+# ambiente: numa sessão interativa mandar o build para o segundo plano é a
+# coisa certa (a notificação reinvoca a sessão), e sob `claude -p` é perder o
+# item, porque não há turno seguinte para colher o resultado.
+ENV_JANELA = "CEPA_UNTIL_RUN"
+
+# Quanto da saída do subprocesso o reconhecedor de limite olha. Ler o pedaço
+# final DESTA tentativa (e não o log inteiro, que é append) é o que impede
+# reagir à mensagem de uma tentativa anterior; ler só o fim é o que impede
+# reagir ao relatório de um agente que MENCIONA limite de uso em prosa.
+CAUDA_DA_SAIDA = 2000
+
 
 # ── relógio ─────────────────────────────────────────────────────────────────
 
@@ -201,10 +240,36 @@ def monta_comando(nome, repo, permissoes):
     return cmd
 
 
+def cauda_do_log(log, desde, limite=CAUDA_DA_SAIDA):
+    """O fim do que UMA tentativa escreveu no log. `desde` é o tamanho do
+    arquivo antes de ela começar."""
+    try:
+        with open(log, "rb") as f:
+            f.seek(desde)
+            bruto = f.read()
+    except OSError:
+        return ""
+    return bruto[-limite:].decode("utf-8", "replace")
+
+
+def limite_de_uso(texto):
+    """(True, reset) se a saída é a conta batendo o teto de uso; (False, None)
+    se não. `reset` é o horário verbatim que a mensagem deu, ou None."""
+    if not texto or not LIMITE_DE_USO.search(texto):
+        return False, None
+    m = RESET_DO_LIMITE.search(texto)
+    return True, (m.group(1).strip().rstrip(".") if m else None)
+
+
 def executa_item(nome, repo, permissoes, limite_seg, log):
-    """Dispara UM subprocesso. Devolve (codigo, matou_por_timeout, segundos)."""
+    """Dispara UM subprocesso.
+    Devolve (codigo, matou_por_timeout, segundos, saida_desta_tentativa)."""
     cmd = monta_comando(nome, repo, permissoes)
     inicio = time.monotonic()
+    try:
+        marca = os.path.getsize(log)
+    except OSError:
+        marca = 0
     with open(log, "ab", buffering=0) as saida:
         saida.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} "
                     f"· {' '.join(cmd)}\n".encode("utf-8"))
@@ -213,6 +278,7 @@ def executa_item(nome, repo, permissoes, limite_seg, log):
             proc = subprocess.Popen(cmd, cwd=str(repo), stdout=saida,
                                     stderr=subprocess.STDOUT,
                                     stdin=subprocess.DEVNULL,
+                                    env=dict(os.environ, **{ENV_JANELA: "1"}),
                                     start_new_session=True)
         except OSError as e:
             # O `claude` sumiu do PATH, ficou sem permissão ou o binário está
@@ -221,7 +287,7 @@ def executa_item(nome, repo, permissoes, limite_seg, log):
             # que ele existe para fazer. Vira item sem progresso: o disjuntor
             # encerra em 3, com o motivo escrito.
             saida.write(f"MAESTRO-SPAWN-FALHOU: {e}\n".encode("utf-8"))
-            return -2, False, time.monotonic() - inicio
+            return -2, False, time.monotonic() - inicio, ""
         try:
             codigo = proc.wait(timeout=max(limite_seg, 1))
             matou = False
@@ -238,7 +304,42 @@ def executa_item(nome, repo, permissoes, limite_seg, log):
                 except Exception:
                     pass
             codigo = proc.returncode if proc.returncode is not None else -1
-    return codigo, matou, time.monotonic() - inicio
+    return codigo, matou, time.monotonic() - inicio, cauda_do_log(log, marca)
+
+
+def bloqueia_item(nome, repo, ident, tentativas):
+    """Tira da frente da fila o item que gastou o teto de tentativas.
+    Devolve None se conseguiu, ou o erro em texto.
+
+    Este é o ÚNICO ponto em que o supervisor ESCREVE no plano, e a exceção é
+    deliberada. O que ele grava aqui — "este item já consumiu N subprocessos
+    DESTA janela" — é um fato que só existe neste nível: cada subprocesso nasce
+    sem memória do anterior, que é justamente o que torna 12h possíveis, então
+    nem o `/common:drain-plan` nem o `cepa-plan` têm como enxergar a repetição.
+    Sem a marca, o `queue` reoferece o mesmo item para sempre.
+
+    `blocked` é o estado certo e não é um estado novo: o `monta_lote` ADIA
+    `blocked` e segue para o próximo item, que é exatamente a semântica pedida,
+    e o `finish` já limpa o `claimed_by` — a reserva órfã não fica pendurada.
+    """
+    evidencia = (
+        f"{tentativas} tentativas seguidas do `cepa-until` na mesma janela sem "
+        "tirar o item do lugar. Isto NÃO é veredito sobre o trabalho nem "
+        "condição de fora: é o supervisor tirando o item da frente para a fila "
+        "andar. A saída do `claude` de cada tentativa está no `.log` do run; "
+        "devolva o item para `pending` quando souber o que travou.")
+    try:
+        p = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "finish", nome, str(ident),
+             "--status", "blocked", "--evidence", evidencia,
+             "--repo", str(repo)],
+            capture_output=True, text=True, timeout=60)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return f"o `cepa-plan finish` não respondeu: {e}"
+    if p.returncode != 0:
+        return (p.stderr or p.stdout or "").strip() or \
+            f"`cepa-plan finish` saiu {p.returncode}"
+    return None
 
 
 # ── guardas de largada ──────────────────────────────────────────────────────
@@ -279,6 +380,11 @@ def main(argv=None):
                     dest="max_falhas",
                     help=f"disjuntor: falhas SEGUIDAS que encerram o run "
                          f"(default {MAX_FALHAS_PADRAO})")
+    ap.add_argument("--tentativas-por-item", type=int,
+                    default=TENTATIVAS_POR_ITEM_PADRAO, dest="tentativas_item",
+                    help=f"quantos subprocessos a mesma janela gasta no mesmo "
+                         f"item antes de marcá-lo `blocked` e seguir para o "
+                         f"próximo (default {TENTATIVAS_POR_ITEM_PADRAO})")
     ap.add_argument("--reserva-minima", default=RESERVA_MINIMA_PADRAO,
                     dest="reserva",
                     help=f"não começa item se sobra menos que isso "
@@ -313,6 +419,10 @@ def main(argv=None):
     if a.max_falhas < 1:
         print("cepa-until: --max-falhas precisa ser >= 1", file=sys.stderr)
         return 2
+    if a.tentativas_item < 1:
+        print("cepa-until: --tentativas-por-item precisa ser >= 1 — com 0 o run "
+              "marcaria `blocked` todo item antes de tentar", file=sys.stderr)
+        return 2
     if not shutil.which("claude"):
         print("cepa-until: `claude` não está no PATH — sem ele não há o que "
               "supervisionar", file=sys.stderr)
@@ -345,6 +455,8 @@ def main(argv=None):
     print(f"  janela      : agora → {prazo.strftime('%d/%m %H:%M')} "
           f"({humano(prazo - agora)})")
     print(f"  disjuntor   : {a.max_falhas} falhas seguidas")
+    print(f"  por item    : até {a.tentativas_item} tentativa(s); depois disso "
+          "vira `blocked` e a fila anda")
     print(f"  reserva     : não começa item com menos de {humano(reserva)}")
     print(f"  folga       : mata item que passar {humano(folga)} do prazo")
     print(f"  permissões  : "
@@ -377,6 +489,9 @@ def main(argv=None):
 
     falhas_seguidas = 0
     feitos, falhados, itens = [], [], 0
+    # Quantas vezes ESTA janela já disparou um subprocesso para cada item, e o
+    # que ela tirou da frente por esgotamento ou pelo teto de uso da conta.
+    tentativas, esgotados, limitados = {}, [], []
     motivo_fim, detalhe_fim = None, None
 
     print()
@@ -417,14 +532,19 @@ def main(argv=None):
         ident = item["id"]
         caminho_plano = dados.get("path")
         itens += 1
+        tentativas[ident] = tentativas.get(ident, 0) + 1
+        vez = tentativas[ident]
 
         print(f"[{datetime.now().strftime('%H:%M')}] {ident} — {item.get('title')} "
-              f"({humano(restante)} restantes)")
+              f"({humano(restante)} restantes"
+              + (f", tentativa {vez}/{a.tentativas_item}" if vez > 1 else "") + ")")
         registra({"evento": "item_start", "id": ident, "title": item.get("title"),
-                  "restante_seg": int(restante.total_seconds())})
+                  "restante_seg": int(restante.total_seconds()),
+                  "tentativa": vez})
 
         limite = (restante + folga).total_seconds()
-        codigo, matou, gasto = executa_item(a.fila, repo, a.permissoes, limite, log)
+        codigo, matou, gasto, saida = executa_item(
+            a.fila, repo, a.permissoes, limite, log)
 
         depois, erro_item = le_item(caminho_plano, ident)
         if erro_item:
@@ -438,7 +558,30 @@ def main(argv=None):
         registra({"evento": "item_end", "id": ident, "status": estado,
                   "human_pending": pendencia, "exit_code": codigo,
                   "timeout": matou, "segundos": int(gasto),
-                  "progresso": progresso})
+                  "tentativa": vez, "progresso": progresso})
+
+        # O teto de uso da CONTA, antes do disjuntor. Sem esta separação a
+        # mensagem "You've hit your session limit" vira "o item não saiu do
+        # lugar" e o relatório da manhã acusa o card errado. Só é consultado
+        # quando o item não andou — uma tentativa que FECHOU o item não vira
+        # parada, aconteça o que acontecer depois na saída.
+        if not progresso:
+            bateu, reset = limite_de_uso(saida)
+            if bateu:
+                limitados.append((ident, reset))
+                registra({"evento": "limite_de_uso", "id": ident, "reset": reset})
+                motivo_fim = "limite-de-uso"
+                detalhe_fim = (
+                    f"a conta bateu o teto de uso da Claude durante o {ident} — "
+                    "isso não é o item, não é a fila e repetir não levanta o "
+                    "teto: quem levanta é o relógio"
+                    + (f" (o `claude` disse que reseta {reset})" if reset else "")
+                    + ". Parei aqui em vez de gastar a janela batendo na mesma "
+                      "porta; o item continua onde estava, sem culpa registrada")
+                print(f"          → LIMITE DE USO DA CONTA"
+                      + (f" · reseta {reset}" if reset else "")
+                      + " — não é falha do item")
+                break
 
         if progresso:
             falhas_seguidas = 0
@@ -456,6 +599,25 @@ def main(argv=None):
                      "o item não saiu do lugar")
             print(f"          → SEM PROGRESSO: {razao} "
                   f"(status ainda `{estado}`) · {falhas_seguidas}/{a.max_falhas}")
+
+            if vez >= a.tentativas_item:
+                erro_bloqueio = bloqueia_item(a.fila, repo, ident, vez)
+                if erro_bloqueio:
+                    motivo_fim = "item-preso"
+                    detalhe_fim = (
+                        f"{ident} gastou as {vez} tentativas e eu não consegui "
+                        f"tirá-lo da frente da fila ({erro_bloqueio}). O próximo "
+                        "`queue` devolveria o mesmo item, e o run viraria um "
+                        "laço nele — parar aqui é o menor dos dois estragos")
+                    registra({"evento": "esgotado", "id": ident, "tentativas": vez,
+                              "bloqueado": False, "erro": erro_bloqueio})
+                    break
+                esgotados.append((ident, vez))
+                registra({"evento": "esgotado", "id": ident, "tentativas": vez,
+                          "bloqueado": True, "erro": None})
+                print(f"          → {vez} tentativa(s) sem progresso: marquei "
+                      "`blocked` e a fila segue no próximo item")
+
             if falhas_seguidas >= a.max_falhas:
                 motivo_fim = "disjuntor"
                 detalhe_fim = (f"{falhas_seguidas} itens seguidos sem progresso — "
@@ -465,12 +627,15 @@ def main(argv=None):
 
     registra({"evento": "run_end", "motivo": motivo_fim, "detalhe": detalhe_fim,
               "itens": itens, "com_progresso": len(feitos),
-              "sem_progresso": len(falhados)})
+              "sem_progresso": len(falhados), "esgotados": len(esgotados),
+              "limite_de_uso": len(limitados)})
 
     print(f"\n── fim às {datetime.now().strftime('%H:%M')} · {motivo_fim}")
     print(f"   {detalhe_fim}")
-    print(f"   {itens} item(ns) tentado(s) · {len(feitos)} com progresso · "
-          f"{len(falhados)} sem")
+    print(f"   {itens} tentativa(s) · {len(feitos)} com progresso · "
+          f"{len(falhados)} sem"
+          + (f" · {len(limitados)} interrompida(s) pelo teto de uso da conta"
+             if limitados else ""))
     abertas = [(i, p) for i, _, p in feitos if p]
     if abertas:
         print(f"\n   Espera por você ({len(abertas)}):")
@@ -481,6 +646,18 @@ def main(argv=None):
         for ident, estado, codigo, matou in falhados:
             print(f"     - {ident}: status `{estado}`"
                   + (" · morto por timeout" if matou else f" · exit {codigo}"))
+    if esgotados:
+        print(f"\n   Tirados da frente da fila ({len(esgotados)}) — estão "
+              "`blocked`, devolva para `pending` quando souber o que travou:")
+        for ident, vez in esgotados:
+            print(f"     - {ident}: {vez} tentativa(s) sem sair do lugar")
+    if limitados:
+        print(f"\n   Teto de uso da conta ({len(limitados)}) — não é falha "
+              "do item:")
+        for ident, reset in limitados:
+            print(f"     - {ident}: bateu o limite"
+                  + (f", reseta {reset}" if reset else
+                     " (o `claude` não disse quando reseta)"))
     print(f"\n   registro: {ledger}")
     print(f"   saída do claude: {log}")
     return 0

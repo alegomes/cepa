@@ -240,7 +240,27 @@ Para cada item do lote, na ordem:
      comportamento, `proof-reviewer` (PROVEN). Veredito diferente disso não é
      `done`; é `blocked` ou volta para `pending`, com o motivo.
 
-  d. **Registre o desfecho**, sempre:
+  d. **Não encerre o turno com trabalho seu rodando em segundo plano.** Um
+     build que você disparou (`./mvnw verify`, `npm test`, o gate de prova) tem
+     que ser AGUARDADO e colhido no mesmo turno em que foi disparado. Frases
+     como "aguardo a notificação do build", "quando ficar verde eu faço o push"
+     e "está compilando em segundo plano" descrevem um futuro que não existe:
+     quando este comando roda dentro do `cepa-until`, o processo é um
+     `claude -p` e **não há turno seguinte** — o processo morre no fim deste, o
+     build vira órfão e o item fica `in_progress` sem desfecho.
+
+     Foi a causa medida das duas únicas falhas não-triviais do run de
+     2026-08-30: 34 dos 49 minutos da janela, dois itens parados exatamente
+     assim, exit 0 e nada registrado.
+
+     Se o build não couber no turno, o desfecho não é silêncio: é
+     `finish --status blocked --evidence "build disparado e não colhido: <o
+     comando, e onde está o log>"`, ou `--status pending` com a mesma
+     evidência. Um item com desfecho nomeado volta na próxima janela sabendo
+     onde parou; um item sem desfecho volta como reserva órfã e recomeça do
+     zero.
+
+  e. **Registre o desfecho**, sempre:
 
      ```
      python3 common/bin/cepa-plan finish <nome> <id> --status done \
@@ -264,7 +284,7 @@ Para cada item do lote, na ordem:
      desfaz o `finish`: o trabalho aconteceu. Registre o card como pendente de
      transição no relatório.
 
-  e. **Item travado:** siga a política escolhida no passo 2 — parar (default)
+  f. **Item travado:** siga a política escolhida no passo 2 — parar (default)
      ou seguir. Nos dois casos, `finish --status blocked --evidence "<a
      condição de fora e quem a resolve>"` antes de seguir, senão o item fica
      `in_progress` para sempre e trava o lote seguinte. Não pergunte nada
@@ -284,7 +304,8 @@ item que você tocou acaba em exatamente um destes:
 | `ERROR` | o run em si falhou (infra, permissão) — nomeie a falha |
 | `SKIPPED` | o item deixou de ser reservável desde a montagem do lote — diga qual dos casos |
 
-"Em andamento", "quase lá" e silêncio **não** são desfechos. São a ausência de
+"Em andamento", "quase lá", "esperando o build" e silêncio **não** são
+desfechos. São a ausência de
 uma decisão vestida de status, e é assim que um item volta na semana seguinte
 sem ninguém saber o que houve com ele. Se você não sabe nomear, o desfecho
 honesto é `BLOCKED` com o motivo "desfecho indeterminado: <o que você não
@@ -339,6 +360,10 @@ Um relatório só, no formato `plain-report`, e em pt-BR:
   worktrees — duas cópias da regra divergem.
 - **Reservar antes de executar, item a item.** Sem o `start`, o item não é
   trabalhado.
+- **Turno que acaba com build em segundo plano é item sem desfecho.** Dentro
+  do `cepa-until` cada item é um `claude -p` que morre no fim do turno: não
+  existe "quando ficar verde eu volto". Aguarde e colha no mesmo turno, ou
+  nomeie o desfecho antes de parar.
 - **A marcação é mecânica** (`cepa-plan start` / `finish`). Editar o YAML à mão
   contorna todas as recusas.
 - **A ordem nunca vem do quadro.** Reconciliar é ler o ESTADO de cada item; a
