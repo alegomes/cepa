@@ -243,7 +243,13 @@ def test_disjuntor_para_depois_de_n_falhas_seguidas():
 
 def test_progresso_zera_o_disjuntor():
     """Duas falhas, um sucesso, duas falhas: com o teto em 3, isso NÃO pode
-    parar o run — senão azar espalhado encerra uma noite saudável."""
+    parar o run — senão azar espalhado encerra uma noite saudável.
+
+    `--tentativas-por-item 6` desliga o OUTRO teto, o de tentativas no mesmo
+    item, que senão tiraria o a1 da frente na 2ª falha e o caso mediria o teto
+    errado. São dois cortes independentes: este mede o disjuntor, que conta
+    falhas seguidas entre itens QUAISQUER.
+    """
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1"), item("a2")])
         corpo = (
@@ -252,7 +258,9 @@ def test_progresso_zera_o_disjuntor():
             "    marca(primeiro_pendente(), status='done')\n")
         binv = fake_claude(tmp, corpo)
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
-        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "3"])
+        p, chamadas = roda(raiz, binv, plano,
+                           ["--for", "2h", "--max-falhas", "3",
+                            "--tentativas-por-item", "6"])
         check("o sucesso do meio zerou a contagem", len(chamadas) == 6,
               f"disparou {len(chamadas)}x (esperado 2 falhas + 1 ok + 3 falhas)")
         fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
@@ -586,6 +594,146 @@ def test_branch_diferente_da_largada_encerra_o_run():
               and "main" in (fim.get("detalhe") or ""), str(fim))
         check("os itens seguintes NÃO foram executados",
               yaml.safe_load(plano.read_text())["items"][1]["status"] == "pending")
+
+
+# ── 3. teto de uso da conta ─────────────────────────────────────────────────
+
+LIMITE_REAL = "You've hit your session limit \u00b7 resets 8:40pm (America/Sao_Paulo)"
+
+
+def test_limite_de_uso_da_conta_para_o_run_sem_culpar_o_item():
+    """A mensagem verbatim do run de 2026-08-30.
+
+    Ela vinha com exit 1 e o item parado, que é EXATAMENTE a assinatura de "o
+    item não saiu do lugar" — e por isso duas tentativas de 92s e 4s entraram
+    no disjuntor como se o WEGO-1941 fosse sistematicamente ruim. O teto é da
+    conta: repetir não levanta, e o relatório da manhã não pode acusar o card.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        binv = fake_claude(tmp, f"print({LIMITE_REAL!r})\nsys.exit(1)")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("bateu o teto e parou na primeira tentativa", len(chamadas) == 1,
+              f"disparou {len(chamadas)}x")
+        fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
+        check("...com motivo próprio, não `disjuntor`",
+              fim["motivo"] == "limite-de-uso", str(fim))
+        check("...e o item NÃO entra na conta de falhas",
+              fim["sem_progresso"] == 0 and fim["limite_de_uso"] == 1, str(fim))
+        ev = [e for e in ledger_de(raiz) if e.get("evento") == "limite_de_uso"]
+        check("...o registro guarda o horário do reset",
+              ev and ev[0].get("reset") == "8:40pm", str(ev))
+        check("...o relatório diz em voz alta que não é falha do item",
+              "não é falha do item" in p.stdout, p.stdout[-500:])
+        check("...e o item continua pendente, sem culpa gravada",
+              yaml.safe_load(plano.read_text())["items"][0]["status"] == "pending")
+
+
+def test_teto_de_uso_so_para_quando_o_item_nao_andou():
+    """Um item que FECHOU não vira parada, aconteça o que acontecer na saída.
+    Sem esta ordem, um relatório que menciona a frase mataria uma janela viva.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(
+            tmp, f"marca(primeiro_pendente(), status='done')\nprint({LIMITE_REAL!r})")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("os dois itens rodaram", len(chamadas) == 2, f"{len(chamadas)}x")
+        fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
+        check("...e o run terminou pela fila, não pelo teto de uso",
+              fim["motivo"] == "fim-da-fila" and fim["limite_de_uso"] == 0, str(fim))
+
+
+def test_limite_no_meio_de_uma_saida_longa_nao_para_o_run():
+    """O reconhecedor olha o FIM da saída desta tentativa. Uma frase citada no
+    meio de um relatório longo é prosa de agente, não a conta batendo o teto —
+    e tratá-la como teto mataria a noite por uma citação."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        corpo = (f"print({LIMITE_REAL!r})\n"
+                 "print('relatorio: ' + 'x' * 4000)\n")
+        binv = fake_claude(tmp, corpo)
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "3"])
+        fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
+        check("a citação no meio não vira teto de uso",
+              fim["limite_de_uso"] == 0, str(fim))
+        check("...e o item conta como falha normal", fim["sem_progresso"] >= 1,
+              str(fim))
+
+
+# ── 4. teto de tentativas por item ──────────────────────────────────────────
+
+def test_teto_de_tentativas_tira_o_item_da_frente_e_a_fila_anda():
+    """O caso do WEGO-1941: um item que não sai do lugar era reoferecido pelo
+    `queue` para sempre e comeu 3 das 5 tentativas do run, com 15 pendentes
+    atrás dele. Na segunda tentativa ele vira `blocked` e a fila segue."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        corpo = ("alvo = primeiro_pendente()\n"
+                 "if alvo and alvo != 'a1':\n"
+                 "    marca(alvo, status='done')\n")
+        binv = fake_claude(tmp, corpo)
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        # Contar só o TOTAL de disparos deixaria passar a versão sem teto: ela
+        # também dispara 3 vezes, as três no a1, e morre no disjuntor. O que
+        # separa as duas é POR ITEM.
+        por_item = {}
+        for e in ledger_de(raiz):
+            if e.get("evento") == "item_start":
+                por_item[e["id"]] = por_item.get(e["id"], 0) + 1
+        check("o item preso gastou 2 tentativas, não mais",
+              por_item.get("a1") == 2, str(por_item))
+        check("...e o item de trás foi alcançado", por_item.get("a2") == 1,
+              str(por_item))
+        depois = {it["id"]: it for it in yaml.safe_load(plano.read_text())["items"]}
+        check("...o item preso ficou `blocked`",
+              depois["a1"]["status"] == "blocked", str(depois["a1"]))
+        check("...com a evidência dizendo que foi o supervisor, não um veredito",
+              "tentativas seguidas do `cepa-until`" in (depois["a1"]["evidence"] or ""),
+              str(depois["a1"].get("evidence"))[:200])
+        check("...a reserva órfã foi limpa junto",
+              not depois["a1"].get("claimed_by"), str(depois["a1"]))
+        check("...e a FILA ANDOU: o item de trás fechou",
+              depois["a2"]["status"] == "done", str(depois["a2"]))
+        fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
+        check("...o run acaba pela fila, não pelo disjuntor",
+              fim["motivo"] == "fim-da-fila" and fim["esgotados"] == 1, str(fim))
+        check("...e o relatório cobra o item que ficou blocked",
+              "Tirados da frente da fila" in p.stdout and "a1" in p.stdout,
+              p.stdout[-600:])
+
+
+def test_tentativa_que_anda_nao_gasta_o_teto_do_item():
+    """A 2ª tentativa tem valor medido: o WEGO-2206 falhou parado num build em
+    segundo plano e FECHOU na repetição. O teto não pode punir quem andou."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        corpo = ("n = len(open(os.environ['FAKE_CHAMADAS']).read().splitlines())\n"
+                 "if n == 2:\n"
+                 "    marca(primeiro_pendente(), status='done')\n")
+        binv = fake_claude(tmp, corpo)
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("a repetição aconteceu e fechou o item", len(chamadas) == 2,
+              f"disparou {len(chamadas)}x")
+        check("...e o item está done, não blocked",
+              yaml.safe_load(plano.read_text())["items"][0]["status"] == "done")
+
+
+def test_tentativas_por_item_invalido_e_recusado():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, "pass")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano,
+                           ["--for", "2h", "--tentativas-por-item", "0"])
+        check("--tentativas-por-item 0 é recusado", p.returncode == 2,
+              f"saiu {p.returncode}")
+        check("...e nada foi disparado", not chamadas, str(chamadas))
 
 
 def test_registro_grava_um_evento_por_item():

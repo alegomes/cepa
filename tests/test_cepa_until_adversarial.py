@@ -183,6 +183,40 @@ def test_claude_corrompido_no_meio_e_falha_contada_nao_traceback():
               "lançar" in p.stdout, p.stdout[-500:])
 
 
+def test_item_esgotado_que_nao_consegue_ser_bloqueado_encerra_sem_laco():
+    """O teto de tentativas por item depende de ESCREVER `blocked` no plano —
+    é o que faz o `queue` parar de reoferecer o item. Se essa escrita falhar
+    (disco cheio, permissão, plano de outro dono), o supervisor não pode
+    seguir: o próximo `queue` devolveria o mesmo item e a janela viraria um
+    laço. Ele encerra com motivo próprio, e sem traceback.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        d = Path(raiz) / ".claude" / "programs" / "fila"
+        # O falso trava a ESCRITA no diretório da fila (o `finish` grava um
+        # .tmp ao lado e renomeia), mantendo a LEITURA de pé — que é a forma
+        # da falha: o supervisor continua enxergando a fila e continua sem
+        # conseguir tirar o item da frente.
+        binv = fake_claude(tmp, f"os.chmod({str(d)!r}, 0o555)")
+        plano = d / "plan.yaml"
+        try:
+            p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        finally:
+            os.chmod(d, 0o755)
+        sem_traceback(p, "escrita do `blocked` recusada")
+        check("o run não vira laço no mesmo item", len(chamadas) <= 3,
+              f"disparou {len(chamadas)}x")
+        fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
+        check("...encerra por `item-preso`", fim["motivo"] == "item-preso",
+              str(fim))
+        check("...e o motivo nomeia o item e o que falhou",
+              "a1" in (fim.get("detalhe") or "")
+              and "tentativas" in (fim.get("detalhe") or ""), str(fim))
+        ev = [e for e in ledger_de(raiz) if e.get("evento") == "esgotado"]
+        check("...o registro guarda que o bloqueio NÃO pegou",
+              ev and ev[-1].get("bloqueado") is False, str(ev))
+
+
 def main():
     print("cepa-until — entrada adversária (nível l4)\n")
     for nome, fn in sorted(globals().items()):
