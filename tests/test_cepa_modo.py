@@ -80,6 +80,21 @@ class Repo:
         return self.path / ".claude" / "session-mode"
 
 
+# Flags que o PRÓPRIO cepa acrescenta antes das suas: hoje só a de permissão
+# (toda sessão nasce em bypassPermissions). O contrato testado aqui é "não
+# engoliu o que você digitou", então elas saem da comparação.
+FLAGS_DO_CEPA = ("--dangerously-skip-permissions", "--permission-mode")
+
+
+def claude_args(proc):
+    """Os args do usuário que chegaram ao claude falso."""
+    linha = ""
+    for l in proc.stdout.splitlines():
+        if l.startswith("CLAUDE_ARGS:"):
+            linha = l[len("CLAUDE_ARGS:"):]
+    return [x for x in linha.split() if x.split("=")[0] not in FLAGS_DO_CEPA]
+
+
 def test_modo_valido():
     with Repo() as r:
         p = r.run("--modo", "construcao", "--resume")
@@ -88,7 +103,7 @@ def test_modo_valido():
         body = r.mode_file.read_text() if r.mode_file.exists() else ""
         check("modo válido: registra o modo", "modo: construcao" in body, body)
         check("modo válido: repassa os args ao claude",
-              "CLAUDE_ARGS:--resume" in p.stdout, p.stdout)
+              claude_args(p) == ["--resume"], p.stdout)
 
 
 def test_modo_invalido():
@@ -115,7 +130,7 @@ def test_kill_switch():
         check("CEPA_MODO=off: sobe", p.returncode == 0, p.stderr)
         check("CEPA_MODO=off: não grava", not r.mode_file.exists())
         check("CEPA_MODO=off: entrega ao claude",
-              "CLAUDE_ARGS:--resume" in p.stdout, p.stdout)
+              claude_args(p) == ["--resume"], p.stdout)
 
 
 def test_reforma_orcamento():
