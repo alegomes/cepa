@@ -498,6 +498,31 @@ def test_contrato_do_comando(base):
           "o que houve")
     check("fecha apontando para o /common:next",
           "/common:next" in f)
+    # 2026-08-30: as duas únicas falhas não-triviais do run de 2h no WEGO foram
+    # o turno acabando com o build rodando de lado — 34 dos 49 minutos, exit 0
+    # nas duas, item `in_progress` sem desfecho. Sob `claude -p` (que é como o
+    # `cepa-until` roda cada item) não existe o turno seguinte que ia colher.
+    check("proíbe encerrar o turno com build em segundo plano",
+          "segundo plano" in limpo and "não há turno seguinte" in limpo,
+          "sem a proibição escrita, o agente segue o conselho do no-busy-wait "
+          "(mandar para o segundo plano), que só vale em sessão interativa")
+    check("e diz o que fazer no lugar: nomear o desfecho antes de parar",
+          "build disparado e não colhido" in limpo,
+          "proibir sem dar a saída faz o agente escolher outra forma de "
+          "silêncio")
+    check("e 'esperando o build' não passa como desfecho",
+          "esperando o build" in limpo,
+          "a tabela de desfechos terminais é o que impede status vestido de "
+          "decisão")
+    # A prosa é a instrução; o hook é a rede. Só a prosa erode sem nenhum teste
+    # ficar vermelho — a lição registrada no próprio cepa-plan.
+    plugin = json.loads(
+        (REPO / "common" / ".claude-plugin" / "plugin.json").read_text("utf-8"))
+    bash = [b for b in plugin["hooks"]["PreToolUse"] if b.get("matcher") == "Bash"]
+    check("e a proibição tem rede mecânica registrada no plugin",
+          bash and any("no-background-build" in h["command"]
+                       for h in bash[0]["hooks"]),
+          "prosa sem hook é promessa; o hook é o que dispara quando ela erode")
     check("diz que a fila mora no clone principal",
           "git-common-dir" in f or "clone principal" in f)
 
