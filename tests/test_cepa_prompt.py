@@ -81,6 +81,40 @@ def args_of(proc):
     return parts[:-1]
 
 
+PROMPT_FLAGS = ("--append-system-prompt", "--system-prompt")
+# Flags que o PRÓPRIO cepa acrescenta, e que portanto não são "args do usuário":
+# hoje só a de permissão (toda sessão nasce em bypassPermissions).
+FLAGS_DO_CEPA = ("--dangerously-skip-permissions", "--permission-mode")
+
+
+def prompt_par(a):
+    """(flag de prompt, conteúdo, args do usuário depois dela).
+
+    O contrato guardado é a ordem RELATIVA — a flag de prompt vem antes do que
+    você digitou — e não o índice absoluto: o cepa prefixa flags próprias antes
+    das do usuário, e uma flag nova não pode quebrar este teste."""
+    for i, x in enumerate(a):
+        if x in PROMPT_FLAGS:
+            return x, (a[i + 1] if i + 1 < len(a) else None), a[i + 2:]
+    return None, None, a
+
+
+def do_usuario(a):
+    """Só o que o usuário digitou — sem as flags do próprio cepa nem o par
+    flag-de-prompt + conteúdo."""
+    fora, i = [], 0
+    while i < len(a):
+        x = a[i]
+        if x in PROMPT_FLAGS:
+            i += 2
+        elif x.split("=")[0] in FLAGS_DO_CEPA:
+            i += 1
+        else:
+            fora.append(x)
+            i += 1
+    return fora
+
+
 def test_append_e_o_default():
     with Repo() as r:
         f = r.path / "p.md"
@@ -88,10 +122,11 @@ def test_append_e_o_default():
         p = r.run("--prompt", str(f), "--resume")
         a = args_of(p)
         check("append: rc=0", p.returncode == 0, p.stderr)
-        check("append: usa --append-system-prompt", a[:1] == ["--append-system-prompt"], a)
+        flag, conteudo, depois = prompt_par(a)
+        check("append: usa --append-system-prompt", flag == "--append-system-prompt", a)
         check("append: entrega o conteúdo como UM argumento",
-              len(a) > 1 and a[1] == "SEJA CONCISO\nlinha dois", a)
-        check("append: preserva os args do usuário", a[2:] == ["--resume"], a)
+              conteudo == "SEJA CONCISO\nlinha dois", a)
+        check("append: preserva os args do usuário", depois == ["--resume"], a)
         check("append: diz qual prompt subiu", "system prompt (append)" in p.stderr, p.stderr)
 
 
@@ -100,7 +135,7 @@ def test_substitui_e_explicito():
         f = r.path / "p.md"
         f.write_text("prompt inteiro\n")
         a = args_of(r.run("--prompt-substitui", str(f)))
-        check("substitui: usa --system-prompt", a[:1] == ["--system-prompt"], a)
+        check("substitui: usa --system-prompt", prompt_par(a)[0] == "--system-prompt", a)
         check("substitui: não usa append",
               "--append-system-prompt" not in a, a)
 
@@ -110,9 +145,11 @@ def test_forma_com_igual():
         f = r.path / "p.md"
         f.write_text("x\n")
         a = args_of(r.run(f"--prompt={f}"))
-        check("--prompt=<val>: reconhecida", a[:1] == ["--append-system-prompt"], a)
+        check("--prompt=<val>: reconhecida",
+              prompt_par(a)[0] == "--append-system-prompt", a)
         a = args_of(r.run(f"--prompt-substitui={f}"))
-        check("--prompt-substitui=<val>: reconhecida", a[:1] == ["--system-prompt"], a)
+        check("--prompt-substitui=<val>: reconhecida",
+              prompt_par(a)[0] == "--system-prompt", a)
 
 
 def test_nome_na_biblioteca():
@@ -120,7 +157,7 @@ def test_nome_na_biblioteca():
         (r.lib / "smartass.md").write_text("da biblioteca\n")
         a = args_of(r.run("--prompt", "smartass"))
         check("nome: acha <nome>.md na biblioteca do usuário",
-              a[1:2] == ["da biblioteca"], a)
+              prompt_par(a)[1] == "da biblioteca", a)
 
 
 def test_nome_na_biblioteca_do_repo():
@@ -130,7 +167,7 @@ def test_nome_na_biblioteca_do_repo():
         (d / "casa").write_text("do repo\n")
         a = args_of(r.run("--prompt", "casa"))
         check("nome: acha na biblioteca do repo (sem sufixo)",
-              a[1:2] == ["do repo"], a)
+              prompt_par(a)[1] == "do repo", a)
 
 
 def test_biblioteca_do_usuario_ganha():
@@ -141,7 +178,7 @@ def test_biblioteca_do_usuario_ganha():
         (d / "x.md").write_text("repo\n")
         a = args_of(r.run("--prompt", "x"))
         check("nome homônimo: a biblioteca do usuário vence",
-              a[1:2] == ["usuario"], a)
+              prompt_par(a)[1] == "usuario", a)
 
 
 def test_inexistente_recusa():
@@ -179,11 +216,11 @@ def test_env_default():
     with Repo() as r:
         (r.lib / "padrao.md").write_text("do env\n")
         a = args_of(r.run("--resume", env={"CEPA_PROMPT": "padrao"}))
-        check("CEPA_PROMPT: aplica sem flag", a[1:2] == ["do env"], a)
+        check("CEPA_PROMPT: aplica sem flag", prompt_par(a)[1] == "do env", a)
         a = args_of(r.run(env={"CEPA_PROMPT": "padrao",
                                "CEPA_PROMPT_MODO": "substitui"}))
         check("CEPA_PROMPT_MODO=substitui: troca a flag",
-              a[:1] == ["--system-prompt"], a)
+              prompt_par(a)[0] == "--system-prompt", a)
         p = r.run(env={"CEPA_PROMPT": "padrao", "CEPA_PROMPT_MODO": "xpto"})
         check("CEPA_PROMPT_MODO inválido: rc=2", p.returncode == 2, p.stderr)
 
@@ -193,13 +230,14 @@ def test_flag_vence_o_env():
         (r.lib / "padrao.md").write_text("do env\n")
         (r.lib / "outro.md").write_text("da flag\n")
         a = args_of(r.run("--prompt", "outro", env={"CEPA_PROMPT": "padrao"}))
-        check("flag vence o env", a[1:2] == ["da flag"], a)
+        check("flag vence o env", prompt_par(a)[1] == "da flag", a)
 
 
 def test_sem_prompt_nada_muda():
     with Repo() as r:
         a = args_of(r.run("--resume"))
-        check("sem --prompt: repassa só os args do usuário", a == ["--resume"], a)
+        check("sem --prompt: repassa só os args do usuário",
+              do_usuario(a) == ["--resume"], a)
 
 
 for fn in [v for k, v in sorted(globals().items()) if k.startswith("test_")]:
