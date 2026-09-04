@@ -108,16 +108,75 @@ def _quoted_mask(s: str) -> list:
 
     Aspas não fechadas mascaram o resto da string: é fail-open, coerente com o
     contrato do hook, e um comando com aspas não fechadas não roda no shell.
+
+    O corpo de um heredoc (`<<EOF`, `<<-EOF`, `<<'EOF'`) também é dado, não
+    shell, e também é mascarado. Mesmo defeito das aspas, um degrau adiante e
+    medido em 04/09/2026: uma mensagem de commit passada por
+    `git commit -F - <<'MSG'` que CITAVA `while true` fez o `no-busy-wait`
+    barrar o commit como se fosse espera ativa. A citação estava dentro do
+    corpo, não numa linha de comando. Um here-string (`<<<`) não abre corpo e
+    fica de fora.
     """
     mask = [False] * len(s)
     quote = None
+    pendentes = []
     i = 0
-    while i < len(s):
+    n = len(s)
+    while i < n:
         c = s[i]
         if quote is None:
+            # O corpo de um heredoc anunciado nesta linha começa depois da
+            # quebra de linha e vai até a linha do delimitador. Nada dele é
+            # shell — é dado.
+            if c == "\n" and pendentes:
+                j = i + 1
+                for delim, apara in pendentes:
+                    while j < n:
+                        fim_linha = s.find("\n", j)
+                        if fim_linha == -1:
+                            fim_linha = n
+                        linha = s[j:fim_linha]
+                        j = fim_linha + 1 if fim_linha < n else n
+                        if (linha.lstrip("\t") if apara else linha).strip() == delim:
+                            break
+                # A quebra de linha que ABRE o corpo entra na máscara junto:
+                # ela ainda é separador de comando para `_split_segments`, e sem
+                # ela o corpo inteiro virava um "segundo comando" — que foi
+                # exatamente como a prosa do corpo voltou a ser lida como shell.
+                for p in range(i, min(j, n)):
+                    mask[p] = True
+                pendentes = []
+                i = min(j, n)
+                continue
+            if s[i:i + 2] == "<<" and s[i:i + 3] != "<<<":
+                k = i + 2
+                apara = k < n and s[k] == "-"
+                if apara:
+                    k += 1
+                while k < n and s[k] in " \t":
+                    k += 1
+                citado = s[k] if k < n and s[k] in "\"'" else None
+                if citado:
+                    k += 1
+                inicio = k
+                while k < n and (s[k].isalnum() or s[k] in "_-."):
+                    k += 1
+                delim = s[inicio:k]
+                if citado and k < n and s[k] == citado:
+                    k += 1
+                if delim:
+                    # O operador e o delimitador ficam VISÍVEIS de propósito:
+                    # `cat <<EOF > out.txt` escreve, e é o `<<` na visão sem
+                    # aspas que sustenta o sinal "não sei analisar isto"
+                    # (_UNCOVERED_RE). Só o CORPO é dado. Mascarar o operador
+                    # junto apagaria o sinal e o heredoc passaria a escrever
+                    # calado.
+                    pendentes.append((delim, apara))
+                    i = k
+                    continue
             if c == "\\":
                 mask[i] = True
-                if i + 1 < len(s):
+                if i + 1 < n:
                     mask[i + 1] = True
                 i += 2
                 continue
@@ -128,7 +187,7 @@ def _quoted_mask(s: str) -> list:
             continue
         mask[i] = True
         if quote == '"' and c == "\\":
-            if i + 1 < len(s):
+            if i + 1 < n:
                 mask[i + 1] = True
             i += 2
             continue
