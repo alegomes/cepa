@@ -60,6 +60,16 @@ COMMIT_SETA = 'git commit -m "feat: algo\n\nO fluxo vai de A -> B agora.\n"'
 COMMIT_TEE = 'git commit -m "fix: algo\n\nAntes eu fazia tee saida.txt na mão.\n"'
 # E pela via do `&&`: o corpo tem um operador de shell no meio da prosa.
 COMMIT_AND = 'git commit -m "fix: algo\n\nroda A && B, nessa ordem.\n"'
+# O caso medido em 04/09/2026: a mensagem de commit deste proprio conserto
+# CITAVA um laco infinito, e o `no-busy-wait` barrou o commit como espera
+# ativa. A citacao estava no CORPO de um heredoc, nao numa linha de comando.
+HEREDOC_SETA = ("git commit -q -F - <<'MSG'\n"
+                "fix: algo\n\nO fluxo vai de A -> plugins/common/hooks/x.py agora.\n"
+                "MSG")
+HEREDOC_TEE = ("git commit -F - <<MSG\n"
+               "fix: algo\n\nAntes eu fazia tee saida.txt na mao.\n"
+               "MSG")
+HEREDOC_RECUO = "cat <<-EOF\n\ttee saida.txt\n\tEOF"
 
 
 def load(path, alias):
@@ -96,6 +106,19 @@ PATHLOCK_CASES = [
      lambda t: t == ["saida.txt"], "2> é fora de escopo, e não vira operando"),
     ("tee com vários destinos", "tee a.txt b.txt",
      lambda t: t == ["a.txt", "b.txt"], "os dois destinos continuam vistos"),
+    # --- corpo de heredoc é DADO, não shell (04/09/2026). Mesmo defeito das
+    #     aspas, um degrau adiante: `git commit -F - <<'MSG'` com uma mensagem
+    #     que CITA `tee` ou `->` fazia o guard acusar escrita fantasma.
+    ("corpo de heredoc com seta na prosa", HEREDOC_SETA,
+     lambda t: t == [], "a seta está no corpo da mensagem, não numa linha de comando"),
+    ("corpo de heredoc com tee na prosa", HEREDOC_TEE,
+     lambda t: t == [], "prosa do corpo não escreve nada"),
+    ("heredoc com recuo (<<-)", HEREDOC_RECUO,
+     lambda t: t == [], "o corpo continua dado mesmo com <<- e delimitador recuado"),
+    # --- e nada de correção exagerada: o heredoc que redireciona de verdade
+    #     continua sendo escrita vista.
+    ("heredoc que redireciona de verdade", "cat > out.txt <<'EOF'\nlinha\nEOF",
+     lambda t: t == ["out.txt"], "o `> out.txt` está FORA do corpo"),
 ]
 
 # (rótulo, comando, esperado para o sinal "não sei analisar isto")
@@ -104,6 +127,14 @@ UNCOVERED_CASES = [
      'git commit -m "corpo com ed e << no meio da frase"', False),
     ("python3 -c continua sinalizado", 'python3 -c "print(1)"', True),
     ("heredoc continua sinalizado", "cat <<EOF > out.txt", True),
+    # O operador continua VISIVEL depois do mascaramento do corpo — e ele que
+    # sustenta o sinal. Mascarar `<<EOF` junto com o corpo apagaria o sinal e o
+    # heredoc passaria a escrever calado.
+    ("heredoc com corpo continua sinalizado",
+     "cat <<EOF > out.txt\nlinha\nEOF", True),
+    # O sinal vem do OPERADOR, e por isso vale tambem aqui: um heredoc e
+    # indecidivel independentemente do que o corpo diga.
+    ("heredoc de mensagem tambem sinaliza, pelo operador", HEREDOC_TEE, True),
 ]
 
 ENFORCEMENT_CASES = [
