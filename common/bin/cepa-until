@@ -149,6 +149,27 @@ RESET_DO_LIMITE = re.compile(r"resets?(?:\s+at)?\s+([^\n(]{1,40})", re.I)
 # item, porque não há turno seguinte para colher o resultado.
 ENV_JANELA = "CEPA_UNTIL_RUN"
 
+# O teto que o `claude -p` usa para esperar trabalho em segundo plano antes de
+# se matar. O default (10 min) matou o WEGO-2224 aos 47 minutos com as 3 Tasks
+# mescladas e a fase de testes por fazer: `Background tasks still running after
+# 600s; terminating`, exit 0, e o clone principal parado numa branch de
+# integração — que a conferência de branch do item seguinte leu como troca de
+# branch e encerrou a janela com 6h54 de sobra (run de 2026-09-03).
+#
+# `0` é o valor que a própria mensagem do harness indica para esperar sem teto.
+# Esperar sem teto aqui é seguro porque o teto REAL é o relógio deste supervisor:
+# `--limite-item` mata o subprocesso e o `--folga` mata o item que passa do
+# prazo. Trocamos um corte cego de 10 min por um corte que conhece a janela.
+#
+# Isso só é seguro junto com o `no-background-build`, que barra na mesma janela
+# o trabalho de segundo plano que NUNCA termina sozinho (vigia com `while true`,
+# `persistent: true`): sem ele, esperar sem teto trocaria o corte de 10 min pelo
+# limite do item inteiro. Os dois formam um par — não mexa em um sem o outro.
+#
+# Valor já posto no ambiente pelo operador ganha: quem escolheu explicitamente
+# sabe o que quer.
+ENV_ESPERA_FUNDO = "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"
+
 # Quanto da saída do subprocesso o reconhecedor de limite olha. Ler o pedaço
 # final DESTA tentativa (e não o log inteiro, que é append) é o que impede
 # reagir à mensagem de uma tentativa anterior; ler só o fim é o que impede
@@ -261,6 +282,14 @@ def limite_de_uso(texto):
     return True, (m.group(1).strip().rstrip(".") if m else None)
 
 
+def ambiente_do_item():
+    """O ambiente de UM subprocesso da janela: a marca que liga os hooks da
+    janela, e o teto de espera por segundo plano zerado (ver ENV_ESPERA_FUNDO)."""
+    env = dict(os.environ, **{ENV_JANELA: "1"})
+    env.setdefault(ENV_ESPERA_FUNDO, "0")
+    return env
+
+
 def executa_item(nome, repo, permissoes, limite_seg, log):
     """Dispara UM subprocesso.
     Devolve (codigo, matou_por_timeout, segundos, saida_desta_tentativa)."""
@@ -278,7 +307,7 @@ def executa_item(nome, repo, permissoes, limite_seg, log):
             proc = subprocess.Popen(cmd, cwd=str(repo), stdout=saida,
                                     stderr=subprocess.STDOUT,
                                     stdin=subprocess.DEVNULL,
-                                    env=dict(os.environ, **{ENV_JANELA: "1"}),
+                                    env=ambiente_do_item(),
                                     start_new_session=True)
         except OSError as e:
             # O `claude` sumiu do PATH, ficou sem permissão ou o binário está

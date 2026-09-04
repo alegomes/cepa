@@ -204,6 +204,52 @@ def test_reserva_minima_impede_comecar_item_que_nao_cabe():
               yaml.safe_load(plano.read_text())["items"][0]["status"] == "pending")
 
 
+def test_ambiente_do_item_liga_a_janela_e_zera_o_teto_de_espera():
+    """O que o subprocesso recebe no ambiente é contrato, não detalhe.
+
+    `CEPA_UNTIL_RUN` é o que faz os hooks da janela existirem. E
+    `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` é o que impede o `claude -p` de se
+    matar aos 10 minutos com trabalho de segundo plano pendente — foi assim que
+    o WEGO-2224 morreu pela metade em 2026-09-03 e a janela de 8h fechou com
+    6h54 de sobra. Sem esta asserção, sumir com a linha não quebra teste nenhum.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        alvo = Path(tmp) / "ambiente.json"
+        binv = fake_claude(
+            tmp,
+            "import os as _o, json as _j\n"
+            f"open({str(alvo)!r}, 'w').write(_j.dumps(dict(_o.environ)))\n"
+            "marca(primeiro_pendente(), status='done')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        roda(raiz, binv, plano, ["--for", "2h"])
+        env = json.loads(alvo.read_text())
+        check("o subprocesso nasce com CEPA_UNTIL_RUN",
+              env.get("CEPA_UNTIL_RUN") == "1", repr(env.get("CEPA_UNTIL_RUN")))
+        check("...e com o teto de espera por segundo plano zerado",
+              env.get("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS") == "0",
+              repr(env.get("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS")))
+
+
+def test_teto_de_espera_escolhido_pelo_operador_ganha():
+    """Quem exportou o valor à mão sabe o que quer; o supervisor não sobrescreve."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        alvo = Path(tmp) / "ambiente.json"
+        binv = fake_claude(
+            tmp,
+            "import os as _o, json as _j\n"
+            f"open({str(alvo)!r}, 'w').write(_j.dumps(dict(_o.environ)))\n"
+            "marca(primeiro_pendente(), status='done')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        roda(raiz, binv, plano, ["--for", "2h"],
+             extra_env={"CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS": "90000"})
+        env = json.loads(alvo.read_text())
+        check("valor posto pelo operador sobrevive",
+              env.get("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS") == "90000",
+              repr(env.get("CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS")))
+
+
 # ── 2. progresso e disjuntor ────────────────────────────────────────────────
 
 def test_fila_inteira_executa_ate_esvaziar():
