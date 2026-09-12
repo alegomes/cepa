@@ -54,6 +54,17 @@ decide se o aviso do `report-style-lint` precisa virar bloqueio.
   2026-08-26, que o gargalo era lead sondando disco (19% a 52% do relógio) e não
   build (3% a 17%).
 
+- **Tokens** (desde 12/09/2026): no fim de cada sessão o `session-registry`
+  dispara o `cepa-tokens` em segundo plano, que lê o transcript e grava um
+  evento `token_usage` (contexto novo, cache lido e saída, por tipo de agente,
+  mais o tamanho do que cada ferramenta devolveu). A seção "Tokens" responde
+  onde o gasto está: agente, repo ou leitura de arquivo. Sessões anteriores à
+  instalação entram com uma varredura única:
+
+  ```
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-tokens" --todas --days 30 --emit
+  ```
+
 - Comandos e skills podem registrar eventos próprios (aparecem em "Eventos
   custom") via:
   `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_telemetry.py" emit <evento> chave=valor ...`

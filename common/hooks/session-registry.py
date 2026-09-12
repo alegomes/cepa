@@ -392,6 +392,21 @@ def main():
     except Exception:
         pass  # telemetry never breaks the session
 
+    # Tokens da sessão que acabou. Roda DESTACADO: o SessionEnd tem prazo curto
+    # e uma sessão longa com subagentes soma dezenas de MB de transcript. O
+    # processo filho sobrevive ao hook e grava o evento token_usage sozinho.
+    transcript = payload.get("transcript_path") or ""
+    if event == "SessionEnd" and transcript and os.path.exists(transcript):
+        try:
+            import subprocess
+            tokens = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                  "bin", "cepa-tokens")
+            subprocess.Popen([sys.executable, tokens, "--arquivo", transcript, "--emit"],
+                             cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        except Exception:
+            pass  # telemetry never breaks the session
+
     sys.exit(0)
 
 

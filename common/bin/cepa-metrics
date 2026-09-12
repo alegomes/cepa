@@ -175,8 +175,31 @@ def main():
         m = len(s) // 2
         return s[m] if len(s) % 2 else (s[m - 1] + s[m]) / 2
 
+    # Tokens: um evento token_usage por sessão, gravado pelo cepa-tokens no fim
+    # dela. A mesma sessão pode ter sido gravada duas vezes (fim automático +
+    # varredura manual); vale o último evento de cada sessão.
+    ultimo_tokens = {}
+    for e in sorted((e for e in events if e.get("event") == "token_usage"),
+                    key=lambda x: x.get("ts", "")):
+        ultimo_tokens[e.get("sessao") or id(e)] = e
+    tok_total = Counter()
+    tok_agente = defaultdict(Counter)
+    tok_chars = Counter()
+    tok_repo = Counter()
+    for e in ultimo_tokens.values():
+        novo = (e.get("entrada") or 0) + (e.get("cache_w") or 0)
+        tok_total["novo"] += novo
+        tok_total["cache_r"] += e.get("cache_r") or 0
+        tok_total["saida"] += e.get("saida") or 0
+        tok_repo[e.get("repo") or "?"] += novo
+        for tipo, u in (e.get("por_agente") or {}).items():
+            tok_agente[tipo]["novo"] += (u.get("entrada") or 0) + (u.get("cache_w") or 0)
+            tok_agente[tipo]["n"] += u.get("n") or 0
+        for nome, c in (e.get("resultado_chars") or {}).items():
+            tok_chars[nome] += c or 0
+
     known = {"session_start", "session_end", "build_result", "gate_block", "gate_warn",
-             "proof_verdict", "proof_block", "report_style", "prompt"}
+             "proof_verdict", "proof_block", "report_style", "prompt", "token_usage"}
     custom = Counter(e.get("event") for e in events if e.get("event") not in known)
 
     if args.as_json:
@@ -197,6 +220,11 @@ def main():
                        "turnos_depois_da_rotina": depois,
                        "mediana_antes": mediana(antes),
                        "mediana_depois": mediana(depois)},
+            "tokens": {"sessoes_medidas": len(ultimo_tokens),
+                       "total": dict(tok_total),
+                       "contexto_novo_por_repo": dict(tok_repo),
+                       "por_agente": {k: dict(v) for k, v in tok_agente.items()},
+                       "resultado_chars": dict(tok_chars)},
             "custom_events": dict(custom),
         }, indent=2, ensure_ascii=False, default=str))
         return 0
@@ -276,6 +304,30 @@ def main():
             print(f"    espera ativa  : {te/60:.0f} min ({te/tw*100:.0f}%)")
             print(f"    build         : {tb/60:.0f} min ({tb/tw*100:.0f}%)")
             print(f"    memória de cálculo: soma de espera_s ÷ soma de relogio_s × 100")
+
+    if ultimo_tokens:
+        base = tok_total["novo"] or 1
+        print(f"\n## Tokens — {len(ultimo_tokens)} sessão(ões) medidas")
+        print(f"    contexto novo {tok_total['novo']:,} · cache lido {tok_total['cache_r']:,} "
+              f"· saída {tok_total['saida']:,}")
+        # Worktree já removida não resolve para o repo principal e aparece com o
+        # nome do próprio diretório; por isso só os 10 maiores.
+        print(f"    contexto novo por repo (10 maiores de {len(tok_repo)}):")
+        for repo, v in tok_repo.most_common(10):
+            print(f"      {repo:40}{v:>13,}  {v/base*100:5.1f}%")
+        print("    contexto novo por agente (tokens · % do total):")
+        for tipo, u in sorted(tok_agente.items(), key=lambda kv: -kv[1]["novo"])[:10]:
+            n = f" ×{u['n']}" if u["n"] else ""
+            print(f"      {tipo + n:40}{u['novo']:>13,}  {u['novo']/base*100:5.1f}%")
+        if tok_chars:
+            tc = sum(tok_chars.values()) or 1
+            print("    o que entrou por resultado de ferramenta (caracteres · %):")
+            for nome, c in tok_chars.most_common(8):
+                print(f"      {nome:40}{c:>13,}  {c/tc*100:5.1f}%")
+        print("    memória de cálculo: contexto novo = input_tokens + cache_creation_input_tokens")
+        print("      do transcript, uma vez por resposta do modelo; % = linha ÷ total × 100.")
+        print("      Resultado de ferramenta é medido em caracteres (o transcript não dá tokens")
+        print("      por resultado). Sessão gravada duas vezes conta só o último evento.")
 
     if custom:
         print("\n## Eventos custom (emitidos por comandos/skills)")

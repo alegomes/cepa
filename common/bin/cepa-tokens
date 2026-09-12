@@ -1,0 +1,234 @@
+#!/usr/bin/env python3
+"""cepa-tokens — quanto token uma sessão gastou, e com quem.
+
+## Por que existe
+
+Em 12/09/2026 avaliou-se o Portal da Spotify, que desvia a leitura de arquivos
+grandes para um modelo barato e promete ~90% de economia nessas leituras. A
+pergunta que decidia se valia copiar a ideia era "leitura pesa no gasto do
+Cepa?", e o ledger não sabia responder: tinha 0 eventos com token. O custo que
+o BACKLOG registrava era de fan-out de agentes (~600k por /common:advisors),
+não de arquivo grande. Este script transforma o palpite em número.
+
+## Como lê
+
+A fonte é a mesma do `cepa-clock`: o transcript em `~/.claude/projects/<slug>/`
+e um arquivo por subagente em `<sessão>/subagents/`, com o tipo do agente no
+`.meta.json` ao lado.
+
+Cada resposta do modelo traz `usage`. A MESMA resposta aparece em várias
+linhas (uma por bloco de conteúdo) e, nos subagentes, as primeiras linhas
+trazem contagem parcial. Por isso conta-se uma vez por `message.id`, com o
+`usage` da ÚLTIMA linha daquele id. Somar todas as linhas infla o total.
+
+Quatro números por resposta:
+  - entrada     = input_tokens (texto novo, sem cache)
+  - cache_w     = cache_creation_input_tokens (texto novo gravado no cache)
+  - cache_r     = cache_read_input_tokens (contexto reaproveitado, ~10% do preço)
+  - saida       = output_tokens
+
+"Contexto novo" = entrada + cache_w. É o que cresce quando um arquivo grande
+entra na conversa.
+
+Para saber O QUE entrou, conta-se o tamanho em caracteres do resultado de cada
+ferramenta (Read, Bash, Agent...). Caracteres, não tokens: o transcript não
+diz quantos tokens cada resultado custou.
+
+Uso:
+    cepa-tokens                       # a sessão mais recente deste repo
+    cepa-tokens --arquivo <x.jsonl>   # uma sessão nomeada
+    cepa-tokens --todas --days 30     # todas as sessões do período
+    cepa-tokens --emit                # grava no ledger (evento token_usage)
+    cepa-tokens --json
+"""
+
+import argparse
+import glob
+import json
+import os
+import subprocess
+import sys
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+PROJETOS = Path.home() / ".claude" / "projects"
+CAMPOS = ("entrada", "cache_w", "cache_r", "saida")
+
+
+def _linhas(f):
+    try:
+        for l in open(f, errors="replace"):
+            l = l.strip()
+            if not l:
+                continue
+            try:
+                yield json.loads(l)
+            except ValueError:
+                continue
+    except OSError:
+        return
+
+
+def _chars(conteudo):
+    if isinstance(conteudo, str):
+        return len(conteudo)
+    if isinstance(conteudo, list):
+        return sum(len(c.get("text") or "") for c in conteudo if isinstance(c, dict))
+    return 0
+
+
+def _arquivo(f):
+    """Uso por modelo, caracteres por ferramenta, cwd e último timestamp de um .jsonl."""
+    usos = {}                       # message.id -> (modelo, usage) — a última linha vence
+    nomes = {}                      # tool_use_id -> nome da ferramenta
+    chars = Counter()
+    cwd, fim = "", ""
+    for l in _linhas(f):
+        cwd = l.get("cwd") or cwd
+        fim = l.get("timestamp") or fim
+        msg = l.get("message")
+        if not isinstance(msg, dict):
+            continue
+        if isinstance(msg.get("usage"), dict):
+            usos[msg.get("id") or id(l)] = (msg.get("model") or "?", msg["usage"])
+        if not isinstance(msg.get("content"), list):
+            continue
+        for c in msg["content"]:
+            if not isinstance(c, dict):
+                continue
+            if c.get("type") == "tool_use":
+                nomes[c.get("id")] = c.get("name") or "?"
+            elif c.get("type") == "tool_result":
+                chars[nomes.get(c.get("tool_use_id"), "?")] += _chars(c.get("content"))
+    por_modelo = defaultdict(Counter)
+    for modelo, u in usos.values():
+        por_modelo[modelo]["entrada"] += u.get("input_tokens") or 0
+        por_modelo[modelo]["cache_w"] += u.get("cache_creation_input_tokens") or 0
+        por_modelo[modelo]["cache_r"] += u.get("cache_read_input_tokens") or 0
+        por_modelo[modelo]["saida"] += u.get("output_tokens") or 0
+    return por_modelo, chars, cwd, fim
+
+
+def medir(sessao: Path):
+    """sessao = o .jsonl da sessão principal; os subagentes ficam no dir irmão."""
+    arqs = [str(sessao)] + sorted(glob.glob(str(sessao.with_suffix("")) + "/subagents/agent-*.jsonl"))
+    total, por_agente, por_modelo, chars = Counter(), defaultdict(Counter), defaultdict(Counter), Counter()
+    cwd, fim = "", ""
+    for f in arqs:
+        tipo = "main"
+        meta = f[: -len(".jsonl")] + ".meta.json"
+        if f != str(sessao):
+            tipo = "?"
+            try:
+                tipo = json.load(open(meta)).get("agentType") or "?"
+            except (OSError, ValueError):
+                pass
+        pm, ch, c, t = _arquivo(f)
+        if f == str(sessao):
+            cwd = c
+        fim = max(fim, t)
+        chars.update(ch)
+        for modelo, u in pm.items():
+            por_modelo[modelo].update(u)
+            por_agente[tipo].update(u)
+            total.update(u)
+        if f != str(sessao):
+            por_agente[tipo]["n"] += 1
+    if not sum(total.values()):
+        return None
+    return {"sessao": sessao.stem, "slug": sessao.parent.name, "cwd": cwd, "fim": fim,
+            "agentes": len(arqs) - 1,
+            "total": {k: total[k] for k in CAMPOS},
+            "por_agente": {k: dict(v) for k, v in por_agente.items()},
+            "por_modelo": {k: dict(v) for k, v in por_modelo.items()},
+            "resultado_chars": dict(chars.most_common())}
+
+
+def _slug_do_cwd():
+    try:
+        raiz = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                              capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        raiz = ""
+    return (raiz or os.getcwd()).replace("/", "-").replace(".", "-")
+
+
+def sessoes(todas=False, days=30):
+    corte = datetime.now(timezone.utc) - timedelta(days=days)
+    dirs = sorted(PROJETOS.glob("*"))
+    if not todas:
+        alvo = _slug_do_cwd()
+        dirs = [d for d in dirs if d.name == alvo] or dirs
+    achados = [f for d in dirs if d.is_dir() for f in d.glob("*.jsonl")
+               if datetime.fromtimestamp(f.stat().st_mtime, timezone.utc) >= corte]
+    achados.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+    return achados if todas else achados[:1]
+
+
+def novo(u):
+    return (u.get("entrada") or 0) + (u.get("cache_w") or 0)
+
+
+def relatorio(r):
+    t = r["total"]
+    base = novo(t) or 1
+    out = [f"{r['sessao'][:8]} · {r['slug'][:52]} · {r['agentes']} subagentes",
+           f"  contexto novo {novo(t):,} · cache lido {t['cache_r']:,} · saída {t['saida']:,}",
+           "  por agente (contexto novo · % do total · saída):"]
+    for tipo, u in sorted(r["por_agente"].items(), key=lambda kv: -novo(kv[1])):
+        n = f" ×{u['n']}" if u.get("n") else ""
+        out.append(f"    {tipo + n:40}{novo(u):>12,}  {novo(u)/base*100:5.1f}%  {u.get('saida', 0):>9,}")
+    if r["resultado_chars"]:
+        tc = sum(r["resultado_chars"].values()) or 1
+        out.append("  o que entrou por resultado de ferramenta (caracteres · %):")
+        for nome, c in list(r["resultado_chars"].items())[:8]:
+            out.append(f"    {nome:40}{c:>12,}  {c/tc*100:5.1f}%")
+    out.append("  memória de cálculo: contexto novo = input_tokens + cache_creation_input_tokens,")
+    out.append("    somados uma vez por message.id (última linha do id); % = agente ÷ total × 100")
+    return "\n".join(out)
+
+
+def emitir(r):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+    import _telemetry as T
+    # `ts` sobrescreve o carimbo de agora pelo fim da sessão: numa varredura de
+    # sessões antigas, o evento precisa cair no período em que o gasto aconteceu.
+    campos = {"sessao": r["sessao"][:8], "agentes": r["agentes"], **r["total"],
+              "por_agente": r["por_agente"], "resultado_chars": dict(list(r["resultado_chars"].items())[:10])}
+    if r["fim"]:
+        campos["ts"] = r["fim"].replace("Z", "+00:00")
+    T.emit("token_usage", cwd=r["cwd"] or None, **campos)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Quanto token uma sessão gastou, e com quem.")
+    ap.add_argument("--arquivo", help="o .jsonl da sessão principal")
+    ap.add_argument("--todas", action="store_true", help="todas as sessões, não só a última")
+    ap.add_argument("--days", type=int, default=30)
+    ap.add_argument("--emit", action="store_true", help="grava no ledger da telemetria")
+    ap.add_argument("--json", action="store_true", dest="as_json")
+    args = ap.parse_args()
+
+    arqs = [Path(args.arquivo)] if args.arquivo else sessoes(args.todas, args.days)
+    rs = [r for r in (medir(f) for f in arqs) if r]
+    if not rs:
+        print("Nenhum transcript com uso de tokens encontrado.", file=sys.stderr)
+        return 0 if args.emit else 2
+
+    if args.emit:
+        for r in rs:
+            emitir(r)
+        if not args.as_json:
+            print(f"gravado no ledger: {len(rs)} sessão(ões)")
+    if args.as_json:
+        print(json.dumps(rs, indent=2, ensure_ascii=False))
+    elif not args.emit:
+        for r in rs:
+            print(relatorio(r))
+            print()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
