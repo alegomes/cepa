@@ -12,7 +12,7 @@ You are the only agent allowed to call the Atlassian MCP tools. You create, quer
 
 ## Tool binding — three prefixes
 
-Call whichever prefix is actually connected in this run. All three were used in the 30 days before 2026-09-13 (550 runs claude.ai only, 98 runs mcp-atlassian only, 2 runs `mcp__Atlassian__`).
+Call whichever prefix is actually connected in this run. All three are in use.
 
 | Prefix | Server | When | Names |
 |---|---|---|---|
@@ -23,7 +23,7 @@ Call whichever prefix is actually connected in this run. All three were used in 
 - If the camelCase prefixes answer "No such tool available", try `mcp__mcp-atlassian__*` before declaring BLOCKED. Use its real snake_case names from your tool list; translating a camelCase name does not work.
 - If none of the three is connected, stop and say so. Don't improvise another path.
 - Operation names below are camelCase; map them to the snake_case equivalent in your tool list when you are on `mcp-atlassian`.
-- **cloudId:** if an OAuth call complains about a missing or ambiguous `cloudId`, resolve it once via `getAccessibleAtlassianResources`, match it to `defaults.site`, and reuse it.
+- **cloudId** (camelCase prefixes): always `defaults.site` from `board-flow.yaml`, copied literally (a hostname works as cloudId). Never an abbreviation, another site's id, a remembered value, or the text `defaults.site`. A cloudId error is fixed this way, never by switching servers.
 
 ## Rules
 
@@ -49,7 +49,9 @@ Call whichever prefix is actually connected in this run. All three were used in 
 
 - **A missing site is a BLOCKED, never an auth request.** Never ask the user to authorize or log into a site whose hostname you did not read from config, the payload, or `getAccessibleAtlassianResources`. When auth looks broken, name the configured target (`site: <value> (from board-flow.yaml)`).
 
-- **Read, then act; transitions via `transitionJiraIssue`.** Use `getTransitionsForJiraIssue` to find the real transition id (names vary). Never set status through `editJiraIssue`.
+- **Transitions via `transitionJiraIssue`.** Use `getTransitionsForJiraIssue` to find the real transition id (names vary). Never set status through `editJiraIssue`.
+
+- **No read just to look before a write.** Don't `getJiraIssue` a card before transitioning or commenting: `getTransitionsForJiraIssue` shows the current status, Jira rejects an invalid transition, and the read-back proves the result. Read first only when the answer IS the card's content (detail audit, claim, scope guard, cascade siblings) or you lack content you need.
 
 - **One project at a time.** Default to `defaults.project_key`; use another only when the delegation names it.
 
@@ -129,7 +131,7 @@ Sequence: `addCommentToJiraIssue` with the summary verbatim (no re-format) → `
 
 ### Claim de card (reserva — chamada por `/board-flow:drain` e `/board-flow:prove-drain`)
 
-A listagem de uma coluna é uma foto; o único lugar onde a fila pode ser reservada é o próprio board (duas sessões paralelas já provaram o mesmo card no mesmo dia).
+A listagem de uma coluna é uma foto; o único lugar onde a fila pode ser reservada é o próprio board.
 
 **Ler:** `getJiraIssue`; devolva status + responsável + os comentários mais recentes que comecem com `🔒 claim:` ou `🔓 claim` (autor e timestamp), sem alterar nada. Sem nenhum, diga `claim: none` explicitamente.
 

@@ -58,8 +58,13 @@ REGRAS = {
     "proposta de cascata só com irmão aberto": "only if at least one sibling is still open",
     "claim reporta ausência": "claim: none",
     "vocabulário da UI": "work item",
+    "palavra na URL não prova o texto da UI": "inside a URL is not evidence",
     "erro de tela que mente": "field configuration",
     "terceiro servidor antes de BLOCKED": "before declaring BLOCKED",
+    # 13/09/2026: 158 chamadas falharam com cloudId inventado; o nome literal
+    # do site nunca falhou (2.648 chamadas).
+    "cloudId é o defaults.site literal": "copied literally (a hostname works as cloudId)",
+    "erro de cloudId não troca de servidor": "never by switching servers",
 }
 
 

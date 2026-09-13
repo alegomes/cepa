@@ -36,6 +36,8 @@ Read the project Jira config: `board-flow.yaml` at project root if present, othe
 
 ### 1. Fetch card details
 
+**Already have the card?** When `/board-flow:execute` dispatched here after its own step 1, it already fetched the same fields (summary, description, acceptance criteria, issue type, status, last 3 comments) and showed the scope verdict. Reuse that content and skip this delegation.
+
 Detect a `--no-scope` flag in `$ARGUMENTS`; the remaining token is the key. Delegate to `atlassian-expert` (the `Command:` line asks it to also report scope membership — a guard, not a filter; add `Scope: none` only if `--no-scope` was passed):
 
 > Command: fix

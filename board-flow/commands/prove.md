@@ -62,6 +62,8 @@ the mutation level)."
 
 ### 1. Fetch card details
 
+**Already have the card?** When this runs as a step of `/board-flow:prove-drain`, the claim read in that same turn already returned summary, description, acceptance criteria, issue type, status and the latest Implementation Summary. Reuse it and skip this delegation; the card came from a scoped column listing, so there is no scope verdict to repeat. Fetch only what is missing from that content.
+
 Detect a `--no-scope` flag in `$ARGUMENTS`; the remaining token is the key. Delegate to `atlassian-expert` (the `Command:` line asks it to also report scope membership — a guard, not a filter; add `Scope: none` only if `--no-scope` was passed):
 
 > Command: prove

@@ -105,7 +105,8 @@ For each confirmed card, in priority order:
      está reservado por outra sessão), registre `SKIPPED` e vá para o próximo
      card SEM rodar prova nenhuma.
   b. Run the equivalent of `/board-flow:prove <card-key>` (proof + verdict-driven
-     transition).
+     transition), reusing the card content from the claim read in (a) — skip
+     prove's step 1 fetch.
   c. Capture the verdict and the action taken.
   d. **Continue regardless of verdict** — UNPROVEN does not stop the drain.
      Every card returned on UNPROVEN carries its own `**Reason:**` — the
@@ -185,8 +186,15 @@ echo "$(basename "$PWD")-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:8])')
 **Antes de tocar em cada card** (é o primeiro passo do 4, antes de qualquer
 build, worktree ou delegação), delegue a `atlassian-expert`:
 
-> Leia o card `<KEY>`: status atual, responsável, e os comentários das últimas
-> 90 minutos. Devolva sem alterar nada.
+> Leia o card `<KEY>`: status atual, responsável, os comentários das últimas
+> 90 minutos, e também summary, description, acceptance criteria, **issue type**
+> e o **texto completo do Implementation Summary mais recente**. Devolva sem
+> alterar nada.
+
+Essa leitura já traz tudo o que o passo 1 do `/board-flow:prove` pediria. No 4b,
+entregue esse conteúdo à prova em vez de buscar o card de novo: medido em
+13/09/2026, reler um card que a sessão acabou de ler era a origem de parte das
+277 releituras dispensáveis.
 
 E decida, mecanicamente:
 
