@@ -2833,3 +2833,44 @@ de embutida.
 A regra não tem teste que a exercite com um card em `in_review`. Um caso de
 `reconcilia()` com plano `done` + quadro `In Review` esperando NENHUMA divergência (ou
 um aviso) é o vermelho que teria pegado isto antes de rodar contra um plano de 110 itens.
+
+---
+
+## A trava de especificação só lê o trecho novo de um Edit
+
+**Status:** pendente · **Lar provável:** `common/hooks/spec-readiness-gate.py` · **Origem:**
+sessão `/common:spec` no `wego-acesso-backend` (13/09/2026), ao fechar
+`docs/spec/tags-de-pessoas.md`.
+
+### Problema
+
+A trava decide se uma especificação pode se declarar `Status: pronta-para-construir`
+olhando o conteúdo da escrita. Para Write ela lê o arquivo inteiro. Para Edit e MultiEdit,
+`extract_content` devolve só o `new_string`. O Edit que troca `**Status:** rascunho` por
+`pronta-para-construir` não contém nenhum `### CS-n`, e a trava responde "nenhum critério
+de sucesso (`### CS-1: ...`)" para uma especificação com 26 critérios completos.
+
+O efeito vai além do atrito. A mensagem manda "continuar o interrogatório", então quem a lê
+tende a reabrir um interrogatório já fechado ou a achar que o arquivo está incompleto. O
+caminho que funciona hoje é regravar o arquivo inteiro com Write.
+
+O inverso também vale: um Edit que acrescenta um `- [ ]` ou apaga a linha `Teste vermelho`
+de um critério numa especificação já pronta passa, porque o trecho novo não tem Status.
+
+### Esboço de solução
+
+1. **Para Edit e MultiEdit, reconstruir o arquivo resultante:** ler `file_path` do disco,
+   aplicar cada `old_string` → `new_string` (respeitando `replace_all`) e rodar o crivo sobre
+   o resultado. Com o arquivo inexistente ou `old_string` sem casar, liberar, porque a
+   própria ferramenta vai falhar.
+2. **Olhar o Status do arquivo resultante, não do trecho.** Assim o Edit que quebra um
+   critério de uma especificação já pronta também é barrado.
+
+### Teste que falta
+
+- Arquivo em disco com critérios completos e `Status: rascunho`; Edit trocando só a linha de
+  Status por `pronta-para-construir`. Espera LIBERADO (hoje sai BLOQUEADO).
+- Arquivo em disco já `pronta-para-construir`; Edit que acrescenta `- [ ] pergunta`. Espera
+  BLOQUEADO (hoje sai LIBERADO).
+- MultiEdit com duas edições, a segunda dependendo da primeira. Espera o crivo sobre o
+  resultado das duas.
