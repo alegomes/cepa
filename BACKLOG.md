@@ -2940,3 +2940,54 @@ de um critério numa especificação já pronta passa, porque o trecho novo não
   BLOQUEADO (hoje sai LIBERADO).
 - MultiEdit com duas edições, a segunda dependendo da primeira. Espera o crivo sobre o
   resultado das duas.
+
+## O Insync apaga pasta commitada do repo sozinho, e o run desatendido não percebe
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (guarda de árvore suja) e
+o launcher `cepa` · **Origem:** manhã de 14/09/2026, `wego-acesso-backend`, ao tentar o
+segundo `cepa-until --for 2h WEGO`.
+
+### Problema
+
+O clone principal do `wego-acesso-backend` mora dentro da pasta sincronizada pelo Insync
+(o serviço que espelha a pasta local com o Google Drive). Às 00:15 de 14/09, uma hora e
+meia depois de o run da noite parar por limite de uso, a pasta
+`docs/tasks/wego-2229-grupo-remocao-funcionarios/` sumiu do disco: 9 arquivos commitados,
+nenhum processo do Claude rodando.
+
+Evidência de que foi o Insync e não o run:
+
+- `docs/tasks` foi o único diretório de toda a árvore `coding/` alterado entre 23:00 e
+  06:20; o último movimento do git foi às 22:34 e o run parou às 22:41.
+- O `logs.db` do Insync registra `ChangeSyncedDir._refresh_local ... AttributeError
+  'NoneType'` às 00:15:46 e às 00:17.
+- No Drive os 9 arquivos existem **sem pasta-mãe** (`parentId` vazio), com o mesmo tamanho
+  do commit (`00-SEAMS.md` 18.234 bytes nos dois lados).
+- Não há linha no log dizendo "apaguei X"; a causa é muito provável, não certa.
+
+O `cepa-until` fez o certo: recusou a árvore suja. Mas a mensagem culpou o run ("não dá
+para separar o que o run fez do que já estava aqui") e sugeriu `--sujo-ok`. Com essa
+bandeira, o próximo item teria rodado sobre a pasta ausente e um `git add -A` ou um commit
+amplo transformaria a deleção fantasma em deleção de verdade no `main`.
+
+Relacionado: a exclusão do `.git` da sincronização ficou como passo manual no redesenho
+de worktrees de 10/06 e nunca foi fechada. Os worktrees já moram fora do Insync; o clone
+principal não.
+
+### Esboço de solução
+
+1. **Guarda distinguir "deleção de arquivo commitado sem processo nenhum" de "mudança do
+   run".** Se a árvore só tem `D` de arquivos que nenhum item do registro `.jsonl` tocou,
+   dizer isso na mensagem ("9 arquivos commitados sumiram do disco fora do run; provável
+   sincronização") e sugerir `git restore <pasta>`, nunca `--sujo-ok`.
+2. **Checagem no `/common:doctor`:** repo com clone principal dentro de pasta do Insync
+   ganha aviso com o risco e a saída (mover o clone para fora, como já foi feito com os
+   worktrees, ou excluir `.git` e o repo inteiro da sincronização).
+3. **Decidir de vez onde mora o clone principal.** Mover para fora do Insync mata a classe
+   inteira; o custo é perder o backup automático de arquivos não commitados.
+
+### Teste que falta
+
+- Árvore com `D` de arquivo commitado que nenhum evento do registro cita: espera a mensagem
+  de "sumiu fora do run" com `git restore`, e não a sugestão de `--sujo-ok`.
+- Árvore com `M` num arquivo que o último item tocou: espera a mensagem de hoje.
