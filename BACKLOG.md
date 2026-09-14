@@ -2834,6 +2834,72 @@ A regra não tem teste que a exercite com um card em `in_review`. Um caso de
 `reconcilia()` com plano `done` + quadro `In Review` esperando NENHUMA divergência (ou
 um aviso) é o vermelho que teria pegado isto antes de rodar contra um plano de 110 itens.
 
+## O portão de modo de escrita lê o corpo do heredoc e barra caminho legítimo
+
+### Problema
+
+O `modo-escrita-gate.py` decide se pode escrever comparando o ALVO da chamada com a
+lista de destinos que o modo libera. Ele erra a extração do alvo, e o resultado é
+sempre o mesmo: bloqueia uma escrita que o modo permite, com uma mensagem que culpa o
+modo em vez do parser. Quem leva o bloqueio tende a acreditar nele — a mensagem é
+assertiva e sugere encerrar o modo, que é caro e desnecessário.
+
+Três episódios na mesma sessão, em 02/09/2026, todos em modo `exploracao`, que libera
+`docs/**`, `.claude/**` e `BACKLOG.md`:
+
+1. **Variável de shell não expandida.** O comando escrevia num caminho montado a partir
+   de uma variável atribuída na linha anterior do mesmo comando. O portão relatou o
+   literal com o cifrão, não casou com `.claude/**`, bloqueou. O MESMO caminho, escrito
+   por extenso, passou.
+
+2. **Crase de dentro do heredoc lida como alvo.** O comando escrevia num caminho
+   absoluto e literal, sem variável nenhuma, mas o corpo do documento citava nomes de
+   arquivo entre crases. O portão relatou como alvo uma crase solta.
+
+3. **Redirecionamento DENTRO do corpo lido como o redirecionamento do comando.** O caso
+   mais claro dos três, e o que fecha o diagnóstico: a tentativa de escrever ESTA
+   PRÓPRIA seção no `BACKLOG.md` foi bloqueada, e o alvo relatado foi o caminho do
+   episódio 1 — que não estava no comando, estava no texto que descrevia o episódio 1.
+   O portão encontrou o `>` do exemplo citado na prosa e o tratou como o destino real.
+
+A consequência prática: qualquer heredoc cujo texto contenha crase, `>` ou aspas está
+sujeito a isso — ou seja, praticamente todo handoff, ADR, nota de decisão ou item de
+backlog que fale sobre comandos. É a classe de documento que o modo `exploracao` mais
+produz.
+
+### Esboço de solução
+
+O que falta é separar a linha de REDIRECIONAMENTO do corpo do heredoc antes de procurar
+o alvo. Três caminhos, em ordem de preferência:
+
+1. **Parar de varrer o comando inteiro.** Cortar o texto no delimitador de abertura do
+   heredoc e procurar redirecionamentos só no que vem antes. Mata os episódios 2 e 3
+   inteiros, é local, e não depende de entender shell de verdade.
+2. **Expandir as atribuições simples do próprio comando** antes de casar o alvo — se o
+   comando começa com uma atribuição e o alvo a referencia, substituir. Resolve o
+   episódio 1 sem executar nada. Não tentar cobrir default de variável nem substituição
+   de comando: nesses, melhor não decidir.
+3. **Quando o alvo não for resolvível com confiança, dizer isso** — bloquear com "não
+   consegui resolver o alvo desta escrita", nunca com "você está fora do modo". Hoje as
+   duas falhas são indistinguíveis para quem lê, e a segunda mensagem manda encerrar o
+   modo.
+
+O (1) e o (2) juntos cobrem os três episódios. O (3) é a rede: garante que a próxima
+forma de erro de parsing que ninguém previu não volte a ser lida como veredito sobre o
+modo.
+
+### Teste que falta
+
+Três casos que teriam pegado isto antes:
+
+- Um heredoc para caminho liberado cujo CORPO contenha crases, esperando LIBERADO.
+- Um heredoc para caminho liberado cujo CORPO contenha um redirecionamento para caminho
+  NÃO liberado, esperando LIBERADO — é o episódio 3, o mais fácil de escrever e o que
+  mais falta.
+- Uma escrita em caminho liberado montado por variável do próprio comando, esperando
+  LIBERADO ou, se a decisão for não expandir, esperando a mensagem de "alvo não
+  resolvível" e nunca a de "fora do modo".
+
 ---
 
 ## A trava de especificação só lê o trecho novo de um Edit
