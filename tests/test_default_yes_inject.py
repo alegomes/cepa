@@ -100,6 +100,9 @@ def test_session_segue_o_alvo():
     rc, ctx = run("/common:session prove-drain --max 5")
     check("session + rotina injeta", rc == 0 and "board-flow:prove-drain" in ctx,
           f"rc={rc} ctx={ctx[:150]!r}")
+    rc, ctx = run("/common:session drain-plan wego --max 2")
+    check("session + apelido drain-plan injeta",
+          rc == 0 and "common:drain-plan" in ctx, f"rc={rc} ctx={ctx[:150]!r}")
     rc, ctx = run("/common:session common:spec uma ideia")
     check("session + conversacional não injeta", rc == 0 and ctx == "",
           f"rc={rc} ctx={ctx[:150]!r}")
