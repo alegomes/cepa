@@ -72,6 +72,7 @@ ALVO_DO_SESSION_RE = re.compile(
 APELIDOS = {
     "prove-drain": "board-flow:prove-drain",
     "drain": "board-flow:drain",
+    "drain-plan": "common:drain-plan",
     "triage": "board-flow:triage",
     "decide": "board-flow:decide",
     "execute": "board-flow:execute",
