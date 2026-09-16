@@ -1,6 +1,6 @@
 ---
 description: Abre uma sessão com propósito declarado e a leva do início ao fim sem pingue-pongue — deixa o harness pronto (doctor --fix em lote), faz TODAS as perguntas na largada (inclusive as que a rotina só encontraria no meio), executa a rotina inteira sem parar, entrega UM relatório final e oferece o wrap-up. Substitui o padrão "rode o doctor → siga as recomendações → rode a rotina → responda o vaivém do fim", que consumia mais atenção que a própria tarefa.
-argument-hint: <rotina> [args da rotina]   ex.: /common:session prove-drain --max 5
+argument-hint: <rotina> [args da rotina] | --help [rotina]   ex.: /common:session prove-drain --max 5
 interaction: routine
 ---
 
@@ -23,6 +23,8 @@ Não é um modo autônomo: você continua decidindo o que é irreversível. Muda
   Rotinas reconhecidas: `prove-drain`, `drain`, `drain-plan`, `triage`,
   `decide`, `execute`, `autonomous`, `docs`, ou qualquer comando de barra
   instalado (passe o nome sem o `/`, ex.: `board-flow:prove-drain`).
+- `--help [rotina]` — lista as rotinas e os parâmetros de cada uma, e não roda
+  nada (ver passo 0). Com uma rotina, mostra só a dela.
 
 ## Instructions
 
@@ -36,6 +38,31 @@ segue com o resto do lote e a traz no relatório — só interrompe se ela
 bloquear literalmente a continuação da rotina.
 
 ## Workflow
+
+### 0. `--help` (só leitura, encerra aqui)
+
+Se o primeiro token de `$ARGUMENTS` é `--help` ou `-h`, **não** rode o doctor,
+não pergunte nada e não execute rotina nenhuma. Responda e pare.
+
+Leia os parâmetros **dos arquivos dos comandos-alvo agora**, nunca de uma cópia
+escrita aqui: uma lista copiada envelhece calada quando um comando ganha flag.
+Para cada apelido do passo 1 (ou só o pedido, se veio `--help <rotina>`):
+
+1. resolva o apelido para o comando real e abra o arquivo dele (a cópia
+   instalada; no repo do cepa, `<plugin>/commands/<cmd>.md`, com `docs` em
+   `docs-topology/`);
+2. junte o `argument-hint:` do frontmatter com a seção `## Variables`. Os dois
+   às vezes divergem (uma flag documentada só num deles); liste a união e marque
+   com "(só no cabeçalho)" ou "(só em Variables)" a flag que aparece num só.
+
+Formato da resposta, em pt-BR leigo:
+
+- uma tabela `apelido → comando real`;
+- uma lista numerada por rotina: cada parâmetro em uma linha com o que faz e o
+  padrão quando omitido;
+- uma linha dizendo que qualquer comando instalado vale pelo nome com `:`, e
+  que os comandos com `interaction: conversational` são recusados (liste-os com
+  `grep -rl "^interaction: conversational"` nos plugins instalados).
 
 ### 1. Resolver a rotina (sem perguntar)
 
