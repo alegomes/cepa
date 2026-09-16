@@ -1,0 +1,64 @@
+schema_version: 1
+card: TOKENS-TELEMETRIA
+status: complete
+audited_at: 2026-09-12T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Ao fim de cada sessão, sem ninguém pedir, o ledger events-YYYY-MM.jsonl recebe um evento token_usage com os tokens da sessão (entrada, cache escrito, cache lido, saída). Superfície: hook SessionEnd (common/hooks/session-registry.py)."
+    altitude: hook
+    surface: "SessionEnd payload -> common/hooks/session-registry.py -> ~/.claude/cepa-telemetry/events-YYYY-MM.jsonl"
+    demonstrated_by:
+      test: "tests/test_cepa_tokens.py::test_session_end_grava_sozinho"
+      layer: hook-integration (subprocess real do session-registry.py com payload SessionEnd)
+      evidence: verified
+      run: "python3 tests/test_cepa_tokens.py -> \"ok  hook sai 0\" / \"ok  SessionEnd grava token_usage sem ninguém pedir\" (all green)"
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "O evento reparte o gasto por tipo de agente (main e cada subagente pelo agentType do .meta.json) e mede o tamanho do resultado de cada ferramenta. Superfície: CLI common/bin/cepa-tokens."
+    altitude: cli
+    surface: "cepa-tokens --arquivo <sessão> --json"
+    demonstrated_by:
+      test: "tests/test_cepa_tokens.py::test_medicao"
+      layer: cli-integration (subprocess real do binário cepa-tokens sobre transcript sintético com 1 subagente)
+      evidence: verified
+      run: "python3 tests/test_cepa_tokens.py -> \"ok  gasto do subagente vai para o tipo lido do .meta.json\" / \"ok  main fica com o resto\" / \"ok  caracteres por ferramenta, texto em string e em lista\" (all green)"
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "A contagem não infla: a mesma resposta do modelo repetida em várias linhas do transcript conta uma vez, com o usage da última linha."
+    altitude: cli
+    surface: "cepa-tokens --json (saída total agregada a partir do transcript)"
+    demonstrated_by:
+      test: "tests/test_cepa_tokens.py::test_medicao"
+      layer: cli-integration (transcript sintético com a resposta m1 duplicada em 2 linhas com o mesmo usage, e o subagente s1 com linha parcial seguida da linha final)
+      evidence: verified
+      run: "python3 tests/test_cepa_tokens.py -> \"ok  resposta repetida conta uma vez, com a última linha\" (r[\"total\"] == {entrada:33, cache_w:1200, cache_r:5000, saida:62}) (all green)"
+    verdict: complete
+    gap: null
+
+  - id: AC4
+    text: "/common:metrics (common/bin/cepa-metrics) mostra uma seção \"Tokens\" com total, por repo, por agente e por ferramenta, com memória de cálculo, e conta uma sessão gravada duas vezes só uma vez. Superfície: CLI cepa-metrics."
+    altitude: cli
+    surface: "cepa-metrics --month YYYY-MM (e --json), invocado por /common:metrics"
+    demonstrated_by:
+      test: "tests/test_cepa_tokens.py::test_metrics_dedupe"
+      layer: cli-integration (subprocess real do binário cepa-metrics lendo o ledger emitido duas vezes pela mesma sessão)
+      evidence: verified
+      run: "python3 tests/test_cepa_tokens.py -> \"ok  sessão gravada duas vezes conta uma\" / \"ok  contexto novo total = 33 + 1200\" / \"ok  subagente somado por tipo\" / \"ok  relatório traz a seção com memória de cálculo\" (all green)"
+    verdict: complete
+    gap: null
+
+  - id: AC5
+    text: "Nada disso pode quebrar ou atrasar o fim da sessão (hook fail-silent, emissor destacado)."
+    altitude: hook
+    surface: "common/hooks/session-registry.py no evento SessionEnd (subprocess.Popen destacado + try/except silencioso ao redor do disparo)"
+    demonstrated_by:
+      test: "tests/test_cepa_tokens.py::test_session_end_nao_quebra_nem_atrasa (mais test_session_end_grava_sozinho)"
+      layer: hook-integration (cópia do session-registry.py rodando com um bin/cepa-tokens FALSO que dorme 10s ou que quebra com SystemExit, mais o caso de transcript ausente; exige exit 0 e retorno em menos de 3s)
+      evidence: verified
+      run: "python3 tests/test_cepa_tokens.py -> \"ok  emissor lento: hook sai 0\" / \"ok  emissor lento: hook volta em menos de 3s (0.1s)\" / \"ok  emissor quebrado: hook sai 0\" / \"ok  emissor quebrado: hook volta em menos de 3s (0.1s)\" / \"ok  transcript ausente: hook sai 0\" (all green). Perturbação conferida por mim: troquei subprocess.Popen por subprocess.run numa cópia isolada em /tmp e o mesmo teste ficou vermelho (\"FAIL  emissor lento: hook volta em menos de 3s (10.1s)\"), confirmando que o teste pega o defeito que diz pegar."
+    verdict: complete
+    gap: null

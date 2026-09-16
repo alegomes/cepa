@@ -1,0 +1,91 @@
+schema_version: 1
+card: ATLASSIAN-SPEC-CORTE
+status: complete
+audited_at: 2026-09-13T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "board-flow/agents/atlassian-expert.md tem no máximo metade do tamanho anterior (≤ 17.280 bytes)."
+    altitude: filesystem
+    surface: "wc -c board-flow/agents/atlassian-expert.md"
+    demonstrated_by:
+      test: "tests/test_atlassian_expert_spec.py (checagem de orçamento em bytes)"
+      layer: file-size assertion (lê o arquivo e compara len(encode('utf-8')) com ORCAMENTO_BYTES=17280)
+      evidence: verified
+      run: "wc -c board-flow/agents/atlassian-expert.md -> 16950; git show HEAD:board-flow/agents/atlassian-expert.md | wc -c -> 34561 (34561/2=17280.5, teto 17280; 16950 <= 17280); python3 tests/test_atlassian_expert_spec.py -> \"ok  spec cabe em 17280 bytes (16950)\" (all green). Reponsição das 2 frases do AC2 somou 130 bytes (16820 -> 16950) e ainda cabe no orçamento."
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "Nenhuma regra de comportamento da versão anterior se perdeu ou mudou de sentido (recusas BLOCKED, preflight, drift de config, overrides por topologia, precedência de escopo, nunca inferir identificador, site ausente não vira auth, read-back de cada escrita, Implementation Summary, ordem comentário-antes-de-transição, bounce com Reason, \"Attention não é estado\", cascata multi-repo, claim, guard op, vocabulário da UI, erro de editmeta, formato de saída)."
+    altitude: document (comparação regra a regra, lado a lado)
+    surface: "board-flow/agents/atlassian-expert.md (HEAD) vs board-flow/agents/atlassian-expert.md (working tree)"
+    demonstrated_by:
+      test: "tests/test_atlassian_expert_spec.py (25 checagens por trecho identificador, agora com as 2 regras que faltavam) + leitura manual lado a lado (git show HEAD:... vs arquivo atual), seção por seção"
+      layer: doc-diff manual, linha a linha, das 25 regras nomeadas pelo teste mais as seções não cobertas por ele (Tool binding, tabela de metadados do agente, Common operations)
+      evidence: verified
+      run: |
+        python3 tests/test_atlassian_expert_spec.py -> "ok  regra presente: comentário nunca é reescrito por defeito não visto"
+        / "ok  regra presente: proposta de cascata só com irmão aberto" / all green (25/25 regras + as 3 checagens de tools:).
+        Confirmei por perturbação isolada (fora do repo, sem editar o arquivo real) que remover
+        "Never rewrite or repost the comment to work around a defect you have not seen." OU
+        remover " — only if at least one sibling is still open —" faz o trecho fixado sumir do
+        texto (checado com Python 'in texto' -> False nos dois casos), ou seja, o teste pegaria
+        a regressão de qualquer uma das duas regras reintroduzidas.
+        Releitura manual completa das duas versões (HEAD vs atual): as 2 perdas do primeiro
+        veredito (read-back de comentário sem "Never rewrite or repost the comment...";
+        cascata sempre anexando o bloco em vez de só "if any sibling is still open") foram
+        repostas com sentido equivalente ao original. Não achei nenhuma outra perda nesta
+        segunda varredura das seções não cobertas pelo teste automatizado (tabela de
+        metadados do agente virou parágrafo de Purpose sem perda de comportamento — Skills
+        como scope-discipline e evidence-over-assumption seguem operacionalizadas na prosa;
+        "Likely cause"/"Card was NOT created" no read-back de create e "Never trust the write
+        response in isolation" no fechamento do bloco de read-back são reafirmação do mesmo
+        BLOCKED já coberto pela frase-mãe, não regra distinta; "Routine must abort" do
+        preflight é redundante com a convenção BLOCKED usada em todo o documento).
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "A linha tools: do frontmatter é idêntica à anterior."
+    altitude: file-diff
+    surface: "linha 4 (tools:) de board-flow/agents/atlassian-expert.md"
+    demonstrated_by:
+      test: "tests/test_atlassian_expert_spec.py (checagem \"os três servidores seguem ligados\") + diff direto da linha"
+      layer: text-diff da linha 4 entre HEAD e o arquivo atual
+      evidence: verified
+      run: "diff <(git show HEAD:board-flow/agents/atlassian-expert.md | sed -n '4p') <(sed -n '4p' board-flow/agents/atlassian-expert.md) -> sem diferenças (\"TOOLS LINE IDENTICAL\"); python3 tests/test_atlassian_expert_spec.py -> as 3 checagens de servidor passam (all green)"
+    verdict: complete
+    gap: null
+
+  - id: AC4
+    text: "A contradição da versão anterior (dizia que as ferramentas mcp-atlassian foram removidas e que não havia caminho headless local, mas as listava em tools: e mandava tentá-las antes de BLOCKED) foi resolvida de forma coerente."
+    altitude: document
+    surface: "seção \"Tool binding\" de board-flow/agents/atlassian-expert.md"
+    demonstrated_by:
+      test: "leitura manual comparativa (a contradição é textual/semântica, sem superfície executável a testar)"
+      layer: doc-diff manual da seção Tool binding
+      evidence: verified
+      run: "leitura direta: a versão nova apresenta os três prefixos (mcp__claude_ai_Atlassian__, mcp__Atlassian__, mcp__mcp-atlassian__) como ativos e em uso (\"All three were used in the 30 days before 2026-09-13\"), sem nenhuma frase dizendo que mcp-atlassian foi removido ou que não há caminho headless local; mantém a instrução de tentar mcp__mcp-atlassian__* antes de BLOCKED (regra \"terceiro servidor antes de BLOCKED\", coberta pelo teste automatizado). Não há mais afirmação que contradiga o tools: (que lista os 14 nomes mcp-atlassian)."
+    verdict: complete
+    gap: null
+
+  - id: AC5
+    text: "tests/test_atlassian_expert_spec.py falha se a spec passar do teto ou se um trecho que identifica regra sumir; test_card_claim.py e test_prompt_placeholder_hosts.py seguem verdes."
+    altitude: unit-test
+    surface: "python3 tests/test_atlassian_expert_spec.py; python3 tests/test_card_claim.py; python3 tests/test_prompt_placeholder_hosts.py"
+    demonstrated_by:
+      test: "tests/test_atlassian_expert_spec.py, tests/test_card_claim.py, tests/test_prompt_placeholder_hosts.py"
+      layer: unit test direto sobre o texto do arquivo (regex + substring), rodado em primeiro plano
+      evidence: verified
+      run: |
+        python3 tests/test_atlassian_expert_spec.py -> 28 checagens, all green, exit 0
+        python3 tests/test_card_claim.py -> 20 checagens, all green, exit 0
+        python3 tests/test_prompt_placeholder_hosts.py -> 4 checagens, all green, exit 0
+        Perturbações reconferidas por mim (fora do repo, só comparando strings em memória,
+        sem editar o arquivo real):
+        1. remover "Never transition a sibling in the same run." -> trecho some do texto (False)
+        2. remover "Never rewrite or repost the comment to work around a defect you have not seen." -> trecho some (False)
+        3. remover " — only if at least one sibling is still open —" -> trecho some (False)
+        As três confirmam que o teste pega a ausência de qualquer uma das regras que nomeia.
+    verdict: complete
+    gap: null

@@ -1,0 +1,231 @@
+schema_version: 1
+card: JIRA-RELEITURA
+status: complete
+audited_at: 2026-09-13T00:30:00-03:00
+criteria:
+  - id: AC1
+    text: "board-flow/agents/atlassian-expert.md não manda mais ler o card antes de transicionar/comentar só para olhar, mas MANTÉM: read-back depois de cada escrita, leitura de claim, scope guard, detail audit, leitura dos irmãos na cascata, e getTransitionsForJiraIssue antes da transição."
+    altitude: document
+    surface: "board-flow/agents/atlassian-expert.md"
+    demonstrated_by:
+      test: "tests/test_jira_releitura.py (3 checagens: regra nova presente, read-back mantido, regra antiga 'Read, then act' removida) + leitura manual das seções Claim/Scope/Detail-audit/Cascata"
+      layer: doc assertion (substring) + leitura manual seção a seção
+      evidence: verified
+      run: |
+        python3 tests/test_jira_releitura.py ->
+          "ok  agente não lê o card só para olhar antes de escrever"
+          "ok  agente mantém o read-back depois de cada escrita"
+          "ok  a regra antiga de ler antes de agir saiu"
+          all green, exit 0
+        Leitura manual confirma que ficaram intactas: "Verify every write with a
+        read-back before reporting success" (linha 58), a rotina de Claim ("Ler:
+        getJiraIssue; devolva status + responsável..."), o Scope guard ("Check a
+        single card's scope membership"), o Detail audit ("getJiraIssue; return
+        summary + description..."), a leitura dos irmãos na cascata ("read the
+        card's issuelinks, pick the sibling-type links, read each sibling's
+        status") e "Use getTransitionsForJiraIssue to find the real transition
+        id" antes de "Transitions via transitionJiraIssue".
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "/board-flow:prove-drain faz a leitura de claim trazer também summary, description, acceptance criteria, issue type e o Implementation Summary mais recente, e o passo 4b entrega esse conteúdo à prova; prove.md passo 1 reaproveita esse conteúdo sem buscar de novo, sem perder campo que os passos seguintes usam (status, issue type, SHA/arquivos do Implementation Summary). Rodando sozinho, /board-flow:prove continua buscando."
+    altitude: document
+    surface: "board-flow/commands/prove-drain.md (Reserva do card, passo 4b) + board-flow/commands/prove.md (passo 1, passo 2, passo 3)"
+    demonstrated_by:
+      test: "tests/test_jira_releitura.py (2 checagens) + leitura manual dos passos 2/3 do prove.md"
+      layer: doc assertion + leitura manual cruzando os campos pedidos pela leitura de claim com os campos usados no restante do prove.md
+      evidence: verified
+      run: |
+        python3 tests/test_jira_releitura.py ->
+          "ok  claim do prove-drain lê também o que a prova precisa"
+          "ok  prove-drain entrega o conteúdo à prova sem buscar de novo"
+          all green, exit 0
+        Leitura manual: a leitura de claim (prove-drain.md, "Antes de tocar em
+        cada card") pede "status atual, responsável, ... summary, description,
+        acceptance criteria, issue type e o texto completo do Implementation
+        Summary mais recente" — cobre exatamente os 4 usos localizados no resto
+        do prove.md: status (passo 2, precondição in_review), issue type (passo
+        3, delegação ao proof-reviewer), SHA e arquivos tocados (passo 3, "head
+        commit + touched files", extraídos do texto completo do Implementation
+        Summary). prove.md passo 1 tem o bloco "Already have the card? ... Reuse
+        it and skip this delegation" citando "prove-drain" e listando os mesmos
+        campos. Quando prove roda sozinho (fora do prove-drain), o passo 1 segue
+        com a delegação normal ao atlassian-expert (texto do passo 1 não foi
+        removido, só ganhou a checagem condicional no topo).
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "board-flow/commands/fix.md passo 1 reaproveita o card quando despachado por /board-flow:execute (que entrega o conteúdo), sem perder campo que o fix usa; rodando sozinho, continua buscando."
+    altitude: document
+    surface: "board-flow/commands/fix.md (passo 1) + board-flow/commands/execute.md (passo 1a)"
+    demonstrated_by:
+      test: "tests/test_jira_releitura.py (2 checagens) + leitura manual comparando os campos pedidos por execute.md passo 1 com os usados por fix.md (reproducer audit)"
+      layer: doc assertion + leitura manual
+      evidence: verified
+      run: |
+        python3 tests/test_jira_releitura.py ->
+          "ok  fix reaproveita o card lido pelo execute"
+          "ok  execute entrega o card ao fix"
+          all green, exit 0
+        Leitura manual: execute.md passo 1 pede "summary, description, acceptance
+        criteria, issue type, status, last 3 comments" — os mesmos 6 campos que
+        fix.md passo 1 pediria via delegação própria ("full details (summary,
+        description, acceptance criteria, issue type, status, last 3 comments)").
+        execute.md passo 1a diz explicitamente "Hand `fix` the card content from
+        step 1 so it does not fetch the card again". fix.md passo 2 (reproducer
+        audit) só usa descrição/comportamento observado-esperado/repro, subconjunto
+        do que já veio. Rodando fix.md sozinho, o bloco "Already have the card?"
+        é condicional ("When /board-flow:execute dispatched here") e a delegação
+        normal abaixo dele continua de pé.
+    verdict: complete
+    gap: null
+
+  - id: AC4
+    text: "board-flow/commands/capture.md não delega mais a segunda checagem de existência; o relatório ao usuário continua condicionado ao read-back do agente (BLOCKED não vira sucesso). Numeração dos passos coerente."
+    altitude: document
+    surface: "board-flow/commands/capture.md"
+    demonstrated_by:
+      test: "tests/test_jira_releitura.py (2 checagens) + leitura manual da numeração"
+      layer: doc assertion + leitura manual
+      evidence: verified
+      run: |
+        python3 tests/test_jira_releitura.py ->
+          "ok  capture não delega segunda checagem de existência"
+          "ok  capture ainda exige o read-back do agente"
+          all green, exit 0
+        Leitura manual: "Confirm Jira issue <KEY> exists" (a segunda delegação)
+        não existe mais no arquivo; o passo 3 mantém "Apply your read-back
+        verification rule — confirm the card actually exists before reporting
+        success. If getJiraIssue doesn't find the key, return BLOCKED", e logo
+        abaixo "If atlassian-expert returns BLOCKED, do NOT report success to the
+        user... and stop." O passo 4 (antigo 5) é "Report back", condicionado a
+        "only if step 3 returned a key, not BLOCKED". Numeração ficou 1→2→3→4,
+        sem buraco nem duplicidade.
+    verdict: complete
+    gap: null
+
+  - id: AC5
+    text: "A spec manda usar defaults.site literal como cloudId nos prefixos camelCase e diz que erro de cloudId não se resolve trocando de servidor; a regra de tentar mcp-atlassian em 'No such tool available' continua."
+    altitude: document
+    surface: "board-flow/agents/atlassian-expert.md (seção Tool binding)"
+    demonstrated_by:
+      test: "tests/test_atlassian_expert_spec.py (2 checagens novas: 'cloudId é o defaults.site literal', 'erro de cloudId não troca de servidor') + 'terceiro servidor antes de BLOCKED'"
+      layer: substring assertion sobre o texto da spec
+      evidence: verified
+      run: |
+        python3 tests/test_atlassian_expert_spec.py ->
+          "ok  regra presente: cloudId é o defaults.site literal"
+          "ok  regra presente: erro de cloudId não troca de servidor"
+          "ok  regra presente: terceiro servidor antes de BLOCKED"
+          all green, exit 0
+        Texto confirmado na leitura direta: "cloudId (camelCase prefixes): always
+        defaults.site from board-flow.yaml, copied literally (a hostname works as
+        cloudId). Never an abbreviation, another site's id, a remembered value, or
+        the text defaults.site. A cloudId error is fixed this way, never by
+        switching servers." e, logo acima, "If the camelCase prefixes answer 'No
+        such tool available', try mcp__mcp-atlassian__* before declaring BLOCKED."
+        segue intacta.
+    verdict: complete
+    gap: null
+
+  - id: AC6
+    text: "Nenhuma outra regra da spec se perdeu em relação a git show HEAD:board-flow/agents/atlassian-expert.md, além dos três cortes assumidos (frase sobre 'project' em URL, parêntese do claim sobre duas sessões, contagens de uso por servidor). Dizer se algum desses cortes mudou comportamento."
+    altitude: document
+    surface: "diff completo entre HEAD e o arquivo atual de board-flow/agents/atlassian-expert.md"
+    demonstrated_by:
+      test: "tests/test_atlassian_expert_spec.py (28 regras nomeadas, nenhuma removida) + git diff HEAD linha a linha"
+      layer: git diff manual + checagem das 28 regras do teste automatizado
+      evidence: verified
+      run: |
+        git diff HEAD -- board-flow/agents/atlassian-expert.md mostra 6 hunks, todos
+        cobertos: (1) contagens de uso por servidor removidas do parágrafo de
+        abertura de Tool binding; (2) regra de cloudId reescrita (tratada em AC5,
+        é mudança pretendida, não corte); (3) "Read, then act" virou "Transitions
+        via..." + novo bullet "No read just to look..." (tratada em AC1); (4)
+        parêntese "(duas sessões paralelas já provaram o mesmo card no mesmo dia)"
+        removido da seção Claim; (5) frase "\"project\" inside a URL is not
+        evidence of the UI wording." removida da seção UI vocabulary.
+        python3 tests/test_atlassian_expert_spec.py -> as 28 regras (incluindo as
+        26 antigas) all green, exit 0 — nenhuma regra nomeada sumiu.
+        Sobre mudança de comportamento dos 3 cortes:
+        - contagens de uso por servidor: só evidência numérica de apoio à frase
+          "All three are in use" (agora reescrita sem os números). Não muda regra
+          nenhuma — os três prefixos continuam obrigatórios via tools: e a tabela.
+          Sem impacto de comportamento.
+        - parêntese sobre duas sessões: só justificativa narrativa de por que o
+          claim existe; a regra em si (ler antes, publicar 🔒, nunca inventar
+          claim-id) está inteira nas duas frases seguintes, inalteradas. Sem
+          impacto de comportamento.
+        - frase "'project' em URL não é evidência": esta É uma regra de
+          comportamento (evita o agente concluir errado que a UI usa a palavra
+          "project" por causa da URL). A frase saiu do texto e não foi reposta em
+          nenhum outro lugar da seção UI vocabulary. Avaliação: mudança de
+          comportamento real, não cosmética — o agente perde o guarda-corpo
+          específico contra essa inferência incorreta, mesmo que a regra geral
+          ("use as palavras da UI... nunca renomeie identificadores") permaneça.
+    verdict: complete
+    gap: null
+    followup_check: |
+      2026-09-13 (segunda passada, apos correcao do time): a frase
+      "'project' inside a URL is not evidence of the UI wording." voltou para
+      a secao UI vocabulary (linha 146 de board-flow/agents/atlassian-expert.md).
+      Conferido por mim, nesta ordem:
+        grep -n "inside a URL is not evidence" board-flow/agents/atlassian-expert.md
+        -> linha 146, frase presente verbatim, na mesma secao UI vocabulary.
+        wc -c board-flow/agents/atlassian-expert.md -> 17234 (teto 17280, sobra 46 bytes).
+      tests/test_atlassian_expert_spec.py ganhou a regra correspondente
+      ("palavra na URL nao prova o texto da UI": "inside a URL is not evidence"),
+      rodei o arquivo e ela aparece "ok" na lista (ver AC7). Nao ha mais nenhum
+      corte de comportamento pendente desta auditoria -- os outros dois cortes
+      (parenteses do claim, contagens de uso por servidor) seguem avaliados como
+      sem impacto de comportamento, como no primeiro veredito.
+
+  - id: AC7
+    text: "tests/test_jira_releitura.py e tests/test_atlassian_expert_spec.py falham quando a regra correspondente some (perturbacao ja feita: restaurar capture.md e fix.md antigos deixa test_jira_releitura vermelho), e a suite tests/run-all.sh fica verde."
+    altitude: unit-test + suite
+    surface: "python3 tests/test_jira_releitura.py; python3 tests/test_atlassian_expert_spec.py; bash tests/run-all.sh"
+    demonstrated_by:
+      test: "tests/test_jira_releitura.py, tests/test_atlassian_expert_spec.py, tests/run-all.sh"
+      layer: unit test direto + perturbacao manual (restaurar arquivos antigos) + suite completa, rodada em lotes proprios
+      evidence: verified
+      run: |
+        Segunda passada (2026-09-13, apos a correcao do AC6 e o run-all.sh
+        completo relatado pelo coordenador):
+
+        python3 tests/test_jira_releitura.py -> 10 checagens, all green, exit 0
+        python3 tests/test_atlassian_expert_spec.py -> 29 checagens (agora com
+        "palavra na URL nao prova o texto da UI") + 3 servidores, all green, exit 0
+
+        Suite completa (68 arquivos), rodada por MIM, em 6 lotes proprios para
+        caber no teto de 120s de primeiro plano desta ferramenta (nao usei
+        background nem Monitor -- cada lote e uma chamada de primeiro plano que
+        terminou antes do teto):
+          lote 1 (16 arquivos, acceptance_gate..cepa_until_adversarial) -> tudo ok
+          tests/test_cepa_until.py sozinho (o unico que passa de 100s) -> "tudo verde", exit 0
+          lote 2 (11 arquivos, common_drain_plan..env_manifest_path) -> "arquivos rodados: 11 de 11 / tudo verde"
+          lote 3 (11 arquivos, eval_suite..maestro_run_cores) -> "arquivos rodados: 11 de 11 / tudo verde"
+          lote 4 (10 script + familia pytest, maven_reactor_guard..pluginver_boot,
+            inclui needs_human_motivos) -> "familia pytest (1): 40 passed in 0.20s" / "arquivos rodados: 11 de 11 / tudo verde"
+          lote 5 (18 script + familia pytest, program_plan_from_plan..write_lock_rename,
+            inclui waivers) -> "familia pytest (1): 12 passed in 0.04s" / "arquivos rodados: 19 de 19 / tudo verde"
+        Nenhum FAIL em nenhum dos 6 lotes, cobrindo os 68 arquivos de tests/test_*.py
+        (conferido contra `ls tests/test_*.py | wc -l` -> 68) mais os 52 casos
+        pytest (40 + 12) embutidos nas familias needs_human_motivos e waivers.
+
+        `git status --short` depois de tudo mostra so as mudancas esperadas
+        (plugin.json, atlassian-expert.md, capture.md, execute.md, fix.md,
+        prove-drain.md, prove.md, test_atlassian_expert_spec.py, e os tres
+        artefatos novos em .claude/acceptance/ + tests/test_jira_releitura.py)
+        -- nenhum arquivo de teste ou producao ficou sujo pelos meus lotes.
+
+        Perturbacao (ja confirmada na primeira passada e reconferida: restaurar
+        capture.md e fix.md com `git show HEAD:...` deixa exatamente duas
+        checagens de tests/test_jira_releitura.py vermelhas -- "fix reaproveita
+        o card lido pelo execute" e "capture nao delega segunda checagem de
+        existencia" -- e os arquivos foram restaurados ao estado do working tree
+        depois, com git diff --stat batendo com o diff original).
+      evidence_full_suite: verified
+    verdict: complete
+    gap: null
