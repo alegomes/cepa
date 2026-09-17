@@ -2991,3 +2991,29 @@ principal não.
 - Árvore com `D` de arquivo commitado que nenhum evento do registro cita: espera a mensagem
   de "sumiu fora do run" com `git restore`, e não a sugestão de `--sujo-ok`.
 - Árvore com `M` num arquivo que o último item tocou: espera a mensagem de hoje.
+
+---
+
+## Parâmetros de comando documentados só no cabeçalho ou só em Variables
+
+**Status:** pendente · **Lar provável:** `common` e `board-flow` (arquivos de comando) ·
+**Origem:** levantamento dos parâmetros das rotinas do `/common:session` (2026-09-16).
+
+### Problema
+
+Cada comando descreve os parâmetros em dois lugares: o `argument-hint:` do frontmatter,
+que é o que o autocompletar mostra, e a seção `## Variables`, que é o que o agente lê.
+Três comandos divergem:
+
+- `common/commands/drain-plan.md`: `--offline` só em Variables, então o autocompletar não o mostra;
+- `common/commands/autonomous-start.md`: `--no-jira` só no `argument-hint`;
+- `board-flow/commands/execute.md`: `--force-feature-flow` só no `argument-hint`.
+
+O `/common:session --help` já marca essas divergências ao ler os dois lugares, mas a
+fonte continua errada.
+
+### Esboço de solução
+
+Completar o lado que falta em cada um dos três arquivos. Opcional: um teste que compara
+as flags `--x` do `argument-hint` com as de `## Variables` em todo comando, para a
+divergência não voltar calada.
