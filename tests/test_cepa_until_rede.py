@@ -151,6 +151,35 @@ def test_queda_de_rede_espera_a_volta_e_retoma_o_mesmo_item():
               p.stdout[-800:])
 
 
+def test_queda_de_rede_nao_conta_no_teto_por_item():
+    """queda, falha REAL, fecha — com teto de 2 por item. Se a queda contasse,
+    a falha real já seria a 2ª vez e o a1 viraria `blocked`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        corpo = CORPO + (
+            "if N == 1:\n"
+            "    sem_rede()\n"
+            "if N == 2:\n"
+            "    sys.exit(1)\n"
+            "marca(primeiro_pendente(), status='done')\n")
+        binv = fake_claude(tmp, corpo)
+        porta = porta_livre()
+        escuta_depois(porta, 0)
+        time.sleep(0.3)
+        p, chamadas = roda(raiz, binv, plano_de(raiz),
+                           ["--for", "2h", "--tentativas-por-item", "2"],
+                           extra_env=ambiente(porta))
+        check("3 chamadas: queda, falha real, fechou",
+              len(chamadas) == 3, str(len(chamadas)))
+        check("o a1 fechou — a queda não gastou uma das 2 vezes",
+              status(plano_de(raiz)) == {"a1": "done"},
+              str(status(plano_de(raiz))))
+        fim = run_end(raiz)
+        check("só a falha real conta como sem progresso",
+              fim["sem_progresso"] == 1 and fim["esgotados"] == 0
+              and fim["motivo"] == "fim-da-fila", str(fim))
+
+
 # ── 2. três quedas seguidas sem progresso param o run ───────────────────────
 
 def test_tres_quedas_seguidas_param_o_run_sem_culpar_o_item():
@@ -200,6 +229,31 @@ def test_rede_que_nao_volta_dentro_da_janela_para_o_run():
               "não voltou até" in fim["detalhe"], fim["detalhe"])
 
 
+def test_queda_perto_do_fim_da_janela_para_sem_sondar():
+    """A rede cai quando já falta menos que a reserva mínima: não há o que
+    esperar, para na hora com `sem-rede`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        # Janela de 12s, reserva de 9s: cabe começar (12 >= 9). O item gasta
+        # 4s e cai; aí o último instante útil (prazo - reserva = 3s) já passou.
+        binv = fake_claude(tmp, CORPO + "time.sleep(4)\nsem_rede()\n")
+        porta = porta_livre()  # ninguém escuta
+        inicio = time.monotonic()
+        p, chamadas = roda(raiz, binv, plano_de(raiz),
+                           ["--for", "0.2m", "--reserva-minima", "0.15m"],
+                           extra_env=ambiente(porta))
+        gasto = time.monotonic() - inicio
+        fim = run_end(raiz)
+        queda = [e for e in ledger_de(raiz) if e.get("evento") == "queda_de_rede"]
+        check("parou com `sem-rede` sem tentar esperar",
+              len(chamadas) == 1 and fim["motivo"] == "sem-rede"
+              and queda and queda[0]["espera"] is False,
+              f"{len(chamadas)} chamadas · {fim} · {queda}")
+        check("o detalhe diz que não sobra tempo, não que esperou",
+              "não sobra tempo" in fim["detalhe"], fim["detalhe"])
+        check("não ficou sondando", gasto < 9, f"{gasto:.1f}s")
+
+
 # ── 4. um item que fecha zera a contagem de quedas ──────────────────────────
 
 def test_item_que_fecha_entre_quedas_zera_a_contagem():
@@ -244,6 +298,11 @@ def test_queda_de_rede_exige_api_error_e_mensagem_de_rede():
     check("erro de API que não é de rede NÃO é queda (é do teto)",
           not m.queda_de_rede(teto + "\n"))
     check("saída vazia não é queda", not m.queda_de_rede(""))
+    sucesso_com_palavra = json.dumps({
+        "type": "result", "subtype": "success", "is_error": False,
+        "result": "corrigi o timeout ECONNRESET no teste do cliente HTTP"})
+    check("result de SUCESSO com palavra de rede NÃO é queda",
+          not m.queda_de_rede(sucesso_com_palavra + "\n"))
     check("o último result é o que vale",
           not m.queda_de_rede(real + "\n" + ok + "\n"))
 
