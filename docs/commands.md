@@ -1,11 +1,137 @@
 # Command reference
 
-Every slash command shipped by the marketplace, grouped by plugin. For
-when-to-use guidance see [`workflows`](#when-to-use-which-command) at the
-bottom.
+Two ways in. **Part 1** is organised by what you are trying to do and points at the command.
+**Part 2** is the full reference, one table per plugin, with arguments and behaviour.
 
 Command namespacing: every command is `/<plugin>:<command>`. The bare
 form (`/plan-build-validate`) returns "Unknown command".
+
+# Part 1: what are you trying to do?
+
+### "I want to implement a new feature"
+
+- Known requirements, no Jira → `/build-hex:plan-build-validate <description>` (or `/build-team:plan-build-validate` for non-hex projects).
+- Known requirements, Jira-tracked → `/board-flow:plan-track-build-validate <description>` (creates Epic + Stories, runs one Story end-to-end).
+- Existing Jira card with the description (Story/Task/Epic) → `/board-flow:execute <KEY>` (auto-routes Bug cards to `/board-flow:fix`).
+- Existing Jira card known to be a Bug → `/board-flow:fix <KEY>` (skip the auto-detect; go straight to reproduce-fix-verify).
+- Unattended → `/common:autonomous-start "<KEY> <description>"` (auto-detects key, wraps with lifecycle).
+
+### "I want to fix a bug"
+
+- Local, no Jira → `/build-hex:reproduce-fix-verify <description>` (or describe in chat for `build-solo`).
+- Jira-tracked → still `/build-hex:reproduce-fix-verify` directly, or wrap with `/common:autonomous-start "<KEY> bug: <description>"`.
+
+### "I'm not sure if X is a problem"
+
+- `/build-hex:investigate <hypothesis>`. Read-only. Outputs a findings report with a recommended next command.
+
+### "I want to design a new endpoint's behavior"
+
+- `/build-hex:spec-e2e <METHOD /path> "<intent>"` — prescriptive, intent-driven. Spec describes what the endpoint *should* do.
+
+### "I want to document an existing endpoint's behavior"
+
+- `/build-hex:document-e2e <METHOD /path>` — descriptive, code-driven. Spec captures what the endpoint *currently does*.
+
+### "I edited the spec; tests need to follow"
+
+- `/build-hex:resync-e2e <METHOD /path>` (or `--all`). Spec → tests propagation.
+
+### "Spec, code, and tests might disagree"
+
+- `/build-hex:audit-e2e <METHOD /path>` (or `--all`). 3-way diff, no propagation. You pick the fix direction.
+
+### "I want to step away while it works"
+
+- `/common:autonomous-start "<task or Jira key>"`. Comes back later, runs `/common:debrief` to review decisions.
+
+### "I lost the thread of what's been done"
+
+- `/common:recap`. Reads the session log + conversation context, renders "Asked / Status / Delivered" table.
+
+### "I want to stop and pick up cleanly in a new session"
+
+- `/common:handoff`. Writes the rich handoff; the next session resumes from it automatically (no need to mention it). The `session-checkpoint` Stop hook already keeps a mechanical skeleton current every turn, so even a token-limit kill leaves something to resume from. See [handoff.md](handoff.md).
+
+### "I want to branch off into a side topic, then come back"
+
+- `/common:branch <assunto>` in the origin session, discuss it in a fresh session via `/common:branch resume`, then `/common:return` to bring back only the conclusion. Nested forks unwind LIFO. For a self-contained side task with no human in the loop, spawn a subagent instead — it's the non-interactive sibling. See [`context-forking.md`](context-forking.md).
+
+### "I want to track work in Jira"
+
+- First time: `/board-flow:configure`. Walks you through the config.
+- New work item, no detail yet: `/board-flow:capture "<description>"`. Just registers, doesn't execute.
+- Drain a column: `/board-flow:drain` (default column = `to_do` from `status_map`).
+- Custom lifecycle column transition: `/board-flow:advance <KEY>`.
+
+### "I have ≥4 independent demands to run in parallel"
+
+- `/maestro:program-plan <name>` to turn them into a wave plan (`plan.yaml`),
+  gated by the intake check until every slice is `READY`. Then `/maestro:run
+  <name>` to execute the wave with one action, and `/maestro:resume <name>` if
+  the session dies mid-wave. With 3 demands or fewer, use `/board-flow:drain` or
+  a single session instead — the orchestration overhead isn't worth it. See
+  [maestro.md](maestro.md). (Not yet live end-to-end — needs `bin/install.sh
+  --clean` + `herdr`.)
+
+### "I know the order I want to work in, and there is no tracker here"
+
+- `/common:plan <nome>` writes the queue: `--from-spec docs/spec/<slug>.md` when
+  a `/common:spec` specification already closed (one item per success criterion,
+  order inherited from the text and said so), or dictated by hand when the
+  demands live in `BACKLOG.md` or in your head, or `--from-jira` with a board —
+  `/board-flow:triage` classifies the column and hands the order over, and
+  `/common:plan` is the one that writes it. Then `/common:next` names ONE step
+  at a time from it.
+- `/common:drain-plan <nome>` runs several of them in a row, in the queue's own
+  order — `--max` caps the batch (default 3) and it stops at the first item it
+  cannot resolve alone (an open `human_pending`, a blocked item, one reserved by
+  another session). Use it when you already know the next few items are yours to
+  build; use `/common:next` when you only want to know what comes next.
+
+### "I have a vague idea and want a spec before any code"
+
+- `/common:spec`. Interviews you in rounds until every success criterion has an observable surface and a failing test declared. Writes no code. Resumable.
+
+### "I have an old backlog and don't know what is still valid"
+
+- `/board-flow:triage [column]`. Classifies every card (already built, ready, obsolete, needs your decision) from evidence in the code. Writes nothing until you confirm.
+
+### "I want to clear the Review column"
+
+- `/board-flow:prove <KEY>` for one card, `/board-flow:prove-drain` for the column. Then `/board-flow:decide` turns whatever stayed `NEEDS-HUMAN` into a few yes/no questions.
+- UI or browser extension: `/common:prove-ui`.
+
+### "I want to run the queue overnight"
+
+- `cepa-until <queue> --for 8h` from the terminal. See [cepa-until.md](cepa-until.md).
+
+### "I want a session that doesn't ping-pong with me"
+
+- `/common:session <routine>`. All questions at the start, the routine runs to the end, one final report.
+- Closing: `/common:wrap-up` (commit, handoff, merge, push behind one confirmation).
+
+### "I want a second opinion on a decision before closing it"
+
+- `/common:advisors <artifact>`. Isolated review lenses, then a synthesis that names the disagreements.
+
+### "I want to open or merge a pull request through the gates"
+
+- First time: `/review-gate:configure`. Then `/review-gate:open`, and `/review-gate:merge` (merges only on PROVEN). `/review-gate:review` runs just the hygiene check.
+
+### "I want to design a feature before engineering builds it"
+
+- `/design:explore-critique-spec <feature>`.
+
+### "I want to document an existing project for onboarding"
+
+- `/docs:survey`, then `/docs:declutter`, `/docs:checkpoint`, `/docs:author`, `/docs:finalize`. `/docs:status` shows where you are.
+
+### "Something in the tooling looks wrong"
+
+- `/common:doctor` checks the install against reality. `/common:metrics` shows where the harness blocks or costs you. `/common:feedback "<complaint>"` records it so it becomes a backlog item. `/common:modos` reminds you which mode the session is in.
+
+# Part 2: reference by plugin
 
 ## common
 
@@ -167,86 +293,3 @@ generated `settings.json`), and `python3 common/bin/cepa-plan validate <plan>`
 (the single-track queue's own checks — empty `why`, ghost `blocked_by`, blocking
 cycle; `check-name <nome>` answers whether a program name is free for a queue
 before you write one).
-
-## When to use which command
-
-### "I want to implement a new feature"
-
-- Known requirements, no Jira → `/build-hex:plan-build-validate <description>` (or `/build-team:plan-build-validate` for non-hex projects).
-- Known requirements, Jira-tracked → `/board-flow:plan-track-build-validate <description>` (creates Epic + Stories, runs one Story end-to-end).
-- Existing Jira card with the description (Story/Task/Epic) → `/board-flow:execute <KEY>` (auto-routes Bug cards to `/board-flow:fix`).
-- Existing Jira card known to be a Bug → `/board-flow:fix <KEY>` (skip the auto-detect; go straight to reproduce-fix-verify).
-- Unattended → `/common:autonomous-start "<KEY> <description>"` (auto-detects key, wraps with lifecycle).
-
-### "I want to fix a bug"
-
-- Local, no Jira → `/build-hex:reproduce-fix-verify <description>` (or describe in chat for `build-solo`).
-- Jira-tracked → still `/build-hex:reproduce-fix-verify` directly, or wrap with `/common:autonomous-start "<KEY> bug: <description>"`.
-
-### "I'm not sure if X is a problem"
-
-- `/build-hex:investigate <hypothesis>`. Read-only. Outputs a findings report with a recommended next command.
-
-### "I want to design a new endpoint's behavior"
-
-- `/build-hex:spec-e2e <METHOD /path> "<intent>"` — prescriptive, intent-driven. Spec describes what the endpoint *should* do.
-
-### "I want to document an existing endpoint's behavior"
-
-- `/build-hex:document-e2e <METHOD /path>` — descriptive, code-driven. Spec captures what the endpoint *currently does*.
-
-### "I edited the spec; tests need to follow"
-
-- `/build-hex:resync-e2e <METHOD /path>` (or `--all`). Spec → tests propagation.
-
-### "Spec, code, and tests might disagree"
-
-- `/build-hex:audit-e2e <METHOD /path>` (or `--all`). 3-way diff, no propagation. You pick the fix direction.
-
-### "I want to step away while it works"
-
-- `/common:autonomous-start "<task or Jira key>"`. Comes back later, runs `/common:debrief` to review decisions.
-
-### "I lost the thread of what's been done"
-
-- `/common:recap`. Reads the session log + conversation context, renders "Asked / Status / Delivered" table.
-
-### "I want to stop and pick up cleanly in a new session"
-
-- `/common:handoff`. Writes the rich handoff; the next session resumes from it automatically (no need to mention it). The `session-checkpoint` Stop hook already keeps a mechanical skeleton current every turn, so even a token-limit kill leaves something to resume from. See [handoff.md](handoff.md).
-
-### "I want to branch off into a side topic, then come back"
-
-- `/common:branch <assunto>` in the origin session, discuss it in a fresh session via `/common:branch resume`, then `/common:return` to bring back only the conclusion. Nested forks unwind LIFO. For a self-contained side task with no human in the loop, spawn a subagent instead — it's the non-interactive sibling. See [`context-forking.md`](context-forking.md).
-
-### "I want to track work in Jira"
-
-- First time: `/board-flow:configure`. Walks you through the config.
-- New work item, no detail yet: `/board-flow:capture "<description>"`. Just registers, doesn't execute.
-- Drain a column: `/board-flow:drain` (default column = `to_do` from `status_map`).
-- Custom lifecycle column transition: `/board-flow:advance <KEY>`.
-
-### "I have ≥4 independent demands to run in parallel"
-
-- `/maestro:program-plan <name>` to turn them into a wave plan (`plan.yaml`),
-  gated by the intake check until every slice is `READY`. Then `/maestro:run
-  <name>` to execute the wave with one action, and `/maestro:resume <name>` if
-  the session dies mid-wave. With 3 demands or fewer, use `/board-flow:drain` or
-  a single session instead — the orchestration overhead isn't worth it. See
-  [maestro.md](maestro.md). (Not yet live end-to-end — needs `bin/install.sh
-  --clean` + `herdr`.)
-
-### "I know the order I want to work in, and there is no tracker here"
-
-- `/common:plan <nome>` writes the queue: `--from-spec docs/spec/<slug>.md` when
-  a `/common:spec` specification already closed (one item per success criterion,
-  order inherited from the text and said so), or dictated by hand when the
-  demands live in `BACKLOG.md` or in your head, or `--from-jira` with a board —
-  `/board-flow:triage` classifies the column and hands the order over, and
-  `/common:plan` is the one that writes it. Then `/common:next` names ONE step
-  at a time from it.
-- `/common:drain-plan <nome>` runs several of them in a row, in the queue's own
-  order — `--max` caps the batch (default 3) and it stops at the first item it
-  cannot resolve alone (an open `human_pending`, a blocked item, one reserved by
-  another session). Use it when you already know the next few items are yours to
-  build; use `/common:next` when you only want to know what comes next.
