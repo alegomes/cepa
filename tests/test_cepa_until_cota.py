@@ -172,6 +172,34 @@ def test_tres_cortes_seguidos_encerram_o_run():
               str(status(plano_de(raiz))))
 
 
+def test_item_que_fecha_entre_cortes_zera_a_contagem():
+    """Numa noite longa a cota bate várias vezes, com itens fechando entre um
+    reset e outro. "Três cortes seguidos" é sem progresso ENTRE eles: sem o
+    zeramento, o 3º corte da noite encerraria a janela como se o reset não
+    levantasse o teto. Sequência: corte, corte, a1 fecha, corte, a2 fecha —
+    sem o zeramento, o corte da 4ª chamada já é o 3º e o run para ali."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        corpo = EVENTO + (
+            "if N in (1, 2, 4):\n"
+            "    evento(1.0, int(time.time()) + 1, 'rejected')\n"
+            f"    resultado({TEXTO_DO_TETO!r}, True)\n"
+            "    sys.exit(1)\n"
+            "evento(0.02, int(time.time()) + 18000)\n"
+            "marca(primeiro_pendente(), status='done')\n")
+        binv = fake_claude(tmp, corpo)
+        p, chamadas = roda(raiz, binv, plano_de(raiz), ["--for", "2h"],
+                           extra_env=MARGEM)
+        check("as 5 chamadas aconteceram", len(chamadas) == 5, f"{len(chamadas)}x")
+        fim = run_end(raiz)
+        check("...o run acaba pela fila, não pelo teto",
+              fim["motivo"] == "fim-da-fila" and fim["esperas_de_cota"] == 3,
+              str(fim))
+        check("...e os dois itens fecharam",
+              status(plano_de(raiz)) == {"a1": "done", "a2": "done"},
+              str(status(plano_de(raiz))))
+
+
 def test_prosa_sobre_o_teto_no_meio_do_stream_nao_e_teto():
     """No stream-json o texto de todos os turnos vai para o log. Um agente que
     CITA a mensagem num turno do meio não é a conta esgotada."""
@@ -238,7 +266,7 @@ def test_cota_folgada_nao_pausa():
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
         corpo = EVENTO + (
-            "R = int(time.time()) + 18000\n"
+            f"R = {int(time.time()) + 18000}\n"
             "evento(0.1 * N, R)\n"
             "marca(primeiro_pendente(), status='done')\n")
         binv = fake_claude(tmp, corpo)
@@ -253,8 +281,11 @@ def test_cota_folgada_nao_pausa():
 def test_pausa_que_nao_cabe_na_janela_para_antes_do_item():
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        # Um reset só, fixado aqui: calculado a cada chamada, duas chamadas em
+        # segundos diferentes davam resets diferentes, o custo do item não era
+        # calculado e o caso passava a medir outra coisa (visto em 2026-09-18).
         corpo = EVENTO + (
-            "R = int(time.time()) + 3 * 3600\n"
+            f"R = {int(time.time()) + 3 * 3600}\n"
             "evento(0.5 if N == 1 else 0.8, R)\n"
             "marca(primeiro_pendente(), status='done')\n")
         binv = fake_claude(tmp, corpo)
