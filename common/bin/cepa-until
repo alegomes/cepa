@@ -66,10 +66,34 @@ reserva pendurada. Duas folgas controlam isso:
     antes de ser morto. Passou disso, é morte por timeout — registrada, e a
     reserva órfã volta para a fila no próximo run.
 
+## O teto de uso da conta (5h)
+
+A conta da Claude tem uma cota por janela de 5h. Em 2026-09-17 a fila bateu o
+teto à 01:00 com reset às 3:20 e janela até 06:17: o run parou e ~3h de janela
+ficaram sem uso, e o item em voo perdeu o que já tinha feito. Duas regras:
+
+  - **Esperar o reset (quando bate).** Com o horário do reset conhecido e
+    cabendo na janela, o supervisor dorme até reset + `CEPA_UNTIL_MARGEM_RESET`
+    (default 120s) e retoma o MESMO item. A tentativa cortada não conta no teto
+    de tentativas do item nem no disjuntor. Três cortes seguidos sem progresso
+    entre eles encerram o run: o reset anunciado não está levantando o teto.
+  - **Não começar item com a cota no fim.** Cada subprocesso roda com
+    `--output-format stream-json`, que traz o evento `rate_limit_event` com o
+    uso da janela de 5h (`unifiedWindows.five_hour.utilization`, fração 0–1) e
+    o reset em epoch. Antes de cada item o supervisor projeta o uso: a última
+    leitura, mais o maior custo de item medido nesta janela (diferença entre as
+    leituras de largada de dois itens seguidos). Se o próximo item não cabe
+    (projeção > 100%), ou se sem histórico a leitura já passou de 90%, espera o
+    reset antes de começar — cortar no meio desperdiça o que o item já gastou.
+
+Se a espera não cabe na janela, o run para (motivo `limite-de-uso` ou
+`cota-no-fim`) em vez de começar um item que seria cortado no meio.
+
 ## Quando ele para
 
 Para no primeiro de: prazo atingido, fila sem item executável (a razão vem do
-`cepa-plan queue` — `fim-da-fila`, `bloqueado`, `bloqueado-antes`), ou disjuntor.
+`cepa-plan queue` — `fim-da-fila`, `bloqueado`, `bloqueado-antes`), disjuntor,
+ou teto de uso da conta cuja espera não cabe na janela.
 Um item que sai `blocked` PARA o lote — regra do `cepa-plan`, herdada do
 `/board-flow:drain`: re-executar mede o mesmo travamento.
 
@@ -130,8 +154,8 @@ TENTATIVAS_POR_ITEM_PADRAO = 2
 # item não andou" e culpa o card: em 2026-08-30 duas tentativas de 92s e 4s
 # entraram no disjuntor como se o WEGO-1941 fosse sistematicamente ruim, e o
 # relatório da manhã mandava investigar o item errado. Repetir também não
-# levanta o teto — quem levanta é o relógio —, então o run PARA aqui, com
-# motivo próprio, em vez de gastar a janela batendo na mesma porta.
+# levanta o teto — quem levanta é o relógio —, então o run espera o reset (ou
+# para, com motivo próprio, se a espera não cabe) em vez de bater na mesma porta.
 LIMITE_DE_USO = re.compile(
     r"(?:you'?ve|you have)\s+(?:hit|reached)\s+your\s+[\w\s-]{0,24}\blimit\b"
     r"|\busage limit reached\b"
@@ -140,7 +164,28 @@ LIMITE_DE_USO = re.compile(
 
 # O horário do reset, quando a mensagem traz — é o dado que decide se remarcar a
 # janela ou desistir da noite, e some se o supervisor só registrar "bateu limite".
-RESET_DO_LIMITE = re.compile(r"resets?(?:\s+at)?\s+([^\n(]{1,40})", re.I)
+RESET_DO_LIMITE = re.compile(r"resets?(?:\s+at)?\s+([^\n(\"]{1,40})", re.I)
+
+# O mesmo horário, em forma que vira relógio: "3:20am", "8pm", com o fuso
+# opcional entre parênteses. Um reset com data na frente ("Sep 22, 4pm") NÃO
+# casa de propósito: é o teto semanal, que não cabe em janela nenhuma, e chutar
+# o dia errado faria o supervisor dormir numa hora sem sentido.
+HORA_DO_RESET = re.compile(
+    r"resets?(?:\s+at)?\s+(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?"
+    r"(?:\s*\(([^)]+)\))?", re.I)
+
+# Folga depois do reset anunciado antes de retomar. O relógio do servidor e o
+# daqui não batem ao segundo, e acordar cedo demais gasta uma tentativa no teto.
+# Ajustável só para o teste exercer a espera sem dormir minutos.
+MARGEM_DO_RESET = float(os.environ.get("CEPA_UNTIL_MARGEM_RESET", "120"))
+
+# Cortes seguidos pelo teto, sem progresso entre eles, que encerram o run. O
+# reset anunciado não está levantando o teto — esperar de novo repete a noite.
+MAX_ESPERAS_SEGUIDAS = 3
+
+# Sem custo de item medido ainda, a leitura a partir da qual o supervisor não
+# arrisca começar um item novo na mesma janela de 5h.
+COTA_SEM_HISTORICO = 0.9
 
 # A marca de "você está dentro de uma janela desatendida", exportada para cada
 # subprocesso. O hook `no-background-build` só existe quando ela está no
@@ -255,14 +300,17 @@ def le_item(caminho_plano, ident):
 # ── execução de um item ─────────────────────────────────────────────────────
 
 def monta_comando(nome, repo, permissoes):
-    cmd = ["claude", "-p", f"/common:drain-plan {nome} --max 1"]
+    # stream-json é o que traz o `rate_limit_event` com o uso da cota. O
+    # `--verbose` é exigência do próprio `claude` para esse formato com `-p`.
+    cmd = ["claude", "-p", f"/common:drain-plan {nome} --max 1",
+           "--output-format", "stream-json", "--verbose"]
     if not permissoes:
         cmd.append("--dangerously-skip-permissions")
     return cmd
 
 
-def cauda_do_log(log, desde, limite=CAUDA_DA_SAIDA):
-    """O fim do que UMA tentativa escreveu no log. `desde` é o tamanho do
+def trecho_do_log(log, desde):
+    """Tudo o que UMA tentativa escreveu no log. `desde` é o tamanho do
     arquivo antes de ela começar."""
     try:
         with open(log, "rb") as f:
@@ -270,16 +318,128 @@ def cauda_do_log(log, desde, limite=CAUDA_DA_SAIDA):
             bruto = f.read()
     except OSError:
         return ""
-    return bruto[-limite:].decode("utf-8", "replace")
+    return bruto.decode("utf-8", "replace")
 
 
-def limite_de_uso(texto):
-    """(True, reset) se a saída é a conta batendo o teto de uso; (False, None)
-    se não. `reset` é o horário verbatim que a mensagem deu, ou None."""
+def _objetos_json(texto, tipo):
+    """As linhas do stream-json de um `type`, em ordem. Linha que não é JSON
+    (saída em texto, lixo de hook) é ignorada."""
+    for linha in texto.splitlines():
+        linha = linha.strip()
+        if not linha.startswith("{") or tipo not in linha:
+            continue
+        try:
+            e = json.loads(linha)
+        except ValueError:
+            continue
+        if isinstance(e, dict) and e.get("type") == tipo:
+            yield e
+
+
+def _numero(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
+def leituras_de_cota(texto):
+    """[(utilizacao, reset_epoch)] da janela de 5h, uma por `rate_limit_event`
+    que trouxe o dado, em ordem."""
+    leituras = []
+    for e in _objetos_json(texto, "rate_limit_event"):
+        info = e.get("rate_limit_info") or {}
+        w = (info.get("unifiedWindows") or {}).get("five_hour") \
+            if isinstance(info, dict) else None
+        if isinstance(w, dict) and _numero(w.get("utilization")) \
+                and _numero(w.get("resetsAt")):
+            leituras.append((float(w["utilization"]), float(w["resetsAt"])))
+    return leituras
+
+
+def horario_do_reset(texto, agora):
+    """O reset anunciado em texto ("resets 3:20am (America/Sao_Paulo)") como
+    datetime local ingênuo, na próxima ocorrência. None se não dá para saber."""
+    m = HORA_DO_RESET.search(texto or "")
+    if not m:
+        return None
+    hh, mm, ap, fuso = int(m.group(1)), int(m.group(2) or 0), m.group(3), m.group(4)
+    if not 1 <= hh <= 12 or mm > 59:
+        return None
+    hh = hh % 12 + (12 if ap.lower() == "p" else 0)
+    tz = None
+    if fuso:
+        try:
+            from zoneinfo import ZoneInfo
+            tz = ZoneInfo(fuso.strip())
+        except Exception:
+            tz = None
+    base = datetime.now(tz) if tz else agora
+    alvo = base.replace(hour=hh, minute=mm, second=0, microsecond=0)
+    # Anunciado há poucos minutos é o reset de agora, não o de amanhã.
+    if alvo < base - timedelta(minutes=10):
+        alvo += timedelta(days=1)
+    if tz:
+        alvo = alvo.astimezone().replace(tzinfo=None)
+    return alvo
+
+
+def limite_de_uso(saida):
+    """(bateu, reset_texto, reset_em) sobre a saída de UMA tentativa.
+
+    O sinal estruturado vem primeiro: um `rate_limit_event` com status
+    `rejected` é a conta esgotada, e não há prosa de agente que o imite. Sem
+    ele, o texto: o `result` final do stream-json ou, em saída de texto, o fim
+    dela (ver CAUDA_DA_SAIDA). `reset_texto` é o horário verbatim para o
+    relatório; `reset_em` é o mesmo horário como datetime, ou None."""
+    rejeitados = [e.get("rate_limit_info") or {}
+                  for e in _objetos_json(saida or "", "rate_limit_event")
+                  if (e.get("rate_limit_info") or {}).get("status") == "rejected"]
+    if rejeitados:
+        r = rejeitados[-1].get("resetsAt")
+        em = datetime.fromtimestamp(r) if _numero(r) else None
+        return True, (em.strftime("%H:%M") if em else None), em
+    resultados = [e.get("result") for e in _objetos_json(saida or "", "result")
+                  if isinstance(e.get("result"), str)]
+    texto = resultados[-1] if resultados else (saida or "")[-CAUDA_DA_SAIDA:]
     if not texto or not LIMITE_DE_USO.search(texto):
-        return False, None
+        return False, None, None
     m = RESET_DO_LIMITE.search(texto)
-    return True, (m.group(1).strip().rstrip(".") if m else None)
+    reset = m.group(1).strip().rstrip(".") if m else None
+    return True, reset, horario_do_reset(texto, datetime.now())
+
+
+def custo_de_item(inicios):
+    """O maior salto de uso entre as leituras de largada de dois itens
+    seguidos na MESMA janela de 5h. None sem par medido."""
+    saltos = [b[0] - a[0] for a, b in zip(inicios, inicios[1:])
+              if a[1] == b[1] and b[0] >= a[0]]
+    return max(saltos) if saltos else None
+
+
+def pausa_de_cota(leitura, fresca, custo, agora):
+    """O reset a esperar antes de começar o próximo item, ou None para seguir.
+
+    `leitura` é a última (uso, reset_epoch) vista. `fresca` diz se ela veio
+    DEPOIS da largada do item anterior; se não, o item anterior ainda não está
+    nela, e a projeção soma o custo dele também."""
+    if not leitura:
+        return None
+    uso, reset_epoch = leitura
+    reset = datetime.fromtimestamp(reset_epoch)
+    if reset <= agora:
+        return None
+    if custo is None:
+        return reset if uso >= COTA_SEM_HISTORICO else None
+    projetado = uso + custo * (1 if fresca else 2)
+    return reset if projetado > 1.0 else None
+
+
+def espera_ate(quando):
+    """Dorme até `quando` pelo relógio de parede, em passos curtos: o
+    `time.sleep` não anda com a máquina suspensa, o relógio anda."""
+    while True:
+        falta = (quando - datetime.now()).total_seconds()
+        if falta <= 0:
+            return
+        time.sleep(min(falta, 60))
 
 
 def ambiente_do_item():
@@ -333,7 +493,7 @@ def executa_item(nome, repo, permissoes, limite_seg, log):
                 except Exception:
                     pass
             codigo = proc.returncode if proc.returncode is not None else -1
-    return codigo, matou, time.monotonic() - inicio, cauda_do_log(log, marca)
+    return codigo, matou, time.monotonic() - inicio, trecho_do_log(log, marca)
 
 
 def bloqueia_item(nome, repo, ident, tentativas):
@@ -522,6 +682,11 @@ def main(argv=None):
     # que ela tirou da frente por esgotamento ou pelo teto de uso da conta.
     tentativas, esgotados, limitados = {}, [], []
     motivo_fim, detalhe_fim = None, None
+    # A cota de 5h vista pelos `rate_limit_event`: a leitura de largada de cada
+    # tentativa (é dela que sai o custo de um item), a última leitura, se ela
+    # já inclui o item anterior, e as esperas feitas.
+    inicios, ultima_leitura, leitura_fresca = [], None, False
+    esperas, esperas_seguidas = [], 0
 
     print()
     while True:
@@ -560,6 +725,33 @@ def main(argv=None):
         item = dados["batch"][0]
         ident = item["id"]
         caminho_plano = dados.get("path")
+
+        # Não começa item que a cota de 5h não comporta: cortado no meio, ele
+        # desperdiça o que já gastou e deixa a árvore pela metade.
+        reset = pausa_de_cota(ultima_leitura, leitura_fresca,
+                              custo_de_item(inicios), datetime.now())
+        if reset:
+            acorda = reset + timedelta(seconds=MARGEM_DO_RESET)
+            uso = ultima_leitura[0]
+            if prazo - acorda < reserva:
+                motivo_fim = "cota-no-fim"
+                detalhe_fim = (
+                    f"a cota de 5h está em {uso:.0%} e o próximo item não cabe "
+                    f"nela; ela reseta às {reset.strftime('%H:%M')}, tarde demais "
+                    f"para a janela (fecha às {prazo.strftime('%H:%M')}). Parei "
+                    "antes de começar um item que seria cortado no meio")
+                break
+            print(f"[{datetime.now().strftime('%H:%M')}] cota de 5h em {uso:.0%}, "
+                  f"o próximo item não cabe · espero o reset e retomo às "
+                  f"{acorda.strftime('%H:%M')}")
+            registra({"evento": "pausa_de_cota", "uso": uso,
+                      "custo_item": custo_de_item(inicios),
+                      "reset": reset.isoformat(), "acorda": acorda.isoformat()})
+            esperas.append(("antes do item", ident, reset))
+            espera_ate(acorda)
+            ultima_leitura, leitura_fresca = None, False
+            continue
+
         itens += 1
         tentativas[ident] = tentativas.get(ident, 0) + 1
         vez = tentativas[ident]
@@ -584,10 +776,18 @@ def main(argv=None):
             pendencia = depois.get("human_pending")
             progresso = estado in TERMINAIS or pendencia is not None
 
+        leituras = leituras_de_cota(saida)
+        if leituras:
+            inicios.append(leituras[0])
+            ultima_leitura = leituras[-1]
+            leitura_fresca = leituras[-1][0] > leituras[0][0]
+
         registra({"evento": "item_end", "id": ident, "status": estado,
                   "human_pending": pendencia, "exit_code": codigo,
                   "timeout": matou, "segundos": int(gasto),
-                  "tentativa": vez, "progresso": progresso})
+                  "tentativa": vez, "progresso": progresso,
+                  "cota_5h": ([leituras[0][0], leituras[-1][0]]
+                              if leituras else None)})
 
         # O teto de uso da CONTA, antes do disjuntor. Sem esta separação a
         # mensagem "You've hit your session limit" vira "o item não saiu do
@@ -595,25 +795,50 @@ def main(argv=None):
         # quando o item não andou — uma tentativa que FECHOU o item não vira
         # parada, aconteça o que acontecer depois na saída.
         if not progresso:
-            bateu, reset = limite_de_uso(saida)
+            bateu, reset, reset_em = limite_de_uso(saida)
             if bateu:
                 limitados.append((ident, reset))
-                registra({"evento": "limite_de_uso", "id": ident, "reset": reset})
-                motivo_fim = "limite-de-uso"
-                detalhe_fim = (
-                    f"a conta bateu o teto de uso da Claude durante o {ident} — "
-                    "isso não é o item, não é a fila e repetir não levanta o "
-                    "teto: quem levanta é o relógio"
-                    + (f" (o `claude` disse que reseta {reset})" if reset else "")
-                    + ". Parei aqui em vez de gastar a janela batendo na mesma "
-                      "porta; o item continua onde estava, sem culpa registrada")
+                # A tentativa cortada pelo teto não é do item: devolve a vez.
+                tentativas[ident] -= 1
+                esperas_seguidas += 1
+                acorda = (reset_em + timedelta(seconds=MARGEM_DO_RESET)
+                          if reset_em else None)
+                cabe = (acorda is not None and acorda > datetime.now()
+                        and prazo - acorda >= reserva
+                        and esperas_seguidas < MAX_ESPERAS_SEGUIDAS)
+                registra({"evento": "limite_de_uso", "id": ident, "reset": reset,
+                          "reset_em": reset_em.isoformat() if reset_em else None,
+                          "espera": cabe})
                 print(f"          → LIMITE DE USO DA CONTA"
                       + (f" · reseta {reset}" if reset else "")
                       + " — não é falha do item")
+                if cabe:
+                    print(f"          → espero o reset e retomo o {ident} às "
+                          f"{acorda.strftime('%H:%M')}")
+                    esperas.append(("item cortado", ident, reset_em))
+                    espera_ate(acorda)
+                    ultima_leitura, leitura_fresca = None, False
+                    continue
+                motivo_fim = "limite-de-uso"
+                if esperas_seguidas >= MAX_ESPERAS_SEGUIDAS:
+                    porque = (f"é a {esperas_seguidas}ª vez seguida sem progresso "
+                              "entre elas — o reset anunciado não está levantando "
+                              "o teto")
+                elif reset_em is None:
+                    porque = "o `claude` não disse quando reseta"
+                else:
+                    porque = (f"o reset ({reset_em.strftime('%H:%M')}) não deixa "
+                              f"a reserva mínima antes do fim da janela "
+                              f"({prazo.strftime('%H:%M')})")
+                detalhe_fim = (
+                    f"a conta bateu o teto de uso da Claude durante o {ident} e "
+                    f"não dá para esperar: {porque}. O item continua onde "
+                    "estava, sem culpa registrada")
                 break
 
         if progresso:
             falhas_seguidas = 0
+            esperas_seguidas = 0
             feitos.append((ident, estado, pendencia))
             marca = estado
             if pendencia:
@@ -657,7 +882,7 @@ def main(argv=None):
     registra({"evento": "run_end", "motivo": motivo_fim, "detalhe": detalhe_fim,
               "itens": itens, "com_progresso": len(feitos),
               "sem_progresso": len(falhados), "esgotados": len(esgotados),
-              "limite_de_uso": len(limitados)})
+              "limite_de_uso": len(limitados), "esperas_de_cota": len(esperas)})
 
     print(f"\n── fim às {datetime.now().strftime('%H:%M')} · {motivo_fim}")
     print(f"   {detalhe_fim}")
@@ -687,6 +912,11 @@ def main(argv=None):
             print(f"     - {ident}: bateu o limite"
                   + (f", reseta {reset}" if reset else
                      " (o `claude` não disse quando reseta)"))
+    if esperas:
+        print(f"\n   Esperas pela cota de 5h ({len(esperas)}):")
+        for quando, ident, reset in esperas:
+            print(f"     - {quando} ({ident}): esperei o reset das "
+                  f"{reset.strftime('%H:%M')}")
     print(f"\n   registro: {ledger}")
     print(f"   saída do claude: {log}")
     return 0

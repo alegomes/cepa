@@ -1,0 +1,128 @@
+card: cepa-until-cota
+title: >
+  cepa-until espera o reset da cota de 5h em vez de encerrar a janela
+  (O1: espera e retoma o mesmo item; O2: não começa item que a cota
+  não comporta).
+diff: 05b9fb7..b99c871 (commit b99c871)
+status: complete
+auditor: completion-auditor
+data: 2026-09-18
+
+caveat_global:
+  texto: >
+    O `claude` falso usado nos testes imprime o `rate_limit_event` no
+    formato copiado à mão de uma execução real do `claude` 2.1.276
+    (comentário no cabeçalho de tests/test_cepa_until_cota.py). Isso prova
+    que o supervisor lê CORRETAMENTE esse formato quando ele aparece — não
+    prova que o formato do `claude` de produção não mudou desde então. Não
+    torna nenhum critério INCOMPLETE: não dá para gravar uma sessão real de
+    5h em CI, e nomear a fonte do formato é a coisa certa a fazer.
+
+criteria:
+  - id: O1
+    texto: >
+      Quando o `claude -p` de um item bate o teto de uso da conta e o
+      horário do reset é conhecido e cabe na janela (reset + margem deixa a
+      reserva mínima antes do prazo), o `cepa-until` espera até
+      reset + margem (CEPA_UNTIL_MARGEM_RESET, default 120s) e retoma o
+      MESMO item; a tentativa cortada não conta no teto de tentativas por
+      item. Se o reset não cabe ou é desconhecido, para com motivo
+      `limite-de-uso`. 3 cortes seguidos sem progresso encerram o run.
+    altitude: cli
+    surface: >
+      cepa-until <fila> --for <duração> — subprocesso `claude` real
+      (substituído por um fake no PATH) rodando com --output-format
+      stream-json --verbose; exit code, stdout, ledger .jsonl e plan.yaml
+    test: >
+      tests/test_cepa_until_cota.py::test_bateu_o_teto_espera_o_reset_e_retoma_o_mesmo_item
+      (a tentativa cortada some do teto de tentativas: com --tentativas-por-item 2
+      a 1ª some, a 2ª falha e a 3ª fecha o item, sem virar `blocked`) +
+      ::test_reset_fora_da_janela_para_em_vez_de_esperar (reset a 5h de distância
+      → para com `limite-de-uso`, item continua `pending`) +
+      ::test_tres_cortes_seguidos_encerram_o_run (3 cortes sem progresso → para,
+      motivo cita "não está levantando") +
+      ::test_prosa_sobre_o_teto_no_meio_do_stream_nao_e_teto (agente CITANDO a
+      frase do teto num turno do meio não é lido como teto real, só o
+      rate_limit_event com status `rejected` ou o `result` final contam)
+    layer: >
+      integration (subprocess real de cepa-until; `claude` substituído por um
+      fake no PATH que imprime `rate_limit_event`/`result` no formato
+      stream-json real, com status `rejected` simulando a conta esgotada)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_cota.py → "✓ tudo verde" (36 checks, 0
+      falhas), 2026-09-18. Especificamente: "ok  o a1 foi retomado depois do
+      reset", "ok  ...e fechou, não virou `blocked`", "ok  ...o supervisor
+      dormiu até o reset", "ok  ...o registro diz que esperou", "ok  ...e o
+      run acaba pela fila; só a falha real foi contada", "ok  uma tentativa
+      só" / "ok  ...parou com motivo limite-de-uso" (reset fora da janela),
+      "ok  três tentativas e para" / "ok  ...com o motivo dizendo que o
+      reset não levanta o teto" (3 cortes), "ok  a citação não vira teto de
+      uso" (prosa no meio do stream). Suíte tests/test_cepa_until.py também
+      rodada (mesmo diff ajustou o caso de reset fora da janela para não
+      depender do relógio de parede) → "✓ tudo verde"; e
+      tests/test_cepa_until_adversarial.py → "✓ tudo verde" (sem regressão).
+    status: complete
+
+  - id: O2
+    texto: >
+      O subprocesso roda com --output-format stream-json --verbose; o
+      supervisor lê o rate_limit_event (unifiedWindows.five_hour.utilization,
+      resetsAt). Antes de cada item projeta uso = última leitura + custo
+      máximo de item medido na mesma janela (x2 se a leitura é da largada do
+      item anterior). Se > 100% (ou, sem histórico, leitura >= 90%), espera
+      o reset antes de começar. Se a espera não cabe na janela, para com
+      motivo `cota-no-fim` sem começar o item.
+    altitude: cli
+    surface: >
+      cepa-until <fila> --for <duração> — argv passado ao subprocesso
+      `claude` (flags --output-format/--verbose), decisão de pausar ANTES do
+      Popen do item seguinte, ledger .jsonl (evento pausa_de_cota) e
+      plan.yaml
+    test: >
+      tests/test_cepa_until_cota.py::test_subprocesso_roda_em_stream_json
+      (a flag chega no argv real do `claude` falso) +
+      ::test_pausa_antes_do_item_que_a_cota_nao_comporta (a1 50%, a2 75%
+      "fresca" → custo medido 25pp, projeção para o a3 = 75+25+25=125%>100%,
+      pausa registrada ANTES do item_start do a3, com uso e custo_item
+      corretos no ledger) + ::test_cota_folgada_nao_pausa (10-30% de uso,
+      sem pausa, os três itens rodam) +
+      ::test_pausa_que_nao_cabe_na_janela_para_antes_do_item (reset a 3h,
+      janela de 2h → para com `cota-no-fim` ANTES de disparar o a3, que
+      continua `pending`) +
+      ::test_sem_historico_cota_acima_de_90_nao_comeca_item (sem par de
+      leituras para medir custo, 95% de uso → para com `cota-no-fim` antes
+      do a2) + testes unitários de horario_do_reset e custo_de_item
+      (funções puras usadas pela decisão, carregadas via importlib do
+      próprio common/bin/cepa-until)
+    layer: >
+      integration (subprocess real de cepa-until; `claude` fake no PATH
+      imprimindo rate_limit_event em stream-json real) + unit (funções
+      auxiliares horario_do_reset/custo_de_item, carregadas por importlib
+      direto de common/bin/cepa-until, sem duplicar a lógica no teste)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_cota.py → "✓ tudo verde" (36 checks, 0
+      falhas), 2026-09-18. Especificamente: "ok  o `claude` recebe
+      --output-format stream-json --verbose", "ok  a pausa veio antes do
+      a3, e só dele", "ok  ...o a3 só largou depois do reset", "ok  ...o
+      registro guarda uso e custo medido", "ok  nenhuma pausa com a cota em
+      10-30%", "ok  o a3 não começou" / "ok  ...o run parou com motivo
+      cota-no-fim" (janela de 2h vs reset em 3h), "ok  só o a1 rodou" /
+      "ok  ...e o run parou pela cota" (sem histórico, 95%).
+    status: complete
+
+resumo: >
+  Ambos os critérios pedidos pelo dono (O1 e O2) têm teste na superfície
+  correta: subprocesso real do `cepa-until` disparando um `claude` falso no
+  PATH que imprime o `rate_limit_event`/`result` no formato stream-json
+  real (copiado de uma execução do `claude` 2.1.276), nunca um teste
+  unitário mockando a decisão por dentro. As únicas funções testadas
+  isoladamente (horario_do_reset, custo_de_item) são auxiliares puras
+  carregadas por importlib direto do arquivo de produção
+  (common/bin/cepa-until) — não reimplementam a lógica no teste — e são
+  complemento, não substituto, dos testes de ponta a ponta que cobrem os
+  dois critérios inteiros (incluindo a decisão de pausar/esperar/parar).
+  Suítes tests/test_cepa_until.py e tests/test_cepa_until_adversarial.py
+  rodadas no mesmo commit para checar ausência de regressão: ambas "✓ tudo
+  verde".
