@@ -30,6 +30,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 
 try:
@@ -647,6 +648,18 @@ def test_branch_diferente_da_largada_encerra_o_run():
 LIMITE_REAL = "You've hit your session limit \u00b7 resets 8:40pm (America/Sao_Paulo)"
 
 
+def _hora_12(dt):
+    h = dt.hour % 12 or 12
+    return f"{h}:{dt.minute:02d}{'am' if dt.hour < 12 else 'pm'}"
+
+
+# O mesmo texto com o reset 5h à frente: fora de qualquer janela de 2h, a
+# qualquer hora do dia. Com o horário fixo o caso dependia do relógio — o
+# supervisor agora ESPERA um reset que cabe na janela.
+RESET_LONGE = _hora_12(datetime.now() + timedelta(hours=5))
+LIMITE_LONGE = f"You've hit your session limit \u00b7 resets {RESET_LONGE}"
+
+
 def test_limite_de_uso_da_conta_para_o_run_sem_culpar_o_item():
     """A mensagem verbatim do run de 2026-08-30.
 
@@ -657,10 +670,10 @@ def test_limite_de_uso_da_conta_para_o_run_sem_culpar_o_item():
     """
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
-        binv = fake_claude(tmp, f"print({LIMITE_REAL!r})\nsys.exit(1)")
+        binv = fake_claude(tmp, f"print({LIMITE_LONGE!r})\nsys.exit(1)")
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
         p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
-        check("bateu o teto e parou na primeira tentativa", len(chamadas) == 1,
+        check("bateu o teto com reset fora da janela e parou na primeira tentativa", len(chamadas) == 1,
               f"disparou {len(chamadas)}x")
         fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
         check("...com motivo próprio, não `disjuntor`",
@@ -669,7 +682,7 @@ def test_limite_de_uso_da_conta_para_o_run_sem_culpar_o_item():
               fim["sem_progresso"] == 0 and fim["limite_de_uso"] == 1, str(fim))
         ev = [e for e in ledger_de(raiz) if e.get("evento") == "limite_de_uso"]
         check("...o registro guarda o horário do reset",
-              ev and ev[0].get("reset") == "8:40pm", str(ev))
+              ev and ev[0].get("reset") == RESET_LONGE, str(ev))
         check("...o relatório diz em voz alta que não é falha do item",
               "não é falha do item" in p.stdout, p.stdout[-500:])
         check("...e o item continua pendente, sem culpa gravada",
