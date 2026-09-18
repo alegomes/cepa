@@ -12,7 +12,7 @@ The path must point at the directory containing `.claude-plugin/`.
 Check:
 
 ```sh
-ls ~/coding/harnessing/claude/claude-multi-team-plugin/.claude-plugin/
+ls ~/cepa/.claude-plugin/
 # should list plugin.json and marketplace.json
 ```
 

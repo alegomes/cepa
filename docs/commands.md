@@ -25,6 +25,14 @@ topology is wired.
 | `/common:feedback` | `[<texto>] [--alvo X] [--listar [--todos]] [--triar]` | Records feedback about **the harness itself**, at any point of any session — the command that asked one question too many, the gate that blocked a legitimate commit, the unreadable report. The ledger is **global** (`~/.claude/cepa-feedback/feedback-YYYY-MM.jsonl`, append-only, `CEPA_FEEDBACK_DIR` overrides), because the target is Cepa while the irritation happens in the client's repo — one file per project would scatter the same complaint across five places nobody re-reads. The text is stored **verbatim** and repo, branch and session mode are captured for you: a complaint you cannot place back in its episode is an anecdote, not a card. Writing is mechanical (`common/bin/cepa-feedback`): it refuses an empty or one-word entry, a triage with no destination, an unknown id, and a **second** triage of the same id (which would silently erase the first decision). No argument lists what is open; `--triar` (only inside the Cepa repo) turns the open ones into `BACKLOG.md` items and marks each destination. The prose path is the `common:feedback-capture` skill plus the `feedback-nudge` hook — you complain in your own words and it gets recorded without a command. |
 | `/common:branch` | `<assunto>` \| `resume [<fork-id>]` | Fork the current discussion into an isolated context. `<assunto>` (origin session): snapshots the thread to `.claude/forks/<id>/context.md` and pushes an `open` frame — then stops, without discussing the topic. `resume [<id>]` (fresh session): loads the snapshot, marks `active`, starts the interactive side discussion. No id = top-most `open`/`active` frame. Pairs with `/common:return`. See [`context-forking.md`](context-forking.md). |
 | `/common:return` | `[<fork-id>]` (default: top of stack) | Close a fork. In the **side** session: distills the discussion into `resolution.md`, marks `resolved`. In the **origin** session: ingests only that resolution into the main thread, marks the frame `closed` in place (LIFO pop). Picks save-vs-ingest by reading its own conversation; asks if ambiguous. "Top of stack" = top-most non-`closed` frame, which drives both the nested-unwind order and re-ingest idempotence. |
+| `/common:session` | `<routine> [routine args]` \| `--help [routine]` | Opens a session with a declared purpose and takes it end to end: gets the harness ready (`doctor --fix`), asks **all** questions at the start, runs the routine without stopping, delivers one final report and offers the wrap-up. |
+| `/common:wrap-up` | `[--discard] [commit message]` | End-of-session one-shot behind a single confirmation: commits the session worktree, writes the handoff, then lands the branch (merge + push + prune). `--discard` throws a dead-end worktree away. Reuses `worktree-merge`'s guards. |
+| `/common:doctor` | `[--live] [--no-fix] [--projeto]` | Validates the install against reality in about 30 seconds: plugins enabled and at the installed version, hooks compiling, `board-flow.yaml` structure, build baseline, stale or orphaned worktrees, overdue handoffs. `--live` also checks `board-flow.yaml` against live Jira. |
+| `/common:metrics` | `[--days N \| --month YYYY-MM] [--repo <name>]` | Telemetry report on the harness itself, from `~/.claude/cepa-telemetry/`: sessions per repo, red-build rate, gate blocks by reason, proof verdicts, over-declared `proven` refused by the guard, and how many turns you spend before and after a routine. |
+| `/common:modos` | `[mode-name]` | Shows the table of working modes (what each asks to enter, what it produces, what must be true to close) and marks the current session's mode. Read-only. |
+| `/common:advisors` | `<artifact> [--area=…] [--lentes=a,b,c]` | Advisor panel on a decision artifact (design doc, ADR, plan, PR): isolated parallel review lenses, then a synthesis that **names** the disagreements instead of averaging them. Runs before the decision is closed. |
+| `/common:prove-ui` | `[flow \| --all \| --draft]` | Proves the UI/extension surface through the mechanical gate: brings the app up, runs the flows declared in `docs/ui-proof.yaml` via Playwright and requires a verifiable backend effect. Returns PROVEN / UNPROVEN / NEEDS-HUMAN. `--draft` proposes a manifest skeleton. |
+| `/common:consolidate` | `[agent \| --all]` | Periodic consolidation of the agents' expertise files: merges redundant entries and retires the ones current code contradicts (always verified against the repo). Shows a before/after diff and writes only after your approval. |
 
 ### Per-session worktree lifecycle
 
@@ -41,6 +49,7 @@ the `CEPA_PROMPT` default — see [system-prompt-customizado.md](system-prompt-c
 | `/common:worktree-merge` | `<slice>` | Verifies the branch is green, merges `session/<slice>` into the current branch (surfacing conflicts normally), then removes the worktree and deletes the branch. The "land it" half. |
 | `/common:worktree-discard` | `<slice>` | Removes the worktree and deletes its branch after showing exactly what work would be lost. The "throw it away" half. |
 | `/common:worktree-name` | `[<name>]` | Renames the current (or a named) session worktree to something readable (`session/<name>`). Optional — naming is never required. |
+| `/common:worktree-label` | `[<purpose…>]` (no args = show; `--clear` to remove) | Gets or sets a free-text note of what a session worktree is *for*. Stored as the branch's git description, so it survives the session and never renames the branch. |
 
 ## build-hex
 
@@ -89,6 +98,36 @@ No commands. Describe the task in chat; orchestrator dispatches
 Discovery cards advance column-by-column via `/board-flow:advance` (no
 `/discovery:plan-build-validate` — discovery is continuous, not phased).
 
+## design
+
+| Command | Argument | What it does |
+|---|---|---|
+| `/design:explore-critique-spec` | `<feature description or docs/design/<slug>/ path>` | The canonical design flow: explore (flows and visual in parallel), reconcile against the design system, prototype via Gamma/Canva, critique, and assemble a build-ready design spec. |
+
+## docs
+
+Five phases, driven one at a time with an owner checkpoint between them.
+
+| Command | Argument | What it does |
+|---|---|---|
+| `/docs:survey` | `[scope note]` | Phase 1. Read-only archaeology: inventory, HOW extraction, flow tracing and WHY archaeology in parallel, synthesized into `docs/_survey/gap-report.md`. Touches no source. |
+| `/docs:declutter` | (none) | Phase 2. Structural moves from the gap-report's approved list: archives process output out of `docs/`, demotes rival front doors to links. Moves files, rewrites no prose. |
+| `/docs:checkpoint` | (none) | Phase 3. Walks the owner through the WHY gaps and drifts. The answers become sourced rationale. No authoring happens before this. |
+| `/docs:author` | `[shelf or doc]` | Phase 4. Writes the Diátaxis tree from the survey ledgers. Every WHY traces to a source or is flagged `UNSOURCED`, never guessed. |
+| `/docs:finalize` | (none) | Phase 5. Whole-tree consistency review, then owner sign-off. On PASS the `docs/_survey/` scratch is deleted. |
+| `/docs:status` | (none) | Shows which phases are done, in progress, awaiting review or not started. No agents. |
+
+## review-gate
+
+The pre-merge gate. Code reaches main only through a reviewed, proven pull request.
+
+| Command | Argument | What it does |
+|---|---|---|
+| `/review-gate:configure` | (none) | Interactive setup of `review-gate.yaml`: host, default destination branch, close-source behavior, review policy. Offers to wire the Jira seam if `board-flow.yaml` exists. |
+| `/review-gate:review` | `[base-ref]` | Runs only the hygiene gate (`/code-review`) on the local diff, without opening a PR. |
+| `/review-gate:open` | `[dest-branch]` | Runs the hygiene gate, drafts the PR title and body from the diff, and opens the PR through `bitbucket-expert`. With board-flow wired, also moves the card to In Review. |
+| `/review-gate:merge` | `[pr-id]` | Finds the open PR for the branch, runs the topology's `proof-reviewer` as the QA gate, and merges on PROVEN (immediately with `auto_merge: true`, otherwise after your go-ahead). |
+
 ## board-flow
 
 The Jira lifecycle layer. Pairs with any topology.
@@ -104,6 +143,7 @@ The Jira lifecycle layer. Pairs with any topology.
 | `/board-flow:triage` | `[source-column] [--max N] [--dry-run]` | Groom a backlog column (default `"Backlog"`). Classifies each card into one of four buckets and routes it: **ALREADY-IMPLEMENTED** → `status_map.in_review` (with a triage-sourced Implementation Summary; the proof gate still applies), **READY** → `status_map.to_do`, **OBSOLETE** → Won't Do (per-card confirm, never batch), **NEEDS-DECISION** → grills you interactively, re-routing on your answer. Implementation evidence comes from a per-card read-only `Explore` over the codebase + git (`file:line` + commit). Read-heavy; writes nothing until you confirm the plan (`--dry-run` writes nothing at all). **Does not write `plan.yaml`**: since stage 2 of "one writer, three sources" it emits a handoff (`<programs>/<project_key>/triagem-<YYYY-MM-DD>.json`) and the queue is written by `/common:plan --from-jira`, so the rules that turn a classified card into an item are code instead of this command's prose. Scope-aware like `*-drain`. `--max` defaults to 15. Routes by evidence — it does **not** prove; follow with `/board-flow:prove-drain`. |
 | `/board-flow:prove` | `<jira-key>` | Change-driven proof gate for a card already in `status_map.in_review`. Delegates to the topology's `proof-reviewer` (currently `build-hex`), which proves every changed line is load-bearing at the external surface — IT coverage of the diff, diff-scoped mutation, adversarial input, and (for bugs) regression-red-at-base. Verdict drives the transition: **PROVEN** advances to `status_map.done` (if set), **UNPROVEN** returns to `in_progress` with the gap, **NEEDS-HUMAN** stays in Review. See [proof-gate](proof-gate.md). |
 | `/board-flow:prove-drain` | `[--max N]` | Bulk-prove the Review column (`status_map.in_review`). Runs `/board-flow:prove` per card in priority order. Unlike `/board-flow:drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. `--max` defaults to 5. |
+| `/board-flow:decide` | `[--max N] [--scope "<jql>"] [--no-scope] [--dry-run]` | Turns the Review column into a short list of closed questions. Reads each card's proof artifact, classifies the NEEDS-HUMAN reason (see [needs-human-motivos.md](needs-human-motivos.md)), removes what is nobody's decision (Docker down, missing tool), groups the rest by reason and asks **one** question per group with a recommendation. You answer in a batch and it applies. Runs no proof. |
 | `/board-flow:advance` | `<jira-key>` | Generic column-by-column transition driven by `lifecycles[]` in `board-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). Runs the column's `on_enter` agent if declared, confirms `enter_gate` precondition with you if declared, transitions with Implementation Summary if `requires_summary: true` (or status name contains `review`/`qa`). |
 
 ## maestro

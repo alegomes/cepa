@@ -21,11 +21,10 @@ Clone this repo somewhere stable on your machine, then run the installer
 from inside (or pointed at) your host project:
 
 ```sh
-git clone https://github.com/alegomes/claude-multi-team-plugin.git \
-  ~/coding/harnessing/claude/claude-multi-team-plugin
+git clone https://github.com/alegomes/cepa.git ~/cepa
 
 cd /path/to/your/host-project
-~/coding/harnessing/claude/claude-multi-team-plugin/bin/install.sh \
+~/cepa/bin/install.sh \
   --topology=build-hex
 ```
 
