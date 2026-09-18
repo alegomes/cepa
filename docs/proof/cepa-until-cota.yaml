@@ -1,0 +1,129 @@
+schema_version: 2
+card: cepa-until-cota
+verdict: proven
+reviewed_at: 2026-09-18T08:10:00-03:00
+base_commit: 05b9fb7
+head_commit: 509b46b
+issue_type: Feature
+repo_kind: harness            # NOT Quarkus/Maven — Python CLI + prompt files, própria suíte em tests/*.py
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (leituras_de_cota — extrai [(utilização, resetsAt)] dos eventos `rate_limit_event` do stream-json)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (horario_do_reset — texto de reset (\"resets 3:20am\") -> datetime)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (custo_de_item — maior salto de uso entre largadas de itens seguidos na mesma janela)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (pausa_de_cota — decide se espera o reset ANTES de começar o próximo item)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (limite_de_uso — sinal estruturado `rate_limit_info.status == rejected` tem prioridade sobre a prosa do agente)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (laço principal main() — pausa antes do item, espera-e-retoma o mesmo item sem gastar a tentativa, disjuntor de MAX_ESPERAS_SEGUIDAS, reset de esperas_seguidas ao progredir, monta_comando com --output-format stream-json --verbose)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_cepa_until_cota.py (rodada 1: suíte dedicada da cota de 5h; rodada 2: +test_item_que_fecha_entre_cortes_zera_a_contagem — encadeia corte→corte→a1 fecha→corte→a2 fecha, e fixa o reset em test_cota_folgada_nao_pausa/test_pausa_que_nao_cabe_na_janela_para_antes_do_item para não ser recalculado a cada chamada do claude falso)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+    - class: "tests/test_cepa_until.py (rodada 1: RESET_LONGE calculado a partir de datetime.now() em vez de horário fixo)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+  note: >-
+    Rodada 2 (este arquivo): head_commit avançou de b99c871 para 509b46b, mas
+    common/bin/cepa-until (o binário de produção) NÃO mudou entre esses dois
+    commits — confirmado por `git diff b99c871..509b46b -- common/bin/cepa-until`
+    (saída vazia). Só tests/test_cepa_until_cota.py mudou: um teste novo
+    (test_item_que_fecha_entre_cortes_zera_a_contagem) e dois testes existentes
+    tiveram o reset fixado para não ser recalculado a cada chamada do `claude`
+    falso (intermitência descrita no próprio diff como vista em 2026-09-18).
+    Por isso esta rodada reaproveita as onze perturbações verde→vermelho já
+    registradas na rodada 1 (nenhuma delas precisa ser refeita — a linha que
+    perturbam não mudou) e refaz apenas a perturbação da SOBREVIVENTE.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é JVM); perturbação manual no binário real, via subprocess.run com um `claude` falso, é o mecanismo aplicável"
+    perturbation:
+      status: pass
+      results:
+        - "REAPROVEITADO da rodada 1 (código de produção idêntico, confirmado por diff vazio) — PASS (RED): leituras_de_cota, custo_de_item, pausa_de_cota (geral e a distinção `fresca`), horario_do_reset, o sinal estruturado `rejected` em limite_de_uso, a tentativa cortada não contar no teto do item, o disjuntor de MAX_ESPERAS_SEGUIDAS, a limpeza de `ultima_leitura` ao retomar, e o `--output-format stream-json --verbose`. Ver docs/proof/cepa-until-cota.yaml@b99c871 (git log) para os run-lines originais de cada uma; não refeitas nesta rodada porque nenhuma linha que perturbam mudou entre b99c871 e 509b46b."
+        - "PASS (RED) — laço principal, linha 841 (`esperas_seguidas = 0` dentro do bloco `if progresso:`, que zera o contador de cortes-seguidos-pelo-teto quando um item fecha entre duas esperas): removida a linha em /tmp/proof-cepa-until-cota (worktree descartável, HEAD 509b46b) → test_cepa_until_cota.py caiu com 3 falhas: 'as 5 chamadas aconteceram' (só 4 aconteceram — o run parou uma chamada antes), '...o run acaba pela fila, não pelo teto' e '...e os dois itens fecharam'. É exatamente o cenário do teste novo desta rodada (corte, corte, a1 fecha, corte, a2 fecha): sem o zeramento o 4º corte é contado como o 3º-sem-progresso e o run para cedo, com a2 ainda pendente. Restaurado via `git checkout -- .../common/bin/cepa-until`; `git diff --stat` no worktree descartável voltou vazio, confirmando a restauração antes de seguir."
+      run: >-
+        Worktree descartável /tmp/proof-cepa-until-cota (`git worktree add
+        --detach 509b46b`; worktree principal
+        /Users/alegomes/cepa-worktrees/cepa-rate_limit NUNCA tocado — `git
+        status --short` nele mostrou só os dois untracked pré-existentes desta
+        sessão, sem diferença antes/depois). GREEN de partida confirmado no
+        worktree descartável: `timeout 60 python3 tests/test_cepa_until_cota.py`
+        → "✓ tudo verde". Perturbação via script Python com
+        `assert s.count(old) == 1` antes de escrever, caminho absoluto
+        (`/tmp/proof-cepa-until-cota/common/bin/cepa-until`). Depois de
+        perturbar: `timeout 60 python3 tests/test_cepa_until_cota.py` → "✗ 3
+        falha(s)". Restaurado com `git checkout --
+        /tmp/proof-cepa-until-cota/common/bin/cepa-until`; `git diff --stat`
+        voltou vazio. Em seguida, as três suítes rodaram em SEQUÊNCIA (não em
+        paralelo) sobre o binário restaurado: `timeout 60 python3
+        tests/test_cepa_until_cota.py` → "✓ tudo verde"; `timeout 150 python3
+        tests/test_cepa_until.py` → "✓ tudo verde" (exit 0; precisou de mais de
+        90s neste ambiente, sem relação com a perturbação, já desfeita);
+        `timeout 150 python3 tests/test_cepa_until_adversarial.py` → "✓ tudo
+        verde" (exit 0). Worktree descartável removido com `git worktree
+        remove --force /tmp/proof-cepa-until-cota`; `git worktree list` ao
+        final mostra só a árvore principal e o clone Insync do main, sem
+        sobra.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      A linha antes descoberta (common/bin/cepa-until:841) agora tem cobertura
+      direta: test_item_que_fecha_entre_cortes_zera_a_contagem encadeia
+      corte→corte→a1 fecha→corte→a2 fecha e, sem o zeramento, o teste vai para
+      RED (confirmado por perturbação acima). Cruzado outra vez com o diff
+      05b9fb7..509b46b em common/bin/cepa-until (idêntico ao diff da rodada 1,
+      já que o arquivo não mudou entre b99c871 e 509b46b): nenhuma linha
+      comportamental nova/mudada ficou sem teste que a quebre.
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings:
+      - "REAPROVEITADO da rodada 1 (nenhuma superfície de entrada nova nesta rodada — só teste mudou): rate_limit_event sem utilization, resetsAt não numérico, evento rejected sem resetsAt, linha stream-json truncada, texto de teto ilegível, unifiedWindows nulo, rate_limit_info não-dict — todos sem estourar, cada um terminando com motivo de parada registrado. Ver rodada 1 (base b99c871) para os 7 casos originais e o script ad-hoc."
+    run: >-
+      Não refeito nesta rodada: o diff 509b46b..b99c871 não abre nem muda
+      nenhuma superfície de entrada (só um teste novo e dois testes com o
+      reset fixado). `timeout 150 python3 tests/test_cepa_until_adversarial.py`
+      (a suíte versionada de linha de comando/estado em disco) confirmado
+      "✓ tudo verde" na sequência de perturbação acima, sem regressão.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  Rodada 2. O código de produção (common/bin/cepa-until) não mudou entre
+  b99c871 e 509b46b — confirmado por diff vazio. O commit 509b46b só adiciona
+  o teste que faltava (test_item_que_fecha_entre_cortes_zera_a_contagem,
+  encadeando corte→corte→item fecha→corte→item fecha) e estabiliza dois testes
+  intermitentes fixando o reset. Reperturbei a única sobrevivente da rodada 1
+  (common/bin/cepa-until:841, `esperas_seguidas = 0` no ramo `if progresso:`)
+  no worktree descartável /tmp/proof-cepa-until-cota: removida a linha, o
+  teste novo foi para VERMELHO (3 falhas, incluindo "as 5 chamadas
+  aconteceram" — só 4 aconteceram, o run parou uma chamada antes por engano).
+  Restaurada a linha, as três suítes (test_cepa_until_cota.py,
+  test_cepa_until.py, test_cepa_until_adversarial.py), rodadas em sequência,
+  voltaram 100% verdes. As outras onze perturbações da rodada 1 continuam
+  válidas sem precisar ser refeitas, porque a linha que cada uma quebra não
+  mudou. Não há mais lacuna nomeada nem lacuna estrutural: PROVEN.
