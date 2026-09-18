@@ -89,6 +89,26 @@ ficaram sem uso, e o item em voo perdeu o que já tinha feito. Duas regras:
 Se a espera não cabe na janela, o run para (motivo `limite-de-uso` ou
 `cota-no-fim`) em vez de começar um item que seria cortado no meio.
 
+## Queda de rede
+
+Em 2026-09-18 a internet caiu às 11:32 no meio do WEGO-2293: o `claude` tentou
+10 vezes, saiu 1 com "Can't reach the API server (ENOTFOUND)", e as duas
+tentativas seguintes morreram do mesmo jeito em 3 minutos cada. O supervisor
+leu três "sem progresso", marcou o item `blocked` e desligou pelo disjuntor —
+por uma queda que não era do item nem da conta. A regra:
+
+  - **Esperar a rede voltar.** Quando o `result` final do stream-json vem com
+    `terminal_reason: api_error` e a mensagem é de rede (ENOTFOUND,
+    ECONNREFUSED, "Can't reach the API server"...), a tentativa não conta no
+    teto do item nem no disjuntor. O supervisor sonda `CEPA_UNTIL_SONDA_REDE`
+    (default `api.anthropic.com:443`) a cada `CEPA_UNTIL_SONDA_INTERVALO`
+    segundos (default 60) até a rede voltar, e retoma o MESMO item — a
+    reserva dele fica órfã e o `start` a reivindica. A espera vai no máximo
+    até o prazo menos a reserva mínima; passou disso, o run para com motivo
+    `sem-rede`. Três quedas seguidas sem progresso entre elas também param o
+    run: a sonda diz que a rede voltou, mas o `claude` continua sem alcançar a
+    API, e insistir repete a noite.
+
 ## Quando ele para
 
 Para no primeiro de: prazo atingido, fila sem item executável (a razão vem do
@@ -109,6 +129,7 @@ import os
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -220,6 +241,24 @@ ENV_ESPERA_FUNDO = "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"
 # reagir à mensagem de uma tentativa anterior; ler só o fim é o que impede
 # reagir ao relatório de um agente que MENCIONA limite de uso em prosa.
 CAUDA_DA_SAIDA = 2000
+
+# O que o `claude` escreve no `result` final quando morreu por falta de REDE
+# (copiado do run de 2026-09-18). Só vale junto com `terminal_reason:
+# api_error`: um agente que MENCIONA ENOTFOUND em prosa não é queda de rede.
+SEM_REDE = re.compile(
+    r"can'?t reach the api server"
+    r"|\b(?:ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|EHOSTUNREACH"
+    r"|ENETUNREACH)\b"
+    r"|\bfetch failed\b", re.I)
+
+# Onde o supervisor bate para saber se a rede voltou (host:porta, TCP), e de
+# quanto em quanto. A API é o alvo certo: é ela que o `claude` precisa alcançar.
+SONDA_DE_REDE = os.environ.get("CEPA_UNTIL_SONDA_REDE", "api.anthropic.com:443")
+INTERVALO_DA_SONDA = float(os.environ.get("CEPA_UNTIL_SONDA_INTERVALO", "60"))
+
+# Quedas de rede seguidas, sem progresso entre elas, que encerram o run: a
+# sonda enxerga a rede, o `claude` não — esperar de novo não muda isso.
+MAX_QUEDAS_SEGUIDAS = 3
 
 
 # ── relógio ─────────────────────────────────────────────────────────────────
@@ -440,6 +479,44 @@ def espera_ate(quando):
         if falta <= 0:
             return
         time.sleep(min(falta, 60))
+
+
+def queda_de_rede(saida):
+    """True se a tentativa morreu porque o `claude` não alcançou a API — o
+    `result` final traz `terminal_reason: api_error` E a mensagem é de rede.
+    Item que fechou não passa por aqui; quem decide isso é o laço."""
+    resultados = list(_objetos_json(saida or "", "result"))
+    if not resultados:
+        return False
+    r = resultados[-1]
+    if r.get("terminal_reason") != "api_error" and not r.get("is_error"):
+        return False
+    texto = r.get("result") if isinstance(r.get("result"), str) else ""
+    return bool(SEM_REDE.search(texto))
+
+
+def rede_alcancavel(alvo=None, timeout=5):
+    """Abre uma conexão TCP com `host:porta` e fecha. False em qualquer erro:
+    DNS, recusa, timeout."""
+    host, _, porta = (alvo or SONDA_DE_REDE).rpartition(":")
+    try:
+        with socket.create_connection((host, int(porta)), timeout=timeout):
+            return True
+    except (OSError, ValueError):
+        return False
+
+
+def espera_a_rede(ate, sonda=rede_alcancavel, intervalo=None):
+    """Sonda até a rede voltar ou até `ate` (relógio de parede). Devolve True
+    se voltou."""
+    passo = INTERVALO_DA_SONDA if intervalo is None else intervalo
+    while True:
+        if sonda():
+            return True
+        falta = (ate - datetime.now()).total_seconds()
+        if falta <= 0:
+            return False
+        time.sleep(max(min(falta, passo), 0.05))
 
 
 def ambiente_do_item():
@@ -687,6 +764,8 @@ def main(argv=None):
     # já inclui o item anterior, e as esperas feitas.
     inicios, ultima_leitura, leitura_fresca = [], None, False
     esperas, esperas_seguidas = [], 0
+    # As quedas de rede: (item, quando caiu, quando voltou), e as seguidas.
+    quedas, quedas_seguidas = [], 0
 
     print()
     while True:
@@ -789,6 +868,49 @@ def main(argv=None):
                   "cota_5h": ([leituras[0][0], leituras[-1][0]]
                               if leituras else None)})
 
+        # A REDE caiu, antes do teto e do disjuntor: o item não andou porque o
+        # `claude` não alcançou a API. Devolve a vez, espera a rede voltar e
+        # retoma o mesmo item — a reserva órfã é reivindicada pelo `start`.
+        if not progresso and queda_de_rede(saida):
+            tentativas[ident] -= 1
+            quedas_seguidas += 1
+            caiu = datetime.now()
+            ate = prazo - reserva
+            cabe = quedas_seguidas < MAX_QUEDAS_SEGUIDAS and ate > caiu
+            registra({"evento": "queda_de_rede", "id": ident, "espera": cabe,
+                      "ate": ate.isoformat(), "seguidas": quedas_seguidas})
+            print(f"          → SEM REDE: o `claude` não alcançou a API — não é "
+                  "falha do item")
+            if cabe:
+                print(f"          → sondo {SONDA_DE_REDE} até a rede voltar (no "
+                      f"máximo até {ate.strftime('%H:%M')}) e retomo o {ident}")
+                if espera_a_rede(ate):
+                    voltou = datetime.now()
+                    quedas.append((ident, caiu, voltou))
+                    registra({"evento": "rede_voltou", "id": ident,
+                              "segundos": int((voltou - caiu).total_seconds())})
+                    print(f"[{voltou.strftime('%H:%M')}] rede de volta "
+                          f"({humano(voltou - caiu)} sem)")
+                    continue
+                motivo_fim = "sem-rede"
+                detalhe_fim = (
+                    f"a rede caiu durante o {ident} às {caiu.strftime('%H:%M')} "
+                    f"e não voltou até {ate.strftime('%H:%M')}, o último "
+                    "instante em que ainda cabia começar um item na janela. O "
+                    "item continua onde estava, sem culpa registrada")
+                break
+            motivo_fim = "sem-rede"
+            if quedas_seguidas >= MAX_QUEDAS_SEGUIDAS:
+                porque = (f"é a {quedas_seguidas}ª queda seguida sem progresso "
+                          "entre elas — a sonda enxerga a rede, o `claude` não")
+            else:
+                porque = "não sobra tempo na janela para esperar a rede voltar"
+            detalhe_fim = (
+                f"o `claude` não alcançou a API durante o {ident} e não dá para "
+                f"esperar: {porque}. O item continua onde estava, sem culpa "
+                "registrada")
+            break
+
         # O teto de uso da CONTA, antes do disjuntor. Sem esta separação a
         # mensagem "You've hit your session limit" vira "o item não saiu do
         # lugar" e o relatório da manhã acusa o card errado. Só é consultado
@@ -839,6 +961,7 @@ def main(argv=None):
         if progresso:
             falhas_seguidas = 0
             esperas_seguidas = 0
+            quedas_seguidas = 0
             feitos.append((ident, estado, pendencia))
             marca = estado
             if pendencia:
@@ -882,7 +1005,8 @@ def main(argv=None):
     registra({"evento": "run_end", "motivo": motivo_fim, "detalhe": detalhe_fim,
               "itens": itens, "com_progresso": len(feitos),
               "sem_progresso": len(falhados), "esgotados": len(esgotados),
-              "limite_de_uso": len(limitados), "esperas_de_cota": len(esperas)})
+              "limite_de_uso": len(limitados), "esperas_de_cota": len(esperas),
+              "quedas_de_rede": len(quedas)})
 
     print(f"\n── fim às {datetime.now().strftime('%H:%M')} · {motivo_fim}")
     print(f"   {detalhe_fim}")
@@ -917,6 +1041,12 @@ def main(argv=None):
         for quando, ident, reset in esperas:
             print(f"     - {quando} ({ident}): esperei o reset das "
                   f"{reset.strftime('%H:%M')}")
+    if quedas:
+        print(f"\n   Quedas de rede ({len(quedas)}) — não é falha do item:")
+        for ident, caiu, voltou in quedas:
+            print(f"     - durante o {ident}: sem rede das "
+                  f"{caiu.strftime('%H:%M')} às {voltou.strftime('%H:%M')}, "
+                  "depois retomei o item")
     print(f"\n   registro: {ledger}")
     print(f"   saída do claude: {log}")
     return 0
