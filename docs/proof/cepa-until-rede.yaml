@@ -1,0 +1,125 @@
+schema_version: 2
+card: cepa-until-rede
+verdict: proven
+reviewed_at: 2026-09-18T14:50:00-03:00
+base_commit: 6a2614d
+head_commit: dcda3ed
+issue_type: Feature
+repo_kind: harness            # NOT Quarkus/Maven — Python CLI + prompt files, própria suíte em tests/*.py
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (queda_de_rede — reconhece no `result` final terminal_reason api_error/is_error + regex SEM_REDE)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (rede_alcancavel — sonda TCP host:porta)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (espera_a_rede — sonda em loop até a rede voltar ou até o prazo)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (main() — bloco de queda de rede antes do teto de uso: devolve a vez, quedas_seguidas, guarda ate>caiu, dorme e retoma, ou motivo sem-rede)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_cepa_until_rede.py (suíte dedicada — 351 linhas, 9 testes; rodada 2 acrescentou test_queda_de_rede_nao_conta_no_teto_por_item, test_queda_perto_do_fim_da_janela_para_sem_sondar e o check 'result de SUCESSO com palavra de rede NÃO é queda' dentro de test_queda_de_rede_exige_api_error_e_mensagem_de_rede)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+  note: >-
+    Rodada 2 (este arquivo): head_commit avançou de cd370a7 para dcda3ed, mas
+    common/bin/cepa-until (o binário de produção) NÃO mudou entre esses dois
+    commits — confirmado por `git diff cd370a7..dcda3ed --stat -- common/bin/cepa-until`
+    (saída vazia). Só tests/test_cepa_until_rede.py mudou: 59 linhas
+    acrescentadas com os 3 testes que fecham as lacunas da rodada 1. Por isso
+    esta rodada reaproveita as 4 perturbações já verde→vermelho da rodada 1
+    (nenhuma delas precisa ser refeita — a linha que perturbam não mudou) e
+    refaz apenas as 3 que sobreviveram na rodada 1, agora contra a suíte
+    ampliada.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é JVM); perturbação manual no binário real, via subprocess.run com um `claude` falso, é o mecanismo aplicável"
+    perturbation:
+      status: pass
+      results:
+        - "REAPROVEITADO da rodada 1 (código de produção idêntico, confirmado por diff vazio) — PASS (RED): quedas_seguidas = 0 ao progredir (common/bin/cepa-until:964), espera_a_rede honrando a sonda real (:509-519), MAX_QUEDAS_SEGUIDAS=3 como teto real (:261), a exigência SEM_REDE em queda_de_rede (:249-252). Ver docs/proof/cepa-until-rede.yaml@cd370a7 (git log) para os run-lines originais; não refeitas nesta rodada porque nenhuma linha que perturbam mudou entre cd370a7 e dcda3ed."
+        - "PASS (RED) — common/bin/cepa-until:875 (`tentativas[ident] -= 1` no ramo `if not progresso and queda_de_rede(saida):`): removida a linha em /tmp/proof-cepa-until-rede2 (worktree descartável, HEAD dcda3ed) → test_queda_de_rede_nao_conta_no_teto_por_item (o teste novo desta rodada: queda, falha REAL, fecha, com teto de 2 por item) caiu com 3 falhas — '3 chamadas: queda, falha real, fechou' (só 2 chamadas, o run parou antes), 'o a1 fechou — a queda não gastou uma das 2 vezes' (a1 ficou `blocked`), 'só a falha real conta como sem progresso' (motivo `fim-da-fila` com 1 esgotado em vez de fechar). Exatamente o cenário que faltava: sem devolver a vez, a queda + a falha real somam 2 e esgotam o teto antes do item fechar. Restaurado via `git -C /tmp/proof-cepa-until-rede2 checkout -- .../common/bin/cepa-until`; `git diff --stat` voltou vazio."
+        - "PASS (RED) — common/bin/cepa-until:492 (o gate `if r.get(\"terminal_reason\") != \"api_error\" and not r.get(\"is_error\"): return False` em queda_de_rede): removido o gate, mantendo a regex SEM_REDE → o novo check 'result de SUCESSO com palavra de rede NÃO é queda' (dentro de test_queda_de_rede_exige_api_error_e_mensagem_de_rede — result com is_error:false, sem terminal_reason:api_error, texto 'corrigi o timeout ECONNRESET no teste do cliente HTTP') foi para VERMELHO: sem o gate, queda_de_rede voltou True para um result de SUCESSO. Restaurado, `git diff --stat` vazio."
+        - "PASS (RED) — common/bin/cepa-until:879 (a guarda `ate > caiu` dentro de `cabe = quedas_seguidas < MAX_QUEDAS_SEGUIDAS and ate > caiu`): removida a guarda → test_queda_perto_do_fim_da_janela_para_sem_sondar (o teste novo: janela 12s, reserva 9s, item cai aos 4s, ate=prazo-reserva=3s já passou) foi para VERMELHO com 2 falhas — 'parou com `sem-rede` sem tentar esperar' (o run tentou `espera_a_rede` e só parou depois de sondar até o prazo, em vez de recusar na hora; o registro mostrou `espera: True` em vez de `False`) e 'o detalhe diz que não sobra tempo, não que esperou' (o detalhe final falou 'não voltou até', a frase do caminho ERRADO). Restaurado, `git diff --stat` vazio."
+      run: >-
+        Worktree descartável /tmp/proof-cepa-until-rede2 (`git worktree add
+        --detach dcda3ed`; worktree principal
+        /Users/alegomes/cepa-worktrees/cepa-rate_limit NUNCA tocado — `git
+        status --short` nele mostrou só os dois untracked pré-existentes da
+        sessão (.claude/acceptance/cepa-until-rede.yaml e este próprio
+        docs/proof/cepa-until-rede.yaml), sem diferença antes/depois). GREEN
+        de partida confirmado no worktree descartável: `timeout 60 python3
+        tests/test_cepa_until_rede.py` → "todos passaram" (9 testes). Cada
+        perturbação foi um `open/replace/write` em
+        `/tmp/proof-cepa-until-rede2/common/bin/cepa-until` (caminho
+        absoluto, com `assert s.count(old) == 1` antes de escrever), seguida
+        de `timeout 60 python3 tests/test_cepa_until_rede.py`, e restaurada
+        com `git -C /tmp/proof-cepa-until-rede2 checkout --
+        /tmp/proof-cepa-until-rede2/common/bin/cepa-until` (`git diff
+        --stat` vazio depois de cada uma das 3 restaurações). As 3
+        perturbações que sobreviviam na rodada 1 foram TODAS para VERMELHO
+        contra a suíte ampliada. Em seguida, restaurado o binário pela
+        última vez, as três suítes de regressão rodaram em SEQUÊNCIA:
+        `timeout 60 python3 tests/test_cepa_until_rede.py` → "todos
+        passaram"; `timeout 150 python3 tests/test_cepa_until.py` → "✓ tudo
+        verde"; `timeout 150 python3 tests/test_cepa_until_cota.py` → "✓
+        tudo verde"; `timeout 150 python3
+        tests/test_cepa_until_adversarial.py` → "✓ tudo verde". Worktree
+        removida com `git worktree remove --force
+        /tmp/proof-cepa-until-rede2`; `git worktree list` ao final mostra só
+        a árvore principal e as outras duas worktrees pré-existentes da
+        sessão, sem sobra.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      As três linhas antes descobertas (common/bin/cepa-until:875, :492,
+      :879) agora têm cobertura direta: cada uma tem um teste que vai para
+      RED quando ela é removida (confirmado pelas 3 perturbações acima).
+      Cruzado outra vez com o diff 6a2614d..dcda3ed em
+      common/bin/cepa-until (idêntico ao diff da rodada 1, já que o arquivo
+      não mudou entre cd370a7 e dcda3ed): nenhuma linha comportamental
+      nova/mudada ficou sem teste que a quebre.
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings:
+      - "REAPROVEITADO da rodada 1 (nenhuma superfície de entrada nova nesta rodada — só teste mudou): queda_de_rede não estoura com linha de lixo antes do result JSON, result sem campo `result` (None), `result` não-string (int), JSON truncado, saída só com espaços, múltiplos results terminando num que não é de rede; rede_alcancavel não estoura com porta não numérica, alvo sem porta, ou alvo vazio (cai no fallback documentado `alvo or SONDA_DE_REDE`). Ver rodada 1 (head cd370a7) para os 9 casos e o script ad-hoc."
+    run: >-
+      Não refeito nesta rodada: o diff cd370a7..dcda3ed não abre nem muda
+      nenhuma superfície de entrada (só testes novos). `timeout 150 python3
+      tests/test_cepa_until_adversarial.py` (a suíte versionada de linha de
+      comando/estado em disco) confirmado "✓ tudo verde" na sequência de
+      perturbação acima, sem regressão.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  Rodada 2. O código de produção (common/bin/cepa-until) não mudou entre
+  cd370a7 e dcda3ed — confirmado por diff vazio. O commit dcda3ed só
+  adiciona os 3 testes que faltavam para fechar as lacunas da rodada 1:
+  test_queda_de_rede_nao_conta_no_teto_por_item (queda + falha real + fecha,
+  teto 2 — cobre common/bin/cepa-until:875), o check "result de SUCESSO com
+  palavra de rede NÃO é queda" dentro de
+  test_queda_de_rede_exige_api_error_e_mensagem_de_rede (cobre
+  common/bin/cepa-until:492), e test_queda_perto_do_fim_da_janela_para_sem_sondar
+  (janela 12s, reserva 9s, queda aos 4s — cobre common/bin/cepa-until:879).
+  Reperturbei as 3 sobreviventes da rodada 1 no worktree descartável
+  /tmp/proof-cepa-until-rede2: as 3 foram para VERMELHO contra a suíte
+  ampliada. As 4 perturbações já verde→vermelho da rodada 1 continuam
+  válidas sem precisar ser refeitas, porque a linha que cada uma quebra não
+  mudou. As três suítes de regressão (test_cepa_until.py,
+  test_cepa_until_cota.py, test_cepa_until_adversarial.py) voltaram 100%
+  verdes. Não há mais lacuna nomeada nem lacuna estrutural: PROVEN.
