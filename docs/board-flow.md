@@ -1,6 +1,6 @@
 # board-flow
 
-The Jira lifecycle layer. Pairs with any topology to keep cards in
+The card-lifecycle workflow plugin (talks to Jira today). Pairs with any topology to keep cards in
 sync with build/discovery state.
 
 ## Config file: `board-flow.yaml` at project root

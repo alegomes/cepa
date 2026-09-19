@@ -180,8 +180,9 @@ And it did not cost speed:
 
 ![Cards in scope versus cards done on one project](docs/assets/flow.svg)
 
-One board of that product, from the day work started (14 Aug) to 17 Sep: from 5 cards done
-to **224 done**. That is 219 cards in 31 days, about 49 a week, by one engineer, with every
+One board of that product. The board was created in July with a first batch of cards, but
+development only really started in mid-August, so the chart starts there (14 Aug) and runs
+to 17 Sep: from 5 cards done to **224 done**. That is 219 cards in 31 days, about 49 a week, by one engineer, with every
 one of them passing through the gates above. Four days when the engineer was travelling and
 nothing ran are cut from the axis and marked. "Done" includes cards that triage found
 already built, which still had to be proven. The chart is drawn from card dates only
@@ -189,17 +190,52 @@ already built, which still had to be proven. The chart is drawn from card dates 
 
 ## Your attention is the scarce resource
 
-Everything above exists so that fewer decisions reach you, and the ones that do arrive cheap.
+An agent can work for hours. You cannot watch for hours. Every interruption, every report you
+have to decode and every decision you make twice is paid from the one budget that does not
+scale. Each policy below exists because of what happens without it.
 
-- **Questions up front, in one batch.** `/common:session` asks everything at the start,
-  including what the routine would only hit halfway, then runs to the end without stopping.
-- **Reports written for someone who was not watching.** Plain-language opening, what is
-  waiting on you, technical detail, then numbered yes/no questions, each with a
-  recommendation.
-- **It learns your preferences.** `/common:debrief` walks you through the decisions an
-  unattended run made on its own. You answer keep, overrule or refine, and the verdict is
-  stored in that agent's expertise file, which follows you across projects. Today's answer
-  is one less question tomorrow.
+**All questions at the start, in one batch.**
+*Without it:* you start a task and leave. Twenty minutes later the agent stops to ask which
+branch to use. You answer an hour later, it runs ten more minutes and asks again. A two-hour
+job takes the whole day, and you never got to focus on anything else, because you were on
+call for a machine.
+*In Cepa:* `/common:session` asks everything up front, including what the routine would only
+hit halfway, then runs to the end without stopping.
+
+**Decide on your own when it is reversible, and write it down.**
+*Without it:* the agent either asks permission for everything, or decides silently and you
+find out in production. Both cost you: the first in interruptions, the second in trust.
+*In Cepa:* a reversible choice with a clear best option is made and logged with its
+rationale. Only what cannot be undone waits for you.
+
+**Reports for someone who was not watching.**
+*Without it:* you come back to a wall of text in the agent's own vocabulary ("fixed the
+adapter seam, gate is green modulo the flaky IT"). To approve it you have to open the diff
+and reconstruct what happened, so you either spend the time you were trying to save or
+approve blind.
+*In Cepa:* every report opens in plain language, says what is waiting on you, keeps the
+technical detail for last, and ends in numbered yes/no questions, each with a recommendation
+and the reason in one line.
+
+**One question per group of cards, not one card at a time.**
+*Without it:* twenty cards sit in Review. You open each one, read the proof file, work out
+why it stopped, and discover that eight of them stopped for the same reason and five because
+Docker was down that night.
+*In Cepa:* `/board-flow:decide` does that reading, drops what is nobody's decision, and asks
+one question per reason.
+
+**One next step, never a menu.**
+*Without it:* "what should I do next?" gets you a list of five equal options, which is the
+state you were already stuck in.
+*In Cepa:* `/common:next` names one step, with the reason it was put first when the queue was
+written.
+
+**It learns your answers.**
+*Without it:* you explain the same preference every week, to an agent that starts from zero
+every session.
+*In Cepa:* `/common:debrief` walks you through the judgement calls an unattended run made.
+You answer keep, overrule or refine. The verdict is stored in that agent's expertise file,
+which follows you across projects. Today's answer is one less question tomorrow.
 
 ## Run it with nobody awake
 
@@ -208,11 +244,26 @@ Everything above exists so that fewer decisions reach you, and the ones that do 
 ```
 
 `cepa-until` is a terminal command, not a slash command (alias it). It runs the queue
-written by `/common:plan` for a **time window**. Each item runs in a fresh `claude -p`
-process, so a full context window is the normal end of a subprocess and not a failure. It
-cuts between items and never in the middle of one, stops after 3 failures in a row, and when
-the account's 5-hour usage cap hits it sleeps until the reset instead of burning the night.
-The gates are what make this safe to leave alone.
+written by `/common:plan` for a **time window**, and it starts **a new Claude Code session
+for every item**.
+
+That last part is the design, not a detail. A long session degrades before it ends. By the
+fifth task the context window is full of the first four: files that have since changed,
+errors already fixed, decisions that belonged to another card. The agent starts reasoning
+from stale material, the automatic summarising that kicks in when the window fills throws
+away detail it needed, and every new message pays again for all that history. People
+describe it as the agent "getting dumber" through the afternoon.
+
+Starting fresh per item removes the cause. Each item begins with an empty window holding
+only its own card, its spec and the code as it is now. Nothing carries over in the
+conversation. What has to carry over lives on disk, where it can be checked: the queue, the
+outcome of each item, the proof files, the handoff note. A full context window also stops
+being a failure. It is just the normal end of one subprocess, and the supervisor launches the
+next.
+
+The rest is about not wasting the night: it cuts between items and never in the middle of
+one, stops after 3 failures in a row, and when the account's 5-hour usage cap hits it sleeps
+until the reset and resumes the same item. The gates are what make this safe to leave alone.
 
 Two things to know before you use it: it runs with `--dangerously-skip-permissions` by
 default (turn that off with `--com-permissoes`), and it needs a queue on disk.
@@ -239,8 +290,9 @@ default (turn that off with `--com-permissoes`), and it needs a queue on disk.
 
 ## What you install
 
-Cepa is split into plugins so you install only what your project needs. There are three
-kinds.
+Cepa is a set of plugins made specifically for Claude Code. They use its plugin system
+(agents, slash commands, hooks, skills) and do nothing outside it. It is split into several
+plugins so you install only what your project needs. There are three kinds.
 
 **The base: `common`. Always installed.** It holds what is shared by everything else: the
 gates (green-or-revert, acceptance-completeness, UI proof), the hooks, the working habits,
@@ -282,22 +334,28 @@ team behind one of the modes:
 | **`design`** | design | Turns a feature brief into a build-ready design spec (flows, visual, prototype, critique) |
 | **`docs`** | documentação | Sweeps an existing project into a grounded doc tree for onboarding, in five checkpointed phases |
 
-**A connector.** A connector ships no builders. It connects whichever team you installed to
-an outside system, and owns the only agent allowed to touch that system.
+**A workflow.** A workflow plugin ships no builders. It runs a process *around* whichever
+team you installed: it decides when the team is called, on what, and what has to be true
+before the result moves on. Each one talks to one outside system through a single agent, the
+only one allowed to touch that system.
 
-| Connector | Connects to | What you get |
+| Workflow | The process it runs | Outside system today |
 |---|---|---|
-| **`board-flow`** | Jira | Commands that take a card as input. `/board-flow:execute PROJ-123` reads the card, runs your team's build flow, moves the card through the columns and posts an implementation summary. Also `triage`, `prove`, `decide`, `drain`. |
-| **`review-gate`** | Bitbucket pull requests | `/review-gate:open` reviews the diff and opens the PR. `/review-gate:merge` merges only after the proof gate says PROVEN. |
+| **`board-flow`** | The life of a work card, from backlog to done. `triage` grooms a column, `execute` reads a card and runs your team's build flow on it, `prove` sends a card in Review through the proof gate, `decide` brings you what is left. The card moves column only when the matching gate passes, and gets an implementation summary. | Jira |
+| **`review-gate`** | The way into main. `/review-gate:open` reviews the diff and opens the pull request. `/review-gate:merge` merges only after the proof gate says PROVEN. | Bitbucket |
+
+The tracker and the git host are adapters. The process is the product. Without `board-flow`
+the same build, acceptance and proof steps exist, driven from a queue file instead of a
+board (`/common:plan`, `/common:drain-plan`).
 
 How the pieces sit together:
 
 ```mermaid
 flowchart LR
-  subgraph conn["connectors (optional)"]
+  subgraph conn["workflows (optional)"]
     direction LR
-    BF["board-flow: Jira"]
-    RG["review-gate: pull requests"]
+    BF["board-flow: card lifecycle"]
+    RG["review-gate: way into main"]
   end
   subgraph teams["teams"]
     direction LR
