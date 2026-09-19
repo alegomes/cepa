@@ -141,9 +141,13 @@ def main():
 
     cwd = Path(payload.get("cwd") or os.getcwd()).resolve()
     tid = extract_transition_id(tool_input)
-    # A CLI aceita o NOME do status no lugar do id; nesse caso o alvo ja veio
-    # resolvido e nao ha o que procurar no transition_ids do board-flow.yaml.
-    target = _mut["target_status"] or (transition_map(cwd).get(tid) if tid else None)
+    # A CLI aceita o NOME do status no lugar do id. O nome vira chave lógica
+    # pelo status_map ("Concluído" -> done); so baixar a caixa deixava passar
+    # qualquer fechamento cujo nome nao fosse literalmente "done".
+    if _mut["target_status"]:
+        target = J.logical_status(_mut["target_status"], cwd)
+    else:
+        target = transition_map(cwd).get(tid) if tid else None
     if target not in CLOSING_TARGETS:
         # Not a close. Every other movement is somebody else's gate.
         sys.exit(0)
