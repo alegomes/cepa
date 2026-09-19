@@ -1,7 +1,7 @@
 # Choosing a topology
 
 The marketplace ships six topology plugins, plus `common` (required)
-and the `board-flow` + `review-gate` layers (optional). Pick **one build
+and the `board-flow` + `review-gate` workflow plugins (optional). Pick **one build
 topology per project**
 — importing two snippets gives the orchestrator conflicting instructions.
 

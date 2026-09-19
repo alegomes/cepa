@@ -256,7 +256,7 @@ The pre-merge gate. Code reaches main only through a reviewed, proven pull reque
 
 ## board-flow
 
-The Jira lifecycle layer. Pairs with any topology.
+The card-lifecycle workflow plugin (talks to Jira today). Pairs with any team.
 
 | Command | Argument | What it does |
 |---|---|---|
