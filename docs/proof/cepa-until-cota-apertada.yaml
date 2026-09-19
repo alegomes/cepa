@@ -1,0 +1,105 @@
+schema_version: 2
+card: cepa-until-cota-apertada
+verdict: proven
+reviewed_at: 2026-09-18T22:25:00-03:00
+base_commit: c15ff25
+head_commit: 6e2b58d
+issue_type: Feature
+repo_kind: harness            # NOT Quarkus/Maven — Python CLI + prompt files, própria suíte em tests/*.py
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (main() — bloco de pausa de cota antes do item: quando o reset não cabe na janela, deixa de parar com motivo `cota-no-fim` e passa a avisar, registrar `cota_apertada` no ledger, guardar em `apertados` e cair para dentro do item; o ramo `else` — reset cabe na janela, espera e `continue` — fica intocado)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (run_end — ganha o campo `cota_apertada: len(apertados)`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (relatório final — nova seção 'Começados com a cota apertada (N)')"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_cepa_until_cota.py (test_pausa_que_nao_cabe_na_janela_comeca_assim_mesmo e test_sem_historico_cota_acima_de_90_comeca_se_o_reset_nao_cabe — reescritos para o novo comportamento)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é JVM); a perturbação manual no binário real, via subprocess.run com um `claude` falso (fake_claude), é o mecanismo aplicável — mesmo padrão usado em docs/proof/cepa-until-rede.yaml"
+    perturbation:
+      status: pass
+      results:
+        - "PASS (RED) — restaurado o `break` com `motivo_fim = \"cota-no-fim\"` no lugar do bloco novo (common/bin/cepa-until:825-838, if prazo-acorda<reserva): test_pausa_que_nao_cabe_na_janela_comeca_assim_mesmo e test_sem_historico_cota_acima_de_90_comeca_se_o_reset_nao_cabe foram para VERMELHO — 'a pausa veio antes do a3, e só dele' (a3 nem chegou a rodar), 'o a3 começou assim mesmo' (2x em vez de 3x), 'o run terminou pela fila, com 1 item apertado' (motivo voltou a `cota-no-fim`, cota_apertada:0), 'os dois rodaram...' (1x em vez de 2x). Restaurado; `git diff --stat` vazio."
+        - "PASS (RED) — removido só o `registra({\"evento\": \"cota_apertada\", ...})` (common/bin/cepa-until:834-836), mantendo `apertados.append`: 'o registro nomeia o item e o uso' caiu (lista vazia — o ledger não guarda mais o evento). Restaurado; diff vazio."
+        - "PASS (RED) — removido só o `apertados.append((ident, uso, reset))` (common/bin/cepa-until:837), mantendo o `registra`: 'o run terminou pela fila, com 1 item apertado' e '...com o a2 registrado como apertado' caíram (cota_apertada:0 no run_end — a contagem no relatório final depende só do `apertados`, não do ledger); 'a tela avisou antes e listou no fim' também caiu (a seção 'Começados com a cota apertada' não aparece com a lista vazia). Restaurado; diff vazio."
+        - "PASS (RED por não-terminação) — acrescentado `continue` logo após `apertados.append(...)` (fim do ramo `if`, antes do `else`): o run parou de cair para dentro do item e voltou ao topo do while sem nunca avançar `itens`/`tentativas` — a condição de cota apertada persiste indefinidamente porque nada muda entre uma volta e outra. `timeout 150 python3 tests/test_cepa_until_cota.py` nunca imprimiu nem FAIL nem 'tudo verde' — o subprocesso `cepa-until` ficou vivo além dos 150s (confirmado via `ps aux`), e a suíte nunca terminou. Matei o processo órfão e restaurei o arquivo; diff vazio depois."
+        - "PASS (RED) — trocado `if prazo - acorda < reserva:` por `if True:` (o if/else invertido na prática: o ramo 'cabe na janela' também passou a começar assim mesmo): test_pausa_antes_do_item_que_a_cota_nao_comporta (o teste da regra ANTIGA, que o card não mudou) foi para VERMELHO — 'a pausa veio antes do a3, e só dele' (a3 largou junto, sem pausa), 'o a3 só largou depois do reset' (largou antes), 'o registro guarda uso e custo medido' (pausa_de_cota vazio). Restaurado; diff vazio."
+      run: >-
+        Worktree descartável /tmp/proof-cepa-until-cota-apertada (`git
+        worktree add --detach 6e2b58d`; árvore principal
+        /Users/alegomes/cepa-worktrees/cepa-rate_limit NUNCA tocada — `git
+        status --short` nela mostrou só o untracked pré-existente da sessão
+        .claude/acceptance/cepa-until-cota-apertada.yaml, sem diferença
+        antes/depois). GREEN de partida confirmado no worktree descartável:
+        `timeout 150 python3 tests/test_cepa_until_cota.py` → "✓ tudo
+        verde". Cada perturbação foi um `open/replace/write` em
+        `/tmp/proof-cepa-until-cota-apertada/common/bin/cepa-until` (com
+        `assert s.count(old) == 1` antes de escrever), seguida de `timeout
+        150 python3 tests/test_cepa_until_cota.py`, e restaurada com `git -C
+        /tmp/proof-cepa-until-cota-apertada checkout --
+        /tmp/proof-cepa-until-cota-apertada/common/bin/cepa-until`
+        (caminho absoluto — o path-lock bloqueia caminho relativo mesmo
+        dentro do /tmp; `git diff --stat` vazio depois de cada uma das 5
+        restaurações). As 5 perturbações foram TODAS para VERMELHO. Em
+        seguida, com o binário restaurado pela última vez, as quatro
+        suítes rodaram em sequência: `timeout 150 python3
+        tests/test_cepa_until_cota.py` → "✓ tudo verde"; `timeout 150
+        python3 tests/test_cepa_until.py` → "✓ tudo verde"; `timeout 150
+        python3 tests/test_cepa_until_rede.py` → "todos passaram";
+        `timeout 150 python3 tests/test_cepa_until_adversarial.py` → "✓
+        tudo verde". Worktree removida com `git worktree remove --force
+        /tmp/proof-cepa-until-cota-apertada`; `git worktree list` ao final
+        mostra só a árvore principal e as outras worktrees pré-existentes
+        da sessão, sem sobra.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      Todo o diff comportamental de 94b72c6 em common/bin/cepa-until (o
+      bloco `if prazo - acorda < reserva` reescrito, o `registra`, o
+      `apertados.append`, a queda para dentro do item, o campo
+      `cota_apertada` no run_end, a seção 'Começados com a cota apertada'
+      no relatório) tem cobertura direta: cada trecho tem uma perturbação
+      acima que o quebra e um teste que vai para RED. O `else` (reset cabe
+      na janela) não mudou e continua coberto por
+      test_pausa_antes_do_item_que_a_cota_nao_comporta, confirmado pela
+      perturbação `if True:` acima. Nenhuma linha nova/mudada ficou sem
+      teste que a quebre.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      O diff não abre nem muda superfície de entrada externa (linha de
+      comando, HTTP, arquivo lido de fora) — é lógica interna de decisão
+      sobre quando começar um item, alimentada pelo `rate_limit_event` que
+      já existia. common/bin/cepa-until é um script CLI (`cli`), não um
+      módulo `api-rest`/input-bearing.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  As 5 perturbações no bloco novo (reverter para `cota-no-fim`, tirar o
+  `registra`, tirar o `apertados.append`, travar o fall-through com
+  `continue`, e inverter o if/else para pegar o ramo antigo) foram TODAS
+  para VERMELHO contra a suíte cobridora
+  (tests/test_cepa_until_cota.py), cada uma no teste certo. As quatro
+  suítes (cota, base, rede, adversarial) voltaram 100% verdes no binário
+  restaurado. O diff não abre superfície de entrada nova, então L4 é n/a
+  (não skipped) — é lógica interna de decisão de cota, sem HTTP/CLI-input
+  novo. Sem lacuna nomeada nem estrutural: PROVEN.
