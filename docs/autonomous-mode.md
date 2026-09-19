@@ -1,7 +1,7 @@
 # Autonomous mode
 
 For when you want the agent team to keep working while you step away.
-Four pieces:
+Five pieces:
 
 - **Skill `autonomous-mode`** — behavioral discipline (no questions to
   the user, every ambiguity logged with rationale).
@@ -81,63 +81,23 @@ description, the slug is the key lowercased (e.g.,
 
 ## The autonomous-mode skill
 
-Activated by `/common:autonomous-start`. Session-wide behavioral
-override:
+Activated by `/common:autonomous-start`. It is a session-wide behavioural override with six
+rules. The rules, the exact Decision block format and the list of what not to log live in
+[`common/skills/autonomous-mode/SKILL.md`](../common/skills/autonomous-mode/SKILL.md), which
+is the source of truth. In short:
 
-### Rule 1: Never ask the user a question
-
-Decide and continue. Exception: **catastrophic ambiguity** (request has
-two contradictory interpretations, no inference possible). In that
-case: document both in `state.yaml.blockers`, pick the more conservative
-one, surface in the final report.
-
-### Rule 2: Log every ambiguous decision in the formal Decision block
-
-Whatever artifact is current (TASK.md, RESULT.md, MERGE.md, investigation
-report), append:
-
-```markdown
-### Decision: <one-line topic>
-
-**Options considered:**
-- Option A: <description> — pros: ... | cons: ...
-- Option B: <description> — pros: ... | cons: ...
-
-**Chosen:** Option <X>
-
-**Rationale:** <why this option, what trade-off, what evidence>
-```
-
-**Format is non-negotiable.** `/common:debrief` matches on the literal
-`### Decision:` heading and the three labeled fields. Inline prose
-("I decided X because Y") is insufficient — debrief reduces to
-fragile heuristics. Single-option decisions still get logged
-(write "Only one viable approach: <X>, alternatives rejected because…").
-
-### Rule 3: Don't fabricate green builds
-
-The autonomous-mode skill does NOT weaken the green-build-evidence rule
-(`qa-engineer` requires BUILD SUCCESS output, `engineering-lead` rejects
-unsubstantiated PASS, `code-reviewer` auto-REJECTs missing evidence).
-If a build genuinely can't be run, the verdict is BLOCKED — not an
-optimistic PASS.
-
-### Rule 4: Blocked work doesn't stop progress on independent work
-
-If Task 3 is blocked on external creds but Tasks 1, 2, 4 are
-independent, finish them. Document the blocker, work around it where
-possible, surface in the final report.
-
-### Rule 5: State file is hook-maintained
-
-You don't write `state.yaml` manually. Just keep working; the hook
-captures every subagent call.
-
-### Rule 6: End cleanly
-
-When the flow finishes (or runs as far as possible given blockers),
-write the final summary, mark `status: completed` or `status: blocked`,
-and stop. Don't loop.
+1. **Never ask the user a question.** Decide and continue. Only a truly contradictory request
+   becomes a blocker, resolved conservatively and surfaced in the final report.
+2. **Log the decisions worth your time, in the literal `### Decision:` block.** Not every
+   ambiguous choice: only the ones that cross a Task boundary (scope, contract, public
+   naming, strategy). The block carries an `**Altitude:**` field, and the
+   `decision-altitude-gate` hook refuses a block without it. `/common:debrief` matches on
+   that format.
+3. **Don't fabricate green builds.** If a build cannot run, the verdict is BLOCKED, never an
+   optimistic PASS.
+4. **Blocked work does not stop independent work.**
+5. **The state file is maintained by the hook, not by the agent.**
+6. **End cleanly.** Write the final summary in the response and stop. Don't loop.
 
 ## The checkpoint hook
 
@@ -185,8 +145,10 @@ What resume **won't** do:
 
 ## Debrief: closing the loop
 
-After a run completes, `/common:debrief` walks every Decision block
-from the run's artifacts and asks for your verdict:
+After a run completes, `/common:debrief` walks the run's `strategic`
+Decision blocks (those whose `**Altitude:**` field says `strategic`: scope,
+contract, breaking change, public naming) and asks for your verdict. Pass
+`--all` to also walk the `tactical` and `implementation` ones:
 
 - **`keep`** — the agent's call was right.
 - **`overrule: <reason>`** — wrong call; tell it what you'd have done

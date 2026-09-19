@@ -51,8 +51,11 @@ pergunta, não um palpite bem-formatado.
 
 ## Para os agentes lead
 
-Todo agente que orquestra (planning-lead, engineering-lead, validation-lead e
-os equivalentes por topologia) lê esta ordem antes de agir. Um lead que
+Esta ordem é uma convenção para quem escreve ou revisa instruções de agente
+(planning-lead, engineering-lead, validation-lead e os equivalentes por
+topologia). Hoje nenhum agente, comando ou skill carrega este documento
+sozinho: um lead só segue a ordem se a regra estiver escrita na própria
+definição dele. Um lead que
 absorve um conflito entre camadas — decidindo em silêncio que a sessão ganha do
 contrato — está tomando uma decisão do usuário disfarçada de execução. A
 disciplina é a mesma da fronteira de mutação do [A8](../maestro/commands/run.md):

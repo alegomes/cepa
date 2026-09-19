@@ -106,8 +106,8 @@ every deterministic level passed (verified), L4 clean, nothing assumed
 `evidence-over-assumption` discipline as the `completion-auditor`. Lack of
 evidence routes to the human, not to a clear.
 
-`NEEDS-HUMAN` is one label over five different situations — half of which are
-not a decision at all (the Docker that didn't come up). The five, and who
+`NEEDS-HUMAN` is one label over seven different situations, some of which are
+not a decision at all (the Docker that didn't come up). The seven, and who
 actually decides each: [needs-human-motivos](needs-human-motivos.md).
 
 ## How a card maps to its diff
@@ -132,6 +132,10 @@ There is no branch-per-card convention. Instead:
 | `/board-flow:prove-drain [--max N]` | `board-flow` | Iterates the Review column. Does NOT stop on UNPROVEN — a bounce is progress. |
 | `base_commit` capture | `board-flow` execute/fix | Records the change baseline at In Progress entry. |
 | `status_map.done` | `board-flow.yaml` | Optional. Set it to auto-advance PROVEN cards; leave unset for triage-only. |
+| `/board-flow:decide` | `board-flow` | Turns the NEEDS-HUMAN cards in Review into a short list of yes/no questions, one per reason group, and applies your batch answer. Runs no proof. |
+| `classify_needs_human.py` | `board-flow/bin/` | Sorts each NEEDS-HUMAN artifact into one of the seven reasons in [needs-human-motivos](needs-human-motivos.md). Used by `/board-flow:decide`. |
+| `waivers.py` | `board-flow/bin/` | Reads, matches (by reason + scope, never by card) and writes the human waivers in `.claude/waivers/`. |
+| `proof-verdict-guard.py` (hook) | `build-hex/hooks/` | Before a proof artifact is written, recomputes the verdict from the level statuses and blocks a `verdict: proven` that its own levels contradict. |
 
 The split is deliberate: `board-flow` stays topology-agnostic (it just prefixes
 the agent name and drives Jira), while the Java/Maven-specific proof mechanics
@@ -170,11 +174,18 @@ the agent to it. Artifacts written before this change stay under
 `classify_needs_human.py` both accept either directory, and prefer `docs/proof/`
 when a card has both.
 
-**The `verdict` is mechanical — there is no waiver.** It is computed from the
-levels: any `assumed`/`skipped`/`gap`/`survived`/`green-at-base` level makes
-`proven` structurally unavailable. The agent never writes `proven` next to an
-unmet level and never embeds a self-granted waiver (waiving a structural gap is
-the human's call at review). As defense-in-depth, `/board-flow:prove` re-derives
+**The `verdict` is mechanical, and the agent cannot waive anything.** It is
+computed from the levels: any `assumed`/`skipped`/`gap`/`survived`/`green-at-base`
+level makes `proven` structurally unavailable. The agent never writes `proven`
+next to an unmet level and never embeds a self-granted waiver; the
+`proof-verdict-guard.py` hook blocks the write if it tries. Waiving a structural
+gap is the human's call: when you answer "accept the proof as it is" in
+`/board-flow:decide`, the command records a waiver in `.claude/waivers/`
+(reason, scope, your reasoning, author, date and when to revisit) and advances
+the cards. Only a human answer creates one; the proof artifact itself has no
+field for it, and the verdict in it stays as computed. A later `/board-flow:decide`
+applies a matching waiver instead of asking the same question again. As
+defense-in-depth, `/board-flow:prove` re-derives
 the verdict from the levels rather than trusting the `verdict` field, so a
 malformed artifact can't auto-advance a card — a `proven` that contradicts its
 own levels is treated as NEEDS-HUMAN and flagged.

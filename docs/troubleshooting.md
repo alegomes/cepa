@@ -1,8 +1,12 @@
 # Troubleshooting
 
-Common errors and their fixes. If your symptom isn't here, check
-`agents-overview.md` (failure-modes table near the bottom) and
-`README.md` (Troubleshooting section).
+Common errors and their fixes.
+
+When something looks wrong, run `/common:doctor` first. It checks the
+installed plugins against the repo, hook compilation, `board-flow.yaml`,
+the build baseline, stale worktrees and overdue handoffs, and names the
+fix for each failure. If your symptom isn't covered by the doctor or by
+this page, see "When all else fails" at the bottom.
 
 ## Install / wiring
 
@@ -13,7 +17,7 @@ Check:
 
 ```sh
 ls ~/cepa/.claude-plugin/
-# should list plugin.json and marketplace.json
+# should list marketplace.json
 ```
 
 If you used `~` in the path, replace with the absolute path.
@@ -50,14 +54,17 @@ Plugin cache survives `claude plugin uninstall`. Force-refresh:
 bin/install.sh --clean
 ```
 
-`--clean` removes `~/.claude/plugins/cache/alegomes/` entirely before
-reinstalling. Required after editing without a version bump.
+`--clean` moves `~/.claude/plugins/cache/cepa/` aside to
+`~/.claude/plugins/cache/cepa.prev` before reinstalling. Required after
+editing without a version bump. If the fresh install is worse, undo it
+with `bin/install.sh --rollback`, which restores the `.prev` copy (one
+step only; see [`harness-ops.md`](harness-ops.md)).
 
 ## path-lock hook blocks
 
 ### `[build-hex path-lock] BLOCKED: agent 'X' cannot Edit Y`
 
-Worker tried to write outside its allowlist. Two cases:
+Worker tried to write outside its allowlist. Three cases:
 
 1. **Right agent, wrong project layout.** `build-hex`'s path-lock
    defaults to the canonical Maven layout (`domain/`, `application/`,
@@ -354,7 +361,8 @@ can use worktree.
 `/build-hex:plan-build-validate` enforces this. If you're invoking
 leads ad-hoc, don't pass `isolation: "worktree"`.
 
-See `cc_plugin_quirks` memory for the full empirical write-up.
+See [`internals/cc-quirks.md`](internals/cc-quirks.md) for the full
+empirical write-up.
 
 ## Discovery handoff
 
@@ -368,13 +376,14 @@ for discovery).
 
 ## When all else fails
 
-1. `bin/install.sh --clean` — clears every cache, reinstalls, re-wires
-   the topology snippet.
-2. `/plugin list` — confirm all 7 plugins are enabled.
-3. `claude --debug` — runs your session with verbose logging; hooks
+1. `/common:doctor`: names what is out of line with the repo and how
+   to fix it.
+2. `bin/install.sh --clean`: moves the plugin cache aside, reinstalls,
+   re-wires the topology snippet (with `--topology=NAME`).
+   `bin/install.sh --rollback` undoes it.
+3. `/plugin list`: confirm every `cepa` plugin is enabled.
+4. `claude --debug`: runs your session with verbose logging; hooks
    print to stderr.
-4. Check `agents-overview.md`'s "Failure modes you'll actually hit"
-   table for symptom matches.
 5. Check `common/expertise/<agent>-mental-model.yaml` if a specific
    agent is misbehaving — feedback entries there can override default
    behavior.

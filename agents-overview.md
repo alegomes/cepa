@@ -6,10 +6,11 @@ under `<topology>/agents/`. Source of truth for write-glob enforcement
 is each topology's own `hooks/path-lock.py` (build-team, build-hex,
 discovery, design, and docs have one; build-solo doesn't, by design).
 
-The marketplace ships **nine plugins**: `common` (skills + expertise),
+The marketplace ships **ten plugins**: `common` (skills + expertise),
 six topologies (`build-team`, `build-solo`, `build-hex`, `discovery`,
-`design`, `docs`), and two cross-cutting layers (`board-flow`,
-`review-gate`) — every one of which is documented below.
+`design`, `docs`), two cross-cutting layers (`board-flow`,
+`review-gate`), and the experimental `maestro` orchestrator. Every one of
+them is documented below.
 
 ---
 
@@ -92,7 +93,7 @@ plan → (per-Task: build → qa → housekeeping → review) → cross-cutting 
 | `code-reviewer` | worker (final GATE) | `engineering-lead` | — | Read, Glob, Grep | — (advisory verdict only; no writes) |
 | `proof-reviewer` | worker (change-driven Review gate; called by `/board-flow:prove`) | `/board-flow:prove`, `/board-flow:prove-drain` | — | Read, Glob, Grep, Bash, Write | `docs/proof/<KEY>.yaml` only (versionado; never code; works in a throwaway git worktree) |
 
-**Models:** orchestrator + 3 leads = `opus`; 10 workers = `sonnet`.
+**Models:** orchestrator + 3 leads = `opus`; 11 workers = `sonnet`.
 
 **Hook:** `build-hex/hooks/path-lock.py` enforces the *Writes* column
 on every `Edit` / `Write` / `MultiEdit` / `NotebookEdit` call. Same
@@ -256,6 +257,8 @@ whichever topology is also installed.
 | `/board-flow:prove <jira-key>` | Change-driven proof gate for a card in `status_map.in_review`. Delegates to `<topology>:proof-reviewer` (build-hex ships it); verdict drives the transition — PROVEN → `status_map.done`, UNPROVEN → `in_progress` with the gap, NEEDS-HUMAN stays in Review. See [docs/proof-gate.md](docs/proof-gate.md). |
 | `/board-flow:prove-drain [--max N]` | Bulk-prove the Review column. Runs `/board-flow:prove` per card. Unlike `/drain`, does NOT stop on a failed card — UNPROVEN bounces back and the drain continues. User confirmation required. |
 | `/board-flow:advance <jira-key>` | Generic column-by-column transition driven by `board-flow.yaml`. Used by discovery (and any topology with a custom lifecycle). For default To Do → In Progress → In Review, prefer `/execute`. |
+| `/board-flow:triage [source-column] [--max N]` | Groom a backlog column: classify each card as ALREADY-IMPLEMENTED (to In Review, proof gate still applies), READY (to To Do), OBSOLETE (to Won't Do) or NEEDS-DECISION (asks you). Reads code and git for evidence; writes nothing until you confirm. Builds nothing. |
+| `/board-flow:decide [--max N]` | Turns the Review column into a short list of closed questions. Reads each card's `docs/proof/<KEY>.yaml`, groups the NEEDS-HUMAN reasons, asks one question per group with a recommendation, and applies your batch answer. Runs no proof itself. |
 
 **Soft requirement:** board-flow's commands delegate to subagents named
 `planning-lead`, `engineering-lead`, `validation-lead`. Both `build-team`
@@ -292,6 +295,28 @@ open → In Review, merge → Done.
 
 ---
 
+## maestro (experimental)
+
+Multi-session orchestrator. **Not a topology** and ships no agents. It
+plans a set of demands into waves of slices with disjoint write surfaces,
+forks each slice into its own worktree as a separate Claude Code
+session, and lands the wave through a merge train. Requires
+`common@cepa`; `/maestro:run` also needs `herdr` running. See
+[docs/maestro.md](docs/maestro.md).
+
+**Commands:**
+
+| Command | Purpose |
+|---|---|
+| `/maestro:program-plan [name]` | Plan a program: propose waves of slices, write `.claude/programs/<name>/plan.yaml`, run the intake gate (`cepa-dor`) until each slice is READY or its gap is named. Executes nothing. |
+| `/maestro:run [name] [--wave N]` | Run the current wave: fork each slice into a worktree, run the event loop, land the wave through the merge train, report. With no name, lists what this repo can run. |
+| `/maestro:resume <name>` | Recover an interrupted wave from `.claude/programs/<name>/wave-state.yaml` and continue where it stopped. |
+
+**Deterministic helpers** live in `maestro/bin/` (`maestro-gatekeeper`,
+`maestro-poll`, `maestro-wave-state`, and others).
+
+---
+
 ## common (cross-topology layer)
 
 The `common@cepa` plugin ships the shared mindset skills, the
@@ -306,7 +331,16 @@ can have a SPA/extension in front of what it builds, so pinning it to one
 topology would hide it from the rest). Agents whose knowledge is
 topology-specific still live in their topologies.
 
-**Commands** (all in `common/commands/`):
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `completion-auditor` | worker (last-mile acceptance gate, before In Review) | the flow that is about to move a card to In Review | none | Read, Glob, Grep, Bash, Write | `.claude/acceptance/<KEY>.yaml`; returns COMPLETE / INCOMPLETE |
+| `ui-proof-reviewer` | worker (UI/extension proof gate, via `/common:prove-ui`) | `/common:prove-ui` | none | Read, Glob, Grep, Bash, Write | `docs/proof/ui-<slug>.yaml`; returns PROVEN / UNPROVEN / NEEDS-HUMAN |
+
+**Models:** both `sonnet`.
+
+**Commands** (in `common/commands/`). The table lists only the commands
+that drive agent runs; the full list is in
+[docs/commands.md](docs/commands.md).
 
 | Command | Purpose |
 |---|---|
@@ -315,7 +349,9 @@ topology-specific still live in their topologies.
 | `/common:debrief [run-id]` | Walk every `### Decision:` block from the run with the user. Verdicts (`keep` / `overrule` / `refine` / `skip`) land in `<agent>-mental-model.yaml` under `feedback`. Dual-scan detects format drift. |
 | `/common:recap [--since=YYYY-MM-DD]` | Render "Asked / Status / Delivered" table for the session. Reads `.claude/session-log.md` (intent) and the conversation (delivery). Read-only. |
 
-**Hooks** (all in `common/hooks/`):
+**Hooks** (in `common/hooks/`). A few of the build-state and
+autonomous-run hooks, not an exhaustive list; see
+[docs/internals/hooks.md](docs/internals/hooks.md) for the rest.
 
 | Hook | Event | Purpose |
 |---|---|---|
@@ -495,8 +531,16 @@ mechanism that prevents the card from advancing on optimism.
 | `name-the-disagreement` | When synthesizing reports from multiple sub-agents that disagree, surface the disagreement explicitly — don't average or pick silently. | leads + orchestrator (synthesizers) |
 | `autonomous-mode` | Activated by `/common:autonomous-start`. No questions to the user; every ambiguity logged in formal `### Decision:` block (Options / Chosen / Rationale). | orchestrator (session-wide) |
 | `green-or-revert` | Never claim runtime state without consulting `.claude/last-build.json`. After meaningful edits, verify is the next action — don't wait to be asked. On FAILURE, fix or revert before any other action. | orchestrator + leads + dev workers |
+| `acceptance-completeness` | Before calling a card done or moving it to In Review, pin each acceptance criterion to its altitude and require a test that exercises that exact surface end-to-end. A green build alone does not prove it. | every agent that declares work done |
+| `default-yes` | Decide instead of asking. With a clear recommendation and a reversible action, execute and record it in the final report; ask only about the irreversible, in one batch at the start or end. | every agent (routine commands, assisted sessions) |
+| `defense-in-depth` | Before relaxing a validation, changing an API contract or claiming "verify green = correct", trace the pipeline end-to-end. Green verify proves existing tests pass, not that the new change is correct. | every agent |
+| `design-craft` | Real design judgment on user-facing surfaces: hierarchy before decoration, consistency over novelty, every state designed, accessibility as a floor. | design agents + anyone designing or reviewing UI |
+| `feedback-capture` | When the user complains about the harness itself, record the complaint verbatim with `cepa-feedback add` and carry on; don't argue or fix the harness now. | every agent |
+| `guided-interrogation` | Inside a spec frame (`/common:spec`, or when the user asks to be grilled), suspends `active-listener`, `zero-micromanagement` and `default-yes` so the agent asks until the scope is closed. | orchestrator in a spec session |
+| `off-mode-capture` | When the session has an active work mode and the next action doesn't belong to it, record the detour and continue with the mode's work instead of doing it. | every agent in a session with a mode |
+| `plain-report` | Required format for a report of finished work: plain opening of up to 3 sentences, what is left for the user, technical detail, then the list of decisions and next steps. | orchestrator (end of task) |
 
-The ten skills ship in the **`common@cepa` plugin**
+The skills ship in the **`common@cepa` plugin**
 (`common/skills/`). Every topology requires `common`; install it once
 per project and the skills are available to every subagent via CC's
 session-wide skill namespace.
@@ -504,6 +548,12 @@ session-wide skill namespace.
 ---
 
 ## indydev Dan idea audit (against the canonical list)
+
+> **Dated note.** This audit and the "Verified end-to-end" section below
+> were written in May 2026, when the marketplace had only `build-team`,
+> `build-solo` and a handful of `common` skills. The agent and skill
+> counts in them are from that time. The mapping of each idea to its CC
+> mechanism still holds; for current counts see the sections above.
 
 Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitation
 
@@ -601,36 +651,3 @@ Status legend: ✅ captured · 🟡 partial / convention only · 🔴 CC limitat
   `is_own_expertise_file` check approved backend-dev's write to its own
   expertise file; the broader allowlist check would block writes
   outside its `apps/*/api/**` etc. domain.
-
-## Outstanding work
-
-- 🟡 **Real-task validation of `build-team`** — basic delegation flow
-  was observed working (orchestrator → leads → workers → honest BLOCKED
-  reply when target code wasn't present). Not yet exercised against a
-  real codebase end-to-end.
-- 🟡 **Real-task validation of `build-hex`** — the 14-agent topology
-  was just built. The per-Task quality loop, refactor-advisor's
-  housekeeping report shape, and code-reviewer's APPROVE/REJECT have
-  not been observed live yet.
-- 🟡 **Real-task validation of `board-flow`** — atlassian-expert and the
-  three Jira-aware commands have not been run against a real Jira
-  project. Atlassian MCP tools are available; the agent prompt is
-  written but unverified.
-- 🟡 **`proof-reviewer` / proof-gate unverified against a real pom** —
-  the L2/L3/L4 mechanics assume specific JaCoCo (IT-isolated), PIT, and
-  failsafe wiring that hasn't been run against a real `pom.xml` yet.
-  Also: cards already in Review predate the `base_commit` capture, so
-  they lack a `.claude/cards/<KEY>.yaml` baseline and will diff-scope
-  from the touched-files list alone (weaker L3) — expect more
-  NEEDS-HUMAN on the existing backlog than on cards run through the flow
-  after the capture landed. Fire test before trusting `prove-drain`.
-- 🟡 If you want to capture the team-topology config more strictly,
-  add a non-driving `topology.yaml` per topology as documentation
-  (CC won't read it; risk of drift). Recommend: skip until needed.
-- 🟡 Consider extending the path-lock hooks to support
-  read/upsert/delete granularity. Modest scope; only worth it if a real
-  workflow demands the distinction.
-- 🟡 Versioned changelog (separate `CHANGELOG.md`) — currently the git
-  log fills this role. Worth adding before any public release.
-- 🔴 Session env vars (`{{SESSION_DIR}}`, `{{CONVERSATION_LOG}}`) — not
-  implementable in CC without harness changes.

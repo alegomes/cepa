@@ -8,8 +8,9 @@
 > trava da Reforma (`reforma-gate.py`) e a da Reflexão (`reflexao-gate.py`). `/common:modos`
 > mostra a tabela e o modo da sessão.
 >
-> Falta: o veredito de saída da Exploração, a cobrança do critério de aceite na passagem da
-> Descoberta para a Construção, e o modo Deploy. A lista completa está em
+> Falta: o veredito de saída da Exploração, o resto da cobrança do critério de aceite na
+> passagem da Descoberta para a Construção (a parte textual já existe, no
+> `spec-readiness-gate.py`), e o modo Deploy. A lista completa está em
 > [O que precisa ser construído](#o-que-precisa-ser-construído).
 
 ## O problema que isto resolve
@@ -252,8 +253,9 @@ os modos 2 e 4 não é organizacional: é o que dá dente ao gate que já existe
 
 ## A mecânica de fronteira
 
-Três peças. As duas primeiras não existem; a terceira existe e precisa ser
-invertida.
+Três peças, mais a 2b. As peças 1, 2 e 2b já estão construídas (ver
+[O que precisa ser construído](#o-que-precisa-ser-construído)). A 3 existe em
+parte: hoje só a Reforma e a Reflexão têm gate de saída.
 
 ### Peça 1 — o modo é declarado no launcher, não num comando
 
@@ -365,7 +367,15 @@ Em ordem:
 4. ~~**Gate da Reflexão**~~ — feito: `common/hooks/reflexao-gate.py`.
 5. **Gate da Exploração** — o veredito que falta ao `advisors`.
 6. **Cobrança do critério de aceite na saída da Descoberta / entrada da
-   Construção** — a peça que dá dente ao `completion-auditor`.
+   Construção** — a peça que dá dente ao `completion-auditor`. **Em parte:** o
+   `/common:spec` e o hook `common/hooks/spec-readiness-gate.py` barram uma
+   especificação marcada `pronta-para-construir` enquanto algum critério
+   (`### CS-<n>`) não tiver uma superfície do vocabulário fechado (http, cli, ui,
+   event, domain, application) e uma frase de **Teste vermelho** que não seja
+   placeholder. Falta: o gate confere só o texto declarado, não um teste escrito
+   e rodado; não confere que o vermelho vem de asserção sobre o comportamento
+   (camada 2) nem que o autor do teste não é quem o faz passar (camada 3); e nada
+   impede abrir a Construção sem uma especificação pronta.
 7. **Modo Deploy** — rodada futura.
 
 Os itens 1 e 2 são a mecânica de fronteira e valem para os oito modos. Os itens

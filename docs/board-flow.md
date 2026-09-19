@@ -33,6 +33,13 @@ defaults:
     in_progress: "In Progress"
     in_review:   "In Review"
     blocked:     "Blocked"           # set to null if your project lacks this status
+    done:        "Done"              # optional; PROVEN cards auto-advance here
+  transition_ids:
+    # Jira transition id -> status_map key. A transition call carries only
+    # the id, so this is how hooks know where a transition goes.
+    "31": in_progress
+    "41": in_review
+    "51": done
   issue_types:
     story: "Story"
     bug: "Bug"
@@ -98,7 +105,7 @@ lifecycles:
 - **`defaults.status_map`** — literal Jira status names. Different teams
   call them different things (`"Doing"` / `"Code Review"` / `"Done"`
   vs. defaults). Commands read this map instead of hardcoding strings.
-  Four entries:
+  Five entries:
   - `to_do` — refined-and-ready column. `/board-flow:drain` pulls from
     here, NOT from Backlog. The split is intentional: Backlog holds
     unrefined items the team hasn't groomed yet; `to_do` holds items
@@ -117,6 +124,13 @@ lifecycles:
     (or `null`) for triage-only: a PROVEN card gets a ✅ comment but
     stays in Review for you to move manually. See
     [proof-gate.md](proof-gate.md).
+- **`defaults.transition_ids`**: maps each Jira transition id to the
+  `status_map` key it leads to, so a hook knows where a transition goes
+  (the transition payload carries only the id). `common/hooks/acceptance-gate.py`
+  uses it to let a card go back to In Progress while still blocking the
+  move to `in_review` / `done`; an unmapped id is treated as gated.
+  `/board-flow:configure` step 5b fills it from `getTransitionsForJiraIssue`.
+  Ids are workflow-specific and change if the workflow is edited.
 - **`defaults.issue_types`** — literal type names for `createIssue`
   calls. Standard names usually work; custom Jira setups may differ.
 - **`defaults.required_fields`** — project-mandated custom fields with
@@ -345,27 +359,13 @@ hard-coded, can't be bypassed by command drift.
 
 ## The execution plan
 
-Jira stores the **queue** — the To Do column — and neither the **order** you
-decided to work it in nor the **why** behind that order. `/board-flow:triage`
-now persists both into `.claude/programs/<project_key>/plan.yaml`, and
-`/common:next` reads them back.
-
-The mechanism, the schema and the reasoning live in
-**[execution-plan.md](execution-plan.md)** — it is not board-flow's, because a
-plan does not require a tracker.
-
-What board-flow contributes:
-
-- **`/board-flow:triage` is the producer.** It is already the moment the order
-  gets decided, so it is where the order gets written down: the To Do list is
-  proposed *in execution order*, each item carrying the reason it sits where it
-  sits, merged into the existing plan rather than overwriting it.
-- **`/execute`, `/fix` and `/prove` close with "And now?"** — the card's `Human
-  validation route` verbatim plus the next unblocked item of the plan.
-- **The reconciliation half of `/common:next`.** With `board-flow.yaml` present,
-  it checks the plan against the live board before answering and names every
-  divergence. Without it, the answer still comes — from the plan alone, flagged
-  as self-reported.
+Jira stores the queue (the To Do column) but not the order you decided to
+work it in, nor why. `/board-flow:triage` decides that order and hands it off
+as a triage JSON (`<programs>/<project_key>/triagem-<date>.json`); the queue
+file `.claude/programs/<project_key>/plan.yaml` is written only by
+`/common:plan --from-jira` (`cepa-plan write --from-triage`), and
+`/common:next` reads it back. Mechanism, schema and reasoning:
+**[execution-plan.md](execution-plan.md)**.
 
 ## Composition rules
 
@@ -374,7 +374,8 @@ What board-flow contributes:
   `planning-lead` + `engineering-lead` + `validation-lead`. `build-hex`
   and `build-team` ship those; `build-solo` doesn't.
 - **Generic commands** (`/board-flow:advance`, `/board-flow:capture`,
-  `/board-flow:drain`, `/board-flow:configure`) work with any topology
+  `/board-flow:drain`, `/board-flow:configure`, `/board-flow:decide`) work
+  with any topology
   (including `build-solo` and `discovery`).
 - **Discovery's column flow** rides on `/board-flow:advance` reading the
   `discovery` entry in `lifecycles[]`. No `/discovery:advance` — the

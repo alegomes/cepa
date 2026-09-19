@@ -6,11 +6,17 @@ topologies run *one* agent team in *one* session, Maestro runs *N real
 sessions* in parallel — each on its own worktree, each mediated by a permission
 gatekeeper — and integrates their results with a verified merge train.
 
-> **Status (2026-07-16): not yet live end-to-end.** Construction steps 1–3 are
-> done and tested (the design, the intake gate, the deterministic run cores, and
-> the `run`/`resume` commands). **Step 4 — the first real wave through `herdr` —
-> has not been validated.** Treat `/maestro:run` as ready to *try* on a real
-> program, not as a proven path. And nothing here works until you reinstall
+> **Status (2026-09-19, maestro 0.5.0): experimental, not yet proven end to end.**
+> Construction steps 1–3 are done and tested (the design, the intake gate, the
+> deterministic run cores, and the `run`/`resume` commands). Step 4 ran once on
+> real work: wave 1 of `WEGO-paralelo` (2026-08-24, in `wego-acesso-backend`)
+> forked 5 children through `herdr` with the gatekeeper in shadow-mode. It
+> exposed four defects (gatekeeper config in the wrong file, poll reading the
+> wrong path, `Write(path)` rules rejected, gatekeeper letting writes pass as
+> reads), fixed in 0.4.3, and the maestro session died before the merge train,
+> so all 5 branches were merged by hand. **Still unproven:** a full wave on
+> 0.4.3+ that lands through the merge train on its own, and the gatekeeper in
+> active-deny mode. And nothing here works until you reinstall
 > (`bin/install.sh --clean`) and have `herdr` running. Full design and decisions:
 > [`.claude/programs/maestro/design.md`](../.claude/programs/maestro/design.md).
 
@@ -44,20 +50,39 @@ orchestration overhead — don't reach for Maestro.
 
 ### 1. `/maestro:program-plan <name>`
 
-Conversational. Reads a source (default `BACKLOG.md`), analyzes each demand's
-**file surface**, dependencies, and human gates, proposes waves with disjoint
-surfaces, and writes `.claude/programs/<name>/plan.yaml`. Then it runs the
-intake gate (`cepa-dor`) and iterates *with you* until every slice is `READY`.
+Conversational. Reads a source (default `BACKLOG.md`, or `--source FILE`),
+analyzes each demand's **file surface**, dependencies, and human gates, proposes
+waves with disjoint surfaces, and writes `.claude/programs/<name>/plan.yaml`.
+Then it runs the intake gate (`cepa-dor`) and iterates *with you* until every
+slice is `READY`.
 
-This is the **only** command that reads the BACKLOG. Everything downstream reads
-only `plan.yaml` (the seam invariant — see below).
+Two alternative source modes:
 
-### 2. `/maestro:run <name> [--wave N] [--shadow]`
+- `--sweep` — instead of a hand-picked list of demands (`--demandas`), reads the
+  whole source and proposes the next 2–3 waves itself. Still a proposal: nothing
+  is written without the conversation.
+- `--from-plan NAME` — the source is the repo's `single-track` queue
+  (`.claude/programs/NAME/plan.yaml`, written by `/common:plan`) instead of a
+  prose file. This is the queue → waves promotion, and the way to use Maestro in
+  a Jira repo (the queue accepts the board as a source; `--source` does not).
+  The queue itself is read by `common/bin/cepa-plan promote` and left untouched;
+  the wave plan needs its own name, different from the queue's.
+
+This is the **only** command that reads the BACKLOG (or any other source).
+Everything downstream reads only `plan.yaml` (the seam invariant — see below).
+
+### 2. `/maestro:run [<name>] [--wave N] [--shadow] [--port P]`
 
 The single action. For the current wave: gc of orphans → intake gate → bring up
-the gatekeeper → fork each slice into a `herdr` worktree with generated settings
-+ the normative wrapper → run the file-based event loop → land the wave with the
-merge train → report. Reads only `plan.yaml`.
+the gatekeeper (on `--port`, default 8765) → fork each slice into a `herdr`
+worktree with generated settings + the normative wrapper → run the file-based
+event loop → land the wave with the merge train → report. Reads only
+`plan.yaml`.
+
+With no program name it runs nothing: `maestro-programs` lists what this repo
+can run (mode, next pending wave, `RODA` or the reason it can't, plus leftovers
+of an earlier run such as a `wave-state.yaml` or an orphan gatekeeper) and stops.
+This listing mode needs neither `herdr` nor a reinstall.
 
 ### 3. `/maestro:resume <name>`
 
@@ -232,6 +257,7 @@ terminal state; a merge already in `landed` is skipped.
 | `maestro/commands/{program-plan,run,resume}.md` | The three commands. |
 | `common/plan-schema.yaml` | Annotated plan.yaml (schema v2; v1 still read) — canonical, both modes. |
 | `maestro/plan-template.yaml` | Pointer to the above (kept so old links resolve). |
+| `maestro/bin/maestro-programs` | Read-only listing of runnable programs (`/maestro:run` with no name); `--check-name` guards new plan names. |
 | `maestro/bin/maestro-fork-settings` | Generates a child's `settings.json` + `.mcp.json` pair (layer 1); `--out-dir <worktree>` writes both. |
 | `maestro/bin/maestro-gatekeeper` | The permission gatekeeper (MCP over loopback HTTP). |
 | `maestro/bin/maestro-poll` | One event-loop iteration (by file marker). |
@@ -248,6 +274,8 @@ terminal state; a merge already in `landed` is skipped.
   but functional).
 - Two worktree homes exist (`~/.herdr/worktrees` vs `~/cepa-worktrees`); the herdr
   worktree inherits the single-owner guard and `.env` seeding from the cepa model.
-- Step 4 (first real wave) is unrun — the end-to-end path is authored and its
-  deterministic cores are tested, but no real program has exercised the herdr
-  spawn + full wave yet.
+- Step 4 has run once (wave 1 of `WEGO-paralelo`, 2026-08-24) and did not land
+  on its own: the merge train only runs while the maestro session is alive, and
+  `wave-state.yaml` does not tell "still running" from "finished, waiting to be
+  merged". Tracked in `BACKLOG.md` ("Onda termina e ninguém aterrissa"). No wave
+  has run on 0.4.3+ yet.
