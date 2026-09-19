@@ -152,7 +152,10 @@ Jira transition by its effect, not by one tool name, through the shared
 helper `common/hooks/_jiramut.py`: the cloud connector's
 `transitionJiraIssue` and mcp-atlassian's `jira_transition_issue` (any
 server prefix), plus a Bash call to the Atlassian `twg` CLI
-(`twg jira workitem transition --transition-id ...`). A `twg` call that
+(`twg jira workitem transition --transition-id ...`). `twg` also accepts the status
+name instead of the id (`--transition-id "In Review"`): the hook translates the name
+to its logical state through `status_map` in `board-flow.yaml`, or by normalising it
+(`In Review` -> `in_review`), and a name it cannot resolve is gated by default. A `twg` call that
 touches Jira but can't be read (for example `twg api ... -X POST`, or no
 card key on the command line) is blocked outright. The hook extracts the
 issue key and reads `.claude/acceptance/<KEY>.yaml`:
@@ -241,11 +244,6 @@ auto-routes Bug cards here.)
   slug, an untracked task) gets the artifact and the auditor's verdict, but
   not the transition gate. The discipline still
   applies; only the structural backstop is Jira-specific.
-- **`twg` transitions by status name.** `twg jira workitem transition
-  --transition-id "In Review"` hands the hook the Jira status name, which it
-  compares as written against `in_review` / `done`. "in review" matches
-  neither, so the transition passes with an incomplete audit (checked
-  2026-09-19). Transitions by numeric id are gated normally.
 - **Wrong-but-green tests.** Same caveat as `green-or-revert`: if a test at
   the right altitude is itself buggy and falsely passes, the audit trusts
   the green result.

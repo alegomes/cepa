@@ -3084,7 +3084,7 @@ e a promessa de `docs/env-manifest.md` ("o doctor acusa porta ocupada") falha ca
 
 ## `acceptance-gate` deixa passar `twg ... --transition-id "In Review"` com auditoria incompleta
 
-**Status:** pendente · **Lar provável:** `common/hooks/_jiramut.py` (`_classify_twg`) e
+**Status:** FEITO em 2026-09-19 (common 2.17.3): `_jiramut.logical_status` traduz o nome pelo `status_map` ou pela forma normalizada, e os dois gates (`acceptance-gate`, `merge-truth-gate`) usam essa função. Teste: `tests/test_gate_status_por_nome.py`. ~~pendente~~ · **Lar provável:** `common/hooks/_jiramut.py` (`_classify_twg`) e
 `common/hooks/acceptance-gate.py` · **Origem:** revisão de `docs/acceptance-completeness.md`
 em 2026-09-19.
 

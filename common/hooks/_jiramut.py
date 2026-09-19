@@ -109,6 +109,47 @@ _TWG_BB_PR_DECIDE = frozenset({
 })
 
 
+# Chaves lógicas de status que os gates entendem (as do `status_map` e do
+# `transition_ids` do board-flow.yaml).
+LOGICAL_STATUSES = frozenset({"to_do", "in_progress", "in_review", "done", "wont_do"})
+_CONFIG_NAMES = ("board-flow.yaml", ".claude/board-flow.lifecycle.yaml")
+
+
+def logical_status(name, cwd):
+    """Traduz o NOME de um status (como a CLI `twg` o aceita) para a chave lógica.
+
+    A `twg` aceita `--transition-id "In Review"`. Só baixar a caixa dava
+    `in review`, que não é chave nenhuma, e o acceptance-gate lia isso como
+    movimento lateral e liberava o card (furo reproduzido em 2026-09-19).
+
+    Ordem: o nome técnico declarado no `status_map` do board-flow.yaml (é ali
+    que "Em Revisão" vira `in_review`); depois a forma normalizada (espaço e
+    hífen viram `_`). Nome que não resolve devolve None: alvo NÃO resolvido,
+    que o gate trata como na dúvida, e não como movimento lateral.
+    """
+    if not name or not str(name).strip():
+        return None
+    alvo = " ".join(str(name).split()).casefold()
+    for nome_cfg in _CONFIG_NAMES:
+        path = os.path.join(str(cwd), nome_cfg)
+        if not os.path.isfile(path):
+            continue
+        try:
+            import yaml  # noqa: adiado, a ausência cai no caminho normalizado
+            with open(path, encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+            smap = (data.get("defaults") or {}).get("status_map") or {}
+        except Exception:
+            smap = {}
+        if isinstance(smap, dict):
+            for chave, tecnico in smap.items():
+                if " ".join(str(tecnico).split()).casefold() == alvo:
+                    return str(chave).strip().lower()
+        break
+    norm = re.sub(r"[\s\-]+", "_", alvo)
+    return norm if norm in LOGICAL_STATUSES else None
+
+
 def classify_bitbucket(command: str):
     """Mutacao de Bitbucket via `twg`. None quando nao ha nenhuma.
 

@@ -190,7 +190,12 @@ def main():
     # The audit is incomplete. Which way is this card moving?
     tid = extract_transition_id(tool_input)
     tmap = transition_map(cwd)
-    target = _mut["target_status"] or (tmap.get(tid) if tid else None)
+    # Nome de status vindo da `twg` precisa virar chave lógica: "In Review"
+    # baixado de caixa dava `in review` e passava como movimento lateral.
+    if _mut["target_status"]:
+        target = J.logical_status(_mut["target_status"], cwd)
+    else:
+        target = tmap.get(tid) if tid else None
 
     if target is not None and target not in ENFORCED_TARGETS:
         # Backward / lateral move (In Progress, To Do, Won't Do). Sending the
