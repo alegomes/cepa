@@ -15,6 +15,7 @@ marketplace. For "I want to use the agents" docs, see the parent
 | [`agent-anatomy.md`](agent-anatomy.md) | System prompt conventions: YAML frontmatter, the table header (Reports to / Delegates to / Skills / Reads / Writes / Output), Rules section, Output shape, expertise file reference. The shape every agent in the marketplace follows. |
 | [`expertise.md`](expertise.md) | `common/expertise/<agent>-mental-model.yaml` shape, the centralized-via-symlink trick that makes agent learnings persist across projects, the `mental-model` skill that reads on boot, the `debrief` command that writes feedback, the 20-entry cap with `principle` exemption. |
 | [`extending.md`](extending.md) | Cookbook: add a new agent / skill / command / hook / plugin. Each comes with a checklist and a path-lock entry (when applicable). |
+| [`invariantes.md`](invariantes.md) | The 10 cross-cutting rules a local change must not break. Each entry carries the incident that created it, the guard that catches it today, and the shape of test that stays green while it is broken. Read before touching a lock hook, a writer/reader artifact pair, worktree removal or delegation. |
 | [`cc-quirks.md`](cc-quirks.md) | Empirical findings about Claude Code's plugin system. Mirrors the `cc_plugin_quirks` memory in `~/.claude/projects/.../memory/`. The "wish I'd known this before building" list. |
 
 ## House conventions
