@@ -24,6 +24,7 @@ and the registry's resume step. The /common:handoff command is model-driven and
 just follows the same on-disk format.
 """
 
+import json
 import os
 import re
 from datetime import datetime, timezone
@@ -116,3 +117,73 @@ def age_seconds(meta: dict) -> float:
         return (datetime.now(timezone.utc) - datetime.fromisoformat(stamp)).total_seconds()
     except ValueError:
         return float("inf")
+
+
+# --- retomada única ---------------------------------------------------------
+# Um handoff é retomado por UMA sessão. Duas travas independentes, de propósito
+# (defesa em profundidade, não duplicação): o frontmatter (`resumed_by`), que é
+# o que o humano lê, e um arquivo de reserva criado com O_EXCL, que é o que
+# decide a corrida. As duas são amarradas à VERSÃO do handoff (`updated_at`):
+# checkpoint novo é conteúdo novo, e a reserva antiga não vale para ele.
+
+def claim_path(path: Path) -> Path:
+    return path.with_suffix(".claim")
+
+
+def _read_claim(path: Path) -> dict:
+    try:
+        data = json.loads(claim_path(path).read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def holder(path: Path, meta: dict) -> str:
+    """Session id de quem já retomou ESTA versão do handoff, ou ""."""
+    version = meta.get("updated_at", "")
+    c = _read_claim(path)
+    if c.get("version") == version and c.get("session_id"):
+        return c["session_id"]
+    if meta.get("resumed_version") == version and meta.get("resumed_by"):
+        return meta["resumed_by"]
+    return ""
+
+
+def release(path: Path) -> None:
+    """Solta a reserva (quem retomou morreu sem escrever nada)."""
+    try:
+        claim_path(path).unlink()
+    except OSError:
+        pass
+    meta, auto, note = parse(path)
+    if any(k in meta for k in ("resumed_by", "resumed_at", "resumed_version")):
+        for k in ("resumed_by", "resumed_at", "resumed_version"):
+            meta.pop(k, None)
+        tmp = path.with_suffix(path.suffix + ".tmp")
+        tmp.write_text(render(meta, auto, note), encoding="utf-8")
+        os.replace(tmp, path)
+
+
+def claim(path: Path, meta: dict, session_id: str, now: str) -> bool:
+    """Reserva esta versão do handoff para `session_id`. False = outra sessão
+    ganhou a corrida. Idempotente para quem já é o dono."""
+    version = meta.get("updated_at", "")
+    cp = claim_path(path)
+    old = _read_claim(path)
+    if old and old.get("version") != version:
+        try:
+            cp.unlink()  # reserva de uma versão que não existe mais
+        except OSError:
+            pass
+    elif old.get("session_id") == session_id:
+        write(path, {"resumed_by": session_id, "resumed_at": old.get("at", now),
+                     "resumed_version": version})
+        return True
+    try:
+        fd = os.open(cp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+    except FileExistsError:
+        return _read_claim(path).get("session_id") == session_id
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump({"version": version, "session_id": session_id, "at": now}, f)
+    write(path, {"resumed_by": session_id, "resumed_at": now, "resumed_version": version})
+    return True
