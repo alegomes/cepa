@@ -1,7 +1,16 @@
 # Modos de trabalho
 
-> Status: **desenho aprovado, não construído.** Escrito em 2026-08-18.
-> Decisões 1–4 desta rodada aprovadas pelo dono; o código vem depois.
+> Status (conferido em 2026-09-19): **construído em parte.** Desenho escrito em 2026-08-18.
+>
+> No ar: a declaração do modo (`cepa --modo <nome>`, gravada em `.claude/session-mode`), o
+> hook `session-mode.py` que lembra o modo a cada turno, a captura de desvio (skill
+> `off-mode-capture`), a trava de destino de escrita por modo (`modo-escrita-gate.py`), a
+> trava da Reforma (`reforma-gate.py`) e a da Reflexão (`reflexao-gate.py`). `/common:modos`
+> mostra a tabela e o modo da sessão.
+>
+> Falta: o veredito de saída da Exploração, a cobrança do critério de aceite na passagem da
+> Descoberta para a Construção, e o modo Deploy. A lista completa está em
+> [O que precisa ser construído](#o-que-precisa-ser-construído).
 
 ## O problema que isto resolve
 
@@ -347,8 +356,9 @@ decisão sua e fica registrada como tal.
 
 Em ordem:
 
-1. **`.claude/session-mode` + `cepa --modo`** — a declaração e a persistência.
-2. **A captura automática** — inverter a `suggest-capture` sob modo ativo.
+1. ~~**`.claude/session-mode` + `cepa --modo`**~~ — feito: `common/bin/cepa` grava o
+   arquivo e `common/hooks/session-mode.py` o lê a cada turno.
+2. ~~**A captura automática**~~ — feito: skill `common/skills/off-mode-capture`.
 2b. ~~**Lista branca de destinos por modo**~~ — feito:
    `common/hooks/modo-escrita-gate.py`.
 3. ~~**Gate da Reforma**~~ — feito: `common/hooks/reforma-gate.py`.
