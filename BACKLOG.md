@@ -706,7 +706,7 @@ acertar — o cenário de omissão só aparece em teste sintético. Vale registr
 ## `prove-drain` não tem disjuntor: falha de ambiente reprova a coluna inteira
 
 **Status:** 🔵 ABERTO · **Lar:** `board-flow/commands/prove-drain.md` · **Origem:**
-painel de advisors sobre `docs/estrategia-drain-plan-velocidade.md`, 2026-08-26
+painel de advisors sobre `docs/archive/estrategia-drain-plan-velocidade.md`, 2026-08-26
 (discordância D2, levantada pelas lentes `operador-sre` e `contrarian`). Decisão do dono
 no mesmo dia: registrar, não construir agora.
 
@@ -1847,7 +1847,7 @@ pasta na mão deixaria esse resto).
 
 # Achados da revisão profunda do harness (2026-08-17)
 
-Os quatro itens abaixo saíram de `docs/internals/harness-review-2026-08.md` —
+Os quatro itens abaixo saíram de `docs/archive/harness-review-2026-08.md` —
 revisão da Cepa como sistema agêntico, pedida pelo dono. São os achados que
 **não tinham item existente**; os demais já moram no BACKLOG (bash-path-lock
 camada 1, atrito de decisão, `/common:gauntlet`). Aprovados pelo dono em
@@ -2689,7 +2689,7 @@ ele, um hook que nunca dispara é indistinguível de um hook que sempre aprova.
 ## Fixar a versão da CLI `twg`, que se autoatualiza sob os pés dos agentes
 
 **Status:** pendente · **Lar provável:** `common` (doctor + manifesto de ambiente) ·
-**Origem:** achado C4 do painel /common:advisors sobre `docs/estrategia-twg-vs-mcp.md`
+**Origem:** achado C4 do painel /common:advisors sobre `docs/archive/estrategia-twg-vs-mcp.md`
 (2026-08-26), levantado por 4 das 7 lentes de forma independente.
 
 ### Problema
@@ -2705,7 +2705,7 @@ do run. Um artefato de prova gerado antes e outro depois teriam sido produzidos 
 ferramentas diferentes, e nada no registro diria isso.
 
 Hoje nada no repo sabe qual versão da CLI está instalada. A avaliação de
-`docs/estrategia-twg-vs-mcp.md` inteira foi feita contra a **1.2.5**, e esse número só
+`docs/archive/estrategia-twg-vs-mcp.md` inteira foi feita contra a **1.2.5**, e esse número só
 existe naquele documento, em prosa.
 
 ### Esboço de solução
@@ -3017,3 +3017,95 @@ fonte continua errada.
 Completar o lado que falta em cada um dos três arquivos. Opcional: um teste que compara
 as flags `--x` do `argument-hint` com as de `## Variables` em todo comando, para a
 divergência não voltar calada.
+
+---
+
+## Atualizar os documentos de `docs/internals/` e juntar os que descrevem o build-state
+
+**Status:** pendente · **Origem:** auditoria de `docs/` em 2026-09-19 (sessão `session/doc-readme`).
+
+A auditoria comparou cada documento de `docs/internals/` com o código. Nenhum descreve algo que
+não existe mais, mas todos ficaram para trás. Quem estende o Cepa lê estes arquivos e recebe
+números e comportamentos errados.
+
+- `hooks.md`: faltam 20 hooks registrados nos `plugin.json`. No `common`: `no-busy-wait`,
+  `no-background-build`, `reforma-gate`, `modo-escrita-gate`, `merge-truth-gate`,
+  `summary-nulls-gate`, `bounce-reason-gate`, `bitbucket-decision-lock`, `handoff-seeds-gate`,
+  `decision-altitude-gate`, `spec-readiness-gate`, `ui-proof-verdict-guard`, `reflexao-gate`,
+  `editorial-lint`, `session-mode`, `session-routine-guard`, `report-style-lint`. No `build-hex`:
+  `proof-verdict-guard`. No `review-gate`: `no-direct-main`, `push-nudge`. A tabela de eventos
+  não tem o matcher `Monitor`, e o `gate-advance` descrito é o antigo, sem tiers e sem
+  `.claude/no-build`. O `acceptance-gate` hoje também casa em `Bash`.
+- `architecture.md`: diz 9 plugins, 49 agentes e 44 comandos. Hoje são 10 plugins, 50 agentes
+  e 59 comandos (contagem dos arquivos em `*/agents/` e `*/commands/`). A árvore ainda mostra a
+  raiz como `claude-multi-team-plugin/`. As tabelas de gates e de estado ignoram `docs/proof/`,
+  `.claude/handoffs/`, `.claude/programs/` e os gates novos.
+- `path-lock.md`: diz que o hook recusa caminho fora do projeto. Desde o commit `1f87a23` ele
+  libera. Cita a saída do proof-reviewer em `.claude/proof/`, hoje é `docs/proof/`. O
+  `HEX_PATHLOCK_DEBUG` só existe na cópia do `build-hex`.
+- `extending.md`: diz que a versão "fica em 0.1.0". A política está em `docs/versionamento.md`.
+  Não diz que o `bash-path-lock.py` é gerado por `bin/gen-locks.py` a partir de
+  `common/hooks/_templates/`, e que editar uma cópia à mão quebra `tests/test_lock_copies_drift.py`.
+- `build-state.md`: faltam `.claude/no-build`, o aviso para repo sem manifesto de build e o
+  status UNKNOWN tratado como falha. O trecho "After UNKNOWN" contradiz a tabela de tiers do
+  próprio documento. Falta o kind `docker-build` e o `cd X &&` (`effective_build_dir`).
+- `cc-quirks.md`: cache em `cache/alegomes/` (hoje `cache/cepa`), caminho de memória antigo, e
+  faltam quirks que já estão na memória `cc_plugin_quirks`.
+- `expertise.md`: não cita `common/hooks/expertise-append.py` (trava e teto de 20 entradas) nem
+  `/common:consolidate`, e manda editar o YAML à mão, o que o `/common:debrief` proíbe. Há 4
+  arquivos de expertise órfãos (`git-historian`, `history-collector`, `history-narrator`,
+  `orchestrator`).
+- `README.md` do índice: não lista os relatórios de piloto.
+
+**Junção:** `docs/green-or-revert.md`, `docs/internals/build-state.md` e a seção do
+`gate-advance` em `hooks.md` descrevem os mesmos três hooks e a mesma tabela de estados.
+Deixar em `build-state.md` só o que é interno (formato do arquivo, detecção por ferramenta) e
+trocar o resto por link para `green-or-revert.md`.
+
+---
+
+## `cepa-doctor` só lê o manifesto de ambiente no endereço antigo
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-doctor` · **Origem:** auditoria de
+`docs/` em 2026-09-19.
+
+O manifesto de ambiente mudou para `docs/env.yaml` em 2026-08-22, com fallback para o antigo
+`.claude/env.yaml`. `common/hooks/_wtlib.py` (`env_manifest_path`), `seed-worktree.py` e
+`/common:worktree-start` já leem os dois. O `cepa-doctor` não: nas linhas 24, 511 e 628 ele só
+lê `.claude/env.yaml`.
+
+**Efeito:** para quem já moveu o arquivo, o `/common:doctor` não confere as portas declaradas,
+e a promessa de `docs/env-manifest.md` ("o doctor acusa porta ocupada") falha calada.
+
+**Conserto:** usar `_wtlib.env_manifest_path` no doctor, com teste que declara uma porta em
+`docs/env.yaml`, ocupa a porta e exige o aviso.
+
+---
+
+## `acceptance-gate` deixa passar `twg ... --transition-id "In Review"` com auditoria incompleta
+
+**Status:** pendente · **Lar provável:** `common/hooks/_jiramut.py` (`_classify_twg`) e
+`common/hooks/acceptance-gate.py` · **Origem:** revisão de `docs/acceptance-completeness.md`
+em 2026-09-19.
+
+A CLI `twg` aceita o NOME do status no lugar do id da transição. O `_jiramut` só baixa a caixa
+(`tid.strip().lower()`), então "In Review" chega ao gate como `in review`, que não está em
+`ENFORCED_TARGETS = {"in_review", "done"}`. O gate lê isso como movimento lateral e libera.
+
+**Reproduzido** com `.claude/acceptance/PROJ-1.yaml` em `status: INCOMPLETE`:
+
+| `--transition-id` | saída do hook |
+|---|---|
+| `"In Review"` | 0 (liberado) |
+| `"in_review"` | 2 (barrado) |
+| `"Done"` | 2 (barrado) |
+| `"41"` | 2 (barrado) |
+
+**Efeito:** um card com auditoria de aceite incompleta chega em Review pela CLI, que é
+exatamente o que o portão existe para impedir.
+
+**Conserto:** normalizar o nome antes de comparar. Mapear pelo `status_map` do
+`board-flow.yaml` (o nome técnico do status para a chave lógica) e, sem mapa, trocar espaço e
+hífen por `_`. Na dúvida, tratar o alvo como não resolvido, que já barra por padrão. Teste de
+regressão com os quatro casos acima. Conferir se o `merge-truth-gate`, que também lê
+`transition_ids`, tem o mesmo furo.

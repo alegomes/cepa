@@ -1,20 +1,10 @@
 # Loop engineering — scheduled autonomous routines
 
-> **Status:** Path A **cloud auth SOLVED + live-verified** (slice `session/loop-pathA`,
-> 2026-06-30). The headless blocker that defined Path A turned out to be a **non-issue for the
-> cloud-cron substrate**: a real `/schedule` routine read the live WEGO board through the
-> **claude.ai Atlassian OAuth connector** with zero human intervention — its refresh token is
-> stored server-side and silently exchanged, so no browser and no warm session are needed.
-> The autonomous fleet therefore just **attaches the OAuth connector** to each routine; no
-> static token, no `.mcp.json`, no org-admin gate. `atlassian-expert` is **triple-bound**:
-> `mcp__claude_ai_Atlassian__*` (local interactive) + `mcp__Atlassian__*` (cloud routine,
-> camelCase, the proven path) + `mcp__mcp-atlassian__*` (community uvx server, local headless
-> launcher). Preflight added. **Substrate is per-repo:** GitHub-hosted board-flow repos → cloud
-> `/schedule` routine; the wego pilot is **Bitbucket-hosted, which the cloud sandbox cannot
-> clone** (TEST3, 2026-07-01), so the wego fleet runs **locally** (launchd/cron +
-> `mcp-atlassian`). Remaining: build the first local execution job (validation-first) + the
-> confirmation-gate skip. Reconstructed from the parked `session/loop-engineering` design
-> (2026-06-19), brought current to the post-rebrand world (`cepa`, `board-flow`).
+> **Status (2026-09-19):** auth is solved on both substrates (cloud routine via the OAuth
+> connector; local headless via `mcp-atlassian`) and the read-only local validator ran green
+> against wego on 2026-07-01, but **the wego fleet does not run on a schedule yet**: the local
+> `launchd`/`cron` job was never promoted (no such job or crontab entry on this machine, checked 2026-09-19).
+> The July 2026 validation diary is kept under [History](#history-july-2026-validation).
 
 ## The goal
 
@@ -36,37 +26,6 @@ before execution) so they don't race on the same board.
 
 **First routine to build = execution, To-Do column only.** Backlog is deliberately
 excluded — unrefined work doesn't become a build.
-
-## The blocker that defined Path A: auth-in-headless — RESOLVED (it doesn't apply to cloud)
-
-The original worry (2026-06-19): a scheduled routine runs on Anthropic cloud infra in a
-**fresh session with no browser**, the claude.ai Atlassian connector authenticates with
-**OAuth**, and the OAuth token was assumed to be **in-memory per interactive session** — so a
-fresh scheduled connection would be unauthenticated, read zero cards, and report "nothing to
-do" (the silent-success trap, ref Claude Code issue #46228).
-
-> **That assumption was wrong for the cloud-cron substrate. Verified 2026-06-30:** a one-shot
-> `/schedule` routine with the `claude.ai Atlassian` connector attached called
-> `getAccessibleAtlassianResources` (resolved cloudId silently), `getVisibleJiraProjects` (saw
-> WEGO), and `searchJiraIssuesUsingJql` (returned the real cards WEGO-1887/1886/1885/1881/1884)
-> — **headless, zero human intervention.** When a connector is attached to a routine, its OAuth
-> **refresh** token is stored **server-side by claude.ai** and exchanged for an access token at
-> call time. #46228 is about a *local* headless connection going cold; it does not apply to a
-> cloud routine with a server-side connector grant.
-
-So the fleet's auth story is simply: **attach the OAuth connector to each routine.** No static
-token, no `.mcp.json`, no org-admin gate. The forks below are now historical context.
-
-### The forks (resolved)
-
-| Fork | Options considered | Resolution |
-|---|---|---|
-| **Cloud auth mechanism** | (A) static API-token server in `.mcp.json`/env; (B) `/loop` in a warm interactive session. | **Neither needed** — the OAuth *connector* works headless in cloud (proven). B still doesn't scale; A is now reserved for the *local* headless case only. |
-| **If a token server were needed, which one** | official Rovo HTTP (needs org-admin to enable token auth; was never connected here) vs community `mcp-atlassian` (uvx, personal token, no admin gate, live-verified locally). | `mcp-atlassian` — but only relevant for a **local** headless launcher, since cloud routines use the connector. |
-
-The journey: the first scaffold chased Rovo HTTP → re-eval flipped it to `mcp-atlassian` →
-the cloud test then showed **no token server is needed in cloud at all**. The static-token
-work survives as the local-headless option (`mcp__mcp-atlassian__*`), not the cloud path.
 
 ## Path A — the foundation (this slice)
 
@@ -107,7 +66,8 @@ place a token + token server is needed.
 routine, camelCase — **the proven headless path**) + `mcp__mcp-atlassian__*` (local-headless,
 snake_case). The *Tool binding* section maps the three prefixes to two vocabularies: the two
 OAuth prefixes share the canonical camelCase names verbatim, and only the snake_case token
-server goes through the **translation table** (`getJiraIssue` ↔ `jira_get_issue`, etc.). The
+server uses different names (`jira_get_issue`, `jira_search`, …), which the agent takes from its
+own tool list (the old camelCase ↔ snake_case translation table was removed). The
 agent uses whichever prefix is connected in its run context, preferring an OAuth/camelCase one
 when more than one is present (no translation needed).
 
@@ -155,14 +115,19 @@ wego (Bitbucket) → **local launcher**. Remaining for the wego pilot:
   confirmation before acting. An unattended variant must skip that gate — likely by running
   under `autonomous-mode` (which already encodes "never ask the user"), or a `--yes`/headless
   flag. Decide during the execution-routine build, *after* Path A.
-- **Concurrency / locking:** no atomic claim today. The Jira status transition (To Do →
-  In Progress at run start) is the closest thing to an advisory lock — a card mid-run leaves
-  the To-Do query. Good enough for a staggered pipeline; revisit if routines overlap.
-- **Per-run hard cap:** `drain` stops on first BLOCKED, but an unattended overnight run wants
-  an explicit ceiling on cards/tokens.
+- **Concurrency / locking:** `/board-flow:drain` now reserves each card before touching it
+  ("Reserva do card"): it re-reads status + comments and posts a `🔒 claim` comment; another
+  session skips a card with a live claim, and the claim expires after 90 minutes. It is an
+  advisory comment, not an atomic lock (two runs reading at the same instant can both claim).
+- **Per-run cap:** `drain --max N` caps the cards per run (default 5; skipped cards don't count).
+  No token ceiling exists yet.
 - **Cadence:** not fixed. Suggested 1–2×/day for the build routine; staggered after triage.
 - **Enrichment command:** does not exist yet — must be built before the enrichment routine.
 - **Security routine:** needs a dedicated validation command.
+- **`twg` (Atlassian's CLI):** Jira calls can now also arrive as `Bash` running `twg` instead
+  of an MCP tool; the four Jira gates in `common/hooks` classify both by effect
+  (`common/hooks/_jiramut.py`) and block `twg api` calls they can't inspect. The routines
+  above still go through `atlassian-expert` and MCP.
 
 ## The repo-hosting constraint — GitHub vs Bitbucket (a second cloud gate)
 
@@ -237,7 +202,50 @@ shape that works, distilled from the tests:
   session spawns immediately). Promote to `cron_expression` (min interval 1h, UTC) once
   validated. Stagger the pipeline: triage before execution before proof.
 
-## Test log
+## References
+
+- Recovered design session: `.claude/handoffs/session-loop-engineering.md` (in the main
+  checkout; untracked, session-local).
+- Autonomous machinery: `common/commands/autonomous-start.md`,
+  `common/commands/autonomous-resume.md`, `common/hooks/autonomous-checkpoint.py`,
+  `common/skills/autonomous-mode/SKILL.md`, `docs/autonomous-mode.md`.
+- Board layer: `docs/board-flow.md`, `board-flow/agents/atlassian-expert.md`,
+  `board-flow/commands/drain.md`, `discovery/board-flow.example.yaml`.
+
+## History (July 2026 validation)
+
+### The blocker that defined Path A: auth-in-headless — RESOLVED (it doesn't apply to cloud)
+
+The original worry (2026-06-19): a scheduled routine runs on Anthropic cloud infra in a
+**fresh session with no browser**, the claude.ai Atlassian connector authenticates with
+**OAuth**, and the OAuth token was assumed to be **in-memory per interactive session** — so a
+fresh scheduled connection would be unauthenticated, read zero cards, and report "nothing to
+do" (the silent-success trap, ref Claude Code issue #46228).
+
+> **That assumption was wrong for the cloud-cron substrate. Verified 2026-06-30:** a one-shot
+> `/schedule` routine with the `claude.ai Atlassian` connector attached called
+> `getAccessibleAtlassianResources` (resolved cloudId silently), `getVisibleJiraProjects` (saw
+> WEGO), and `searchJiraIssuesUsingJql` (returned the real cards WEGO-1887/1886/1885/1881/1884)
+> — **headless, zero human intervention.** When a connector is attached to a routine, its OAuth
+> **refresh** token is stored **server-side by claude.ai** and exchanged for an access token at
+> call time. #46228 is about a *local* headless connection going cold; it does not apply to a
+> cloud routine with a server-side connector grant.
+
+So the fleet's auth story is simply: **attach the OAuth connector to each routine.** No static
+token, no `.mcp.json`, no org-admin gate. The forks below are now historical context.
+
+#### The forks (resolved)
+
+| Fork | Options considered | Resolution |
+|---|---|---|
+| **Cloud auth mechanism** | (A) static API-token server in `.mcp.json`/env; (B) `/loop` in a warm interactive session. | **Neither needed** — the OAuth *connector* works headless in cloud (proven). B still doesn't scale; A is now reserved for the *local* headless case only. |
+| **If a token server were needed, which one** | official Rovo HTTP (needs org-admin to enable token auth; was never connected here) vs community `mcp-atlassian` (uvx, personal token, no admin gate, live-verified locally). | `mcp-atlassian` — but only relevant for a **local** headless launcher, since cloud routines use the connector. |
+
+The journey: the first scaffold chased Rovo HTTP → re-eval flipped it to `mcp-atlassian` →
+the cloud test then showed **no token server is needed in cloud at all**. The static-token
+work survives as the local-headless option (`mcp__mcp-atlassian__*`), not the cloud path.
+
+### Test log
 
 Chronological record of what's been proven in the cloud substrate (all read-only):
 
@@ -250,13 +258,3 @@ Chronological record of what's been proven in the cloud substrate (all read-only
 Test triggers auto-disable after firing (one-shot); report-back branches are deleted after
 reading. TEST1/TEST2 triggers can't be deleted via API (owner deletes at
 `https://claude.ai/code/routines`).
-
-## References
-
-- Recovered design session: `.claude/handoffs/session-loop-engineering.md` (in the main
-  checkout; untracked, session-local).
-- Autonomous machinery: `common/commands/autonomous-start.md`,
-  `common/commands/autonomous-resume.md`, `common/hooks/autonomous-checkpoint.py`,
-  `common/skills/autonomous-mode/SKILL.md`, `docs/autonomous-mode.md`.
-- Board layer: `docs/board-flow.md`, `board-flow/agents/atlassian-expert.md`,
-  `board-flow/commands/drain.md`, `discovery/board-flow.example.yaml`.

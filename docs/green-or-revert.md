@@ -25,7 +25,10 @@ The skill + hooks below make this failure structurally hard.
 ## The state file: `.claude/last-build.json`
 
 The authoritative record of build/test state. **The orchestrator does
-not own the writes** — two hooks maintain it.
+not own the writes** — two hooks maintain it. It lives at the root of the
+session's worktree (`session_root`), not in the Bash tool's current
+directory: the cwd persists between Bash calls, so a `cd subdir` would
+otherwise move the state into `subdir/.claude/` for the rest of the session.
 
 Shape after a successful build:
 
@@ -108,20 +111,31 @@ Out-of-band: the orchestrator does not own this write.
 ### `capture-build-result.py` (PostToolUse, matches `Bash`)
 
 Fires after every Bash invocation. Recognizes common build/test
-commands:
+commands. Claude Code's Bash result omits the exit code when a command
+succeeds, so a green run can only be recognized by text in the output.
+Failure markers are checked first; when no marker matches, the hook falls
+back to the exit code, which is present on failures only.
 
 | Pattern | Kind | Detected via |
 |---|---|---|
 | `./mvnw verify`, `./mvnw test`, `mvn ...` | `maven` | `BUILD SUCCESS` / `BUILD FAILURE` in output |
 | `./gradlew test`, `gradle ...` | `gradle` | `BUILD SUCCESSFUL` / `BUILD FAILED` |
-| `npm test`, `npm run build` | `npm` | exit code |
-| `yarn test`, `pnpm test` | `yarn` | exit code |
-| `pytest` | `pytest` | exit code |
-| `cargo test`, `cargo build` | `cargo` | exit code |
-| `go test` | `go-test` | exit code |
+| `npm test`, `npm run build` | `npm` | text markers: success `Compiled successfully`, `built in`, `build completed`, `Done in `; failure `npm error`, `npm ERR!`, `ELIFECYCLE`, `Failed to compile`, `error TS`, etc. Exit code as fallback. |
+| `yarn test`, `pnpm test`, `yarn build` | `yarn` | same text markers as `npm` |
+| `docker build`, `docker buildx build` | `docker-build` | text markers: success `writing image`, `naming to`, `Successfully built`; failure `failed to solve`, `executor failed`, `returned a non-zero code` |
+| `pytest` | `pytest` | exit code only (no markers): a failure is recorded, a green run is not |
+| `cargo test`, `cargo build` | `cargo` | exit code only, same limit |
+| `go test` | `go-test` | exit code only, same limit |
 
 Other commands are skipped (better to leave stale than misclassify).
 Records the command, kind, and last ~12 lines of output.
+
+The hook follows a leading `cd X &&` (or `cd X;`) prefix to find where the
+build actually ran. A build inside the session tree, including
+`cd subdir && ...` in a monorepo, is recorded at the session root. A build
+outside it (for example a proof reviewer's throwaway worktree under `/tmp`)
+is recorded in that directory's own `.claude/last-build.json`, so a
+deliberate RED there never touches this session's baseline.
 
 ### `gate-advance.py` (PreToolUse, matches `Bash`)
 
@@ -159,6 +173,7 @@ tier wins (sharing > local > exempt).
 | `STALE` | BLOCK | BLOCK |
 | `FAILURE` | BLOCK | BLOCK |
 | missing (no baseline yet) | **ALLOW** with loud stderr warning | **BLOCK** with clear message |
+| missing, and no build manifest at the root | **ALLOW** with loud stderr warning | **ALLOW** with warning asking for `.claude/no-build` |
 | any state, but `.claude/no-build` present | **ALLOW** | **ALLOW** |
 
 The asymmetry on "missing baseline" is intentional:
@@ -181,9 +196,13 @@ plain stderr lines mid-session.
 docs-only, content, config — a baseline can never exist, so the sharing tier
 would block `push` forever. Create `.claude/no-build` (commit it to apply for
 the team) and the gate allows both tiers: there is nothing to verify, so it
-does not apply. This is an **explicit, human-placed** marker — the gate never
-auto-detects "build-less" and opens the door itself, so a real project that
-simply hasn't run verify yet stays protected. Faking `last-build.json` with a
+does not apply. This is an **explicit, human-placed** marker. Without it, the gate has one
+narrow fallback: when there is no baseline *and* no recognizable build
+manifest at the root (`pom.xml`, `mvnw`, `gradlew`, `package.json`,
+`pyproject.toml`, `Cargo.toml`, `go.mod`, `Makefile` and a few more), it
+allows the sharing tier with a warning that asks for the marker instead of
+blocking. A project that has a manifest but hasn't run verify yet stays
+blocked. Faking `last-build.json` with a
 `SUCCESS` you never ran is the dishonest alternative this exists to replace.
 
 When the gate fires, the block message names:
@@ -246,7 +265,7 @@ If verify FAILED:
 ```
 $ ./mvnw -pl bootstrap -am verify
 # ... runs ...
-# BUILD FAILURE  ← state.json gets status: FAILURE
+# BUILD FAILURE  ← last-build.json gets status: FAILURE
 
 $ git commit -m "fix WEGO-1234"
 [gate-advance] BLOCKED: build is FAILURE since 2026-05-13T09:36:00Z
@@ -261,7 +280,7 @@ Either fix the failure and re-verify, or revert the offending edit:
 $ git checkout -- domain/src/main/java/.../X.java
 # Note: this doesn't clear FAILURE — only a fresh SUCCESS run does.
 $ ./mvnw -pl bootstrap -am verify
-# BUILD SUCCESS → state.json: SUCCESS → gate clears.
+# BUILD SUCCESS → last-build.json: SUCCESS → gate clears.
 ```
 
 ## What this doesn't protect against

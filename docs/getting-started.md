@@ -31,8 +31,9 @@ cd /path/to/your/host-project
 That single command:
 
 1. Registers this repo as a Claude Code plugin marketplace.
-2. Installs all nine plugins (`common`, `build-team`, `build-solo`,
-   `build-hex`, `discovery`, `design`, `docs`, `board-flow`, `review-gate`).
+2. Installs every plugin listed in `.claude-plugin/marketplace.json`
+   (`common`, `build-team`, `build-solo`, `build-hex`, `discovery`,
+   `design`, `docs`, `board-flow`, `review-gate`, `maestro`).
 3. Symlinks `./.claude/expertise/` → the plugin's centralized expertise
    directory (accumulated agent learnings follow you across projects).
 4. Copies `build-hex-topology.md` into your `.claude/` and appends
@@ -42,6 +43,17 @@ That single command:
    (you'll fix those next).
 6. Writes `.claude/topology` (one-line marker so the cross-topology
    commands know which flow to dispatch into).
+
+The installer also prints two terminal tools you run yourself (they are
+not slash commands, so this is where you learn they exist):
+
+- `cepa` (`common/bin/cepa`): a launcher to use instead of `claude`. It
+  isolates a session into its own git worktree when another live session
+  shares the tree, and asks which work mode the session is in
+  (`cepa --modo ajuda` lists the modes).
+- `cepa-until` (`common/bin/cepa-until`): runs the repo's work queue for
+  a time window (`--for 12h` or `--until 07:00`) instead of item by item.
+  See [`cepa-until.md`](cepa-until.md).
 
 Re-run with `--clean` whenever you've edited the plugin source and want
 CC to pick up the changes without a version bump.
@@ -75,8 +87,9 @@ contract.
 ## 4. Verify the install
 
 ```
-/plugin list     # should show 7 alegomes plugins, all enabled
-/agents          # should list the topology's agents (13 for build-hex)
+/common:doctor   # checks installed plugins and versions, hooks, board-flow.yaml, build baseline
+/plugin list     # should show the cepa plugins, all enabled
+/agents          # should list the topology's agents (14 for build-hex)
 ```
 
 If `/agents` is empty, you probably forgot `common@cepa` (required by

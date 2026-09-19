@@ -147,34 +147,48 @@ route the fix without coming back to ask.
 
 ## The hook: `acceptance-gate.py`
 
-A PreToolUse hard gate (`common/hooks/acceptance-gate.py`). It matches the
-Atlassian MCP transition tool (`transitionJiraIssue`, any server prefix),
-extracts the issue key from the tool input, and reads
-`.claude/acceptance/<KEY>.yaml`:
+A PreToolUse hard gate (`common/hooks/acceptance-gate.py`). It recognizes a
+Jira transition by its effect, not by one tool name, through the shared
+helper `common/hooks/_jiramut.py`: the cloud connector's
+`transitionJiraIssue` and mcp-atlassian's `jira_transition_issue` (any
+server prefix), plus a Bash call to the Atlassian `twg` CLI
+(`twg jira workitem transition --transition-id ...`). A `twg` call that
+touches Jira but can't be read (for example `twg api ... -X POST`, or no
+card key on the command line) is blocked outright. The hook extracts the
+issue key and reads `.claude/acceptance/<KEY>.yaml`:
 
 | Artifact state | Hook |
 |---|---|
 | absent | ALLOW (audit hasn't run; not gated) |
 | present, `status: complete` | ALLOW |
-| present, `status:` anything else | BLOCK (exit 2) |
+| present, `status:` anything else, target is `in_review` or `done` | BLOCK (exit 2) |
+| present, `status:` anything else, target is another declared status (e.g. `in_progress`) | ALLOW (sending the card back is what an incomplete audit should cause) |
+| present, `status:` anything else, target can't be resolved | BLOCK (fails closed) |
 | key not extractable | ALLOW (never spuriously block a transition) |
 
-### The temporal trick
+### The temporal trick, and the direction check
 
-The hook **gates the In-Review transition without ever decoding which
-status is being targeted.** It needs no transition-id table because of
-*when* the artifact appears:
+The artifact's timing is still the first signal:
 
 - The `completion-auditor` writes `<KEY>.yaml` only *after* implementation,
   right before the flow tries to move the card to In Review.
 - Earlier transitions (To Do → In Progress) run with **no artifact on
   disk** → the gate fails open (nothing to enforce yet).
 - The In-Review transition runs with the artifact **present** → the gate
-  reads its `status` and blocks unless it's `complete`.
+  reads its `status`.
 
-The artifact's temporal existence *is* the signal. The hook stays generic
-across every Jira lifecycle — it never has to know that "31" means In
-Review on one board and something else on another.
+Timing alone was not enough. Until 2026-07-31 the hook never decoded the
+destination, so an `incomplete` artifact also blocked the card from going
+*back* to In Progress: WEGO-1782 sat stuck in Review, barred from exactly
+the move an incomplete audit should cause. Now, when the audit isn't
+`complete`, the hook works out where the card is going. The transition
+payload carries only an opaque transition id, so it reads
+`defaults.transition_ids` from `board-flow.yaml` (a map from transition id
+to `status_map` key, filled by `/board-flow:configure` step 5b; a `twg`
+call that passes a status name instead of an id supplies the target
+directly, with the caveat below). Only `in_review` and `done` are gated. Any other declared
+target is allowed. An id missing from the map, or a project with no map
+at all, is treated as gated: a config gap never opens the gate.
 
 When it fires, the block message names the card, the current status, the
 open per-criterion gaps (scraped from `gap:` lines), and the recovery —
@@ -207,7 +221,7 @@ COMPLETE and the `.claude/acceptance/<KEY>.yaml` path. INCOMPLETE (or
 absent) → it does **not** transition; the card stays in `in_progress` until
 the missing altitude test lands. The `acceptance-gate` hook is the
 backstop: even if the orchestrator tried to transition anyway, the hook
-reads the artifact and blocks the `transitionJiraIssue` call. The
+reads the artifact and blocks the transition call. The
 precondition just fails earlier and more clearly. (`/board-flow:execute`
 auto-routes Bug cards here.)
 
@@ -222,10 +236,16 @@ auto-routes Bug cards here.)
 - **Criteria the auditor mis-reads.** If it pins the wrong altitude, the
   gate enforces the wrong thing. Altitude is read from the criterion's
   words; vague criteria produce vague audits.
-- **Cards with no Jira key.** The hook gates `transitionJiraIssue`; work
-  tracked outside Jira (a slug, an untracked task) gets the artifact and the
-  auditor's verdict, but not the transition gate. The discipline still
+- **Cards with no Jira key.** The hook gates Jira transitions (either MCP
+  server, or the `twg` CLI through Bash); work tracked outside Jira (a
+  slug, an untracked task) gets the artifact and the auditor's verdict, but
+  not the transition gate. The discipline still
   applies; only the structural backstop is Jira-specific.
+- **`twg` transitions by status name.** `twg jira workitem transition
+  --transition-id "In Review"` hands the hook the Jira status name, which it
+  compares as written against `in_review` / `done`. "in review" matches
+  neither, so the transition passes with an incomplete audit (checked
+  2026-09-19). Transitions by numeric id are gated normally.
 - **Wrong-but-green tests.** Same caveat as `green-or-revert`: if a test at
   the right altitude is itself buggy and falsely passes, the audit trusts
   the green result.

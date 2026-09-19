@@ -4,6 +4,12 @@ The marketplace ships six topology plugins, plus `common` (required)
 and the `board-flow` + `review-gate` workflow plugins (optional). Pick **one build
 topology per project**
 — importing two snippets gives the orchestrator conflicting instructions.
+`bin/install.sh --topology=NAME` wires `build-hex`, `build-team`,
+`build-solo`, `discovery` and `docs`; `design` is installed as a plugin
+but not wired by `--topology` (see [design](#design-product-design-upstream-of-the-build)).
+The `maestro` plugin, which runs several work slices in parallel
+worktrees, is also installed; it is experimental and not a topology. See
+[`maestro.md`](maestro.md).
 
 | Topology | Agents | Best for | Path-lock | Commands |
 |---|---|---|---|---|
@@ -12,7 +18,7 @@ topology per project**
 | **build-solo** | 2 | One-file tweaks, bug fixes, small refactors. No leads, no per-Task loop. | tool-allowlist only (`pair-reviewer` is read-only via tools) | none — describe in chat |
 | **discovery** | 6 | Continuous product discovery: signals → opportunities → validated bets → engineering brief. Sits *upstream* of build topologies. | `docs/discovery/**` | `capture` (plus generic `/board-flow:advance` for column transitions) |
 | **design** | 6 | Product design: a feature brief → a build-ready design spec, before engineering builds. Upstream of the build teams. | `docs/design/**` | `explore-critique-spec` (+ per-column lifecycle via `/board-flow:advance`) |
-| **docs** | 9 | Sweep an existing project into a grounded Diátaxis doc tree for onboarding. | `docs/**`, `docs/_survey/**` | `survey`, `declutter`, `checkpoint`, `author`, `finalize` |
+| **docs** | 9 | Sweep an existing project into a grounded Diátaxis doc tree for onboarding. | `docs/**`, `docs/_survey/**` | `survey`, `declutter`, `checkpoint`, `author`, `finalize`, `status` |
 
 ## How to choose
 
@@ -51,7 +57,7 @@ build topologies; it's complementary. Common setup:
 - **One topology per project.** The topology snippet in
   `CLAUDE.md` (`@.claude/<topology>-topology.md`) tells the orchestrator
   how to behave. Two snippets = contradictory instructions.
-- **`common` is required by every topology.** The 8 mindset skills are
+- **`common` is required by every topology.** Its mindset skills are
   referenced in agent bodies; without `common` the references go
   nowhere.
 - **`board-flow` requires a 3-lead topology** for its lead-based commands
@@ -121,6 +127,10 @@ Three teams:
 - **Validation team** (5): `validation-lead` + `qa-engineer` +
   `refactor-advisor` + `security-reviewer` + `code-reviewer`.
 
+Plus `proof-reviewer`, the independent proof gate that
+`/board-flow:prove` calls for a card already in Review (14 agents in
+total).
+
 Per-Task quality loop (mandatory inside `plan-build-validate`):
 
 ```
@@ -181,6 +191,13 @@ Run `/design:explore-critique-spec "<feature>"` for the linear flow, or drive
 it per-column with `/board-flow:advance`. Sits downstream of `discovery` and
 upstream of `build-team` / `build-hex`. `prototyper` is the sole holder of the
 Gamma/Canva MCP tools.
+
+`bin/install.sh` installs the `design` plugin but `--topology=design` is
+rejected, so the snippet is not wired for you. To give the orchestrator
+the design instructions, do by hand what the installer does for the
+other topologies: copy `design/design-topology.md` from this repo into
+your project's `.claude/` and add the line `@.claude/design-topology.md`
+to your `CLAUDE.md`.
 
 ### docs (documentation & onboarding)
 

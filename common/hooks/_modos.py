@@ -47,7 +47,7 @@ MODOS = {
                   "aceite escritos NA ALTITUDE em que serão cobrados",
         "saida": "evidence-auditor Confirmed nas suposições de risco + os "
                  "critérios de aceite escritos na altitude + o teste vermelho de cada um",
-        "gate": "existe (topologia discovery), mas ainda não cobra os critérios; o modo-escrita-gate barra escrita fora de docs/discovery e docs/spec",
+        "gate": "em parte: o spec-readiness-gate barra especificação pronta sem superfície e teste vermelho declarados por critério, mas não roda o teste; o modo-escrita-gate barra escrita fora de docs/discovery e docs/spec",
         "escrita": ["docs/discovery/**", "docs/spec/**", ".claude/**", "BACKLOG.md"],
     },
     "design": {
