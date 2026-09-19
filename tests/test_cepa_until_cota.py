@@ -278,7 +278,10 @@ def test_cota_folgada_nao_pausa():
         check("...e os três rodaram", len(chamadas) == 3, f"{len(chamadas)}x")
 
 
-def test_pausa_que_nao_cabe_na_janela_para_antes_do_item():
+def test_pausa_que_nao_cabe_na_janela_comeca_assim_mesmo():
+    """Reset fora da janela: parar deixaria a janela toda sem uso (19:45 de
+    2026-09-18, 24% de cota e 1h35 sobrando). O corte no meio é recuperável,
+    então o item começa, com aviso e registro."""
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
         # Um reset só, fixado aqui: calculado a cada chamada, duas chamadas em
@@ -291,16 +294,23 @@ def test_pausa_que_nao_cabe_na_janela_para_antes_do_item():
         binv = fake_claude(tmp, corpo)
         p, chamadas = roda(raiz, binv, plano_de(raiz), ["--for", "2h"],
                            extra_env=MARGEM)
-        check("o a3 não começou", len(chamadas) == 2, f"{len(chamadas)}x")
+        check("o a3 começou assim mesmo", len(chamadas) == 3, f"{len(chamadas)}x")
         fim = run_end(raiz)
-        check("...o run parou com motivo cota-no-fim",
-              fim["motivo"] == "cota-no-fim" and "80%" in (fim.get("detalhe") or ""),
+        check("...o run terminou pela fila, com 1 item apertado",
+              fim["motivo"] == "fim-da-fila" and fim["cota_apertada"] == 1,
               str(fim))
-        check("...e o a3 segue pendente",
-              status(plano_de(raiz))["a3"] == "pending")
+        apertado = [e for e in ledger_de(raiz) if e.get("evento") == "cota_apertada"]
+        check("...o registro nomeia o item e o uso",
+              len(apertado) == 1 and apertado[0]["id"] == "a3"
+              and apertado[0]["uso"] == 0.8, str(apertado))
+        check("...a tela avisou antes e listou no fim",
+              "começo assim mesmo" in p.stdout
+              and "Começados com a cota apertada (1)" in p.stdout,
+              p.stdout[-600:])
+        check("...e o a3 fechou", status(plano_de(raiz))["a3"] == "done")
 
 
-def test_sem_historico_cota_acima_de_90_nao_comeca_item():
+def test_sem_historico_cota_acima_de_90_comeca_se_o_reset_nao_cabe():
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1"), item("a2")])
         corpo = EVENTO + (
@@ -309,9 +319,11 @@ def test_sem_historico_cota_acima_de_90_nao_comeca_item():
         binv = fake_claude(tmp, corpo)
         p, chamadas = roda(raiz, binv, plano_de(raiz), ["--for", "2h"],
                            extra_env=MARGEM)
-        check("só o a1 rodou", len(chamadas) == 1, f"{len(chamadas)}x")
-        check("...e o run parou pela cota",
-              run_end(raiz)["motivo"] == "cota-no-fim", str(run_end(raiz)))
+        check("os dois rodaram: sem histórico e acima de 90%, mas o reset "
+              "(3h) não cabe na janela (2h)", len(chamadas) == 2,
+              f"{len(chamadas)}x")
+        check("...com o a2 registrado como apertado",
+              run_end(raiz)["cota_apertada"] == 1, str(run_end(raiz)))
 
 
 def test_subprocesso_roda_em_stream_json():
