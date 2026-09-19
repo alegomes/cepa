@@ -1,0 +1,223 @@
+card: cepa-until-rede
+title: >
+  cepa-until espera o reset da rede em vez de culpar o item (AC1: queda de
+  rede não gasta a vez nem conta no disjuntor; AC2: espera e retoma o mesmo
+  item; AC3: sem-rede se não voltar na janela; AC4: 3 quedas seguidas sem
+  progresso encerram, item que fecha entre elas zera a contagem; AC5:
+  reconhecedor exige api_error + mensagem de rede; AC6: ledger e relatório
+  registram a queda).
+diff: 6a2614d..cd370a7 (commits b4c1274 feat + cd370a7 test)
+status: complete
+auditor: completion-auditor
+data: 2026-09-18
+
+caveat_global:
+  texto: >
+    O `claude` falso usado nos testes imprime o `result` final no formato
+    real copiado à mão do `.log` do run de 2026-09-18 citado no cabeçalho de
+    tests/test_cepa_until_rede.py ("API Error: Can't reach the API server —
+    check your internet or DNS (ENOTFOUND)"). Isso prova que o supervisor
+    reconhece CORRETAMENTE esse formato quando ele aparece — não prova que
+    toda variação futura de mensagem de rede do `claude` de produção será
+    reconhecida (o `queda_de_rede` casa por texto). Não torna nenhum
+    critério INCOMPLETE: o teste 5 (test_queda_de_rede_exige_api_error_e_mensagem_de_rede)
+    já cobre os contrastes que existiam para se equivocar (prosa de agente
+    citando ENOTFOUND com result normal, erro de API que é do teto de uso e
+    não de rede).
+
+criteria:
+  - id: AC1
+    texto: >
+      Quando o `result` final tem terminal_reason api_error e mensagem de
+      rede (ENOTFOUND / "Can't reach the API server"), a tentativa NÃO conta
+      no teto por item (--tentativas-por-item) nem no disjuntor
+      (--max-falhas).
+    altitude: cli
+    surface: >
+      cepa-until <fila> --for <duração> --tentativas-por-item N — subprocesso
+      `claude` real (substituído por um fake no PATH); plan.yaml e ledger
+      .jsonl no disco
+    test: >
+      tests/test_cepa_until_rede.py::test_queda_de_rede_espera_a_volta_e_retoma_o_mesmo_item
+      (--tentativas-por-item 1: se a queda contasse como tentativa, a1
+      viraria `blocked` na hora; em vez disso a1 é retomado e fecha `done`) +
+      ::test_tres_quedas_seguidas_param_o_run_sem_culpar_o_item
+      (--max-falhas 2 e --tentativas-por-item 2: 3 quedas encerram por
+      `sem-rede`, com sem_progresso == 0 e esgotados == 0 no run_end,
+      confirmando que nem o disjuntor nem o teto por item foram debitados)
+    layer: >
+      integration (subprocess real de cepa-until; `claude` fake no PATH
+      imprimindo o `result` de api_error de rede no formato stream-json
+      real; asserção sobre plan.yaml, ledger .jsonl e stdout)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_rede.py → "todos passaram", 2026-09-18.
+      Linhas relevantes: "ok  o a1 foi retomado quando a rede voltou", "ok
+      ...e fechou, não virou `blocked` (a queda não gastou a vez)", "ok  3
+      quedas e parou com motivo `sem-rede`", "ok  ...não pelo disjuntor de 2
+      nem pelo teto de 2 por item".
+    status: complete
+
+  - id: AC2
+    texto: >
+      O supervisor sonda a rede (TCP em CEPA_UNTIL_SONDA_REDE, a cada
+      CEPA_UNTIL_SONDA_INTERVALO) e, quando ela volta, retoma o MESMO item.
+    altitude: cli
+    surface: >
+      cepa-until <fila> --for <duração> com CEPA_UNTIL_SONDA_REDE/
+      CEPA_UNTIL_SONDA_INTERVALO no ambiente; sequência de item_start no
+      ledger .jsonl
+    test: >
+      tests/test_cepa_until_rede.py::test_queda_de_rede_espera_a_volta_e_retoma_o_mesmo_item
+      (porta TCP real que só aceita conexão depois de 2s simulando a rede
+      voltando; starts == ["a1", "a1", "a2"] prova retomada do MESMO item; o
+      tempo gasto >= 2s prova que o supervisor de fato esperou a sonda, não
+      só um sleep fixo)
+    layer: >
+      integration (socket TCP real em 127.0.0.1, thread que abre a porta
+      depois de N segundos; subprocess real de cepa-until lendo a sonda)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_rede.py → "todos passaram". Linhas: "ok
+      o a1 foi retomado quando a rede voltou", "ok  ...o supervisor esperou a
+      rede" (gasto >= 2s), "ok  ...e a volta da rede" (evento rede_voltou no
+      ledger).
+    status: complete
+
+  - id: AC3
+    texto: >
+      Se a rede não volta antes de (prazo - reserva mínima), o run termina
+      com motivo `sem-rede` e o item fica onde estava (não vira `blocked`).
+    altitude: cli
+    surface: >
+      cepa-until <fila> --for <duração> --reserva-minima <duração>; run_end
+      no ledger e status do item em plan.yaml
+    test: >
+      tests/test_cepa_until_rede.py::test_rede_que_nao_volta_dentro_da_janela_para_o_run
+      (porta TCP que ninguém escuta, --for 0.2m --reserva-minima 0.05m: 1
+      chamada só, para com `sem-rede`, esperou entre 5 e 14s — até o prazo
+      menos a reserva, não além)
+    layer: >
+      integration (porta TCP fechada de propósito; subprocess real de
+      cepa-until medindo o tempo de espera até o prazo)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_rede.py → "todos passaram". Linhas: "ok
+      uma chamada só, e parou com `sem-rede`", "ok  esperou até o prazo menos
+      a reserva, não além" (5 <= gasto <= 14s), "ok  o detalhe diz até quando
+      esperou".
+    status: complete
+
+  - id: AC4
+    texto: >
+      Três quedas de rede consecutivas sem progresso entre elas encerram o
+      run com motivo `sem-rede`; um item que fecha entre quedas zera a
+      contagem.
+    altitude: cli
+    surface: >
+      cepa-until <fila> --for <duração>; contagem de quedas seguidas e
+      run_end.quedas_de_rede no ledger .jsonl
+    test: >
+      tests/test_cepa_until_rede.py::test_tres_quedas_seguidas_param_o_run_sem_culpar_o_item
+      (3 chamadas, motivo sem-rede, item continua `pending`, detalhe cita
+      "3ª queda seguida") +
+      ::test_item_que_fecha_entre_quedas_zera_a_contagem (padrão
+      queda-queda-fecha-queda-queda-fecha: 6 chamadas, ambos os itens
+      fecham `done`, run termina por `fim-da-fila`; sem o zeramento a 3ª
+      queda — 4ª chamada — encerraria o run antes de a2 fechar)
+    layer: >
+      integration (subprocess real de cepa-until; `claude` fake no PATH
+      alternando queda/sucesso conforme contador de chamadas)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_rede.py → "todos passaram". Linhas: "ok
+      3 quedas e parou com motivo `sem-rede`", "ok  ...não pelo disjuntor de
+      2 nem pelo teto de 2 por item", "ok  o a1 continua `pending`, sem
+      culpa", "ok  6 chamadas e os dois itens fechados", "ok  o run terminou
+      pela fila".
+    status: complete
+
+  - id: AC5
+    texto: >
+      Um `result` de erro de API que NÃO é mensagem de rede (ex.: texto de
+      limite de uso), ou prosa de agente citando ENOTFOUND com um `result`
+      final normal, NÃO é tratado como queda de rede.
+    altitude: domain
+    surface: >
+      função queda_de_rede(saida) em common/bin/cepa-until, chamada pelo
+      supervisor sobre o stream stdout bruto do subprocesso
+    test: >
+      tests/test_cepa_until_rede.py::test_queda_de_rede_exige_api_error_e_mensagem_de_rede
+      (result real de 2026-09-18 → é queda; prosa de assistant mencionando
+      ENOTFOUND + result final normal → NÃO é queda; api_error com texto de
+      limite de uso "session limit" → NÃO é queda, é do teto; saída vazia →
+      NÃO é queda; stream com result de rede seguido de um result normal →
+      NÃO é queda, porque o último result é o que vale)
+    layer: >
+      unit (chama m.queda_de_rede diretamente, módulo carregado por
+      importlib de common/bin/cepa-until — sem reimplementar a lógica no
+      teste)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_rede.py → "todos passaram". Linhas: "ok
+      o result real de 2026-09-18 é queda de rede", "ok  prosa de agente com
+      ENOTFOUND + result normal NÃO é queda", "ok  erro de API que não é de
+      rede NÃO é queda (é do teto)", "ok  saída vazia não é queda", "ok  o
+      último result é o que vale".
+    caveat: >
+      Este critério fala do reconhecedor interno (queda_de_rede), não de uma
+      superfície observável pelo usuário isoladamente — mas o mesmo
+      reconhecedor É o que decide o comportamento observado em AC1/AC2/AC4
+      via chamada real no supervisor (linha 874 de common/bin/cepa-until:
+      `if not progresso and queda_de_rede(saida):`), então o teste unitário
+      aqui soma ao end-to-end, não substitui o que já está coberto em
+      altitude cli pelos outros critérios.
+    status: complete
+
+  - id: AC6
+    texto: >
+      O ledger registra queda_de_rede (com espera) e rede_voltou; run_end
+      carrega quedas_de_rede; o relatório final lista "Quedas de rede (N)".
+    altitude: cli
+    surface: >
+      ledger .jsonl escrito por cepa-until e o relatório impresso no stdout
+      ao fim do run
+    test: >
+      tests/test_cepa_until_rede.py::test_queda_de_rede_espera_a_volta_e_retoma_o_mesmo_item
+      (evento queda_de_rede com espera=True e id="a1" no ledger; evento
+      rede_voltou presente; run_end com motivo fim-da-fila e
+      quedas_de_rede == 1; stdout contém "Quedas de rede (1)" e "SEM REDE")
+    layer: >
+      integration (mesmo subprocess real; asserções sobre ledger .jsonl e
+      stdout capturado do processo cepa-until)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_rede.py → "todos passaram". Linhas: "ok
+      o registro tem a queda com espera=True", "ok  ...e a volta da rede",
+      "ok  o run terminou pela fila, não pelo disjuntor" (quedas_de_rede ==
+      1), "ok  o relatório lista a queda como não-falha" ("Quedas de rede
+      (1)" e "SEM REDE" no stdout).
+    status: complete
+
+regressao:
+  texto: >
+    Suítes vizinhas rodadas no mesmo commit para checar ausência de
+    regressão sobre o teto por item, o disjuntor e o corte de cota: todas
+    "✓ tudo verde" / "todos passaram", 2026-09-18.
+  comandos:
+    - "python3 tests/test_cepa_until.py → ✓ tudo verde"
+    - "python3 tests/test_cepa_until_cota.py → ✓ tudo verde"
+    - "python3 tests/test_cepa_until_adversarial.py → ✓ tudo verde"
+
+resumo: >
+  Os seis critérios pedidos têm teste na superfície correta: subprocesso
+  real de cepa-until disparando um `claude` falso no PATH que imprime o
+  `result` de erro de rede no formato stream-json real (copiado do `.log`
+  do run de 2026-09-18), verificado contra plan.yaml, ledger .jsonl e
+  stdout — não um teste unitário mockando a decisão por dentro. A única
+  peça testada isoladamente (AC5, a função pura queda_de_rede) é
+  complemento e não substituto: o mesmo reconhecedor é exercitado dentro do
+  supervisor real nos outros cinco critérios. Nenhuma tentativa de rodar
+  além do que os testes já cobrem foi necessária: os 5 arquivos de teste
+  (rede, base, cota, adversarial) rodaram em primeiro plano, sem espera em
+  segundo plano.
