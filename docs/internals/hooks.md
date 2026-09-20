@@ -395,6 +395,26 @@ that's the doctor's business, not an alarm). Tests:
 `tests/test_pluginver_boot.py` (17 checks; perturbation: dropping the call from
 `session-registry.py` turns 2 red).
 
+**The handoff claim (`_handoff.py`).** A handoff is resumed by one session.
+Delivery records who took it, in the frontmatter (`resumed_by`) and in a
+sibling `.claim` file created with `O_EXCL`, both tied to the handoff's
+`updated_at`. The live-peer check compares the exact `cwd` and missed a session
+opened in a subdirectory; the claim does not guess. A dead claimer's claim is
+released. `tests/test_handoff_claim.py` (13 checks; perturbation: making
+`holder()` return nothing turns 4 red). See [`../handoff.md`](../handoff.md).
+
+**The memory validity sweep (`_memval.py`).** A Claude Code memory that asserts
+a *state* ("not installed yet", "not run on a real repo") carries
+`validade: YYYY-MM-DD` under `metadata:` in its frontmatter. Past that date the
+sweep prefixes its line in `MEMORY.md` with `[VENCIDA desde D, reconfira antes
+de afirmar]` and the session gets a notice naming it. The mark lands for the
+*next* session (this one already loaded the index); the notice covers this one.
+A memory without the field never expires, and extending the date removes the
+mark. The memory directory is derived from the main clone's path, the way
+Claude Code names it. By hand: `python3 common/hooks/_memval.py sweep`.
+`tests/test_memoria_validade.py` (21 checks, one drives the real hook as a
+subprocess; perturbation: dropping the call turns 2 red).
+
 ### session-checkpoint.py (Stop)
 
 Owner: `common/hooks/`. Every turn, rewrites the AUTO zone of

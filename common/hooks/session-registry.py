@@ -227,6 +227,16 @@ def on_start(session_id: str, cwd: str) -> None:
     except Exception as e:  # noqa: BLE001
         print(f"[session-registry] worktree scan failed: {e}", file=sys.stderr)
 
+    # Memórias com validade vencida: marca no índice e avisa. A marca vale para
+    # a PRÓXIMA sessão (o MEMORY.md desta já foi carregado); o aviso, para esta.
+    try:
+        import _memval as MV
+        mnote = MV.notice(MV.sweep(MV.memory_dir(root)))
+        if mnote:
+            notices.append(mnote)
+    except Exception as e:  # noqa: BLE001 — memória nunca derruba o SessionStart
+        print(f"[session-registry] memory sweep failed: {e}", file=sys.stderr)
+
     # Nudges de manutenção — sugestão, nunca bloqueio. O doctor pega falhas de
     # infraestrutura ANTES de custarem uma tarefa; o metrics só vale se lido.
     try:

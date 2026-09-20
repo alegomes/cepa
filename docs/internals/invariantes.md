@@ -204,7 +204,9 @@ enxerga defeito de concorrência.
 
 **Guarda.** `tests/test_handoff_claim.py`: reserva com duas travas
 independentes (frontmatter `resumed_by` e arquivo `.claim` criado com `O_EXCL`),
-amarradas à versão do handoff.
+amarradas à versão do handoff. Para memória de estado,
+`tests/test_memoria_validade.py`: o campo `validade:` no frontmatter e a
+varredura de `common/hooks/_memval.py`, que marca a linha vencida no índice.
 
 ## I10. "Feito" tem grau, e existir código não é o grau que fecha card
 
