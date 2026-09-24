@@ -33,14 +33,31 @@ CASES = [
 
  # --- evasao ---
  ("encadeado com &&", bash("cd /tmp && twg jira workitem transition --id WEGO-1 --transition-id 31"), "pass","transition"),
- ("escondido apos ;", bash("echo oi; twg jira workitem create --summary x"), "opaque","mutation"),
+ ("escondido apos ; ainda e achado", bash("echo oi; twg jira workitem create --summary x"), "pass","create"),
  ("caminho absoluto", bash("/Users/alegomes/.local/bin/twg jira workitem delete WEGO-1"), "opaque","mutation"),
- ("com env var na frente", bash("TWG_AGENT_DEFAULTS=1 twg jira workitem update --id WEGO-1 --summary x"), "opaque","mutation"),
+ ("com env var na frente", bash("TWG_AGENT_DEFAULTS=1 twg jira workitem update --id WEGO-1 --summary x"), "pass","edit"),
  ("flag com = em vez de espaco", bash("twg jira workitem transition --id=WEGO-1 --transition-id=31"), "pass","transition"),
  ("bulk-transition (verbo novo)", bash("twg jira workitem bulk-transition --jql 'project=WEGO'"), "opaque","mutation"),
  ("archive", bash("twg jira workitem archive --id WEGO-1"), "opaque","mutation"),
  ("outro produto nao e deste gate", bash("twg confluence content create --title x"), None,None),
  ("aspas nao fechadas", bash("twg jira workitem comment create --body 'aberta"), "opaque","mutation"),
+ # --- O3 (2026-09-24): escrita legivel que nao transiciona nem comenta ---
+ ("create legivel", bash("twg jira workitem create --space WEGO --type Task --summary x"), "pass","create"),
+ ("update de campo legivel", bash("twg jira workitem update --id WEGO-1 --add-labels a"), "pass","edit"),
+ ("link entre cards", bash("twg jira workitem link workitem --id WEGO-1 --target-id WEGO-2 --link-type-id 10003"), "pass","link"),
+ ("update --status transiciona por fora", bash("twg jira workitem update --id WEGO-1 --status Done"), "opaque","mutation"),
+ ("update --comment comenta por fora", bash("twg jira workitem update --id WEGO-1 --comment ok"), "opaque","mutation"),
+ ("update --field nomeia um campo so", bash("twg jira workitem update --id WEGO-1 --field 'customfield_10020=3'"), "pass","edit"),
+ ("update --variables-json e JSON livre", bash("twg jira workitem update --id WEGO-1 --variables-json '{}'"), "opaque","mutation"),
+ ("update --fields-json e JSON livre", bash("twg jira workitem update --id WEGO-1 --fields-json '{}'"), "opaque","mutation"),
+ ("update --resolution fecha por fora", bash("twg jira workitem update --id WEGO-1 --resolution Done"), "opaque","mutation"),
+ ("link para commit segue opaco", bash("twg jira workitem link commit --id WEGO-1 --url x"), "opaque","mutation"),
+ # --- leituras de terceiro nivel e ajuda ---
+ ("link query e leitura", bash("twg jira workitem link query --issue-id WEGO-1"), None,None),
+ ("create-metadata e leitura", bash("twg jira workitem field create-metadata --space WEGO --type Task"), None,None),
+ ("comment query e leitura", bash("twg jira workitem comment query --issue-id WEGO-1"), None,None),
+ ("--help nao e escrita", bash("twg jira workitem create --help"), None,None),
+ ("-h nao e escrita", bash("twg jira workitem update -h"), None,None),
  # o falso-positivo historico do repo
  (">= nao pode virar redirect", bash("twg jira workitem query 'sp >= 3' -o json"), None,None),
 ]
@@ -88,4 +105,34 @@ for desc, agent, cmd, want in BB:
     else:
         print(f"  ok  [exit {want}] {desc}")
 print(f"{len(BB)-bfail}/{len(BB)} passaram")
-sys.exit(1 if (fail or bfail) else 0)
+
+# --- jira-write-lock: so o atlassian-expert escreve no Jira pela twg (O3) ---
+JW = [
+ ("dev cria card",                "build-hex:domain-dev",       "twg jira workitem create --space WEGO --type Task --summary x", 2),
+ ("dev transiciona",              "build-team:backend-dev",     "twg jira workitem transition --id WEGO-1 --transition-id 31",   2),
+ ("dev comenta",                  "build-hex:domain-dev",       "twg jira workitem comment create --issue-id WEGO-1 --body x",   2),
+ ("embutido sem prefixo edita",   "general-purpose",            "twg jira workitem update --id WEGO-1 --summary x",              2),
+ ("dev por twg api POST",         "build-hex:domain-dev",       "twg api jira:/rest/api/3/issue -X POST --input p.json",         2),
+ ("dev le o card",                "build-hex:domain-dev",       "twg jira workitem get WEGO-1",                                  0),
+ ("dev consulta transicoes",      "build-hex:domain-dev",       "twg jira workitem transition --id WEGO-1",                      0),
+ ("atlassian-expert cria",        "board-flow:atlassian-expert","twg jira workitem create --space WEGO --type Task --summary x", 0),
+ ("atlassian-expert transiciona", "board-flow:atlassian-expert","twg jira workitem transition --id WEGO-1 --transition-id 31",   0),
+ ("sessao principal (humano)",    "",                           "twg jira workitem create --space WEGO --type Task --summary x", 0),
+ ("sem twg",                      "build-hex:domain-dev",       "git status",                                                    0),
+]
+JHOOK = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                     "common", "hooks", "jira-write-lock.py")
+jfail = 0
+print("\n--- jira-write-lock ---")
+for desc, agent, cmd, want in JW:
+    body = {"tool_name": "Bash", "tool_input": {"command": cmd}}
+    if agent:
+        body["agent_type"] = agent
+    rc = subprocess.run([sys.executable, JHOOK], input=_json.dumps(body),
+                        capture_output=True, text=True).returncode
+    if rc != want:
+        jfail += 1; print(f"  FALHOU: {desc} — esperado exit={want}, obtido {rc}")
+    else:
+        print(f"  ok  [exit {want}] {desc}")
+print(f"{len(JW)-jfail}/{len(JW)} passaram")
+sys.exit(1 if (fail or bfail or jfail) else 0)

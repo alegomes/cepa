@@ -90,6 +90,28 @@ _TWG_JIRA_READ = frozenset({
     ("dashboard", "get"), ("dashboard", "query"), ("dashboard", "list"),
 })
 
+# Versão da `twg` cujo `help describe` conferiu as listas brancas abaixo. O
+# atlassian-expert.md cita o mesmo número, e tests/test_atlassian_expert_spec.py
+# falha se os dois divergirem. Versão nova não quebra nada sozinha: verbo
+# desconhecido já cai como escrita opaca.
+TWG_VERIFICADA = "1.3.1"
+
+# Leituras de terceiro nível (`twg jira workitem link query`). Verificado no
+# `twg help describe` da CLI 1.3.1.
+_TWG_JIRA_READ_SUB = frozenset({
+    ("workitem", "link", "query"),
+    ("workitem", "field", "create-metadata"),
+    ("workitem", "attachment", "query"), ("workitem", "attachment", "get"),
+})
+
+# Opções de `workitem update` que transicionam, comentam ou carregam JSON livre.
+# `--field <id>=<valor>` fica de fora: nomeia um campo só, visível na linha, e o
+# Jira não aceita status nem comentário como campo de edição.
+_UPDATE_OPACO = (
+    "--status", "--comment", "--transition-comment", "--resolution",
+    "--fields-json", "--variables-json",
+)
+
 # Subcomandos de `comment` que gravam texto no card.
 _TWG_COMMENT_WRITE = frozenset({"create", "update"})
 
@@ -195,6 +217,16 @@ def classify_bitbucket(command: str):
     return None
 
 
+def _legivel(kind, rest):
+    """Escrita que o gate consegue ler e que não é transição nem comentário."""
+    key = _flag(rest, "--id", "--issue-id", "--key") or _first_key(rest)
+    return {
+        "kind": kind, "mechanism": "twg",
+        "tool_input": {"issueIdOrKey": key} if key else {},
+        "opaque": False, "reason": "", "target_status": None,
+    }
+
+
 def _flag(argv, *names):
     """Valor de `--flag valor` ou `--flag=valor`, o primeiro que aparecer."""
     for i, tok in enumerate(argv):
@@ -245,6 +277,11 @@ def _classify_twg(argv):
     if head != "jira":
         return None  # bitbucket, confluence, goals... não são deste gate
 
+    # `--help` só imprime ajuda, qualquer que seja o caminho. Sem isto até
+    # `twg jira workitem create --help` era barrado como escrita opaca.
+    if "--help" in rest or "-h" in rest:
+        return None
+
     path = tuple(a for a in rest[1:3] if not a.startswith("-"))
     if len(path) < 2:
         return None
@@ -252,6 +289,39 @@ def _classify_twg(argv):
         return None
 
     resource, verb = path
+
+    # Terceiro nível: `workitem link query`, `workitem field create-metadata`.
+    words = [a for a in rest[1:] if not a.startswith("-")]
+    sub = words[2] if len(words) > 2 else None
+    if (resource, verb, sub) in _TWG_JIRA_READ_SUB:
+        return None
+
+    # ---- escrita que não transiciona nem comenta ----
+    # Criar card, editar campo e ligar cards não são o que os quatro gates
+    # auditam (pelo MCP também nunca foram). São escrita LEGÍVEL: o gate deixa
+    # passar, e quem pode escrever é o `jira-write-lock` que decide.
+    if resource == "workitem" and verb == "create":
+        return _legivel("create", rest)
+    if resource == "workitem" and verb == "link" and sub == "workitem":
+        return _legivel("link", rest)
+    if resource == "workitem" and verb == "update":
+        # `update --status` transiciona e `--comment` comenta: o mesmo efeito dos
+        # dois caminhos auditáveis, por uma porta que o gate não lê. E
+        # `--fields-json` e `--variables-json` carregam JSON livre. Nesses casos,
+        # opaco.
+        escondido = [f for f in _UPDATE_OPACO if _flag(rest, f) is not None]
+        if escondido:
+            return {
+                "kind": "mutation", "mechanism": "twg", "tool_input": {},
+                "opaque": True,
+                "reason": (
+                    f"`twg jira workitem update` com {', '.join(escondido)} muda status, "
+                    "comenta ou carrega JSON livre. Use `workitem transition` e "
+                    "`workitem comment create`, que o gate consegue ler"
+                ),
+                "target_status": None,
+            }
+        return _legivel("edit", rest)
 
     # ---- transição ----
     if (resource, verb) == ("workitem", "transition"):
