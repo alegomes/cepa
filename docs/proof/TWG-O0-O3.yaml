@@ -1,0 +1,109 @@
+schema_version: 2
+card: TWG-O0-O3
+verdict: unproven
+reviewed_at: 2026-09-24T16:23:00-03:00
+base_commit: 25f1c17
+head_commit: cfa3054
+issue_type: N/A            # sem card Jira; sequência O0+O3 de docs/archive/estrategia-twg-vs-mcp.md
+repo_kind: harness         # NOT Quarkus/Maven — Python + prompt files, suíte própria em tests/*.py
+scope:
+  changed_classes:
+    - class: "common/hooks/jira-write-lock.py (barra escrita twg de agente não autorizado; libera atlassian-expert; libera sessão principal; libera leitura)"
+      module: hook
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/hooks/_jiramut.py (`--help`/-h não é escrita; leituras de terceiro nível _TWG_JIRA_READ_SUB; create/link/update via _legivel; _UPDATE_OPACO; TWG_VERIFICADA)"
+      module: hook-lib
+      external_observable: false
+      substituted_by_double: null
+    - class: "board-flow/agents/atlassian-expert.md (linha `tools:` sem os 32 nomes dos dois servidores MCP locais, com Bash; seção de binding com o detector `command -v twg && twg --version`)"
+      module: agent-spec
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/.claude-plugin/plugin.json (registro do hook jira-write-lock.py no array PreToolUse)"
+      module: plugin-manifest
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+  note: >-
+    Diff 25f1c17..cfa3054 (commits 937fc1b, d70e366, cfa3054), interseccionado
+    com os arquivos indicados pelo usuário. cfa3054 (docs) não muda
+    comportamento (BACKLOG.md + docs/archive/estrategia-twg-vs-mcp.md) e não
+    tem linha a perturbar; citado só como parte da faixa de commits.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é JVM); perturbação manual dos hooks Python, via subprocess.run e import direto, é o mecanismo aplicável"
+    perturbation:
+      status: survived
+      results:
+        - "PASS (RED) — jira-write-lock.py:53-55 (`if not agent_type or agent_type == AUTHORIZED: sys.exit(0)` trocado por `sys.exit(0)` incondicional, liberando qualquer agente): tests/test_jiramut_deteccao_por_efeito.py, bloco '--- jira-write-lock ---', caiu de 11/11 para 6/11 (5 falhas: dev cria card, dev transiciona, dev comenta, embutido sem prefixo edita, dev por twg api POST — todos deveriam sair exit=2 e saíram exit=0)."
+        - "PASS (RED) — jira-write-lock.py:36 (`AUTHORIZED = \"board-flow:atlassian-expert\"` trocado por um valor que nunca bate, barrando até o próprio autorizado): mesmo bloco caiu para 9/11 (atlassian-expert cria/transiciona passaram a exit=2 em vez de exit=0)."
+        - "PASS (RED) — jira-write-lock.py:54 (clausula `not agent_type` removida, exigindo AUTHORIZED até da sessão principal sem agent_type): mesmo bloco caiu para 10/11 ('sessao principal (humano)' passou a exit=2 em vez de exit=0)."
+        - "PASS (RED) — _jiramut.py:282-283 (checagem de `--help`/`-h` removida): tests/test_jiramut_deteccao_por_efeito.py, bloco principal, 2 falhas ('--help nao e escrita' e '-h nao e escrita' passaram a classificar como mutação legível em vez de None)."
+        - "PASS (RED) — _jiramut.py:102 (`(\"workitem\", \"link\", \"query\")` removido de _TWG_JIRA_READ_SUB): 1 falha ('link query e leitura' passou de None para opaque/mutation)."
+        - "PASS (RED) — _jiramut.py:303-304 (branch `resource == \"workitem\" and verb == \"create\": return _legivel(...)` removido, caindo no catch-all opaco): 2 falhas ('escondido apos ; ainda e achado' e 'create legivel' passaram de pass/create para opaque/mutation — comportamento muda, mas o teste que devia acusar acusou)."
+        - "PASS (RED) — _jiramut.py:110-113 (`--status` removido de _UPDATE_OPACO): 1 falha ('update --status transiciona por fora' passou de opaque/mutation para pass/edit, ou seja, `workitem update --status` deixaria de ser barrado como transição disfarçada)."
+        - "PASS (RED) — _jiramut.py:97 (TWG_VERIFICADA trocado de 1.3.1 para 1.9.9): tests/test_atlassian_expert_spec.py caiu (1 falha: 'versão verificada da twg igual à do _jiramut')."
+        - "PASS (RED) — board-flow/agents/atlassian-expert.md (Bash removido da linha `tools:`): tests/test_atlassian_expert_spec.py caiu (1 falha: 'Bash ligado para a twg')."
+        - "PASS (RED) — board-flow/agents/atlassian-expert.md (linha `command -v twg >/dev/null && twg --version` trocada por outro detector): tests/test_atlassian_expert_spec.py caiu (1 falha: 'regra presente: detector de caminho é um comando só')."
+        - "SURVIVED — common/.claude-plugin/plugin.json (bloco de registro do hook `jira-write-lock.py` no array PreToolUse/Bash removido, mantendo JSON válido): rodei em sequência tests/test_jiramut_deteccao_por_efeito.py, tests/test_atlassian_expert_spec.py, tests/test_acceptance_gate.py, tests/test_merge_truth_gate.py, tests/test_summary_nulls_gate.py, tests/test_bounce_reason_gate.py, tests/test_gate_status_por_nome.py — todos exit=0, nenhuma falha. Nenhum teste do repo dispara o hook pelo dispatch real do plugin.json (todos chamam jira-write-lock.py e _jiramut.py diretamente, por subprocess ou import). Sem o registro, o hook nunca dispara em produção e nenhum teste acusaria — linha estruturalmente descoberta."
+      run: >-
+        Worktree descartável /tmp/proof-TWG-O0-O3 (`git worktree add --detach
+        HEAD`, HEAD=00101e0, que contém 25f1c17..cfa3054 via merge). Worktree
+        principal /Users/alegomes/cepa-worktrees/cepa-pendencias_ai_memory
+        NUNCA tocado (todas as edições via `python3 -c`/heredoc escrevendo em
+        caminho absoluto dentro de /tmp/proof-TWG-O0-O3, restauração via `git
+        -C /tmp/proof-TWG-O0-O3 checkout HEAD -- <arquivo>` a cada rodada).
+        GREEN de partida confirmado antes de perturbar:
+        `python3 tests/test_jiramut_deteccao_por_efeito.py` → "40/40, 10/10,
+        11/11 passaram" (exit 0); `python3 tests/test_atlassian_expert_spec.py`
+        → "all green" (exit 0). Cada perturbação: editar, rodar o teste que
+        deveria acusar (RED confirmado nas 10 primeiras), restaurar, conferir
+        `git diff --stat` vazio antes da próxima. Todas as edições em primeiro
+        plano, nenhum `run_in_background`. Ao final: `git checkout HEAD --
+        common/.claude-plugin/plugin.json` (restauração da última perturbação)
+        e `git worktree remove --force /tmp/proof-TWG-O0-O3` — `git worktree
+        list` ao final mostra só a árvore principal e as outras duas árvores
+        já existentes na sessão, sem sobra.
+  l2_coverage:
+    status: gap
+    uncovered_lines:
+      - "common/.claude-plugin/plugin.json — bloco de registro do hook jira-write-lock.py no array PreToolUse/Bash. Nenhum teste do repo exercita o dispatch real de hooks a partir do plugin.json; todos os testes chamam o hook diretamente."
+    run: >-
+      Confirmado por perturbação acima (SURVIVED): remover o registro não
+      derruba nenhuma das 7 suítes relevantes.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      Nenhum dos artefatos do diff parseia entrada vinda de fora do processo
+      além da linha de comando `twg` já coberta pelos casos adversariais de
+      tests/test_jiramut_deteccao_por_efeito.py (aspas não fechadas, `>=` como
+      falso redirect, `twg api` com corpo em arquivo, escapatórias por `;`/`&&`
+      — todos já no diff-scoped test acima). Não há módulo do tipo `api-rest`
+      nesta topologia (repo_kind: harness); a superfície de entrada real (a
+      linha Bash) já está coberta pela própria suíte de detecção por efeito.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "não é card de tipo Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  Nove comportamentos mudados nos três arquivos de produção (jira-write-lock.py:
+  barra não autorizado, libera atlassian-expert, libera sessão principal;
+  _jiramut.py: --help, leitura de terceiro nível, create/link/update legíveis,
+  _UPDATE_OPACO, TWG_VERIFICADA; atlassian-expert.md: tools: com Bash, detector
+  de binding) foram perturbados um a um em worktree descartável e cada um
+  derrubou exatamente o teste que deveria guardá-lo — load-bearing confirmado
+  nos nove. A décima linha do diff, o registro do hook jira-write-lock.py no
+  array PreToolUse de common/.claude-plugin/plugin.json, sobreviveu à mesma
+  perturbação: removida, as 7 suítes relevantes (incluindo os 4 gates) ficaram
+  100% verdes, porque nenhuma delas dispara hooks pelo carregamento real do
+  plugin.json — todas chamam os arquivos .py diretamente. Sem esse registro o
+  hook nunca roda em produção, e é exatamente essa lacuna que nenhum teste
+  hoje pegaria. Por instrução explícita do enunciado ("se o registro no
+  plugin.json não tiver teste que o cubra, diga isso: é UNPROVEN para aquela
+  linha") e pela regra de roteamento (linha comportamental sem cobertura que
+  sobreviveu à perturbação -> UNPROVEN, não NEEDS-HUMAN), o veredito do card é
+  UNPROVEN, isolado nessa única linha.

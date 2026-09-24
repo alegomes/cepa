@@ -135,4 +135,22 @@ for desc, agent, cmd, want in JW:
     else:
         print(f"  ok  [exit {want}] {desc}")
 print(f"{len(JW)-jfail}/{len(JW)} passaram")
-sys.exit(1 if (fail or bfail or jfail) else 0)
+
+# --- registro: hook que existe mas nao esta no plugin.json nunca roda ---
+# A prova de 2026-09-24 (docs/proof/TWG-O0-O3.yaml) apagou a entrada do
+# jira-write-lock no plugin.json e nenhum teste ficou vermelho: todos chamam o
+# script direto. Estes hooks precisam estar no PreToolUse de matcher Bash, que e
+# por onde a twg chega.
+PLUGIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                      "common", ".claude-plugin", "plugin.json")
+_pre = _json.load(open(PLUGIN, encoding="utf-8"))["hooks"]["PreToolUse"]
+_bash = [h["command"] for e in _pre if e.get("matcher") == "Bash" for h in e["hooks"]]
+rfail = 0
+print("\n--- registro no plugin.json (PreToolUse, matcher Bash) ---")
+for nome in ("jira-write-lock.py", "bitbucket-decision-lock.py", "acceptance-gate.py",
+             "merge-truth-gate.py", "summary-nulls-gate.py", "bounce-reason-gate.py"):
+    if any(c.endswith(f'/hooks/{nome}"') for c in _bash):
+        print(f"  ok  {nome}")
+    else:
+        rfail += 1; print(f"  FALHOU: {nome} nao esta registrado no matcher Bash")
+sys.exit(1 if (fail or bfail or jfail or rfail) else 0)
