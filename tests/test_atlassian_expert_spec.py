@@ -18,8 +18,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 SPEC = REPO / "board-flow" / "agents" / "atlassian-expert.md"
 # Metade dos 34.561 bytes de antes do corte (34.561 ÷ 2 = 17.280), arquivo
-# inteiro. Só a linha `tools:` ocupa ~3,3 KB e não pode encolher: os três
-# servidores estão em uso.
+# inteiro. Em 24/09/2026 (O0 + O3) a linha `tools:` perdeu os 32 nomes dos dois
+# servidores locais e a spec ganhou o mapa de comandos da `twg` no lugar.
 ORCAMENTO_BYTES = 17280
 
 FAILURES = []
@@ -60,7 +60,12 @@ REGRAS = {
     "vocabulário da UI": "work item",
     "palavra na URL não prova o texto da UI": "inside a URL is not evidence",
     "erro de tela que mente": "field configuration",
-    "terceiro servidor antes de BLOCKED": "before declaring BLOCKED",
+    # 24/09/2026 (O3): caminho local é a `twg`, a nuvem segue no MCP.
+    "detector de caminho é um comando só": "command -v twg >/dev/null && twg --version",
+    "sem caminho nenhum vira BLOCKED": "BLOCKED: no Jira path",
+    "nunca instalar nem caçar a twg": "never install, hunt for or retry",
+    "twg api é proibido": "Never `twg api`",
+    "corpo do comentário na linha de comando": "inline in `--body`",
     # 13/09/2026: 158 chamadas falharam com cloudId inventado; o nome literal
     # do site nunca falhou (2.648 chamadas).
     "cloudId é o defaults.site literal": "copied literally (a hostname works as cloudId)",
@@ -75,8 +80,15 @@ def main():
     for nome, trecho in REGRAS.items():
         check(f"regra presente: {nome}", trecho in texto, repr(trecho))
     ferramentas = re.search(r"^tools:(.*)$", texto, re.M).group(1)
-    for prefixo in ("mcp__claude_ai_Atlassian__", "mcp__Atlassian__", "mcp__mcp-atlassian__"):
-        check(f"os três servidores seguem ligados: {prefixo}", prefixo in ferramentas)
+    nomes = [t.strip() for t in ferramentas.split(",")]
+    check("rotina cloud segue ligada: mcp__Atlassian__", any(n.startswith("mcp__Atlassian__") for n in nomes))
+    check("Bash ligado para a twg", "Bash" in nomes)
+    for prefixo in ("mcp__claude_ai_Atlassian__", "mcp__mcp-atlassian__"):
+        check(f"servidor local desligado (O0/O3): {prefixo}", prefixo not in ferramentas)
+    sys.path.insert(0, str(REPO / "common" / "hooks"))
+    import _jiramut
+    check(f"versão verificada da twg igual à do _jiramut ({_jiramut.TWG_VERIFICADA})",
+          f"verified version: **{_jiramut.TWG_VERIFICADA}**" in texto)
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")
