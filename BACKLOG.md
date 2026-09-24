@@ -3109,3 +3109,48 @@ exatamente o que o portão existe para impedir.
 hífen por `_`. Na dúvida, tratar o alvo como não resolvido, que já barra por padrão. Teste de
 regressão com os quatro casos acima. Conferir se o `merge-truth-gate`, que também lê
 `transition_ids`, tem o mesmo furo.
+
+## Reavaliar `twg` como acesso canônico ao Jira (caminho O3) com o custo medido
+
+**Status:** pendente, pronto para uma sessão em modo `construcao` · **Lar provável:**
+`board-flow/agents/atlassian-expert.md` e `docs/archive/estrategia-twg-vs-mcp.md` ·
+**Origem:** decisão de 2026-09-16 ("troca adiada até a comparação de custo") e a comparação
+feita em 2026-09-24.
+
+### O que já se sabe
+
+A comparação que travava a decisão foi feita em 24/09, no ledger de telemetria
+(`~/.claude/cepa-telemetry`, eventos `token_usage`, uma gravação por sessão):
+
+| Período | Execuções do `atlassian-expert` | Contexto novo total | Por execução |
+|---|---|---|---|
+| Linha de base, 14/08 a 13/09 | 743 | 42.629.668 | 57.375 |
+| Depois dos cortes de 13/09, 14/09 a 24/09 | 162 | 6.161.172 | 38.032 |
+
+Queda de 34% (1 − 38.032 ÷ 57.375). Mediana das médias por sessão: 54.531 → 33.605.
+Cache lido por execução: 272.176 → 99.015. Ressalva: os dois períodos são quase só
+`wego-acesso-backend` (241 de 743 e 156 de 162), sem separação por comando.
+
+Da recomendação revisada do documento (ordem: consertar F7 → O0 → verificar R1 → O4 →
+reavaliar O3), o estado em 24/09:
+
+1. **F7 (gates de Jira por efeito, não por nome):** FEITO em 26/08 (`_jiramut.py`), com o
+   ajuste de nome de status em 19/09 (common 2.17.3).
+2. **O0 (podar os 45 nomes MCP sem trocar de tecnologia):** os schemas foram MEDIDOS em 26/08
+   (3.848 tokens por invocação nos 14 nomes `snake_case`), mas a poda NÃO foi feita: a linha
+   `tools:` do `atlassian-expert.md` ainda lista os 3 prefixos, inclusive os 17
+   `mcp__mcp-atlassian__*`.
+3. **R1 (rotina cloud não tem `twg`):** verificado em execução em 26/08. É fato.
+4. **O4 (`twg` onde o MCP não chega):** feito para Bitbucket (`fda99d9`, trava
+   `bitbucket-decision-lock.py`).
+5. **O3:** é este item.
+
+### O que a sessão faz
+
+- Decidir O0 antes de O3: cortar os 14 nomes `snake_case` do `atlassian-expert` custa quase
+  nada e a economia está medida. Se O0 já entrega o que se quer, O3 pode esperar.
+- Para O3, os dois pré-requisitos que o painel de advisors pôs e continuam abertos: um
+  detector de contexto (local vs. rotina cloud, achado C5) e a versão da CLI fixada (C4).
+- Corrigir o ponteiro na memória `atlassian-expert-custo-baseline`: o documento está em
+  `docs/archive/estrategia-twg-vs-mcp.md`, não em `docs/`. (Bloqueado em 24/09 pelo
+  `modo-escrita-gate`, porque a sessão estava em `exploracao`.)
