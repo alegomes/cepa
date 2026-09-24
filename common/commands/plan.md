@@ -141,9 +141,10 @@ O que sai de lá é rascunho para você revisar com o dono, não resultado final
   Problema/Escopo disser por que aquele critério vem antes dos outros, troque a
   frase de herança por esse motivo, que é melhor. O relatório repete em voz alta
   o que ficou herdado.
-- `blocked_by` — o script devolve sempre vazio: dependência entre critérios não
-  se lê do texto. Acrescente só onde a spec declarar uma, e não deduza
-  dependência de dois critérios tocarem o mesmo arquivo.
+- `blocked_by` — o script preenche com o que a própria spec declara em prosa
+  ("Depois do CS-1", "após o CS-2 e CS-3"). Até 2026-09-24 ele devolvia sempre
+  vazio e a regra era você acrescentar à mão; no WEGO ninguém acrescentou. Não
+  deduza dependência além disso, como dois critérios tocarem o mesmo arquivo.
 - `human_pending` — `null`. Na hora de planejar ainda não existe rota a cobrar;
   o campo é preenchido depois, quando o item fecha e o Implementation Summary
   diz qual é a rota de validação humana.

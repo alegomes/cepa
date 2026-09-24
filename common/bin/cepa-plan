@@ -553,6 +553,15 @@ RE_CAMPO = re.compile(
     r"^\*\*(Superfície|Teste vermelho)[:]?\*\*[:]?[ \t]*(.*?)"
     r"(?=\n[ \t]*\n|\n\*\*|\n#{2,}|\Z)", re.M | re.S)
 
+# A dependência que a PRÓPRIA spec declara em prosa ("Depois do CS-1, ..."). É
+# a única que se lê do texto sem deduzir: dois critérios tocarem o mesmo
+# arquivo não é dependência. Antes a regra era "o agente acrescenta onde a spec
+# declarar", e em 2026-09-23 ninguém acrescentou — a fila liberou o CS-2 antes
+# do CS-1 existir.
+RE_DEPOIS_DE = re.compile(
+    r"\b(?:depois|ap[óo]s)\s+(?:(?:d[oa]s?|[oa]s?)\s+)?"
+    r"(CS-\d+(?:\s*(?:,|\be\b)\s*CS-\d+)*)", re.I)
+
 
 def itens_de_spec(texto):
     """(itens, avisos). Um item por `### CS-N`, na ordem em que aparecem.
@@ -577,9 +586,21 @@ def itens_de_spec(texto):
                       "fila que ninguém sabe quando terminou")
 
     achados = list(RE_CRITERIO.finditer(texto))
+    ids = {m.group(1) for m in achados}
     itens = []
     for i, m in enumerate(achados):
         corpo = texto[m.end():achados[i + 1].start() if i + 1 < len(achados) else len(texto)]
+        depende = []
+        for d in RE_DEPOIS_DE.finditer(corpo):
+            for alvo in re.findall(r"CS-\d+", d.group(1)):
+                if alvo == m.group(1) or alvo in depende:
+                    continue
+                if alvo not in ids:
+                    avisos.append(f"{m.group(1)} diz que vem depois do {alvo}, "
+                                  "que não existe nesta spec — dependência "
+                                  "fora do `blocked_by`")
+                    continue
+                depende.append(alvo)
         campos = {k: " ".join(v.split()) for k, v in RE_CAMPO.findall(corpo)}
         pedacos = [HERDADO]
         if campos.get("Superfície"):
@@ -594,7 +615,7 @@ def itens_de_spec(texto):
             "title": m.group(2),
             "why": " · ".join(pedacos),
             "status": "pending",
-            "blocked_by": [],
+            "blocked_by": depende,
             "human_pending": None,
         })
     return itens, avisos
