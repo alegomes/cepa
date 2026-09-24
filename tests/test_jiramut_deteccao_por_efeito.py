@@ -153,4 +153,37 @@ for nome in ("jira-write-lock.py", "bitbucket-decision-lock.py", "acceptance-gat
         print(f"  ok  {nome}")
     else:
         rfail += 1; print(f"  FALHOU: {nome} nao esta registrado no matcher Bash")
-sys.exit(1 if (fail or bfail or jfail or rfail) else 0)
+
+# --- os quatro gates, rodados como processo, com comando twg (altitude do AC5) ---
+# O loop CASES prova o classify; isto prova que cada gate de verdade usa a
+# classificacao: escrita legivel e leitura passam, escrita opaca e barrada.
+import tempfile
+GATES = ("acceptance-gate.py", "merge-truth-gate.py", "summary-nulls-gate.py",
+         "bounce-reason-gate.py")
+GCASOS = [
+ ("create legivel passa",           "twg jira workitem create --space WEGO --type Task --summary x", 0),
+ ("update de campo passa",          "twg jira workitem update --id WEGO-1 --add-labels a",           0),
+ ("link entre cards passa",         "twg jira workitem link workitem --id WEGO-1 --target-id WEGO-2", 0),
+ ("--help passa",                   "twg jira workitem create --help",                              0),
+ ("comment query passa",            "twg jira workitem comment query --issue-id WEGO-1",            0),
+ ("update --status e barrado",      "twg jira workitem update --id WEGO-1 --status Done",           2),
+ ("update --comment e barrado",     "twg jira workitem update --id WEGO-1 --comment ok",            2),
+ ("update --fields-json e barrado", "twg jira workitem update --id WEGO-1 --fields-json '{}'",      2),
+]
+HOOKS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "common", "hooks")
+gfail = 0
+print("\n--- quatro gates como processo, com twg ---")
+with tempfile.TemporaryDirectory() as cwd:
+    for gate in GATES:
+        for desc, cmd, want in GCASOS:
+            body = {"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": cwd,
+                    "agent_type": "board-flow:atlassian-expert"}
+            rc = subprocess.run([sys.executable, os.path.join(HOOKS, gate)],
+                                input=_json.dumps(body), capture_output=True,
+                                text=True, cwd=cwd).returncode
+            if rc != want:
+                gfail += 1; print(f"  FALHOU: {gate}: {desc} — esperado exit={want}, obtido {rc}")
+            else:
+                print(f"  ok  [exit {want}] {gate}: {desc}")
+print(f"{len(GATES)*len(GCASOS)-gfail}/{len(GATES)*len(GCASOS)} passaram")
+sys.exit(1 if (fail or bfail or jfail or rfail or gfail) else 0)

@@ -1,0 +1,165 @@
+key: TWG-O0-O3
+audited_at: "2026-09-24"
+audited_range: "25f1c17..cfa3054 (937fc1b, d70e366, cfa3054) + merge 00101e0"
+status: incomplete
+
+criteria:
+  - id: AC1
+    description: >
+      O0 — a linha `tools:` de board-flow/agents/atlassian-expert.md não tem
+      nenhum mcp__mcp-atlassian__* nem mcp__claude_ai_Atlassian__*, mantém os
+      16 mcp__Atlassian__* e tem Bash.
+    altitude: application
+    surface: "board-flow/agents/atlassian-expert.md, linha `tools:`"
+    test: tests/test_atlassian_expert_spec.py
+    layer: script (leitura estática do frontmatter)
+    evidence: verified
+    run: |
+      $ python3 tests/test_atlassian_expert_spec.py
+      ok  rotina cloud segue ligada: mcp__Atlassian__
+      ok  Bash ligado para a twg
+      ok  servidor local desligado (O0/O3): mcp__claude_ai_Atlassian__
+      ok  servidor local desligado (O0/O3): mcp__mcp-atlassian__
+      all green
+      (conferido também manualmente: 16 mcp__Atlassian__* distintos na linha `tools:`, 0 ocorrências
+      de mcp__mcp-atlassian__ ou mcp__claude_ai_Atlassian__, Bash presente)
+    verdict: complete
+
+  - id: AC2
+    description: >
+      O3 + detector C5 — a spec manda rodar `command -v twg >/dev/null &&
+      twg --version` primeiro; versão impressa → local por twg; falha →
+      cloud por mcp__Atlassian__*; nenhum dos dois → BLOCKED. Proíbe
+      instalar/caçar/repetir a twg. Traz mapa operação MCP → comando twg.
+    altitude: application
+    surface: "board-flow/agents/atlassian-expert.md, seção 'Tool binding — two paths'"
+    test: tests/test_atlassian_expert_spec.py (checagem de trechos-âncora: "command -v twg...", "BLOCKED: no Jira path", "never install, hunt for or retry")
+    layer: script (grep de trechos na spec)
+    evidence: verified
+    run: |
+      $ python3 tests/test_atlassian_expert_spec.py
+      ok  regra presente: detector de caminho é um comando só
+      ok  regra presente: sem caminho nenhum vira BLOCKED
+      ok  regra presente: nunca instalar nem caçar a twg
+      ok  regra presente: twg api é proibido
+      ok  regra presente: corpo do comentário na linha de comando
+      all green
+      (mapa de 15 operações MCP -> twg conferido por leitura direta, linhas 33-49 da spec)
+    verdict: complete
+
+  - id: AC3
+    description: >
+      Versão (C4) — fonte única em _jiramut.TWG_VERIFICADA; um teste falha
+      se a spec citar outra versão.
+    altitude: application
+    surface: "common/hooks/_jiramut.py:TWG_VERIFICADA + board-flow/agents/atlassian-expert.md"
+    test: tests/test_atlassian_expert_spec.py
+    layer: script (compara string da spec com a constante importada)
+    evidence: verified
+    run: |
+      $ python3 tests/test_atlassian_expert_spec.py
+      ok  versão verificada da twg igual à do _jiramut (1.3.1)
+      all green
+    verdict: complete
+
+  - id: AC4
+    description: >
+      R2 — common/hooks/jira-write-lock.py barra (exit 2) qualquer escrita
+      no Jira pela twg (legível ou opaca) de agente que não seja
+      board-flow:atlassian-expert, inclusive agente embutido sem prefixo;
+      libera leitura, o atlassian-expert e a sessão principal (payload sem
+      agent_type). Registrado no PreToolUse com matcher Bash.
+    altitude: application
+    surface: "common/hooks/jira-write-lock.py rodando como processo (stdin JSON -> exit code), registrado em common/.claude-plugin/plugin.json"
+    test: tests/test_jiramut_deteccao_por_efeito.py (bloco "--- jira-write-lock ---")
+    layer: processo (subprocess.run do hook real, não só a função classify)
+    evidence: verified
+    run: |
+      $ python3 tests/test_jiramut_deteccao_por_efeito.py
+      --- jira-write-lock ---
+        ok  [exit 2] dev cria card
+        ok  [exit 2] dev transiciona
+        ok  [exit 2] dev comenta
+        ok  [exit 2] embutido sem prefixo edita
+        ok  [exit 2] dev por twg api POST
+        ok  [exit 0] dev le o card
+        ok  [exit 0] dev consulta transicoes
+        ok  [exit 0] atlassian-expert cria
+        ok  [exit 0] atlassian-expert transiciona
+        ok  [exit 0] sessao principal (humano)
+        ok  [exit 0] sem twg
+      11/11 passaram
+      Registro conferido em common/.claude-plugin/plugin.json: hook "jira-write-lock.py" está
+      no bloco PreToolUse com "matcher": "Bash" (junto aos demais hooks Bash).
+    verdict: complete
+
+  - id: AC5
+    description: >
+      Gates de common/hooks/_jiramut.py — workitem create, workitem update
+      só de campos (inclusive --field) e workitem link workitem são
+      escrita legível e os 4 gates (acceptance-gate, merge-truth-gate,
+      summary-nulls-gate, bounce-reason-gate) deixam passar; update com
+      --status/--comment/--transition-comment/--resolution/--fields-json/
+      --variables-json é opaco e os gates barram; --help/-h, link query,
+      field create-metadata e comment query não são barrados.
+    altitude: application
+    surface: "os 4 hooks reais (common/hooks/acceptance-gate.py, merge-truth-gate.py, summary-nulls-gate.py, bounce-reason-gate.py) rodando como processo (stdin JSON -> exit code) diante de um comando `twg`"
+    test: tests/test_jiramut_deteccao_por_efeito.py (bloco CASES, linhas 8-63)
+    layer: função (J.classify(payload) chamado direto em Python, NUNCA os 4 hooks-gate como subprocess)
+    evidence: missing
+    run: |
+      $ grep -n "twg\|Bash" tests/test_acceptance_gate.py tests/test_bounce_reason_gate.py \
+          tests/test_merge_truth_gate.py tests/test_summary_nulls_gate.py
+      (sem resultado — nenhuma ocorrência)
+      Confirmado por leitura: os 4 arquivos de teste dos gates reais (test_acceptance_gate.py,
+      test_merge_truth_gate.py, test_summary_nulls_gate.py, test_bounce_reason_gate.py) só
+      constroem payload com tool_name MCP (ex. "transitionJiraIssue"); nenhum deles roda o hook
+      como processo com um comando `twg jira workitem ...` no tool_input, nem via subprocess nem
+      importando a função principal do gate com esse payload.
+      O único teste que exercita as regras de create/update/link/--status/--comment/--fields-json
+      etc. é o loop CASES de tests/test_jiramut_deteccao_por_efeito.py, que chama
+      J.classify(payload) diretamente — nunca os hooks acceptance-gate.py, merge-truth-gate.py,
+      summary-nulls-gate.py ou bounce-reason-gate.py como processo.
+    gap: >
+      Lacuna de altitude: a regra do AC5 é sobre o comportamento dos 4 GATES (arquivos
+      common/hooks/acceptance-gate.py, merge-truth-gate.py, summary-nulls-gate.py,
+      bounce-reason-gate.py), não sobre a função classify() que eles chamam por dentro. Hoje só
+      a função é testada; nenhum teste roda um desses 4 hooks como processo (stdin JSON -> exit
+      code) com um payload Bash contendo `twg jira workitem create`, `workitem update --field`,
+      `workitem link workitem`, `workitem update --status` etc. Um bug de integração entre o
+      gate e _jiramut.classify (ex.: import errado, campo do payload não repassado, exceção
+      silenciosa) passaria batido pela suíte atual. Fecha com um bloco de teste no molde do que
+      já existe para jira-write-lock e bitbucket-decision-lock nesse mesmo arquivo: para cada um
+      dos 4 gates reais, ao menos um caso `pass` (ex. `twg jira workitem create ...`) e um caso
+      `blocked` (ex. `twg jira workitem update --id X --status Done`) rodando o hook via
+      subprocess.run([sys.executable, HOOK], input=payload_json, ...) e conferindo o returncode.
+    verdict: incomplete
+
+  - id: AC6
+    description: >
+      Suíte tests/run-all.sh verde, exceto tests/test_cepa_until_adversarial.py,
+      que já falhava no HEAD 25f1c17 (verificado).
+    altitude: application
+    surface: tests/run-all.sh (suíte inteira, 76 arquivos)
+    test: tests/run-all.sh
+    layer: processo (execução real da suíte)
+    evidence: verified
+    run: |
+      $ bash tests/run-all.sh
+      ── família script (74) ──
+      ... (73 ok)
+      FALHA   tests/test_cepa_until_adversarial.py  (saída 1)
+      ... (demais ok)
+      ── família pytest (2) ──
+      52 passed in 0.22s
+      arquivos rodados: 76 de 76
+      com falha: 1
+        - tests/test_cepa_until_adversarial.py
+      Confirmado que tests/test_cepa_until_adversarial.py não foi tocado por nenhum dos 3
+      commits do trabalho (937fc1b, d70e366, cfa3054): `git log -- tests/test_cepa_until_adversarial.py`
+      mostra só commits de outra frente (cepa-until, 92222b3 e 739721b), fora do range auditado.
+    verdict: complete
+
+summary:
+  complete: [AC1, AC2, AC3, AC4, AC6]
+  incomplete: [AC5]
