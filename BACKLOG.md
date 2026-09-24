@@ -3154,3 +3154,38 @@ reavaliar O3), o estado em 24/09:
 - Corrigir o ponteiro na memória `atlassian-expert-custo-baseline`: o documento está em
   `docs/archive/estrategia-twg-vs-mcp.md`, não em `docs/`. (Bloqueado em 24/09 pelo
   `modo-escrita-gate`, porque a sessão estava em `exploracao`.)
+
+---
+
+## cepa-until conta BLOCKED como progresso e queima uma rodada por card travado
+
+**Status:** pendente · **Lar:** `common/bin/cepa-until` (linhas 170 e 873) e
+possivelmente `cepa-plan queue` · **Origem:** run wego `2026-09-23-1826` (12 h, 25
+rodadas), analisado em 2026-09-24.
+
+### Problema
+
+`progresso = estado in TERMINAIS or pendencia is not None`, com
+`TERMINAIS = {"done", "blocked", "dropped"}`. Um item que sai `blocked` conta como
+progresso, então o disjuntor (`max_falhas`) nunca dispara quando a fila entrega uma
+sequência de itens que travam todos pela mesma causa de fora.
+
+No run citado: 5 DONE e 20 BLOCKED, todos com `"progresso": true`. As 20 rodadas
+custaram US$ 14,30 (84,39 do total − 70,09 das 5 entregas) e ~20 min para redescobrir
+a mesma causa: o card anterior do épico estava pronto numa branch `session/*` sem
+merge. Agravante: os cards dos épicos tinham `blocked_by` vazio, e um antecessor
+`done` sem merge libera o dependente (o `queue` confia no status).
+
+### Esboço de solução
+
+1. Tratar N `blocked` seguidos (sugestão: 3) como sinal de parada, com motivo próprio
+   no `run_end` ("fila travada por condição de fora"), sem contar como falha do item.
+2. Opcional: se o `evidence` dos `blocked` seguidos cita a mesma branch/card como
+   causa, parar já no segundo.
+3. No `queue`: um antecessor `done` cujo `evidence` diz "NAO mesclado" (ou cuja
+   branch `session/<id>` não é ancestral de `origin/main`) não libera o dependente.
+
+### Aceite
+
+Fila sintética com 1 item `done` sem merge seguido de 5 dependentes que travam: o
+run encerra depois de 3 `blocked` seguidos, com motivo nomeado no `.jsonl`.
