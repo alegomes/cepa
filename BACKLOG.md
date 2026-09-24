@@ -3112,7 +3112,8 @@ regressão com os quatro casos acima. Conferir se o `merge-truth-gate`, que tamb
 
 ## Reavaliar `twg` como acesso canônico ao Jira (caminho O3) com o custo medido
 
-**Status:** pendente, pronto para uma sessão em modo `construcao` · **Lar provável:**
+**Status:** FEITO em 2026-09-24, O0 e O3 juntos (ver "Execução (2026-09-24)" em
+`docs/archive/estrategia-twg-vs-mcp.md`). Antes: · **Lar provável:**
 `board-flow/agents/atlassian-expert.md` e `docs/archive/estrategia-twg-vs-mcp.md` ·
 **Origem:** decisão de 2026-09-16 ("troca adiada até a comparação de custo") e a comparação
 feita em 2026-09-24.
