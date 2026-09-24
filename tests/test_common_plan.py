@@ -407,6 +407,31 @@ def test_from_spec_le_os_criterios(base):
           "spec.md" in plan["source"], plan["source"])
 
 
+def test_from_spec_le_depois_do_cs_como_blocked_by(base):
+    """A spec do WEGO dizia "Depois do CS-1" no CS-2 e a fila nasceu com
+    `blocked_by` vazio: a regra dependia do agente acrescentar à mão."""
+    d = repo_git(base, "spec-dep")
+    sp = d / "spec.md"
+    sp.write_text(SPEC_FIXTURE
+                  .replace("### CS-2:", "### CS-2:", 1)
+                  + "\n### CS-3: o terceiro\n\nDepois do CS-1 e CS-2, a "
+                  "listagem traz o total.\n\n**Superfície:** http\n\n"
+                  "**Teste vermelho:** falha hoje.\n"
+                  "\n### CS-4: o quarto\n\nApós o CS-9, nada.\n\n"
+                  "**Superfície:** http\n\n**Teste vermelho:** falha hoje.\n",
+                  encoding="utf-8")
+    r = run(d, "from-spec", str(sp))
+    check("lê a spec com dependência declarada", r.returncode == 0, r.stderr)
+    itens = {i["id"]: i for i in json.loads(r.stdout)}
+    check("\"Depois do CS-1 e CS-2\" vira blocked_by [CS-1, CS-2]",
+          itens.get("CS-3", {}).get("blocked_by") == ["CS-1", "CS-2"],
+          str(itens.get("CS-3")))
+    check("critério sem a frase nasce sem dependência",
+          itens["CS-1"]["blocked_by"] == [] and itens["CS-2"]["blocked_by"] == [])
+    check("dependência de critério que não existe fica fora e é avisada",
+          itens["CS-4"]["blocked_by"] == [] and "CS-9" in r.stderr, r.stderr)
+
+
 def test_from_spec_avisa_rascunho_e_recusa_vazia(base):
     d = repo_git(base, "spec-ruim")
     sp = d / "rascunho.md"
@@ -695,6 +720,7 @@ def main():
                    test_raiz_e_a_do_clone_principal, test_dry_run_nao_grava,
                    test_validate_recusa_plano_de_ondas, test_from_spec_le_os_criterios,
                    test_from_spec_avisa_rascunho_e_recusa_vazia,
+                   test_from_spec_le_depois_do_cs_como_blocked_by,
                    test_from_triage_so_ready_vira_item,
                    test_from_triage_recusa_o_que_a_prosa_so_pedia,
                    test_from_triage_dependencia_para_fora_da_fila,

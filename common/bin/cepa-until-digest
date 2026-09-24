@@ -1,0 +1,250 @@
+#!/usr/bin/env python3
+"""cepa-until-digest — o resumo de um run do `cepa-until` que cabe numa sessão.
+
+## Por que existe
+
+O `cepa-until` deixa dois arquivos por run: o registro (`<run>.jsonl`, poucos
+KB) e a saída bruta de cada subprocesso `claude` (`<run>.log`, stream-json).
+O `.log` do run de 2026-09-23 no WEGO tem 10,6 MB, cerca de 2,6 milhões de
+tokens (10.617.662 bytes ÷ ~4 bytes por token): não cabe em sessão nenhuma. Uma
+análise que lê o `.log` por grep lê o que o grep achou, e o que ele não achou
+some calado.
+
+Este script escolhe o que ler de forma MECÂNICA, e diz o que escolheu:
+
+  - o registro inteiro (largada, fim, cada item, cada build);
+  - de cada rodada, o relatório final do `claude` (o `result` do stream-json),
+    as chamadas de agente por tipo, os erros de ferramenta e o custo;
+  - de cada build completo do supervisor, a cauda da saída;
+  - o `status` e a `evidence` ATUAIS de cada item tocado, lidos do plano.
+
+Quem interpreta é o `/common:until-review`. Este script não opina.
+
+Uso:
+    cepa-until-digest .claude/programs/WEGO/until/2026-09-23-1826.jsonl
+    cepa-until-digest <run>.jsonl --result-max 4000
+"""
+
+import argparse
+import json
+import sys
+from collections import Counter
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
+RESULT_MAX_PADRAO = 3000
+ERROS_POR_RODADA = 5
+CAUDA_DO_VERIFY = 15
+
+
+def le_jsonl(caminho):
+    eventos = []
+    for linha in Path(caminho).read_text(encoding="utf-8",
+                                         errors="replace").splitlines():
+        try:
+            eventos.append(json.loads(linha))
+        except json.JSONDecodeError:
+            continue
+    return eventos
+
+
+def segmentos_do_log(caminho):
+    """[(cabeçalho, [linhas])], um por `===== <quando> · <comando>` que o
+    supervisor escreve antes de cada subprocesso e de cada build."""
+    segs, atual = [], None
+    try:
+        f = open(caminho, encoding="utf-8", errors="replace")
+    except OSError:
+        return segs
+    with f:
+        for linha in f:
+            if linha.startswith("===== "):
+                atual = (linha[6:].strip(), [])
+                segs.append(atual)
+            elif atual is not None:
+                atual[1].append(linha)
+    return segs
+
+
+def resume_rodada(linhas, result_max):
+    """O que importa de UM subprocesso `claude` em stream-json."""
+    agentes, erros, resultado = Counter(), [], None
+    for linha in linhas:
+        try:
+            e = json.loads(linha)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        tipo = e.get("type")
+        if tipo == "assistant":
+            for c in (e.get("message") or {}).get("content") or []:
+                if c.get("type") == "tool_use" and c.get("name") in ("Agent", "Task"):
+                    agentes[(c.get("input") or {}).get("subagent_type") or "?"] += 1
+        elif tipo == "user":
+            for c in (e.get("message") or {}).get("content") or []:
+                if isinstance(c, dict) and c.get("type") == "tool_result" \
+                        and c.get("is_error"):
+                    texto = c.get("content")
+                    if isinstance(texto, list):
+                        texto = " ".join(str(x.get("text", "")) for x in texto
+                                         if isinstance(x, dict))
+                    erros.append(" ".join(str(texto or "").split())[:240])
+        elif tipo == "result":
+            resultado = e
+    r = resultado or {}
+    texto = r.get("result") if isinstance(r.get("result"), str) else ""
+    cortado = len(texto) > result_max
+    return {
+        "agentes": dict(agentes),
+        "erros": erros,
+        "custo": r.get("total_cost_usd"),
+        "turnos": r.get("num_turns"),
+        "is_error": r.get("is_error"),
+        "terminal": r.get("terminal_reason") or r.get("subtype"),
+        "relatorio": texto[:result_max] + ("\n[… cortado]" if cortado else ""),
+        "tem_result": resultado is not None,
+    }
+
+
+def itens_do_plano(caminho_plano):
+    if yaml is None or not caminho_plano.is_file():
+        return {}
+    try:
+        plano = yaml.safe_load(caminho_plano.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return {}
+    return {str(it.get("id")): it for it in plano.get("items") or []
+            if isinstance(it, dict)}
+
+
+def monta(ledger, result_max):
+    ledger = Path(ledger).resolve()
+    log = ledger.with_suffix(".log")
+    eventos = le_jsonl(ledger)
+    inicio = next((e for e in eventos if e.get("evento") == "run_start"), {})
+    fim = next((e for e in eventos if e.get("evento") == "run_end"), {})
+    plano = itens_do_plano(ledger.parent.parent / "plan.yaml")
+
+    rodadas = [s for s in segmentos_do_log(log) if " · verify · " not in s[0]
+               and "/common:until-review" not in s[0]]
+    builds = [s for s in segmentos_do_log(log) if " · verify · " in s[0]]
+    starts = [e for e in eventos if e.get("evento") == "item_start"]
+    ends = [e for e in eventos if e.get("evento") == "item_end"]
+
+    out = [f"# Resumo do run {ledger.stem}", ""]
+    out.append(f"- registro: `{ledger}`")
+    out.append(f"- saída bruta: `{log}` "
+               f"({log.stat().st_size if log.exists() else 0} bytes; este "
+               "resumo lê dela só o que está listado abaixo)")
+    out.append(f"- fila: `{inicio.get('fila')}` · branch: `{inicio.get('branch')}`"
+               f" · base: `{(inicio.get('base') or '')[:10]}`"
+               f" · build: `{inicio.get('verify')}`")
+    out.append(f"- largada: {inicio.get('quando')} · prazo: {inicio.get('prazo')}"
+               f" · fim: {fim.get('quando')} · motivo: `{fim.get('motivo')}`")
+    out.append(f"- detalhe do fim: {fim.get('detalhe')}")
+    contagens = {k: v for k, v in fim.items()
+                 if isinstance(v, int) and k not in ("max_falhas",)}
+    out.append(f"- contagens: {json.dumps(contagens, ensure_ascii=False)}")
+    if len(rodadas) != len(starts):
+        out.append(f"- ATENÇÃO: {len(starts)} item_start no registro e "
+                   f"{len(rodadas)} rodadas no `.log` — o pareamento abaixo "
+                   "pode estar deslocado")
+    out.append("")
+
+    out.append("## Eventos do registro fora das rodadas")
+    for e in eventos:
+        if e.get("evento") not in ("run_start", "run_end", "item_start",
+                                   "item_end"):
+            out.append(f"- {json.dumps(e, ensure_ascii=False)}")
+    out.append("")
+
+    custo_total = 0.0
+    out.append("## Rodadas")
+    for i, st in enumerate(starts):
+        ident = st.get("id")
+        en = ends[i] if i < len(ends) else {}
+        r = resume_rodada(rodadas[i][1], result_max) if i < len(rodadas) else None
+        custo = (r or {}).get("custo")
+        if isinstance(custo, (int, float)):
+            custo_total += custo
+        out.append(f"### {i + 1}. {ident} — {st.get('title')}")
+        out.append(f"- desfecho no registro: status `{en.get('status')}`, "
+                   f"{en.get('segundos')} s, exit {en.get('exit_code')}, "
+                   f"commits na branch da noite: {en.get('commits')}, "
+                   f"tentativa {en.get('tentativa')}")
+        if r:
+            out.append(f"- custo US$ {custo} · {r['turnos']} turnos · "
+                       f"fim `{r['terminal']}`"
+                       + (" · is_error" if r["is_error"] else ""))
+            if r["agentes"]:
+                out.append("- agentes chamados: "
+                           + ", ".join(f"{k} ×{v}" for k, v in
+                                       sorted(r["agentes"].items())))
+            else:
+                out.append("- agentes chamados: nenhum")
+            if r["erros"]:
+                out.append(f"- erros de ferramenta: {len(r['erros'])}; os "
+                           f"primeiros {min(len(r['erros']), ERROS_POR_RODADA)}:")
+                for erro in r["erros"][:ERROS_POR_RODADA]:
+                    out.append(f"  - {erro}")
+            if not r["tem_result"]:
+                out.append("- SEM `result` final: o subprocesso morreu antes de "
+                           "relatar")
+            out.append("")
+            out.append("Relatório final da rodada:")
+            out.append("")
+            out.append("> " + (r["relatorio"] or "(vazio)").replace("\n", "\n> "))
+        out.append("")
+
+    if builds:
+        out.append("## Builds completos do supervisor")
+        for cab, linhas in builds:
+            out.append(f"### {cab}")
+            out.append("```")
+            out.extend(l.rstrip() for l in linhas[-CAUDA_DO_VERIFY:])
+            out.append("```")
+        out.append("")
+
+    tocados = []
+    for st in starts:
+        if st.get("id") not in tocados:
+            tocados.append(st.get("id"))
+    out.append("## Estado ATUAL na fila dos itens tocados")
+    out.append("(lido do plan.yaml agora, não do momento do run)")
+    for ident in tocados:
+        it = plano.get(str(ident))
+        if not it:
+            out.append(f"- {ident}: não está mais na fila")
+            continue
+        out.append(f"- {ident}: `{it.get('status')}`"
+                   + (f" · blocked_by {it.get('blocked_by')}"
+                      if it.get("blocked_by") else " · blocked_by vazio")
+                   + (f" · rota humana: {it.get('human_pending')}"
+                      if it.get("human_pending") else ""))
+        if it.get("evidence"):
+            out.append(f"  - evidence: {' '.join(str(it['evidence']).split())}")
+    out.append("")
+    out.append(f"Custo somado das rodadas: US$ {custo_total:.2f} (soma do "
+               "`total_cost_usd` de cada `result`).")
+    return "\n".join(out) + "\n"
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="resumo de um run do cepa-until")
+    ap.add_argument("ledger", help="o <run>.jsonl do cepa-until")
+    ap.add_argument("--result-max", type=int, default=RESULT_MAX_PADRAO,
+                    help=f"caracteres do relatório final de cada rodada "
+                         f"(default {RESULT_MAX_PADRAO})")
+    a = ap.parse_args(argv)
+    if not Path(a.ledger).is_file():
+        print(f"cepa-until-digest: {a.ledger} não existe", file=sys.stderr)
+        return 2
+    sys.stdout.write(monta(a.ledger, a.result_max))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

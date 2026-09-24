@@ -126,12 +126,25 @@ def fake_claude(tmp, corpo):
 
 
 def roda(raiz, binv, plano, args, timeout=120, extra_env=None):
+    """Por padrão o run sai `--sem-verify --sem-analise`: os repos de teste não
+    têm build, e a análise do fim seria mais uma chamada ao `claude` falso em
+    todo teste. Quem testa os dois passa `--verify`/`--com-analise`
+    (`--com-analise` é só deste ajudante: ele apenas não acrescenta
+    `--sem-analise`)."""
     env = dict(os.environ)
     env.update(extra_env or {})
     env["PATH"] = f"{binv}:{env['PATH']}"
     env["FAKE_PLANO"] = str(plano)
+    env.setdefault("CEPA_WORKTREE_HOME", str(Path(raiz).parent / "worktrees"))
     chamadas = Path(raiz).parent / "chamadas.jsonl"
     env["FAKE_CHAMADAS"] = str(chamadas)
+    args = list(args)
+    if "--verify" not in args and "--sem-verify" not in args:
+        args.append("--sem-verify")
+    if "--com-analise" in args:
+        args.remove("--com-analise")
+    elif "--sem-analise" not in args:
+        args.append("--sem-analise")
     p = subprocess.run([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz)]
                        + args, capture_output=True, text=True, env=env,
                        timeout=timeout)
@@ -615,9 +628,9 @@ def test_aviso_da_fila_chega_ao_registro_e_a_tela():
 
 
 def test_branch_diferente_da_largada_encerra_o_run():
-    """Decisão do dono: commit por item numa branch só. O supervisor não
-    commita nem cria branch — quem faz isso é o fluxo dentro do subprocesso —,
-    então sem conferência a noite podia se espalhar em branches caladas.
+    """Decisão do dono: commit por item numa branch só. Desde 2026-09-24 a
+    branch vigiada é a da noite (`until/<run>`), na worktree em que o
+    subprocesso acorda — trocar de branch ALI espalharia a noite.
     (Achado pelo gate de aceite, 2026-08-30.)"""
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
@@ -625,9 +638,7 @@ def test_branch_diferente_da_largada_encerra_o_run():
                  "marca(ident, status='done')\n"
                  "if ident == 'a1':\n"
                  "    import subprocess\n"
-                 "    subprocess.run(['git', 'checkout', '-q', '-b', 'outra'],\n"
-                 "                   cwd=os.path.dirname(os.path.dirname(\n"
-                 "                       os.path.dirname(os.path.dirname(PLANO)))))\n")
+                 "    subprocess.run(['git', 'checkout', '-q', '-b', 'outra'])\n")
         binv = fake_claude(tmp, corpo)
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
         p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
@@ -638,7 +649,7 @@ def test_branch_diferente_da_largada_encerra_o_run():
               str(fim))
         check("...e o detalhe nomeia as duas branches",
               "outra" in (fim.get("detalhe") or "")
-              and "main" in (fim.get("detalhe") or ""), str(fim))
+              and "until/" in (fim.get("detalhe") or ""), str(fim))
         check("os itens seguintes NÃO foram executados",
               yaml.safe_load(plano.read_text())["items"][1]["status"] == "pending")
 

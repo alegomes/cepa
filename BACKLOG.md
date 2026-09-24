@@ -3155,3 +3155,81 @@ reavaliar O3), o estado em 24/09:
 - Corrigir o ponteiro na memória `atlassian-expert-custo-baseline`: o documento está em
   `docs/archive/estrategia-twg-vs-mcp.md`, não em `docs/`. (Bloqueado em 24/09 pelo
   `modo-escrita-gate`, porque a sessão estava em `exploracao`.)
+
+---
+
+## cepa-until conta BLOCKED como progresso e queima uma rodada por card travado
+
+**Status:** PARCIAL em 2026-09-24 (common 2.19.0, merge `1cddede`). A causa das 20 rodadas
+travadas saiu: cada card agora roda na branch da noite `until/<run>`, que já tem os cards
+anteriores, então "antecessor `done` sem merge" deixa de existir dentro de um run. O resumo e
+o `run_end` separam entregues de travados. Não feito, de propósito: parar depois de N `blocked`
+seguidos (itens 1 e 2 abaixo), porque com a branch da noite esses travamentos deixam de
+acontecer e cada um custava ~1 min. O item 3 (o `queue` desconfiar de `done` sem merge) vale
+entre runs e continua aberto. ~~pendente~~ · **Lar:** `common/bin/cepa-until` (linhas 170 e 873) e
+possivelmente `cepa-plan queue` · **Origem:** run wego `2026-09-23-1826` (12 h, 25
+rodadas), analisado em 2026-09-24.
+
+### Problema
+
+`progresso = estado in TERMINAIS or pendencia is not None`, com
+`TERMINAIS = {"done", "blocked", "dropped"}`. Um item que sai `blocked` conta como
+progresso, então o disjuntor (`max_falhas`) nunca dispara quando a fila entrega uma
+sequência de itens que travam todos pela mesma causa de fora.
+
+No run citado: 5 DONE e 20 BLOCKED, todos com `"progresso": true`. As 20 rodadas
+custaram US$ 14,30 (84,39 do total − 70,09 das 5 entregas) e ~20 min para redescobrir
+a mesma causa: o card anterior do épico estava pronto numa branch `session/*` sem
+merge. Agravante: os cards dos épicos tinham `blocked_by` vazio, e um antecessor
+`done` sem merge libera o dependente (o `queue` confia no status).
+
+### Esboço de solução
+
+1. Tratar N `blocked` seguidos (sugestão: 3) como sinal de parada, com motivo próprio
+   no `run_end` ("fila travada por condição de fora"), sem contar como falha do item.
+2. Opcional: se o `evidence` dos `blocked` seguidos cita a mesma branch/card como
+   causa, parar já no segundo.
+3. No `queue`: um antecessor `done` cujo `evidence` diz "NAO mesclado" (ou cuja
+   branch `session/<id>` não é ancestral de `origin/main`) não libera o dependente.
+
+### Aceite
+
+Fila sintética com 1 item `done` sem merge seguido de 5 dependentes que travam: o
+run encerra depois de 3 `blocked` seguidos, com motivo nomeado no `.jsonl`.
+---
+
+## `drain-plan` fecha card `done` sem a fase de validação do build-hex
+
+**Status:** pendente · **Lar provável:** `common/commands/drain-plan.md` (passo 3.c) e
+`build-hex/commands/plan-build-validate.md` · **Origem:** análise do run de 2026-09-23 do
+`cepa-until` no WEGO, feita em 2026-09-24.
+
+O `plan-build-validate` do build-hex termina no `validation-lead`, que roda o build completo e
+o `security-reviewer`. No run de 23/09 nenhum dos 5 cards entregues passou por ele: a contagem
+de agentes no `.log` mostra engineering-lead, qa, refactor-advisor, code-reviewer,
+completion-auditor e proof-reviewer em todos, e `validation-lead` em nenhum. O build completo
+agora é do supervisor (`cepa-until` 2.19.0 roda depois de cada `done`), mas a revisão de
+segurança continua sem rodar. O WEGO-2318 faz login no portal com a credencial da operadora e
+não teve revisão de segurança.
+
+**Conserto:** o passo 3.c do `drain-plan` passa a exigir, quando a topologia tem
+`validation-lead`, o veredito dele (READY) além de COMPLETE e PROVEN. Melhor ainda se for uma
+trava mecânica: o `cepa-plan finish --status done` recusa sem um artefato de validação gravado,
+do mesmo jeito que o gate de aceite lê `.claude/acceptance/<KEY>.yaml`.
+
+---
+
+## `test_cepa_until_adversarial.py` vermelho desde antes de 2026-09-24
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (`executa_item`, caminho do
+`OSError`) ou o próprio teste · **Origem:** suíte rodada em 2026-09-24 antes das mudanças da
+branch da noite.
+
+O caso `test_claude_corrompido_no_meio_e_falha_contada_nao_traceback` falha em "o item que nem
+lançou é registrado sem progresso": o registro sai sem nenhum `run_end` e o teste estoura com
+`IndexError`. É o teste de entrada hostil de um processo que roda sem ninguém olhando. A falha
+já existia no commit `4d1ddfb`, antes das mudanças da branch da noite, e continua igual depois
+delas.
+
+**Primeiro passo:** reproduzir isolado e ver se o supervisor morre (o que seria defeito real:
+a noite acaba sem registro) ou se o teste montou o cenário errado.
