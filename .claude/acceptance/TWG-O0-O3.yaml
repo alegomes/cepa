@@ -1,7 +1,7 @@
 key: TWG-O0-O3
 audited_at: "2026-09-24"
-audited_range: "25f1c17..cfa3054 (937fc1b, d70e366, cfa3054) + merge 00101e0"
-status: incomplete
+audited_range: "25f1c17..a36a52e (937fc1b, d70e366, cfa3054, merge 00101e0, f3e6ddc, fdf70fe, a36a52e)"
+status: complete
 
 criteria:
   - id: AC1
@@ -71,7 +71,7 @@ criteria:
       agent_type). Registrado no PreToolUse com matcher Bash.
     altitude: application
     surface: "common/hooks/jira-write-lock.py rodando como processo (stdin JSON -> exit code), registrado em common/.claude-plugin/plugin.json"
-    test: tests/test_jiramut_deteccao_por_efeito.py (bloco "--- jira-write-lock ---")
+    test: tests/test_jiramut_deteccao_por_efeito.py (blocos "--- jira-write-lock ---" e "--- registro no plugin.json ---")
     layer: processo (subprocess.run do hook real, não só a função classify)
     evidence: verified
     run: |
@@ -89,8 +89,13 @@ criteria:
         ok  [exit 0] sessao principal (humano)
         ok  [exit 0] sem twg
       11/11 passaram
-      Registro conferido em common/.claude-plugin/plugin.json: hook "jira-write-lock.py" está
-      no bloco PreToolUse com "matcher": "Bash" (junto aos demais hooks Bash).
+      --- registro no plugin.json (PreToolUse, matcher Bash) ---
+        ok  jira-write-lock.py
+        ok  bitbucket-decision-lock.py
+        ok  acceptance-gate.py
+        ok  merge-truth-gate.py
+        ok  summary-nulls-gate.py
+        ok  bounce-reason-gate.py
     verdict: complete
 
   - id: AC5
@@ -104,36 +109,29 @@ criteria:
       field create-metadata e comment query não são barrados.
     altitude: application
     surface: "os 4 hooks reais (common/hooks/acceptance-gate.py, merge-truth-gate.py, summary-nulls-gate.py, bounce-reason-gate.py) rodando como processo (stdin JSON -> exit code) diante de um comando `twg`"
-    test: tests/test_jiramut_deteccao_por_efeito.py (bloco CASES, linhas 8-63)
-    layer: função (J.classify(payload) chamado direto em Python, NUNCA os 4 hooks-gate como subprocess)
-    evidence: missing
+    test: tests/test_jiramut_deteccao_por_efeito.py (bloco "--- quatro gates como processo, com twg ---")
+    layer: processo (subprocess.run de cada um dos 4 hooks reais, não só a função classify)
+    evidence: verified
     run: |
-      $ grep -n "twg\|Bash" tests/test_acceptance_gate.py tests/test_bounce_reason_gate.py \
-          tests/test_merge_truth_gate.py tests/test_summary_nulls_gate.py
-      (sem resultado — nenhuma ocorrência)
-      Confirmado por leitura: os 4 arquivos de teste dos gates reais (test_acceptance_gate.py,
-      test_merge_truth_gate.py, test_summary_nulls_gate.py, test_bounce_reason_gate.py) só
-      constroem payload com tool_name MCP (ex. "transitionJiraIssue"); nenhum deles roda o hook
-      como processo com um comando `twg jira workitem ...` no tool_input, nem via subprocess nem
-      importando a função principal do gate com esse payload.
-      O único teste que exercita as regras de create/update/link/--status/--comment/--fields-json
-      etc. é o loop CASES de tests/test_jiramut_deteccao_por_efeito.py, que chama
-      J.classify(payload) diretamente — nunca os hooks acceptance-gate.py, merge-truth-gate.py,
-      summary-nulls-gate.py ou bounce-reason-gate.py como processo.
-    gap: >
-      Lacuna de altitude: a regra do AC5 é sobre o comportamento dos 4 GATES (arquivos
-      common/hooks/acceptance-gate.py, merge-truth-gate.py, summary-nulls-gate.py,
-      bounce-reason-gate.py), não sobre a função classify() que eles chamam por dentro. Hoje só
-      a função é testada; nenhum teste roda um desses 4 hooks como processo (stdin JSON -> exit
-      code) com um payload Bash contendo `twg jira workitem create`, `workitem update --field`,
-      `workitem link workitem`, `workitem update --status` etc. Um bug de integração entre o
-      gate e _jiramut.classify (ex.: import errado, campo do payload não repassado, exceção
-      silenciosa) passaria batido pela suíte atual. Fecha com um bloco de teste no molde do que
-      já existe para jira-write-lock e bitbucket-decision-lock nesse mesmo arquivo: para cada um
-      dos 4 gates reais, ao menos um caso `pass` (ex. `twg jira workitem create ...`) e um caso
-      `blocked` (ex. `twg jira workitem update --id X --status Done`) rodando o hook via
-      subprocess.run([sys.executable, HOOK], input=payload_json, ...) e conferindo o returncode.
-    verdict: incomplete
+      $ python3 tests/test_jiramut_deteccao_por_efeito.py
+      --- quatro gates como processo, com twg ---
+        ok  [exit 0] acceptance-gate.py: create legivel passa
+        ok  [exit 0] acceptance-gate.py: update de campo passa
+        ok  [exit 0] acceptance-gate.py: link entre cards passa
+        ok  [exit 0] acceptance-gate.py: --help passa
+        ok  [exit 0] acceptance-gate.py: comment query passa
+        ok  [exit 2] acceptance-gate.py: update --status e barrado
+        ok  [exit 2] acceptance-gate.py: update --comment e barrado
+        ok  [exit 2] acceptance-gate.py: update --fields-json e barrado
+        (mesmos 8 casos, mesmo resultado, para merge-truth-gate.py, summary-nulls-gate.py
+        e bounce-reason-gate.py)
+      32/32 passaram
+      Lido o trecho comum dos 4 gates (ex. common/hooks/acceptance-gate.py:149-157): cada um
+      chama `_mut = J.classify(payload)`; se `_mut["opaque"]` chama `J.block(...)` (exit 2); senão,
+      para `kind != "transition"` (create/edit/link/comment-query) sai 0 imediatamente — confirma
+      que os 32 casos exercitam de fato o caminho de decisão do gate, não uma coincidência de outra
+      regra de negócio bloqueando/liberando por outro motivo.
+    verdict: complete
 
   - id: AC6
     description: >
@@ -145,21 +143,21 @@ criteria:
     layer: processo (execução real da suíte)
     evidence: verified
     run: |
-      $ bash tests/run-all.sh
+      $ bash tests/run-all.sh   # reconferido após o commit a36a52e (fechamento do AC5)
       ── família script (74) ──
       ... (73 ok)
       FALHA   tests/test_cepa_until_adversarial.py  (saída 1)
       ... (demais ok)
       ── família pytest (2) ──
-      52 passed in 0.22s
+      52 passed in 0.23s
       arquivos rodados: 76 de 76
       com falha: 1
         - tests/test_cepa_until_adversarial.py
-      Confirmado que tests/test_cepa_until_adversarial.py não foi tocado por nenhum dos 3
-      commits do trabalho (937fc1b, d70e366, cfa3054): `git log -- tests/test_cepa_until_adversarial.py`
-      mostra só commits de outra frente (cepa-until, 92222b3 e 739721b), fora do range auditado.
+      Confirmado que tests/test_cepa_until_adversarial.py não foi tocado por nenhum commit deste
+      trabalho: `git log -- tests/test_cepa_until_adversarial.py` mostra só commits de outra frente
+      (cepa-until, 92222b3 e 739721b), fora do range auditado.
     verdict: complete
 
 summary:
-  complete: [AC1, AC2, AC3, AC4, AC6]
-  incomplete: [AC5]
+  complete: [AC1, AC2, AC3, AC4, AC5, AC6]
+  incomplete: []
