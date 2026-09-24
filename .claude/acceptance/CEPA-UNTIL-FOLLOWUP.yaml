@@ -1,0 +1,115 @@
+key: CEPA-UNTIL-FOLLOWUP
+status: complete
+audited_at: "2026-09-24"
+auditor: completion-auditor
+criteria:
+  - id: AC1
+    text: >
+      Branch da noite: cepa-until cria until/<run> numa worktree fora do
+      clone, roda cada subprocesso nela com --na-branch, o clone principal
+      não muda de branch, o próximo card enxerga os commits do anterior,
+      nada vai para main/origin, o guarda de troca de branch confere a
+      branch da worktree da noite, e sem commit no fim worktree+branch são
+      removidas.
+    altitude: cli
+    surface: "common/bin/cepa-until (subprocesso git worktree/branch) + common/commands/drain-plan.md --na-branch"
+    test: tests/test_cepa_until_branch_da_noite.py::test_subprocesso_roda_na_branch_da_noite_e_o_clone_fica_parado, ::test_done_sem_commit_na_branch_da_noite_e_apontado
+    layer: integration (subprocesso real via git, claude falso no PATH)
+    evidence: verified
+    run: "python3 tests/test_cepa_until_branch_da_noite.py -> '✓ tudo verde' (29/29 checks, incl. os dois testes acima)"
+    verdict: complete
+  - id: AC2
+    text: >
+      Build completo pelo supervisor após cada done com commit: --verify,
+      mvnw/gradlew detectados, ou dispensa por --sem-verify/.claude/no-build;
+      repo sem build conhecido e sem flag recusa começar; build vermelho move
+      os commits do item para until/<run>-vermelho-<id> e volta a branch da
+      noite; done sem commit vira done_sem_commit; sobra não commitada vai
+      para stash registrado e não passa ao próximo item.
+    altitude: cli
+    surface: common/bin/cepa-until (roda_verify, desfaz_item, guarda_sobra, comando_de_verify)
+    test: tests/test_cepa_until_branch_da_noite.py::test_build_vermelho_tira_o_item_da_branch_sem_perder_os_commits, ::test_repo_sem_build_conhecido_nao_comeca_sem_dizer_qual, ::test_mvnw_na_raiz_vira_o_build_padrao, ::test_sobra_nao_commitada_nao_passa_para_o_proximo_item, ::test_done_sem_commit_na_branch_da_noite_e_apontado
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_cepa_until_branch_da_noite.py -> '✓ tudo verde' (29/29 checks, incl. os cinco testes acima)"
+    verdict: complete
+  - id: AC3
+    text: >
+      O resumo final e o run_end separam entregues de travados (antes
+      somavam tudo em "com progresso").
+    altitude: cli
+    surface: "common/bin/cepa-until (registra run_end com entregues/travados; print do resumo final)"
+    test: tests/test_cepa_until_branch_da_noite.py::test_build_vermelho_tira_o_item_da_branch_sem_perder_os_commits
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_cepa_until_branch_da_noite.py -> ok 'o registro conta entregues, travados e vermelhos', ok 'o resumo separa entregues de travados' (checa literalmente '2 entregue(s) · 1 travado(s)' no stdout)"
+    verdict: complete
+  - id: AC4
+    text: >
+      cepa-plan from-spec preenche blocked_by a partir de "Depois do CS-N" /
+      "após o CS-N e CS-M" na própria spec, e avisa quando o CS citado não
+      existe.
+    altitude: cli
+    surface: common/bin/cepa-plan (itens_de_spec, RE_DEPOIS_DE, cmd_from_spec)
+    test: tests/test_common_plan.py::test_from_spec_le_depois_do_cs_como_blocked_by
+    layer: integration (subprocess real do cepa-plan from-spec)
+    evidence: verified
+    run: "python3 tests/test_common_plan.py -> 'all green', incl. ok '\"Depois do CS-1 e CS-2\" vira blocked_by [CS-1, CS-2]' e a checagem do aviso para CS-9 inexistente"
+    verdict: complete
+  - id: AC5
+    text: >
+      /common:until-review (common/commands/until-review.md) +
+      common/bin/cepa-until-digest: o digest gera um resumo mecânico do run
+      (relatório final de cada rodada, agentes por tipo, erros de
+      ferramenta, custo somado com a origem, cauda dos builds, estado atual
+      da fila dos itens tocados, aviso quando registro e log não pareiam). O
+      comando é só leitura e relata em plain-report. O cepa-until roda o
+      /common:until-review no fim do run e grava <run>.review.md, exceto com
+      --sem-analise, zero itens, ou parada pela cota (nesse caso diz como
+      rodar à mão).
+    altitude: cli
+    surface: "common/bin/cepa-until-digest (mecânica do resumo) + common/commands/until-review.md (contrato do prompt: só leitura, plain-report) + common/bin/cepa-until (integração no fim do run)"
+    test: "tests/test_cepa_until_digest.py (mecânica do digest); tests/test_common_until_review.py (contrato de conteúdo do until-review.md: só leitura, proibições, plain-report, perguntas fechadas); tests/test_cepa_until_branch_da_noite.py::test_analise_do_fim_grava_o_review_ao_lado_do_registro / ::test_run_parado_pela_cota_nao_roda_a_analise (integração do cepa-until)"
+    layer: "unit (digest) + content-contract (until-review.md) + integration (cepa-until)"
+    evidence: verified
+    run: >
+      python3 tests/test_common_until_review.py -> "✓ tudo verde" (13/13
+      checks). Perturbação conferida por este auditor, independentemente do
+      coordenador: apaguei o parágrafo "**Só leitura.**" de
+      common/commands/until-review.md (cópia de segurança em
+      /tmp/until-review-backup.md) e rodei o teste de novo -> 7 falhas
+      ("declara só leitura nas instruções", "...e proíbe git merge",
+      "...e proíbe cepa-plan finish", "...e proíbe transição de card",
+      "...e proíbe build", "...e proíbe push", "...e proíbe edição de
+      arquivo"), exit 1. Restaurei o arquivo original e rodei de novo ->
+      "✓ tudo verde", exit 0. Conferi com `diff` que o arquivo restaurado é
+      idêntico ao original e `git status --porcelain` não mostra mudança de
+      conteúdo (só o `??` de arquivo novo neste card). Também rodei
+      python3 tests/test_cepa_until_digest.py -> "✓ tudo verde" e as duas
+      rodadas relevantes de test_cepa_until_branch_da_noite.py (dentro do
+      "✓ tudo verde" de 29/29 já registrado no AC1/AC2).
+    verdict: complete
+  - id: AC6
+    text: >
+      /common:drain-plan documenta --na-branch: não criar worktree/branch
+      por item, não partir de origin/main, commit direto, sem merge/push,
+      conferir a branch antes.
+    altitude: cli
+    surface: common/commands/drain-plan.md (seção --na-branch)
+    test: tests/test_common_drain_plan.py::test_na_branch_da_noite
+    layer: content-contract (lê o .md e confere as frases)
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 'all green', incl. os 6 checks de test_na_branch_da_noite (declara --na-branch, não criar worktree/branch, não partir de origin/main, commit direto, sem merge/push, confere a branch antes)"
+    verdict: complete
+notes: >
+  Suítes rodadas nesta auditoria, em primeiro plano, uma por vez:
+  tests/test_cepa_until.py (verde), tests/test_cepa_until_branch_da_noite.py
+  (verde, 29/29), tests/test_cepa_until_digest.py (verde),
+  tests/test_common_until_review.py (verde, 13/13, com perturbação
+  reproduzida por este auditor), tests/test_common_plan.py (verde, "all
+  green"), tests/test_common_drain_plan.py (verde, "all green").
+  tests/test_cepa_until_adversarial.py falha em
+  "o item que nem lançou é registrado sem progresso" — não está entre os
+  arquivos modificados neste card (git status não o lista como M) e a falha
+  bate com a observação do dono ("já falhava antes destas mudanças, mesma
+  falha"); tratada como pré-existente e fora do escopo deste veredito.
