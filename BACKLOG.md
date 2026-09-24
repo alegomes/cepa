@@ -3159,7 +3159,13 @@ reavaliar O3), o estado em 24/09:
 
 ## cepa-until conta BLOCKED como progresso e queima uma rodada por card travado
 
-**Status:** pendente · **Lar:** `common/bin/cepa-until` (linhas 170 e 873) e
+**Status:** PARCIAL em 2026-09-24 (common 2.19.0, merge `1cddede`). A causa das 20 rodadas
+travadas saiu: cada card agora roda na branch da noite `until/<run>`, que já tem os cards
+anteriores, então "antecessor `done` sem merge" deixa de existir dentro de um run. O resumo e
+o `run_end` separam entregues de travados. Não feito, de propósito: parar depois de N `blocked`
+seguidos (itens 1 e 2 abaixo), porque com a branch da noite esses travamentos deixam de
+acontecer e cada um custava ~1 min. O item 3 (o `queue` desconfiar de `done` sem merge) vale
+entre runs e continua aberto. ~~pendente~~ · **Lar:** `common/bin/cepa-until` (linhas 170 e 873) e
 possivelmente `cepa-plan queue` · **Origem:** run wego `2026-09-23-1826` (12 h, 25
 rodadas), analisado em 2026-09-24.
 
