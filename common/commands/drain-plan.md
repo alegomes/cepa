@@ -1,6 +1,6 @@
 ---
 description: Executa em lote a fila `single-track` do repo — `.claude/programs/<nome>/plan.yaml` — NA ORDEM QUE ELA GUARDA. É a etapa 3 do desenho "um escritor, três fontes", e fecha o ciclo sem tracker: `/common:plan` escreve a fila, `/common:next` aponta UM passo, este comando executa vários. Não exige Jira e nunca consulta um: o único lote que existia até aqui, o `/board-flow:drain`, tira a ordem do rank do quadro — exatamente a ordem que o plano existe para substituir. Copia do drain o que vale: parar no primeiro item travado e o teto `--max`. Uma rota que só o humano fecha ADIA o item e o lote segue, cobrando todas as rotas no fim. Reserva cada item antes de tocá-lo — com dono registrado, para saber se é sessão viva ou run morto — e registra o desfecho de todos. Reconcilia contra o quadro antes de montar o lote, e transiciona o card ao fechar, quando o repo tem Jira.
-argument-hint: <nome> [--max N] [--dry-run]
+argument-hint: <nome> [--max N] [--dry-run] [--na-branch <branch>]
 interaction: routine
 ---
 
@@ -47,6 +47,9 @@ tentar linearizá-lo.
 - `--offline` — não lê o quadro no passo 0 nem transiciona card nenhum. Use
   quando o Jira está fora do ar ou você quer rodar sem rede; o relatório diz
   que o status da fila é auto-declarado.
+- `--na-branch <branch>` — quem passa é o `cepa-until`. Diz que o diretório
+  em que você acordou já é a worktree da branch da noite, e muda três coisas
+  (ver "Na branch da noite", no passo 3).
 
 ## Instructions
 
@@ -233,6 +236,31 @@ Para cada item do lote, na ordem:
      `why` do item são a descrição; o `why` é contexto de prioridade, não
      escopo — não amplie o item para "aproveitar que estou aqui"
      (`scope-discipline`).
+
+  **Na branch da noite (`--na-branch <branch>`).** Confira primeiro que
+  `git rev-parse --abbrev-ref HEAD` devolve exatamente `<branch>`; se não
+  devolver, `finish --status blocked` com a divergência e pare. Depois:
+
+  - **trabalhe aqui.** Não crie worktree nem branch para o item (`git worktree
+    add -b`, `git checkout -b`, `/common:worktree-start`), e não parta de
+    `origin/main`. A branch da noite JÁ tem os cards anteriores da noite, e é
+    por isso que ela existe: no run de 2026-09-23 cada item abriu a própria
+    worktree a partir de `origin/main`, nada mesclou, e 20 de 25 rodadas
+    travaram porque o card anterior só existia numa branch solta. Worktree
+    descartável para perturbação de prova (`git worktree add --detach /tmp/...`)
+    continua valendo;
+  - **commit direto nesta branch**, com a árvore limpa antes do `finish`. O
+    supervisor guarda num stash o que sobrar sem commit, e o próximo card não
+    vê;
+  - **sem merge, sem push, sem Done.** O supervisor roda o build completo
+    depois do seu `finish --status done`; vermelho, ele tira os seus commits da
+    branch e marca o item `blocked`. O card vai para Review como sempre, e a
+    evidência não diz "merge fica com o dono": diz que o código está na branch
+    da noite.
+
+  Um item que depende de outro da mesma fila que já está `done` na branch da
+  noite **não** está travado por "o antecessor não está na main": o código dele
+  está aqui.
 
   c. **Passe pelos dois gates** antes de chamar o item de fechado — são os
      mesmos de qualquer construção deste harness, e o lote não os pula por ser

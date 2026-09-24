@@ -674,6 +674,26 @@ def test_reconcile_recusa_status_que_o_mapa_nao_conhece(base):
     check("e diz por quê", "status_map" in r.stderr, r.stderr)
 
 
+def test_na_branch_da_noite(base):
+    """O `cepa-until` passa `--na-branch`. Sem o comando declarar o que isso
+    muda, o agente volta a abrir worktree própria a partir de `origin/main`,
+    que foi o que deixou 20 de 25 rodadas travadas em 2026-09-23."""
+    f = CMD.read_text(encoding="utf-8")
+    limpo = f.replace("`", "").lower()
+    check("declara --na-branch nos argumentos",
+          "--na-branch" in f.split("## Instructions")[0])
+    i = limpo.find("na branch da noite (--na-branch")
+    trecho = limpo[i:i + 2500] if i != -1 else ""
+    check("o passo 3 diz o que muda na branch da noite", bool(trecho))
+    check("...não criar worktree nem branch para o item",
+          "não crie worktree nem branch" in trecho, trecho[:300])
+    check("...não partir de origin/main", "origin/main" in trecho)
+    check("...commit direto na branch", "commit direto nesta branch" in trecho)
+    check("...sem merge, sem push", "sem merge, sem push" in trecho)
+    check("...e confere a branch antes de começar",
+          "rev-parse --abbrev-ref head" in trecho)
+
+
 def main():
     with tempfile.TemporaryDirectory() as base:
         for fn in (test_lote_segue_a_ordem_da_fila_e_o_teto,
@@ -698,6 +718,7 @@ def main():
                    test_finish_exige_evidencia,
                    test_finish_abre_divida_mas_nunca_fecha,
                    test_marcacao_preserva_cabecalho_e_campos_extras,
+                   test_na_branch_da_noite,
                    test_contrato_do_comando):
             print(f"\n{fn.__name__}")
             fn(base)

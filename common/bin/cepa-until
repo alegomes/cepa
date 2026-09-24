@@ -51,6 +51,26 @@ Este arquivo é a fiação em volta disso: relógio, disjuntor e registro.
    conferência a noite podia se espalhar em branches caladas e o banner
    continuaria imprimindo a branch certa. (Lacuna achada pelo gate de aceite,
    2026-08-30.)
+   **Revisão de 2026-09-24: a branch da noite é do supervisor.** A conferência
+   acima olhava a branch do clone principal, e o run de 23/09 no WEGO mostrou
+   que isso não basta: cada subprocesso abriu a própria worktree a partir de
+   `origin/main` (`session/wego2308`, `session/wego2309`...), o clone principal
+   ficou em `main` a noite toda e o guarda nunca disparou. Nada mesclou, e 20
+   das 25 rodadas travaram porque o card anterior só existia numa branch
+   solta. Agora o supervisor cria a worktree `until/<run>` na largada, roda
+   cada subprocesso DENTRO dela (`/common:drain-plan ... --na-branch
+   until/<run>`), e cada card começa de onde o anterior terminou. Nada vai
+   para a `main` nem para o `origin`: de manhã o dono mescla uma branch só.
+
+   **E o build completo também é do supervisor.** No mesmo run, a 2308 fechou
+   `done` com o `clean verify` rodado ANTES de um último refactor, e o
+   `validation-lead` (a fase que roda o build completo no fim do card) não
+   rodou em nenhum dos 5 cards. Depois de cada item `done`, o supervisor roda
+   o build completo na branch da noite. Vermelho, os commits do item vão para
+   `until/<run>-vermelho-<id>`, a branch da noite volta para onde estava e o
+   item vira `blocked` com o motivo. O próximo card nunca começa sobre código
+   que não passou.
+
 4. **`--dangerously-skip-permissions` ligado.** Sem isso o subprocesso trava no
    primeiro pedido de permissão e a noite morre em silêncio. Fica explícito no
    banner e desligável por `--com-permissoes`.
@@ -125,6 +145,14 @@ ou teto de uso da conta cuja espera não cabe na janela.
 Um item que sai `blocked` PARA o lote — regra do `cepa-plan`, herdada do
 `/board-flow:drain`: re-executar mede o mesmo travamento.
 
+## Depois do fim
+
+Com o run encerrado, um último `claude -p "/common:until-review <run>"` lê o
+registro e a saída dos subprocessos e grava `<run>.review.md` ao lado deles: o
+que o dono precisa fazer, em perguntas fechadas. Não roda quando o run parou
+pela cota (a análise bateria no mesmo teto) nem com `--sem-analise`; nos dois
+casos o comando roda à mão depois.
+
 Uso:
     cepa-until minha-fila --for 12h
     cepa-until minha-fila --until 07:00
@@ -152,6 +180,24 @@ except ImportError:
 
 AQUI = Path(__file__).resolve().parent
 CEPA_PLAN = AQUI / "cepa-plan"
+CEPA_UNTIL_DIGEST = AQUI / "cepa-until-digest"
+
+# Onde nasce a worktree da noite. Mesma casa e mesma variável do
+# `cepa` (launcher): fora da árvore sincronizada pelo Insync.
+ENV_CASA_WORKTREES = "CEPA_WORKTREE_HOME"
+
+# O build completo que o supervisor roda depois de cada item `done`, pelo
+# arquivo que o repo tem na raiz. Repo sem nenhum dos dois precisa dizer o
+# comando (`--verify`) ou dispensá-lo (`--sem-verify`, ou `.claude/no-build`
+# commitado): uma noite sem build completo é o buraco que a 2308 mostrou.
+VERIFY_POR_ARQUIVO = [
+    ("mvnw", "./mvnw -B clean verify"),
+    ("gradlew", "./gradlew build"),
+]
+
+# Quanto a análise do fim do run pode levar. Ela lê um resumo de dezenas de KB,
+# não o `.log` inteiro; 20 minutos é folga, não estimativa.
+LIMITE_DA_ANALISE_SEG = int(os.environ.get("CEPA_UNTIL_LIMITE_ANALISE", "1200"))
 
 RESERVA_MINIMA_PADRAO = "25m"
 FOLGA_PADRAO = "60m"
@@ -346,10 +392,15 @@ def le_item(caminho_plano, ident):
 
 # ── execução de um item ─────────────────────────────────────────────────────
 
-def monta_comando(nome, repo, permissoes):
+def monta_comando(nome, branch, permissoes):
     # stream-json é o que traz o `rate_limit_event` com o uso da cota. O
     # `--verbose` é exigência do próprio `claude` para esse formato com `-p`.
-    cmd = ["claude", "-p", f"/common:drain-plan {nome} --max 1",
+    # `--na-branch` diz ao drain-plan que a árvore em que ele acorda É a
+    # branch da noite: sem worktree nova, commit direto nela.
+    pedido = f"/common:drain-plan {nome} --max 1"
+    if branch:
+        pedido += f" --na-branch {branch}"
+    cmd = ["claude", "-p", pedido,
            "--output-format", "stream-json", "--verbose"]
     if not permissoes:
         cmd.append("--dangerously-skip-permissions")
@@ -535,10 +586,11 @@ def ambiente_do_item():
     return env
 
 
-def executa_item(nome, repo, permissoes, limite_seg, log):
-    """Dispara UM subprocesso.
+def executa_item(nome, arvore, branch, permissoes, limite_seg, log):
+    """Dispara UM subprocesso, com `arvore` (a worktree da noite) como cwd.
     Devolve (codigo, matou_por_timeout, segundos, saida_desta_tentativa)."""
-    cmd = monta_comando(nome, repo, permissoes)
+    repo = arvore
+    cmd = monta_comando(nome, branch, permissoes)
     inicio = time.monotonic()
     try:
         marca = os.path.getsize(log)
@@ -602,18 +654,7 @@ def bloqueia_item(nome, repo, ident, tentativas):
         "condição de fora: é o supervisor tirando o item da frente para a fila "
         "andar. A saída do `claude` de cada tentativa está no `.log` do run; "
         "devolva o item para `pending` quando souber o que travou.")
-    try:
-        p = subprocess.run(
-            [sys.executable, str(CEPA_PLAN), "finish", nome, str(ident),
-             "--status", "blocked", "--evidence", evidencia,
-             "--repo", str(repo)],
-            capture_output=True, text=True, timeout=60)
-    except (subprocess.TimeoutExpired, OSError) as e:
-        return f"o `cepa-plan finish` não respondeu: {e}"
-    if p.returncode != 0:
-        return (p.stderr or p.stdout or "").strip() or \
-            f"`cepa-plan finish` saiu {p.returncode}"
-    return None
+    return finaliza_item(nome, repo, ident, "blocked", evidencia)
 
 
 # ── guardas de largada ──────────────────────────────────────────────────────
@@ -636,6 +677,155 @@ def branch_atual(repo):
         return p.stdout.strip() if p.returncode == 0 else "?"
     except Exception:
         return "?"
+
+
+# ── a branch da noite ───────────────────────────────────────────────────────
+
+def git(args, cwd, timeout=120):
+    """(código, saída+erro). Nunca levanta: o supervisor não morre por git."""
+    try:
+        p = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True,
+                           text=True, timeout=timeout)
+        return p.returncode, (p.stdout + p.stderr).strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        return 1, str(e)
+
+
+def cabeca(arvore):
+    codigo, saida = git(["rev-parse", "HEAD"], arvore)
+    return saida if codigo == 0 else None
+
+
+def abre_branch_da_noite(repo, run_id):
+    """Cria `until/<run>` a partir do HEAD do clone e a worktree dela fora da
+    árvore sincronizada. Devolve (arvore, branch, erro)."""
+    branch = f"until/{run_id}"
+    casa = Path(os.environ.get(ENV_CASA_WORKTREES)
+                or Path.home() / "cepa-worktrees")
+    arvore = casa / f"{repo.name}-until-{run_id}"
+    casa.mkdir(parents=True, exist_ok=True)
+    codigo, saida = git(["worktree", "add", "-q", "-b", branch, str(arvore),
+                         "HEAD"], repo)
+    if codigo != 0:
+        return None, branch, saida or f"`git worktree add` saiu {codigo}"
+    return arvore, branch, None
+
+
+def fecha_branch_vazia(repo, arvore, branch, base):
+    """Noite sem nenhum commit não deixa worktree nem branch para trás."""
+    if cabeca(arvore) != base or arvore_suja(arvore):
+        return False
+    git(["worktree", "remove", str(arvore)], repo)
+    git(["branch", "-D", branch], repo)
+    return True
+
+
+def guarda_sobra(arvore, run_id, ident):
+    """O item terminou com arquivos não commitados. O próximo card não pode
+    começar em cima deles, e o build completo mediria a sobra em vez do que foi
+    commitado. Guarda num stash com etiqueta única e devolve o sha dele."""
+    etiqueta = f"cepa-until {run_id} {ident}"
+    codigo, saida = git(["stash", "push", "-u", "-m", etiqueta], arvore)
+    if codigo != 0:
+        return None, saida
+    codigo, lista = git(["stash", "list", "--format=%H %gs"], arvore)
+    for linha in lista.splitlines():
+        if linha.endswith(etiqueta):
+            return linha.split()[0], None
+    return None, "stash criado mas não encontrado pela etiqueta"
+
+
+def comando_de_verify(repo, explicito, dispensado):
+    """(comando, origem). Comando None = dispensado; '' = não sei qual é."""
+    if dispensado:
+        return None, "--sem-verify"
+    if explicito:
+        return explicito, "--verify"
+    if (repo / ".claude" / "no-build").exists():
+        return None, ".claude/no-build"
+    for arquivo, comando in VERIFY_POR_ARQUIVO:
+        if (repo / arquivo).exists():
+            return comando, f"achei `{arquivo}` na raiz"
+    return "", None
+
+
+def roda_verify(comando, arvore, limite_seg, log):
+    """Roda o build completo na branch da noite, com a saída no `.log` do run.
+    Devolve (verde, segundos, motivo)."""
+    inicio = time.monotonic()
+    with open(log, "ab", buffering=0) as saida:
+        saida.write(f"\n===== {datetime.now().isoformat(timespec='seconds')} "
+                    f"· verify · {comando}\n".encode("utf-8"))
+        try:
+            proc = subprocess.Popen(comando, shell=True, cwd=str(arvore),
+                                    stdout=saida, stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL,
+                                    start_new_session=True)
+        except OSError as e:
+            return False, time.monotonic() - inicio, f"não lançou: {e}"
+        try:
+            codigo = proc.wait(timeout=max(limite_seg, 1))
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except Exception:
+                pass
+            proc.wait()
+            return False, time.monotonic() - inicio, "não terminou dentro da janela"
+    gasto = time.monotonic() - inicio
+    return codigo == 0, gasto, (None if codigo == 0 else f"saiu {codigo}")
+
+
+def desfaz_item(repo, arvore, run_id, ident, antes):
+    """Tira da branch da noite os commits de um item cujo build ficou
+    vermelho, sem perdê-los: eles ficam em `until/<run>-vermelho-<id>`."""
+    lateral = f"until/{run_id}-vermelho-{ident}"
+    codigo, saida = git(["branch", "-f", lateral, "HEAD"], arvore)
+    if codigo != 0:
+        return None, saida
+    codigo, saida = git(["reset", "-q", "--hard", antes], arvore)
+    if codigo != 0:
+        return None, saida
+    return lateral, None
+
+
+def finaliza_item(nome, repo, ident, status, evidencia):
+    """`cepa-plan finish`. Devolve None ou o erro em texto."""
+    try:
+        p = subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "finish", nome, str(ident),
+             "--status", status, "--evidence", evidencia, "--repo", str(repo)],
+            capture_output=True, text=True, timeout=60)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return f"o `cepa-plan finish` não respondeu: {e}"
+    if p.returncode != 0:
+        return (p.stderr or p.stdout or "").strip() or \
+            f"`cepa-plan finish` saiu {p.returncode}"
+    return None
+
+
+# ── a análise do fim ────────────────────────────────────────────────────────
+
+def analisa_o_run(repo, arvore, ledger, permissoes):
+    """Roda `/common:until-review` sobre o run e grava `<run>.review.md`.
+    Devolve (caminho, erro)."""
+    destino = ledger.with_suffix(".review.md")
+    cmd = ["claude", "-p", f"/common:until-review {ledger}",
+           "--output-format", "text"]
+    if not permissoes:
+        cmd.append("--dangerously-skip-permissions")
+    try:
+        p = subprocess.run(cmd, cwd=str(arvore or repo), capture_output=True,
+                           text=True, timeout=LIMITE_DA_ANALISE_SEG,
+                           stdin=subprocess.DEVNULL, env=ambiente_do_item())
+    except subprocess.TimeoutExpired:
+        return None, f"não terminou em {LIMITE_DA_ANALISE_SEG // 60} min"
+    except OSError as e:
+        return None, f"não lançou: {e}"
+    if p.returncode != 0 or not p.stdout.strip():
+        return None, (p.stderr or "").strip()[-300:] or f"saiu {p.returncode}"
+    destino.write_text(p.stdout, encoding="utf-8")
+    return destino, None
 
 
 # ── o laço ──────────────────────────────────────────────────────────────────
@@ -674,6 +864,15 @@ def main(argv=None):
                     help="começa mesmo com a árvore suja (por default recusa: "
                          "sem isso não dá para separar o que o run fez do que "
                          "já estava lá)")
+    ap.add_argument("--verify", metavar="CMD",
+                    help="o build completo que roda na branch da noite depois "
+                         "de cada item `done` (default: pelo mvnw/gradlew da "
+                         "raiz)")
+    ap.add_argument("--sem-verify", action="store_true", dest="sem_verify",
+                    help="não roda build completo depois dos itens — só para "
+                         "repo sem build")
+    ap.add_argument("--sem-analise", action="store_true", dest="sem_analise",
+                    help="não roda o /common:until-review no fim do run")
     ap.add_argument("--dry-run", action="store_true", dest="dry",
                     help="mostra o plano do run e sai sem executar nada")
     a = ap.parse_args(argv)
@@ -718,6 +917,15 @@ def main(argv=None):
             print(f"    {l}", file=sys.stderr)
         return 2
 
+    verify, origem_verify = comando_de_verify(repo, a.verify, a.sem_verify)
+    if verify == "":
+        print("cepa-until: não sei o build completo deste repo (não há `mvnw` "
+              "nem `gradlew` na raiz). Passe `--verify '<comando>'`, ou "
+              "`--sem-verify` se o repo não tem build — sem isso um card pode "
+              "fechar `done` com o build vermelho e o próximo começar em cima "
+              "dele.", file=sys.stderr)
+        return 2
+
     ledger_dir = repo / ".claude" / "programs" / a.fila / "until"
     ledger_dir.mkdir(parents=True, exist_ok=True)
     run_id = agora.strftime("%Y-%m-%d-%H%M")
@@ -736,6 +944,13 @@ def main(argv=None):
     print(f"  permissões  : "
           + ("PEDE (vai travar sem alguém olhando)" if a.permissoes
              else "--dangerously-skip-permissions LIGADO"))
+    print(f"  branch noite: until/{run_id} (worktree fora da árvore; nada vai "
+          "para a main nem para o origin)")
+    print(f"  build       : " + (f"{verify} depois de cada item done "
+                                 f"({origem_verify})" if verify else
+                                 f"dispensado ({origem_verify})"))
+    print(f"  análise     : " + ("desligada (--sem-analise)" if a.sem_analise
+                                 else "/common:until-review no fim"))
     print(f"  registro    : {ledger}")
     prox = (dados.get("batch") or [{}])[0]
     print(f"  1º item     : {prox.get('id', '(nenhum — fila sem item executável)')}"
@@ -757,9 +972,21 @@ def main(argv=None):
         with ledger.open("a", encoding="utf-8") as f:
             f.write(json.dumps(evento, ensure_ascii=False) + "\n")
 
-    branch_largada = branch_atual(repo)
+    arvore, branch_largada, erro = abre_branch_da_noite(repo, run_id)
+    if erro:
+        print(f"cepa-until: não consegui criar a branch da noite "
+              f"`{branch_largada}`: {erro}", file=sys.stderr)
+        return 2
+    base_da_noite = cabeca(arvore)
     registra({"evento": "run_start", "fila": a.fila, "prazo": prazo.isoformat(),
-              "max_falhas": a.max_falhas, "branch": branch_largada})
+              "max_falhas": a.max_falhas, "branch": branch_largada,
+              "arvore": str(arvore), "base": base_da_noite,
+              "branch_do_clone": branch_atual(repo), "verify": verify})
+    # O que a noite ENTREGOU (done com build verde na branch da noite) e o que
+    # travou (`blocked`). Os dois contam como progresso para o disjuntor —
+    # tirar um item da fila com motivo não é falha do run —, mas o resumo não
+    # pode somá-los: em 23/09 "25 com progresso" escondia 20 travados.
+    entregues, travados, vermelhos, sem_commit = [], [], [], []
 
     falhas_seguidas = 0
     feitos, falhados, itens = [], [], 0
@@ -787,7 +1014,7 @@ def main(argv=None):
                            "agora seria trabalho jogado fora")
             break
 
-        agora_branch = branch_atual(repo)
+        agora_branch = branch_atual(arvore)
         if agora_branch != branch_largada:
             motivo_fim = "branch-mudou"
             detalhe_fim = (
@@ -860,8 +1087,18 @@ def main(argv=None):
                   "tentativa": vez})
 
         limite = (restante + folga).total_seconds()
+        antes = cabeca(arvore)
         codigo, matou, gasto, saida = executa_item(
-            a.fila, repo, a.permissoes, limite, log)
+            a.fila, arvore, branch_largada, a.permissoes, limite, log)
+
+        # Sobra não commitada não passa para o próximo item.
+        if arvore_suja(arvore):
+            sha, erro_sobra = guarda_sobra(arvore, run_id, ident)
+            registra({"evento": "sobra_guardada", "id": ident, "stash": sha,
+                      "erro": erro_sobra})
+            print(f"          → o item deixou arquivos sem commit"
+                  + (f"; guardei no stash {sha[:10]}" if sha else
+                     f" e NÃO consegui guardá-los: {erro_sobra}"))
 
         depois, erro_item = le_item(caminho_plano, ident)
         if erro_item:
@@ -878,12 +1115,69 @@ def main(argv=None):
             ultima_leitura = leituras[-1]
             leitura_fresca = leituras[-1][0] > leituras[0][0]
 
+        depois_head = cabeca(arvore)
+        n_commits = 0
+        if antes and depois_head and antes != depois_head:
+            c, contagem = git(["rev-list", "--count", f"{antes}..{depois_head}"],
+                              arvore)
+            n_commits = int(contagem) if c == 0 and contagem.isdigit() else -1
+
         registra({"evento": "item_end", "id": ident, "status": estado,
                   "human_pending": pendencia, "exit_code": codigo,
                   "timeout": matou, "segundos": int(gasto),
                   "tentativa": vez, "progresso": progresso,
+                  "commits": n_commits,
                   "cota_5h": ([leituras[0][0], leituras[-1][0]]
                               if leituras else None)})
+
+        # O build completo da branch da noite, depois de cada `done` que
+        # commitou. É o supervisor quem roda, não o agente: o agente pode
+        # rodar antes do último refactor, rodar em duas metades ou pular a
+        # fase de validação (os três aconteceram em 23/09).
+        if estado == "done" and n_commits == 0:
+            sem_commit.append(ident)
+            registra({"evento": "done_sem_commit", "id": ident})
+            print("          → `done` sem nenhum commit na branch da noite: o "
+                  "trabalho, se houve, foi parar em outra branch")
+        elif estado == "done" and verify:
+            print(f"          → build completo: {verify}")
+            restam = (prazo + folga - datetime.now()).total_seconds()
+            verde, seg_verify, motivo_verify = roda_verify(
+                verify, arvore, restam, log)
+            registra({"evento": "verify", "id": ident, "verde": verde,
+                      "segundos": int(seg_verify), "motivo": motivo_verify})
+            if verde:
+                print(f"          → verde ({humano(timedelta(seconds=seg_verify))})")
+            else:
+                lateral, erro_desfaz = desfaz_item(repo, arvore, run_id, ident,
+                                                   antes)
+                evid = (f"O item fechou `done`, mas o build completo da branch "
+                        f"da noite (`{verify}`) {motivo_verify}. Saída no "
+                        f"`.log` do run {run_id}. ")
+                evid += (f"Os commits do item estão em `{lateral}` e a branch "
+                         f"da noite voltou para {antes[:10]}; o card no Jira "
+                         "pode ter ido para Review antes do build — confira."
+                         if lateral else
+                         f"NÃO consegui tirar os commits da branch da noite: "
+                         f"{erro_desfaz}")
+                erro_fin = finaliza_item(a.fila, repo, ident, "blocked", evid)
+                vermelhos.append((ident, lateral, motivo_verify))
+                registra({"evento": "verify_vermelho", "id": ident,
+                          "lateral": lateral, "erro": erro_desfaz or erro_fin})
+                print(f"          → VERMELHO ({motivo_verify}): commits "
+                      f"guardados em `{lateral}`, item marcado `blocked`")
+                estado = "blocked"
+                if erro_desfaz:
+                    motivo_fim = "verify-vermelho"
+                    detalhe_fim = (f"o build ficou vermelho depois do {ident} e "
+                                   f"não consegui desfazer os commits dele "
+                                   f"({erro_desfaz}); o próximo card começaria "
+                                   "em cima de código quebrado")
+                    break
+        if estado == "done":
+            entregues.append(ident)
+        elif estado == "blocked":
+            travados.append(ident)
 
         # A REDE caiu, antes do teto e do disjuntor: o item não andou porque o
         # `claude` não alcançou a API. Devolve a vez, espera a rede voltar e
@@ -1023,14 +1317,31 @@ def main(argv=None):
               "itens": itens, "com_progresso": len(feitos),
               "sem_progresso": len(falhados), "esgotados": len(esgotados),
               "limite_de_uso": len(limitados), "esperas_de_cota": len(esperas),
-              "quedas_de_rede": len(quedas), "cota_apertada": len(apertados)})
+              "quedas_de_rede": len(quedas), "cota_apertada": len(apertados),
+              "entregues": len(entregues), "travados": len(travados),
+              "verify_vermelho": len(vermelhos),
+              "done_sem_commit": len(sem_commit)})
 
     print(f"\n── fim às {datetime.now().strftime('%H:%M')} · {motivo_fim}")
     print(f"   {detalhe_fim}")
-    print(f"   {itens} tentativa(s) · {len(feitos)} com progresso · "
-          f"{len(falhados)} sem"
+    print(f"   {itens} tentativa(s) · {len(entregues)} entregue(s) · "
+          f"{len(travados)} travado(s) · {len(falhados)} sem progresso"
           + (f" · {len(limitados)} interrompida(s) pelo teto de uso da conta"
              if limitados else ""))
+    if travados:
+        print(f"\n   Travados ({len(travados)}) — o motivo de cada um está no "
+              "`evidence` da fila:")
+        for ident in travados:
+            print(f"     - {ident}")
+    if vermelhos:
+        print(f"\n   Build vermelho depois do item ({len(vermelhos)}):")
+        for ident, lateral, motivo in vermelhos:
+            print(f"     - {ident}: {motivo}; commits em `{lateral}`")
+    if sem_commit:
+        print(f"\n   `done` sem commit na branch da noite ({len(sem_commit)}) "
+              "— procure o trabalho em outra branch:")
+        for ident in sem_commit:
+            print(f"     - {ident}")
     abertas = [(i, p) for i, _, p in feitos if p]
     if abertas:
         print(f"\n   Espera por você ({len(abertas)}):")
@@ -1070,8 +1381,37 @@ def main(argv=None):
             print(f"     - durante o {ident}: sem rede das "
                   f"{caiu.strftime('%H:%M')} às {voltou.strftime('%H:%M')}, "
                   "depois retomei o item")
+    if fecha_branch_vazia(repo, arvore, branch_largada, base_da_noite):
+        print(f"\n   branch da noite: nenhum commit — removi `{branch_largada}` "
+              "e a worktree dela")
+    else:
+        c, n = git(["rev-list", "--count", f"{base_da_noite}..HEAD"], arvore)
+        print(f"\n   branch da noite: `{branch_largada}` "
+              f"({n if c == 0 else '?'} commit(s) sobre a largada), em {arvore}")
+        print(f"   para aterrissar: no clone, `git merge {branch_largada}` (ou "
+              f"/common:worktree-merge), build completo, push")
     print(f"\n   registro: {ledger}")
     print(f"   saída do claude: {log}")
+
+    # A análise gasta cota: parar pela cota e analisar em seguida bate no
+    # mesmo teto. Nesses casos, e com nada executado, fica para a mão.
+    if a.sem_analise or itens == 0:
+        return 0
+    if motivo_fim == "limite-de-uso":
+        print("   análise: não rodei (o run parou pela cota) — rode "
+              f"`/common:until-review {ledger}` quando a cota voltar")
+        registra({"evento": "analise", "feita": False, "motivo": "cota"})
+        return 0
+    print("   análise: rodando /common:until-review…")
+    revisao, erro_rev = analisa_o_run(repo, arvore if arvore.exists() else None,
+                                      ledger, a.permissoes)
+    registra({"evento": "analise", "feita": revisao is not None,
+              "arquivo": str(revisao) if revisao else None, "erro": erro_rev})
+    if revisao:
+        print(f"   análise: {revisao}")
+    else:
+        print(f"   análise: falhou ({erro_rev}) — rode `/common:until-review "
+              f"{ledger}` à mão")
     return 0
 
 
