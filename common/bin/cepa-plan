@@ -99,6 +99,45 @@ Subcomandos:
       fechar (passar vazio) é recusado, porque só quem rodou a rota sabe se
       ela passou.
 
+  cepa-plan add <nome> <id> --title T [--why W] [--antes-de <id>]
+                [--blocked-by id1,id2] [--repo DIR]
+      A1 de "Fila única" (BACKLOG.md): acrescenta UM item a uma fila que já
+      existe, sem reescrever os outros — ao contrário do `write`, que
+      substitui a lista inteira. É o que `/board-flow:capture`, o
+      `cepa-feedback triar` (quando o destino é o cepa) e a mão do dono
+      chamam para um card novo não ficar só no Jira ou só no BACKLOG.md.
+      Sem `--antes-de`, o item entra no FIM da fila e o `why` carrega a
+      frase "ainda não priorizado" (regra R2: toda porta de entrada cria o
+      item no mesmo passo, mesmo sem saber a posição). Com `--antes-de`,
+      `--why` é OBRIGATÓRIO — uma posição escolhida sem o motivo de ela vir
+      antes das outras é exatamente o que a fila existe para impedir.
+      Exit 2 = fila inexistente, `--antes-de` ou `--blocked-by` apontando
+      para id que não está nesta fila, ou o resultado não passa em
+      `valida_plano`; 3 = plano de ondas; 4 = id já existe (a mensagem diz
+      o status dele, para quem chama duas vezes distinguir).
+
+  cepa-plan ordena <nome> --keys K1,K2,... [--json] [--repo DIR]
+      A2: dá ao `/board-flow:drain` a ordem da fila para uma lista de chaves
+      do Jira. As que são item do plano vêm primeiro, na ordem da fila; as
+      que não são vêm depois, na ordem em que chegaram (a do Jira), marcadas
+      `fora_do_plano`. Não decide o que fazer com item `done`/`dropped` —
+      só ordena e diz o status de cada chave ao lado. Exit 2 = fila
+      inexistente (quem chama cai de volta para a ordem do Jira).
+
+  cepa-plan divergencia <nome> [--board ARQUIVO] [--backlog ARQUIVO]
+                        [--json] [--repo DIR]
+      A3: o que o `/common:doctor` lista sem corrigir nada — read-only, de
+      propósito, porque decidir por conta própria (fechar um card órfão,
+      inventar um `**Plano:**`) é reescrever a fila ou o documento sem o
+      dono ver. Três listas: `cards_sem_item` (card aberto no Jira sem item
+      no plano), `itens_com_card_done` (item não fechado cujo card o quadro
+      já diz `done`) e `secoes_sem_plano`/`plano_inexistente` (seção do
+      BACKLOG.md sem a linha `**Plano:**`, ou citando um id que não está
+      nesta fila). Sem `--board`, as duas primeiras ficam de fora do
+      relatório (avisado, não calado); sem `--backlog`, a terceira também.
+      Exit 0 mesmo com divergência — é um relatório, não uma falha; 2 =
+      algum dos arquivos de entrada é ilegível.
+
   cepa-plan validate <plan.yaml>
       As checagens abaixo sobre um arquivo que já está no disco.
       Exit 0 = válido; 2 = inválido, com as lacunas nomeadas.
@@ -1408,6 +1447,83 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending):
     return 0
 
 
+# ── add: uma porta de entrada acrescenta UM item sem reescrever a fila ───────
+#
+# A1 de "Fila única, BACKLOG.md e plan.yaml convergem no plan.yaml" (decisão
+# do dono, 2026-09-25, regra R2): toda porta de entrada — /board-flow:capture,
+# `cepa-feedback triar`, ou a mão do dono — cria o item no plano NO MESMO
+# PASSO em que o card nasce, no fim da fila com "ainda não priorizado" se
+# ninguém disse onde ele entra. Diferente do `write`, que reescreve a lista
+# inteira e por isso serve para REPLANEJAR, o `add` toca só o item novo — os
+# outros, e o cabeçalho escrito à mão, sobrevivem intactos.
+
+FRASE_NAO_PRIORIZADO = "ainda não priorizado: entrou no fim da fila"
+
+
+def cmd_add(raiz, nome, ident, a):
+    alvo, plan, por_id, rc = abre_plano_para_marcar(raiz, nome)
+    if rc == 2:
+        print(f"  crie a fila primeiro: /common:plan {nome}", file=sys.stderr)
+        return rc
+    if rc:
+        return rc
+
+    if str(ident) in por_id:
+        it = por_id[str(ident)]
+        print(f"{nome} já tem o item '{ident}' (status: {status_de(it)}) — "
+              "nada foi gravado", file=sys.stderr)
+        return 4
+
+    itens = list(plan.get("items") or [])
+
+    pos = len(itens)
+    if a.antes_de:
+        if str(a.antes_de) not in por_id:
+            print(f"`--antes-de` aponta para '{a.antes_de}', que não existe "
+                  f"na fila {nome}", file=sys.stderr)
+            return 2
+        if not str(a.why or "").strip():
+            print("inserir antes de outro item exige `--why`: uma posição "
+                  "escolhida sem o motivo de vir antes das outras é "
+                  "exatamente o que esta fila existe para impedir", file=sys.stderr)
+            return 2
+        why = a.why
+        pos = next(i for i, it in enumerate(itens)
+                   if str(it.get("id")) == str(a.antes_de))
+    else:
+        why = (f"{a.why.strip()} ({FRASE_NAO_PRIORIZADO})"
+               if str(a.why or "").strip() else FRASE_NAO_PRIORIZADO)
+
+    bloqueios = []
+    if a.blocked_by:
+        bloqueios = [x.strip() for x in a.blocked_by.split(",") if x.strip()]
+        faltando = [b for b in bloqueios if b not in por_id]
+        if faltando:
+            print(f"`--blocked-by` cita {', '.join(faltando)}, que não "
+                  f"existe(m) na fila {nome} — id fantasma deixaria o item "
+                  "bloqueado para sempre por algo que ninguém vai fechar",
+                  file=sys.stderr)
+            return 2
+
+    novo = normaliza({"id": ident, "title": a.title, "why": why,
+                      "status": "pending", "blocked_by": bloqueios,
+                      "human_pending": None, "evidence": None})
+    novos_itens = list(itens)
+    novos_itens.insert(pos, novo)
+
+    faltas = valida_plano({**plan, "items": novos_itens})
+    if faltas:
+        print(f"{len(faltas)} lacuna(s) no resultado — nada foi gravado",
+              file=sys.stderr)
+        for f in faltas:
+            print(f"  - {f}", file=sys.stderr)
+        return 2
+
+    grava_corpo(alvo, plan, novos_itens)
+    print(f"{ident} inserido na posição {pos + 1} de {len(novos_itens)} em {alvo}")
+    return 0
+
+
 # ── subcomandos ──────────────────────────────────────────────────────────────
 
 # ── reconcile: o plano contra o quadro, em código ────────────────────────────
@@ -1603,6 +1719,245 @@ def cmd_reconcile(raiz, nome, arquivo, config, aplicar, como_json):
         print(f"  aviso: {a}")
     print(f"  {len(aplicadas)} gravada(s)" if aplicar else
           "  nada gravado (rode com --apply para gravar)")
+    return 0
+
+
+# ── ordena: a ordem da fila aplicada a uma lista de chaves do Jira ───────────
+#
+# A2: até aqui o /board-flow:drain ordenava pelo rank do Jira e o
+# /common:drain-plan/ /common:next pela fila — subir a prioridade de um card
+# no Jira não mudava nada no plano. Este subcomando dá ao drain a MESMA
+# ordem que a fila já usa, sem o drain precisar ler o YAML por conta própria.
+
+def cmd_ordena(raiz, nome, chaves, como_json):
+    alvo = caminho_do_plano(raiz, nome)
+    if not alvo.is_file():
+        print(f"{alvo} não existe — sem fila para ordenar por ela; quem chama "
+              "cai de volta para a ordem do Jira", file=sys.stderr)
+        return 2
+    plan, erro = le_plano(alvo)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    if modo_de(plan) != MODE:
+        print(f"{alvo} é um plano '{modo_de(plan)}', não uma fila", file=sys.stderr)
+        return 3
+
+    items = plan.get("items") or []
+    posicao = {str(it.get("id")): (i + 1, status_de(it))
+               for i, it in enumerate(items) if isinstance(it, dict)}
+
+    na_fila = sorted((k for k in chaves if k in posicao), key=lambda k: posicao[k][0])
+    fora = [k for k in chaves if k not in posicao]
+
+    ordem = [{"key": k, "posicao": posicao[k][0], "status": posicao[k][1]}
+             for k in na_fila]
+    ordem += [{"key": k, "posicao": None, "status": None} for k in fora]
+
+    saida = {"program": nome, "ordem": ordem, "fora_do_plano": fora}
+    if como_json:
+        print(json.dumps(saida, ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"fila {nome} aplicada a {len(chaves)} chave(s)")
+    for o in ordem:
+        marca = "" if o["posicao"] is not None else "  (fora do plano)"
+        print(f"  {o['key']}{marca}")
+    if fora:
+        print(f"  {len(fora)} chave(s) fora do plano, na ordem do Jira: "
+              + ", ".join(fora))
+    return 0
+
+
+# ── divergencia: a fila × o quadro × o BACKLOG, sem corrigir nada ───────────
+#
+# A3: o que o /common:doctor lista. Read-only de propósito — decidir aqui
+# (fechar um card órfão, inventar um `**Plano:**`) seria reescrever a fila ou
+# o BACKLOG sem o dono ver; quem corrige é o `add`, o `reconcile --apply` ou
+# a mão do dono, depois de ler este relatório.
+
+MARCA_PLANO = "**Plano:**"
+ID_ENTRE_CRASES = re.compile(r"`([^`]+)`")
+
+
+def _secoes_do_backlog(texto):
+    """[(heading, linha 1-based, corpo)] — cada seção nível `## `."""
+    linhas = texto.splitlines()
+    marcas = [(i, l[3:].strip()) for i, l in enumerate(linhas) if l.startswith("## ")]
+    secoes = []
+    for idx, (i, heading) in enumerate(marcas):
+        fim = marcas[idx + 1][0] if idx + 1 < len(marcas) else len(linhas)
+        secoes.append((heading, i + 1, linhas[i + 1:fim]))
+    return secoes
+
+
+def _extrai_plano(linha):
+    """O texto depois de `**Plano:**` até o próximo campo, ou None.
+
+    A marca não mora sozinha na linha: no formato real do BACKLOG.md ela
+    aparece no MEIO de uma linha de campos separados por ` · `, por exemplo
+    `**Status:** 🔵 ABERTO · **Plano:** \\`id\\` · **Lar:** ...`. Ancorar a
+    busca no início da linha (como a versão anterior fazia) lia essa seção
+    como "sem `**Plano:**`" — um falso positivo medido no BACKLOG real. Aqui
+    a marca é procurada em QUALQUER posição, e o valor vai até o próximo
+    ` · ` (o separador de campo desta convenção) ou até o fim da linha.
+    """
+    idx = linha.find(MARCA_PLANO)
+    if idx == -1:
+        return None
+    resto = linha[idx + len(MARCA_PLANO):]
+    corte = resto.find("·")
+    if corte != -1:
+        resto = resto[:corte]
+    return resto.strip()
+
+
+def divergencia_do_backlog(texto, nome, ids_da_fila):
+    """(secoes_sem_plano, plano_inexistente) do texto do BACKLOG.md.
+
+    `**Plano:** <id1>, <id2>` pode citar mais de um plano (ex.: a seção do
+    Maestro). Um id com `/` é `<programa>/<id-na-fila>` — só é avaliado
+    contra ESTA fila (`nome`) quando o programa bate; id sem `/` é lido como
+    pertencendo a esta fila. `**Plano:** fora da fila (motivo)` está isento:
+    é a seção dizendo explicitamente que não há fila para ela.
+
+    O id é o texto ENTRE CRASES, nunca a linha inteira depois delas: o
+    formato real anexa texto solto depois do id fechado, tipo
+    `\\`cepa/baseline-cega-builds-longos\\` (descartado)`. Cortar só as
+    crases das pontas (como a versão anterior fazia) deixava a crase de
+    fechamento colada no id — ele nunca batia com nada na fila, e um item
+    `dropped` de verdade virava falso positivo de "plano inexistente".
+    """
+    sem_plano, inexistente = [], []
+    for heading, linha, corpo in _secoes_do_backlog(texto):
+        valor = None
+        for l in corpo:
+            v = _extrai_plano(l)
+            if v is not None:
+                valor = v
+                break
+        if valor is None:
+            sem_plano.append({"secao": heading, "linha": linha})
+            continue
+        if valor.startswith("fora da fila"):
+            continue
+        pedacos = ID_ENTRE_CRASES.findall(valor)
+        if not pedacos:
+            # sem crase nenhuma: convenção de fallback, um id "nu" por vírgula
+            pedacos = [p.strip() for p in valor.split(",") if p.strip()]
+        for pedaco in pedacos:
+            pedaco = pedaco.strip()
+            if not pedaco:
+                continue
+            if "/" in pedaco:
+                programa, ident = pedaco.split("/", 1)
+            else:
+                programa, ident = nome, pedaco
+            if programa != nome:
+                continue
+            if ident not in ids_da_fila:
+                inexistente.append({"secao": heading, "linha": linha,
+                                    "plano": pedaco})
+    return sem_plano, inexistente
+
+
+def cmd_divergencia(raiz, nome, arq_board, arq_backlog, como_json):
+    alvo = caminho_do_plano(raiz, nome)
+    items, avisos = [], []
+    if alvo.is_file():
+        plan, erro = le_plano(alvo)
+        if erro:
+            print(erro, file=sys.stderr)
+            return 2
+        if modo_de(plan) != MODE:
+            print(f"{alvo} é um plano '{modo_de(plan)}', não uma fila",
+                  file=sys.stderr)
+            return 3
+        items = plan.get("items") or []
+    else:
+        avisos.append(f"{alvo} não existe — a fila '{nome}' ainda não tem "
+                      "plan.yaml; cards_sem_item e itens_com_card_done "
+                      "comparam contra uma fila vazia")
+
+    ids_da_fila = {str(it.get("id")) for it in items if isinstance(it, dict)}
+    por_id = {str(it.get("id")): it for it in items if isinstance(it, dict)}
+
+    cards_sem_item, itens_com_card_done = [], []
+    if arq_board:
+        board, ausentes, erro = le_board(arq_board)
+        if erro:
+            print(erro, file=sys.stderr)
+            return 2
+        papel_de, cfg, erro = status_map_do_repo(raiz)
+        if erro:
+            print(erro, file=sys.stderr)
+            return 2
+        if not papel_de:
+            avisos.append("nenhum `defaults.status_map` encontrado — não dá "
+                          "para dizer se um card do quadro está aberto ou "
+                          "fechado, então cards_sem_item e "
+                          "itens_com_card_done ficaram de fora")
+        else:
+            for key, bruto in board.items():
+                papel = papel_de.get(bruto)
+                if papel is None:
+                    avisos.append(f"{key} está em '{bruto}', que o "
+                                  "`status_map` do board-flow.yaml não "
+                                  "descreve — não avaliado, para não "
+                                  "adivinhar o estado do trabalho")
+                    continue
+                if key not in ids_da_fila and papel != "done":
+                    cards_sem_item.append({"key": key, "status": bruto})
+            for ident, it in por_id.items():
+                if status_de(it) in ("done", "dropped"):
+                    continue
+                bruto = board.get(ident)
+                if bruto is None:
+                    continue
+                if papel_de.get(bruto) == "done":
+                    itens_com_card_done.append(
+                        {"id": ident, "status": status_de(it), "board": bruto})
+    else:
+        avisos.append("sem `--board`: cards_sem_item e itens_com_card_done "
+                      "não avaliados")
+
+    secoes_sem_plano, plano_inexistente = [], []
+    if arq_backlog:
+        p = Path(arq_backlog)
+        if not p.is_file():
+            print(f"{p} não existe", file=sys.stderr)
+            return 2
+        texto = p.read_text(encoding="utf-8")
+        secoes_sem_plano, plano_inexistente = divergencia_do_backlog(
+            texto, nome, ids_da_fila)
+    else:
+        avisos.append("sem `--backlog`: secoes_sem_plano e "
+                      "plano_inexistente não avaliados")
+
+    saida = {"program": nome, "cards_sem_item": cards_sem_item,
+             "itens_com_card_done": itens_com_card_done,
+             "secoes_sem_plano": secoes_sem_plano,
+             "plano_inexistente": plano_inexistente, "avisos": avisos}
+    if como_json:
+        print(json.dumps(saida, ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"divergência da fila {nome}")
+    if cards_sem_item:
+        print("  cards abertos no quadro sem item no plano: " + ", ".join(
+            f"{c['key']} ({c['status']})" for c in cards_sem_item))
+    if itens_com_card_done:
+        print("  itens não fechados cujo card o quadro já dá como done: "
+              + ", ".join(f"{i['id']} ({i['status']})"
+                          for i in itens_com_card_done))
+    if secoes_sem_plano:
+        print("  seções do BACKLOG sem `**Plano:**`: " + ", ".join(
+            f"{s['secao']} (linha {s['linha']})" for s in secoes_sem_plano))
+    if plano_inexistente:
+        print("  `**Plano:**` citando id fora desta fila: " + ", ".join(
+            f"{p['secao']} → {p['plano']}" for p in plano_inexistente))
+    for a in avisos:
+        print(f"  aviso: {a}")
     return 0
 
 
@@ -1844,6 +2199,45 @@ def main(argv=None):
     rc.add_argument("--repo", default=".")
     rc.add_argument("--json", action="store_true", dest="como_json")
 
+    ad = sub.add_parser("add",
+                        help="acrescenta UM item a uma fila existente, sem "
+                             "reescrever os outros")
+    ad.add_argument("nome")
+    ad.add_argument("id")
+    ad.add_argument("--title", required=True)
+    ad.add_argument("--why", help="obrigatório com --antes-de; sem "
+                                  "--antes-de, vira o `why` do item com a "
+                                  "frase 'ainda não priorizado' anexada")
+    ad.add_argument("--antes-de", dest="antes_de", metavar="ID",
+                    help="insere imediatamente antes deste id (exige --why)")
+    ad.add_argument("--blocked-by", dest="blocked_by", metavar="ID,ID",
+                    help="ids desta MESMA fila que bloqueiam o item novo")
+    ad.add_argument("--repo", default=".")
+
+    od = sub.add_parser("ordena",
+                        help="ordena uma lista de chaves do Jira pela ordem "
+                             "da fila")
+    od.add_argument("nome")
+    od.add_argument("--keys", required=True, metavar="K1,K2,...",
+                    help="chaves na ordem do Jira; as que são item do plano "
+                         "voltam na ordem da fila, as outras depois, "
+                         "marcadas `fora_do_plano`")
+    od.add_argument("--repo", default=".")
+    od.add_argument("--json", action="store_true", dest="como_json")
+
+    dv = sub.add_parser("divergencia",
+                        help="lista (sem corrigir) a fila × o quadro × o "
+                             "BACKLOG.md")
+    dv.add_argument("nome")
+    dv.add_argument("--board", metavar="ARQUIVO",
+                    help="mesmo formato do `reconcile`. Sem ele, "
+                         "cards_sem_item e itens_com_card_done saem vazios")
+    dv.add_argument("--backlog", metavar="ARQUIVO",
+                    help="o BACKLOG.md a varrer. Sem ele, secoes_sem_plano e "
+                         "plano_inexistente saem vazios")
+    dv.add_argument("--repo", default=".")
+    dv.add_argument("--json", action="store_true", dest="como_json")
+
     w = sub.add_parser("write", help="grava a fila")
     w.add_argument("nome")
     w.add_argument("--items",
@@ -1881,6 +2275,13 @@ def main(argv=None):
         return 2
     if a.cmd == "check-name":
         return cmd_check_name(raiz, a.nome)
+    if a.cmd == "add":
+        return cmd_add(raiz, a.nome, a.id, a)
+    if a.cmd == "ordena":
+        chaves = [k.strip() for k in a.keys.split(",") if k.strip()]
+        return cmd_ordena(raiz, a.nome, chaves, a.como_json)
+    if a.cmd == "divergencia":
+        return cmd_divergencia(raiz, a.nome, a.board, a.backlog, a.como_json)
     if a.cmd == "queue":
         return cmd_queue(raiz, a.nome, a.teto, a.como_json)
     if a.cmd == "promote":

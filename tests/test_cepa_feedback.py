@@ -161,6 +161,100 @@ def test_triar_marca_e_recusa_repeticao():
               "Atrito de decisão" in p.stderr, p.stderr)
 
 
+PLANO = """schema_version: 2
+mode: single-track
+program: WEGO
+source: teste
+items:
+- id: WEGO-1
+  title: primeiro
+  why: porque
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+"""
+
+
+def test_triar_com_plano_acrescenta_a_fila():
+    with Caixa() as c:
+        (c.repo / ".claude" / "programs" / "WEGO").mkdir(parents=True)
+        (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").write_text(
+            PLANO, encoding="utf-8")
+        texto = "o relatório final do drain não nomeia o card que travou, custou 20min"
+        c.cli("add", texto)
+        fid = f"fb-{HOJE}-1"
+        p = c.cli("triar", fid, "--destino", "fila WEGO", "--plano", "WEGO",
+                  "--why", "achado real de sessão")
+        check("triar --plano: rc=0", p.returncode == 0, p.stderr)
+        check("triar --plano: confirma a entrada na fila",
+              "também entrou na fila" in p.stdout, p.stdout)
+        fila = (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").read_text(
+            encoding="utf-8")
+        check("triar --plano: item novo no plan.yaml", fid in fila, fila)
+        check("triar --plano: título é o começo do texto do feedback",
+              texto[:60] in fila, fila)
+
+
+def test_triar_com_plano_ja_na_fila_nao_e_erro():
+    with Caixa() as c:
+        (c.repo / ".claude" / "programs" / "WEGO").mkdir(parents=True)
+        plano_com_item = PLANO.replace("id: WEGO-1", f"id: fb-{HOJE}-1")
+        (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").write_text(
+            plano_com_item, encoding="utf-8")
+        c.cli("add", "queixa qualquer que já tem item homônimo na fila")
+        fid = f"fb-{HOJE}-1"
+        p = c.cli("triar", fid, "--destino", "fila WEGO", "--plano", "WEGO")
+        check("triar --plano: id já na fila não é erro (rc=0)",
+              p.returncode == 0, p.stderr)
+        check("triar --plano: avisa sem alarde", "já estava na fila" in p.stdout,
+              p.stdout)
+
+
+def test_triar_com_plano_erro_real_nao_desfaz_a_triagem():
+    """`add` falhando por um motivo REAL (não o "já está lá" do exit 4) não
+    pode apagar a triagem que já foi gravada — a escrita do evento de triagem
+    e a tentativa de entrar na fila são dois passos, e o primeiro já
+    aconteceu quando o segundo falha. A prova fica no ARQUIVO do ledger, não
+    só na saída do processo: um `grava()` que só roda condicionado ao sucesso
+    do `add` passaria despercebido se a asserção olhasse só o stdout."""
+    with Caixa() as c:
+        # `mode: waves` é um plano de ONDAS (/maestro:program-plan) — o
+        # `cepa-plan add` recusa com um erro real (exit 3), diferente do
+        # exit 4 de "id já na fila".
+        plano_ondas = PLANO.replace("mode: single-track", "mode: waves")
+        (c.repo / ".claude" / "programs" / "WEGO").mkdir(parents=True)
+        (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").write_text(
+            plano_ondas, encoding="utf-8")
+        c.cli("add", "queixa que precisa sobreviver a um erro real do add")
+        fid = f"fb-{HOJE}-1"
+        p = c.cli("triar", fid, "--destino", "fila WEGO", "--plano", "WEGO")
+        check("triar com erro real do add: rc=0 (a triagem em si teve sucesso)",
+              p.returncode == 0, p.stderr)
+        check("triar com erro real do add: avisa que NÃO entrou na fila",
+              "NÃO entrou na fila" in p.stderr, p.stderr)
+        # A prova de que a triagem sobreviveu está no ARQUIVO, não no stdout.
+        eventos = c.linhas()
+        triagens = [e for e in eventos if e.get("tipo") == "triagem" and e.get("id") == fid]
+        check("triar com erro real do add: evento de triagem GRAVADO no ledger",
+              len(triagens) == 1 and triagens[0]["destino"] == "fila WEGO",
+              eventos)
+
+
+def test_triar_sem_plano_nao_toca_em_fila_nenhuma():
+    with Caixa() as c:
+        (c.repo / ".claude" / "programs" / "WEGO").mkdir(parents=True)
+        (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").write_text(
+            PLANO, encoding="utf-8")
+        c.cli("add", "queixa comum, sem pedir fila nenhuma desta vez")
+        fid = f"fb-{HOJE}-1"
+        p = c.cli("triar", fid, "--destino", "BACKLOG.md § X")
+        check("triar sem --plano: rc=0", p.returncode == 0, p.stderr)
+        fila = (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").read_text(
+            encoding="utf-8")
+        check("triar sem --plano: fila intocada", fid not in fila, fila)
+
+
 def test_triar_recusa_id_inexistente_e_destino_vazio():
     with Caixa() as c:
         c.cli("add", "alguma queixa suficientemente longa aqui")
@@ -255,6 +349,10 @@ def main():
     for fn in (test_add_grava_verbatim_com_contexto, test_add_recusa_vazio_e_curto,
                test_ids_sequenciais_no_dia, test_fora_de_repo_git_nao_quebra,
                test_triar_marca_e_recusa_repeticao,
+               test_triar_com_plano_acrescenta_a_fila,
+               test_triar_com_plano_ja_na_fila_nao_e_erro,
+               test_triar_com_plano_erro_real_nao_desfaz_a_triagem,
+               test_triar_sem_plano_nao_toca_em_fila_nenhuma,
                test_triar_recusa_id_inexistente_e_destino_vazio,
                test_list_replay_do_ledger, test_linha_corrompida_nao_derruba_o_resto,
                test_list_sem_nada_registrado,

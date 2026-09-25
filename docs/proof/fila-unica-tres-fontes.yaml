@@ -1,0 +1,162 @@
+schema_version: 2
+card: fila-unica-tres-fontes
+verdict: proven
+reviewed_at: 2026-09-25T21:45:00-03:00
+base_commit: 7be4b1e
+head_commit: e872c9d
+issue_type: Feature
+repo_kind: harness             # NOT Quarkus/Maven — Python CLIs + prompt files, own test suite (tests/run-all.sh)
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (cmd_add, cmd_ordena, cmd_divergencia, divergencia_do_backlog, _extrai_plano)"
+      module: cli
+      external_observable: true    # superfície é a linha de comando: exit code, stdout/stderr, o disco (plan.yaml)
+      substituted_by_double: null  # CLI real, subprocess de ponta a ponta contra repos git temporários
+    - class: "common/bin/cepa-doctor (check_divergencia_plano, resolve_fila_unica)"
+      module: cli
+      external_observable: true    # roda dentro de /common:doctor; delega o cálculo ao cepa-plan real via subprocess
+      substituted_by_double: null
+    - class: "common/bin/cepa-feedback (cmd_triar, --plano)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "board-flow/commands/capture.md (prosa: passo 4, `cepa-plan add`)"
+      module: prompt
+      external_observable: false   # prosa executada por um modelo, não por interpretador
+      substituted_by_double: null
+    - class: "board-flow/commands/drain.md (prosa: passo 2/2b, `cepa-plan ordena`, `--max` pós-reordenação)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/commands/doctor.md (prosa: área `plano`, `--live` chamando `cepa-plan divergencia --board`)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); perturbação manual é o único mecanismo aplicável"
+    perturbation:
+      status: pass
+      results:
+        - "PASS — add: id repetido recusado (exit 4): `if str(ident) in por_id:` (cepa-plan:1471) neutralizado → RED (2 asserções), restaurado"
+        - "PASS — add: `--antes-de` fantasma recusado (exit 2, nomeia o id): `if str(a.antes_de) not in por_id:` (cepa-plan:1481) neutralizado → RED (2 asserções), restaurado"
+        - "PASS (contrato externo, não a linha isolada) — add: `--why` obrigatório com `--antes-de`: `if not str(a.why or \"\").strip():` (cepa-plan:1485) neutralizado isoladamente → all green, porque `valida_plano` (linha 1514, PRÉ-EXISTENTE, chamada sobre o resultado inteiro) também recusa `why` vazio com a mesma mensagem-chave ('why') e o mesmo exit 2. ACHADO reportado (não bloqueia): a linha específica de UX é redundante com a rede de segurança genérica, não é ela sozinha a garantia — mas o contrato externo (recusa, exit 2, nada gravado) permanece verdadeiro em ambos os casos, confirmado por P (recusa quando o resultado falha em valida_plano) abaixo."
+        - "PASS — add: missing queue diz `/common:plan <nome>`: a linha de print (cepa-plan:1466) apagada → RED (1 asserção: a recusa nomeia /common:plan), restaurado"
+        - "PASS — add: recusa plano de ondas (exit 3): `return None, None, None, 3` (cepa-plan:1369, dentro de `abre_plano_para_marcar`, reusado por start/finish/add) neutralizado → RED, restaurado"
+        - "PASS — add: marca 'ainda não priorizado': `FRASE_NAO_PRIORIZADO` (cepa-plan:1460) trocada por texto diferente (não-vazio) → RED (2 asserções), restaurado"
+        - "PASS — add: preserva cabeçalho escrito à mão: `texto = cabecalho_do_arquivo(...)` (cepa-plan:1349, em `grava_corpo`, pré-existente e reusado por `add`) trocado por `texto = \"\"` → RED, restaurado"
+        - "PASS — add: insere IMEDIATAMENTE antes do alvo: `pos = next(...)` (cepa-plan:1491) trocado por `pos = len(itens)` → RED (2 asserções), restaurado"
+        - "PASS (contrato externo, não a linha isolada) — add: `--blocked-by` fantasma recusado: `faltando = [b for b in bloqueios if b not in por_id]` (cepa-plan:1500) neutralizado isoladamente → all green, mesma causa do item acima (`valida_plano`, linha 1514, também recusa `blocked_by` fantasma de forma genérica). ACHADO reportado, mesmo raciocínio: contrato externo intacto, mensagem específica não distinguida pelo teste."
+        - "PASS — add: recusa quando o RESULTADO inteiro falha em `valida_plano` (a real rede de segurança por trás dos dois achados acima): `faltas = valida_plano({**plan, \"items\": novos_itens})` (cepa-plan:1514) neutralizado → RED (3 asserções: rc, mensagem, nada gravado), restaurado. Este é o ponto único de falha real do `add` — os dois achados acima são mensagens de conveniência na frente dele, não garantias independentes."
+        - "PASS — ordena: ordem da fila, não do Jira: `na_fila = sorted(...)` (cepa-plan:1750) trocado para preservar a ordem do Jira → RED, restaurado"
+        - "PASS — ordena: `fora_do_plano` marcado: `fora = [...]` (cepa-plan:1751) esvaziado à força → RED (crash/KeyError na asserção, contado como RED), restaurado"
+        - "PASS (contrato externo, não a linha isolada) — ordena: fila inexistente recusada (exit 2): o `if not alvo.is_file(): ...; return 2` explícito (cepa-plan:1734) neutralizado isoladamente → all green, porque sem o arquivo `le_plano` (pré-existente) devolve `OSError` capturado como `erro`, e `cmd_ordena` já tem `if erro: return 2` logo depois. ACHADO reportado: mesmo exit code por outro caminho, mensagem específica não testada; contrato externo (exit 2) intacto."
+        - "PASS — divergencia: `cards_sem_item` (card aberto sem item no plano): o `.append` (cepa-plan:1910) trocado por `pass` → RED, restaurado"
+        - "PASS — divergencia: `itens_com_card_done` (item aberto cujo card já é done): o `.append` (cepa-plan:1918) trocado por `pass` → RED, restaurado"
+        - "PASS — divergencia: `**Plano:**` no MEIO da linha (fix do falso positivo real, medido no BACKLOG.md do próprio repo): a busca por `MARCA_PLANO` em qualquer posição (cepa-plan:1805) trocada por `linha.startswith(MARCA_PLANO)` (o comportamento antigo) → RED, restaurado"
+        - "PASS — divergencia: id com texto solto após a crase de fechamento (fix do 2º falso positivo real, também medido no BACKLOG.md do próprio repo): a extração por pares de crase via `ID_ENTRE_CRASES.findall` trocada por `valor.strip(\"`\")` (emulando o corte só das pontas da versão anterior) → RED, restaurado"
+        - "PASS — divergencia: `**Plano:** fora da fila (...)` isento: `if valor.startswith(\"fora da fila\"): continue` (cepa-plan:1842) neutralizado → RED (2 asserções), restaurado"
+        - "PASS — doctor: silêncio quando não há divergência vira ausência de qualquer saída `[plano]`: o bloco de retorno antecipado (cepa-doctor, dentro de `check_divergencia_plano`) neutralizado → RED (6 asserções, toda a suíte de doctor dependia da linha `[plano]` aparecer), restaurado"
+        - "PASS — doctor: silêncio com fila AMBÍGUA (>1 fila `single-track`), o GAP apontado na 1ª rodada desta prova (head c86f185) e fechado por `195b9bb`/`e872c9d` com `test_duas_filas_sem_board_flow_e_ambiguo_e_silencioso`: `return filas[0] if len(filas) == 1 else None` (cepa-doctor:709, dentro de `resolve_fila_unica`) trocado por `return filas[0] if filas else None` (aceita a 1ª fila mesmo havendo duas) → RED (1 asserção: 'duas filas ambíguas: nenhuma linha [plano] no relatório'), restaurado — re-perturbado nesta 2ª rodada (head e872c9d) especificamente para confirmar o fechamento"
+        - "PASS — feedback: `triar --plano` mantém a triagem gravada mesmo quando o `add` falha de verdade (não só exit 4), o 2º GAP apontado na 1ª rodada e fechado por `e872c9d` com `test_triar_com_plano_erro_real_nao_desfaz_a_triagem` (asserção no ARQUIVO do ledger, não no stdout): `grava(ev)` (cepa-feedback:258) movido para só rodar quando `not args.plano` → RED ('triar com erro real do add: evento de triagem GRAVADO no ledger'), restaurado — re-perturbado nesta 2ª rodada especificamente para confirmar o fechamento"
+      run: >-
+        DUAS rodadas, worktrees descartáveis separadas, nenhuma na árvore
+        principal. 1ª rodada (head c86f185, revisão anterior): as 17
+        perturbações "PASS" acima já tinham ido a RED e sido restauradas; as
+        duas marcadas hoje como "PASS — ... GAP ... fechado" tinham ficado
+        verdes (`resolve_fila_unica` e `grava(ev)` condicional) — reportado
+        como UNPROVEN, com o teste que faltava nomeado para cada um. 2ª
+        rodada (esta, head e872c9d, depois de `195b9bb` e `e872c9d`
+        adicionarem `tests/test_fila_unica_contratos.py`,
+        `test_duas_filas_sem_board_flow_e_ambiguo_e_silencioso` e
+        `test_triar_com_plano_erro_real_nao_desfaz_a_triagem`): worktree
+        descartável nova em
+        /private/tmp/claude-501/.../scratchpad/proof-fila-unica-tres-fontes-e872c9d
+        (git worktree add --detach e872c9d). GREEN de partida confirmado nas
+        QUATRO suítes: test_cepa_plan_fila_unica.py ("all green"),
+        test_doctor_divergencia_plano.py ("tudo verde"),
+        test_cepa_feedback.py ("tudo verde"), test_fila_unica_contratos.py
+        ("all green" — agora COMMITADO, presente no worktree checked out em
+        e872c9d). As DUAS perturbações do gap foram reaplicadas com o mesmo
+        script descartável (perturb.py, caminhos absolutos) contra
+        cepa-doctor:709 e cepa-feedback:258: cada uma foi a RED
+        especificamente no teste novo que a fecha (confirmado pelo nome da
+        falha impresso), restaurada com `git checkout --
+        <caminho-absoluto>`, e as quatro suítes voltaram a "tudo
+        verde"/"all green". `git status --porcelain` só com o `perturb.py`
+        descartável (não rastreado) antes de `git worktree remove --force`.
+        Nenhuma edição foi feita na árvore principal em nenhuma das duas
+        rodadas.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (não há coverage tool wired neste repo Python) +
+      confirmação por perturbação. Os dois pontos sem teste na 1ª rodada
+      (cepa-doctor:709 ramo `len(filas) > 1 → None`; cepa-feedback:258
+      `grava(ev)` quando `--plano` e o `add` falha por um motivo real) agora
+      têm teste dedicado e ambos foram confirmados RED→restaurado→GREEN nesta
+      rodada. As demais decisões novas do diff (as 5 recusas do `add`, a
+      marca de não-priorizado, a preservação de cabeçalho, a posição de
+      inserção, a ordem do `ordena` e o `fora_do_plano`, as 4 listas do
+      `divergencia`, os dois fixes de regex, o silêncio do doctor sem
+      divergência) já tinham teste que vai a RED quando quebradas. ACHADO
+      não bloqueante: 3 perturbações isoladas (o `--why` obrigatório e o
+      `--blocked-by` fantasma dentro de `cmd_add`; a checagem explícita de
+      "fila inexistente" em `cmd_ordena`) ficam verdes quando quebradas
+      SOZINHAS, porque uma checagem genérica pré-existente (`valida_plano`
+      para o `add`; o `OSError` de `le_plano` para o `ordena`) garante o
+      MESMO contrato externo (mesmo exit code) por outro caminho. Não é uma
+      lacuna de comportamento — é redundância defensiva com mensagem não
+      distinguida pelo teste; reportado para quem quiser, no futuro, escrever
+      uma asserção que verifique a mensagem exata em vez de só o exit code.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      a mudança abre superfície de entrada (BACKLOG.md e o arquivo `--board`
+      lidos por `divergencia`; argumentos da CLI), mas ela já é
+      adversarialmente coberta pelos próprios casos de regressão do card
+      (status desconhecido do quadro vira aviso em vez de chute, `--board`
+      ilegível recusa com exit 2, `**Plano:**` no meio da linha e id com
+      texto após a crase de fechamento são regressões medidas no BACKLOG.md
+      REAL do próprio repo) — no mesmo padrão de program-plan-from-plan.yaml
+      e common-plan-etapa2.yaml. `cli` não é o módulo `api-rest` do
+      vocabulário Quarkus (este repo não tem um), então a condição estrutural
+      do `n/a` é vácua aqui — mas a condição de fundo (razão nomeada, diff
+      que abre superfície mas já coberta) se mantém.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  Todas as ~20 decisões novas do diff (`base_commit` 7be4b1e → `head_commit`
+  e872c9d, cumulativo: `c86f185` código + `195b9bb`/`e872c9d` os dois testes
+  que fecham os gaps) foram perturbadas, e cada uma foi a RED contra o teste
+  que deveria acusar a quebra, depois restaurada e a suíte confirmada verde de
+  novo — em DUAS rodadas de worktree descartável, a 2ª específica para
+  reconfirmar os dois pontos que faltavam. Os dois GAPS reais da 1ª rodada
+  (silêncio do `cepa-doctor` com fila `single-track` ambígua, sem teste; e
+  `cepa-feedback triar --plano` preservando a triagem no ledger quando o
+  `add` falha de verdade, sem teste que leia o ledger) agora têm teste
+  dedicado: `test_duas_filas_sem_board_flow_e_ambiguo_e_silencioso`
+  (tests/test_doctor_divergencia_plano.py) e
+  `test_triar_com_plano_erro_real_nao_desfaz_a_triagem`
+  (tests/test_cepa_feedback.py, que assere no ARQUIVO do ledger, não só no
+  stdout — evitando a mesma vacuidade que permitiu o gap passar despercebido
+  antes). Reaplicar a mesma perturbação exata de antes em cada um foi a RED
+  no teste novo específico, confirmando o fechamento. O arquivo
+  `tests/test_fila_unica_contratos.py`, que na 1ª rodada estava sem commitar
+  (git status `??`, fora do head_commit revisado então) e por isso não
+  contava como cobertura da prosa, agora está commitado em `195b9bb` e
+  presente no worktree checked out em `e872c9d` — a prosa de capture.md/
+  drain.md/doctor.md (module `prompt`, `external_observable: false`) tem os
+  três contratos grep travados e rodando em `tests/run-all.sh` para qualquer
+  clone do repo. Único achado remanescente, não bloqueante: 3 checagens
+  específicas dentro de `add`/`ordena` são redundantes com uma rede de
+  segurança genérica pré-existente (mesmo exit code por outro caminho) — o
+  contrato externo observável está provado de qualquer forma pela própria
+  rede genérica, perturbada e confirmada em RED separadamente. PROVEN.

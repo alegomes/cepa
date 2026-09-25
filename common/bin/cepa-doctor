@@ -506,6 +506,7 @@ def check_project(cwd: Path):
 
     check_arvore_suja(root)
     check_env_manifest(root)
+    check_divergencia_plano(root)
 
 
 # ── Ambiente (.claude/env.yaml) ─────────────────────────────────────────
@@ -669,6 +670,82 @@ def check_env_manifest(root: Path):
             else:
                 warn("ambiente", f"container {svc} declarado no env.yaml não está no docker ps "
                                  f"— suba com o comando `up:` do manifest")
+
+
+# ── Divergência da fila única (A3) ──────────────────────────────────────
+#
+# Reporta, nunca corrige: fechar um card órfão ou inventar um `**Plano:**` no
+# BACKLOG.md é decisão do dono, não do doctor. Delega o cálculo inteiro ao
+# `cepa-plan divergencia`, que é quem sabe comparar fila × BACKLOG (a leitura
+# viva do Jira, cards_sem_item/itens_com_card_done, entra no passo `--live`
+# do /common:doctor, que passa `--board`).
+
+def resolve_fila_unica(root: Path):
+    """Nome da fila `single-track` deste repo, do mesmo jeito que o
+    /common:next resolve: `board-flow.yaml` → `defaults.project_key` primeiro;
+    senão, se houver exatamente UMA fila `mode: single-track` em
+    `.claude/programs/*/plan.yaml`, essa. Mais de uma → None (ambíguo — o
+    doctor não adivinha qual fila o dono quer ver)."""
+    bf = root / "board-flow.yaml"
+    if bf.is_file():
+        try:
+            texto = bf.read_text(encoding="utf-8", errors="replace")
+            m = re.search(r"^\s*project_key:\s*['\"]?([\w-]+)", texto, re.M)
+            if m:
+                return m.group(1)
+        except OSError:
+            pass
+    d = root / ".claude" / "programs"
+    if not d.is_dir():
+        return None
+    filas = []
+    for plano in sorted(d.glob("*/plan.yaml")):
+        try:
+            texto = plano.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        if re.search(r"^mode:\s*single-track\s*$", texto, re.M):
+            filas.append(plano.parent.name)
+    return filas[0] if len(filas) == 1 else None
+
+
+def check_divergencia_plano(root: Path):
+    backlog = root / "BACKLOG.md"
+    if not backlog.is_file():
+        return
+    fila = resolve_fila_unica(root)
+    if fila is None:
+        return  # sem fila resolvível (nenhuma ou mais de uma) — nada a comparar
+    cepa_plan = Path(__file__).resolve().parent / "cepa-plan"
+    if not cepa_plan.is_file():
+        return
+    try:
+        p = subprocess.run(
+            [sys.executable, str(cepa_plan), "divergencia", fila,
+             "--backlog", str(backlog), "--repo", str(root), "--json"],
+            capture_output=True, text=True, timeout=30)
+    except Exception as e:  # noqa: BLE001 — diagnóstico não pode quebrar o doctor
+        warn("plano", f"divergência da fila `{fila}` não rodou: {e}")
+        return
+    if p.returncode not in (0,):
+        return  # sem fila / plano de ondas / erro de leitura — silencioso, cepa-plan já loga
+    try:
+        saida = json.loads(p.stdout)
+    except (ValueError, json.JSONDecodeError):
+        return
+    sem_plano = saida.get("secoes_sem_plano") or []
+    inexistente = saida.get("plano_inexistente") or []
+    if not sem_plano and not inexistente:
+        ok("plano", f"fila `{fila}` × BACKLOG.md sem divergência")
+        return
+    partes = []
+    if sem_plano:
+        partes.append(f"{len(sem_plano)} seção(ões) do BACKLOG.md sem `**Plano:**`: "
+                      + ", ".join(f"{s['secao']} (linha {s['linha']})" for s in sem_plano))
+    if inexistente:
+        partes.append(f"{len(inexistente)} `**Plano:**` citando id fora da fila `{fila}`: "
+                      + ", ".join(f"{i['secao']} → {i['plano']}" for i in inexistente))
+    warn("plano", f"fila `{fila}` × BACKLOG.md diverge — " + "; ".join(partes))
 
 
 # ── Correções em lote (--fix) ───────────────────────────────────────────

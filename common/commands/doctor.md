@@ -1,5 +1,5 @@
 ---
-description: Valida a instalação do harness contra a realidade em 30 segundos — plugins habilitados e na versão instalada, hooks compilando, board-flow.yaml estrutural, baseline de build (status + idade), worktrees stale/órfãs (inclusive a worktree de agente esquecida dentro do repo, que duplica o código-fonte) e handoffs vencidos. Com --live, também confere o board-flow.yaml contra o Jira vivo via atlassian-expert. Rode no início do dia ou quando algo do harness parecer errado — cada check existe porque a falha correspondente já custou uma tarefa.
+description: Valida a instalação do harness contra a realidade em 30 segundos — plugins habilitados e na versão instalada, hooks compilando, board-flow.yaml estrutural, baseline de build (status + idade), worktrees stale/órfãs (inclusive a worktree de agente esquecida dentro do repo, que duplica o código-fonte), handoffs vencidos e a fila single-track (plan.yaml) divergindo do BACKLOG.md. Com --live, também confere o board-flow.yaml e a fila contra o Jira vivo via atlassian-expert. Rode no início do dia ou quando algo do harness parecer errado — cada check existe porque a falha correspondente já custou uma tarefa.
 argument-hint: [--live] [--no-fix] [--projeto]
 interaction: routine
 ---
@@ -43,6 +43,15 @@ para um momento em que consertar é barato.
 2. Mostre a saída ao usuário na íntegra (✓/⚠/✗ por área, já em pt-BR),
    incluindo os blocos finais **Corrigido automaticamente** e **Precisa de você**.
 
+   A área `plano` (quando aparece) é a fila single-track (`.claude/programs/<fila>/plan.yaml`)
+   comparada com o `BACKLOG.md` do projeto — o `cepa-plan divergencia` que o script
+   já rodou sozinho: seções do BACKLOG.md sem `**Plano:**` e `**Plano:**` citando
+   um id que não existe naquela fila. Só aparece quando o repo tem `BACKLOG.md` E
+   uma fila resolvível sem ambiguidade (via `board-flow.yaml` → `defaults.project_key`,
+   ou exatamente uma fila `single-track` em `.claude/programs/*/plan.yaml`); com
+   mais de uma fila possível o script fica calado — não adivinha qual o dono quer
+   ver. É relatório, nunca correção: nenhum `--fix` mexe aqui.
+
 3. **Se `--live` foi passado** e existe `board-flow.yaml` no projeto: delegue ao
    `board-flow:atlassian-expert` (se o plugin board-flow estiver instalado):
 
@@ -52,6 +61,20 @@ para um momento em que consertar é barato.
    > metadata do issue type. Responda OK ou a lista de divergências.
 
    Anexe o resultado ao relatório.
+
+   Se a mesma fila resolvida no passo 2 (`plano`) existir, peça também ao
+   `atlassian-expert` a lista de cards do projeto (`key` + `status`), salve num
+   arquivo temporário e rode:
+
+   ```
+   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" divergencia <fila> \
+     --board <arquivo-temporário> --backlog BACKLOG.md --repo . --json
+   ```
+
+   Isso completa o relatório do passo 1 (que só compara fila × BACKLOG.md) com a
+   metade que depende do Jira: `cards_sem_item` (cards abertos no quadro sem item
+   na fila) e `itens_com_card_done` (itens não fechados cujo card o Jira já dá
+   como done). Anexe ao relatório da mesma forma — leitura, nunca correção.
 
 4. O que sobrou no bloco **Precisa de você** são as correções que envolvem uma
    escolha (descartar worktree com trabalho dentro — inclusive a worktree de agente que ainda tem commit ou arquivo não rastreado —, editar `board-flow.yaml`,
