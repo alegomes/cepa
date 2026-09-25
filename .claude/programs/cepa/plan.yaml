@@ -8,7 +8,7 @@
 # fecha — agente nenhum troca o texto por null por conta própria.
 #
 # Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor) + itens de 2026-09-24
-# Escrito em: 2026-09-24
+# Escrito em: 2026-09-25
 
 schema_version: 2
 mode: single-track
@@ -531,3 +531,17 @@ items:
     que ele usou twg e nao MCP.'
   evidence: 'session/pendencias_ai_memory: 937fc1b (jira-write-lock + _jiramut),
     d70e366 (atlassian-expert), cfa3054 (docs).'
+- id: classificador-nh-doc-so-nada-a-provar
+  title: classify_needs_human.py reconhece artefato so de documentacao como nada-a-provar
+  why: 'decidido pelo dono em 2026-09-25 no prove-drain do wego-acesso-backend.
+    Tres cards so de documentacao (WEGO-2117, WEGO-2275, WEGO-2276) cairam em teste-cego
+    ("perturbacao externa nao pode rodar") pelo fallback pert.status == skipped,
+    porque a prosa do artefato nao casou o padrao DIFF_SEM_PRODUCAO. O motivo certo
+    e nada-a-provar, como nos precedentes WEGO-2212, 2220 e 2240. Custo de hoje:
+    cada dispensa corrigida a mao, e o agrupamento do /board-flow:decide junta spec
+    com teste cego de verdade. Sinal estrutural disponivel no artefato: scope.changed_classes
+    vazio, l4 n/a e perturbacao skipped, sem depender de prosa.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
