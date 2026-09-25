@@ -1,0 +1,93 @@
+card: topologia-do-cepa
+title: "Dar ao cepa uma topologia propria (.claude/topology + comando de flow)
+  para o /common:drain-plan e o cepa-until executarem a fila do cepa"
+status: complete
+diff: "b166969..6f5b5ad (.claude/topology, build-solo/commands/plan-build-validate.md,
+  build-solo/commands/reproduce-fix-verify.md, tests/test_topologia_do_cepa.py,
+  bump build-solo 0.1.x -> 0.2.0)"
+source: ".claude/programs/cepa/plan.yaml, item topologia-do-cepa (why cita
+  literalmente o criterio auditado)"
+precedent: "mesma regua de altitude que .claude/acceptance/common-drain-plan.yaml:
+  a superficie que conta como demonstrada e a que o criterio nomeia
+  literalmente (aqui, `cepa-until <fila> --for 1h`), exercitada via
+  subprocess/execucao real, nao um teste de arquivo isolado que so confere
+  promessa de estrutura."
+
+criteria:
+  - id: AC1
+    text: >
+      cepa-until cepa --for 1h executa o primeiro item ate o fim sem abortar
+      por topologia.
+    altitude: cli
+    surface: "o binario `common/bin/cepa-until <nome-da-fila> --for 1h`: le
+      `.claude/topology` na raiz do repo (config por-repo, nao por-fila),
+      despacha para `/<topologia>:plan-build-validate` (ou
+      `reproduce-fix-verify` para defeito) e so conta como sem abortar se o
+      log nao tiver 'No topology configured' e o item fechar `done` antes do
+      fim da janela."
+    test: "Nao ha teste automatizado que rode `cepa-until` ponta a ponta (ele
+      dispara subagentes reais e leva minutos) — a demonstracao e uma
+      execucao real: `CEPA_WORKTREE_HOME=<scratchpad>/wt python3
+      common/bin/cepa-until prova --for 1h --repo . --sem-analise` num clone
+      descartavel do commit 6f5b5ad (mesmo `.claude/topology: build-solo` do
+      HEAD auditado), com uma fila de um item (`prova-topologia`) escrita a
+      mao no mesmo formato do schema single-track, no lugar da fila real
+      `cepa` — substituicao legitima e nao lacuna: a checagem de topologia e
+      por-repo (le `.claude/topology` na raiz, nao o nome da fila), e rodar
+      contra a fila `cepa` de verdade executaria o proximo item ao vivo do
+      dono, incluindo o proprio item topologia-do-cepa (que no `plan.yaml`
+      auditado ainda esta `status: pending`, `evidence: null` — nao foi
+      marcado done por este diff)."
+    layer: "cli, execucao real de processo (nao mock): `cepa-until` de fato
+      subiu um worktree de noite, chamou um agente Claude real via subagente
+      `Task`, que executou `/build-solo:plan-build-validate` completo
+      (pair-dev implementa, pair-reviewer revisa, orquestrador roda a suite e
+      commita)."
+    evidence: verified
+    run: >
+      Reproduzi/conferi eu mesmo, lendo os artefatos da execucao real (nao
+      apenas o relato):
+      (1) `cat <scratchpad>/until-prova.out` -> 'exit=0', '1º item
+      prova-topologia ... → done (4min)', 'fim-da-fila — nenhum item
+      pendente sobrou', '1 tentativa(s) · 1 entregue(s) · 0 travado(s)';
+      (2) `grep -c "No topology configured"
+      <clone>/.claude/programs/prova/until/2026-09-25-1915.log` -> 0;
+      (3) `grep -o "build-solo:plan-build-validate" <log-convertido-em-texto>
+      | wc -l` -> 6 ocorrencias (o dispatch de fato chamou o comando de flow
+      da topologia declarada, nao um caminho generico);
+      (4) `git log until/2026-09-25-1915 --oneline` no clone mostra 2
+      commits reais sobre a fila (85a0a6d cria PROVA-TOPOLOGIA.md,
+      deb2916 grava o veredito do completion-auditor daquele item-prova),
+      confirmando commit na branch da noite sem push/merge;
+      (5) `python3 tests/test_topologia_do_cepa.py` (rodado por mim neste
+      worktree, HEAD 6f5b5ad) -> 8/8 'ok', exit 0 — confirma que os dois
+      arquivos de flow existem sob o plugin declarado em `.claude/topology`,
+      rodam a suite em primeiro plano e commitam sem push (as pre-condicoes
+      estruturais que tornam o AC1 possivel).
+    verdict: complete
+    note: >
+      Nao rodei eu mesmo `tests/run-all.sh` ate o fim neste worktree (a
+      execucao estourou o timeout de 120s do meu turno e eu nao reporto a
+      contagem 78/78 do executor como verificada por mim — fica como
+      `evidence: assumed` para esse dado isolado, sem afetar o veredito do
+      AC1, que se sustenta nos itens (1)-(5) acima, verificados por mim
+      diretamente contra artefatos em disco).
+
+summary: >
+  O criterio nomeia a superficie `cli` do supervisor de fila noturna
+  (`cepa-until <fila> --for 1h`) rodando ate o fim sem abortar por
+  topologia ausente/incompleta. A demonstracao nao e um teste de unidade
+  sobre a estrutura de arquivos (isso e cobertura complementar, ja existente
+  em `tests/test_topologia_do_cepa.py` e verificada em separado) — e uma
+  execucao real do proprio binario citado no criterio, contra o commit
+  exato sendo auditado, delegando para um agente real que completou o flow
+  `/build-solo:plan-build-validate` do inicio ao fim (build, review, suite,
+  commit) sem nenhuma ocorrencia do erro de aborto que motivou o item. A
+  troca da fila `cepa` pela fila descartavel `prova` foi avaliada
+  adversarialmente: a checagem de topologia e por-repo, nao por-fila (le
+  `.claude/topology` na raiz), entao o nome da fila nao muda a superficie
+  testada; usar a fila `cepa` de verdade teria efeito colateral real
+  (executaria o proximo item ao vivo do dono). Considero isso um
+  stand-in legitimo, nao uma lacuna de altitude.
+
+gaps: []

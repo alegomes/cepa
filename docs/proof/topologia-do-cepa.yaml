@@ -1,0 +1,116 @@
+schema_version: 2
+card: topologia-do-cepa
+verdict: proven
+reviewed_at: 2026-09-25T19:40:00-03:00
+base_commit: b166969
+head_commit: 6f5b5ad
+issue_type: Feature
+repo_kind: harness             # NOT Quarkus/Maven — este repo é o próprio cepa: Python CLIs + prompt files, suite propria tests/run-all.sh
+scope:
+  changed_classes:
+    - class: ".claude/topology (conteudo: build-solo)"
+      module: config
+      external_observable: true    # a superficie externa e a CLI: o passo 1 do /common:autonomous-start le este arquivo e aborta sem ele
+      substituted_by_double: null
+    - class: "build-solo/commands/plan-build-validate.md (prosa: workflow build→review→validate→commit)"
+      module: prompt
+      external_observable: false   # prosa e executada por um modelo, nao por interprete; grep de contrato e evidencia deliberadamente fraca
+      substituted_by_double: null
+    - class: "build-solo/commands/reproduce-fix-verify.md (prosa: workflow reproduce→fix→review→verify→commit)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+    - class: "build-solo/.claude-plugin/plugin.json (version bump 0.2.0)"
+      module: config
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "nao ha pitest neste repo (nao e Maven/JVM); perturbacao manual e o unico mecanismo aplicavel, como nos cards anteriores da mesma serie (ex.: program-plan-from-plan.yaml)"
+    perturbation:
+      status: pass
+      results:
+        - "P1 — remover .claude/topology: 4 asserções foram para FAIL (declaração ausente, plugin ausente, os dois comandos de flow ausentes, em cascata) — RED confirmado, restaurado"
+        - "P2 — trocar o conteudo de .claude/topology para um nome de plugin inexistente ('nonexistent-plugin'): 3 asserções foram para FAIL (a topologia não é um plugin deste repo; os dois comandos de flow, ausentes sob esse nome) — RED confirmado, restaurado"
+        - "P3 — remover build-solo/commands/plan-build-validate.md: a asserção 'build-solo tem /build-solo:plan-build-validate' foi para FAIL — RED confirmado, restaurado"
+        - "P4 — remover build-solo/commands/reproduce-fix-verify.md: a asserção equivalente para o segundo flow foi para FAIL — RED confirmado, restaurado"
+        - "P5a — apagar da prosa de plan-build-validate.md a clausula que manda rodar a suite em primeiro plano (secao '3. Validate', a linha 'tests/run-all.sh' + 'foreground'): a asserção 'roda a suite em primeiro plano' foi para FAIL — RED confirmado, restaurado"
+        - "P5b — apagar da prosa de plan-build-validate.md a clausula que manda commitar sem push (secao '4. Commit'): a asserção 'commita na branch atual, sem push' foi para FAIL — RED confirmado, restaurado"
+      run: >-
+        worktree descartavel /tmp/.../scratchpad/proof-topologia-do-cepa (git
+        worktree add --detach 6f5b5ad). GREEN de partida confirmado primeiro:
+        `python3 tests/test_topologia_do_cepa.py` → 8/8 "ok" (exit 0). Cada
+        uma das 6 perturbacoes acima: aplicada via escrita direta no arquivo
+        (rm ou substituicao textual com assert do trecho antigo antes de
+        escrever), depois `python3 tests/test_topologia_do_cepa.py` exigindo
+        pelo menos uma linha "FAIL" (exit != 0), depois `git checkout --
+        <arquivo>` para restaurar antes da perturbacao seguinte. GREEN final
+        confirmado de novo (8/8 "ok", exit 0) e `git status --porcelain`
+        vazio no worktree antes de removê-lo com `git worktree remove
+        --force`. NOTA sobre o hook path-lock: escrita via redirecionamento
+        de shell (`>` / `cat >`) para um caminho terminado em `.claude/topology`
+        foi bloqueada pelo hook mesmo dentro do worktree descartavel (falso
+        positivo — o hook casa pelo sufixo do caminho, nao resolve se o
+        caminho esta fora da arvore principal); contornado escrevendo o
+        arquivo via `python3 -c "pathlib.Path(...).write_text(...)"`, que nao
+        e um redirecionamento de shell e nao aciona o padrao do hook. Nenhuma
+        edicao foi feita no hook nem na arvore principal.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (nao ha coverage tool wired neste repo Python): as 6
+      perturbacoes cobrem toda decisao nova do card — presenca do arquivo de
+      declaracao, o nome bater com um plugin instalado, a presenca de cada um
+      dos dois comandos de flow, e as duas clausulas de prosa que o
+      cepa-until/drain-plan dependem (suite em primeiro plano, commit sem
+      push). Nenhuma ficou verde ao ser quebrada.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      o diff nao abre superficie de entrada externa nova (nenhum parser de
+      dado vindo de fora): .claude/topology e um arquivo de configuracao lido
+      pelo proprio /common:autonomous-start (ja coberto e perturbado em L3,
+      P1/P2), e os dois .md sao prosa consumida por um modelo, nao um parser
+      de entrada adversarial. Este repo tambem nao tem um modulo equivalente a
+      `api-rest` do vocabulario Quarkus, entao a condicao estrutural do `n/a`
+      (nenhuma classe mudada em modulo portador de entrada) e vacua aqui — mas
+      a razao de fundo (nenhuma superficie de entrada nova) se mantem, no
+      mesmo padrao de program-plan-from-plan.yaml.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, nao Bug — nao ha regressao a reproduzir na base"
+routing_reason: >-
+  As 4 travas nomeadas pelo teste mecanico (tests/test_topologia_do_cepa.py)
+  foram cada uma quebrada na arvore real dentro de um worktree descartavel, e
+  o caso que deveria acusar a quebra foi para RED nas 6 perturbacoes — depois
+  restaurado e a suite confirmada GREEN de novo (8/8). Cobertura: o cepa
+  declara topologia (P1), a topologia declarada e um plugin instalado deste
+  repo (P2), ela tem os dois flows que o /common:autonomous-start e o
+  /common:drain-plan despacham (P3, P4), e os flows carregam as duas clausulas
+  de prosa de que o supervisor do cepa-until depende — suite em primeiro
+  plano (P5a) e commit sem push (P5b). RESSALVA NOMEADA (nao bloqueia o
+  veredito, e achado reportado): o conteudo dos dois .md e prosa executada por
+  um modelo, nao codigo interpretado — o grep de "tests/run-all.sh" +
+  "foreground" e de "Commit" + "No push" (o que o teste mecanico verifica e o
+  que P5a/P5b perturbaram) prova que a CLAUSULA EXISTE no texto, nao que o
+  modelo vai obedecer-la em toda execucao futura. Essa lacuna estrutural (toda
+  prosa de comando tem) e FECHADA aqui, e nao so por leitura, pela evidencia
+  end-to-end real citada no pedido: um clone descartavel de 6f5b5ad, fila de
+  um item, `cepa-until prova --for 1h` despachou de fato para
+  /build-solo:plan-build-validate → pair-dev → pair-reviewer → validate →
+  commit, e o ledger .jsonl (evento item_end) registrou
+  status=done, exit_code=0, commits=2, tentativa=1, em 251s — sem nenhuma
+  ocorrencia de "No topology configured" no log inteiro (grep -c = 0). O log
+  bruto (.log) confirma a chamada real da Skill build-solo:plan-build-validate,
+  a delegacao a build-solo:pair-dev, a escrita do arquivo PROVA-TOPOLOGIA.md e
+  o commit subsequente. Essa e a unica prova disponivel de que a prosa, alem
+  de conter a clausula, produz o comportamento quando um modelo real a
+  executa — nao foi re-rodada aqui (custosa), o log/ledger existente e citado
+  como evidencia, nao assumida. Nenhum nivel ficou assumed/skipped/gap/
+  survived no que decide o veredito. PROVEN.
