@@ -1,5 +1,5 @@
 ---
-description: Bulk-execute Jira cards from a column (default = `defaults.status_map.to_do` from `board-flow.yaml`, fallback "To Do"). Iterates through up to N cards in priority order. Stops on first BLOCKED to avoid wasting budget on a stuck card. Heavy operation — each card runs the full execution flow. The split between Backlog (unrefined) and `to_do` (ready for dev) is intentional: drain only pulls from `to_do`, so unrefined Backlog items stay safe.
+description: Bulk-execute Jira cards from a column (default = `defaults.status_map.to_do` from `board-flow.yaml`, fallback "To Do"). Iterates through up to N cards in the order the single-track queue (`<programs>/<project_key>/plan.yaml`) puts them, when one exists — cards outside the queue follow, in Jira priority/rank order; with no queue, falls back to Jira priority/rank order as before. Stops on first BLOCKED to avoid wasting budget on a stuck card. Heavy operation — each card runs the full execution flow. The split between Backlog (unrefined) and `to_do` (ready for dev) is intentional: drain only pulls from `to_do`, so unrefined Backlog items stay safe.
 argument-hint: [column] [--max N] [--scope "<jql>"] [--no-scope]
 interaction: routine
 ---
@@ -37,23 +37,57 @@ You are the orchestrator. Iterate through pending cards. Stop on first BLOCKED. 
 
 ### 2. List pending cards
 
+Resolve the single-track queue first, because it changes how many cards to ask
+for: `<programs>/<project_key>/plan.yaml` (`<programs>` = `<main-root>/.claude/programs`,
+`<main-root>` = the main clone, never the current worktree's own `.claude/`;
+`<project_key>` from `board-flow.yaml`). Check whether that file exists before
+delegating.
+
 Delegate to `atlassian-expert` (the `Command:` line tells it to resolve scope for `drain`; include the scope directive only if a flag was passed):
 
 > Command: drain
 > <Scope: ... — only if a flag was passed>
 >
-> List Jira issues where `status = "<column>"` in the project, applying the effective drain scope, ordered by priority and rank. Limit to <max> cards. Return key + summary + priority for each, plus the effective scope you used.
+> List Jira issues where `status = "<column>"` in the project, applying the effective drain scope, ordered by priority and rank. Limit to <the whole column, no limit, if the single-track queue exists — otherwise <max>> cards. Return key + summary + priority for each, plus the effective scope you used.
+
+**Why the whole column when a queue exists:** `--max` caps how many cards this
+run *executes*, not how many exist. Asking Jira for only the first `<max>` in
+its own priority/rank order, then reordering by the queue, could cut off the
+queue's actual first items if Jira's rank disagrees — the cap has to apply
+*after* reordering (step 2b), never before.
 
 If 0 cards → report "Nothing in column <column>" (note the effective scope, so an empty result from an over-narrow filter is obvious, not mistaken for an empty board) and stop.
 
+### 2b. Reorder by the queue, if one exists
+
+- No `plan.yaml` for `<project_key>` → keep Jira's priority/rank order exactly
+  as listed in step 2 (today's behavior). Skip to step 3.
+- `plan.yaml` exists → run:
+
+  ```
+  python3 common/bin/cepa-plan ordena <project_key> --keys <K1,K2,...> --json
+  ```
+
+  passing every key step 2 returned, in the order Jira gave them. The command
+  returns the queue's order for keys that are items of it, then the rest —
+  `fora_do_plano` — in the Jira order they came in. Use that combined order for
+  steps 3 onward. Exit 2 (no queue after all — e.g. it was removed between the
+  two calls) falls back to Jira order, same as "no `plan.yaml`" above.
+- Cards in `fora_do_plano` are **named** in the step-3 confirmation screen and
+  the final report, with the hint that `/common:plan <project_key> --from-jira`
+  or `python3 common/bin/cepa-plan add <project_key> <key> --title "..."` is
+  what puts a card into the queue.
+- Apply `--max` to the reordered list now, not to the raw Jira listing from
+  step 2.
+
 ### 3. Confirm with user
 
-Show the user:
+Show the user (order = the queue's, when step 2b found one; Jira's otherwise):
 
 ```
-Found N cards in <column> (scope: <effective scope, or "none — whole column">):
+Found N cards in <column> (scope: <effective scope, or "none — whole column">)<, queue: <project_key> — if a plan.yaml drove the order>:
   WEGO-1234 (P1) — <summary>
-  WEGO-1235 (P2) — <summary>
+  WEGO-1235 (P2) — <summary>  (fora do plano — só entra na fila com /common:plan <project_key> --from-jira ou cepa-plan add)
   ...
 
 Drain these? Each card runs the full execute flow (planning audit + build + validate + Jira transitions).
@@ -125,6 +159,8 @@ a non-terminal slice) — one discipline, two surfaces.
 A single summary message:
 
 - **Drained from column:** <column> (scope: <effective scope, or "none">)
+- **Order:** queue `<project_key>` (`<programs>/<project_key>/plan.yaml`), or "Jira priority/rank (no queue for `<project_key>`)"
+- **Out of the queue (drained in Jira order, after the queued ones):** keys, or "none" — only when a queue drove the order; name them and repeat the hint (`/common:plan <project_key> --from-jira` or `cepa-plan add`)
 - **Cards attempted:** N — each with its outcome terminal (`SHIPPED` / `BLOCKED` / `DEFERRED` / `DROPPED` / `ERROR`). The count of attempted cards MUST equal the count of named outcomes; if it doesn't, the drain is not finished.
 - **Moved to In Review:** M (list keys + verdicts)
 - **Blocked:** 0 or 1 (key + reason)

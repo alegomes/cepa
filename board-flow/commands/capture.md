@@ -61,13 +61,38 @@ If `atlassian-expert` returns BLOCKED, do NOT report success to the user. Surfac
 
 A success reply from step 3 already carries the read-back: `atlassian-expert` only reports a key after `getJiraIssue` found it. Don't delegate a second existence check — it repeats the same read and, measured on 2026-09-13, was one of the sources of card reads the session already had.
 
-### 4. Report back
+### 4. Add the card to the queue, if one exists
+
+The single-track queue at `<main-root>/.claude/programs/<project_key>/plan.yaml`
+(`<main-root>` = the parent of the main clone, never the current worktree's own
+`.claude/`) is the convergence point for Jira, `BACKLOG.md` and `plan.yaml` — a
+card born outside it starts already out of the queue that drives execution.
+
+- No `plan.yaml` for `<project_key>` → skip this step and say so in the report
+  ("no queue for `<project_key>` yet — card is Jira-only"). Don't create one:
+  that's `/common:plan`'s job, not capture's.
+- Queue exists → run:
+
+  ```
+  python3 common/bin/cepa-plan add <project_key> <KEY> --title "<summary>"
+  ```
+
+  No `--antes-de`, so the card lands at the end of the queue, marked "ainda
+  não priorizado" — capture doesn't decide priority, it only makes sure the
+  card isn't invisible to the queue. Exit 4 (id already in the queue) is fine,
+  not an error — report it as already-queued.
+- If `add` fails for any other reason, the card stands: do **not** roll back
+  step 3's creation. Report it plainly as "card created, out of the queue"
+  with the error, so the gap is visible instead of silently lost.
+
+### 5. Report back
 
 A single line to the user (only if step 3 returned a key, not BLOCKED):
 
 ```
 Captured: <KEY> — <summary>  (<URL>)
 Verified: card exists in Jira at status <status>.
+Queue: <added to <project_key> queue | already queued | no queue for <project_key> | card created, out of the queue: <error>>
 Next: /board-flow:execute <KEY> to work on it, or leave it in the backlog.
 ```
 
