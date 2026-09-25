@@ -7,13 +7,14 @@
 # Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
 # fecha — agente nenhum troca o texto por null por conta própria.
 #
-# Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor)
-# Escrito em: 2026-08-25
+# Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor) + itens de 2026-09-24
+# Escrito em: 2026-09-24
 
 schema_version: 2
 mode: single-track
 program: cepa
 source: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor)
+  + itens de 2026-09-24
 items:
 - id: common-plan-etapa1
   title: /common:plan <nome> — escreve a fila single-track a partir de uma spec
@@ -130,6 +131,15 @@ items:
   evidence: 'done em 2026-07-29 por /common:next --sync. Evidência: /common:doctor
     na mesma sessão — install ok há 0d, com common 0.21.0 / board-flow 0.11.0 /
     maestro 0.4.0 instalados e habilitados, exatamente as versões cobradas.'
+- id: cepa-until-adversarial-vermelho
+  title: test_cepa_until_adversarial.py vermelho desde antes de 2026-09-24
+  why: 'entra na frente da fila porque, enquanto ele falha, o tests/run-all.sh termina
+    vermelho em toda sessao e um vermelho novo passa despercebido no meio do velho.
+    Barato: um caso so (test_claude_corrompido_no_meio_e_falha_contada_nao_traceback).
+    Posicao dada em 2026-09-24 a pedido do dono ("2. sim" no /common:next).'
+  status: pending
+  blocked_by: []
+  human_pending: null
 - id: validar-fio-condutor-em-board-real
   title: Rodar /board-flow:triage num board com fila real e ver a ordem sobreviver
     à revisão
@@ -282,9 +292,7 @@ items:
     todos de uma vez; consertar só o session-log deixa a classe de pé.'
   status: done
   blocked_by: []
-  human_pending: 'rodar bin/install.sh --clean e reiniciar o Claude Code: os quatro
-    portoes consertados sao de enforcement em producao e seguem com o comportamento
-    velho enquanto o cache servir common 2.7.0'
+  human_pending: null
   evidence: 'done em 2026-08-25, branch session/next (3 commits, 355b693 fix(hooks)
     + b2b500b common 2.8.0 + ebe5dca test), NAO aterrissada em main ainda. O card
     previa que era uma CLASSE e nao um arquivo, e era: sete hooks montavam `.claude/<estado>`
@@ -408,11 +416,26 @@ items:
   status: pending
   blocked_by: []
   human_pending: null
+- id: drain-plan-pula-validacao-build-hex
+  title: drain-plan fecha card done sem a fase de validacao do build-hex
+  why: 'mesmo tipo de buraco do gate-verde-sem-teste: um done que pulou uma verificacao
+    que o fluxo manual faria. Vem logo depois dele. Posicao dada em 2026-09-24.'
+  status: pending
+  blocked_by: []
+  human_pending: null
 - id: aviso-worktrees-mente
   title: O aviso de worktrees não mescladas do SessionStart mente
   why: 'declarado `prioridade média` no próprio card, e é barato: o aviso lê estado
     gravado em vez de perguntar ao git, então envelhece sozinho e nunca se corrige.
     Aviso que mente ensina a ignorar todos os avisos.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: cepa-until-blocked-como-progresso
+  title: cepa-until conta BLOCKED como progresso (resto do PARCIAL)
+  why: a causa das 20 rodadas travadas ja saiu com a branch da noite (1cddede).
+    O que falta so aparece de novo num run real com varios blocked, entao espera
+    o primeiro run noturno. Posicao dada em 2026-09-24.
   status: pending
   blocked_by: []
   human_pending: null
@@ -496,3 +519,15 @@ items:
   human_pending: null
   evidence: mora no S4 do lotes-sweep-verify, com superficie de arquivos e criterio
     de aceite declarados la; quem a executa e o item rodar-onda-lotes-sweep-verify.
+- id: twg-o0-o3
+  title: Reavaliar twg como acesso canonico ao Jira (O0 e O3)
+  why: decidido pelo dono em 2026-09-24 ("Faca O0 e O3") depois da comparacao de
+    custo (57.375 -> 38.032 tokens por execucao).
+  status: done
+  blocked_by: []
+  human_pending: 'rodar bin/install.sh --clean e reiniciar o Claude Code: o atlassian-expert
+    novo e o jira-write-lock so valem com common 2.20.0 e board-flow 0.24.0 no cache.
+    Depois, numa sessao local, pedir ao atlassian-expert uma leitura de card e confirmar
+    que ele usou twg e nao MCP.'
+  evidence: 'session/pendencias_ai_memory: 937fc1b (jira-write-lock + _jiramut),
+    d70e366 (atlassian-expert), cfa3054 (docs).'
