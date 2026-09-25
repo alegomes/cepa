@@ -7,6 +7,8 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ## Política default-yes — matar as micro-interações nas pontas da sessão
 
+**Plano:** fora da fila (nenhum item o executa)
+
 **Status:** pendente · **Lar provável:** `common` (skill `zero-micromanagement` + varredura
 dos comandos) · **Origem:** reclamação forte do usuário (2026-08-18, por voz): toda rotina
 (triage, drain, prove-drain, autonomous, doctor) exige ciclos de confirmação ANTES
@@ -65,6 +67,8 @@ duas métricas para provar o efeito — "turnos até o primeiro comando de rotin
 ---
 
 ## Advisors — painel de perspectivas por área de decisão
+
+**Plano:** `melhorias-2026-07/P7-advisors-workflow`
 
 **Status:** pendente · **Lar provável:** `common` (transversal a todas as topologias)
 · **Origem:** revisão do design da Variante 3 do `wego-acesso` (2026-06-28), feita à
@@ -144,6 +148,8 @@ partir da área declarada da decisão.
 
 ## Topologia de marketing / produção de conteúdo
 
+**Plano:** `cepa/topologia-marketing`
+
 **Status:** pendente · **Lar provável:** nova topologia `marketing` (par de `docs`)
 · **Origem:** run autônomo `2026-06-30-sales-enablement-kit` (kit de sales-enablement
 do WeGo). A tarefa era escrita de prosa comercial, e nenhuma topologia instalada
@@ -196,6 +202,8 @@ crítico:
 ---
 
 ## Maestro — orquestração multi-harness (frota de sessões Claude Code)
+
+**Plano:** `cepa/onboarding-maestro-blocos-1-3`, `cepa/maestro-merge-train-nao-roda`, `cepa/maestro-calibrar-porteiro`, `cepa/maestro-run-nao-diz-a-aba`, `cepa/herdr-space-por-worktree`
 
 **Status:** EM CONSTRUÇÃO — passos 1-3 FEITOS 2026-07-15 (spike VIÁVEL +
 program-plan/intake + núcleos determinísticos do run testados + comandos
@@ -287,6 +295,8 @@ CLI = wrappers JSON do socket):
 
 ## "Verde" sem teste nenhum: gate de aceite precisa exigir `Tests run:` > 0
 
+**Plano:** `cepa/gate-verde-sem-teste`
+
 **Status:** pendente · **Lar:** `common/hooks/capture-build-result.py` (classificação do
 build) + `build-hex/agents/proof-reviewer` e `common/agents/completion-auditor` (o que
 eles aceitam como prova) · **Origem:** merge `00e0dda` no wego-acesso-backend
@@ -334,6 +344,8 @@ commit passar nem declarar o card feito — hoje deixa as duas coisas.
 
 ## Onda termina e ninguém aterrissa: o merge train não roda sozinho
 
+**Plano:** `cepa/maestro-merge-train-nao-roda`
+
 **Status:** pendente · **Lar:** `maestro/commands/run.md` (passo 8, merge train) +
 `maestro/bin/maestro-wave-state` · **Origem:** onda 1 do programa `WEGO-paralelo`
 (2026-08-24). Duas branches prontas e verdes ficaram paradas até alguém reparar.
@@ -380,6 +392,8 @@ silêncio — sem que ninguém precise abrir o `wave-state.yaml`.
 ---
 
 ## Calibrar as regras do porteiro do Maestro com o 1º lote de sombra (43 escalações)
+
+**Plano:** `cepa/maestro-calibrar-porteiro`
 
 **Status:** PARCIAL — o conserto do motor de classificação aterrissou (maestro 0.4.3,
 `allow_mecanico` + `_shellscan`, teste
@@ -467,6 +481,8 @@ calibração tem contra o que rodar. O que é perecível são os worktrees das f
 
 ## Baseline cega para builds longos (> teto de foreground do Bash)
 
+**Plano:** `cepa/baseline-cega-builds-longos` (descartado)
+
 **Status:** pendente · **Lar:** `common/hooks/capture-build-result.py` (+ possivelmente
 `gate-advance.py`) · **Origem:** sessão wego 2026-07-20 — build Maven de ~14:30 nunca
 grava baseline, diagnóstico confirmado como limite de desenho, não uso errado.
@@ -512,6 +528,8 @@ o caso.
 ---
 
 ## Aprovação humana não chega ao subagente (canal de consentimento)
+
+**Plano:** `cepa/aprovacao-humana-nao-chega-ao-subagente` (descartado)
 
 **Status:** pendente · **Lar:** `common/` (canal de aprovação) + `build-hex/hooks/path-lock.py`
 + prompts dos workers · **Origem:** sessão wego 2026-07-21, card WEGO-1948 — worker recusou
@@ -614,6 +632,8 @@ transformar em número.
 
 ## `summary-nulls-gate` bloqueia summary honesto por formatação (falso positivo)
 
+**Plano:** fora da fila (concluído)
+
 **Status:** ✅ CORRIGIDO 2026-07-21 (pendente `bin/install.sh` para valer na cópia
 instalada) · **Lar:** `common/hooks/summary-nulls-gate.py` (+
 `tests/test_summary_nulls_gate.py`) · **Origem:** sessão wego 2026-07-21, validação da
@@ -705,6 +725,8 @@ acertar — o cenário de omissão só aparece em teste sintético. Vale registr
 
 ## `prove-drain` não tem disjuntor: falha de ambiente reprova a coluna inteira
 
+**Plano:** fora da fila (registrar, não construir: decisão do dono em 2026-08-26)
+
 **Status:** 🔵 ABERTO · **Lar:** `board-flow/commands/prove-drain.md` · **Origem:**
 painel de advisors sobre `docs/archive/estrategia-drain-plan-velocidade.md`, 2026-08-26
 (discordância D2, levantada pelas lentes `operador-sre` e `contrarian`). Decisão do dono
@@ -737,6 +759,8 @@ tinha entregado o que precisava.
 
 
 ## O modo é prosa: desvio vira pergunta, pergunta vira "sim", e o modo não segurou nada
+
+**Plano:** fora da fila (concluído)
 
 **Status:** ✅ FEITO em 2026-08-26 (`common/hooks/modo-escrita-gate.py`, common
 2.11.0 — **não está live até `bin/install.sh --clean` + restart**) · **Lar:**
@@ -892,6 +916,8 @@ Também é o v0 do Maestro: valida o formato de plano/ondas antes do daemon exis
 
 ## P1. Lint editorial como hook
 
+**Plano:** `melhorias-2026-07/P1-lint-editorial`
+
 **Onda 1 · Lar:** `common` · **Status:** ver plan.yaml
 
 Regras de estilo (zero travessão, LinkedIn-ês, hashtags genéricas) hoje dependem de
@@ -903,6 +929,8 @@ modelo (exit 2 em PostToolUse = feedback não-bloqueante). Aceite: escrever "foo
 num arquivo coberto gera o aviso; arquivo fora dos globs não gera nada.
 
 ## P2. Nudges de manutenção (doctor diário, metrics semanal)
+
+**Plano:** `melhorias-2026-07/P2-nudges`
 
 **Onda 1 · Lar:** `common` · **Status:** ver plan.yaml
 
@@ -916,6 +944,8 @@ local; um launchd job fica como evolução se o nudge se provar fraco.
 
 ## P3. Manifesto de ambiente (.claude/env.yaml)
 
+**Plano:** `melhorias-2026-07/P3-env-manifest`
+
 **Onda 2 · Lar:** `common` · **Status:** pendente
 
 O cepa modela código, não runtime — e as fricções de sessões paralelas foram todas de
@@ -927,6 +957,8 @@ ocupada declarada no manifest; worktree-start seeda o que o manifest lista.
 
 ## P4. Consolidação periódica de mental-models
 
+**Plano:** `melhorias-2026-07/P4-consolidacao-mm`
+
 **Onda 2 · Lar:** `common` · **Status:** pendente
 
 Entries de expertise acumulam com prune por contagem, nunca re-verificados — mesmo
@@ -936,6 +968,8 @@ repo) e marca proveniência. Aceite: rodar no expertise mais gordo reduz entries
 perder nenhuma regra ainda-válida (diff revisável antes de gravar).
 
 ## P5. Cascata multi-repo no board-flow
+
+**Plano:** `melhorias-2026-07/P5-cascata-multirepo`
 
 **Onda 2 · Lar:** `board-flow` · **Status:** pendente
 
@@ -947,6 +981,8 @@ projetos sem Jira. Aceite: fechar card pai com 2 filhos linkados gera proposta d
 fechamento dos 2.
 
 ## P6. Proof-gate de UI/extensão
+
+**Plano:** `melhorias-2026-07/P6-ui-proof-gate`
 
 **Onda 3 (design interativo) · Lar:** novo agente em `common` ou plugin próprio ·
 **Status:** pendente — TEM decisão de design aberta (onde mora a superfície
@@ -960,6 +996,8 @@ extensão do wego-acesso é pega pelo gate.
 
 ## P7. Advisors como Workflow
 
+**Plano:** `melhorias-2026-07/P7-advisors-workflow`
+
 **Onda 3 (design interativo) · Lar:** `common` · **Status:** pendente — resolver as 3
 pendências do item "Advisors" acima (declaração de área, nº de lentes, quem sintetiza)
 
@@ -968,6 +1006,8 @@ determinístico + síntese name-the-disagreement), não como prosa de orquestra�
 Meta-aceite: usar o advisors recém-nascido para revisar o design do P6.
 
 ## P8. Revisão com evidência (fecha o programa)
+
+**Plano:** `melhorias-2026-07/P8-metrics-review`
 
 **Onda 4 · Status:** aguarda ~2 semanas de telemetria
 
@@ -990,6 +1030,8 @@ gate não-validado.
 
 ## A1. Validation seeds + carry-forward no handoff do discovery
 
+**Plano:** `ariad-leva2/A1`
+
 **Onda 2 · Lar:** `discovery` + hook em `common` · **Status:** ver plan.yaml
 
 Quando exploração vira entrega, o handoff deve carregar sementes de validação
@@ -1001,6 +1043,8 @@ string-match nos rótulos); seeds viajam para a descrição do card criado. Acei
 Write de handoff sem os rótulos é bloqueado; com "none" passa.
 
 ## A2. Updates operacionais do harness (classes + rota mínima)
+
+**Plano:** `ariad-leva2/A2`
 
 **Onda 3 · Lar:** `bin/install.sh` + `common:doctor` + docs · **Status:** ver plan.yaml
 
@@ -1016,6 +1060,8 @@ acusado pelo doctor; --rollback restaura o estado anterior.
 
 ## A3. Teste "BDD ou substrato" no cepa-dor
 
+**Plano:** `ariad-leva2/A3`
+
 **Onda 1 · Lar:** `maestro` · **Status:** ver plan.yaml
 
 Se o plano de um slice/card só nomeia passos privados de implementação — nenhum
@@ -1027,6 +1073,8 @@ BDD reprova; substrato declarado passa).
 
 ## A4. Razão obrigatória em bounce-back
 
+**Plano:** `ariad-leva2/A4`
+
 **Onda 1 · Lar:** `common/hooks` + `board-flow` (prove*) · **Status:** ver plan.yaml
 
 Card devolvido de Review sem razão estruturada obriga re-arqueologia na próxima
@@ -1037,6 +1085,8 @@ anexa em prosa: "Attention não é estado — nomeie a condição real (Blocked/
 Deferred/Dropped + razão)". Aceite: teste novo + devolução real bloqueada sem razão.
 
 ## A5. Regras de fechamento acoplado no drain
+
+**Plano:** `ariad-leva2/A5`
 
 **Onda 2 · Lar:** `board-flow` (drain*) + `build-hex:proof-reviewer` · **Status:** ver plan.yaml
 
@@ -1051,6 +1101,8 @@ outcome e evidência nomeados por card.
 
 ## A6. Dívida com revisit trigger no Implementation Summary
 
+**Plano:** `ariad-leva2/A6`
+
 **Onda 1 · Lar:** `common/hooks/summary-nulls-gate.py` + templates board-flow · **Status:** ver plan.yaml
 
 Estende o campo da Leva 1: se `New debt introduced` ≠ none/unknown, o gate passa
@@ -1064,6 +1116,8 @@ passa; none não exige).
 
 ## A7. Lista do incomprimível (regras de compressão por gate)
 
+**Plano:** `ariad-leva2/ADOC`
+
 **Onda 4 · Lar:** docs · **Status:** ver plan.yaml
 
 Do conceito de cadence do Ariad, o exportável é a regra de compressão EXPLÍCITA:
@@ -1073,6 +1127,8 @@ razão de bounce do A4; "no release needed" dito em vez de pulado). Não cria ga
 novo — é o spec de crescimento dos gates. Entra no commit de docs da Onda 4.
 
 ## A8. Fronteira de mutação + outcome terminal por onda
+
+**Plano:** `ariad-leva2/A8`
 
 **Onda 2 · Lar:** `maestro` · **Status:** ver plan.yaml
 
@@ -1086,6 +1142,8 @@ tests/test_maestro_run_cores.py — onda com slice não-terminal não aterrissa.
 
 ## A9. Precedência de instruções em 5 camadas
 
+**Plano:** `ariad-leva2/ADOC`
+
 **Onda 4 · Lar:** docs/`common` · **Status:** ver plan.yaml
 
 Ordem explícita: instrução da sessão > contrato do projeto (CLAUDE.md do repo) >
@@ -1094,6 +1152,8 @@ geral; conflito com camada superior = parar e expor. Doc de ~15 linhas
 referenciado pelos agentes lead. Entra no commit de docs da Onda 4.
 
 ## A10. Versionamento pelo nível que colapsou + release note narrativa
+
+**Plano:** `ariad-leva2/ADOC`
 
 **Onda 4 · Lar:** docs · **Status:** ver plan.yaml
 
@@ -1105,6 +1165,8 @@ da Onda 4.
 ---
 
 ## Fio condutor: "e agora, o que eu faço?" entre sessões e entre cards
+
+**Plano:** `cepa/instalar-leva-fio-condutor`, `cepa/validar-fio-condutor-em-board-real`
 
 **Status:** as 3 peças CONSTRUÍDAS (2026-07-28/29, commits `8d752e3` · `21b73fa`
 · `2e8b953` · `86416a4`) — **nenhuma validada em board real** · **Lar:** schema em `common`, produtor e
@@ -1219,6 +1281,8 @@ gerou o WEGO-1958. A dor se reproduz sozinha a cada card executado.
 ---
 
 ## Atrito de decisão — o harness pergunta demais, e pergunta cedo demais
+
+**Plano:** `cepa/atrito-decisao-fase-1` (descartado)
 
 **Status:** pendente · **Lar provável:** `common` (faixas de autonomia, registro de
 atestados) + `board-flow` (auditar antes de perguntar, perguntas por sub-task)
@@ -1412,6 +1476,8 @@ build.
 ---
 
 ## O plano de execução morre com o worktree, e o nome do programa colide
+
+**Plano:** fora da fila (nenhum item o executa)
 
 **Status:** camada 0 FEITA em 2026-08-18 (ver "Camadas propostas" abaixo); a colisão
 de NOME de programa segue pendente · **Lar provável:** `common`
@@ -1633,6 +1699,8 @@ Suíte de 21 → 25 checks; perturbação: sem o CLI, 4 ficam vermelhos. **Não 
 
 ## O `bash-path-lock` bloqueia `cp`, mas deixa passar a mesma escrita via `python3 -c`
 
+**Plano:** `cepa/bash-path-lock-camada-1`
+
 Encontrado em 2026-08-13, durante WEGO-1936 no `wego-acesso-backend`, e reportado pelo
 próprio agente que contornou o cadeado — não por auditoria.
 
@@ -1677,6 +1745,8 @@ dito "não" e não ter significado nada.
 ---
 
 ## `/common:gauntlet` — competição de designs com julgamento cego
+
+**Plano:** `cepa/comando-gauntlet` (descartado)
 
 **Status:** pendente (aprovado para cristalizar em 2026-08-15, após 2 pilotos) ·
 **Lar provável:** `common` · **Origem:** pergunta do dono "how can we add Gauntlet Loop
@@ -1772,6 +1842,8 @@ varrendo as 5 cópias).
 
 ## O guard de dono único mora no comando, e `git worktree remove` cru passa por fora
 
+**Plano:** `cepa/worktree-remove-cru-passa-por-fora` (descartado)
+
 **Status:** pendente · **Lar provável:** `common` (hook + `worktree-guard.py`)
 · **Origem:** incidente no `wego-acesso-backend` em 2026-08-17, ~11:37 — uma sessão
 removeu o worktree de OUTRA sessão que estava viva dentro dele.
@@ -1857,6 +1929,8 @@ camada 1, atrito de decisão, `/common:gauntlet`). Aprovados pelo dono em
 
 ## O aviso de versão só existe se alguém rodar o doctor (P0-4 da revisão)
 
+**Plano:** fora da fila (concluído)
+
 **Status:** CONSTRUÍDO 2026-08-17 (`1738aa8`, common 0.28.0) · **Lar:** `common/hooks/_pluginver.py` + `session-registry.py`
 · **Origem:** revisão 2026-08-17, §7 gargalo nº 5.
 
@@ -1899,6 +1973,8 @@ Cuidados que o desenho precisa respeitar:
 ---
 
 ## O path-lock existe em 5 cópias, e a correção depende de disciplina (P0-3)
+
+**Plano:** fora da fila (concluído)
 
 **Status:** CONSTRUÍDO 2026-08-17/18 (`aeaaa16` detector + `bin/gen-locks.py`
 gerador) · **Lar:** `tests/test_lock_copies_drift.py` +
@@ -1962,6 +2038,8 @@ consertadas" e não corre o risco de quebrar o enforcement enquanto é escrito.
 
 ## Os loops de qualidade não têm teto, e o mesmo erro repetido não é detectado (P0-2)
 
+**Plano:** fora da fila (concluído)
+
 **Status:** CONSTRUÍDO 2026-08-17 (`7f717b3`, common 0.28.0) · **Lar:** `common/hooks/loop-budget.py` +
 `build-hex/agents/engineering-lead.md` · **Origem:** revisão 2026-08-17, §14.
 
@@ -2002,6 +2080,8 @@ escape trivial.
 ---
 
 ## Não existe modo de saber se uma mudança no harness melhorou alguma coisa (P1-4)
+
+**Plano:** fora da fila (nenhum item o executa)
 
 **Status:** CONSTRUÍDO, NUNCA RODADO 2026-08-17 (`bf95d47`) — 3 tarefas
 validadas (vermelhas sem agente), nenhum A/B feito · **Lar:** `tests/eval/` · **Origem:** revisão 2026-08-17, §16 — apontado como o elo mais fraco
@@ -2051,6 +2131,8 @@ com casos onde o resultado hoje é **conhecido e misto**.
 
 ## cepa-doctor não enxerga worktree de agente esquecida dentro de um repositório
 
+**Plano:** fora da fila (concluído)
+
 **Status:** FEITO (common 1.2.0) · **Lar:** `common/bin/cepa-doctor`
 (`check_worktree_interna` + `fix_worktree_interna`), teste em
 `tests/test_doctor_worktree_interna.py` · **Origem:** sessão de 2026-08-19 no
@@ -2096,6 +2178,8 @@ se apresentar pelo nome. O custo de não ter é medido — uma sessão.
 ---
 
 ## A instrução de "trabalhe por Bash" colide com as travas de caminho dos papéis
+
+**Plano:** `cepa/bash-vs-path-lock` (descartado)
 
 **Status:** pendente · **Lar provável:** `build-hex` (hook `path-lock`) + a diretiva de
 auto-mode que injeta "faça o trabalho pelo Bash" · **Origem:** drain de 5 cards no
@@ -2153,6 +2237,8 @@ produzir o conflito toda vez, em vez de resolvê-lo na origem.
 ---
 
 ## Planejador de lotes paralelos do backlog
+
+**Plano:** `cepa/rodar-onda-lotes-sweep-verify`, `cepa/rodar-onda-lotes-2026-08-23`
 
 **Status:** especificado · **Especificação:** `docs/spec/planejador-de-lotes-paralelos.md`
 **Lar:** `maestro/commands/program-plan.md` + `common/bin/` + `common/bin/cepa-dor`
@@ -2214,6 +2300,8 @@ Recorte: **fronteiras** (onde o `maestro` toca o `herdr`). Origem: as cinco filh
 onda `WEGO-paralelo` nasceram numa aba que não era a do `/maestro:run`.
 
 ## O `/maestro:run` forka as filhas sem dizer em que aba, e o herdr resolve pelo foco
+
+**Plano:** `cepa/maestro-run-nao-diz-a-aba`
 
 **Status:** pendente · **Lar provável:** `maestro/commands/run.md` (passo do spawn) ·
 **Origem:** reflexão 2026-08-24 sobre a onda `WEGO-paralelo` do `wego-acesso-backend`.
@@ -2277,6 +2365,8 @@ nascerem em A. Hoje falha: nascem em B.
 
 ## Cada worktree do Maestro vira um Space próprio na barra lateral do herdr
 
+**Plano:** `cepa/herdr-space-por-worktree`
+
 **Status:** pendente, prioridade baixa · **Lar provável:** `maestro/commands/run.md`
 (passo do `worktree create`) ou apenas nota de operação · **Origem:** mesma reflexão.
 
@@ -2303,6 +2393,8 @@ que a barra lateral cresce por onda. A (a) parece certa, mas depende de conferir
 `herdr worktree remove --workspace` derruba a worktree git com o Space ou só o Space.
 
 ## O aviso de worktrees não mescladas do SessionStart mente
+
+**Plano:** `cepa/aviso-worktrees-mente`
 
 **Status:** pendente, prioridade média · **Lar provável:** o hook de SessionStart que
 monta o bloco "📋 Unmerged session worktrees" · **Origem:** sessão de reflexão em
@@ -2340,6 +2432,8 @@ que precisa conferir. A (a) parece certa e é barata neste tamanho de repo.
 ---
 
 ## Não há como executar em lote um plano `single-track` na ordem do plano
+
+**Plano:** `cepa/common-drain-plan`
 
 **Status:** **RESOLVIDO em 2026-08-25** — `/common:drain-plan <nome>`
 (`common/commands/drain-plan.md`) mais os três subcomandos que ele usa em
@@ -2407,6 +2501,8 @@ humana sem nunca fechá-la.
 
 ## Os dois planejadores dividem o mesmo namespace de arquivo sem nenhuma guarda
 
+**Plano:** fora da fila (concluído)
+
 **Status:** **RESOLVIDO em 2026-08-24** (commit `10a3a89`, mesma sessão que o
 abriu) — `maestro-programs --check-name` sai com 3 quando o nome já é fila
 `single-track` de um board, e o passo 4 do `/maestro:program-plan` chama a
@@ -2449,6 +2545,8 @@ Vale para o `/common:next` também, que hoje aceita `--plan NOME` e confia no
 
 ## `docs/commands.md` não lista 8 comandos que existem
 
+**Plano:** `cepa/catalogo-listar-os-8-comandos`
+
 **Status:** pendente, prioridade baixa · **Lar provável:** `docs/commands.md` ·
 **Origem:** mesma revisão da sessão `session/doubt`.
 
@@ -2479,6 +2577,8 @@ documento. O material está levantado no relatório da sessão `session/doubt`.
 ---
 
 ## O catálogo de comandos não tem guarda mecânica — e por isso volta a defasar
+
+**Plano:** `cepa/catalogo-guarda-mecanica`
 
 **Status:** pendente · **Lar provável:** `tests/` (teste novo) · **Origem:**
 sessão `session/doubt` (2026-08-24), ao constatar 8 comandos ausentes de
@@ -2515,6 +2615,8 @@ lista de exceções fica no próprio teste, explícita, em vez de virar omissão
 ---
 
 ## Cinco portas de planejamento, nenhuma conversão entre elas
+
+**Plano:** `cepa/common-plan-etapa1`, `cepa/common-plan-etapa2`, `cepa/common-drain-plan`, `cepa/program-plan-from-plan`
 
 **Status:** **RESOLVIDO — as 4 etapas CONSTRUÍDAS.** 1 e 2 em 2026-08-24/25
 (`/common:plan` com `--from-spec`, `--from-jira` e a fila ditada à mão +
@@ -2620,6 +2722,8 @@ dizer que herdou.
 
 ## Modo automático edita por `sed` e três hooks só escutam `Edit|Write`
 
+**Plano:** fora da fila (nenhum item o executa)
+
 Encontrado em 2026-08-25, durante a triagem do backlog do wego-acesso-backend.
 A origem é um desvio que a sessão do WEGO-2118 registrou em 24/08 e que ficou
 sem destino: "o modo automático da sessão instrui edição via sed/heredoc, o que
@@ -2688,6 +2792,8 @@ ele, um hook que nunca dispara é indistinguível de um hook que sempre aprova.
 
 ## Fixar a versão da CLI `twg`, que se autoatualiza sob os pés dos agentes
 
+**Plano:** fora da fila (nenhum item o executa)
+
 **Status:** pendente · **Lar provável:** `common` (doctor + manifesto de ambiente) ·
 **Origem:** achado C4 do painel /common:advisors sobre `docs/archive/estrategia-twg-vs-mcp.md`
 (2026-08-26), levantado por 4 das 7 lentes de forma independente.
@@ -2732,6 +2838,8 @@ estratégia for retomado — usar `twg` como caminho canônico em execução loc
 
 ## Detector de contexto de execução, se o `twg` virar caminho canônico local
 
+**Plano:** fora da fila (nenhum item o executa)
+
 **Status:** pendente (condicional a O3) · **Lar provável:** `board-flow`
 (`atlassian-expert`) · **Origem:** achado C5 do painel /common:advisors (2026-08-26),
 levantado por 4 lentes independentes.
@@ -2774,6 +2882,8 @@ que sobraram são ambos MCP e falam o mesmo vocabulário.
 ---
 
 ## A reconciliação do `cepa-plan` lê "In Review" como "reprovado e reaberto"
+
+**Plano:** fora da fila (nenhum item o executa)
 
 **Status:** pendente · **Lar provável:** `common/bin/cepa-plan` (`PAPEL_DO_STATUS` e
 `reconcilia()`) · **Origem:** `/common:session drain-plan` no repo wego-acesso-backend em
@@ -2835,6 +2945,8 @@ A regra não tem teste que a exercite com um card em `in_review`. Um caso de
 um aviso) é o vermelho que teria pegado isto antes de rodar contra um plano de 110 itens.
 
 ## O portão de modo de escrita lê o corpo do heredoc e barra caminho legítimo
+
+**Plano:** fora da fila (nenhum item o executa)
 
 ### Problema
 
@@ -2904,6 +3016,8 @@ Três casos que teriam pegado isto antes:
 
 ## A trava de especificação só lê o trecho novo de um Edit
 
+**Plano:** fora da fila (nenhum item o executa)
+
 **Status:** pendente · **Lar provável:** `common/hooks/spec-readiness-gate.py` · **Origem:**
 sessão `/common:spec` no `wego-acesso-backend` (13/09/2026), ao fechar
 `docs/spec/tags-de-pessoas.md`.
@@ -2942,6 +3056,8 @@ de um critério numa especificação já pronta passa, porque o trecho novo não
   resultado das duas.
 
 ## O Insync apaga pasta commitada do repo sozinho, e o run desatendido não percebe
+
+**Plano:** fora da fila (nenhum item o executa)
 
 **Status:** pendente · **Lar provável:** `common/bin/cepa-until` (guarda de árvore suja) e
 o launcher `cepa` · **Origem:** manhã de 14/09/2026, `wego-acesso-backend`, ao tentar o
@@ -2996,6 +3112,8 @@ principal não.
 
 ## Parâmetros de comando documentados só no cabeçalho ou só em Variables
 
+**Plano:** fora da fila (nenhum item o executa)
+
 **Status:** pendente · **Lar provável:** `common` e `board-flow` (arquivos de comando) ·
 **Origem:** levantamento dos parâmetros das rotinas do `/common:session` (2026-09-16).
 
@@ -3021,6 +3139,8 @@ divergência não voltar calada.
 ---
 
 ## Atualizar os documentos de `docs/internals/` e juntar os que descrevem o build-state
+
+**Plano:** fora da fila (nenhum item o executa)
 
 **Status:** pendente · **Origem:** auditoria de `docs/` em 2026-09-19 (sessão `session/doc-readme`).
 
@@ -3066,6 +3186,8 @@ trocar o resto por link para `green-or-revert.md`.
 
 ## `cepa-doctor` só lê o manifesto de ambiente no endereço antigo
 
+**Plano:** fora da fila (nenhum item o executa)
+
 **Status:** pendente · **Lar provável:** `common/bin/cepa-doctor` · **Origem:** auditoria de
 `docs/` em 2026-09-19.
 
@@ -3083,6 +3205,8 @@ e a promessa de `docs/env-manifest.md` ("o doctor acusa porta ocupada") falha ca
 ---
 
 ## `acceptance-gate` deixa passar `twg ... --transition-id "In Review"` com auditoria incompleta
+
+**Plano:** fora da fila (concluído)
 
 **Status:** FEITO em 2026-09-19 (common 2.17.3): `_jiramut.logical_status` traduz o nome pelo `status_map` ou pela forma normalizada, e os dois gates (`acceptance-gate`, `merge-truth-gate`) usam essa função. Teste: `tests/test_gate_status_por_nome.py`. ~~pendente~~ · **Lar provável:** `common/hooks/_jiramut.py` (`_classify_twg`) e
 `common/hooks/acceptance-gate.py` · **Origem:** revisão de `docs/acceptance-completeness.md`
@@ -3111,6 +3235,8 @@ regressão com os quatro casos acima. Conferir se o `merge-truth-gate`, que tamb
 `transition_ids`, tem o mesmo furo.
 
 ## Reavaliar `twg` como acesso canônico ao Jira (caminho O3) com o custo medido
+
+**Plano:** `cepa/twg-o0-o3`
 
 **Status:** FEITO em 2026-09-24, O0 e O3 juntos (ver "Execução (2026-09-24)" em
 `docs/archive/estrategia-twg-vs-mcp.md`). Antes: · **Lar provável:**
@@ -3160,6 +3286,8 @@ reavaliar O3), o estado em 24/09:
 
 ## cepa-until conta BLOCKED como progresso e queima uma rodada por card travado
 
+**Plano:** `cepa/cepa-until-blocked-como-progresso`
+
 **Status:** PARCIAL em 2026-09-24 (common 2.19.0, merge `1cddede`). A causa das 20 rodadas
 travadas saiu: cada card agora roda na branch da noite `until/<run>`, que já tem os cards
 anteriores, então "antecessor `done` sem merge" deixa de existir dentro de um run. O resumo e
@@ -3200,6 +3328,8 @@ run encerra depois de 3 `blocked` seguidos, com motivo nomeado no `.jsonl`.
 
 ## `drain-plan` fecha card `done` sem a fase de validação do build-hex
 
+**Plano:** `cepa/drain-plan-pula-validacao-build-hex`
+
 **Status:** pendente · **Lar provável:** `common/commands/drain-plan.md` (passo 3.c) e
 `build-hex/commands/plan-build-validate.md` · **Origem:** análise do run de 2026-09-23 do
 `cepa-until` no WEGO, feita em 2026-09-24.
@@ -3221,6 +3351,8 @@ do mesmo jeito que o gate de aceite lê `.claude/acceptance/<KEY>.yaml`.
 
 ## `test_cepa_until_adversarial.py` vermelho desde antes de 2026-09-24
 
+**Plano:** `cepa/cepa-until-adversarial-vermelho`
+
 **Status:** pendente · **Lar provável:** `common/bin/cepa-until` (`executa_item`, caminho do
 `OSError`) ou o próprio teste · **Origem:** suíte rodada em 2026-09-24 antes das mudanças da
 branch da noite.
@@ -3235,6 +3367,8 @@ delas.
 a noite acaba sem registro) ou se o teste montou o cenário errado.
 
 ## `board-flow-fleet-validate.sh` valida o `mcp-atlassian`, que o `atlassian-expert` não usa mais
+
+**Plano:** fora da fila (nenhum item o executa)
 
 **Status:** pendente · **Lar provável:** `board-flow/board-flow-fleet-validate.sh` e
 `docs/loop-engineering.md` · **Origem:** O0+O3 em 2026-09-24 (commit `d70e366`), aprovado pelo
