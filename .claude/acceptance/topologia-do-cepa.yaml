@@ -66,12 +66,14 @@ criteria:
       estruturais que tornam o AC1 possivel).
     verdict: complete
     note: >
-      Nao rodei eu mesmo `tests/run-all.sh` ate o fim neste worktree (a
-      execucao estourou o timeout de 120s do meu turno e eu nao reporto a
-      contagem 78/78 do executor como verificada por mim — fica como
-      `evidence: assumed` para esse dado isolado, sem afetar o veredito do
-      AC1, que se sustenta nos itens (1)-(5) acima, verificados por mim
-      diretamente contra artefatos em disco).
+      `tests/run-all.sh` estourou o timeout de 120s do meu turno e foi
+      movido para segundo plano; a notificacao de termino chegou depois
+      (nao fiquei esperando parado por ela). Conferi o output completo:
+      'arquivos rodados: 78 de 78', 'tudo verde', 'família pytest (2) ...
+      52 passed in 0.22s', exit code 0 — inclui `tests/test_topologia_do_cepa.py`
+      na lista dos 78. Isso confirma, verificado por mim diretamente (nao
+      so relatado), o numero que o pedido original citava. Nao muda o
+      veredito do AC1, que ja se sustentava nos itens (1)-(5) acima.
 
 summary: >
   O criterio nomeia a superficie `cli` do supervisor de fila noturna
