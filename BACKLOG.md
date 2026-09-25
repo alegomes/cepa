@@ -3112,7 +3112,8 @@ regressão com os quatro casos acima. Conferir se o `merge-truth-gate`, que tamb
 
 ## Reavaliar `twg` como acesso canônico ao Jira (caminho O3) com o custo medido
 
-**Status:** pendente, pronto para uma sessão em modo `construcao` · **Lar provável:**
+**Status:** FEITO em 2026-09-24, O0 e O3 juntos (ver "Execução (2026-09-24)" em
+`docs/archive/estrategia-twg-vs-mcp.md`). Antes: · **Lar provável:**
 `board-flow/agents/atlassian-expert.md` e `docs/archive/estrategia-twg-vs-mcp.md` ·
 **Origem:** decisão de 2026-09-16 ("troca adiada até a comparação de custo") e a comparação
 feita em 2026-09-24.
@@ -3232,3 +3233,20 @@ delas.
 
 **Primeiro passo:** reproduzir isolado e ver se o supervisor morre (o que seria defeito real:
 a noite acaba sem registro) ou se o teste montou o cenário errado.
+
+## `board-flow-fleet-validate.sh` valida o `mcp-atlassian`, que o `atlassian-expert` não usa mais
+
+**Status:** pendente · **Lar provável:** `board-flow/board-flow-fleet-validate.sh` e
+`docs/loop-engineering.md` · **Origem:** O0+O3 em 2026-09-24 (commit `d70e366`), aprovado pelo
+dono no mesmo dia.
+
+O script roda `claude -p` com `--allowedTools` restrito a `mcp__mcp-atlassian__jira_get_all_projects`
+e `jira_search`, e depende de `JIRA_API_TOKEN` em `~/.zsecrets`. Desde o O3 o `atlassian-expert`
+alcança o Jira local pela CLI `twg` (autenticada por OAuth em `~/.config/twg/auth.conf`), então
+um `VALIDATION PASS` do script prova um caminho que nenhum run do agente percorre, e uma falha
+da `twg` passa sem aviso.
+
+**Conserto provável:** o preflight passa a ser `twg doctor` (linha `Connectivity`) seguido de
+`twg jira space get <project_key>` e `twg jira workitem query 'project = <key> AND status = "<to_do>"'`,
+sem `claude -p` e sem token. Atualizar `docs/loop-engineering.md`, que ainda descreve o
+`mcp-atlassian` como caminho do headless local.

@@ -409,3 +409,53 @@ medição real), **F7** (gates mortos → reconhecimento por efeito), **R2 prese
 texto e fechado pelo item 1), **D2** (verificado). Continuam **abertos**: **C4** (versão da CLI
 que se autoatualiza, sem controle) e **C5** (detector de contexto de execução) — ambos só viram
 pré-requisito se O3 for retomado.
+
+---
+
+# Execução (2026-09-24) — O0 e O3 juntos
+
+**Decisão do dono:** "Faça O0 e O3", depois da comparação de custo (57.375 → 38.032 tokens
+de contexto novo por execução do `atlassian-expert`, −34%, registrada no `BACKLOG.md`).
+
+## Por que os dois juntos, e não O0 sozinho
+
+O O0 já tinha sido feito uma vez, em 26/08 (`d0072b8`), e desfeito no mesmo dia (`76ed76d`):
+numa sessão local sem o conector OAuth da claude.ai ativo, o servidor `mcp-atlassian` era o
+único caminho até o Jira, e sem ele o agente declarava BLOCKED com a ferramenta funcionando ao
+lado. Cortar os nomes locais só é seguro se outro caminho local ocupar o lugar. A `twg` é esse
+caminho.
+
+## O que mudou
+
+1. **`atlassian-expert`:** a linha `tools:` perdeu os 32 nomes dos dois prefixos locais
+   (15 `mcp__claude_ai_Atlassian__*` + 17 `mcp__mcp-atlassian__*`) e ganhou `Bash`. Ficam os
+   16 `mcp__Atlassian__*` da rotina cloud, onde R1 provou que não há `twg`.
+2. **Detector de contexto (C5):** a primeira ação do agente é
+   `command -v twg >/dev/null && twg --version`. Imprimiu versão, caminho local por `twg`;
+   falhou, caminho cloud por MCP; nenhum dos dois, BLOCKED. A spec proíbe instalar, caçar ou
+   repetir a `twg` depois da falha, que era o risco de "agente persistente contorna
+   `command not found`".
+3. **Versão (C4):** não há como travar a atualização automática (o `launchd`
+   `com.atlassian.twg.upkeep` roda `twg upkeep run` a cada 720 s e a CLI não expõe opção para
+   desligar). O controle ficou em dois pontos: `_jiramut.TWG_VERIFICADA = "1.3.1"` é a versão
+   contra a qual as listas brancas foram conferidas, a spec cita o mesmo número (um teste
+   falha se divergirem), e o agente declara na resposta quando a versão instalada é outra.
+   Verbo novo de uma versão futura não passa calado: cai como escrita opaca e é barrado.
+4. **`_jiramut.py`:** `workitem create`, `workitem update` só de campos e
+   `workitem link workitem` viraram escrita **legível** (os quatro gates não auditam criação
+   nem edição, como nunca auditaram pelo MCP). `update` com `--status`, `--comment`,
+   `--transition-comment`, `--resolution`, `--fields-json` ou `--variables-json` segue
+   **opaco**, porque transiciona ou comenta por uma porta que o gate não lê. `--help` e as
+   leituras de terceiro nível (`link query`, `field create-metadata`) deixaram de ser barradas:
+   até `twg jira workitem create --help` era bloqueado.
+5. **R2 fechado com `common/hooks/jira-write-lock.py`:** qualquer escrita no Jira pela `twg`
+   só passa para `board-flow:atlassian-expert` ou para a sessão principal. Diferente do
+   `bitbucket-decision-lock`, agente embutido sem prefixo (`general-purpose`) é barrado.
+
+## O que não mudou
+
+- Os quatro gates continuam reconhecendo os nomes `jira_*` do `mcp-atlassian`: a sessão
+  principal ainda pode usar esse servidor, e o gate precisa auditá-la.
+- `board-flow/board-flow-fleet-validate.sh` segue validando o caminho `mcp-atlassian`. Ele
+  não passa pelo `atlassian-expert`, então não quebrou, mas agora valida um caminho que o
+  agente não usa mais.
