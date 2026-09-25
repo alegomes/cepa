@@ -1,0 +1,180 @@
+card: fila-unica-tres-fontes
+title: "Fila única: cepa-plan add, drain lendo o plan.yaml e doctor listando
+  divergência entre Jira, BACKLOG.md e plan.yaml"
+status: complete
+diff: "7be4b1e..c86f185 (fila-unica-tres-fontes: cepa-plan add/ordena/
+  divergencia + chamadores) + 195b9bb (tests/test_fila_unica_contratos.py,
+  fecha os três gaps da primeira passada desta auditoria)"
+source: "BACKLOG.md, seção 'Fila única: Jira, BACKLOG.md e plan.yaml
+  convergem no plan.yaml' (~linha 3424): regras R1-R4 e esboço A1-A4"
+precedent: ".claude/acceptance/common-drain-plan.yaml — a superfície `cli`
+  que conta como demonstrada é o binário determinístico (`cepa-plan`),
+  exercitado via subprocess real; grep de prosa do `.md` só cobre a parte
+  do critério que é sobre o TEXTO exposto ao operador, e só quando existe
+  um teste de contrato (`test_contrato_do_comando`) que trava esse texto —
+  não uma leitura manual do auditor. `tests/test_fila_unica_contratos.py`
+  (195b9bb) é esse mesmo padrão aplicado aos três chamadores desta fila."
+
+scope_note: >
+  R1 (a ordem só muda no plan.yaml) e R2 (toda porta de entrada cria o item,
+  no fim, com "ainda não priorizado" quando não priorizado) são as regras
+  que A1/A2 implementam e por isso viram parte dos critérios abaixo (AC1/AC2).
+  R4 (toda seção do BACKLOG diz **Plano:**) é explicitamente adiado no
+  próprio texto do esboço ("A preencher depois... numa varredura só guiada
+  pelo A3") — não é critério deste item, é trabalho futuro que o A3
+  (divergência) deste item habilita. R3 ("status vai do Jira para o plano,
+  nunca volta, nunca rebaixa done") é uma restrição de desenho para o
+  CAMINHO QUE ESCREVE status a partir do Jira — esse item não introduz nem
+  toca esse caminho: `add` só cria itens `pending` novos, `ordena` e
+  `divergencia` são só-leitura. O único código que já escreve status a
+  partir do Jira é `cmd_reconcile`/`reconcilia` (pré-existente, não tocado
+  neste diff) e ele CONTINUA rebaixando done→pending em bounce
+  (common/bin/cepa-plan, função `reconcilia`, ramo
+  `papel != "done" and st == "done"` → `para: "pending"`), o que contraria a
+  letra de R3. Registrado na primeira passada desta auditoria; o
+  coordenador confirmou que essa tensão fica FORA deste item e vai ser
+  reportada ao dono separadamente — não repito o gap aqui.
+
+criteria:
+  - id: AC1
+    text: >
+      A1. `cepa-plan add <fila> <id> --why ... [--antes-de <id>]`: acrescenta
+      um item sem reescrever a fila. Chamado por `/board-flow:capture`, por
+      `cepa-feedback triar` quando o destino é o cepa, e à mão.
+    altitude: cli
+    surface: "o subcomando `add` do binário `common/bin/cepa-plan` (posição,
+      `--antes-de` exige `--why`, recusa id duplicado/bloqueio fantasma/fila
+      de ondas, preserva cabeçalho, valida o plano inteiro). TRÊS
+      chamadores: (a) 'à mão' = o próprio binário; (b) `cepa-feedback triar
+      --plano` = outro binário real, chamando `cepa-plan add` via
+      subprocess; (c) `/board-flow:capture` = prosa de agente
+      (`board-flow/commands/capture.md`, passo 4), travada por grep-lock
+      desde 195b9bb."
+    test: "tests/test_cepa_plan_fila_unica.py (11 casos de `add`) +
+      tests/test_cepa_feedback.py ('triar --plano: item novo no plan.yaml'
+      etc.) + tests/test_fila_unica_contratos.py::test_capture_add (4
+      cláusulas: comando exato `cepa-plan add <project_key> <KEY> --title`,
+      exit 4 tratado como normal, proibição de rollback do card na falha do
+      add, e a frase 'out of the queue' no relatório)"
+    layer: "cli (subprocess real) para os chamadores (a) e (b). Chamador
+      (c): grep-lock em `capture.md`, o mesmo padrão que o precedente
+      (`test_contrato_do_comando`) já usa para `drain-plan.md` neste repo."
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_fila_unica.py -> 'all green' (exit
+      0); python3 tests/test_cepa_feedback.py -> 'tudo verde' (exit 0);
+      python3 tests/test_fila_unica_contratos.py -> 'all green' (exit 0),
+      as 4 cláusulas de test_capture_add ok. Perturbação que eu mesmo
+      apliquei numa cópia descartável (trocar 'cepa-plan add' por
+      'cepa-plan enqueue' em capture.md): a cláusula 'chama cepa-plan add
+      <project_key> <KEY> --title' vira FAIL sozinha, as outras 11
+      continuam ok — confirma que a trava mira a cláusula certa, não o
+      arquivo inteiro. Rodei tudo pessoalmente."
+    verdict: complete
+
+  - id: AC2
+    text: >
+      A2. `/board-flow:drain` lê a ordem do `plan.yaml` quando existe um;
+      sem plano, segue o Jira.
+    altitude: cli
+    surface: "o subcomando `ordena` de `cepa-plan` (`cmd_ordena`): recebe a
+      lista de chaves do Jira, na ordem em que o Jira as devolveu, e
+      devolve a ordem da FILA primeiro + as de fora do plano depois
+      (`fora_do_plano`). `/board-flow:drain` (`board-flow/commands/
+      drain.md`, passo 2b) chama esse binário com `--keys <K1,K2,...>
+      --json`, pede a coluna INTEIRA ao Jira quando existe fila (para o
+      `--max` não cortar antes de reordenar), e aplica `--max` só depois da
+      reordenação — as quatro cláusulas travadas por grep-lock desde
+      195b9bb."
+    test: "tests/test_cepa_plan_fila_unica.py::
+      test_ordena_recusa_fila_inexistente,
+      test_ordena_mistura_dentro_e_fora_do_plano (forma `--keys
+      C,ZZZ,A,B`, igual ao que o atlassian-expert devolveria) +
+      tests/test_fila_unica_contratos.py::test_drain_ordena (5 cláusulas:
+      comando exato `cepa-plan ordena <project_key> --keys`, coluna inteira
+      quando há fila, `--max` aplicado DEPOIS de reordenar, fallback para a
+      ordem do Jira sem fila, cards fora do plano nomeados no relatório
+      final)"
+    layer: "cli (subprocess real) para a mecânica de `ordena`; grep-lock em
+      `drain.md` para a ponte de prosa — mesmo padrão do precedente."
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_fila_unica.py -> 'all green' (exit
+      0); python3 tests/test_fila_unica_contratos.py -> 'all green' (exit
+      0), as 5 cláusulas de test_drain_ordena ok. Rodei pessoalmente."
+    verdict: complete
+
+  - id: AC3
+    text: >
+      A3. `/common:doctor` lista a divergência, sem corrigir: cards abertos
+      no Jira sem item, seções do BACKLOG sem `**Plano:**`, itens cujo card
+      já está Done.
+    altitude: cli
+    surface: "duas partes: (i) a comparação fila×BACKLOG.md, sem depender do
+      Jira — `cepa-doctor` chamando `cepa-plan divergencia <fila> --backlog
+      BACKLOG.md` sozinho; (ii) 'cards abertos no Jira sem item' e 'itens
+      cujo card já está Done', que exigem `--board` — só existem no fluxo
+      `--live` de `common/commands/doctor.md` passo 3 (delega a
+      `atlassian-expert`, salva a lista de cards, chama `cepa-plan
+      divergencia --board`), agora travado por grep-lock."
+    test: "(i) tests/test_doctor_divergencia_plano.py — E2E real do binário
+      `cepa-doctor --projeto` (5 cenários). (ii) o CÁLCULO está testado
+      direto em tests/test_cepa_plan_fila_unica.py
+      (test_divergencia_cards_sem_item, test_divergencia_itens_com_
+      card_done); a PONTE de prosa (doctor.md passo 3 realmente monta
+      `--board` e chama `cepa-plan divergencia`, nomeia os dois campos, e
+      declara o passo como leitura-só) está travada por
+      tests/test_fila_unica_contratos.py::test_doctor_live (3 cláusulas)."
+    layer: "cli para (i), verificado E2E; grep-lock para a ponte de prosa
+      de (ii) — mesmo padrão do precedente. O caminho `--live` de ponta a
+      ponta contra um Jira de verdade continua sem E2E (exigiria Jira
+      vivo), mas isso não é mais um buraco silencioso: a promessa textual
+      do passo 3 está travada contra regressão."
+    evidence: verified
+    run: "python3 tests/test_doctor_divergencia_plano.py -> '✓ tudo verde'
+      (exit 0); python3 tests/test_fila_unica_contratos.py -> 'all green'
+      (exit 0), as 3 cláusulas de test_doctor_live ok. Perturbação que eu
+      mesmo apliquei numa cópia descartável (trocar 'leitura, nunca
+      correção' por 'leitura informativa apenas' em doctor.md): a cláusula
+      'declara que o passo é leitura, nunca correção' vira FAIL sozinha, as
+      outras 11 continuam ok. Real-data check:
+      `python3 common/bin/cepa-plan divergencia cepa --backlog BACKLOG.md
+      --repo .` -> `cards_sem_item: []`, `secoes_sem_plano: []`,
+      `plano_inexistente: []` (0/0 nas duas métricas sem `--board`). Rodei
+      tudo pessoalmente."
+    verdict: complete
+
+summary: >
+  Os três subcomandos mecânicos (`add`, `ordena`, `divergencia`) existem em
+  `common/bin/cepa-plan`, são código real e estão cobertos por subprocess
+  real e verde (tests/test_cepa_plan_fila_unica.py, 22 casos;
+  tests/test_doctor_divergencia_plano.py, 5 casos; tests/
+  test_cepa_feedback.py, 37 casos incluindo a triagem com `--plano`). O
+  gap desta auditoria era a PONTE de prosa entre os três comandos de agente
+  (`/board-flow:capture`, `/board-flow:drain`, `/common:doctor --live`) e
+  esses binários: nada travava que o texto dos `.md` de fato instruísse a
+  chamada certa. O commit 195b9bb fecha isso com
+  tests/test_fila_unica_contratos.py (12 cláusulas, uma por promessa de
+  texto nomeada nos três gaps da primeira passada), no mesmo padrão de
+  grep-lock que este repo já usa para `drain-plan.md`
+  (`test_contrato_do_comando`, citado no precedente
+  common-drain-plan.yaml).
+
+  Verifiquei eu mesmo, não só aceitei o relato do implementador: rodei as
+  quatro suítes relevantes (`test_cepa_plan_fila_unica.py`,
+  `test_doctor_divergencia_plano.py`, `test_cepa_feedback.py`,
+  `test_fila_unica_contratos.py`), todas verdes, e perturbei DUAS cláusulas
+  em cópias descartáveis do repo (trocar `cepa-plan add` por `cepa-plan
+  enqueue` em `capture.md`; trocar "leitura, nunca correção" por "leitura
+  informativa apenas" em `doctor.md`) — nos dois casos, exatamente a
+  cláusula correspondente virou FAIL, isolada, sem derrubar as outras 11.
+  Isso confirma RED-quando-a-âncora-some, não só GREEN hoje. Também refiz o
+  check de dados reais: `cepa-plan divergencia cepa --backlog BACKLOG.md
+  --repo .` -> 0/0 nas duas métricas que não exigem `--board`.
+
+  Fora de escopo deste item, registrado e delegado pelo coordenador ao
+  dono: `cmd_reconcile`/`reconcilia` (pré-existente, não tocado neste
+  diff) ainda rebaixa item `done` para `pending` em bounce, o que tensiona
+  com a letra de R3 ("nunca rebaixa item done"). Nenhum código escrito
+  neste item toca esse caminho. R4 está explicitamente adiado no próprio
+  texto do BACKLOG.
+
+gaps: []

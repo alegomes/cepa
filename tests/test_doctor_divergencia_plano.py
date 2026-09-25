@@ -115,6 +115,30 @@ def test_sem_backlog_e_silencioso():
               "[plano]" not in out, out)
 
 
+def test_duas_filas_sem_board_flow_e_ambiguo_e_silencioso():
+    """Sem `board-flow.yaml` e com MAIS de uma fila `single-track`, o doctor
+    não pode escolher uma delas no chute — pegar "a primeira que achar" é
+    exatamente a ambiguidade que `resolve_fila_unica` existe para recusar.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = Path(tmp)
+        for nome in ("WEGO", "OUTRA"):
+            d = raiz / ".claude" / "programs" / nome
+            d.mkdir(parents=True)
+            (d / "plan.yaml").write_text(PLANO.replace("program: WEGO", f"program: {nome}"),
+                                         encoding="utf-8")
+        (raiz / "BACKLOG.md").write_text("## Seção sem plano\n\nnada aqui.\n",
+                                         encoding="utf-8")
+        (raiz / "README.md").write_text("base\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", "."], cwd=raiz, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", "base"], cwd=raiz, check=True)
+        out = roda(raiz)
+        check("duas filas ambíguas: nenhuma linha [plano] no relatório",
+              "[plano]" not in out, out)
+
+
 def test_resolve_via_project_key_do_board_flow():
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta(tmp, com_board_flow=True,
