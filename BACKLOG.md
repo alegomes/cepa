@@ -3250,3 +3250,32 @@ da `twg` passa sem aviso.
 `twg jira space get <project_key>` e `twg jira workitem query 'project = <key> AND status = "<to_do>"'`,
 sem `claude -p` e sem token. Atualizar `docs/loop-engineering.md`, que ainda descreve o
 `mcp-atlassian` como caminho do headless local.
+
+## `acceptance-gate.py` fica cego em worktree e libera Done sem auditoria
+
+**Status:** 🔵 ABERTO · **Lar:** `common/hooks/acceptance-gate.py` · **Origem:** feedback
+`fb-20260919-1`, diagnosticado no card WEGO-2287 do wego-acesso-backend
+(`docs/investigations/wego-2287-trava-de-validacao-manual.md`). O dono aceitou o
+diagnóstico e pediu o item aqui em 2026-09-25.
+
+### Problema
+
+A trava monta o caminho como `<raiz da worktree>/.claude/acceptance/<KEY>.yaml`
+(linhas 169-170) e libera a transição quando o arquivo falta (linhas 172-176). Como
+`.claude/` não é versionado e o `seed-worktree.py` não copia `acceptance/`, toda transição
+feita de dentro de uma worktree nova passa sem auditoria. Mesmo com o arquivo presente,
+`status: complete` com rota humana aberta passa (linhas 187-188).
+
+Medido: em 2026-09-16 18:29 UTC o prove-drain, rodando na worktree `session/decide`, passou
+WEGO-2218 para Done com o artefato da árvore principal dizendo `status: incomplete`.
+Reproduzido em /tmp: sem artefato sai 0, com o artefato sai 2. Reconferido em 2026-09-25
+contra o common 2.21.0 (arquivo idêntico ao 2.20.0).
+
+### Esboço de solução
+
+1. Para alvo `in_review` ou `done`, procurar também em `<raiz principal>/.claude/acceptance/`
+   (pai de `git rev-parse --git-common-dir`) e em `docs/acceptance/`, que é onde o
+   wego-acesso-backend versiona os artefatos.
+2. Decidir se artefato ausente em transição para `done` continua liberando. Hoje libera.
+3. Lateral: `merge-truth-gate.py:158` aceita qualquer commit em `origin/main` que cite a
+   chave, inclusive o commit que só grava o veredito de prova.
