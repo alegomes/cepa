@@ -131,6 +131,21 @@ items:
   evidence: 'done em 2026-07-29 por /common:next --sync. Evidência: /common:doctor
     na mesma sessão — install ok há 0d, com common 0.21.0 / board-flow 0.11.0 /
     maestro 0.4.0 instalados e habilitados, exatamente as versões cobradas.'
+- id: topologia-do-cepa
+  title: Dar ao cepa uma topologia propria (.claude/topology + comando de flow) para o /common:drain-plan
+    e o cepa-until executarem a fila do cepa
+  why: 'primeiro da fila por decisao do dono em 2026-09-25. Hoje o /common:drain-plan executa
+    cada item pelo flow de .claude/topology, e o cepa nao tem esse arquivo; o passo 1 do /common:autonomous-start
+    aborta sem topologia ("No topology configured... Aborting"). Nenhuma topologia existente
+    serve: build-hex e backend Maven, build-team so escreve em apps/*, build-solo nao tem
+    plan-build-validate. Enquanto isso nao existir, os itens do cepa so andam em sessao a
+    mao e o cepa-until nao serve para o cepa. Antes da fila-unica-tres-fontes porque ela mesma
+    seria executada por esse caminho. Criterio: cepa-until cepa --for 1h executa o primeiro
+    item ate o fim sem abortar por topologia.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
 - id: fila-unica-tres-fontes
   title: 'Fila unica: cepa-plan add, drain lendo o plan.yaml e doctor listando divergencia
     entre Jira, BACKLOG.md e plan.yaml'
