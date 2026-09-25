@@ -3469,3 +3469,29 @@ de pendências.
 Fica de fora: o quadro do Jira mostra outra ordem, porque o `twg` não reordena rank de
 card existente. A preencher depois: a linha `**Plano:**` nas seções antigas deste BACKLOG,
 numa varredura só guiada pelo A3.
+
+---
+
+## maven-reactor-guard barra o `quarkus:dev`, que só funciona sem `-am`
+
+**Plano:** fora da fila (ainda não priorizado; registrado em 2026-09-25)
+
+**Status:** pendente · **Lar provável:** `common/hooks/maven-reactor-guard.py` · **Origem:**
+sessão `startup_error` do wego-acesso-backend (2026-09-25), achado do completion-auditor
+conferido na sessão principal.
+
+### Problema
+
+O guarda barra todo `-pl` sem `-am` num reator multi-módulo e manda acrescentar `-am`. Para
+goals do plugin do Quarkus isso quebra o comando: `./mvnw -pl bootstrap -am quarkus:help`
+falha com `No plugin found for prefix 'quarkus'`, e `./mvnw -pl bootstrap quarkus:help` passa.
+Com `-am` o reator inclui módulos que não declaram o plugin (`domain`, `application`,
+`infrastructure`), e o prefixo `quarkus:` deixa de resolver. O contorno de hoje é acrescentar
+`# stale-ok` depois de um `install` da raiz, que é a mesma afirmação que o guarda existe para
+não aceitar por reflexo.
+
+### Esboço de solução
+
+Quando o comando tem um goal `quarkus:*`, o guarda troca a orientação: em vez de pedir `-am`,
+exige que um `./mvnw install` da raiz tenha rodado depois do último commit (ou aceita
+`# stale-ok` sem o texto de advertência). Teste em `tests/` com os dois comandos acima.
