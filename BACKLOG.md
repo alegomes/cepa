@@ -7,7 +7,7 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 ## Política default-yes — matar as micro-interações nas pontas da sessão
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/politica-default-yes`
 
 **Status:** pendente · **Lar provável:** `common` (skill `zero-micromanagement` + varredura
 dos comandos) · **Origem:** reclamação forte do usuário (2026-08-18, por voz): toda rotina
@@ -1477,7 +1477,7 @@ build.
 
 ## O plano de execução morre com o worktree, e o nome do programa colide
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/plano-morre-com-worktree-resto`
 
 **Status:** camada 0 FEITA em 2026-08-18 (ver "Camadas propostas" abaixo); a colisão
 de NOME de programa segue pendente · **Lar provável:** `common`
@@ -2081,7 +2081,7 @@ escape trivial.
 
 ## Não existe modo de saber se uma mudança no harness melhorou alguma coisa (P1-4)
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/medir-efeito-de-mudanca-no-harness`
 
 **Status:** CONSTRUÍDO, NUNCA RODADO 2026-08-17 (`bf95d47`) — 3 tarefas
 validadas (vermelhas sem agente), nenhum A/B feito · **Lar:** `tests/eval/` · **Origem:** revisão 2026-08-17, §16 — apontado como o elo mais fraco
@@ -2722,7 +2722,7 @@ dizer que herdou.
 
 ## Modo automático edita por `sed` e três hooks só escutam `Edit|Write`
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/sed-escapa-dos-hooks-edit-write`
 
 Encontrado em 2026-08-25, durante a triagem do backlog do wego-acesso-backend.
 A origem é um desvio que a sessão do WEGO-2118 registrou em 24/08 e que ficou
@@ -2792,7 +2792,7 @@ ele, um hook que nunca dispara é indistinguível de um hook que sempre aprova.
 
 ## Fixar a versão da CLI `twg`, que se autoatualiza sob os pés dos agentes
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/fixar-versao-twg`
 
 **Status:** pendente · **Lar provável:** `common` (doctor + manifesto de ambiente) ·
 **Origem:** achado C4 do painel /common:advisors sobre `docs/archive/estrategia-twg-vs-mcp.md`
@@ -2838,7 +2838,7 @@ estratégia for retomado — usar `twg` como caminho canônico em execução loc
 
 ## Detector de contexto de execução, se o `twg` virar caminho canônico local
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/detector-contexto-twg`
 
 **Status:** pendente (condicional a O3) · **Lar provável:** `board-flow`
 (`atlassian-expert`) · **Origem:** achado C5 do painel /common:advisors (2026-08-26),
@@ -2883,7 +2883,7 @@ que sobraram são ambos MCP e falam o mesmo vocabulário.
 
 ## A reconciliação do `cepa-plan` lê "In Review" como "reprovado e reaberto"
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/reconcile-le-in-review-como-reprovado`
 
 **Status:** pendente · **Lar provável:** `common/bin/cepa-plan` (`PAPEL_DO_STATUS` e
 `reconcilia()`) · **Origem:** `/common:session drain-plan` no repo wego-acesso-backend em
@@ -2946,7 +2946,7 @@ um aviso) é o vermelho que teria pegado isto antes de rodar contra um plano de 
 
 ## O portão de modo de escrita lê o corpo do heredoc e barra caminho legítimo
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/portao-modo-escrita-le-heredoc`
 
 ### Problema
 
@@ -3016,7 +3016,7 @@ Três casos que teriam pegado isto antes:
 
 ## A trava de especificação só lê o trecho novo de um Edit
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/spec-gate-so-le-trecho-do-edit`
 
 **Status:** pendente · **Lar provável:** `common/hooks/spec-readiness-gate.py` · **Origem:**
 sessão `/common:spec` no `wego-acesso-backend` (13/09/2026), ao fechar
@@ -3057,7 +3057,7 @@ de um critério numa especificação já pronta passa, porque o trecho novo não
 
 ## O Insync apaga pasta commitada do repo sozinho, e o run desatendido não percebe
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/insync-apaga-pasta-commitada`
 
 **Status:** pendente · **Lar provável:** `common/bin/cepa-until` (guarda de árvore suja) e
 o launcher `cepa` · **Origem:** manhã de 14/09/2026, `wego-acesso-backend`, ao tentar o
@@ -3112,7 +3112,7 @@ principal não.
 
 ## Parâmetros de comando documentados só no cabeçalho ou só em Variables
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/parametros-de-comando-pela-metade`
 
 **Status:** pendente · **Lar provável:** `common` e `board-flow` (arquivos de comando) ·
 **Origem:** levantamento dos parâmetros das rotinas do `/common:session` (2026-09-16).
@@ -3140,7 +3140,7 @@ divergência não voltar calada.
 
 ## Atualizar os documentos de `docs/internals/` e juntar os que descrevem o build-state
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/docs-internals-desatualizados`
 
 **Status:** pendente · **Origem:** auditoria de `docs/` em 2026-09-19 (sessão `session/doc-readme`).
 
@@ -3186,7 +3186,7 @@ trocar o resto por link para `green-or-revert.md`.
 
 ## `cepa-doctor` só lê o manifesto de ambiente no endereço antigo
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/doctor-le-manifesto-no-endereco-antigo`
 
 **Status:** pendente · **Lar provável:** `common/bin/cepa-doctor` · **Origem:** auditoria de
 `docs/` em 2026-09-19.
@@ -3368,7 +3368,7 @@ a noite acaba sem registro) ou se o teste montou o cenário errado.
 
 ## `board-flow-fleet-validate.sh` valida o `mcp-atlassian`, que o `atlassian-expert` não usa mais
 
-**Plano:** fora da fila (nenhum item o executa)
+**Plano:** `cepa/fleet-validate-valida-mcp-atlassian`
 
 **Status:** pendente · **Lar provável:** `board-flow/board-flow-fleet-validate.sh` e
 `docs/loop-engineering.md` · **Origem:** O0+O3 em 2026-09-24 (commit `d70e366`), aprovado pelo
