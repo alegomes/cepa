@@ -70,6 +70,8 @@ REGRAS = {
     # do site nunca falhou (2.648 chamadas).
     "cloudId é o defaults.site literal": "copied literally (a hostname works as cloudId)",
     "erro de cloudId não troca de servidor": "never by switching servers",
+    # 25/09/2026: 35 cards WEGO nasceram sem Team e Módulo do sistema.
+    "todo create leva os required_fields": "Every create sends every resolved `required_fields`",
 }
 
 
