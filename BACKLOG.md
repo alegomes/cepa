@@ -3253,8 +3253,8 @@ sem `claude -p` e sem token. Atualizar `docs/loop-engineering.md`, que ainda des
 
 ## `acceptance-gate.py` fica cego em worktree e libera Done sem auditoria
 
-**Status:** 🔵 ABERTO · **Lar:** `common/hooks/acceptance-gate.py` · **Origem:** feedback
-`fb-20260919-1`, diagnosticado no card WEGO-2287 do wego-acesso-backend
+**Status:** 🔵 ABERTO · **Plano:** `acceptance-gate-cego-em-worktree` · **Lar:**
+`common/hooks/acceptance-gate.py` · **Origem:** feedback `fb-20260919-1`, diagnosticado no card WEGO-2287 do wego-acesso-backend
 (`docs/investigations/wego-2287-trava-de-validacao-manual.md`). O dono aceitou o
 diagnóstico e pediu o item aqui em 2026-09-25.
 
@@ -3279,3 +3279,59 @@ contra o common 2.21.0 (arquivo idêntico ao 2.20.0).
 2. Decidir se artefato ausente em transição para `done` continua liberando. Hoje libera.
 3. Lateral: `merge-truth-gate.py:158` aceita qualquer commit em `origin/main` que cite a
    chave, inclusive o commit que só grava o veredito de prova.
+
+### Tensão com uma decisão anterior
+
+O item `session-root` do plano (done em 2026-08-25) decidiu que o estado de uma worktree
+segue a worktree (`_wtlib.session_root`, não `main_root`), para uma worktree não ler o
+build de outra como baseline. Procurar o artefato de aceite na árvore principal é uma
+exceção deliberada a essa regra, e o conserto precisa dizer por que o aceite difere do build.
+
+## Fila única: Jira, BACKLOG.md e plan.yaml convergem no plan.yaml
+
+**Status:** 🔵 ABERTO · **Plano:** `fila-unica-tres-fontes` · **Lar:** `common/bin/cepa-plan`,
+`board-flow/commands/drain.md`, `board-flow/commands/capture.md`, `common/commands/doctor.md`
+· **Origem:** decisão do dono em 2026-09-25, no fim de um `/board-flow:prove-drain` do
+wego-acesso-backend.
+
+### Problema
+
+O desenho "um escritor, três fontes" fez do `plan.yaml` a fila, mas as pontes de entrada
+não existem. Medido em 2026-09-25:
+
+1. `/board-flow:drain` ordena por prioridade e rank do Jira; `/common:drain-plan` e
+   `/common:next` ordenam pelo `plan.yaml`. Subir a prioridade do WEGO-2334 no Jira não
+   mudou nada no plano.
+2. Card criado no Jira não ganha item no plano: o WEGO-2334 existia no Jira e não no plano WEGO.
+3. Este BACKLOG tem 68 seções e o plano do cepa 38 itens, sem campo ligando uma à outra.
+4. O plano WEGO não era versionado (`.gitignore` ignorava `.claude/`); corrigido no
+   wego-acesso-backend em `873037f3`.
+5. `cepa-plan reconcile --apply` já rebaixou 11 cards prontos (7 ocorrências no
+   wego-acesso-backend), então sincronização nova não pode reabrir item.
+
+### Decisão (dono, 2026-09-25)
+
+Um papel por fonte. `plan.yaml` guarda a ordem, o porquê, os bloqueios e a pendência humana.
+O Jira guarda o estado de cada card e é a vitrine para o time; prioridade e rank viram
+informativos. O `BACKLOG.md` guarda a descrição longa de cada problema e deixa de ser lista
+de pendências.
+
+- R1. A ordem só muda no `plan.yaml`.
+- R2. Toda porta de entrada cria o item no plano no mesmo passo, no fim da fila com
+  "ainda não priorizado" se ninguém disse onde.
+- R3. Status vai do Jira para o plano, nunca volta, e nunca rebaixa item `done`.
+- R4. Toda seção deste BACKLOG diz `**Plano:** <id>` ou `**Plano:** fora da fila (motivo)`.
+
+### Esboço de solução
+
+- A1. `cepa-plan add <fila> <id> --why ... [--antes-de <id>]`: acrescenta um item sem
+  reescrever a fila. Chamado por `/board-flow:capture`, por `cepa-feedback triar` quando o
+  destino é o cepa, e à mão.
+- A2. `/board-flow:drain` lê a ordem do `plan.yaml` quando existe um; sem plano, segue o Jira.
+- A3. `/common:doctor` lista a divergência, sem corrigir: cards abertos no Jira sem item,
+  seções do BACKLOG sem `**Plano:**`, itens cujo card já está Done.
+- A4. (feito no WEGO) versionar `.claude/programs/<nome>/plan.yaml` nos repos que usam fila.
+
+Fica de fora: o quadro do Jira mostra outra ordem, porque o `twg` não reordena rank de
+card existente. A preencher depois: a linha `**Plano:**` nas seções antigas deste BACKLOG,
+numa varredura só guiada pelo A3.

@@ -545,3 +545,24 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: acceptance-gate-cego-em-worktree
+  title: acceptance-gate.py procura o artefato de aceite fora da worktree e decide
+    se ausencia em transicao para Done continua liberando
+  why: 'pedido pelo dono em 2026-09-25 ao aceitar o diagnostico do WEGO-2287 (wego-acesso-backend).
+    A trava libera Done sem auditoria sempre que a transicao sai de worktree nova;
+    ja deixou WEGO-1891, 2202 e 2218 irem para Done com rota humana aberta. No fim
+    da fila porque ninguem priorizou contra os pendentes; detalhe no BACKLOG.md.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: fila-unica-tres-fontes
+  title: 'Fila unica: cepa-plan add, drain lendo o plan.yaml e doctor listando divergencia
+    entre Jira, BACKLOG.md e plan.yaml'
+  why: 'decidido pelo dono em 2026-09-25 (R1 a R4 no BACKLOG.md). Sem as pontes, cada
+    porta de entrada cria trabalho que o /common:next nao ve, e os dois lotes seguem
+    ordens diferentes. No fim da fila porque ninguem priorizou contra os pendentes.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
