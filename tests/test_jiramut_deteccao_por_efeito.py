@@ -87,6 +87,8 @@ BB = [
  ("dev le o diff",                "build-hex:domain-dev",            "twg bitbucket pull-requests diff 42",           0),
  ("dev consulta PRs",             "build-hex:domain-dev",            "twg bitbucket pull-requests query --state OPEN",0),
  ("sessao principal (humano)",    "",                                "twg bitbucket pull-requests merge --id 42",     0),
+ ("embutido sem prefixo aprova",  "general-purpose",                 "twg bitbucket pull-requests approve 42",        2),
+ ("embutido sem prefixo mergeia", "Explore",                         "twg bitbucket pull-requests merge --id 42",     2),
  ("comentar nao e decidir",       "build-hex:domain-dev",            "twg bitbucket pull-requests comment create 42 --content x", 0),
  ("sem twg",                      "build-hex:domain-dev",            "git log",                                       0),
 ]
@@ -96,8 +98,10 @@ HOOK = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
 bfail = 0
 print("\n--- bitbucket-decision-lock ---")
 for desc, agent, cmd, want in BB:
-    payload = _json.dumps({"tool_name": "Bash", "agent_type": agent,
-                           "tool_input": {"command": cmd}})
+    _b = {"tool_name": "Bash", "tool_input": {"command": cmd}}
+    if agent:
+        _b["agent_type"] = agent
+    payload = _json.dumps(_b)
     rc = subprocess.run([sys.executable, HOOK], input=payload, capture_output=True,
                         text=True).returncode
     if rc != want:

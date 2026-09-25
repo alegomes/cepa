@@ -30,8 +30,11 @@ PR, e o gate de revisão vira decoração.
 - Escrita que não decide (`comment`, `task`, `update`) → passa, com aviso.
 - **Decisão** (`approve`, `merge`, `decline`, `request-changes`) → só
   `review-gate:bitbucket-expert`. Qualquer outro agente é barrado.
-- A sessão principal (sem `agent_type` com prefixo de plugin) passa: é o humano,
-  e o humano sempre pôde aprovar o próprio PR se quisesse.
+- A sessão principal (payload sem `agent_type`) passa: é o humano, e o humano
+  sempre pôde aprovar o próprio PR se quisesse.
+- Agente embutido sem prefixo de plugin (`general-purpose`, `Explore`) NÃO
+  passa: ele não é o humano, só não tem dono. Até 2026-09-24 este hook o tratava
+  como sessão principal, e um `general-purpose` podia aprovar e mergear PR.
 """
 
 import json
@@ -62,8 +65,8 @@ def main():
 
     agent_type = payload.get("agent_type", "") or ""
 
-    # Sem prefixo de plugin → sessão principal ou agente embutido. É o humano.
-    if ":" not in agent_type:
+    # Sem agent_type → sessão principal. É o humano.
+    if not agent_type:
         sys.exit(0)
 
     if agent_type == AUTHORIZED:

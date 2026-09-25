@@ -22,8 +22,9 @@ autorização é a **identidade do agente**.
   `board-flow:atlassian-expert`.
 - A sessão principal (payload sem `agent_type`) passa: é o humano.
 
-Diferente do `bitbucket-decision-lock`, agente embutido sem prefixo de plugin
-(`general-purpose`, `Explore`) NÃO passa: ele não é o humano, só não tem dono.
+Agente embutido sem prefixo de plugin (`general-purpose`, `Explore`) NÃO passa:
+ele não é o humano, só não tem dono. O `bitbucket-decision-lock` segue a mesma
+regra desde 2026-09-24.
 """
 
 import json
