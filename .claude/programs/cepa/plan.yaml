@@ -132,39 +132,77 @@ items:
     na mesma sessão — install ok há 0d, com common 0.21.0 / board-flow 0.11.0 /
     maestro 0.4.0 instalados e habilitados, exatamente as versões cobradas.'
 - id: topologia-do-cepa
-  title: Dar ao cepa uma topologia propria (.claude/topology + comando de flow) para o /common:drain-plan
-    e o cepa-until executarem a fila do cepa
-  why: 'primeiro da fila por decisao do dono em 2026-09-25. Hoje o /common:drain-plan executa
-    cada item pelo flow de .claude/topology, e o cepa nao tem esse arquivo; o passo 1 do /common:autonomous-start
-    aborta sem topologia ("No topology configured... Aborting"). Nenhuma topologia existente
-    serve: build-hex e backend Maven, build-team so escreve em apps/*, build-solo nao tem
-    plan-build-validate. Enquanto isso nao existir, os itens do cepa so andam em sessao a
-    mao e o cepa-until nao serve para o cepa. Antes da fila-unica-tres-fontes porque ela mesma
-    seria executada por esse caminho. Criterio: cepa-until cepa --for 1h executa o primeiro
-    item ate o fim sem abortar por topologia.'
-  status: pending
+  title: Dar ao cepa uma topologia propria (.claude/topology + comando de flow)
+    para o /common:drain-plan e o cepa-until executarem a fila do cepa
+  why: 'primeiro da fila por decisao do dono em 2026-09-25. Hoje o /common:drain-plan
+    executa cada item pelo flow de .claude/topology, e o cepa nao tem esse arquivo;
+    o passo 1 do /common:autonomous-start aborta sem topologia ("No topology configured...
+    Aborting"). Nenhuma topologia existente serve: build-hex e backend Maven, build-team
+    so escreve em apps/*, build-solo nao tem plan-build-validate. Enquanto isso
+    nao existir, os itens do cepa so andam em sessao a mao e o cepa-until nao serve
+    para o cepa. Antes da fila-unica-tres-fontes porque ela mesma seria executada
+    por esse caminho. Criterio: cepa-until cepa --for 1h executa o primeiro item
+    ate o fim sem abortar por topologia.'
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 6f5b5ad (build-solo ganha /build-solo:plan-build-validate e
+    /build-solo:reproduce-fix-verify, versao 0.2.0; .claude/topology = build-solo;
+    tests/test_topologia_do_cepa.py) e 7be4b1e (vereditos) na branch session/drain_backlog,
+    ainda nao mesclada na main. completion-auditor COMPLETE (.claude/acceptance/topologia-do-cepa.yaml),
+    proof-reviewer PROVEN (docs/proof/topologia-do-cepa.yaml, 6 perturbacoes red).
+    Criterio rodado num clone descartavel com fila de um item: cepa-until prova
+    --for 1h fechou o item done em 4min via build-solo:pair-dev/pair-reviewer, sem
+    ''No topology configured''. Fora: a fila cepa real so roda pelo cepa-until depois
+    do merge na main e do install a partir do clone principal.'
 - id: fila-unica-tres-fontes
   title: 'Fila unica: cepa-plan add, drain lendo o plan.yaml e doctor listando divergencia
     entre Jira, BACKLOG.md e plan.yaml'
-  why: 'no topo da fila por decisão do dono em 2026-09-25, porque sem as pontes a sincronizacao entre Jira, BACKLOG.md e plan.yaml depende de a sessao lembrar e volta a divergir a cada card novo. Decidido pelo dono em 2026-09-25 (R1 a R4 no BACKLOG.md). Sem as pontes, cada
-    porta de entrada cria trabalho que o /common:next nao ve, e os dois lotes seguem
-    ordens diferentes. No fim da fila porque ninguem priorizou contra os pendentes.'
-  status: pending
+  why: no topo da fila por decisão do dono em 2026-09-25, porque sem as pontes a
+    sincronizacao entre Jira, BACKLOG.md e plan.yaml depende de a sessao lembrar
+    e volta a divergir a cada card novo. Decidido pelo dono em 2026-09-25 (R1 a
+    R4 no BACKLOG.md). Sem as pontes, cada porta de entrada cria trabalho que o
+    /common:next nao ve, e os dois lotes seguem ordens diferentes. No fim da fila
+    porque ninguem priorizou contra os pendentes.
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits c86f185 (cepa-plan add/ordena/divergencia; capture.md, drain.md,
+    doctor.md, cepa-doctor e cepa-feedback triar --plano ligados; common 2.22.0,
+    board-flow 0.25.0), 195b9bb e e872c9d (testes de contrato da prosa, fila ambigua
+    no doctor, triagem que sobrevive a falha do add) na branch session/drain_backlog,
+    nao mesclada. completion-auditor COMPLETE (.claude/acceptance/fila-unica-tres-fontes.yaml,
+    apos INCOMPLETE por prosa sem trava), proof-reviewer PROVEN (docs/proof/fila-unica-tres-fontes.yaml,
+    apos UNPROVEN por 2 lacunas de teste). divergencia cepa contra o BACKLOG real:
+    0 secoes sem Plano, 0 ids inexistentes. Fora: A4 (feito no WEGO); a linha Plano
+    nas secoes antigas ja estava completa; cmd_reconcile ainda rebaixa item done
+    em bounce (tensao com R3, pre-existente, nao tocada); a metade Jira do doctor
+    --live e o drain reordenado nunca rodaram contra um quadro real.'
 - id: cepa-until-adversarial-vermelho
   title: test_cepa_until_adversarial.py vermelho desde antes de 2026-09-24
   why: 'entra na frente da fila porque, enquanto ele falha, o tests/run-all.sh termina
     vermelho em toda sessao e um vermelho novo passa despercebido no meio do velho.
     Barato: um caso so (test_claude_corrompido_no_meio_e_falha_contada_nao_traceback).
-    Posicao dada em 2026-09-24 a pedido do dono ("2. sim" no /common:next).'
-  status: pending
+    Posicao dada em 2026-09-24 a pedido do dono ("2. sim" no /common:next). Descartado
+    pelo dono em 2026-09-25 ("2. sim" no relatorio do /common:drain-plan): verde
+    em todos os ambientes testados; se voltar a falhar, vira item novo com a saida
+    inteira guardada.'
+  status: dropped
   blocked_by: []
   human_pending: null
+  evidence: 'Nao reproduzi em 2026-09-25; sem reproducao nao ha conserto (reproduce-fix-verify).
+    test_cepa_until_adversarial.py passou verde em: HEAD da session/drain_backlog
+    (4 vezes sozinho, 3 em paralelo, dentro de 4 run-all.sh completos); 4d1ddfb,
+    o commit onde a falha foi registrada (worktree descartavel); com CEPA_UNTIL_RUN=1,
+    CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 e CEPA_WORKTREE_HOME trocado; e dentro
+    de um claude -p com o ambiente do cepa-until. A premissa do why (run-all.sh
+    vermelho em toda sessao) nao vale mais: a suite esta 81/81 verde. Pista separada:
+    no run cepa-until de prova (clone descartavel, 2026-09-25 19:15) o agente viu
+    5 OUTROS testes do cepa-until vermelhos (test_cepa_until, _cota, _rede, _branch_da_noite,
+    test_doctor_install_guard; asserts com registro vazio []), sem a saida completa
+    guardada. Retoma quando: uma execucao vermelha deste teste for capturada com
+    a saida inteira (o IndexError e o ambiente). Quem resolve: o dono decide se
+    descarta o item.'
 - id: validar-fio-condutor-em-board-real
   title: Rodar /board-flow:triage num board com fila real e ver a ordem sobreviver
     à revisão
@@ -573,134 +611,143 @@ items:
 - id: acceptance-gate-cego-em-worktree
   title: acceptance-gate.py procura o artefato de aceite fora da worktree e decide
     se ausencia em transicao para Done continua liberando
-  why: 'pedido pelo dono em 2026-09-25 ao aceitar o diagnostico do WEGO-2287 (wego-acesso-backend).
+  why: pedido pelo dono em 2026-09-25 ao aceitar o diagnostico do WEGO-2287 (wego-acesso-backend).
     A trava libera Done sem auditoria sempre que a transicao sai de worktree nova;
     ja deixou WEGO-1891, 2202 e 2218 irem para Done com rota humana aberta. No fim
-    da fila porque ninguem priorizou contra os pendentes; detalhe no BACKLOG.md.'
+    da fila porque ninguem priorizou contra os pendentes; detalhe no BACKLOG.md.
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: politica-default-yes
   title: Política default-yes — matar as micro-interações nas pontas da sessão
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "Política default-yes — matar as micro-interações nas pontas da sessão" do BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "Política default-yes — matar as micro-interações nas pontas
+    da sessão" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: plano-morre-com-worktree-resto
   title: O plano de execução morre com o worktree, e o nome do programa colide
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "O plano de execução morre com o worktree, e o nome do programa colide" do BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "O plano de execução morre com o worktree, e o nome do programa
+    colide" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: medir-efeito-de-mudanca-no-harness
-  title: Não existe modo de saber se uma mudança no harness melhorou alguma coisa (P1-4)
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "Não existe modo de saber se uma mudança no harness melhorou alguma coisa (P1-4)"
-    do BACKLOG.md.'
+  title: Não existe modo de saber se uma mudança no harness melhorou alguma coisa
+    (P1-4)
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "Não existe modo de saber se uma mudança no harness melhorou
+    alguma coisa (P1-4)" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: sed-escapa-dos-hooks-edit-write
   title: Modo automático edita por `sed` e três hooks só escutam `Edit|Write`
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "Modo automático edita por `sed` e três hooks só escutam `Edit|Write`" do BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "Modo automático edita por `sed` e três hooks só escutam `Edit|Write`"
+    do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: fixar-versao-twg
   title: Fixar a versão da CLI `twg`, que se autoatualiza sob os pés dos agentes
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "Fixar a versão da CLI `twg`, que se autoatualiza sob os pés dos agentes" do
-    BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "Fixar a versão da CLI `twg`, que se autoatualiza sob os pés
+    dos agentes" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: detector-contexto-twg
   title: Detector de contexto de execução, se o `twg` virar caminho canônico local
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "Detector de contexto de execução, se o `twg` virar caminho canônico local" do
-    BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "Detector de contexto de execução, se o `twg` virar caminho
+    canônico local" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: reconcile-le-in-review-como-reprovado
   title: A reconciliação do `cepa-plan` lê "In Review" como "reprovado e reaberto"
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "A reconciliação do `cepa-plan` lê "In Review" como "reprovado e reaberto"" do
-    BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "A reconciliação do `cepa-plan` lê "In Review" como "reprovado
+    e reaberto"" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: portao-modo-escrita-le-heredoc
   title: O portão de modo de escrita lê o corpo do heredoc e barra caminho legítimo
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "O portão de modo de escrita lê o corpo do heredoc e barra caminho legítimo"
-    do BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "O portão de modo de escrita lê o corpo do heredoc e barra
+    caminho legítimo" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: spec-gate-so-le-trecho-do-edit
   title: A trava de especificação só lê o trecho novo de um Edit
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "A trava de especificação só lê o trecho novo de um Edit" do BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "A trava de especificação só lê o trecho novo de um Edit" do
+    BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: insync-apaga-pasta-commitada
-  title: O Insync apaga pasta commitada do repo sozinho, e o run desatendido não percebe
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "O Insync apaga pasta commitada do repo sozinho, e o run desatendido não percebe"
-    do BACKLOG.md.'
+  title: O Insync apaga pasta commitada do repo sozinho, e o run desatendido não
+    percebe
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "O Insync apaga pasta commitada do repo sozinho, e o run desatendido
+    não percebe" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: parametros-de-comando-pela-metade
   title: Parâmetros de comando documentados só no cabeçalho ou só em Variables
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "Parâmetros de comando documentados só no cabeçalho ou só em Variables" do BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "Parâmetros de comando documentados só no cabeçalho ou só em
+    Variables" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: docs-internals-desatualizados
-  title: Atualizar os documentos de `docs/internals/` e juntar os que descrevem o build-state
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "Atualizar os documentos de `docs/internals/` e juntar os que descrevem o build-state"
-    do BACKLOG.md.'
+  title: Atualizar os documentos de `docs/internals/` e juntar os que descrevem
+    o build-state
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "Atualizar os documentos de `docs/internals/` e juntar os que
+    descrevem o build-state" do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
 - id: doctor-le-manifesto-no-endereco-antigo
   title: '`cepa-doctor` só lê o manifesto de ambiente no endereço antigo'
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "`cepa-doctor` só lê o manifesto de ambiente no endereço antigo" do BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "`cepa-doctor` só lê o manifesto de ambiente no endereço antigo"
+    do BACKLOG.md.'
   status: pending
   blocked_by: []
   human_pending: null
@@ -708,10 +755,34 @@ items:
 - id: fleet-validate-valida-mcp-atlassian
   title: '`board-flow-fleet-validate.sh` valida o `mcp-atlassian`, que o `atlassian-expert`
     não usa mais'
-  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura de
-    2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única). Detalhe
-    na seção "`board-flow-fleet-validate.sh` valida o `mcp-atlassian`, que o `atlassian-expert`
-    não usa mais" do BACKLOG.md.'
+  why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
+    de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
+    Detalhe na seção "`board-flow-fleet-validate.sh` valida o `mcp-atlassian`, que
+    o `atlassian-expert` não usa mais" do BACKLOG.md.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: reconcile-nao-rebaixa-done
+  title: cepa-plan reconcile para de rebaixar item done para pending quando o card
+    volta no Jira (regra R3)
+  why: 'Aprovado pelo dono em 2026-09-25 (''3. sim''). A regra R3 da fila unica
+    diz que status vai do Jira para o plano e nunca rebaixa item done, e o cmd_reconcile
+    ainda rebaixa em bounce; ja rebaixou 11 cards prontos no wego-acesso-backend
+    (BACKLOG, secao Fila unica, fato 5). (ainda não priorizado: entrou no fim da
+    fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: board-flow-acha-cepa-plan-fora-do-cepa
+  title: Comandos do board-flow acham o cepa-plan fora do repo cepa (hoje chamam
+    python3 common/bin/cepa-plan, caminho relativo)
+  why: 'Aprovado pelo dono em 2026-09-25 (''4. sim''). Em repo hospedeiro como o
+    WEGO o caminho relativo nao existe, entao o /board-flow:capture nao poe o card
+    na fila e o /board-flow:drain cai na ordem do Jira, anulando a fila unica fora
+    do cepa. Convencao herdada do triage.md. (ainda não priorizado: entrou no fim
+    da fila)'
   status: pending
   blocked_by: []
   human_pending: null
