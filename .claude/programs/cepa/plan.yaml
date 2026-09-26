@@ -565,25 +565,60 @@ items:
   title: drain-plan fecha card done sem a fase de validacao do build-hex
   why: 'mesmo tipo de buraco do gate-verde-sem-teste: um done que pulou uma verificacao
     que o fluxo manual faria. Vem logo depois dele. Posicao dada em 2026-09-24.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits fb6beb1 + 97b2400 na branch da noite until/2026-09-26-1809
+    (sem merge; build completo fica com o supervisor). cepa-plan finish --status
+    done agora recusa (exit 2) em topologia build-hex/build-team sem .claude/validation/<id>.yaml
+    com READY-TO-SHIP/READY-WITH-CAVEATS; os dois validation-lead gravam esse arquivo
+    (ganharam Write); drain-plan 3.c torna o validation-lead gate e manda build:
+    delegated-to-supervisor na branch da noite. Testes: tests/test_common_drain_plan.py
+    all green (2 testes novos) + vizinhos verdes (verde_sem_teste, cepa_plan_fila_unica,
+    common_plan, common_next, fila_unica_contratos, summary_nulls_gate, cepa_until_branch_da_noite,
+    lock_copies_drift, atlassian_expert_spec). Prova por perturbacao: trocar a chamada
+    do gate por None deixa 4 checks vermelhos. Gates: pair-reviewer APPROVE, completion-auditor
+    COMPLETE (.claude/acceptance/drain-plan-pula-validacao-build-hex.yaml). Fora:
+    bin/install.sh para valer na copia instalada; common 2.24.0, build-hex 1.4.0,
+    build-team 0.5.0.'
 - id: aviso-worktrees-mente
   title: O aviso de worktrees não mescladas do SessionStart mente
   why: 'declarado `prioridade média` no próprio card, e é barato: o aviso lê estado
     gravado em vez de perguntar ao git, então envelhece sozinho e nunca se corrige.
     Aviso que mente ensina a ignorar todos os avisos.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'commit e44439f na branch da noite until/2026-09-26-1809 (sem merge,
+    sem push). Causa real diferente da hipotese do card: worktree registrada com
+    ref de branch apagado -> ahead=-1 contado como pendencia e git status de branch
+    sem ref mostrando staged. classify ganha branch_gone; hook separa fantasma (some)
+    e orfa com diretorio (linha propria). tests/test_aviso_worktrees_fantasma.py
+    verde; vermelho (4 FAIL) contra o hook anterior. pair-reviewer APPROVE; completion-auditor
+    COMPLETE (.claude/acceptance/aviso-worktrees-mente.yaml). Build completo fica
+    com o supervisor. Fora do escopo: session/2118 como sessao aberta vem do registro
+    de sessoes (bloco 2c). common 2.24.1, vale apos bin/install.sh --clean.'
 - id: cepa-until-blocked-como-progresso
   title: cepa-until conta BLOCKED como progresso (resto do PARCIAL)
   why: a causa das 20 rodadas travadas ja saiu com a branch da noite (1cddede).
     O que falta so aparece de novo num run real com varios blocked, entao espera
     o primeiro run noturno. Posicao dada em 2026-09-24.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Item 1 do esboco feito na branch da noite until/2026-09-26-1809 (sem
+    merge): f24f170 (--max-travados, default 3, encerra o run com motivo fila-travada
+    depois de N blocked seguidos, sem contar como falha do item; docs/cepa-until.md;
+    common 2.25.0), dd86f99 (teste do banner e do run_start), c960280 (vereditos).
+    Gates: completion-auditor COMPLETE (.claude/acceptance/CEPA-UNTIL-BLOCKED-COMO-PROGRESSO.yaml),
+    proof-reviewer PROVEN (docs/proof/CEPA-UNTIL-BLOCKED-COMO-PROGRESSO.yaml, 6
+    perturbacoes todas RED). Testes: tests/test_cepa_until*.py, test_common_until_review,
+    test_common_drain_plan verdes; build completo fica com o supervisor. Motivo
+    de fazer agora: os ledgers mostram sequencias de blocked por outras causas alem
+    do antecessor sem merge (7 seguidas em 2026-09-15). De fora, registrado no BACKLOG:
+    item 2 (parar no 2o pela mesma causa, opcional) e item 3 (queue desconfiar de
+    done sem merge), que conflita com a branch da noite. Vale apos bin/install.sh
+    --clean.'
 - id: maestro-merge-train-nao-roda
   title: 'Onda termina e ninguém aterrissa: o merge train não roda sozinho'
   why: 'primeiro dos itens de Maestro porque é o que deixa trabalho pronto sem aterrissar.

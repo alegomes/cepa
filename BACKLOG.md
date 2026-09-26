@@ -3654,3 +3654,30 @@ zero intervenção para o vermelho e nada novo para lembrar.
   tentativas, `FIX-<teste>` na frente da fila e o item `pending` bloqueado por ele.
 - Próximo run com o `FIX-<teste>` `done`: espera cherry-pick da lateral antes do agente e a
   lateral apagada quando o item fecha.
+
+---
+
+## `cepa-until` pula a suíte do cepa por causa do `.claude/no-build`
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (`comando_de_verify`, linha ~746)
+· **Origem:** análise do run `cepa` `2026-09-26-1809` (`/common:until-review`).
+
+### Problema
+
+O `.claude/no-build` existe para dispensar o baseline de build do `gate-advance` (o repo não tem
+`mvnw`/`npm test`). Só que o `comando_de_verify` do `cepa-until` lê o mesmo arquivo como "não há
+verify", e grava `"verify": null` no `run_start`. Enquanto isso o `drain-plan.md` manda cada
+rodada deixar o build completo "para o supervisor". No cepa ninguém roda `tests/run-all.sh`
+(85 arquivos `tests/test_*.py`): no run de 26/09 as 811 inserções passaram só por testes
+vizinhos, e a rodada 3 teve um vermelho no meio. A suíte foi rodada à mão depois (verde, 4min15s).
+
+### Esboço de solução
+
+`comando_de_verify` procura `tests/run-all.sh` (ou uma linha `verify: <comando>` dentro do
+`.claude/no-build`) ANTES de aceitar o `no-build` como dispensa. O `no-build` continua valendo
+para o `gate-advance`.
+
+### Teste que falta
+
+Repo falso com `.claude/no-build` e `tests/run-all.sh`: espera `run_start` com `verify`
+apontando para o script, e não `null`.
