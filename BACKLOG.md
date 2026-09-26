@@ -3620,6 +3620,11 @@ zero intervenção para o vermelho e nada novo para lembrar.
 3. **`cepa-until aterrissar <fila>/<run>`** como camada fina sobre os guardas do
    `/common:worktree-merge` (decisão do dono, 26/09). O run continua sem tocar a `main`:
    o dono recusou a aterrissagem automática em 26/09.
+   Atenção: hoje o resumo do fim do run sugere "ou `/common:worktree-merge`"
+   (`cepa-until:1391`), mas esse comando só resolve branches `session/<slice>`
+   (`common/commands/worktree-merge.md:38`) e não acha `until/<run>`. Reusar os guardas
+   dele exige ensiná-lo a aceitar `until/`, ou extrair os guardas para um executável que
+   os dois chamem. Até lá, tirar essa sugestão do resumo.
 4. **Vermelho que se resolve:** segundo build completo; verde fecha `done`; vermelho de novo
    põe `FIX-<teste>` na frente da fila e devolve o item para `pending` bloqueado por ele;
    registro de instabilidade entre runs; lateral consumida e apagada pelo próprio supervisor.
