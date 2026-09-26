@@ -149,7 +149,8 @@ def resolve_target(mut: dict, tid: str | None, cwd: Path) -> str | None:
 
 
 def empty_build(cwd: Path) -> dict | None:
-    """The session's `.claude/last-build.json` when its status is EMPTY.
+    """The session's `.claude/last-build.json` when its status is EMPTY, or
+    STALE with `last_known_status: EMPTY` (edited after the empty run).
 
     Unreadable or absent state is None: build greenness is gate-advance's job;
     this gate only refuses the one state that LOOKS green and is not.
@@ -159,18 +160,34 @@ def empty_build(cwd: Path) -> dict | None:
         state = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if isinstance(state, dict) and str(state.get("status", "")).upper() == "EMPTY":
+    if not isinstance(state, dict):
+        return None
+    status = str(state.get("status", "")).upper()
+    if status == "EMPTY":
         return state
+    # EMPTY seguido de edição de fonte: o mark-build-stale grava STALE e guarda
+    # o EMPTY em `last_known_status`. Nenhum build novo rodou, então o card
+    # continua sem teste executado — e agora nem o código é o mesmo.
+    if status == "STALE" and str(state.get("last_known_status", "")).upper() == "EMPTY":
+        return dict(state, _stale=True,
+                    command=state.get("last_known_command"),
+                    at=state.get("last_known_at"))
     return None
 
 
 def block_empty(key: str, target: str | None, state: dict, cwd: Path):
     alvo = target or "a forward status (target unresolved, enforced by default)"
+    stale = (
+        f"  The code changed since (last edit: {state.get('after_edit_to', '<unknown>')}),\n"
+        f"  and no build ran after it: the baseline is STALE on top of that EMPTY run.\n"
+        if state.get("_stale") else ""
+    )
     print(
-        f"[acceptance-gate] BLOCKED: cannot move {key} to {alvo} — the last build is "
-        f"EMPTY: the test filter in `{state.get('command', '<unknown>')}` matched zero "
-        f"tests (recorded {state.get('at', '<unknown time>')} in "
+        f"[acceptance-gate] BLOCKED: cannot move {key} to {alvo} — the last real build "
+        f"is EMPTY: the test filter in `{state.get('command') or '<unknown>'}` matched zero "
+        f"tests (recorded {state.get('at') or '<unknown time>'} in "
         f"{cwd / '.claude' / 'last-build.json'}).\n"
+        f"{stale}"
         f"  It exited green, but no test ran, so it proves nothing, and a card is not\n"
         f"  done on it — whatever the acceptance artifact says.\n"
         f"  Fix the test name in the filter (-Dtest= / -k / -run / -t) so it matches the\n"

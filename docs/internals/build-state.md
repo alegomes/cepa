@@ -79,7 +79,7 @@ green: gate-advance blocks on it like FAILURE, and the two places that
 declare a card/item done refuse it too: `acceptance-gate.py` blocks a
 forward Jira transition (in_review/done or unresolved target, bounces
 allowed) even with a `complete` audit, and `cepa-plan finish --status done`
-exits 2 (blocked/pending still accepted). Unfiltered builds are not
+exits 2 (blocked/pending still accepted). Both also refuse `STALE` with `last_known_status: EMPTY` (edited after the empty run, no new build; mark-build-stale carries `last_known_*` through STALE→STALE so a second edit keeps it), reading the baseline of the session's own worktree root, never the main clone. Unfiltered builds are not
 checked (a module with no tests is legitimate). A filtered SUCCESS also
 records `tests_run: N`.
 

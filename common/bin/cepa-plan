@@ -1420,7 +1420,8 @@ def cmd_start(raiz, nome, ident, cwd="."):
 
 
 def build_vazio(repo):
-    """O `.claude/last-build.json` da raiz da SESSÃO de `repo`, se for EMPTY.
+    """O `.claude/last-build.json` da raiz da SESSÃO de `repo`, se for EMPTY
+    (ou STALE cuja última execução real foi EMPTY).
 
     A baseline de build segue a worktree (`_wtlib.session_root`), não o clone
     principal onde a fila mora. EMPTY é o filtro de teste que saiu verde sem
@@ -1439,9 +1440,17 @@ def build_vazio(repo):
         estado = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    if isinstance(estado, dict) and str(estado.get("status", "")).upper() == "EMPTY":
+    if not isinstance(estado, dict):
+        return None
+    status = str(estado.get("status", "")).upper()
+    if status == "EMPTY":
         estado["_arquivo"] = str(p)
         return estado
+    # EMPTY seguido de edição de fonte (mark-build-stale → STALE com
+    # `last_known_status: EMPTY`): nenhum build novo rodou desde o vazio.
+    if status == "STALE" and str(estado.get("last_known_status", "")).upper() == "EMPTY":
+        return dict(estado, _arquivo=str(p), _stale=True,
+                    command=estado.get("last_known_command"))
     return None
 
 
@@ -1449,9 +1458,13 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo="."):
     if status == "done":
         vazio = build_vazio(repo)
         if vazio is not None:
-            print(f"`done` recusado para {ident}: o último build é EMPTY — o filtro "
-                  f"de teste em `{vazio.get('command', '<desconhecido>')}` casou "
-                  f"zero teste ({vazio['_arquivo']}). Saiu verde sem rodar teste "
+            mudou = (f" E o código mudou depois dele (última edição: "
+                     f"{vazio.get('after_edit_to', '<desconhecida>')}) sem build "
+                     "novo — a baseline é STALE em cima desse EMPTY."
+                     if vazio.get("_stale") else "")
+            print(f"`done` recusado para {ident}: o último build real é EMPTY — o filtro "
+                  f"de teste em `{vazio.get('command') or '<desconhecido>'}` casou "
+                  f"zero teste ({vazio['_arquivo']}).{mudou} Saiu verde sem rodar teste "
                   "nenhum, então não prova nada. Corrija o nome no filtro "
                   "(-Dtest= / -k / -run / -t) e rode de novo, ou faça o build "
                   "falhar com filtro vazio (Maven: "

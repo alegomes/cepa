@@ -134,13 +134,24 @@ def main():
         except (OSError, json.JSONDecodeError):
             previous = {}
 
+    # `last_known_*` é a última execução REAL. Uma edição sobre um STALE
+    # herda a linhagem dele: copiar `status: STALE` apagava o EMPTY de origem
+    # na segunda edição, e o acceptance-gate/cepa-plan finish liberavam o card.
+    if str(previous.get("status", "")).upper() == "STALE":
+        last = {
+            "status": previous.get("last_known_status", "UNKNOWN"),
+            "at": previous.get("last_known_at"),
+            "command": previous.get("last_known_command"),
+        }
+    else:
+        last = previous
     new_state = {
         "status": "STALE",
         "since": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "after_edit_to": rel,
-        "last_known_status": previous.get("status", "UNKNOWN"),
-        "last_known_at": previous.get("at"),
-        "last_known_command": previous.get("command"),
+        "last_known_status": last.get("status", "UNKNOWN"),
+        "last_known_at": last.get("at"),
+        "last_known_command": last.get("command"),
     }
 
     try:

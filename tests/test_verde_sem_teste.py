@@ -395,6 +395,143 @@ with tempfile.TemporaryDirectory() as tmp:
     check("depois de verde com teste, cepa-plan finish --status done aceita",
           f.returncode == 0, f.stderr[:300])
 
+    print("\n# worktree ligada — a baseline é a da worktree, não a do clone principal")
+
+    # A fila mora no clone principal (compartilhada entre worktrees); a
+    # baseline de build é de CADA worktree. Ler a do clone principal deixava
+    # `finish done` passar numa worktree ligada com build EMPTY, e barrava
+    # uma worktree verde pelo EMPTY de outra.
+    principal = make_repo(tmp / "wt-principal")
+    (principal / "board-flow.yaml").write_text(BOARD_FLOW, encoding="utf-8")
+    (principal / "sub").mkdir()
+    (principal / "sub" / "LEIAME").write_text("x\n", encoding="utf-8")
+    git(["add", "-A"], principal)
+    c = git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], principal)
+    check("pré-condição: commit no clone principal", c.returncode == 0, c.stderr[:200])
+    ligada = tmp / "wt-ligada"
+    a = git(["worktree", "add", "-q", str(ligada), "-b", "x"], principal)
+    check("pré-condição: worktree ligada criada", a.returncode == 0, a.stderr[:200])
+
+    w = cepa_plan(ligada, "write", "fila", "--items", str(itens), "--source", "teste",
+                  "--quando", "2026-09-25", "--repo", str(ligada))
+    check("fila gravada a partir da worktree ligada", w.returncode == 0, w.stderr[:300])
+    check("…e mora no clone principal",
+          (principal / ".claude" / "programs" / "fila" / "plan.yaml").exists()
+          and not (ligada / ".claude" / "programs" / "fila" / "plan.yaml").exists(), "")
+
+    capture(ligada, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest",
+            MAVEN_VAZIO)
+    check("pré-condição: EMPTY só na worktree ligada",
+          (state(ligada) or {}).get("status") == "EMPTY" and state(principal) is None,
+          f"ligada={state(ligada)} principal={state(principal)}")
+    f = cepa_plan(ligada, "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", str(ligada))
+    check("finish done --repo <worktree ligada> RECUSA com EMPTY na worktree ligada",
+          f.returncode == 2, f"exit={f.returncode} err={f.stderr[:300]}")
+    check("…e a recusa cita o last-build.json da worktree ligada",
+          str(ligada / ".claude" / "last-build.json") in f.stderr
+          or str((ligada / ".claude" / "last-build.json").resolve()) in f.stderr,
+          f.stderr[:400])
+    f = cepa_plan(ligada / "sub", "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", str(ligada / "sub"))
+    check("finish done --repo <subdir da worktree ligada> também RECUSA",
+          f.returncode == 2, f"exit={f.returncode} err={f.stderr[:300]}")
+
+    (ligada / ".claude" / "acceptance").mkdir(parents=True, exist_ok=True)
+    (ligada / ".claude" / "acceptance" / f"{KEY}.yaml").write_text(
+        f"key: {KEY}\nstatus: complete\n", encoding="utf-8")
+    g = transition(ligada, "41")
+    check("acceptance-gate BARRA in_review com EMPTY na worktree ligada (cwd = ela)",
+          g.returncode == 2, f"exit={g.returncode} stderr={g.stderr[:300]}")
+    g = transition(ligada / "sub", "41")
+    check("acceptance-gate BARRA in_review com cwd = subdir da worktree ligada",
+          g.returncode == 2, f"exit={g.returncode} stderr={g.stderr[:300]}")
+
+    # O inverso: verde na worktree ligada, EMPTY só no clone principal.
+    capture(ligada, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_COM_TESTE)
+    capture(principal, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest",
+            MAVEN_VAZIO)
+    check("pré-condição: SUCCESS na ligada, EMPTY só no principal",
+          (state(ligada) or {}).get("status") == "SUCCESS"
+          and (state(principal) or {}).get("status") == "EMPTY",
+          f"ligada={state(ligada)} principal={state(principal)}")
+    g = transition(ligada, "41")
+    check("acceptance-gate NÃO barra a worktree ligada verde pelo EMPTY do principal",
+          g.returncode == 0, f"exit={g.returncode} stderr={g.stderr[:300]}")
+    f = cepa_plan(ligada, "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", str(ligada))
+    check("finish done --repo <worktree ligada> ACEITA com EMPTY só no clone principal",
+          f.returncode == 0, f"exit={f.returncode} err={f.stderr[:300]}")
+
+    print("\n# EMPTY que virou STALE — editar depois do build vazio não limpa o bloqueio")
+
+    MARK_STALE = HOOKS / "mark-build-stale.py"
+
+    def edita(repo, rel):
+        return run_hook(MARK_STALE, {
+            "tool_name": "Edit",
+            "tool_input": {"file_path": str(repo / rel)},
+            "cwd": str(repo),
+        })
+
+    r = make_repo(tmp / "e2e-stale")
+    (r / "board-flow.yaml").write_text(BOARD_FLOW, encoding="utf-8")
+    acc = r / ".claude" / "acceptance"
+    acc.mkdir(parents=True)
+    (acc / f"{KEY}.yaml").write_text(f"key: {KEY}\nstatus: complete\n", encoding="utf-8")
+    w = cepa_plan(r, "write", "fila", "--items", str(itens), "--source", "teste",
+                  "--quando", "2026-09-25", "--repo", ".")
+    check("fila de teste gravada (stale)", w.returncode == 0, w.stderr[:300])
+
+    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_VAZIO)
+    edita(r, "domain/src/main/java/Cpf.java")
+    s = state(r) or {}
+    check("pré-condição: EMPTY + edição de fonte → STALE com last_known_status EMPTY",
+          s.get("status") == "STALE" and s.get("last_known_status") == "EMPTY", str(s))
+    g = transition(r, "41")
+    check("acceptance-gate BARRA in_review com STALE herdado de EMPTY",
+          g.returncode == 2, f"exit={g.returncode} stderr={g.stderr[:300]}")
+    check("…e a mensagem diz que a última execução casou zero teste e o código mudou",
+          "zero" in g.stderr.lower() and "changed" in g.stderr.lower(), g.stderr[:500])
+    f = cepa_plan(r, "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", ".")
+    check("finish done RECUSA com STALE herdado de EMPTY",
+          f.returncode == 2, f"exit={f.returncode} err={f.stderr[:300]}")
+    check("…e a recusa diz que o código mudou desde o build vazio",
+          "zero" in f.stderr.lower() and "mudou" in f.stderr.lower(), f.stderr[:500])
+    f = cepa_plan(r, "finish", "fila", "B", "--status", "blocked",
+                  "--evidence", "travou", "--repo", ".")
+    check("finish blocked ACEITA com STALE herdado de EMPTY",
+          f.returncode == 0, f.stderr[:300])
+
+    # Uma segunda edição não pode apagar a linhagem (STALE → STALE).
+    edita(r, "domain/src/main/java/Rg.java")
+    s = state(r) or {}
+    check("segunda edição mantém last_known_status EMPTY (não vira STALE)",
+          s.get("status") == "STALE" and s.get("last_known_status") == "EMPTY", str(s))
+    g = transition(r, "51")
+    check("acceptance-gate BARRA done depois de duas edições sobre um EMPTY",
+          g.returncode == 2, f"exit={g.returncode} stderr={g.stderr[:300]}")
+    f = cepa_plan(r, "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", ".")
+    check("finish done RECUSA depois de duas edições sobre um EMPTY",
+          f.returncode == 2, f"exit={f.returncode} err={f.stderr[:300]}")
+
+    # STALE comum (última execução real SUCCESS) não é assunto destas portas:
+    # quem cobra build novo antes do commit é o gate-advance.
+    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_COM_TESTE)
+    edita(r, "domain/src/main/java/Cpf.java")
+    s = state(r) or {}
+    check("pré-condição: SUCCESS + edição → STALE com last_known_status SUCCESS",
+          s.get("status") == "STALE" and s.get("last_known_status") == "SUCCESS", str(s))
+    g = transition(r, "41")
+    check("acceptance-gate NÃO barra STALE herdado de SUCCESS",
+          g.returncode == 0, f"exit={g.returncode} stderr={g.stderr[:300]}")
+    f = cepa_plan(r, "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", ".")
+    check("finish done ACEITA STALE herdado de SUCCESS",
+          f.returncode == 0, f"exit={f.returncode} err={f.stderr[:300]}")
+
 print("\n# prompts — 'o comando de aceite passou' só vale com N > 0")
 for rel in ("build-hex/agents/proof-reviewer.md", "common/agents/completion-auditor.md"):
     text = (REPO / rel).read_text(encoding="utf-8")
