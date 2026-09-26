@@ -1,0 +1,74 @@
+card: cepa-until-blocked-como-progresso
+title: >
+  N `blocked` seguidos encerram o run como fila-travada (item 1 do esboço em
+  BACKLOG.md, seção "cepa-until conta BLOCKED como progresso"; itens 2 e 3 do
+  esboço explicitamente fora de escopo neste card).
+diff: e44439f..f24f170 (commit f24f170)
+status: complete
+auditor: completion-auditor
+data: 2026-09-26
+
+criteria:
+  - id: AC1
+    texto: >
+      Fila sintética com 1 item `done` sem merge seguido de 5 dependentes que
+      travam: o run encerra depois de 3 `blocked` seguidos, com motivo
+      nomeado no `.jsonl`. `blocked` em sequência não conta como falha do
+      item (não é o disjuntor), e um desfecho que não é `blocked` zera a
+      sequência.
+    altitude: cli
+    surface: >
+      cepa-until <fila> --for <duração> — subprocesso `claude` real
+      (substituído por um fake no PATH); exit code, ledger .jsonl (evento
+      run_end com `motivo`/`detalhe`/`travados`) e plan.yaml.
+    test: >
+      tests/test_cepa_until.py::test_n_blocked_seguidos_encerram_o_run_como_fila_travada
+      (1 item `done` + 5 dependentes que travam → o run dispara só 3
+      subprocessos, os dois últimos itens seguem `pending`, o `run_end` traz
+      `motivo == "fila-travada"` com `detalhe` nomeando b1/b2/b3, e
+      `com_progresso == 3`/`sem_progresso == 0`/`travados == 3` — ou seja,
+      contado como progresso, nunca como falha do item) +
+      ::test_desfecho_que_nao_e_blocked_zera_a_sequencia (2 blocked, 1 done,
+      2 blocked, teto 3 → os cinco rodam e o run termina por `fim-da-fila`,
+      não por `fila-travada`, provando que o `done` no meio zera a
+      sequência) +
+      ::test_max_travados_configuravel_e_validado (`--max-travados 0` é
+      recusado com exit 2 antes de disparar qualquer subprocesso;
+      `--max-travados 2` encerra no 2º `blocked`).
+    layer: >
+      integration (subprocess real de cepa-until; `claude` substituído por um
+      fake no PATH via fake_claude/roda, helpers já usados pelas demais
+      suítes deste arquivo)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until.py → "✓ tudo verde" (2026-09-26, rodado
+      em primeiro plano, sem filtro de teste — suíte inteira do arquivo, N>0
+      asserções executadas). Linhas relevantes do próprio harness de
+      asserções (formato "ok <descrição>" por `check()`, ver tests/test_cepa_until.py:48):
+      "test_n_blocked_seguidos_encerram_o_run_como_fila_travada:" seguido de
+      "ok  para no 3º \`blocked\` seguido", "ok  os dois últimos nem foram
+      tocados", "ok  o run termina por \`fila-travada\`, não por
+      \`disjuntor\`", "ok  ...e o motivo nomeia os itens da sequência", "ok
+      os travados continuam PROGRESSO, não falha do item";
+      "test_desfecho_que_nao_e_blocked_zera_a_sequencia:" com "ok  os cinco
+      rodaram" e "ok  o run termina pela fila, não por \`fila-travada\`";
+      "test_max_travados_configuravel_e_validado:" com "ok  --max-travados 0
+      é recusado antes de disparar" e "ok  --max-travados 2 para no 2º".
+      Nenhuma falha registrada em FAILURES; saída fecha com "✓ tudo verde"
+      (exit 0).
+    status: complete
+
+resumo: >
+  O critério de aceite (item 1 do esboço) está coberto por teste na
+  superfície certa: subprocesso real do `cepa-until` disparando um `claude`
+  falso no PATH, verificando exit code do run, conteúdo do plan.yaml e o
+  evento `run_end` do ledger .jsonl — nunca uma chamada direta a uma função
+  interna. Os três testes cobrem exatamente as três exigências do enunciado:
+  (a) para no 3º `blocked` seguido com motivo `fila-travada` nomeado no
+  `.jsonl`; (b) `blocked` conta como progresso e não como falha do item
+  (`sem_progresso == 0`, distinto do `disjuntor`); (c) um desfecho não-blocked
+  zera a sequência. `--max-travados` configurável e validado (>=1) também tem
+  teste dedicado. Itens 2 e 3 do esboço ficam de fora por decisão registrada
+  em BACKLOG.md (linha alterada no mesmo diff), não fazem parte deste card.
+  Suíte completa tests/test_cepa_until.py rodada e verde no mesmo commit
+  (sem regressão nos demais testes do arquivo).

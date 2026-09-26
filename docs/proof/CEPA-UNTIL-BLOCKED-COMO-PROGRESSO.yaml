@@ -1,0 +1,122 @@
+schema_version: 2
+card: cepa-until-blocked-como-progresso
+verdict: proven
+reviewed_at: 2026-09-26T18:50:00-03:00
+base_commit: e44439f
+head_commit: dd86f99
+issue_type: Feature
+repo_kind: harness            # NOT Quarkus/Maven — Python CLI + prompt files, própria suíte em tests/*.py
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (streak travados_seguidos — acumula ids de itens blocked SEGUIDOS dentro do bloco if progresso, e zera no primeiro desfecho que não é blocked)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (o break que encerra o run com motivo_fim = fila-travada quando len(travados_seguidos) >= a.max_travados, citando os ids na detalhe_fim)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (MAX_TRAVADOS_PADRAO = 3 e o novo argumento --max-travados, default MAX_TRAVADOS_PADRAO)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (validação if a.max_travados < 1: return 2)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (linha do banner: fila travada, N itens blocked seguidos)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (campo max_travados gravado no evento run_start do ledger .jsonl)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_cepa_until.py (três testes: test_n_blocked_seguidos_encerram_o_run_como_fila_travada, test_desfecho_que_nao_e_blocked_zera_a_sequencia, test_max_travados_configuravel_e_validado — este último recebeu, no commit dd86f99, mais duas asserções: banner e campo max_travados do run_start)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+  note: >-
+    Rodada 2 (este arquivo, atualizando a rodada 1 de head_commit f24f170 para
+    dd86f99): o coordenador fechou a lacuna apontada na rodada 1 — dd86f99
+    só muda tests/test_cepa_until.py, acrescentando duas asserções ao teste
+    test_max_travados_configuravel_e_validado (banner + campo max_travados
+    no run_start), confirmado por diff vazio em common/bin/cepa-until entre
+    f24f170 e dd86f99 (o binário de produção não mudou). As 4 perturbações
+    da rodada 1 continuam válidas sem precisar ser refeitas — a linha que
+    cada uma quebra não mudou. Esta rodada perturba só as duas linhas antes
+    descobertas.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é JVM); a técnica aplicável é perturbação manual do binário real via subprocess, com um claude falso, como as demais provas deste repo"
+    perturbation:
+      status: pass
+      results:
+        - "REAPROVEITADO da rodada 1 (código de produção idêntico entre f24f170 e dd86f99, confirmado por diff vazio em common/bin/cepa-until) — PASS (RED): o break que fecha o run em fila-travada; o reset da sequência (else: travados_seguidos = []) no desfecho que não é blocked; o default MAX_TRAVADOS_PADRAO = 3; a validação --max-travados < 1. Não refeitas nesta rodada porque a linha que cada uma quebra não mudou."
+        - "PASS (RED) — a linha do banner que imprime 'fila travada: N itens blocked seguidos' (common/bin/cepa-until:956): removida (substituída por comentário) no worktree descartável dd86f99. test_max_travados_configuravel_e_validado caiu em 'o banner mostra o teto escolhido' — o texto 'fila travada: 2 itens blocked seguidos' não apareceu em p.stdout (o banner seguiu direto de disjuntor para por item, sem a linha nova)."
+        - "PASS (RED) — o campo max_travados dentro do dict passado a registra(evento=run_start) (common/bin/cepa-until:999): removido do dict, mantendo só max_falhas. test_max_travados_configuravel_e_validado caiu em 'o run_start registra o teto, para a análise da manhã' — o evento run_start do ledger não trouxe a chave max_travados (dict impresso no FAIL confirma a ausência: só evento, fila, prazo, max_falhas, branch, arvore, base, branch_do_clone, verify, quando)."
+      run: >-
+        Worktree descartável /tmp/proof-CEPA-UNTIL (git worktree add --detach
+        dd86f99; worktree principal
+        /Users/alegomes/cepa-worktrees/cepa-until-2026-09-26-1809 NUNCA
+        tocado além da escrita final deste arquivo — git status --short
+        nele mostrou só os dois untracked pré-existentes da sessão, sem
+        diferença antes/depois das perturbações). GREEN de partida
+        confirmado na árvore principal antes de criar o worktree: python3
+        tests/test_cepa_until.py (HEAD dd86f99) → tudo verde. Cada uma
+        das 2 perturbações desta rodada foi aplicada com um script Python
+        que confirma que o texto perturbado existe uma única vez antes de
+        escrever, seguida de python3 tests/test_cepa_until.py completo no
+        worktree descartável (a suíte não tem seletor de teste único) → FAIL
+        na asserção nova, depois git checkout -- common/bin/cepa-until para
+        restaurar e git diff --stat vazio antes da perturbação seguinte.
+        Depois de restaurar a segunda perturbação, rodei a suíte completa
+        mais uma vez no worktree descartável (binário restaurado): python3
+        tests/test_cepa_until.py → tudo verde. Ao final, git worktree
+        remove --force /tmp/proof-CEPA-UNTIL; git worktree list mostra só
+        a árvore principal e o clone do main, sem sobra.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      As duas linhas antes descobertas (banner em common/bin/cepa-until:956 e
+      campo max_travados no run_start em common/bin/cepa-until:999) agora
+      têm cobertura direta: as duas novas asserções de
+      test_max_travados_configuravel_e_validado (commit dd86f99) leem
+      p.stdout e ledger_de(raiz) respectivamente, e ambas foram confirmadas
+      indo para RED quando a linha correspondente é removida (ver l3 acima).
+      Cruzado outra vez com o diff e44439f..dd86f99 em
+      common/bin/cepa-until: nenhuma linha comportamental nova/mudada ficou
+      sem teste que a quebre.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      O diff não abre superfície de entrada nova — --max-travados é um int
+      já coberto pela mesma validação estrutural de --max-falhas ( < 1
+      recusado com exit 2), e o resto do diff é lógica interna de contagem de
+      streak sobre estados que a fila já produzia (blocked era já um estado
+      terminal aceito), mais duas linhas de saída/auditoria (banner e ledger)
+      sem parsing de entrada externa. Nenhum changed class está em módulo que
+      faça parsing de entrada externa nova.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão a reproduzir na base"
+routing_reason: >-
+  Rodada 2. O código de produção (common/bin/cepa-until) não mudou entre
+  f24f170 e dd86f99 — confirmado por diff vazio; dd86f99 só acrescenta duas
+  asserções ao teste test_max_travados_configuravel_e_validado, fechando a
+  lacuna apontada na rodada 1 (banner e campo max_travados do run_start sem
+  cobertura). Perturbei as duas linhas no worktree descartável
+  /tmp/proof-CEPA-UNTIL (HEAD dd86f99): removida a linha do banner, a
+  asserção nova caiu; restaurada, removido o campo max_travados do dict de
+  run_start, a outra asserção nova caiu; restaurada, suíte completa voltou
+  verde. Somadas às 4 perturbações reaproveitadas da rodada 1 (break, reset
+  da sequência, default, validação de --max-travados < 1), as 6 peças que
+  compõem o comportamento novo do card têm, cada uma, um teste que cai
+  quando quebradas. Não há mais lacuna nomeada nem lacuna estrutural: PROVEN.
