@@ -279,6 +279,18 @@ Para cada item do lote, na ordem:
      comportamento, `proof-reviewer` (PROVEN). Veredito diferente disso não é
      `done`; é `blocked` ou volta para `pending`, com o motivo.
 
+     **Topologia com `validation-lead` (build-hex, build-team): ele também é
+     gate.** O flow dela termina nele, e é ele quem chama o
+     `security-reviewer`. Delegue ao `validation-lead` com o `id` do item como
+     chave; ele grava `.claude/validation/<id>.yaml`, e só `READY-TO-SHIP` ou
+     `READY-WITH-CAVEATS` fecha `done`. O `cepa-plan finish --status done`
+     recusa sem esse arquivo, então pular o gate não passa despercebido: no run
+     de 2026-09-23 nenhum dos 5 cards do WEGO passou pelo `validation-lead`, e
+     o WEGO-2318, que faz login no portal com a credencial da operadora,
+     fechou sem revisão de segurança. Na branch da noite, diga no pedido que o
+     build completo é do supervisor: ele grava `build:
+     delegated-to-supervisor` em vez de rodar o `./mvnw verify`.
+
   d. **Não encerre o turno com trabalho seu rodando em segundo plano.** Um
      build que você disparou (`./mvnw verify`, `npm test`, o gate de prova) tem
      que ser AGUARDADO e colhido no mesmo turno em que foi disparado. Frases
@@ -336,7 +348,7 @@ item que você tocou acaba em exatamente um destes:
 
 | Desfecho | Significa |
 |---|---|
-| `DONE` | fechou, com os dois gates e a evidência gravada |
+| `DONE` | fechou, com os dois gates (mais o `validation-lead`, na topologia que o tem) e a evidência gravada |
 | `BLOCKED` | travou numa condição de fora — nomeie a condição e quem a resolve |
 | `DEFERRED` | adiado de propósito — nomeie o que precisa ser verdade para retomar |
 | `DROPPED` | não vai ser feito — nomeie por quê |

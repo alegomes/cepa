@@ -3333,8 +3333,12 @@ run encerra depois de 3 `blocked` seguidos, com motivo nomeado no `.jsonl`.
 
 **Plano:** `cepa/drain-plan-pula-validacao-build-hex`
 
-**Status:** pendente · **Lar provável:** `common/commands/drain-plan.md` (passo 3.c) e
-`build-hex/commands/plan-build-validate.md` · **Origem:** análise do run de 2026-09-23 do
+**Status:** ✅ FEITO 2026-09-26 (common 2.24.0, build-hex 1.4.0, build-team 0.5.0;
+`tests/test_common_drain_plan.py`; pendente `bin/install.sh` para valer na cópia instalada).
+Saiu a trava mecânica: `cepa-plan finish --status done` recusa, em topologia com
+`validation-lead`, sem `.claude/validation/<id>.yaml` com `READY-TO-SHIP`/`READY-WITH-CAVEATS`,
+que o próprio validation-lead grava · **Lar:** `common/bin/cepa-plan`, `common/commands/drain-plan.md`
+(passo 3.c), `build-hex|build-team/agents/validation-lead.md` · **Origem:** análise do run de 2026-09-23 do
 `cepa-until` no WEGO, feita em 2026-09-24.
 
 O `plan-build-validate` do build-hex termina no `validation-lead`, que roda o build completo e

@@ -101,6 +101,10 @@ Subcomandos:
       `--status done` é recusado quando o `.claude/last-build.json` da raiz
       da sessão de `--repo` está EMPTY (filtro de teste que casou zero teste):
       verde sem teste não fecha item.
+      Também é recusado quando a topologia da sessão (`.claude/topology`) tem
+      `validation-lead` (build-hex, build-team) e não existe
+      `.claude/validation/<id>.yaml` com `verdict: READY-TO-SHIP` ou
+      `READY-WITH-CAVEATS`: sem ele o item fecha sem a revisão de segurança.
 
   cepa-plan add <nome> <id> --title T [--why W] [--antes-de <id>]
                 [--blocked-by id1,id2] [--repo DIR]
@@ -1419,6 +1423,18 @@ def cmd_start(raiz, nome, ident, cwd="."):
     return 0
 
 
+def raiz_da_sessao(repo):
+    """A raiz da worktree de `repo` (`_wtlib.session_root`), não o clone
+    principal onde a fila mora: build, topologia e artefatos de gate seguem a
+    árvore em que o item foi construído."""
+    w = _wt()
+    if w:
+        return Path(w.session_root(repo))
+    r = subprocess.run(["git", "-C", str(repo), "rev-parse", "--show-toplevel"],
+                       capture_output=True, text=True)
+    return Path(r.stdout.strip() if r.returncode == 0 else repo)
+
+
 def build_vazio(repo):
     """O `.claude/last-build.json` da raiz da SESSÃO de `repo`, se for EMPTY
     (ou STALE cuja última execução real foi EMPTY).
@@ -1428,14 +1444,7 @@ def build_vazio(repo):
     executar teste nenhum (gravado pelo capture-build-result); ausente ou
     ilegível devolve None — verde ou vermelho é assunto do gate-advance.
     """
-    w = _wt()
-    if w:
-        raiz_sessao = Path(w.session_root(repo))
-    else:
-        r = subprocess.run(["git", "-C", str(repo), "rev-parse", "--show-toplevel"],
-                           capture_output=True, text=True)
-        raiz_sessao = Path(r.stdout.strip() if r.returncode == 0 else repo)
-    p = raiz_sessao / ".claude" / "last-build.json"
+    p = raiz_da_sessao(repo) / ".claude" / "last-build.json"
     try:
         estado = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -1454,8 +1463,57 @@ def build_vazio(repo):
     return None
 
 
+# Topologias cujo plan-build-validate termina no `validation-lead` (revisão de
+# segurança + build completo + veredito). Item `drain-plan-pula-validacao-
+# build-hex` (2026-09-24): no run de 23/09 do cepa-until no WEGO nenhum dos 5
+# cards entregues passou por ele, e o WEGO-2318, que faz login no portal com a
+# credencial da operadora, fechou `done` sem revisão de segurança. O teste
+# test_common_drain_plan confere esta lista contra os `agents/validation-lead.md`
+# do repo, para as duas não divergirem.
+TOPOLOGIAS_COM_VALIDACAO = ("build-hex", "build-team")
+VEREDITOS_DE_ENTREGA = ("READY-TO-SHIP", "READY-WITH-CAVEATS")
+VEREDITO_RE = re.compile(r"^verdict:\s*[\"']?([A-Za-z_-]+)", re.MULTILINE)
+
+
+def validacao_faltando(repo, ident):
+    """None quando o item pode fechar `done`; senão, a frase da recusa.
+
+    Só vale para topologia com `validation-lead`. O artefato é o que o próprio
+    validation-lead grava, `.claude/validation/<id>.yaml`, na raiz da sessão —
+    o mesmo desenho do gate de aceite com `.claude/acceptance/<KEY>.yaml`.
+    """
+    raiz_sessao = raiz_da_sessao(repo)
+    try:
+        topologia = (raiz_sessao / ".claude" / "topology").read_text(
+            encoding="utf-8").strip()
+    except OSError:
+        return None
+    if topologia not in TOPOLOGIAS_COM_VALIDACAO:
+        return None
+    p = raiz_sessao / ".claude" / "validation" / f"{ident}.yaml"
+    try:
+        texto = p.read_text(encoding="utf-8")
+    except OSError:
+        return (f"a topologia `{topologia}` termina no `validation-lead`, e não "
+                f"há veredito dele para {ident} ({p} não existe). Sem ele o item "
+                "fecha sem a revisão de segurança. Delegue ao validation-lead, "
+                "que grava o arquivo; `blocked`/`pending` continuam aceitos.")
+    m = VEREDITO_RE.search(texto)
+    veredito = m.group(1).upper() if m else None
+    if veredito in VEREDITOS_DE_ENTREGA:
+        return None
+    return (f"o veredito do `validation-lead` para {ident} é "
+            f"`{veredito or '<ausente>'}` ({p}), e só "
+            f"{' ou '.join(VEREDITOS_DE_ENTREGA)} fecha `done`. Resolva o que "
+            "ele nomeou, ou feche como `blocked` com o motivo.")
+
+
 def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo="."):
     if status == "done":
+        falta = validacao_faltando(repo, ident)
+        if falta is not None:
+            print(f"`done` recusado para {ident}: {falta}", file=sys.stderr)
+            return 2
         vazio = build_vazio(repo)
         if vazio is not None:
             mudou = (f" E o código mudou depois dele (última edição: "

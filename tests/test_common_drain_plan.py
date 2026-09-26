@@ -724,6 +724,82 @@ def test_na_branch_da_noite(base):
           "qa-engineer" in regra and "validation-lead" in regra, regra[:300])
 
 
+def test_finish_done_exige_o_veredito_do_validation_lead(base):
+    """Item `drain-plan-pula-validacao-build-hex`: no run de 2026-09-23 nenhum
+    dos 5 cards do WEGO passou pelo validation-lead, e o WEGO-2318 fechou sem
+    revisão de segurança. Com topologia que tem validation-lead, `done` sem o
+    veredito gravado é recusado; o resto da fila não muda."""
+    d = repo_git(base, "validacao")
+    alvo = escreve_fila(d, [item("A"), item("B"), item("C")])
+    (d / ".claude" / "topology").write_text("build-hex\n", encoding="utf-8")
+
+    r = run(d, "finish", "fila", "A", "--status", "done",
+            "--evidence", "commit abc", "--repo", ".")
+    check("build-hex sem .claude/validation/A.yaml: done RECUSADO",
+          r.returncode == 2, r.stdout + r.stderr)
+    check("a recusa nomeia o validation-lead e o arquivo que falta",
+          "validation-lead" in r.stderr and "validation/A.yaml" in r.stderr,
+          r.stderr)
+    check("nada mudou no disco na recusa",
+          por_id(plano_de(alvo))["A"]["status"] == "pending")
+
+    r = run(d, "finish", "fila", "A", "--status", "blocked",
+            "--evidence", "validation-lead não rodou", "--repo", ".")
+    check("sem o veredito, blocked continua aceito", r.returncode == 0, r.stderr)
+
+    val = d / ".claude" / "validation"
+    val.mkdir(parents=True)
+    (val / "B.yaml").write_text("key: B\nverdict: BLOCKED\n", encoding="utf-8")
+    r = run(d, "finish", "fila", "B", "--status", "done",
+            "--evidence", "commit def", "--repo", ".")
+    check("veredito BLOCKED: done RECUSADO e o veredito aparece na recusa",
+          r.returncode == 2 and "BLOCKED" in r.stderr, r.stderr)
+
+    (val / "B.yaml").write_text("key: B\nverdict: READY-WITH-CAVEATS\n",
+                                encoding="utf-8")
+    r = run(d, "finish", "fila", "B", "--status", "done",
+            "--evidence", "commit def", "--repo", ".")
+    check("READY-WITH-CAVEATS fecha done", r.returncode == 0, r.stderr)
+    (val / "C.yaml").write_text("key: C\nverdict: READY-TO-SHIP\n",
+                                encoding="utf-8")
+    r = run(d, "finish", "fila", "C", "--status", "done",
+            "--evidence", "commit ghi", "--repo", ".")
+    check("READY-TO-SHIP fecha done", r.returncode == 0, r.stderr)
+
+    d2 = repo_git(base, "validacao-solo")
+    escreve_fila(d2, [item("A")])
+    (d2 / ".claude" / "topology").write_text("build-solo\n", encoding="utf-8")
+    r = run(d2, "finish", "fila", "A", "--status", "done",
+            "--evidence", "commit abc", "--repo", ".")
+    check("build-solo (sem validation-lead) não exige o arquivo",
+          r.returncode == 0, r.stderr)
+
+
+def test_topologias_com_validacao_batem_com_os_agentes(base):
+    """A lista do cepa-plan é uma cópia do que está no disco; sem esta
+    conferência, uma topologia nova com validation-lead fecharia sem ele."""
+    import re as _re
+    fonte = CEPA_PLAN.read_text(encoding="utf-8")
+    m = _re.search(r"^TOPOLOGIAS_COM_VALIDACAO = \(([^)]*)\)", fonte, _re.M)
+    declaradas = set(_re.findall(r'"([^"]+)"', m.group(1))) if m else set()
+    no_disco = {a.parent.parent.name
+                for a in REPO.glob("*/agents/validation-lead.md")}
+    check("TOPOLOGIAS_COM_VALIDACAO == plugins com agents/validation-lead.md",
+          declaradas == no_disco, f"{declaradas} != {no_disco}")
+    for f in no_disco:
+        spec = (REPO / f / "agents" / "validation-lead.md").read_text(
+            encoding="utf-8")
+        check(f"{f}/validation-lead grava .claude/validation/<KEY>.yaml",
+              ".claude/validation/<KEY>.yaml" in spec
+              and "Write" in spec.split("\n", 5)[3], f)
+    limpo = CMD.read_text(encoding="utf-8").replace("`", "")
+    i = limpo.find("c. **Passe pelos dois gates**")
+    passo = limpo[i:i + 2000] if i != -1 else ""
+    check("drain-plan 3.c exige o validation-lead na topologia que o tem",
+          "validation-lead" in passo and ".claude/validation/<id>.yaml" in passo
+          and "delegated-to-supervisor" in passo, passo[:300])
+
+
 def main():
     with tempfile.TemporaryDirectory() as base:
         for fn in (test_lote_segue_a_ordem_da_fila_e_o_teto,
@@ -748,6 +824,8 @@ def main():
                    test_start_recusa_item_fechado_e_item_com_rota_aberta,
                    test_finish_exige_evidencia,
                    test_finish_abre_divida_mas_nunca_fecha,
+                   test_finish_done_exige_o_veredito_do_validation_lead,
+                   test_topologias_com_validacao_batem_com_os_agentes,
                    test_marcacao_preserva_cabecalho_e_campos_extras,
                    test_na_branch_da_noite,
                    test_contrato_do_comando):
