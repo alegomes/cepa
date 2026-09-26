@@ -57,17 +57,16 @@ TARGET = "hooks/bash-path-lock.py"
 #   dir     diretório da topologia no repo
 #   plugin  nome do plugin (o prefixo que chega em agent_type)
 #   alias   prefixo do módulo importado via importlib (não pode colidir)
-#   logslug nome do arquivo de log em /tmp
 #   noun    o que a topologia escreve — muda a frase do bloqueio: as topologias
-#           de build escrevem `source`; design/discovery/docs escrevem
-#           `artifacts`. Dizer "source" a quem só escreve documento faz a
+#           de build escrevem `código`; design/discovery/docs escrevem
+#           `artefatos`. Dizer "source" a quem só escreve documento faz a
 #           mensagem soar errada para quem a lê.
 TOPOLOGIES = [
-    {"dir": "build-team",    "plugin": "build-team", "alias": "multiteam", "logslug": "multiteam", "noun": "source"},
-    {"dir": "build-hex",     "plugin": "build-hex",  "alias": "hex",       "logslug": "hex",       "noun": "source"},
-    {"dir": "discovery",     "plugin": "discovery",  "alias": "discovery", "logslug": "discovery", "noun": "artifacts"},
-    {"dir": "design",        "plugin": "design",     "alias": "design",    "logslug": "design",    "noun": "artifacts"},
-    {"dir": "docs-topology", "plugin": "docs",       "alias": "docs",      "logslug": "docs",      "noun": "artifacts"},
+    {"dir": "build-team",    "plugin": "build-team", "alias": "multiteam", "noun": "código"},
+    {"dir": "build-hex",     "plugin": "build-hex",  "alias": "hex",       "noun": "código"},
+    {"dir": "discovery",     "plugin": "discovery",  "alias": "discovery", "noun": "artefatos"},
+    {"dir": "design",        "plugin": "design",     "alias": "design",    "noun": "artefatos"},
+    {"dir": "docs-topology", "plugin": "docs",       "alias": "docs",      "noun": "artefatos"},
 ]
 
 # Como cada cópia obtém o allowlist do path-lock irmão. O build-hex é o único
@@ -97,7 +96,6 @@ def render(topo: dict) -> str:
     marks = {
         "@@PLUGIN@@": topo["plugin"],
         "@@ALIAS@@": topo["alias"],
-        "@@LOGSLUG@@": topo["logslug"],
         "@@NOUN@@": topo["noun"],
         "@@ALLOWLIST_RESOLUTION@@": resolution,
     }

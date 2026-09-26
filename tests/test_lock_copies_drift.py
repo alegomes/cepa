@@ -142,6 +142,7 @@ def normalize(src: str) -> str:
     # design/discovery/docs escrevem `artifacts`. Diferença declarada, não
     # acidental.
     src = re.sub(r"Writing (?:source|artifacts) via Bash", "Writing <NOUN> via Bash", src)
+    src = re.sub(r"Escrever (?:código|artefatos) por Bash", "Escrever <NOUN> por Bash", src)
     # Espaço em branco no fim de linha não é divergência.
     return "\n".join(line.rstrip() for line in src.splitlines()).strip()
 
