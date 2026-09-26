@@ -628,6 +628,28 @@ def test_reconcile_traz_o_quadro_para_a_fila(base):
           p2["W-1"]["why"] == "porque W-1", p2["W-1"])
 
 
+def test_reconcile_done_em_review_nao_e_bounce(base):
+    """Item fechado aqui vai para Review e espera o gate de prova. Ler isso
+    como bounce reabriu 8 itens prontos por rodada no run 2026-09-26-1102."""
+    d = repo_git(base, "review")
+    com_quadro(d)
+    alvo = escreve_fila(d, [item("W-1", status="done"),
+                            item("W-2", status="done"),
+                            item("W-3")])
+    arq = board(d, [{"key": "W-1", "status": "Code Review"},
+                    {"key": "W-2", "status": "Doing"},
+                    {"key": "W-3", "status": "Code Review"}])
+    _, out = reconcile(d, arq, "--apply")
+    div = {x["id"]: x["para"] for x in out["divergences"]}
+    check("done + Code Review fica em dia", "W-1" in out["in_sync"]
+          and "W-1" not in div, out)
+    check("e continua done no disco",
+          por_id(plano_de(alvo))["W-1"]["status"] == "done")
+    check("done + Doing continua sendo bounce", div.get("W-2") == "pending", div)
+    check("pending + Code Review avisa que alguém pode estar nele",
+          any("W-3" in a for a in out["warnings"]), out["warnings"])
+
+
 def test_reconcile_nunca_anexa_card_nem_fecha_divida_humana(base):
     d = repo_git(base, "limites")
     com_quadro(d)
@@ -710,6 +732,7 @@ def main():
                    test_start_grava_o_dono_e_o_finish_o_apaga,
                    test_start_recupera_reserva_orfa_e_recusa_a_viva,
                    test_reconcile_traz_o_quadro_para_a_fila,
+                   test_reconcile_done_em_review_nao_e_bounce,
                    test_reconcile_nunca_anexa_card_nem_fecha_divida_humana,
                    test_reconcile_recusa_status_que_o_mapa_nao_conhece,
                    test_queue_recusa_ondas_e_fila_inexistente,

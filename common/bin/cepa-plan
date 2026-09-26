@@ -1600,7 +1600,11 @@ def cmd_add(raiz, nome, ident, a):
 # arquivo, nunca chutado.
 PAPEL_DO_STATUS = {
     "done": "done",
-    "in_review": "em-andamento",
+    # In Review é o destino NORMAL de um item que fechou aqui: o card espera o
+    # gate de prova. Tratá-lo como em-andamento lia todo `done` em Review como
+    # bounce e reabria trabalho pronto (run 2026-09-26-1102: 8 itens por
+    # rodada). O bounce de verdade põe o card em in_progress/to_do.
+    "in_review": "em-revisao",
     "in_progress": "em-andamento",
     "to_do": "a-fazer",
     "blocked": "a-fazer",
@@ -1693,12 +1697,14 @@ def reconcilia(items, board, ausentes, papel_de):
                         "leitura": f"{ident} fechou fora deste plano ({bruto}). "
                         "A rota de validação humana dele NÃO veio junto: se "
                         "havia uma, ela está perdida — só você sabe dizer"})
+        elif papel == "em-revisao" and st == "done":
+            em_dia.append(ident)
         elif papel != "done" and st == "done":
             div.append({"id": ident, "de": st, "para": "pending", "board": bruto,
                         "leitura": f"{ident} voltou atrás no quadro ({bruto}) — "
                         "bounce (UNPROVEN, reaberto). Volta a ser trabalho, e "
                         "provavelmente o próximo"})
-        elif papel == "em-andamento" and st == "pending":
+        elif papel in ("em-andamento", "em-revisao") and st == "pending":
             avisos.append(
                 f"{ident} está '{bruto}' no quadro e `pending` aqui — uma "
                 "sessão pode estar nele agora; conferir antes de começá-lo")
