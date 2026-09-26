@@ -1,0 +1,36 @@
+key: catalogo-listar-os-8-comandos
+status: complete
+audited_at: "2026-09-25"
+auditor: completion-auditor
+commit: f5c8d00
+diff_range: 73e69cc..f5c8d00
+criteria:
+  - id: AC1
+    text: "Todo comando publicado pelo repo (*/commands/*.md, nome vindo de .claude-plugin/plugin.json) está listado em docs/commands.md com argumento e o que faz."
+    altitude: application
+    surface: "docs/commands.md vs. */commands/*.md + .claude-plugin/plugin.json"
+    test: tests/test_catalogo_comandos.py
+    layer: script (varredura de arquivos + regex sobre o texto do catálogo)
+    evidence: verified
+    run: "python3 tests/test_catalogo_comandos.py -> 'tudo ok (63 comandos no catálogo)' (rc=0)"
+    verdict: complete
+  - id: AC2
+    text: "Os 8 comandos originalmente citados (session, doctor, metrics, advisors, consolidate, prove-ui, decide, spec) estão no catálogo."
+    altitude: application
+    surface: docs/commands.md
+    test: "grep manual das 8 entradas em docs/commands.md (linhas 154/156/157/160/162/161/278/149)"
+    layer: manual grep (a auditoria não escreveu teste; usou o AC1 mecânico + confirmação direta)
+    evidence: verified
+    run: "grep -n '/common:session\\|/common:doctor\\|/common:metrics\\|/common:advisors\\|/common:consolidate\\|/common:prove-ui\\|/board-flow:decide\\|/common:spec' docs/commands.md -> todas as 8 entradas encontradas"
+    verdict: complete
+notes: |
+  O diff f5c8d00 em si só acrescentou 3 comandos que tinham escapado
+  (/common:until-review, /build-solo:plan-build-validate,
+  /build-solo:reproduce-fix-verify) porque os 8 originalmente nomeados no
+  título do item já haviam entrado no catálogo por commits anteriores a este.
+  A auditoria verificou o estado ATUAL da árvore (HEAD = 340eb6a), não apenas
+  o diff isolado do commit f5c8d00, porque o critério de aceite fala do
+  catálogo como um todo, e o teste mecânico tests/test_catalogo_comandos.py
+  (adicionado no item seguinte, catalogo-guarda-mecanica) hoje confirma que
+  os 63 comandos publicados - incluindo os 8 - estão citados no catálogo.
+gap: null

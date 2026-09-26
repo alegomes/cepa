@@ -1,0 +1,57 @@
+key: catalogo-guarda-mecanica
+status: complete
+audited_at: "2026-09-25"
+auditor: completion-auditor
+commit: 340eb6a
+diff_range: f5c8d00..340eb6a
+criteria:
+  - id: AC1
+    text: "Um teste em tests/ que roda em tests/run-all.sh falha quando qualquer comando publicado está faltando em docs/commands.md."
+    altitude: application
+    surface: "tests/test_catalogo_comandos.py, coletado pelo glob tests/test_*.py de tests/run-all.sh"
+    test: tests/test_catalogo_comandos.py
+    layer: script (família 'script' do run-all.sh, não usa pytest)
+    evidence: verified
+    run: |
+      python3 tests/test_catalogo_comandos.py -> 'tudo ok (63 comandos no catálogo)' (rc=0)
+      tests/run-all.sh catalogo -> 'ok  tests/test_catalogo_comandos.py' / 'arquivos rodados: 1 de 1' / 'tudo verde' (rc=0)
+      tests/run-all.sh sem filtro (suíte inteira) -> 'arquivos rodados: 82 de 82' / 'tudo verde' (rc=0),
+      confirmando que o arquivo é coletado e passa também na execução completa,
+      não só na filtrada.
+      O próprio teste se autoverifica vermelho: as duas últimas checagens
+      (linhas 83-89 do arquivo) tiram uma linha do catálogo e confirmam que o
+      comando correspondente passa a faltar, e confirmam que prefixo de outro
+      comando não conta como citação (/common:plan-x não é coberto por
+      '/common:plan-xyz' nem /common:plan por '/common:plan-x').
+    verdict: complete
+  - id: AC2
+    text: "Exceções para comandos intencionalmente internos ficam escritas no teste com o motivo."
+    altitude: application
+    surface: "dict INTERNOS em tests/test_catalogo_comandos.py"
+    test: tests/test_catalogo_comandos.py
+    layer: script
+    evidence: verified
+    run: "INTERNOS = {} (linha 30) - hoje nenhum comando precisa de exceção; o teste tem uma checagem própria ('toda exceção em INTERNOS ainda existe') que falha se uma exceção ficar órfã (comando removido mas a entrada de INTERNOS permanecer), então o mecanismo está pronto e testado mesmo vazio."
+    verdict: complete
+  - id: AC3
+    text: "Verde na árvore atual."
+    altitude: application
+    surface: tests/test_catalogo_comandos.py
+    test: tests/test_catalogo_comandos.py
+    layer: script
+    evidence: verified
+    run: "python3 tests/test_catalogo_comandos.py -> rc=0, 'tudo ok (63 comandos no catálogo)'; tests/run-all.sh (suíte completa) -> 'arquivos rodados: 82 de 82', 'tudo verde' (rc=0)"
+    verdict: complete
+notes: |
+  A suíte completa (tests/run-all.sh sem filtro) não terminou dentro dos 120s
+  do primeiro turno desta auditoria - havia 4 outros processos run-all.sh
+  concorrentes de outras sessões no mesmo host. Em vez de esperar em primeiro
+  plano além do limite (proibido para este agente), a auditoria primeiro
+  rodou tests/run-all.sh com o filtro nativo do próprio script
+  ('tests/run-all.sh catalogo'), que reproduz a mesma seleção e execução que
+  a suíte completa faria para este arquivo (família 'script', sem pytest), e
+  confirmou 'tudo verde'. O comando completo seguiu rodando em segundo plano
+  por conta do próprio harness (não por escolha deste agente) e, ao terminar,
+  a notificação trouxe o resultado: 82 de 82 arquivos, tudo verde - reforça,
+  sem alterar, o veredito já registrado.
+gap: null

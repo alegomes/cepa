@@ -1,0 +1,138 @@
+key: gate-verde-sem-teste
+status: complete
+audited_at: "2026-09-25"
+auditor: completion-auditor
+commit: 5a4b71d
+diff_range: 55e9b62..5a4b71d
+reaudit_of: 9eef3a4
+reaudit_reason: >
+  Veredito anterior (INCOMPLETE em 9eef3a4) apontava a metade "nem declarar o
+  card feito" como comprovada só por grep de texto de prompt. O commit
+  5a4b71d torna essa metade mecânica: common/hooks/acceptance-gate.py passa a
+  barrar a transição Jira para in_review/done quando
+  `.claude/last-build.json` está EMPTY, e `common/bin/cepa-plan finish
+  --status done` recusa na mesma condição — ambos com teste ponta a ponta em
+  tests/test_verde_sem_teste.py, sem mock.
+criteria:
+  - id: AC1
+    text: >
+      Rodar um comando de aceite com nome de teste inexistente e o harness NÃO
+      deixar o commit passar — metade "hook/gate" do critério de pronto
+      verbatim do BACKLOG.md.
+    altitude: >
+      hook subprocess (PostToolUse capture-build-result classifica o build;
+      PreToolUse gate-advance decide o `git commit`)
+    surface: >
+      `./mvnw ... -Dtest=<inexistente>` (e equivalentes pytest -k / go test
+      -run / npm|jest -t) produzindo saída verde com zero "Tests run:",
+      seguido de `git commit`.
+    test: >
+      tests/test_verde_sem_teste.py, bloco "critério de pronto — depois de um
+      EMPTY, o commit não passa" (linhas 305-334)
+    layer: >
+      script — subprocess real de common/hooks/capture-build-result.py e
+      common/hooks/gate-advance.py, sem mock
+    evidence: verified
+    run: |
+      python3 tests/test_verde_sem_teste.py -> 'all verde-sem-teste tests passed' (rc=0)
+      Casos relevantes deste bloco, todos 'ok':
+        - gate-advance BARRA git commit com baseline EMPTY
+        - mensagem diz que o filtro casou zero teste e ensina a corrigir
+        - gate-advance BARRA git push com baseline EMPTY
+        - verde com teste executado libera o commit de novo
+    verdict: complete
+  - id: AC2
+    text: >
+      ... e o harness NÃO declarar o card feito, pela transição de status no
+      Jira — primeira metade nova de "nem declarar feito", agora mecânica em
+      vez de textual.
+    altitude: >
+      hook subprocess (PostToolUse capture-build-result grava o
+      `.claude/last-build.json`; PreToolUse acceptance-gate decide o payload
+      da ferramenta de transição do Jira)
+    surface: >
+      Uma transição de card (MCP `jira_transition_issue`/`transitionJiraIssue`,
+      ou `twg` via Bash) para in_review/done, com `.claude/last-build.json`
+      EMPTY na raiz da sessão — inclusive quando o artefato de auditoria já
+      diz `status: complete`.
+    test: >
+      tests/test_verde_sem_teste.py, bloco "critério de pronto — depois de um
+      EMPTY, o card não é declarado feito" (linhas 336-371)
+    layer: >
+      script — subprocess real de common/hooks/acceptance-gate.py invocado
+      com o payload de transição do dialeto mcp-atlassian, sem mock
+    evidence: verified
+    run: |
+      python3 tests/test_verde_sem_teste.py -> 'all verde-sem-teste tests passed' (rc=0)
+      Casos relevantes:
+        - pré-condição: baseline EMPTY
+        - acceptance-gate BARRA a ida para in_review com baseline EMPTY (mesmo com auditoria complete)
+        - a mensagem nomeia o build filtrado sem teste e como corrigir
+        - acceptance-gate BARRA a ida para done com baseline EMPTY
+        - acceptance-gate DEIXA o card voltar para in_progress com baseline EMPTY
+        - depois de verde com teste, acceptance-gate libera in_review
+    verdict: complete
+    note: >
+      Memória de risco relevante (gate por nome de ferramenta falha aberto
+      quando surge mecanismo novo pro mesmo efeito, ex. CLI `twg`):
+      acceptance-gate.py NÃO casa por nome de ferramenta MCP — ele delega a
+      `_jiramut.classify()`, que reconhece a transição por EFEITO (inclusive
+      `twg` via Bash, com lista branca de leituras e bloqueio de qualquer
+      escrita não classificável). Esse reconhecimento por efeito já existia
+      antes deste diff e é coberto por outras suítes
+      (tests/test_jiramut_deteccao_por_efeito.py,
+      tests/test_gate_status_por_nome.py — ambas verdes nesta auditoria). O
+      teste ponta a ponta deste item (tests/test_verde_sem_teste.py) só
+      exercita o dialeto MCP diretamente; não há, dentro DESTE item, um caso
+      que combine EMPTY + transição via `twg`/Bash. Não é um gap deste
+      critério — a cobertura do reconhecimento por efeito já existe em outro
+      arquivo de teste, testado e verde — mas fica registrado para quem
+      revisar não presumir que o EMPTY-gate foi provado contra o caminho
+      `twg` especificamente.
+  - id: AC3
+    text: >
+      ... e o harness NÃO declarar o card feito, pelo desfecho de item da fila
+      local — segunda metade nova de "nem declarar feito" (a fila do
+      `cepa-plan`, quando não há Jira/board-flow envolvido).
+    altitude: cli (subcomando `finish` de common/bin/cepa-plan)
+    surface: >
+      `cepa-plan finish fila <id> --status done --evidence ...` com
+      `.claude/last-build.json` EMPTY na raiz da sessão do `--repo`.
+    test: >
+      tests/test_verde_sem_teste.py, mesmo bloco de linhas 336-371, casos de
+      `cepa_plan(r, "finish", ...)`
+    layer: >
+      script — subprocess real de common/bin/cepa-plan, sem mock
+    evidence: verified
+    run: |
+      python3 tests/test_verde_sem_teste.py -> 'all verde-sem-teste tests passed' (rc=0)
+      Casos relevantes:
+        - cepa-plan finish --status done RECUSA com baseline EMPTY
+        - a recusa nomeia o build vazio
+        - cepa-plan finish --status blocked ACEITA com baseline EMPTY
+        - cepa-plan finish --status pending ACEITA com baseline EMPTY
+        - depois de verde com teste, cepa-plan finish --status done aceita
+    verdict: complete
+notes: |
+  Comandos rodados nesta auditoria, todos em primeiro plano, cada um com o
+  resultado literal colado acima:
+    - python3 tests/test_verde_sem_teste.py -> rc=0, 'all verde-sem-teste tests passed'
+    - python3 tests/test_acceptance_gate.py -> rc=0, 'all acceptance-gate tests passed'
+    - python3 tests/test_common_drain_plan.py -> rc=0, 'all green'
+    - python3 tests/test_gate_status_por_nome.py -> rc=0, 'tudo verde' (checagem extra
+      desta auditoria, não pedida na task original, para confirmar que o
+      reconhecimento por efeito do acceptance-gate cobre nomes de status
+      variados vindos da `twg`)
+
+  A suíte completa (tests/run-all.sh, 86 arquivos) foi lançada em primeiro
+  plano, mas o próprio harness a moveu para segundo plano ao estourar o
+  timeout padrão de 120s (ID b9kwfs176) — o mesmo padrão já registrado na
+  auditoria anterior deste item, e este agente não fica esperando por essa
+  notificação (proibido). Em vez disso, os quatro arquivos relevantes ao
+  diff (test_verde_sem_teste.py, test_acceptance_gate.py,
+  test_common_drain_plan.py, test_gate_status_por_nome.py) foram rodados
+  isolados, em primeiro pleno, todos verdes — evidência suficiente para os
+  três critérios deste item, que são o escopo da task. O resultado de
+  84+/86 completos não foi aguardado nem é necessário para este veredito;
+  se vier vermelho em algo fora deste diff, é achado de outro item, não
+  deste.

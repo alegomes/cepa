@@ -1,0 +1,181 @@
+key: bash-path-lock-camada-1
+titulo: >
+  Construir o deny-by-default de 4 baldes no bash-path-lock (5 cópias + testes)
+diff: 9eef3a4..fc6a75a (commits 515cb7c, fc6a75a)
+status: complete
+altitude_geral: >
+  subprocess — o hook bash-path-lock.py invocado como processo filho recebendo
+  um payload PreToolUse (tool_name=Bash, tool_input.command, agent_type, cwd)
+  via stdin e decidindo pelo exit code (0 = permite, 2 = nega), replicado nas
+  5 cópias/topologias (build-hex, build-team, design, discovery, docs-topology).
+criterios:
+  - id: AC1
+    descricao: >
+      Fecha (ou detecta de forma confiável) a CLASSE "execução de código
+      arbitrário inline = escrita arbitrária" por mecanismo (quatro baldes),
+      não por lista de strings — cobre o vetor real do WEGO-1936 (python3 -c)
+      e variantes não listadas antes (perl/ruby/node -e, sh -c, heredoc,
+      script em /tmp, xargs com escritor, git apply/checkout--/restore,
+      binário compilado na hora, verbo desconhecido).
+    altitude: subprocess
+    surface: >
+      bash-path-lock.py invocado com agent_type trancado (ex.:
+      build-hex:qa-engineer) e comando de interpretador inline visando um
+      arquivo fora da pista do agente.
+    test: tests/test_bash_path_lock_exec.py (função test_baldes, casos DENY
+      "WEGO-1936" + 25+ variantes de classe rodando nas 5 cópias)
+    layer: integração via subprocess real do hook (não import/mocking)
+    evidence: verified
+    run: |
+      $ python3 tests/test_bash_path_lock_exec.py
+      975 verificações, 0 FAIL, exit 0, linha final "tudo verde em 5 cópias"
+    veredito: complete
+
+  - id: AC2
+    descricao: >
+      Os três gaps nomeados pelo desenho (docs/internals/gauntlet-pilot-
+      bash-path-lock.md, seção "Gaps remanescentes") estão fechados:
+      (a) $(...) / crase / <(...) em argumento de verbo inocente também é
+      classificado; (b) o teste anti-deriva das 5 cópias deriva PLUGIN_NAME
+      do plugin.json da pasta, em vez de exigir hash byte-a-byte que nasceria
+      vermelho; (c) a receita canônica `D=$(mktemp -d) && git worktree add
+      ...` passa pelo classificador.
+    altitude: subprocess
+    surface: >
+      mesmo hook, casos específicos de substituição de comando
+      ("$(...) dentro de echo", "atribuição com substituição maliciosa",
+      "flag escondida em $(printf)") e o teste dedicado de PLUGIN_NAME.
+    test: >
+      tests/test_bash_path_lock_exec.py (casos DENY de substituição de
+      comando + caso ALLOW "receita canônica em uma linha"; função
+      test_plugin_name_vem_do_caminho)
+    layer: integração via subprocess real + import direto do módulo para o
+      teste de PLUGIN_NAME
+    evidence: verified
+    run: |
+      $ python3 tests/test_bash_path_lock_exec.py
+      inclui: ok [*] PLUGIN_NAME == plugin.json name (...) — 5/5 cópias
+      inclui: ok [*] nega: $(...) dentro de echo — 5/5
+      inclui: ok [*] libera: receita canônica em uma linha — 5/5
+      (mesma execução acima, 975 ok / 0 FAIL)
+    veredito: complete
+
+  - id: AC3
+    descricao: >
+      A rota legítima de perturbação RED (worktree descartável fora da raiz)
+      continua funcionando: git worktree add/remove fora da raiz é permitido
+      por construção (balde 3), e a rota completa (mktemp -d + worktree +
+      revert + teste) é tratada como ALLOW.
+    altitude: subprocess
+    surface: >
+      comando composto rodando fora da raiz do projeto (cwd fora ou cd para
+      fora antes do && ), incluindo git worktree add/remove com path externo.
+    test: tests/test_bash_path_lock_exec.py (casos ALLOW "git worktree add em
+      /tmp", "git worktree remove em /tmp", "receita canônica em uma linha",
+      "cd /tmp && python3 -c (worktree descartável)", etc.) + evento
+      perturb_worktree_created em test_modo_sombra_e_telemetria
+    layer: integração via subprocess real
+    evidence: verified
+    run: |
+      $ python3 tests/test_bash_path_lock_exec.py
+      ok [*] libera: git worktree add em /tmp — 5/5
+      ok [*] worktree de perturbação vira evento contável — 5/5
+      (mesma execução acima, 975 ok / 0 FAIL)
+    veredito: complete
+
+  - id: AC4
+    descricao: >
+      O carve-out out-of-root do lock de Write/Edit (path-lock.py) permanece
+      intacto e não regrediu com a mudança no bash-path-lock.py.
+    altitude: subprocess
+    surface: >
+      path-lock.py invocado com payload PreToolUse de Write/Edit fora da raiz
+      do projeto, incluindo o caso proof-reviewer citado no desenho.
+    test: tests/test_path_lock_out_of_root.py (roda direto, sem tocar
+      bash-path-lock — é a regressão histórica que o desenho pede como
+      pré-condição)
+    layer: integração via subprocess real
+    evidence: verified
+    run: |
+      $ python3 tests/test_path_lock_out_of_root.py
+      All checks passed across 5 hook copies (exit 0)
+    veredito: complete
+
+  - id: AC5
+    descricao: >
+      Todo comando Bash de um agente trancado cai em exatamente um dos 4
+      baldes (escritor analisável / verbo inocente com deny-list de flag /
+      fora da jurisdição / nega) — verificado empiricamente por ~100 casos
+      DENY e ~60 casos ALLOW cobrindo os ramos, rodando nas 5 cópias via
+      subprocesso real com o exit code observado.
+    altitude: subprocess
+    surface: mesmo hook, tabelas DENY/ALLOW completas de
+      tests/test_bash_path_lock_exec.py
+    test: tests/test_bash_path_lock_exec.py (test_baldes, ~160 casos × 5
+      cópias = 800 verificações desta função sozinha)
+    layer: integração via subprocess real
+    evidence: verified
+    run: |
+      $ python3 tests/test_bash_path_lock_exec.py
+      975 verificações totais, 0 FAIL, exit 0
+    veredito: complete
+
+  - id: AC6
+    descricao: >
+      As 5 cópias do hook (geradas por bin/gen-locks.py a partir do molde
+      common/hooks/_templates/bash-path-lock.py.tmpl) não divergem entre si
+      função a função, e o molde reflete exatamente o que está commitado nas
+      5 cópias (não há drift entre gerador e artefato).
+    altitude: subprocess + build
+    surface: as 5 cópias em disco vs. o molde compartilhado; comparação
+      função a função (não hash byte-a-byte, que nasceria vermelho por
+      PLUGIN_NAME/docstring — gap 2 do desenho, resolvido assim)
+    test: tests/test_lock_copies_drift.py + bin/gen-locks.py --check
+    layer: verificação estática direta (comparação de AST/texto por função) +
+      regeneração idempotente do molde
+    evidence: verified
+    run: |
+      $ python3 tests/test_lock_copies_drift.py
+      ... (61 checks) ... "all green" (exit 0)
+      $ python3 bin/gen-locks.py --check
+      ✓ as 5 cópias são exatamente o molde renderizado
+    veredito: complete
+
+  - id: AC7
+    descricao: >
+      Regressões históricas do bash-path-lock (>= false-match, redirect
+      legítimo, `sed -i` sem -i confundido, etc.) continuam verdes após a
+      reescrita do classificador.
+    altitude: subprocess
+    surface: mesmo hook, suíte de regressão pré-existente
+    test: tests/test_bash_path_lock_redir.py
+    layer: integração via subprocess real
+    evidence: verified
+    run: |
+      $ python3 tests/test_bash_path_lock_redir.py
+      All checks passed across 5 hook copies (exit 0)
+    veredito: complete
+
+gaps: []
+
+observacoes: >
+  Escopo do card é explicitamente "Camada 1" (prevenção default por
+  classificação de 4 baldes); as Camadas 2 (write-fence por diff) e 3
+  (sandbox opcional) do desenho em
+  docs/internals/gauntlet-pilot-bash-path-lock.md não fazem parte deste
+  diff e não foram cobradas aqui — nenhum arquivo tests/test_bash_write_fence.py
+  existe ainda, o que é esperado para este card. O default de
+  CEPA_BASHLOCK_ENFORCE é "1" (enforce ligado), ou seja a Camada 1 já nasce
+  deny-by-default, não em modo sombra — condizente com a "Direção escolhida"
+  registrada no BACKLOG.md (~linha 1816: "Camada 1 — prevenção default (dia
+  1)"). Suite completa (tests/run-all.sh) não foi rodada em primeiro plano
+  neste audit por ultrapassar o tempo de foreground disponível; em vez disso
+  rodei em escopo os quatro arquivos de teste que demonstram os critérios
+  deste card (test_bash_path_lock_exec.py, test_lock_copies_drift.py,
+  test_path_lock_out_of_root.py, test_bash_path_lock_redir.py), todos verdes.
+  Arquivos não commitados no worktree no momento deste audit (BACKLOG.md,
+  common/bin/cepa-plan, common/hooks/acceptance-gate.py,
+  docs/internals/build-state.md, tests/test_verde_sem_teste.py,
+  .claude/acceptance/catalogo-*.yaml, .claude/acceptance/gate-verde-sem-teste.yaml)
+  não pertencem a este diff (9eef3a4..fc6a75a) e parecem ser trabalho de uma
+  sessão concorrente — não avaliados aqui.
