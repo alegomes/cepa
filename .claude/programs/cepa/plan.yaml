@@ -210,10 +210,25 @@ items:
     não comportamento: o triage nunca escreveu um plano de verdade e o next nunca
     reconciliou contra Jira vivo. Antes disto, "pronto" é code-exists (L0 da escada
     de confiança), não funciona.'
-  status: pending
+  status: blocked
   blocked_by:
   - instalar-leva-fio-condutor
   human_pending: null
+  evidence: 'Validacao executada em 2026-09-25 contra o Jira vivo (WEGO, wego-assinatura-backend,
+    161 cards em To Do no escopo de triage) e a ordem NAO sobreviveu. (1) triage
+    de 5 cards (WEGO-1438/1439/1440 ready; 1441 e 1461 needs-refinement, comentados
+    no Jira); repasse gravado em wego-assinatura-backend/.claude/programs/WEGO/triagem-2026-09-25.json.
+    (2) cepa-plan write --from-triage recusou (exit 4) sumir com os 25 itens antigos,
+    correto. Com --on-missing keep (dry-run) os 3 cards novos entram NA FRENTE dos
+    5 pendentes que o dono priorizou (WEGO-1437 primeiro) e os antigos vao para
+    o fim ''sem posicao escolhida'': triagem parcial reordena a fila. Plano NAO
+    gravado por isso (backup em scratchpad). (3) cepa-plan reconcile contra o quadro
+    vivo (sem --apply) rebaixaria done->pending WEGO-1550 e WEGO-1982 (In Review)
+    e WEGO-1973 (In Progress): e o defeito do item reconcile-nao-rebaixa-done, agora
+    reproduzido em quadro real; tambem lista 12 ''dropped -> dropped'' que nao mudam
+    nada. Condicao para destravar: consertar reconcile-nao-rebaixa-done (ja na fila)
+    e a fusao da triagem parcial no cepa-plan write (item novo, o dono decide a
+    posicao); depois re-rodar esta validacao.'
 - id: produtor-de-plano-sem-tracker
   title: Decidir quem escreve o plano single-track num repo sem Jira
   why: 'registrado como ITEM, e não como parágrafo no BACKLOG, porque o receio do
@@ -238,19 +253,39 @@ items:
     os eventos do mês e provavelmente é a mesma causa dos STALE vista de outro ângulo.
     Independente das peças acima — pode furar a fila se um dia de trabalho no wego
     travar de novo.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Investigacao read-only, veredito no-issue, relatorio em docs/investigations/2026-09-25-stale-e-reactor-no-wego.md
+    (commit cf2fa34). 83 dos 86 reactor_block de julho vinham da pasta ''multi''
+    criada por tests/test_maven_reactor_guard.py; vazamento da suite no ledger consertado
+    em 83109c1 (26/08). No wego-assinatura-backend: 7 reactor_block e 12 STALE (jul+ago,
+    zero em set); causas distintas (maven-reactor-guard.py:148 vs gate-advance.py:273-294).
+    Sem diff de comportamento: gates nao se aplicam. Achado lateral fora do escopo:
+    wego-acesso-backend teve 481 reactor_block (328 em set), 61,9% seguidos de retry
+    com ''# stale-ok'' apos install; candidato a item novo, decisao do dono.'
 - id: proof-gate-nunca-disse-proven
   title: Re-exercitar o proof gate depois do fix de path-lock out-of-root
   why: 7 vereditos no mês, todos needs-human ou unproven, nenhum PROVEN — padrão
     consistente com o fix de path-lock que existe no repo mas nunca foi re-exercitado.
     Um gate caro que nunca conclui é pior que gate nenhum, porque consome orçamento
     e não fecha card.
-  status: pending
+  status: done
   blocked_by:
   - instalar-leva-fio-condutor
   human_pending: null
+  evidence: 'Premissa superada, conferido em 2026-09-25 sem mudar codigo. (1) Telemetria
+    ~/.claude/cepa-telemetry, eventos proof_verdict=proven: 5 em jul, 2267 em ago,
+    155 em set (contagem de linhas do ledger; o volume de ago sugere evento duplicado
+    por leitura, mas o sinal ''nenhum PROVEN'' morreu). (2) Exercicio real do fix
+    de path-lock out-of-root: build-hex proof-reviewer perturbou em worktree descartavel
+    /tmp/proof-wego-2311 e /tmp/proof-wego-2312 no wego-acesso-backend e devolveu
+    PROVEN (docs/proof/WEGO-2311.yaml linha 36: GREEN 18/0 -> RED 18/16; WEGO-2312.yaml
+    linha 33). (3) No cepa, fila-unica-tres-fontes PROVEN com perturbacao em worktree
+    no scratchpad (docs/proof/fila-unica-tres-fontes.yaml linha 79). Sem diff, entao
+    sem completion-auditor/proof-reviewer. Achado lateral: o bash-path-lock barra
+    git checkout de restauracao dentro da worktree descartavel em /tmp; o reviewer
+    contorna recriando a worktree (custo, nao furo).'
 - id: decide-rodar-no-wego
   title: Rodar /board-flow:decide no wego-assinatura-backend, percurso inteiro
   why: 'o comando NUNCA rodou. Está escrito e apoiado em módulos testados, mas commands/decide.md
@@ -383,9 +418,12 @@ items:
   why: pedidos em 23/07 e 27/07, mas o que ficou entendido não foi registrado em
     lugar nenhum — este item existe para a dúvida não se perder de novo. Antes de
     retomar, confirmar com o dono onde parou, em vez de repetir.
-  status: pending
+  status: blocked
   blocked_by: []
   human_pending: null
+  evidence: 'Condicao de fora: o proprio why exige confirmar com o dono onde o onboarding
+    parou antes de retomar. Lote desatendido (drain-plan 2026-09-25, politica b).
+    Quem resolve: o dono, numa sessao interativa dizendo onde parou nos blocos 1-3.'
 - id: bash-path-lock-camada-1
   title: Construir o deny-by-default de 4 baldes no bash-path-lock (5 cópias + testes)
   why: 'fecha o furo real do WEGO-1936 (agente contornou o cadeado com python3 -c)
@@ -393,9 +431,21 @@ items:
     novo cai no bloqueio por construção. Design julgado e aprovado no piloto 1 (BACKLOG
     "Direção escolhida"); estimativa 1-2 sessões. Antes dos dois abaixo porque é
     o único que conserta enforcement já em produção.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 515cb7c (classificador deny-by-default de 4 baldes no template
+    + 5 copias geradas por bin/gen-locks.py, tests/test_bash_path_lock_exec.py com
+    975 verificacoes) e fc6a75a (bump build-hex 1.3.0, build-team/discovery 0.4.0,
+    design/docs 0.3.0). completion-auditor COMPLETE (.claude/acceptance/bash-path-lock-camada-1.yaml,
+    7 ACs). proof-reviewer PROVEN (docs/proof/bash-path-lock-camada-1.yaml, 7b4d03c):
+    WEGO-1936 exit 0 na base -> exit 2 no head; perturbar o fallback do balde 4
+    deixa 60 FAILs; 19 tentativas de contorno negadas; builds legitimos liberados.
+    Fora do escopo: camadas 2 e 3. Ficou negado de proposito e pode incomodar: git
+    pull/rebase/stash, ''cd x; ./mvnw'' com '';'', pip/npm install de pacote, perl/ruby/java
+    -jar. Nota do reviewer: rodado so via pytest o test_bash_path_lock_exec.py da
+    falso-verde (run-all.sh roda como script, entao a suite pega). Vale so depois
+    de bin/install.sh.'
 - id: rodar-onda-lotes-sweep-verify
   title: Rodar a onda 1 do plano de ondas lotes-sweep-verify (4 slices)
   why: 'entra na fila no lugar dos dois itens que ele absorve (o /common:gauntlet
@@ -406,9 +456,13 @@ items:
     e julgado nos pilotos. NAO roda hoje: o /maestro:run exige o herdr de pe e a
     instalacao nova, que nao foi feita. Enquanto isso, os quatro slices podem ser
     feitos um a um numa sessao so.'
-  status: pending
+  status: blocked
   blocked_by: []
   human_pending: null
+  evidence: 'Condicao de fora: /maestro:run exige o herdr rodando (binario em /opt/homebrew/bin/herdr,
+    processo fora do ar em 2026-09-25). Dono decidiu no drain-plan de 2026-09-25
+    nao subir o herdr num lote desatendido (4 worktrees por onda, caro, sem acompanhamento).
+    Quem resolve: o dono, numa sessao acompanhada com herdr de pe.'
 - id: rodar-onda-lotes-2026-08-23
   title: Rodar a onda 1 do plano de ondas lotes-2026-08-23 (4 slices)
   why: 'mesma costura do item anterior, para o segundo plano de ondas pendente:
@@ -417,9 +471,13 @@ items:
     a resolver antes: o P5 (cascata multi-repo) esta done no plano melhorias-2026-07
     e reaparece como slice pendente aqui. Um dos dois esta mentindo, e rodar a onda
     sem saber qual refaz trabalho ou pula trabalho.'
-  status: pending
+  status: blocked
   blocked_by: []
   human_pending: null
+  evidence: 'Condicao de fora: mesma do rodar-onda-lotes-sweep-verify (herdr fora
+    do ar; dono decidiu em 2026-09-25 nao subir num lote desatendido). Alem disso
+    segue aberta a contradicao do why: P5 (cascata multi-repo) done em melhorias-2026-07
+    e pendente aqui; resolver antes de rodar. Quem resolve: o dono.'
 - id: atrito-decisao-fase-1
   title: 'Spike do hook em AskUserQuestion (30 min) + autonomy.yaml com detect:
     + extensão do decide'
@@ -456,9 +514,15 @@ items:
     ao catalogo-guarda-mecanica de propósito: a lista conserta o sintoma de hoje,
     a guarda impede o de amanhã, e fazer as duas na mesma sessão custa quase o mesmo
     que uma.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits f5c8d00 (build-solo:plan-build-validate, build-solo:reproduce-fix-verify,
+    common:until-review no catalogo) e 46ee306 (linha de tabela do /common:spec,
+    que so tinha a mencao da Parte 1). Os 8 do titulo ja estavam no catalogo por
+    commits anteriores. completion-auditor COMPLETE (.claude/acceptance/catalogo-listar-os-8-comandos.yaml,
+    suite 82/82); proof-reviewer PROVEN em conjunto com a guarda (docs/proof/catalogo-guarda-mecanica.yaml,
+    d868b43): catalogo de 73e69cc fica RED citando os 3 comandos.'
 - id: catalogo-guarda-mecanica
   title: Teste que falha quando um comando existe e não está em docs/commands.md
   why: '8 comandos sumiram do catálogo sem que nenhum teste piscasse (spec, session,
@@ -467,18 +531,36 @@ items:
     os arquivos */commands/*.md com as tabelas do doc. Independente das quatro acima;
     barato. Dúvida honesta a resolver na construção: se algum comando é interno
     de propósito, a exceção fica escrita no teste em vez de virar omissão.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'tests/test_catalogo_comandos.py (340eb6a, apertado em 46ee306, 39ab099,
+    55e9b62): todo /plugin:comando publicado (nome do plugin.json) precisa de linha
+    propria de tabela em docs/commands.md; mencao em prosa, comentario HTML e bloco
+    de codigo nao contam. Excecoes em INTERNOS com motivo (vazio hoje). completion-auditor
+    COMPLETE (.claude/acceptance/catalogo-guarda-mecanica.yaml, 82/82). proof-reviewer
+    PROVEN na 4a rodada (docs/proof/catalogo-guarda-mecanica.yaml, d868b43); rodadas
+    1-3 NEEDS-HUMAN, cada uma fechou um disfarce.'
 - id: gate-verde-sem-teste
   title: Gate de aceite exigir `Tests run:` > 0 antes de chamar de verde
   why: 'primeiro dos novos porque é buraco de enforcement em produção HOJE: o capture-build-result
     classifica como verde um build que não rodou teste nenhum, e todo o green-or-revert
     se apoia nesse sinal. Um gate que aprova o vazio é pior que gate nenhum, porque
     dá confiança falsa.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: Commits 9eef3a4 (capture-build-result grava EMPTY quando filtro de teste
+    -Dtest/-k/-run/-t roda zero teste; gate-advance barra commit/push; worktree-merge
+    e wrap-up recusam nao-SUCCESS; doctor/metrics nomeiam EMPTY; proof-reviewer
+    e completion-auditor exigem N>0; common 2.23.0, build-hex 1.2.0), 5a4b71d (acceptance-gate
+    barra transicao para in_review/done e cepa-plan finish --status done recusa
+    com EMPTY) e aef8e26 (le a worktree ligada, nao o clone principal; EMPTY que
+    virou STALE continua barrando; mark-build-stale preserva a ultima execucao real).
+    completion-auditor COMPLETE (.claude/acceptance/gate-verde-sem-teste.yaml, 1a
+    rodada INCOMPLETE pela metade 'declarar feito'); proof-reviewer PROVEN em aef8e26
+    (docs/proof/gate-verde-sem-teste.yaml, 5aeca22; rodada 2 UNPROVEN fechada).
+    Suite 84/84. Vale so depois de bin/install.sh.
 - id: drain-plan-pula-validacao-build-hex
   title: drain-plan fecha card done sem a fase de validacao do build-hex
   why: 'mesmo tipo de buraco do gate-verde-sem-teste: um done que pulou uma verificacao
@@ -775,6 +857,18 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: triagem-parcial-preserva-ordem
+  title: Triagem parcial acrescenta os cards novos DEPOIS dos pendentes ja priorizados,
+    sem mexer na ordem deles
+  why: 'achado da validacao em quadro real de 2026-09-25 (validar-fio-condutor-em-board-real,
+    BLOCKED): com --on-missing keep, cepa-plan write --from-triage poe 3 cards novos
+    na frente dos 5 pendentes que o dono priorizou e manda os antigos para o fim.
+    Colado ao reconcile-nao-rebaixa-done porque os dois juntos destravam aquela
+    validacao. Aprovado pelo dono em 2026-09-26.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
 - id: board-flow-acha-cepa-plan-fora-do-cepa
   title: Comandos do board-flow acham o cepa-plan fora do repo cepa (hoje chamam
     python3 common/bin/cepa-plan, caminho relativo)
@@ -783,6 +877,24 @@ items:
     na fila e o /board-flow:drain cai na ordem do Jira, anulando a fila unica fora
     do cepa. Convencao herdada do triage.md. (ainda não priorizado: entrou no fim
     da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: until-git-quebrado-vira-troca-de-branch
+  title: O cepa-until lê "git quebrado" como "trocaram de branch" e encerra a janela
+  why: 'pedido do dono em 26/09/2026 depois do run WEGO de 25/09, que perdeu 5h40
+    de prazo por isso. Detalhe na seção de mesmo título do BACKLOG.md. (ainda não
+    priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: until-build-longo-sem-trava
+  title: Build de mais de 10 min dentro do cepa-until vira trava para o dono
+  why: 'pedido do dono em 26/09/2026 depois do WEGO-2334, travado pelo teto de 10
+    min. Detalhe na seção de mesmo título do BACKLOG.md. (ainda não priorizado:
+    entrou no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
