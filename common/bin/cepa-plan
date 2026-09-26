@@ -98,6 +98,9 @@ Subcomandos:
       item fechado. `--human-pending` ABRE uma rota que só o humano fecha;
       fechar (passar vazio) é recusado, porque só quem rodou a rota sabe se
       ela passou.
+      `--status done` é recusado quando o `.claude/last-build.json` da raiz
+      da sessão de `--repo` está EMPTY (filtro de teste que casou zero teste):
+      verde sem teste não fecha item.
 
   cepa-plan add <nome> <id> --title T [--why W] [--antes-de <id>]
                 [--blocked-by id1,id2] [--repo DIR]
@@ -1416,7 +1419,46 @@ def cmd_start(raiz, nome, ident, cwd="."):
     return 0
 
 
-def cmd_finish(raiz, nome, ident, status, evidencia, human_pending):
+def build_vazio(repo):
+    """O `.claude/last-build.json` da raiz da SESSÃO de `repo`, se for EMPTY.
+
+    A baseline de build segue a worktree (`_wtlib.session_root`), não o clone
+    principal onde a fila mora. EMPTY é o filtro de teste que saiu verde sem
+    executar teste nenhum (gravado pelo capture-build-result); ausente ou
+    ilegível devolve None — verde ou vermelho é assunto do gate-advance.
+    """
+    w = _wt()
+    if w:
+        raiz_sessao = Path(w.session_root(repo))
+    else:
+        r = subprocess.run(["git", "-C", str(repo), "rev-parse", "--show-toplevel"],
+                           capture_output=True, text=True)
+        raiz_sessao = Path(r.stdout.strip() if r.returncode == 0 else repo)
+    p = raiz_sessao / ".claude" / "last-build.json"
+    try:
+        estado = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if isinstance(estado, dict) and str(estado.get("status", "")).upper() == "EMPTY":
+        estado["_arquivo"] = str(p)
+        return estado
+    return None
+
+
+def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo="."):
+    if status == "done":
+        vazio = build_vazio(repo)
+        if vazio is not None:
+            print(f"`done` recusado para {ident}: o último build é EMPTY — o filtro "
+                  f"de teste em `{vazio.get('command', '<desconhecido>')}` casou "
+                  f"zero teste ({vazio['_arquivo']}). Saiu verde sem rodar teste "
+                  "nenhum, então não prova nada. Corrija o nome no filtro "
+                  "(-Dtest= / -k / -run / -t) e rode de novo, ou faça o build "
+                  "falhar com filtro vazio (Maven: "
+                  "-Dsurefire.failIfNoSpecifiedTests=true). Um verde com N > 0 "
+                  "testes libera; `blocked`/`pending` continuam aceitos.",
+                  file=sys.stderr)
+            return 2
     alvo, plan, por_id, rc = abre_plano_para_marcar(raiz, nome)
     if rc:
         return rc
@@ -2293,7 +2335,7 @@ def main(argv=None):
         return cmd_start(raiz, a.nome, a.id, a.repo)
     if a.cmd == "finish":
         return cmd_finish(raiz, a.nome, a.id, a.status, a.evidence,
-                          a.human_pending)
+                          a.human_pending, a.repo)
     return cmd_write(raiz, a)
 
 

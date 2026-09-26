@@ -301,7 +301,9 @@ CLI = wrappers JSON do socket):
 pendente `bin/install.sh` para valer na cópia instalada) · **Lar:** `common/hooks/capture-build-result.py` (classificação do
 build) + `build-hex/agents/proof-reviewer` e `common/agents/completion-auditor` (o que
 eles aceitam como prova) · **Origem:** merge `00e0dda` no wego-acesso-backend
-(2026-08-24), medido na árvore mesclada.
+(2026-08-24), medido na árvore mesclada. **"Nem declarar feito", mecânico:** com baseline
+EMPTY, o `acceptance-gate` barra a transição do card para in_review/done (volta liberada) e
+o `cepa-plan finish --status done` recusa (blocked/pending aceitos), testado ponta a ponta.
 
 ### Problema
 

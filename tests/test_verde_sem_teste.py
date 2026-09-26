@@ -22,6 +22,12 @@ O contrato que este arquivo guarda:
     - depois de uma captura EMPTY, `git commit` é BARRADO, e a mensagem diz que
       o filtro casou zero teste e como corrigir.
 
+  acceptance-gate.py e cepa-plan finish (a outra metade: "nem declarar feito")
+    - depois de uma captura EMPTY, a transição do card para in_review/done é
+      BARRADA mesmo com auditoria `complete`; voltar para in_progress passa;
+    - `cepa-plan finish --status done` recusa; blocked/pending aceitam;
+    - depois de um verde com teste executado, as duas portas liberam.
+
   prompts
     - proof-reviewer e completion-auditor exigem N > 0 testes executados.
 """
@@ -41,6 +47,8 @@ REPO = Path(__file__).resolve().parent.parent
 HOOKS = REPO / "common" / "hooks"
 CAPTURE = HOOKS / "capture-build-result.py"
 GATE = HOOKS / "gate-advance.py"
+ACCEPTANCE = HOOKS / "acceptance-gate.py"
+CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
 
 FAILURES = []
 
@@ -83,6 +91,32 @@ def capture(repo, command, output, exit_code=None):
         "tool_response": resp,
         "cwd": str(repo),
     })
+
+
+KEY = "WEGO-2100"
+
+BOARD_FLOW = """\
+defaults:
+  project_key: WEGO
+  transition_ids:
+    "31": in_progress
+    "41": in_review
+    "51": done
+"""
+
+
+def transition(repo, tid):
+    """Transição do card pelo mcp-atlassian, no hook real do acceptance-gate."""
+    return run_hook(ACCEPTANCE, {
+        "tool_name": "mcp__mcp-atlassian__jira_transition_issue",
+        "tool_input": {"issue_key": KEY, "transition_id": tid},
+        "cwd": str(repo),
+    })
+
+
+def cepa_plan(repo, *args):
+    return subprocess.run([sys.executable, str(CEPA_PLAN)] + list(args),
+                          capture_output=True, text=True, cwd=str(repo))
 
 
 def state(repo):
@@ -298,6 +332,68 @@ with tempfile.TemporaryDirectory() as tmp:
         "cwd": str(r),
     })
     check("verde com teste executado libera o commit de novo", g.returncode == 0, g.stderr[:200])
+
+    print("\n# critério de pronto — depois de um EMPTY, o card não é declarado feito")
+
+    # Os dois lugares onde "feito" se declara: a transição do card no Jira
+    # (acceptance-gate) e o desfecho de item da fila (cepa-plan finish).
+    r = make_repo(tmp / "e2e-feito")
+    (r / "board-flow.yaml").write_text(BOARD_FLOW, encoding="utf-8")
+    acc = r / ".claude" / "acceptance"
+    acc.mkdir(parents=True)
+    # Artefato COMPLETO: o bloqueio tem de vir do build vazio, não da auditoria.
+    (acc / f"{KEY}.yaml").write_text(f"key: {KEY}\nstatus: complete\n", encoding="utf-8")
+    itens = r / "itens.json"
+    itens.write_text(json.dumps([
+        {"id": i, "title": f"item {i}", "why": f"porque {i}", "status": "pending",
+         "blocked_by": [], "human_pending": None} for i in ("A", "B")
+    ]), encoding="utf-8")
+    w = cepa_plan(r, "write", "fila", "--items", str(itens), "--source", "teste",
+                  "--quando", "2026-09-25", "--repo", ".")
+    check("fila de teste gravada", w.returncode == 0, w.stderr[:300])
+
+    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_VAZIO)
+    check("pré-condição: baseline EMPTY", (state(r) or {}).get("status") == "EMPTY",
+          str(state(r)))
+
+    g = transition(r, "41")
+    check("acceptance-gate BARRA a ida para in_review com baseline EMPTY "
+          "(mesmo com auditoria complete)", g.returncode == 2,
+          f"exit={g.returncode} stderr={g.stderr[:300]}")
+    check("…e a mensagem nomeia o build filtrado sem teste e como corrigir",
+          "EMPTY" in g.stderr and "zero" in g.stderr.lower()
+          and "failIfNoSpecifiedTests=true" in g.stderr, g.stderr[:400])
+    g = transition(r, "51")
+    check("acceptance-gate BARRA a ida para done com baseline EMPTY", g.returncode == 2,
+          g.stderr[:200])
+    g = transition(r, "31")
+    check("acceptance-gate DEIXA o card voltar para in_progress com baseline EMPTY",
+          g.returncode == 0, g.stderr[:200])
+
+    f = cepa_plan(r, "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", ".")
+    check("cepa-plan finish --status done RECUSA com baseline EMPTY",
+          f.returncode != 0, f"exit={f.returncode} out={f.stdout[:200]}")
+    check("…e a recusa nomeia o build vazio",
+          "EMPTY" in f.stderr and "zero" in f.stderr.lower(), f.stderr[:400])
+    f = cepa_plan(r, "finish", "fila", "B", "--status", "blocked",
+                  "--evidence", "travou no build vazio", "--repo", ".")
+    check("cepa-plan finish --status blocked ACEITA com baseline EMPTY",
+          f.returncode == 0, f.stderr[:300])
+    f = cepa_plan(r, "finish", "fila", "B", "--status", "pending",
+                  "--evidence", "volta para a fila", "--repo", ".")
+    check("cepa-plan finish --status pending ACEITA com baseline EMPTY",
+          f.returncode == 0, f.stderr[:300])
+
+    # Um verde de verdade depois libera as duas portas.
+    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_COM_TESTE)
+    g = transition(r, "41")
+    check("depois de verde com teste, acceptance-gate libera in_review",
+          g.returncode == 0, g.stderr[:200])
+    f = cepa_plan(r, "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", ".")
+    check("depois de verde com teste, cepa-plan finish --status done aceita",
+          f.returncode == 0, f.stderr[:300])
 
 print("\n# prompts — 'o comando de aceite passou' só vale com N > 0")
 for rel in ("build-hex/agents/proof-reviewer.md", "common/agents/completion-auditor.md"):
