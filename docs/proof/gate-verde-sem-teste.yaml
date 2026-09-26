@@ -1,0 +1,135 @@
+schema_version: 2
+card: gate-verde-sem-teste
+verdict: proven
+reviewed_at: 2026-09-25T21:55:00-03:00
+base_commit: 55e9b62
+head_commit: 9eef3a4
+issue_type: Feature
+repo_kind: harness            # NOT Quarkus/Maven — este repo é o próprio cepa: hooks Python + prosa de agentes/comandos, teste próprio tests/test_verde_sem_teste.py
+scope:
+  changed_classes:
+    - class: "common/hooks/capture-build-result.py (refine_empty/count_tests_run/has_test_filter — terceiro estado EMPTY)"
+      module: hook
+      external_observable: true    # a superfície externa é a decisão que chega em .claude/last-build.json e daí ao gate-advance/wrap-up/worktree-merge
+      substituted_by_double: null
+    - class: "common/hooks/gate-advance.py (bloqueio de git commit/push quando status == EMPTY)"
+      module: hook
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/commands/worktree-merge.md (green-gate recusa EMPTY, não só STALE/FAILURE)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/commands/wrap-up.md (green-gate recusa EMPTY, não só STALE/FAILURE)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+    - class: "build-hex/agents/proof-reviewer.md (verdict routing exige N > 0 testes executados; EMPTY nunca é verde)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/agents/completion-auditor.md (evidence: verified exige N > 0 testes executados)"
+      module: prompt
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/bin/cepa-doctor, common/bin/cepa-metrics (nomeiam EMPTY nos relatórios)"
+      module: cli
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); perturbação manual via git checkout/Write em worktree descartável é o único mecanismo aplicável, como nos cards anteriores da mesma série (topologia-do-cepa.yaml)."
+    perturbation:
+      status: pass
+      results:
+        - "regressão-no-base: trazendo as versões de 55e9b62 (pré-mudança) dos 9 arquivos tocados para dentro do worktree em HEAD 9eef3a4 e rodando tests/test_verde_sem_teste.py → 19 falhas (todas as asserções de EMPTY, do bloqueio do commit e das duas menções em prosa). Confirma que o teste de HEAD de fato depende do código de HEAD, não passa vazio contra o código antigo."
+        - "P1 — count_tests_run() sempre retorna 1 (contagem nunca zero): 14 asserções foram para FAIL (maven/pytest/go/jest vazios viraram SUCCESS; gate-advance parou de bloquear commit/push) — RED confirmado, restaurado."
+        - "P2 — regex do filtro maven (-Dtest=/-Dit.test=) trocada por um padrão que nunca casa: 9 asserções foram para FAIL (maven deixa de ser reconhecido como filtrado, volta a SUCCESS mesmo com zero testes; gate-advance libera commit/push) — RED confirmado, restaurado."
+        - "P3 — gate-advance.py: status EMPTY movido para o mesmo early-exit de SUCCESS (sys.exit(0)): 4 asserções foram para FAIL (commit e push com baseline EMPTY deixam de ser barrados, mensagem de correção desaparece) — RED confirmado, restaurado."
+        - "P4 — worktree-merge.md: linha do green-gate reescrita para citar só STALE/FAILURE (sem EMPTY): 1 asserção foi para FAIL ('recusa EMPTY no green-gate') — RED confirmado, restaurado."
+        - "P5 — wrap-up.md: as duas linhas do green-gate (bullet de topo + L4) reescritas para citar só STALE/FAILURE: 1 asserção foi para FAIL — RED confirmado, restaurado."
+        - "P6 — common/agents/completion-auditor.md: bullet 'N > 0 testes executados' + menção a EMPTY substituídos por uma nota de perturbação: 1 asserção foi para FAIL ('exige N > 0 testes executados') — RED confirmado, restaurado."
+        - "P7 — build-hex/agents/proof-reviewer.md: mesmo tratamento no bloco de verdict routing (item 1 da UNPROVEN routing) — 1 asserção foi para FAIL — RED confirmado, restaurado."
+        - "ACHADO DE ROBUSTEZ (não bloqueia o veredito): os 3 regexes específicos de marcador-zero (pytest 'no tests ran'/'deselected', go '[no tests to run]', jest 'No tests found') NÃO são individualmente load-bearing — quebrar os três ao mesmo tempo não produziu nenhum RED, porque count_tests_run() já cai no ramo 'n is None' quando o regex não casa, e refine_empty() trata None do mesmo jeito que 0 (ambos viram EMPTY). O comportamento observável (nunca SUCCESS com zero teste) não regride; só a mensagem de motivo fica genérica em vez de nomear o marcador exato."
+      run: >-
+        worktree descartável /private/tmp/claude-501/.../proof-gate-verde
+        (git worktree add --detach 9eef3a4). GREEN de partida confirmado
+        primeiro: `python3 tests/test_verde_sem_teste.py` → "all verde-sem-teste
+        tests passed" (exit 0), tanto no worktree principal quanto no
+        descartável. Regressão-no-base confirmada com `git -C <worktree>
+        checkout 55e9b62 -- <9 arquivos>` seguido do mesmo comando → 19
+        failure(s) listadas. Cada uma das 7 perturbações (P1-P7) aplicada via
+        Write (conteúdo completo do arquivo, sem sed/python3 -c/redirecionamento
+        de shell) dentro do worktree descartável, depois
+        `python3 tests/test_verde_sem_teste.py` exigindo pelo menos uma linha
+        "FAIL" (exit != 0), depois `git -C <worktree> checkout HEAD -- <arquivo>`
+        para restaurar antes da perturbação seguinte. GREEN final confirmado de
+        novo ("all verde-sem-teste tests passed") e `git status --short` vazio
+        no worktree antes de removê-lo com `git worktree remove --force`.
+        NOTA sobre o hook path-lock: um primeiro `git -C` funcionou sem
+        problema; uma tentativa anterior usando `cd "$WT" && git checkout ...`
+        com variável de shell foi bloqueada pelo bash-path-lock do build-hex
+        (a variável não foi resolvida internamente pelo hook, então os alvos
+        relativos foram avaliados contra a raiz da árvore principal em vez do
+        worktree descartável — falso positivo). Contornado usando `git -C
+        <caminho-absoluto>` (sem variável, sem cd inline), que não aciona esse
+        caso. Nenhuma edição foi feita no hook nem na árvore principal.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (não há coverage tool wired neste repo Python): as 7
+      perturbações cobrem toda decisão nova do card — contagem de testes
+      executados nunca é fixa/sempre-positiva, detecção do filtro maven
+      -Dtest=, o bloqueio de commit/push pelo gate-advance quando EMPTY, e as
+      quatro menções em prosa (worktree-merge, wrap-up, completion-auditor,
+      proof-reviewer) que dependem da palavra EMPTY estar presente e correta.
+      Nenhuma ficou verde ao ser quebrada, exceto os 3 regexes de marcador-zero
+      cobertos pelo achado de robustez acima (justificadamente: o fallback
+      None→EMPTY já cobre o caso).
+  l4_adversarial_input:
+    status: clean
+    findings: []
+    reason: >-
+      Testado contra as saídas realistas pedidas — nenhuma classificou errado:
+      (1) maven multi-módulo com um módulo 'Tests run: 0' e outro 'Tests run: 3'
+      (MAVEN_COM_TESTE tem duas linhas 'Tests run:' repetidas, por-classe +
+      Results): count_tests_run() usa max(a-s for a,s in runs), não soma
+      módulos, pega o maior — um módulo real com testes classifica SUCCESS
+      corretamente. (2) pytest '2 passed, 3 deselected' (PYTEST_COM_TESTE): a
+      soma 'passed'+'failed' vence antes do fallback de deselected —
+      corretamente SUCCESS com tests_run=2. (3) surefire
+      failIfNoSpecifiedTests=true (build falha de verdade, não passa vazio):
+      fora do escopo do EMPTY por desenho — sai com marcador BUILD FAILURE,
+      cai no caminho FAILURE normal do classify(), nunca chega em
+      refine_empty() (que só atua sobre status == SUCCESS). (4) jest com tudo
+      'skipped' (JEST_TUDO_PULADO: 14 skipped, 14 total, sem 'passed'): a
+      regex 'Tests:' captura a linha, mas nem 'passed' nem 'failed' casam →
+      soma 0 → EMPTY, correto. Nenhum desses cenários produziu um SUCCESS
+      falso nem um bloqueio indevido.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature (item de fila do BACKLOG.md), não Bug — não há regressão point-in-time a reproduzir na base; a 'regressão' aqui é estrutural (L3, ver acima), não um bug report."
+routing_reason: >-
+  As 4 travas nomeadas pelo BACKLOG (capture-build-result classifica EMPTY,
+  gate-advance bloqueia commit/push em EMPTY, os consumidores em prosa
+  recusam EMPTY, os prompts de proof-reviewer/completion-auditor exigem N > 0)
+  foram cada uma quebrada de fato na árvore real dentro de um worktree
+  descartável (7 perturbações, P1-P7), e em todas o teste mecânico
+  tests/test_verde_sem_teste.py foi para RED — depois restaurado e a suíte
+  confirmada GREEN de novo. A regressão-no-base (código de 55e9b62 + teste de
+  9eef3a4 → 19 falhas) confirma que o teste realmente amarra no código novo,
+  não passa por coincidência. L4 adversarial rodou contra as saídas realistas
+  pedidas (maven multi-módulo, "N passed, M deselected", jest tudo pulado,
+  failIfNoSpecifiedTests=true) e todas classificam corretamente — L4: clean.
+  ÚNICO ACHADO DE ROBUSTEZ (não bloqueia, reportado em L3): os 3 regexes de
+  marcador-zero específicos por ferramenta (pytest/go/jest) são redundantes
+  frente ao fallback "sem contagem reconhecida → EMPTY" — quebrá-los não
+  produz SUCCESS falso, só perde a precisão da mensagem de motivo. Nenhum
+  nível ficou assumed/skipped/gap/survived/findings no que decide o veredito.
+  PROVEN.
