@@ -1,27 +1,29 @@
 schema_version: 2
 card: catalogo-guarda-mecanica
-verdict: needs-human
-reviewed_at: 2026-09-25T22:55:00-03:00
+verdict: proven
+reviewed_at: 2026-09-25T21:53:15-03:00
 base_commit: f5c8d00
-head_commit: 39ab099
+head_commit: 55e9b62
 issue_type: Feature
 repo_kind: harness             # NAO Quarkus/Maven — este repo e o proprio cepa: Python CLIs + prompt files, suite propria tests/run-all.sh
 notes: >-
-  Terceira rodada. Rodada 1 (a10f6f9, base f5c8d00, head 340eb6a): NEEDS-HUMAN
-  — mencao solta em prosa substituindo a linha da tabela passava verde. Rodada
-  2 (ab1ff16, head 46ee306): o fix daquele gap trouxe um gap novo — uma linha
-  de tabela identica escondida dentro de um comentario HTML `<!-- -->` tambem
-  passava verde, porque o regex ancorado por linha nao sabe que aquele trecho
-  esta comentado. NEEDS-HUMAN de novo. Esta rodada reprova o fix do gap da
-  rodada 2 (commit 39ab099, diff 46ee306..39ab099 em
-  tests/test_catalogo_comandos.py): `faltando()` agora chama `re.sub(r"<!--.*?-->", "", texto, flags=re.S)`
-  antes do regex ancorado, removendo qualquer trecho comentado do texto que o
-  guard varre. Confirma o fechamento com perturbacao real (nao so o
-  autoteste embutido no proprio arquivo) e procura de novo por qualquer outro
-  jeito de "documentar" um comando sem uma linha de catalogo de verdade.
+  Quarta rodada. Rodada 1 (a10f6f9, head 340eb6a): NEEDS-HUMAN — mencao solta
+  em prosa passava verde. Rodada 2 (ab1ff16, head 46ee306): fix da rodada 1
+  trouxe gap novo — linha real escondida dentro de comentario HTML `<!-- -->`
+  tambem passava verde. Rodada 3 (341bded, head 39ab099): fix da rodada 2
+  fechou o comentario HTML, mas achou (L4) um gap da mesma familia — linha
+  real dentro de um bloco de codigo cercado por tres crases (``` ```) tambem
+  escapava do pre-processamento, porque este so removia comentario HTML.
+  NEEDS-HUMAN de novo, com recomendacao explicita de fechar (troca trivial).
+  Esta rodada prova o fix do gap da rodada 3 (commit 55e9b62, diff
+  39ab099..55e9b62 em tests/test_catalogo_comandos.py): `faltando()` agora
+  aplica um segundo `re.sub` que remove blocos cercados por ``` ou ~~~
+  (`re.sub(r"^(```|~~~).*?^\1[^\n]*$", "", visivel, flags=re.S | re.M)`)
+  depois de remover comentarios HTML, antes do regex ancorado por linha da
+  tabela.
 scope:
   changed_classes:
-    - class: "tests/test_catalogo_comandos.py (faltando(): comentario HTML e removido do texto antes do regex de linha de tabela)"
+    - class: "tests/test_catalogo_comandos.py (faltando(): bloco cercado por ``` ou ~~~ e removido do texto antes do regex de linha de tabela, alem do comentario HTML ja removido na rodada anterior)"
       module: test
       external_observable: true
       substituted_by_double: null
@@ -36,92 +38,60 @@ levels:
     perturbation:
       status: pass
       results:
-        - "GREEN de partida — antes de qualquer perturbacao, `python3 tests/test_catalogo_comandos.py` na arvore em 39ab099: 9/9 ok (a 9a linha nova e o autoteste 'linha dentro de comentario HTML nao conta', que o proprio commit acrescentou), 'tudo ok (63 comandos no catalogo)', exit 0."
-        - "P4 (o gap exato da rodada 2, reproduzido na arvore real de docs/commands.md, nao so no autoteste do arquivo de teste) — apaguei a linha de tabela real de /build-solo:plan-build-validate e recriei a MESMA linha dentro de um comentario HTML (`<!--\\n| ... |\\n-->`) no fim do arquivo: o teste foi para FAIL citando exatamente /build-solo:plan-build-validate como fora do catalogo — RED confirmado. Restaurado, GREEN de novo (9/9, exit 0)."
-        - "P2 (reconfirmacao do gap da rodada 1, para garantir que o fix desta rodada nao reabriu o anterior) — apaguei so a linha de tabela de /common:spec (linha 149 em docs/commands.md), sem tocar em nenhuma outra mencao: FAIL citando /common:spec fora do catalogo — RED confirmado. Restaurado, GREEN de novo."
-        - "Achado L4 (ver l4_adversarial_input abaixo) — apaguei a linha real de /build-solo:plan-build-validate e recriei a mesma linha dentro de um bloco de codigo cercado por tres crases (``` ... ```) no fim do arquivo: o teste continuou GREEN (9/9, exit 0). O regex ancorado por linha nao sabe distinguir uma linha de tabela dentro de um bloco de codigo de uma linha de tabela viva — mesma familia de bug da rodada 2, mas o fix deste commit so tratou comentario HTML. Restaurado, GREEN de novo."
+        - "GREEN de partida — worktree descartavel fora da arvore principal, `git worktree add --detach 55e9b62` em /private/tmp/claude-501/.../scratchpad/proof-catalogo-r4: `python3 tests/test_catalogo_comandos.py` 11/11 ok (as 2 linhas novas do commit: 'linha dentro de bloco de codigo nao conta' cobrindo ``` e ~~~, e 'bloco de codigo antes nao engole a tabela depois dele'), 'tudo ok (63 comandos no catalogo)', exit 0."
+        - "P-crases (o gap exato apontado como L4 findings na rodada 3, reproduzido na arvore real de docs/commands.md, nao so no autoteste do arquivo de teste) — apaguei a linha real de /build-solo:plan-build-validate e recriei a MESMA linha dentro de um bloco cercado por tres crases no fim do arquivo: o teste foi para FAIL citando exatamente /build-solo:plan-build-validate fora do catalogo — RED confirmado."
+        - "P-til (mesmo gap, marcador ~~~ em vez de ```, para garantir que o fix nao tratou so um dos dois marcadores) — restaurei o arquivo (md5 identico ao original antes desta perturbacao), apaguei de novo a mesma linha e recriei dentro de um bloco cercado por ~~~: o teste foi para FAIL citando o mesmo comando fora do catalogo — RED confirmado."
+        - "Restauracao final — reescrevi docs/commands.md com o conteudo original (md5 2439ec22e4843892b0216f31ac315e51, identico ao de antes de qualquer perturbacao) e rodei o teste de novo: GREEN, 11/11, 'tudo ok (63 comandos no catalogo)', exit 0. `git diff --stat` vazio na worktree descartavel."
+        - "Reconfirmacao das rodadas 1-3 — os proprios autotestes embutidos em tests/test_catalogo_comandos.py ('mencao solta em prosa nao conta', 'linha dentro de comentario HTML nao conta') continuaram OK em todas as execucoes acima; nenhuma das perturbacoes desta rodada tocou o pre-processamento de comentario HTML nem a deteccao de prosa solta, e o resultado consistente confirma que o fix desta rodada nao reabriu nenhum dos gaps anteriores."
+        - "Checagem de nao-engolir linha real (pedida explicitamente pelo escopo desta rodada, via script Python isolado que importa faltando() do arquivo de teste real na worktree, sem tocar docs/commands.md) — (1) fence aberto (```) sem fechamento em lugar nenhum do texto, com a linha real depois dele: faltando() == [] (linha CONTINUA contada — o regex exige marcador de fechamento e nao apaga nada quando ele nao existe, entao nao ha engolicao por acidente); (2) bloco cercado fechado ANTES de uma linha real nao relacionada: faltando() == [] (linha real intacta); (3) bloco cercado fechado contendo uma linha FALSA de um comando diferente + linha REAL de outro comando depois: faltando(['/common:x','/common:y']) == ['/common:y'] — a falsa dentro do bloco corretamente NAO conta (e o proprio objetivo do fix) e a real fora dele continua contando. Nenhum dos tres casos e um bypass; sao verificacoes de que o fix nao ficou guloso."
+        - "Verificacao no arquivo real (nao perturbado) — docs/commands.md hoje nao contem nenhum bloco cercado por ``` ou ~~~ (grep vazio), entao o novo re.sub e estruturalmente incapaz de remover conteudo real neste estado do arquivo; a suite roda 63/63 comandos contados, mesmo numero de antes do commit."
       run: >-
         worktree descartavel fora da arvore principal (`git worktree add
-        --detach 39ab099` em
-        /private/tmp/claude-501/.../scratchpad/proof-catalogo-guarda-mecanica-3).
-        Cada perturbacao foi feita reescrevendo docs/commands.md por inteiro
-        com a ferramenta Write (nunca sed -i/cat>/heredoc — bash-path-lock
-        bloqueia essas construcoes mesmo dentro da worktree descartavel,
-        inclusive `git checkout -- <arquivo>` para restaurar, entao a
-        restauracao tambem foi feita via Write com o conteudo original lido
-        antes de qualquer perturbacao). Depois de cada perturbacao,
-        `python3 tests/test_catalogo_comandos.py` (exigindo o resultado
-        declarado) e depois a restauracao com nova rodada do teste exigindo
-        GREEN antes de seguir para a proxima perturbacao. `git status
-        --porcelain` e `git diff --stat` vazios na worktree ao final, antes
-        de `git worktree remove --force`. Nenhuma edicao foi feita no hook
-        nem na arvore principal.
+        --detach 55e9b62` em
+        /private/tmp/claude-501/-Users-alegomes-cepa-worktrees-cepa-drain-backlog/cb72278a-89e9-406b-b6db-54f4c6d41ea2/scratchpad/proof-catalogo-r4,
+        removida com `git worktree remove --force` ao final). Cada
+        perturbacao foi feita reescrevendo docs/commands.md por inteiro com a
+        ferramenta Write (nunca sed -i/cat>/heredoc — bash-path-lock bloqueia
+        essas construcoes mesmo dentro da worktree descartavel, inclusive
+        `cp`/`git checkout --` via Bash para restaurar; a restauracao foi
+        feita via Write com o conteudo original, conferido por `md5` igual ao
+        de antes de qualquer perturbacao). Depois de cada perturbacao,
+        `python3 tests/test_catalogo_comandos.py` exigindo o resultado
+        declarado, e nova rodada exigindo GREEN apos restaurar antes de seguir
+        para a proxima perturbacao. `git diff --stat` vazio na worktree ao
+        final, antes de `git worktree remove --force`. Nenhuma edicao foi
+        feita no hook nem na arvore principal.
   l2_coverage:
     status: pass
     uncovered_lines: []
     run: >-
       leitura estrutural (nao ha coverage tool wired neste repo Python): a
-      unica mudanca do diff 46ee306..39ab099 e a linha `re.sub(r"<!--.*?-->",
-      ...)` dentro de `faltando()` mais o autoteste novo que a exercita. A
-      perturbacao P4 cobre exatamente essa linha na arvore real (nao so no
-      autoteste) e ela nao ficou verde ao ser quebrada.
+      unica mudanca de producao do diff 39ab099..55e9b62 e a linha
+      `visivel = re.sub(r"^(```|~~~).*?^\1[^\n]*$", "", visivel, flags=re.S | re.M)`
+      dentro de `faltando()`, mais os dois autotestes novos que a exercitam.
+      As perturbacoes P-crases e P-til cobrem exatamente essa linha na
+      arvore real (nao so no autoteste) e nenhuma delas ficou verde ao ser
+      quebrada.
   l4_adversarial_input:
-    status: findings
-    reason: >-
-      o diff continua abrindo a mesma superficie de entrada da rodada
-      anterior: o teste consome docs/commands.md como texto livre com um
-      regex ancorado por linha depois de um pre-processamento que remove só
-      comentarios HTML. Testei se existe outro jeito de mascarar uma linha
-      de tabela viva que o pre-processamento atual nao cobre.
-    findings:
-      - >-
-        GAP NAO FECHADO POR ESTE COMMIT (mesma familia do gap da rodada 2,
-        mecanismo de disfarce diferente) — uma linha de tabela real dentro
-        de um bloco de codigo cercado por tres crases (```` ``` ````) tambem
-        passa pelo regex ancorado por linha sem ser filtrada, porque o
-        pre-processamento novo so remove `<!-- -->`, nao blocos de codigo.
-        Reproduzido e revertido na arvore real (ver a perturbacao "Achado L4"
-        na secao l3 acima): apagar a linha real e recria-la dentro de um
-        bloco cercado manteve o teste 100% verde.
-        Avaliacao de risco para o humano decidir (nao decido isso sozinho):
-        ao contrario do comentario HTML (que fica INVISIVEL no markdown
-        renderizado — GitHub, VS Code preview etc. — e por isso e um jeito
-        plausivel de "sumir" uma linha sem ninguem notar), uma linha de
-        tabela dentro de um bloco cercado aparece no render como texto
-        pre-formatado quebrado e feio: qualquer um que abra o preview do
-        arquivo notaria o bloco de codigo estranho imediatamente. Minha
-        leitura e que nao e um jeito realista de um comando escapar do
-        catalogo por acidente ou por um "veja tambem" descuidado — exigiria
-        alguem deliberadamente cercar uma linha de tabela em tres crases,
-        sem motivo de autoria plausivel. Recomendo fechar mesmo assim, e ja,
-        porque o custo e trivial: adicionar
-        `texto = re.sub(r"\`\`\`.*?\`\`\`", "", texto, flags=re.S)` ao lado
-        da linha de comentario HTML em faltando() (mesmo padrao usado para o
-        comentario HTML), sem novo ciclo de rodada. Mas a decisao de aceitar
-        o risco como esta ou exigir o fechamento antes de fechar o card e do
-        humano — o guard mecanico (proof-verdict-guard.py) bloqueia
-        `verdict: proven` sempre que L4 tem findings, e essa regra nao e
-        minha para contornar mesmo quando julgo o achado de baixo risco.
+    status: clean
+    reason: ""
+    findings: []
   bugfix_regression_red_at_base:
     status: n/a
     run: "issue_type Feature, nao Bug — nao ha regressao a reproduzir na base"
 routing_reason: >-
-  O gap que gerou o NEEDS-HUMAN da rodada 2 (linha de tabela real escondida
-  dentro de um comentario HTML) esta fechado: a perturbacao "P4" reproduziu o
-  cenario exato na arvore real de docs/commands.md (nao so no autoteste
-  dentro do proprio arquivo de teste) e o guard foi para RED citando o
-  comando certo. A perturbacao "P2" reconfirma que o gap da rodada 1 (mencao
-  solta em prosa) continua fechado e nao foi reaberto por este fix. A busca
-  por "mais algum jeito remanescente" achou um gap real da mesma familia
-  (bloco de codigo cercado por tres crases tambem escapa do
-  pre-processamento) — documentado em l4_adversarial_input.findings com
-  minha avaliacao de que e baixo risco (visivel no render, sem motivo de
-  autoria plausivel) e recomendacao de fechar mesmo assim, ja que o custo e
-  trivial. Mas a definicao do proof-reviewer e mecanica aqui: achado de L4
-  bloqueia `proven` estruturalmente, e o proof-verdict-guard.py recusa
-  gravar `verdict: proven` ao lado de um `l4_adversarial_input.status:
-  findings` — nao e uma decisao minha para pesar, e a politica que existe
-  justamente para eu nao autocertificar um "achado de baixo risco" como se
-  fosse aceitavel. Veredito mecanico da rota: NEEDS-HUMAN, com recomendacao
-  explicita de fechar o gap do bloco cercado (troca trivial) e voltar para
-  nova rodada, ou o humano aceitar o risco e liberar manualmente.
+  O gap apontado como L4 findings na rodada 3 (linha de tabela real dentro de
+  um bloco cercado por tres crases escapando do pre-processamento) esta
+  fechado: as perturbacoes P-crases e P-til reproduziram o cenario exato
+  (ambos os marcadores, ``` e ~~~) na arvore real de docs/commands.md — nao
+  so no autoteste dentro do proprio arquivo de teste — e o guard foi para RED
+  citando o comando certo nas duas vezes. A busca extra por engolicao
+  indevida (fence aberto sem fechamento, fence fechado antes de uma linha
+  real nao relacionada, fence fechado contendo uma linha falsa de outro
+  comando) nao achou nenhum caso em que uma linha real deixasse de ser
+  contada — o novo re.sub so remove o que esta genuinamente dentro de um par
+  de marcadores fechado, nunca o resto do texto. O arquivo real hoje nao
+  contem nenhum bloco cercado, entao o fix e estruturalmente inofensivo ao
+  catalogo atual (63/63 continuam contados). Nenhum finding novo de L4 nesta
+  rodada. Todos os niveis aplicaveis passaram com evidencia verificada:
+  PROVEN.
