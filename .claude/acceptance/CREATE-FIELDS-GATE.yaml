@@ -1,0 +1,139 @@
+key: CREATE-FIELDS-GATE
+status: complete
+audited_at: "2026-09-25"
+auditor: completion-auditor
+scope:
+  - board-flow/.claude-plugin/plugin.json
+  - board-flow/agents/atlassian-expert.md
+  - common/.claude-plugin/plugin.json
+  - common/hooks/jira-create-fields-gate.py
+  - tests/test_jira_create_fields_gate.py
+  - tests/test_atlassian_expert_spec.py
+
+criteria:
+  - id: AC1
+    text: >
+      Uma criação de card sem os required_fields do board-flow.yaml é barrada
+      antes de chegar ao Jira, por qualquer caminho: twg jira workitem create
+      (Bash), MCP local (jira_create_issue, jira_batch_create_issues), MCP da
+      nuvem (createJiraIssue), REST cru (twg api POST /issue).
+    altitude: process
+    surface: >
+      common/hooks/jira-create-fields-gate.py rodado como processo, recebendo
+      o payload de PreToolUse via stdin (mesmo contrato usado em produção).
+    test: tests/test_jira_create_fields_gate.py
+    layer: hook-subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_jira_create_fields_gate.py -> "todos passaram"
+      (33 checks, incluindo: chamada de 22/09 sem campos BLOQUEIA [MCP local],
+      MCP da nuvem createJiraIssue, lote jira_batch_create_issues aponta o
+      card errado, twg jira workitem create sem --field BLOQUEIA, twg api
+      POST /issue BLOQUEIA "REST cru", twg api GET passa)
+    status: complete
+
+  - id: AC2
+    text: Vale para qualquer agente e para a sessão principal (em todos os modos).
+    altitude: process
+    surface: payload PreToolUse com e sem agent_type (sessão principal = sem agent_type).
+    test: tests/test_jira_create_fields_gate.py ("sessão principal sem campo BLOQUEIA")
+    layer: hook-subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_jira_create_fields_gate.py -> linha "ok  sessão
+      principal sem campo BLOQUEIA" (run() chamado com agent_type=None,
+      rc==2). O hook não lê agent_type no código-fonte (confirmado por
+      leitura de common/hooks/jira-create-fields-gate.py), então o
+      comportamento independe do chamador.
+    status: complete
+
+  - id: AC3
+    text: >
+      O valor tem de bater com o do arquivo (Team de outro time é barrado), e
+      a sobrescrita por topologia é respeitada.
+    altitude: process
+    surface: comparação de valor via _norm() e resolução topologies.<ativa> vs defaults.
+    test: tests/test_jira_create_fields_gate.py ("Team de outro time BLOQUEIA",
+      "topologia discovery: só o Team dela basta",
+      "topologia discovery: Team do defaults BLOQUEIA")
+    layer: hook-subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_jira_create_fields_gate.py -> as 3 linhas "ok"
+      correspondentes, dentro do rodada única de "todos passaram".
+    status: complete
+
+  - id: AC4
+    text: >
+      O hook está ligado no plugin.json do common para os matchers certos
+      (Bash e mcp__.*(createJiraIssue|jira_create_issue|jira_batch_create_issues)).
+    altitude: config
+    surface: common/.claude-plugin/plugin.json -> hooks.PreToolUse
+    test: inspeção direta do JSON (script python inline)
+    layer: config
+    evidence: verified
+    run: >
+      python3 -c "..." sobre common/.claude-plugin/plugin.json ->
+      matcher: Bash / command: python3 "${CLAUDE_PLUGIN_ROOT}/hooks/jira-create-fields-gate.py"
+      matcher: mcp__.*(createJiraIssue|jira_create_issue|jira_batch_create_issues) / mesmo command.
+      Ambos os matchers pedidos estão presentes, apontando para o hook novo.
+    status: complete
+
+  - id: AC5
+    text: >
+      A spec do atlassian-expert diz que todo create leva os required_fields
+      mesmo quando a delegação não os cita, sem estourar o orçamento de
+      bytes (tests/test_atlassian_expert_spec.py).
+    altitude: doc/spec
+    surface: board-flow/agents/atlassian-expert.md, seção "Read project config first, every time".
+    test: tests/test_atlassian_expert_spec.py
+    layer: spec-regression
+    evidence: verified
+    run: >
+      python3 tests/test_atlassian_expert_spec.py -> "all green" (38 checks),
+      incluindo "ok  spec cabe em 17280 bytes (17271)" e
+      "ok  regra presente: todo create leva os required_fields".
+      Diff confirma a frase adicionada: "Every create sends every resolved
+      `required_fields` value verbatim (...), even if the delegation omits
+      them or forbids custom fields; `jira-create-fields-gate` blocks
+      creates without them."
+    status: complete
+
+  - id: AC6
+    text: >
+      Contra os board-flow.yaml reais em
+      ~/Insync/.../coding/wego/*/board-flow.yaml, a chamada de 22/09
+      (project_key WEGO, sem additional_fields) é barrada nos repos que
+      declaram required_fields.
+    altitude: process
+    surface: hook rodado com cwd apontando para cada repo real do WeGo (13 repos).
+    test: script inline (não versionado, rodado ad hoc pelo auditor) reproduzindo
+      a chamada exata do payload de 22/09 (WEGO-2303) contra cada board-flow.yaml real.
+    layer: hook-subprocess
+    evidence: verified
+    run: >
+      Rodada em 2026-09-25 contra os 13 board-flow.yaml reais:
+      wego-acesso-backend (WEGO, 2 required_fields) rc=2 BLOCKED;
+      wego-acesso-extension (WEGO, 2) rc=2 BLOCKED;
+      wego-acesso-frontend (WEGO, 2) rc=2 BLOCKED;
+      wego-agendamentos-backend (WEGO, 2) rc=2 BLOCKED;
+      wego-assinatura-backend (WEGO, 2) rc=2 BLOCKED;
+      wego-platform-commons (WEGO, 2) rc=2 BLOCKED;
+      wego-recebiveis-backend (WEGO, 2) rc=2 BLOCKED;
+      wego-tasy-gateway (WEGO, 2) rc=2 BLOCKED;
+      wego-conciliacao (project_key=EXAMPLE, 0 required_fields) rc=0 passou;
+      wego-contratos-backend (WEGO, 0 required_fields) rc=0 passou;
+      wego-contratos (WEGO, 0 required_fields) rc=0 passou;
+      wego-modelo-backend (WEGO, 0 required_fields) rc=0 passou;
+      wego-product (project_key=WGD, 0 required_fields) rc=0 passou.
+      Resultado bate com o critério: bloqueia exatamente nos 8 repos que
+      declaram required_fields para o projeto WEGO; os 5 sem required_fields
+      (ou de outro projeto) deixam passar, como esperado.
+    status: complete
+
+gaps: []
+
+notes: >
+  tests/test_cepa_until_adversarial.py falha, mas é falha preexistente à
+  mudança (citada como conhecida no pedido do auditor); não faz parte do
+  escopo desta auditoria e não foi rodada para este veredito.
