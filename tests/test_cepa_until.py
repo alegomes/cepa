@@ -446,6 +446,12 @@ def test_max_travados_configuravel_e_validado():
         p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-travados", "2"])
         check("--max-travados 2 para no 2º", len(chamadas) == 2,
               f"disparou {len(chamadas)}x")
+        check("o banner mostra o teto escolhido",
+              "fila travada: 2 itens `blocked` seguidos" in p.stdout,
+              p.stdout[:600])
+        largada = [e for e in ledger_de(raiz) if e.get("evento") == "run_start"]
+        check("o run_start registra o teto, para a análise da manhã",
+              largada and largada[-1].get("max_travados") == 2, str(largada))
 
 
 # ── 3. guardas de largada ───────────────────────────────────────────────────
