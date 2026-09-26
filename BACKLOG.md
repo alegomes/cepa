@@ -3587,3 +3587,48 @@ por um vigia no mesmo turno, é colhido.
 - Build sintético de 11 min em segundo plano com vigia: espera item `done` com o resultado
   colhido.
 - O mesmo sem vigia: espera bloqueio, como hoje.
+
+---
+
+## Fim do `cepa-until` sem intervenção do dono: vermelho que se resolve e aterrissagem por comando
+
+**Plano:** `cepa/until-fim-sem-dono`
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-until`, `common/bin/cepa-plan`,
+`common/commands/until-review.md`, `common/bin/cepa-doctor` · **Origem:** run `WEGO`
+`2026-09-26-1102` (WEGO-2320 marcado `blocked` por um teste que passou no build anterior do
+mesmo código); estratégia em `docs/estrategia-fim-do-cepa-until.md` (proposta, revisão do
+painel de 7 lentes e revisão 2 com as respostas do dono).
+
+### Problema
+
+No fim do run o dono não sabe o que fazer: as decisões ficam num arquivo, um card pronto
+aparece como "travado" por causa de um teste instável, e os commits de uma tentativa sem
+progresso ficam na branch da noite sem nunca passar pelo build do supervisor. O dono pediu
+zero intervenção para o vermelho e nada novo para lembrar.
+
+### Sequência (detalhes e critérios no documento)
+
+0. Medir quanto custa um segundo `./mvnw -B clean verify` e uma reexecução do
+   `CadastroComTagsE2ETest` na worktree de 26/09.
+1. **Garantia:** os commits de todas as tentativas de um item vão para a branch lateral, com
+   as duas checagens antes do `reset` (SHA ancestral do HEAD; nenhum outro `done` no meio).
+   Teste vermelho: item com duas tentativas, e a lateral precisa conter os commits das duas.
+2. **Estado do run e lista de ações** gravados antes da análise do modelo, impressos no fim do
+   terminal, lidos pelo `/common:until-review`; uma linha por item no resumo.
+3. **`cepa-until aterrissar <fila>/<run>`** como camada fina sobre os guardas do
+   `/common:worktree-merge` (decisão do dono, 26/09).
+4. **Vermelho que se resolve:** segundo build completo; verde fecha `done`; vermelho de novo
+   põe `FIX-<teste>` na frente da fila e devolve o item para `pending` bloqueado por ele;
+   registro de instabilidade entre runs; lateral consumida e apagada pelo próprio supervisor.
+5. Cabeçalho curto, caminhos relativos, custo no resumo; `/common:next` e `/common:doctor`
+   leem o estado do run.
+
+### Teste que falta
+
+- Build falso que falha uma vez e depois passa: espera item `done` e uma linha no registro de
+  instabilidade.
+- Build falso que falha duas vezes no mesmo teste: espera lateral com os commits de todas as
+  tentativas, `FIX-<teste>` na frente da fila e o item `pending` bloqueado por ele.
+- Próximo run com o `FIX-<teste>` `done`: espera cherry-pick da lateral antes do agente e a
+  lateral apagada quando o item fecha.
