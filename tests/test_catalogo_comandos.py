@@ -61,8 +61,10 @@ def faltando(cmds, texto):
     tabela e deixar a menção passava verde — e foi assim que o /common:spec
     ficou só com a linha da Parte 1.
     """
-    # Comentário HTML some na renderização: linha escondida nele não documenta.
+    # Comentário HTML some na renderização, e bloco de código vira texto cru:
+    # linha de tabela dentro de um deles não é linha do catálogo.
     visivel = re.sub(r"<!--.*?-->", "", texto, flags=re.S)
+    visivel = re.sub(r"^(```|~~~).*?^\1[^\n]*$", "", visivel, flags=re.S | re.M)
     return [
         c for c in cmds
         if c not in INTERNOS
@@ -102,6 +104,11 @@ def main():
           == [alvo])
     check("linha dentro de comentário HTML não conta",
           faltando([alvo], f"<!--\n| `{alvo}` | `[x]` | faz algo |\n-->") == [alvo])
+    check("linha dentro de bloco de código não conta",
+          faltando([alvo], f"```\n| `{alvo}` | `[x]` | faz algo |\n```") == [alvo]
+          and faltando([alvo], f"~~~md\n| `{alvo}` | `[x]` | faz algo |\n~~~") == [alvo])
+    check("bloco de código antes não engole a tabela depois dele",
+          faltando([alvo], f"```\nx\n```\n| `{alvo}` | `[x]` | faz algo |") == [])
     check("a linha da tabela conta",
           faltando([alvo], f"| `{alvo}` | `[x]` | faz algo |") == [])
 
