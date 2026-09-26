@@ -8,7 +8,7 @@
 # fecha — agente nenhum troca o texto por null por conta própria.
 #
 # Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor) + itens de 2026-09-24
-# Escrito em: 2026-09-25
+# Escrito em: (data não informada)
 
 schema_version: 2
 mode: single-track
@@ -869,6 +869,19 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: prova-descartavel-caminho-literal
+  title: proof-reviewer e ui-proof-reviewer usam caminho literal ou git -C na worktree
+    descartavel; bash-path-lock sugere isso ao negar variavel nao resolvida
+  why: 'com o cadeado novo (camada 1), ''cd "$WT" && git checkout'' e negado quando
+    $WT veio de outra chamada; caminho literal e git -C passam (conferido em 2026-09-26).
+    Os agentes de prova contornavam com python3 -c, o vetor do WEGO-1936. Aprovado
+    pelo dono em 2026-09-26. ( Posicao dada pelo dono em 2026-09-26: logo depois
+    do triagem-parcial-preserva-ordem, porque e pequeno e enquanto nao sai os agentes
+    de prova seguem esbarrando no cadeado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
 - id: board-flow-acha-cepa-plan-fora-do-cepa
   title: Comandos do board-flow acham o cepa-plan fora do repo cepa (hoje chamam
     python3 common/bin/cepa-plan, caminho relativo)
@@ -906,17 +919,6 @@ items:
     61,9% seguidos de retry com ''# stale-ok'' depois de install (docs/investigations/2026-09-25-stale-e-reactor-no-wego.md);
     quarkus:* quebra com -am (BACKLOG, adf873f). Antes de construir: conferir numa
     amostra de 10 bloqueios que o install veio depois da ultima edicao. Aprovado
-    pelo dono em 2026-09-26. (ainda não priorizado: entrou no fim da fila)'
-  status: pending
-  blocked_by: []
-  human_pending: null
-  evidence: null
-- id: prova-descartavel-caminho-literal
-  title: proof-reviewer e ui-proof-reviewer usam caminho literal ou git -C na worktree
-    descartavel; bash-path-lock sugere isso ao negar variavel nao resolvida
-  why: 'com o cadeado novo (camada 1), ''cd "$WT" && git checkout'' e negado quando
-    $WT veio de outra chamada; caminho literal e git -C passam (conferido em 2026-09-26).
-    Os agentes de prova contornavam com python3 -c, o vetor do WEGO-1936. Aprovado
     pelo dono em 2026-09-26. (ainda não priorizado: entrou no fim da fila)'
   status: pending
   blocked_by: []
