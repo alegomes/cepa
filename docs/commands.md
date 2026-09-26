@@ -155,6 +155,7 @@ topology is wired.
 | `/common:wrap-up` | `[--discard] [commit message]` | End-of-session one-shot behind a single confirmation: commits the session worktree, writes the handoff, then lands the branch (merge + push + prune). `--discard` throws a dead-end worktree away. Reuses `worktree-merge`'s guards. |
 | `/common:doctor` | `[--live] [--no-fix] [--projeto]` | Validates the install against reality in about 30 seconds: plugins enabled and at the installed version, hooks compiling, `board-flow.yaml` structure, build baseline, stale or orphaned worktrees, overdue handoffs. `--live` also checks `board-flow.yaml` against live Jira. |
 | `/common:metrics` | `[--days N \| --month YYYY-MM] [--repo <name>]` | Telemetry report on the harness itself, from `~/.claude/cepa-telemetry/`: sessions per repo, red-build rate, gate blocks by reason, proof verdicts, over-declared `proven` refused by the guard, and how many turns you spend before and after a routine. |
+| `/common:until-review` | `[<run>.jsonl \| latest] [--fila NOME]` | Reads a finished `cepa-until` run (the `.jsonl` record and the subprocess `.log`) and says what the owner must do next, as closed questions with a recommendation. Runs by itself at the end of every run (written to `<run>.review.md`) and by hand for an old run or one stopped by quota. Reads the mechanical digest from `cepa-until-digest`, never the whole `.log`. Read-only: no merge, no queue change, no Jira. |
 | `/common:modos` | `[mode-name]` | Shows the table of working modes (what each asks to enter, what it produces, what must be true to close) and marks the current session's mode. Read-only. |
 | `/common:advisors` | `<artifact> [--area=…] [--lentes=a,b,c]` | Advisor panel on a decision artifact (design doc, ADR, plan, PR): isolated parallel review lenses, then a synthesis that **names** the disagreements instead of averaging them. Runs before the decision is closed. |
 | `/common:prove-ui` | `[flow \| --all \| --draft]` | Proves the UI/extension surface through the mechanical gate: brings the app up, runs the flows declared in `docs/ui-proof.yaml` via Playwright and requires a verifiable backend effect. Returns PROVEN / UNPROVEN / NEEDS-HUMAN. `--draft` proposes a manifest skeleton. |
@@ -212,7 +213,12 @@ The generic 9-agent topology.
 
 ## build-solo
 
-No commands. Describe the task in chat; orchestrator dispatches
+| Command | Argument | What it does |
+|---|---|---|
+| `/build-solo:plan-build-validate` | `<task description>` | One well-scoped task: `pair-dev` implements, `pair-reviewer` reviews, the orchestrator runs the project's full test suite and commits. The flow `/common:autonomous-start` and `/common:drain-plan` dispatch to when `.claude/topology` says `build-solo`. |
+| `/build-solo:reproduce-fix-verify` | `<bug description, error message, or failing test>` | Bug-fix flow: `pair-dev` writes a failing regression test first, then the fix; `pair-reviewer` reviews; the orchestrator runs the full suite and commits. Where the same two commands send defects under `build-solo`. |
+
+Outside these flows, describe the task in chat; the orchestrator dispatches
 `pair-dev` then `pair-reviewer`.
 
 ## discovery
