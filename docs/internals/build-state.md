@@ -67,6 +67,22 @@ state. The fix is unproven until a new verify lands.
 Same shape as SUCCESS, with `status: FAILURE`. `tail` will include the
 failure surface.
 
+### EMPTY
+
+Same shape as SUCCESS, with `status: EMPTY`, `tests_run: 0` and a `reason`.
+Written when the command carries a **test filter** (`-Dtest=`/`-Dit.test=`,
+`pytest -k`, `go test -run`, jest `-t`/`--testNamePattern`), the run would
+classify SUCCESS, and the output shows zero tests executed (or no count at
+all). Origin: with `surefire.failIfNoSpecifiedTests=false`, a mistyped
+`-Dtest=` prints BUILD SUCCESS with no `Tests run:` line. EMPTY is never
+green: gate-advance blocks on it like FAILURE, and the two places that
+declare a card/item done refuse it too: `acceptance-gate.py` blocks a
+forward Jira transition (in_review/done or unresolved target, bounces
+allowed) even with a `complete` audit, and `cepa-plan finish --status done`
+exits 2 (blocked/pending still accepted). Both also refuse `STALE` with `last_known_status: EMPTY` (edited after the empty run, no new build; mark-build-stale carries `last_known_*` through STALE→STALE so a second edit keeps it), reading the baseline of the session's own worktree root, never the main clone. Unfiltered builds are not
+checked (a module with no tests is legitimate). A filtered SUCCESS also
+records `tests_run: N`.
+
 ### STALE
 
 ```json
@@ -233,6 +249,7 @@ control.
 | `SUCCESS` | exit 0 | exit 0 | exit 0 |
 | `STALE` | exit 0 | exit 2 | exit 2 |
 | `FAILURE` | exit 0 | exit 2 | exit 2 |
+| `EMPTY` | exit 0 | exit 2 | exit 2 |
 | missing | exit 0 | exit 0 + LOUD banner | exit 2 |
 
 The "missing baseline" row is the asymmetry that H1 + H2 introduced.

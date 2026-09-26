@@ -48,6 +48,14 @@ issue key from the tool input, looks for `.claude/acceptance/<KEY>.yaml`:
   - key not extractable          -> allow (can't gate meaningfully; never
                                     spuriously block a Jira transition)
 
+Build EMPTY (item `gate-verde-sem-teste`, 2026-09-25): before the artifact
+check, a forward move (enforced or unresolved target) is BLOCKED when the
+session root's `.claude/last-build.json` is `EMPTY` — a filtered test run that
+exited green with zero tests executed. That is the half of "a green with no
+test is not green" that gate-advance cannot see: gate-advance stops the
+commit, this stops the card being declared done. Independent of the artifact
+(a `complete` audit does not unlock it); bounces stay allowed.
+
 Exit codes:
   0 — allowed
   2 — blocked (stderr reaches the agent so it can self-correct)
@@ -131,6 +139,66 @@ def transition_map(cwd: Path) -> dict:
     return {}
 
 
+def resolve_target(mut: dict, tid: str | None, cwd: Path) -> str | None:
+    """Logical target status of the transition, or None when unresolvable."""
+    # Nome de status vindo da `twg` precisa virar chave lógica: "In Review"
+    # baixado de caixa dava `in review` e passava como movimento lateral.
+    if mut["target_status"]:
+        return J.logical_status(mut["target_status"], cwd)
+    return transition_map(cwd).get(tid) if tid else None
+
+
+def empty_build(cwd: Path) -> dict | None:
+    """The session's `.claude/last-build.json` when its status is EMPTY, or
+    STALE with `last_known_status: EMPTY` (edited after the empty run).
+
+    Unreadable or absent state is None: build greenness is gate-advance's job;
+    this gate only refuses the one state that LOOKS green and is not.
+    """
+    p = cwd / ".claude" / "last-build.json"
+    try:
+        state = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(state, dict):
+        return None
+    status = str(state.get("status", "")).upper()
+    if status == "EMPTY":
+        return state
+    # EMPTY seguido de edição de fonte: o mark-build-stale grava STALE e guarda
+    # o EMPTY em `last_known_status`. Nenhum build novo rodou, então o card
+    # continua sem teste executado — e agora nem o código é o mesmo.
+    if status == "STALE" and str(state.get("last_known_status", "")).upper() == "EMPTY":
+        return dict(state, _stale=True,
+                    command=state.get("last_known_command"),
+                    at=state.get("last_known_at"))
+    return None
+
+
+def block_empty(key: str, target: str | None, state: dict, cwd: Path):
+    alvo = target or "a forward status (target unresolved, enforced by default)"
+    stale = (
+        f"  The code changed since (last edit: {state.get('after_edit_to', '<unknown>')}),\n"
+        f"  and no build ran after it: the baseline is STALE on top of that EMPTY run.\n"
+        if state.get("_stale") else ""
+    )
+    print(
+        f"[acceptance-gate] BLOCKED: cannot move {key} to {alvo} — the last real build "
+        f"is EMPTY: the test filter in `{state.get('command') or '<unknown>'}` matched zero "
+        f"tests (recorded {state.get('at') or '<unknown time>'} in "
+        f"{cwd / '.claude' / 'last-build.json'}).\n"
+        f"{stale}"
+        f"  It exited green, but no test ran, so it proves nothing, and a card is not\n"
+        f"  done on it — whatever the acceptance artifact says.\n"
+        f"  Fix the test name in the filter (-Dtest= / -k / -run / -t) so it matches the\n"
+        f"  tests you mean and re-run it, or make the build fail on an empty filter\n"
+        f"  (Maven: -Dsurefire.failIfNoSpecifiedTests=true). A green run with N > 0 tests\n"
+        f"  clears this. Bouncing the card back (e.g. to in_progress) stays allowed.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -169,6 +237,18 @@ def main():
     cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
     artifact = cwd / ".claude" / "acceptance" / f"{key}.yaml"
 
+    tid = extract_transition_id(tool_input)
+    target = resolve_target(_mut, tid, cwd)
+
+    # Build filtrado que casou zero teste (EMPTY, gravado pelo
+    # capture-build-result) não declara card nenhum feito — com ou sem
+    # artefato de auditoria. Só a ida para frente é barrada; voltar o card
+    # continua livre, pelo mesmo motivo da direção abaixo.
+    if target is None or target in ENFORCED_TARGETS:
+        empty = empty_build(cwd)
+        if empty is not None:
+            block_empty(key, target, empty, cwd)
+
     if not artifact.exists():
         # No audit on disk yet (e.g. the To Do -> In Progress transition).
         # Nothing to enforce. The completion-auditor writes this file right
@@ -187,16 +267,8 @@ def main():
     if status == "complete":
         sys.exit(0)
 
-    # The audit is incomplete. Which way is this card moving?
-    tid = extract_transition_id(tool_input)
-    tmap = transition_map(cwd)
-    # Nome de status vindo da `twg` precisa virar chave lógica: "In Review"
-    # baixado de caixa dava `in review` e passava como movimento lateral.
-    if _mut["target_status"]:
-        target = J.logical_status(_mut["target_status"], cwd)
-    else:
-        target = tmap.get(tid) if tid else None
-
+    # The audit is incomplete. Which way is this card moving? (`target`,
+    # resolved above.)
     if target is not None and target not in ENFORCED_TARGETS:
         # Backward / lateral move (In Progress, To Do, Won't Do). Sending the
         # card back is precisely what an incomplete audit should cause — the

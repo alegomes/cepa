@@ -1,0 +1,97 @@
+schema_version: 2
+card: catalogo-guarda-mecanica
+verdict: proven
+reviewed_at: 2026-09-25T21:53:15-03:00
+base_commit: f5c8d00
+head_commit: 55e9b62
+issue_type: Feature
+repo_kind: harness             # NAO Quarkus/Maven — este repo e o proprio cepa: Python CLIs + prompt files, suite propria tests/run-all.sh
+notes: >-
+  Quarta rodada. Rodada 1 (a10f6f9, head 340eb6a): NEEDS-HUMAN — mencao solta
+  em prosa passava verde. Rodada 2 (ab1ff16, head 46ee306): fix da rodada 1
+  trouxe gap novo — linha real escondida dentro de comentario HTML `<!-- -->`
+  tambem passava verde. Rodada 3 (341bded, head 39ab099): fix da rodada 2
+  fechou o comentario HTML, mas achou (L4) um gap da mesma familia — linha
+  real dentro de um bloco de codigo cercado por tres crases (``` ```) tambem
+  escapava do pre-processamento, porque este so removia comentario HTML.
+  NEEDS-HUMAN de novo, com recomendacao explicita de fechar (troca trivial).
+  Esta rodada prova o fix do gap da rodada 3 (commit 55e9b62, diff
+  39ab099..55e9b62 em tests/test_catalogo_comandos.py): `faltando()` agora
+  aplica um segundo `re.sub` que remove blocos cercados por ``` ou ~~~
+  (`re.sub(r"^(```|~~~).*?^\1[^\n]*$", "", visivel, flags=re.S | re.M)`)
+  depois de remover comentarios HTML, antes do regex ancorado por linha da
+  tabela.
+scope:
+  changed_classes:
+    - class: "tests/test_catalogo_comandos.py (faltando(): bloco cercado por ``` ou ~~~ e removido do texto antes do regex de linha de tabela, alem do comentario HTML ja removido na rodada anterior)"
+      module: test
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "nao ha pitest neste repo (nao e Maven/JVM); perturbacao manual e o unico mecanismo aplicavel, mesmo padrao das rodadas anteriores da serie"
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida — worktree descartavel fora da arvore principal, `git worktree add --detach 55e9b62` em /private/tmp/claude-501/.../scratchpad/proof-catalogo-r4: `python3 tests/test_catalogo_comandos.py` 11/11 ok (as 2 linhas novas do commit: 'linha dentro de bloco de codigo nao conta' cobrindo ``` e ~~~, e 'bloco de codigo antes nao engole a tabela depois dele'), 'tudo ok (63 comandos no catalogo)', exit 0."
+        - "P-crases (o gap exato apontado como L4 findings na rodada 3, reproduzido na arvore real de docs/commands.md, nao so no autoteste do arquivo de teste) — apaguei a linha real de /build-solo:plan-build-validate e recriei a MESMA linha dentro de um bloco cercado por tres crases no fim do arquivo: o teste foi para FAIL citando exatamente /build-solo:plan-build-validate fora do catalogo — RED confirmado."
+        - "P-til (mesmo gap, marcador ~~~ em vez de ```, para garantir que o fix nao tratou so um dos dois marcadores) — restaurei o arquivo (md5 identico ao original antes desta perturbacao), apaguei de novo a mesma linha e recriei dentro de um bloco cercado por ~~~: o teste foi para FAIL citando o mesmo comando fora do catalogo — RED confirmado."
+        - "Restauracao final — reescrevi docs/commands.md com o conteudo original (md5 2439ec22e4843892b0216f31ac315e51, identico ao de antes de qualquer perturbacao) e rodei o teste de novo: GREEN, 11/11, 'tudo ok (63 comandos no catalogo)', exit 0. `git diff --stat` vazio na worktree descartavel."
+        - "Reconfirmacao das rodadas 1-3 — os proprios autotestes embutidos em tests/test_catalogo_comandos.py ('mencao solta em prosa nao conta', 'linha dentro de comentario HTML nao conta') continuaram OK em todas as execucoes acima; nenhuma das perturbacoes desta rodada tocou o pre-processamento de comentario HTML nem a deteccao de prosa solta, e o resultado consistente confirma que o fix desta rodada nao reabriu nenhum dos gaps anteriores."
+        - "Checagem de nao-engolir linha real (pedida explicitamente pelo escopo desta rodada, via script Python isolado que importa faltando() do arquivo de teste real na worktree, sem tocar docs/commands.md) — (1) fence aberto (```) sem fechamento em lugar nenhum do texto, com a linha real depois dele: faltando() == [] (linha CONTINUA contada — o regex exige marcador de fechamento e nao apaga nada quando ele nao existe, entao nao ha engolicao por acidente); (2) bloco cercado fechado ANTES de uma linha real nao relacionada: faltando() == [] (linha real intacta); (3) bloco cercado fechado contendo uma linha FALSA de um comando diferente + linha REAL de outro comando depois: faltando(['/common:x','/common:y']) == ['/common:y'] — a falsa dentro do bloco corretamente NAO conta (e o proprio objetivo do fix) e a real fora dele continua contando. Nenhum dos tres casos e um bypass; sao verificacoes de que o fix nao ficou guloso."
+        - "Verificacao no arquivo real (nao perturbado) — docs/commands.md hoje nao contem nenhum bloco cercado por ``` ou ~~~ (grep vazio), entao o novo re.sub e estruturalmente incapaz de remover conteudo real neste estado do arquivo; a suite roda 63/63 comandos contados, mesmo numero de antes do commit."
+      run: >-
+        worktree descartavel fora da arvore principal (`git worktree add
+        --detach 55e9b62` em
+        /private/tmp/claude-501/-Users-alegomes-cepa-worktrees-cepa-drain-backlog/cb72278a-89e9-406b-b6db-54f4c6d41ea2/scratchpad/proof-catalogo-r4,
+        removida com `git worktree remove --force` ao final). Cada
+        perturbacao foi feita reescrevendo docs/commands.md por inteiro com a
+        ferramenta Write (nunca sed -i/cat>/heredoc — bash-path-lock bloqueia
+        essas construcoes mesmo dentro da worktree descartavel, inclusive
+        `cp`/`git checkout --` via Bash para restaurar; a restauracao foi
+        feita via Write com o conteudo original, conferido por `md5` igual ao
+        de antes de qualquer perturbacao). Depois de cada perturbacao,
+        `python3 tests/test_catalogo_comandos.py` exigindo o resultado
+        declarado, e nova rodada exigindo GREEN apos restaurar antes de seguir
+        para a proxima perturbacao. `git diff --stat` vazio na worktree ao
+        final, antes de `git worktree remove --force`. Nenhuma edicao foi
+        feita no hook nem na arvore principal.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (nao ha coverage tool wired neste repo Python): a
+      unica mudanca de producao do diff 39ab099..55e9b62 e a linha
+      `visivel = re.sub(r"^(```|~~~).*?^\1[^\n]*$", "", visivel, flags=re.S | re.M)`
+      dentro de `faltando()`, mais os dois autotestes novos que a exercitam.
+      As perturbacoes P-crases e P-til cobrem exatamente essa linha na
+      arvore real (nao so no autoteste) e nenhuma delas ficou verde ao ser
+      quebrada.
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, nao Bug — nao ha regressao a reproduzir na base"
+routing_reason: >-
+  O gap apontado como L4 findings na rodada 3 (linha de tabela real dentro de
+  um bloco cercado por tres crases escapando do pre-processamento) esta
+  fechado: as perturbacoes P-crases e P-til reproduziram o cenario exato
+  (ambos os marcadores, ``` e ~~~) na arvore real de docs/commands.md — nao
+  so no autoteste dentro do proprio arquivo de teste — e o guard foi para RED
+  citando o comando certo nas duas vezes. A busca extra por engolicao
+  indevida (fence aberto sem fechamento, fence fechado antes de uma linha
+  real nao relacionada, fence fechado contendo uma linha falsa de outro
+  comando) nao achou nenhum caso em que uma linha real deixasse de ser
+  contada — o novo re.sub so remove o que esta genuinamente dentro de um par
+  de marcadores fechado, nunca o resto do texto. O arquivo real hoje nao
+  contem nenhum bloco cercado, entao o fix e estruturalmente inofensivo ao
+  catalogo atual (63/63 continuam contados). Nenhum finding novo de L4 nesta
+  rodada. Todos os niveis aplicaveis passaram com evidencia verificada:
+  PROVEN.

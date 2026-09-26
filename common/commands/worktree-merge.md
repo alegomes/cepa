@@ -68,7 +68,9 @@ session worktree, tell them to switch to the integration session/worktree first.
 
 5. **Green-gate the source.** Read `<worktree-path>/.claude/last-build.json`.
    Unless `<worktree-path>/.claude/no-build` exists, refuse to merge when the
-   session branch's last build status is `STALE` or `FAILURE` — landing a broken
+   session branch's last build status is anything other than `SUCCESS` —
+   `STALE`, `FAILURE`, or `EMPTY` (a filtered test run that matched zero tests:
+   green exit, nothing executed) — landing a broken
    branch onto your integration branch is exactly what green-or-revert exists to
    prevent. Tell the user to get the branch green in its own window first, then
    re-run. (If `last-build.json` is absent and there's no `no-build` marker, say

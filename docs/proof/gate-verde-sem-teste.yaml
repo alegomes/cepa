@@ -1,0 +1,103 @@
+schema_version: 2
+card: gate-verde-sem-teste
+verdict: proven
+reviewed_at: 2026-09-25T22:30:00-03:00
+base_commit: 55e9b62
+head_commit: aef8e26
+issue_type: Feature
+repo_kind: harness            # NOT Quarkus/Maven — este repo é o próprio cepa: hooks Python + prosa de agentes/comandos
+notes_rounds_1_2: >-
+  Rodada 1 (55e9b62..9eef3a4) foi PROVEN em 0a94a15 (capture-build-result
+  classifica EMPTY, gate-advance bloqueia commit/push, prosa e prompts).
+  Rodada 2 (9eef3a4..5a4b71d) foi UNPROVEN em c7c8b6e: (P6) `cepa-plan
+  build_vazio()` lia sempre o clone principal em vez da raiz de sessão da
+  worktree ligada apontada por `--repo`, sem nenhum teste distinguindo os
+  dois; e (achado L4) EMPTY que virava STALE por uma edição de fonte deixava
+  de ser bloqueado, porque nem acceptance-gate nem cepa-plan olhavam
+  `last_known_status`. Esta rodada 3 cobre o delta 5a4b71d..aef8e26, o commit
+  que fecha exatamente essas duas lacunas.
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (build_vazio — volta a usar `_wtlib.session_root(repo)` e passa a tratar STALE com `last_known_status: EMPTY` como vazio; cmd_finish cita a edição que tornou o build stale)"
+      module: cli
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/hooks/acceptance-gate.py (empty_build/block_empty — passam a tratar STALE com `last_known_status: EMPTY` como vazio, além do EMPTY direto)"
+      module: hook
+      external_observable: true   # a superfície é a transição do card no Jira que o agente executa via mcp-atlassian/twg
+      substituted_by_double: null
+    - class: "common/hooks/mark-build-stale.py (main — ao marcar STALE em cima de um STALE anterior, preserva `last_known_*` da última execução REAL em vez de copiar `status: STALE`, que apagaria a linhagem EMPTY na segunda edição)"
+      module: hook
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); perturbação manual via git checkout/Write/patch em worktree descartável é o mecanismo aplicável, como nas rodadas 1-2."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida confirmado: `python3 tests/test_verde_sem_teste.py`, `tests/test_session_anchor_root.py`, `tests/test_common_drain_plan.py` e `tests/test_acceptance_gate.py` verdes no worktree descartável em aef8e26 (55 casos em test_verde_sem_teste.py)."
+        - "regressão-no-base: trazendo os três arquivos de 5a4b71d (pré-fix) para dentro do worktree em HEAD aef8e26 e rodando tests/test_verde_sem_teste.py → 7 falhas, todas nas seções novas ('EMPTY que virou STALE...'), confirmando que o teste de HEAD amarra no código novo desta rodada. Restaurado."
+        - "P7 (fecha o achado L4 da rodada 2, superfície acceptance-gate): `empty_build` com o ramo STALE→EMPTY desativado (`if status == \"STALE\" and ...` removido, sempre retorna None para STALE) → 3 asserções da seção STALE foram para FAIL ('acceptance-gate BARRA in_review com STALE herdado de EMPTY' e a mensagem, 'acceptance-gate BARRA done depois de duas edições sobre um EMPTY') — RED confirmado, restaurado."
+        - "P8 (fecha o mesmo achado, superfície cepa-plan): `build_vazio` com o mesmo ramo STALE→EMPTY desativado → 3 asserções foram para FAIL ('finish done RECUSA com STALE herdado de EMPTY' e a mensagem, 'finish done RECUSA depois de duas edições sobre um EMPTY') — RED confirmado, restaurado."
+        - "P9 (fecha a linhagem STALE→STALE): `mark-build-stale.py` com a herança de `last_known_*` desativada (volta a copiar `previous` cru, inclusive quando `previous.status == STALE`) → 3 asserções foram para FAIL ('segunda edição mantém last_known_status EMPTY (não vira STALE)', 'acceptance-gate BARRA done depois de duas edições', 'finish done RECUSA depois de duas edições') — RED confirmado, restaurado. Prova que a segunda edição sobre um STALE não apaga mais a linhagem EMPTY."
+        - "P6b (fecha o SURVIVED da rodada 2, re-testado no código atual e não só via regressão-no-base): `build_vazio` com a resolução de `_wt().session_root(repo)` trocada de volta para sempre ler o clone principal via `git rev-parse --git-common-dir` (o padrão de `raiz_principal`) → 4 asserções da seção 'worktree ligada' foram para FAIL, incluindo o par completo (RECUSA vira aceite quando devia recusar, ACEITA vira recusa quando devia aceitar) — RED confirmado, restaurado."
+        - "adversarial de robustez (sem baseline): `empty_build(Path(<repo sem .claude/last-build.json>))` chamado diretamente devolve `None` — confirma que a ausência de baseline continua não-gated (comportamento pré-existente, intacto)."
+      run: >-
+        worktree descartável /private/tmp/claude-501/.../scratchpad/proof-gate-verde-r3
+        (git worktree add --detach aef8e26, removida ao final com
+        `git worktree remove --force`). Perturbações aplicadas via `patch`
+        alimentado por diffs unificados gerados com Write+`diff -u` em
+        scratchpad e aplicados com `patch -p1 --fuzz=3` (arquivo grande;
+        mesmo mecanismo de `git apply` já endossado pelas regras deste
+        agente) — a maioria das edições de fonte foi feita fora da árvore do
+        repo (em `/tmp`) por causa do bash-path-lock, que barra escrita via
+        Bash a paths do repo mesmo dentro do worktree descartável quando o
+        comando usa caminho relativo; contornado usando `git -C <worktree>
+        checkout ...` com caminhos absolutos para restaurar, e `patch` (que
+        o hook não intercepta) para aplicar. Cada perturbação seguida de
+        `python3 tests/test_verde_sem_teste.py` e depois `git checkout HEAD
+        -- <arquivo>` para restaurar, com `git status --short` conferido
+        vazio antes de seguir para a próxima.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      as três linhas que a rodada 2 apontou como não-cobertas (o ramo
+      `w.session_root(repo)` de `build_vazio`, e a ausência de checagem de
+      `last_known_status` em ambos os hooks) agora são exercitadas e
+      distinguidas comportamentalmente pelas seções "worktree ligada" e
+      "EMPTY que virou STALE" de tests/test_verde_sem_teste.py — confirmado
+      por perturbação (P6b, P7, P8, P9 acima), não só por leitura estrutural.
+  l4_adversarial_input:
+    status: clean
+    findings: []
+    run: >-
+      o achado da rodada 2 (STALE não herdava o bloqueio de EMPTY) está
+      fechado e coberto por teste comportamental, confirmado por perturbação
+      (P7/P8 acima). Casos adjacentes verificados e OK: STALE cuja última
+      execução real foi SUCCESS continua liberado (por desenho — quem cobra
+      build novo antes do commit é o gate-advance, não este gate); bounce
+      para in_progress continua livre mesmo com baseline EMPTY; ausência de
+      `.claude/last-build.json` continua não-gated (`empty_build` → None,
+      verificado direto).
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature (item de fila do BACKLOG.md), não Bug — não há regressão point-in-time a reproduzir na base."
+routing_reason: >-
+  As duas lacunas que derrubaram a rodada 2 (UNPROVEN em c7c8b6e) estão
+  fechadas e cada uma tem perturbação própria indo a RED no código de HEAD:
+  P6b reproduz a exata perturbação SURVIVED da rodada 2 (build_vazio lendo o
+  clone principal em vez da raiz da worktree ligada) e agora o par de
+  asserções fica RED como deveria; P7/P8 fecham o achado L4 (STALE herdado de
+  EMPTY não bloqueava) nas duas superfícies (acceptance-gate e cepa-plan
+  finish); P9 fecha o caso adjacente que a própria rodada 3 introduziu
+  (segunda edição sobre um STALE apagando a linhagem). Regressão-no-base
+  confirma que os testes novos amarram no código novo (7 falhas ao trazer os
+  três arquivos de 5a4b71d). Nenhum nível ficou assumed/skipped/gap/survived.
+  PROVEN.

@@ -22,6 +22,10 @@ Patterns detected:
 If the command isn't one we know how to parse, we skip — better to leave
 stale than mis-classify.
 
+Third state, EMPTY: a command with a TEST FILTER (`-Dtest=`, `pytest -k`,
+`go test -run`, jest `-t`/`--testNamePattern`) that exits green but executed
+zero tests is recorded as EMPTY, never SUCCESS — see refine_empty().
+
 Never blocks. Failures are stderr-only.
 
 Debugging: set CAPTURE_BUILD_DEBUG=1 to dump every invocation's
@@ -275,6 +279,105 @@ def classify(command: str, response_text: str, exit_code):
     return None, None, "no command pattern matched (not a build command)"
 
 
+# ─── filtered green with zero tests (EMPTY) ───────────────────────────
+#
+# Found on the wego (2026-08-24): with `surefire.failIfNoSpecifiedTests=false`
+# in the pom, `./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest`
+# prints BUILD SUCCESS with ZERO "Tests run:" lines. A mistyped test name
+# became green, gate-advance let the commit through, and a card was declared
+# done with no test run. `pytest -k`, `go test -run` and jest's `-t` /
+# `--testNamePattern` fail the same way (exit 0, nothing executed).
+#
+# So: when the command carries a TEST FILTER and would classify SUCCESS, the
+# output must show N > 0 tests executed. Zero — or no count at all — records a
+# third state, "EMPTY", which every consumer treats as not-green.
+#
+# Scope: only FILTERED commands. An unfiltered `./mvnw verify` in a module
+# with no tests is legitimate (build-only modules exist) and keeps today's
+# behavior; demanding a count there would turn every such build red.
+
+_TEST_FILTERS = {
+    # -Dtest= (surefire) and -Dit.test= (failsafe)
+    "maven": re.compile(r"(?:^|\s)-D(?:it\.)?test="),
+    "pytest": re.compile(r"(?:^|\s)-k(?:\s|=|$)"),
+    "go-test": re.compile(r"(?:^|\s)-(?:test\.)?run(?:\s|=)"),
+    "npm": re.compile(r"(?:^|\s)(?:-t|--testNamePattern)(?:\s|=)"),
+    "yarn": re.compile(r"(?:^|\s)(?:-t|--testNamePattern)(?:\s|=)"),
+}
+
+EMPTY_FIX_HINT = (
+    "fix the test name in the filter, or make the build fail on it "
+    "(Maven: -Dsurefire.failIfNoSpecifiedTests=true)"
+)
+
+
+def has_test_filter(command: str, kind: str) -> bool:
+    rx = _TEST_FILTERS.get(kind)
+    return bool(rx and rx.search(command))
+
+
+def count_tests_run(kind: str, text: str):
+    """How many tests the output says were EXECUTED (passed + failed), or
+    None when the output carries no count this function recognizes.
+    Skipped / deselected tests do not count — they did not run."""
+    if kind == "maven":
+        runs = [(int(a), int(s)) for a, s in re.findall(
+            r"Tests run:\s*(\d+),.*?Skipped:\s*(\d+)", text)]
+        if not runs:
+            return None
+        # Per-class lines + the Results summary repeat the same tests; only
+        # zero-vs-nonzero matters, so take the largest executed count.
+        return max(a - s for a, s in runs)
+    if kind == "pytest":
+        passed = sum(int(n) for n in re.findall(r"(\d+) passed", text))
+        failed = sum(int(n) for n in re.findall(r"(\d+) failed", text))
+        if passed or failed:
+            return passed + failed
+        if re.search(r"no tests ran|collected 0 items|\d+ deselected|0 selected", text):
+            return 0
+        return None
+    if kind == "go-test":
+        ran = len(re.findall(r"^--- (?:PASS|FAIL)", text, re.M))
+        ran += sum(1 for line in text.splitlines()
+                   if re.match(r"^ok\s", line) and "[no tests to run]" not in line)
+        if ran:
+            return ran
+        if "[no tests to run]" in text or "[no test files]" in text:
+            return 0
+        return None
+    if kind in ("npm", "yarn"):
+        # jest: "Tests:       2 passed, 12 skipped, 14 total"
+        # vitest: "Tests  2 passed (2)"
+        m = re.search(r"^\s*Tests:?\s+(.*)$", text, re.M)
+        if m:
+            line = m.group(1)
+            p = re.search(r"(\d+) passed", line)
+            f = re.search(r"(\d+) failed", line)
+            return (int(p.group(1)) if p else 0) + (int(f.group(1)) if f else 0)
+        if re.search(r"No tests found|No test files found", text):
+            return 0
+        return None
+    return None
+
+
+def refine_empty(command: str, kind: str, status, text: str):
+    """(status, tests_run, reason) after the zero-tests check. Only turns a
+    SUCCESS from a FILTERED command into EMPTY; everything else passes through."""
+    if status != "SUCCESS" or not has_test_filter(command, kind):
+        return status, None, None
+    n = count_tests_run(kind, text)
+    if n is None:
+        return "EMPTY", 0, (
+            "test filter present but the output shows no count of executed "
+            f"tests — treated as zero tests run; {EMPTY_FIX_HINT}"
+        )
+    if n <= 0:
+        return "EMPTY", 0, (
+            f"test filter matched zero tests (green with nothing executed); {EMPTY_FIX_HINT}"
+        )
+    return status, n, None
+
+
 # ─── debug logging ────────────────────────────────────────────────────
 
 def debug_log(payload, response_text, exit_code, status, kind, reason):
@@ -368,6 +471,9 @@ def main():
     exit_code = extract_exit_code(tool_response)
 
     status, kind, reason = classify(command, response_text, exit_code)
+    status, tests_run, empty_reason = refine_empty(command, kind, status, response_text)
+    if empty_reason:
+        reason = f"{reason}; {empty_reason}"
 
     debug_log(payload, response_text, exit_code, status, kind, reason)
 
@@ -404,6 +510,11 @@ def main():
         "kind": kind,
         "tail": tail(response_text),
     }
+    if tests_run is not None:
+        new_state["tests_run"] = tests_run
+    if empty_reason:
+        new_state["reason"] = empty_reason
+        print(f"[capture-build-result] EMPTY, not green: {empty_reason}", file=sys.stderr)
 
     try:
         state_path.parent.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,119 @@
+schema_version: 2
+card: bash-path-lock-camada-1
+verdict: proven
+reviewed_at: 2026-09-25T00:00:00-03:00
+base_commit: 9eef3a4
+head_commit: fc6a75a
+issue_type: Feature
+repo_kind: harness   # cepa CLI/hooks (Python) — NAO Maven; perturbacao + re-run e o mecanismo, nao PIT
+scope:
+  changed_classes:
+    - class: "common/hooks/_templates/bash-path-lock.py.tmpl (classificador deny-by-default de 4 baldes)"
+      module: hooks-template
+      external_observable: true   # governa Bash de agentes trancados nas 5 topologias — a superficie e o proprio hook rodando como subprocesso PreToolUse
+      substituted_by_double: null
+    - class: "build-hex/hooks/bash-path-lock.py (copia gerada)"
+      module: hooks-copy
+      external_observable: true
+      substituted_by_double: null
+    - class: "build-team/hooks/bash-path-lock.py (copia gerada)"
+      module: hooks-copy
+      external_observable: true
+      substituted_by_double: null
+    - class: "design/hooks/bash-path-lock.py (copia gerada)"
+      module: hooks-copy
+      external_observable: true
+      substituted_by_double: null
+    - class: "discovery/hooks/bash-path-lock.py (copia gerada)"
+      module: hooks-copy
+      external_observable: true
+      substituted_by_double: null
+    - class: "docs-topology/hooks/bash-path-lock.py (copia gerada)"
+      module: hooks-copy
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "nao ha pitest neste repo (nao e Maven/JVM); os cobridores sao subprocessos Python que rodam o hook de verdade contra 5 copias, entao perturbacao do molde + regeneracao das copias e o mecanismo aplicavel, nao PIT"
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida (worktree descartavel /tmp/.../scratchpad/proof-bash-path-lock, git worktree add --detach fc6a75a): tests/test_bash_path_lock_exec.py, tests/test_lock_copies_drift.py, tests/test_bash_path_lock_redir.py, tests/test_path_lock_out_of_root.py — 13 passed (pytest) + 'tudo verde em 5 copias' / 'all green' / 'All checks passed across 5 hook copies' (execucao direta)."
+        - "REGRESSAO WEGO-1936 dirigida como subprocesso contra o hook de verdade (nao via teste, via payload JSON no stdin, como os testes fazem): agent_type=build-hex:qa-engineer, comando python3 -c \"open('domain/src/main/java/F.java','w').write('x')\". Na copia de BASE (9eef3a4, build-hex/hooks/bash-path-lock.py) → exit=0 (PERMITIDO — o furo real). Na copia de HEAD (fc6a75a) → exit=2, mensagem 'NEGADO (balde 4 — fora da lista de comandos inocentes)'. Regressao fechada, confirmada nas duas pontas."
+        - "PERTURBACAO do molde: em common/hooks/_templates/bash-path-lock.py.tmpl, troquei o fallback do balde 4 (`_deny(4, v, ...)`, o ultimo `else` de _dispatch para verbo desconhecido) por `return` (libera em vez de negar). Regenerado com `python3 bin/gen-locks.py --write` (5 copias regeneradas). Rodando `python3 tests/test_bash_path_lock_exec.py` direto (nao via pytest — ver ressalva abaixo): foi para RED nas 5 copias, 60 FAILs (perl -e, perl -pi -e, ruby -rfileutils -e, osascript -e, eval, exec, trap com codigo, cc, verbo desconhecido, nohup perl -e, sudo, git status && perl -e — um subconjunto de vetores do balde 4 que dependiam exatamente desse fallback), exit=1. Worktree descartado e recriado do zero em vez de restaurado (mais barato que reescrever um arquivo de 2239 linhas linha a linha com a ferramenta Write) — GREEN final re-confirmado apos a recriacao."
+        - "RESSALVA (achado, nao bloqueia por si so): `python3 -m pytest tests/test_bash_path_lock_exec.py` reporta '5 passed' tanto no GREEN quanto durante a perturbacao RED — o arquivo usa funcoes `test_*` com um coletor manual de falhas (lista FAILURES + prints) que so vira exit-code != 0 quando chamado via `python3 tests/test_bash_path_lock_exec.py` (o bloco `if __name__ == \"__main__\"`), nunca via pytest puro. Rodar essa suite por pytest e um falso-verde estrutural. Nao afeta este veredito porque toda evidencia aqui foi coletada com a invocacao correta (execucao direta), mas fica registrado para quem rodar `pytest tests/` no CI."
+      run: >-
+        worktree descartavel /private/tmp/claude-501/.../scratchpad/proof-bash-path-lock
+        (git worktree add --detach fc6a75a) e um segundo worktree
+        .../proof-bash-path-lock-base (git worktree add --detach 9eef3a4) so para
+        o driver da regressao WEGO-1936. Comandos: `python3 -m pytest
+        tests/test_bash_path_lock_exec.py tests/test_lock_copies_drift.py
+        tests/test_bash_path_lock_redir.py tests/test_path_lock_out_of_root.py -q`
+        → 13 passed; `python3 tests/test_bash_path_lock_exec.py` direto → 'tudo
+        verde em 5 copias' (exit 0); driver Python proprio (subprocess +
+        payload JSON identico ao dos testes) contra as copias de base e head
+        para o vetor WEGO-1936; edicao do molde e restauracao feitas com as
+        ferramentas Read/Write (nunca sed -i/python3 -c/redirect via Bash,
+        conforme a regra do card); `python3 bin/gen-locks.py --write` para
+        regenerar as 5 copias apos a perturbacao. Os dois worktrees removidos
+        com `git worktree remove --force` ao final; arvore principal
+        (cepa-drain_backlog) nunca tocada.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (nao ha coverage tool wired neste repo Python; os 4
+      arquivos de teste cobrem estaticamente as 4 decisoes do desenho — balde
+      1/2/3/4 — com listas DENY/ALLOW exaustivas por vetor, rodadas contra as
+      5 copias via ThreadPoolExecutor). A perturbacao do fallback do balde 4
+      (unico ponto sem lista fechada, o mais arriscado por construcao) foi
+      exercitada diretamente e foi para RED nas 5 copias — a linha decisiva
+      esta coberta.
+  l4_adversarial_input:
+    status: clean
+    findings: []
+    run: >-
+      driver adversarial proprio (nao a suite) contra a copia build-hex, agente
+      qa-engineer, alvo domain/src/main/java/F.java (fora da pista dele):
+      python3 script.py em /tmp, heredoc bare para python3 (`python3 - <<EOF`),
+      npm exec -c, ./mvnw exec:java, make -f /tmp/x.mk, `$(echo cm0=|base64 -d)
+      -rf`, indirecao de variavel (`C=python3; $C -c`), `command python3 -c`,
+      `\python3 -c`, `/usr/bin/python3 -c`, aspas quebradas (`"py"thon3`), `ln -s`
+      seguido de escrita, `vim -c wq`, `ex -s -c wq`, `git apply`, `patch`,
+      `xargs -I{} sh -c`, `env FOO=bar python3 -c` — todos os 19 vetores foram
+      NEGADOS (exit=2), nenhum bypass encontrado. Contraprova de nao-vacuidade:
+      os mesmos 4 comandos legitimos citados no card (`./mvnw -pl domain -am
+      test`, `npm test`, `pytest -q`, `git commit -m` com `>` e `$(...)` citados
+      dentro da mensagem) foram PERMITIDOS (exit=0) pela mesma copia — o cadeado
+      nega o que deve negar e libera o que deve liberar, nao um "nega tudo"
+      disfarcado de prova.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: >-
+      card sem issue_type=Bug formal (item de fila, sem Jira). O vetor
+      WEGO-1936 (regressao real, ja documentada no comentario do proprio
+      molde) foi tratado como o "hunk" de maior risco e perturbado via a
+      rota geral (perturbation, acima): ALLOW comprovado na copia de base
+      9eef3a4 e DENY comprovado na copia de head fc6a75a, o mesmo par
+      green-at-base -> red-e-fixed-at-head que este campo exigiria de um
+      Bug formal — apenas registrado sob l3 em vez de aqui por nao haver
+      tipo de issue Bug.
+routing_reason: >-
+  Todos os niveis aplicaveis passaram com evidencia verified: GREEN de partida
+  nas 4 suites cobridoras (13 casos via pytest + 3 execucoes diretas com
+  "tudo verde"/"all green"/"All checks passed"), a regressao WEGO-1936
+  comprovada nas duas pontas (ALLOW na copia de base 9eef3a4, DENY na copia
+  de head fc6a75a, mesmo comando, mesmo agente, via subprocess real), a
+  perturbacao do fallback do balde 4 (o ponto de maior risco, por ser o
+  "resto" sem lista fechada) foi para RED nas 5 copias e GREEN foi
+  reconfirmado apos restaurar, e 19 vetores adversariais adicionais (alem
+  dos ja cobertos pela suite) nao encontraram nenhum bypass, com os 4
+  comandos legitimos do card continuando permitidos na mesma rodada. A unica
+  ressalva registrada (pytest mascarando RED como "5 passed" nesta suite) e
+  um achado de higiene de CI, nao uma lacuna de prova: toda evidencia aqui
+  foi coletada pela invocacao correta (execucao direta do arquivo). PROVEN.

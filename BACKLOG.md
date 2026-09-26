@@ -297,10 +297,13 @@ CLI = wrappers JSON do socket):
 
 **Plano:** `cepa/gate-verde-sem-teste`
 
-**Status:** pendente · **Lar:** `common/hooks/capture-build-result.py` (classificação do
+**Status:** ✅ FEITO 2026-09-25 (common 2.23.0, build-hex 1.2.0; `tests/test_verde_sem_teste.py`;
+pendente `bin/install.sh` para valer na cópia instalada) · **Lar:** `common/hooks/capture-build-result.py` (classificação do
 build) + `build-hex/agents/proof-reviewer` e `common/agents/completion-auditor` (o que
 eles aceitam como prova) · **Origem:** merge `00e0dda` no wego-acesso-backend
-(2026-08-24), medido na árvore mesclada.
+(2026-08-24), medido na árvore mesclada. **"Nem declarar feito", mecânico:** com baseline
+EMPTY, o `acceptance-gate` barra a transição do card para in_review/done (volta liberada) e
+o `cepa-plan finish --status done` recusa (blocked/pending aceitos), testado ponta a ponta.
 
 ### Problema
 
@@ -3495,3 +3498,92 @@ não aceitar por reflexo.
 Quando o comando tem um goal `quarkus:*`, o guarda troca a orientação: em vez de pedir `-am`,
 exige que um `./mvnw install` da raiz tenha rodado depois do último commit (ou aceita
 `# stale-ok` sem o texto de advertência). Teste em `tests/` com os dois comandos acima.
+
+---
+
+## `cepa-until` lê "git quebrado" como "trocaram de branch" e encerra a janela
+
+**Plano:** `cepa/until-git-quebrado-vira-troca-de-branch`
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (`branch_atual` e a
+conferência de branch do laço principal) · **Origem:** run `WEGO` de 25/09/2026 20:05,
+`wego-acesso-backend`, registro `.claude/programs/WEGO/until/2026-09-25-2005.jsonl`.
+
+### Problema
+
+O run parou às 00:25:47 com motivo `branch-mudou` ("agora estamos em `?`") e 5h40m02s de
+prazo sobrando (prazo 06:05:49 menos fim 00:25:47). Ninguém trocou de branch. A pasta
+`/Users/alegomes/Insync/alegomes@gmail.com/GoogleDrive/2026/coding/wego/wego-acesso-backend/.git/worktrees/`,
+que liga cada worktree ao repositório, sumiu inteira entre 00:06:56 (último commit que
+funcionou) e 00:25:47. Sem ela, `git rev-parse` na worktree da noite responde
+`fatal: not a git repository`, e `branch_atual` devolve `"?"` para qualquer erro do git.
+O laço compara `"?"` com a branch da largada e lê isso como troca de branch.
+
+Conferido em 26/09: a pasta `.git/worktrees/` não existia, e a worktree da noite respondia
+`fatal: not a git repository`. O conteúdo dela era idêntico ao da branch, então nada se
+perdeu além do prazo.
+
+### Quem apagou: não identificado
+
+- O `logs.db` do Insync entre 00:00 e 00:30 de 26/09 só tem os erros repetidos de
+  `GDCloudService`/`LicenseService` e nenhuma linha citando `worktrees` ou `wego-acesso`.
+- No cepa, só o `cepa-doctor --fix` roda `git worktree prune`, e só para registro cujo
+  diretório já não existe. O diretório da noite existia.
+- Suspeita principal: Insync, mesmo padrão de `insync-apaga-pasta-commitada`.
+
+### Esboço de solução
+
+1. `branch_atual` devolve o erro do git em vez de `"?"`. O laço trata "git não responde na
+   worktree da noite" como motivo próprio (`git-quebrado`), com a mensagem certa.
+2. Diante de `git-quebrado` com o diretório da worktree presente, o supervisor tenta
+   `git worktree repair <caminho>` a partir do clone e segue o run se a branch voltar a ser
+   a da largada.
+3. Investigar quem apaga `.git/worktrees/`: vigiar a pasta (`fswatch`) durante um run e
+   cruzar com o `logs.db` do Insync.
+
+### Teste que falta
+
+- Worktree da noite com `.git/worktrees/<nome>` removido: espera motivo `git-quebrado`,
+  não `branch-mudou`, e com o reparo ligado espera o run seguir.
+
+---
+
+## Build longo dentro do `cepa-until` vira trava para o dono
+
+**Plano:** `cepa/until-build-longo-sem-trava`
+
+**Status:** pendente · **Lar provável:** `common/hooks/no-background-build.py` e
+`common/bin/cepa-until` · **Origem:** run `WEGO` de 25/09/2026 20:05, item WEGO-2334;
+pedido do dono em 26/09.
+
+### Problema
+
+A ferramenta Bash mata comando em primeiro plano aos 10 minutos. Dentro do `cepa-until`,
+o `no-background-build` barra mandar build para o segundo plano. Resultado: todo item que
+precisa de um build de mais de 10 min trava e vira pendência do dono. No WEGO-2334, o par
+de `clean verify` simultâneos foi cortado com `EXIT=124`, e o agente deixou
+`~/.wego-acesso/proof-2334/rodar-par-head.sh` para o dono rodar. O dono só soube disso
+lendo a `evidence` da fila, porque o resumo do fim do run só dizia "Travados (1)".
+
+O bloqueio total ficou mais rígido do que precisa. Desde 04/09 o supervisor exporta
+`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`, então o `claude -p` espera o segundo plano em vez
+de morrer aos 10 min, e o próprio hook já libera `Monitor` com fim declarado. O efeito que
+o hook existe para barrar é segundo plano que ninguém colhe, e um build com fim, esperado
+por um vigia no mesmo turno, é colhido.
+
+### Esboço de solução
+
+1. **Teste primeiro (10 min):** sob `claude -p` com `CEPA_UNTIL_RUN` e o teto em 0,
+   disparar `sleep 700; echo FIM > arquivo` em segundo plano mais um `Monitor` com
+   until-loop no arquivo, e conferir que o turno colhe o `FIM` e o item sai com desfecho.
+2. Se passar, o hook libera build em segundo plano quando o mesmo turno arma o vigia com
+   fim declarado (ou quando o comando grava `EXIT=` num arquivo e há vigia sobre ele), e
+   mantém o bloqueio sem vigia.
+3. O resumo do fim do run passa a listar a `human_pending`/trava de cada item travado, com
+   o comando que o dono precisa rodar, em vez de mandar abrir a fila.
+
+### Teste que falta
+
+- Build sintético de 11 min em segundo plano com vigia: espera item `done` com o resultado
+  colhido.
+- O mesmo sem vigia: espera bloqueio, como hoje.

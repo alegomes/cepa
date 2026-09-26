@@ -254,7 +254,16 @@ run it — it MUST go **red**. Green-at-base → the test doesn't capture the bu
 1. **UNPROVEN** if any of: an **externally-observable** changed hunk survives its
    external perturbation (green-when-broken); a PIT surviving mutant on a changed
    line; a hard-uncovered changed line at the claimed altitude; bug
-   regression green-at-base. (Deterministic failure — safe to send back.)
+   regression green-at-base; a green run that executed **zero** tests. (Deterministic failure — safe to send back.)
+
+   **A green counts only with N > 0 tests executed.** With
+   `surefire.failIfNoSpecifiedTests=false`, a mistyped `-Dtest=<Name>` prints
+   BUILD SUCCESS with no `Tests run:` line at all — and `pytest -k`, `go test
+   -run`, jest `-t` do the same. Every run you cite as evidence must show its
+   count (`Tests run: N` with N > 0); a filtered green with zero tests is not a
+   pass, it is **UNPROVEN** with the reason named ("filter `-Dtest=X` matched
+   zero tests"), never a generic NEEDS-HUMAN. `capture-build-result` records it
+   as `status: EMPTY` in `.claude/last-build.json`; EMPTY is never green.
 2. **NEEDS-HUMAN** if not UNPROVEN AND: L4 found something; OR an external proof
    could not run (no-op test double, no `@QuarkusTest` covers the path,
    `base_commit` missing); OR a level is `assumed`/`skipped`. (No evidence to
