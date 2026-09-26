@@ -1,0 +1,64 @@
+schema_version: 1
+card: aviso-worktrees-mente
+status: complete
+audited_at: 2026-09-26T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "O bloco \"📋 Unmerged session worktrees\" do SessionStart (common/hooks/session-registry.py) não deve listar branch que não existe em `git branch -a`."
+    altitude: event
+    surface: "additionalContext JSON emitido pelo hook SessionStart (common/hooks/session-registry.py), invocado via stdin/stdout como o Claude Code faz de verdade"
+    demonstrated_by:
+      test: "tests/test_aviso_worktrees_fantasma.py (dispara o hook real via subprocess num repo git descartável)"
+      layer: "subprocess do hook inteiro (não uma função isolada de _wtlib) lendo o additionalContext"
+      evidence: verified
+      run: |
+        python3 tests/test_aviso_worktrees_fantasma.py
+          ok   classify: ref apagado é branch_gone
+          ok   classify: branch viva não é branch_gone
+          ok   fantasma não aparece em lugar nenhum
+          ok   órfã não é listada como não mesclada
+          ok   órfã não vira 'uncommitted changes'
+          ok   órfã ganha linha própria com o caminho
+          ok   branch viva com commit continua no aviso
+        all passed
+        EXIT:0
+        (7 checagens, 0 falhas)
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "Não deve descrever tal worktree fantasma como tendo \"uncommitted changes\"."
+    altitude: event
+    surface: "additionalContext JSON emitido pelo hook SessionStart, bloco 📋 Unmerged session worktrees"
+    demonstrated_by:
+      test: "tests/test_aviso_worktrees_fantasma.py, checagem \"órfã não vira 'uncommitted changes'\""
+      layer: "subprocess do hook real, string 'uncommitted' ausente do bloco 📋 para a worktree órfã (ref apagado, diretório presente)"
+      evidence: verified
+      run: "mesma execução do AC1 acima — linha 'ok   órfã não vira 'uncommitted changes''"
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "Worktrees pendentes de verdade (branch existe, com commits à frente) continuam listadas no bloco."
+    altitude: event
+    surface: "additionalContext JSON emitido pelo hook SessionStart, bloco 📋 Unmerged session worktrees"
+    demonstrated_by:
+      test: "tests/test_aviso_worktrees_fantasma.py, checagem \"branch viva com commit continua no aviso\""
+      layer: "subprocess do hook real, branch session/real (viva, 1 commit à frente) aparece no bloco 📋 com '1 commit'"
+      evidence: verified
+      run: "mesma execução do AC1 acima — linha 'ok   branch viva com commit continua no aviso'"
+    verdict: complete
+    gap: null
+
+notes: |
+  Fora do escopo por decisão do card (não afeta o veredito): o sintoma
+  "session/2118 anunciada como sessão aberta" vem do bloco de registro de
+  sessões (item 2c de on_start), não do bloco 📋 auditado aqui.
+
+  Teste roda o hook de verdade via subprocess (session-registry.py), não uma
+  função isolada de _wtlib.py — altitude confere com o texto do critério, que
+  fala do bloco do SessionStart, não de uma função interna.
+
+  branch_exists() em _wtlib.py usa `git rev-parse --verify --quiet
+  refs/heads/<branch>`, equivalente à checagem "existe em git branch -a" para
+  branches locais (que é o universo de `git worktree list`).

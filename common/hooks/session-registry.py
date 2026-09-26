@@ -203,13 +203,29 @@ def on_start(session_id: str, cwd: str) -> None:
                 f"acceptance files. Move what you want to keep to its real "
                 f"place and delete the folder."
             )
-        pending = [c for c in L.classify(root) if c["ahead"] != 0 or c["dirty"]]
+        rows = L.classify(root)
+        # A branch whose ref is gone has nothing to land. With its directory
+        # also gone nothing is left at all; with the directory still there, the
+        # files exist only on disk — say THAT, never "unmerged".
+        orphans = [c for c in rows if c["branch_gone"] and os.path.isdir(c["path"])]
+        if orphans:
+            lines = ["⚠ Worktrees whose branch no longer exists (the ref was "
+                     "deleted; files in the directory live only there):"]
+            for c in orphans:
+                lines.append(f"  • {c['path']} (was {c['branch']})")
+            lines.append("  Look inside before dropping it with "
+                         "`git worktree remove --force <path>`.")
+            notices.append("\n".join(lines))
+        pending = [c for c in rows
+                   if not c["branch_gone"] and (c["ahead"] != 0 or c["dirty"])]
         if pending:
             lines = ["📋 Unmerged session worktrees (don't forget to land them):"]
             for c in pending:
                 bits = []
                 if c["ahead"] > 0:
                     bits.append(f"{c['ahead']} commit{'s' if c['ahead'] != 1 else ''}")
+                elif c["ahead"] < 0:
+                    bits.append("commits ahead unknown")
                 if c["dirty"]:
                     bits.append("uncommitted changes")
                 if c["multi_area"]:

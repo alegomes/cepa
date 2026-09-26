@@ -2399,9 +2399,18 @@ que a barra lateral cresce por onda. A (a) parece certa, mas depende de conferir
 
 **Plano:** `cepa/aviso-worktrees-mente`
 
-**Status:** pendente, prioridade média · **Lar provável:** o hook de SessionStart que
-monta o bloco "📋 Unmerged session worktrees" · **Origem:** sessão de reflexão em
-`wego-acesso-backend`, 2026-08-24.
+**Status:** **RESOLVIDO em 2026-09-26** (common 2.24.1) — a hipótese abaixo estava
+errada: a lista já vinha do git na hora (`_wtlib.classify` lê `git worktree list`). O
+que mentia era o ref da branch apagado com a worktree ainda registrada: `rev-list`
+falhava, `ahead` voltava -1 e o filtro `ahead != 0` contava "desconhecido" como
+pendência; com o diretório ainda no disco, `git status` numa branch sem ref mostra todo
+arquivo como staged, daí o "uncommitted changes". Agora `classify` devolve
+`branch_gone`; branch sem ref e sem diretório some do aviso, e com diretório ganha
+linha própria dizendo que a branch não existe mais. Teste:
+`tests/test_aviso_worktrees_fantasma.py`. Fora do escopo: o `session/2118` citado como
+sessão aberta vem do registro de sessões (bloco 2c), não deste. · **Lar:**
+`common/hooks/session-registry.py` + `common/hooks/_wtlib.py` · **Origem:** sessão de
+reflexão em `wego-acesso-backend`, 2026-08-24.
 
 ### Problema
 

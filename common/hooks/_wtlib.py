@@ -181,6 +181,13 @@ def commits_ahead(cwd, base: str, branch: str) -> int:
         return -1
 
 
+def branch_exists(cwd, branch: str) -> bool:
+    if not branch:
+        return False
+    rc, _, _ = git(["rev-parse", "--verify", "--quiet", f"refs/heads/{branch}"], cwd=cwd)
+    return rc == 0
+
+
 def is_merged(cwd, base: str, branch: str) -> bool:
     """True when branch has no commits base lacks (fully merged or empty)."""
     return commits_ahead(cwd, base, branch) == 0
@@ -396,6 +403,12 @@ def classify(root: str, predict=False):
         info = {
             "path": wt["path"],
             "branch": branch,
+            # `git worktree list` keeps naming a branch whose ref was deleted
+            # (update-ref -d, a tool that bypassed `git branch -D`). Then ahead
+            # comes back -1 and, when the directory survives, `git status`
+            # reports every file as staged — a branch `git branch -a` doesn't
+            # know shows up as "unmerged, uncommitted changes".
+            "branch_gone": not branch_exists(root, branch),
             "base": base,
             "alive": entry_is_live(e) if e else False,
             "dirty": dirty,
