@@ -61,10 +61,12 @@ def faltando(cmds, texto):
     tabela e deixar a menção passava verde — e foi assim que o /common:spec
     ficou só com a linha da Parte 1.
     """
+    # Comentário HTML some na renderização: linha escondida nele não documenta.
+    visivel = re.sub(r"<!--.*?-->", "", texto, flags=re.S)
     return [
         c for c in cmds
         if c not in INTERNOS
-        and not re.search(r"^\|\s*`" + re.escape(c) + r"`\s*\|", texto, re.M)
+        and not re.search(r"^\|\s*`" + re.escape(c) + r"`\s*\|", visivel, re.M)
     ]
 
 
@@ -98,6 +100,8 @@ def main():
     check("menção solta em prosa não conta como linha do catálogo",
           faltando([alvo], f"veja também `{alvo}` para isso.\n- `{alvo}`. faz algo")
           == [alvo])
+    check("linha dentro de comentário HTML não conta",
+          faltando([alvo], f"<!--\n| `{alvo}` | `[x]` | faz algo |\n-->") == [alvo])
     check("a linha da tabela conta",
           faltando([alvo], f"| `{alvo}` | `[x]` | faz algo |") == [])
 
