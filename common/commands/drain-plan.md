@@ -256,7 +256,18 @@ Para cada item do lote, na ordem:
     depois do seu `finish --status done`; vermelho, ele tira os seus commits da
     branch e marca o item `blocked`. O card vai para Review como sempre, e a
     evidência não diz "merge fica com o dono": diz que o código está na branch
-    da noite.
+    da noite;
+  - **não rode o build completo, e diga isso a quem você delegar.** Ele é do
+    supervisor, que roda logo depois do seu `finish`. Aqui rode só os testes
+    que o item tocou e os vizinhos (`-Dtest=...` com `-am`, `-k`, o arquivo de
+    teste), num comando que caiba em 10 minutos, o teto de cada comando do
+    agente: passou disso, o próprio Bash manda o comando para o segundo plano
+    e o passo d abaixo vira regra quebrada sem ninguém ter pedido. Passe esta
+    regra por escrito no pedido de todo agente que roda teste (`qa-engineer`,
+    `validation-lead`, `proof-reviewer`). No run de 2026-09-26 o `qa-engineer`
+    do WEGO-2320 rodou a suíte do `bootstrap`, que leva 15 minutos, ela foi
+    para o segundo plano, e a rodada terminou em "Continuo aguardando" depois
+    de 85 minutos e US$ 14,15, com o item `in_progress`.
 
   Um item que depende de outro da mesma fila que já está `done` na branch da
   noite **não** está travado por "o antecessor não está na main": o código dele

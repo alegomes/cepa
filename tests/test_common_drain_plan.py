@@ -714,6 +714,14 @@ def test_na_branch_da_noite(base):
     check("...sem merge, sem push", "sem merge, sem push" in trecho)
     check("...e confere a branch antes de começar",
           "rev-parse --abbrev-ref head" in trecho)
+    i = limpo.find("não rode o build completo")
+    regra = limpo[i:i + 1500] if i != -1 else ""
+    check("...não roda o build completo, que é do supervisor",
+          bool(regra) and "supervisor" in regra, regra[:200])
+    check("...roda só os testes focados, dentro do teto de 10 minutos",
+          "10 minutos" in regra and "-dtest" in regra, regra[:300])
+    check("...e passa a regra aos agentes que delega",
+          "qa-engineer" in regra and "validation-lead" in regra, regra[:300])
 
 
 def main():
