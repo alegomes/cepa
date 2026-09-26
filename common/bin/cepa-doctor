@@ -444,6 +444,9 @@ def check_project(cwd: Path):
                 ok("build", f"baseline SUCCESS{atxt}")
             else:
                 w = f"baseline {status}{atxt} — gate-advance vai bloquear commits/push até um verify verde"
+                if status == "EMPTY":
+                    w += (" (o filtro de teste do último comando casou ZERO teste: corrija o nome "
+                          "ou rode com -Dsurefire.failIfNoSpecifiedTests=true)")
                 if a is not None and a > 7:
                     w += " (antigo demais para ser verdade; rode o verify)"
                 warn("build", w)

@@ -243,7 +243,10 @@ def main():
             ok, fail = c.get("SUCCESS", 0), c.get("FAILURE", 0)
             total = sum(c.values())
             rate = f"{100 * fail / total:.0f}%" if total else "-"
-            print(f"    {repo}: {ok} verdes, {fail} vermelhos (taxa de falha {rate})")
+            # EMPTY: rodada com filtro de teste que executou zero teste (não é verde).
+            empty = c.get("EMPTY", 0)
+            vaz = f", {empty} vazios (filtro casou zero teste)" if empty else ""
+            print(f"    {repo}: {ok} verdes, {fail} vermelhos{vaz} (taxa de falha {rate})")
     else:
         print("    (nenhum)")
 

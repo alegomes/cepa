@@ -12,7 +12,7 @@ The harness must always be in a known-good state, or moving toward one. After ev
 Maintained by two hooks out of your control:
 
 - `mark-build-stale.py` writes `status: STALE` after every `Edit` / `Write` / `MultiEdit` on production code (source files, build manifests, migrations). Records the edited path + previous known-good status.
-- `capture-build-result.py` writes `status: SUCCESS` or `status: FAILURE` after every `Bash` invocation of a recognized build/test command (Maven, Gradle, npm, yarn, pytest, cargo, go test). Records the command + tail of output.
+- `capture-build-result.py` writes `status: SUCCESS`, `status: FAILURE` or `status: EMPTY` (filtered run, zero tests executed) after every `Bash` invocation of a recognized build/test command (Maven, Gradle, npm, yarn, pytest, cargo, go test). Records the command + tail of output.
 
 You **cannot** write this file. The orchestrator does not own its content. The file reflects reality, not optimism.
 
@@ -23,6 +23,7 @@ Possible states:
 | `SUCCESS` (recent) | Last verify ran green, no edits since. | Safe to claim "green". Safe to commit / push / advance. |
 | `STALE` | Source edited since last verify. | **Run verify now.** Then re-check the file. Do not claim green. Do not commit / push / advance — the `gate-advance` hook blocks those anyway. |
 | `FAILURE` | Last verify failed. | **Fix or revert before any other action.** Read the `tail` field for the failure surface. If the fix is small, fix and re-verify. If you don't immediately see the cause, `git checkout -- <files>` to revert the failing edit, then re-verify, then approach the problem fresh. |
+| `EMPTY` | A **filtered** test run (`-Dtest=`, `pytest -k`, `go test -run`, jest `-t`) exited green but executed **zero** tests — usually a mistyped test name. | **Not green.** Fix the name in the filter and re-run, or make the build fail on it (Maven: `-Dsurefire.failIfNoSpecifiedTests=true`). Never cite it as "the test passed". |
 | Missing | No verify recorded yet this session. | Run verify to establish a baseline. Don't claim anything before the first verify lands. |
 
 Staleness has no expiry timer — `STALE` set by an edit stays `STALE` until a `SUCCESS` build lands. "I ran verify five minutes ago" doesn't matter if you edited something after. The hook will have already moved the file to `STALE`.
@@ -61,7 +62,7 @@ What you do NOT do: continue editing other files while the build is red. Each ne
 
 ### 5. Commit / push / advance is gated.
 
-The `gate-advance.py` PreToolUse hook refuses Bash commands matching `git commit`, `git push`, `gh pr create`, `kubectl apply`, etc. when `last-build.json` is `STALE` or `FAILURE`. This is structural — you literally cannot proceed without green. The block message names the suggested recovery.
+The `gate-advance.py` PreToolUse hook refuses Bash commands matching `git commit`, `git push`, `gh pr create`, `kubectl apply`, etc. when `last-build.json` is `STALE`, `FAILURE` or `EMPTY`. This is structural — you literally cannot proceed without green. The block message names the suggested recovery.
 
 Don't try to work around the gate (e.g., by editing the state file directly). The fix is to re-establish green, not to fake it.
 

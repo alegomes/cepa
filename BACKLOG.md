@@ -297,7 +297,8 @@ CLI = wrappers JSON do socket):
 
 **Plano:** `cepa/gate-verde-sem-teste`
 
-**Status:** pendente · **Lar:** `common/hooks/capture-build-result.py` (classificação do
+**Status:** ✅ FEITO 2026-09-25 (common 2.23.0, build-hex 1.2.0; `tests/test_verde_sem_teste.py`;
+pendente `bin/install.sh` para valer na cópia instalada) · **Lar:** `common/hooks/capture-build-result.py` (classificação do
 build) + `build-hex/agents/proof-reviewer` e `common/agents/completion-auditor` (o que
 eles aceitam como prova) · **Origem:** merge `00e0dda` no wego-acesso-backend
 (2026-08-24), medido na árvore mesclada.

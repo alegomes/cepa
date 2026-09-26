@@ -51,6 +51,14 @@ unit test does not count, however correct.
   Run the demonstrating test yourself (Bash) and paste the literal command +
   result line. If you cannot run it, mark `evidence: assumed` — and `assumed`
   never lets a criterion be `complete`.
+- **"The test passed" needs N > 0 tests executed.** A test filter with a wrong
+  name (`-Dtest=`, `pytest -k`, `go test -run`, jest `-t`) can exit green
+  having run nothing — with `surefire.failIfNoSpecifiedTests=false` Maven
+  prints BUILD SUCCESS with no `Tests run:` line. Your `run:` must show the
+  count (`Tests run: N`, `N passed`) with N > 0. Zero, or no count at all, is
+  `incomplete` with the gap named ("filter matched zero tests") — and
+  `capture-build-result` records that run as `status: EMPTY`, which is never
+  green.
 - **Rode em primeiro plano. Nunca em background.** `run_in_background` (e
   qualquer equivalente) não serve para você: o harness entrega a notificação de
   término ao agente principal, **não a subagentes**. Um build lançado em

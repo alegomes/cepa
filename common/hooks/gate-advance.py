@@ -269,10 +269,22 @@ def main():
                 "the verify command is the fastest way to find out"
             )
 
-    # STALE or FAILURE → block (regardless of tier).
+    # STALE, FAILURE or EMPTY (filtered green, zero tests) → block (regardless of tier).
     if status == "STALE":
         reason = f"build is STALE since edit to {state.get('after_edit_to', '<unknown path>')} at {state.get('since', '<unknown time>')}{age_note}"
         suggestion = "Run your project's verify command (e.g. `./mvnw <scope> verify`) before this operation. The hook will clear STALE on a green run."
+    elif status == "EMPTY":
+        reason = (
+            f"build is EMPTY since {state.get('at', '<unknown time>')}{age_note}: the test "
+            f"filter in `{state.get('command', '<unknown>')}` matched zero tests — it exited "
+            f"green, but no test ran, so it proves nothing"
+        )
+        suggestion = (
+            "Fix the test name in the filter (-Dtest= / -k / -run / -t) so it matches the "
+            "tests you mean and re-run it, or make the build fail on an empty filter "
+            "(Maven: -Dsurefire.failIfNoSpecifiedTests=true). A green with zero tests "
+            "never counts as green."
+        )
     elif status == "FAILURE":
         reason = f"build is FAILURE since {state.get('at', '<unknown time>')}{age_note} (command: `{state.get('command', '<unknown>')}`)"
         suggestion = "Fix the failing tests / build errors, re-run the verify command, and try again. Don't proceed with broken state."

@@ -13,7 +13,7 @@ with the same five steps typed by hand — *commit it, merge it, push, handoff,
 exit*. This chains them behind a **single confirmation**, reusing the existing
 commands' logic so every safety check still fires:
 
-- **green-gate** — won't land a `STALE`/`FAILURE` branch (unless `.claude/no-build`).
+- **green-gate** — won't land a `STALE`/`FAILURE`/`EMPTY` branch (unless `.claude/no-build`).
 - **single-owner guard** — won't merge a branch a *live* session is sitting on.
 - **conflict-stop** — a merge conflict halts the chain for you to resolve by hand.
 
@@ -171,7 +171,8 @@ re-show the plan.
   *other* live session holds the source or destination); proceed only on an
   explicit override.
 - **green-gate:** read `<session-worktree>/.claude/last-build.json`. Unless
-  `<session-worktree>/.claude/no-build` exists, refuse on `STALE`/`FAILURE` —
+  `<session-worktree>/.claude/no-build` exists, refuse on anything other than
+  `SUCCESS` (`STALE`/`FAILURE`/`EMPTY` — EMPTY is a filtered run that executed zero tests) —
   same rule as `/common:worktree-merge`. (Absent + no marker → ask the user to
   confirm they verified the branch.)
 
