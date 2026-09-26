@@ -93,8 +93,15 @@ instead of starting an item that would be cut halfway.
 ## When it stops
 
 At the first of: deadline reached, no runnable item in the queue (`fim-da-fila`, `bloqueado`,
-`bloqueado-antes`, as reported by `cepa-plan queue`), circuit breaker, or a usage cap whose
-wait does not fit in the window.
+`bloqueado-antes`, as reported by `cepa-plan queue`), circuit breaker, a stuck queue, or a
+usage cap whose wait does not fit in the window.
+
+A **stuck queue** (`fila-travada`) is N items in a row that ended `blocked` (`--max-travados`,
+default 3). `blocked` counts as progress, so the circuit breaker never sees it: the item left
+the queue with a reason. But a queue where every item blocks on the same outside cause burns
+the window rediscovering it. On 2026-09-23 that was 20 rounds and US$ 14.30; on 2026-09-15,
+7 in a row in 11 minutes. Any other outcome (`done`, `dropped`, a human route) resets the
+count; an attempt with no progress belongs to the circuit breaker and leaves it alone.
 
 ## Before you leave it running
 

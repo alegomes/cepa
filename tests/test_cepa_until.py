@@ -385,6 +385,69 @@ def test_item_blocked_nao_trava_a_noite_atras_dele():
               fim["com_progresso"] == 3 and fim["sem_progresso"] == 0, str(fim))
 
 
+def test_n_blocked_seguidos_encerram_o_run_como_fila_travada():
+    """O aceite do item `cepa-until-blocked-como-progresso`: 1 item `done` sem
+    merge seguido de 5 dependentes que travam. Em 2026-09-23 foram 20 rodadas
+    assim, cada uma redescobrindo a mesma causa; `blocked` é progresso, então o
+    disjuntor nunca disparava. O run tem que parar no 3º `blocked` seguido, com
+    motivo próprio — e sem culpar os itens."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a0", status="done")]
+                          + [item(f"b{n}") for n in range(1, 6)])
+        binv = fake_claude(
+            tmp, "marca(primeiro_pendente(), status='blocked', "
+                 "evidence='a0 esta done numa branch sem merge')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("para no 3º `blocked` seguido", len(chamadas) == 3,
+              f"disparou {len(chamadas)}x")
+        depois = {it["id"]: it["status"]
+                  for it in yaml.safe_load(plano.read_text())["items"]}
+        check("os dois últimos nem foram tocados",
+              depois["b4"] == "pending" and depois["b5"] == "pending", depois)
+        fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
+        check("o run termina por `fila-travada`, não por `disjuntor`",
+              fim["motivo"] == "fila-travada", str(fim))
+        check("...e o motivo nomeia os itens da sequência",
+              all(i in (fim.get("detalhe") or "") for i in ("b1", "b2", "b3")),
+              str(fim))
+        check("os travados continuam PROGRESSO, não falha do item",
+              fim["com_progresso"] == 3 and fim["sem_progresso"] == 0
+              and fim["travados"] == 3, str(fim))
+
+
+def test_desfecho_que_nao_e_blocked_zera_a_sequencia():
+    """Dois `blocked`, um `done`, dois `blocked`: com o teto em 3 o run NÃO
+    para — travamento espalhado pela fila é item a item, não a fila travada."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item(f"a{n}") for n in range(1, 6)])
+        corpo = ("ident = primeiro_pendente()\n"
+                 "marca(ident, status='done' if ident == 'a3' else 'blocked', "
+                 "evidence='x')\n")
+        binv = fake_claude(tmp, corpo)
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("os cinco rodaram", len(chamadas) == 5,
+              f"disparou {len(chamadas)}x")
+        fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
+        check("o run termina pela fila, não por `fila-travada`",
+              fim["motivo"] == "fim-da-fila", str(fim))
+
+
+def test_max_travados_configuravel_e_validado():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item(f"a{n}") for n in range(1, 4)])
+        binv = fake_claude(
+            tmp, "marca(primeiro_pendente(), status='blocked', evidence='x')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-travados", "0"])
+        check("--max-travados 0 é recusado antes de disparar",
+              p.returncode == 2 and not chamadas, f"{p.returncode} {chamadas}")
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-travados", "2"])
+        check("--max-travados 2 para no 2º", len(chamadas) == 2,
+              f"disparou {len(chamadas)}x")
+
+
 # ── 3. guardas de largada ───────────────────────────────────────────────────
 
 def test_arvore_suja_recusa_o_run():

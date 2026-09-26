@@ -215,6 +215,14 @@ GRACA_SIGTERM = float(os.environ.get("CEPA_UNTIL_GRACA_SIGTERM", "30"))
 # da fila por decisão registrada, não por falha do run.
 TERMINAIS = {"done", "blocked", "dropped"}
 
+# Itens `blocked` SEGUIDOS que encerram o run. `blocked` é progresso (o item
+# saiu da fila com motivo), então o disjuntor nunca os vê — e uma fila que trava
+# item após item pela mesma causa de fora queima a janela redescobrindo a causa.
+# Em 2026-09-23 foram 20 rodadas e US$ 14,30 assim; em 2026-09-15, 7 seguidas em
+# 11 minutos. Não é falha do item: é a fila travada, e o run para com motivo
+# próprio (`fila-travada`) em vez de `disjuntor`.
+MAX_TRAVADOS_PADRAO = 3
+
 # Quantos subprocessos a MESMA janela gasta no MESMO item antes de tirá-lo da
 # frente. O `queue` sempre entrega o primeiro item executável, e um subprocesso
 # morto devolve a reserva como órfã — então um item que não sai do lugar é
@@ -844,6 +852,11 @@ def main(argv=None):
                     dest="max_falhas",
                     help=f"disjuntor: falhas SEGUIDAS que encerram o run "
                          f"(default {MAX_FALHAS_PADRAO})")
+    ap.add_argument("--max-travados", type=int, default=MAX_TRAVADOS_PADRAO,
+                    dest="max_travados",
+                    help=f"itens `blocked` SEGUIDOS que encerram o run: a fila "
+                         f"está travando por uma causa de fora, e seguir só "
+                         f"redescobre a causa (default {MAX_TRAVADOS_PADRAO})")
     ap.add_argument("--tentativas-por-item", type=int,
                     default=TENTATIVAS_POR_ITEM_PADRAO, dest="tentativas_item",
                     help=f"quantos subprocessos a mesma janela gasta no mesmo "
@@ -892,6 +905,9 @@ def main(argv=None):
     if a.max_falhas < 1:
         print("cepa-until: --max-falhas precisa ser >= 1", file=sys.stderr)
         return 2
+    if a.max_travados < 1:
+        print("cepa-until: --max-travados precisa ser >= 1", file=sys.stderr)
+        return 2
     if a.tentativas_item < 1:
         print("cepa-until: --tentativas-por-item precisa ser >= 1 — com 0 o run "
               "marcaria `blocked` todo item antes de tentar", file=sys.stderr)
@@ -937,6 +953,7 @@ def main(argv=None):
     print(f"  janela      : agora → {prazo.strftime('%d/%m %H:%M')} "
           f"({humano(prazo - agora)})")
     print(f"  disjuntor   : {a.max_falhas} falhas seguidas")
+    print(f"  fila travada: {a.max_travados} itens `blocked` seguidos")
     print(f"  por item    : até {a.tentativas_item} tentativa(s); depois disso "
           "vira `blocked` e a fila anda")
     print(f"  reserva     : não começa item com menos de {humano(reserva)}")
@@ -979,7 +996,8 @@ def main(argv=None):
         return 2
     base_da_noite = cabeca(arvore)
     registra({"evento": "run_start", "fila": a.fila, "prazo": prazo.isoformat(),
-              "max_falhas": a.max_falhas, "branch": branch_largada,
+              "max_falhas": a.max_falhas, "max_travados": a.max_travados,
+              "branch": branch_largada,
               "arvore": str(arvore), "base": base_da_noite,
               "branch_do_clone": branch_atual(repo), "verify": verify})
     # O que a noite ENTREGOU (done com build verde na branch da noite) e o que
@@ -989,6 +1007,10 @@ def main(argv=None):
     entregues, travados, vermelhos, sem_commit = [], [], [], []
 
     falhas_seguidas = 0
+    # Os `blocked` da sequência corrente. Só um desfecho que não é `blocked`
+    # (done, dropped, rota humana) zera; tentativa sem progresso é do disjuntor
+    # e não mexe aqui.
+    travados_seguidos = []
     feitos, falhados, itens = [], [], 0
     # Quantas vezes ESTA janela já disparou um subprocesso para cada item, e o
     # que ela tirou da frente por esgotamento ou pelo teto de uso da conta.
@@ -1278,6 +1300,20 @@ def main(argv=None):
             if pendencia:
                 marca += " · rota humana em aberto"
             print(f"          → {marca} ({humano(timedelta(seconds=gasto))})")
+
+            if estado == "blocked":
+                travados_seguidos.append(ident)
+            else:
+                travados_seguidos = []
+            if len(travados_seguidos) >= a.max_travados:
+                motivo_fim = "fila-travada"
+                detalhe_fim = (
+                    f"{len(travados_seguidos)} itens seguidos saíram `blocked` "
+                    f"({', '.join(travados_seguidos)}) — a fila está travando "
+                    "por uma condição de fora, não por falha dos itens. Seguir "
+                    "redescobriria a mesma causa a cada item; o motivo de cada "
+                    "um está no `evidence` da fila")
+                break
         else:
             falhas_seguidas += 1
             falhados.append((ident, estado, codigo, matou))

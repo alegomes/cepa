@@ -3300,7 +3300,9 @@ reavaliar O3), o estado em 24/09:
 
 **Plano:** `cepa/cepa-until-blocked-como-progresso`
 
-**Status:** PARCIAL em 2026-09-24 (common 2.19.0, merge `1cddede`). A causa das 20 rodadas
+**Status:** item 1 FEITO em 2026-09-26 (common 2.25.0, branch da noite `until/2026-09-26-1809`): `--max-travados` (default 3) encerra o run com motivo `fila-travada` depois de N `blocked` seguidos, sem contar como falha do item. Entrou porque os runs mostraram sequências de `blocked` por outras causas além do antecessor sem merge (7 seguidas em 2026-09-15). Continuam de fora: o item 2 (parar já no 2º pela mesma causa, opcional) e o item 3 (`queue` desconfiar de `done` sem merge), que conflita com a branch da noite, onde o antecessor `done` sem merge é justamente o caso válido.
+
+Antes: PARCIAL em 2026-09-24 (common 2.19.0, merge `1cddede`). A causa das 20 rodadas
 travadas saiu: cada card agora roda na branch da noite `until/<run>`, que já tem os cards
 anteriores, então "antecessor `done` sem merge" deixa de existir dentro de um run. O resumo e
 o `run_end` separam entregues de travados. Não feito, de propósito: parar depois de N `blocked`
