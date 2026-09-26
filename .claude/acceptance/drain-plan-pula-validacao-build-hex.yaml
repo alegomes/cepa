@@ -1,0 +1,47 @@
+key: drain-plan-pula-validacao-build-hex
+status: complete
+diff: fb6beb1
+criteria:
+  - id: AC1
+    text: >-
+      O passo 3.c do drain-plan passa a exigir, quando a topologia tem
+      validation-lead, o veredito dele (READY) além de COMPLETE e PROVEN.
+    altitude: prompt-contract
+    surface: common/commands/drain-plan.md (passo 3.c) — contrato de prosa
+      guardado por teste que le o texto do comando
+    test: tests/test_common_drain_plan.py::test_topologias_com_validacao_batem_com_os_agentes
+    layer: prose-contract
+    verdict: complete
+    evidence: verified
+    run: >-
+      python3 tests/test_common_drain_plan.py -> bloco
+      test_topologias_com_validacao_batem_com_os_agentes:
+      "ok  drain-plan 3.c exige o validation-lead na topologia que o tem"
+      (checa que o passo 3.c cita validation-lead,
+      .claude/validation/<id>.yaml e delegated-to-supervisor);
+      143 checks ok, 0 FAIL, "all green"
+  - id: AC2
+    text: >-
+      Trava mecânica: o cepa-plan finish --status done recusa sem um
+      artefato de validação gravado, do mesmo jeito que o gate de aceite
+      lê .claude/acceptance/<KEY>.yaml.
+    altitude: cli
+    surface: common/bin/cepa-plan finish --status done (exit code + stderr)
+    test: tests/test_common_drain_plan.py::test_finish_done_exige_o_veredito_do_validation_lead
+    layer: cli-integration
+    verdict: complete
+    evidence: verified
+    run: >-
+      python3 tests/test_common_drain_plan.py -> bloco
+      test_finish_done_exige_o_veredito_do_validation_lead: 8/8 "ok" —
+      cobre ausência do arquivo (exit 2, nomeia validation-lead e o
+      arquivo), blocked ainda aceito, veredito BLOCKED (exit 2),
+      READY-WITH-CAVEATS e READY-TO-SHIP fecham done, e topologia sem
+      validation-lead (build-solo) não exige o arquivo;
+      143 checks ok, 0 FAIL, "all green"
+notes:
+  - Rodado apenas tests/test_common_drain_plan.py (arquivo único), não
+    tests/run-all.sh, por instrução do escopo desta auditoria.
+  - Cobertura adicional: test_na_branch_da_noite confirma que na branch da
+    noite o validation-lead grava build: delegated-to-supervisor em vez de
+    rodar o build completo, sem afrouxar a exigência do veredito.
