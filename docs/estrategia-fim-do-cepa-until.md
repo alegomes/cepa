@@ -420,3 +420,11 @@ corrida introduzida aparece.
 Esta revisão **não** passou por um novo painel de advisors. O painel anterior revisou a
 triagem com reexecução isolada. A mudança central daqui (repetir o build inteiro e colocar o
 conserto na fila) responde à objeção principal dele, mas as lentes não a viram.
+
+### Respostas do dono à revisão 2 (2026-09-26)
+
+- **Reabrir o Caminho 3 (o run aterrissa sozinho quando tudo fica verde): não.** A decisão 3
+  continua valendo: o run não toca a `main`. Aterrissar segue pelo `cepa-until aterrissar`,
+  disparado pelo dono.
+- **Passar a revisão 2 pelo painel de advisors no começo da sessão de construção: sim.** Vira
+  o passo 0 da sequência no BACKLOG, antes de qualquer código.

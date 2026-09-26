@@ -3609,7 +3609,8 @@ zero intervenção para o vermelho e nada novo para lembrar.
 
 ### Sequência (detalhes e critérios no documento)
 
-0. Medir quanto custa um segundo `./mvnw -B clean verify` e uma reexecução do
+0. Rodar `/common:advisors` sobre a "Revisão 2" do documento (decisão do dono, 26/09): o
+   painel anterior só viu a triagem com reexecução isolada. Em seguida, medir quanto custa um segundo `./mvnw -B clean verify` e uma reexecução do
    `CadastroComTagsE2ETest` na worktree de 26/09.
 1. **Garantia:** os commits de todas as tentativas de um item vão para a branch lateral, com
    as duas checagens antes do `reset` (SHA ancestral do HEAD; nenhum outro `done` no meio).
@@ -3617,7 +3618,8 @@ zero intervenção para o vermelho e nada novo para lembrar.
 2. **Estado do run e lista de ações** gravados antes da análise do modelo, impressos no fim do
    terminal, lidos pelo `/common:until-review`; uma linha por item no resumo.
 3. **`cepa-until aterrissar <fila>/<run>`** como camada fina sobre os guardas do
-   `/common:worktree-merge` (decisão do dono, 26/09).
+   `/common:worktree-merge` (decisão do dono, 26/09). O run continua sem tocar a `main`:
+   o dono recusou a aterrissagem automática em 26/09.
 4. **Vermelho que se resolve:** segundo build completo; verde fecha `done`; vermelho de novo
    põe `FIX-<teste>` na frente da fila e devolve o item para `pending` bloqueado por ele;
    registro de instabilidade entre runs; lateral consumida e apagada pelo próprio supervisor.
