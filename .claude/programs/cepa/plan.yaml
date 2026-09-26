@@ -899,3 +899,26 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: maven-reactor-guard-libera-o-inocente
+  title: maven-reactor-guard libera goals que nao compilam, -pl sem -am apos install
+    da raiz posterior a ultima edicao, e quarkus:*
+  why: 'wego-acesso-backend teve 481 bloqueios do reactor guard (328 em setembro),
+    61,9% seguidos de retry com ''# stale-ok'' depois de install (docs/investigations/2026-09-25-stale-e-reactor-no-wego.md);
+    quarkus:* quebra com -am (BACKLOG, adf873f). Antes de construir: conferir numa
+    amostra de 10 bloqueios que o install veio depois da ultima edicao. Aprovado
+    pelo dono em 2026-09-26. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: prova-descartavel-caminho-literal
+  title: proof-reviewer e ui-proof-reviewer usam caminho literal ou git -C na worktree
+    descartavel; bash-path-lock sugere isso ao negar variavel nao resolvida
+  why: 'com o cadeado novo (camada 1), ''cd "$WT" && git checkout'' e negado quando
+    $WT veio de outra chamada; caminho literal e git -C passam (conferido em 2026-09-26).
+    Os agentes de prova contornavam com python3 -c, o vetor do WEGO-1936. Aprovado
+    pelo dono em 2026-09-26. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
