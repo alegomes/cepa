@@ -53,10 +53,18 @@ def comandos(repo):
 
 
 def faltando(cmds, texto):
-    """Os comandos que não aparecem citados no texto do catálogo."""
+    """Os comandos sem linha própria numa tabela do catálogo.
+
+    Só vale a linha `| `/plugin:comando` | argumento | o que faz |`. Uma
+    menção solta em prosa ("veja também /x:y") não documenta o comando: o
+    proof gate mostrou que, contando qualquer citação, apagar a linha da
+    tabela e deixar a menção passava verde — e foi assim que o /common:spec
+    ficou só com a linha da Parte 1.
+    """
     return [
         c for c in cmds
-        if c not in INTERNOS and not re.search(re.escape(c) + r"(?![\w-])", texto)
+        if c not in INTERNOS
+        and not re.search(r"^\|\s*`" + re.escape(c) + r"`\s*\|", texto, re.M)
     ]
 
 
@@ -78,15 +86,20 @@ def main():
           "exceção para comando que sumiu: " + ", ".join(fantasmas))
 
     # O teste tem que conseguir ficar vermelho: tirar uma linha acusa ela,
-    # e um prefixo não vale pelo comando inteiro (/common:worktree-list não
-    # cobre /common:worktree-lis, nem /common:plan cobre /common:plan-x).
+    # um prefixo não vale pelo comando inteiro (/common:plan não cobre
+    # /common:plan-x) e menção fora de tabela não vale pela linha.
     alvo = "/common:until-review"
     sem_linha = "\n".join(l for l in texto.splitlines() if alvo not in l)
     check("tirar a linha de um comando faz ele faltar",
           faltando([alvo], sem_linha) == [alvo])
-    check("prefixo de outro comando não conta como citação",
-          faltando(["/common:plan-x"], "`/common:plan-xyz`") == ["/common:plan-x"]
-          and faltando(["/common:plan"], "`/common:plan-x`") == ["/common:plan"])
+    check("prefixo de outro comando não conta como linha",
+          faltando(["/common:plan-x"], "| `/common:plan-xyz` | a | b |") == ["/common:plan-x"]
+          and faltando(["/common:plan"], "| `/common:plan-x` | a | b |") == ["/common:plan"])
+    check("menção solta em prosa não conta como linha do catálogo",
+          faltando([alvo], f"veja também `{alvo}` para isso.\n- `{alvo}`. faz algo")
+          == [alvo])
+    check("a linha da tabela conta",
+          faltando([alvo], f"| `{alvo}` | `[x]` | faz algo |") == [])
 
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s)")
