@@ -1,0 +1,62 @@
+schema_version: 2
+card: maven-reactor-guard-libera-o-inocente
+verdict: proven
+reviewed_at: 2026-09-27T15:14:26-03:00
+base_commit: d52162a
+head_commit: 94185f0
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "common/hooks/maven-reactor-guard.py (regra 1: _all_goals_noncompiling/_is_noncompiling_goal e o loop _offending_segments->compiling que aplica a regra 1 a TODOS os segmentos ofensores, não só ao primeiro; regra 2: _fresh_root_install, comparação de mtime via _buildsource.any_source_newer; regra 3: _is_quarkus_segment e a mensagem de bloqueio sem sugestão de -am; telemetria maven_reactor_allow/maven_reactor_block com os novos `reason`)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/capture-build-result.py (runs_root_install: goals/has_pl/has_resume_from/file_flag_target, resolução do pom efetivo via -f ou build_dir, comparação contra marker_root; gravação de .claude/last-root-install.json separado de last-build.json)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/_mvnscan.py (novo módulo compartilhado: maven_args, has_pl, has_am, has_resume_from, file_flag_target, goals — extraído de maven-reactor-guard.py, usado também por capture-build-result.py)"
+      module: hooks
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/hooks/_buildsource.py (novo módulo compartilhado: is_source, SOURCE_EXTENSIONS/BUILD_FILES/EXCLUDED_PATH_FRAGMENTS, any_source_newer — extraído de mark-build-stale.py, usado também por maven-reactor-guard.py)"
+      module: hooks
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/hooks/mark-build-stale.py (refatorado: is_source = B.is_source, delega para _buildsource.py em vez de manter a lista duplicada)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results:
+        - "repo Python de harness (hooks do cepa), sem pitest; PIT não se aplica — fallback é a perturbação universal, único mecanismo usado."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN pré-perturbação, na árvore principal, sem nenhuma alteração: `python3 tests/test_maven_reactor_guard.py` -> 'all green' (17+ casos); `python3 tests/test_capture_build_result_root_install.py` -> 'all green'; `python3 tests/test_shell_write_marks_stale.py` -> 'all shell-write-marks-stale tests passed'; `python3 tests/test_baseline_worktree_poisoning.py` -> 'all baseline-worktree-poisoning tests passed'; `python3 tests/test_multiline_quoted_shell.py` -> 'tudo verde em 6 cópias do bash-path-lock + os 2 guards do common'."
+        - "Worktree descartável `git worktree add --detach <tmp>/red 94185f0` (fora da raiz do repo); removida ao fim com `git worktree remove --force`. Todas as edições de perturbação abaixo foram feitas SÓ dentro dessa worktree, nunca na árvore principal."
+        - "Perturbação 1 (regra 1 — só o PRIMEIRO ofensor, não todos): em `main()`, trocado `compiling = [(s, a) for s, a in offenders if not _all_goals_noncompiling(a)]` por uma versão que olha só `offenders[0]` -> `python3 tests/test_maven_reactor_guard.py` -> RED: 'FAIL clean (não compila) seguido de test (compila) continua bloqueado' — reintroduz exatamente o bypass do pair-reviewer de 2026-09-27 (`./mvnw -pl a clean && ./mvnw -pl b test` passaria liberado). Restaurado (`git checkout HEAD -- common/hooks/maven-reactor-guard.py`); GREEN de novo."
+        - "Perturbação 2 (regra 1 — install deixa de compilar): acrescentado `'install'` a `_NONCOMPILING_PHASES` -> `python3 tests/test_maven_reactor_guard.py` -> RED: 'FAIL -pl domain install continua bloqueado (install compila, de propósito)'. Restaurado; GREEN de novo."
+        - "Perturbação 3 (regra 2 — mtime deixa de importar): `_fresh_root_install` trocado para `return True` sempre que o marcador existe, ignorando `B.any_source_newer` -> RED: 'FAIL install file presente mas fonte MAIS NOVA que `at` -> continua bloqueado' e 'FAIL editar fonte depois do install fresco volta a bloquear' (2 falhas). Restaurado; GREEN de novo."
+        - "Perturbação 4 (regra 3 — mensagem do quarkus:* passa a sugerir -am): trecho da mensagem de bloqueio trocado para 'acrescente `-am` para consertar' -> RED: 'FAIL mensagem do quarkus:* NÃO sugere acrescentar -am'. Restaurado; GREEN de novo."
+        - "Perturbação 5 (capture-build-result — check de pom efetivo via -f/cd removido): em `runs_root_install`, `if resolved != root_pom: continue` trocado por `if False: continue` (aceita qualquer pom como se fosse o da raiz) -> `python3 tests/test_capture_build_result_root_install.py` -> RED: 'FAIL -f domain/pom.xml install NÃO grava o marcador (pom de submódulo)' e 'FAIL cd domain && ./mvnw install NÃO grava o marcador na raiz da sessão' (2 falhas, os dois bugs que o pair-reviewer reproduziu em 2026-09-27). Restaurado; GREEN de novo."
+        - "Perturbação 6 (_buildsource.py — is_source deixa de excluir src/test): removido o fragmento `/test/` de `EXCLUDED_PATH_FRAGMENTS` (mantendo `/tests/`/`/__tests__/` para não confundir com o outro achado) -> `python3 tests/test_maven_reactor_guard.py` -> RED: 'FAIL editar teste depois do install fresco NÃO bloqueia (src/test não é fonte)' (e um segundo caso downstream também caiu, 2 falhas no total). `test_shell_write_marks_stale.py` não pegou este caso específico (seus cenários de teste ficam na raiz da árvore, não em src/test/ dentro de um módulo) — mas o teste do próprio hook alterado (test_maven_reactor_guard.py) pegou, o que já satisfaz 'a guarding test da altitude certa foi ao vermelho'. Restaurado; GREEN de novo."
+        - "Todos os hooks são chamados via `subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), ...)` — a superfície externa real (o contrato PreToolUse/PostToolUse de hook do Claude Code via stdin JSON / exit code / stderr), sem nenhum duplo substituindo o hook sob teste."
+        - "Reconfirmação final na árvore principal, intocada durante todo o processo: `python3 tests/test_maven_reactor_guard.py` -> 'all green'; `python3 tests/test_capture_build_result_root_install.py` -> 'all green'. `git status --short` na árvore principal mostra zero mudança nos arquivos de produção tocados por esta prova."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Todo hunk perturbado (regra 1 por-segmento, regra 1 install-compila, regra 2 comparação de mtime, regra 3 mensagem sem -am, capture-build-result pom efetivo via -f/cd, _buildsource exclusão de src/test) tem uma linha de teste que foi de fato ao vermelho quando o hunk foi quebrado — não há linha alterada sem teste que a cubra na altitude certa. `_mvnscan.py` e `_buildsource.py` (módulos novos) não foram perturbados isoladamente porque toda função neles é exercida pelas duas suítes de hook acima (maven_args/has_pl/has_am/has_resume_from/file_flag_target/goals via test_maven_reactor_guard.py e test_capture_build_result_root_install.py; is_source/any_source_newer via ambas)."
+  l4_adversarial_input:
+    status: "n/a"
+    reason: "O diff altera só hooks de linha de comando (PreToolUse/PostToolUse) que leem um payload JSON do Claude Code via stdin e uma linha de comando de shell já validada pelos testes existentes; não abre superfície HTTP nem parser novo exposto a usuário externo. Este repo (harness cepa) não tem módulo de entrada tipo api-rest."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: "n/a"
+    run: "Item não é card de Bug formal (fila cepa, tipo Feature — libera três casos de falso-positivo do guard). Os dois bugs mencionados no diff como 'reproduzidos pelo pair-reviewer em 2026-09-27' (olhar só o primeiro segmento ofensor; -f/cd escapando do check do pom efetivo) já nasceram consertados neste mesmo commit 94185f0 — não há SHA anterior em que a regra nova existia com o bug para reproduzir red-at-base. A garantia equivalente foi dada pela perturbação acima: reintroduzir cada um desses dois bugs isoladamente faz a suíte correspondente ir a RED."
+routing_reason: "Seis hunks de decisão do diff (regra 1 aplicada a todos os segmentos ofensores, regra 1 excluindo install, regra 2 comparação de mtime, regra 3 mensagem sem -am, capture-build-result comparando o pom efetivo contra a raiz via -f/cd, _buildsource excluindo src/test) foram cada um revertido isoladamente numa worktree descartável fora da árvore principal, e cada reversão fez a suíte que deveria acusar ir a RED — nenhum ficou verde quando quebrado. Todas as reversões foram restauradas e as duas suítes centrais voltaram a GREEN, confirmadas de novo na árvore principal intocada. Não há PIT neste repo Python (ausente, fallback universal usado). L4 é n/a (hook de linha de comando, sem superfície HTTP). Regressão red-at-base é n/a (não é card Bug; os dois bugs relatados pelo pair-reviewer já chegam consertados no commit e foram provados load-bearing pela perturbação). PROVEN."

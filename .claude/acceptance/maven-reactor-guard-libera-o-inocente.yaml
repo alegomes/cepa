@@ -1,0 +1,133 @@
+key: maven-reactor-guard-libera-o-inocente
+status: complete
+diff_range: d52162a..94185f0 (commit 94185f0)
+title: >
+  maven-reactor-guard libera goals que nao compilam, -pl sem -am apos install
+  da raiz posterior a ultima edicao, e quarkus:*
+
+precondition_check:
+  claim: >
+    Antes de construir: conferir numa amostra de 10 bloqueios que o install
+    veio depois da ultima edicao.
+  status: done_by_orchestrator
+  evidence: >
+    /tmp/rg-amostra/amostra.py rodado sobre ~/.claude/projects/*wego-acesso*/**/*.jsonl:
+    366 bloqueios, 187 install-after-last-edit, 143 edit-after-install, 36 sem
+    install; amostra aleatoria de 10 (seed 20260927): 4/5/1. Este achado está
+    registrado no docstring do guard (common/hooks/maven-reactor-guard.py,
+    linhas 62-79, seção "2. `-pl` sem `-am` depois de um `install` fresco da
+    raiz") e bate com o resumo passado pelo orquestrador. Não é um teste
+    automatizado — é o insumo de design que justifica a comparação por
+    carimbo de tempo (em vez de "houve install alguma vez"), e está citado
+    como tal.
+
+criteria:
+  - id: AC1
+    text: "libera goals que nao compilam"
+    altitude: hook (PreToolUse)
+    surface: >
+      JSON payload no stdin de common/hooks/maven-reactor-guard.py -> exit
+      code (0 libera / 2 bloqueia) + stderr
+    test: tests/test_maven_reactor_guard.py
+    layer: subprocess do hook real (REPO/common/hooks/maven-reactor-guard.py),
+      não import de função isolada
+    evidence: verified
+    run: >
+      $ python3 tests/test_maven_reactor_guard.py
+      ... (39 checks, incluindo "-pl domain clean é liberado (clean não
+      compila)", "-pl bootstrap dependency:tree é liberado", "-pl x clean
+      test continua bloqueado (test compila)", "-pl domain install continua
+      bloqueado (install compila, de propósito)", "clean (não compila)
+      seguido de test (compila) continua bloqueado" [comando encadeado com
+      múltiplos ofensores])
+      all green
+      EXIT=0
+    notes: >
+      Cobre também o bug do pair-reviewer (comando encadeado com mais de um
+      segmento ofensor — só libera quando TODOS não compilam).
+
+  - id: AC2
+    text: "-pl sem -am apos install da raiz posterior a ultima edicao"
+    altitude: hook-to-hook (PostToolUse escreve marcador; PreToolUse seguinte lê)
+    surface: >
+      capture-build-result.py (PostToolUse) grava
+      .claude/last-root-install.json a partir do payload de um Maven SUCCESS;
+      maven-reactor-guard.py (PreToolUse) lê esse arquivo e compara com mtime
+      dos fontes do reator antes de liberar/bloquear um -pl subsequente.
+    test: >
+      tests/test_capture_build_result_root_install.py (escrita do marcador,
+      inclusive os quatro jeitos de NÃO contar: -pl, -rf, -f para submódulo,
+      cd para submódulo sem -f) + tests/test_maven_reactor_guard.py (leitura
+      do marcador comparada a mtime de fonte, incluindo teste não conta como
+      fonte)
+    layer: subprocess dos dois hooks reais
+    evidence: verified
+    run: >
+      $ python3 tests/test_capture_build_result_root_install.py
+      ... (14 checks) all green EXIT=0
+      $ python3 tests/test_maven_reactor_guard.py
+      ... (inclui "install fresco (fonte MAIS ANTIGA que `at`) → liberado",
+      "editar fonte depois do install fresco volta a bloquear", "editar
+      teste depois do install fresco NÃO bloqueia") all green EXIT=0
+      Adicionalmente, corri manualmente a cadeia ponta-a-ponta (os dois hooks
+      reais, reator sintético em disco, sem parametrizar nada dentro dos
+      arquivos de teste) via /tmp/rg-amostra/e2e.sh:
+      $ bash /tmp/rg-amostra/e2e.sh
+      1) sem install: [2] -pl bootstrap test bloqueado, [0] -pl domain clean liberado
+      2) cd domain && install (sem -f): nenhum marcador gravado (nem raiz nem
+         domain/.claude) -> [2] -pl bootstrap test continua bloqueado
+      3) install da raiz: [0] -pl bootstrap test liberado, [0] -pl bootstrap
+         quarkus:dev liberado
+      4) common editado depois do install: [2] -pl bootstrap test bloqueado,
+         [2] -pl bootstrap quarkus:dev bloqueado, [0] dependency:tree liberado,
+         [2] clean&&test encadeado bloqueado
+    notes: >
+      A cadeia real (escrever o marcador com um hook, ler com o outro, contra
+      um reator com pom.xml/mtimes de verdade em disco) foi exercida por mim,
+      não só assumida a partir do relato do orquestrador.
+
+  - id: AC3
+    text: "quarkus:* nunca ganha sugestao de -am"
+    altitude: hook (PreToolUse)
+    surface: >
+      payload com goal quarkus:* -> exit code 2 + mensagem de stderr que NÃO
+      sugere -am e instrui instalar a raiz e repetir
+    test: tests/test_maven_reactor_guard.py
+    layer: subprocess do hook real
+    evidence: verified
+    run: >
+      $ python3 tests/test_maven_reactor_guard.py
+      ... "-pl bootstrap quarkus:dev sem install é bloqueado" ok
+      "mensagem do quarkus:* NÃO sugere acrescentar -am" ok
+      "mensagem do quarkus:* manda instalar a raiz" ok
+      "-pl bootstrap quarkus:dev com install fresco é liberado" ok
+      all green EXIT=0
+    notes: >
+      Confirmado também na cadeia manual (e2e.sh passo 3: quarkus:dev com
+      install fresco -> exit 0; passo 4: quarkus:dev com fonte editada depois
+      do install -> exit 2, mensagem cita -am só para explicar que NÃO é o
+      conserto, nunca como sugestão de ação).
+
+judgment_hooks_from_installed_plugin:
+  question: >
+    "hooks carregados do plugin instalado" é um gap deste item?
+  verdict: not_a_gap
+  reasoning: >
+    As sessões cepa-until/claude carregam hooks a partir do plugin instalado
+    no clone principal, então em produção esta mudança só passa a valer após
+    merge + reinstalação do plugin. Isso é verdade para toda mudança de hook
+    neste repositório — é o caminho normal de aterrissagem, não uma condição
+    de aceite deste item específico. Os testes deste item rodam o hook direto
+    do arquivo no worktree (REPO/common/hooks/*.py via subprocess), que é a
+    forma correta de testar a *lógica* do hook antes do merge; verificar a
+    reinstalação do plugin em si não faz parte do escopo de "libera goals que
+    nao compilam, -pl sem -am..., e quarkus:*".
+
+overall_notes: >
+  Três liberações automáticas do maven-reactor-guard, cada uma com teste
+  demonstrando a lógica no arquivo de hook real via subprocess (payload in,
+  exit code out) — a altitude correta para hooks Claude Code PreToolUse/
+  PostToolUse. AC2 (a mais arriscada, por depender de dois hooks
+  coordenados por um arquivo compartilhado) foi verificada tanto pela suíte
+  quanto por uma cadeia manual independente em disco. Nenhum gap encontrado
+  dentro do escopo declarado do item.

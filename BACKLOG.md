@@ -3591,9 +3591,10 @@ numa varredura só guiada pelo A3.
 
 ## maven-reactor-guard barra o `quarkus:dev`, que só funciona sem `-am`
 
-**Plano:** fora da fila (ainda não priorizado; registrado em 2026-09-25)
+**Plano:** `cepa/maven-reactor-guard-libera-o-inocente`
 
-**Status:** pendente · **Lar provável:** `common/hooks/maven-reactor-guard.py` · **Origem:**
+**Status:** feito em 27/09/2026 (`94185f0`, na branch `until/2026-09-27-1213`): com goal `quarkus:*` o guarda
+não sugere `-am` e libera depois de um `install` da raiz posterior à última edição · **Lar:** `common/hooks/maven-reactor-guard.py` · **Origem:**
 sessão `startup_error` do wego-acesso-backend (2026-09-25), achado do completion-auditor
 conferido na sessão principal.
 
