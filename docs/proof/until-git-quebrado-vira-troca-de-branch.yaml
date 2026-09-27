@@ -1,0 +1,128 @@
+schema_version: 2
+card: until-git-quebrado-vira-troca-de-branch
+verdict: proven
+reviewed_at: 2026-09-27T13:27:00-03:00
+base_commit: c6ba8eb
+head_commit: 9ae3d39
+issue_type: Bug
+repo_kind: harness            # NOT Quarkus/Maven — Python CLI + prompt files, própria suíte em tests/*.py
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (le_branch — devolve (branch, erro) em vez de sempre \"?\")"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (branch_atual — agora só um wrapper fino sobre le_branch)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (repara_ligacao — recria .git/worktrees/<nome>: HEAD, commondir, gitdir, e roda `git reset -q`)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (repara_ligacao — guarda admin.parent.resolve() != casa, recusa recriar ligação fora de <clone>/worktrees)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (laço principal — trata erro de git como reparo-e-segue ou encerra com motivo git-quebrado, em vez de branch-mudou)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_cepa_until_git_quebrado.py (suíte dedicada — neste diff ganhou o check do índice refeito e o teste novo da guarda de caminho)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é JVM); perturbação manual no binário real, via subprocess.run com um `claude` falso, é o mecanismo aplicável"
+    perturbation:
+      status: pass
+      results:
+        - "PASS (RED) — common/bin/cepa-until:864 (`codigo, saida = git([\"reset\", \"-q\"], arvore)` dentro de `repara_ligacao`): substituído por `codigo, saida = 0, \"\"` (pula o `git reset` de verdade, fingindo sucesso). Antes disso este item SOBREVIVIA à mesma perturbação (proof anterior, HEAD e210106). Com o novo check do commit 9ae3d39 (o 2º item grava `git status --porcelain` da worktree logo ao acordar, antes de escrever qualquer arquivo), a perturbação foi para VERMELHO: `timeout 60 python3 tests/test_cepa_until_git_quebrado.py` → 1 falha (`o 2º item acorda com a worktree limpa, índice refeito`), mostrando `D  .claude/programs/fila/plan.yaml`, `D  a1.txt`, `??  .claude/`, `?? a1.txt` — exatamente o índice dessincronizado que o `git reset -q` existe para corrigir. Restaurado; `diff` contra o binário do worktree principal confirmou idêntico."
+        - "PASS (RED) — common/bin/cepa-until:848 (guarda `if admin.parent.resolve() != casa:`): substituída por `if False:` (a guarda nunca dispara, deixando o reparo escrever onde o `gitdir:` mandar). Antes disso não havia teste algum que citasse essa guarda (GAP ESTRUTURAL na proof anterior). Com o teste novo `test_reparo_nao_escreve_fora_da_pasta_de_worktrees_do_clone` (aponta `.git` da worktree para `gitdir: <fora do clone>` e chama `repara_ligacao` direto, importando o binário como módulo), a perturbação foi para VERMELHO: `timeout 60 python3 tests/test_cepa_until_git_quebrado.py` → 2 falhas (`recusa ligação fora de .git/worktrees` — o reparo tentou seguir e caiu num `git reset` que falhou de outro jeito em vez de recusar com a mensagem certa; `e não cria nada lá` — a pasta fora do clone foi criada). Restaurado; `diff` confirmou binário idêntico."
+        - "RE-VERIFICADO PASS (RED) — common/bin/cepa-until:1218 (`falha_reparo = repara_ligacao(repo, arvore, branch_largada)`): substituído por `falha_reparo = erro_git` (pula a chamada de reparo). `timeout 60 python3 tests/test_cepa_until_git_quebrado.py` → 8 falhas, motivo virou `git-quebrado` no caso que deveria seguir (independente da mudança neste commit — linha e teste que a cobre não mudaram). Restaurado; `diff` confirmou idêntico."
+        - "RE-VERIFICADO (herdado da proof anterior, não re-executado nesta rodada por não ter mudado no diff 9ae3d39): common/bin/cepa-until:859 (conteúdo do HEAD recriado), :775-785 (`le_branch` devolvendo `None, erro` em vez de `\"?\", None`) e :1232 (`break` após `motivo_fim = \"git-quebrado\"`) — todos PASS (RED) na proof de e210106 e nenhuma dessas linhas nem os testes que as cobrem mudaram no commit 9ae3d39."
+      run: >-
+        Worktree descartável /tmp/proof-until-gitq2 (`git worktree add
+        --detach 9ae3d39`; worktree principal
+        /Users/alegomes/cepa-worktrees/cepa-until-2026-09-27-1213 NUNCA
+        tocado — `git status --porcelain` nele seguiu idêntico ao estado
+        inicial do início ao fim). GREEN de partida confirmado: `timeout 60
+        python3 tests/test_cepa_until_git_quebrado.py` → "✓ tudo verde" (15
+        checks, 3 testes), ANTES de qualquer perturbação. Também confirmado
+        verde `tests/test_cepa_until.py` e `tests/test_cepa_until_branch_da_noite.py`
+        (rodados em background por excederem 120s no primeiro corte, mas
+        concluídos em foreground do processo do sistema antes de eu seguir —
+        ambos "✓ tudo verde", sem depender de notificação assíncrona para a
+        decisão). Cada perturbação foi um `sed -i` no arquivo dentro do
+        worktree descartável (nunca no primário), seguida do mesmo comando de
+        teste, e restaurada a partir de `/tmp/cepa-until.orig` — `diff`
+        contra o arquivo do worktree principal confirmou byte-a-byte
+        idêntico depois de cada restauração. Worktree removida ao final com
+        `git worktree remove --force /tmp/proof-until-gitq2`; `git worktree
+        list` só mostra a árvore principal e a árvore não relacionada
+        `/Users/alegomes/coding/cepa`.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      As duas linhas que ficavam sem teste na proof anterior — o `git reset
+      -q` de :864 e a guarda de caminho de :848 — passaram a ter cobertura
+      direta neste commit (o check do índice refeito, e o teste dedicado da
+      guarda) e ambas foram confirmadas RED-quando-quebrado acima. As outras
+      4 linhas comportamentais do diff original (le_branch devolvendo o
+      erro, o reparo sendo chamado, o HEAD reparado apontar para a branch
+      certa, e o `break` no motivo git-quebrado) seguem com cobertura
+      RED-quando-quebrado herdada e não afetada por este commit.
+  l4_adversarial_input:
+    status: "n/a"
+    reason: >-
+      O diff não abre superfície de entrada nova: le_branch/repara_ligacao
+      leem só a saída do próprio `git` (subprocess controlado pelo
+      supervisor, não input externo/de usuário), e o laço principal só
+      reage a esses valores internos. O commit 9ae3d39 só adiciona testes,
+      não muda superfície nenhuma. Nenhum changed class está em módulo que
+      analisa entrada de fora (não há equivalente a `api-rest` neste harness
+      Python).
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: >-
+      No worktree descartável /tmp/proof-until-gitq2: `git checkout c6ba8eb
+      -- /tmp/proof-until-gitq2/common/bin/cepa-until` (mantendo
+      tests/test_cepa_until_git_quebrado.py do HEAD 9ae3d39) → `timeout 60
+      python3 tests/test_cepa_until_git_quebrado.py` → falhas em ambos os
+      testes end-to-end, motivo `branch-mudou` em vez de `git-quebrado`
+      (`agora estamos em \`?\``) e o terceiro teste quebra com
+      `AttributeError: module 'cepa_until' has no attribute 'repara_ligacao'`
+      porque a função nem existe na base — reproduz de forma independente a
+      regressão de 25/09 e confirma que a suíte nova exige a função nova.
+      Restaurado com `git checkout 9ae3d39 --
+      /tmp/proof-until-gitq2/common/bin/cepa-until`; `diff` contra
+      `/tmp/cepa-until.orig` confirmou idêntico.
+routing_reason: >-
+  Os dois gaps que bloquearam a proof anterior (HEAD e210106) foram
+  fechados por este commit e verificados de forma independente: (1) o `git
+  reset -q` dentro de `repara_ligacao` (common/bin/cepa-until:864), que
+  antes sobrevivia perturbado, agora vai para VERMELHO porque o teste novo
+  grava o `git status --porcelain` da worktree assim que o 2º item acorda,
+  antes de qualquer arquivo ser escrito — perturbar (fingir que o reset deu
+  certo sem rodar) deixa o índice sujo e o check falha; (2) a guarda de
+  segurança `admin.parent != casa` (:848), que antes não tinha teste algum,
+  agora tem `test_reparo_nao_escreve_fora_da_pasta_de_worktrees_do_clone`
+  (importa o binário como módulo e chama `repara_ligacao` direto com um
+  `gitdir:` fora do clone) e essa perturbação também vai para VERMELHO. As
+  quatro perturbações que já eram load-bearing na proof anterior (chamada
+  ao reparo, conteúdo do HEAD recriado, `le_branch` devolver o erro em vez
+  de "?", e o `break` no motivo git-quebrado) não mudaram neste commit e
+  foram re-verificadas onde fazia sentido (a chamada ao reparo, re-testada
+  integralmente). A regressão de 25/09 continua provada
+  green-at-head/red-at-base de forma independente. Não há mais nenhuma
+  linha comportamental do diff sobrevivendo perturbada nem sem cobertura.
+  L4 é n/a porque o diff (testes apenas, mais o fix já provado antes) não
+  abre superfície de entrada nova. PROVEN.
