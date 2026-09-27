@@ -1,0 +1,118 @@
+key: board-flow-acha-cepa-plan-fora-do-cepa
+diff: 9bf1bcb..4c4b465
+status: complete
+criteria:
+  - id: AC1
+    text: >-
+      From a host repo cwd without a common/ directory, the invocation used
+      by /board-flow:capture (`cepa-plan add`) reaches common's real
+      cepa-plan and acts on the host repo's queue (cwd as --repo).
+    altitude: cli
+    surface: >-
+      subprocess execution of board-flow/bin/cepa-plan (the shim) from a cwd
+      that has no common/ at its root, plus the exact invocation string
+      capture.md hands to the shell (${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan add
+      ... --title ...)
+    test:
+      - tests/test_board_flow_cepa_plan_shim.py::test_cwd_sem_common_ainda_resolve_pelo_layout_de_repo
+      - tests/test_board_flow_cepa_plan_shim.py::test_integracao_real_chega_no_cepa_plan_de_verdade
+      - tests/test_fila_unica_contratos.py::test_capture_add
+    layer: subprocess (real shim binary invoked via Python subprocess.run) + textual contract on capture.md's exact command line
+    evidence: verified
+    run: |
+      $ python3 -m pytest tests/test_board_flow_cepa_plan_shim.py -q
+      7 passed in 0.25s (exit=0)
+      $ python3 tests/test_fila_unica_contratos.py
+      test_capture_add: ok chama cepa-plan add <project_key> <KEY> --title ... ; all green (exit=0)
+    verdict: complete
+    notes: >-
+      --repo defaults to "." in common/bin/cepa-plan's argparse (confirmed by
+      reading the add/ordena/write subparsers), so cwd-as---repo is the
+      default and does not need an explicit flag in capture.md/drain.md;
+      triage.md's write call passes --repo . explicitly.
+
+  - id: AC2
+    text: >-
+      Same for /board-flow:drain (`cepa-plan ordena`) and /board-flow:triage
+      (`cepa-plan write --from-triage`).
+    altitude: cli
+    surface: >-
+      the exact shell invocation drain.md and triage.md hand off, through
+      the same shim resolution mechanism
+    test:
+      - tests/test_board_flow_cepa_plan_shim.py::test_layout_de_repo_resolve_e_repassa_argv_e_exit
+      - tests/test_fila_unica_contratos.py::test_drain_ordena
+      - tests/test_common_plan.py::test_contrato_do_triage
+    layer: subprocess (real shim, fake cepa-plan echoing argv/exit code) + textual contract on drain.md/triage.md
+    evidence: verified
+    run: |
+      $ python3 tests/test_fila_unica_contratos.py
+      test_drain_ordena: ok chama cepa-plan ordena <project_key> --keys ... ; all green (exit=0)
+      $ python3 tests/test_common_plan.py
+      test_contrato_do_triage: ok manda a gravação passar pelo cepa-plan --from-triage ; all green (exit=0)
+    verdict: complete
+
+  - id: AC3
+    text: >-
+      Works in both the cepa repo layout and the installed plugin cache
+      layout (~/.claude/plugins/cache/<mkt>/board-flow/<ver>/ with
+      common/<ver>/), picking the highest installed common version.
+    altitude: cli
+    surface: shim path resolution against a fabricated plugin-cache directory tree
+    test:
+      - tests/test_board_flow_cepa_plan_shim.py::test_layout_de_cache_pega_a_versao_mais_alta_do_common
+      - tests/test_board_flow_cepa_plan_shim.py::test_layout_de_repo_resolve_e_repassa_argv_e_exit
+    layer: subprocess (real shim binary against tmp_path-built fake cache/repo trees, numeric tuple comparison verified against a lexical-order trap 2.9.0 vs 2.10.0)
+    evidence: verified
+    run: |
+      $ python3 -m pytest tests/test_board_flow_cepa_plan_shim.py::test_layout_de_cache_pega_a_versao_mais_alta_do_common -v
+      PASSED (exit=0, part of "7 passed in 0.25s")
+    verdict: complete
+
+  - id: AC4
+    text: >-
+      No board-flow command/skill/agent still calls `python3
+      common/bin/cepa-plan`.
+    altitude: application (source-scan contract over board-flow/{commands,skills,agents})
+    surface: literal string "python3 common/bin/cepa-plan" absent from board-flow's command/skill/agent files
+    test:
+      - tests/test_board_flow_cepa_plan_shim.py::test_nenhum_arquivo_do_board_flow_chama_o_caminho_relativo
+    layer: source scan (rglob over board-flow/commands, board-flow/skills, board-flow/agents)
+    evidence: verified
+    run: |
+      $ python3 -m pytest tests/test_board_flow_cepa_plan_shim.py::test_nenhum_arquivo_do_board_flow_chama_o_caminho_relativo -v
+      PASSED (exit=0)
+      Manual grep confirms remaining "common/bin/cepa-plan" occurrences in
+      capture.md/triage.md are prose explaining the shim, not invocations
+      (they don't match "python3 common/bin/cepa-plan").
+    verdict: complete
+
+  - id: AC5
+    text: Failure to locate is loud (non-zero, names tried paths), not silent.
+    altitude: cli
+    surface: shim exit code and stderr when no cepa-plan candidate exists anywhere (repo, cache, PATH)
+    test:
+      - tests/test_board_flow_cepa_plan_shim.py::test_nenhum_candidato_sai_127_e_nomeia_os_caminhos_tentados
+    layer: subprocess (real shim binary, PATH scrubbed to /usr/bin:/bin)
+    evidence: verified
+    run: |
+      $ python3 -m pytest tests/test_board_flow_cepa_plan_shim.py::test_nenhum_candidato_sai_127_e_nomeia_os_caminhos_tentados -v
+      PASSED (exit=0) -- asserts returncode == 127, "não encontrado" in stderr,
+      the tried repo path is named, and "instale o plugin" appears
+    verdict: complete
+
+runs_summary:
+  - cmd: python3 -m pytest tests/test_board_flow_cepa_plan_shim.py -q
+    result: "7 passed in 0.25s"
+    exit: 0
+  - cmd: python3 tests/test_fila_unica_contratos.py
+    result: "all green (test_capture_add, test_drain_ordena, test_doctor_live)"
+    exit: 0
+  - cmd: python3 tests/test_common_plan.py
+    result: "all green (9 test functions, dozens of named checks incl. test_contrato_do_triage)"
+    exit: 0
+  - cmd: python3 tests/test_fio_condutor.py
+    result: "all green"
+    exit: 0
+
+gap: null
