@@ -73,9 +73,22 @@ def test_os_limites_que_a_reconciliacao_nao_pode_cruzar():
           "self-reported" in limpo or "auto-declarado" in limpo)
 
 
+def test_item_done_nao_desce_de_categoria():
+    f = CMD.read_text(encoding="utf-8")
+    limpo = f.replace("`", "").lower()
+    check("a tabela diz que item done continua done contra o quadro (R3)",
+          "stays done" in limpo and "r3" in limpo,
+          "o rebaixamento antigo reabriu 11 cards prontos no wego-acesso-backend")
+    check("e que reabrir é decisão do usuário, pelo /common:plan",
+          "reopening it is the user's call" in limpo
+          and "through /common:plan" in limpo,
+          "se o comando voltar a reabrir sozinho, a regra R3 some do leitor")
+
+
 def main():
     for fn in (test_chama_o_comparador_em_vez_de_comparar_de_olho,
-               test_os_limites_que_a_reconciliacao_nao_pode_cruzar):
+               test_os_limites_que_a_reconciliacao_nao_pode_cruzar,
+               test_item_done_nao_desce_de_categoria):
         print(f"\n{fn.__name__}")
         fn()
     print()

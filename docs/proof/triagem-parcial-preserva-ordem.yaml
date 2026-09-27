@@ -1,0 +1,123 @@
+schema_version: 2
+card: triagem-parcial-preserva-ordem
+verdict: proven
+reviewed_at: 2026-09-27T15:20:00-03:00
+base_commit: cf45f50
+head_commit: 15da11b
+issue_type: Bug
+repo_kind: harness   # plugins do Claude Code (Python), sem Maven/Quarkus — perturbação + re-run do teste é o mecanismo, não PIT
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (cmd_write: ramo novo `if a.on_missing == \"keep\" and a.from_triage and sobras`, que ancora a fila do disco em `ja_na_fila` via `por_id.pop(ident)` e acrescenta o resto de `fundidos` — os cards novos — no fim; relatório novo `acrescentados`; texto de ajuda do subcomando write)"
+      module: cli
+      external_observable: true   # superfície é o subprocesso `cepa-plan write --from-triage ... --on-missing keep`, chamado pelo teste via subprocess.run (helper `run()`), não por chamada de função mockada
+      substituted_by_double: null
+    - class: "common/commands/plan.md (prosa do `--on-missing keep` explicando a triagem parcial)"
+      module: commands
+      external_observable: false   # texto de documentação, sem asserção de teste cobrindo esta prosa específica
+      substituted_by_double: null
+    - class: "tests/test_common_plan.py (test_triagem_parcial_preserva_a_ordem_da_fila) — teste-only, sem mudança de produção"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); o cobridor é um subprocesso Python (common/bin/cepa-plan write) invocado via subprocess.run pelo helper `run()` de tests/test_common_plan.py com o payload real de CLI — perturbação de cada ramo mudado + re-run do processo é o mecanismo aplicável, não PIT."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida confirmado no HEAD (15da11b), numa worktree descartável (git worktree add --detach 15da11b /private/tmp/proof-triagem-ordem, endereçada pelo caminho literal em toda chamada seguinte): python3 tests/test_common_plan.py -> 'all green', 133 checks 'ok', exit 0."
+        - "PERTURBAÇÃO 1 (load-bearing, RED) -- neutralizada a condição nova (`if a.on_missing == \"keep\" and a.from_triage and sobras:` virou `if False and ...`), forçando o fluxo a cair no `elif a.on_missing == \"keep\":` antigo (extend no fim, sem ancorar a ordem do disco). Reexecutado python3 tests/test_common_plan.py: 2 falhas, exit 1 -- 'a fila do disco fica na ordem dela e os novos entram DEPOIS' (ids voltaram a ['W-1438','W-1600','W-1439','W-1440','W-1437','W-1500','W-900','W-1700','W-1800'], os 3 novos na frente e a fila antiga inteira empurrada para o fim) e 'o relatório nomeia os cards acrescentados' (a mensagem 'triagem parcial: ...' deixou de ser impressa). Restaurado com `git -C /private/tmp/proof-triagem-ordem checkout 15da11b -- /private/tmp/proof-triagem-ordem/common/bin/cepa-plan`, GREEN reconfirmado (133 ok, exit 0, git status limpo)."
+        - "PERTURBAÇÃO 2 (load-bearing, RED) -- quebrado o 'atualiza no lugar': removido o `por_id.pop(ident)` (trocado por sempre reconstruir do disco, sem nunca esvaziar `por_id`), então um item que a triagem também cita (W-1600) passou a aparecer DUAS vezes -- uma no lugar antigo com o dado do disco, outra no fim com o dado atualizado da triagem, porque a segunda passada (`[f for f in fundidos if str(f[\"id\"]) in por_id]`) nunca deixa de enxergá-lo. Reexecutado: 2 falhas, exit 1 -- ids saíram como ['W-1437','W-1500','W-900','W-1600','W-1700','W-1800','W-1438','W-1600','W-1439','W-1440'] (W-1600 duplicado) e o relatório de acrescentados quebrou junto. Restaurado com `git -C /private/tmp/proof-triagem-ordem checkout HEAD -- /private/tmp/proof-triagem-ordem/common/bin/cepa-plan`, GREEN reconfirmado (133 ok, exit 0, git status limpo)."
+      run: >-
+        Worktree descartável /private/tmp/proof-triagem-ordem (git -C
+        /Users/alegomes/coding/cepa worktree add --detach
+        /private/tmp/proof-triagem-ordem 15da11b), endereçada pelo caminho
+        literal em toda chamada (git -C /private/tmp/proof-triagem-ordem ...
+        ou cd /private/tmp/proof-triagem-ordem && ...), nunca por variável
+        nem por python3 -c para contornar cadeado. Duas restrições de hooks
+        do próprio harness bateram durante a prova e foram respeitadas sem
+        contorná-las: o `modo-escrita-gate` (sessão em modo exploração) só
+        libera escrita relativa dentro da raiz da sessão OU alvo absoluto
+        fora dela -- por isso toda restauração usou o caminho absoluto do
+        arquivo dentro da worktree descartável como alvo do `git checkout`,
+        nunca caminho relativo; o `bash-path-lock` (build-hex) nega
+        `python3 <arquivo>` quando o cd de uma linha anterior do mesmo
+        comando composto já havia deslocado o rastreamento para fora da raiz
+        -- por isso cada `python3 tests/...` rodou em chamada Bash isolada,
+        própria, com `cd /private/tmp/proof-triagem-ordem &&` na mesma
+        linha. Cada perturbação foi uma edição direta de texto (heredoc
+        python3 fazendo substituição de string exata), seguida de
+        `python3 tests/test_common_plan.py` em chamada separada, restauração
+        via `git checkout <ref> -- <caminho absoluto>` e reconfirmação de
+        GREEN antes da perturbação seguinte. Ao final, `git status --short`
+        limpo. Árvore principal (/Users/alegomes/coding/cepa) e a worktree
+        de trabalho do card (/Users/alegomes/cepa-worktrees/cepa-until-2026-09-27-1213)
+        nunca tocadas; nenhum arquivo fora de docs/proof/ foi escrito lá.
+        Complementarmente (mesma chamada isolada, mesma worktree): python3
+        tests/test_common_drain_plan.py -> all green, exit 0; python3
+        tests/test_common_next.py -> all green, exit 0.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      Leitura estrutural (não há coverage tool wired neste repo Python); as
+      duas linhas de comportamento mudadas no diff de produção
+      (âncora da ordem do disco via `ja_na_fila`/`por_id.pop`, e o cálculo
+      de `acrescentados` + impressão do relatório) são EXECUTADAS e, com o
+      teste atual, AMBAS mudam o resultado do processo real quando
+      quebradas (RED nas perturbações 1 e 2 de l3) -- nenhuma é código
+      morto. A única mudança não coberta por asserção é a prosa nova em
+      common/commands/plan.md (texto de ajuda do `--on-missing keep` com
+      `--from-jira`) -- é documentação, não comportamento executável, e por
+      isso não bloqueia o veredito, mas fica registrada como gap de
+      cobertura textual.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      O subcomando não abre superfície de entrada HTTP/anônima: é um CLI
+      local (`cepa-plan write`) invocado por outro comando do harness ou,
+      nos testes, simulado via subprocess.run com argv e JSON de disco
+      controlados pelo próprio teste -- não há usuário externo desconhecido
+      compondo o payload. Este repo não tem módulo equivalente a api-rest
+      (é Python, não Maven/Quarkus), então a condição estrutural do guard
+      (nenhuma classe mudada em módulo com superfície de entrada) vale
+      trivialmente.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: >-
+      Na mesma worktree descartável, com `git checkout cf45f50 --
+      /private/tmp/proof-triagem-ordem/common/bin/cepa-plan
+      /private/tmp/proof-triagem-ordem/common/commands/plan.md` (código
+      ainda sem o fix -- triagem parcial reordenava a fila inteira) e o
+      arquivo de teste do HEAD trazido por cima (`git checkout 15da11b --
+      /private/tmp/proof-triagem-ordem/tests/test_common_plan.py`), rodei
+      `python3 tests/test_common_plan.py`: 2 falhas, exit 1 -- exatamente as
+      mesmas duas asserções nomeadas no card ('a fila do disco fica na
+      ordem dela e os novos entram DEPOIS', com ids saindo como
+      ['W-1438','W-1600','W-1439','W-1440','W-1437','W-1500','W-900','W-1700','W-1800']
+      -- os 3 cards novos na frente e a fila priorizada inteira empurrada
+      para trás, o mesmo padrão do achado de quadro real de 2026-09-25; e 'o
+      relatório nomeia os cards acrescentados'). No HEAD (15da11b), o mesmo
+      arquivo de teste dá 'all green', 133 ok, exit 0. Restaurado
+      (`git checkout 15da11b -- <3 arquivos>`), GREEN reconfirmado.
+routing_reason: >-
+  As duas linhas de comportamento mudadas no diff de produção (base cf45f50
+  -> head 15da11b: âncora da ordem do disco em `ja_na_fila` com
+  `por_id.pop`, e o relatório de `acrescentados`) morrem sob perturbação
+  isolada dentro de uma worktree descartável endereçada só por caminho
+  literal, como o card exige. A regressão do bug está vermelha na base (2
+  falhas em cf45f50, as mesmas duas asserções nomeadas no card, com a fila
+  reordenada exatamente como no achado de quadro real de 2026-09-25) e verde
+  no head. l4 é n/a porque o comando não abre superfície de entrada externa
+  (CLI local, sem módulo api-rest neste repo). l2 é pass porque as linhas
+  mudadas rodam e mudam o resultado real, confirmado nas mesmas perturbações
+  de l3; a única lacuna é textual (prosa de common/commands/plan.md sem
+  asserção própria), registrada mas não bloqueante. Nenhum nível está
+  assumed/skipped/gap/survived -- PROVEN.

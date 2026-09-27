@@ -1,0 +1,148 @@
+schema_version: 2
+card: reconcile-nao-rebaixa-done
+verdict: proven            # proven | unproven | needs-human
+reviewed_at: 2026-09-27T17:10:00-03:00
+base_commit: 7aa500b
+head_commit: 5464f2b
+issue_type: Bug
+repo_kind: harness   # plugins do Claude Code / hooks Python, sem Maven/Quarkus — perturbação + re-run do teste que cobre é o mecanismo, não PIT
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (função reconcilia(): guarda R3 — status ‘done’ nunca rebaixa, qualquer que seja o status do quadro, inclusive Won't Do e card sumido; divergência vira aviso nomeado citando R3)"
+      module: cli
+      external_observable: true   # superfície é o próprio subcomando `cepa-plan reconcile` rodando como subprocesso (tests/test_common_drain_plan.py helper reconcile() invoca via subprocess.run e lê stdout/JSON/exit code, não chamada de função mockada)
+      substituted_by_double: null
+    - class: "tests/test_common_drain_plan.py (test_reconcile_nunca_rebaixa_item_done — novo; test_reconcile_traz_o_quadro_para_a_fila e test_reconcile_done_em_review_nao_e_bounce — ajustados para não esperar mais o bounce antigo)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/commands/next.md (tabela de leitura do reconcile e ordem de recomendação: linha ‘done | in progress/to do’ passa a dizer ‘stays done (rule R3)’ em vez de ‘it is pending again’; precedência nomeia que reabrir é decisão do dono via /common:plan)"
+      module: docs
+      external_observable: true   # commit 5464f2b acrescentou tests/test_common_next.py::test_item_done_nao_desce_de_categoria, que lê o arquivo do disco e afirma as duas frases-chave desta linha; verificado de forma independente nesta sessão (worktree própria, ver l2 abaixo)
+      substituted_by_double: null
+    - class: "tests/test_common_next.py (test_item_done_nao_desce_de_categoria — novo no commit 5464f2b, escrito pela sessão principal para fechar o gap l2_coverage apontado nesta prova; verificação independente feita aqui)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); o cobridor é um subprocesso Python (cepa-plan reconcile) invocado via subprocess.run com JSON real de plano+quadro, e uma leitura de arquivo (next.md) via `pathlib.Path.read_text` — perturbação de cada ramo/frase mudado + re-run do teste é o mecanismo aplicável, não PIT."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida confirmado no HEAD (8f84bb2, primeira rodada desta prova), em worktree descartável endereçada pelo caminho literal em toda chamada (git -C /private/tmp/proof-reconcile-nao-rebaixa-done ...), nunca por variável: python3 tests/test_common_drain_plan.py -> 'all green', 154 asserções 'ok', exit 0."
+        - "PERTURBAÇÃO 1 (load-bearing, RED) -- revertido em common/bin/cepa-plan todo o hunk da regra R3 (git apply -R do diff base->head restrito a esse arquivo, isolando exatamente a mudança de produção do card, teste do HEAD mantido): python3 tests/test_common_drain_plan.py -> 12 falhas, exit 1, incluindo os 3 asserts do teste-alvo ('card done que voltou atrás no quadro NÃO vira divergência (R3)', 'nenhum item done vira divergência, qualquer que seja o quadro', 'e o disco guarda todos como done depois do --apply') e as 2 regressões vizinhas. Restaurado com `git -C <worktree> checkout 8f84bb2 -- <worktree>/common/bin/cepa-plan` (pathspec absoluto, fora da raiz do clone principal — o path-lock e o modo-escrita-gate da sessão não têm jurisdição ali), GREEN reconfirmado (154 ok, exit 0)."
+        - "PERTURBAÇÃO 2 (load-bearing, RED) -- dentro do bloco R3, trocado `if papel in (\"done\", \"em-revisao\"):` por `if False:` (o item done nunca mais entra em_dia, mesmo quando o quadro já bate — Code Review/Concluído incluídos): python3 tests/test_common_drain_plan.py -> 2 falhas, exit 1 ('done + Code Review fica em dia', 'done + Concluído fica em dia, sem aviso') — confirma que o ramo silencioso (sem aviso quando o quadro já corresponde ao papel done/em-revisao) é load-bearing e não um efeito acidental do `continue`. Restaurado (mesmo comando de pathspec absoluto), GREEN reconfirmado (154 ok, exit 0)."
+        - "VERIFICAÇÃO INDEPENDENTE DO FECHAMENTO DO GAP (2ª rodada desta prova, commit 5464f2b, feita a pedido do coordenador sobre um teste que a sessão principal escreveu, não eu): nova worktree descartável /private/tmp/proof-reconcile-l2-fechado (git worktree add --detach 5464f2b), endereçada pelo caminho literal. (a) GREEN no head: python3 tests/test_common_next.py -> 8 ok, incluindo as 2 asserções novas de test_item_done_nao_desce_de_categoria, exit 0. (b) RED com common/commands/next.md na versão da base (git checkout 7aa500b -- <path literal>/common/commands/next.md, doc ainda sem a regra R3): 2 falhas, exit 1, ambas no teste novo. Restaurado (git checkout 5464f2b -- <path literal>/common/commands/next.md), GREEN reconfirmado. (c) PERTURBAÇÃO por frase, cada uma isolada e restaurada antes da próxima: c1 — reescrevi a linha 168 removendo só 'stays `done`** (rule R3:' (troquei para 'gets updated** (per policy:', mantendo a segunda frase intacta) -> 1 falha, exit 1, exatamente 'a tabela diz que item done continua done contra o quadro (R3)'; a segunda asserção continuou 'ok'. Restaurado, GREEN reconfirmado. c2 — reescrevi a mesma linha removendo só 'reopening it is the user's call, through `/common:plan`' (troquei para 'it is a call for the team lead to make', mantendo 'stays `done`... rule R3' intacto) -> 1 falha, exit 1, exatamente 'e que reabrir é decisão do usuário, pelo /common:plan'; a primeira asserção continuou 'ok'. Restaurado, GREEN reconfirmado (8 ok, exit 0) e reconfirmei também python3 tests/test_common_drain_plan.py -> 'all green' no mesmo head."
+      run: >-
+        Duas worktrees descartáveis nesta prova, cada uma endereçada pelo
+        caminho literal em toda chamada, nunca por variável de shell nem
+        python3 -c: /private/tmp/proof-reconcile-nao-rebaixa-done (git -C
+        /Users/alegomes/coding/cepa worktree add --detach
+        /private/tmp/proof-reconcile-nao-rebaixa-done 8f84bb2, 1ª rodada,
+        cobre common/bin/cepa-plan) e /private/tmp/proof-reconcile-l2-fechado
+        (git -C /Users/alegomes/coding/cepa worktree add --detach
+        /private/tmp/proof-reconcile-l2-fechado 5464f2b, 2ª rodada,
+        verificação independente do teste que fecha o gap em next.md, escrito
+        pela sessão principal). Perturbações por `git apply -R`/`git checkout
+        <ref> -- <path literal>` (pathspec absoluto: o modo-escrita-gate da
+        sessão só opina dentro da raiz do clone principal, e escrita fora
+        dela passa por desenho — decisão 2 do cabeçalho de
+        common/hooks/modo-escrita-gate.py) e por reescrita completa do
+        arquivo (Write nesta ferramenta, alvo fora da raiz, mesma regra),
+        já que `sed -i` com a prosa em inglês do hunk disparava falso
+        positivo no bash-path-lock (a heurística de detecção de comando `s///`
+        do sed lê "stays" como um comando `s` com delimitador `t`). Cada
+        perturbação seguida de reconfirmação de GREEN antes da próxima. Ao
+        final de cada rodada, `git status --short` limpo na worktree e `git
+        worktree remove --force <caminho literal>` + `git worktree prune`
+        executados a partir do clone principal. Clone principal
+        (/Users/alegomes/coding/cepa) e a worktree de trabalho
+        (/Users/alegomes/cepa-worktrees/cepa-until-2026-09-27-1213) nunca
+        tocados; nenhum arquivo fora de docs/proof/ foi escrito lá.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      Leitura estrutural (não há coverage tool wired para arquivos .md neste
+      repo Python). As linhas de código mudadas em common/bin/cepa-plan
+      (registro do guard R3, o desvio em_dia/aviso, e a remoção do bounce
+      antigo) são todas EXECUTADAS e mudam o resultado real do subprocesso
+      quando revertidas ou alteradas (RED nas duas perturbações de l3) --
+      nenhuma delas é código morto. O hunk de tests/test_common_drain_plan.py
+      é o próprio cobridor, coberto por definição. O hunk de
+      common/commands/next.md — que na 1ª rodada desta prova estava
+      descoberto (nenhum teste afirmava as duas frases novas) — ganhou
+      cobertura no commit 5464f2b via tests/test_common_next.py::
+      test_item_done_nao_desce_de_categoria, e a cobertura foi verificada de
+      forma independente aqui: as duas frases quebram o teste isoladamente
+      quando removidas (perturbações c1/c2 de l3) e a versão de base do
+      arquivo (7aa500b, doc sem a regra R3) também derruba o teste. Gap
+      fechado.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      cepa-plan reconcile é um subcomando CLI local, não abre porta HTTP nem
+      recebe payload de usuário anônimo: o `--board` é um JSON que o
+      atlassian-expert monta a partir do Jira e entrega por arquivo -- não há
+      uma superfície pública compondo esse payload. common/commands/next.md é
+      prosa lida por um agente, não endpoint. Este repo não tem módulo
+      equivalente a api-rest (é Python, não Maven/Quarkus), então a condição
+      estrutural do guard (nenhuma classe mudada em módulo com superfície de
+      entrada) vale trivialmente. Formas adversariais do `--board` que fazem
+      sentido aqui (status que o status_map não conhece, card ausente do
+      quadro, card duplicado) já são cobertas por teste dedicado e não
+      mudaram neste diff (test_reconcile_recusa_status_que_o_mapa_nao_conhece,
+      preexistente).
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: >-
+      No worktree descartável da 1ª rodada, com `git -C
+      /private/tmp/proof-reconcile-nao-rebaixa-done checkout 7aa500b --
+      /private/tmp/proof-reconcile-nao-rebaixa-done/common/bin/cepa-plan`
+      (base_commit, reconcile ainda lendo done + To Do/Doing como bounce e
+      rebaixando para pending -- o bug do card) e o arquivo de teste do HEAD
+      trazido por cima (já presente, não tocado), rodei `python3
+      tests/test_common_drain_plan.py`: 12 falhas, exit 1, incluindo os 3
+      asserts do teste-alvo nomeado no card
+      (test_reconcile_nunca_rebaixa_item_done) e as 2 regressões vizinhas
+      (test_reconcile_traz_o_quadro_para_a_fila,
+      test_reconcile_done_em_review_nao_e_bounce) -- reproduz literalmente o
+      relato do bug (rebaixar item done quando o quadro diverge). No HEAD
+      (8f84bb2 e, na verificação independente, também 5464f2b), o mesmo
+      arquivo de teste dá 'all green', 154 ok, exit 0. Na 2ª rodada, a mesma
+      lógica foi repetida para o hunk de next.md isoladamente: `git checkout
+      7aa500b -- .../common/commands/next.md` (doc na versão de base, sem a
+      regra R3) + `python3 tests/test_common_next.py` -> 2 falhas, exit 1,
+      ambas no teste novo; restaurado, GREEN de volta. Restaurado com `git
+      checkout <ref> -- <path literal>` em ambas as rodadas.
+routing_reason: >-
+  O comportamento do bug fix propriamente dito -- a regra R3 dentro de
+  reconcilia() em common/bin/cepa-plan -- está provado com rigor: GREEN de
+  partida, duas perturbações isoladas (revert do hunk inteiro; e do desvio
+  interno em_dia/aviso) foram ambas RED e foram restauradas para GREEN, e a
+  regressão do bug está vermelha na base 7aa500b (12 falhas, reproduzindo o
+  rebaixamento de item done) e verde no head. l4 é n/a porque cepa-plan
+  reconcile não abre superfície de entrada externa (CLI local, --board vem do
+  atlassian-expert, não de usuário anônimo) e next.md é prosa, não endpoint.
+  Na 1ª rodada desta prova, o hunk de common/commands/next.md (mudança de
+  texto refletindo a mesma regra R3) não tinha nenhuma asserção de teste
+  cobrindo, e o card ficou NEEDS-HUMAN por esse `l2_coverage: gap` -- não
+  havia defeito de comportamento, mas uma lacuna de cobertura real. O
+  coordenador reportou que a sessão principal fechou esse gap no commit
+  5464f2b (tests/test_common_next.py::test_item_done_nao_desce_de_categoria),
+  e esta 2ª rodada verifica isso de forma INDEPENDENTE, não confiando no
+  relato: worktree descartável própria em 5464f2b, GREEN no head, RED com
+  next.md na versão de base (7aa500b), e RED perturbando cada uma das duas
+  frases isoladamente, com a outra intacta em cada perturbação, confirmando
+  que o teste novo não é vácuo nem redundante -- cada frase tem seu próprio
+  poder de derrubar o teste. Com o gap fechado e verificado, todos os níveis
+  aplicáveis passam com evidência own-produced: l3 pass, l2 pass, l4 n/a
+  (estrutural), bugfix_regression_red_at_base pass. Nenhum nível está
+  assumed/skipped/gap/survived -- PROVEN.
