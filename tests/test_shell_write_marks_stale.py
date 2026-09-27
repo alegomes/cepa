@@ -113,6 +113,14 @@ with tempfile.TemporaryDirectory() as tmp:
     check("sed -i em doc e leitura de código: baseline intacta",
           state(repo)["status"] == "SUCCESS", str(state(repo)))
 
+    for teste in ("tests/test_x.py", "specs/x.py"):
+        green(repo)
+        run_hook(STALE, {"tool_name": "Edit", "cwd": str(repo),
+                         "tool_input": {"file_path": str(repo / teste)}})
+        run_hook(STALE, bash(repo, f"sed -i '' 's/a/b/' {teste}"))
+        check(f"{teste} na raiz da árvore não é código de produção",
+              state(repo)["status"] == "SUCCESS", str(state(repo)))
+
     green(repo)
     run_hook(STALE, bash(repo, "git commit -m 'sed -i conserta src/main/X.java > nada'"))
     check("prosa citada numa mensagem de commit: baseline intacta",

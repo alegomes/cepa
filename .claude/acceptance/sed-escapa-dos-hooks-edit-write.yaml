@@ -1,0 +1,49 @@
+card: sed-escapa-dos-hooks-edit-write
+commit: 12631f0
+status: complete
+criteria:
+  - id: AC1
+    text: >-
+      Editar um arquivo de código de produção por `sed -i` (e por heredoc)
+      deixa a baseline de build marcada como suja, demonstrado por um teste
+      que fica verde antes e vermelho depois de remover o interceptador.
+    altitude: event
+    surface: >-
+      Invocação real do hook de PostToolUse do Claude Code: o script
+      common/hooks/mark-build-stale.py (e common/hooks/session-activity.py)
+      rodado como subprocesso recebendo no stdin o payload que o Bash tool
+      produz (tool_name=Bash, tool_input.command, cwd, session_id); e o
+      registro desses hooks no matcher "Bash" do PostToolUse em
+      common/.claude-plugin/plugin.json.
+    test: tests/test_shell_write_marks_stale.py
+    layer: hook-subprocess (invocação de ponta a ponta do hook via stdin/stdout, não chamada direta de função interna)
+    evidence: verified
+    run: >-
+      python3 tests/test_shell_write_marks_stale.py -> "all shell-write-marks-stale
+      tests passed" (exit 0), 11/11 checagens ok, incluindo as duas de
+      registro em plugin.json e as de sed -i/heredoc sujando a baseline.
+    red_before_check:
+      method: >-
+        git worktree add --detach /tmp/audit-sed-hook-wt 12631f0~1 (commit pai,
+        antes do conserto); copiado tests/test_shell_write_marks_stale.py para
+        dentro dessa worktree (o teste não existia antes do commit) e rodado lá.
+      run: >-
+        python3 tests/test_shell_write_marks_stale.py (na worktree em
+        12631f0~1) -> 7 failure(s): ['mark-build-stale registrado em Bash',
+        'session-activity registrado em Bash', 'sed -i em código de produção:
+        STALE', 'sed -i: registra o arquivo editado', 'sed -i: guarda o
+        último verde real', 'heredoc para arquivo de produção: STALE',
+        'sed -i conta o diretório tocado'] (exit 1)
+      cleanup: git worktree remove /tmp/audit-sed-hook-wt --force (executado)
+    gap: null
+neighbours_run:
+  - test: tests/test_baseline_worktree_poisoning.py
+    run: "all baseline-worktree-poisoning tests passed (13/13 ok, exit 0)"
+  - test: tests/test_session_anchor_root.py
+    run: "todos os casos verdes (exit 0)"
+  - test: tests/test_lock_copies_drift.py
+    run: "all green (exit 0)"
+scope_notes: >-
+  Registrado no BACKLOG.md, seção "O que ficou de fora": editorial-lint e os
+  guardas de veredito (verdict guards) foram intencionalmente deixados fora
+  deste conserto, não fazem parte deste critério de aceite.

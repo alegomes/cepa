@@ -122,7 +122,10 @@ def main():
             # build; marking the main baseline STALE for it poisons the
             # advance gate (and the bare relative_to() used to crash here).
             continue
-        if is_source(candidate):
+        # A barra na frente: os fragmentos excluídos (`/tests/`, `/specs/`)
+        # pedem um separador antes, e o caminho relativo à raiz não tem —
+        # `tests/test_x.py` virava código de produção.
+        if is_source("/" + candidate):
             rel = candidate
             break
     if rel is None:
