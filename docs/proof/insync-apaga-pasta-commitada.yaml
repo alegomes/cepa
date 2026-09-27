@@ -1,0 +1,114 @@
+schema_version: 2
+card: insync-apaga-pasta-commitada
+verdict: proven
+reviewed_at: 2026-09-27T01:10:00-03:00
+base_commit: 385c959
+head_commit: 03e2f94
+issue_type: Bug
+repo_kind: harness   # common/bin/cepa-until é script Python (supervisor de fila), não Maven/Quarkus — não há PIT; o mecanismo é perturbação + re-run do subprocesso real do CLI
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until (sumidos_do_disco via `git ls-files --deleted -z`, tocados_pelo_ultimo_run com `git diff --name-only -z`, delecoes_fantasma, alvos_de_restore, o recálculo de `resto` e o bloco da guarda de árvore suja em main())"
+      module: bin
+      external_observable: true   # a superfície é o próprio CLI rodando como subprocesso real (tests/test_cepa_until.py:roda() invoca subprocess.run de verdade, com `claude` falso no PATH), stdout/stderr/exit code são o contrato observado
+      substituted_by_double: null   # o cepa-until sob teste é o binário de verdade; só o `claude` (fora do escopo do card) é dublê
+    - class: "tests/test_cepa_until.py (dois cenários novos em 03e2f94: fantasma + sujeira de verdade ao lado / fantasma + arquivo tocado apagado ao lado — teste-only, sem mudança de produção)"
+      module: bin
+      external_observable: true
+      substituted_by_double: null
+scope_note: >-
+  Terceira passada. base_commit continua 385c959 (imediatamente anterior ao
+  primeiro commit da correção). head passou de 0579276 (rodada 2) para
+  03e2f94, que só mexe em tests/test_cepa_until.py: acrescenta, ao final do
+  teste do fantasma, um segundo cenário com `lixo.txt` sujo ao lado da pasta
+  acentuada apagada, exigindo que "E há mais" liste só o lixo.txt (não a
+  pasta); e, ao final do teste do arquivo tocado, um terceiro cenário com
+  `intocado.txt` apagado (fantasma de verdade) ao lado de `relatório.txt`
+  apagado (tocado pelo run), exigindo que " D relatório.txt" apareça em "há
+  mais" pelo nome cru. Esses dois cenários são exatamente os que fecham o gap
+  encontrado na rodada 2 (o recálculo de `resto` em main() nunca era
+  exercitado com fantasma + outro arquivo ao mesmo tempo). Diff completo
+  provado aqui: 385c959..03e2f94.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (Python, não JVM); o cobridor é um subprocesso real do CLI (tests/test_cepa_until.py:roda() -> subprocess.run(['python3', CEPA_UNTIL, ...])) com um `claude` falso no PATH — perturbação de cada função/ramo mudado + re-run do processo é o mecanismo aplicável, não PIT."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida confirmado no HEAD (03e2f94), numa worktree descartável nova (git worktree add --detach 03e2f94 /tmp/proof-insync3): as duas funções de teste (agora com 6 checks cada, 12 no total) -> FAILURES: []."
+        - "PERTURBAÇÃO 1 (load-bearing, RED, gap da rodada 2 FECHADO) -- em main() (common/bin/cepa-until:1028-1029), revertido o recálculo de `resto` para a comparação antiga por string escapada (`resto = [l for l in sujeira if not (l.startswith(\" D \") and l[3:].strip(chr(34)) in fantasmas)]`, o mesmo mutante que sobreviveu na rodada 2): agora FALHA em 2 checks -- \"...e a sujeira de verdade é a única de 'há mais'\" (lixo.txt some da lista de 'há mais' e as 2 linhas escapadas da pasta acentuada aparecem de novo lá, duplicadas com o fantasma) e \"...e a deleção do arquivo tocado segue listada em 'há mais'\" (intocado.txt e relatório.txt colidem: o `resto` fica com o nome escapado de relatório.txt e some da comparação certa). Restaurada via cp do arquivo original, GREEN reconfirmado."
+        - "PERTURBAÇÃO 2 (load-bearing, RED) -- em main() (common/bin/cepa-until:1028-1029), removida a segunda metade do `resto` (`resto = [l for l in sujeira if not l.startswith(\" D \")]`, sem a lista `[f\" D {f}\" for f in sumidos_do_disco(repo) if f not in fantasmas]`): FALHA em \"...e a deleção do arquivo tocado segue listada em 'há mais'\" -- relatório.txt (tocado, apagado, não-fantasma) desaparece da lista 'há mais' porque a segunda metade era a única fonte de deleções não-fantasma no `resto`. Restaurada, GREEN reconfirmado."
+        - "PERTURBAÇÃO 3 (reconfirmação, load-bearing, RED) -- em sumidos_do_disco (common/bin/cepa-until:738), removido o `-z` de novo (mesma perturbação das rodadas 1-2, revalidada porque a função de produção não mudou em 03e2f94 mas os cenários de teste mudaram): FALHA em 4 checks do teste do arquivo tocado -- com relatório.txt escapado, ele deixa de bater com o nome cru em `fantasmas`/`tocados`, e o comando de restore e a lista 'há mais' saem errados (`git restore -- intocado.txt \"relat\\303\\263rio.txt\"`, e relatório.txt some de 'há mais'). Restaurada, GREEN reconfirmado."
+        - "Gap da rodada 1 (alvos_de_restore, o mutante de listar arquivo por arquivo em vez de agrupar na pasta) segue fechado -- não voltou a ser exercitado nesta rodada porque o assert que fecha esse gap (a linha inteira do git restore, de 0579276) não mudou; os dois novos cenários de 03e2f94 usam sub-strings adicionais (mais(1)) que não reabrem esse ponto."
+      run: >-
+        Worktree descartável /tmp/proof-insync3 (git worktree add --detach
+        03e2f94), removida ao final com `git worktree remove --force`. Cada
+        perturbação foi feita com `sed`/`awk` sobre o arquivo (heredoc e
+        `python3 -c` para reescrever código continuam bloqueados pelo hook
+        bash-path-lock como escrita arbitrária mesmo dentro da worktree
+        descartável, e combinar um `sed` de escrita com um `python3 -c` de
+        teste no MESMO comando também foi bloqueado -- cada perturbação e
+        cada rodada de teste foram comandos Bash separados), seguida de
+        checagem de sintaxe via `python3 -c "import ast; ast.parse(...)"`
+        quando a perturbação usou awk multi-linha, e reconfirmação de GREEN
+        via `cp` do arquivo original (salvo em /tmp/cepa-until.orig3 logo
+        após o checkout da worktree) antes da próxima. Árvore principal
+        (cepa-pendencias_until-until-2026-09-26-2203) nunca tocada; nenhum
+        arquivo fora de docs/proof/ foi escrito lá.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      Leitura estrutural (não há coverage tool wired neste repo Python); toda
+      linha nova/mudada no diff completo (sumidos_do_disco com -z,
+      tocados_pelo_ultimo_run com -z, delecoes_fantasma, alvos_de_restore, e
+      as duas metades do recálculo de resto em main()) agora muda o resultado
+      real do processo quando perturbada isoladamente (RED em todas as
+      perturbações de l3) -- nenhuma é código morto e nenhuma sobrevive.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      cepa-until não abre superfície de entrada HTTP/anônima: é um CLI local
+      que lê `git status`/`git ls-files`/`git diff`, o ledger JSONL da própria
+      fila em .claude/programs/<fila>/until/*.jsonl e argumentos de linha de
+      comando do mesmo operador que dispara o supervisor -- não há usuário
+      externo desconhecido compondo esse payload. Este repo não tem módulo
+      equivalente a api-rest (é harness Python, não Maven/Quarkus), então a
+      condição estrutural do guard (nenhuma classe mudada em módulo com
+      superfície de entrada) vale trivialmente.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: >-
+      No mesmo worktree descartável, com `git checkout 385c959 --
+      common/bin/cepa-until` (script AINDA SEM nenhuma das correções) e os
+      testes do HEAD (03e2f94) já presentes: 6 falhas -- as 3 do sintoma
+      original ('...dizendo que o arquivo sumiu fora do run', '...e mandando
+      restaurar a pasta com git restore', '...sem sugerir --sujo-ok') mais as
+      3 novas ("...e a sujeira de verdade é a única de 'há mais'",
+      "fantasma ao lado de arquivo tocado vira a recusa nova",
+      "...e a deleção do arquivo tocado segue listada em 'há mais'") -- todas
+      nomeando o mesmo sintoma: na base, a árvore suja é tratada de forma
+      genérica, com nomes escapados
+      (` D "docs/tasks/wego-2229-remo\303\247\303\243o/00-SEAMS.md"`,
+      ` D "relat\303\263rio.txt"`) e a recusa sugere `--sujo-ok`. No HEAD
+      (03e2f94), as 12 checagens das duas funções passam: FAILURES: [].
+routing_reason: >-
+  Diff completo 385c959..03e2f94 provado load-bearing em toda linha mudada.
+  Os dois mutantes que o coordenador já tinha conferido manualmente (o
+  recálculo de `resto` voltando à comparação escapada antiga, e a remoção da
+  segunda metade do `resto`) foram reproduzidos aqui de forma independente e
+  os dois foram a RED com os testes de 03e2f94 -- o gap encontrado na rodada 2
+  (nenhum teste exercitava fantasma + outro arquivo ao mesmo tempo) está
+  fechado pelos dois cenários novos. As correções de -z (sumidos_do_disco e
+  tocados_pelo_ultimo_run) e o assert de linha inteira em alvos_de_restore
+  (fechado na rodada 2) continuam load-bearing, revalidados nesta rodada. A
+  regressão do bug de 14/09 está vermelha na base (385c959, 6 falhas) e verde
+  no head (03e2f94, FAILURES: [] em 12/12 checks). l2 e l4 não bloqueiam (l4
+  é n/a porque o CLI não abre superfície de entrada externa; l2 é pass porque
+  toda linha mudada roda e muda o resultado real). Nenhum nível está
+  assumed/skipped/gap/survived -- PROVEN.

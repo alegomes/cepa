@@ -1,0 +1,98 @@
+card: insync-apaga-pasta-commitada
+status: complete
+altitude: cli
+surface: >
+  common/bin/cepa-until invocado como subprocesso real (não import), com
+  `claude` falso no PATH via tests/test_cepa_until.py::roda(), que faz
+  subprocess.run([sys.executable, str(CEPA_UNTIL), "fila", "--repo", ...]).
+  Verificado por exit code (p.returncode) e stderr (p.stderr) — o mesmo modo
+  como o cepa-until roda de verdade.
+commit_auditado: c774490
+diff_base: 385c959..c774490
+escopo_declarado: >
+  Só o ponto 1 do "Esboço de solução" da seção "O Insync apaga pasta
+  commitada do repo sozinho, e o run desatendido não percebe" do
+  BACKLOG.md — distinguir na guarda de árvore suja a deleção de arquivo
+  commitado que nenhum item do último run tocou (provável sincronização)
+  da mudança que se confunde com a do run. Os pontos 2 (aviso no
+  /common:doctor para clone principal dentro de pasta sincronizada pelo
+  Insync) e 3 (decisão do dono sobre onde mora o clone principal) ficaram
+  fora desta entrega por decisão do solicitante, registrados abaixo como
+  fora_do_escopo — não são requisito desta auditoria porque a seção "Teste
+  que falta" do BACKLOG.md, que é a fonte dos critérios de aceite aqui
+  auditados, só cobre o comportamento do ponto 1 (as duas árvores de teste
+  descritas). Pontos 2 e 3 não têm teste esperado nessa seção; virar cards
+  próprios é decisão do humano, não bloqueiam o status deste item.
+criteria:
+  - id: AC1
+    descricao: >
+      "Teste que falta" bullet 1 — árvore com D de arquivo commitado que
+      nenhum evento do registro cita: espera a mensagem de "sumiu fora do
+      run" com git restore, e não a sugestão de --sujo-ok.
+    altitude: cli
+    test: tests/test_cepa_until.py::test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok
+    layer: cepa-until subprocess (exit code + stderr do processo real)
+    evidence: verified
+    run: >
+      timeout 300 python3 -c "import sys; sys.path.insert(0,'tests'); import
+      test_cepa_until as t;
+      t.test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok()" ->
+      4/4 checks "ok": "deleção fantasma ainda recusa a largada" (rc==2, sem
+      chamada ao claude falso), "...dizendo que o arquivo sumiu fora do run",
+      "...e mandando restaurar a pasta com git restore" (string literal
+      "git restore -- docs/tasks/wego-2229" no stderr), "...sem sugerir
+      --sujo-ok". t.FAILURES == [] ao final.
+    status: complete
+    gap: null
+
+  - id: AC2
+    descricao: >
+      "Teste que falta" bullet 2 — árvore com M num arquivo que o último
+      item tocou: espera a mensagem de hoje (a recusa antiga, com
+      --sujo-ok), sem confundir com deleção fantasma.
+    altitude: cli
+    test: tests/test_cepa_until.py::test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje
+    layer: cepa-until subprocess (exit code + stderr do processo real)
+    evidence: verified
+    run: >
+      timeout 300 python3 -c "import sys; sys.path.insert(0,'tests'); import
+      test_cepa_until as t;
+      t.test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje()"
+      -> 4/4 checks "ok": "o run anterior deixou branch e base no registro",
+      "mudança em arquivo tocado recusa" (rc==2, sem chamada), "...com a
+      mensagem de hoje, que nomeia --sujo-ok", "...e não chama a deleção de
+      arquivo tocado de fantasma". t.FAILURES == [] ao final.
+    status: complete
+    gap: null
+
+fora_do_escopo:
+  - ponto: 2
+    descricao: >
+      Checagem no /common:doctor — repo com clone principal dentro de
+      pasta sincronizada pelo Insync ganha aviso com o risco e a saída.
+    decisao: >
+      Fora desta entrega por decisão do solicitante; sem teste esperado na
+      seção "Teste que falta" do BACKLOG.md. Sugestão: card próprio
+      referenciando esta mesma seção do BACKLOG.md antes de fechar o plano
+      `cepa/insync-apaga-pasta-commitada` como concluído por completo.
+  - ponto: 3
+    descricao: >
+      Decisão do dono sobre onde mora o clone principal (mover para fora
+      do Insync vs. excluir .git/repo da sincronização).
+    decisao: >
+      Decisão de produto/infra do usuário, não implementação; corretamente
+      fora do escopo de código. Não é card de teste, é decisão a registrar
+      em algum lugar (o próprio BACKLOG.md já a registra como pendente).
+
+notas: >
+  Os dois comandos de teste rodaram em primeiro plano, escopo único (as duas
+  funções nomeadas, não a suíte inteira), dentro do limite de 10 minutos,
+  cada um dentro do mesmo turno. N > 0 em ambos (4 checks cada, 0 em
+  FAILURES). Superfície é CLI: roda() sobe o binário cepa-until de verdade
+  via subprocess com `claude` fake no PATH e verifica p.returncode/p.stderr
+  — não é teste de função isolada nem mock do subprocess, é o processo real.
+  O status complete cobre exclusivamente o ponto 1 do esboço de solução, que
+  é o único com "Teste que falta" explícito no BACKLOG.md; os pontos 2 e 3
+  ficam registrados acima como fora_do_escopo e não impedem este status, mas
+  o plano-mãe (`cepa/insync-apaga-pasta-commitada`) só deve ser dado como
+  totalmente resolvido quando o humano decidir explicitamente sobre eles.
