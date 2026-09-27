@@ -236,7 +236,10 @@ def build_allowed_writes(roles: dict, extra_write_globs: dict = None) -> dict:
         # Its verdict, which `cepa-plan finish --status done` requires. With
         # `[]` the lock blocked it and the orchestrator transcribed the verdict
         # by hand (WEGO-2323/2324/2325, 2026-09-27) — no longer independent.
-        "validation-lead":   [".claude/validation/**"],
+        # `docs/`, not `.claude/`, for the same reason as proof-reviewer below:
+        # `.claude/` is gitignored in the projects, so the verdict died with the
+        # run's worktree. The old path stays blocked so the loss can't return.
+        "validation-lead":   ["docs/validation/**"],
 
         # Planning workers — write specs and decomposition artifacts.
         "epic-author":         ["spec/**", "specs/**", "docs/**"],

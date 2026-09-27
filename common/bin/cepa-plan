@@ -103,7 +103,8 @@ Subcomandos:
       verde sem teste não fecha item.
       Também é recusado quando a topologia da sessão (`.claude/topology`) tem
       `validation-lead` (build-hex, build-team) e não existe
-      `.claude/validation/<id>.yaml` com `verdict: READY-TO-SHIP` ou
+      `docs/validation/<id>.yaml` (ou o legado `.claude/validation/<id>.yaml`)
+      com `verdict: READY-TO-SHIP` ou
       `READY-WITH-CAVEATS`: sem ele o item fecha sem a revisão de segurança.
 
   cepa-plan add <nome> <id> --title T [--why W] [--antes-de <id>]
@@ -1479,8 +1480,14 @@ def validacao_faltando(repo, ident):
     """None quando o item pode fechar `done`; senão, a frase da recusa.
 
     Só vale para topologia com `validation-lead`. O artefato é o que o próprio
-    validation-lead grava, `.claude/validation/<id>.yaml`, na raiz da sessão —
-    o mesmo desenho do gate de aceite com `.claude/acceptance/<KEY>.yaml`.
+    validation-lead grava, `docs/validation/<id>.yaml`, na raiz da sessão.
+
+    O destino era `.claude/validation/` até 27/09/2026. Nos projetos que rodam
+    o portão `.claude/*` é ignorado pelo git, então o veredito morria com a
+    worktree descartável do run (os 3 do run 2026-09-27-0832 do WEGO só
+    existiam na worktree dele) — o mesmo motivo que levou o proof-reviewer
+    para `docs/proof/`. O caminho antigo continua LIDO, como o do proof:
+    estreitar o leitor cegaria para os vereditos que já estão no disco.
     """
     raiz_sessao = raiz_da_sessao(repo)
     try:
@@ -1490,7 +1497,10 @@ def validacao_faltando(repo, ident):
         return None
     if topologia not in TOPOLOGIAS_COM_VALIDACAO:
         return None
-    p = raiz_sessao / ".claude" / "validation" / f"{ident}.yaml"
+    p = raiz_sessao / "docs" / "validation" / f"{ident}.yaml"
+    legado = raiz_sessao / ".claude" / "validation" / f"{ident}.yaml"
+    if not p.exists() and legado.exists():
+        p = legado
     try:
         texto = p.read_text(encoding="utf-8")
     except OSError:

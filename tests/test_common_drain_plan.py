@@ -735,10 +735,10 @@ def test_finish_done_exige_o_veredito_do_validation_lead(base):
 
     r = run(d, "finish", "fila", "A", "--status", "done",
             "--evidence", "commit abc", "--repo", ".")
-    check("build-hex sem .claude/validation/A.yaml: done RECUSADO",
+    check("build-hex sem docs/validation/A.yaml: done RECUSADO",
           r.returncode == 2, r.stdout + r.stderr)
     check("a recusa nomeia o validation-lead e o arquivo que falta",
-          "validation-lead" in r.stderr and "validation/A.yaml" in r.stderr,
+          "validation-lead" in r.stderr and "docs/validation/A.yaml" in r.stderr,
           r.stderr)
     check("nada mudou no disco na recusa",
           por_id(plano_de(alvo))["A"]["status"] == "pending")
@@ -747,7 +747,7 @@ def test_finish_done_exige_o_veredito_do_validation_lead(base):
             "--evidence", "validation-lead não rodou", "--repo", ".")
     check("sem o veredito, blocked continua aceito", r.returncode == 0, r.stderr)
 
-    val = d / ".claude" / "validation"
+    val = d / "docs" / "validation"
     val.mkdir(parents=True)
     (val / "B.yaml").write_text("key: B\nverdict: BLOCKED\n", encoding="utf-8")
     r = run(d, "finish", "fila", "B", "--status", "done",
@@ -774,6 +774,20 @@ def test_finish_done_exige_o_veredito_do_validation_lead(base):
     check("build-solo (sem validation-lead) não exige o arquivo",
           r.returncode == 0, r.stderr)
 
+    # O caminho antigo continua LIDO: vereditos gravados em .claude/validation/
+    # antes de 27/09/2026 não podem virar recusa só porque o destino mudou.
+    d3 = repo_git(base, "validacao-legado")
+    escreve_fila(d3, [item("A")])
+    (d3 / ".claude" / "topology").write_text("build-hex\n", encoding="utf-8")
+    legado = d3 / ".claude" / "validation"
+    legado.mkdir(parents=True)
+    (legado / "A.yaml").write_text("key: A\nverdict: READY-TO-SHIP\n",
+                                   encoding="utf-8")
+    r = run(d3, "finish", "fila", "A", "--status", "done",
+            "--evidence", "commit abc", "--repo", ".")
+    check("veredito no caminho antigo .claude/validation/ ainda fecha done",
+          r.returncode == 0, r.stderr)
+
 
 def test_topologias_com_validacao_batem_com_os_agentes(base):
     """A lista do cepa-plan é uma cópia do que está no disco; sem esta
@@ -789,14 +803,15 @@ def test_topologias_com_validacao_batem_com_os_agentes(base):
     for f in no_disco:
         spec = (REPO / f / "agents" / "validation-lead.md").read_text(
             encoding="utf-8")
-        check(f"{f}/validation-lead grava .claude/validation/<KEY>.yaml",
-              ".claude/validation/<KEY>.yaml" in spec
+        check(f"{f}/validation-lead grava docs/validation/<KEY>.yaml",
+              "docs/validation/<KEY>.yaml" in spec
+              and ".claude/validation" not in spec
               and "Write" in spec.split("\n", 5)[3], f)
     limpo = CMD.read_text(encoding="utf-8").replace("`", "")
     i = limpo.find("c. **Passe pelos dois gates**")
     passo = limpo[i:i + 2000] if i != -1 else ""
     check("drain-plan 3.c exige o validation-lead na topologia que o tem",
-          "validation-lead" in passo and ".claude/validation/<id>.yaml" in passo
+          "validation-lead" in passo and "docs/validation/<id>.yaml" in passo
           and "delegated-to-supervisor" in passo, passo[:300])
 
 

@@ -282,7 +282,7 @@ Para cada item do lote, na ordem:
      **Topologia com `validation-lead` (build-hex, build-team): ele também é
      gate.** O flow dela termina nele, e é ele quem chama o
      `security-reviewer`. Delegue ao `validation-lead` com o `id` do item como
-     chave; ele grava `.claude/validation/<id>.yaml`, e só `READY-TO-SHIP` ou
+     chave; ele grava `docs/validation/<id>.yaml`, e só `READY-TO-SHIP` ou
      `READY-WITH-CAVEATS` fecha `done`. O `cepa-plan finish --status done`
      recusa sem esse arquivo, então pular o gate não passa despercebido: no run
      de 2026-09-23 nenhum dos 5 cards do WEGO passou pelo `validation-lead`, e

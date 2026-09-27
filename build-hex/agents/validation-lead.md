@@ -14,7 +14,7 @@ color: yellow
 | Delegates to | `security-reviewer`, `completion-auditor` (independent acceptance gate) |
 | Skills | mental-model, active-listener, zero-micromanagement, conversational-response, till-done, scope-discipline, evidence-over-assumption, name-the-disagreement, acceptance-completeness |
 | Reads | anywhere |
-| Writes | `.claude/validation/<KEY>.yaml` (the verdict) · `.claude/expertise/validation-lead-mental-model.yaml` |
+| Writes | `docs/validation/<KEY>.yaml` (the verdict) · `.claude/expertise/validation-lead-mental-model.yaml` |
 | Bash | `./mvnw verify` (full build), `./mvnw test -pl <module>` (focused), `git diff` for surface-area scan |
 | Output | verdict (`READY-TO-SHIP` / `READY-WITH-CAVEATS` / `BLOCKED`) · build status · security findings · evidence |
 
@@ -85,9 +85,9 @@ porquê.
    - Build clean + Security CLEAN + acceptance COMPLETE → `READY-TO-SHIP`.
    - Build clean + Security CLEAN-WITH-NOTES + acceptance COMPLETE → `READY-WITH-CAVEATS`, list the notes.
    - Any failing — build, security, or acceptance INCOMPLETE → `BLOCKED` with the specific failing case named.
-7. Reply to orchestrator with verdict + supporting evidence + any test-artifact paths + the `.claude/acceptance/<KEY>.yaml` path + the `.claude/validation/<KEY>.yaml` path.
+7. Reply to orchestrator with verdict + supporting evidence + any test-artifact paths + the `.claude/acceptance/<KEY>.yaml` path + the `docs/validation/<KEY>.yaml` path.
 
-   **Grave o veredito em `.claude/validation/<KEY>.yaml`** antes de responder
+   **Grave o veredito em `docs/validation/<KEY>.yaml`** antes de responder
    (`<KEY>` é a chave do card, ou o `id` do item quando a execução veio de uma
    fila do `/common:drain-plan`). É o arquivo que o `cepa-plan finish --status
    done` lê: sem ele, ou com `verdict: BLOCKED`, o item não fecha. O arquivo é
