@@ -705,6 +705,55 @@ def arvore_suja(repo):
             if l.strip() and not REGISTRO_DO_RUN.match(l)]
 
 
+def tocados_pelo_ultimo_run(repo, fila):
+    """Os arquivos que o último run desta fila commitou na branch da noite
+    (`base..branch` do `run_start` mais recente). Sem registro, ou com a branch
+    já apagada, devolve o vazio: nada no disco pode ter vindo do run."""
+    d = repo / ".claude" / "programs" / fila / "until"
+    for reg in sorted(d.glob("*.jsonl"), reverse=True):
+        largada = None
+        try:
+            for l in reg.read_text(encoding="utf-8").splitlines():
+                ev = json.loads(l) if l.strip() else {}
+                if ev.get("evento") == "run_start":
+                    largada = ev
+        except (OSError, ValueError):
+            continue
+        if not (largada and largada.get("base") and largada.get("branch")):
+            continue
+        p = subprocess.run(["git", "diff", "--name-only",
+                            f"{largada['base']}..{largada['branch']}"],
+                           cwd=str(repo), capture_output=True, text=True,
+                           timeout=30)
+        return set(p.stdout.splitlines()) if p.returncode == 0 else set()
+    return set()
+
+
+def delecoes_fantasma(repo, fila, sujeira):
+    """Arquivo commitado que sumiu do disco (` D`, sem stage) e que o último
+    run não tocou. Em 14/09 o Insync apagou 9 arquivos commitados do clone
+    principal com nenhum processo do Claude rodando; a recusa culpou o run e
+    sugeriu `--sujo-ok`, que deixaria o próximo item rodar por cima da pasta
+    ausente."""
+    sumidos = [l[3:].strip('"') for l in sujeira if l.startswith(" D ")]
+    if not sumidos:
+        return []
+    tocados = tocados_pelo_ultimo_run(repo, fila)
+    return [f for f in sumidos if f not in tocados]
+
+
+def alvos_de_restore(repo, arquivos):
+    """A pasta mais alta que sumiu inteira, em vez de arquivo por arquivo."""
+    alvos = []
+    for f in arquivos:
+        alvo = Path(f)
+        while alvo.parent != Path(".") and not (repo / alvo.parent).exists():
+            alvo = alvo.parent
+        if str(alvo) not in alvos:
+            alvos.append(str(alvo))
+    return alvos
+
+
 def branch_atual(repo):
     try:
         p = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -951,6 +1000,27 @@ def main(argv=None):
         return 2
 
     sujeira = arvore_suja(repo)
+    fantasmas = delecoes_fantasma(repo, a.fila, sujeira) if sujeira else []
+    if fantasmas and not a.sujo_ok:
+        # Sem `--sujo-ok` na mensagem de propósito: com ele o próximo item roda
+        # sem a pasta, e um commit amplo vira a deleção fantasma em deleção de
+        # verdade.
+        print(f"cepa-until: {len(fantasmas)} arquivo(s) commitado(s) sumiram "
+              "do disco fora do run: nenhum item do último run os tocou. "
+              "Provável sincronização (Insync, Google Drive) apagando pasta "
+              "do clone. Restaure e rode de novo:", file=sys.stderr)
+        print(f"    git restore -- {' '.join(alvos_de_restore(repo, fantasmas))}",
+              file=sys.stderr)
+        for l in fantasmas[:10]:
+            print(f"     D {l}", file=sys.stderr)
+        resto = [l for l in sujeira
+                 if not (l.startswith(" D ") and l[3:].strip('"') in fantasmas)]
+        if resto:
+            print(f"  E há mais {len(resto)} arquivo(s) modificado(s), que "
+                  "precisam ser commitados ou limpos:", file=sys.stderr)
+            for l in resto[:10]:
+                print(f"    {l}", file=sys.stderr)
+        return 2
     if sujeira and not a.sujo_ok:
         print(f"cepa-until: a árvore tem {len(sujeira)} arquivo(s) modificado(s). "
               "Commite ou limpe antes — de manhã não dá para separar o que o run "

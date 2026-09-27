@@ -511,6 +511,86 @@ def test_registro_do_run_anterior_nao_e_sujeira():
               p3.stderr[:400])
 
 
+def _commita(raiz, msg):
+    subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", msg], cwd=raiz, check=True)
+
+
+def test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok():
+    """Em 14/09 o Insync apagou `docs/tasks/wego-2229-.../` (9 arquivos
+    commitados) do clone principal uma hora e meia depois de o run parar. A
+    recusa culpou o run e sugeriu `--sujo-ok`, que faria o próximo item rodar
+    por cima da pasta ausente. Deleção de arquivo commitado que o último run
+    não tocou é outra coisa, e a saída é `git restore`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        pasta = raiz / "docs" / "tasks" / "wego-2229"
+        pasta.mkdir(parents=True)
+        for n in ("00-SEAMS.md", "01-PLAN.md"):
+            (pasta / n).write_text(n, encoding="utf-8")
+        _commita(raiz, "docs")
+        binv = fake_claude(
+            tmp, "marca(primeiro_pendente(), status='done')\nsys.exit(0)")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p1, _ = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "1"])
+        subprocess.run(["git", "checkout", "-q", "--", str(plano)], cwd=raiz,
+                       check=True)
+        for f in pasta.iterdir():
+            f.unlink()
+        pasta.rmdir()
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("deleção fantasma ainda recusa a largada",
+              p.returncode == 2 and not chamadas, f"saiu {p.returncode}")
+        check("...dizendo que o arquivo sumiu fora do run",
+              "sumiram do disco" in p.stderr and "fora do run" in p.stderr,
+              p.stderr[:600])
+        check("...e mandando restaurar a pasta com git restore",
+              "git restore -- docs/tasks/wego-2229" in p.stderr, p.stderr[:600])
+        check("...sem sugerir --sujo-ok", "--sujo-ok" not in p.stderr,
+              p.stderr[:600])
+
+
+def test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje():
+    """O contraponto: arquivo que o run anterior tocou e está diferente no
+    disco é mudança que se confunde com a do run. A mensagem continua a de
+    antes, com o escape `--sujo-ok`. Inclui a deleção: se o último item
+    commitou o arquivo, ele sumir não é fantasma."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        (raiz / "tocado.txt").write_text("v0", encoding="utf-8")
+        (raiz / "apagado.txt").write_text("v0", encoding="utf-8")
+        _commita(raiz, "base2")
+        binv = fake_claude(
+            tmp,
+            "import subprocess\n"
+            "open('tocado.txt','w').write('v1')\n"
+            "open('apagado.txt','w').write('v1')\n"
+            "subprocess.run(['git','-c','user.email=t@t','-c','user.name=t',"
+            "'commit','-qam','item'])\n"
+            "marca(primeiro_pendente(), status='done')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p1, _ = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "1"])
+        largada = [e for e in ledger_de(raiz) if e.get("evento") == "run_start"]
+        check("o run anterior deixou branch e base no registro",
+              largada and largada[-1].get("base") and largada[-1].get("branch"),
+              str(largada))
+        subprocess.run(["git", "checkout", "-q", "--", str(plano)], cwd=raiz,
+                       check=True)
+        (raiz / "tocado.txt").write_text("mexido", encoding="utf-8")
+        (raiz / "apagado.txt").unlink()
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("mudança em arquivo tocado recusa",
+              p.returncode == 2 and not chamadas, f"saiu {p.returncode}")
+        check("...com a mensagem de hoje, que nomeia --sujo-ok",
+              "modificado(s)" in p.stderr and "--sujo-ok" in p.stderr,
+              p.stderr[:600])
+        check("...e não chama a deleção de arquivo tocado de fantasma",
+              "sumiram do disco" not in p.stderr, p.stderr[:600])
+
+
 def test_fila_inexistente_recusa_antes_de_disparar():
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1")])
