@@ -1,0 +1,107 @@
+schema_version: 1
+card: detector-contexto-twg
+repo: /Users/alegomes/cepa-worktrees/cepa-pendencias_until-until-2026-09-26-2203
+origem: >-
+  BACKLOG.md, secao "Detector de contexto de execucao, se o `twg` virar
+  caminho canonico local" (~linha 2933), condicional a O3. O3 foi executado
+  em 2026-09-24 (commits 937fc1b, d70e366, cfa3054; proof docs/proof/TWG-O0-O3.yaml,
+  verdict proven). Nao ha secao formal de Aceite; os 3 criterios abaixo foram
+  derivados do texto do backlog pelo orquestrador que chamou esta auditoria.
+audited_at: 2026-09-27T00:50:00-03:00
+head_commit: b36797e
+status: complete
+criteria:
+  - id: AC1
+    text: >-
+      Um sinal mecanico (nao uma regra de prosa) decide o caminho local vs
+      cloud no board-flow/agents/atlassian-expert.md.
+    altitude: agent-spec
+    surface: >-
+      Primeira acao de toda execucao do agente atlassian-expert:
+      `command -v twg >/dev/null && twg --version`.
+    demonstrated_by:
+      test: tests/test_atlassian_expert_spec.py
+      layer: spec-perturbation (grep de trechos-ancora no markdown do agente,
+        mesma tecnica usada no proof TWG-O0-O3 para este mesmo arquivo)
+      evidence: verified
+      run: >-
+        python3 tests/test_atlassian_expert_spec.py -> "all green" contra
+        HEAD b36797e, 38 checagens incluindo "regra presente: detector de
+        caminho e um comando so" (ancora: "command -v twg >/dev/null && twg
+        --version") e "regra presente: sem caminho nenhum vira BLOCKED".
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: >-
+      Ausencia da `twg` (rc != 0) e tratada como "contexto errado / caminho
+      cloud", nunca como erro transitorio a contornar (sem instalar, cacar
+      ou repetir); ausencia dos dois caminhos vira um BLOCKED nomeado, nunca
+      improvisacao.
+    altitude: agent-spec
+    surface: >-
+      board-flow/agents/atlassian-expert.md, bloco "Tool binding": "Exit != 0
+      means cloud path: never install, hunt for or retry `twg`. If
+      mcp__Atlassian__* is absent too: `BLOCKED: no Jira path - twg not on
+      PATH and mcp__Atlassian__* not connected.` Don't improvise another path."
+    demonstrated_by:
+      test: tests/test_atlassian_expert_spec.py
+      layer: spec-perturbation
+      evidence: verified
+      run: >-
+        python3 tests/test_atlassian_expert_spec.py -> "all green" contra
+        HEAD b36797e, inclui "regra presente: nunca instalar nem cacar a
+        twg" (ancora "never install, hunt for or retry") e "regra presente:
+        sem caminho nenhum vira BLOCKED" (ancora "BLOCKED: no Jira path").
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: >-
+      Criterio de rollback: o backlog temia que o passo 2 de O3 removesse o
+      caminho MCP antes do passo 3 provar que o cloud continua de pe, sem
+      kill-switch descrito. Julgar se ficou satisfeito, moot ou genuinamente
+      aberto.
+    altitude: repo-structure + docs
+    surface: >-
+      docs/archive/estrategia-twg-vs-mcp.md, nova secao "## Como voltar
+      atras" (commit b36797e, linhas ~463-481); git diff/show de
+      937fc1b e d70e366 contra o d70e366^.
+    demonstrated_by:
+      test: null
+      layer: inspecao direta (git show / git diff / git revert --no-commit
+        real numa worktree descartavel; nao ha teste automatizado para esta
+        pergunta)
+      evidence: verified
+      run: >-
+        (1) `git show 937fc1b --stat` e `git show d70e366 --stat`: os 16
+        nomes `mcp__Atlassian__*` (caminho cloud) nunca aparecem como
+        removidos em nenhum dos dois commits; so os 32 nomes dos SERVIDORES
+        LOCAIS (`mcp__claude_ai_Atlassian__*`, `mcp__mcp-atlassian__*`) saem
+        da linha `tools:` -- confirma que "o caminho cloud ficou de pe" e
+        satisfeito por construcao, o risco de sequenciamento nao chegou a
+        existir.
+        (2) Reproduzi eu mesmo a alegacao do coordenador de que
+        `git revert d70e366` nao aplica limpo: worktree descartavel
+        `git worktree add --detach /tmp/verify-revert-twg HEAD` (HEAD =
+        b36797e) seguido de `git revert --no-commit d70e366` ->
+        "CONFLICT (content): Merge conflict in
+        board-flow/.claude-plugin/plugin.json" e "... in
+        board-flow/agents/atlassian-expert.md", exit 1. Conflito e
+        consistente com `498bde4` (commit posterior a d70e366, "fix(board-
+        flow): atlassian-expert manda os required_fields em todo create")
+        tocar os dois mesmos arquivos. Abortei com `git revert --abort`,
+        removi a worktree com `git worktree remove --force
+        /tmp/verify-revert-twg`; `git worktree list` no repo principal
+        confirma que nao sobrou residuo.
+        (3) A secao "Como voltar atras" (docs/archive/estrategia-twg-vs-
+        mcp.md) documenta, com essa mesma constatacao, a volta manual
+        ancorada em `d70e366^` (devolver os 32 nomes locais, trocar a secao
+        Tool binding, ajustar o teste) e nomeia explicitamente o gatilho
+        ("`twg --version` sai 0 mas as chamadas falham por um motivo que
+        nao e do card") e o anti-kill-switch ("tirar a `twg` do PATH nao
+        serve de desligador: sem ela o agente cai no cloud, que numa sessao
+        local nao esta conectado, e o desfecho e BLOCKED").
+        (4) `python3 tests/test_atlassian_expert_spec.py` -> "all green"
+        contra HEAD b36797e (regressao: a doc nao mexeu em codigo/spec).
+    verdict: complete
+    gap: null
+gaps: []
