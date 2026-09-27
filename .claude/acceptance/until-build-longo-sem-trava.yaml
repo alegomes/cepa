@@ -1,0 +1,135 @@
+key: until-build-longo-sem-trava
+status: incomplete
+diff_range: 3454663..e29eb08
+criteria:
+  - id: AC1
+    descricao: >-
+      Esboço passo 1 ("Teste primeiro", 10 min): sob `claude -p` com
+      `CEPA_UNTIL_RUN` e o teto de espera em 0, disparar `sleep 700; echo FIM
+      > arquivo` em segundo plano mais um `Monitor` com until-loop no arquivo,
+      e conferir que o turno colhe o `FIM` e o item sai com desfecho.
+    altitude: cli (agente real, dentro de `cepa-until`)
+    surface: "claude -p + Monitor com until-loop, sob CEPA_UNTIL_RUN"
+    test: nenhum — o próprio card documenta que este passo, tal como escrito,
+      foi refutado pelo experimento (Monitor não segura o turno; ver nota)
+    layer: n/a
+    evidence: missing
+    run: null
+    status: incomplete
+    nota: >-
+      Este NÃO é um gap de implementação: é o card admitindo, em BACKLOG.md,
+      que a premissa do passo 1 (Monitor com until-loop segura o turno) caiu
+      na medição de 27/09 (experimento A, em /tmp/exp-bg-longo/A). O desenho
+      final não usa Monitor para isto; usa o arquivo com `EXIT=` + espera em
+      primeiro plano (ver AC2). Mantenho este critério como item formal do
+      esboço, incompleto como escrito, para não apagar da auditoria que o
+      passo 1 literal nunca passou — ele foi substituído, não satisfeito.
+    gap: >-
+      Nenhum follow-up necessário aqui: a substituição está registrada em
+      AC2/AC3. Se alguém reler só o esboço sem ler o Status, vai procurar um
+      teste que nunca existiu por design.
+  - id: AC2
+    descricao: >-
+      "Teste que falta" 1: build sintético de 11 min em segundo plano com
+      vigia espera item `done` com o resultado colhido — reformulado pelo
+      próprio card para "build com `EXIT=` gravado + espera em primeiro
+      plano", já que "vigia" (Monitor) não segura o turno.
+    altitude: cli (item da fila do `cepa-until` chegando a `done` com um build
+      real de mais de 10 min rodado por trás)
+    surface: "common/bin/cepa-until (loop principal, item de verdade
+      terminando `done`) + o hook no-background-build.py + no-busy-wait.py
+      dentro de um turno de agente real"
+    test: nenhum teste automatizado no repo nesta altitude — apenas o
+      experimento manual E (/tmp/exp-bg-longo/E)
+    layer: e2e manual (nested claude -p, fora da suíte de testes)
+    evidence: assumed
+    run: >-
+      Não rodei eu mesmo (exigiria `claude -p` aninhado por ~12,5 min, e a
+      tarefa pede nada em segundo plano e nenhum build completo). Inspecionei
+      os artefatos: /tmp/exp-bg-longo/E/{prompt.txt,inicio,fim_claude,
+      resultado.txt,saida.json} e o transcript em
+      ~/.claude/projects/-private-tmp-exp-bg-longo-E/*.jsonl. `fim_claude -
+      inicio` = 1790527922 - 1790527169 = 753s; `duration_ms` no saida.json =
+      750272 (~12,5 min); o transcript mostra a 1ª tentativa de segundo plano
+      sem `EXIT=$?` sendo BLOQUEADA pelo `no-background-build`, a 2ª (com
+      `echo EXIT=$? >> /tmp/b.fim`) sendo aceita, e a espera em primeiro
+      plano com `# espera-ok` sendo cortada aos 600s pelo próprio Bash e
+      RETOMADA no turno seguinte até ler `EXIT=0`; `resultado.txt` = "BUILD
+      SUCCESS\n0". Isso é evidência genuína de que o MECANISMO do hook
+      funciona sob um agente real — mas não é uma execução minha, nem um
+      teste commitado e repetível.
+    status: incomplete
+    gap: >-
+      Falta um teste automatizado, em `tests/test_cepa_until.py`, na altitude
+      literal do critério: um `fake_claude` cujo corpo dispara um build
+      sintético (pode ser curto, como os outros testes de janela usam
+      segundos no lugar de minutos — ex. `sleep 2; echo EXIT=$? >> <arq>` em
+      segundo plano + espera em primeiro plano no mesmo corpo) e confere que o
+      ITEM da fila termina `status=done` com o resultado presente (evidence ou
+      saída do build), rodando pelo `cepa-until` de verdade — não um script
+      solto num diretório à parte com um `settings.json` fabricado à mão. O
+      experimento E prova o hook sob agente real; não prova que `cepa-until`
+      leva esse item a `done`. Sem esse teste, uma regressão futura no laço
+      principal do `cepa-until` (não no hook) que quebre a colheita do
+      resultado não seria pega por nenhum teste do repo.
+  - id: AC3
+    descricao: >-
+      "Teste que falta" 2: o mesmo sem vigia espera bloqueio, como hoje —
+      reformulado para "sem fim declarado (sem `EXIT=`) espera bloqueio, como
+      hoje", nas duas portas: PreToolUse (Bash/Monitor) e Stop.
+    altitude: hook (PreToolUse e Stop do no-background-build.py, dentro da
+      janela `CEPA_UNTIL_RUN`)
+    surface: "no-background-build.py: bloqueia() e motivo_da_parada()"
+    test: >-
+      tests/test_no_background_build.py::test_build_longo_sem_fim_declarado_segue_bloqueado_e_ensina_a_receita,
+      tests/test_no_background_build.py::test_parada_antes_do_exit_do_build_longo_e_bloqueada,
+      tests/test_no_background_build.py::test_parada_com_build_longo_fora_da_janela_passa
+    layer: unit (hook chamado como subprocesso, com transcript sintético)
+    evidence: verified
+    run: >-
+      python3 tests/test_no_background_build.py -> "✓ tudo verde" (exit 0);
+      inclui "sem EXIT= num arquivo, o segundo plano segue bloqueado", "e a
+      recusa ensina gravar EXIT= e esperar em primeiro plano", "parar com o
+      build longo sem EXIT= é bloqueado", "com EXIT= gravado, a parada passa"
+      e "fora da janela a parada não olha build nenhum"
+    status: complete
+    gap: null
+  - id: AC4
+    descricao: >-
+      Esboço passo 3: o resumo do fim do run passa a listar a
+      `human_pending`/trava de cada item travado, com o comando que o dono
+      precisa rodar, em vez de mandar abrir a fila.
+    altitude: cli (saída de tela do `cepa-until`, fim do run)
+    surface: "common/bin/cepa-until — bloco 'Travados (N)' impresso no fim"
+    test: >-
+      tests/test_cepa_until.py::test_resumo_do_fim_diz_por_que_cada_item_travou
+    layer: cli-e2e (fake_claude no PATH, roda o binário real, lê stdout)
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until.py -> "✓ tudo verde" (exit 0); inclui "o
+      resumo dos travados existe", "o comando no FIM de uma evidence longa
+      chega ao resumo", "...e a evidence longa é cortada, não despejada
+      inteira", "travado sem evidence aponta para a rota, sem repeti-la"
+    status: complete
+    gap: null
+regressao:
+  - test: tests/test_no_background_build.py
+    run: "python3 tests/test_no_background_build.py -> ✓ tudo verde (exit 0)"
+  - test: tests/test_cepa_until.py
+    run: "python3 tests/test_cepa_until.py -> ✓ tudo verde (exit 0)"
+julgamento_do_objetivo: >-
+  A troca do passo 2 do esboço ("sem vigia: bloqueio como hoje" virou "sem fim
+  declarado: bloqueio como hoje") atende à intenção do item — o dono não
+  herdar um build longo como pendência silenciosa. O mecanismo (gravar `EXIT=`
+  + esperar em primeiro plano com laço curto + Stop barrado sem `EXIT=`) está
+  implementado, testado em unidade (AC3, verde) e demonstrado sob um agente
+  real de ponta a ponta uma vez (experimento E, ~12,5 min, resultado colhido).
+  Isso é evidência forte de que o mecanismo funciona. O que falta para
+  `complete` é estritamente o que o próprio card listou como "Teste que
+  falta" item 1 (AC2): nenhum teste automatizado no repo leva um ITEM da fila
+  do `cepa-until` a `done` com resultado colhido depois de um build de mais
+  de 10 min — só o hook foi testado em unidade, e só uma vez, manualmente,
+  fora da suíte, um script solto que não passa pelo laço do `cepa-until`. O
+  experimento E é evidência de que o hook funciona sob agente real; NÃO
+  conto ele como o teste que a altitude do critério AC2 pede — ele não
+  demonstra `cepa-until` levando um item a `done`, e não é repetível/commitado.

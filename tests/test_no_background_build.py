@@ -362,6 +362,23 @@ def test_parada_antes_do_exit_do_build_longo_e_bloqueada():
         check("com EXIT= gravado, a parada passa", saida == {}, str(saida)[:300])
 
 
+def test_parada_depois_do_exit_em_subshell_passa():
+    """Run de 27/09 (e2e F): o agente escreveu `(<build>; echo EXIT=$? >>
+    /tmp/b.fim) &`, e o `)` grudava no nome do arquivo. O hook procurava
+    `/tmp/b.fim)`, não achava, e barrava a parada com o build já colhido."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        fim = Path(d) / "b.fim"
+        fim.write_text("EXIT=0\n")
+        cmd = f"(make verify > /tmp/b.log 2>&1; echo EXIT=$? >> {fim}) & disown"
+        c = _transcript(Path(d), [[{"type": "tool_use", "id": "tu_8",
+                                    "name": "Bash",
+                                    "input": {"command": cmd}}]])
+        p, saida = roda_stop(c)
+        check("build em subshell com EXIT= gravado não barra a parada",
+              saida == {}, str(saida)[:300])
+
+
 def test_parada_com_build_longo_fora_da_janela_passa():
     import tempfile
     with tempfile.TemporaryDirectory() as d:

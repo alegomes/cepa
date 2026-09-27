@@ -185,7 +185,7 @@ def bloqueia(command: str, background: bool, ambiente=None):
 # com `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` em 0, ausente ou 120000 (saiu em
 # 15s e matou o build nos três), e um `Monitor` armado não segura o turno.
 _MARCA_FIM = re.compile(
-    r"""EXIT=\$\?["']?\s*>{1,2}\s*["']?([^\s;&|"']+)""")
+    r"""EXIT=\$\?["']?\s*>{1,2}\s*["']?([^\s;&|"'()`<>]+)""")
 
 
 def marca_de_fim(command: str):

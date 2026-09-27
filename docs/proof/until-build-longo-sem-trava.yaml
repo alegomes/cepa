@@ -1,0 +1,47 @@
+schema_version: 2
+card: until-build-longo-sem-trava
+verdict: proven
+reviewed_at: 2026-09-27T14:06:00-03:00
+base_commit: 3454663
+head_commit: e29eb08
+issue_type: Fix
+scope:
+  changed_classes:
+    - class: "common/hooks/no-background-build.py (marca_de_fim, bloqueia, pendencias, _terminou, motivo_da_parada, mensagem de bloqueio do Bash)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (resume_motivo, MOTIVO_NO_RESUMO, lista travados com (id, human_pending, evidence), resumo do fim)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results:
+        - "repo Python de harness, sem pitest; PIT não se aplica (fallback: perturbação universal)."
+    perturbation:
+      status: pass
+      results:
+        - "worktree descartável /tmp/proof-bg-longo (git worktree add --detach e29eb08); removida ao fim (git worktree remove --force)."
+        - "GREEN prévio, sem perturbação: `python3 tests/test_no_background_build.py` -> 'tudo verde'; `python3 tests/test_cepa_until.py` -> 'tudo verde' (rodados no HEAD e29eb08, worktree principal, antes de qualquer perturbação)."
+        - "Hunk 1 (no-background-build.py: `if marca_de_fim(command): return None` em `bloqueia()`, que libera build com fim declarado): removido o early-return -> `python3 tests/test_no_background_build.py` -> RED: 'FAIL build em segundo plano que grava EXIT= num arquivo passa  saiu 2: ... BLOQUEADO: build em segundo plano (run_in_background)' e 'FAIL ...também desanexado no shell' (2 falhas). Restaurado (`git checkout e29eb08 -- common/hooks/no-background-build.py`)."
+        - "Hunk 2 (no-background-build.py: `builds = [... if not _terminou(arq)]` em `pendencias()`, que barra a parada Stop enquanto o arquivo não tem EXIT=): substituído por `builds = []` -> `python3 tests/test_no_background_build.py` -> RED: 'FAIL parar com o build longo sem EXIT= é bloqueado  {}' e 'FAIL ...e o motivo nomeia o arquivo e a espera em primeiro plano' (2 falhas). Restaurado."
+        - "Hunk 3 (cepa-until: `travados.append((ident, relido.get(\"human_pending\"), relido.get(\"evidence\")))`, que carrega o motivo de cada travado para o resumo do fim): substituído por `travados.append((ident, None, None))` -> `python3 tests/test_cepa_until.py` -> RED: 3 falhas em `test_resumo_do_fim_diz_por_que_cada_item_travou` ('o comando no FIM de uma evidence longa chega ao resumo', '...e a evidence longa é cortada, não despejada inteira', 'travado sem evidence aponta para a rota, sem repeti-la'); resumo mostrado é 'o item não registrou motivo na fila' para ambos ao invés do motivo real. Restaurado."
+        - "Pós-restauração, GREEN confirmado de novo: `python3 tests/test_cepa_until.py` -> 'tudo verde'; `python3 tests/test_no_background_build.py` -> 'tudo verde'."
+        - "Os testes chamam o hook real via subprocess (`subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), ...)` em `tests/test_no_background_build.py`), sem duplo — é a superfície externa real (o contrato PreToolUse/Stop do Claude Code), não uma simulação."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Toda linha alterada em ambos os arquivos foi exercida por pelo menos um dos três hunks perturbados acima e voltou RED; nenhuma exigiu ferramenta de cobertura (repo pequeno, sem quarkus-jacoco por não ser Quarkus)."
+  l4_adversarial_input:
+    status: "n/a"
+    reason: "O diff altera um hook de linha de comando e um supervisor CLI que leem stdin JSON e um plano YAML já validados pelos próprios testes existentes (payload ilegível, transcript ausente); não abre superfície de entrada HTTP nem novo parser exposto a usuário externo. Nenhuma classe alterada está em módulo de entrada tipo api-rest (não há tal módulo neste repo)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: "n/a"
+    run: "Item não é um card Jira `Bug` formal (é item de fila `cepa`, tipo Fix, sem rastreamento de tipo de issue no plan.yaml); o comportamento de regressão (WEGO-2334 travado com EXIT=124) já está coberto pela perturbação universal acima, que prova load-bearing nos três hunks que fecham a lacuna."
+routing_reason: "Os três comportamentos do diff (liberar build com fim declarado; barrar a parada Stop enquanto falta EXIT=; e mostrar o motivo de cada item travado no resumo do fim) foram cada um revertido isoladamente numa worktree descartável e cada reversão fez o teste que deveria acusar virar RED; a suíte foi restaurada ao GREEN em seguida. Os testes chamam o hook real via subprocess, sem duplo, então a prova é na superfície externa (o contrato do Claude Code com o hook), não numa simulação interna. L4 é n/a (o diff não abre superfície de entrada nova) e o regression-at-base não se aplica por não ser um card `Bug` formal, mas isso não bloqueia PROVEN porque a load-bearing já cobre a mesma lacuna. PROVEN."
