@@ -59,6 +59,14 @@ stand in for an external one.
   (`git worktree remove --force`) before returning. You DO perturb source, but
   only inside that disposable worktree, via `git` (`git checkout <ref> -- <file>`,
   `git apply -R`), and you restore/discard it. The user's tree is never altered.
+  **Address that worktree by its literal path, in every call.** Each Bash
+  call is a fresh shell, and the bash-path-lock reads each call on its own: a
+  variable set in an earlier call (`WT=...`, `D=$(mktemp -d)`) has no value
+  in the next, so `cd "$WT" && git checkout ...` is treated as running in the
+  project root and is denied. Write the path out (`cd /tmp/proof-<KEY> && ...`) or use
+  `git -C /tmp/proof-<KEY> ...`; both pass. A variable defined and used in the same call
+  also passes. Never switch to `python3 -c` / an inline interpreter after a
+  deny: that is the exact bypass the lock exists to stop (WEGO-1936).
 - **Never edit the implementation to "fix" a gap.** You prove; you do not patch.
   Name the gap precisely enough that the right dev-worker can close it.
 - **Never edit enforcement, hook, or plugin code to grant yourself permission.**

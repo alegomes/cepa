@@ -560,6 +560,10 @@ class _Ctx:
         self.would = []     # negações do balde 4 em modo sombra
         self.events = []    # (evento, campos) para o ledger
         self.sub_base = 0   # numeração global das substituições
+        # diretórios (`cd $X`, `git -C $X`) cujo valor esta chamada não conhece.
+        # Não negam nada sozinhos; entram na mensagem de uma negação que vier
+        # depois, porque são quase sempre a causa dela.
+        self.dirs_desconhecidos = []
 
 
 # ─── leitura da linha: substituições e heredocs ─────────────────────────────
@@ -1664,6 +1668,7 @@ def _h_git(ctx, verbo, args, cwds, seg):
         if v == "-C" and i + 1 < len(args):
             alvo = args[i + 1]
             if not alvo.known:
+                ctx.dirs_desconhecidos.append(alvo.raw)
                 _deny(4, verbo, f"git -C com caminho que não sei avaliar ({alvo.raw})", seg)
             git_cwds = {p for p in _resolve_all(alvo.value, git_cwds)}
             i += 2
@@ -2051,6 +2056,8 @@ def _classify_segment(ctx, text, cwds):
             destino = {Path.home().resolve()}
         elif not nf[0].known or nf[0].value == "-":
             destino = {ctx.root}   # não sei para onde foi: trato como a raiz
+            if not nf[0].known:
+                ctx.dirs_desconhecidos.append(nf[0].raw)
         else:
             destino = set(_resolve_all(nf[0].value, cwds))
         return frozenset(destino), frozenset(cwds)
@@ -2119,7 +2126,32 @@ _BALDE_NOME = {
 }
 
 
-def _mensagem(n, agent, command, allowed):
+def _dica_dir_desconhecido(raws):
+    """A negação veio de um diretório que esta chamada não sabe resolver.
+
+    Caso medido em 2026-09-26: o proof-reviewer criava a worktree descartável
+    numa chamada (`WT=$(mktemp -d)/red && git worktree add ...`) e usava
+    `cd "$WT" && git checkout ...` na seguinte. O cadeado lê cada chamada
+    sozinha, então `$WT` não tem valor, o `cd` conta como "continua na raiz" e
+    a reversão vira escrita fora da pista. A mensagem antiga dizia só "escrita
+    fora da sua pista" e sugeria a mesma receita com `"$D/red"`; os agentes
+    contornavam com `python3 -c`, o vetor do WEGO-1936.
+    """
+    nomes = ", ".join(dict.fromkeys(raws))
+    return [
+        "",
+        f"  Por que caiu aqui: {nomes} não tem valor que eu conheça nesta chamada.",
+        "  Cada chamada do Bash é lida sozinha: variável definida numa chamada",
+        "  anterior (WT=..., D=$(mktemp -d)) não existe nesta. Sem saber o destino,",
+        "  o `cd` conta como se você continuasse na raiz do projeto.",
+        "  Repita o caminho LITERAL que a chamada anterior imprimiu:",
+        "    cd /tmp/tmp.AbC123/red && <comando>",
+        "    git -C /tmp/tmp.AbC123/red <subcomando>",
+        "  Trocar por python3 -c não resolve: é o balde 4, e contornar é violação.",
+    ]
+
+
+def _mensagem(n, agent, command, allowed, dirs_desconhecidos=()):
     globs = "\n      - ".join(allowed or ["(nenhum — só o seu arquivo de expertise)"])
     linhas = [
         f"[marketing bash-path-lock] NEGADO ({_BALDE_NOME.get(n.balde, n.balde)}): "
@@ -2132,6 +2164,10 @@ def _mensagem(n, agent, command, allowed):
         linhas.append(f"  Trecho: {n.segmento.strip()[:200]}")
     linhas += [
         f"  Comando: {command[:300]}",
+    ]
+    if dirs_desconhecidos:
+        linhas += _dica_dir_desconhecido(dirs_desconhecidos)
+    linhas += [
         "",
         "  Este cadeado só deixa passar o que é comprovadamente inofensivo: escrita",
         "  com alvo visível dentro da sua pista, verbo da lista de inocentes, ou",
@@ -2147,7 +2183,9 @@ def _mensagem(n, agent, command, allowed):
         "      (lá o cadeado não tem jurisdição, e a reversão nunca vaza para o diff):",
         "        D=$(mktemp -d) && git worktree add --detach \"$D/red\" HEAD && "
         "cd \"$D/red\" && <reverta e rode o teste>",
-        "        git worktree remove --force \"$D/red\"",
+        "      Nas chamadas SEGUINTES, $D não existe mais: use o caminho literal",
+        "      (cd /tmp/tmp.AbC123/red && ..., ou git -C /tmp/tmp.AbC123/red ...):",
+        "        git worktree remove --force /tmp/tmp.AbC123/red",
         "    - verbo legítimo que faltou na lista: diga no seu relatório — quem",
         "      decide incluir é o humano, nunca o agente bloqueado.",
         "",
@@ -2209,7 +2247,8 @@ def main():
         _t_emit("bash_pathlock_deny", cwd=cwd_s, agent=agent, bucket=n.balde,
                 verb=n.verbo, cmd_hash=_cmd_hash(command),
                 card=os.environ.get("CLAUDE_AUTONOMOUS_RUN_ID", ""))
-        print(_mensagem(n, agent, command, allowed), file=sys.stderr)
+        print(_mensagem(n, agent, command, allowed, ctx.dirs_desconhecidos),
+              file=sys.stderr)
         sys.exit(2)
 
     for n in ctx.would:
