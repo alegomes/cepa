@@ -64,6 +64,24 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
    `common/plan-schema.yaml`). Selecione a onda alvo (`--wave` ou a primeira
    pending).
 
+   **Capturar o pane-lar da onda, AGORA — não na hora do fork.** Rode
+   `herdr pane current` e guarde `pane_id`, `tab_id` e `workspace_id` (essa é
+   a aba/Space que vai receber TODAS as filhas desta onda). O motivo de
+   capturar aqui, antes até do intake gate, e não no passo 6 (spawn): entre
+   este ponto e o primeiro fork se passam minutos (gc de órfãos, intake gate,
+   subida do porteiro), e o foco muda nesse intervalo por qualquer clique do
+   dono — o foco na hora do spawn é exatamente o valor errado. Na onda
+   WEGO-paralelo (2026-08-24) o spawn não recebia `--tab`/`--workspace`
+   nenhum e forkava a aba que estivesse em foco no momento; a evidência no
+   `herdr-server.log` foi cinco `pane.spawn.start` sucessivos com a largura
+   caindo pela metade a cada um (173 → 87 → 44 → 22 → 11 colunas) — a
+   assinatura de cinco divisões da MESMA aba, que não era a do `/maestro:run`.
+   Se `herdr pane current` falhar (sessão fora do herdr), o pane-lar não é "a
+   aba que tiver foco quando alguém notar": abra uma aba nova e previsível,
+   `herdr tab create --label <PROG> --no-focus`, e use o `root_pane` dela.
+   Este pane-lar é persistido no passo 5 (`maestro-wave-state set-home`) e é
+   contra ele — nunca contra o foco corrente — que o passo 6c divide.
+
 2. **gc de órfãos** (o análogo do que o cepa-doctor faz para cepa-worktrees —
    restos de programas anteriores custam a próxima onda):
    - `herdr worktree list --json` → worktrees de programas já concluídos;
@@ -90,6 +108,10 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
 
 5. **Inicializar o estado da onda.**
    `python3 maestro/bin/maestro-wave-state init PROGDIR --plan PROGDIR/plan.yaml --wave N`.
+   Logo em seguida, persista o pane-lar capturado no passo 1:
+   `python3 maestro/bin/maestro-wave-state set-home PROGDIR --pane <pane_id> --tab <tab_id> --workspace <workspace_id>`.
+   É esse registro em disco — não uma variável da sessão — que o passo 6c e o
+   `/maestro:resume` consultam para saber onde nascem as filhas.
 
 6. **Fork por slice** (respeitando `max_concurrent_slices`):
    Para cada slice READY da onda:
@@ -133,18 +155,45 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
       porteiro nunca é consultado (achado do spike), e sem o `.mcp.json` a filha
       não enxerga a ferramenta do porteiro e morre na largada (achado da onda
       WEGO-paralelo, 2026-08-24 — `mcpServers` em settings.json é ignorado).
-   c. **Spawn com o wrapper normativo** (pipefail + PIPESTATUS, senão toda
-      filha que falha reporta sucesso — bug real da rev1):
+   c. **Spawn contra o pane-lar, com o wrapper normativo** (pipefail +
+      PIPESTATUS, senão toda filha que falha reporta sucesso — bug real da
+      rev1). O `herdr agent start` da versão instalada (0.9.1) não aceita mais
+      `--cwd`, `--env`, `--tab`, `--workspace` nem um comando após `--`
+      ("Start a supported interactive agent in an existing pane" — ele só
+      inicia um agente numa pane que já existe); por isso o spawn é
+      split-e-run contra o pane-lar registrado no passo 5
+      (`maestro-wave-state get PROGDIR`, campo `home.pane`), NUNCA contra o
+      pane que estiver em foco:
       ```
-      herdr agent start <PROG>-<slice> --cwd <worktree> \
-        --env MAESTRO_LINGER=600 -- \
-        bash -c 'set -o pipefail; claude -p "<prompt-do-slice>" \
-          --mcp-config .mcp.json --strict-mcp-config \
-          --permission-prompt-tool mcp__gatekeeper__permission_prompt \
-          2>&1 | tee resultado.txt; ec=${PIPESTATUS[0]}; \
-          echo "MAESTRO-EXIT:$ec" | tee -a resultado.txt; \
-          sleep "$MAESTRO_LINGER"'
+      herdr pane split <home.pane> --direction right --cwd <worktree> \
+        --env MAESTRO_LINGER=600 --no-focus
+      # → devolve o novo pane_id
+      herdr pane rename <novo-pane> <PROG>-<slice>
+      herdr pane run <novo-pane> "bash -c 'set -o pipefail; claude -p \"<prompt-do-slice>\" \
+        --mcp-config .mcp.json --strict-mcp-config \
+        --permission-prompt-tool mcp__gatekeeper__permission_prompt \
+        2>&1 | tee resultado.txt; ec=\${PIPESTATUS[0]}; \
+        echo \"MAESTRO-EXIT:\$ec\" | tee -a resultado.txt; \
+        sleep \"\$MAESTRO_LINGER\"'"
       ```
+      **O `\$` antes de `{PIPESTATUS[0]}`, `ec` e `MAESTRO_LINGER` é
+      proposital, não sujeira de escape.** O `herdr pane run` acima roda no
+      shell duplo-aspeado da PRÓPRIA sessão do maestro (quem está montando o
+      comando), não no shell da filha. Sem o `\`, essas três variáveis
+      expandem AQUI — vazias, porque não existem neste shell — antes do texto
+      chegar à pane filha: o resultado seria `ec=`, `MAESTRO-EXIT:` sem
+      código e `sleep ""`, quebrando silenciosamente a sincronização por
+      arquivo que o `maestro-poll` depende (confirmado ao vivo: rodar a
+      receita sem o `\` produz exatamente isso). Nunca "limpe" essas barras
+      achando que sobraram por engano.
+      **Nunca divida o pane que estiver em foco e nunca omita o id do
+      pane-lar** — `--no-focus` só impede que o pane novo ROUBE o foco depois
+      de criado, ele não escolhe onde o pane nasce (quem escolhe é o primeiro
+      argumento de `herdr pane split`). `herdr pane split` cria o pane novo NA
+      ABA do pane que você apontar, sem olhar qual aba está em foco no
+      momento — é essa propriedade que resolve o item (probado ao vivo: uma
+      aba sem foco recebeu o split e ficou com o pane novo; a aba com foco não
+      mudou).
       `--mcp-config .mcp.json --strict-mcp-config` NÃO é opcional: sem ele a
       filha sobe sem o porteiro, `--permission-prompt-tool` aponta para ferramenta
       inexistente e o processo aborta com
@@ -156,7 +205,17 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
       não só no painel — é por arquivo que o `maestro-poll` sincroniza.
       O `<prompt-do-slice>` traz a demanda, a superfície, o `acceptance`/
       `acceptance_cmd`, o `context` e a disciplina autonomous-mode.
-      `maestro-wave-state set-slice PROGDIR <slice> running --pane <id> --worktree <path>`.
+      `maestro-wave-state set-slice PROGDIR <slice> running --pane <novo-pane> --worktree <path>`.
+
+      **Fallback: pane-lar morto.** Se o `herdr pane split` devolver
+      `pane_not_found` (a aba do pane-lar foi fechada), não caia de volta no
+      foco corrente — abra uma aba nova e previsível no mesmo Space:
+      `herdr tab create --workspace <home.workspace> --label <PROG> --cwd <worktree> --env MAESTRO_LINGER=600 --no-focus`,
+      use o `root_pane` devolvido como o pane desta slice (rename + run como
+      acima) e **atualize o pane-lar** com
+      `maestro-wave-state set-home PROGDIR --pane <root_pane> --tab <tab-da-nova-aba> --workspace <home.workspace>`
+      para que as próximas slices desta onda também nasçam ali, em vez de cada
+      uma abrir sua própria aba nova.
 
 7. **Event loop da onda** (obrigatório — sem ele há deadlock). Em rodízio, até a
    onda terminar:
@@ -166,8 +225,12 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
    - **Escalações**: para cada uma pending, apresente ao humano (ação, slice,
      contexto, opções). Grave a decisão no próprio `escalations/<id>.yaml`
      (`estado: answered`) e **re-spawne a filha** injetando "decisão do dono
-     sobre <id>: ..." no prompt — ela continua do worktree onde parou.
-   - **Retentativa com nome novo** (`S-2067R` nascendo de `S-2067`): registre-a
+     sobre <id>: ..." no prompt — ela continua do worktree onde parou. O
+     re-spawn usa a MESMA receita do passo 6c (`herdr pane split` contra o
+     pane-lar de `maestro-wave-state get PROGDIR` → `home.pane`, rename, `herdr
+     pane run`) — nunca o foco corrente do momento.
+   - **Retentativa com nome novo** (`S-2067R` nascendo de `S-2067`): forka pela
+     mesma receita do passo 6c contra o pane-lar registrado, e registre-a
      no mesmo instante em que forka,
      `maestro-wave-state set-slice PROGDIR <slice>R running --pane <id> --worktree <path>
      --detail "retentativa de <slice>"`. Na onda 1 do WEGO-paralelo as

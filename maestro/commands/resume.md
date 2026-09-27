@@ -28,10 +28,18 @@ aterrissou. Reusa o padrão do `/common:autonomous-resume` — não inventa outr
    - **porteiro**: `GET /health` na URL registrada. Morto → ressuba
      (`maestro-gatekeeper --state-dir .../gatekeeper --port <P>` no mesmo modo)
      e atualize o pid via `set-gk`.
-   - **filhas `running`**: confira se o pane/PID ainda vive (`herdr agent get`)
-     E se o `resultado.txt` já tem `MAESTRO-EXIT`. Filha morta sem marcador →
-     trate como a próxima iteração do poll decidirá (TIMEOUT se estourou o
-     prazo); filha viva → segue no loop.
+   - **filhas `running`**: confira se o pane ainda vive com
+     `herdr pane get <pane>` (o id gravado em `slices.<slice>.pane`; a
+     liveness NÃO é mais por agente — o herdr 0.9 já não tem esse comando de
+     agente para isto) E se o `resultado.txt` já
+     tem `MAESTRO-EXIT`. Filha morta sem marcador → trate como a próxima
+     iteração do poll decidirá (TIMEOUT se estourou o prazo); filha viva →
+     segue no loop. Qualquer re-spawn (filha morta, escalação respondida)
+     usa o pane-lar gravado no wave-state
+     (`maestro-wave-state get <PROGDIR> --json` → `home.pane`/`home.tab`/
+     `home.workspace`), com a mesma receita `herdr pane split` + rename +
+     `herdr pane run` do `/maestro:run` (passo 6c) — nunca o foco corrente
+     desta sessão de resume, que pode nem ser a mesma aba da onda original.
    - **merges**: slice `LANDED` (ou, em wave-state antigo, nome na lista
      `landed:`) já entrou no main; não re-mergeie.
 

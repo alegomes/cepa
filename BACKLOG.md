@@ -2306,8 +2306,16 @@ onda `WEGO-paralelo` nasceram numa aba que não era a do `/maestro:run`.
 
 **Plano:** `cepa/maestro-run-nao-diz-a-aba`
 
-**Status:** pendente · **Lar provável:** `maestro/commands/run.md` (passo do spawn) ·
+**Status:** feito nesta branch · **Lar:** `maestro/commands/run.md` (passo 1
+captura, passo 5 persiste, passo 6c forka), `maestro/commands/resume.md`
+(liveness e re-spawn), `maestro/bin/maestro-wave-state` (`set-home`/`home`) ·
 **Origem:** reflexão 2026-08-24 sobre a onda `WEGO-paralelo` do `wego-acesso-backend`.
+
+**Nota:** o esboço abaixo (passar `--tab`/`--workspace` ao `herdr agent start`)
+ficou obsoleto — o herdr 0.9 removeu `--cwd`/`--tab`/`--workspace`/comando do
+`agent start` (ele só inicia agente em pane já existente). A solução
+implementada é `herdr pane split <pane-lar>` por id explícito de pane (não por
+foco), com `herdr pane rename` + `herdr pane run` para o wrapper normativo.
 
 ### Problema
 

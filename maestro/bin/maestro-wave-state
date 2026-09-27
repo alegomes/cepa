@@ -12,6 +12,10 @@ Subcomandos:
   set-slice <program-dir> <slice> <status> [--pane ID] [--worktree PATH]
         [--pid N] [--started-epoch E] [--detail TEXT]
   set-gk <program-dir> --pid N [--url URL]
+  set-home <program-dir> --pane ID --tab ID --workspace ID
+        registra o pane/aba/Space que os forks da onda devem usar (ver
+        /maestro:run, passo capturado ANTES do intake gate — o foco na hora
+        do fork é o valor errado, WEGO-paralelo 2026-08-24)
   landed <program-dir> <slice>          # marca merge aterrissado (slice → LANDED)
   get <program-dir> [--json]            # imprime o estado (resume lê isto)
   check-terminal <program-dir> [--json] # exit 0 se toda slice terminou; 2 senão
@@ -95,6 +99,7 @@ def cmd_init(a):
         "created_epoch": int(time.time()),
         "timeout_min_default": 45,
         "gatekeeper": {"pid": None, "url": None},
+        "home": None,
         "landed": [],
         "slices": {
             s: {"status": "pending",
@@ -142,6 +147,21 @@ def cmd_set_gk(a):
         gk["url"] = a.url
     _save(a.program_dir, ws)
     print(f"gatekeeper pid={a.pid}")
+    return 0
+
+
+def cmd_set_home(a):
+    """Registra o pane/aba/Space capturados no início da rotina.
+
+    É a única fonte de "onde nascem as filhas". Sem isto, o spawn do passo 6c
+    cairia de volta no foco corrente na hora do fork — exatamente o bug do
+    item (a onda WEGO-paralelo, 2026-08-24, forkou 5 panes na aba que estava
+    em foco, não na do /maestro:run).
+    """
+    ws = _load(a.program_dir)
+    ws["home"] = {"pane": a.pane, "tab": a.tab, "workspace": a.workspace}
+    _save(a.program_dir, ws)
+    print(f"home: pane={a.pane} tab={a.tab} workspace={a.workspace}")
     return 0
 
 
@@ -234,6 +254,11 @@ def main():
     p = sub.add_parser("set-gk"); p.add_argument("program_dir")
     p.add_argument("--pid", type=int, required=True); p.add_argument("--url")
     p.set_defaults(fn=cmd_set_gk)
+
+    p = sub.add_parser("set-home"); p.add_argument("program_dir")
+    p.add_argument("--pane", required=True); p.add_argument("--tab", required=True)
+    p.add_argument("--workspace", required=True)
+    p.set_defaults(fn=cmd_set_home)
 
     p = sub.add_parser("landed"); p.add_argument("program_dir"); p.add_argument("slice")
     p.set_defaults(fn=cmd_landed)
