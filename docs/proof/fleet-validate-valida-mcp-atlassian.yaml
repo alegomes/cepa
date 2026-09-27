@@ -1,0 +1,53 @@
+schema_version: 2
+card: fleet-validate-valida-mcp-atlassian
+verdict: proven
+reviewed_at: 2026-09-27T00:00:00-03:00
+base_commit: 86ee073
+head_commit: 54d09ff
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "board-flow/board-flow-fleet-validate.sh (preflight twg doctor -> connectivity.ok)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "board-flow/board-flow-fleet-validate.sh (jira space get PROJECT_KEY, visibilidade do projeto)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "board-flow/board-flow-fleet-validate.sh (JQL da coluna To-Do e parsing de data.issues)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_fleet_validate_twg.py (novo teste, twg fake registra chamadas e responde por FAKE_MODE)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "GREEN no HEAD íntegro: worktree descartável /tmp/proof-fleet-validate criado com `git worktree add --detach /tmp/proof-fleet-validate 54d09ff`; `python3 tests/test_fleet_validate_twg.py` (roda o script como CLI real via subprocess, twg fake) -> 18 checks 'ok', 0 falha(s), EXIT=0."
+        - "Regressão RED na base: trouxe o teste de HEAD para o worktree em 86ee073 (`git checkout 86ee073 -- board-flow-fleet-validate.sh` + `git checkout 54d09ff -- tests/test_fleet_validate_twg.py`) -> 13 de 18 falhas, incluindo as duas que capturam a mudança central ('código não chama claude -p' e 'código não usa mcp-atlassian nem JIRA_API_TOKEN'); demais falhas por dependência de JIRA_API_TOKEN/claude -p inexistentes no ambiente de prova. Confirma que o script antigo não passa no contrato novo."
+        - "Perturbação P1 — ignora connectivity.ok do `twg doctor` (troquei `print(\"ok\" if c.get(\"ok\") is True else ...)` por `print(\"ok\")` fixo, via `git apply` de patch mínimo dentro do worktree descartável) -> RED: 4 falhas, incluindo o caso que simula OAuth expirado deixando de bloquear. Restaurado com `git checkout 54d09ff -- board-flow/board-flow-fleet-validate.sh`."
+        - "Perturbação P2 — troca a JQL removendo o filtro de status (`JQL=\"project = $PROJECT_KEY ORDER BY priority DESC\"`, sem `AND status = ...`) -> RED: 1 falha ('consulta a coluna To-Do do board-flow.yaml'), teste captura a JQL exata enviada à twg fake e compara. Restaurado."
+        - "Perturbação P3 — aceita `data.issues` ausente como lista vazia em vez de BLOCKED (`issues = issues if isinstance(issues, list) else []` no lugar do `if not isinstance(issues, list): ... exit(1)`) -> RED: 1 falha ('query sem data.issues é BLOCKED, não PASS vazio'), o script passa a imprimir 'VALIDATION PASS ... (0 cards)' em vez de BLOCKED. Restaurado."
+        - "Perturbação P4 — pula a checagem `jira space get PROJECT_KEY` (visibilidade do projeto), zerando a variável `space` sem chamar a twg -> RED: 2 falhas ('confere o projeto com twg jira space get ABC' e 'projeto invisível sai 1 com BLOCKED'), confirma que sem essa chamada um projeto inexistente não é bloqueado. Restaurado."
+        - "GREEN final confirmado após a última restauração: `git diff --stat` vazio (script byte-a-byte igual a HEAD) e `python3 tests/test_fleet_validate_twg.py` -> 0 falha(s), fechando green -> red -> green para cada um dos 4 trechos de comportamento mudados."
+        - "Todas as edições de perturbação foram feitas via `git apply`/`git checkout <ref> -- <path>` dentro do worktree descartável /tmp/proof-fleet-validate (nunca sed/cp/Write direto no arquivo rastreado — o path-lock do build-hex bloqueia escrita fora da pista do proof-reviewer por qualquer outro verbo); a árvore principal do repo nunca foi tocada."
+        - "Worktree descartável removido ao final com `git worktree remove --force /tmp/proof-fleet-validate`."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "As quatro linhas de comportamento que a mudança introduziu (preflight via connectivity.ok, jira space get, JQL com status, parsing de data.issues) foram cada uma perturbada e capturadas por um assert dedicado do teste (ver l3 acima); nenhuma delas ficou descoberta."
+  l4_adversarial_input:
+    status: "n/a"
+    reason: "O script é uma ferramenta de validação local rodada manualmente (nunca por schedule/rede) que só consome a saída JSON de um binário local (twg) e um arquivo YAML local (board-flow.yaml); não há endpoint HTTP nem payload de rede exposto por esta mudança — a superfície de entrada é a CLI local, já coberta pela perturbação. Nenhuma classe mudada está em módulo api-rest/input externo (é bash/CLI de harness)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base 86ee073 + teste de 54d09ff -> 13/18 falhas (RED), incluindo as duas asserções que checam a ausência de claude -p/mcp-atlassian; head 54d09ff -> 18/18 'ok' (GREEN). Commit 54d09ff também documenta '13 falhas no script antigo, verde no novo', consistente com o que medi."
+routing_reason: "Todo comportamento mudado (preflight via connectivity.ok, checagem de visibilidade do projeto via jira space get, JQL da coluna To-Do, parsing de data.issues) foi perturbado individualmente dentro de um worktree descartável e cada perturbação virou RED no teste que deveria capturá-la; a regressão na base também é RED, confirmando que o script antigo não atende ao contrato novo. Nenhum nível ficou assumed/skipped/gap. PROVEN."

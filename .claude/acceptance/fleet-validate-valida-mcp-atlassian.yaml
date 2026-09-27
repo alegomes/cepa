@@ -1,0 +1,53 @@
+key: fleet-validate-valida-mcp-atlassian
+diff: 86ee073..54d09ff
+status: complete
+criteria:
+  - id: AC1
+    text: >-
+      O preflight do script passa a ser `twg doctor` (linha Connectivity) e falha
+      de auth vira BLOCKED, nunca quadro vazio.
+    altitude: cli
+    surface: board-flow/board-flow-fleet-validate.sh (script executado via bash)
+    test: tests/test_fleet_validate_twg.py
+    layer: cli (subprocess.run do script, twg fake)
+    evidence: verified
+    run: "python3 tests/test_fleet_validate_twg.py -> 0 falha(s) (18 checks ok, ~1.9s); casos 'preflight é twg doctor', 'twg sem auth sai 1', 'BLOCKED diz que é auth, não quadro vazio', 'sem auth não consulta o quadro' todos ok"
+    status: complete
+  - id: AC2
+    text: >-
+      Depois `twg jira space get <project_key>` e `twg jira workitem query
+      'project = <key> AND status = "<to_do>"'`.
+    altitude: cli
+    surface: board-flow/board-flow-fleet-validate.sh (script executado via bash)
+    test: tests/test_fleet_validate_twg.py
+    layer: cli
+    evidence: verified
+    run: "python3 tests/test_fleet_validate_twg.py -> 0 falha(s); casos 'confere o projeto com twg jira space get ABC' e 'consulta a coluna To-Do do board-flow.yaml' ok"
+    status: complete
+  - id: AC3
+    text: "Sem `claude -p` e sem token (`JIRA_API_TOKEN`)."
+    altitude: cli
+    surface: board-flow/board-flow-fleet-validate.sh (código-fonte do script)
+    test: tests/test_fleet_validate_twg.py
+    layer: cli (inspeção estática do código-fonte do script, dentro do próprio teste, mais CLAUDE_BIN=/nonexistent/claude no ambiente do fake)
+    evidence: verified
+    run: "python3 tests/test_fleet_validate_twg.py -> 0 falha(s); casos 'código não chama claude -p' e 'código não usa mcp-atlassian nem JIRA_API_TOKEN' ok"
+    status: complete
+  - id: AC4
+    text: >-
+      `docs/loop-engineering.md` deixa de descrever o `mcp-atlassian` como caminho
+      do headless local.
+    altitude: domain
+    surface: docs/loop-engineering.md (texto de documentação)
+    test: leitura manual do arquivo (sem teste automatizado; critério é sobre prosa, não comportamento)
+    layer: n/a (documentação)
+    evidence: verified
+    run: "grep -n -i 'mcp-atlassian|headless' docs/loop-engineering.md lido manualmente: linha 49 rotula 'Local option, interativo ou headless' como twg; linha 55 rotula mcp-atlassian como '*Superseded (O3, 2026-09-24)*... The agent no longer uses it'; linha 70 confirma 'The mcp__mcp-atlassian__ binding was dropped in O3'."
+    status: complete
+gaps: []
+notes: >-
+  Orquestrador também rodou o script contra o Jira real (leitura só) em
+  2026-09-27: PASS com WEGO e 3 cards; PROJECT_KEY=NAOEXISTE saiu 1 com BLOCKED.
+  Não reproduzido por este auditor (regra: não chamar o Jira); tratado como
+  evidência complementar do orquestrador, não como base do veredito — o veredito
+  se apoia na execução direta de tests/test_fleet_validate_twg.py.
