@@ -28,6 +28,7 @@ Run: python3 tests/test_spec_readiness_gate.py
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -177,6 +178,172 @@ def test_edit_e_multiedit():
     rc, _ = run({"tool_name": "MultiEdit",
                  "tool_input": {"edits": [{"new_string": doc}]}})
     check("MultiEdit é lido", rc == 2, f"rc={rc}")
+
+
+def com_arquivo_temporario(conteudo):
+    """Escreve `conteudo` num arquivo temporário e devolve o Path; quem chama
+    apaga depois."""
+    f = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False,
+                                     encoding="utf-8")
+    f.write(conteudo)
+    f.close()
+    return Path(f.name)
+
+
+def test_edit_com_file_path_le_o_arquivo_resultante():
+    # (a) Status rascunho -> pronta, critério já completo no arquivo: hoje
+    # bloqueava (falso bloqueio, o fragmento só tem o Status). Deve liberar.
+    doc_rascunho = PRONTA_OK.replace("**Status:** pronta-para-construir",
+                                     "**Status:** rascunho")
+    caminho = com_arquivo_temporario(doc_rascunho)
+    try:
+        rc, err = run({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "old_string": "**Status:** rascunho",
+                "new_string": "**Status:** pronta-para-construir",
+            },
+        })
+        check("Edit que só muda o Status vê o critério completo e libera",
+              rc == 0, f"rc={rc} err={err[:200]}")
+    finally:
+        caminho.unlink(missing_ok=True)
+
+    # (b) já pronta no arquivo, Edit adiciona pergunta em aberto no fragmento
+    # (que não tem Status): hoje passava (falso passe). Deve bloquear.
+    caminho = com_arquivo_temporario(PRONTA_OK)
+    try:
+        rc, err = run({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "old_string": "## Critérios de sucesso",
+                "new_string": "## Perguntas em aberto\n- [ ] pergunta nova\n\n## Critérios de sucesso",
+            },
+        })
+        check("Edit que reabre pergunta numa spec pronta bloqueia",
+              rc == 2, f"rc={rc}")
+        check("mensagem cita a pergunta reaberta", "pergunta nova" in err, err[:300])
+    finally:
+        caminho.unlink(missing_ok=True)
+
+    # (c) já pronta no arquivo, Edit remove o Teste vermelho no fragmento (que
+    # não tem Status nem CS): hoje passava. Deve bloquear.
+    caminho = com_arquivo_temporario(PRONTA_OK)
+    try:
+        rc, err = run({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "old_string": "**Teste vermelho:** AssinaturaResourceIT#post_menorSemResponsavel_retorna422 — hoje não existe.\n",
+                "new_string": "",
+            },
+        })
+        check("Edit que remove Teste vermelho numa spec pronta bloqueia",
+              rc == 2, f"rc={rc}")
+        check("mensagem cita Teste vermelho", "Teste vermelho" in err, err[:300])
+    finally:
+        caminho.unlink(missing_ok=True)
+
+
+def test_multiedit_com_file_path_aplica_em_sequencia():
+    # A segunda edição só bate DEPOIS que a primeira foi aplicada (o old_string
+    # da segunda não existe no arquivo original). O veredito só pode estar
+    # certo se o gate aplicar as duas em sequência sobre o mesmo texto.
+    doc = PRONTA_OK.replace("**Status:** pronta-para-construir",
+                            "**Status:** RASCUNHO_TEMPORARIO")
+    caminho = com_arquivo_temporario(doc)
+    try:
+        rc, err = run({
+            "tool_name": "MultiEdit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "edits": [
+                    {"old_string": "**Status:** RASCUNHO_TEMPORARIO",
+                     "new_string": "**Status:** rascunho"},
+                    {"old_string": "**Status:** rascunho",
+                     "new_string": "**Status:** pronta-para-construir"},
+                ],
+            },
+        })
+        check("MultiEdit aplica as edições em sequência e libera (completa)",
+              rc == 0, f"rc={rc} err={err[:200]}")
+    finally:
+        caminho.unlink(missing_ok=True)
+
+
+def test_multiedit_replace_all():
+    doc = PRONTA_OK.replace("**Status:** pronta-para-construir",
+                            "**Status:** rascunho")
+    caminho = com_arquivo_temporario(doc)
+    try:
+        rc, err = run({
+            "tool_name": "MultiEdit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "edits": [
+                    {"old_string": "rascunho", "new_string": "pronta-para-construir",
+                     "replace_all": True},
+                ],
+            },
+        })
+        check("replace_all é respeitado e a spec completa libera",
+              rc == 0, f"rc={rc} err={err[:200]}")
+    finally:
+        caminho.unlink(missing_ok=True)
+
+
+def test_edit_com_file_path_inexistente_libera():
+    rc, err = run({
+        "tool_name": "Edit",
+        "tool_input": {
+            "file_path": "/tmp/nao-existe-spec-readiness-gate-teste.md",
+            "old_string": "**Status:** rascunho",
+            "new_string": "**Status:** pronta-para-construir",
+        },
+    })
+    check("file_path inexistente libera", rc == 0, f"rc={rc} err={err[:200]}")
+
+
+def test_edit_com_old_string_duplicado_sem_replace_all_libera():
+    # old_string bate duas vezes e replace_all não foi pedido: a ferramenta
+    # Edit real exige unicidade e falha sozinha, então o gate libera em vez de
+    # trocar "a primeira" ocorrência por conta própria.
+    doc = PRONTA_OK.replace(
+        "**Superfície:** http",
+        "**Superfície:** http\n**Superfície:** http",
+    )
+    caminho = com_arquivo_temporario(doc)
+    try:
+        rc, err = run({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "old_string": "**Superfície:** http",
+                "new_string": "**Superfície:** banco de dados",
+            },
+        })
+        check("old_string duplicado sem replace_all libera",
+              rc == 0, f"rc={rc} err={err[:200]}")
+    finally:
+        caminho.unlink(missing_ok=True)
+
+
+def test_edit_com_old_string_que_nao_bate_libera():
+    caminho = com_arquivo_temporario(PRONTA_OK)
+    try:
+        rc, err = run({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "old_string": "isto não existe no arquivo",
+                "new_string": "qualquer coisa",
+            },
+        })
+        check("old_string que não bate libera", rc == 0, f"rc={rc} err={err[:200]}")
+    finally:
+        caminho.unlink(missing_ok=True)
 
 
 def test_nunca_bloqueia_o_que_nao_ve():

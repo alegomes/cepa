@@ -17,6 +17,18 @@ corre. O que é gateado é exclusivamente a AFIRMAÇÃO de que acabou.
 
 Mecanismo:
   - Fira em Write/Edit/MultiEdit; só olha conteúdo com um campo Status.
+  - Em Edit/MultiEdit com `file_path`, não julga o fragmento (`new_string`)
+    isolado: lê o arquivo do disco, aplica cada `old_string` → `new_string` na
+    ordem (respeitando `replace_all`; sem ele, exige que `old_string` seja
+    único no texto e troca essa única ocorrência — o mesmo que a ferramenta
+    Edit faz de verdade) e julga o ARQUIVO RESULTANTE inteiro, Status incluso.
+    Sem isso, um Edit que só troca `Status:` engana o gate (não vê os
+    critérios, que estão fora do fragmento) e um Edit que fura um critério ou
+    reabre uma pergunta engana o gate do lado oposto (o fragmento não tem
+    Status, então nada dispara). Se o arquivo não existe, não lê, algum
+    `old_string` não bate, ou bate mais de uma vez sem `replace_all`, libera (a
+    própria ferramenta vai falhar por conta própria). Sem `file_path`, mantém
+    o comportamento antigo: julga só os fragmentos (`new_string`).
   - Status diferente de "pronta-para-construir" → libera, sem olhar mais nada.
   - Declarou pronta, então exige, em cada bloco `### CS-<n>`:
       · **Superfície:** com valor do vocabulário fechado (o mesmo da skill
@@ -36,6 +48,7 @@ Exit codes:
 import json
 import re
 import sys
+from pathlib import Path
 
 GATED_TOOLS = ("Write", "Edit", "MultiEdit")
 
@@ -84,6 +97,57 @@ def extract_content(tool_input: dict):
     return None
 
 
+def aplica_edicao(texto: str, edit: dict):
+    """Aplica um `old_string` → `new_string` sobre `texto`, como a ferramenta
+    Edit faria de verdade. Retorna None se `old_string` não bate, ou se bate
+    mais de uma vez sem `replace_all` — a ferramenta real exige que
+    `old_string` seja único nesse caso e falha sozinha; quem chama aqui
+    decide liberar."""
+    old = edit.get("old_string")
+    new = edit.get("new_string")
+    if not isinstance(old, str) or not isinstance(new, str) or old == "":
+        return None
+    if old not in texto:
+        return None
+    if edit.get("replace_all"):
+        return texto.replace(old, new)
+    if texto.count(old) > 1:
+        return None
+    return texto.replace(old, new, 1)
+
+
+def resultado_apos_edicoes(tool_name: str, tool_input: dict):
+    """Para Edit/MultiEdit com `file_path`: lê o arquivo do disco e aplica cada
+    edição na ordem, retornando o conteúdo resultante inteiro. Retorna None
+    quando não dá para calcular com segurança (sem `file_path`, arquivo
+    ilegível, formato inesperado, ou algum `old_string` que não bate) — nesses
+    casos quem chama libera, porque a ferramenta real vai falhar por conta
+    própria."""
+    file_path = tool_input.get("file_path")
+    if not isinstance(file_path, str) or not file_path:
+        return None
+
+    if tool_name == "MultiEdit":
+        edits = tool_input.get("edits")
+    else:
+        edits = [tool_input]
+    if not isinstance(edits, list) or not edits:
+        return None
+
+    try:
+        texto = Path(file_path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    for edit in edits:
+        if not isinstance(edit, dict):
+            return None
+        texto = aplica_edicao(texto, edit)
+        if texto is None:
+            return None
+    return texto
+
+
 def limpa(valor: str) -> str:
     v = valor.strip()
     v = re.sub(r"^(\*\*|__|`)+|(\*\*|__|`)+$", "", v).strip()
@@ -128,9 +192,20 @@ def main():
     if not any(t in payload.get("tool_name", "") for t in GATED_TOOLS):
         sys.exit(0)
 
-    content = extract_content(payload.get("tool_input") or {})
-    if content is None:
-        sys.exit(0)          # sem ver o conteúdo, não se bloqueia nada
+    tool_name = payload.get("tool_name", "")
+    tool_input = payload.get("tool_input") or {}
+    file_path = tool_input.get("file_path")
+
+    if tool_name in ("Edit", "MultiEdit") and isinstance(file_path, str) and file_path:
+        # Com file_path, o fragmento (new_string) não basta — precisa do
+        # ARQUIVO INTEIRO depois da edição, Status incluso (ver docstring).
+        content = resultado_apos_edicoes(tool_name, tool_input)
+        if content is None:
+            sys.exit(0)      # arquivo ilegível ou old_string não bate: libera
+    else:
+        content = extract_content(tool_input)
+        if content is None:
+            sys.exit(0)          # sem ver o conteúdo, não se bloqueia nada
 
     status = [limpa(v).lower() for v in STATUS_RE.findall(content)]
     status = [s for s in status if not s.startswith("<")]
