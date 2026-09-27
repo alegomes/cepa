@@ -165,7 +165,7 @@ Read its output; don't re-derive it:
 |---|---|---|
 | `pending` | done | someone finished it elsewhere → mark `done`, and **ask what its human validation route was** — that debt is otherwise lost |
 | `pending` | in progress | a live session may be on it → warn before you start it too |
-| `done` | in progress / to do | it bounced back (UNPROVEN, reopened) → it is `pending` again, and probably the real next step |
+| `done` | in progress / to do / Won't Do / gone | **stays `done`** (rule R3: status never demotes a `done` item — the old demotion reopened 11 finished cards in wego-acesso-backend) → it comes back as a warning; name it, and reopening it is the user's call, through `/common:plan` |
 | item present | card gone / Won't Do | → `dropped`, with the reason |
 | — | in `to_do`, absent from plan | the plan is stale or was truncated by `--max` → **name these cards**; never fold them in silently as if they'd been prioritised |
 
@@ -207,8 +207,10 @@ Name **one** recommended next step, and say why it and not the other.
 
 Default precedence, to be overridden with a stated reason:
 
-1. **An item the board says bounced back** — work already paid for that is
-   sliding backwards outranks work not yet started.
+1. **An item the board says bounced back** (a `reconcile` warning citing R3:
+   `done` here, reopened there) — work already paid for that is sliding
+   backwards outranks work not yet started. Recommend the user reopen it
+   through `/common:plan`; the reconcile never does it for them.
 2. **Human debt that blocks the queue** — a route that must pass before the next
    card is meaningful (e.g. the next card builds on the one awaiting validation).
    A maestro wave waiting to land counts here: finished work that isn't in the

@@ -609,11 +609,10 @@ def test_reconcile_traz_o_quadro_para_a_fila(base):
     _, out = reconcile(d, arq)
     div = {x["id"]: x["para"] for x in out["divergences"]}
     check("card que fechou fora do plano vira done", div.get("W-1") == "done", div)
-    check("card que voltou atrás volta a ser trabalho",
-          div.get("W-2") == "pending", div)
-    check("bounce é lido como bounce, não como novidade",
-          "bounce" in [x for x in out["divergences"] if x["id"] == "W-2"][0]["leitura"],
-          out["divergences"])
+    check("card done que voltou atrás no quadro NÃO vira divergência (R3)",
+          "W-2" not in div, div)
+    check("mas é nomeado num aviso, em vez de sumir calado",
+          any("W-2" in a and "R3" in a for a in out["warnings"]), out["warnings"])
     check("card em dia não vira divergência", "W-3" in out["in_sync"], out)
     check("card que sumiu do quadro vira dropped", div.get("W-4") == "dropped", div)
     check("sem --apply não grava nada", out["wrote"] is False, out)
@@ -645,9 +644,46 @@ def test_reconcile_done_em_review_nao_e_bounce(base):
           and "W-1" not in div, out)
     check("e continua done no disco",
           por_id(plano_de(alvo))["W-1"]["status"] == "done")
-    check("done + Doing continua sendo bounce", div.get("W-2") == "pending", div)
+    check("done + Doing não é rebaixado (R3)", "W-2" not in div, div)
+    check("e continua done no disco, mesmo com --apply",
+          por_id(plano_de(alvo))["W-2"]["status"] == "done")
     check("pending + Code Review avisa que alguém pode estar nele",
           any("W-3" in a for a in out["warnings"]), out["warnings"])
+
+
+def test_reconcile_nunca_rebaixa_item_done(base):
+    """Regra R3 (dono, 2026-09-25): status vai do quadro para o plano e nunca
+    rebaixa item `done`. O `--apply` antigo lia done + To Do como bounce e
+    rebaixou 11 cards prontos no wego-acesso-backend."""
+    d = repo_git(base, "r3")
+    com_quadro(d)
+    alvo = escreve_fila(d, [item("W-1", status="done"), item("W-2", status="done"),
+                            item("W-3", status="done"), item("W-4", status="done"),
+                            item("W-5", status="done"), item("W-6")])
+    arq = board(d, [{"key": "W-1", "status": "To Do"},
+                    {"key": "W-2", "status": "Doing"},
+                    {"key": "W-3", "status": "Won't Do"},
+                    {"key": "W-5", "status": "Concluído"},
+                    {"key": "W-6", "status": "To Do"}],
+                missing=["W-4"])
+    _, out = reconcile(d, arq, "--apply")
+    ids_div = {x["id"] for x in out["divergences"]}
+    check("nenhum item done vira divergência, qualquer que seja o quadro",
+          ids_div.isdisjoint({"W-1", "W-2", "W-3", "W-4", "W-5"}), out["divergences"])
+    no_disco = por_id(plano_de(alvo))
+    check("e o disco guarda todos como done depois do --apply",
+          all(no_disco[k]["status"] == "done" for k in ("W-1", "W-2", "W-3", "W-4", "W-5")),
+          {k: v["status"] for k, v in no_disco.items()})
+    check("sem carimbo de reconciliação em quem não mudou",
+          all("reconciled" not in no_disco[k] for k in ("W-1", "W-2", "W-3", "W-4")),
+          no_disco)
+    for k in ("W-1", "W-2", "W-3", "W-4"):
+        check(f"{k} divergente é nomeado num aviso com a regra",
+              any(k in a and "R3" in a for a in out["warnings"]), out["warnings"])
+    check("done + Concluído fica em dia, sem aviso", "W-5" in out["in_sync"]
+          and not any("W-5" in a for a in out["warnings"]), out)
+    check("item pending não é afetado pela regra", no_disco["W-6"]["status"] == "pending")
+    check("nada gravado quando não há o que mudar", out["wrote"] is False, out)
 
 
 def test_reconcile_nunca_anexa_card_nem_fecha_divida_humana(base):
@@ -817,6 +853,7 @@ def main():
                    test_start_recupera_reserva_orfa_e_recusa_a_viva,
                    test_reconcile_traz_o_quadro_para_a_fila,
                    test_reconcile_done_em_review_nao_e_bounce,
+                   test_reconcile_nunca_rebaixa_item_done,
                    test_reconcile_nunca_anexa_card_nem_fecha_divida_humana,
                    test_reconcile_recusa_status_que_o_mapa_nao_conhece,
                    test_queue_recusa_ondas_e_fila_inexistente,
