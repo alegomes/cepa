@@ -2979,7 +2979,7 @@ que sobraram são ambos MCP e falam o mesmo vocabulário.
 
 **Plano:** `cepa/reconcile-le-in-review-como-reprovado`
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-plan` (`PAPEL_DO_STATUS` e
+**Status:** FEITO em 2026-09-27, por absorção: o `db0fae8` (2026-09-26) deu ao `in_review` o papel próprio `em-revisao`, e `reconcilia()` lê plano `done` + quadro In Review como em dia (caminho 1 do esboço, sem aviso). O `test_reconcile_done_em_review_nao_e_bounce` em `tests/test_common_drain_plan.py` é o teste que faltava, e fica vermelho se o `in_review` voltar a `em-andamento` (conferido em worktree descartável). Fora daqui: plano `done` + quadro In Progress ainda rebaixa, e isso é do item `reconcile-nao-rebaixa-done`; o caminho 3 (status terminal declarado no `board-flow.yaml`) não foi feito. ~~pendente~~ · **Lar provável:** `common/bin/cepa-plan` (`PAPEL_DO_STATUS` e
 `reconcilia()`) · **Origem:** `/common:session drain-plan` no repo wego-acesso-backend em
 2026-08-29 — a reconciliação do passo 0 reabriu 11 cards que estavam prontos, e o lote
 seguinte apontou para refazê-los.
