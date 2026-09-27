@@ -1,7 +1,7 @@
 item: maestro-merge-train-nao-roda
 diff: 6c01a4a..2dbb99e
 branch: until/2026-09-26-2203
-status: incomplete
+status: complete
 criteria:
   - id: AC1
     desc: "maestro-wave-state ganha estado terminal LANDED por slice, distinto de DONE (landed: deixa de ser a unica fonte de verdade)"
@@ -10,7 +10,7 @@ criteria:
     test: "tests/test_maestro_merge_pendente.py::test_landed_tira_da_espera_e_silencia, ::test_landed_recusa_slice_que_nao_terminou_bem; tests/test_maestro_run_cores.py::test_wave_state (landed exige DONE antes)"
     layer: "cli (subprocess real do binario maestro-wave-state)"
     evidence: verified
-    run: "python3 tests/test_maestro_merge_pendente.py -> '8 testes ok' (checks 'slice aterrissada vira LANDED', 'landed de slice FAIL sai 2', 'LANDED conta como terminal na fronteira de termino'); python3 tests/test_maestro_run_cores.py -> 'all green' (32 checks, inclui 'landed registra o merge')"
+    run: "python3 tests/test_maestro_merge_pendente.py -> '8 testes ok' (checks 'slice aterrissada vira LANDED', 'landed de slice FAIL sai 2', 'LANDED conta como terminal na fronteira de termino')"
     status: complete
 
   - id: AC2
@@ -36,27 +36,29 @@ criteria:
   - id: AC4
     desc: "Retentativa forkada durante a onda (ex.: S-2067R) entra no wave-state.yaml no momento em que e criada, nao so na onda seguinte"
     altitude: cli
-    surface: "maestro/bin/maestro-wave-state: set-slice (primitivo ja existente, reusado) + check-terminal enxergando a retentativa na hora; maestro/commands/run.md, passo 6 ('Fork por slice'): instrucao nova para o agente chamar set-slice no instante do fork"
-    test: "tests/test_maestro_merge_pendente.py::test_retentativa_registrada_entra_na_fronteira (prova a mecanica: set-slice + check-terminal); NENHUM teste verifica que run.md de fato contem a instrucao nova"
-    layer: "cli para o primitivo (subprocess real de set-slice/check-terminal); a mudanca real do item -- a instrucao de prosa em run.md que manda o agente registrar a retentativa no instante do fork -- nao tem nenhuma checagem, nem grep"
+    surface: "maestro/bin/maestro-wave-state: set-slice (primitivo ja existente, reusado) + check-terminal enxergando a retentativa na hora; maestro/commands/run.md, passo 7 ('Event loop da onda'), bullet 'Retentativa com nome novo': instrucao para o agente chamar set-slice PROGDIR <slice>R running no instante do fork"
+    test: "tests/test_maestro_merge_pendente.py::test_retentativa_registrada_entra_na_fronteira (prova a mecanica: set-slice + check-terminal); ::test_comandos_chamam_a_checagem (grep, adicionado em 58cf777, confirmando 'Retentativa com nome novo' e 'set-slice PROGDIR <slice>R running' em run.md)"
+    layer: "cli para o primitivo (subprocess real de set-slice/check-terminal) + grep de prosa para a instrucao em run.md, na mesma convencao ja usada para next.md e resume.md neste arquivo de teste"
     evidence: verified
-    run: "python3 tests/test_maestro_merge_pendente.py -> '8 testes ok' (checks 'set-slice registra a retentativa nova', '...e a fronteira de termino a enxerga na hora (exit 2)')"
-    gap: "O que o teste prova e que o primitivo (set-slice cria a entrada, check-terminal a enxerga) ja funciona -- isso e comportamento pre-existente do wave-state, nao a mudanca deste item. A mudanca real e a instrucao textual em maestro/commands/run.md dizendo ao agente para chamar set-slice no mesmo instante em que forka a retentativa; nada garante que essa linha exista ou permaneca (poderia ser apagada por um refactor futuro sem quebrar nenhum teste). Falta um teste no estilo dos ja usados para next.md e resume.md em test_comandos_chamam_a_checagem: grep em run.md confirmando a instrucao no passo 6 ('Fork por slice'), por exemplo algo como 'set-slice PROGDIR <slice>R running' proximo de 'Retentativa com nome novo'."
-    status: incomplete
+    run: "python3 tests/test_maestro_merge_pendente.py -> '8 testes ok' (checks 'set-slice registra a retentativa nova', '...e a fronteira de termino a enxerga na hora (exit 2)', '/maestro:run registra a retentativa no instante do fork')"
+    status: complete
 
 notes: >
-  AC1, AC2 e AC3 tem teste rodado e verde na altitude certa dado que o item se
-  trata majoritariamente de comandos de agente (next.md, resume.md sao prosa
-  interpretada por um LLM, nao codigo executavel): a convencao ja estabelecida
-  neste mesmo arquivo de teste (test_comandos_chamam_a_checagem) e grep sobre
-  o texto do comando confirmando que a instrucao existe, e essa convencao foi
-  seguida para next.md e resume.md. AC4 quebra essa mesma convencao: o
-  mapeamento do implementador cita run.md passo 7 (aqui e o passo 6, "Fork por
-  slice") como o lar da mudanca, mas nenhum teste grepa run.md para confirmar
-  que a instrucao de registrar a retentativa no instante do fork esta la —
-  so o primitivo generico (set-slice/check-terminal) foi testado, e esse
-  primitivo ja existia antes deste item. Rodei os 4 arquivos pedidos
-  (test_maestro_merge_pendente.py, test_maestro_run_cores.py,
-  test_maestro_programs.py, test_common_next.py), todos "all green"/"N testes
-  ok" com N>0; nao rodei a suite completa (tests/run-all.sh) por instrucao
-  explicita do orquestrador.
+  Re-auditoria pos-commit 58cf777: o gap de AC4 apontado na rodada anterior
+  (nenhum teste grepava run.md para confirmar a instrucao de registrar a
+  retentativa no instante do fork) foi fechado com um novo check em
+  test_comandos_chamam_a_checagem, na mesma convencao ja usada para next.md
+  ("maestro-programs . --aguardando-merge") e resume.md ("aguardando-merge" +
+  "Passo 9"): agora confirma que maestro/commands/run.md contem literalmente
+  "Retentativa com nome novo" e "set-slice PROGDIR <slice>R running" — a
+  instrucao vive no passo 7 (Event loop da onda), nao no passo 6 (Fork por
+  slice) como eu havia presumido na rodada anterior; confirmado lendo o
+  arquivo (linha 170-172), o texto ja existia desde 2dbb99e e so faltava o
+  teste que o travasse. Rodei apenas
+  tests/test_maestro_merge_pendente.py (unico arquivo pedido nesta
+  re-auditoria) em primeiro plano: "8 testes ok", 0 falhas, incluindo o novo
+  check. As 4 AC agora tem teste executado e verde na altitude do criterio
+  (cli real para os primitivos e para o doctor; grep de prosa para os
+  comandos de agente next.md/resume.md/run.md, unica forma de testar
+  automaticamente um prompt interpretado por LLM, e convencao ja estabelecida
+  neste mesmo arquivo de teste).
