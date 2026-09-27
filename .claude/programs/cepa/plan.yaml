@@ -912,10 +912,7 @@ items:
     dos agentes" do BACKLOG.md.'
   status: done
   blocked_by: []
-  human_pending: 'Peca 3 decidida em 2026-09-27 (pergunta 7 da revisao do run 2026-09-26-2203):
-    o auto-update da twg continua ligado; o aviso do doctor e o registro por item
-    bastam. Falta declarar twg_version: 1.3.1 num docs/env.yaml dos repos WEGO,
-    que hoje nao tem manifesto de ambiente nenhum (13 repos em ~/coding/wego).'
+  human_pending: null
   evidence: 'Commits 4f2ac16 (feat: cepa-doctor check_twg_version compara twg --version
     com twg_version: do manifesto de ambiente, docs/env.yaml ganha do legado, silencio
     sem declaracao; cepa-until grava twg_version em cada item_start do jsonl, lido
@@ -926,7 +923,10 @@ items:
     3/3, vizinhos verdes; suite completa fica com o supervisor. Peca 1 adaptada:
     versao registrada no jsonl do cepa-until por item, nao nos YAMLs de prova (que
     nao sao produzidos com a twg). Fora: peca 3 (auto-update), aberta como rota
-    humana. Codigo esta na branch da noite until/2026-09-26-2203, sem merge.'
+    humana. Codigo esta na branch da noite until/2026-09-26-2203, sem merge.
+    Fechado em 2026-09-27: auto-update da twg segue ligado (decisao do dono);
+    twg_version: 1.3.1 declarado em docs/env.yaml nos 13 repos de ~/coding/wego,
+    commit local em cada um, lido pelo cepa-doctor.'
 - id: detector-contexto-twg
   title: Detector de contexto de execução, se o `twg` virar caminho canônico local
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
