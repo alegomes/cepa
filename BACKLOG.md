@@ -3485,7 +3485,9 @@ a noite acaba sem registro) ou se o teste montou o cenário errado.
 
 **Plano:** `cepa/fleet-validate-valida-mcp-atlassian`
 
-**Status:** pendente · **Lar provável:** `board-flow/board-flow-fleet-validate.sh` e
+**Status:** FEITO em 2026-09-27 (o script chama a `twg` direto: `twg doctor` → `twg jira space get` →
+`twg jira workitem query`, sem `claude -p` e sem token; teste em `tests/test_fleet_validate_twg.py`;
+`docs/loop-engineering.md` descreve a `twg` como caminho local) · **Lar:** `board-flow/board-flow-fleet-validate.sh` e
 `docs/loop-engineering.md` · **Origem:** O0+O3 em 2026-09-24 (commit `d70e366`), aprovado pelo
 dono no mesmo dia.
 

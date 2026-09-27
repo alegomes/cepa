@@ -1,8 +1,9 @@
 # Loop engineering — scheduled autonomous routines
 
-> **Status (2026-09-19):** auth is solved on both substrates (cloud routine via the OAuth
-> connector; local headless via `mcp-atlassian`) and the read-only local validator ran green
-> against wego on 2026-07-01, but **the wego fleet does not run on a schedule yet**: the local
+> **Status (2026-09-27):** auth is solved on both substrates (cloud routine via the OAuth
+> connector; local, interactive or headless, via the `twg` CLI) and the read-only local
+> validator ran green against wego on 2026-07-01 (then via `mcp-atlassian`) and again on
+> 2026-09-27 (via `twg`), but **the wego fleet does not run on a schedule yet**: the local
 > `launchd`/`cron` job was never promoted (no such job or crontab entry on this machine, checked 2026-09-19).
 > The July 2026 validation diary is kept under [History](#history-july-2026-validation).
 
@@ -45,31 +46,28 @@ org-admin gate, no `cloudId` plumbing** (the agent resolves it via
 > Keep routines using the standard connector name `Atlassian` so the prefix stays
 > `mcp__Atlassian__`.
 
-**Local-headless option (not the cloud path).** If you ever run an *unattended* `claude` on
-your **own machine** (a cron/launchd job, no claude.ai connector wired), the OAuth session is
-cold and you instead register the community **`mcp-atlassian`** server (sooperset, `uvx`,
-static API token in `env`: `JIRA_URL`/`JIRA_USERNAME`/`JIRA_API_TOKEN`). Template:
-**`board-flow/atlassian-mcp.example.json`** → host project's `.mcp.json`, token via
-`${JIRA_API_TOKEN}` (never inline). It exposes **snake_case** tools (`jira_search`, …), with
-its site fixed by `JIRA_URL` (no `cloudId`) which must match `defaults.site`. This is the only
-place a token + token server is needed.
+**Local option, interactive or headless (not the cloud path).** On your **own machine** the
+`atlassian-expert` reaches Jira through the **`twg` CLI**, authenticated by OAuth in
+`~/.config/twg/auth.conf` (`twg auth login` once). There is no static token and no token
+server: a `launchd`/`cron` job only needs `twg` on its `PATH`. `twg doctor` shows the site and
+whether the token is valid (line `Connectivity`).
+
+*Superseded (O3, 2026-09-24):* the community **`mcp-atlassian`** server (sooperset, `uvx`,
+static `JIRA_API_TOKEN`, template `board-flow/atlassian-mcp.example.json`) was the local-headless
+path until then. The agent no longer uses it; the template stays only for a repo that still
+wires it by hand.
 
 > ⚠ **Secret hygiene.** The local `mcp-atlassian` install had its API token written **inline
 > in `~/.claude.json`**. Migrated 2026-06-30 to `${JIRA_API_TOKEN}` (the literal token now
 > lives in `~/.zsecrets`, chmod 600, sourced from `~/.zprofile`). Rotate it if it was ever
 > synced/backed up.
 
-### 2. Bind `atlassian-expert` — ✅ done (triple-bind, two vocabularies)
+### 2. Bind `atlassian-expert` — ✅ done (two paths, one check)
 
-`board-flow/agents/atlassian-expert.md` is **triple-bound** in its `tools:` frontmatter:
-`mcp__claude_ai_Atlassian__*` (local interactive, camelCase) + `mcp__Atlassian__*` (cloud
-routine, camelCase — **the proven headless path**) + `mcp__mcp-atlassian__*` (local-headless,
-snake_case). The *Tool binding* section maps the three prefixes to two vocabularies: the two
-OAuth prefixes share the canonical camelCase names verbatim, and only the snake_case token
-server uses different names (`jira_get_issue`, `jira_search`, …), which the agent takes from its
-own tool list (the old camelCase ↔ snake_case translation table was removed). The
-agent uses whichever prefix is connected in its run context, preferring an OAuth/camelCase one
-when more than one is present (no translation needed).
+`board-flow/agents/atlassian-expert.md` picks its path with one check, `command -v twg`:
+`twg` on `PATH` → local path (interactive or headless), every Jira operation through the `twg`
+CLI with the map in its *Tool binding* section; no `twg` → cloud routine, `mcp__Atlassian__*`
+(camelCase). The `mcp__mcp-atlassian__*` binding was dropped in O3 (2026-09-24).
 
 ### 3. Read-board-or-hard-fail preflight — ✅ done
 
@@ -79,7 +77,7 @@ Every routine's **first act** must prove it can READ the board, and **hard-fail 
 can't — never proceed as if the board were simply empty. A real empty column and a broken auth
 connection must produce **different, unmistakable** outcomes. Implemented as the **Board-read
 preflight** in `atlassian-expert.md`: the first Jira op probes `getVisibleJiraProjects`
-(OAuth) / `jira_get_all_projects` (token server) and confirms `project_key` is in the list; on
+(cloud) / `twg jira space get <project_key>` (local) and confirms `project_key` is visible; on
 failure it replies `BLOCKED: … AUTH/connection failure, NOT an empty board` instead of
 returning zero cards.
 
@@ -88,13 +86,14 @@ returning zero cards.
 Auth is done, and the substrate is decided **per repo**: GitHub-hosted → cloud routine;
 wego (Bitbucket) → **local launcher**. Remaining for the wego pilot:
 
-1. **Build the local execution job** (To-Do column): a `launchd`/`cron` job that `source`s
-   `~/.zsecrets` (so `JIRA_API_TOKEN` is set for `mcp-atlassian`), then runs
-   `claude -p "/board-flow:drain"` in the local `wego-assinatura-backend` checkout, under
-   `autonomous-mode`. **Start validation-first** (preflight + list-To-Do, no build).
-2. Confirm the **preflight fails loudly** when the token is missing/wrong (the silent-success
-   guard) — verify by running the job once with `JIRA_API_TOKEN` unset.
-3. Land the slice + reinstall (so the triple-bound `atlassian-expert` is live).
+1. **Build the local execution job** (To-Do column): a `launchd`/`cron` job with `twg` on its
+   `PATH` that runs `claude -p "/board-flow:drain"` in the local `wego-assinatura-backend`
+   checkout, under `autonomous-mode`. **Start validation-first** with
+   `board-flow/board-flow-fleet-validate.sh` (preflight + list-To-Do, no build).
+2. Confirm the **preflight fails loudly** when `twg` is logged out (the silent-success guard):
+   the validator exits 1 with `BLOCKED: twg preflight failed`, never a PASS with 0 cards
+   (covered by `tests/test_fleet_validate_twg.py`).
+3. Land the slice + reinstall (so the current `atlassian-expert` is live).
 4. *(For any future GitHub-hosted board-flow repo)* the cloud routine path is ready: attach the
    `Atlassian` connector, enable the plugins, run `/board-flow:drain` under `autonomous-mode`.
 
@@ -142,8 +141,8 @@ So a routine can only run `/board-flow:drain` against a codebase the cloud sandb
 > credentials (exit 128), and the sandbox has **no `ssh` binary** at all. GitHub clones fine
 > (local proxy + `GITHUB_TOKEN`), and the Atlassian connector works — but the *repo* is
 > unreachable. Three ways out: **(a)** run the wego fleet **locally** (launchd/cron on the
-> owner's Mac, where the Bitbucket clone + SSH key already exist) via the
-> `mcp__mcp-atlassian__*` binding — **chosen**, see below; (b) **mirror** the repo to GitHub;
+> owner's Mac, where the Bitbucket clone + SSH key already exist) via the local Jira path
+> (then `mcp-atlassian`, today `twg`) — **chosen**, see below; (b) **mirror** the repo to GitHub;
 > (c) provision the cloud env with a Bitbucket app-password + `ssh`.
 
 **Rule:** before building a cloud routine for a repo, confirm the sandbox can clone it. If the
@@ -157,19 +156,21 @@ Because of the above, the wego execution fleet is a **local** automation, not a 
 - **Substrate:** `launchd` (macOS) or `cron` on the owner's machine — each job invokes
   `claude` headless (`claude -p "/board-flow:drain"`) in the local `wego-assinatura-backend`
   checkout, where the Bitbucket remote + credentials already work.
-- **Auth:** the `mcp__mcp-atlassian__*` server (uvx, static token). Its `JIRA_API_TOKEN` must
-  be present in the job's environment — a `launchd` plist does **not** source `~/.zprofile`,
-  so set it explicitly in the plist's `EnvironmentVariables` (referencing `~/.zsecrets`) or
-  have the job `source ~/.zsecrets` before invoking `claude`. **This is the #1 footgun**: a
-  missing token = the preflight's silent-success guard must fire (it will hard-fail loudly).
+- **Auth:** the `twg` CLI (OAuth, `~/.config/twg/auth.conf`). The job needs `twg` on its
+  `PATH` — a `launchd` plist does **not** source `~/.zprofile`, so set `PATH` in the plist's
+  `EnvironmentVariables` (e.g. including `~/.local/bin`). **This is the #1 footgun**: without
+  `twg` the agent falls to the cloud path, finds no `mcp__Atlassian__*`, and must reply
+  `BLOCKED` (it hard-fails loudly, never reads an empty board).
 - **Skip the confirmation gate:** run under `autonomous-mode` (`CLAUDE_AUTONOMOUS_RUN_ID` set
   in the job env, or the job invokes `/common:autonomous-start`).
 - **Validation-first:** the first local job runs preflight + list-To-Do only (no build, no
-  transition), so the whole local stack (token resolves, `mcp-atlassian` respawns with it,
-  board-flow.yaml read, WEGO visible) is proven before any autonomous build is unleashed.
-  This is shipped as **`board-flow/board-flow-fleet-validate.sh`** — a generic, read-only launcher
-  (config-driven, or `PROJECT_KEY`/`TODO_STATUS` overrides for a repo without `board-flow.yaml`
-  yet, like wego). Ran green 2026-07-01 against wego (20 To-Do cards). Symlink it onto `PATH`
+  transition), so the whole local stack (`twg` authenticates, board-flow.yaml read, WEGO
+  visible) is proven before any autonomous build is unleashed.
+  This is shipped as **`board-flow/board-flow-fleet-validate.sh`** — a generic, read-only script
+  that calls `twg` directly (`twg doctor` → `twg jira space get` → `twg jira workitem query`;
+  no `claude -p`, no token), config-driven or with `PROJECT_KEY`/`TODO_STATUS` overrides for a
+  repo without `board-flow.yaml` yet, like wego. Ran green 2026-07-01 against wego (20 To-Do
+  cards, via `mcp-atlassian`) and 2026-09-27 (via `twg`). Symlink it onto `PATH`
   (e.g. `~/.local/bin/board-flow-fleet-validate`). Promote to a `launchd`/`cron` job running
   the real `/board-flow:drain` under `autonomous-mode` only after it passes.
 - The cloud OAuth path (`mcp__Atlassian__*`) stays valid for any **GitHub-hosted** board-flow

@@ -6,10 +6,15 @@
 #   board-flow "loop-engineering" routines can run in the cloud (/schedule) ONLY for
 #   GitHub-hosted repos the cloud sandbox can clone. For a repo the sandbox can't reach
 #   (e.g. Bitbucket-hosted — proven for wego, see docs/loop-engineering.md), the fleet runs
-#   LOCALLY via the mcp-atlassian MCP server (static API token). This script is the
-#   *validation-first* step: it proves the local auth+read stack works
-#   (token -> mcp-atlassian authenticates -> project visible -> To-Do lists) BEFORE any
+#   LOCALLY, and locally the atlassian-expert reaches Jira through the `twg` CLI (OAuth,
+#   ~/.config/twg/auth.conf). This script is the *validation-first* step: it proves that
+#   exact path works (twg authenticates -> project visible -> To-Do lists) BEFORE any
 #   autonomous build is ever unleashed. READ-ONLY: no build, no Jira mutation.
+#
+#   Until 2026-09 this script ran `claude -p` restricted to the mcp-atlassian MCP server
+#   (static JIRA_API_TOKEN). The agent stopped using that server, so a PASS proved a path
+#   no run takes, and a broken twg went unnoticed. It now calls twg directly — no claude,
+#   no token.
 #
 # USAGE
 #   board-flow-fleet-validate.sh [REPO_PATH]                 # REPO_PATH defaults to $PWD
@@ -20,8 +25,11 @@
 #   # Override mode (repo has NO board-flow.yaml yet, e.g. wego):
 #   PROJECT_KEY=WEGO TODO_STATUS='A fazer' board-flow-fleet-validate.sh ~/path/to/wego
 #
-#   Env knobs: SECRETS_FILE (default ~/.zsecrets), CLAUDE_BIN (default ~/.local/bin/claude),
-#              PROJECT_KEY, TODO_STATUS.
+#   Env knobs: TWG_BIN (default: twg on PATH), PROJECT_KEY, TODO_STATUS, LIMIT (default 20).
+#
+# EXIT
+#   0  VALIDATION PASS
+#   1  BLOCKED (auth/connection, project not visible, config missing) — never an empty board
 #
 # NOT scheduled — run by hand. Promote to launchd/cron (running the real /board-flow:drain
 # under autonomous-mode) only after this passes. See docs/loop-engineering.md.
@@ -29,62 +37,85 @@
 set -euo pipefail
 
 REPO_PATH="${1:-$PWD}"
-SECRETS_FILE="${SECRETS_FILE:-$HOME/.zsecrets}"
-CLAUDE_BIN="${CLAUDE_BIN:-$HOME/.local/bin/claude}"
+TWG_BIN="${TWG_BIN:-$(command -v twg || true)}"
 PROJECT_KEY="${PROJECT_KEY:-}"   # optional override; else resolved from board-flow.yaml
 TODO_STATUS="${TODO_STATUS:-}"   # optional override; else resolved from board-flow.yaml
+LIMIT="${LIMIT:-20}"
 
-# 1. Load the static token — a launchd/cron job does NOT source ~/.zprofile, so we source
-#    the secrets file here. This is the #1 footgun; guard against a silent auth failure.
-if [[ -f "$SECRETS_FILE" ]]; then
-  # shellcheck disable=SC1090
-  source "$SECRETS_FILE"
+blocked() { echo "BLOCKED: $*" >&2; exit 1; }
+
+# 1. Sanity: binary and checkout.
+[[ -n "$TWG_BIN" && -x "$TWG_BIN" ]] || blocked "twg not found (install it, or set TWG_BIN)."
+[[ -d "$REPO_PATH" ]] || blocked "repo path not found: $REPO_PATH"
+
+# 2. project_key + To-Do status: overrides win, else board-flow.yaml.
+if [[ -z "$PROJECT_KEY" || -z "$TODO_STATUS" ]]; then
+  cfg=""
+  for c in "$REPO_PATH/board-flow.yaml" "$REPO_PATH/.claude/board-flow.lifecycle.yaml"; do
+    [[ -f "$c" ]] && { cfg="$c"; break; }
+  done
+  if [[ -z "$cfg" ]]; then
+    echo "BLOCKED: no board-flow.yaml in $REPO_PATH and PROJECT_KEY/TODO_STATUS not both set." >&2
+    echo "        Add board-flow.yaml (/board-flow:configure), or run with overrides, e.g.:" >&2
+    echo "          PROJECT_KEY=WEGO TODO_STATUS='A fazer' $(basename "$0") $REPO_PATH" >&2
+    exit 1
+  fi
+  resolved="$(python3 - "$cfg" <<'PY'
+import sys
+try:
+    import yaml
+except ImportError:
+    sys.exit("PyYAML missing: cannot read board-flow.yaml (pip install pyyaml, or pass PROJECT_KEY/TODO_STATUS)")
+try:
+    d = (yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}).get("defaults") or {}
+except Exception as e:
+    sys.exit(f"{sys.argv[1]} unreadable: {e}")
+print(d.get("project_key") or "")
+print((d.get("status_map") or {}).get("to_do") or "")
+PY
+)" || blocked "could not read $cfg"
+  [[ -n "$PROJECT_KEY" ]] || PROJECT_KEY="$(sed -n 1p <<<"$resolved")"
+  [[ -n "$TODO_STATUS" ]] || TODO_STATUS="$(sed -n 2p <<<"$resolved")"
+  [[ -n "$PROJECT_KEY" && -n "$TODO_STATUS" ]] \
+    || blocked "$cfg has no defaults.project_key and/or defaults.status_map.to_do."
 fi
-if [[ -z "${JIRA_API_TOKEN:-}" ]]; then
-  echo "BLOCKED: JIRA_API_TOKEN is not set (source $SECRETS_FILE failed or the var is missing)." >&2
-  echo "        mcp-atlassian would authenticate with an unresolved token and read zero cards —" >&2
-  echo "        that is an AUTH failure, NOT an empty board. Aborting." >&2
-  exit 1
-fi
-export JIRA_API_TOKEN
 
-# 2. Sanity: binary, checkout, and a way to know project_key + To-Do status.
-[[ -x "$CLAUDE_BIN" ]] || { echo "BLOCKED: claude not executable at $CLAUDE_BIN (set CLAUDE_BIN)." >&2; exit 1; }
-[[ -d "$REPO_PATH"  ]] || { echo "BLOCKED: repo path not found: $REPO_PATH" >&2; exit 1; }
+twg_json() { "$TWG_BIN" "$@" -o json --output-summary none; }
 
-has_config=false
-[[ -f "$REPO_PATH/board-flow.yaml" || -f "$REPO_PATH/.claude/board-flow.lifecycle.yaml" ]] && has_config=true
-if { [[ -z "$PROJECT_KEY" || -z "$TODO_STATUS" ]]; } && ! $has_config; then
-  echo "BLOCKED: no board-flow.yaml in $REPO_PATH and PROJECT_KEY/TODO_STATUS not both set." >&2
-  echo "        Add board-flow.yaml (/board-flow:configure), or run with overrides, e.g.:" >&2
-  echo "          PROJECT_KEY=WEGO TODO_STATUS='A fazer' $(basename "$0") $REPO_PATH" >&2
-  exit 1
-fi
+# 3. PREFLIGHT — twg authenticates. A failure here is AUTH/connection, NOT an empty board.
+doctor="$(twg_json doctor 2>&1)" || true
+conn="$(python3 -c '
+import json, sys
+try:
+    c = (json.loads(sys.stdin.read()).get("data") or {}).get("connectivity") or {}
+except ValueError:
+    print("unparseable twg doctor output"); sys.exit()
+print("ok" if c.get("ok") is True else (c.get("message") or "connectivity not ok"))
+' <<<"$doctor")"
+[[ "$conn" == "ok" ]] \
+  || blocked "twg preflight failed — $conn. This is an AUTH/connection failure, NOT an empty board. (twg auth login)"
 
-cd "$REPO_PATH"
+# 4. The project is visible to this account.
+space="$(twg_json jira space get "$PROJECT_KEY" 2>&1)" \
+  || blocked "project $PROJECT_KEY not visible via twg — $(head -c 300 <<<"$space")"
 
-if [[ -n "$PROJECT_KEY" && -n "$TODO_STATUS" ]]; then
-  CONFIG_LINE="Use project_key=\"$PROJECT_KEY\" and To-Do status=\"$TODO_STATUS\" (provided explicitly; do NOT read board-flow.yaml)."
-else
-  CONFIG_LINE="Read board-flow.yaml at the repo root (or .claude/board-flow.lifecycle.yaml) and resolve defaults.project_key and defaults.status_map.to_do from it."
-fi
+# 5. List the To-Do column.
+JQL="project = $PROJECT_KEY AND status = \"$TODO_STATUS\" ORDER BY priority DESC"
+query="$(twg_json jira workitem query "$JQL" --first "$LIMIT" 2>&1)" \
+  || blocked "To-Do query failed — $(head -c 300 <<<"$query")"
 
-PROMPT="VALIDATION-FIRST board read (READ-ONLY — do NOT build, run tests, git, or transition/edit any Jira issue).
-
-$CONFIG_LINE
-
-Use the mcp-atlassian MCP tools ONLY (mcp__mcp-atlassian__*):
-1. PREFLIGHT: call jira_get_all_projects and confirm the project_key is present. If the call errors, returns no projects, or the key is absent, reply EXACTLY:
-   \"BLOCKED: mcp-atlassian preflight failed — <verbatim error / project not visible>. This is an AUTH/connection failure, NOT an empty board.\" and STOP.
-2. If preflight passes, call jira_search with:
-     jql   = project = <project_key> AND status = \"<To-Do status>\" ORDER BY priority DESC
-     limit = 20
-   List each card as: KEY — summary — priority. Report the count (note if more pages exist).
-3. End with one line:
-   \"VALIDATION PASS: mcp-atlassian authenticated, <project_key> visible, To-Do listed (<N> cards).\"
-   or the BLOCKED line from step 1.
-
-Do NOT run any build, test, or git command. Do NOT create/edit/transition/comment any issue."
-
-exec "$CLAUDE_BIN" -p "$PROMPT" \
-  --allowedTools "Read" "mcp__mcp-atlassian__jira_get_all_projects" "mcp__mcp-atlassian__jira_search"
+python3 -c '
+import json, sys
+key, status = sys.argv[1], sys.argv[2]
+try:
+    issues = (json.loads(sys.stdin.read()).get("data") or {}).get("issues")
+except ValueError:
+    issues = None
+if not isinstance(issues, list):
+    print("BLOCKED: unexpected twg query output (no data.issues).", file=sys.stderr); sys.exit(1)
+for i in issues:
+    pr = i.get("priority")
+    pr = pr.get("name", "-") if isinstance(pr, dict) else (pr or "-")
+    print(" — ".join((str(i.get("key")), str(i.get("summary")), str(pr))))
+print("VALIDATION PASS: twg authenticated, %s visible, To-Do \"%s\" listed (%d cards)." % (key, status, len(issues)))
+' "$PROJECT_KEY" "$TODO_STATUS" <<<"$query"
