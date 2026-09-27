@@ -179,9 +179,27 @@ Rationale:
 - Principles encode permanent corrections that shouldn't be lost just
   because they're old.
 
-To manually prune, edit the file directly. To explicitly tag a
-prior-recent entry as `principle` (preventing prune), edit `tag:
-example` → `tag: principle`.
+**Do not hand-edit the YAML file.** These files are symlinked from the
+plugin source and shared across every project and every concurrent
+`claude` session; two writers touching the same agent file at once
+race on a read-modify-write and lose one side's entry. All appends go
+through `common/hooks/expertise-append.py`, which serializes the write
+under an advisory `flock`, does the whole read → append → prune → write
+cycle while holding it, and enforces the 20-entry cap itself:
+
+```sh
+printf '  - run_id: ...\n    date: ...\n    topic: ...\n    user_verdict: ...\n    user_reason: "..."\n    tag: example' \
+  | python3 "${CLAUDE_PLUGIN_ROOT}/hooks/expertise-append.py" \
+      --file common/expertise/<agent>-mental-model.yaml --cap 20
+```
+
+`/common:debrief` uses this helper for every entry it appends (one
+invocation per entry). Mutating an EXISTING entry (merging redundant
+ones, retiring a `principle` the current code contradicts, or retagging
+one) isn't an append and isn't this helper's job; that's what
+`/common:consolidate` is for (below): it re-verifies each entry against
+the repo, proposes a reviewable diff, and writes nothing without
+explicit per-`principle` approval.
 
 ## Reading order at agent boot
 
@@ -244,6 +262,32 @@ EOF
 
 Then the agent body should reference the file at task boot per the
 [agent-anatomy](agent-anatomy.md) convention.
+
+## Periodic consolidation: `/common:consolidate`
+
+The 20-entry cap prunes by COUNT, never by VALIDITY. A fact written in
+February can be contradicted by July's code and still get read at every
+boot in between, the same defect the "handoff is hypothesis" discipline
+fixes for handoffs, applied to expertise. `/common:consolidate [agent |
+--all]` closes that gap: it re-reads each entry, verifies the ones that
+cite concrete artifacts against the current repo, merges redundant
+entries, and proposes a before/after diff with the evidence for each
+retirement. `principle`-tagged entries are never touched automatically;
+retiring one requires individual approval. Nothing is written without
+explicit user approval of the diff.
+
+## Orphan expertise files (report, don't delete)
+
+Four expertise files have no corresponding agent left in the
+marketplace as of this writing: `git-historian-mental-model.yaml`,
+`history-collector-mental-model.yaml`,
+`history-narrator-mental-model.yaml`, and
+`orchestrator-mental-model.yaml` (no `agents/*.md` anywhere declares
+`name: git-historian` / `history-collector` / `history-narrator` /
+`orchestrator`). They're harmless (nothing reads or writes them without
+an agent invoking the `mental-model` skill), but they're dead weight.
+Leave them; deciding whether to delete them is a separate call, not a
+docs fix.
 
 ## Memory references
 

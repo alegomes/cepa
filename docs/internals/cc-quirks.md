@@ -108,7 +108,7 @@ substitute.
 without a version bump:
 
 ```sh
-rm -rf ~/.claude/plugins/cache/alegomes/
+rm -rf ~/.claude/plugins/cache/cepa/
 ```
 
 `bin/install.sh --clean` does this automatically (plus the explicit
@@ -225,6 +225,58 @@ Reconnects the connector. Then retry. If a CCR routine relies on the
 connector, re-arming alone won't help — the routine needs the auth in
 place before it fires.
 
+## Launcher scripts vs. plugin cache
+
+`ccw`-style launchers (`bin/` scripts symlinked onto `PATH`) are LIVE
+immediately on commit, no `--clean`, no reinstall. Unlike plugin
+commands/hooks/skills, which are read from
+`~/.claude/plugins/cache/cepa/`, a `PATH` symlink resolves straight to
+the repo file. If the launcher and the repo share the same `.git` (e.g.
+a second path onto the same working tree), a merge to `main` changes
+what the live symlink executes on its very next invocation. Rule of
+thumb when shipping a launcher change vs. a command/hook change:
+launcher = live now; anything routed through the plugin cache = needs
+`bin/install.sh --clean` + a fresh session.
+
+## Warp doesn't honor zsh completion functions
+
+A `#compdef` completion function (e.g. a custom `_ccw` for a `ccw`
+launcher) works via TAB in Terminal.app, iTerm2, VS Code's terminal, and
+tmux, but not in Warp: Warp uses its own Fig-style completion-spec
+engine and has an open feature request for honoring shell completions.
+If a CLI affordance must work IN Warp, don't rely on zsh completion;
+build something terminal-agnostic instead (e.g. an explicit `-s` flag
+with no argument that opens an fzf/numbered picker).
+
+## A hook can't spawn once its session's cwd is deleted
+
+Symptom: `Stop hook error: … ENOENT … posix_spawn '/bin/sh'`. CC
+launches every hook command via `/bin/sh -c "<cmd>"` with `cwd` set to
+the session's launch directory. If that directory no longer exists, the
+spawn fails naming `/bin/sh` (the shell CC tried to launch), not the
+missing directory, which is misleading since `/bin/sh` obviously exists. A
+slash command must never delete the cwd of the live session running it;
+defer any self-directed worktree removal to `SessionEnd` (or an
+auto-clean sweep) instead of doing it inline before the turn ends.
+
+## MCP servers in `.claude/settings.json` are silently ignored
+
+An `mcpServers` block declared inside `.claude/settings.json` is NOT
+read; MCP servers only load from `.mcp.json` (or `--mcp-config` on the
+CLI). A headless child launched with
+`--permission-prompt-tool mcp__<server>__<tool>` and no matching
+`.mcp.json` next to it aborts at startup with `Error: MCP tool … not
+found`; the tell is that the error's "available tools" list only shows
+user-scope servers, meaning the project server never loaded (not that
+it crashed). Fix: emit an explicit `.mcp.json` and spawn with
+`--mcp-config .mcp.json --strict-mcp-config`.
+
+Related, same settings file: a permission rule only matches as
+`Edit(path)`, never `Write(path)`. `Edit(path)` already covers every
+file-editing tool including `Write`, so generating both is pure noise.
+Bare tool names (e.g. `"Write"` in an `ask` catch-all) are fine; it's
+only the `(path)`-scoped form that's Edit-only.
+
 ## When CC version bumps
 
 After upgrading Claude Code:
@@ -245,7 +297,7 @@ After upgrading Claude Code:
 The live working copy of these quirks lives in:
 
 ```
-~/.claude/projects/-Users-alegomes-Insync-alegomes-gmail-com-GoogleDrive-2026-coding-harnessing-claude-claude-multi-team-plugin/memory/cc_plugin_quirks.md
+~/.claude/projects/-Users-alegomes-Insync-alegomes-gmail-com-GoogleDrive-2026-coding-cepa/memory/cc_plugin_quirks.md
 ```
 
 The memory file is updated more often than this docs page. When in

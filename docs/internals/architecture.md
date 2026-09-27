@@ -36,7 +36,7 @@ Every topology except `build-solo` follows the same shape:
 | Guarantee | How | Bypassable? |
 |---|---|---|
 | Leads can't write code | tool allowlist (no `Edit`/`Write`/`MultiEdit` in `tools:` frontmatter) | No — CC enforces tool allowlists |
-| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (build-team, build-hex, discovery, design, docs); build-solo has no hook |
+| Workers stay in their domain | `path-lock.py` PreToolUse hook, exit 2 | No (build-team, build-hex, discovery, design, docs, marketing); build-solo and maestro have no hook |
 | Orchestrator delegates instead of coding | prompt-only (`zero-micromanagement` skill + topology snippet) | **Yes** — strong tendency, not a hard block |
 | Plan → build → validate ordering | prompt-only (in command + topology) | Yes — orchestrator can reorder |
 | board-flow only mutates Jira via MCP | tool allowlist (`atlassian-expert` is the only agent with Atlassian MCP tools) | No |
@@ -45,6 +45,14 @@ Every topology except `build-solo` follows the same shape:
 | Decision logging in autonomous mode | `autonomous-mode` skill + `### Decision:` format | Soft — debrief dual-scan catches drift retroactively |
 | Jira write read-back verification | agent-spec rule in `atlassian-expert` | Soft (agent-level), but well-tested rule pattern |
 | Review-style transition requires Implementation Summary | agent-spec rule in `atlassian-expert` | Soft, refuses with BLOCKED at delegation |
+| Proof verdict can't contradict its own levels | `proof-verdict-guard` (build-hex) / `ui-proof-verdict-guard` (common) PreToolUse on the `docs/proof/*.yaml` Write | No, it recomputes the verdict mechanically and blocks a `proven` that the levels don't support |
+| A card can't close while its code sits unmerged | `merge-truth-gate` PreToolUse on the Jira transition MCP call | No, exit 2 until the merge exists |
+| Only `atlassian-expert` writes Jira | `jira-write-lock` (Bash, the `twg` CLI) + tool allowlist (MCP path) | No for both paths |
+
+See [`hooks.md`](hooks.md) for the full list; the table above only
+names the guarantees that read across topologies. `common` alone ships
+close to 30 hooks, most of them narrower gates on one Jira/report/mode
+seam each.
 
 Soft enforcement (rules in prompts/skills) keeps the agents honest;
 hard enforcement (tool allowlists + hooks) catches the cases where the
@@ -88,8 +96,8 @@ Notable patterns:
 ## Per-plugin layout in this marketplace
 
 ```
-claude-multi-team-plugin/
-├── .claude-plugin/marketplace.json    # 9-plugin marketplace registry (cepa)
+cepa/
+├── .claude-plugin/marketplace.json    # 11-plugin marketplace registry (cepa)
 ├── bin/install.sh                     # one-command installer + per-project wiring
 ├── common/                            # cross-topology layer (required substrate)
 │   ├── .claude-plugin/plugin.json
@@ -105,6 +113,8 @@ claude-multi-team-plugin/
 ├── docs-topology/                     # documentation/onboarding topology (plugin name: docs)
 ├── board-flow/                        # Jira lifecycle layer
 ├── review-gate/                       # pre-merge PR gate
+├── maestro/                           # multi-worktree wave orchestration (no agents; commands + hooks)
+├── marketing/                         # content production topology (brief → redação → revisão)
 ├── docs/                              # user-facing documentation
 │   └── internals/                     # this directory
 ├── agents-overview.md                 # cross-agent matrix
@@ -115,18 +125,23 @@ claude-multi-team-plugin/
 
 | Plugin | Agents | Commands |
 |---|---|---|
-| common | 1 | 14 |
+| common | 2 | 27 |
 | build-team | 9 | 1 |
-| build-solo | 2 | 0 |
+| build-solo | 2 | 2 |
 | build-hex | 14 | 7 |
 | discovery | 6 | 1 |
 | design | 6 | 1 |
 | docs | 9 | 6 |
-| board-flow | 1 | 10 |
+| board-flow | 1 | 11 |
 | review-gate | 1 | 4 |
+| maestro | 0 | 3 |
+| marketing | 5 | 1 |
 
-Total: 49 agents, 44 commands across 9 plugins. (Hook and skill counts vary per
-plugin; see each `plugin.json`.)
+Total: 55 agents, 64 commands across 11 plugins (counted from `find . -path
+"*/agents/*.md"` / `*/commands/*.md`, cross-checked per-plugin against the
+table above; `git-history-report/` has neither `agents/` nor a `plugin.json`
+and isn't counted as a plugin). Hook and skill counts vary per plugin; see
+each `plugin.json`.
 
 ## Path-lock allowlists at a glance
 
@@ -170,6 +185,9 @@ Every agent also gets a structural pass to write its own
 | Build state | `.claude/last-build.json` | `mark-build-stale` + `capture-build-result` hooks (write); `gate-advance` (read) | Per session; rewritten on edits + verify runs |
 | Plan-build-validate artifacts | `docs/tasks/<story>/**` (TASK.md, RESULT.md, MERGE.md) | `engineering-lead`, dev workers (write) | Per Story; lives with the code |
 | E2E spec | `specs/e2e-assertions.md` | `integration-analyst` (write); `qa-engineer` (read) | Per project; team-edited |
+| Proof verdicts | `docs/proof/<KEY>.yaml` | `proof-reviewer` (write; `.claude/proof/` is no longer writable, since it's gitignored and dies with the throwaway worktree) | Per card; versioned, outlives the worktree |
+| Session handoffs | `.claude/handoffs/<branch-slug>.md` | `session-checkpoint` hook (mechanical AUTO zone, every turn); `/common:handoff` (narrative NOTE zone) | Per branch, in the main worktree; read on the next session's `SessionStart` |
+| Maestro program/wave state | `.claude/programs/<name>/{plan.yaml,wave-state.yaml}` | `/maestro:program-plan` (write plan), `maestro-wave-state` + wave hooks (write state) | Per program; read by `/maestro:resume` after a crash or token-limit |
 
 ## When you can stop reading
 

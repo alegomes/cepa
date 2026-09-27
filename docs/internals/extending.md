@@ -170,6 +170,17 @@ Gotchas:
   Python is on PATH. Stick to stdlib (`json`, `os`, `sys`, `re`,
   `pathlib`, `datetime`). PyYAML is tempting but adds an install
   dependency.
+- **`bash-path-lock.py`'s per-topology copies are generated, not
+  hand-written.** `bin/gen-locks.py` renders all six copies from
+  `common/hooks/_templates/bash-path-lock.py.tmpl` plus a per-topology
+  table (plugin name, importlib alias, log slug, the noun the block
+  message uses). Edit the template and re-run `bin/gen-locks.py --write`,
+  never a copy directly: a hand-edited copy fails
+  `tests/test_lock_copies_drift.py`, which compares each copy's AST
+  (docstrings/comments excluded) and flags whichever one walked away.
+  `path-lock.py` itself is NOT generated, since it carries `ALLOWED_WRITES`,
+  which is topology data, not engine; see
+  [`path-lock.md`](path-lock.md)#bug-5-git-mv-was-a-write-only-one-copy-could-see-fixed-2026-08-17.
 
 ## Add a new plugin
 
@@ -314,8 +325,11 @@ After any edit:
    marketplaces omit the field entirely. This step used to say "both",
    and every bump so far ignored the marketplace half — 8 of the 8
    bumped plugins had drifted. An instruction nobody can follow and
-   nothing enforces teaches you to skim the list. For early development
-   at `0.1.0`, version stays at `0.1.0` until first public release.
+   nothing enforces teaches you to skim the list. Which level to bump
+   (MAJOR/MINOR/PATCH) and what the release note must say is a full
+   policy on its own; see [`../versionamento.md`](../versionamento.md).
+   Don't leave a plugin at its initial version once it ships a real
+   change (`common` alone is well past `2.0`).
 2. Commit (per the `user_preferences` "split commits along feature/doc
    lines" rule).
 3. `bin/install.sh --clean` in every host project that uses the

@@ -1,9 +1,11 @@
 # path-lock deep dive
 
-The PreToolUse hook that enforces per-agent write allowlists. Five
+The PreToolUse hook that enforces per-agent write allowlists. Six
 instances ship across topologies (`build-team`, `build-hex`,
-`discovery`, `design`, `docs`); each has the same structure with a
-different `PLUGIN_NAME` constant and `ALLOWED_WRITES` table.
+`discovery`, `design`, `docs`, `marketing`); each has the same structure
+with a different `PLUGIN_NAME` constant and `ALLOWED_WRITES` table.
+(`build-solo` and `maestro` ship no path-lock; see
+[`hooks.md`](hooks.md)#every-hook-the-marketplace-ships.)
 
 It has two companions that close its blind spots — covered in
 [The Bash half and the enforcement surface](#the-bash-half-and-the-enforcement-surface)
@@ -412,8 +414,15 @@ This bypasses the allowlist check. Why structural rather than path-glob:
   Effectively: `domain/src/main/**` matches `domain/src/main` AND
   `domain/src/main/foo/bar.java`.
 - **Allowlist entries are project-relative.** The hook resolves
-  `file_path` against `payload["cwd"]` and refuses paths that fall
-  outside the project root.
+  `file_path` against `payload["cwd"]`. Since commit `1f87a23`, a
+  target that resolves OUTSIDE the project root fails OPEN (allowed),
+  the same carve-out `bash-path-lock.py` already had. The lock enforces
+  architectural boundaries WITHIN the tree, not what an agent does to
+  files elsewhere (that's `enforcement-guard.py`'s job; see
+  [below](#the-bash-half-and-the-enforcement-surface)). Before that fix,
+  an out-of-root target raised `ValueError` on `relative_to()` and was
+  treated as "no match" → BLOCKED, which made a proof-reviewer's
+  throwaway `/tmp` perturbation worktree structurally unreachable.
 - **Empty allowlist means delegate-only.** `engineering-lead`
   (build-team) has `[]` because it never writes code; it writes
   TASK.md indirectly through worker delegations. `build-hex`'s
@@ -454,7 +463,10 @@ See [`hooks.md`](hooks.md)#hook-didnt-fire.
 
 ```sh
 export HEX_PATHLOCK_DEBUG=1
-# (or replace hex with build-team/discovery/design/docs per topology you're using)
+# build-hex only. docs-topology has the equivalent DOCS_PATHLOCK_DEBUG
+# (log at /tmp/docs-pathlock-debug.log by default). build-team, discovery,
+# design, and marketing have no per-topology debug var today. For those,
+# fall back to `claude --debug` (below) or a temporary print statement.
 ```
 
 Then read `/tmp/hex-pathlock-debug.log`. Each line is a JSON record:
@@ -550,7 +562,9 @@ edit settings.
 
 The root cause underneath that incident was mundane: `proof-reviewer` was
 missing from the allowlist entirely (unknown agent → every write blocked,
-including its documented `.claude/proof/` output), which is what drove it to the
+including its then-documented `.claude/proof/` output; today it's
+`docs/proof/`, versioned so the verdict outlives the throwaway worktree),
+which is what drove it to the
 shell. The fix was to add the entry in the **source repo** — never the cache,
 which a reinstall overwrites. That is the rule the guard now enforces for
 everyone: if a write you believe is legitimate is blocked, stop and report so a

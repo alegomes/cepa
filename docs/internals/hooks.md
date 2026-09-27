@@ -9,12 +9,17 @@ CC supports several hook events. This marketplace uses six:
 
 | Event | Fires | Marketplace usage |
 |---|---|---|
-| `PreToolUse` | Before a tool call lands. Hook can exit 2 to BLOCK the call. | `path-lock.py` + `bash-path-lock.py` (every topology), `gate-advance.py` + `enforcement-guard.py` + `maven-reactor-guard.py` + `lead-no-worktree.py` + `loop-budget.py` + `acceptance-gate.py` (common) |
-| `PostToolUse` | After a tool call returns. Hook can observe + write to disk. Cannot block (the call already happened). | `autonomous-checkpoint.py`, `mark-build-stale.py`, `capture-build-result.py`, `session-activity.py`, `loop-budget.py` (common) |
-| `UserPromptSubmit` | When the user submits a prompt. Hook can observe; can inject system reminders. | `session-log.py`, `session-subject.py` (common) |
+| `PreToolUse` | Before a tool call lands. Hook can exit 2 to BLOCK the call. | `path-lock.py` + `bash-path-lock.py` (every topology incl. `marketing`), plus close to 30 `common` hooks gating matchers `Bash`, `Edit\|Write\|MultiEdit\|NotebookEdit`, `Write`, `Task`, `Monitor`, and specific `mcp__...` Jira/Bitbucket tool matchers (see the full list below) |
+| `PostToolUse` | After a tool call returns. Hook can observe + write to disk. Cannot block (the call already happened). | `autonomous-checkpoint.py`, `mark-build-stale.py`, `capture-build-result.py`, `session-activity.py`, `loop-budget.py`, `editorial-lint.py` (common); `push-nudge.py` (review-gate) |
+| `UserPromptSubmit` | When the user submits a prompt. Hook can observe; can inject system reminders. | `session-log.py`, `session-subject.py`, `session-mode.py`, `session-routine-guard.py`, `report-style-lint.py`, `feedback-nudge.py` (common) |
 | `SessionStart` | Session boot. Hook can inject context. | `session-registry.py` (common) — registry hygiene + transparent handoff resume |
 | `SessionEnd` | Session teardown. | `session-registry.py` (common) — WIP-autosave + deregister |
-| `Stop` | After the main agent finishes a turn. | `session-checkpoint.py` (common) — continuous handoff skeleton |
+| `Stop` | After the main agent finishes a turn. | `session-checkpoint.py`, `report-style-lint.py`, `no-background-build.py` (common) |
+
+`Monitor` (a CC tool name, used to poll a `run_in_background` job) is a
+**matcher**, not a separate event; it shows up as a `PreToolUse` matcher on
+`no-background-build.py`, which also matches `Bash`. Listed here because the
+matcher table above used to omit it entirely.
 
 ## Hook payload anatomy
 
@@ -65,10 +70,12 @@ the full design):
 
 ## Every hook the marketplace ships
 
-### path-lock.py × 5 (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
+### path-lock.py × 6 (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
 
 Owners: `build-team/hooks/`, `build-hex/hooks/`, `discovery/hooks/`,
-`design/hooks/`, `docs-topology/hooks/`.
+`design/hooks/`, `docs-topology/hooks/`, `marketing/hooks/`. (`build-solo` and
+`maestro` ship no path-lock: `build-solo` is deliberately hookless,
+`maestro` has no agents of its own to lock.)
 
 Enforces per-agent write allowlists. Each instance has a `PLUGIN_NAME`
 constant and an `ALLOWED_WRITES` dict keyed by agent name.
@@ -97,9 +104,9 @@ multi-plugin collision fix (`PLUGIN_NAME` prefix scoping), the
 built-in-agent fail-open fix, and debugging via
 `HEX_PATHLOCK_DEBUG=1`.
 
-### bash-path-lock.py × 5 (PreToolUse, matcher `Bash`)
+### bash-path-lock.py × 6 (PreToolUse, matcher `Bash`)
 
-Owners: same five topologies as `path-lock.py`.
+Owners: same six topologies as `path-lock.py`.
 
 The Bash half of the path-lock. `path-lock.py` only gates
 `Edit/Write/MultiEdit` — so an agent blocked from a `Write` could land the
@@ -186,29 +193,19 @@ Testes: `tests/test_maven_reactor_guard.py` (25 casos, sem deps).
 
 Owner: `common/hooks/`.
 
-Hard gate against advancement commands when build state is unsafe.
-
-**Logic:**
-
-```python
-1. Parse stdin; tool_name must be Bash; fail-open on parse error.
-2. command = tool_input["command"]
-3. If command matches any EXEMPT_PATTERN (mvnw, gradle, npm, pytest,
-   cargo, go test, read-only git): exit 0  (recovery path; never gate)
-4. If command does NOT match any ADVANCE_PATTERN (git commit, git push,
-   gh pr create, gh pr merge, gh release, kubectl apply, terraform
-   apply, docker push, aws/gcloud/az deploy): exit 0
-5. Read .claude/last-build.json
-   If missing: exit 0 with stderr warning (no baseline)
-   If parse error: exit 0 with stderr warning
-   If status == SUCCESS: exit 0
-   If status == STALE: BLOCK with edit path + suggestion
-   If status == FAILURE: BLOCK with failure tail + suggestion
-```
-
-ADVANCE_PATTERNS use regex with separator-aware lookahead
-(`(?:^|\s|&&\s|;\s)`) so compound shells (`git add foo && git commit
--m bar`) match correctly.
+Hard gate against advancement commands (`git commit`/`push`, `gh pr
+create/merge`, deploys) when `.claude/last-build.json` is unsafe. Two
+tiers: LOCAL (`git commit`, recoverable, fails open on a missing
+baseline with a loud warning) and SHARING (push/PR/deploy,
+unrecoverable, fails closed on a missing baseline), plus a
+`.claude/no-build` opt-out and a warning-only path for repos with no
+recognizable build manifest. `UNKNOWN` status is treated as `FAILURE`.
+This is one of three hooks (with `mark-build-stale.py` and
+`capture-build-result.py`) behind the `last-build.json` state machine;
+the full behavior table, states, and recovery flows live in
+[`../green-or-revert.md`](../green-or-revert.md); this entry just
+says where the gate sits in the hook lifecycle. Internal file format
+and per-tool detection detail: [`build-state.md`](build-state.md).
 
 ### mark-build-stale.py (PostToolUse, matcher `Edit|Write|MultiEdit`)
 
@@ -247,21 +244,26 @@ Detects build/test invocations and writes SUCCESS or FAILURE to
 1. Parse stdin; tool_name must be Bash.
 2. command = tool_input["command"]
 3. Match against PATTERNS list (maven, gradle, npm, yarn, pytest,
-   cargo, go-test). If no match: exit 0 (don't classify).
+   cargo, go-test, docker-build). If no match: exit 0 (don't classify).
 4. For matched kind:
      - Extract response text from tool_response (handles dict shape
        variants: stdout/output/result/content/stderr)
      - Check for kind-specific marker: BUILD SUCCESS / BUILD SUCCESSFUL
        in success path; BUILD FAILURE / BUILD FAILED in failure path
+       (docker-build uses its own text markers, no exit code to read)
      - Fallback: exit_code 0 → SUCCESS; non-zero → FAILURE
      - Ambiguous (marker missing, exit code unknown): exit 0
-5. Write { status: SUCCESS|FAILURE, at: now, command, kind,
+5. Follow a leading `cd X &&`/`cd X;` prefix (effective_build_dir) to
+   find where the build actually ran; a build outside the session tree
+   (e.g. a proof-reviewer throwaway worktree) is recorded in THAT
+   directory's own .claude/last-build.json, never the session's.
+6. Write { status: SUCCESS|FAILURE, at: now, command, kind,
    tail: last ~12 lines of response_text }
 ```
 
 Pattern list is extensible — add a `(regex, kind, success_marker,
 failure_marker)` tuple to `PATTERNS`. `None` markers fall back to exit
-code only.
+code only. Full behavior table: [`../green-or-revert.md`](../green-or-revert.md).
 
 ### autonomous-checkpoint.py (PostToolUse, matcher `Task`)
 
@@ -471,12 +473,180 @@ Owner: `common/hooks/`. Blocks spawning a lead agent with worktree isolation —
 leads are write-locked out of the workers' lanes, so isolating them is a
 mistake. Exit 2 with a re-issue suggestion.
 
-### acceptance-gate.py (PreToolUse, matcher `mcp__.*transitionJiraIssue`)
+### acceptance-gate.py (PreToolUse, matchers `Bash` and `mcp__.*(transitionJiraIssue|jira_transition_issue)`)
 
 Owner: `common/hooks/`. Blocks the In-Review transition while the per-card
 acceptance audit (`.claude/acceptance/<KEY>.yaml`, written by
-`completion-auditor`) is absent or incomplete. See
+`completion-auditor`) is absent or incomplete. Also matches `Bash`: the
+`twg` CLI transitions a card the same way the MCP tool does, and used to slip
+past this gate uncaught because it never showed up as an `mcp__...` call. See
 [`../acceptance-completeness.md`](../acceptance-completeness.md).
+
+### no-busy-wait.py (PreToolUse, matcher `Bash`)
+
+Owner: `common/hooks/`. Blocks active-waiting Bash (`sleep`-in-a-loop,
+polling a marker file, `wait` on a backgrounded PID), measured as the
+single biggest wall-clock cost in the harness's own transcripts
+(2026-08-26 measurement). Steers the agent toward `run_in_background` +
+being re-invoked on completion instead of burning a turn in a spin-loop.
+
+### no-background-build.py (PreToolUse, matchers `Bash` and `Monitor`; also `Stop`)
+
+Owner: `common/hooks/`. Scoped to `cepa-until` runs only (`CEPA_UNTIL_RUN`
+env var set; outside that mode, backgrounding a build is the right move
+and the hook is a no-op). Under `claude -p` (what `cepa-until` uses per
+queue item), there is no next turn to be woken up by a background job's
+completion notification: a build sent to the background is never
+collected, the item rots `in_progress`, and the next window finds an
+orphaned reservation. Blocks a build/test command from backgrounding via
+either `run_in_background: true` or shell-level detachment (trailing `&`,
+`nohup`, `disown`, `setsid`) outside quotes, and blocks polling it back via
+the `Monitor` tool. The `Stop` registration catches a session that ends
+mid-build.
+
+### reforma-gate.py (PreToolUse, matchers `Bash` and `Edit\|Write\|MultiEdit\|NotebookEdit`)
+
+Owner: `common/hooks/`. Blocks editing an EXTERNAL test while the
+"Reforma" work mode is active (`docs/modos-de-trabalho.md`). Reforma's exit
+condition has three parts (declared budget exhausted, build green, no
+external test edited), and the third is the only one this hook can check
+mechanically, so it's the one enforced.
+
+### modo-escrita-gate.py (PreToolUse, matchers `Bash` and `Edit\|Write\|MultiEdit\|NotebookEdit`)
+
+Owner: `common/hooks/`. Each session mode (set via `session-mode.py`) only
+writes what it PRODUCES: a mode announced in prose was routinely ignored
+under pressure; this closes that gap mechanically instead of re-teaching it
+every session.
+
+### merge-truth-gate.py (PreToolUse, matchers `Bash` and `mcp__.*(transitionJiraIssue|jira_transition_issue)`)
+
+Owner: `common/hooks/`. Blocks a card's forward transition while its code
+sits unmerged. The Implementation Summary is written the moment the work
+is done, necessarily before the merge exists, so it says "pending merge"
+and nobody revisits it; a 2026-08-01 board review found six cards closed
+this way. Recomputes merge state instead of trusting the comment.
+
+### summary-nulls-gate.py (PreToolUse, matcher `mcp__.*(addCommentToJiraIssue|jira_add_comment)`)
+
+Owner: `common/hooks/`. Blocks posting an Implementation Summary that
+omits the explicit-null fields ("new debt introduced: none", "release
+needed: no") instead of stating them outright: the structural teeth of
+the "explicit nulls" discipline (imported from the Ariad method).
+
+### bounce-reason-gate.py (PreToolUse, matcher `mcp__.*(addCommentToJiraIssue|jira_add_comment)`)
+
+Owner: `common/hooks/`. Sibling of `summary-nulls-gate.py`, one seam
+later: blocks bouncing a card back from Review without a structured
+reason, so the next session doesn't have to re-derive WHY from the diff.
+
+### bitbucket-decision-lock.py (PreToolUse, matcher `Bash`)
+
+Owner: `common/hooks/`. Only `bitbucket-expert` decides a pull request's
+fate (approve, merge, decline, request changes); this hook is the same
+"one decider" invariant `review-gate` enforces, applied to Bitbucket
+instead of a direct `git push`/merge.
+
+### jira-write-lock.py (PreToolUse, matcher `Bash`)
+
+Owner: `common/hooks/`. Only `board-flow:atlassian-expert` writes to Jira
+via the `twg` CLI. Via MCP the "one agent writes Jira" rule holds through
+the `tools:` frontmatter allowlist (only `atlassian-expert` has the
+write-scoped Jira MCP tools); the CLI path has no such allowlist, so this
+hook is the CLI's equivalent gate.
+
+### jira-create-fields-gate.py (PreToolUse, matcher `Bash` and `mcp__.*(createJiraIssue|jira_create_issue|jira_batch_create_issues)`)
+
+Owner: `common/hooks/`. A new Jira card must carry the `required_fields`
+declared in the project's `board-flow.yaml` (e.g. Team, Módulo do
+sistema); Jira itself doesn't enforce a per-project required-field list,
+so this hook does.
+
+### handoff-seeds-gate.py (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
+
+Owner: `common/hooks/`. Blocks writing a discovery handoff that omits the
+forward-carrying fields (validation seeds, etc.), the fields exploration
+routinely drops at the seam into delivery.
+
+### decision-altitude-gate.py (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
+
+Owner: `common/hooks/`. Blocks a `### Decision:` block whose `**Altitude:**`
+field isn't one of `strategic` / `tactical` / `implementation`, the field
+that routes the decision to the right reviewer at `/common:debrief` time
+(owner for strategic, lead for tactical, `--all`-only for implementation).
+
+### spec-readiness-gate.py (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
+
+Owner: `common/hooks/`. Blocks a specification declaring itself
+build-ready (`Status: ready`) while some success criterion still has no
+surface + red test: the failure mode is the `/common:spec` interrogation
+ending from agent fatigue rather than actual readiness.
+
+### ui-proof-verdict-guard.py (PreToolUse, matcher `Write`)
+
+Owner: `common/hooks/`. Sibling of `build-hex/hooks/proof-verdict-guard.py`,
+one altitude up: parses the `ui-proof-reviewer`'s `flows` schema (written
+to `docs/proof/ui-<slug>.yaml`) and blocks a declared `verdict: proven`
+that the recorded flow statuses don't support.
+
+### reflexao-gate.py (PreToolUse, matcher `Write`)
+
+Owner: `common/hooks/`. Integrity gate for the "Reflexão" report, sibling
+of `ui-proof-verdict-guard.py`: the verdict is a value recalculated from
+the report's own content, not an opinion the agent writes, and is blocked
+when it doesn't match. Reflexão's exit condition is "no finding without a
+destination," checked mechanically here.
+
+### editorial-lint.py (PostToolUse, matcher `Edit\|Write\|MultiEdit`)
+
+Owner: `common/hooks/`. Opt-in per-project lint for pt-BR editorial style
+(zero em dash, not sounding LinkedIn-ish, niche-specific hashtags), rules
+that were being re-taught every session and still getting violated.
+
+### session-mode.py (UserPromptSubmit)
+
+Owner: `common/hooks/`. Injects the active work mode (set via `cepa
+--modo <x>`, stored in `.claude/session-mode`) into context every turn:
+a session-long STATE, distinct from a routine (a task that ends). Full
+design: `docs/modos-de-trabalho.md`.
+
+### session-routine-guard.py (UserPromptSubmit)
+
+Owner: `common/hooks/`. Refuses, at the start, a conversational routine
+handed to `/common:session`. That command's own rule is "no questions
+between launch and report," and a routine that isn't ready to run
+straight through breaks it.
+
+### report-style-lint.py (UserPromptSubmit and Stop)
+
+Owner: `common/hooks/`. Measures the turn's final report against the
+`plain-report` skill's format (2 plain-language sentences, explicit
+default recommendation, technical detail last), added after the user
+reported having to read reports more than once to understand them.
+
+### proof-verdict-guard.py (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
+
+Owner: `build-hex/hooks/`. Reads the `.claude/proof/<KEY>.yaml` /
+`docs/proof/<KEY>.yaml` the `proof-reviewer` is about to write, recomputes
+the verdict mechanically from the level statuses, and blocks the write
+when a declared `verdict: proven` contradicts a level marked `skipped` /
+`assumed` / `survived` / `gap` (or an `l4_adversarial_input` with
+findings), the same integrity gap `ui-proof-verdict-guard.py` closes for
+UI proofs, one topology down.
+
+### no-direct-main.py (PreToolUse, matcher `Bash`)
+
+Owner: `review-gate/hooks/`. THE FENCE: blocks a direct `git merge` /
+`git push` to the protected branch in a repo that opted into `review-gate`
+(a `review-gate.yaml` at root), redirecting to the PR flow
+(`/review-gate:open`, `/review-gate:merge`) instead. Silent (self-scoped
+exit 0) in repos without that config.
+
+### push-nudge.py (PostToolUse, matcher `Bash`)
+
+Owner: `review-gate/hooks/`. THE NUDGE, never a block: after a feature-branch
+push, suggests `/review-gate:open` ("lexical proposes, model disposes,"
+same discretion pattern as `session-subject.py`).
 
 ## Hook ordering when multiple match
 
@@ -516,6 +686,13 @@ env-agent vars, resolved agent name, tool, file path.
 
 Useful when CC version changes (the `agent_type` payload field might
 move; debug log shows what's actually arriving).
+
+`docs-topology/hooks/path-lock.py` has the equivalent
+`DOCS_PATHLOCK_DEBUG` (log at `/tmp/docs-pathlock-debug.log` by default,
+overridable via `DOCS_PATHLOCK_DEBUG_LOG`). `build-team`, `discovery`,
+`design`, and `marketing` ship no debug env var today; if you need one
+there, mirror `HEX_PATHLOCK_DEBUG`'s pattern rather than inventing a new
+shape.
 
 ### Adding your own debug print
 

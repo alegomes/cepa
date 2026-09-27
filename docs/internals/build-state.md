@@ -7,38 +7,19 @@ extending or debugging the state machine itself.
 
 ## States
 
-```
-                                edit source / build manifest / migration
-                              ┌────────────────────────────────────────┐
-                              │                                        │
-                              │                                        ▼
-   missing ──────────────► SUCCESS ◄────── verify passes ──────── STALE
-   (no baseline)          ▲    │                                        ▲
-                          │    │ verify fails                          │
-                          │    ▼                                       │
-                          └── FAILURE ────────── edit ──────────────────┘
-```
+For the state machine diagram, the tier behavior (LOCAL vs SHARING),
+the `.claude/no-build` opt-out, the no-manifest warning path, and how
+`UNKNOWN` is treated, see [`../green-or-revert.md`](../green-or-revert.md),
+which is now the single description of all of that. This page covers
+only what's internal to the three hooks: file schema and per-tool
+detection.
 
-Four states; transitions all triggered by hooks (orchestrator never
-writes the file directly):
-
-| From | Trigger | To | Hook |
-|---|---|---|---|
-| (missing) | Edit on source path | `STALE` (with `last_known_status: UNKNOWN`) | `mark-build-stale` |
-| (missing) | `mvnw verify` returns BUILD SUCCESS | `SUCCESS` | `capture-build-result` |
-| (missing) | `mvnw verify` returns BUILD FAILURE | `FAILURE` | `capture-build-result` |
-| `SUCCESS` | Edit on source path | `STALE` | `mark-build-stale` |
-| `SUCCESS` | `mvnw verify` returns BUILD SUCCESS | `SUCCESS` (refresh timestamp) | `capture-build-result` |
-| `SUCCESS` | `mvnw verify` returns BUILD FAILURE | `FAILURE` | `capture-build-result` |
-| `STALE` | Edit on source path | `STALE` (newer timestamp, new `after_edit_to`) | `mark-build-stale` |
-| `STALE` | `mvnw verify` returns BUILD SUCCESS | `SUCCESS` | `capture-build-result` |
-| `STALE` | `mvnw verify` returns BUILD FAILURE | `FAILURE` | `capture-build-result` |
-| `FAILURE` | Edit on source path | `STALE` | `mark-build-stale` |
-| `FAILURE` | `mvnw verify` returns BUILD SUCCESS | `SUCCESS` | `capture-build-result` |
-| `FAILURE` | `mvnw verify` returns BUILD FAILURE | `FAILURE` (refresh timestamp) | `capture-build-result` |
-
-Note: editing while FAILURE returns to STALE, not directly to a fixed
-state. The fix is unproven until a new verify lands.
+Five states in the file (`SUCCESS`, `FAILURE`, `EMPTY`, `STALE`, and
+`UNKNOWN`/missing); transitions all triggered by hooks (orchestrator
+never writes the file directly). `UNKNOWN` is any `status` value
+`gate-advance.py` doesn't recognize, treated the same as `FAILURE`.
+Editing while `FAILURE` returns to `STALE`, not directly to a fixed
+state, since the fix is unproven until a new verify lands.
 
 ## Schema
 
@@ -59,7 +40,7 @@ state. The fix is unproven until a new verify lands.
 | `status` | Always `SUCCESS` |
 | `at` | UTC ISO-8601, second precision, written by `capture-build-result` at hook time |
 | `command` | First 200 chars of the Bash command that triggered |
-| `kind` | One of: `maven`, `gradle`, `npm`, `yarn`, `pytest`, `cargo`, `go-test` |
+| `kind` | One of: `maven`, `gradle`, `npm`, `yarn`, `pytest`, `cargo`, `go-test`, `docker-build` |
 | `tail` | Last ~12 lines of the response text |
 
 ### FAILURE
@@ -179,6 +160,15 @@ PATTERNS = [
      "cargo", None, None),
     (re.compile(r"(?:^|\s)go\s+test\b"),
      "go-test", None, None),
+    # docker build emits no exit code the hook can read; classified on
+    # output text only. BuildKit prints "writing image" + "naming to";
+    # the classic builder prints "Successfully built". Failures:
+    # BuildKit "failed to solve" / "executor failed"; classic "returned
+    # a non-zero code".
+    (re.compile(r"(?:^|\s)docker\s+(?:buildx\s+)?build\b"),
+     "docker-build",
+     ["writing image", "naming to", "Successfully built"],
+     ["failed to solve", "executor failed", "returned a non-zero code"]),
 ]
 ```
 
@@ -193,71 +183,31 @@ writing. Better to leave the previous state than to misclassify.
 To support a new build tool: add a tuple. Keep the regex precise — too
 broad and it'll fire on commands that aren't builds.
 
+**Where the build actually ran (`effective_build_dir`).** The Bash `cwd`
+CC reports persists across calls within a session, so a project script
+that does `cd subdir && ./mvnw verify` needs the hook to know it ran in
+`subdir`, not at the session root. `effective_build_dir` follows a
+leading `cd X &&` / `cd X;` prefix (quoted or bare, chained) to resolve
+where the build actually executed. When that resolved directory is
+OUTSIDE the session's worktree (the case that matters is a
+`proof-reviewer` perturbation running in a throwaway `/tmp` worktree),
+the result is written to THAT directory's own
+`.claude/last-build.json`, never poisoning the session's own baseline
+with a deliberate RED from somewhere else.
+
 ### gate-advance (PreToolUse on Bash)
 
-Three pattern lists (LOCAL vs SHARING is the H1+H2 design choice):
-
-```python
-# Local operations — recoverable via `git reset`. Fail-OPEN on
-# missing baseline (with loud warning); BLOCK on STALE/FAILURE.
-LOCAL_PATTERNS = [
-    re.compile(r"(?:^|\s|&&\s|;\s)git\s+commit\b"),
-]
-
-# Sharing operations — broadcast / deploy / unrecoverable. Fail-CLOSED
-# on missing baseline; BLOCK on STALE/FAILURE.
-SHARING_PATTERNS = [
-    re.compile(r"(?:^|\s|&&\s|;\s)git\s+push\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)gh\s+pr\s+(?:create|merge|review\s+--approve)\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)gh\s+release\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)kubectl\s+apply\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)terraform\s+apply\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)docker\s+push\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)(?:aws|gcloud|az)\s+(?:.*\b)?(?:deploy|push)\b"),
-]
-
-EXEMPT_PATTERNS = [
-    # Build / test commands — recovery path, never gate.
-    re.compile(r"(?:^|\s|&&\s|;\s)(?:\./)?mvnw?\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)(?:\./)?gradlew?\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)gradle\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)npm\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)(?:yarn|pnpm)\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)pytest\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)cargo\s+(?:test|build|check)\b"),
-    re.compile(r"(?:^|\s|&&\s|;\s)go\s+test\b"),
-    # Read-only git — fine to run while STALE/FAILURE.
-    re.compile(r"(?:^|\s|&&\s|;\s)git\s+(?:status|log|diff|show|stash|checkout|restore|reset|add|rm|mv|fetch|pull|merge|rebase|branch|tag|worktree|config|remote)\b"),
-]
-```
-
-The separator prefix `(?:^|\s|&&\s|;\s)` lets the regex match commands
-inside compound shells (e.g., `git add foo && git commit -m bar`).
-
-**Tier precedence: SHARING > LOCAL > EXEMPT.** When the command mixes
-patterns (e.g., `git add foo && git commit -m bar` matches both
-EXEMPT/`git add` and LOCAL/`git commit`), the strictest tier wins.
-`classify()` returns the highest tier that matched. This is
-conservative: a compound command that includes a commit needs the gate;
-the user splits it into two commands if they want finer-grained
-control.
-
-**Behavior matrix:**
-
-| state | exempt-only | local | sharing |
-|---|---|---|---|
-| `SUCCESS` | exit 0 | exit 0 | exit 0 |
-| `STALE` | exit 0 | exit 2 | exit 2 |
-| `FAILURE` | exit 0 | exit 2 | exit 2 |
-| `EMPTY` | exit 0 | exit 2 | exit 2 |
-| missing | exit 0 | exit 0 + LOUD banner | exit 2 |
-
-The "missing baseline" row is the asymmetry that H1 + H2 introduced.
-Older code fail-open-with-stderr-warning for both tiers; the warning
-was easy to miss, so unverified commits historically slipped through
-in cache-stale projects (the wego-tasy-gateway incident, May 2026).
-The split treats local commits as recoverable (loud warning, no block)
-and sharing operations as unrecoverable (block until baseline exists).
+The full tier behavior (LOCAL vs SHARING), the `.claude/no-build`
+opt-out, the no-manifest warning, and how `UNKNOWN` is treated are
+described once, for both internals and usage, in
+[`../green-or-revert.md`](../green-or-revert.md)#the-three-hooks. What's
+internal here: the three pattern lists (`LOCAL_PATTERNS`,
+`SHARING_PATTERNS`, `EXEMPT_PATTERNS`) live in `gate-advance.py`, each a
+list of regexes with the separator-aware prefix `(?:^|\s|&&\s|;\s)` so
+compound shells (`git add foo && git commit -m bar`) match correctly.
+`classify()` returns the highest tier that matched, precedence SHARING
+> LOCAL > EXEMPT, so a compound command that includes a commit needs
+the gate even if most of it is exempt.
 
 To add a new advancement command:
 - New local operation (rare; almost everything that isn't a build is
@@ -285,29 +235,21 @@ race scenarios:
 Race-condition-safety isn't a hard guarantee; if it became an issue,
 the right fix is `os.replace()` (atomic) for the write.
 
-## Recovery flows
+## Recovery flows and what the gate doesn't catch
 
-### After STALE
+Both now live in [`../green-or-revert.md`](../green-or-revert.md): the
+`After STALE` / `After FAILURE` / missing-baseline recovery steps
+(green-or-revert's "When you'll see the gate fire" + "Recovery" section)
+and the "What this doesn't protect against" list (flaky tests, build
+tool lies, coverage gaps, environment drift). One correction that used
+to live here and contradicted the tier table above: a **missing**
+baseline does NOT uniformly "exit 0 with a warning"; that's only true
+for the LOCAL tier (`git commit`) and for the no-manifest fallback.
+SHARING-tier commands (`push`, PR, deploy) fail CLOSED on a missing
+baseline. And `UNKNOWN` (a `status` value the gate doesn't recognize) is
+treated as `FAILURE`, not as a missing baseline, so it always blocks.
 
-Run any of: `./mvnw verify`, `./gradlew test`, `npm test`, `pytest`,
-etc. If green: state becomes SUCCESS. If red: state becomes FAILURE.
-
-### After FAILURE
-
-Two paths:
-
-1. **Fix forward** — apply the fix, re-run verify, watch FAILURE → STALE
-   → SUCCESS.
-2. **Revert** — `git checkout -- <files>` to discard the edit. State is
-   still FAILURE (the file write doesn't reset state); run verify again
-   to confirm green and update to SUCCESS.
-
-### After UNKNOWN (or missing file)
-
-No baseline. The gate exits 0 with stderr warning. Run a verify to
-establish the baseline; subsequent edits will then properly mark STALE.
-
-### Manual override (emergency only)
+**Manual override (emergency only):**
 
 ```sh
 echo '{"status": "SUCCESS", "at": "2026-05-13T10:00:00Z", "command": "manual override", "kind": "manual", "tail": "manually overridden"}' \
@@ -317,21 +259,6 @@ echo '{"status": "SUCCESS", "at": "2026-05-13T10:00:00Z", "command": "manual ove
 This is cheating. The `green-or-revert` skill should flag it. The
 recovery path is to re-establish a real green build, not to fake the
 state file.
-
-## What this doesn't catch
-
-- **Flaky tests.** A test that intermittently passes will move state
-  between SUCCESS and FAILURE on consecutive runs. The state always
-  reflects the last run, not aggregate confidence.
-- **Build tool lies.** If `./mvnw verify` reports BUILD SUCCESS while
-  tests are silently broken, the hook trusts the marker.
-- **Coverage gaps.** SUCCESS means the tests that exist pass. It
-  doesn't mean coverage is meaningful. That's `qa-engineer`'s gap
-  scan (within the per-Task quality loop), separate concern.
-- **Pre-existing FAILURE on session start.** If you start a session
-  with `.claude/last-build.json` already in FAILURE from a previous
-  session, the gate immediately blocks pushes. Correct behavior — run
-  verify to confirm or revert prior broken state.
 
 ## When to extend
 

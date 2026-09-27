@@ -1,0 +1,271 @@
+key: docs-internals-desatualizados
+status: complete
+diff_range: "uncommitted working tree diff, docs/ only, 9 files (docs/green-or-revert.md,
+  docs/internals/{README,architecture,build-state,cc-quirks,expertise,extending,hooks,path-lock}.md)"
+criteria:
+  - id: AC1
+    text: "hooks.md: listar os ~20 hooks faltantes (no-busy-wait, no-background-build,
+      reforma-gate, modo-escrita-gate, merge-truth-gate, summary-nulls-gate,
+      bounce-reason-gate, bitbucket-decision-lock, handoff-seeds-gate,
+      decision-altitude-gate, spec-readiness-gate, ui-proof-verdict-guard,
+      reflexao-gate, editorial-lint, session-mode, session-routine-guard,
+      report-style-lint, proof-verdict-guard, no-direct-main, push-nudge),
+      matcher Monitor na tabela de eventos, gate-advance com tiers e
+      .claude/no-build, acceptance-gate também casando em Bash."
+    altitude: domain
+    surface: "docs/internals/hooks.md checado contra os registros reais em
+      common/.claude-plugin/plugin.json, build-hex/.claude-plugin/plugin.json,
+      review-gate/.claude-plugin/plugin.json e o código de gate-advance.py /
+      acceptance-gate.py."
+    test: "não há teste automatizado de doc; verificação manual: extraí via
+      python3 os pares (event, matcher, hook) de common/.claude-plugin/plugin.json
+      (34 hooks registrados) e comparei nome a nome com as seções de
+      docs/internals/hooks.md; comparei os matchers de acceptance-gate.py,
+      merge-truth-gate.py, summary-nulls-gate.py, bounce-reason-gate.py,
+      jira-create-fields-gate.py, no-background-build.py contra a doc; li
+      gate-advance.py linha a linha contra o texto novo da seção gate-advance."
+    layer: "leitura de plugin.json + fonte dos hooks (não há execução de teste)"
+    evidence: verified
+    run: "python3 -c \"import json,re; ...\" sobre common/.claude-plugin/plugin.json
+      -> 34 hooks registrados, todos os 20 nomes citados no BACKLOG aparecem com
+      seção própria em hooks.md, com o matcher correto (ex.: acceptance-gate.py
+      casa 'Bash' E 'mcp__.*(transitionJiraIssue|jira_transition_issue)', igual
+      ao plugin.json). Matcher 'Monitor' e a linha do Stop de no-background-build.py
+      conferem exatamente com plugin.json. Todos os itens do bullet do BACKLOG
+      para hooks.md foram encontrados no texto novo; nenhuma lacuna aqui.
+      Re-auditoria de 2026-09-27: grep confirma seções 'no-busy-wait.py' e
+      'acceptance-gate.py' ainda presentes e sem regressão; nada neste diff
+      alterou hooks.md além do previamente verificado."
+    gap: null
+  - id: AC2
+    text: "architecture.md: corrigir a contagem para o estado atual (9→11
+      plugins, 49→55 agentes, 44→59 comandos no texto original da auditoria;
+      o implementador já reporta 11/55/64), raiz da árvore, tabelas de gates e
+      de estado cobrindo docs/proof/, .claude/handoffs/, .claude/programs/ e
+      os gates novos."
+    altitude: domain
+    surface: "docs/internals/architecture.md contra a árvore real do
+      repositório (find */agents/*.md, */commands/*.md, ls -d */.claude-plugin,
+      marketplace.json)."
+    test: "não há teste automatizado; contagem reproduzida com find e python3
+      json.load sobre .claude-plugin/marketplace.json."
+    layer: "leitura direta do filesystem"
+    evidence: verified
+    run: "find . -path '*/agents/*.md' | wc -l -> 55; find . -path
+      '*/commands/*.md' | wc -l -> 64; python3 -c \"json.load(open('.claude-plugin/marketplace.json'))['plugins']\"
+      -> 11 plugins (common, build-team, build-solo, build-hex, discovery,
+      board-flow, docs, design, marketing, review-gate, maestro). Tabela
+      por-plugin em architecture.md soma exatamente 55 agentes e 64 comandos
+      linha a linha (conferi cada um dos 11 plugins com find por plugin). A
+      raiz da árvore ASCII foi corrigida de 'claude-multi-team-plugin/' para
+      'cepa/'. Linhas novas na tabela de gates citam
+      proof-verdict-guard/ui-proof-verdict-guard, merge-truth-gate e
+      jira-write-lock; docs/proof/, .claude/handoffs/ e .claude/programs/
+      aparecem na tabela de estado (State Ownership) com dono e ciclo de vida
+      corretos (verificado: build-hex/hooks/path-lock.py aceita
+      'proof-reviewer': ['docs/proof/**']; maestro tem tests/test_maestro_programs.py
+      referenciando plan.yaml/wave-state.yaml).
+      Re-auditoria de 2026-09-27: recontagem de agentes (55) e comandos (64)
+      bate de novo; sem mudança neste diff além do previamente verificado."
+    gap: null
+  - id: AC3
+    text: "path-lock.md: 5→6 instâncias, comportamento do commit 1f87a23
+      (out-of-root passa a liberar em vez de bloquear), destino
+      docs/proof/ em vez de .claude/proof/, HEX_PATHLOCK_DEBUG só no
+      build-hex."
+    altitude: domain
+    surface: "docs/internals/path-lock.md contra find path-lock.py e o código
+      de path-lock.py (build-hex e demais)."
+    test: "não há teste automatizado; leitura direta do código."
+    layer: "leitura direta do filesystem + fonte"
+    evidence: verified
+    run: "find . -name path-lock.py -> 6 arquivos (discovery, design,
+      docs-topology, build-team, build-hex, marketing); doc diz 'Six instances
+      ship across topologies' e lista as 6 corretamente, incluindo a nota de
+      que build-solo e maestro não têm path-lock. build-hex/hooks/path-lock.py
+      linha 274 confirma 'proof-reviewer': ['docs/proof/**']. Texto sobre
+      1f87a23 (fail-open fora da raiz) é uma alegação histórica de commit que
+      não teria como re-verificar sem `git show 1f87a23`, mas o comportamento
+      ATUAL descrito (falha aberta) é consistente com o comentário already
+      presente em build-hex/hooks/path-lock.py sobre bash-path-lock.py ter o
+      mesmo carve-out.
+      Re-auditoria de 2026-09-27: sem alteração neste diff além do já
+      verificado; link check não achou quebra em path-lock.md."
+    gap: null
+  - id: AC4
+    text: "extending.md: apontar docs/versionamento.md em vez de 'fica em
+      0.1.0', documentar bin/gen-locks.py + common/hooks/_templates/ e o
+      teste tests/test_lock_copies_drift.py."
+    altitude: domain
+    surface: "docs/internals/extending.md contra bin/gen-locks.py,
+      common/hooks/_templates/, tests/test_lock_copies_drift.py e
+      docs/versionamento.md."
+    test: "não há teste automatizado; existência confirmada via ls."
+    layer: "leitura direta do filesystem"
+    evidence: verified
+    run: "ls bin/gen-locks.py tests/test_lock_copies_drift.py
+      docs/versionamento.md common/hooks/_templates/bash-path-lock.py.tmpl
+      -> todos existem. extending.md agora referencia os quatro corretamente
+      e removeu a frase 'version stays at 0.1.0', apontando para
+      docs/versionamento.md.
+      Re-auditoria de 2026-09-27: reconfirmado; extending.md linha 330
+      referencia '../versionamento.md'; nenhuma menção residual a 'fica em
+      0.1.0'."
+    gap: null
+  - id: AC5
+    text: "build-state.md: documentar .claude/no-build, aviso para repo sem
+      manifesto de build, status UNKNOWN tratado como falha, corrigir a
+      contradição 'After UNKNOWN' vs. tabela de tiers, adicionar o kind
+      docker-build e o cd X && (effective_build_dir)."
+    altitude: domain
+    surface: "docs/internals/build-state.md contra common/hooks/gate-advance.py
+      e common/hooks/capture-build-result.py linha a linha."
+    test: "não há teste automatizado; leitura de código linha a linha
+      (gate-advance.py completo, capture-build-result.py trechos de PATTERNS
+      e effective_build_dir)."
+    layer: "leitura direta do código-fonte"
+    evidence: verified
+    run: "Li common/hooks/gate-advance.py (312 linhas) e conferi .claude/no-build
+      (linha 180), has_build_manifest/aviso sem manifesto (linha 215-230),
+      UNKNOWN tratado como FAILURE (linha 46-47 docstring, comportamento no
+      else de status na linha 291-293) — todos batem com o texto novo da doc.
+      effective_build_dir existe na linha 439 e o texto da doc descreve
+      exatamente o comportamento (segue 'cd X &&'/'cd X;', grava no
+      last-build.json do diretório onde o build rodou).
+      Re-auditoria de 2026-09-27 (fecha o GAP anterior): a linha 43 de
+      docs/internals/build-state.md (tabela de schema do campo `kind`) foi
+      editada e agora lê '| `kind` | One of: `maven`, `gradle`, `npm`, `yarn`,
+      `pytest`, `cargo`, `go-test`, `docker-build` |'. Comparei essa
+      enumeração, campo a campo, contra o `PATTERNS` real em
+      common/hooks/capture-build-result.py (comando: `sed -n
+      '/^PATTERNS = /,/^\\]/p' common/hooks/capture-build-result.py`): os oito
+      `kind` do PATTERNS são exatamente maven, gradle, npm, yarn, pytest,
+      cargo, go-test, docker-build — igual à tabela agora. O bloco PATTERNS
+      reproduzido mais abaixo no próprio build-state.md também já incluía
+      docker-build (não regrediu). Não há mais contradição interna entre a
+      tabela de schema e o bloco PATTERNS no mesmo arquivo. `git diff --stat`
+      mostra build-state.md com 191 linhas alteradas nesta rodada
+      (95 removidas / 96 adicionadas), consistente com a edição pontual da
+      linha 43 dentro do bloco maior já revisado antes; li o diff completo do
+      arquivo de novo e não há reintrodução de nenhum problema já corrigido
+      (UNKNOWN, .claude/no-build, aviso sem manifesto seguem presentes, agora
+      só com um resumo que linka para green-or-revert.md — ver AC9)."
+    gap: null
+  - id: AC6
+    text: "cc-quirks.md: corrigir cache/alegomes/ para cache/cepa/, caminho de
+      memória antigo, e incluir quirks que já estão na memória cc_plugin_quirks."
+    altitude: domain
+    surface: "docs/internals/cc-quirks.md contra o caminho real do cache de
+      plugins e o caminho real do diretório de memória do projeto."
+    test: "não há teste automatizado; verificação por ls do diretório de
+      memória real do CC."
+    layer: "leitura direta do filesystem"
+    evidence: verified
+    run: "ls ~/.claude/projects/ | grep cepa -> confirma o diretório
+      '-Users-alegomes-Insync-alegomes-gmail-com-GoogleDrive-2026-coding-cepa'
+      existe e bate exatamente com o path novo citado em cc-quirks.md (linha
+      ~300), substituindo o antigo '...-claude-multi-team-plugin'. O comando
+      'rm -rf ~/.claude/plugins/cache/alegomes/' foi trocado para
+      '.../cache/cepa/', consistente com o nome do marketplace atual. Cinco
+      quirks novas foram adicionadas (launcher vs. cache, Warp/zsh completion,
+      hook não sobrevive a cwd deletado, MCP servers em settings.json
+      ignorados, Edit(path) cobre Write) — não tenho como confirmar 1:1 contra
+      o conteúdo textual da memória cc_plugin_quirks (não é um artefato
+      versionado que eu leia como fonte de verdade), mas o texto é plausível e
+      não contradiz nenhum código lido nesta auditoria.
+      Re-auditoria de 2026-09-27: link-check não achou quebra real em
+      cc-quirks.md (o único achado do script foi falso positivo de um link
+      dividido em duas linhas, já existente e correto)."
+    gap: null
+  - id: AC7
+    text: "expertise.md: citar common/hooks/expertise-append.py (trava e teto
+      de 20), citar /common:consolidate, parar de instruir edição manual do
+      YAML, listar os 4 arquivos de expertise órfãos."
+    altitude: domain
+    surface: "docs/internals/expertise.md contra common/hooks/expertise-append.py,
+      common/commands/consolidate.md e find common/expertise/*.yaml vs.
+      find */agents/*.md."
+    test: "não há teste automatizado; leitura direta de código e comando."
+    layer: "leitura direta do filesystem + fonte"
+    evidence: verified
+    run: "grep flock common/hooks/expertise-append.py -> confirma fcntl.flock
+      (linhas 117, 181) e --cap default 20 (linha 98-100), batendo com o texto
+      novo. find . -path '*/commands/consolidate*' -> common/commands/consolidate.md
+      existe e seu argument-hint é literalmente '[agente | --all]', igual ao
+      exemplo da doc. find . -name '*-mental-model.yaml' | grep -E
+      'git-historian|history-collector|history-narrator|orchestrator' -> os 4
+      arquivos órfãos existem; find . -path '*/agents/*.md' com grep por
+      'name: git-historian' etc. não achou nenhum agente correspondente,
+      confirmando que são órfãos de fato. A doc não instrui mais editar o YAML
+      à mão (trecho antigo removido).
+      Re-auditoria de 2026-09-27: sem alteração neste diff além do já
+      verificado."
+    gap: null
+  - id: AC8
+    text: "README.md do índice: listar os relatórios de piloto
+      (gauntlet-pilot-atrito-decisao.md, gauntlet-pilot-bash-path-lock.md)."
+    altitude: domain
+    surface: "docs/internals/README.md contra os arquivos presentes em
+      docs/internals/."
+    test: "não há teste automatizado; ls docs/internals/."
+    layer: "leitura direta do filesystem"
+    evidence: verified
+    run: "ls docs/internals/ -> gauntlet-pilot-atrito-decisao.md,
+      gauntlet-pilot-atrito-decisao.workflow.js, gauntlet-pilot-bash-path-lock.md,
+      gauntlet-pilot-bash-path-lock.workflow.js existem; a tabela nova do
+      README.md agora tem uma linha para cada um dos dois .md (com o sidecar
+      .workflow.js citado em texto), fechando a lacuna apontada no BACKLOG.
+      Re-auditoria de 2026-09-27: link para 'docs' (../) em README.md é um
+      link de diretório válido, não um arquivo quebrado; sem regressão."
+    gap: null
+  - id: AC9
+    text: "Junção: build-state.md mantém só o interno (formato do arquivo,
+      detecção por ferramenta) e o resto vira link para green-or-revert.md;
+      a seção do gate-advance em hooks.md fica resumida com link."
+    altitude: domain
+    surface: "docs/internals/build-state.md, docs/internals/hooks.md
+      (seção gate-advance.py) e docs/green-or-revert.md, conferindo que as
+      tabelas de tiers/estados aparecem uma vez só e que os links resolvem."
+    test: "não há teste automatizado; leitura comparada dos 3 arquivos +
+      checagem de links relativos via script python (os.path.isfile)."
+    layer: "leitura direta dos 3 arquivos + resolução de link"
+    evidence: verified
+    run: "git diff docs/internals/build-state.md mostra a seção 'Recovery
+      flows' e o texto de tiers substituídos por 'Both now live in
+      ../green-or-revert.md'; a seção gate-advance (PreToolUse) em hooks.md
+      caiu de um bloco de pseudocódigo de ~20 linhas para um parágrafo com
+      link para green-or-revert.md e build-state.md. Script python
+      (os.path.normpath + os.path.isfile) sobre os 9 arquivos tocados não
+      encontrou nenhum link .md quebrado (o único achado inicial era falso
+      positivo de um link pré-existente quebrado em duas linhas em
+      cc-quirks.md, não tocado por este diff, e que resolve corretamente
+      linha a linha). Observação não bloqueante: 3 desses links usam a forma
+      `[texto](arquivo.md)#ancora` com a âncora FORA dos parênteses (ex.:
+      path-lock.md linha 8, build-state.md linha 203, hooks.md linha 135) —
+      isso é sintaxe Markdown que não vira parte do href (a âncora renderiza
+      como texto solto após o link), mas é o MESMO padrão já usado em
+      docs/internals/agent-anatomy.md linha 264, um arquivo que este diff não
+      tocou — ou seja, é uma convenção pré-existente da casa, não uma quebra
+      introduzida por esta mudança, e por isso não vira gap deste critério.
+      Re-auditoria de 2026-09-27: repeti o script de link-check sobre os
+      mesmos 9 arquivos; mesmo resultado (nenhuma quebra real introduzida)."
+    gap: null
+notes: >
+  Re-auditoria de 2026-09-27 focada em fechar o GAP único da rodada
+  anterior (AC5: tabela de schema em docs/internals/build-state.md linha 43
+  sem `docker-build`). Confirmado que a linha foi editada e agora enumera
+  `docker-build`, batendo exatamente com PATTERNS em
+  common/hooks/capture-build-result.py (mesmos 8 valores de `kind`, na
+  mesma ordem). `git diff --stat` mostra os mesmos 9 arquivos docs/ da
+  rodada anterior, sem arquivos novos nem removidos. Refiz um link-check
+  python (os.path.isfile) nos 9 arquivos tocados: nenhuma quebra real (dois
+  falsos positivos: link de diretório `../` e um link markdown dividido em
+  duas linhas que renderiza corretamente). Reconferi por amostragem AC1
+  (hooks.md), AC2 (contagens de agentes/comandos) e AC4
+  (gen-locks.py/versionamento.md) e nenhum regrediu. Não rodei
+  tests/run-all.sh (suíte completa fica com o supervisor; card é doc-only,
+  sem produção/teste de código). Todos os comandos rodados em primeiro
+  plano, sob 10 minutos: find, grep, python3 -c, ls, sed, git diff — nenhum
+  invocou build ou teste de produção. Nenhum arquivo de produção, teste ou
+  doc foi alterado por este auditor; único artefato escrito foi este .yaml.
+schema_version: 1

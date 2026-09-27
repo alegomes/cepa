@@ -81,11 +81,18 @@ Shape after a failed build:
                           └── FAILURE ────────── edit ──────────────────┘
 ```
 
+`EMPTY` and `UNKNOWN` aren't drawn above (both behave like `FAILURE` for
+gating purposes; `EMPTY` is a distinct status so the reason a filtered
+green run didn't count stays visible). Full schema:
+[`internals/build-state.md`](internals/build-state.md).
+
 | Status | Meaning | What you do |
 |---|---|---|
 | `SUCCESS` (recent) | Last verify ran green, no edits since. | Safe to claim "green". Safe to commit / push / advance. |
 | `STALE` | Source edited since last verify. | Run verify now. Don't claim green. Don't commit / push — the gate blocks anyway. |
 | `FAILURE` | Last verify failed. | Fix or revert before any other action. Read `tail` for the failure surface. |
+| `EMPTY` | The run had a test filter (`-Dtest=`, `pytest -k`, etc.) that matched **zero tests**: exited green, proved nothing. | Never treated as green. Fix the filter and re-run. |
+| `UNKNOWN` | `status` field present but not one of the recognized values. | Treated the same as `FAILURE`, always blocks. Run a fresh verify. |
 | missing | No verify recorded yet this session. | Establish a baseline: run verify. Don't claim anything beforehand. |
 
 Staleness has no timer — `STALE` set by an edit stays `STALE` until a
@@ -172,6 +179,8 @@ tier wins (sharing > local > exempt).
 | `SUCCESS` | ALLOW | ALLOW |
 | `STALE` | BLOCK | BLOCK |
 | `FAILURE` | BLOCK | BLOCK |
+| `EMPTY` (filtered run, zero tests matched) | BLOCK | BLOCK |
+| `UNKNOWN` (unrecognized status value) | BLOCK (treated as `FAILURE`) | BLOCK (treated as `FAILURE`) |
 | missing (no baseline yet) | **ALLOW** with loud stderr warning | **BLOCK** with clear message |
 | missing, and no build manifest at the root | **ALLOW** with loud stderr warning | **ALLOW** with warning asking for `.claude/no-build` |
 | any state, but `.claude/no-build` present | **ALLOW** | **ALLOW** |
