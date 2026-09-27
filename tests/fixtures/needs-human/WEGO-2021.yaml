@@ -1,0 +1,100 @@
+card: WEGO-2021
+verdict: needs-human
+schema_version: 2
+issue_type: Task
+base_commit: 8a6aef6^
+head_commit: 8a6aef6
+scope:
+  changed_classes: []
+  changed_files:
+  - file: bootstrap/src/main/resources/application.properties
+  base_commit_resolved: true
+routing_reason: 'Achados factuais, todos favoráveis -- nenhum defeito encontrado:
+
+  (1) Estado pós-mudança: grep -rn ''%staging'' em todo o repo (excluindo target/ e .git/) mostra ZERO
+  linhas ATIVAS de %staging.* em application.properties; as únicas ocorrências restantes são comentários
+  (histórico + nota de reversão) e javadoc/docs que descrevem o perfil removido. Comando: grep -rn ''%staging''
+  --include=''*'' . | grep -v /target/ | grep -v /.git/ -- ver saída completa na sessão de prova.
+
+  (2) Nenhum ambiente vivo dependia do perfil: docker/entrypoint.sh:11 default é QUARKUS_PROFILE=prod
+  (_profile="${QUARKUS_PROFILE:-prod}"); docs/deploy.md:392 confirma que o container roda com QUARKUS_PROFILE=prod
+  mesmo no cluster de dev; nenhum arquivo em docker/, bin/, scripts/ ou bitbucket-pipelines.yml seta QUARKUS_PROFILE=staging.
+  A remoção não quebra nenhum ambiente real.
+
+  (3) Nenhuma propriedade órfã: wego.tenancy.jwt.claim-name (a chave sem @WithDefault citada no card)
+  só é definida hoje em %prod (application.properties:228, %prod.wego.tenancy.jwt.claim-name=cliente_id)
+  e sobrescrita explicitamente via getConfigOverrides() nos QuarkusTestProfile de teste (DevHeaderDesligadoJwtClaimTestProfile,
+  DevHeaderLigadoTenantSemeadoTestProfile, SemPermitAllTestProfile). Nenhum código depende de um valor
+  "%staging.wego.tenancy.jwt.claim-name" que deixou de existir -- a lib wego-platform-commons lê a chave
+  sem o prefixo de perfil, e cada perfil ativo (%dev, %test, %prod) já a resolve pelo seu próprio caminho.
+
+  (4) Afirmação do implementador VERIFICADA e CONFIRMADA verdadeira: git show bde5524 (commit anterior
+  no mesmo dia, 16/08 18:15, "fix(seguranca): fecha as duas frestas de %staging do WEGO-2028") mostra
+  que %staging.wego.tenancy.dev-header.enabled já estava =false (não =true como o card WEGO-2021 alegava)
+  e que o comentário "dev/test/staging (OIDC off)" -- o comentário falso que o card queria corrigir --
+  JÁ tinha sido reescrito para a versão correta ("Em dev e test (OIDC off)... em staging e prod, do claim
+  JWT" + bloco ATENÇÃO explicando o erro). Ou seja: o card WEGO-2021 descrevia um estado (linha 182 com
+  =true, comentário mentindo) que só existiu ANTES de bde5524, e a Implementation Summary do WEGO-2021
+  está factualmente correta ao dizer isso.
+
+  (5) Suíte verde no HEAD atual (867310a, que contém 8a6aef6): ./mvnw clean verify -- Tests run: 253,
+  Failures: 0, Errors: 0, Skipped: 0, BUILD SUCCESS. Inclui os dois testes E2E que reproduzem o comportamento
+  equivalente a %staging via overrides (AdminCredenciaisPrecedenciaIdentidadeHeaderDesligadoE2ETest, AdminCredenciaisPrecedenciaIdentidadeHeaderLigadoE2ETest)
+  -- ambos verdes, confirmando que a lógica de precedência de identidade que %staging usaria continua
+  íntegra em %prod.
+
+  NEEDS-HUMAN não é por defeito encontrado -- é mecânico: l3.perturbation.status=skipped (não existe,
+  e nunca existiu, um teste que ative %staging de verdade para provar green->red->green sobre o hunk removido
+  -- é exatamente o motivo do card existir) e l2_coverage.status=assumed (properties não é instrumentável).
+  Pela rota de veredito desta skill, qualquer nível assumed/skipped torna ''proven'' estruturalmente indisponível,
+  mesmo quando -- como aqui -- toda evidência factual disponível é favorável.
+
+  Pendência substantiva para decisão humana (já sinalizada pelo próprio implementador, não é achado novo
+  desta prova): remover %staging esvazia a primeira metade do WEGO-2028 (teste de precedência de identidade
+  EM STAGING) -- sem o perfil não há ambiente para o teste rodar. Decisão em aberto: o teste faz sentido
+  reaproveitado em %dev/%test, ou o WEGO-2028 deve ser fechado/reescrito? Isso não bloqueia o WEGO-2021
+  (que cumpriu seu próprio critério de aceite ao remover o perfil inteiro), mas é a mesma pendência que
+  motiva o NEEDS-HUMAN aqui.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: n/a (config-only deletion) -- ver perturbation.status abaixo
+    pit:
+      status: n/a
+      results:
+      - Nenhuma classe de produção mudou neste diff (só application.properties); PIT não tem alvo.
+    perturbation:
+      status: skipped
+      results:
+      - 'Não existe teste que guarde este hunk na altitude ''%staging de verdade'': confirmado por leitura
+        de todos os 4 arquivos que citam %staging em bootstrap/src/test/.../e2e/ (DevHeaderDesligadoJwtClaimTestProfile.java,
+        TenantResolvivelSemIdentidadeTestProfile.java, AdminCredenciaisPrecedenciaIdentidadeHeaderDesligadoE2ETest.java,
+        NegarPorOmissaoTenantSemIdentidadeE2ETest.java) -- nenhum QuarkusTestProfile.getConfigProfile()
+        retorna "staging"; todos reproduzem a MESMA configuração via getConfigOverrides() sobre %test.
+        Isso é o próprio motivo estrutural do card (perfil morto, nunca exercitado) e está documentado
+        no javadoc de DevHeaderDesligadoJwtClaimTestProfile.java linha 14: ''Não existe classe de teste
+        neste repositório que rode sob %staging de verdade''. Não há prova externa possível de reverter-e-vermelho
+        porque não há vermelho possível: nada no repo ativa esse perfil. Reportado como skipped (não pass)
+        por instrução explícita de não marcar verde automático.'
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: 'application.properties não é instrumentável por jacoco/quarkus-jacoco (arquivo de propriedades,
+      não bytecode). Cobertura determinada estruturalmente: as duas linhas removidas nunca foram lidas
+      em nenhum boot real do repo (nenhum ambiente ativa QUARKUS_PROFILE=staging -- ver achado 2 abaixo).
+      "assumed" porque não há ferramenta para medir isso automaticamente, só leitura.
+
+      '
+  l4_adversarial_input:
+    status: n/a
+    reason: 'O diff não abre superfície de entrada nenhuma: não toca api-rest, não adiciona/ remove parsing
+      de request, não muda nenhuma classe de produção compilável -- é remoção de duas linhas de configuração
+      declarativa e reescrita de comentários. Nenhum changed_class em módulo input-bearing (api-rest);
+      changed_classes está vazio.
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: issue_type=Task, não Bug; não há regressão a reproduzir.

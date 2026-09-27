@@ -52,6 +52,10 @@ ESPERADO = {
     "WEGO-1510": "teste-cego",  # a superfície viva do PlugSign não é alcançável no automatizado
     "WEGO-1614": "teste-cego",  # reverter só o pedaço não compila no commit-base
     "WEGO-1619": "teste-cego",  # falta o @QuarkusTest que asserta o 400 na rejeição
+    # Tem os três sinais de diff só de doc (changed_classes vazio, L4 n/a,
+    # perturbação skipped), mas o único arquivo é o application.properties:
+    # configuração muda comportamento, não é "nada a provar".
+    "WEGO-2021": "teste-cego",
     # Não havia o que provar aqui
     # Epic-mãe sem commit-base próprio. Classificado `nao-rodou` até 2026-08-04,
     # quando o primeiro run real do /board-flow:decide mostrou o custo: `nao-rodou`
@@ -63,6 +67,13 @@ ESPERADO = {
     "WEGO-1658": "nada-a-provar",   # card só de documentação
     "WEGO-1709": "nada-a-provar",   # ADR puro
     "WEGO-1962": "nada-a-provar",   # fuzzer HTTP não cabe em vazamento de log
+    # Só .md, reconhecidos pela estrutura (changed_classes vazio, L4 n/a,
+    # perturbação skipped): a prosa não casa DIFF_SEM_PRODUCAO e até
+    # 2026-09-25 os três caíam em `teste-cego` pelo fallback de perturbação
+    # skipped. Vindos do prove-drain de wego-acesso-backend.
+    "WEGO-2117": "nada-a-provar",
+    "WEGO-2275": "nada-a-provar",
+    "WEGO-2276": "nada-a-provar",
     # Os testes rodam, mas seguram pouco
     "WEGO-1564": "guarda-fraca",    # PedidoAssinatura, 60% dos mutantes mortos
     # Apareceu comportamento que nenhum teste confere
@@ -143,6 +154,31 @@ def test_epic_so_sai_do_nao_rodou_quando_nao_tem_commit_base():
     # e o mesmo Epic, se perdesse o commit-base, cairia na guarda
     sem_base = dict(mil732, base_commit=None, scope={"base_commit_resolved": False})
     assert classify(sem_base)[0] == "nada-a-provar"
+
+
+def test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais():
+    """A regra estrutural de `nada-a-provar` é estreita de propósito.
+
+    Precisa dos três: `changed_classes` ESCRITO e vazio, perturbação `skipped`
+    e L4 `n/a` — e, quando o artefato lista `changed_files`, todo arquivo tem
+    que ser documentação. Faltando qualquer um, o card segue para o fallback e continua
+    `teste-cego` — senão a regra engoliria perturbação que não rodou num diff
+    com código de verdade.
+    """
+    doc = _carrega("WEGO-2117")
+    assert classify(doc) == (
+        "nada-a-provar", "diff sem classe de produção (changed_classes vazio)")
+
+    sem_chave = dict(doc, scope={"base_commit_resolved": True})
+    com_classe = dict(doc, scope={"base_commit_resolved": True,
+                                  "changed_classes": ["com.wego.Foo"]})
+    levels_l4_rodou = dict(doc["levels"])
+    levels_l4_rodou["l4_adversarial_input"] = {"status": "pass"}
+    l4_rodou = dict(doc, levels=levels_l4_rodou)
+    config = dict(doc, scope=dict(doc["scope"], changed_files=[
+        {"file": "docs/x.md"}, {"file": "bootstrap/src/main/resources/application.properties"}]))
+    for caso in (sem_chave, com_classe, l4_rodou, config):
+        assert classify(caso)[0] == "teste-cego"
 
 
 def test_so_nao_rodou_deixa_de_virar_pergunta():

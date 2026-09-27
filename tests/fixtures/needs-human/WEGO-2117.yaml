@@ -1,0 +1,65 @@
+card: WEGO-2117
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 00e4090
+head_commit: aa7bef6
+scope:
+  changed_classes: []
+  changed_files:
+  - file: docs/decisoes/0003-empacotamento-e-distribuicao.md
+  - file: docs/distribuicao-politica.md
+  base_commit_resolved: true
+routing_reason: 'As 4 perguntas do card estão de fato respondidas em origin/main (conferido por leitura
+  direta, não pelas linhas citadas no Implementation Summary, que se moveram) e a decisão do dono (WeGo
+  gerencia o console) está registrada com data e justificativa. O documento é honesto sobre o que falta:
+  declara explicitamente ''ainda não exercitado numa máquina real'' em ambos os arquivos, sem alegar validação
+  de campo que não ocorreu. Não há, porém, nenhum mecanismo mecânico (PIT, perturbação, teste automatizado)
+  capaz de provar conteúdo de prosa — o protocolo deste agente foi desenhado para comportamento executável,
+  e este card não tem nenhum. L2 fica ''assumed'' e a perturbação de L3 fica ''skipped'' porque não existe
+  teste a reverter/quebrar para um documento; isso torna ''proven'' estruturalmente indisponível por este
+  portão, mesmo a inspeção manual tendo confirmado o conteúdo. NEEDS-HUMAN não é dúvida sobre o conteúdo
+  (que confere), é limite estrutural do mecanismo de prova para um card sem código.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: inspection-only (diff sem código de produção)
+    pit:
+      status: n/a
+      results:
+      - não há classe de produção não-Quarkus alterada; PIT não se aplica
+    perturbation:
+      status: skipped
+      results:
+      - 'não existe teste automatizado (nem qualquer harness) que verifique afirmações de prosa em markdown;
+        reverter o hunk e rodar ''o teste que deveria acusar'' não tem correspondente para este card.
+        Verificação feita foi leitura direta de origin/main confirmando que as 4 perguntas do card têm
+        resposta textual: (1) viabilidade do token sem MDM — docs/decisoes/0003-empacotamento-e-distribuicao.md,
+        seção ''O que a investigação WEGO-2117 achou sobre o caminho 2'', trecho ''Viabilidade do arquivo
+        de token, sem MDM: confirmada pela documentação oficial do Google''; (2) custo — mesma seção,
+        trecho ''Custo: zero.''; (3) dono do console — seção ''De quem é o console — decidido em 2026-08-23
+        (WEGO-2117)'', trecho ''Decisão do dono: a WeGo gerencia.''; (4) o que muda para o TI do prestador
+        — docs/distribuicao-politica.md, seção ''Caminho 2 — sem gestão central: inscrição no console
+        da WeGo'', com passo a passo e comandos macOS/Windows. As linhas citadas no Implementation Summary
+        (50-102, 121-126, 82-93, 38-84) se moveram desde 22/09 (commits intermediários no repo), mas o
+        conteúdo citado está presente em origin/main (HEAD 91a27f4) nas seções acima.'
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: 'Não há ferramenta de cobertura aplicável a markdown. Determinação estrutural: as 4 perguntas
+      do card são alcançadas por leitura direta (grep + inspeção manual) nos dois arquivos tocados pelo
+      diff; não há medição automatizada possível, então fica ''assumed'' por precisão que não pude medir.
+
+      '
+  l4_adversarial_input:
+    status: n/a
+    reason: 'Diff é só documentação (dois arquivos .md); não há parser, endpoint, DTO ou qualquer caminho
+      que receba entrada externa. scope.changed_classes está vazio e nenhum arquivo tocado pertence a
+      módulo de entrada (api-rest/api/rest).
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: issue_type Story, não Bug; regra não se aplica

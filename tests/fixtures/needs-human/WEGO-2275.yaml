@@ -1,0 +1,82 @@
+card: WEGO-2275
+verdict: needs-human
+schema_version: 2
+issue_type: Task
+base_commit: 31ac02bd
+head_commit: 2a58082d
+scope:
+  changed_classes: []
+  changed_files:
+  - file: docs/spec/lote-e-listagens-administrativas.md
+  base_commit_resolved: true
+routing_reason: 'Os dois itens do pedido (item 16 — lote de concessão por credencial; item 20 — busca/filtro/ordenação/paginação
+  nas listagens de grupos, tags e pessoas) têm resposta textual em origin/main na spec docs/spec/lote-e-listagens-
+  administrativas.md, commit 2a58082d, status "pronta-para-construir", coerente com o que o Implementation
+  Summary declara. Os 14 critérios de sucesso seguem o padrão do repositório (superfície http + teste
+  vermelho declarado), e o arquivo não sofreu deriva desde 2a58082d. Um achado de staleness foi registrado
+  (parte do CS-7 já foi implementada por outro card, WEGO-2309, um dia depois da spec ser fechada) mas
+  não compromete o documento como deliverable deste card — é sinal para quem for reconciliar o épico WEGO-2302,
+  não defeito da spec. Ainda assim, o mecanismo deste agente (PIT/perturbação green→red) não tem correspondente
+  para provar conteúdo de prosa: não existe teste a reverter/quebrar para um documento, então l3.perturbation
+  fica "skipped" e l2 fica "assumed" — isso torna "proven" estruturalmente indisponível por este portão
+  (mesmo a inspeção manual tendo confirmado o conteúdo), o mesmo limite estrutural já registrado em docs/proof/WEGO-2117.yaml
+  para outro card de puro documento. NEEDS-HUMAN não é dúvida sobre o conteúdo da spec (que confere),
+  é o limite do mecanismo de prova para um card sem código.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: inspection-only (diff sem código de produção; card pede spec, não implementação)
+    pit:
+      status: n/a
+      results:
+      - nenhuma classe de produção alterada; PIT não se aplica
+    perturbation:
+      status: skipped
+      results:
+      - 'Não existe teste automatizado que verifique afirmações de prosa em markdown; reverter um hunk
+        da spec e rodar "o teste que deveria acusar" não tem correspondente para este card. Verificação
+        feita foi leitura direta de origin/main (HEAD 2a58082d no arquivo) contra os dois itens do pedido:
+        (1) item 16 — lote de concessão por credencial — coberto pelos CS-1 a CS-6 (linhas 66-102), rota
+        nova POST /api/v1/admin/portais/{portal}/credenciais/ {credencialId}/habilitacoes/lote, cada critério
+        com "Superfície: http" e "Teste vermelho" declarado (ex.: CS-1 "a rota não existe — o POST responde
+        404", linha 71); (2) item 20 — busca/filtro/ordenação/paginação nas listagens de grupos, tags
+        e pessoas — coberto pelos CS-7 a CS-14 (linhas 104-152), que enumeram as dez rotas administrativas
+        (linhas 31-35), incluindo explicitamente /admin/grupos-de-credenciais (grupos), /admin/tags e
+        /admin/tags/selecao (tags), /admin/usuarios (pessoas, com busca por nome e e-mail em CS-9 e filtro
+        por tag em CS-10) — as três famílias que o item 20 pediu estão nominalmente dentro do escopo.
+
+        '
+      - 'Achado de staleness (não bloqueia a leitura, mas é relevante para quem for construir): a citação
+        de "teste vermelho" do CS-7 (linha 108-109, "hoje a resposta é um array JSON na raiz, AdminUsuariosResource.java:238")
+        já não é verdadeira em origin/main. O commit 5cf2d522 (feat WEGO-2309, 23/09 — um dia depois de
+        2a58082d) já mudou 8 das 10 rotas para o envelope {itens, temMais}, incluindo AdminUsuariosResource
+        (linha 238 hoje é "public ListagemResponse<UsuarioResponse> listar()", conferido por Read). Confirmado
+        por leitura de AdminUsuariosResource.java que busca/limite/deslocamento/ordenacao continuam ausentes
+        (grep sem resultado) — CS-8 a CS-14 seguem "vermelhos" de verdade hoje. Ou seja, parte de CS-7
+        já foi implementada por outro card antes desta spec ter sido formalmente encaminhada à construção;
+        isso é sobreposição de trabalho a reconciliar no épico WEGO-2302, não um defeito na spec.
+
+        '
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: 'Não há ferramenta de cobertura aplicável a markdown. Determinação estrutural: os 14 critérios
+      de sucesso (CS-1 a CS-14) todos têm campo "Superfície: http" e "Teste vermelho" preenchidos com
+      uma frase verificável (conferido por leitura integral do arquivo, linhas 66-152) — é o padrão que
+      as outras specs do repositório (docs/spec/grupo-de- credenciais.md, docs/spec/tags-de-pessoas.md)
+      seguem. Não há medição automatizada possível para prosa; fica "assumed" por precisão que não pude
+      medir.
+
+      '
+  l4_adversarial_input:
+    status: n/a
+    reason: 'Diff é só documentação (um arquivo .md); não há parser, endpoint, DTO ou qualquer caminho
+      que receba entrada externa. scope.changed_classes está vazio e o único arquivo tocado não pertence
+      a módulo de entrada (api-rest).
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: issue_type Task (spec), não Bug; regra não se aplica

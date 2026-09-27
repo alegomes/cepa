@@ -118,6 +118,10 @@ Duas situações com a mesma pergunta para você:
 
 - O diff não tem código de produção — um ADR, um arquivo de documentação, só
   teste. Não há o que quebrar, logo não há o que provar (WEGO-1709, WEGO-1658).
+  Quando a prosa do artefato não diz isso com as palavras que o classificador
+  conhece, vale a estrutura: `scope.changed_classes: []`, L4 `n/a` e
+  perturbação `skipped` juntos também dão este motivo (WEGO-2117, 2275, 2276,
+  que antes caíam em `teste-cego`).
 - Existe código provado, mas **uma das checagens** não se aplica àquele tipo de
   mudança: o fuzzer bate em endpoint HTTP, e o defeito era vazamento no log de
   um adaptador que não tem endpoint próprio (WEGO-1962). Nada ficou por provar;

@@ -174,6 +174,24 @@ def _travados(levels: dict) -> list[tuple[str, str]]:
     return fora
 
 
+DOC_EXT = (".md", ".adoc", ".rst", ".txt")
+
+
+def _so_documentacao(changed_files) -> bool:
+    """Verdadeiro se a lista de arquivos (quando existe) é toda documentação.
+
+    Lista ausente não reprova: o artefato só declarou as classes. Lista
+    presente precisa ter todo arquivo em `docs/` ou com extensão de texto.
+    """
+    if changed_files is None:
+        return True
+    for item in changed_files:
+        caminho = str(item.get("file") if isinstance(item, dict) else item or "")
+        if not (caminho.startswith("docs/") or caminho.lower().endswith(DOC_EXT)):
+            return False
+    return True
+
+
 def _casa(regras, blob):
     for padrao, evidencia in regras:
         if re.search(padrao, blob):
@@ -263,6 +281,24 @@ def classify(d: dict) -> tuple[str, str]:
     ev = _casa(TESTE_CEGO, blob)
     if ev:
         return "teste-cego", ev
+
+    # Diff só de documentação reconhecido pela ESTRUTURA, não pela prosa: o
+    # artefato declara `scope.changed_classes: []`, o L4 saiu `n/a` e a
+    # perturbação `skipped`. Sem esta regra o card cai no fallback logo abaixo
+    # e vira `teste-cego`, juntando spec com teste cego de verdade no
+    # agrupamento do /board-flow:decide. Achado em 2026-09-25 no prove-drain de
+    # wego-acesso-backend: WEGO-2117, 2275 e 2276 (só .md) cujo texto não casou
+    # DIFF_SEM_PRODUCAO. A lista vazia tem que estar ESCRITA: chave ausente é
+    # artefato que não disse, e não prova diff sem produção. E classe nenhuma
+    # não basta quando o artefato lista os arquivos: o WEGO-2021 também tem
+    # `changed_classes: []`, mas o diff é o application.properties — mudança
+    # de configuração, que muda comportamento.
+    if (scope.get("changed_classes") == []
+            and pert.get("status") == "skipped"
+            and l4.get("status") == "n/a"
+            and _so_documentacao(scope.get("changed_files"))):
+        return "nada-a-provar", "diff sem classe de produção (changed_classes vazio)"
+
     if pert.get("status") == "skipped":
         return "teste-cego", "perturbação externa não pôde rodar"
 

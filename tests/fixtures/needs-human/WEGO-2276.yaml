@@ -1,0 +1,99 @@
+card: WEGO-2276
+verdict: needs-human
+schema_version: 2
+issue_type: Story
+base_commit: 31ac02bd
+head_commit: e4b9bd21
+scope:
+  changed_classes: []
+  changed_files:
+  - file: docs/spec/testar-acesso-de-credencial.md
+  base_commit_resolved: true
+routing_reason: 'Os 4 pontos em aberto do card (rota para disparar o teste, onde o resultado fica guardado,
+  como a listagem expõe o último resultado, rótulo "com falha" distinto de "desativada") têm resposta
+  textual em origin/main na spec docs/spec/testar-acesso-de-credencial.md, commit e4b9bd21, status "pronta-para-construir",
+  coerente com o Implementation Summary (CS-1 a CS-4 mapeados para os 4 pontos). Os 12 critérios de sucesso
+  seguem o padrão do repositório (superfície + teste vermelho declarado), e o arquivo não sofreu deriva
+  de conteúdo desde e4b9bd21. Um achado de staleness relevante foi registrado: CS-1 e CS-2 já foram construídos
+  pelo épico WEGO-2317 (Story WEGO-2318) antes desta prova, então os "testes vermelhos" citados para esses
+  dois critérios já não reproduzem — isso não é defeito da spec (o card entregou documento, não código),
+  mas é sinal para o dono do produto reconciliar o card de spec com o estado real do épico WEGO-2317.
+  Como nos precedentes WEGO-2275 e WEGO-2117, o mecanismo deste agente (PIT/perturbação green→red) não
+  tem correspondente para provar conteúdo de prosa: não existe teste a reverter/quebrar para um documento,
+  então l3.perturbation fica "skipped" e l2 fica "assumed" — isso torna "proven" estruturalmente indisponível
+  por este portão, mesmo a inspeção manual tendo confirmado o conteúdo. NEEDS-HUMAN não é dúvida sobre
+  o conteúdo da spec (que confere), é o limite do mecanismo de prova para um card sem código, com o achado
+  de staleness anexado para o dono decidir.
+
+  '
+levels:
+  l3_load_bearing:
+    technique: inspection-only (diff sem código de produção; card pede spec, não implementação)
+    pit:
+      status: n/a
+      results:
+      - nenhuma classe de produção alterada por este card; PIT não se aplica
+    perturbation:
+      status: skipped
+      results:
+      - 'Não existe teste automatizado que verifique afirmações de prosa em markdown; reverter um hunk
+        da spec e rodar "o teste que deveria acusar" não tem correspondente para este card. Verificação
+        feita foi leitura direta de origin/main (arquivo idêntico a e4b9bd21) contra os 4 pontos em aberto
+        do card (registrados pelo item 17 da revisão de produto de 14/09): (1) rota para disparar o teste
+        — seção "Entra", "Rota de teste — POST /api/v1/admin/portais/{portal}/credenciais/{credencialId}/teste:
+        autentica no portal e descarta o material devolvido"; (2) onde o resultado fica guardado — seção
+        "Estado e migração", quatro colunas novas na credencial (instante, resultado, mensagem, contador
+        de falhas seguidas) mais tabela nova de tentativas com retenção de 30 dias; (3) como a listagem
+        expõe o último resultado — CS-5 "GET .../credenciais traz, por credencial, o instante do último
+        login, se passou, a mensagem curta e o contador de falhas seguidas" e CS-6/CS-11 cobrindo o caso
+        de falha de abertura real marcar a credencial; (4) rótulo "com falha" na listagem distinto de
+        "desativada" — decidido em Q11 ("sim... credencial que falha para todo mundo o dia inteiro fica
+        verde até alguém clicar em testar") e refletido em CS-6. Os 12 critérios de sucesso (CS-1 a CS-12)
+        têm "Superfície" e "Teste vermelho" preenchidos, o padrão deste repositório (confere com docs/spec/lote-e-listagens-administrativas.md
+        e docs/spec/grupo-de-credenciais.md).
+
+        '
+      - 'Achado de staleness (não bloqueia a leitura do documento, mas é relevante para quem for revisar
+        o desdobramento): parte da spec já foi construída por Stories do épico WEGO-2317 antes desta prova
+        rodar. Encontrados em origin/main: migration bootstrap/src/main/resources/db/migration/V20260924000001__credencial_ultimo_login.sql
+        (as quatro colunas descritas em "Estado e migração": ultimo_login_em, ultimo_login_resultado,
+        ultimo_login_mensagem, falhas_seguidas, com os CHECK constraints coerentes com a regra "nulo =
+        nunca testada"); rota POST /{credencialId}/teste em AdminCredenciaisResource.java:616-641, com
+        javadoc citando "WEGO-2318, CS-1 de docs/spec/testar-acesso-de-credencial.md"; TestarCredencialService.java
+        implementando exatamente CS-1 e CS-2 (autentica, descarta o material, nunca chama MaterialSessaoStorePort/SessaoRepositoryPort/
+        TrilhaAuditoriaPort); TesteCredencialResponse.java com o contrato resultado=PASSOU|FALHOU + mensagem
+        nullable saneada por GuardasDeCaptura, igual à spec; teste E2E bootstrap/src/test/java/.../e2e/AdminTestarCredencialE2ETest.java
+        e bootstrap/src/test/java/.../e2e/CredencialUltimoLoginNaListagemE2ETest.java. Ou seja: os "testes
+        vermelhos" citados em CS-1 e CS-2 ("a rota não existe — o POST responde 404") já não reproduzem
+        em origin/main — a rota existe e responde 200. Não encontrado (grep sem resultado) rate limit
+        de 5 minutos em TestarCredencialService (CS-3) nem valor novo de operação na trilha (CS-4) nem
+        TentativaAcesso/tabela de tentativas com retenção de 30 dias além do adapter TentativasCredencialQueryAdapter
+        (cuja existência sugere que a tabela de tentativas também já existe, não confirmado por leitura
+        de migration). Isso é sobreposição de trabalho esperada — o card pediu a spec, a construção é
+        dos cards WEGO-2318 em diante, e a Definition of Done deste card específico é o documento, não
+        o código — mas o dono do produto precisa saber que parte do "teste vermelho" documentado já foi
+        resolvido por outra Story, para não reabrir escopo já fechado nem confundir o card de spec com
+        pendência de construção.
+
+        '
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: 'Não há ferramenta de cobertura aplicável a markdown. Determinação estrutural: os 12 critérios
+      de sucesso (CS-1 a CS-12) todos têm campo "Superfície" e "Teste vermelho" preenchidos com uma frase
+      verificável (conferido por leitura integral do arquivo) — é o padrão que as outras specs do repositório
+      seguem. Não há medição automatizada possível para prosa; fica "assumed" por precisão que não pude
+      medir.
+
+      '
+  l4_adversarial_input:
+    status: n/a
+    reason: 'Diff é só documentação (um arquivo .md); não há parser, endpoint, DTO ou qualquer caminho
+      que receba entrada externa no diff deste card. scope.changed_classes está vazio e o único arquivo
+      tocado não pertence a módulo de entrada (api-rest).
+
+      '
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: issue_type Story (spec), não Bug; regra não se aplica
