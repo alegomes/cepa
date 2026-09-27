@@ -34,6 +34,15 @@ o que esta rodada permite? Encerre o turno. A notificação te traz de volta com
 o resultado na mão. Não sonde o disco atrás do arquivo do worker nem invente o
 que ele ainda não devolveu.
 
+O que NÃO fazer (medição de 2026-08-26 sobre cinco runs reais, que perderam
+912 minutos em comando que não fazia nada, quase tudo em lead):
+
+- **sondar o disco atrás do arquivo do worker**: `until [ -f .../rascunho.md ];
+  do sleep 10; done`, `until git status --short | grep -q "brief"; do sleep 10; done`;
+- **laço de queima** no lugar do `sleep`, que o harness bloqueia.
+
+O hook `no-busy-wait` recusa esses comandos; ele é a rede, a disciplina é sua.
+
 ## Rules
 
 - **You delegate, you do not produce.** The only file you write is your own expertise YAML. Every artifact (brief, pieces, critique reports) comes from a worker.
