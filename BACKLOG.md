@@ -3619,7 +3619,9 @@ exige que um `./mvnw install` da raiz tenha rodado depois do último commit (ou 
 
 **Plano:** `cepa/until-git-quebrado-vira-troca-de-branch`
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (`branch_atual` e a
+**Status:** passos 1 e 2 feitos em 27/09/2026 (`le_branch` + `repara_ligacao` no
+`common/bin/cepa-until`, teste em `tests/test_cepa_until_git_quebrado.py`); o passo 3
+(quem apaga a pasta) segue aberto · **Lar:** `common/bin/cepa-until` (`branch_atual` e a
 conferência de branch do laço principal) · **Origem:** run `WEGO` de 25/09/2026 20:05,
 `wego-acesso-backend`, registro `.claude/programs/WEGO/until/2026-09-25-2005.jsonl`.
 
@@ -3652,6 +3654,9 @@ perdeu além do prazo.
 2. Diante de `git-quebrado` com o diretório da worktree presente, o supervisor tenta
    `git worktree repair <caminho>` a partir do clone e segue o run se a branch voltar a ser
    a da largada.
+   `git worktree repair` NÃO serve: sem a pasta ele recusa ("unable to locate
+   repository", conferido no git 2.55). O reparo feito recria a pasta à mão (HEAD,
+   `commondir`, `gitdir`) e refaz o índice com `git reset`.
 3. Investigar quem apaga `.git/worktrees/`: vigiar a pasta (`fswatch`) durante um run e
    cruzar com o `logs.db` do Insync.
 
