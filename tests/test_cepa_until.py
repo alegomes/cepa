@@ -385,6 +385,35 @@ def test_item_blocked_nao_trava_a_noite_atras_dele():
               fim["com_progresso"] == 3 and fim["sem_progresso"] == 0, str(fim))
 
 
+def test_resumo_do_fim_diz_por_que_cada_item_travou():
+    """Item `until-build-longo-sem-trava`, parte 3: no run WEGO de 25/09 o
+    resumo só dizia "Travados (1)", e o comando que o WEGO-2334 deixou para o
+    dono rodar estava no fim da `evidence`, que só se lia abrindo a fila."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        longo = ("o par de clean verify foi cortado com EXIT=124 " * 30
+                 + "rode ~/.wego-acesso/proof-2334/rodar-par-head.sh")
+        corpo = ("ident = primeiro_pendente()\n"
+                 "if ident == 'a1':\n"
+                 f"    marca(ident, status='blocked', evidence={longo!r})\n"
+                 "else:\n"
+                 "    marca(ident, status='blocked', evidence=None,\n"
+                 "          human_pending='aprove o PR 12 na interface')\n")
+        binv = fake_claude(tmp, corpo)
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p, _ = roda(raiz, binv, plano, ["--for", "2h"])
+        resumo = p.stdout[p.stdout.find("Travados ("):]
+        check("o resumo dos travados existe", "Travados (2)" in resumo,
+              p.stdout[-800:])
+        check("o comando no FIM de uma evidence longa chega ao resumo",
+              "rodar-par-head.sh" in resumo, resumo[:900])
+        check("...e a evidence longa é cortada, não despejada inteira",
+              "[...]" in resumo and resumo.count("EXIT=124") < 30, resumo[:900])
+        check("travado sem evidence aponta para a rota, sem repeti-la",
+              "a rota em \"Espera por você\"" in resumo
+              and resumo.count("aprove o PR 12 na interface") == 1, resumo[:900])
+
+
 def test_n_blocked_seguidos_encerram_o_run_como_fila_travada():
     """O aceite do item `cepa-until-blocked-como-progresso`: 1 item `done` sem
     merge seguido de 5 dependentes que travam. Em 2026-09-23 foram 20 rodadas

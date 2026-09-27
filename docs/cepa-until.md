@@ -56,7 +56,10 @@ tested:
    Above it, the window is being burned on a systemic problem.
 3. **One commit per item, on a single branch.** No merge train, no pile of branches waiting
    for someone to notice. This is a guard, not an intention: the starting branch is recorded
-   and checked between items, and the run ends if it changed.
+   and checked between items, and the run ends if it changed (`branch-mudou`). Git not
+   answering in the night's worktree is not a branch change: the supervisor rebuilds the
+   worktree's link to the clone (`.git/worktrees/<name>`, which vanished on 2026-09-25)
+   and carries on; if that fails the run ends as `git-quebrado`, with git's own error.
 4. **`--dangerously-skip-permissions` is on by default.** Without it the subprocess hangs at
    the first permission prompt and the night dies silently. It is printed in the banner and
    can be turned off with `--com-permissoes`, which only makes sense with someone watching.

@@ -3591,9 +3591,10 @@ numa varredura só guiada pelo A3.
 
 ## maven-reactor-guard barra o `quarkus:dev`, que só funciona sem `-am`
 
-**Plano:** fora da fila (ainda não priorizado; registrado em 2026-09-25)
+**Plano:** `cepa/maven-reactor-guard-libera-o-inocente`
 
-**Status:** pendente · **Lar provável:** `common/hooks/maven-reactor-guard.py` · **Origem:**
+**Status:** feito em 27/09/2026 (`94185f0`, na branch `until/2026-09-27-1213`): com goal `quarkus:*` o guarda
+não sugere `-am` e libera depois de um `install` da raiz posterior à última edição · **Lar:** `common/hooks/maven-reactor-guard.py` · **Origem:**
 sessão `startup_error` do wego-acesso-backend (2026-09-25), achado do completion-auditor
 conferido na sessão principal.
 
@@ -3619,7 +3620,9 @@ exige que um `./mvnw install` da raiz tenha rodado depois do último commit (ou 
 
 **Plano:** `cepa/until-git-quebrado-vira-troca-de-branch`
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (`branch_atual` e a
+**Status:** passos 1 e 2 feitos em 27/09/2026 (`le_branch` + `repara_ligacao` no
+`common/bin/cepa-until`, teste em `tests/test_cepa_until_git_quebrado.py`); o passo 3
+(quem apaga a pasta) segue aberto · **Lar:** `common/bin/cepa-until` (`branch_atual` e a
 conferência de branch do laço principal) · **Origem:** run `WEGO` de 25/09/2026 20:05,
 `wego-acesso-backend`, registro `.claude/programs/WEGO/until/2026-09-25-2005.jsonl`.
 
@@ -3652,6 +3655,9 @@ perdeu além do prazo.
 2. Diante de `git-quebrado` com o diretório da worktree presente, o supervisor tenta
    `git worktree repair <caminho>` a partir do clone e segue o run se a branch voltar a ser
    a da largada.
+   `git worktree repair` NÃO serve: sem a pasta ele recusa ("unable to locate
+   repository", conferido no git 2.55). O reparo feito recria a pasta à mão (HEAD,
+   `commondir`, `gitdir`) e refaz o índice com `git reset`.
 3. Investigar quem apaga `.git/worktrees/`: vigiar a pasta (`fswatch`) durante um run e
    cruzar com o `logs.db` do Insync.
 
@@ -3666,9 +3672,14 @@ perdeu além do prazo.
 
 **Plano:** `cepa/until-build-longo-sem-trava`
 
-**Status:** pendente · **Lar provável:** `common/hooks/no-background-build.py` e
-`common/bin/cepa-until` · **Origem:** run `WEGO` de 25/09/2026 20:05, item WEGO-2334;
-pedido do dono em 26/09.
+**Status:** feito em 27/09/2026, com o passo 2 trocado pelo que o passo 1 mediu: o
+`claude -p` (2.1.283) mata o segundo plano no fim do turno com o teto em 0, ausente ou
+120000, e o `Monitor` não segura o turno. O hook libera o build em segundo plano que grava
+`EXIT=` num arquivo, ensina esperar esse arquivo em primeiro plano (`# espera-ok`) e barra
+a parada antes do `EXIT=`; o resumo do fim mostra o motivo de cada travado. Testes em
+`tests/test_no_background_build.py` e `tests/test_cepa_until.py` · **Lar:**
+`common/hooks/no-background-build.py` e `common/bin/cepa-until` · **Origem:** run `WEGO`
+de 25/09/2026 20:05, item WEGO-2334; pedido do dono em 26/09.
 
 ### Problema
 

@@ -304,6 +304,14 @@ ENV_JANELA = "CEPA_UNTIL_RUN"
 #
 # Valor já posto no ambiente pelo operador ganha: quem escolheu explicitamente
 # sabe o que quer.
+#
+# MEDIDO EM 27/09/2026 (claude 2.1.283): a espera não acontece. Com a variável
+# em 0, ausente ou 120000, um `claude -p` que deixou `bash build.sh` em segundo
+# plano saiu em ~15s e o build morreu junto; um `Monitor` armado também não
+# segura o turno. O que colhe um build de mais de 10 min hoje é a receita que o
+# `no-background-build` ensina: gravar `EXIT=` num arquivo e esperá-lo em
+# primeiro plano. A exportação fica porque não custa nada e o comportamento
+# pode voltar numa versão futura; não conte com ela.
 ENV_ESPERA_FUNDO = "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"
 
 # Quanto da saída do subprocesso o reconhecedor de limite olha. Ler o pedaço
@@ -391,6 +399,20 @@ def consulta_fila(nome, repo):
         return json.loads(p.stdout), None
     except json.JSONDecodeError as e:
         return None, f"o `cepa-plan queue` não devolveu JSON ({e})"
+
+
+# Quanto do `evidence` de um item travado o resumo do fim mostra. O comando que
+# o dono precisa rodar costuma estar no fim do texto ("deixei X para você
+# rodar"), então o corte guarda o começo E o fim, não só o começo.
+MOTIVO_NO_RESUMO = 600
+
+
+def resume_motivo(texto):
+    texto = " ".join(str(texto).split())
+    if len(texto) <= MOTIVO_NO_RESUMO:
+        return texto
+    metade = MOTIVO_NO_RESUMO // 2
+    return f"{texto[:metade]} [...] {texto[-metade:]}"
 
 
 def le_item(caminho_plano, ident):
@@ -772,13 +794,22 @@ def alvos_de_restore(repo, arquivos):
     return alvos
 
 
-def branch_atual(repo):
+def le_branch(repo):
+    """(branch, erro). Erro é o que o git disse: em 25/09 o `"?"` de sempre
+    escondeu um `fatal: not a git repository` e o laço leu troca de branch."""
     try:
         p = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
                            cwd=str(repo), capture_output=True, text=True, timeout=30)
-        return p.stdout.strip() if p.returncode == 0 else "?"
-    except Exception:
-        return "?"
+    except Exception as e:
+        return None, str(e)
+    if p.returncode != 0:
+        return None, (p.stderr.strip() or f"`git rev-parse` saiu {p.returncode}")
+    return p.stdout.strip(), None
+
+
+def branch_atual(repo):
+    branch, _ = le_branch(repo)
+    return branch or "?"
 
 
 # ── a branch da noite ───────────────────────────────────────────────────────
@@ -811,6 +842,51 @@ def abre_branch_da_noite(repo, run_id):
     if codigo != 0:
         return None, branch, saida or f"`git worktree add` saiu {codigo}"
     return arvore, branch, None
+
+
+def repara_ligacao(repo, arvore, branch):
+    """Refaz `.git/worktrees/<nome>`, a pasta que liga a worktree da noite ao
+    clone, quando ela sumiu e a worktree ficou no disco (run WEGO de 25/09: a
+    pasta inteira sumiu às 00:2x, suspeita de Insync). `git worktree repair`
+    não serve: sem a pasta ele recusa ("unable to locate repository").
+
+    Só recria o que o `git worktree add` teria criado — HEAD apontando para a
+    branch da largada, `commondir`, `gitdir` — e refaz o índice a partir do
+    HEAD sem tocar nos arquivos. Devolve None se reparou, ou o motivo."""
+    ponteiro = Path(arvore) / ".git"
+    if not ponteiro.is_file():
+        return f"`{ponteiro}` não existe: a worktree da noite sumiu do disco"
+    linha = ponteiro.read_text(encoding="utf-8", errors="replace").strip()
+    if not linha.startswith("gitdir:"):
+        return f"`{ponteiro}` não aponta para um gitdir: {linha[:120]!r}"
+    admin = Path(linha[len("gitdir:"):].strip())
+    if not admin.is_absolute():
+        admin = (Path(arvore) / admin).resolve()
+    codigo, comum = git(["rev-parse", "--git-common-dir"], repo)
+    if codigo != 0:
+        return f"o clone também não responde ao git: {comum}"
+    comum = Path(comum) if Path(comum).is_absolute() else Path(repo) / comum
+    casa = comum.resolve() / "worktrees"
+    if admin.parent.resolve() != casa:
+        return (f"`{ponteiro}` aponta para `{admin}`, fora de `{casa}`: "
+                "não recrio ligação em lugar que não é do clone")
+    if admin.exists():
+        return f"`{admin}` existe e mesmo assim o git não responde"
+    codigo, saida = git(["rev-parse", "--verify", "-q", f"refs/heads/{branch}"],
+                        repo)
+    if codigo != 0:
+        return f"a branch `{branch}` não existe mais no clone"
+    try:
+        admin.mkdir(parents=True)
+        (admin / "HEAD").write_text(f"ref: refs/heads/{branch}\n")
+        (admin / "commondir").write_text(f"{os.path.relpath(comum.resolve(), admin)}\n")
+        (admin / "gitdir").write_text(f"{ponteiro.resolve()}\n")
+    except OSError as e:
+        return f"não consegui recriar `{admin}`: {e}"
+    codigo, saida = git(["reset", "-q"], arvore)
+    if codigo != 0:
+        return f"recriei `{admin}`, mas `git reset` saiu {codigo}: {saida}"
+    return None
 
 
 def fecha_branch_vazia(repo, arvore, branch, base):
@@ -1156,7 +1232,29 @@ def main(argv=None):
                            "agora seria trabalho jogado fora")
             break
 
-        agora_branch = branch_atual(arvore)
+        agora_branch, erro_git = le_branch(arvore)
+        if erro_git:
+            # Git que não responde não é troca de branch. Tenta refazer a
+            # ligação da worktree; se a branch voltar a ser a da largada, a
+            # noite segue.
+            falha_reparo = repara_ligacao(repo, arvore, branch_largada)
+            if not falha_reparo:
+                agora_branch, depois = le_branch(arvore)
+                if depois:
+                    falha_reparo = f"reparei, e o git ainda diz: {depois}"
+            registra({"evento": "git_reparo", "erro": erro_git,
+                      "reparou": not falha_reparo, "falha": falha_reparo})
+            if falha_reparo:
+                motivo_fim = "git-quebrado"
+                detalhe_fim = (
+                    f"o git parou de responder na worktree da noite `{arvore}`"
+                    f" ({erro_git}) e o reparo não voltou: {falha_reparo}. "
+                    "Ninguém trocou de branch; o que está no disco da worktree "
+                    "continua lá")
+                break
+            print(f"[{datetime.now().strftime('%H:%M')}] o git não respondia "
+                  f"na worktree da noite ({erro_git}); refiz a ligação dela "
+                  "com o clone e sigo")
         if agora_branch != branch_largada:
             motivo_fim = "branch-mudou"
             detalhe_fim = (
@@ -1319,7 +1417,13 @@ def main(argv=None):
         if estado == "done":
             entregues.append(ident)
         elif estado == "blocked":
-            travados.append(ident)
+            # O motivo vai junto: o resumo do fim é onde o dono lê o que fazer,
+            # e em 25/09 ele só dizia "Travados (1)" enquanto o comando que o
+            # WEGO-2334 deixou para ele rodar estava na `evidence` da fila.
+            relido, _ = le_item(caminho_plano, ident)
+            relido = relido or {}
+            travados.append((ident, relido.get("human_pending"),
+                             relido.get("evidence")))
 
         # A REDE caiu, antes do teto e do disjuntor: o item não andou porque o
         # `claude` não alcançou a API. Devolve a vez, espera a rede voltar e
@@ -1485,10 +1589,15 @@ def main(argv=None):
           + (f" · {len(limitados)} interrompida(s) pelo teto de uso da conta"
              if limitados else ""))
     if travados:
-        print(f"\n   Travados ({len(travados)}) — o motivo de cada um está no "
-              "`evidence` da fila:")
-        for ident in travados:
+        print(f"\n   Travados ({len(travados)}):")
+        for ident, rota, evid in travados:
             print(f"     - {ident}")
+            if evid:
+                print(f"       motivo: {resume_motivo(evid)}")
+            elif rota:
+                print("       motivo: a rota em \"Espera por você\", abaixo")
+            else:
+                print("       o item não registrou motivo na fila")
     if vermelhos:
         print(f"\n   Build vermelho depois do item ({len(vermelhos)}):")
         for ident, lateral, motivo in vermelhos:

@@ -223,7 +223,7 @@ There is exactly one writer of the `single-track` queue, and it is
 keeps doing what only it can do — read the cards, hunt evidence in the code,
 route the four buckets, propose the order — and hands that result over. What
 disappears is the duplicated writer, not the order: before this step, the same
-rules lived in this file's prose *and* in `common/bin/cepa-plan`, and prose
+rules lived in this file's prose *and* in `common`'s `cepa-plan`, and prose
 erodes without a single test going red.
 
 **Write the handoff** — the classification, in the execution order the user
@@ -269,10 +269,13 @@ burying an unanswered question inside a queue that reads as decided.
 the writer stamps a `PARCIAL` note on the plan's `source` line, so a queue
 covering 15 of 27 cards can never be read later as the whole board.
 
-Then run the writer:
+Then run the writer (`common/bin/cepa-plan` is a relative path that only
+exists inside the `cepa` repo; this shim at `${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan`
+finds the real `cepa-plan` from `common`, in the repo or the plugin cache, so
+it also works from a host project like WEGO):
 
 ```
-python3 common/bin/cepa-plan write <project_key> \
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" write <project_key> \
   --from-triage <programs>/<project_key>/triagem-<YYYY-MM-DD>.json \
   --quando <YYYY-MM-DD> --repo .
 ```
@@ -306,7 +309,7 @@ A single summary:
 
 - **Default `--max 15`.** Each card costs an evidence search; raise deliberately.
 - **The order and its `why` are outputs, not chat.** A triage run that transitions cards but never reaches step 9 has done half the job: the queue moved and the reasoning evaporated. Under `--max`, the queue holds only the cards actually classified — `remaining_in_column` is what makes the writer say so, and leaving it out is how a truncated plan comes to read as the whole board.
-- **Triage never writes `plan.yaml`.** It writes the handoff and calls `common/bin/cepa-plan write --from-triage`, the single writer of the queue. Writing the YAML here — by hand or by a second set of rules — is what this step exists to stop: two writers drift, and the one made of prose drifts without a test going red.
+- **Triage never writes `plan.yaml`.** It writes the handoff and calls `cepa-plan write --from-triage` (via the `${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan` shim, which resolves to `common`'s real `cepa-plan`), the single writer of the queue. Writing the YAML here — by hand or by a second set of rules — is what this step exists to stop: two writers drift, and the one made of prose drifts without a test going red.
 - **Read-heavy, write-late.** No Jira write happens before the step-7 confirmation (and none at all under `--dry-run`).
 - **In Review here is a candidacy, not a verdict.** Triage routes by code evidence; `/board-flow:prove` is what proves load-bearing behavior at the surface. Never report a triaged-to-Review card as "done."
 - **PARTIAL never rounds up to IMPLEMENTED.** If a single acceptance criterion is unmet, the card is not done — bucket it READY or NEEDS-DECISION and name the gap.

@@ -1,0 +1,73 @@
+key: until-git-quebrado-vira-troca-de-branch
+status: complete
+diff_range: c6ba8eb..e210106
+criteria:
+  - id: AC1
+    descricao: >-
+      Quando o git nao responde na worktree da noite, o run NAO encerra como
+      `branch-mudou`; o erro de `branch_atual` (agora `le_branch`) e exposto, e
+      existe um motivo proprio `git-quebrado` com a mensagem do git.
+    altitude: cli
+    surface: "common/bin/cepa-until (subprocesso end-to-end, laco principal)"
+    test: tests/test_cepa_until_git_quebrado.py::test_reparo_impossivel_para_como_git_quebrado_e_nao_branch_mudou
+    layer: cli-e2e (fake claude no PATH, roda o binario real)
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until_git_quebrado.py -> "cepa-until — git
+      quebrado na worktree da noite" ... "✓ tudo verde" (exit 0); os 6 checks
+      do 2º teste, incluindo "o motivo é `git-quebrado`" e "o detalhe não
+      acusa troca de branch", ok
+    status: complete
+    gap: null
+  - id: AC2
+    descricao: >-
+      Com o diretorio da worktree presente, o supervisor tenta reparar a
+      ligacao a partir do clone e segue o run se a branch voltar a ser a da
+      largada.
+    altitude: cli
+    surface: "common/bin/cepa-until (funcao repara_ligacao chamada do laco principal)"
+    test: tests/test_cepa_until_git_quebrado.py::test_ligacao_apagada_e_refeita_e_a_noite_segue
+    layer: cli-e2e (fake claude no PATH, roda o binario real)
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until_git_quebrado.py -> "✓ tudo verde" (exit
+      0); os 7 checks do 1º teste, incluindo "o registro diz que reparou e
+      qual erro o git deu", "o clone voltou a listar a worktree da noite" e "o
+      2º item roda depois da ligação apagada", ok
+    nota: >-
+      A implementacao NAO usa `git worktree repair` (o proprio card documenta,
+      em BACKLOG.md e no comentario de repara_ligacao, que ele recusa sem a
+      pasta: "unable to locate repository", conferido no git 2.55). Em vez
+      disso recria `.git/worktrees/<nome>` a mao (HEAD, commondir, gitdir) e
+      roda `git reset`. Isso diverge da letra do item 2 do Esboço de solução
+      ("tenta `git worktree repair`"), mas cumpre a intencao (reparar a
+      ligacao e seguir o run) e o proprio backlog ja registra a divergencia
+      como decisao tomada, nao como pendencia. Julgamento: aceito como
+      atendendo a intencao; fica registrado aqui para o humano revisar se
+      quiser.
+    status: complete
+    gap: null
+  - id: AC3
+    descricao: >-
+      Teste: worktree com `.git/worktrees/<nome>` removido espera
+      `git-quebrado` (nao `branch-mudou`); com reparo possivel espera o run
+      seguir.
+    altitude: cli
+    surface: "tests/test_cepa_until_git_quebrado.py (novo arquivo, roda o cepa-until real com fake claude)"
+    test: tests/test_cepa_until_git_quebrado.py (ambos os testes)
+    layer: cli-e2e
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until_git_quebrado.py -> "✓ tudo verde" (exit
+      0), 13 checks no total, 0 falhas
+    status: complete
+    gap: null
+regressao:
+  - test: tests/test_cepa_until.py
+    run: "python3 tests/test_cepa_until.py -> ✓ tudo verde (exit 0)"
+  - test: tests/test_cepa_until_branch_da_noite.py
+    run: "python3 tests/test_cepa_until_branch_da_noite.py -> ✓ tudo verde (exit 0)"
+  - test: tests/test_cepa_until_adversarial.py
+    run: "python3 tests/test_cepa_until_adversarial.py -> ✓ tudo verde (exit 0)"
+fora_de_escopo:
+  - item 3 do Esboço de solução (investigar quem apaga .git/worktrees) segue aberto no BACKLOG.md, como o proprio card marca; nao e criterio de aceite deste plano.

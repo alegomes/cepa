@@ -1,0 +1,117 @@
+schema_version: 2
+card: prova-descartavel-caminho-literal
+verdict: proven
+reviewed_at: 2026-09-27T13:05:00-03:00
+base_commit: 06eee35
+head_commit: 83b08fa
+issue_type: Bug
+repo_kind: harness   # plugins do Claude Code / hooks Python, sem Maven/Quarkus — perturbação + re-run do teste é o mecanismo, não PIT
+scope:
+  changed_classes:
+    - class: "common/hooks/_templates/bash-path-lock.py.tmpl (_Ctx.dirs_desconhecidos, registro em _h_git para `git -C <desconhecido>`, registro em _classify_segment para `cd`/`pushd` sem valor conhecido, _dica_dir_desconhecido, _mensagem recebendo dirs_desconhecidos, main() repassando ctx.dirs_desconhecidos)"
+      module: hooks
+      external_observable: true   # superfície é o próprio hook rodando como subprocesso PreToolUse do Bash, chamado com o payload JSON real (tests/test_bash_path_lock_exec.py:run() invoca via subprocess.run e lê stdout/stderr/rc)
+      substituted_by_double: null
+    - class: "build-hex/hooks/bash-path-lock.py, build-team/hooks/bash-path-lock.py, design/hooks/bash-path-lock.py, discovery/hooks/bash-path-lock.py, docs-topology/hooks/bash-path-lock.py, marketing/hooks/bash-path-lock.py (as 6 cópias geradas por bin/gen-locks.py --write a partir do molde acima)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "build-hex/agents/proof-reviewer.md, common/agents/ui-proof-reviewer.md (regra nova: endereçar a worktree descartável pelo caminho literal em toda chamada, nunca python3 -c para contornar)"
+      module: agents
+      external_observable: true   # texto lido pelo próprio agente de prova ao operar; o teste novo lê o arquivo do disco e cobra as frases-chave
+      substituted_by_double: null
+    - class: "tests/test_bash_path_lock_exec.py (test_dica_diretorio_nao_resolvido, test_agentes_de_prova_enderecam_worktree_por_caminho_literal) — teste-only, sem mudança de produção"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); o cobridor é um subprocesso Python (bash-path-lock.py) recebendo o payload JSON real de uma chamada Bash simulada via subprocess.run — perturbação de cada ramo mudado + re-run do processo é o mecanismo aplicável, não PIT."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida confirmado no HEAD (83b08fa), numa worktree descartável (git worktree add --detach 83b08fa /tmp/proof-prova-literal, endereçada pelo caminho literal em toda chamada seguinte): python3 tests/test_bash_path_lock_exec.py -> 'tudo verde em 6 cópias', exit 0, 1232 checks 'ok'."
+        - "PERTURBAÇÃO 1 (load-bearing, RED) -- no molde, comentada a chamada a `_dica_dir_desconhecido` dentro de `_mensagem` (o `if dirs_desconhecidos: linhas += _dica_dir_desconhecido(...)` vira no-op); regeradas as 6 cópias com `python3 bin/gen-locks.py --write` dentro da worktree descartável: 24 falhas em 6 cópias, exit 1 -- as negações continuam (o cadeado ainda nega `cd \"$VAR\"` e `git -C \"$VAR\"`), mas a dica que nomeia a variável e sugere o caminho literal desaparece da mensagem. Restaurada com `git checkout 83b08fa -- <7 arquivos>`, GREEN reconfirmado (1232 ok, exit 0)."
+        - "PERTURBAÇÃO 2 (load-bearing, RED) -- no molde, removido o `ctx.dirs_desconhecidos.append(nf[0].raw)` dentro do ramo `cd`/`pushd` de `_classify_segment` (ficou só o registro no `git -C`); regeradas as 6 cópias: 12 falhas em 6 cópias, exit 1 -- `cd \"$VAR\" && git checkout` continua negado (balde 1, escrita fora da pista), mas sem nomear a variável nem sugerir o caminho literal, porque o `cd` parou de alimentar `dirs_desconhecidos`. Restaurada, GREEN reconfirmado (exit 0)."
+        - "PERTURBAÇÃO 3 (load-bearing, RED) -- removido do texto de build-hex/agents/proof-reviewer.md o parágrafo 'Address that worktree by its literal path, in every call.' (628 caracteres, do marcador até o próximo bullet): 1 falha, exit 1 ('build-hex/agents/proof-reviewer.md manda endereçar a worktree pelo caminho literal'). Restaurado com `git checkout 83b08fa -- build-hex/agents/proof-reviewer.md`, GREEN reconfirmado (exit 0)."
+      run: >-
+        Worktree descartável /tmp/proof-prova-literal (git -C
+        /Users/alegomes/cepa-worktrees/cepa-until-2026-09-27-1213 worktree
+        add --detach /tmp/proof-prova-literal 83b08fa), endereçada pelo
+        caminho literal em toda chamada Bash (cd /tmp/proof-prova-literal &&
+        ...), nunca por variável de chamada anterior nem por python3 -c para
+        contornar negação. Cada perturbação foi uma edição direta do arquivo
+        (heredoc python3 fazendo substituição de texto exato, ou sed com
+        marcador de comentário), seguida de `python3 tests/test_bash_path_lock_exec.py`
+        em chamada separada, restauração com `git checkout 83b08fa -- <arquivo>`
+        e reconfirmação de GREEN antes da perturbação seguinte. Ao final,
+        `git status --short` limpo e `git worktree remove --force
+        /tmp/proof-prova-literal` executado a partir da árvore principal.
+        Árvore principal (/Users/alegomes/cepa-worktrees/cepa-until-2026-09-27-1213)
+        nunca tocada; nenhum arquivo fora de docs/proof/ foi escrito lá.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      Leitura estrutural (não há coverage tool wired neste repo Python); as
+      três linhas de comportamento mudadas no diff completo (registro em
+      dirs_desconhecidos no `cd`/`pushd`, registro em dirs_desconhecidos no
+      `git -C`, e a montagem da dica em `_mensagem` via
+      `_dica_dir_desconhecido`) são todas EXECUTADAS e, com os testes
+      atuais, TODAS mudam o resultado do processo real quando removidas
+      (RED nas perturbações 1 e 2 de l3) -- nenhuma é código morto. O texto
+      novo dos dois agentes (proof-reviewer.md, ui-proof-reviewer.md) também
+      é coberto: a perturbação 3 mostrou que remover o parágrafo de
+      proof-reviewer.md derruba o teste que lê o arquivo do disco; o mesmo
+      teste cobre ui-proof-reviewer.md com a mesma asserção (não perturbado
+      isoladamente porque o mecanismo -- leitura de string fixa do arquivo --
+      é idêntico ao já provado RED em proof-reviewer.md).
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      O hook não abre superfície de entrada HTTP/anônima: roda como
+      subprocesso local invocado pelo próprio Claude Code (ou, nos testes,
+      simulado via subprocess.run), recebendo no stdin/argv o payload que o
+      harness monta a partir da chamada de ferramenta do agente -- não há
+      usuário externo desconhecido compondo esse payload. Este repo não tem
+      módulo equivalente a api-rest (é Python, não Maven/Quarkus), então a
+      condição estrutural do guard (nenhuma classe mudada em módulo com
+      superfície de entrada) vale trivialmente.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: >-
+      No mesmo worktree descartável, com `git checkout 06eee35 --
+      common/hooks/_templates/bash-path-lock.py.tmpl build-hex/hooks/bash-path-lock.py
+      build-team/hooks/bash-path-lock.py design/hooks/bash-path-lock.py
+      discovery/hooks/bash-path-lock.py docs-topology/hooks/bash-path-lock.py
+      marketing/hooks/bash-path-lock.py build-hex/agents/proof-reviewer.md
+      common/agents/ui-proof-reviewer.md` (hook e agentes AINDA NÃO
+      corrigidos -- o bug do card: negação por diretório não resolvido não
+      explicava a causa nem sugeria caminho literal, e os agentes não tinham
+      a regra) e o arquivo de teste do HEAD trazido por cima (`git checkout
+      83b08fa -- tests/test_bash_path_lock_exec.py`), rodei
+      `python3 tests/test_bash_path_lock_exec.py`: 26 falhas em 6 cópias,
+      exit 1 -- incluindo os dois testes nomeados no card
+      (test_dica_diretorio_nao_resolvido e
+      test_agentes_de_prova_enderecam_worktree_por_caminho_literal, ambos com
+      múltiplas asserções por cópia/agente). No HEAD (83b08fa), o mesmo
+      arquivo de teste dá 'tudo verde em 6 cópias', exit 0.
+routing_reason: >-
+  As três linhas de comportamento mudadas no diff completo (base 06eee35 ->
+  head 83b08fa: registro de dirs_desconhecidos no cd/pushd, registro no
+  git -C, e a montagem da dica em _mensagem) morrem sob perturbação isolada
+  dentro de uma worktree descartável endereçada só por caminho literal, como
+  o próprio card exige. O texto novo dos dois agentes de prova também morre
+  sob perturbação (parágrafo removido de proof-reviewer.md -> teste vermelho).
+  A regressão do bug está vermelha na base (26 falhas em 06eee35, incluindo
+  os dois testes nomeados no card) e verde no head. l4 é n/a porque o hook
+  não abre superfície de entrada externa (não é api-rest); l2 é pass porque
+  as linhas mudadas rodam e mudam o resultado real, confirmado nas mesmas
+  perturbações de l3. Nenhum nível está assumed/skipped/gap/survived --
+  PROVEN.

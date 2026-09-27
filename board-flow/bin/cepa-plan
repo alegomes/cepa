@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""cepa-plan (board-flow) — atalho que acha o `cepa-plan` de verdade, do common.
+
+Existe porque `common/bin/cepa-plan` é um caminho RELATIVO, e board-flow é um
+plugin instalado dentro de outro repo (ex.: WEGO) que nunca teve — nem precisa
+ter — um diretório `common/` na raiz. `/board-flow:capture`, `/drain` e
+`/triage` chamavam `python3 common/bin/cepa-plan ...` direto: dentro do
+próprio repo cepa o caminho existe por acidente de layout, mas em qualquer
+outro projeto o arquivo simplesmente não está lá, o comando falha calado
+(ou nem roda) e o card nasce fora da fila sem nenhum aviso — o bug que este
+shim fecha.
+
+Este arquivo não reimplementa nada do cepa-plan: acha o script real do
+`common` (repo ou cache de plugin) e faz `exec` nele, repassando todo o
+argv e preservando o código de saída — quem lê a saída não percebe que
+passou por aqui.
+
+Layouts considerados, na ordem (mesmo padrão de
+`maestro/bin/maestro-gatekeeper::_carregar_shellscan`, que resolve o
+`common` de dentro do `maestro` do mesmo jeito):
+
+  Repo:   <repo>/board-flow/bin/cepa-plan  → <repo>/common/bin/cepa-plan
+  Cache:  <mkt>/board-flow/<ver>/bin/      → <mkt>/common/<ver>/bin/cepa-plan
+          (posso encontrar VÁRIAS versões do common instaladas ao mesmo
+          tempo — pego a mais alta por comparação numérica de tupla, não
+          lexical: "2.10.0" tem que vencer "2.9.0", e string compara errado)
+  PATH:   `cepa-plan` em algum diretório do PATH (pulando este próprio
+          arquivo, para não entrar em loop se ele também se chamar
+          `cepa-plan` e estiver no PATH).
+
+Nenhum candidato encontrado → mensagem em stderr nomeando cada caminho
+tentado e como resolver, saída 127 (comando não encontrado).
+"""
+import os
+import re
+import shutil
+import sys
+from pathlib import Path
+
+
+def _versao_numerica(nome):
+    """"2.10.0" -> (2, 10, 0); usado para achar a versão mais alta do common
+    no cache de plugins. Comparação lexical erraria "2.10.0" < "2.9.0"."""
+    try:
+        return tuple(int(x) for x in re.findall(r"\d+", nome))
+    except Exception:
+        return (0,)
+
+
+def _candidato_repo(aqui):
+    """aqui = <repo>/board-flow/bin/ -> <repo>/common/bin/cepa-plan.
+
+    aqui.parent = board-flow, aqui.parent.parent = <repo>.
+    """
+    return aqui.parent.parent / "common" / "bin" / "cepa-plan"
+
+
+def _candidato_cache(aqui):
+    """aqui = <mkt>/board-flow/<ver>/bin/ -> <mkt>/common/<ver-mais-alta>/bin/cepa-plan.
+
+    aqui.parent = <ver>, aqui.parent.parent = board-flow, aqui.parent.parent.parent
+    = <mkt> (o cache do marketplace em ~/.claude/plugins/cache/<mkt>/).
+    """
+    mkt = aqui.parent.parent.parent
+    versoes = sorted(
+        (d for d in (mkt / "common").glob("*") if d.is_dir()),
+        key=lambda d: _versao_numerica(d.name),
+    )
+    if versoes:
+        return versoes[-1] / "bin" / "cepa-plan"
+    return None
+
+
+def _candidato_path(self_arquivo):
+    """`cepa-plan` em algum PATH, pulando este próprio arquivo."""
+    achado = shutil.which("cepa-plan")
+    if achado and Path(achado).resolve() != self_arquivo:
+        return Path(achado)
+    return None
+
+
+def main():
+    self_arquivo = Path(__file__).resolve()
+    aqui = self_arquivo.parent  # o diretório bin/ que contém este shim
+
+    tentados = []
+
+    repo = _candidato_repo(aqui)
+    tentados.append(str(repo))
+    if repo.is_file():
+        real = repo
+    else:
+        cache = _candidato_cache(aqui)
+        if cache is not None:
+            tentados.append(str(cache))
+        real = cache if (cache is not None and cache.is_file()) else None
+
+        if real is None:
+            via_path = _candidato_path(self_arquivo)
+            tentados.append("cepa-plan no PATH")
+            real = via_path
+
+    if real is None:
+        sys.stderr.write(
+            "cepa-plan (do common) não encontrado. Caminhos tentados:\n"
+            + "\n".join(f"  - {t}" for t in tentados)
+            + "\n\nComo resolver: instale o plugin `common` do marketplace cepa "
+            "(ele traz o `bin/cepa-plan` real), ou garanta que `cepa-plan` "
+            "esteja no PATH.\n"
+        )
+        sys.exit(127)
+
+    os.execv(sys.executable, [sys.executable, str(real), *sys.argv[1:]])
+
+
+if __name__ == "__main__":
+    main()

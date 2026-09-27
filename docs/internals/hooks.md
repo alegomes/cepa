@@ -182,12 +182,40 @@ reincidiu — daí a barreira ser mecânica e bloquear, não avisar.
 3. Por segmento (split em ; | && ||): achar uma invocação REAL do Maven.
    Prefixo de env (`FOO=bar ./mvnw`) e wrapper (`timeout 600 mvn`) contam;
    `echo`/`grep`/`cat` + amigos não — ali o `mvn` é texto citado.
-4. BLOCK se houver `-pl`/`--projects` (inclusive `-pl=x`) sem `-am`/
-   `--also-make`. `-amd`/`--also-make-dependents` NÃO conta: constrói os
-   dependentes, não as dependências, então o buraco continua aberto.
+4. `-pl`/`--projects` (inclusive `-pl=x`) sem `-am`/`--also-make` é candidato a
+   bloqueio, coletado em TODOS os segmentos do comando (não só o primeiro):
+   `./mvnw -pl a clean && ./mvnw -pl b test` tem dois ofensores. `-amd`/
+   `--also-make-dependents` NÃO conta: constrói os dependentes, não as
+   dependências, então o buraco continua aberto.
+5. Três liberações automáticas (2026-09-27, docs/investigations/
+   2026-09-25-stale-e-reactor-no-wego.md seção 5), goals via `_mvnscan.py`:
+   (a) todo goal do segmento é não-compilante (`clean`/`validate`/
+   `initialize`/`dependency:*`/`help:*` — `install` fica de fora de
+   propósito) — aplicada por ofensor: com vários ofensores no comando, o guard
+   usa o PRIMEIRO que compila para as regras 5c/6, e só libera de fato quando
+   TODOS os ofensores não compilam (bug corrigido em 2026-09-27: olhar só o
+   primeiro segmento deixava um `-pl b test` que compila passar escondido
+   atrás de um `-pl a clean` inofensivo); (b) `.claude/last-root-install.json`
+   (gravado por `capture-build-result.py` a cada Maven SUCCESS que roda
+   `install` sobre o reator inteiro — sem `-pl`, sem `-rf`/`--resume-from`, e
+   com o pom EFETIVO — `-f`/`--file`, se presente, resolvido relativo ao build
+   dir; sem `-f`, o pom.xml do próprio build dir — apontando para o pom.xml da
+   RAIZ DA SESSÃO, não de um submódulo. `cd domain && ./mvnw install` sem
+   `-f` nenhum NÃO grava: o pom efetivo é o de `domain`, não o da sessão, bug
+   reproduzido pelo pair-reviewer em 2026-09-27) existe na raiz da sessão e
+   nenhum arquivo-fonte do reator (`_buildsource.is_source`) tem mtime posterior ao
+   `at` gravado ali — fail closed se o arquivo faltar/for ilegível; (c) goal
+   `quarkus:*` nunca ganha a sugestão de `-am` (quebraria o prefixo do plugin)
+   — sem install fresco, a mensagem manda instalar a raiz e repetir o mesmo
+   comando.
+6. BLOCK se nenhuma liberação valeu. `T.emit("maven_reactor_allow", ...)` nas
+   liberações 5a/5b; `T.emit("maven_reactor_block", ...)` com
+   `reason="pl-without-am"` (genérico) ou `"quarkus-without-fresh-install"`.
 ```
 
-Testes: `tests/test_maven_reactor_guard.py` (25 casos, sem deps).
+Testes: `tests/test_maven_reactor_guard.py` (sem deps) e
+`tests/test_capture_build_result_root_install.py` (marcador de install da
+raiz).
 
 ### gate-advance.py (PreToolUse, matcher `Bash`)
 
@@ -503,6 +531,19 @@ either `run_in_background: true` or shell-level detachment (trailing `&`,
 `nohup`, `disown`, `setsid`) outside quotes, and blocks polling it back via
 the `Monitor` tool. The `Stop` registration catches a session that ends
 mid-build.
+
+Exception since 2026-09-27: a build that declares its own end
+(`...; echo EXIT=$? >> <file>`) may go to the background, because a build
+longer than 10 minutes has no foreground option (the Bash tool moves it to
+the background anyway). The turn must then wait for that file in the
+foreground with a loop that exits on its own before the 10-minute cap
+(`for i in $(seq 27); do grep -q EXIT= <file> && break; sleep 20; done
+# espera-ok`), repeated until `EXIT=` shows up (a full 10-minute wait is
+itself moved to the background), and `Stop` is blocked while the file
+lacks `EXIT=`. Measured the same day
+on claude 2.1.283: `claude -p` kills background tasks when the turn ends
+whatever `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` says (0, unset or 120000),
+and an armed `Monitor` does not keep the turn alive.
 
 ### reforma-gate.py (PreToolUse, matchers `Bash` and `Edit\|Write\|MultiEdit\|NotebookEdit`)
 

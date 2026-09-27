@@ -25,6 +25,11 @@ What does NOT count:
   - Test sources (changes there don't invalidate "is the production code
     working" — they extend coverage. We could gate this differently if
     needed; for v1, conservative skip.)
+
+The heuristic itself (`is_source`, the extension/manifest/exclusion lists)
+lives in `_buildsource.py` — shared with `maven-reactor-guard.py`, which asks
+the same question ("does this path count as source?") over a timestamp
+instead of an Edit/Write event. See that module's docstring for why.
 """
 
 import json
@@ -35,65 +40,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _wtlib as L  # noqa: E402
 import _shellscan as S  # noqa: E402
+import _buildsource as B  # noqa: E402
 
 
-
-SOURCE_EXTENSIONS = {
-    # JVM
-    ".java", ".kt", ".kts", ".scala", ".groovy", ".clj",
-    # JavaScript / TypeScript
-    ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx",
-    # Python
-    ".py", ".pyx",
-    # Go / Rust
-    ".go", ".rs",
-    # Ruby / PHP / C# / Swift / ObjC
-    ".rb", ".php", ".cs", ".swift", ".m", ".mm",
-    # C / C++
-    ".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".hxx",
-    # Elixir
-    ".ex", ".exs",
-    # SQL (treated as source — migrations affect runtime behavior)
-    ".sql",
-}
-
-BUILD_FILES = {
-    "pom.xml",
-    "build.gradle", "build.gradle.kts",
-    "settings.gradle", "settings.gradle.kts",
-    "package.json", "package-lock.json",
-    "yarn.lock", "pnpm-lock.yaml",
-    "Cargo.toml", "Cargo.lock",
-    "go.mod", "go.sum",
-    "requirements.txt", "Pipfile", "Pipfile.lock",
-    "pyproject.toml", "poetry.lock",
-    "Gemfile", "Gemfile.lock",
-}
-
-EXCLUDED_PATH_FRAGMENTS = (
-    ".claude/",
-    "docs/",
-    "/spec/", "/specs/",
-    "/src/test/", "/test/", "/tests/", "/__tests__/",
-)
-
-
-def is_source(file_path: str) -> bool:
-    """Heuristic: does editing this file invalidate 'is the build green?'."""
-    p = Path(file_path)
-    posix = str(p).replace(os.sep, "/")
-
-    for fragment in EXCLUDED_PATH_FRAGMENTS:
-        if fragment in posix:
-            return False
-
-    if p.name in BUILD_FILES:
-        return True
-
-    if p.suffix.lower() in SOURCE_EXTENSIONS:
-        return True
-
-    return False
+is_source = B.is_source
 
 
 def main():

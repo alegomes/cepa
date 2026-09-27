@@ -71,6 +71,27 @@ vez de morrer aos 10 minutos. Isso só é seguro porque estas duas portas novas
 barram o segundo plano que nunca termina — sem elas, esperar sem teto trocaria
 um corte de 10 min pelo limite do item inteiro.
 
+BUILD DE MAIS DE 10 MIN (27/09/2026)
+------------------------------------
+Barrar todo build em segundo plano deixava o build de mais de 10 min sem
+saída: o Bash o empurra para o segundo plano aos 10 min de qualquer jeito, e
+no run WEGO de 25/09 o WEGO-2334 travou com `EXIT=124` e virou tarefa do dono.
+Medido em 27/09 (claude 2.1.283): a espera que o parágrafo acima atribui ao
+`CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` não acontece. O `claude -p` sai no fim
+do turno e mata o segundo plano com o teto em 0, ausente ou 120000, e um
+`Monitor` armado não segura o turno (o agente parou dizendo "a notificação vai
+me reinvocar", e nada foi colhido).
+
+Então o segundo plano é liberado quando o comando DECLARA O FIM
+(`...; echo EXIT=$? >> <arquivo>`), e a espera é em primeiro plano, no mesmo
+turno, num laço que sai sozinho antes dos 10 min (`for i in $(seq 27); do
+grep -q EXIT= <arquivo> && break; sleep 20; done # espera-ok`), repetido até o
+`EXIT=`. Uma espera de 10 min cheios é empurrada para o segundo plano como o
+próprio build: no experimento de 27/09 foi isso que fez o agente parar
+"aguardando a notificação", e só a porta 3 o segurou. A porta 3 barra parar
+enquanto esse arquivo não tem `EXIT=`. Sem fim declarado,
+o bloqueio continua como antes.
+
 ESCAPE HATCH: `# fundo-ok` no comando (Bash e Monitor).
 
 Exit codes:
@@ -149,7 +170,28 @@ def bloqueia(command: str, background: bool, ambiente=None):
         return None
     if not _BUILD.search(_unquoted_view(command)):
         return None
+    if marca_de_fim(command):
+        # Build com fim declarado: o turno colhe esperando o arquivo em
+        # primeiro plano, e a porta 3 (Stop) barra parar antes do `EXIT=`.
+        return None
     return desanexa(command, background)
+
+
+# Build que passa de 10 min não cabe em primeiro plano: o Bash o empurra para
+# o segundo plano aos 10 min de qualquer jeito. O jeito colhível é o comando
+# gravar o próprio fim num arquivo (`...; echo EXIT=$? >> /tmp/x.fim`) e o
+# turno esperar esse arquivo em primeiro plano. Medido em 27/09/2026 (claude
+# 2.1.283): o `claude -p` NÃO espera tarefa de segundo plano ao fim do turno,
+# com `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` em 0, ausente ou 120000 (saiu em
+# 15s e matou o build nos três), e um `Monitor` armado não segura o turno.
+_MARCA_FIM = re.compile(
+    r"""EXIT=\$\?["']?\s*>{1,2}\s*["']?([^\s;&|"'()`<>]+)""")
+
+
+def marca_de_fim(command: str):
+    """O arquivo em que o comando grava `EXIT=<código>` ao terminar, ou None."""
+    m = _MARCA_FIM.search(command or "")
+    return m.group(1) if m else None
 
 
 # ── porta 2: o vigia que não termina (Monitor) ──────────────────────────────
@@ -203,6 +245,7 @@ def pendencias(transcript_path):
     payload do Stop não lista tarefa de segundo plano nenhuma.
     """
     despachados, respondidos, armados, parados = {}, set(), {}, set()
+    marcas = {}
     try:
         with open(transcript_path, encoding="utf-8", errors="replace") as f:
             for bruta in f:
@@ -215,6 +258,13 @@ def pendencias(transcript_path):
                     continue
                 for b in _blocos(linha):
                     tipo = b.get("type")
+                    if tipo == "tool_use" and b.get("name") == "Bash":
+                        ent = b.get("input") or {}
+                        cmd = ent.get("command") or ""
+                        arq = marca_de_fim(cmd)
+                        if arq and _BUILD.search(_unquoted_view(cmd)) and \
+                                desanexa(cmd, bool(ent.get("run_in_background"))):
+                            marcas[arq] = (ent.get("description") or cmd)[:80]
                     if tipo == "tool_use" and b.get("name") in _DESPACHO:
                         rotulo = (b.get("input") or {}).get("description") or b.get("name")
                         despachados[b.get("id")] = str(rotulo)[:80]
@@ -230,10 +280,21 @@ def pendencias(transcript_path):
                         for m in _VIGIA_PARADO.finditer(texto):
                             parados.add(m.group(1))
     except OSError:
-        return [], []
+        return [], [], []
     subagentes = [r for i, r in despachados.items() if i not in respondidos]
     vigias = [v for v in armados if v not in parados]
-    return subagentes, vigias
+    builds = [f"{rotulo} (sem `EXIT=` em {arq})"
+              for arq, rotulo in marcas.items() if not _terminou(arq)]
+    return subagentes, vigias, builds
+
+
+def _terminou(arquivo):
+    try:
+        with open(os.path.expanduser(arquivo), encoding="utf-8",
+                  errors="replace") as f:
+            return "EXIT=" in f.read()
+    except OSError:
+        return False
 
 
 def motivo_da_parada(payload, ambiente=None):
@@ -249,8 +310,8 @@ def motivo_da_parada(payload, ambiente=None):
     caminho = payload.get("transcript_path")
     if not caminho:
         return None
-    subagentes, vigias = pendencias(caminho)
-    if not subagentes and not vigias:
+    subagentes, vigias, builds = pendencias(caminho)
+    if not subagentes and not vigias and not builds:
         return None
     partes = []
     if subagentes:
@@ -258,6 +319,15 @@ def motivo_da_parada(payload, ambiente=None):
                       "transcript: " + ", ".join(subagentes[:5]))
     if vigias:
         partes.append("vigia(s) do Monitor ainda armado(s): " + ", ".join(vigias[:5]))
+    if builds:
+        partes.append("build(s) em segundo plano ainda sem fim: "
+                      + ", ".join(builds[:5]) + ". Espere o arquivo em "
+                      "PRIMEIRO PLANO com um laço que sai antes dos 10 min: "
+                      "`for i in $(seq 27); do grep -q EXIT= <arquivo> && "
+                      "break; sleep 20; done # espera-ok` (timeout 590000), "
+                      "e repita até aparecer o `EXIT=`. Espera de 10 min ou "
+                      "mais é empurrada para o segundo plano e morre com o "
+                      "turno")
     return (
         "[no-background-build] Você está numa janela do `cepa-until` e NÃO HÁ "
         "TURNO SEGUINTE: parar agora mata o processo com trabalho por colher.\n"
@@ -346,9 +416,21 @@ def main():
         "       `cepa-plan finish <fila> <id> --status blocked --evidence`\n"
         "       \"build disparado e não colhido: <comando>, log em <caminho>\".\n"
         "       Um item com desfecho volta sabendo onde parou.\n"
-        "    3. Se o comando NÃO produz veredito (subir servidor, serviço de\n"
+        "    3. Se o build passa de 10 min (o Bash o empurraria para o segundo\n"
+        "       plano de qualquer jeito), declare o fim e espere em primeiro\n"
+        "       plano, no MESMO turno:\n"
+        "         <build> > /tmp/b.log 2>&1; echo EXIT=$? >> /tmp/b.fim\n"
+        "       em segundo plano, e depois, com timeout 590000:\n"
+        "         for i in $(seq 27); do grep -q EXIT= /tmp/b.fim && break;\n"
+        "           sleep 20; done # espera-ok\n"
+        "       repetindo até o `EXIT=`. O laço sai antes dos 10 min de\n"
+        "       propósito: espera mais longa é empurrada para o segundo plano\n"
+        "       como o build. Um `Monitor` NÃO serve: ele não segura\n"
+        "       o turno, e o `claude -p` mata o segundo plano quando o turno\n"
+        "       acaba. Parar antes do `EXIT=` é barrado na parada.\n"
+        "    4. Se o comando NÃO produz veredito (subir servidor, serviço de\n"
         "       apoio), acrescente `# fundo-ok`.\n\n"
-        "  A opção 3 é uma afirmação sua de que ninguém precisa ler a saída.",
+        "  A opção 4 é uma afirmação sua de que ninguém precisa ler a saída.",
         file=sys.stderr,
     )
     sys.exit(2)

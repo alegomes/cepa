@@ -445,6 +445,68 @@ def test_modo_sombra_e_telemetria():
               rc == 0 and len(ev) == 1, str(eventos())[-300:])
 
 
+def test_dica_diretorio_nao_resolvido():
+    """Worktree descartável em duas chamadas: a negação diz por que e o que usar.
+
+    Caso de 2026-09-26: o agente de prova cria a worktree numa chamada e usa
+    `cd "$WT" && git checkout ...` na seguinte. O cadeado lê cada chamada
+    sozinha; `$WT` não tem valor, o `cd` conta como "continua na raiz" e a
+    reversão é negada. A mensagem antiga só dizia "escrita fora da sua pista",
+    e os agentes contornavam com python3 -c (o vetor do WEGO-1936). A negação
+    continua (o cadeado não pode adivinhar o destino); o que muda é que ela
+    nomeia a variável e oferece caminho literal ou `git -C`, que passam.
+
+    Perturbação: tire a chamada a `_dica_dir_desconhecido` de `_mensagem` no
+    molde e regenere; os casos "nomeia a variável" ficam vermelhos.
+    """
+    var = "$CEPA_WT_NAO_EXISTE"
+    for hook in HOOKS:
+        topo = hook.parent.parent.name
+        agent, _lane_in, lane_out = LANES[topo]
+        at = f"{plugin_of(hook)}:{agent}"
+        proj = Path(tempfile.mkdtemp(prefix="bpl-proj-")).resolve()
+        tmp = Path(tempfile.mkdtemp(prefix="bpl-wt-")).resolve()
+        for rotulo, cmd in (
+                ("cd \"$VAR\" && git checkout",
+                 f'cd "{var}" && git checkout HEAD~1 -- {lane_out}'),
+                ("git -C \"$VAR\" checkout",
+                 f'git -C "{var}" checkout HEAD~1 -- {lane_out}')):
+            rc, err = run(hook, at, cmd, proj)
+            check(f"[{topo:13}] {rotulo}: continua negado", rc == 2, err[:200])
+            check(f"[{topo:13}] {rotulo}: nomeia a variável e a causa",
+                  f"{var} não tem valor" in err and "Cada chamada do Bash" in err,
+                  err[:600])
+            check(f"[{topo:13}] {rotulo}: sugere caminho literal e git -C",
+                  "caminho LITERAL" in err and "git -C /tmp/" in err, err[:600])
+        for rotulo, cmd in (
+                ("cd <literal> && git checkout",
+                 f"cd {tmp}/red && git checkout HEAD~1 -- {lane_out}"),
+                ("git -C <literal> checkout",
+                 f"git -C {tmp}/red checkout HEAD~1 -- {lane_out}"),
+                ("variável definida na MESMA chamada",
+                 f"WT={tmp}/red; cd \"$WT\" && git checkout HEAD~1 -- {lane_out}")):
+            rc, err = run(hook, at, cmd, proj)
+            check(f"[{topo:13}] {rotulo}: liberado", rc == 0, err[:300])
+        rc, err = run(hook, at, f"cp x {lane_out}", proj)
+        check(f"[{topo:13}] negação sem variável não ganha a dica",
+              rc == 2 and "não tem valor" not in err, err[:400])
+
+
+def test_agentes_de_prova_enderecam_worktree_por_caminho_literal():
+    """Os dois agentes de prova dizem para usar caminho literal ou git -C.
+
+    O hook só explica depois de negar; o texto do agente evita a negação.
+    Sem esta regra no agente, cada run de prova esbarra no cadeado uma vez
+    antes de acertar, e é nesse esbarrão que o python3 -c aparece.
+    """
+    for rel in ("build-hex/agents/proof-reviewer.md",
+                "common/agents/ui-proof-reviewer.md"):
+        txt = (REPO / rel).read_text(encoding="utf-8")
+        check(f"{rel} manda endereçar a worktree pelo caminho literal",
+              "by its literal path" in txt and "`git -C /tmp/" in txt
+              and "python3 -c" in txt)
+
+
 def main():
     if not HOOKS:
         print("FAIL: nenhum */hooks/bash-path-lock.py em", REPO)
@@ -453,6 +515,8 @@ def main():
     test_baldes()
     test_fora_de_escopo_continua_livre()
     test_mensagem_nomeia_balde_e_saida()
+    test_dica_diretorio_nao_resolvido()
+    test_agentes_de_prova_enderecam_worktree_por_caminho_literal()
     test_modo_sombra_e_telemetria()
     print()
     if FAILURES:

@@ -70,15 +70,16 @@ Subcomandos:
       silêncio, que é o que este documento existe para impedir.
 
   cepa-plan reconcile <nome> --board ARQUIVO [--apply] [--repo DIR] [--json]
-      A fila contra o quadro: quem fechou fora do plano, quem voltou atrás,
-      quem sumiu, e quais cards existem no quadro sem posição na fila. Era a
-      tabela em prosa do /common:next; virou código para o lote poder
-      reconciliar sem reescrever a regra — e para a regra ter teste.
+      A fila contra o quadro: quem fechou fora do plano, quem sumiu, e
+      quais cards existem no quadro sem posição na fila. Era a tabela em
+      prosa do /common:next; virou código para o lote poder reconciliar sem
+      reescrever a regra — e para a regra ter teste.
       Não fala com o Jira: quem lê o quadro é o `atlassian-expert`, e o
       resultado dele chega aqui pelo `--board`. `--apply` grava; sem ele,
       relata. NUNCA fecha um `human_pending` (só o humano fecha) e NUNCA anexa
       card que a fila não tem (posição sem `why` é a decisão que a fila guarda
-      — quem coloca é o /common:plan --from-jira).
+      — quem coloca é o /common:plan --from-jira). E NUNCA rebaixa item
+      `done` (regra R3): card que voltou atrás no quadro vira aviso.
 
   cepa-plan start <nome> <id>
       Reserva o item: `pending` → `in_progress`, e ASSINA a reserva com a
@@ -157,6 +158,9 @@ Subcomandos:
       objetos) ou por stdin com `-`.
       Exit 0 = gravado; 2 = itens inválidos; 3 = colisão de nome; 4 = o arquivo
       no disco tem itens que a lista nova não menciona (ver --on-missing).
+      `--on-missing keep` põe esses itens no fim; com `--from-triage` é a
+      triagem parcial, e é o contrário: a fila do disco fica na ordem dela e
+      os cards novos entram depois.
 
 Checagens de item — cada uma existe porque a falha correspondente já custou
 alguma coisa a alguém:
@@ -1732,7 +1736,8 @@ def reconcilia(items, board, ausentes, papel_de):
 
     Nunca fecha `human_pending` (só o humano fecha), nunca anexa card que o
     plano não tem (posição sem `why` é a decisão que a fila existe para
-    guardar) e nunca inventa papel para status que o mapa não conhece.
+    guardar), nunca inventa papel para status que o mapa não conhece e
+    nunca rebaixa item `done` (R3).
     """
     div, em_dia, avisos = [], [], []
     vistos = set()
@@ -1741,6 +1746,22 @@ def reconcilia(items, board, ausentes, papel_de):
             continue
         ident, st = str(it.get("id")), status_de(it)
         vistos.add(ident)
+        if st == "done" and (ident in ausentes or ident in board):
+            # R3 (dono, 2026-09-25): status vai do quadro para o plano e NUNCA
+            # rebaixa item `done`. Rebaixar em bounce reabriu 11 cards prontos
+            # no wego-acesso-backend. O quadro divergente vira aviso nomeado;
+            # reabrir o item é decisão do dono, pelo /common:plan.
+            bruto = "(não existe mais)" if ident in ausentes else board[ident]
+            papel = "descartado" if ident in ausentes else papel_de.get(bruto)
+            if papel in ("done", "em-revisao"):
+                em_dia.append(ident)
+            else:
+                avisos.append(
+                    f"{ident} está `done` aqui e '{bruto}' no quadro — não "
+                    "rebaixei (regra R3: status nunca rebaixa item `done`). Se "
+                    "o card reabriu de verdade, quem devolve o item à fila é o "
+                    "dono, pelo /common:plan")
+            continue
         if ident in ausentes:
             div.append({"id": ident, "de": st, "para": "dropped",
                         "board": "(não existe mais)", "leitura":
@@ -1765,13 +1786,6 @@ def reconcilia(items, board, ausentes, papel_de):
                         "leitura": f"{ident} fechou fora deste plano ({bruto}). "
                         "A rota de validação humana dele NÃO veio junto: se "
                         "havia uma, ela está perdida — só você sabe dizer"})
-        elif papel == "em-revisao" and st == "done":
-            em_dia.append(ident)
-        elif papel != "done" and st == "done":
-            div.append({"id": ident, "de": st, "para": "pending", "board": bruto,
-                        "leitura": f"{ident} voltou atrás no quadro ({bruto}) — "
-                        "bounce (UNPROVEN, reaberto). Volta a ser trabalho, e "
-                        "provavelmente o próximo"})
         elif papel in ("em-andamento", "em-revisao") and st == "pending":
             avisos.append(
                 f"{ident} está '{bruto}' no quadro e `pending` aqui — uma "
@@ -2199,16 +2213,40 @@ def cmd_write(raiz, a):
                   "Sumir com eles em silêncio apaga posição e `why` que alguém "
                   "decidiu. Inclua-os na lista, ou diga explicitamente o que "
                   "fazer: --on-missing keep (mantém no fim, sem posição "
-                  "escolhida) ou --on-missing drop (marca status: dropped).",
+                  "escolhida; com --from-triage, mantém a fila do disco na "
+                  "ordem dela e acrescenta os cards novos depois) ou "
+                  "--on-missing drop (marca status: dropped).",
                   file=sys.stderr)
             return 4
 
     fundidos, reaproveitados = funde(itens, antigos)
+    acrescentados = []
     if antigos:
         novos_ids = {str(i["id"]) for i in fundidos}
         sobras = [x for x in antigos
                   if isinstance(x, dict) and str(x.get("id")) not in novos_ids]
-        if a.on_missing == "keep":
+        if a.on_missing == "keep" and a.from_triage and sobras:
+            # Triagem PARCIAL: o repasse cobre um pedaço da coluna, então a
+            # ordem que ele propõe vale entre os cards que ele leu, não contra
+            # a fila que o dono já priorizou. Achado em quadro real
+            # (2026-09-25): 3 cards novos entravam na frente dos 5 pendentes
+            # priorizados, e esses iam para o fim. A fila do disco fica na
+            # posição dela (item que a triagem também cita é atualizado ali
+            # mesmo) e os cards novos entram DEPOIS, na ordem da triagem.
+            por_id = {str(f["id"]): f for f in fundidos}
+            ja_na_fila = []
+            for s in antigos:
+                if not isinstance(s, dict):
+                    continue
+                ident = str(s.get("id"))
+                ja_na_fila.append(por_id.pop(ident) if ident in por_id else
+                                  normaliza({**s, "why": s.get("why") or
+                                             "sem `why` registrado na fila anterior"}))
+            acrescentados = [str(f["id"]) for f in fundidos
+                             if str(f["id"]) in por_id]
+            fundidos = ja_na_fila + [f for f in fundidos
+                                     if str(f["id"]) in por_id]
+        elif a.on_missing == "keep":
             fundidos.extend(normaliza({**s, "why": s.get("why") or
                                        "sem `why` registrado na fila anterior"}
                                       ) for s in sobras)
@@ -2244,6 +2282,10 @@ def cmd_write(raiz, a):
     if reaproveitados:
         print(f"  {len(reaproveitados)} item(ns) já existiam — status e "
               f"human_pending preservados do disco: {', '.join(reaproveitados)}")
+    if acrescentados:
+        print(f"  triagem parcial: a ordem da fila do disco foi mantida; "
+              f"{len(acrescentados)} card(s) novo(s) entraram depois dela: "
+              f"{', '.join(acrescentados)}")
     if backup:
         print(f"  cópia do anterior em {backup} — comentários escritos à mão "
               f"não sobrevivem à reescrita, estão lá")

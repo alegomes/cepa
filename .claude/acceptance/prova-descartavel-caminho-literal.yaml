@@ -1,0 +1,82 @@
+key: prova-descartavel-caminho-literal
+status: complete
+verdict: COMPLETE
+diff: 06eee35..83b08fa
+audited_at: "2026-09-27"
+criteria:
+  - id: AC1
+    description: >
+      Quando o bash-path-lock nega um comando cujo cd/pushd ou git -C recebeu
+      diretório que a chamada não sabe resolver (variável de chamada
+      anterior), a mensagem nomeia a variável, explica que variável de
+      chamada anterior não existe nesta e sugere caminho literal ou
+      git -C <literal> — nas 6 cópias do hook (build-hex, build-team, design,
+      discovery, docs-topology, marketing), rodando o hook como subprocesso
+      com payload JSON no stdin.
+    altitude: cli
+    surface: >
+      */hooks/bash-path-lock.py invocado como subprocess (stdin JSON,
+      stdout/stderr, exit code) — a mesma forma como o Claude Code invoca o
+      hook em produção.
+    test: tests/test_bash_path_lock_exec.py::test_dica_diretorio_nao_resolvido
+    layer: hook-subprocess
+    status: complete
+    evidence: verified
+    run: >
+      python3 tests/test_bash_path_lock_exec.py -> exit=0; 1232 asserções
+      "ok" (0 falhas); cobre as 6 topologias (build-hex, build-team, design,
+      discovery, docs-topology, marketing) para "cd \"$VAR\" && git checkout"
+      e "git -C \"$VAR\" checkout": nega (rc==2), nomeia a variável
+      ("$CEPA_WT_NAO_EXISTE não tem valor"), explica a causa ("Cada chamada
+      do Bash é lida sozinha") e sugere caminho literal/git -C.
+    gap: null
+  - id: AC2
+    description: >
+      cd <literal> && git checkout ... -- <arquivo> e
+      git -C <literal> checkout ... fora da raiz continuam liberados
+      (exit 0); negação sem variável não ganha a dica; nenhuma decisão de
+      negar/liberar mudou.
+    altitude: cli
+    surface: mesmo subprocess do AC1, mesmas 6 cópias.
+    test: tests/test_bash_path_lock_exec.py::test_dica_diretorio_nao_resolvido
+    layer: hook-subprocess
+    status: complete
+    evidence: verified
+    run: >
+      Mesma execução do AC1 (exit=0, 1232 ok, 0 falhas). Casos "cd <literal>
+      && git checkout", "git -C <literal> checkout" e "variável definida na
+      MESMA chamada" -> rc==0 (liberado) nas 6 topologias; caso
+      "cp x <fora-da-pista>" -> rc==2 e a string "não tem valor" ausente do
+      stderr (negação sem variável não ganha a dica) nas 6 topologias.
+    gap: null
+  - id: AC3
+    description: >
+      build-hex/agents/proof-reviewer.md e common/agents/ui-proof-reviewer.md
+      instruem endereçar a worktree descartável pelo caminho literal/git -C e
+      não trocar por python3 -c.
+    altitude: domain
+    surface: >
+      Conteúdo literal dos dois arquivos de agente (texto de instrução lido
+      pelo agente, não código executável).
+    test: >
+      tests/test_bash_path_lock_exec.py::test_agentes_de_prova_enderecam_worktree_por_caminho_literal
+    layer: file-content
+    status: complete
+    evidence: verified
+    run: >
+      Mesma execução do AC1/AC2 (parte do mesmo arquivo de teste, exit=0).
+      Linhas específicas: "ok  build-hex/agents/proof-reviewer.md manda
+      endereçar a worktree pelo caminho literal" e "ok
+      common/agents/ui-proof-reviewer.md manda endereçar a worktree pelo
+      caminho literal". Confere no diff que ambos os .md ganharam o parágrafo
+      "Address that worktree by its literal path, in every call." com
+      exemplos de cd <literal>/git -C <literal> e proibição explícita de
+      python3 -c (WEGO-1936).
+    gap: null
+notes: >
+  Regra da noite respeitada: rodei python3 tests/test_bash_path_lock_exec.py
+  e python3 tests/test_lock_copies_drift.py (vizinho que confere que o molde
+  common/hooks/_templates/bash-path-lock.py.tmpl não divergiu das 6 cópias),
+  cada um em primeiro plano, sem tests/run-all.sh. Segundo:
+  python3 tests/test_lock_copies_drift.py -> exit=0, 120 asserções "ok",
+  0 falhas.

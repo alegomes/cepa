@@ -1,0 +1,44 @@
+schema_version: 2
+card: board-flow-acha-cepa-plan-fora-do-cepa
+verdict: proven
+reviewed_at: 2026-09-27T13:40:00-03:00
+base_commit: 9bf1bcb
+head_commit: c543ea0
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "board-flow/bin/cepa-plan", module: bin-shim, external_observable: true, substituted_by_double: null }
+    - { class: "board-flow/commands/capture.md", module: commands, external_observable: true, substituted_by_double: null }
+    - { class: "board-flow/commands/drain.md", module: commands, external_observable: true, substituted_by_double: null }
+    - { class: "board-flow/commands/triage.md", module: commands, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_board_flow_cepa_plan_shim.py", module: tests, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/markdown; sem pitest — perturbacao em worktree descartavel e o mecanismo universal usado aqui"
+    perturbation:
+      status: pass
+      results:
+        - "GREEN baseline em /tmp/proof-cepa-plan-2 @c543ea0 -> `python3 -m pytest tests/test_board_flow_cepa_plan_shim.py -q` = `8 passed in 0.28s` (inclui o novo test_ele_mesmo_no_path_nao_reexecuta_a_si_proprio) e `python3 tests/test_fila_unica_contratos.py` = `all green`"
+        - "PASS: versao lexical em vez de tupla numerica (_candidato_cache: key=lambda d: d.name) -> `1 failed, 7 passed` (test_layout_de_cache_pega_a_versao_mais_alta_do_common: assert 9 == 10)"
+        - "PASS: derrubar o candidato de cache (real = None direto, pula pro PATH apos repo falhar) -> `1 failed, 7 passed` (test_layout_de_cache_pega_a_versao_mais_alta_do_common: cai no cepa-plan real do PATH, erro de --keys faltando, returncode 2 != 10)"
+        - "PASS (gap da rodada anterior fechado): remover o self-skip do candidato de PATH (cepa-plan:76-78, `if achado and Path(achado).resolve() != self_arquivo` -> `if achado`) -> `1 failed, 7 passed` em 10.29s; test_ele_mesmo_no_path_nao_reexecuta_a_si_proprio (adicionado no commit c543ea0) trava em loop (shim reexecutando a si mesmo via os.execv) ate estourar o timeout de 10s do subprocess.run e falhar com TimeoutExpired -- exatamente o cenario que a rodada anterior apontou como descoberto"
+        - "PASS: trocar `sys.exit(127)` por `sys.exit(1)` -> `2 failed, 6 passed` (test_nenhum_candidato_sai_127_e_nomeia_os_caminhos_tentados: assert 1 == 127; e o novo test_ele_mesmo_no_path_nao_reexecuta_a_si_proprio tambem acusa pelo mesmo motivo)"
+        - "PASS: reverter capture.md para `python3 common/bin/cepa-plan add` -> tests/test_board_flow_cepa_plan_shim.py::test_nenhum_arquivo_do_board_flow_chama_o_caminho_relativo RED (`ainda chamam o caminho relativo: ['.../capture.md']`) e `python3 tests/test_fila_unica_contratos.py` RED (`1 failure(s): ['chama cepa-plan add <project_key> <KEY> --title']`)"
+        - "todas as perturbacoes restauradas via `cp`/`git checkout --` antes de remover o worktree; `git diff --stat` no worktree ficou vazio (so arquivos .bak nao rastreados, apagados) antes do `git worktree remove --force`"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem coverage tool no projeto (nao ha jacoco/coverage.py wired); cobertura confirmada por perturbacao -- as 5 perturbacoes distintas (versao lexical, cache removido, self-skip removido, exit code trocado, comando revertido pro caminho relativo) cobrem as 5 linhas de decisao mudadas no diff e todas viraram RED"
+  l4_adversarial_input:
+    status: n/a
+    reason: "shim so resolve caminhos de arquivo e repassa argv/exit code; nao interpreta payload externo alem de PATH/diretorio, e o diff nao toca modulo input-bearing (nao ha api-rest neste repo)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "worktree /tmp/proof-cepa-plan-base em 9bf1bcb + tests/test_board_flow_cepa_plan_shim.py trazido de c543ea0 -> `8 failed in 0.16s`, incluindo test_ele_mesmo_no_path_nao_reexecuta_a_si_proprio e test_integracao_real_chega_no_cepa_plan_de_verdade (arquivo board-flow/bin/cepa-plan nao existe em 9bf1bcb); tests/test_fila_unica_contratos.py ja existia em 9bf1bcb e ficou green nas duas pontas (checagem por substring que capture.md satisfaz em ambas as versoes, nao e o teste que guarda esta regressao especifica)"
+routing_reason: "O gap da rodada anterior (self-skip do PATH em cepa-plan:76-78 sobrevivendo a perturbacao, nenhum teste colocando o proprio shim como `cepa-plan` no PATH) foi fechado pelo commit c543ea0, que adicionou test_ele_mesmo_no_path_nao_reexecuta_a_si_proprio. Repeti as 5 perturbacoes (versao lexical, cache removido, self-skip removido, exit code trocado, comando revertido pro caminho relativo) em worktree descartavel em c543ea0: todas viraram RED. A regressao do bug esta green-at-base->red confirmada (8 failed em 9bf1bcb, 8 passed em c543ea0). Nada assumido/skipped/gap. PROVEN."

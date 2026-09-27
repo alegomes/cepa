@@ -1,0 +1,56 @@
+schema_version: 2
+card: until-build-longo-sem-trava
+verdict: proven
+reviewed_at: 2026-09-27T14:35:00-03:00
+base_commit: 3454663
+head_commit: 85848ad2b5811556835120610ead64d7c546eab0
+issue_type: Fix
+scope:
+  changed_classes:
+    - class: "common/hooks/no-background-build.py (marca_de_fim, bloqueia, pendencias, _terminou, motivo_da_parada, mensagem de bloqueio do Bash; e29eb08)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until (resume_motivo, MOTIVO_NO_RESUMO, lista travados com (id, human_pending, evidence), resumo do fim; e29eb08)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/hooks/no-background-build.py (_MARCA_FIM: classe de caracteres do nome do arquivo de EXIT= passa a excluir `()` `` ` `` `<>`, para não grudar o parêntese de fechamento do subshell no nome; 85848ad)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/e2e_build_longo_claude_p.py (script opt-in, ponta a ponta com claude -p real; não faz parte da suíte automática, não é produção; 5f0ff71)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results:
+        - "repo Python de harness, sem pitest; PIT não se aplica (fallback: perturbação universal)."
+    perturbation:
+      status: pass
+      results:
+        - "Reprova cobrindo os três hunks já provados na rodada anterior (e29eb08), reconfirmados nesta rodada por leitura do artifact anterior e por GREEN de novo em HEAD (ver abaixo); a perturbação de hoje foi focada no hunk novo (85848ad), que é o incremento real desde a última prova."
+        - "GREEN prévio, sem perturbação, em HEAD 85848ad (worktree principal, antes de qualquer perturbação): `python3 tests/test_no_background_build.py` -> 'tudo verde' (34 casos, incluindo test_parada_depois_do_exit_em_subshell_passa); `python3 tests/test_cepa_until.py` -> 'tudo verde'."
+        - "Worktree descartável /tmp/proof-bg-longo2 (git worktree add --detach HEAD 85848ad2b5811556835120610ead64d7c546eab0); removida ao fim (git worktree remove --force)."
+        - "Hunk único de 85848ad em common/hooks/no-background-build.py, linha 188, regex `_MARCA_FIM` (o padrão que extrai o nome do arquivo de EXIT= do comando de shell): revertido de `r'''EXIT=\\$\\?[\"']?\\s*>{1,2}\\s*[\"']?([^\\s;&|\"'()`<>]+)'''` para o estado anterior `r'''EXIT=\\$\\?[\"']?\\s*>{1,2}\\s*[\"']?([^\\s;&|\"']+)'''` (reintroduz `()`, crase e `<>` como caracteres válidos no nome do arquivo) -> `python3 tests/test_no_background_build.py` -> RED: exit 1, 1 falha: 'FAIL build em subshell com EXIT= gravado não barra a parada  {decision: block, reason: ...ainda sem fim: (make verify > /tmp/b.log 2>&1; echo EXIT=$? >> /var/folders/.../b.fim) & disown...}' — com a regex velha o `)` do subshell gruda no nome do arquivo e o hook procura o arquivo errado, reproduzindo o bug relatado no e2e de 27/09 (build já colhido barrado na parada). Restaurado (`git checkout HEAD -- common/hooks/no-background-build.py`)."
+        - "Pós-restauração, GREEN confirmado de novo dentro do worktree descartável: `python3 tests/test_no_background_build.py` -> 'tudo verde' (34 casos)."
+        - "Teste chama o hook real via subprocess (`subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), ...)`), sem duplo — é a superfície externa real (o contrato PreToolUse/Stop do Claude Code), não uma simulação."
+        - "Reconfirmação em HEAD (worktree principal, pós-remoção do worktree descartável): `python3 tests/test_no_background_build.py` -> 'tudo verde'; `python3 tests/test_cepa_until.py` -> 'tudo verde' (as duas suítes rodadas de novo, sem perturbação, para provar que a árvore principal ficou intacta)."
+        - "5f0ff71 (tests/e2e_build_longo_claude_p.py) não é código de produção — é um script opt-in que chama `claude -p` de verdade; NÃO foi executado nesta rodada (custa dinheiro real e ~13min por chamada). Evidência independente já existe: a execução de hoje ficou registrada em /tmp/exp-bg-longo/F.out ('claude saiu 0 em 737s (custo 0.16238200000000003)') e /tmp/exp-bg-longo/F.fim ('EXIT=0'), cenário F = build de 700s com o hook e o cepa-until reais; resultado 'ok build de mais de 10 min colhido dentro da janela'. Essa execução é evidence: assumed (rodada pela sessão anterior, não reproduzida por mim agora), citada apenas como corroboração, não como prova desta rodada."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "A linha alterada em 85848ad (regex _MARCA_FIM) é exercida por test_parada_depois_do_exit_em_subshell_passa, que foi perturbada acima e voltou RED; as linhas alteradas em e29eb08 seguem cobertas pelos três hunks já provados na rodada anterior (ver artifact anterior, git log deste arquivo). tests/e2e_build_longo_claude_p.py não altera produção (module: tests, external_observable: false), não entra nesta contagem."
+  l4_adversarial_input:
+    status: "n/a"
+    reason: "O diff (e29eb08 + 85848ad) segue alterando só um hook de linha de comando e um supervisor CLI que leem stdin JSON e um plano YAML já validados pelos próprios testes existentes; não abre superfície de entrada HTTP nem novo parser exposto a usuário externo. Nenhuma classe alterada está em módulo de entrada tipo api-rest (não há tal módulo neste repo). 5f0ff71 é só teste, não abre superfície nova."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: "n/a"
+    run: "Item não é um card Jira Bug formal (fila cepa, tipo Fix). A regressão do parêntese do subshell (relatada no e2e de 27/09, run F) foi provada load-bearing pela perturbação acima: revertendo a regex de 85848ad ao estado anterior, o teste que cobre exatamente esse cenário (test_parada_depois_do_exit_em_subshell_passa) voltou RED reproduzindo o sintoma relatado (arquivo com parêntese grudado não encontrado, parada bloqueada com build já colhido)."
+routing_reason: "Desde a última prova (PROVEN sobre 3454663..e29eb08) entraram dois commits: 5f0ff71 é só teste opt-in (não roda nesta prova, custa dinheiro; corroborado por execução já feita e registrada em /tmp/exp-bg-longo/F.out), e 85848ad é o único incremento de produção — um ajuste na classe de caracteres da regex _MARCA_FIM para não deixar o fechamento do subshell `)` grudar no nome do arquivo de EXIT=. Esse hunk foi revertido isoladamente numa worktree descartável e a reversão fez o teste que deveria acusar (test_parada_depois_do_exit_em_subshell_passa) virar RED, reproduzindo o sintoma relatado no e2e de 27/09; restaurado, a suíte voltou a GREEN, e as duas suítes (test_no_background_build.py e test_cepa_until.py) seguem verdes em HEAD, confirmando que as provas da rodada anterior continuam válidas. L4 segue n/a (o diff não abre superfície de entrada nova) e o regression-at-base não se aplica por não ser card Bug formal, mas a mesma lacuna já foi fechada pela perturbação load-bearing. PROVEN."

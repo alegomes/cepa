@@ -308,6 +308,86 @@ def test_transcript_ausente_nao_estoura():
           p.returncode == 0 and not saida, f"saiu {p.returncode}")
 
 
+# ── build longo com fim declarado (item until-build-longo-sem-trava) ────────
+# Medido em 27/09/2026: o `claude -p` mata o segundo plano ao fim do turno e o
+# `Monitor` não segura o turno. O build de mais de 10 min só é colhível gravando
+# `EXIT=` num arquivo e esperando esse arquivo em primeiro plano.
+
+LONGO = "./mvnw -B clean verify > /tmp/b.log 2>&1; echo EXIT=$? >> {fim}"
+
+
+def test_build_longo_com_fim_declarado_passa_na_janela():
+    p = roda(LONGO.format(fim="/tmp/b.fim"), background=True)
+    check("build em segundo plano que grava EXIT= num arquivo passa",
+          p.returncode == 0, f"saiu {p.returncode}: {p.stderr[:200]}")
+    p = roda(LONGO.format(fim="/tmp/b.fim") + " &")
+    check("...também desanexado no shell", p.returncode == 0,
+          f"saiu {p.returncode}: {p.stderr[:200]}")
+
+
+def test_build_longo_sem_fim_declarado_segue_bloqueado_e_ensina_a_receita():
+    p = roda("./mvnw -B clean verify > /tmp/b.log 2>&1", background=True)
+    check("sem EXIT= num arquivo, o segundo plano segue bloqueado",
+          p.returncode == 2, f"saiu {p.returncode}")
+    check("...e a recusa ensina gravar EXIT= e esperar em primeiro plano",
+          "echo EXIT=$? >>" in p.stderr and "# espera-ok" in p.stderr
+          and "Monitor` NÃO serve" in p.stderr, p.stderr[-600:])
+    check("...com um laço que sai antes dos 10 min (27 x 20s = 9 min)",
+          "seq 27" in p.stderr and "timeout 590000" in p.stderr,
+          p.stderr[-600:])
+
+
+def _lanca_longo(fim):
+    return [{"type": "tool_use", "id": "tu_9", "name": "Bash",
+             "input": {"command": LONGO.format(fim=fim),
+                       "description": "verify da noite",
+                       "run_in_background": True}}]
+
+
+def test_parada_antes_do_exit_do_build_longo_e_bloqueada():
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        fim = Path(d) / "b.fim"
+        c = _transcript(Path(d), [_lanca_longo(fim)])
+        p, saida = roda_stop(c)
+        check("parar com o build longo sem EXIT= é bloqueado",
+              saida.get("decision") == "block", str(saida)[:300])
+        check("...e o motivo nomeia o arquivo e a espera em primeiro plano",
+              str(fim) in saida.get("reason", "")
+              and "PRIMEIRO PLANO" in saida.get("reason", "")
+              and "seq 27" in saida.get("reason", ""),
+              saida.get("reason", "")[:400])
+        fim.write_text("EXIT=0\n")
+        p, saida = roda_stop(c)
+        check("com EXIT= gravado, a parada passa", saida == {}, str(saida)[:300])
+
+
+def test_parada_depois_do_exit_em_subshell_passa():
+    """Run de 27/09 (e2e F): o agente escreveu `(<build>; echo EXIT=$? >>
+    /tmp/b.fim) &`, e o `)` grudava no nome do arquivo. O hook procurava
+    `/tmp/b.fim)`, não achava, e barrava a parada com o build já colhido."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        fim = Path(d) / "b.fim"
+        fim.write_text("EXIT=0\n")
+        cmd = f"(make verify > /tmp/b.log 2>&1; echo EXIT=$? >> {fim}) & disown"
+        c = _transcript(Path(d), [[{"type": "tool_use", "id": "tu_8",
+                                    "name": "Bash",
+                                    "input": {"command": cmd}}]])
+        p, saida = roda_stop(c)
+        check("build em subshell com EXIT= gravado não barra a parada",
+              saida == {}, str(saida)[:300])
+
+
+def test_parada_com_build_longo_fora_da_janela_passa():
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        c = _transcript(Path(d), [_lanca_longo(Path(d) / "b.fim")])
+        p, saida = roda_stop(c, na_janela=False)
+        check("fora da janela a parada não olha build nenhum", saida == {},
+              str(saida)[:300])
+
+
 def main():
     print("no-background-build — build em segundo plano dentro do cepa-until\n")
     for nome, fn in sorted(globals().items()):
