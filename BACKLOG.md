@@ -2789,6 +2789,9 @@ dizer que herdou.
 
 **Plano:** `cepa/sed-escapa-dos-hooks-edit-write`
 
+**Status:** feito em 2026-09-27, com duas sobras (ver "O que ficou de fora", no fim
+desta seção) · **Lar:** `common` 2.26.0
+
 Encontrado em 2026-08-25, durante a triagem do backlog do wego-acesso-backend.
 A origem é um desvio que a sessão do WEGO-2118 registrou em 24/08 e que ficou
 sem destino: "o modo automático da sessão instrui edição via sed/heredoc, o que
@@ -2852,6 +2855,32 @@ Editar um arquivo de código de produção por `sed -i` (e por heredoc) deixa a
 baseline de build marcada como suja, demonstrado por um teste que fica **verde
 antes e vermelho depois** de remover o interceptador. O contraste importa: sem
 ele, um hook que nunca dispara é indistinguível de um hook que sempre aprova.
+
+### O que foi feito (2026-09-27)
+
+Saída 2 do esboço. `common/hooks/_shellscan.py` ganhou `edited_paths(payload)`,
+que responde "que arquivos esta chamada escreveu?" para Edit/Write/MultiEdit e
+para Bash (com o mesmo `extract_write_targets` dos guards; um alvo relativo é
+resolvido contra o último `cd` da linha, para a perturbação em `/tmp` não sujar
+a árvore da sessão). O `mark-build-stale.py` e o `session-activity.py` passaram
+a perguntar a ele e foram registrados também no `PostToolUse` de `Bash`.
+
+Prova: `tests/test_shell_write_marks_stale.py`, verde com o conserto; contra o
+código anterior fica vermelho em 7 checagens, e só com o registro no
+`plugin.json` removido fica vermelho em 2.
+
+### O que ficou de fora
+
+- **`editorial-lint.py`** continua só em `Edit|Write|MultiEdit`. Ele lint o
+  TEXTO escrito (`content`, `new_string`), e um `sed -i` não traz o texto na
+  linha de comando; ligar em Bash pede ler o arquivo inteiro depois da escrita,
+  que é outra decisão (lintar o arquivo todo acusaria o que já estava lá).
+- **Os dois guardas de veredito** (`build-hex/hooks/proof-verdict-guard.py`,
+  `common/hooks/ui-proof-verdict-guard.py`) seguem gateando só `Write`. Não
+  foram tocados: são PreToolUse de bloqueio, não PostToolUse de efeito, e o
+  conserto é diferente do daqui.
+- Escrita que o motor de shell não sabe ler (`python -c`, `perl -e`,
+  `awk -i inplace`, `ed`, `patch`) continua sem sujar a baseline.
 
 ---
 

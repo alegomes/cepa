@@ -2,7 +2,11 @@
 """PostToolUse hook: mark .claude/last-build.json as STALE after source edits.
 
 Fires after Edit / Write / MultiEdit on production code (source files,
-build/dependency files, migrations). Records the path + timestamp + the
+build/dependency files, migrations) — and after a Bash command that writes one
+(`sed -i`, heredoc or `>` into a file, `tee`, `cp`, `mv`...), read by
+`_shellscan.edited_paths`. Without the Bash half, a session editing by `sed`
+(what autonomous mode prefers) left a green baseline describing code that no
+longer existed. Records the path + timestamp + the
 previous known-good status (if any). The /common:green-or-revert skill
 reads this file and the PreToolUse gate-advance hook blocks "wrap-up"
 operations until verify confirms green.
@@ -30,6 +34,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _wtlib as L  # noqa: E402
+import _shellscan as S  # noqa: E402
 
 
 
@@ -99,12 +104,7 @@ def main():
         print("[mark-build-stale] could not parse hook payload; skipping", file=sys.stderr)
         sys.exit(0)
 
-    tool_name = payload.get("tool_name", "")
-    if tool_name not in {"Edit", "Write", "MultiEdit"}:
-        sys.exit(0)
-
-    file_path = (payload.get("tool_input") or {}).get("file_path", "")
-    if not file_path or not is_source(file_path):
+    if payload.get("tool_name", "") not in {*S.WRITE_TOOLS, "Bash"}:
         sys.exit(0)
 
     # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
@@ -112,18 +112,21 @@ def main():
     # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
     cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
 
-    edited = Path(file_path)
-    if edited.is_absolute():
+    rel = None
+    for edited in S.edited_paths(payload):
         try:
-            rel = str(edited.resolve().relative_to(cwd))
+            candidate = str(Path(edited).resolve().relative_to(cwd))
         except ValueError:
             # Edit landed OUTSIDE the session tree — e.g. a proof worktree
             # perturbation in /tmp. It does not invalidate THIS project's
             # build; marking the main baseline STALE for it poisons the
             # advance gate (and the bare relative_to() used to crash here).
-            sys.exit(0)
-    else:
-        rel = file_path
+            continue
+        if is_source(candidate):
+            rel = candidate
+            break
+    if rel is None:
+        sys.exit(0)
 
     state_path = cwd / ".claude" / "last-build.json"
 

@@ -376,3 +376,69 @@ def extract_write_targets(command: str) -> tuple:
         seen.add(t)
         clean.append(t)
     return clean, bool(_UNCOVERED_RE.search(_unquoted_view(command)))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# "Que arquivos esta chamada de ferramenta escreveu?" — a mesma pergunta para
+# Edit/Write e para Bash.
+#
+# Os hooks de PostToolUse que reagem a escrita (`mark-build-stale`,
+# `session-activity`) só eram registrados em `Edit|Write|MultiEdit`. O modo
+# automático manda preferir `sed`, heredoc e script curto a `Edit`/`Write`, e
+# aí o código mudava com a baseline de build ainda marcada como fresca: o
+# `gate-advance` liberava um verde que descrevia código que não existia mais
+# (BACKLOG, "Modo automático edita por `sed`...", 2026-08-25). Em vez de cada
+# hook ganhar a própria leitura de shell, todos perguntam aqui.
+# ─────────────────────────────────────────────────────────────────────────────
+
+WRITE_TOOLS = ("Edit", "Write", "MultiEdit")
+
+
+def _cd_target(segment: str):
+    """O diretório de um segmento `cd X`, ou None se o segmento não é um cd."""
+    try:
+        argv = shlex.split(segment, posix=True)
+    except ValueError:
+        return None
+    if len(argv) == 2 and argv[0] == "cd":
+        return os.path.expanduser(argv[1])
+    return None
+
+
+def edited_paths(payload: dict) -> list:
+    """Caminhos absolutos que esta chamada de ferramenta escreveu.
+
+    Edit/Write/MultiEdit: o `file_path`. Bash: os alvos de escrita que o
+    `extract_write_targets` sabe ler (redirecionamento, heredoc para arquivo,
+    `sed -i`, `tee`, `cp`, `mv`...). Um alvo relativo é resolvido contra o
+    diretório do último `cd` que o antecede na linha, e sem `cd` contra o `cwd`
+    do payload: `cd /tmp/wt && sed -i ... X.java` escreveu em /tmp/wt, não na
+    árvore da sessão. O que o motor não sabe analisar (`python -c`, `perl -e`,
+    `awk -i inplace`, `ed`, `patch`) não aparece aqui — os limites são os dele.
+    """
+    tool = payload.get("tool_name", "")
+    tool_input = payload.get("tool_input") or {}
+    base = os.path.abspath(payload.get("cwd") or os.getcwd())
+    if tool in WRITE_TOOLS:
+        fp = tool_input.get("file_path") or ""
+        return [os.path.normpath(os.path.join(base, fp))] if fp else []
+    if tool != "Bash":
+        return []
+    command = tool_input.get("command") or ""
+    out = []
+    for seg in _split_segments(command):
+        seg = seg.strip()
+        if not seg:
+            continue
+        destino = _cd_target(seg)
+        if destino is not None:
+            base = os.path.normpath(os.path.join(base, destino))
+            continue
+        for t in _segment_targets(seg):
+            t = _unquote(t).strip()
+            if not t or t in _PSEUDO or t.startswith("&"):
+                continue
+            p = os.path.normpath(os.path.join(base, os.path.expanduser(t)))
+            if p not in out:
+                out.append(p)
+    return out
