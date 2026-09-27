@@ -1,0 +1,47 @@
+item: resgate-session-mode
+diff: c1119ec..508004e
+branch: session/pendencias_until
+status: complete
+criteria:
+  - id: AC1
+    desc: "Resgate de artefatos nao copia .claude/session-mode para .claude/rescued/"
+    altitude: domain
+    surface: "common/hooks/_wtlib.py: doomed_artifacts() / RESCUE_SKIP (consumida por rescue_artifacts())"
+    test: "tests/test_worktree_artifact_rescue.py::test_doomed_lists_artifacts_and_skips_ephemeral (check 'session-mode is skipped')"
+    layer: unit (chama doomed_artifacts diretamente; rescue_artifacts reusa a mesma funcao, cobertura transitiva confirmada pelo AC3)
+    evidence: verified
+    run: "python3 tests/test_worktree_artifact_rescue.py -> 'all green' (24 checks ok, 0 falhas)"
+    status: complete
+
+  - id: AC2
+    desc: "Artefatos reais (plan.yaml, proof/*.yaml) continuam sendo resgatados"
+    altitude: domain
+    surface: "common/hooks/_wtlib.py: doomed_artifacts() + rescue_artifacts()"
+    test: "tests/test_worktree_artifact_rescue.py::test_doomed_lists_artifacts_and_skips_ephemeral, ::test_rescue_survives_removal, ::test_rescue_never_clobbers_the_live_plan, ::test_cli_rescues_on_command_removal_path"
+    layer: unit + CLI (subprocess real de `_wtlib.py rescue`)
+    evidence: verified
+    run: "python3 tests/test_worktree_artifact_rescue.py -> 'all green' (checks 'plan is listed', 'proof is listed', 'plan survived the removal', 'proof survived too', 'CLI names what it saved')"
+    status: complete
+
+  - id: AC3
+    desc: "Aviso do SessionStart (rescued_dirs) nao aparece / nao conta o session-mode quando ele era o unico arquivo ignorado extra"
+    altitude: application
+    surface: "common/hooks/_wtlib.py: rescued_dirs() (consumida por common/hooks/session-registry.py no SessionStart) via rescue_artifacts() real, nao so a lista doomed"
+    test: "tests/test_worktree_artifact_rescue.py::test_rescued_dirs_reports_for_session_start (asserta got == [('session-todo', 2)] apos rescue_artifacts real, com session-mode presente no fixture make_repo)"
+    layer: unit direto sobre a funcao que o hook de SessionStart le (rescued_dirs); nao ha teste de processo completo do hook session-registry.py, mas a superficie citada no criterio (contagem por pasta resgatada) e exatamente essa funcao
+    evidence: verified
+    run: "python3 tests/test_worktree_artifact_rescue.py -> 'all green' (check 'rescue is announceable at SessionStart' == [('session-todo', 2)])"
+    regression_proof: "mesmo arquivo de teste, rodado contra common/hooks/_wtlib.py do commit c1119ec (antes do fix, RESCUE_SKIP sem 'session-mode'): FAIL em 'session-mode is skipped' e em 'rescue is announceable at SessionStart' (retornou [('session-todo', 3)] em vez de 2). Comando: cópia do repo com _wtlib.py revertido para c1119ec + `python3 tests/test_worktree_artifact_rescue.py` -> exit 1, 2 failure(s)."
+    status: complete
+
+notes: >
+  O teste prova as tres AC na superficie certa: doomed_artifacts (AC1),
+  rescue_artifacts real via API e via CLI (AC2), e rescued_dirs — a mesma
+  funcao que o SessionStart le para montar o aviso — com contagem 2 (nao 3)
+  apos incluir session-mode no fixture make_repo (AC3). Nao existe um teste de
+  processo completo do hook session-registry.py (que efetivamente imprime o
+  aviso), mas o criterio fala da "contagem por pasta resgatada", que e
+  exatamente o dado que rescued_dirs devolve e que o hook consome sem
+  transformacao adicional (ver common/hooks/session-registry.py). Confirmado
+  que o teste falha contra a versao anterior (c1119ec) e passa contra a
+  versao corrigida (508004e).
