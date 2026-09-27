@@ -2114,8 +2114,10 @@ escape trivial.
 
 **Plano:** `cepa/medir-efeito-de-mudanca-no-harness`
 
-**Status:** CONSTRUÍDO, NUNCA RODADO 2026-08-17 (`bf95d47`) — 3 tarefas
-validadas (vermelhas sem agente), nenhum A/B feito · **Lar:** `tests/eval/` · **Origem:** revisão 2026-08-17, §16 — apontado como o elo mais fraco
+**Status:** REFERÊNCIA MEDIDA 2026-09-27 — 2/3 tarefas, US$ 4,69 por
+volta da suíte (harness `24e3e2d`; conta em `tests/eval/README.md`). Nenhum A/B
+feito ainda: falta uma mudança de harness para comparar. A suíte tem 3
+tarefas, abaixo das 8 a 12 do esboço · **Lar:** `tests/eval/` · **Origem:** revisão 2026-08-17, §16 — apontado como o elo mais fraco
 do sistema inteiro.
 
 ### Problema

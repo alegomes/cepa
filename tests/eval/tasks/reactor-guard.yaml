@@ -22,6 +22,9 @@ contrato: |
   Ela espera **exit 2** quando o comando deve ser barrado e **exit 0** quando
   deve passar, com a explicação em stderr.
 
+  A saída para quem sabe que o cache está bom é um comentário no fim do
+  próprio comando: `# stale-ok` libera (é a convenção de escape desta casa).
+
   O teste que julga isso é `tests/test_maven_reactor_guard.py` e roda com
   `python3 tests/test_maven_reactor_guard.py`.
 

@@ -1,10 +1,10 @@
 # Tarefas douradas — a suíte que mede o harness
 
-> Estado: **rodada uma vez (2026-08-18), e a primeira corrida mediu a própria
-> suíte.** Resultado: 0/3, US$ 8,82, ~7 min por tarefa. A causa não era
-> dificuldade — era um defeito de desenho aqui dentro, descrito em "A primeira
-> corrida" abaixo. Corrigido; **não re-rodada desde então**, então ainda não
-> existe um número de referência confiável nem um A/B.
+> Estado: **existe um número de referência (2026-09-27): 2/3, US$ 4,69 por
+> volta da suíte, ~5 min por tarefa**, com o harness em `24e3e2d`. Ainda não
+> houve A/B: o número serve de "antes" para a próxima mudança que alguém
+> queira medir. Histórico das duas corridas anteriores em "A primeira
+> corrida" e "A corrida de referência", abaixo.
 
 ## Por que existe
 
@@ -82,6 +82,41 @@ Duas mudanças saíram daí:
    repositório; se estivesse no trabalho do agente, não haveria como saber —
    a evidência já tinha ido embora. Agora o executor guarda a worktree e
    registra no resultado o que o agente mexeu.
+
+## A corrida de referência: 1/3, depois 2/3 (2026-09-27)
+
+Harness em `24e3e2d`. A primeira passada deu 1/3 e, de novo, parte das falhas
+era da suíte e não do agente: dois casos de teste cobravam uma convenção que o
+`contrato:` não contava.
+
+- `reactor-guard` cobrava o nome exato da saída de emergência, `# stale-ok`. O
+  enunciado só dizia que "precisa existir uma saída";
+- `bounce-reason` cobrava que um `Reason:` sem negrito nem cabeçalho fosse
+  barrado com o texto literal `NOT in a recognized format` no stderr.
+
+Os dois viraram frase no `contrato:` (mesma regra da primeira corrida: o
+trabalho fica com o agente, a convenção de nome vai para o contrato) e só essas
+duas tarefas foram re-rodadas:
+
+| tarefa | dificuldade | 1ª passada | com o contrato corrigido | voltas | custo |
+|---|---|---|---|---|---|
+| acceptance-gate-direcao | alta | passou | (não re-rodada) | 27 | US$ 1,78 |
+| bounce-reason | baixa | falhou (3 casos) | passou | 24 | US$ 1,46 |
+| reactor-guard | média | falhou (3 casos) | falhou (2 casos) | 21 | US$ 1,45 |
+
+Custo da suíte na referência: 1,78 + 1,46 + 1,45 = **US$ 4,69**, cerca de
+16 min em série (323 s + 298 s + 301 s = 922 s). O que a medição toda gastou,
+contando a primeira passada, foi 1,78 + 1,50 + 1,60 + 1,46 + 1,45 = US$ 7,79.
+
+As duas falhas que sobraram no `reactor-guard` são legítimas, e é por isso que
+a tarefa fica como está: `timeout 600 ./mvnw test -pl x` e `cd x && ./mvnw
+test -pl y` passaram pela barreira do agente. O enunciado pede que o problema
+"não possa mais acontecer", e um comando embrulhado ou encadeado é o jeito
+comum de ele acontecer. É uma tarefa no meio da faixa: resolvida em parte, com
+o buraco nomeado. É o tipo de tarefa que distingue duas versões do harness.
+
+Resultados em `tests/eval/results/baseline-2026-09-27.json` (1ª passada) e
+`ref-2026-09-27-{bounce,reactor}.json` (re-rodadas), fora do git.
 
 ## Uso
 

@@ -24,6 +24,13 @@ contrato: |
   Ela espera **exit 2** para barrar e **exit 0** para deixar passar, com a
   explicação em stderr.
 
+  A razão só conta quando o rótulo dela está MARCADO como campo: negrito
+  (`**Reason:**`, `**Motivo:**`) ou cabeçalho (`### Motivo`, `h3. Motivo`).
+  Um `Reason:` em texto corrido é barrado, e o stderr desse caso contém
+  literalmente `NOT in a recognized format` — é o que separa "escreveu no
+  formato errado" de "não escreveu". Rótulo ausente e rótulo vazio também
+  são distinguidos no stderr (o vazio diz `empty`).
+
   O teste que julga isso é `tests/test_bounce_reason_gate.py` e roda com
   `python3 tests/test_bounce_reason_gate.py`.
 
