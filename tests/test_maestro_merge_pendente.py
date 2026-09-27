@@ -191,6 +191,10 @@ def test_comandos_chamam_a_checagem(tmp):
     res = (REPO / "maestro" / "commands" / "resume.md").read_text()
     check("/maestro:resume vai ao merge train quando a onda terminou sem merge",
           "aguardando-merge" in res and "Passo 9" in res)
+    run = (REPO / "maestro" / "commands" / "run.md").read_text()
+    check("/maestro:run registra a retentativa no instante do fork",
+          "Retentativa com nome novo" in run
+          and "set-slice PROGDIR <slice>R running" in run)
 
 
 def main():
