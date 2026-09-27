@@ -1,0 +1,45 @@
+schema_version: 2
+card: until-registro-nao-e-sujeira
+verdict: proven
+reviewed_at: 2026-09-26T22:30:00-03:00
+base_commit: 440860d
+head_commit: 6c01a4a
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until: REGISTRO_DO_RUN (consumida por arvore_suja)"
+      module: bin
+      external_observable: false   # filtro interno sobre a saida de `git status --porcelain`,
+                                    # sem parsing de entrada externa nem endpoint novo
+      substituted_by_double: null  # o teste roda o CLI real via subprocess (roda()), sem mock
+    - class: "common/bin/cepa-doctor: filtro em check_arvore_suja"
+      module: bin
+      external_observable: false
+      substituted_by_double: null  # o teste roda o CLI real via subprocess (roda()), sem mock
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Repo Python (scripts em common/bin/), sem Maven/pitest; nao provisionado por decisao de mudanca de escopo. Fallback: perturbacao direta em worktree descartavel."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN (arvore primaria, HEAD 6c01a4a, sem tocar nada): `python3 tests/test_cepa_until.py` -> '✓ tudo verde'; `python3 tests/test_doctor_arvore_suja.py` -> '✓ tudo verde' (inclui test_registro_do_run_anterior_nao_e_sujeira e test_registro_do_cepa_until_nao_conta_como_sujeira)."
+        - "RED #1 (worktree descartavel /tmp/proof-until-registro criado com `git worktree add --detach 6c01a4a`): removida a exclusao `and not REGISTRO_DO_RUN.match(l)` de arvore_suja() em common/bin/cepa-until (fica so `if l.strip()`, o estado do bug) -> `python3 tests/test_cepa_until.py` -> '✗ 2 falha(s): o run seguinte larga mesmo com o registro do anterior, ...e a lista mostra só a sujeira, não o registro'. Arquivo restaurado com `git checkout -- common/bin/cepa-until`."
+        - "RED #2 (mesmo worktree): removidas as duas linhas do filtro `suja = [l for l in suja if not re.match(...)]` em check_arvore_suja() de common/bin/cepa-doctor -> `python3 tests/test_doctor_arvore_suja.py` -> '✗ 2 falha(s): só o registro do run → confirma que larga, registro + sujeira de verdade → ainda avisa'. Arquivo restaurado com `git checkout -- common/bin/cepa-doctor`."
+        - "Worktree removido ao final com `git worktree remove --force /tmp/proof-until-registro`; a arvore primaria nunca foi tocada (confirmado por `git status --porcelain` antes e depois: nenhuma mudanca em common/bin/*)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Sem coverage tool wired (projeto Python, sem Quarkus/JaCoCo). Alcancabilidade confirmada de forma mais forte que estatica: as duas perturbacoes acima (remover exatamente a linha/trecho mudado) fizeram os testes-alvo irem a RED, provando que arvore_suja() e check_arvore_suja() executam essas linhas em tempo de teste."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff so filtra, por regex, linhas ja produzidas por `git status --porcelain` (saida de um comando local, nao entrada externa/HTTP/rede); nao ha modulo api-rest neste repo (nao e projeto Quarkus) e nenhuma classe alterada abre superficie de entrada nova."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "Mesmo worktree descartavel (/tmp/proof-until-registro): `git checkout 440860d -- common/bin/cepa-until common/bin/cepa-doctor` (so os dois arquivos de producao da base; testes novos de HEAD mantidos) -> `python3 tests/test_cepa_until.py` -> '✗ 2 falha(s): o run seguinte larga mesmo com o registro do anterior, ...e a lista mostra só a sujeira, não o registro'; `python3 tests/test_doctor_arvore_suja.py` -> '✗ 2 falha(s): só o registro do run → confirma que larga, registro + sujeira de verdade → ainda avisa'. Restaurado com `git checkout HEAD -- common/bin/cepa-until common/bin/cepa-doctor` (confirmado `git status --porcelain` limpo) antes de remover o worktree."
+routing_reason: "Bug de uma linha de comportamento em dois lugares (cepa-until e cepa-doctor ignoram o registro do proprio run como sujeira): perturbacao green->red->green demonstrada nos dois arquivos, em worktree descartavel, e regressao vermelha confirmada contra base_commit (440860d) com os testes novos de HEAD. Diff nao abre superficie de entrada externa (L4 = n/a, motivo registrado) nem ha double no lugar das classes mudadas (o teste roda o CLI real via subprocess). Todos os niveis aplicaveis passaram com evidencia verificada -> PROVEN."
