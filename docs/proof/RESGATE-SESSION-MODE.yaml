@@ -1,0 +1,44 @@
+schema_version: 2
+card: RESGATE-SESSION-MODE
+verdict: proven
+reviewed_at: 2026-09-26T00:00:00-03:00
+base_commit: c1119ec
+head_commit: 528bb20
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "common/hooks/_wtlib.py: RESCUE_SKIP (consumida por doomed_artifacts/rescue_artifacts/rescued_dirs)"
+      module: hooks
+      external_observable: true   # observável no aviso do SessionStart, que le rescued_dirs()
+      substituted_by_double: null # os testes chamam as funcoes reais (doomed_artifacts,
+                                  # rescue_artifacts, rescued_dirs) e um subprocess real do
+                                  # CLI `_wtlib.py rescue`; nao ha mock/fake no lugar da classe
+    - class: "common/.claude-plugin/plugin.json: version bump 2.25.0 -> 2.25.1"
+      module: manifest
+      external_observable: false  # nao-comportamental, so metadado
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Nao ha pitest no projeto (repo Python, sem Maven/pom.xml) e o projeto nao o adota; nao provisionado por decisao de mudanca de escopo. Fallback: perturbacao direta."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN (HEAD 528bb20, arvore primaria): `python3 tests/test_worktree_artifact_rescue.py` -> 'all green' (todos os checks ok, incluindo 'session-mode is skipped' e 'rescue is announceable at SessionStart' == [('session-todo', 2)])."
+        - "RED (perturbacao, worktree descartavel /tmp/.../red criado com `git worktree add --detach`): removida a entrada `\"session-mode\",` (com seu comentario) de RESCUE_SKIP em common/hooks/_wtlib.py, reproduzindo o estado anterior ao fix -> `python3 tests/test_worktree_artifact_rescue.py` -> exit 1, '2 failure(s): session-mode is skipped, rescue is announceable at SessionStart' (retornou [('session-todo', 3)] em vez de 2). Worktree restaurado (`git checkout -- common/hooks/_wtlib.py`) e removido (`git worktree remove --force`) em seguida; a arvore primaria nunca foi tocada."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Nao ha coverage tool wired (projeto Python sem Quarkus/JaCoCo). Alcancabilidade confirmada de forma mais forte que estatica: a propria perturbacao acima (remover a linha mudada) fez os dois testes-alvo irem a RED, provando que doomed_artifacts()/rescued_dirs() executam exatamente essa linha em tempo de teste."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff so acrescenta um literal a uma tupla denylist (RESCUE_SKIP) usada internamente para filtrar nomes de arquivo sob .claude/ de uma arvore de trabalho local; nao ha parsing de entrada externa, endpoint HTTP ou payload de rede novo. Nao existe modulo 'api-rest' neste repo (nao e projeto Quarkus) e nenhuma classe alterada abre superficie de entrada."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "Worktree descartavel criado a partir de HEAD (528bb20) com `git worktree add --detach`; dentro dele, `git checkout c1119ec -- common/hooks/_wtlib.py` (so o arquivo de producao, teste de HEAD mantido) -> `python3 tests/test_worktree_artifact_rescue.py` -> exit 1, mesmas 2 falhas do bug ('session-mode is skipped', 'rescue is announceable at SessionStart', retornou [('session-todo', 3)]). Fix (528bb20 / arvore primaria) -> 'all green', 0 falhas. Worktree removido ao final (`git worktree remove --force`); nunca tocou a arvore primaria."
+routing_reason: "Fix de uma linha (adicionar 'session-mode' a RESCUE_SKIP) com teste guardiao direto e nao-Quarkus: green->red->green demonstrado por perturbacao real em worktree descartavel, e regressao vermelha confirmada contra base_commit. Nao ha superficie de entrada externa aberta pelo diff (L4 = n/a, motivo registrado) nem double no lugar da classe mudada. Todos os niveis aplicaveis passaram com evidencia verificada -> PROVEN."
