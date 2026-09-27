@@ -145,6 +145,66 @@ empty_map = make_project(audit=AUDIT_INCOMPLETE,
 r = run_hook(empty_map, tool_input=cloud("31"))
 check("board-flow.yaml sem transition_ids → BLOQUEIA", r.returncode == 2)
 
+# ── worktree nova: o artefato mora no clone principal (WEGO-2218, 2026-09-16) ─
+def git(*args, cwd):
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+def make_worktree_pair(audit, where=Path(".claude") / "acceptance"):
+    """Clone principal com o artefato em `where` e uma worktree ligada sem ele,
+    como deixa o seed-worktree (que não copia `.claude/acceptance/`)."""
+    main = Path(tempfile.mkdtemp(prefix="acceptance-gate-main-"))
+    git("init", "-q", "-b", "main", cwd=main)
+    (main / "board-flow.yaml").write_text(BOARD_FLOW, encoding="utf-8")
+    (main / ".gitignore").write_text(".claude/\n", encoding="utf-8")
+    git("add", "-A", cwd=main)
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init", cwd=main)
+    wt = Path(tempfile.mkdtemp(prefix="acceptance-gate-wt-")) / "wt"
+    git("worktree", "add", "-q", "-b", "session/x", str(wt), cwd=main)
+    if audit is not None:
+        (main / where).mkdir(parents=True, exist_ok=True)
+        (main / where / f"{KEY}.yaml").write_text(audit, encoding="utf-8")
+    return main, wt
+
+
+main, wt = make_worktree_pair(AUDIT_INCOMPLETE)
+check("pré-condição: a worktree não tem o artefato",
+      not (wt / ".claude" / "acceptance" / f"{KEY}.yaml").exists())
+for tid, label in (("41", "In Review"), ("51", "Done")):
+    r = run_hook(wt, tool_input=cloud(tid))
+    check(f"worktree + artefato incompleto no clone principal → {label} BLOQUEIA",
+          r.returncode == 2, f"rc={r.returncode} {r.stderr[:200]}")
+check("…e a mensagem aponta o artefato do clone principal",
+      str(main.resolve()) in r.stderr, r.stderr[:300])
+(wt / "sub").mkdir()
+r = run_hook(wt / "sub", tool_input=cloud("51"))
+check("worktree, cwd num subdiretório → Done BLOQUEIA", r.returncode == 2, r.stderr[:200])
+r = run_hook(wt, tool_input=cloud("31"))
+check("worktree + artefato incompleto no principal → devolução PASSA", r.returncode == 0)
+
+(wt / ".claude" / "acceptance").mkdir(parents=True)
+(wt / ".claude" / "acceptance" / f"{KEY}.yaml").write_text(AUDIT_COMPLETE, encoding="utf-8")
+r = run_hook(wt, tool_input=cloud("51"))
+check("auditoria nova da worktree (complete) vence a antiga do principal",
+      r.returncode == 0, r.stderr[:200])
+
+main, wt = make_worktree_pair(AUDIT_INCOMPLETE, where=Path("docs") / "acceptance")
+r = run_hook(wt, tool_input=cloud("51"))
+check("artefato em docs/acceptance/ do principal → Done BLOQUEIA",
+      r.returncode == 2, r.stderr[:200])
+
+docs_proj = make_project(board_flow=BOARD_FLOW)
+(docs_proj / "docs" / "acceptance").mkdir(parents=True)
+(docs_proj / "docs" / "acceptance" / f"{KEY}.yaml").write_text(AUDIT_INCOMPLETE, encoding="utf-8")
+r = run_hook(docs_proj, tool_input=cloud("41"))
+check("artefato em docs/acceptance/ da própria árvore → In Review BLOQUEIA",
+      r.returncode == 2, r.stderr[:200])
+
+main, wt = make_worktree_pair(None)
+r = run_hook(wt, tool_input=cloud("51"))
+check("nenhuma árvore tem artefato → Done PASSA (decisão do dono em aberto)",
+      r.returncode == 0, r.stderr[:200])
+
 # ── unchanged contracts ────────────────────────────────────────────────────
 clean = make_project(board_flow=BOARD_FLOW)
 r = run_hook(clean, tool_input=cloud("41"))
