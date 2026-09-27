@@ -200,6 +200,18 @@ r = run_hook(docs_proj, tool_input=cloud("41"))
 check("artefato em docs/acceptance/ da própria árvore → In Review BLOQUEIA",
       r.returncode == 2, r.stderr[:200])
 
+# Fora de git o main_root é "", e Path("") seria o diretório do PROCESSO. Com
+# o processo parado numa árvore que tem artefato incompleto, um projeto limpo
+# fora de git não pode herdar esse artefato.
+alheio = make_project(audit=AUDIT_INCOMPLETE)
+limpo = make_project(board_flow=BOARD_FLOW)
+r = subprocess.run(
+    [sys.executable, str(HOOK)], cwd=alheio, capture_output=True, text=True,
+    input=json.dumps({"tool_name": CLOUD_TOOL, "tool_input": cloud("51"),
+                      "cwd": str(limpo)}))
+check("fora de git, artefato no diretório do processo não conta → Done PASSA",
+      r.returncode == 0, r.stderr[:200])
+
 main, wt = make_worktree_pair(None)
 r = run_hook(wt, tool_input=cloud("51"))
 check("nenhuma árvore tem artefato → Done PASSA (decisão do dono em aberto)",
