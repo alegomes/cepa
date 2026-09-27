@@ -2934,7 +2934,7 @@ estratégia for retomado — usar `twg` como caminho canônico em execução loc
 
 **Plano:** `cepa/detector-contexto-twg`
 
-**Status:** pendente (condicional a O3) · **Lar provável:** `board-flow`
+**Status:** FEITO em 2026-09-27, por absorção: o O3 rodou em 2026-09-24 (`d70e366`) e trouxe o detector `command -v twg && twg --version`, que o `tests/test_atlassian_expert_spec.py` fixa. O critério de rollback virou a seção "Como voltar atrás" de `docs/archive/estrategia-twg-vs-mcp.md`. ~~pendente (condicional a O3)~~ · **Lar provável:** `board-flow`
 (`atlassian-expert`) · **Origem:** achado C5 do painel /common:advisors (2026-08-26),
 levantado por 4 lentes independentes.
 

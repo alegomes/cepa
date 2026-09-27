@@ -459,3 +459,23 @@ caminho.
 - `board-flow/board-flow-fleet-validate.sh` segue validando o caminho `mcp-atlassian`. Ele
   não passa pelo `atlassian-expert`, então não quebrou, mas agora valida um caminho que o
   agente não usa mais.
+
+## Como voltar atrás
+
+O caminho da rotina cloud nunca saiu: os 16 `mcp__Atlassian__*` estão na linha `tools:` antes
+e depois de `937fc1b` e `d70e366`. O risco que o painel apontou (remover o MCP antes de provar
+que a nuvem continua de pé) não chegou a existir. O que dá para desfazer é só o caminho local.
+
+- **Quando voltar:** a `twg` responde à versão (`twg --version` sai 0) mas as chamadas do
+  `atlassian-expert` falham de forma que não é do card (autenticação, verbo mudou numa versão
+  nova). O detector não enxerga isso: ele só pergunta se a `twg` existe, então tirar a `twg`
+  do `PATH` não serve de desligador. Sem ela, o agente cai no caminho cloud, e numa sessão
+  local o `mcp__Atlassian__*` não está conectado: o desfecho é o BLOCKED "no Jira path".
+- **Como voltar:** `git revert d70e366` **não aplica limpo** (conferido em 2026-09-27 numa
+  worktree descartável: conflito em `board-flow/agents/atlassian-expert.md` e no
+  `plugin.json`, que `498bde4` e as versões seguintes tocaram). A volta é à mão, com o
+  `d70e366^` como referência: devolver à linha `tools:` os 15 `mcp__claude_ai_Atlassian__*`
+  e os 17 `mcp__mcp-atlassian__*`, trocar a seção "Tool binding" pela regra de dois prefixos
+  MCP daquela versão e ajustar `tests/test_atlassian_expert_spec.py`, que hoje exige o
+  detector e o `Bash`. O `jira-write-lock.py` (`937fc1b`) pode ficar: ele só barra escrita
+  pela `twg`, e sem a `twg` no caminho não tem o que barrar.
