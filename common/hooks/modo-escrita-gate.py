@@ -65,6 +65,18 @@ Quatro decisões que vieram de estrago já pago neste repo:
    modo de falha seguinte, se ele for oferecido, é o agente passar a pedir para
    desligar o gate, e aí o buraco só mudou de lugar.
 
+5. **Alvo que o gate não resolve não é veredito sobre o modo.** Em 02/09/2026,
+   três bloqueios numa sessão de `exploracao` culparam o modo por erro de
+   leitura: uma variável atribuída no próprio comando (`D=...; cat > "$D/x"`)
+   chegava ao gate como o literal `$D/x`, que não casa lista nenhuma. A
+   mensagem mandava encerrar o modo, e quem a lê acredita. Agora a atribuição
+   simples da própria linha é expandida antes de casar (sem executar nada), e
+   o que continua sem resolver — variável que a linha não atribui, `$(...)`,
+   `${D:-x}` — barra dizendo "não consegui resolver o alvo", nunca "você está
+   fora do modo". Os outros dois episódios (crase e `>` citados no CORPO do
+   heredoc) já tinham morrido no `_shellscan`, que mascara o corpo desde
+   04/09/2026.
+
 O que este gate NÃO alcança é a metade "não vira pergunta": isso é texto do
 agente, não chamada de ferramenta, e nenhum hook lê a redação de uma resposta.
 Mas a trava de escrita torna a pergunta inútil — não há o que oferecer quando o
@@ -74,6 +86,8 @@ passo seguinte está barrado.
 import fnmatch
 import json
 import os
+import re
+import shlex
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -113,8 +127,85 @@ def alvos(tool, inp):
         t = inp.get("file_path") or inp.get("notebook_path")
         return ([t] if t else []), False
     if tool == "Bash":
-        return S.extract_write_targets(inp.get("command") or "")
+        comando = inp.get("command") or ""
+        return alvos_bash(comando), S.extract_write_targets(comando)[1]
     return [], False
+
+
+_VAR_RE = re.compile(r"\$\{([A-Za-z_]\w*)\}|\$([A-Za-z_]\w*)")
+_ATRIB_RE = re.compile(r"^([A-Za-z_]\w*)=(.*)$", re.S)
+
+
+def _expande(texto, conhecidas):
+    """Troca `$X`/`${X}` pelo valor que a própria linha atribuiu a X.
+
+    Só a forma simples. `${X:-y}`, `${#X}` e `$(...)` ficam como estão, e o
+    `$` que sobra é o que `nao_resolvido` enxerga: nesses casos o gate prefere
+    dizer que não sabe a adivinhar.
+    """
+    def troca(m):
+        nome = m.group(1) or m.group(2)
+        return conhecidas.get(nome, m.group(0))
+    return _VAR_RE.sub(troca, texto)
+
+
+def _atribuicoes(segmento):
+    """Os pares NOME=valor de um segmento que SÓ atribui, ou None.
+
+    `D=x cmd` não conta: no shell a atribuição de prefixo não vale para as
+    expansões do próprio comando. `export`/`readonly`/`local` contam.
+    """
+    try:
+        argv = shlex.split(segmento, posix=True)
+    except ValueError:
+        return None
+    if argv and argv[0] in ("export", "readonly", "local"):
+        argv = [a for a in argv[1:] if not a.startswith("-")]
+    if not argv:
+        return None
+    pares = [_ATRIB_RE.match(a) for a in argv]
+    if not all(pares):
+        return None
+    return [(m.group(1), m.group(2)) for m in pares]
+
+
+def alvos_bash(comando):
+    """Os alvos de escrita da linha, com as variáveis dela já expandidas.
+
+    Anda os segmentos na ordem: uma atribuição só vale para o que vem depois
+    dela, e uma atribuição que o gate não consegue ler (valor com `$(...)` ou
+    com variável desconhecida) APAGA o valor anterior — senão `D=docs;
+    D=$(pwd); echo > $D/x` casaria o `docs` velho.
+    """
+    conhecidas = {}
+    saida = []
+    for seg in S._split_segments(comando):
+        seg = seg.strip()
+        if not seg:
+            continue
+        pares = _atribuicoes(seg)
+        if pares is not None:
+            for nome, valor in pares:
+                valor = _expande(valor, conhecidas)
+                if "$" in valor or "`" in valor:
+                    conhecidas.pop(nome, None)
+                else:
+                    conhecidas[nome] = valor
+            continue
+        for t in S._segment_targets(seg):
+            t = S._unquote(t).strip()
+            if not t or t in S._PSEUDO or t.startswith("&"):
+                continue
+            t = _expande(t, conhecidas)
+            if t not in saida:
+                saida.append(t)
+    return saida
+
+
+def nao_resolvido(alvo):
+    """O alvo ainda tem expansão de shell depois das variáveis da linha e do ambiente?"""
+    caminho = os.path.expandvars(os.path.expanduser(alvo))
+    return "$" in caminho or "`" in caminho
 
 
 def relativo(alvo, root):
@@ -178,6 +269,24 @@ def main():
         encontrados, indecidivel = alvos(payload.get("tool_name", ""),
                                          payload.get("tool_input", {}) or {})
         for alvo in encontrados:
+            if nao_resolvido(alvo):
+                # Barra, porque o destino pode estar em qualquer lugar — mas
+                # sem a mensagem de "fora do modo": ver a decisão 5.
+                T.emit("modo_escrita_nao_resolvido", cwd=cwd, modo=modo)
+                print(
+                    f"[modo-escrita-gate] BLOQUEADO: não consegui resolver o "
+                    f"alvo desta escrita, então não sei se ele está dentro do "
+                    f"modo {modo}.\n"
+                    f"  Alvo como o gate leu: {alvo}\n"
+                    f"  Isto é limite de leitura do gate, não veredito sobre o "
+                    f"modo: variável que a linha não atribui, $(...) e "
+                    f"${{X:-y}} não são expandidos.\n"
+                    f"  O que fazer: escreva o caminho por extenso (ou atribua "
+                    f"a variável com valor literal na mesma linha) e rode de "
+                    f"novo. Destinos liberados: {', '.join(padroes)}",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
             rel = relativo(alvo, root)
             if rel is None or permitido(rel, padroes):
                 continue

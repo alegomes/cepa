@@ -304,6 +304,92 @@ def test_tabela_vem_de_modos_py():
     check("o hook importa a tabela em vez de copiá-la", "_modos" in src)
 
 
+def test_corpo_do_heredoc_nao_e_alvo():
+    """Episódios 2 e 3 do item portao-modo-escrita-le-heredoc (02/09/2026).
+
+    O portão tratava o texto DE DENTRO do heredoc como shell: uma crase citada
+    no corpo virava alvo, e um `>` de um exemplo citado na prosa virava o
+    destino da escrita. A tentativa de gravar a própria seção do BACKLOG que
+    descrevia o defeito foi barrada por ele. O corpo é dado, não comando.
+    """
+    with Repo() as r:
+        r.modo("exploracao")
+        casos = {
+            "crase no corpo":
+                f"cat > {r.path}/docs/nota.md <<'EOF'\n"
+                "veja `common/hooks/x.py` e `\n"
+                "EOF",
+            "redirecionamento no corpo":
+                f"cat >> {r.path}/BACKLOG.md <<'EOF'\n"
+                "o comando fazia echo x > common/hooks/novo.py\n"
+                "EOF",
+            "redirecionamento no corpo, delimitador sem aspas":
+                f"cat >> {r.path}/BACKLOG.md <<EOF\n"
+                "echo x > common/hooks/novo.py\n"
+                "EOF",
+        }
+        for nome, cmd in casos.items():
+            p = r.bash(cmd)
+            check(f"heredoc liberado: {nome}", p.returncode == 0, p.stderr[:200])
+        # O corpo ser dado não pode abrir um furo: o destino REAL do comando
+        # continua sendo conferido.
+        p = r.bash("cat > common/hooks/novo.py <<'EOF'\nconteudo\nEOF")
+        check("heredoc para destino fora do modo ainda barra",
+              p.returncode == 2, p.stderr[:200])
+
+
+def test_variavel_do_proprio_comando_e_expandida():
+    """Episódio 1: o alvo montado por variável atribuída no próprio comando.
+
+    O portão relatava o literal `$D/x.md`, que não casa com lista nenhuma, e
+    barrava dizendo "você está fora do modo". O mesmo caminho por extenso
+    passava. A atribuição simples está na linha: dá para ler sem executar.
+    """
+    with Repo() as r:
+        r.modo("exploracao")
+        for cmd in (f'D={r.path}/.claude/notas; cat > "$D/x.md" <<EOF\noi\nEOF',
+                    f'D={r.path}/.claude/notas && echo oi > ${{D}}/x.md',
+                    f'export D="{r.path}/docs"; echo oi >> $D/y.md',
+                    'D=docs; E=$D/sub; echo oi > $E/z.md'):
+            p = r.bash(cmd)
+            check(f"variável do comando expandida: {cmd[-24:]!r}",
+                  p.returncode == 0, p.stderr[:200])
+        # Expandir não é afrouxar: o destino expandido fora do modo barra.
+        p = r.bash('D=common/hooks; echo x > "$D/novo.py"')
+        check("variável expandida para fora do modo barra", p.returncode == 2,
+              p.stderr[:200])
+        check("o bloqueio mostra o alvo já expandido",
+              "common/hooks/novo.py" in p.stderr, p.stderr[:300])
+
+
+def test_alvo_nao_resolvivel_nao_culpa_o_modo():
+    """A rede do item: quando o alvo não dá para ler, dizer isso.
+
+    As duas falhas eram indistinguíveis para quem lê — a de parsing saía com a
+    mensagem de "fora do modo", que manda encerrar o modo, e quem leva o
+    bloqueio acredita. Alvo com variável que o comando não atribui (ou atribui
+    por substituição de comando) é alvo não resolvido, não veredito.
+    """
+    with Repo() as r:
+        r.modo("exploracao")
+        for cmd in ('echo x > "$DESTINO_QUE_NINGUEM_DEFINIU/a.md"',
+                    'D=$(pwd)/docs; echo x > $D/a.md',
+                    'echo x > "${D:-docs}/a.md"'):
+            p = r.bash(cmd)
+            check(f"não resolvido barra: {cmd[:28]}", p.returncode == 2,
+                  p.stderr[:200])
+            check(f"diz que não resolveu: {cmd[:28]}",
+                  "não consegui resolver" in p.stderr, p.stderr[:300])
+            check(f"não culpa o modo: {cmd[:28]}",
+                  "fora do que esse modo produz" not in p.stderr
+                  and "encerre" not in p.stderr.lower(), p.stderr[:300])
+        # Variável de ambiente de verdade continua valendo (os.path.expandvars).
+        p = r.bash('echo x > "$RAIZ_TESTE/docs/a.md"',
+                   env={"RAIZ_TESTE": str(r.path)})
+        check("variável de ambiente definida resolve", p.returncode == 0,
+              p.stderr[:200])
+
+
 def main():
     print("test_modo_escrita_gate")
     if not GATE.exists():
@@ -318,7 +404,10 @@ def main():
                test_indecidivel_nao_engole_bloqueio,
                test_ge_nao_e_redirecionamento, test_fora_da_raiz_passa,
                test_mensagem_diz_o_que_fazer, test_kill_switch,
-               test_tabela_vem_de_modos_py):
+               test_tabela_vem_de_modos_py,
+               test_corpo_do_heredoc_nao_e_alvo,
+               test_variavel_do_proprio_comando_e_expandida,
+               test_alvo_nao_resolvivel_nao_culpa_o_modo):
         fn()
     if failures:
         print(f"\n{len(failures)} falha(s): {', '.join(failures)}")

@@ -3042,6 +3042,15 @@ um aviso) é o vermelho que teria pegado isto antes de rodar contra um plano de 
 
 **Plano:** `cepa/portao-modo-escrita-le-heredoc`
 
+**Status:** feito em 27/09/2026 (branch `until/2026-09-26-2203`). Reproduzido antes
+de mexer: os episódios 2 e 3 (crase e `>` citados no corpo do heredoc) já não
+aconteciam, porque o `_shellscan` mascara o corpo do heredoc desde 04/09/2026; ficaram
+como testes de guarda. O episódio 1 ainda barrava: o portão agora expande a atribuição
+simples da própria linha (`D=...;`, `export D=...`) antes de casar o alvo, e o que
+continua sem resolver (`$(...)`, `${D:-x}`, variável que a linha não atribui) barra com
+"não consegui resolver o alvo desta escrita", sem culpar o modo. Testes em
+`tests/test_modo_escrita_gate.py`.
+
 ### Problema
 
 O `modo-escrita-gate.py` decide se pode escrever comparando o ALVO da chamada com a
