@@ -625,39 +625,104 @@ items:
     Todos eles ficam atrás dos itens acima por um motivo declarado: o Maestro ainda
     não roda de ponta a ponta neste harness, então consertá-lo não desbloqueia trabalho
     de hoje.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Na branch da noite until/2026-09-26-2203 (sem merge/push; build completo
+    fica com o supervisor). Commits: 2dbb99e (maestro-wave-state ganha estado LANDED
+    e subcomando aguardando-merge; landed recusa slice nao-DONE; maestro-programs
+    --aguardando-merge imprime ''N slice(s) terminada(s) esperando merge -> /maestro:resume
+    <prog>''; cepa-doctor area [maestro]; next.md lista como divida humana; resume.md
+    vai direto ao Passo 9; run.md registra retentativa no fork), 58cf777 (teste
+    trava a instrucao do run.md). Testes: tests/test_maestro_merge_pendente.py (8
+    ok, vermelho na base 6c01a4a), test_maestro_run_cores ajustado (landed agora
+    exige DONE). Gates: completion-auditor COMPLETE (b529267, apos INCOMPLETE em
+    1bc65f5 corrigido), proof-reviewer PROVEN (4cb7626, 5 perturbacoes todas RED).
+    Fora: /common:next e /maestro:resume sao prosa de comando, travados por grep,
+    nao por execucao ponta a ponta com herdr.'
 - id: maestro-calibrar-porteiro
   title: Calibrar as regras do porteiro do Maestro com o lote de sombra (43 escalações)
   why: o card está PARCIAL — o motor de classificação já aterrissou em maestro 0.4.3
     e o que falta é a calibragem contra as 43 escalações medidas. Depois do merge
     train porque calibrar um porteiro de ondas que não aterrissam mede a coisa errada.
-  status: pending
+  status: blocked
   blocked_by: []
   human_pending: null
+  evidence: 'Condicao de fora nao cumprida: o BACKLOG.md (secao ''Calibrar as regras
+    do porteiro'', decisao do dono 2026-08-24) adia o que falta (liberar escrita
+    por shell cujo alvo cai dentro da superficie da slice) ate a 0.4.3 do porteiro
+    rodar pelo menos uma onda de verdade. Conferido em 2026-09-27: o unico ledger
+    de porteiro no disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
+    166 linhas) e de 2026-08-24 10:12, anterior ao commit 9b9846e da 0.4.3 (10:13);
+    nenhuma onda rodou depois. As duas ondas da fila (rodar-onda-lotes-*) estao
+    blocked por herdr fora do ar. Nada implementado, nenhum commit. Quem resolve:
+    o dono, rodando uma onda acompanhada com herdr de pe (destrava rodar-onda-*)
+    e depois devolvendo este item para pending.'
 - id: maestro-run-nao-diz-a-aba
   title: O /maestro:run forka as filhas sem dizer em que aba, e o herdr resolve
     pelo foco
   why: 'por último dos três de Maestro: incomoda quem está olhando o run acontecer,
     e não quebra resultado nenhum.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Na branch da noite until/2026-09-26-2203 (sem merge, sem push): 4f0dc09
+    feat (run.md captura o pane-lar com herdr pane current antes do intake, persiste
+    com maestro-wave-state set-home, forka com herdr pane split <pane-lar> --no-focus
+    + herdr pane run; fallback herdr tab create --label no pane_not_found; resume.md
+    usa herdr pane get e o pane-lar gravado; teste tests/test_maestro_run_aba.py),
+    7383cfa proof PROVEN (perturbacao de 6 trechos, teste vermelho no base b529267),
+    dc675df acceptance COMPLETE (AC5 exercitado ao vivo no herdr 0.9.1: foco na
+    aba B, filhas nasceram na aba A; script docs/proof/evidence/maestro-run-nao-diz-a-aba-e2e.sh).
+    Descoberta: herdr 0.9.1 tirou --cwd/--env/comando do agent start, a receita
+    antiga nem rodava. Ficou de fora: (1) herdr pane run logo apos criar aba nova
+    pode perder o comando por corrida de inicializacao do terminal (auditor viu
+    com sleep 2, sumiu com 6s); run.md nao espera o shell ficar pronto; (2) checagem
+    de --no-focus no teste e global ao arquivo, nao local ao comando (proof-reviewer,
+    nao bloqueante). Build completo e do supervisor.'
 - id: herdr-space-por-worktree
   title: Cada worktree do Maestro vira um Space próprio na barra lateral do herdr
   why: '`prioridade baixa` declarada no próprio card, e é arrumação de interface
     — entra na fila para não sumir, não para ser feito agora.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 6577cfb (feat: maestro/bin/maestro-prune + run.md passos 2/6a/9
+    + tests/test_maestro_prune.py + BACKLOG) e bf3b4f1 (vereditos) na branch da
+    noite until/2026-09-26-2203, sem merge nem push. Gates: pair-reviewer APROVADO;
+    completion-auditor COMPLETE (.claude/acceptance/herdr-space-por-worktree.yaml);
+    proof-reviewer PROVEN (docs/proof/herdr-space-por-worktree.yaml, 5 perturbacoes
+    vermelhas). Fato ao vivo herdr 0.9.1: worktree remove --workspace derruba Space+worktree+diretorio,
+    branch fica; roteiro docs/proof/evidence/herdr-space-por-worktree-e2e.sh. Defeito
+    achado so no teste ao vivo e corrigido: worktree list sem --cwd lista o Space
+    em foco. Fora do escopo: nao apaga branches; Space extra do clone principal
+    criado pelo worktree create --cwd em repo sem Space aberto (anotado no BACKLOG).
+    Build completo delegado ao supervisor.'
 - id: topologia-marketing
   title: Topologia de marketing / produção de conteúdo
   why: 'por último de tudo: é a única demanda que cria uma topologia nova em vez
     de consertar o que existe, e nada do que está em uso depende dela.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: revisar as 3 decisoes de design tomadas no run desatendido (marketing/marketing-topology.md,
+    secao Decisoes) quando algum projeto for usar o plugin; se alguma nao servir,
+    reabrir o item. (Instalado por bin/install.sh --clean em 2026-09-27, marketing
+    0.1.0.)
+  evidence: 'Na branch da noite until/2026-09-26-2203: d8f7b21 (plugin marketing/:
+    5 agentes content-lead, content-strategist, copywriter, brand-style-critic,
+    fact-checker; comando /marketing:brief-write-review com teto de 2 rodadas de
+    REVISE; path-lock por agente; bash-path-lock gerado; registro em marketplace,
+    install.sh, gen-locks, docs, README; tests/test_topologia_marketing.py), 545da35
+    (test_lock_copies_drift cruza disco x gen-locks x teste, lacuna achada pela
+    prova), commit de vereditos. As 3 pendencias de design do BACKLOG decididas
+    em modo desatendido e registradas em marketing/marketing-topology.md secao Decisoes:
+    brand-rules.yaml opcional por projeto; board-flow no mesmo nivel do design;
+    BRIEF.md versionado como fonte unica. Vereditos: pair-reviewer OK-WITH-NOTES
+    (travessao corrigido), completion-auditor COMPLETE (.claude/acceptance/topologia-marketing.yaml),
+    proof-reviewer PROVEN na 2a rodada (docs/proof/topologia-marketing.yaml). Fora:
+    nenhum modo de sessao marketing em _modos.py; install.sh --topology nao conhece
+    marketing (mesmo padrao do design); nenhum run real do fluxo com LLM. Build
+    completo delegado ao supervisor.'
 - id: baseline-cega-builds-longos
   title: Baseline cega para build que estoura o teto de foreground do Bash
   why: 'proposto na varredura de 2026-08-25 e RETIRADO na mesma sessao: a demanda
@@ -721,10 +786,20 @@ items:
     cada dispensa corrigida a mao, e o agrupamento do /board-flow:decide junta spec
     com teste cego de verdade. Sinal estrutural disponivel no artefato: scope.changed_classes
     vazio, l4 n/a e perturbacao skipped, sem depender de prosa.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-09-26-2203: 833946c (regra estrutural
+    em classify_needs_human.py: changed_classes [] + L4 n/a + perturbacao skipped
+    + changed_files so de doc; fixtures WEGO-2117/2275/2276/2021; docs/needs-human-motivos.md),
+    a0acdfe (teste que fecha a condicao de perturbacao apontada na 1a prova), 0d2fe8b
+    (artefatos). Gates: completion-auditor COMPLETE, proof-reviewer PROVEN (2a rodada;
+    1a foi UNPROVEN por condicao sem teste). tests/test_needs_human_motivos.py 45/45.
+    Efeito real em 85 artefatos WEGO: 5 cards teste-cego -> nada-a-provar (2117,
+    2275, 2276, 1915, 2287, todos so .md); WEGO-2021 (application.properties) continua
+    teste-cego. Fora: build completo e do supervisor; tests/test_gatekeeper_classifica_linha_inteira.py
+    tem 2 erros pre-existentes (fixture gk ausente), nao tocado. Codigo esta na
+    branch da noite, sem merge.'
 - id: acceptance-gate-cego-em-worktree
   title: acceptance-gate.py procura o artefato de aceite fora da worktree e decide
     se ausencia em transicao para Done continua liberando
@@ -732,30 +807,60 @@ items:
     A trava libera Done sem auditoria sempre que a transicao sai de worktree nova;
     ja deixou WEGO-1891, 2202 e 2218 irem para Done com rota humana aberta. No fim
     da fila porque ninguem priorizou contra os pendentes; detalhe no BACKLOG.md.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-09-26-2203: 9f257b6 (fix: acceptance-gate
+    procura <KEY>.yaml em .claude/acceptance e docs/acceptance da worktree e do
+    clone principal, primeira achada vence; guarda para main_root vazio fora de
+    git), ee4cf93 e 950985f (testes, incluindo git worktree add real), commit de
+    proof+acceptance em seguida. Gates: completion-auditor COMPLETE; proof-reviewer
+    PROVEN (6 testes RED na base 0d2fe8b; 4 perturbacoes RED; a guarda de main_root
+    vazio ficou GREEN na 1a rodada e ganhou teste proprio). Testes: tests/test_acceptance_gate.py
+    verde; vizinhos test_gate_status_por_nome, test_verde_sem_teste, test_session_anchor_root,
+    test_cepa_plan_fila_unica verdes. Build completo fica com o supervisor. Fora
+    do escopo: passo 3 (merge-truth-gate aceita commit que so grava veredito) e
+    ''complete com rota humana aberta passa''. A decisao do passo 2 nao foi tomada
+    pelo executor: comportamento mantido (artefato ausente em ida para done libera).'
 - id: politica-default-yes
   title: Política default-yes — matar as micro-interações nas pontas da sessão
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "Política default-yes — matar as micro-interações nas pontas
     da sessão" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Ja implementado antes desta rodada: as 6 partes do esboco existiam
+    (skill default-yes 0fc6ca9 + hook default-yes-inject 32e0c58; varredura e50b935/63a0fd6/2f07718;
+    doctor --fix 6a49e7d; preflight no launcher cepa 63b4754 no lugar do job launchd;
+    /common:session 0fc6ca9; fio da sessao na skill default-yes; metricas de atrito
+    3667132). Rodada so corrigiu o status do BACKLOG.md e acrescentou o mapa ''Onde
+    cada parte mora'' (a86f5c7). completion-auditor COMPLETE 7/7 (.claude/acceptance/politica-default-yes.yaml,
+    commit seguinte). proof-reviewer nao se aplica: mudanca so de documentacao,
+    nenhum comportamento alterado. Topologia build-solo, sem validation-lead. Codigo
+    na branch da noite until/2026-09-26-2203, sem merge nem push.'
 - id: plano-morre-com-worktree-resto
   title: O plano de execução morre com o worktree, e o nome do programa colide
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "O plano de execução morre com o worktree, e o nome do programa
-    colide" do BACKLOG.md.'
-  status: pending
+    colide" do BACKLOG.md. Descartado em 2026-09-27 (pergunta 8 da revisao do run
+    2026-09-26-2203, "resolva as pendencias"): as camadas 0-2 ja estao no codigo,
+    e a metade restante contradiz a fila unica por repo decidida em 2026-09-25.'
+  status: dropped
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Nada construido. Conferido em 2026-09-27: camadas 0 (plano ancorado
+    no clone principal), 1 (resgate de .claude/ antes de remover worktree, inclusive
+    merge/discard) e 2 (rescue antes do --force) ja estao no codigo; a 1 esta instalada
+    (cache common 2.25.1 chama _wtlib.py rescue); tests/test_worktree_artifact_rescue.py
+    + test_plan_anchor_root.py 8 passed. A metade restante (nome de programa = fatia
+    de trabalho, tirar a regra 2 project_key do /common:next) contradiz a decisao
+    do dono de 2026-09-25 (fila unica: uma fila por repo, drain le <programs>/<project_key>/plan.yaml),
+    e reescrever o sobrescrito ja e barrado pelo cepa-plan write. Condicao de fora:
+    o dono decide se essa metade vira dropped. Registro no BACKLOG.md, commit 24e3e2d
+    na branch until/2026-09-26-2203.'
 - id: medir-efeito-de-mudanca-no-harness
   title: Não existe modo de saber se uma mudança no harness melhorou alguma coisa
     (P1-4)
@@ -763,70 +868,144 @@ items:
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "Não existe modo de saber se uma mudança no harness melhorou
     alguma coisa (P1-4)" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Suite dourada rodada pela 1a vez com contrato corrigido. Referencia
+    2026-09-27 (harness 24e3e2d): 2/3, US$ 4,69 por volta (1,78+1,46+1,45), ~922
+    s em serie. 1a passada deu 1/3; dois casos cobravam convencao nao informada
+    (# stale-ok; ''NOT in a recognized format'') e viraram frase no contrato: de
+    reactor-guard e bounce-reason. reactor-guard segue falhando em 2 casos legitimos
+    (timeout wrapper, segmento apos &&). Gasto total da medicao US$ 7,79. Commits
+    8d6b57b + acceptance na branch until/2026-09-26-2203. completion-auditor COMPLETE;
+    proof-reviewer nao aplicavel (nenhuma mudanca de comportamento do harness, so
+    fixtures de eval e docs). Fora: A/B (depende de uma mudanca de harness a comparar)
+    e ampliar para 8-12 tarefas.'
 - id: sed-escapa-dos-hooks-edit-write
   title: Modo automático edita por `sed` e três hooks só escutam `Edit|Write`
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "Modo automático edita por `sed` e três hooks só escutam `Edit|Write`"
     do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 12631f0 + b207088 na branch until/2026-09-26-2203 (sem merge/push;
+    build completo fica com o supervisor). _shellscan.edited_paths le a escrita
+    de Bash (sed -i, heredoc, tee, cp, mv; alvo relativo resolvido contra o ultimo
+    cd); mark-build-stale e session-activity usam e ficam registrados no PostToolUse
+    de Bash; common 2.26.0. Gates: completion-auditor COMPLETE (.claude/acceptance/sed-escapa-dos-hooks-edit-write.yaml,
+    confirmou vermelho no commit pai); pair-reviewer NEEDS-FIX achou regressao (tests/
+    e specs/ na raiz viravam codigo de producao), consertada em b207088 com caso
+    de teste vermelho sem o conserto. tests/test_shell_write_marks_stale.py verde;
+    vermelho em 7 checagens contra o codigo anterior e em 2 so sem o registro. Vizinhos
+    verdes: baseline_worktree_poisoning, session_anchor_root, verde_sem_teste, lock_copies_drift
+    e mais 14 que citam os hooks. Fora: editorial-lint (precisa ler o arquivo apos
+    o sed, outra decisao), os guardas de veredito proof-verdict-guard/ui-proof-verdict-guard
+    (so Write), e escrita que o motor de shell nao le (python -c, perl -e, awk -i
+    inplace, ed, patch). Registrado no BACKLOG.'
 - id: fixar-versao-twg
   title: Fixar a versão da CLI `twg`, que se autoatualiza sob os pés dos agentes
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "Fixar a versão da CLI `twg`, que se autoatualiza sob os pés
     dos agentes" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: 'Peca 3 decidida em 2026-09-27 (pergunta 7 da revisao do run 2026-09-26-2203):
+    o auto-update da twg continua ligado; o aviso do doctor e o registro por item
+    bastam. Falta declarar twg_version: 1.3.1 num docs/env.yaml dos repos WEGO,
+    que hoje nao tem manifesto de ambiente nenhum (13 repos em ~/coding/wego).'
+  evidence: 'Commits 4f2ac16 (feat: cepa-doctor check_twg_version compara twg --version
+    com twg_version: do manifesto de ambiente, docs/env.yaml ganha do legado, silencio
+    sem declaracao; cepa-until grava twg_version em cada item_start do jsonl, lido
+    por item; docs/env-manifest.md; common 2.26.1) e o commit de artefatos seguinte.
+    Gates: pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/fixar-versao-twg.yaml);
+    proof-reviewer PROVEN (docs/proof/fixar-versao-twg.yaml, 5 perturbacoes todas
+    vermelhas). Testes: tests/test_doctor_twg_version.py 6/6, tests/test_cepa_until_twg_version.py
+    3/3, vizinhos verdes; suite completa fica com o supervisor. Peca 1 adaptada:
+    versao registrada no jsonl do cepa-until por item, nao nos YAMLs de prova (que
+    nao sao produzidos com a twg). Fora: peca 3 (auto-update), aberta como rota
+    humana. Codigo esta na branch da noite until/2026-09-26-2203, sem merge.'
 - id: detector-contexto-twg
   title: Detector de contexto de execução, se o `twg` virar caminho canônico local
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "Detector de contexto de execução, se o `twg` virar caminho
     canônico local" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Fechado por absorcao: o detector pedido (command -v twg && twg --version,
+    twg ausente = caminho cloud, nunca instalar/cacar/repetir, sem caminho = BLOCKED
+    nomeado) ja existia desde d70e366 (O3, 2026-09-24, prova PROVEN em docs/proof/TWG-O0-O3.yaml).
+    Faltava o criterio de rollback: commit b36797e adiciona ''Como voltar atras''
+    em docs/archive/estrategia-twg-vs-mcp.md (caminho cloud nunca saiu; git revert
+    d70e366 conflita, conferido em worktree descartavel; volta manual a partir de
+    d70e366^; tirar a twg do PATH nao e desligador) e marca o item FEITO no BACKLOG.md.
+    completion-auditor COMPLETE (3/3, d38f77d). proof-reviewer nao aplicavel: so
+    documentacao, nenhum comportamento mudou. Codigo na branch da noite until/2026-09-26-2203;
+    build completo fica com o supervisor.'
 - id: reconcile-le-in-review-como-reprovado
   title: A reconciliação do `cepa-plan` lê "In Review" como "reprovado e reaberto"
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "A reconciliação do `cepa-plan` lê "In Review" como "reprovado
     e reaberto"" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Fechado por absorcao: o fix ja estava no db0fae8 (2026-09-26, ancestral
+    da branch until/2026-09-26-2203): PAPEL_DO_STATUS[''in_review'']=''em-revisao''
+    e reconcilia() le plano done + quadro In Review como em dia. Teste test_reconcile_done_em_review_nao_e_bounce
+    (tests/test_common_drain_plan.py) all green e fica vermelho (2 falhas) com in_review=''em-andamento'',
+    conferido em worktree descartavel. Este run: e34831f (BACKLOG marcado FEITO)
+    e 979ddd3 (completion-auditor COMPLETE, .claude/acceptance/reconcile-le-in-review-como-reprovado.yaml).
+    Sem mudanca de comportamento neste run, proof-reviewer nao aplicavel. Fora:
+    done + In Progress ainda rebaixa (item reconcile-nao-rebaixa-done); caminho
+    3 do esboco (status terminal no board-flow.yaml) nao feito. Codigo na branch
+    da noite, sem merge nem push.'
 - id: portao-modo-escrita-le-heredoc
   title: O portão de modo de escrita lê o corpo do heredoc e barra caminho legítimo
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "O portão de modo de escrita lê o corpo do heredoc e barra
     caminho legítimo" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-09-26-2203: e32e82e (portao expande atribuicao
+    simples da propria linha antes de casar o alvo; alvo nao resolvido barra com
+    ''nao consegui resolver o alvo'', sem culpar o modo) e d192cf0 (unset/read/((..))
+    na mesma linha invalidam o valor guardado, achado do pair-reviewer). Reproduzido
+    antes: episodios 2 e 3 (crase e > no corpo do heredoc) ja mortos pelo mascaramento
+    do _shellscan de 04/09, viraram testes de guarda; episodio 1 ainda barrava.
+    Gates: pair-reviewer OK-WITH-NOTES (nota consertada em d192cf0), completion-auditor
+    COMPLETE (49eef21, avaliou e32e82e), proof-reviewer PROVEN ate d192cf0 (08fb63c,
+    6 perturbacoes vermelhas, defeito vermelho na base 979ddd3). Testes rodados:
+    tests/test_modo_escrita_gate.py, test_lock_copies_drift.py, test_cepa_modo.py
+    verdes. Build completo fica com o supervisor. Fora do escopo: o bash-path-lock
+    usa o mesmo leitor e nao expande variavel da linha.'
 - id: spec-gate-so-le-trecho-do-edit
   title: A trava de especificação só lê o trecho novo de um Edit
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "A trava de especificação só lê o trecho novo de um Edit" do
     BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 7a7b9aa (fix: Edit/MultiEdit com file_path julgados pelo arquivo
+    resultante, replace_all respeitado, old_string ambiguo/ausente e arquivo inexistente
+    liberam, sem file_path mantem o comportamento antigo), a169a2d e cdc5062 (testes
+    reforcados apos o proof-reviewer), 6336f41 (artefatos). pair-reviewer OK-WITH-NOTES
+    (nota aplicada); completion-auditor COMPLETE (.claude/acceptance/spec-gate-so-le-trecho-do-edit.yaml);
+    proof-reviewer PROVEN na 3a rodada (docs/proof/spec-gate-so-le-trecho-do-edit.yaml;
+    6 perturbacoes vermelhas, regressao vermelha na base b6133a6). Rodado so tests/test_spec_readiness_gate.py
+    (all green); suite completa e do supervisor. Codigo na branch da noite until/2026-09-26-2203.
+    Fora do escopo: o proprio tests/test_spec_readiness_gate.py contem linha Status
+    pronta-para-construir e dois CS-1, entao agora ate Edit nele e barrado pelo
+    gate (Write ja era antes).'
 - id: insync-apaga-pasta-commitada
   title: O Insync apaga pasta commitada do repo sozinho, e o run desatendido não
     percebe
@@ -834,20 +1013,38 @@ items:
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "O Insync apaga pasta commitada do repo sozinho, e o run desatendido
     não percebe" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Ponto 1 do esboco feito na branch da noite until/2026-09-26-2203 (sem
+    merge, sem push): a guarda de arvore suja do cepa-until separa arquivo commitado
+    que sumiu do disco sem o ultimo run te-lo tocado (base..branch do run_start
+    mais recente, nomes lidos com -z) e manda git restore -- <pasta> sem sugerir
+    --sujo-ok; mudanca em arquivo tocado mantem a recusa de antes. Commits c774490,
+    42b6656 (nome acentuado virava fantasma, achado da revisao do par), 0579276
+    e 03e2f94 (testes apertados por achados do proof-reviewer), e5f226e (artefatos).
+    Gates: pair-reviewer APPROVE, completion-auditor COMPLETE (.claude/acceptance/insync-apaga-pasta-commitada.yaml),
+    proof-reviewer PROVEN na 3a passada (docs/proof/insync-apaga-pasta-commitada.yaml,
+    head 03e2f94). Testes: tests/test_cepa_until.py rodado inteiro verde no c774490;
+    nos commits seguintes so as funcoes da guarda (build completo e do supervisor).
+    Ficou de fora: ponto 2 (aviso no /common:doctor para clone dentro do Insync)
+    e ponto 3 (decisao do dono sobre onde mora o clone principal).'
 - id: parametros-de-comando-pela-metade
   title: Parâmetros de comando documentados só no cabeçalho ou só em Variables
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "Parâmetros de comando documentados só no cabeçalho ou só em
     Variables" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits da7234e (drain-plan --offline no argument-hint; autonomous-start
+    --no-jira e execute --force-feature-flow em Variables; novo tests/test_flags_hint_variables.py
+    varrendo os 64 comandos) e 0622e68 (gates). completion-auditor COMPLETE, proof-reviewer
+    PROVEN (3 perturbacoes RED, RED no base e5f226e). Fora do escopo, nomeados como
+    EXCECOES no teste: plan.md --source e worktree-label.md --branch (so em Variables);
+    session.md --max e exemplo. Codigo na branch da noite until/2026-09-26-2203;
+    build completo e do supervisor.'
 - id: docs-internals-desatualizados
   title: Atualizar os documentos de `docs/internals/` e juntar os que descrevem
     o build-state
@@ -855,20 +1052,39 @@ items:
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "Atualizar os documentos de `docs/internals/` e juntar os que
     descrevem o build-state" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commit d85cb7f na branch da noite until/2026-09-26-2203 (sem merge/push;
+    build completo fica com o supervisor). 9 docs atualizados contra o codigo: hooks.md
+    (49 hooks registrados, +jira-write-lock/jira-create-fields-gate que a auditoria
+    nao listava, matcher Monitor, acceptance-gate em Bash, path-lock x6), architecture.md
+    (11 plugins/55 agentes/64 comandos, raiz cepa/), path-lock.md, extending.md,
+    build-state.md (so interno) + green-or-revert.md (descricao unica de tiers/no-build/UNKNOWN/EMPTY),
+    cc-quirks.md, expertise.md, README.md. pair-reviewer OK-WITH-NOTES (recuo e
+    '' -- '' corrigidos); completion-auditor COMPLETE na 2a rodada (gap docker-build
+    na tabela de kind fechado). Sem mudanca de comportamento: proof-reviewer nao
+    se aplica. Testes: test_lock_copies_drift 9 passed, test_bash_path_lock_exec
+    5 passed, links relativos 0 quebrados. Fora do escopo: os 4 expertise orfaos
+    (git-historian, history-collector, history-narrator, orchestrator) foram so
+    documentados, nao apagados.'
 - id: doctor-le-manifesto-no-endereco-antigo
   title: '`cepa-doctor` só lê o manifesto de ambiente no endereço antigo'
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "`cepa-doctor` só lê o manifesto de ambiente no endereço antigo"
     do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits cf205d5 (fix: check_env_manifest do cepa-doctor usa _wtlib.env_manifest_path,
+    docs/env.yaml com fallback a .claude/env.yaml; teste novo tests/test_doctor_env_manifest_path.py,
+    3 falhas antes e verde depois) e 86ee073 (artefatos). Gates: pair-reviewer APPROVE;
+    completion-auditor COMPLETE (.claude/acceptance/doctor-le-manifesto-no-endereco-antigo.yaml);
+    proof-reviewer PROVEN (docs/proof/doctor-le-manifesto-no-endereco-antigo.yaml,
+    perturbacao vermelha e regressao vermelha na base d85cb7f). Testes rodados:
+    tests/test_doctor_*.py (7 arquivos) verdes; suite completa fica com o supervisor.
+    Codigo esta na branch da noite until/2026-09-26-2203. Fora do escopo: nada.'
 - id: fleet-validate-valida-mcp-atlassian
   title: '`board-flow-fleet-validate.sh` valida o `mcp-atlassian`, que o `atlassian-expert`
     não usa mais'
@@ -876,10 +1092,15 @@ items:
     de 2026-09-25 e acrescentada no fim por decisão do dono (regra R2 da fila única).
     Detalhe na seção "`board-flow-fleet-validate.sh` valida o `mcp-atlassian`, que
     o `atlassian-expert` não usa mais" do BACKLOG.md.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commit 54d09ff (fix: board-flow-fleet-validate.sh valida a twg, o caminho
+    que o atlassian-expert usa) e c7610eb (artefatos, gravados do stash bd45dc9
+    depois da queda de rede do run 2026-09-26-2203). Gates: completion-auditor COMPLETE
+    (.claude/acceptance/fleet-validate-valida-mcp-atlassian.yaml); proof-reviewer
+    PROVEN (docs/proof/fleet-validate-valida-mcp-atlassian.yaml). Codigo esta na
+    branch da noite until/2026-09-26-2203.'
 - id: reconcile-nao-rebaixa-done
   title: cepa-plan reconcile para de rebaixar item done para pending quando o card
     volta no Jira (regra R3)
@@ -955,6 +1176,35 @@ items:
     quarkus:* quebra com -am (BACKLOG, adf873f). Antes de construir: conferir numa
     amostra de 10 bloqueios que o install veio depois da ultima edicao. Aprovado
     pelo dono em 2026-09-26. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: acceptance-gate-barra-done-sem-auditoria
+  title: acceptance-gate.py barra a ida para Done quando nao existe artefato de
+    aceite em nenhuma das quatro pastas (Review continua liberado)
+  why: 'decidido em 2026-09-27 (pergunta 6 da revisao do run 2026-09-26-2203): fecha
+    a rota humana aberta pelo item acceptance-gate-cego-em-worktree. Todo fluxo
+    do harness roda o completion-auditor antes do Review, entao so chega a Done
+    sem auditoria quem pulou o fluxo; ja deixou WEGO-1891, 2202 e 2218 passarem.
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: defeitos-da-revisao-until-2203
+  title: 'Tres defeitos do harness achados na revisao do run 2026-09-26-2203: digest
+    le fila velha, run_end conta zero quedas de rede, suite de avaliacao deixa worktrees
+    em /tmp'
+  why: 'decidido em 2026-09-27 (pergunta 9 da revisao do run 2026-09-26-2203). (1)
+    cepa-until-digest le ledger.parent.parent/plan.yaml, a copia da worktree de
+    largada, e nao a fila ancorada no clone principal (caminho_do_plano do cepa-plan);
+    mostrou 21 itens pending. (2) cepa-until so faz quedas.append quando a rede
+    volta, entao um run que termina sem-rede grava quedas_de_rede: 0 com um evento
+    queda_de_rede no registro. (3) a suite de avaliacao do item medir-efeito-de-mudanca-no-harness
+    deixou 3 worktrees em /private/tmp/cepa-eval/ registradas no git worktree list.
+    Os dois primeiros enganam a proxima revisao de run. (ainda não priorizado: entrou
+    no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
