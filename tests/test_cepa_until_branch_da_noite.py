@@ -232,6 +232,63 @@ def test_mvnw_na_raiz_vira_o_build_padrao():
               "./mvnw -B clean verify" in p.stdout, p.stdout + p.stderr)
 
 
+def _roda_sem_flag_de_verify(tmp, raiz, binv):
+    """Sem `--verify` nem `--sem-verify`: quem escolhe é o `cepa-until`."""
+    return subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
+                             / "bin" / "cepa-until"),
+         "fila", "--repo", str(raiz), "--for", "2h", "--sem-analise"],
+        capture_output=True, text=True, timeout=120,
+        env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
+                 FAKE_PLANO=str(plano_de(raiz)),
+                 FAKE_CHAMADAS=str(Path(tmp) / "chamadas.jsonl"),
+                 CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees")))
+
+
+def _commita(raiz, msg):
+    subprocess.run(["git", "add", "-A"], cwd=raiz)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                    "commit", "-qm", msg], cwd=raiz)
+
+
+def test_no_build_com_suite_roda_a_suite():
+    # O cepa tem `.claude/no-build` (sem build para o gate-advance) e
+    # `tests/run-all.sh`. O run 2026-09-26-2203 leu o primeiro como "sem
+    # verify" e 18 itens fecharam sem a suíte inteira rodar.
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        marca_suite = Path(tmp) / "suite-rodou"
+        (raiz / ".claude" / "no-build").write_text("# sem build\n")
+        (raiz / "tests").mkdir(exist_ok=True)
+        suite = raiz / "tests" / "run-all.sh"
+        suite.write_text(f"#!/bin/sh\necho x >> {marca_suite}\nexit 0\n")
+        suite.chmod(0o755)
+        _commita(raiz, "no-build + suite")
+        binv = fake_claude(tmp, TRABALHA)
+        p = _roda_sem_flag_de_verify(tmp, raiz, binv)
+        inicio = [e for e in ledger_de(raiz) if e["evento"] == "run_start"]
+        check("com no-build e tests/run-all.sh, o run começa",
+              p.returncode == 0 and inicio, f"saiu {p.returncode}: {p.stderr[-300:]}")
+        check("...e o run_start grava a suíte como verify, não null",
+              inicio and inicio[0].get("verify") == "tests/run-all.sh",
+              str(inicio))
+        check("...e a suíte rodou depois do item done", marca_suite.exists(),
+              p.stdout[-400:])
+
+
+def test_no_build_sem_suite_continua_dispensando():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        (raiz / ".claude" / "no-build").write_text("# sem build\n")
+        _commita(raiz, "no-build")
+        binv = fake_claude(tmp, TRABALHA)
+        p = _roda_sem_flag_de_verify(tmp, raiz, binv)
+        inicio = [e for e in ledger_de(raiz) if e["evento"] == "run_start"]
+        check("só com no-build, o run começa sem verify",
+              p.returncode == 0 and inicio and inicio[0].get("verify") is None,
+              f"saiu {p.returncode}: {inicio} {p.stderr[-300:]}")
+
+
 def test_analise_do_fim_grava_o_review_ao_lado_do_registro():
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1")])

@@ -187,13 +187,21 @@ CEPA_UNTIL_DIGEST = AQUI / "cepa-until-digest"
 ENV_CASA_WORKTREES = "CEPA_WORKTREE_HOME"
 
 # O build completo que o supervisor roda depois de cada item `done`, pelo
-# arquivo que o repo tem na raiz. Repo sem nenhum dos dois precisa dizer o
-# comando (`--verify`) ou dispensá-lo (`--sem-verify`, ou `.claude/no-build`
-# commitado): uma noite sem build completo é o buraco que a 2308 mostrou.
+# arquivo que o repo tem. Repo sem nenhum deles precisa dizer o comando
+# (`--verify`) ou dispensá-lo (`--sem-verify`, ou `.claude/no-build` commitado
+# sem `tests/run-all.sh`): uma noite sem build completo é o buraco que a 2308
+# mostrou.
 VERIFY_POR_ARQUIVO = [
     ("mvnw", "./mvnw -B clean verify"),
     ("gradlew", "./gradlew build"),
+    ("tests/run-all.sh", "tests/run-all.sh"),
 ]
+
+# A suíte de um repo que não compila nada (o próprio cepa). O `.claude/no-build`
+# dispensa o baseline do `gate-advance` porque não há build; não quer dizer que
+# não há suíte. Com os dois no repo, a suíte roda: no run 2026-09-26-2203 o
+# `no-build` sozinho fez 18 itens fecharem sem ninguém rodar a suíte inteira.
+SUITE_SEM_BUILD = "tests/run-all.sh"
 
 # Quanto a análise do fim do run pode levar. Ela lê um resumo de dezenas de KB,
 # não o `.log` inteiro; 20 minutos é folga, não estimativa.
@@ -836,6 +844,9 @@ def comando_de_verify(repo, explicito, dispensado):
     if explicito:
         return explicito, "--verify"
     if (repo / ".claude" / "no-build").exists():
+        if (repo / SUITE_SEM_BUILD).exists():
+            return SUITE_SEM_BUILD, (f"achei `{SUITE_SEM_BUILD}`; o "
+                                     "`.claude/no-build` só dispensa o build")
         return None, ".claude/no-build"
     for arquivo, comando in VERIFY_POR_ARQUIVO:
         if (repo / arquivo).exists():
@@ -1045,7 +1056,7 @@ def main(argv=None):
     verify, origem_verify = comando_de_verify(repo, a.verify, a.sem_verify)
     if verify == "":
         print("cepa-until: não sei o build completo deste repo (não há `mvnw` "
-              "nem `gradlew` na raiz). Passe `--verify '<comando>'`, ou "
+              "nem `gradlew` na raiz, nem `tests/run-all.sh`). Passe `--verify '<comando>'`, ou "
               "`--sem-verify` se o repo não tem build — sem isso um card pode "
               "fechar `done` com o build vermelho e o próximo começar em cima "
               "dele.", file=sys.stderr)
