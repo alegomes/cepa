@@ -721,21 +721,31 @@ def tocados_pelo_ultimo_run(repo, fila):
             continue
         if not (largada and largada.get("base") and largada.get("branch")):
             continue
-        p = subprocess.run(["git", "diff", "--name-only",
+        # `-z` nos dois lados: sem ele o git escreve `relatório.md` como
+        # `"relat\303\263rio.md"`, e o nome nunca bate com o do disco.
+        p = subprocess.run(["git", "diff", "--name-only", "-z",
                             f"{largada['base']}..{largada['branch']}"],
                            cwd=str(repo), capture_output=True, text=True,
                            timeout=30)
-        return set(p.stdout.splitlines()) if p.returncode == 0 else set()
+        return set(filter(None, p.stdout.split("\0"))) \
+            if p.returncode == 0 else set()
     return set()
 
 
-def delecoes_fantasma(repo, fila, sujeira):
-    """Arquivo commitado que sumiu do disco (` D`, sem stage) e que o último
-    run não tocou. Em 14/09 o Insync apagou 9 arquivos commitados do clone
-    principal com nenhum processo do Claude rodando; a recusa culpou o run e
-    sugeriu `--sujo-ok`, que deixaria o próximo item rodar por cima da pasta
-    ausente."""
-    sumidos = [l[3:].strip('"') for l in sujeira if l.startswith(" D ")]
+def sumidos_do_disco(repo):
+    """Arquivo commitado que não está mais no disco, sem a deleção no stage
+    (o ` D` do `git status`), com o nome cru."""
+    p = subprocess.run(["git", "ls-files", "--deleted", "-z"], cwd=str(repo),
+                       capture_output=True, text=True, timeout=30)
+    return list(filter(None, p.stdout.split("\0"))) if p.returncode == 0 else []
+
+
+def delecoes_fantasma(repo, fila):
+    """Arquivo commitado que sumiu do disco e que o último run não tocou. Em
+    14/09 o Insync apagou 9 arquivos commitados do clone principal com nenhum
+    processo do Claude rodando; a recusa culpou o run e sugeriu `--sujo-ok`,
+    que deixaria o próximo item rodar por cima da pasta ausente."""
+    sumidos = sumidos_do_disco(repo)
     if not sumidos:
         return []
     tocados = tocados_pelo_ultimo_run(repo, fila)
@@ -1000,7 +1010,7 @@ def main(argv=None):
         return 2
 
     sujeira = arvore_suja(repo)
-    fantasmas = delecoes_fantasma(repo, a.fila, sujeira) if sujeira else []
+    fantasmas = delecoes_fantasma(repo, a.fila) if sujeira else []
     if fantasmas and not a.sujo_ok:
         # Sem `--sujo-ok` na mensagem de propósito: com ele o próximo item roda
         # sem a pasta, e um commit amplo vira a deleção fantasma em deleção de
@@ -1013,8 +1023,10 @@ def main(argv=None):
               file=sys.stderr)
         for l in fantasmas[:10]:
             print(f"     D {l}", file=sys.stderr)
-        resto = [l for l in sujeira
-                 if not (l.startswith(" D ") and l[3:].strip('"') in fantasmas)]
+        # As linhas ` D` do porcelain vêm escapadas; as deleções que não são
+        # fantasma voltam pelo nome cru.
+        resto = [l for l in sujeira if not l.startswith(" D ")] + \
+            [f" D {f}" for f in sumidos_do_disco(repo) if f not in fantasmas]
         if resto:
             print(f"  E há mais {len(resto)} arquivo(s) modificado(s), que "
                   "precisam ser commitados ou limpos:", file=sys.stderr)

@@ -3162,9 +3162,15 @@ de um critério numa especificação já pronta passa, porque o trecho novo não
 
 **Plano:** `cepa/insync-apaga-pasta-commitada`
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (guarda de árvore suja) e
-o launcher `cepa` · **Origem:** manhã de 14/09/2026, `wego-acesso-backend`, ao tentar o
-segundo `cepa-until --for 2h WEGO`.
+**Status:** ponto 1 FEITO em 2026-09-27 (branch da noite `until/2026-09-26-2203`): a
+guarda de árvore suja do `cepa-until` separa arquivo commitado que sumiu do disco sem o
+último run tê-lo tocado (conferido pelo `base..branch` do `run_start` mais recente do
+registro) e, nesse caso, manda `git restore -- <pasta>` sem sugerir `--sujo-ok`. Mudança
+em arquivo que o run tocou mantém a mensagem de antes. Testes em `tests/test_cepa_until.py`
+(os dois do "Teste que falta"). Continuam de fora: o ponto 2 (aviso no `/common:doctor`) e
+o ponto 3, que é decisão do dono. · **Lar provável:** `common/bin/cepa-until` (guarda de
+árvore suja) e o launcher `cepa` · **Origem:** manhã de 14/09/2026, `wego-acesso-backend`,
+ao tentar o segundo `cepa-until --for 2h WEGO`.
 
 ### Problema
 

@@ -525,7 +525,7 @@ def test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok():
     não tocou é outra coisa, e a saída é `git restore`."""
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        pasta = raiz / "docs" / "tasks" / "wego-2229"
+        pasta = raiz / "docs" / "tasks" / "wego-2229-remoção"
         pasta.mkdir(parents=True)
         for n in ("00-SEAMS.md", "01-PLAN.md"):
             (pasta / n).write_text(n, encoding="utf-8")
@@ -547,7 +547,7 @@ def test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok():
               "sumiram do disco" in p.stderr and "fora do run" in p.stderr,
               p.stderr[:600])
         check("...e mandando restaurar a pasta com git restore",
-              "git restore -- docs/tasks/wego-2229" in p.stderr, p.stderr[:600])
+              "git restore -- docs/tasks/wego-2229-remoção" in p.stderr, p.stderr[:600])
         check("...sem sugerir --sujo-ok", "--sujo-ok" not in p.stderr,
               p.stderr[:600])
 
@@ -556,17 +556,19 @@ def test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje():
     """O contraponto: arquivo que o run anterior tocou e está diferente no
     disco é mudança que se confunde com a do run. A mensagem continua a de
     antes, com o escape `--sujo-ok`. Inclui a deleção: se o último item
-    commitou o arquivo, ele sumir não é fantasma."""
+    commitou o arquivo, ele sumir não é fantasma. O nome acentuado é de
+    propósito: o git escapa `relatório.txt` no `status` e no `diff`, e a
+    primeira versão comparava os escapes e chamava o arquivo de fantasma."""
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1"), item("a2")])
         (raiz / "tocado.txt").write_text("v0", encoding="utf-8")
-        (raiz / "apagado.txt").write_text("v0", encoding="utf-8")
+        (raiz / "relatório.txt").write_text("v0", encoding="utf-8")
         _commita(raiz, "base2")
         binv = fake_claude(
             tmp,
             "import subprocess\n"
             "open('tocado.txt','w').write('v1')\n"
-            "open('apagado.txt','w').write('v1')\n"
+            "open('relatório.txt','w').write('v1')\n"
             "subprocess.run(['git','-c','user.email=t@t','-c','user.name=t',"
             "'commit','-qam','item'])\n"
             "marca(primeiro_pendente(), status='done')")
@@ -579,7 +581,7 @@ def test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje():
         subprocess.run(["git", "checkout", "-q", "--", str(plano)], cwd=raiz,
                        check=True)
         (raiz / "tocado.txt").write_text("mexido", encoding="utf-8")
-        (raiz / "apagado.txt").unlink()
+        (raiz / "relatório.txt").unlink()
         (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
         p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
         check("mudança em arquivo tocado recusa",
