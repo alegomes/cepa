@@ -54,10 +54,10 @@ def _instala_fake_cepa_plan(destino, exit_code):
     destino.chmod(destino.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def _run(shim, args, cwd, env=None):
+def _run(shim, args, cwd, env=None, timeout=None):
     return subprocess.run(
         [sys.executable, str(shim), *args],
-        cwd=str(cwd), capture_output=True, text=True, env=env,
+        cwd=str(cwd), capture_output=True, text=True, env=env, timeout=timeout,
     )
 
 
@@ -121,6 +121,23 @@ def test_nenhum_candidato_sai_127_e_nomeia_os_caminhos_tentados(tmp_path):
     # shim = .../solto/board-flow/bin/cepa-plan; a raiz do "repo" é `solto/`.
     assert str(shim.parent.parent.parent / "common" / "bin" / "cepa-plan") in r.stderr
     assert "instale o plugin" in r.stderr.lower()
+
+
+def test_ele_mesmo_no_path_nao_reexecuta_a_si_proprio(tmp_path):
+    """Se `_candidato_path` não pulasse este próprio arquivo, `shutil.which("cepa-plan")`
+    o acharia a si mesmo (instalado no PATH sob o nome `cepa-plan`, sem nenhum `common/`
+    em volta, nem layout de repo nem de cache) e o `os.execv` chamaria a si mesmo de novo
+    e de novo, travando até o timeout em vez de sair 127 com a mensagem de erro."""
+    bin_no_path = tmp_path / "so-o-shim-no-path"
+    shim_como_cepa_plan = bin_no_path / "cepa-plan"
+    _instala_shim(shim_como_cepa_plan)
+
+    env = dict(os.environ, PATH=f"{bin_no_path}:/usr/bin:/bin")
+
+    r = _run(shim_como_cepa_plan, [], cwd=tmp_path, env=env, timeout=10)
+
+    assert r.returncode == 127
+    assert "não encontrado" in r.stderr
 
 
 def test_cwd_sem_common_ainda_resolve_pelo_layout_de_repo(tmp_path):
