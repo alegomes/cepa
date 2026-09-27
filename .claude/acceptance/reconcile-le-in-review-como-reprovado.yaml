@@ -1,0 +1,59 @@
+card: reconcile-le-in-review-como-reprovado
+repo: /Users/alegomes/cepa-worktrees/cepa-pendencias_until-until-2026-09-26-2203
+diff: db0fae8 (fix, já na ancestralidade de HEAD e34831f) + e34831f (só BACKLOG.md, sem código)
+escopo: |
+  Fechamento por ABSORÇÃO: o fix já tinha sido implementado em db0fae8
+  (2026-09-26), antes desta rodada. Esta rodada só atualizou o BACKLOG.md
+  (status FEITO). Auditado contra o estado atual do código, não contra um
+  diff novo.
+
+  Fora de escopo (não gera gap aqui, são itens separados do backlog):
+  - `reconcile-nao-rebaixa-done`: plano `done` + quadro In Progress ainda
+    rebaixa para `pending` — comportamento correto e intencional, item à parte.
+  - Caminho 3 do esboço (status terminal declarado no `board-flow.yaml`):
+    marcado como opcional/não feito no próprio texto do backlog.
+status: complete
+criteria:
+  - id: AC1
+    descricao: >-
+      `cepa-plan reconcile` com item `done` no plano e card do quadro em
+      status mapeado para o papel `in_review` (ex.: "Code Review") NÃO deve
+      rebaixar o item para `pending` — sem divergência (ou no máximo aviso);
+      o item continua `done` em disco depois do `--apply`.
+    altitude: cli
+    surface: >-
+      `python3 common/bin/cepa-plan reconcile ... --board ... --apply --json`
+      (subprocess real do binário via helper `reconcile()` do arquivo de
+      teste, que invoca o script como processo, não a função Python isolada).
+    test: tests/test_common_drain_plan.py::test_reconcile_done_em_review_nao_e_bounce
+    layer: integration (subprocess real do binário `cepa-plan`)
+    evidence: verified
+    run: >-
+      `python3 tests/test_common_drain_plan.py` no worktree
+      /Users/alegomes/cepa-worktrees/cepa-pendencias_until-until-2026-09-26-2203
+      → "all green" (143 checagens `ok`, 0 falhas). Do teste-alvo, 4
+      checagens ok: "done + Code Review fica em dia", "e continua done no
+      disco", "done + Doing continua sendo bounce", "pending + Code Review
+      avisa que alguém pode estar nele".
+    veredito: complete
+  - id: AC2
+    descricao: >-
+      Existe um teste que exercita reconcile com plano `done` + quadro In
+      Review, e que teria pego o incidente (vermelho com o mapeamento
+      antigo `"in_review": "em-andamento"`).
+    altitude: cli
+    surface: mesmo teste do AC1, verificado também contra o mapeamento antigo.
+    test: tests/test_common_drain_plan.py::test_reconcile_done_em_review_nao_e_bounce
+    layer: integration (subprocess real do binário `cepa-plan`)
+    evidence: verified
+    run: >-
+      Reproduzido em árvore descartável isolada (`git worktree add --detach
+      /tmp/cepa-audit-check HEAD`, removida ao final com `git worktree
+      remove --force`, worktree principal nunca tocado): revertida a linha
+      `PAPEL_DO_STATUS["in_review"]` de `"em-revisao"` de volta para
+      `"em-andamento"` (o valor de antes do fix) e rodado
+      `python3 tests/test_common_drain_plan.py` → saída "2 failure(s):
+      ['done + Code Review fica em dia', 'e continua done no disco']".
+      Confirma que o teste é vermelho com o bug e verde com o fix.
+    veredito: complete
+gaps: []
