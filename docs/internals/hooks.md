@@ -182,12 +182,40 @@ reincidiu — daí a barreira ser mecânica e bloquear, não avisar.
 3. Por segmento (split em ; | && ||): achar uma invocação REAL do Maven.
    Prefixo de env (`FOO=bar ./mvnw`) e wrapper (`timeout 600 mvn`) contam;
    `echo`/`grep`/`cat` + amigos não — ali o `mvn` é texto citado.
-4. BLOCK se houver `-pl`/`--projects` (inclusive `-pl=x`) sem `-am`/
-   `--also-make`. `-amd`/`--also-make-dependents` NÃO conta: constrói os
-   dependentes, não as dependências, então o buraco continua aberto.
+4. `-pl`/`--projects` (inclusive `-pl=x`) sem `-am`/`--also-make` é candidato a
+   bloqueio, coletado em TODOS os segmentos do comando (não só o primeiro):
+   `./mvnw -pl a clean && ./mvnw -pl b test` tem dois ofensores. `-amd`/
+   `--also-make-dependents` NÃO conta: constrói os dependentes, não as
+   dependências, então o buraco continua aberto.
+5. Três liberações automáticas (2026-09-27, docs/investigations/
+   2026-09-25-stale-e-reactor-no-wego.md seção 5), goals via `_mvnscan.py`:
+   (a) todo goal do segmento é não-compilante (`clean`/`validate`/
+   `initialize`/`dependency:*`/`help:*` — `install` fica de fora de
+   propósito) — aplicada por ofensor: com vários ofensores no comando, o guard
+   usa o PRIMEIRO que compila para as regras 5c/6, e só libera de fato quando
+   TODOS os ofensores não compilam (bug corrigido em 2026-09-27: olhar só o
+   primeiro segmento deixava um `-pl b test` que compila passar escondido
+   atrás de um `-pl a clean` inofensivo); (b) `.claude/last-root-install.json`
+   (gravado por `capture-build-result.py` a cada Maven SUCCESS que roda
+   `install` sobre o reator inteiro — sem `-pl`, sem `-rf`/`--resume-from`, e
+   com o pom EFETIVO — `-f`/`--file`, se presente, resolvido relativo ao build
+   dir; sem `-f`, o pom.xml do próprio build dir — apontando para o pom.xml da
+   RAIZ DA SESSÃO, não de um submódulo. `cd domain && ./mvnw install` sem
+   `-f` nenhum NÃO grava: o pom efetivo é o de `domain`, não o da sessão, bug
+   reproduzido pelo pair-reviewer em 2026-09-27) existe na raiz da sessão e
+   nenhum arquivo-fonte do reator (`_buildsource.is_source`) tem mtime posterior ao
+   `at` gravado ali — fail closed se o arquivo faltar/for ilegível; (c) goal
+   `quarkus:*` nunca ganha a sugestão de `-am` (quebraria o prefixo do plugin)
+   — sem install fresco, a mensagem manda instalar a raiz e repetir o mesmo
+   comando.
+6. BLOCK se nenhuma liberação valeu. `T.emit("maven_reactor_allow", ...)` nas
+   liberações 5a/5b; `T.emit("maven_reactor_block", ...)` com
+   `reason="pl-without-am"` (genérico) ou `"quarkus-without-fresh-install"`.
 ```
 
-Testes: `tests/test_maven_reactor_guard.py` (25 casos, sem deps).
+Testes: `tests/test_maven_reactor_guard.py` (sem deps) e
+`tests/test_capture_build_result_root_install.py` (marcador de install da
+raiz).
 
 ### gate-advance.py (PreToolUse, matcher `Bash`)
 

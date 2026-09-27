@@ -18,9 +18,12 @@ Guards the contracts of the guard:
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Este teste executa hook que emite telemetria; sem isto os eventos cairiam
@@ -202,6 +205,142 @@ def main():
             "payload vazio falha aberto",
             not blocked(run_hook(None, multi, raw="")),
         )
+
+        # ── liberação automática 1: nenhum goal do segmento compila ─────────
+        check(
+            "-pl domain clean é liberado (clean não compila)",
+            not blocked(run_hook("./mvnw -pl domain clean", multi)),
+        )
+        check(
+            "-pl bootstrap dependency:tree é liberado (dependency: não compila)",
+            not blocked(run_hook("./mvnw -pl bootstrap dependency:tree", multi)),
+        )
+        check(
+            "-pl x clean test continua bloqueado (test compila)",
+            blocked(run_hook("./mvnw -pl x clean test", multi)),
+        )
+        check(
+            "-pl domain install continua bloqueado (install compila, de propósito)",
+            blocked(run_hook("./mvnw -pl domain install", multi)),
+        )
+
+        # ── comando encadeado com MAIS DE UM ofensor (-pl sem -am) ──────────
+        # Bypass reproduzido pelo pair-reviewer em 2026-09-27: olhar só o
+        # PRIMEIRO segmento ofensor fazia a regra 1 (nenhum goal compila) ser
+        # avaliada só nele — um `clean` inofensivo no primeiro segmento
+        # blindava um `test` que compila no segundo.
+        check(
+            "clean (não compila) seguido de test (compila) continua bloqueado",
+            blocked(run_hook("./mvnw -pl a clean && ./mvnw -pl b test", multi)),
+        )
+        check(
+            "clean seguido de dependency:tree (nenhum dos dois compila) é liberado",
+            not blocked(
+                run_hook("./mvnw -pl a clean && ./mvnw -pl b dependency:tree", multi)
+            ),
+        )
+
+        # ── liberação automática 2: install fresco da raiz ──────────────────
+        # Carimbos de tempo controlados EXPLICITAMENTE por época (epoch), em vez
+        # de `time.sleep` + `datetime.now()`: `at` é gravado com precisão de
+        # SEGUNDO (`isoformat(timespec="seconds")`, igual ao hook real), então
+        # um arquivo criado no mesmo segundo em que `at` é truncado tem mtime
+        # com fração > o `at` truncado mesmo sendo "antes" no relógio de
+        # parede — dar 10s de folga entre os carimbos elimina essa ambiguidade
+        # sem depender de quão rápido o teste roda.
+        def write_root_install(root, at_epoch, command="./mvnw install -DskipTests"):
+            claude = Path(root) / ".claude"
+            claude.mkdir(parents=True, exist_ok=True)
+            at_iso = datetime.fromtimestamp(at_epoch, tz=timezone.utc).isoformat(
+                timespec="seconds"
+            )
+            (claude / "last-root-install.json").write_text(
+                json.dumps({"at": at_iso, "command": command}), encoding="utf-8"
+            )
+
+        def clear_root_install(root):
+            marker = Path(root) / ".claude" / "last-root-install.json"
+            if marker.exists():
+                marker.unlink()
+
+        fresh_multi = Path(td) / "fresh-multi"
+        fresh_multi.mkdir()
+        (fresh_multi / "pom.xml").write_text(MULTI_POM, encoding="utf-8")
+        (fresh_multi / "domain").mkdir()
+        foo_java = fresh_multi / "domain" / "Foo.java"
+        foo_java.write_text("class Foo {}\n", encoding="utf-8")
+
+        now = time.time()
+        # `pom.xml` também é fonte (BUILD_FILES) — sem empurrar o mtime dele
+        # para o passado também, ele fica "mais novo" que qualquer `at` gravado
+        # nos poucos milissegundos seguintes à criação da árvore, e a
+        # liberação nunca dispara. Reseta tudo que já existe na árvore.
+        for p in fresh_multi.rglob("*"):
+            if p.is_file():
+                os.utime(p, (now - 100, now - 100))
+
+        old_at = now - 200  # `at` ANTES da fonte → não libera
+        write_root_install(fresh_multi, old_at)
+        check(
+            "install file presente mas fonte MAIS NOVA que `at` → continua bloqueado",
+            blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
+        )
+
+        fresh_at = now  # `at` DEPOIS da fonte (100s de folga) → libera
+        write_root_install(fresh_multi, fresh_at)
+        check(
+            "install fresco (fonte MAIS ANTIGA que `at`) → liberado",
+            not blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
+        )
+
+        # editar um arquivo-fonte DEPOIS do `at` gravado volta a bloquear.
+        os.utime(foo_java, (now + 100, now + 100))
+        check(
+            "editar fonte depois do install fresco volta a bloquear",
+            blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
+        )
+        os.utime(foo_java, (now - 100, now - 100))  # devolve ao estado "antiga"
+
+        # editar um arquivo de TESTE depois do install não invalida a liberação
+        # (src/test não conta como fonte — mesmo critério do mark-build-stale).
+        (fresh_multi / "domain" / "src" / "test" / "java").mkdir(parents=True)
+        test_file = fresh_multi / "domain" / "src" / "test" / "java" / "FooTest.java"
+        test_file.write_text("class FooTest {}\n", encoding="utf-8")
+        os.utime(test_file, (now + 100, now + 100))  # depois do install, mas é teste
+        check(
+            "editar teste depois do install fresco NÃO bloqueia (src/test não é fonte)",
+            not blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
+        )
+
+        clear_root_install(fresh_multi)
+        check(
+            "sem last-root-install.json → continua bloqueado",
+            blocked(run_hook("./mvnw test -pl bootstrap", fresh_multi)),
+        )
+
+        # ── liberação automática 3: quarkus:* nunca ganha sugestão de -am ────
+        check(
+            "-pl bootstrap quarkus:dev sem install é bloqueado",
+            blocked(run_hook("./mvnw -pl bootstrap quarkus:dev", multi)),
+        )
+        check(
+            "mensagem do quarkus:* NÃO sugere acrescentar -am",
+            "acrescente `-am`" not in run_hook(
+                "./mvnw -pl bootstrap quarkus:dev", multi
+            ).stderr,
+        )
+        check(
+            "mensagem do quarkus:* manda instalar a raiz",
+            "install -DskipTests" in run_hook(
+                "./mvnw -pl bootstrap quarkus:dev", multi
+            ).stderr,
+        )
+        write_root_install(fresh_multi, time.time())
+        check(
+            "-pl bootstrap quarkus:dev com install fresco é liberado",
+            not blocked(run_hook("./mvnw -pl bootstrap quarkus:dev", fresh_multi)),
+        )
+        clear_root_install(fresh_multi)
 
     print()
     if FAILURES:

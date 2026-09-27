@@ -32,6 +32,24 @@ Debugging: set CAPTURE_BUILD_DEBUG=1 to dump every invocation's
 payload + classification details to /tmp/capture-build-debug.log
 (or to $CAPTURE_BUILD_DEBUG_LOG if set). Same pattern as
 HEX_PATHLOCK_DEBUG.
+
+Root-install marker (2026-09-27): when a Maven command classifies SUCCESS and
+one of its segments ran `install` over the WHOLE reactor (no `-pl`/`--projects`,
+no `-rf`/`--resume-from` — a partial reactor even without `-pl` — and its
+effective pom — `-f`/`--file`'s target resolved relative to the effective
+build dir, or that build dir's own `pom.xml` when there's no `-f` — is the
+`pom.xml` of `marker_root`, the directory whose `.claude/` receives the
+marker: the session root when the build ran inside the session tree, the
+build dir itself when it ran outside it — `_mvnscan.goals`/`has_pl`/
+`has_resume_from`/`file_flag_target`), this hook also writes
+`.claude/last-root-install.json`
+= {"at": <iso utc>, "command": <cmd[:200]>} next to last-build.json. It is a
+SEPARATE file, not folded into last-build.json: that one gets overwritten by
+every build (including a later `-pl` one), so it can't answer "when did the
+reactor last see a full install?" a few commands later. `maven-reactor-guard.py`
+reads this file to liberate `-pl` without `-am` when no reactor source is newer
+than `at` — see that hook's docstring for the full rationale
+(docs/investigations/2026-09-25-stale-e-reactor-no-wego.md, seção 5).
 """
 
 import json
@@ -42,7 +60,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _wtlib as L  # noqa: E402
-
+import _shellscan as S  # noqa: E402
+import _mvnscan as M  # noqa: E402
 
 
 # Shared markers for the JS/Node toolchain (npm/yarn/pnpm). CC's Bash
@@ -449,6 +468,63 @@ def effective_build_dir(command: str, cwd: Path) -> Path:
         rest = rest[m.end():]
 
 
+# ─── root-install marker ───────────────────────────────────────────────
+
+def runs_root_install(command: str, build_dir: Path, marker_root: Path) -> bool:
+    """True se algum segmento Maven do comando roda `install` sobre o reator
+    INTEIRO a partir de `build_dir`, E o pom efetivo desse install é o
+    `pom.xml` de `marker_root` — o diretório cujo `.claude/` recebe o
+    marcador (a raiz da sessão quando o build rodou dentro da árvore da
+    sessão; `build_dir` quando rodou fora — ver a ramificação em `main()`).
+
+    Quatro jeitos de NÃO ser um install completo da raiz, mesmo com `install`
+    no goal:
+      - `-pl x install` (um módulo só) — quem chamou instalou uma fração do
+        reator, não o reator inteiro;
+      - `-rf`/`--resume-from` (retomada) — o reator não roda de novo desde o
+        começo, é um reator PARCIAL mesmo sem `-pl`;
+      - `-f`/`--file X` (ou `-f=X`/`--file=X`) apontando para outra coisa que
+        não o pom.xml de `marker_root`. `X` pode ser um diretório
+        (`X/pom.xml` é o que conta) ou um arquivo; resolvido relativo a
+        `build_dir`. Bug reproduzido pelo pair-reviewer em 2026-09-27:
+        `./mvnw -f domain/pom.xml install` marcava a raiz como fresca quando
+        só `domain` tinha sido instalado — `-pl` nem precisa aparecer para o
+        install ser parcial, `-f` sozinho já resolve para outro pom;
+      - SEM `-f`: o pom efetivo é o de `build_dir` (o pom que o Maven usa por
+        default é o do diretório corrente). Se `build_dir` não é
+        `marker_root` — por exemplo `cd domain && ./mvnw install`, um `cd`
+        para dentro de um submódulo sem `-f` nenhum — o install rodou sobre o
+        reator do SUBMÓDULO, não sobre o da sessão, mesmo sem `-pl`/`-rf`.
+        Bug reproduzido pelo pair-reviewer em 2026-09-27: essa combinação
+        (sem `-f`, `build_dir` != `marker_root`) escapava do check porque só
+        o ramo com `-f` comparava contra a raiz."""
+    root_pom = (marker_root / "pom.xml").resolve()
+    for seg in S._split_segments(command):
+        seg = seg.strip()
+        if not seg:
+            continue
+        args = M.maven_args(seg)
+        if args is None:
+            continue
+        if "install" not in M.goals(args):
+            continue
+        if M.has_pl(args) or M.has_resume_from(args):
+            continue
+        target = M.file_flag_target(args)
+        if target is not None:
+            resolved = Path(target)
+            resolved = resolved if resolved.is_absolute() else (build_dir / resolved)
+            resolved = resolved.resolve()
+            if resolved.is_dir():
+                resolved = resolved / "pom.xml"
+        else:
+            resolved = (build_dir / "pom.xml").resolve()
+        if resolved != root_pom:
+            continue
+        return True
+    return False
+
+
 # ─── main ─────────────────────────────────────────────────────────────
 
 def main():
@@ -492,6 +568,7 @@ def main():
         # main baseline and gate-advance blocks the next push on another
         # directory's failure (the proof gate and the advance gate working
         # against each other). Record it where the build ran instead.
+        marker_root = build_dir
         state_path = build_dir / ".claude" / "last-build.json"
         print(
             f"[capture-build-result] build ran outside the session tree "
@@ -500,7 +577,11 @@ def main():
         )
     else:
         # Inside the tree (including `cd subdir && build` in a monorepo):
-        # the session's baseline is the right home, as before.
+        # the session's baseline is the right home, as before. The root-
+        # install marker (below) must also be checked against THIS
+        # directory's pom, not build_dir's — `cd domain && ./mvnw install`
+        # has build_dir == cwd/domain but the marker still lands in cwd/.claude.
+        marker_root = cwd
         state_path = cwd / ".claude" / "last-build.json"
 
     new_state = {
@@ -521,6 +602,21 @@ def main():
         state_path.write_text(json.dumps(new_state, indent=2) + "\n", encoding="utf-8")
     except OSError as e:
         print(f"[capture-build-result] could not write {state_path}: {e}", file=sys.stderr)
+
+    if status == "SUCCESS" and kind == "maven" and runs_root_install(command, build_dir, marker_root):
+        # Marcador SEPARADO do last-build.json (mesmo diretório): o de cima é
+        # sobrescrito a cada build, inclusive por um `-pl` posterior que não
+        # instalou nada — perderia exatamente o dado que o
+        # maven-reactor-guard precisa para liberar depois. Ver docstring.
+        root_install_path = state_path.parent / "last-root-install.json"
+        try:
+            root_install_path.write_text(json.dumps({
+                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "command": command[:200],
+            }, indent=2) + "\n", encoding="utf-8")
+        except OSError as e:
+            print(f"[capture-build-result] could not write {root_install_path}: {e}",
+                  file=sys.stderr)
 
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parent))
