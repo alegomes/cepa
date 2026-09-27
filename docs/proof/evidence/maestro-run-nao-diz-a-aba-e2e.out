@@ -1,0 +1,14 @@
+capturado: pane=w28:p5 tab=w28:t4 (A=w28:t4)
+foco agora: True em B
+s1 nasceu em tab=w28:t4
+s2 nasceu em tab=w28:t4
+A panes=3  B panes=1  B focused=True
+filha-s1
+MAESTRO-EXIT:0
+filha-s2
+MAESTRO-EXIT:0
+{"error":{"code":"pane_not_found","message":"pane not found"},"id":"cli:pane:split"}
+split_no_lar_morto exit=1
+fallback: aba nova w28:t6 rotulo=e2e-PROG focada=False
+foco devolvido a w28:t2: True
+['1', 'cepa-until']

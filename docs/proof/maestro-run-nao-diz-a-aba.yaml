@@ -1,0 +1,122 @@
+schema_version: 2
+card: maestro-run-nao-diz-a-aba
+verdict: proven
+reviewed_at: 2026-09-26T23:10:00-03:00
+base_commit: b529267
+head_commit: 4f0dc09
+issue_type: Bug
+repo_kind: harness            # NOT Quarkus/Maven — Claude Code plugin source (.claude/no-build), Python CLI + prompt files, própria suíte em tests/*.py
+scope:
+  changed_classes:
+    - class: "maestro/bin/maestro-wave-state (cmd_set_home — novo subcomando `set-home`, grava home.pane/tab/workspace no wave-state.yaml)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "maestro/bin/maestro-wave-state (chave `home: None` inicializada em cmd_init, formato antigo sem `home` continua carregando)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "maestro/commands/run.md (prosa executada pelo modelo — captura `herdr pane current` ANTES do intake gate `cepa-dor`)"
+      module: prompt
+      external_observable: true
+      substituted_by_double: null
+    - class: "maestro/commands/run.md (passo 6c — spawn trocado de `herdr agent start --cwd` para `herdr pane split <home.pane> --no-focus` + `herdr pane rename` + `herdr pane run` com `\\$`-escape de PIPESTATUS/ec/MAESTRO_LINGER)"
+      module: prompt
+      external_observable: true
+      substituted_by_double: null
+    - class: "maestro/commands/run.md (fallback `pane_not_found` — `herdr tab create --label <PROG>` + `set-home` atualizado para as próximas slices)"
+      module: prompt
+      external_observable: true
+      substituted_by_double: null
+    - class: "maestro/commands/resume.md (liveness de filha `running` trocada de `herdr agent get` para `herdr pane get`; re-spawn/escalação usa o pane-lar de `wave-state get --json` → `home.pane`)"
+      module: prompt
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_maestro_run_aba.py (suíte nova — 5 funções de teste cobrindo captura, spawn por split, escaping do PIPESTATUS, fallback e roundtrip do wave-state)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é JVM); mecanismo aplicável é perturbação manual em worktree descartável"
+    perturbation:
+      status: pass
+      results:
+        - "PASS (RED) — maestro-wave-state:162 (`ws[\"home\"] = {...}` em cmd_set_home): trocado por `pass` → test_wave_state_roundtrip caiu em 'get expõe home.pane/tab/workspace gravados' (home ficou None). Restaurado do .bak, git status limpo."
+        - "PASS (RED) — maestro-wave-state:261 (`p.set_defaults(fn=cmd_set_home)` no parser do subcomando `set-home`): trocado por `fn=cmd_set_gk` → `set-home` chamou a função errada e crashou (`AttributeError: 'Namespace' object has no attribute 'pid'`); 2 falhas em cascata (`set-home roda ok`, `get expõe home...`). Restaurado, git status limpo."
+        - "PASS (RED) — run.md (texto `herdr pane current` no passo 1, antes do intake gate): renomeado para `PERTURBADO pane current` → 2 falhas (`run.md chama herdr pane current`, `a captura do pane-lar vem ANTES do intake gate`). Restaurado, git status limpo."
+        - "PASS (RED) — run.md:175 (`ec=\\${PIPESTATUS[0]}` no bloco `herdr pane run` do passo 6c — o `\\$` que impede expansão prematura no shell do maestro): removida a barra (`ec=${PIPESTATUS[0]}`) → test_maestro_exit_nao_expande_no_shell_do_maestro caiu em '...ainda tem ${PIPESTATUS[0]} literal' (a simulação real em bash mostrou a variável expandindo vazia no shell do maestro, exatamente o defeito que a prosa descreve). Restaurado, git status limpo."
+        - "PASS (RED) — resume.md:32 (`herdr pane get <pane>` — liveness pós-herdr-0.9): trocado por `herdr agent get <pane>` → test_set_home_persistido_e_lido caiu em 'resume.md confere liveness por herdr pane get, não por herdr agent get'. Restaurado, git status limpo."
+        - "PASS (RED) — run.md (fallback `pane_not_found` no passo 6c): renomeado para `PANE-SUMIU` → test_fallback_pane_lar_morto caiu em 'existe fallback para pane-lar morto (pane_not_found)'. Restaurado, git status limpo."
+        - "SURVIVED (GAP, não bloqueia por si só) — run.md:169 (`--no-focus` anexado à chamada `herdr pane split` específica do passo 6c): removido só esse `--no-focus` (mantendo as outras 2 ocorrências da string em prosa/fallback) → todos os testes continuaram verdes. `test_spawn_usa_split_por_pane_lar` checa `\"--no-focus\" in fr` (texto achatado do arquivo INTEIRO), não que o split do passo 6c especificamente o carregue — a asserção é estrutural-fraca (presença global, não local). Não achatado como falha estrutural do diff, porque o comportamento real (roubar foco) não é observável por este harness de texto de qualquer forma; registrado como achado para o dev, não como hunk não-guardado."
+        - "CONFIRMADO RED NO BASE (b529267) — worktree descartável em base_commit com tests/test_maestro_run_aba.py trazido do HEAD (4f0dc09): 21 de 27 checagens falharam, incluindo `set-home roda ok` com erro de parser (`invalid choice: 'set-home'` — subcomando não existia), confirmando que o comportamento é genuinamente novo e o teste não está vazio."
+      run: >-
+        Worktree descartável fora da árvore principal (`git worktree add
+        --detach b529267 "$TMPDIR/red"`) — worktree principal
+        /Users/alegomes/cepa-worktrees/cepa-pendencias_until-until-2026-09-26-2203
+        NUNCA tocado (confirmado `git status --short` limpo no final).
+        Confirmação de base: `git checkout 4f0dc09 -- tests/test_maestro_run_aba.py`
+        em cima de b529267 → `python3 tests/test_maestro_run_aba.py` foi RED
+        (21 falhas). Trazido o resto do HEAD (`git checkout 4f0dc09 -- .`) →
+        `python3 tests/test_maestro_run_aba.py` → "all green" (GREEN de
+        partida). Cada perturbação foi `cp`/`sed -i`/`mv` num único ponto do
+        arquivo alvo seguido do teste correspondente, restaurado do `.bak` e
+        confirmado `git status --short` estável. GREEN final re-confirmado
+        antes de rodar as suítes vizinhas (test_worktree_create_verify: "all
+        green"; test_maestro_merge_pendente: "8 testes ok"; test_maestro_run_cores:
+        "all green"; test_maestro_programs: "all green") e remover o worktree
+        (`git worktree remove --force`).
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      Todo hunk comportamental do diff b529267..4f0dc09 em maestro-wave-state
+      (set-home + home no init) e nas duas prosas (run.md, resume.md) tem uma
+      perturbação correspondente acima que foi a RED contra
+      tests/test_maestro_run_aba.py — exceto o `--no-focus` isolado do passo
+      6c, cuja checagem é estrutural-fraca (global, não local); ver achado
+      acima. BACKLOG.md é só changelog, sem comportamento a perturbar.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      O diff não abre superfície de entrada externa nova: é CLI local
+      (argparse lendo flags do próprio operador/modelo, grava em
+      wave-state.yaml no disco do projeto) e prosa de comando lida pelo
+      modelo — não parseia entrada de rede nem de usuário não confiável.
+      Nenhuma classe mudada está em módulo input-bearing tipo api-rest (este
+      projeto nem tem esse módulo — é um harness Python/prompt, não Quarkus).
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: >-
+      issue_type Bug (spawn forkava a aba em foco em vez da aba do
+      /maestro:run). Regressão trazida do HEAD (test_maestro_run_aba.py) para
+      o base_commit b529267 → RED (21/27 checagens falharam, incluindo o
+      parser rejeitando `set-home` e a ausência de `herdr pane current`/`herdr
+      pane split`/fallback no texto do run.md). Fix em 4f0dc09 → mesma suíte
+      "all green".
+routing_reason: >-
+  As 6 perturbações no comportamento novo (persistência de home em
+  cmd_set_home, wiring do subcommand set-home no parser, ordem
+  captura-antes-do-intake em run.md, escaping do PIPESTATUS na receita de
+  spawn, troca de herdr agent get por herdr pane get em resume.md, e o
+  fallback pane_not_found) foram todas GREEN→RED→GREEN contra
+  tests/test_maestro_run_aba.py, o teste que a descrição do item aponta como
+  cobertura. Confirmado RED no base_commit (comportamento realmente novo, teste
+  não vazio). Não há dependência de Quarkus/PIT neste repo; a perturbação em
+  worktree descartável é o mecanismo certo. Uma checagem (--no-focus anexado
+  à chamada de split do passo 6c) sobreviveu à perturbação porque a asserção
+  do teste é global no arquivo, não local ao comando — é um achado de teste
+  fraco, não um hunk sem cobertura nenhuma (as outras 12 checagens da mesma
+  função de teste, e o roundtrip real do wave-state, seguem cobrindo o resto
+  do passo 6c com força). L4 é n/a porque o diff não abre superfície de
+  entrada externa (CLI local + prosa), condição mecânica satisfeita
+  (reason + nenhuma classe em módulo input-bearing). Nada ficou
+  assumed/skipped/gap. Suítes vizinhas (test_worktree_create_verify,
+  test_maestro_merge_pendente, test_maestro_run_cores, test_maestro_programs)
+  verdes, sem regressão. PROVEN.
