@@ -25,6 +25,11 @@ Checks do projeto (cwd):
     ocupadas por processo de OUTRO diretório (lsof) e containers de `services`
     ausentes no `docker ps` (best-effort; sem docker → skip silencioso).
     O `healthcheck:` do manifest NUNCA roda aqui — doctor é só leitura.
+  - versão da CLI `twg` (Atlassian): a instalada (`twg --version`) contra a
+    declarada em `twg_version:` no manifesto de ambiente (docs/env.yaml ganha
+    de .claude/env.yaml) — ela se autoatualiza
+    sozinha e pode trocar entre dois cards do mesmo lote desatendido. Sem
+    `twg_version:` declarado, silêncio total.
 
 Saída: ✓ / ⚠ / ✗ por check. Exit 0 = tudo ok, 1 = só warnings, 2 = falhas.
 O check VIVO do board-flow.yaml contra o Jira não acontece aqui (script sem
@@ -57,6 +62,13 @@ try:
     import _pluginver as PV
 except Exception:  # noqa: BLE001 — doctor degrada, nunca morre por causa disso
     PV = None
+
+# `_wtlib.env_manifest_path` é a mesma resolução de caminho do seeding de
+# worktree (docs/env.yaml ganha de .claude/env.yaml, o legado) — fonte única.
+try:
+    import _wtlib as WT
+except Exception:  # noqa: BLE001
+    WT = None
 
 
 def ok(area, msg, fix=None):
@@ -509,6 +521,7 @@ def check_project(cwd: Path):
 
     check_arvore_suja(root)
     check_env_manifest(root)
+    check_twg_version(root)
     check_divergencia_plano(root)
     check_aguardando_merge(root)
 
@@ -677,6 +690,54 @@ def check_env_manifest(root: Path):
             else:
                 warn("ambiente", f"container {svc} declarado no env.yaml não está no docker ps "
                                  f"— suba com o comando `up:` do manifest")
+
+
+def twg_version_instalada():
+    """Versão da CLI `twg` (Atlassian) instalada, extraída da saída de
+    `twg --version` com regex `\\d+(\\.\\d+)+`. None quando a CLI não está no
+    PATH, o comando falha, ou a saída não tem nada que pareça versão. Timeout
+    curto e qualquer exceção viram None — este check nunca pode travar/quebrar
+    o doctor por causa de uma CLI de terceiro."""
+    try:
+        p = subprocess.run(["twg", "--version"], capture_output=True, text=True, timeout=10)
+    except Exception:  # noqa: BLE001
+        return None
+    m = re.search(r"\d+(?:\.\d+)+", (p.stdout or "") + (p.stderr or ""))
+    return m.group(0) if m else None
+
+
+def check_twg_version(root: Path):
+    """Confere a CLI `twg` instalada contra a `twg_version:` declarada no
+    manifesto de ambiente (ver docs/env-manifest.md).
+
+    A `twg` roda um agendador (`com.atlassian.twg.upkeep`) a cada 12 minutos
+    que checa atualização sozinho — a versão pode trocar ENTRE dois cards do
+    mesmo lote desatendido, sem sinal nenhum. Sem `twg_version:` declarado,
+    silêncio total: o doctor roda em toda abertura de sessão e aviso sem
+    pedido é ruído.
+    """
+    if WT is None:
+        return
+    manifest = WT.env_manifest_path(str(root))
+    if manifest is None:
+        return
+    declarada = env_manifest_list(manifest, "twg_version")
+    if not declarada:
+        return
+    declarada_v = declarada[0]
+    instalada_v = twg_version_instalada()
+    if instalada_v is None:
+        warn("ambiente", f"env.yaml declara twg_version {declarada_v}, mas a CLI `twg` "
+                         f"não está instalada ou não está no PATH")
+        return
+    if instalada_v == declarada_v:
+        ok("ambiente", f"twg {instalada_v}, a versão declarada no env.yaml")
+        return
+    warn("ambiente", f"twg instalado está em {instalada_v}, mas o env.yaml declara "
+                     f"{declarada_v} — o agendador `com.atlassian.twg.upkeep` atualiza "
+                     f"a CLI sozinho, e o que os agentes leem da saída dela mudou de "
+                     f"ferramenta desde então; reinstale a versão declarada ou atualize "
+                     f"`twg_version:` depois de conferir")
 
 
 # ── Divergência da fila única (A3) ──────────────────────────────────────

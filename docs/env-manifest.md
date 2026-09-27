@@ -58,6 +58,12 @@ seed:
   - .env
   - .env.local
   - config/application-local.properties
+
+# Versão esperada da CLI `twg` (Atlassian), a que os agentes usam para falar
+# com o Jira/Confluence local. Ela se autoatualiza sozinha (agendador
+# `com.atlassian.twg.upkeep`, a cada 12 minutos). Declare aqui a versão que
+# você conferiu para o doctor avisar quando a realidade sair de baixo.
+twg_version: 1.3.1
 ```
 
 Listas inline também valem: `ports: [8083, 3000]`.
@@ -71,6 +77,7 @@ Listas inline também valem: `ports: [8083, 3000]`.
 | `up` | string (comando) | Como subir o ambiente do zero. |
 | `healthcheck` | string (comando) | Retorna 0 quando o ambiente está saudável. |
 | `seed` | lista de globs | Arquivos gitignorados a copiar para worktrees novos. |
+| `twg_version` | string (escalar) | Versão esperada da CLI `twg` (Atlassian), conferida contra a instalada. |
 
 Todos os campos são opcionais. Um manifesto só com `ports:` já paga o custo.
 
@@ -91,6 +98,19 @@ Todos os campos são opcionais. Um manifesto só com `ports:` já paga o custo.
 - **`/common:worktree-start`** (passo "Preflight de ambiente"): quando o
   manifesto existe, as portas checadas no preflight vêm de `ports:` — fonte
   mecânica — em vez da lista chutada `8080,8083,3000`.
+- **`cepa-doctor`** (área `ambiente`, de novo): com `twg_version:` declarado,
+  roda `twg --version` (timeout curto; ausente/ilegível conta como não
+  instalada) e compara. Sem `twg_version:` declarado, silêncio total: o
+  doctor roda em toda abertura de sessão e aviso sem pedido é ruído. Igual à
+  declarada → ok. Diferente → aviso nomeando as duas versões e lembrando que o
+  agendador `com.atlassian.twg.upkeep` (ver acima) troca a CLI sozinho; a
+  correção (reinstalar a versão declarada ou atualizar `twg_version:`) é
+  decisão sua, o doctor não mexe.
+- **`cepa-until`**: grava a versão instalada do `twg` em cada evento
+  `item_start` do registro `.jsonl` do run (campo `twg_version`, `null` se a
+  CLI não estiver instalada/ilegível). Lida a CADA item, não uma vez no
+  `run_start`, porque é a prova concreta de que a versão trocou (ou não) ENTRE dois
+  cards do mesmo lote desatendido.
 
 ## Aceite (do backlog P3)
 

@@ -594,6 +594,25 @@ def ambiente_do_item():
     return env
 
 
+def twg_version_instalada():
+    """Versão da CLI `twg` (Atlassian) instalada agora, ou None se ausente do
+    PATH / `--version` falhar / a saída não trouxer nada que pareça versão.
+
+    Lida a cada item (nunca em cache no `run_start`): a `twg` roda um
+    agendador (`com.atlassian.twg.upkeep`) que checa atualização sozinho a
+    cada 12 minutos, e a versão pode trocar ENTRE dois itens do mesmo run sem
+    sinal nenhum — é exatamente o vetor que este registro existe para pegar.
+    Timeout curto e qualquer exceção viram None: uma CLI de terceiro não pode
+    derrubar o run.
+    """
+    try:
+        p = subprocess.run(["twg", "--version"], capture_output=True, text=True, timeout=10)
+    except Exception:  # noqa: BLE001
+        return None
+    m = re.search(r"\d+(?:\.\d+)+", (p.stdout or "") + (p.stderr or ""))
+    return m.group(0) if m else None
+
+
 def executa_item(nome, arvore, branch, permissoes, limite_seg, log):
     """Dispara UM subprocesso, com `arvore` (a worktree da noite) como cwd.
     Devolve (codigo, matou_por_timeout, segundos, saida_desta_tentativa)."""
@@ -1114,7 +1133,7 @@ def main(argv=None):
               + (f", tentativa {vez}/{a.tentativas_item}" if vez > 1 else "") + ")")
         registra({"evento": "item_start", "id": ident, "title": item.get("title"),
                   "restante_seg": int(restante.total_seconds()),
-                  "tentativa": vez})
+                  "tentativa": vez, "twg_version": twg_version_instalada()})
 
         limite = (restante + folga).total_seconds()
         antes = cabeca(arvore)
