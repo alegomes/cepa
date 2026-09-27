@@ -3297,7 +3297,7 @@ trocar o resto por link para `green-or-revert.md`.
 
 **Plano:** `cepa/doctor-le-manifesto-no-endereco-antigo`
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-doctor` · **Origem:** auditoria de
+**Status:** feito (2026-09-27, commit cf205d5 na branch until/2026-09-26-2203) · **Lar provável:** `common/bin/cepa-doctor` · **Origem:** auditoria de
 `docs/` em 2026-09-19.
 
 O manifesto de ambiente mudou para `docs/env.yaml` em 2026-08-22, com fallback para o antigo

@@ -1,0 +1,67 @@
+key: doctor-le-manifesto-no-endereco-antigo
+status: complete
+diff_range: "d85cb7f..cf205d5 (common/bin/cepa-doctor,
+  tests/test_doctor_env_manifest_path.py — 2 arquivos, 205 inserções/8
+  remoções)"
+criteria:
+  - id: AC1
+    text: "`cepa-doctor` (o check_env_manifest do /common:doctor) lê o
+      manifesto de ambiente em `docs/env.yaml`, com fallback ao legado
+      `.claude/env.yaml`, via `_wtlib.env_manifest_path` (fonte única de
+      verdade)."
+    altitude: cli
+    surface: "saída do binário `common/bin/cepa-doctor --projeto`, rodado
+      como subprocesso (o usuário só observa o texto do relatório do
+      doctor, nunca chama check_env_manifest diretamente)."
+    test: "tests/test_doctor_env_manifest_path.py::test_legado_claude_env_yaml_porta_ocupada_tambem_avisa
+      e ::test_docs_env_yaml_ganha_do_legado_na_porta — o primeiro monta um
+      repo só com `.claude/env.yaml` (sem docs/env.yaml) e exige o aviso; o
+      segundo monta os dois manifestos com portas diferentes e exige que só
+      a porta de docs/env.yaml apareça no relatório, provando a ordem de
+      precedência de `_wtlib.env_manifest_path`."
+    layer: "subprocess.run([sys.executable, cepa-doctor, '--projeto']) —
+      integração real via CLI, não chamada direta de função Python."
+    evidence: verified
+    run: "python3 tests/test_doctor_env_manifest_path.py -> 'test_legado_claude_env_yaml_porta_ocupada_tambem_avisa:
+      ok  .claude/env.yaml (legado, sem docs/env.yaml) também dispara o
+      aviso' e 'test_docs_env_yaml_ganha_do_legado_na_porta: ok docs/env.yaml
+      ganha: avisa da porta do docs/env.yaml / ok ...e NÃO menciona a porta
+      do legado (docs/env.yaml venceu)'; ao final: '✓ tudo verde' (3 funções
+      de teste executadas, todas ok, nenhuma falha). Confirmei no diff que
+      check_env_manifest deixou de hardcodar `.claude/env.yaml`
+      (`ef = root / '.claude' / 'env.yaml'`) e passou a chamar
+      `WT.env_manifest_path(str(root))`, e que `_wtlib.env_manifest_path`
+      (common/hooks/_wtlib.py:615-621) itera ENV_MANIFEST_PATHS com
+      docs/env.yaml primeiro."
+    gap: null
+  - id: AC2
+    text: "A promessa de docs/env-manifest.md ('o doctor acusa porta
+      ocupada') vale para um manifesto em docs/env.yaml: um teste declara
+      uma porta em docs/env.yaml, ocupa-a, e exige o aviso."
+    altitude: cli
+    surface: "mesma saída de `common/bin/cepa-doctor --projeto`, com
+      docs/env.yaml declarando uma porta realmente ocupada por um processo
+      de outro diretório (via lsof, como o código de produção usa)."
+    test: "tests/test_doctor_env_manifest_path.py::test_docs_env_yaml_porta_ocupada_avisa
+      — abre um socket TCP real em 127.0.0.1 (classe OuvinteDePorta), monta
+      um repo com `docs/env.yaml: ports: [<porta>]` e roda o doctor via
+      subprocess, checando a string 'porta <N> ocupada' na saída."
+    layer: "subprocess.run(cepa-doctor --projeto) + socket real escutando
+      numa porta — mesmo caminho do lsof que o código de produção percorre."
+    evidence: verified
+    run: "python3 tests/test_doctor_env_manifest_path.py -> 'test_docs_env_yaml_porta_ocupada_avisa:
+      ok  docs/env.yaml declara porta ocupada → warn nomeando a porta';
+      arquivo inteiro terminou com '✓ tudo verde', 3 testes rodados, 0
+      falhas, 0 skips (lsof disponível neste ambiente)."
+    gap: null
+notes: >
+  Rodei tests/test_doctor_env_manifest_path.py isoladamente (o teste que
+  demonstra os dois critérios) e, para checar ausência de regressão, os 6
+  siblings tests/test_doctor_{arvore_suja,divergencia_plano,fix,
+  install_guard,twg_version,worktree_interna}.py — todos em primeiro plano,
+  cada um sob 10 minutos, todos verdes (nenhuma falha, nenhum filtro
+  vazio). Não rodei a suíte completa (tests/run-all.sh); isso fica com o
+  supervisor, por instrução explícita da tarefa. Nenhum arquivo de
+  produção ou teste foi alterado por este auditor; único artefato escrito
+  foi este .yaml.
+schema_version: 1

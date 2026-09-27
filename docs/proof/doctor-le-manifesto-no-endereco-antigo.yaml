@@ -1,0 +1,45 @@
+schema_version: 2
+card: doctor-le-manifesto-no-endereco-antigo
+verdict: proven
+reviewed_at: 2026-09-27T00:00:00-03:00
+base_commit: d85cb7f
+head_commit: cf205d5
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-doctor (check_env_manifest)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-doctor (import _wtlib as WT, module-level guard)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_doctor_env_manifest_path.py (novo teste, guarda o invariante)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "GREEN no HEAD íntegro, worktree descartável /tmp/proof-doctor-head criado com `git worktree add --detach /tmp/proof-doctor-head cf205d5`: `python3 tests/test_doctor_env_manifest_path.py` roda o CLI real (`common/bin/cepa-doctor --projeto`) como subprocesso em 3 repos git temporários -> 4 checks 'ok', 'tudo verde', EXIT=0."
+        - "Perturbação (reverte exatamente as linhas mudadas em check_env_manifest): substituí `ef = WT.env_manifest_path(str(root))` / `if ef is None: return` por `ef = root / \".claude\" / \"env.yaml\"` / `if not ef.exists(): return` (comando `sed -i` no arquivo dentro do worktree descartável, nunca na árvore principal) -> `python3 tests/test_doctor_env_manifest_path.py` some vira RED: 3 falhas ('docs/env.yaml ganha: avisa da porta do docs/env.yaml', '...e NÃO menciona a porta do legado', 'docs/env.yaml declara porta ocupada -> warn nomeando a porta'), EXIT=1 — exatamente as 3 falhas descritas na mensagem do commit cf205d5 ('3 falhas antes')."
+        - "Restaurado o arquivo ao estado de HEAD via sed pontual e confirmado byte-a-byte com `diff <(git show cf205d5:common/bin/cepa-doctor) common/bin/cepa-doctor` -> IDENTICAL; re-rodei o teste -> 4 'ok', 'tudo verde', EXIT=0 (green->red->green fechado)."
+        - "Cobertura da linha cosmética restante do diff (o texto do ok() que agora usa `f\"{ef.relative_to(root)} presente, sem ports/services declarados\"` em vez do texto hardcoded) não é exercida por test_doctor_env_manifest_path.py, mas É exercida sem quebrar por tests/test_doctor_twg_version.py::test_docs_env_yaml_versao_igual_da_ok (env.yaml só com twg_version, sem ports/services) -> rodado no mesmo worktree HEAD, 6 'ok', 'tudo verde', EXIT=0. Confirma que o branch não lança exceção nem regride comportamento; não é uma prova de conteúdo específico da mensagem, é evidência de que o branch alcançável não quebrou."
+        - "Worktree descartável removido ao final com `git worktree remove --force /tmp/proof-doctor-head`; a árvore principal (/Users/alegomes/cepa-worktrees/cepa-pendencias_until-until-2026-09-26-2203) nunca foi tocada."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "As linhas comportamentais mudadas (guarda `if WT is None`, resolução via `WT.env_manifest_path`, `if ef is None`) são cobertas e comprovadamente load-bearing pela perturbação acima. A única linha cosmética não coberta pelo teste dedicado (o texto do ok() com relative_to) é alcançada sem erro por um teste irmão pré-existente (test_doctor_twg_version.py), então não há linha comportamental sem nenhuma cobertura estrutural."
+  l4_adversarial_input:
+    status: "n/a"
+    reason: "O diff é uma correção de resolução de caminho de um arquivo de config local (docs/env.yaml / .claude/env.yaml) lido pelo próprio CLI no cwd do usuário; não há payload externo, endpoint HTTP nem módulo de borda de entrada de rede envolvido — a única 'entrada' é o próprio filesystem do repo onde o doctor roda, já coberta pela perturbação acima."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "Copiei tests/test_doctor_env_manifest_path.py (de HEAD) para um worktree descartável em base_commit d85cb7f (`git worktree add --detach /tmp/proof-doctor-base d85cb7f`, teste colado por cima pois o arquivo não existe na base): `python3 tests/test_doctor_env_manifest_path.py` -> 3 falhas nas mesmas 3 checagens do perturbation acima, EXIT=1 (RED), batendo com o texto do commit ('3 falhas antes'). Worktree removido com `git worktree remove --force /tmp/proof-doctor-base`."
+routing_reason: "O bug (check_env_manifest hardcodava .claude/env.yaml e nunca via docs/env.yaml) está provado como regressão real: RED na base (3 falhas) e GREEN no HEAD (4 oks). A prova de load-bearing por perturbação reverteu exatamente as linhas mudadas em check_env_manifest e reproduziu as mesmas 3 falhas da base, restaurando depois para GREEN — green->red->green fechado, tudo em worktree descartável fora da árvore principal. A única linha do diff sem teste dedicado é cosmética (formatação da mensagem ok()) e foi confirmada não-quebrada por um teste irmão pré-existente. Nenhum nível ficou assumed/skipped. PROVEN."
