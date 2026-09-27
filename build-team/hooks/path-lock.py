@@ -35,7 +35,8 @@ ALLOWED_WRITES = {
     "orchestrator":      [],
     "planning-lead":     ["specs/**"],
     "engineering-lead":  [],
-    "validation-lead":   [],
+    # its verdict, which `cepa-plan finish --status done` requires
+    "validation-lead":   [".claude/validation/**"],
 
     # workers — domain-locked
     "product-manager":   ["specs/**"],
