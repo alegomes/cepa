@@ -1,0 +1,135 @@
+item: maestro-run-nao-diz-a-aba
+diff: b529267..4f0dc09 (commit unico 4f0dc09)
+branch: until/2026-09-26-2203
+status: complete
+criteria:
+  - id: AC1
+    desc: "esboco 1 — /maestro:run captura o pane-lar (herdr pane current: pane_id/tab_id/workspace_id) no INICIO da rotina, antes do intake gate, nunca na hora do fork"
+    altitude: cli
+    surface: "maestro/commands/run.md, passo 1 (novo bloco 'Capturar o pane-lar da onda, AGORA'); comando citado: `herdr pane current`; fallback textual sem herdr: `herdr tab create --label <PROG> --no-focus`"
+    test: "tests/test_maestro_run_aba.py::test_captura_antes_do_intake"
+    layer: "grep de prosa (run.md e um comando de agente/prompt interpretado por LLM, nao codigo executavel — a mesma convencao ja usada em .claude/acceptance/maestro-merge-train-nao-roda.yaml para next.md/resume.md/run.md: a superficie mecanicamente testavel de um prompt e o proprio texto, e o teste confere ordem (indice da string 'herdr pane current' < indice de 'common/bin/cepa-dor') e a presenca da justificativa/evidencia (2026-08-24, 'pela metade')"
+    evidence: verified
+    run: "python3 tests/test_maestro_run_aba.py -> 'all green', 0 failures; checks relevantes: 'run.md chama herdr pane current', 'a captura do pane-lar vem ANTES do intake gate no texto', 'captura sem herdr -> aba nova previsivel'"
+    status: complete
+
+  - id: AC2
+    desc: "esboco 2 — o passo de spawn passa o id capturado (pane-lar) ao fork, nunca o foco corrente no instante do fork; a receita usa herdr pane split com id explicito + --no-focus + herdr pane run (adaptacao necessaria porque herdr 0.9.1 removeu --cwd/--tab/--workspace/comando de herdr agent start, tornando o esboco original — passar --tab/--workspace ao agent start — inviavel contra o binario instalado)"
+    altitude: cli
+    surface: "maestro/commands/run.md, passo 6c ('Spawn contra o pane-lar...'); comandos citados: `herdr pane split <home.pane> --direction right ... --no-focus`, `herdr pane rename`, `herdr pane run`; prosa explicita proibindo split contra pane em foco e nomeando que --no-focus nao escolhe onde o pane nasce"
+    test: "tests/test_maestro_run_aba.py::test_spawn_usa_split_por_pane_lar, ::test_maestro_exit_nao_expande_no_shell_do_maestro"
+    layer: "grep de prosa (mesma justificativa de AC1) + verificacao mecanica adicional (roda o script do wrapper contra um bash real para confirmar que ${PIPESTATUS[0]}/$ec/$MAESTRO_LINGER chegam literais, nao expandidos cedo demais no shell do maestro)"
+    evidence: verified
+    run: "python3 tests/test_maestro_run_aba.py -> 'all green'; checks: 'spawn usa herdr pane split', 'run.md NAO tem mais a receita obsoleta herdr agent start <PROG>-<slice> --cwd', 'o texto que chegaria a pane filha ainda tem ${PIPESTATUS[0]} literal'. Reforco fora do teste automatizado: o orquestrador confirmou HOJE, ao vivo contra herdr 0.9.1 instalado, que `herdr pane split <pane-de-aba-nao-focada> --no-focus --cwd --env` cria o pane na aba NAO focada (pane_count 1->2) enquanto a aba focada permanece com 1 pane, e que `herdr pane run` executa o wrapper e grava MAESTRO-EXIT:0 — evidencia real (nao so textual) de que o mecanismo por id de pane, independente de foco, funciona no binario hoje instalado"
+    status: complete
+
+  - id: AC3
+    desc: "esboco 3 — se o pane-lar capturado tiver deixado de existir na hora do fork, o comando abre uma aba nova nomeada com o programa, nunca cai no foco corrente ('falhar para um lugar previsivel')"
+    altitude: cli
+    surface: "maestro/commands/run.md, passo 6c, bloco 'Fallback: pane-lar morto': `herdr tab create --workspace <home.workspace> --label <PROG> --cwd <worktree> ... --no-focus`, seguido de `maestro-wave-state set-home` para atualizar o pane-lar da onda"
+    test: "tests/test_maestro_run_aba.py::test_fallback_pane_lar_morto"
+    layer: "grep de prosa (mesma convencao); a deteccao do gatilho e o literal `pane_not_found` (codigo de erro do herdr) citado em run.md"
+    evidence: verified
+    run: "python3 tests/test_maestro_run_aba.py -> 'all green'; checks: 'existe fallback para pane-lar morto (pane_not_found)', 'o fallback usa herdr tab create com --label', 'o fallback atualiza o pane-lar com set-home'. Reforco fora do teste automatizado: o orquestrador confirmou HOJE que um `herdr pane split` contra o pane de uma aba ja fechada retorna exit 1 com o literal `pane_not_found` — o gatilho que a prosa do fallback nomeia e real no herdr 0.9.1, nao hipotetico"
+    status: complete
+
+  - id: AC4
+    desc: "o pane-lar capturado e persistido em disco (nao em variavel de sessao) via maestro-wave-state set-home, e lido de volta por /maestro:resume para re-spawn (filha morta, escalacao respondida, retentativa) — nunca o foco corrente da sessao de resume"
+    altitude: cli
+    surface: "maestro/bin/maestro-wave-state: subcomando `set-home` (novo) grava home.pane/home.tab/home.workspace; `get --json` devolve o campo; maestro/commands/resume.md le `home.pane` e usa a mesma receita de split/rename/run do passo 6c para re-spawn; liveness passa a ser `herdr pane get`, nao `herdr agent get` (removido no herdr 0.9)"
+    test: "tests/test_maestro_run_aba.py::test_set_home_persistido_e_lido, ::test_wave_state_roundtrip"
+    layer: "cli real (subprocess do binario maestro-wave-state: init + set-home + get, incluindo compatibilidade retroativa de wave-state sem a chave home) + grep de prosa para resume.md"
+    evidence: verified
+    run: "python3 tests/test_maestro_run_aba.py -> 'all green'; checks: 'set-home roda ok', 'get expoe home.pane/tab/workspace gravados', 'wave-state sem home (formato antigo) ainda carrega', 'resume.md le o pane-lar do wave-state (home.pane) para re-spawn', 'resume.md confere liveness por herdr pane get, nao por herdr agent get'"
+    status: complete
+
+  - id: AC5
+    desc: "Aceite literal do BACKLOG: 'Rodar /maestro:run numa aba A, clicar numa aba B durante o intake, e ver as filhas nascerem em A.' — cenario end-to-end, multi-aba, com clique humano de verdade no meio do caminho"
+    altitude: ui
+    surface: "sessao real de herdr com pelo menos duas abas, a receita LITERAL do passo 1 (captura) e do passo 6c (spawn) de run.md executada por comandos herdr reais (nao mockados), com um clique humano de foco na aba B entre a captura e o fork"
+    test: "docs/proof/evidence/maestro-run-nao-diz-a-aba-e2e.sh (script escrito pelo orquestrador, reproduzido de forma independente por mim)"
+    layer: "e2e real contra o herdr 0.9.1 instalado (nao simulado, nao mockado): duas abas throwaway A/B; passo 1 executado DE DENTRO do pane de A (`herdr pane run $A_PANE 'herdr pane current > .../home.json'`) — o mesmo `herdr pane current` que run.md manda rodar no inicio da rotina; em seguida `herdr tab focus B` reproduz o clique do dono durante o intake; depois a receita LITERAL do passo 6c (`herdr pane split <pane-lar> --no-focus`, `herdr pane rename`, `herdr pane run` com o wrapper de escape ($) identico ao de run.md, exceto `claude -p` trocado por `echo` — a unica substituicao, porque o criterio e sobre ROTEAMENTO espacial, nao sobre o que a filha executa) para 2 slices; e por fim o fallback (fecha a aba A, split no pane-lar morto, `herdr tab create --label`)."
+    evidence: verified
+    run: >
+      Rodada 1 (orquestrador, docs/proof/evidence/maestro-run-nao-diz-a-aba-e2e.out):
+      "capturado: pane=w28:p5 tab=w28:t4 (A=w28:t4)" / "foco agora: True em B" /
+      "s1 nasceu em tab=w28:t4" / "s2 nasceu em tab=w28:t4" /
+      "A panes=3  B panes=1  B focused=True" / "MAESTRO-EXIT:0" (x2) /
+      fallback: `pane_not_found` no split contra o pane-lar morto, exit=1,
+      aba nova `e2e-PROG` criada com `focada=False`.
+
+      Rodada 2 (eu, completion-auditor, execucao independente do MESMO script
+      hoje, mesmo workspace w28, mesmo herdr 0.9.1 — bash /tmp/e2e-retry.sh,
+      copia literal do script com sleeps maiores para evitar corrida de
+      inicializacao de terminal que fiz falhar numa tentativa anterior):
+      "capturado: pane=w28:pH tab=w28:tE (A=w28:tE)" / "foco agora: True em B"
+      / "s1 nasceu em tab=w28:tE" / "s2 nasceu em tab=w28:tE" /
+      "A panes=3  B panes=1  B focused=True" / "filha-s1" / "MAESTRO-EXIT:0" /
+      "filha-s2" / "MAESTRO-EXIT:0" / `{"error":{"code":"pane_not_found",...}}`
+      / "split_no_lar_morto exit=1" / "fallback: aba nova w28:tG
+      rotulo=e2e-PROG focada=False" / "foco devolvido a w28:t2: True".
+      Ambiente restaurado ao final (abas throwaway fechadas, foco devolvido).
+    status: complete
+    note: >
+      Residual, e nao um gap que mantenha o item incompleto: quem executou a
+      sequencia foi um script bash com os comandos herdr LITERAIS de run.md,
+      nao um agente de IA lendo a prosa de run.md e decidindo rodar esses
+      comandos sozinho. Isso e a mesma altitude em que toda outra acceptance
+      de /maestro:run/resume.md neste repositorio ja fecha (ver
+      .claude/acceptance/maestro-merge-train-nao-roda.yaml: grep de prosa +
+      subprocess real dos primitivos) — nao ha, neste repositorio, um jeito
+      de testar automaticamente "o agente de IA obedece literalmente ao
+      prompt" alem de (a) a prosa estar certa (AC1-AC4, verificado por grep)
+      e (b) os comandos que a prosa manda rodar produzirem o efeito que a
+      prosa promete quando executados de verdade (este AC5, agora verificado
+      duas vezes, com herdr real). Fechar a lacuna "o agente segue a prosa"
+      exigiria uma sessao real de Claude Code rodando /maestro:run do
+      principio ao fim, o que nao muda o veredito de completude do CODIGO/
+      PROSA implementados neste commit — e o mesmo padrao ja aceito no
+      restante do repositorio.
+
+notes: >
+  Re-avaliacao de AC5 apos evidencia nova do orquestrador
+  (docs/proof/evidence/maestro-run-nao-diz-a-aba-e2e.sh/.out): rodei o MESMO
+  script eu mesma, de forma independente, no mesmo workspace herdr (w28),
+  contra o mesmo herdr 0.9.1 instalado. Na minha primeira tentativa o
+  `herdr pane run` nao entregou o comando a tempo (sleep 2 insuficiente para
+  o terminal novo inicializar — reproduzi e diagnostiquei isso isoladamente:
+  com sleep de 6s+ o mesmo comando funciona de forma consistente); isso e uma
+  corrida de inicializacao do terminal do SO, nao um defeito do mecanismo
+  herdr nem da prosa de run.md. Refiz a rodada com sleeps maiores e reproduzi
+  EXATAMENTE o resultado do orquestrador: passo 1 (`herdr pane current`)
+  executado de dentro do pane de A; clique do dono simulado por
+  `herdr tab focus B`; as duas filhas forkadas pelo passo 6c (`herdr pane
+  split <pane-lar> --no-focus` + `herdr pane rename` + `herdr pane run` com o
+  wrapper \$-escapado identico ao de run.md) nasceram AMBAS na aba A, que
+  ficou com pane_count=3 (1 original + 2 filhas), enquanto a aba B (clicada,
+  com foco) permaneceu com pane_count=1; ambas as filhas gravaram
+  MAESTRO-EXIT:0; o fallback (fechar a aba A e tentar split no pane-lar
+  morto) devolveu `pane_not_found` e o comando seguinte (`herdr tab create
+  --label`) criou a aba de fallback sem foco, como a prosa promete. Ambiente
+  restaurado ao final de cada rodada (abas throwaway fechadas, foco
+  devolvido a aba original) — confirmei isso tambem, sem sobrar aba orfa
+  (uma aba de depuracao minha, `dbg-A3`, ficou aberta por um instante durante
+  o meu diagnostico do timing; fechei manualmente logo em seguida e confirmei
+  a lista de abas voltando a `['1', 'cepa-until']`).
+
+  Isso fecha o gap que eu tinha apontado na rodada anterior: nao e mais
+  verdade que "nenhum teste possivel neste ambiente exercita o cenario
+  literal do Aceite". O script E esse teste — ele roda os comandos herdr
+  reais (nao mockados) na sequencia exata que run.md descreve (captura de
+  dentro do pane-lar, split por id explicito enquanto outra aba esta em
+  foco, fallback para pane_not_found), com uma unica substituicao legitima
+  (`claude -p` -> `echo`, porque o criterio e sobre ROTEAMENTO espacial das
+  filhas, nao sobre o que elas executam). O unico residual — um agente de IA
+  de verdade obedecendo literalmente a prosa de run.md, em vez de um script
+  bash rodando os mesmos comandos — e a MESMA altitude em que toda outra
+  acceptance de /maestro:run/resume.md neste repositorio ja fecha (grep de
+  prosa + subprocess real dos primitivos), entao nao mantenho o item
+  incompleto por causa dele.
+
+  Rodei tambem, nesta rodada, apenas o script de evidencia (e minha copia
+  dele) em primeiro plano — nao rodei nenhuma suite completa, conforme
+  pedido. AC1-AC4 continuam como na rodada anterior (tests/test_maestro_run_aba.py
+  -> all green), sem necessidade de re-rodar porque nada mudou no codigo
+  entre as duas rodadas de auditoria, so a evidencia de AC5.
