@@ -1,0 +1,49 @@
+schema_version: 2
+card: parametros-de-comando-pela-metade
+verdict: proven
+reviewed_at: 2026-09-27T04:43:29Z
+base_commit: e5f226e
+head_commit: da7234e
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "board-flow/commands/execute.md (## Variables — --force-feature-flow)"
+      module: docs-commands
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/commands/autonomous-start.md (## Variables — --no-jira)"
+      module: docs-commands
+      external_observable: false
+      substituted_by_double: null
+    - class: "common/commands/drain-plan.md (argument-hint — --offline)"
+      module: docs-commands
+      external_observable: false
+      substituted_by_double: null
+    - class: "tests/test_flags_hint_variables.py (novo teste, guarda o invariante)"
+      module: tests
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "GREEN no HEAD íntegro (worktree /tmp/proof-pcpm-head, da7234e): `python3 tests/test_flags_hint_variables.py` -> 12 checks 'ok', 'tudo ok (64 comandos varridos)', EXIT=0."
+        - "Perturbação 1 — reverteu common/commands/drain-plan.md para a versão base (e5f226e), removendo --offline do argument-hint, dentro de worktree descartável /tmp/red2(mktemp)/red criado a partir de da7234e: `python3 tests/test_flags_hint_variables.py` -> FAIL em 'toda flag está no argument-hint e em ## Variables' e no check específico do drain-plan.md, EXIT=1 (RED)."
+        - "Perturbação 2 — reverteu common/commands/autonomous-start.md para e5f226e (remove --no-jira de ## Variables), worktree descartável análogo: mesmas duas checagens FAIL, EXIT=1 (RED)."
+        - "Perturbação 3 — reverteu board-flow/commands/execute.md para e5f226e (remove --force-feature-flow de ## Variables), worktree descartável análogo: mesmas duas checagens FAIL, EXIT=1 (RED)."
+        - "Todos os três worktrees descartáveis (`git worktree add --detach <tmp> da7234e`) foram removidos com `git worktree remove --force` ao final; a árvore principal nunca foi tocada."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "O teste varre estruturalmente todo `*/commands/*.md` (glob `REPO.glob('*/commands/*.md')`, achou 64 arquivos) e compara argument-hint vs ## Variables; as três linhas do diff (dois `## Variables` novos + um `argument-hint` novo) estão dentro do universo varrido, confirmado pelos checks nominais por arquivo."
+  l4_adversarial_input:
+    status: "n/a"
+    reason: "O diff é documentação de comandos (markdown) e um teste que só lê arquivos do próprio repositório; não abre superfície de entrada externa (não há endpoint HTTP, parser de payload externo, nem módulo api-rest envolvido)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: "n/a"
+    run: "Issue type não é Bug: é uma correção de convenção de documentação/self-test, comprovada por perturbation acima, não por regressão de bug."
+routing_reason: "As três divergências nomeadas (drain-plan --offline, autonomous-start --no-jira, execute --force-feature-flow) foram corrigidas e o teste novo tests/test_flags_hint_variables.py comprovadamente vira RED quando qualquer uma delas é revertida isoladamente (perturbação em worktree descartável), e GREEN com as três correções presentes. RED-at-base também foi confirmado copiando o teste para um worktree no base_commit e2f226e: 4 falhas, EXIT=1, batendo exatamente com as três divergências nomeadas no cabeçalho do teste. Nada foi assumido/pulado; todos os níveis aplicáveis têm evidência real. PROVEN."

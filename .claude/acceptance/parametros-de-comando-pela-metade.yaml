@@ -1,0 +1,73 @@
+key: parametros-de-comando-pela-metade
+status: complete
+criteria:
+  - id: AC1
+    description: >-
+      common/commands/drain-plan.md: --offline deve aparecer também no
+      frontmatter argument-hint (antes só estava em ## Variables).
+    altitude: cli
+    surface: "common/commands/drain-plan.md — argument-hint: e ## Variables"
+    test: tests/test_flags_hint_variables.py
+    layer: script (comparação textual argument-hint vs ## Variables no arquivo do comando)
+    evidence: verified
+    run: >-
+      python3 tests/test_flags_hint_variables.py ->
+      "ok  common/commands/drain-plan.md tem Variables e flags nos dois lados"
+      ; "tudo ok (64 comandos varridos)" (12 checks, 0 FAIL)
+    verdict: complete
+  - id: AC2
+    description: >-
+      common/commands/autonomous-start.md: --no-jira deve estar definido em
+      ## Variables (antes só estava no argument-hint), consistente com o uso
+      no corpo do comando.
+    altitude: cli
+    surface: "common/commands/autonomous-start.md — argument-hint: e ## Variables"
+    test: tests/test_flags_hint_variables.py
+    layer: script (comparação textual argument-hint vs ## Variables no arquivo do comando)
+    evidence: verified
+    run: >-
+      python3 tests/test_flags_hint_variables.py ->
+      "ok  common/commands/autonomous-start.md tem Variables e flags nos dois lados"
+      ; "tudo ok (64 comandos varridos)" (12 checks, 0 FAIL)
+    verdict: complete
+  - id: AC3
+    description: >-
+      board-flow/commands/execute.md: --force-feature-flow deve estar
+      definido em ## Variables (antes só estava no argument-hint),
+      consistente com o corpo do comando.
+    altitude: cli
+    surface: "board-flow/commands/execute.md — argument-hint: e ## Variables"
+    test: tests/test_flags_hint_variables.py
+    layer: script (comparação textual argument-hint vs ## Variables no arquivo do comando)
+    evidence: verified
+    run: >-
+      python3 tests/test_flags_hint_variables.py ->
+      "ok  board-flow/commands/execute.md tem Variables e flags nos dois lados"
+      ; "tudo ok (64 comandos varridos)" (12 checks, 0 FAIL)
+    verdict: complete
+  - id: AC4
+    description: >-
+      Opcional: teste que compara flags --x do argument-hint com as de
+      ## Variables em todos os comandos, para a divergência não voltar em
+      silêncio. Divergências conhecidas e fora de escopo (plan.md --source,
+      worktree-label.md --branch, session.md --max) entram como exceções
+      nomeadas com motivo.
+    altitude: cli
+    surface: "tests/test_flags_hint_variables.py — varredura de */commands/*.md"
+    test: tests/test_flags_hint_variables.py
+    layer: script
+    evidence: verified
+    run: >-
+      python3 tests/test_flags_hint_variables.py ->
+      "ok  toda flag está no argument-hint e em ## Variables" ;
+      "ok  toda exceção em EXCECOES ainda diverge" ;
+      "tudo ok (64 comandos varridos)" (12 checks, 0 FAIL)
+    verdict: complete
+notes: >-
+  Diff auditado: git diff e5f234e..da7234e (nota: comando efetivamente rodado
+  foi git diff e5f234e..da7234e conforme delegado, correspondente aos três
+  arquivos citados mais tests/test_flags_hint_variables.py, novo). O teste é
+  o próprio arquivo-fonte dos comandos (argument-hint: e ## Variables), que é
+  a altitude exata do critério — não há camada mais externa a checar aqui,
+  pois o "usuário" desses parâmetros é o próprio arquivo de definição de
+  comando lido pelo agente/autocompletar.

@@ -3223,7 +3223,7 @@ principal não.
 
 **Plano:** `cepa/parametros-de-comando-pela-metade`
 
-**Status:** pendente · **Lar provável:** `common` e `board-flow` (arquivos de comando) ·
+**Status:** feito (2026-09-27, commit da7234e na branch until/2026-09-26-2203) · **Lar provável:** `common` e `board-flow` (arquivos de comando) ·
 **Origem:** levantamento dos parâmetros das rotinas do `/common:session` (2026-09-16).
 
 ### Problema
