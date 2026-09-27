@@ -1,0 +1,62 @@
+item: maestro-merge-train-nao-roda
+diff: 6c01a4a..2dbb99e
+branch: until/2026-09-26-2203
+status: incomplete
+criteria:
+  - id: AC1
+    desc: "maestro-wave-state ganha estado terminal LANDED por slice, distinto de DONE (landed: deixa de ser a unica fonte de verdade)"
+    altitude: cli
+    surface: "maestro/bin/maestro-wave-state: cmd_landed() (recusa slice != DONE, seta status=LANDED), VALID/TERMINAL incluindo LANDED"
+    test: "tests/test_maestro_merge_pendente.py::test_landed_tira_da_espera_e_silencia, ::test_landed_recusa_slice_que_nao_terminou_bem; tests/test_maestro_run_cores.py::test_wave_state (landed exige DONE antes)"
+    layer: "cli (subprocess real do binario maestro-wave-state)"
+    evidence: verified
+    run: "python3 tests/test_maestro_merge_pendente.py -> '8 testes ok' (checks 'slice aterrissada vira LANDED', 'landed de slice FAIL sai 2', 'LANDED conta como terminal na fronteira de termino'); python3 tests/test_maestro_run_cores.py -> 'all green' (32 checks, inclui 'landed registra o merge')"
+    status: complete
+
+  - id: AC2
+    desc: "/common:next e /common:doctor passam a nomear slice DONE-nao-LANDED como acao humana pendente"
+    altitude: cli
+    surface: "cepa-doctor: check_aguardando_merge() (executavel, chamado por check_project); common/commands/next.md: linha de prompt que invoca `maestro-programs . --aguardando-merge` (comando e prosa para o agente, a superficie mecanica citada no mapeamento e essa linha de CLI)"
+    test: "tests/test_maestro_merge_pendente.py::test_doctor_cobra_a_onda_parada (subprocess real do cepa-doctor), ::test_landed_tira_da_espera_e_silencia (checa que o aviso some quando tudo aterrissa), ::test_comandos_chamam_a_checagem (grep de que next.md contem a linha 'maestro-programs . --aguardando-merge')"
+    layer: "cli para o doctor (subprocess real, ⚠ [maestro] com contagem e rota); grep de prosa para next.md — nao ha execucao real do comando /common:next (e um prompt de agente, nao codigo), entao a garantia de que o agente de fato roda a linha certa fica no texto do arquivo, nao numa chamada de ponta a ponta"
+    evidence: verified
+    run: "python3 tests/test_maestro_merge_pendente.py -> '8 testes ok' (checks 'doctor avisa na area [maestro]', '...com a contagem e a rota', '/common:next roda maestro-programs --aguardando-merge')"
+    status: complete
+
+  - id: AC3
+    desc: "/maestro:resume vai direto ao merge train quando a onda inteira esta DONE, em vez de concluir 'nao ha nada rodando'"
+    altitude: cli
+    surface: "maestro/commands/resume.md, Passo 3 (novo): 'onda terminada sem merge vai direto ao merge train' -> Passo 9"
+    test: "tests/test_maestro_merge_pendente.py::test_comandos_chamam_a_checagem (grep: 'aguardando-merge' in resume.md and 'Passo 9' in resume.md)"
+    layer: "grep de prosa — resume.md e um comando de agente (prompt), nao ha um teste que simule uma sessao de /maestro:resume executando de fato o passo 3 e chegando ao passo 9; a verificacao e textual, nao comportamental"
+    evidence: verified
+    run: "python3 tests/test_maestro_merge_pendente.py -> '8 testes ok' (check '/maestro:resume vai ao merge train quando a onda terminou sem merge')"
+    status: complete
+
+  - id: AC4
+    desc: "Retentativa forkada durante a onda (ex.: S-2067R) entra no wave-state.yaml no momento em que e criada, nao so na onda seguinte"
+    altitude: cli
+    surface: "maestro/bin/maestro-wave-state: set-slice (primitivo ja existente, reusado) + check-terminal enxergando a retentativa na hora; maestro/commands/run.md, passo 6 ('Fork por slice'): instrucao nova para o agente chamar set-slice no instante do fork"
+    test: "tests/test_maestro_merge_pendente.py::test_retentativa_registrada_entra_na_fronteira (prova a mecanica: set-slice + check-terminal); NENHUM teste verifica que run.md de fato contem a instrucao nova"
+    layer: "cli para o primitivo (subprocess real de set-slice/check-terminal); a mudanca real do item -- a instrucao de prosa em run.md que manda o agente registrar a retentativa no instante do fork -- nao tem nenhuma checagem, nem grep"
+    evidence: verified
+    run: "python3 tests/test_maestro_merge_pendente.py -> '8 testes ok' (checks 'set-slice registra a retentativa nova', '...e a fronteira de termino a enxerga na hora (exit 2)')"
+    gap: "O que o teste prova e que o primitivo (set-slice cria a entrada, check-terminal a enxerga) ja funciona -- isso e comportamento pre-existente do wave-state, nao a mudanca deste item. A mudanca real e a instrucao textual em maestro/commands/run.md dizendo ao agente para chamar set-slice no mesmo instante em que forka a retentativa; nada garante que essa linha exista ou permaneca (poderia ser apagada por um refactor futuro sem quebrar nenhum teste). Falta um teste no estilo dos ja usados para next.md e resume.md em test_comandos_chamam_a_checagem: grep em run.md confirmando a instrucao no passo 6 ('Fork por slice'), por exemplo algo como 'set-slice PROGDIR <slice>R running' proximo de 'Retentativa com nome novo'."
+    status: incomplete
+
+notes: >
+  AC1, AC2 e AC3 tem teste rodado e verde na altitude certa dado que o item se
+  trata majoritariamente de comandos de agente (next.md, resume.md sao prosa
+  interpretada por um LLM, nao codigo executavel): a convencao ja estabelecida
+  neste mesmo arquivo de teste (test_comandos_chamam_a_checagem) e grep sobre
+  o texto do comando confirmando que a instrucao existe, e essa convencao foi
+  seguida para next.md e resume.md. AC4 quebra essa mesma convencao: o
+  mapeamento do implementador cita run.md passo 7 (aqui e o passo 6, "Fork por
+  slice") como o lar da mudanca, mas nenhum teste grepa run.md para confirmar
+  que a instrucao de registrar a retentativa no instante do fork esta la —
+  so o primitivo generico (set-slice/check-terminal) foi testado, e esse
+  primitivo ja existia antes deste item. Rodei os 4 arquivos pedidos
+  (test_maestro_merge_pendente.py, test_maestro_run_cores.py,
+  test_maestro_programs.py, test_common_next.py), todos "all green"/"N testes
+  ok" com N>0; nao rodei a suite completa (tests/run-all.sh) por instrucao
+  explicita do orquestrador.
