@@ -1503,7 +1503,15 @@ build.
 **Plano:** `cepa/plano-morre-com-worktree-resto`
 
 **Status:** camada 0 FEITA em 2026-08-18 (ver "Camadas propostas" abaixo); a colisão
-de NOME de programa segue pendente · **Lar provável:** `common`
+de NOME de programa segue pendente · **Conferido em 2026-09-27** (drain-plan da
+branch `until/2026-09-26-2203`): as camadas 0, 1 e 2 estão no código e a 1 está
+instalada (o `common` 2.25.1 do cache já chama `_wtlib.py rescue` no `worktree-merge`
+e no `worktree-discard`; `tests/test_worktree_artifact_rescue.py` e
+`tests/test_plan_anchor_root.py`, 8 passed). O que sobra, trocar o nome do programa da
+chave do projeto para a fatia de trabalho, contradiz a decisão do dono de 2026-09-25
+na seção da fila única ("Um papel por fonte": uma fila por repo, o `/board-flow:drain`
+lê `<programs>/<project_key>/plan.yaml`). Não foi construído; o item ficou `blocked`
+até o dono dizer se essa metade morre · **Lar provável:** `common`
 (`plan-schema.yaml`, `/common:next`)
 + `maestro` (`program-plan`, `run`, `resume`) · **Origem:** sessão de 2026-08-10, a
 partir do relato de uma sessão do WEGO: *"O plano desta sessão morre com o worktree. O
