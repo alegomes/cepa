@@ -157,6 +157,9 @@ Subcomandos:
       objetos) ou por stdin com `-`.
       Exit 0 = gravado; 2 = itens inválidos; 3 = colisão de nome; 4 = o arquivo
       no disco tem itens que a lista nova não menciona (ver --on-missing).
+      `--on-missing keep` põe esses itens no fim; com `--from-triage` é a
+      triagem parcial, e é o contrário: a fila do disco fica na ordem dela e
+      os cards novos entram depois.
 
 Checagens de item — cada uma existe porque a falha correspondente já custou
 alguma coisa a alguém:
@@ -2200,16 +2203,40 @@ def cmd_write(raiz, a):
                   "Sumir com eles em silêncio apaga posição e `why` que alguém "
                   "decidiu. Inclua-os na lista, ou diga explicitamente o que "
                   "fazer: --on-missing keep (mantém no fim, sem posição "
-                  "escolhida) ou --on-missing drop (marca status: dropped).",
+                  "escolhida; com --from-triage, mantém a fila do disco na "
+                  "ordem dela e acrescenta os cards novos depois) ou "
+                  "--on-missing drop (marca status: dropped).",
                   file=sys.stderr)
             return 4
 
     fundidos, reaproveitados = funde(itens, antigos)
+    acrescentados = []
     if antigos:
         novos_ids = {str(i["id"]) for i in fundidos}
         sobras = [x for x in antigos
                   if isinstance(x, dict) and str(x.get("id")) not in novos_ids]
-        if a.on_missing == "keep":
+        if a.on_missing == "keep" and a.from_triage and sobras:
+            # Triagem PARCIAL: o repasse cobre um pedaço da coluna, então a
+            # ordem que ele propõe vale entre os cards que ele leu, não contra
+            # a fila que o dono já priorizou. Achado em quadro real
+            # (2026-09-25): 3 cards novos entravam na frente dos 5 pendentes
+            # priorizados, e esses iam para o fim. A fila do disco fica na
+            # posição dela (item que a triagem também cita é atualizado ali
+            # mesmo) e os cards novos entram DEPOIS, na ordem da triagem.
+            por_id = {str(f["id"]): f for f in fundidos}
+            ja_na_fila = []
+            for s in antigos:
+                if not isinstance(s, dict):
+                    continue
+                ident = str(s.get("id"))
+                ja_na_fila.append(por_id.pop(ident) if ident in por_id else
+                                  normaliza({**s, "why": s.get("why") or
+                                             "sem `why` registrado na fila anterior"}))
+            acrescentados = [str(f["id"]) for f in fundidos
+                             if str(f["id"]) in por_id]
+            fundidos = ja_na_fila + [f for f in fundidos
+                                     if str(f["id"]) in por_id]
+        elif a.on_missing == "keep":
             fundidos.extend(normaliza({**s, "why": s.get("why") or
                                        "sem `why` registrado na fila anterior"}
                                       ) for s in sobras)
@@ -2245,6 +2272,10 @@ def cmd_write(raiz, a):
     if reaproveitados:
         print(f"  {len(reaproveitados)} item(ns) já existiam — status e "
               f"human_pending preservados do disco: {', '.join(reaproveitados)}")
+    if acrescentados:
+        print(f"  triagem parcial: a ordem da fila do disco foi mantida; "
+              f"{len(acrescentados)} card(s) novo(s) entraram depois dela: "
+              f"{', '.join(acrescentados)}")
     if backup:
         print(f"  cópia do anterior em {backup} — comentários escritos à mão "
               f"não sobrevivem à reescrita, estão lá")

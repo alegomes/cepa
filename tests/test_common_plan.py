@@ -677,6 +677,73 @@ def test_write_from_triage_grava_e_diz_que_e_parcial(base):
           "apagaria dívida que ninguém pagou")
 
 
+def test_triagem_parcial_preserva_a_ordem_da_fila(base):
+    """Triagem parcial acrescenta DEPOIS dos pendentes, sem mexer na ordem deles.
+
+    Achado em quadro real (2026-09-25, validar-fio-condutor-em-board-real):
+    com --on-missing keep, 3 cards novos entravam na frente dos 5 pendentes que
+    o dono priorizou, e os 5 iam para o fim "sem posição escolhida". Uma
+    triagem de 5 cards reordenava uma fila de 25.
+    """
+    d = repo_git(base, "triagem-parcial")
+    fila = [{"id": f"W-{n}", "title": f"priorizado {n}",
+             "why": f"posição {n} decidida pelo dono", "human_pending": None}
+            for n in (1437, 1500, 1600, 1700, 1800)]
+    fila.insert(2, {"id": "W-900", "title": "já feito", "why": "x",
+                    "status": "done", "human_pending": None})
+    r = run(d, "write", "WEGO", "--items", str(escreve_itens(d, fila)),
+            "--repo", ".")
+    check("grava a fila priorizada", r.returncode == 0, r.stderr)
+
+    parcial = {"project_key": "WEGO", "source_column": "To Do",
+               "triaged_on": "2026-09-25", "remaining_in_column": 156,
+               "cards": [
+                   {"key": "W-1438", "title": "novo a", "bucket": "ready",
+                    "why": "triagem: a"},
+                   {"key": "W-1600", "title": "priorizado 1600, relido",
+                    "bucket": "ready", "why": "triagem: relido"},
+                   {"key": "W-1439", "title": "novo b", "bucket": "ready",
+                    "why": "triagem: b"},
+                   {"key": "W-1440", "title": "novo c", "bucket": "ready",
+                    "why": "triagem: c", "blocked_by": ["W-1438"]},
+               ]}
+    rp = repasse(d, parcial, "parcial.json")
+    r = run(d, "write", "WEGO", "--from-triage", str(rp), "--repo", ".")
+    check("sem --on-missing, a triagem parcial segue recusada",
+          r.returncode == 4, r.stderr)
+
+    r = run(d, "write", "WEGO", "--from-triage", str(rp), "--repo", ".",
+            "--on-missing", "keep")
+    check("com --on-missing keep, grava", r.returncode == 0, r.stderr)
+    ids = [i["id"] for i in plano_de(d, "WEGO")["items"]]
+    check("a fila do disco fica na ordem dela e os novos entram DEPOIS",
+          ids == ["W-1437", "W-1500", "W-900", "W-1600", "W-1700", "W-1800",
+                  "W-1438", "W-1439", "W-1440"], str(ids))
+    check("o relatório nomeia os cards acrescentados",
+          "triagem parcial" in r.stdout and "W-1438" in r.stdout
+          and "W-1600" not in r.stdout.split("triagem parcial")[1], r.stdout)
+    itens = {i["id"]: i for i in plano_de(d, "WEGO")["items"]}
+    check("item já na fila que a triagem releu continua `pending` no lugar dele",
+          itens["W-1600"]["status"] == "pending")
+    check("o `done` do meio da fila sobrevive", itens["W-900"]["status"] == "done")
+    check("a dependência entre cards novos sobrevive",
+          itens["W-1440"]["blocked_by"] == ["W-1438"])
+
+    # triagem que cobre a fila inteira continua mandando na ordem
+    d2 = repo_git(base, "triagem-inteira")
+    rp2 = repasse(d2, REPASSE_OK)
+    run(d2, "write", "WEGO", "--from-triage", str(rp2), "--repo", ".")
+    invertido = dict(REPASSE_OK, cards=[REPASSE_OK["cards"][3],
+                                        {**REPASSE_OK["cards"][1], "blocked_by": []},
+                                        REPASSE_OK["cards"][0]])
+    r = run(d2, "write", "WEGO", "--from-triage",
+            str(repasse(d2, invertido, "inv.json")), "--repo", ".",
+            "--on-missing", "keep")
+    check("triagem sem item sumido ainda reordena a fila",
+          [i["id"] for i in plano_de(d2, "WEGO")["items"]]
+          == ["WEGO-1236", "WEGO-1240", "WEGO-1235"], r.stderr)
+
+
 def test_contrato_do_triage(_base):
     """O `/board-flow:triage` deixou de ser o segundo escritor da fila.
 
@@ -725,6 +792,7 @@ def main():
                    test_from_triage_recusa_o_que_a_prosa_so_pedia,
                    test_from_triage_dependencia_para_fora_da_fila,
                    test_write_from_triage_grava_e_diz_que_e_parcial,
+                   test_triagem_parcial_preserva_a_ordem_da_fila,
                    test_contrato_do_comando, test_contrato_do_triage):
             print(f"\n{fn.__name__}")
             fn(base)

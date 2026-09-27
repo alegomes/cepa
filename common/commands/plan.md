@@ -55,7 +55,10 @@ mesmo diretório e são distinguidos por um campo interno, então este comando
 - `--dry-run` — mostra o arquivo que seria gravado e não grava.
 - `--on-missing refuse|keep|drop` — o que fazer com item que já está na fila do
   disco e a lista nova não menciona. Default `refuse`: sumir com ele em silêncio
-  apaga posição e `why` que alguém decidiu.
+  apaga posição e `why` que alguém decidiu. Com `--from-jira`, `keep` é a
+  **triagem parcial**: a fila do disco fica na ordem dela e os cards novos entram
+  depois, na ordem da triagem — a triagem leu um pedaço da coluna, e a ordem
+  dela não vale contra pendentes que o dono já priorizou.
 
 **`--from-jira` não consulta o Jira por conta própria.** A ordem de uma fila
 vinda de um board sai da CLASSIFICAÇÃO, nunca da coluna: quem lê os cards,
