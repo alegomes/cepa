@@ -430,6 +430,33 @@ def test_edit_com_old_string_que_nao_bate_libera():
         caminho.unlink(missing_ok=True)
 
 
+def test_edit_com_old_string_que_nao_bate_em_spec_invalida_libera():
+    # A spec no disco JÁ é inválida (pronta sem Superfície no CS-1) --
+    # o teste anterior usa uma spec VÁLIDA como base, e por isso não pegaria
+    # uma implementação que, ao não achar old_string, devolvesse o texto
+    # ORIGINAL sem sinalizar erro (em vez de liberar): com uma base válida os
+    # dois caminhos dão rc 0 igual. Aqui a base é inválida, então só uma
+    # implementação que realmente libera (em vez de julgar o texto original
+    # sem edição nenhuma aplicada) devolve rc 0; uma que "aplicasse mesmo
+    # assim" o texto inalterado devolveria rc 2 (a spec inválida seria julgada).
+    doc = PRONTA_OK.replace("**Superfície:** http\n", "")
+    caminho = com_arquivo_temporario(doc)
+    try:
+        rc, err = run({
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "old_string": "isto não existe no arquivo",
+                "new_string": "qualquer coisa",
+            },
+        })
+        check("old_string que não bate numa spec inválida libera",
+              rc == 0, f"rc={rc} err={err[:200]}")
+    finally:
+        caminho.unlink(missing_ok=True)
+
+
+
 def test_nunca_bloqueia_o_que_nao_ve():
     rc, _ = run({"tool_name": "Bash", "tool_input": {"command": "echo pronta-para-construir"}})
     check("ferramenta fora do escopo passa", rc == 0, f"rc={rc}")
