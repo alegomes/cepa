@@ -1,0 +1,148 @@
+schema_version: 2
+card: acceptance-gate-cego-em-worktree
+verdict: proven
+reviewed_at: 2026-09-26T23:05:00-03:00
+base_commit: 0d2fe8b
+head_commit: 950985f
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/acceptance-gate.py (find_artifact: ordem de busca worktree .claude/acceptance -> worktree docs/acceptance -> clone principal .claude/acceptance -> clone principal docs/acceptance, primeiro achado vence)", module: "common-hooks", external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/acceptance-gate.py (guarda de main_root vazio fora de repo git: `Path(main).resolve() if main else cwd` no call site dentro de main())", module: "common-hooks", external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/acceptance-gate.py (call site em main(): `artifact = find_artifact(key, cwd, ...)` substituindo a leitura antiga só de `cwd`)", module: "common-hooks", external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_acceptance_gate.py (casos de worktree+clone principal, docs/acceptance, sem artefato em nenhuma árvore, e o caso novo de 950985f que fixa o cwd físico do subprocesso fora de git)", module: "tests", external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python (harness cepa, hooks Claude Code — não Quarkus, sem Maven/PIT).
+    A "superfície externa" aqui é o próprio processo do hook, invocado como
+    subprocesso (`python3 common/hooks/acceptance-gate.py` lendo um payload
+    JSON via stdin) — exatamente como `tests/test_acceptance_gate.py` o
+    exercita via `subprocess.run`. Técnica: perturbação universal em
+    worktrees descartáveis `--detach`, fora da raiz do projeto (sob
+    $(mktemp -d), por exigência do hook `bash-path-lock` deste repo), nunca
+    na árvore principal. Rodada anterior (head ee4cf93) tinha ficado
+    UNPROVEN: a guarda de `main_root` vazio sobrevivia à perturbação porque
+    nenhum teste fixava o cwd físico do subprocesso. O coordenador fechou o
+    gap com um commit novo (950985f) adicionando exatamente esse teste;
+    esta rodada reperturba a mesma linha sob o HEAD novo e reconfirma as
+    outras 3 mudanças.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "PASS (RED confirmado): removida a busca no clone principal —
+           `roots = [session] if session == main else [session, main]`
+           virou `roots = [session]`. GREEN antes (29/29); RED depois em 5
+           checks (todos os que dependem do artefato estar só no clone
+           principal): 'worktree + artefato incompleto no clone principal →
+           In Review/Done BLOQUEIA' (x2), '...aponta o artefato do clone
+           principal', 'worktree, cwd num subdiretório → Done BLOQUEIA',
+           'artefato em docs/acceptance/ do principal → Done BLOQUEIA'.
+           Restaurado com `mv acceptance-gate.py.bak acceptance-gate.py`,
+           GREEN de novo."
+        - "PASS (RED confirmado): removido `docs/acceptance` de
+           `ACCEPTANCE_DIRS` (só sobrou `.claude/acceptance`). GREEN antes;
+           RED depois em 2 checks: 'artefato em docs/acceptance/ do
+           principal → Done BLOQUEIA' e 'artefato em docs/acceptance/ da
+           própria árvore → In Review BLOQUEIA'. Restaurado, GREEN de novo."
+        - "PASS (RED confirmado): invertida a precedência — `roots =
+           [session] if session == main else [main, session]` (principal
+           antes da worktree). GREEN antes; RED depois em 1 check: 'auditoria
+           nova da worktree (complete) vence a antiga do principal' — o
+           teste que dá nome ao próprio item de fila (`acceptance-gate-cego-
+           em-worktree`) volta a falhar quando a precedência é invertida.
+           Restaurado, GREEN de novo."
+        - "PASS (RED confirmado — fecha o gap da rodada anterior, head
+           ee4cf93, onde esta mesma perturbação isolada sobrevivia com
+           28/28 verde): removida a guarda de `main_root` vazio no call
+           site — `Path(main).resolve() if main else cwd` virou
+           `Path(main).resolve())` incondicional. GREEN antes (29/29); RED
+           depois em 1 check: 'fora de git, artefato no diretório do
+           processo não conta → Done PASSA' — o caso novo adicionado em
+           950985f, que roda o hook com `subprocess.run(..., cwd=<diretório
+           alheio com artefato incompleto>)` e payload `cwd=<projeto limpo
+           fora de git>`. Sem a guarda, `Path(main).resolve()` (com
+           `main_root` vazio) cai no cwd físico do subprocesso — o
+           diretório alheio — e o artefato incompleto de lá passa a valer
+           para um card que nada tem a ver com ele, bloqueando
+           indevidamente. Restaurado com `mv acceptance-gate.py.bak
+           acceptance-gate.py`, GREEN de novo (29/29, `git diff --stat`
+           vazio)."
+      run: "Worktree descartável nova sob $(mktemp -d) no HEAD 950985f
+            (`git worktree add --detach \"$D/head\" 950985f`); baseline
+            confirmado GREEN antes de cada perturbação (`python3
+            tests/test_acceptance_gate.py` -> 'all acceptance-gate tests
+            passed', 29 checks). Cada uma das 4 perturbações acima foi
+            aplicada isolada via `sed -i.bak`, testada, e restaurada com
+            `mv *.bak` antes da próxima (cada comando < 1 min; suíte
+            completa não foi rodada em modo diferente do arquivo único
+            `tests/test_acceptance_gate.py`, conforme instrução). Worktree
+            removida ao final (`git worktree remove --force`); árvore
+            principal nunca tocada."
+    pit:
+      status: absent
+      results:
+        - "pitest não se aplica: repo Python (hooks Claude Code), sem
+           Maven/pom.xml. Instrução explícita da tarefa: usar perturbação
+           direta, sem PIT/Maven."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "As 4 mudanças descritas na tarefa (ordem de busca com clone
+          principal, inclusão de docs/acceptance, precedência
+          worktree-antes-do-principal, guarda de main_root vazio fora de
+          git) têm, cada uma, um teste que a contrasta — confirmado pela
+          perturbação isolada de cada uma indo RED em l3_load_bearing.
+          A guarda de main_root vazio, que na rodada anterior (head
+          ee4cf93) não tinha nenhum teste capaz de derrubá-la, passou a ter
+          o caso 'fora de git, artefato no diretório do processo não conta
+          → Done PASSA' (commit 950985f), que fixa o cwd físico do
+          subprocesso via `subprocess.run(cwd=...)` — o que faltava para
+          tornar `main` observável quando `main_root` é vazio."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff muda a lógica de localização de um arquivo YAML já
+             escrito pelo próprio harness (busca em diretórios fixos,
+             `.claude/acceptance/<KEY>.yaml` e `docs/acceptance/<KEY>.yaml`)
+             e o fallback de raiz do git; não há parser de entrada externa
+             nem endpoint HTTP no caminho mudado. Nenhuma classe mudada
+             pertence a um módulo de borda de entrada (este repo não tem
+             api-rest; é um harness de hooks Python)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "Worktree descartável no base_commit 0d2fe8b sob $(mktemp -d),
+          removida ao final. Copiado tests/test_acceptance_gate.py do HEAD
+          por cima do arquivo da base, hook da base mantido intocado.
+          `python3 tests/test_acceptance_gate.py` -> RED: 6 failures, exit
+          1 ('worktree + artefato incompleto no clone principal → In
+          Review/Done BLOQUEIA', '...aponta o artefato do clone principal',
+          'worktree, cwd num subdiretório → Done BLOQUEIA', 'artefato em
+          docs/acceptance/ do principal → Done BLOQUEIA', 'artefato em
+          docs/acceptance/ da própria árvore → In Review BLOQUEIA') —
+          exatamente os cenários que o item descreve como 'cego em
+          worktree'. Confirma que os testes novos capturam o defeito
+          relatado (gate não enxergava o artefato do clone principal). Não
+          re-executado nesta rodada porque o hook da base (0d2fe8b) não
+          mudou entre as duas rodadas — só o arquivo de teste no HEAD
+          mudou, e o novo caso ('fora de git...') não depende de
+          comportamento presente na base (é sobre a ausência da guarda, que
+          a base nem tem o conceito de find_artifact/main_root para
+          exercitar da mesma forma); o resultado à base permanece válido."
+routing_reason: "As 4 mudanças descritas na tarefa são agora todas
+  load-bearing: perturbadas isoladamente em worktree descartável sob o HEAD
+  950985f, cada uma virou RED na suíte de 29 checks (busca no clone
+  principal, inclusão de docs/acceptance, precedência
+  worktree-antes-do-principal, e agora também a guarda de main_root vazio
+  fora de git) — e a regressão do bug original (gate cego em worktree nova)
+  é RED na base 0d2fe8b com os testes do HEAD, GREEN no HEAD. O gap da
+  rodada anterior (head ee4cf93, UNPROVEN: guarda de main_root vazio
+  sobrevivia à perturbação porque nenhum teste fixava o cwd físico do
+  subprocesso) foi fechado pelo commit 950985f, que adiciona exatamente
+  esse teste (`subprocess.run(cwd=<diretório alheio>)` com payload
+  apontando para um projeto limpo fora de git). Reperturbada a mesma linha
+  sob o HEAD novo, agora vai RED. L4 é n/a (harness Python sem superfície
+  de entrada) e a regressão de bug é pass. Todos os níveis aplicáveis
+  passaram com evidência colada — PROVEN."

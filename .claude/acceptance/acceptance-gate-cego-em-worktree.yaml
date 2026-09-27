@@ -1,0 +1,73 @@
+key: acceptance-gate-cego-em-worktree
+status: complete
+diff_range: 0d2fe8b..ee4cf93
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      common/hooks/acceptance-gate.py invocado como subprocesso com um
+      payload JSON de PreToolUse, a partir de uma worktree ligada criada
+      com `git worktree add` de verdade (não simulada), buscando
+      <KEY>.yaml em <worktree>/.claude/acceptance/,
+      <worktree>/docs/acceptance/, <clone principal>/.claude/acceptance/
+      e <clone principal>/docs/acceptance/ (clone principal = pai de
+      git-common-dir).
+    test: tests/test_acceptance_gate.py (bloco "worktree nova: o artefato
+      mora no clone principal", função make_worktree_pair, linhas 148-201)
+    layer: cli/subprocess sobre git worktree real
+    evidence: verified
+    run: "python3 tests/test_acceptance_gate.py -> 'ok worktree + artefato
+      incompleto no clone principal → In Review BLOQUEIA', 'ok worktree +
+      artefato incompleto no clone principal → Done BLOQUEIA', 'ok worktree,
+      cwd num subdiretório → Done BLOQUEIA', 'ok artefato em docs/acceptance/
+      do principal → Done BLOQUEIA', 'ok artefato em docs/acceptance/ da
+      própria árvore → In Review BLOQUEIA' -> 'all acceptance-gate tests
+      passed' (exit 0, 28/28 checks ok)"
+  - id: AC2
+    altitude: cli
+    surface: >
+      Auditoria mais nova gravada em <worktree>/.claude/acceptance/
+      prevalece sobre uma mais antiga presente no clone principal
+      (find_artifact busca a worktree antes do clone principal, primeira
+      achada vence); devoluções (in_progress) continuam liberadas mesmo
+      com artefato incompleto em qualquer árvore.
+    test: tests/test_acceptance_gate.py, linhas 182-189 ("worktree +
+      artefato incompleto no principal → devolução PASSA" e "auditoria
+      nova da worktree (complete) vence a antiga do principal")
+    layer: cli/subprocess sobre git worktree real
+    evidence: verified
+    run: "python3 tests/test_acceptance_gate.py -> 'ok worktree +
+      artefato incompleto no principal → devolução PASSA', 'ok auditoria
+      nova da worktree (complete) vence a antiga do principal' -> 'all
+      acceptance-gate tests passed' (exit 0)"
+  - id: AC3
+    altitude: cli
+    surface: >
+      Comportamento intencionalmente inalterado: artefato ausente em
+      todas as quatro árvores continua liberando a transição para
+      done/in_review (a decisão de travar isso nesse caso fica em
+      aberto, com o dono). Verificado que (a) o comportamento não mudou
+      e está testado, e (b) BACKLOG.md e docs/acceptance-completeness.md
+      registram a pendência como decisão do dono.
+    test: tests/test_acceptance_gate.py, linha 203-206 ("nenhuma árvore
+      tem artefato → Done PASSA (decisão do dono em aberto)")
+    layer: cli/subprocess sobre git worktree real + doc
+    evidence: verified
+    run: "python3 tests/test_acceptance_gate.py -> 'ok nenhuma árvore tem
+      artefato → Done PASSA (decisão do dono em aberto)' -> 'all
+      acceptance-gate tests passed' (exit 0). BACKLOG.md linha 3431 diz
+      'Passo 2 aguarda o dono: ausente em ida para done segue liberando.
+      Passo 3 e complete com rota humana aberta ficaram de fora.';
+      docs/acceptance-completeness.md documenta a tabela com 'absent in
+      all four places -> ALLOW'."
+out_of_scope:
+  - "step 3 (merge-truth-gate lateral) — não tocado neste diff, fora do
+    escopo deste run"
+  - "'status complete with open human route passes' — não implementado
+    nem testado neste diff, fora do escopo deste run"
+notes: >
+  Rodados apenas os testes pedidos (não a suíte inteira):
+  tests/test_acceptance_gate.py (28/28 ok), tests/test_gate_status_por_nome.py
+  (19/19 ok), tests/test_verde_sem_teste.py (todos ok), tests/test_session_anchor_root.py
+  (todos ok). Nenhum arquivo de produção ou teste foi alterado por este
+  auditor.
