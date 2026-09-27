@@ -383,6 +383,16 @@ def test_alvo_nao_resolvivel_nao_culpa_o_modo():
             check(f"não culpa o modo: {cmd[:28]}",
                   "fora do que esse modo produz" not in p.stderr
                   and "encerre" not in p.stderr.lower(), p.stderr[:300])
+        # Comando que mexe na variável sem atribuição simples invalida o valor
+        # que o gate guardou: `unset D` deixa `$D` vazio no shell, e liberar
+        # `docs/y` seria liberar um alvo que não é o real.
+        for cmd in ('D=docs; unset D; echo x > $D/y.md',
+                    'D=docs; read D < /tmp/entrada; echo x > $D/y.md',
+                    'D=docs; ((D+=1)); echo x > $D/y.md'):
+            p = r.bash(cmd)
+            check(f"mutação invalida o valor: {cmd[8:22]}",
+                  p.returncode == 2 and "não consegui resolver" in p.stderr,
+                  p.stderr[:200])
         # Variável de ambiente de verdade continua valendo (os.path.expandvars).
         p = r.bash('echo x > "$RAIZ_TESTE/docs/a.md"',
                    env={"RAIZ_TESTE": str(r.path)})

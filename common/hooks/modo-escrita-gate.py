@@ -199,6 +199,14 @@ def alvos_bash(comando):
             t = _expande(t, conhecidas)
             if t not in saida:
                 saida.append(t)
+        # `unset D`, `read D`, `let D=1`, `((D++))`: o comando mexe na
+        # variável sem ser atribuição simples, e o valor que o gate guardou
+        # deixou de valer. Citar o NOME sem `$` basta para esquecê-lo: esquecer
+        # à toa só leva a "não resolvido", que barra; lembrar à toa liberaria
+        # um alvo que o shell não vai usar (achado do pair-reviewer).
+        for nome in [n for n in conhecidas
+                     if re.search(r"(?<![$\w{])" + n + r"\b", seg)]:
+            del conhecidas[nome]
     return saida
 
 
