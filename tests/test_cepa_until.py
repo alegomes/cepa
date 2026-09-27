@@ -546,8 +546,11 @@ def test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok():
         check("...dizendo que o arquivo sumiu fora do run",
               "sumiram do disco" in p.stderr and "fora do run" in p.stderr,
               p.stderr[:600])
+        # A linha inteira: a pasta que sumiu, e não os arquivos um a um (que
+        # também começam com o nome da pasta).
         check("...e mandando restaurar a pasta com git restore",
-              "git restore -- docs/tasks/wego-2229-remoção" in p.stderr, p.stderr[:600])
+              "    git restore -- docs/tasks/wego-2229-remoção\n" in p.stderr,
+              p.stderr[:600])
         check("...sem sugerir --sujo-ok", "--sujo-ok" not in p.stderr,
               p.stderr[:600])
 
