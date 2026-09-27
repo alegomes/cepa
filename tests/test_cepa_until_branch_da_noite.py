@@ -203,6 +203,8 @@ def test_repo_sem_build_conhecido_nao_comeca_sem_dizer_qual():
               f"saiu {p.returncode}: {p.stderr[-300:]}")
         check("...e diz as duas saídas",
               "--verify" in p.stderr and "--sem-verify" in p.stderr, p.stderr)
+        check("...e nomeia a suíte que teria bastado",
+              "tests/run-all.sh" in p.stderr, p.stderr)
         check("...sem ter criado branch", not git(raiz, "branch", "--list",
                                                   "until/*"))
 
@@ -242,7 +244,9 @@ def _roda_sem_flag_de_verify(tmp, raiz, binv):
         env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
                  FAKE_PLANO=str(plano_de(raiz)),
                  FAKE_CHAMADAS=str(Path(tmp) / "chamadas.jsonl"),
-                 CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees")))
+                 CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"),
+                 # longe do ledger real do /common:metrics
+                 CEPA_TELEMETRY_DIR=str(Path(tmp) / "telemetria")))
 
 
 def _commita(raiz, msg):
@@ -274,6 +278,27 @@ def test_no_build_com_suite_roda_a_suite():
               str(inicio))
         check("...e a suíte rodou depois do item done", marca_suite.exists(),
               p.stdout[-400:])
+
+
+def test_suite_sem_no_build_vira_o_verify():
+    # Repo sem mvnw/gradlew e sem `.claude/no-build`, só com a suíte: ela é o
+    # build completo, em vez da recusa "não sei o build deste repo".
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        marca_suite = Path(tmp) / "suite-rodou"
+        (raiz / "tests").mkdir(exist_ok=True)
+        suite = raiz / "tests" / "run-all.sh"
+        suite.write_text(f"#!/bin/sh\necho x >> {marca_suite}\nexit 0\n")
+        suite.chmod(0o755)
+        _commita(raiz, "suite")
+        binv = fake_claude(tmp, TRABALHA)
+        p = _roda_sem_flag_de_verify(tmp, raiz, binv)
+        inicio = [e for e in ledger_de(raiz) if e["evento"] == "run_start"]
+        check("só com tests/run-all.sh, o run começa com a suíte como verify",
+              p.returncode == 0 and inicio
+              and inicio[0].get("verify") == "tests/run-all.sh",
+              f"saiu {p.returncode}: {inicio} {p.stderr[-300:]}")
+        check("...e a suíte rodou", marca_suite.exists(), p.stdout[-400:])
 
 
 def test_no_build_sem_suite_continua_dispensando():
