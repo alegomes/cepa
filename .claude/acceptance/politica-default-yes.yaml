@@ -1,0 +1,210 @@
+schema_version: 1
+key: politica-default-yes
+status: complete
+diff_range: a86f5c7 (docs-only; as 6 partes vêm de commits anteriores já mesclados)
+criteria:
+  - id: AC1
+    text: >
+      Regra transversal (ação reversível/registrável + recomendação clara →
+      executar e registrar; perguntar só para irreversível/destrutivo/custo
+      real/bifurcação genuína; perguntas em lote nas pontas), ativa nos
+      comandos de rotina.
+    altitude: skill
+    surface: >
+      common/skills/default-yes/SKILL.md (seções "A regra" e "Perguntas vão
+      nas pontas, nunca no meio") + hook default-yes-inject.py que injeta a
+      política para todo comando `interaction: routine`.
+    demonstrated_by:
+      test: tests/test_default_yes_inject.py
+      layer: skill (prompt-level) + hook (cli/subprocess)
+      evidence: verified
+      run: "python3 tests/test_default_yes_inject.py -> 26 checks 'ok' (ex.:
+        'board-flow:prove-drain injeta', 'diz que vale para o run inteiro',
+        'nomeia subagentes/comandos invocados', 'mantém a fronteira do
+        irreversível') -> 'all green' (exit 0)"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: >
+      Fortalecer `common:zero-micromanagement` com a regra explícita (hoje ela
+      existe mas os comandos a contradizem).
+    altitude: skill
+    surface: >
+      Esperado: edição da skill zero-micromanagement. Entregue: skill NOVA e
+      separada `default-yes`, ativada por hook (default-yes-inject.py) em
+      todo comando de rotina; zero-micromanagement não foi tocada.
+    demonstrated_by:
+      test: >
+        tests/test_default_yes_inject.py + leitura de
+        common/skills/default-yes/SKILL.md, parágrafo de abertura, que diz
+        que a skill não se confunde com zero-micromanagement porque uma
+        trata da fronteira com a pessoa (quando perguntar) e a outra da
+        fronteira com os agentes (quando delegar a um worker).
+      layer: skill + hook
+      evidence: verified
+      run: "python3 tests/test_default_yes_inject.py -> 26/26 ok (mesmo run
+        do AC1)"
+    verdict: complete
+    gap: null
+    notes: >
+      Desvio deliberado do esboço, não uma omissão: em vez de sobrepor duas
+      regras (delegação a worker vs. pergunta ao usuário) no mesmo arquivo, o
+      time criou uma skill separada que nomeia e resolve essa distinção no
+      próprio texto, e um hook que cobre TODOS os comandos de rotina (o
+      esboço só previa "revisar" caso a caso). Julgo como satisfação válida
+      do objetivo, mais robusta que a proposta original.
+  - id: AC3
+    text: >
+      Varredura de drain/prove-drain/triage/decide/wrap-up trocando
+      confirmação-por-item por default aplicado + registro + um único ponto
+      de confirmação; doctor ganha `--fix` em lote.
+    altitude: cli
+    surface: >
+      board-flow/commands/{triage,drain,execute,prove-drain}.md (citam
+      `default-yes` e aplicam lote) + common/commands/doctor.md (`--fix`) +
+      common/bin/cepa-doctor (implementação de `--fix`).
+    demonstrated_by:
+      test: tests/test_doctor_fix.py
+      layer: prompt (comandos) + cli (cepa-doctor --fix)
+      evidence: verified
+      run: "python3 tests/test_doctor_fix.py -> 17 checks 'ok' (ex.:
+        'relatório lista o que foi corrigido', 'depois de corrigir tudo que
+        era mecânico, exit 0', 'os três aparecem no bloco Precisa de você')
+        -> 'all green' (exit 0). Confirmado por grep direto que triage.md,
+        drain.md, execute.md e prove-drain.md citam `default-yes` com
+        instrução de lote."
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: >
+      Preparação fora da sessão: job agendado (launchd) roda o cepa-doctor de
+      manhã em modo auto-fix mecânico e grava status; o hook de SessionStart
+      injeta uma linha ("harness verde às 07:00" ou "N pendências que só você
+      decide") em vez de mandar o usuário rodar o doctor e seguir
+      recomendações em cascata dentro da sessão.
+    altitude: cli
+    surface: >
+      Caminho alternativo alegado: preflight `cepa-doctor --fix --brief
+      --if-stale 12` embutido no launcher `common/bin/cepa`, chamado ANTES de
+      entregar a sessão ao `claude` — não um job launchd nem um hook de
+      SessionStart.
+    demonstrated_by:
+      test: tests/test_doctor_fix.py::test_preflight_do_wrapper
+      layer: cli (wrapper de abertura de sessão)
+      evidence: verified
+      run: "python3 tests/test_doctor_fix.py -> 'ok preflight corrige o
+        mecânico e resume em poucas linhas', 'ok preflight não despeja o
+        diagnóstico inteiro', 'ok dentro da janela, o preflight é MUDO', 'ok
+        doctor quebrado NÃO impede a sessão de abrir', 'ok
+        CEPA_PREFLIGHT=off desliga o preflight' -> 'all green' (exit 0)"
+    verdict: complete
+    gap: null
+    notes: >
+      Julgamento sobre o objetivo (não sobre a letra): a meta do esboço era a
+      sessão nascer pronta sem cascata de recomendações DENTRO dela. O
+      preflight do wrapper cumpre isso — roda antes de `claude` subir,
+      corrige o mecânico sozinho e imprime só a contagem do que sobra para
+      decisão humana ("N pendência(s) que só você decide", texto literal
+      confirmado em common/bin/cepa-doctor), calado quando não há nada a
+      dizer. É funcionalmente equivalente ou superior ao desenho original:
+      dispara no momento exato em que a sessão nasce (não num horário fixo
+      que pode estar desatualizado), sem plist nem "será que rodou hoje?", e
+      nunca bloqueia a abertura se o doctor falhar. O commit 63b4754 registra
+      essa escolha explicitamente no próprio título ("dentro do wrapper, nao
+      num agendador"). Não há hook de SessionStart injetando a linha — a
+      informação chega por stderr do wrapper antes do primeiro prompt, ponto
+      ainda mais cedo que SessionStart.
+  - id: AC5
+    text: >
+      `/common:session <rotina>` encadeia a jornada inteira: checa o
+      preflight, faz TODAS as perguntas na largada, executa sem parar,
+      entrega UM relatório final e oferece o wrap-up como último passo.
+    altitude: cli
+    surface: >
+      common/commands/session.md + hook session-routine-guard.py (resolve
+      apelidos de rotina, bloqueia contradição com /common:spec).
+    demonstrated_by:
+      test: tests/test_session_routine_guard.py
+      layer: prompt (comando) + cli (hook)
+      evidence: verified
+      run: "python3 tests/test_session_routine_guard.py -> checks 'ok' em
+        todos os blocos (test_rotina_normal_passa,
+        test_apelidos_do_passo_1, test_spec_via_session_bloqueia,
+        test_apelidos_nao_divergem_do_session_md, etc.) -> 'all green'
+        (exit 0)"
+    verdict: complete
+    gap: null
+  - id: AC6
+    text: >
+      Disciplina de fio da sessão: proposta em aberto reaparece nos
+      relatórios seguintes até ser resolvida; assunto lateral (worktree
+      solto, handoff vencido) vai para um estacionamento exibido só no
+      wrap-up, nunca vira pergunta no meio de outra discussão.
+    altitude: skill
+    surface: >
+      common/skills/default-yes/SKILL.md, seção "Guardar o fio da sessão".
+    demonstrated_by:
+      test: "leitura direta do arquivo (não há superfície executável: é
+        instrução de prompt para o agente, não código)"
+      layer: skill (prompt-level)
+      evidence: verified
+      run: "grep -n 'Proposta em aberto não some|Assunto lateral fica
+        estacionado' common/skills/default-yes/SKILL.md -> linhas 58 e 62,
+        texto presente e batendo literalmente com os dois compromissos do
+        item 6 do esboço"
+    verdict: complete
+    gap: null
+    notes: >
+      Não existe (nem faria sentido pedir) um teste unitário para uma
+      instrução comportamental de prompt sem lógica determinística por trás;
+      a evidência aqui é a existência verbatim do texto, confirmada por
+      grep, e não uma alegação não verificada.
+  - id: AC_metricas
+    text: >
+      `/common:metrics` ganha duas métricas: "turnos até o primeiro comando
+      de rotina" e "turnos entre o fim da rotina e o wrap-up".
+    altitude: cli
+    surface: >
+      common/bin/cepa-metrics, bloco "Atrito das pontas".
+    demonstrated_by:
+      test: "execução direta do agregador com ledger sintético (sem teste
+        dedicado em tests/)"
+      layer: cli (agregador de telemetria)
+      evidence: verified
+      run: "Criado ledger sintético em diretório temporário com 1 sessão (2
+        prompts antes da rotina, 1 depois até o evento 'fechamento'); rodado
+        `CEPA_TELEMETRY_DIR=<tmp> python3 common/bin/cepa-metrics` -> saída:
+        '## Atrito das pontas (1 sessão(ões) com rotina)', 'turnos ANTES da
+        1a rotina: mediana 2 (todas: [2])', 'turnos DEPOIS da última:
+        mediana 1 (todas: [1])', com a legenda 'ANTES = quantos vieram antes
+        do primeiro comando de rotina' e 'DEPOIS = quantos vieram após o
+        último, até o /wrap-up ou /handoff' — as duas métricas nomeadas no
+        esboço, calculadas e impressas de fato, não só presentes no
+        código-fonte."
+    verdict: complete
+    gap: null
+out_of_scope: []
+notes: >
+  Rodados apenas os testes explicitamente relevantes, em primeiro plano, sem
+  a suíte completa: tests/test_default_yes_inject.py (26/26 ok, roda como
+  script Python no import, não pytest), tests/test_doctor_fix.py (17/17 ok,
+  via `if __name__ == "__main__"`), tests/test_session_routine_guard.py
+  (via `if __name__ == "__main__"`, todos os blocos ok), e uma execução
+  isolada de common/bin/cepa-metrics contra um ledger sintético descartável
+  (nenhum arquivo do repositório foi alterado por essa execução). Nenhum
+  arquivo de produção ou de teste foi alterado por este auditor.
+
+  Confirmado por `git show --stat a86f5c7` que o único commit da rodada
+  mexeu apenas em BACKLOG.md (22 inserções, 2 remoções) — a alegação de "nada
+  construído, só o mapa" procede. Os oito commits citados no mapa "Onde cada
+  parte mora" (0fc6ca9, 32e0c58, e50b935, 63a0fd6, 2f07718, 6a49e7d, 63b4754,
+  3667132) existem no histórico e seus títulos batem com o que o mapa
+  atribui a cada um.
+
+  Dois pontos julgados deliberadamente a favor do implementador, com o
+  motivo registrado em cada critério: AC2 (skill separada em vez de editar
+  zero-micromanagement) e AC4 (preflight no wrapper `cepa` em vez de job
+  launchd + hook de SessionStart) — ambos cumprem o objetivo declarado do
+  esboço (sessão nasce pronta, sem cascata de perguntas dentro dela) por um
+  caminho diferente do literal, e a divergência está documentada no próprio
+  BACKLOG.md e no título do commit 63b4754, não escondida.
