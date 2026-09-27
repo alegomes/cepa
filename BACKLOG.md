@@ -9,8 +9,9 @@ e onde provavelmente mora. Sem ordem de prioridade fixa.
 
 **Plano:** `cepa/politica-default-yes`
 
-**Status:** pendente · **Lar provável:** `common` (skill `zero-micromanagement` + varredura
-dos comandos) · **Origem:** reclamação forte do usuário (2026-08-18, por voz): toda rotina
+**Status:** feito (conferido em 2026-09-26, sem código novo: as seis partes já estavam
+no repo e só este status tinha ficado para trás) · **Lar:** `common` · **Origem:**
+reclamação forte do usuário (2026-08-18, por voz): toda rotina
 (triage, drain, prove-drain, autonomous, doctor) exige ciclos de confirmação ANTES
 (preparação em cascata, ~15–20% do contexto) e DEPOIS (vaivém até "ter certeza que
 acabou") da operação principal — e ele quase sempre aceita a recomendação, então a
@@ -63,6 +64,25 @@ decisão auto-aplicada fica nomeada no relatório; o handoff e o `/common:debrie
 (revisão keep/overrule a posteriori) são o canal de correção; `/common:metrics` ganha
 duas métricas para provar o efeito — "turnos até o primeiro comando de rotina" e
 "turnos entre o fim da rotina e o wrap-up".
+
+### Onde cada parte mora
+
+1. **Regra** e 2. **Skill:** a regra virou uma skill própria,
+   `common/skills/default-yes/SKILL.md` (0fc6ca9), em vez de um parágrafo a mais na
+   `zero-micromanagement`. O hook `common/hooks/default-yes-inject.py` a mantém ativa
+   dentro do run, não só na largada (32e0c58).
+3. **Varredura:** `drain`, `triage` e `execute` (e50b935); `prove-drain` entrega as
+   perguntas agrupadas (63a0fd6); `triage` confirma em lote (2f07718); `doctor --fix`
+   aplica o mecânico em lote (6a49e7d).
+4. **Preparação fora da sessão:** feito por outro caminho. Em vez do job no launchd,
+   o launcher `common/bin/cepa` roda `cepa-doctor --fix --brief --if-stale 12` antes
+   de abrir cada sessão, calado quando não há nada a dizer (63b4754, cujo título
+   registra a escolha: "dentro do wrapper (nao num agendador)").
+5. **Sessão com propósito declarado:** `common/commands/session.md` (0fc6ca9).
+6. **Fio da sessão:** seção "Guardar o fio da sessão" da skill `default-yes`
+   (proposta em aberto reaparece; assunto lateral fica estacionado).
+
+**Métricas:** `/common:metrics`, bloco "Atrito das pontas" (3667132).
 
 ---
 
