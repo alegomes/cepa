@@ -104,6 +104,9 @@ Answers to the three open design questions the backlog item raised
    `/board-flow:advance`, desde que o projeto declare as colunas em
    `board-flow.yaml`. Nenhum código novo de `board-flow` foi escrito: a
    composição é a mesma que já existe para `design` e `discovery`.
+   O quadro é **opcional**: sem `board-flow.yaml` (ou sem Jira), o
+   `/marketing:brief-write-review` roda o fluxo inteiro com artefatos locais
+   em `docs/marketing/`. Confirmado pelo dono em 2026-09-27.
 3. **Fonte de fato versionada sem drift?** `BRIEF.md` é versionado no
    próprio repositório do projeto (`docs/marketing/<slug>/BRIEF.md`), e a
    tabela de números canônicos é a única fonte de verdade para figuras.

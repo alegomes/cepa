@@ -704,10 +704,7 @@ items:
     de consertar o que existe, e nada do que está em uso depende dela.'
   status: done
   blocked_by: []
-  human_pending: revisar as 3 decisoes de design tomadas no run desatendido (marketing/marketing-topology.md,
-    secao Decisoes) quando algum projeto for usar o plugin; se alguma nao servir,
-    reabrir o item. (Instalado por bin/install.sh --clean em 2026-09-27, marketing
-    0.1.0.)
+  human_pending: null
   evidence: 'Na branch da noite until/2026-09-26-2203: d8f7b21 (plugin marketing/:
     5 agentes content-lead, content-strategist, copywriter, brand-style-critic,
     fact-checker; comando /marketing:brief-write-review com teto de 2 rodadas de
@@ -722,7 +719,9 @@ items:
     proof-reviewer PROVEN na 2a rodada (docs/proof/topologia-marketing.yaml). Fora:
     nenhum modo de sessao marketing em _modos.py; install.sh --topology nao conhece
     marketing (mesmo padrao do design); nenhum run real do fluxo com LLM. Build
-    completo delegado ao supervisor.'
+    completo delegado ao supervisor. Decisoes de design revisadas pelo dono em 2026-09-27:
+    1 (brand-rules.yaml opcional) e 3 (numeros so no BRIEF.md) mantidas; 2 mantida
+    com o quadro do Jira opcional, agora explicito em marketing-topology.md.'
 - id: baseline-cega-builds-longos
   title: Baseline cega para build que estoura o teto de foreground do Bash
   why: 'proposto na varredura de 2026-08-25 e RETIRADO na mesma sessao: a demanda
