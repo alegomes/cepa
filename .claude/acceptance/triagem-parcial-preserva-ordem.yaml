@@ -1,0 +1,59 @@
+key: triagem-parcial-preserva-ordem
+status: complete
+criteria:
+  - id: AC1
+    text: >-
+      "Triagem parcial acrescenta os cards novos DEPOIS dos pendentes já
+      priorizados, sem mexer na ordem deles." Achado em quadro real
+      (2026-09-25): com `--on-missing keep`, `cepa-plan write --from-triage`
+      punha 3 cards novos NA FRENTE dos 5 pendentes que o dono priorizou, e
+      mandava os 5 antigos para o fim. Depois do fix, uma triagem parcial
+      (repasse que não cobre a fila inteira do disco) mantém a fila do disco
+      na ordem dela — item que a triagem também cita é atualizado no lugar
+      dele, sem mudar posição — e os cards novos entram só depois, na ordem
+      da triagem.
+    altitude: cli
+    surface: >-
+      python3 common/bin/cepa-plan write <nome> --from-triage <repasse.json>
+      --on-missing keep
+    test: tests/test_common_plan.py::test_triagem_parcial_preserva_a_ordem_da_fila
+    layer: cli-subprocess (helper `run()` chama subprocess.run no
+      sys.executable + common/bin/cepa-plan; não é chamada de função mockada)
+    evidence: verified
+    run: >-
+      $ python3 tests/test_common_plan.py
+      -> "all green"; 133 asserções "ok" nesta execução, exit code 0.
+      Asserts específicos do teste-alvo (todos "ok"):
+      "com --on-missing keep, grava" /
+      "a fila do disco fica na ordem dela e os novos entram DEPOIS" (ids ==
+      ["W-1437","W-1500","W-900","W-1600","W-1700","W-1800","W-1438","W-1439",
+      "W-1440"]) / "o relatório nomeia os cards acrescentados" / "item já na
+      fila que a triagem releu continua `pending` no lugar dele" / "o `done`
+      do meio da fila sobrevive" / "a dependência entre cards novos sobrevive".
+    verdict: complete
+    notes: >-
+      Diff (cf45f50..15da11b) confere com o teste: o ramo novo só entra
+      quando `a.on_missing == "keep" and a.from_triage and sobras` (triagem
+      parcial de fato), reusa `funde()` para preservar status/human_pending
+      dos itens que a triagem também cita, e ancora a ordem do disco via
+      `ja_na_fila`, apendando o resto de `fundidos` (os novos, na ordem da
+      triagem) no fim. O relatório de gravação (`--from-triage`) nomeia os
+      cards acrescentados. O implementador já havia verificado que o teste
+      falha na base (cf45f50), reordenando para
+      W-1438, W-1600, W-1439, W-1440, W-1437...; não repeti esse checkout
+      porque o objeto é auditar o commit que fecha o item, não reconfirmar a
+      falha histórica.
+      Segundo sub-teste do mesmo caso ("triagem que cobre a fila inteira
+      continua mandando na ordem") confirma que o design deliberadamente
+      restringe o fix a triagem PARCIAL — uma triagem que cobre a fila
+      inteira do disco ainda reordena, comportamento antigo preservado e
+      coberto por asserção própria, consistente com o texto do critério
+      ("triagem parcial").
+runs:
+  - command: python3 tests/test_common_plan.py
+    result: "all green (133 ok), exit 0"
+  - command: python3 tests/test_common_drain_plan.py
+    result: "all green, exit 0"
+  - command: python3 tests/test_common_next.py
+    result: "all green, exit 0"
+gaps: []
