@@ -1,0 +1,107 @@
+card: spec-gate-so-le-trecho-do-edit
+status: complete
+altitude: cli
+surface: >
+  common/hooks/spec-readiness-gate.py invocado como subprocesso (PreToolUse
+  hook), payload JSON no stdin, exit code 0 (libera) / 2 (bloqueia). Testado
+  via subprocess.run([sys.executable, HOOK], input=json.dumps(payload)) em
+  tests/test_spec_readiness_gate.py — é o mesmo modo como o hook roda de
+  verdade no Claude Code.
+commit_auditado: 7a7b9aa
+diff_base: b6133a6..7a7b9aa
+criteria:
+  - id: AC1
+    descricao: >
+      Esboço de solução item 1 — para Edit e MultiEdit com file_path, reconstruir
+      o arquivo resultante lendo o disco e aplicando cada old_string -> new_string
+      (respeitando replace_all); liberar se o arquivo não existe ou old_string
+      não bate.
+    altitude: cli
+    test: tests/test_spec_readiness_gate.py::test_edit_com_file_path_le_o_arquivo_resultante (caso a)
+          e tests/test_spec_readiness_gate.py::test_multiedit_com_file_path_aplica_em_sequencia
+          e tests/test_spec_readiness_gate.py::test_multiedit_replace_all
+          e tests/test_spec_readiness_gate.py::test_edit_com_file_path_inexistente_libera
+          e tests/test_spec_readiness_gate.py::test_edit_com_old_string_duplicado_sem_replace_all_libera
+          e tests/test_spec_readiness_gate.py::test_edit_com_old_string_que_nao_bate_libera
+    layer: hook subprocess (exit code do processo real)
+    evidence: verified
+    run: >
+      python3 tests/test_spec_readiness_gate.py -> "all green", exit 0,
+      36 checks "ok" (contagem via grep -c "^  ok"), incluindo todos os
+      casos acima.
+    status: complete
+    gap: null
+
+  - id: AC2
+    descricao: >
+      Esboço de solução item 2 — olhar o Status do arquivo resultante, não do
+      trecho, para que um Edit que quebra um critério de uma spec já pronta
+      também seja barrado.
+    altitude: cli
+    test: tests/test_spec_readiness_gate.py::test_edit_com_file_path_le_o_arquivo_resultante (casos b e c)
+    layer: hook subprocess (exit code do processo real)
+    evidence: verified
+    run: >
+      python3 tests/test_spec_readiness_gate.py -> ok "Edit que reabre pergunta
+      numa spec pronta bloqueia" (rc==2), ok "mensagem cita a pergunta reaberta",
+      ok "Edit que remove Teste vermelho numa spec pronta bloqueia" (rc==2),
+      ok "mensagem cita Teste vermelho". Exit 0 geral do runner.
+    status: complete
+    gap: null
+
+  - id: AC3
+    descricao: >
+      Teste que falta, bullet 1 — arquivo em disco com critérios completos e
+      Status: rascunho; Edit trocando só a linha de Status por
+      pronta-para-construir. Espera LIBERADO (hoje sai BLOQUEADO).
+    altitude: cli
+    test: tests/test_spec_readiness_gate.py::test_edit_com_file_path_le_o_arquivo_resultante (caso a)
+    layer: hook subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_spec_readiness_gate.py -> ok "Edit que só muda o
+      Status vê o critério completo e libera" (rc==0). Exit geral 0.
+    status: complete
+    gap: null
+
+  - id: AC4
+    descricao: >
+      Teste que falta, bullet 2 — arquivo em disco já pronta-para-construir;
+      Edit que acrescenta "- [ ] pergunta". Espera BLOQUEADO (hoje sai
+      LIBERADO).
+    altitude: cli
+    test: tests/test_spec_readiness_gate.py::test_edit_com_file_path_le_o_arquivo_resultante (caso b)
+    layer: hook subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_spec_readiness_gate.py -> ok "Edit que reabre
+      pergunta numa spec pronta bloqueia" (rc==2) e ok "mensagem cita a
+      pergunta reaberta". Exit geral 0.
+    status: complete
+    gap: null
+
+  - id: AC5
+    descricao: >
+      Teste que falta, bullet 3 — MultiEdit com duas edições, a segunda
+      dependendo da primeira. Espera o crivo sobre o resultado das duas.
+    altitude: cli
+    test: tests/test_spec_readiness_gate.py::test_multiedit_com_file_path_aplica_em_sequencia
+    layer: hook subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_spec_readiness_gate.py -> ok "MultiEdit aplica as
+      edições em sequência e libera (completa)" (rc==0), confirmando que o
+      old_string da segunda edição só bate depois de aplicar a primeira sobre
+      o mesmo texto. Exit geral 0.
+    status: complete
+    gap: null
+
+notas: >
+  Comando executado em primeiro plano, escopo único
+  (tests/test_spec_readiness_gate.py), sem suíte completa — respeita a regra
+  de branch noturna. Runner usa contagem própria (linhas "ok"/"FAIL" +
+  "all green"/exit 1), sem literal "Tests run: N"; contagem obtida via
+  `grep -c "^  ok"` = 36 (> 0). Todos os 3 bullets de "Teste que falta" têm
+  teste nomeado e verde; os 2 itens do "Esboço de solução" estão implementados
+  em aplica_edicao/resultado_apos_edicoes e exercidos pelos mesmos testes mais
+  os casos extras de old_string duplicado/inexistente e file_path ausente.

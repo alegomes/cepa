@@ -3121,7 +3121,7 @@ Três casos que teriam pegado isto antes:
 
 **Plano:** `cepa/spec-gate-so-le-trecho-do-edit`
 
-**Status:** pendente · **Lar provável:** `common/hooks/spec-readiness-gate.py` · **Origem:**
+**Status:** feito nesta branch (commits 7a7b9aa, a169a2d, cdc5062) · **Lar:** `common/hooks/spec-readiness-gate.py` · **Origem:**
 sessão `/common:spec` no `wego-acesso-backend` (13/09/2026), ao fechar
 `docs/spec/tags-de-pessoas.md`.
 

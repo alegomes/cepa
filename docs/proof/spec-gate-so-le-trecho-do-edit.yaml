@@ -1,0 +1,109 @@
+schema_version: 2
+card: spec-gate-so-le-trecho-do-edit
+verdict: proven
+reviewed_at: 2026-09-27T03:10:00-03:00
+base_commit: b6133a6
+head_commit: cdc5062
+issue_type: Bug
+repo_kind: harness   # hook Python do Claude Code, não Maven/Quarkus — perturbação + re-run é o mecanismo, não PIT
+scope:
+  changed_classes:
+    - class: "common/hooks/spec-readiness-gate.py (aplica_edicao, resultado_apos_edicoes, e o roteamento em main() para Edit/MultiEdit com file_path)"
+      module: hooks
+      external_observable: true   # a superfície é o próprio hook rodando como subprocesso PreToolUse, recebendo o payload JSON de verdade no stdin (tests/test_spec_readiness_gate.py:run() invoca via subprocess.run, exit code + stderr)
+      substituted_by_double: null
+    - class: "tests/test_spec_readiness_gate.py (test_multiedit_replace_all_troca_TODAS_as_ocorrencias, test_multiedit_acumula_sobre_o_resultado_da_edicao_anterior, test_edit_com_old_string_que_nao_bate_em_spec_invalida_libera — teste-only, sem mudança de produção)"
+      module: hooks
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); o cobridor é um subprocesso Python (python3 common/hooks/spec-readiness-gate.py) recebendo o payload JSON de verdade no stdin — perturbação de cada função/ramo mudado + re-run do processo é o mecanismo aplicável, não PIT."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida confirmado no HEAD (cdc5062), numa worktree descartável (git worktree add --detach cdc5062 /tmp/proof-spec-gate-3): python3 tests/test_spec_readiness_gate.py -> 'all green', exit 0."
+        - "PERTURBAÇÃO 1 (load-bearing, RED) -- em aplica_edicao, removido o ramo `if edit.get(\"replace_all\"): return texto.replace(old, new)`: 2 falhas ('replace_all troca as duas ocorrências e as duas ficam inválidas', 'mensagem cita os dois critérios'), exit 1. Restaurada, GREEN reconfirmado."
+        - "PERTURBAÇÃO 2 (load-bearing, RED) -- em resultado_apos_edicoes, quebrada a acumulação sequencial (cada aplica_edicao voltou a rodar sobre o texto original em vez do resultado da edição anterior): 1 falha ('os dois consertos se acumulam e a spec completa libera'), exit 1. Restaurada, GREEN reconfirmado."
+        - "PERTURBAÇÃO 3 (load-bearing, RED) -- em aplica_edicao, removida a checagem `if texto.count(old) > 1: return None`: 1 falha ('old_string duplicado sem replace_all libera'), exit 1. Restaurada, GREEN reconfirmado."
+        - "PERTURBAÇÃO 4 (load-bearing, RED) -- em resultado_apos_edicoes, removido o `try/except OSError` ao redor de Path(file_path).read_text: 1 falha ('file_path inexistente libera'), exit 1 (crash com FileNotFoundError não tratado). Restaurada, GREEN reconfirmado."
+        - "PERTURBAÇÃO 5 (load-bearing, RED) -- em main(), removido o roteamento condicional (Edit/MultiEdit com file_path -> resultado_apos_edicoes) e forçado sempre extract_content (fragmento isolado), simulando o comportamento antigo: 9 falhas, exit 1 (as duas cenas do card e mais 7). Restaurada, GREEN reconfirmado."
+        - "PERTURBAÇÃO 6 (load-bearing, RED, gap da rodada anterior FECHADO) -- em aplica_edicao, removida a checagem `if old not in texto: return None`: 1 falha ('old_string que não bate numa spec inválida libera'), exit 1. O novo teste test_edit_com_old_string_que_nao_bate_em_spec_invalida_libera usa um arquivo de base JÁ INVÁLIDO (CS-1 sem Superfície) -- sem a checagem, aplica_edicao devolve o texto original inalterado (ainda inválido) em vez de None, o gate julga esse texto e bloqueia (rc=2) em vez de liberar (rc=0), e agora o teste pega essa divergência (o teste anterior, com base válida, não pegava porque os dois caminhos coincidiam em rc=0 por acaso). Restaurada, GREEN reconfirmado."
+      run: >-
+        Worktree descartável /tmp/proof-spec-gate-3 (git worktree add
+        --detach cdc5062), removida ao final com `git worktree remove
+        --force`. Cada perturbação foi um `python3 -c "..."` reescrevendo o
+        arquivo por substituição de texto exato, seguida de comando Bash
+        separado `python3 tests/test_spec_readiness_gate.py`, restauração com
+        `git checkout cdc5062 -- common/hooks/spec-readiness-gate.py` e
+        reconfirmação de GREEN antes da próxima. Árvore principal
+        (cepa-pendencias_until-until-2026-09-26-2203) nunca tocada; nenhum
+        arquivo fora de docs/proof/ foi escrito lá.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      Leitura estrutural (não há coverage tool wired neste repo Python); as
+      6 linhas de comportamento mudadas no diff completo (ramo replace_all,
+      checagem de unicidade, guarda de old_string ausente, acumulação
+      sequencial do MultiEdit, guarda de arquivo inexistente, roteamento
+      file_path-vs-fragmento) são todas EXECUTADAS e, com os testes
+      atuais, TODAS mudam o resultado do processo real quando removidas
+      (RED nas 6 perturbações de l3) -- nenhuma é código morto e nenhuma
+      sobrevive.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      O hook não abre superfície de entrada HTTP/anônima: roda como
+      subprocesso local invocado pelo próprio Claude Code, recebendo no stdin
+      o payload JSON que o harness monta a partir da chamada de ferramenta do
+      agente -- não há usuário externo desconhecido compondo esse payload.
+      Este repo não tem módulo equivalente a api-rest (é Python, não
+      Maven/Quarkus), então a condição estrutural do guard (nenhuma classe
+      mudada em módulo com superfície de entrada) vale trivialmente.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: >-
+      No mesmo worktree descartável, com `git checkout b6133a6 --
+      common/hooks/spec-readiness-gate.py` (hook AINDA NÃO corrigido) e o
+      arquivo de teste do HEAD trazido por cima (`git checkout cdc5062 --
+      tests/test_spec_readiness_gate.py`), rodei
+      `python3 tests/test_spec_readiness_gate.py`: 9 falhas, exit 1 --
+      incluindo as duas cenas nomeadas no card ("Edit que só muda o Status vê
+      o critério completo e libera" e "Edit que reabre pergunta numa spec
+      pronta bloqueia" / "Edit que remove Teste vermelho numa spec pronta
+      bloqueia"), mais "file_path inexistente libera", "MultiEdit aplica as
+      edições em sequência e libera (completa)" e "replace_all troca as duas
+      ocorrências e as duas ficam inválidas". No HEAD (cdc5062), o mesmo
+      arquivo de teste dá 'all green', exit 0. (Os dois testes mais novos,
+      test_multiedit_acumula_sobre_o_resultado_da_edicao_anterior e
+      test_edit_com_old_string_que_nao_bate_em_spec_invalida_libera, também
+      passam na base -- mas trivialmente: sem o roteamento por file_path, o
+      fragmento julgado não tem campo Status nenhum, então o gate libera sem
+      nunca aplicar a lógica em questão. Isso não invalida a regressão: as
+      outras 9 falhas já provam vermelho na base, e o comportamento desses
+      dois testes na base é irrelevante para o veredito -- o que importa é
+      que eles ESTÃO RED quando a linha correspondente é perturbada no HEAD,
+      confirmado em l3.)
+routing_reason: >-
+  As seis linhas de comportamento mudadas neste diff completo (base
+  b6133a6 -> head cdc5062, passando por 7a7b9aa fix e a169a2d + cdc5062
+  test-only) agora morrem TODAS sob perturbação isolada: ramo replace_all,
+  checagem de unicidade de old_string, acumulação sequencial do MultiEdit,
+  guarda de arquivo inexistente, roteamento file_path-vs-fragmento, e a
+  checagem de old_string ausente. Os três gaps encontrados nas duas rodadas
+  anteriores deste card (replace_all e acumulação sequencial na primeira
+  rodada; old_string ausente com base inválida na segunda) foram todos
+  fechados por testes novos, sem nenhuma mudança de produção -- e cada
+  fechamento foi reconfirmado nesta rodada, do zero, numa worktree
+  descartável nova. A regressão do bug está vermelha na base (9 falhas em
+  b6133a6, incluindo as duas cenas do card) e verde no head. l2 e l4 não
+  bloqueiam (l4 é n/a porque o hook não abre superfície de entrada externa;
+  l2 é pass porque as 6 linhas mudadas rodam e mudam o resultado real).
+  Nenhum nível está assumed/skipped/gap/survived -- PROVEN.
