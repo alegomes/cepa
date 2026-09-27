@@ -1,0 +1,76 @@
+key: until-registro-nao-e-sujeira
+status: complete
+base_commit: 440860d
+head_commit: 6c01a4a
+criterios:
+  - id: AC1
+    descricao: >-
+      cepa-until <fila> --for ...: quando a única pendência do `git status`
+      é o registro de runs anteriores em .claude/programs/<fila>/until/
+      (não rastreado), o run larga (não recusa com "arquivo(s)
+      modificado(s)").
+    altitude: cli
+    surface: "common/bin/cepa-until <fila> --for <janela>"
+    test: tests/test_cepa_until.py::test_registro_do_run_anterior_nao_e_sujeira
+    layer: cli-subprocess (roda o binário real via subprocess.run, git real)
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until.py -> rc=0; dentro do teste:
+      "ok  o run seguinte larga mesmo com o registro do anterior"
+      (assinatura da checagem: "modificado(s)" not in p2.stderr and
+      len(chamadas2) == 1); suíte inteira do arquivo terminou com
+      "✓ tudo verde" (120 linhas "ok", 0 falhas).
+    status: complete
+  - id: AC2
+    descricao: >-
+      Mesma superfície: sujeira de verdade (ex.: arquivo não rastreado fora
+      de until/) ao lado do registro continua recusando (rc 2, nada
+      disparado) e a listagem mostra só a sujeira real.
+    altitude: cli
+    surface: "common/bin/cepa-until <fila> --for <janela>"
+    test: tests/test_cepa_until.py::test_registro_do_run_anterior_nao_e_sujeira
+    layer: cli-subprocess (mesmo teste, segunda metade)
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until.py -> rc=0; dentro do teste:
+      "ok  sujeira de verdade ao lado do registro ainda recusa" e
+      "ok  ...e a lista mostra só a sujeira, não o registro"
+      (checa p3.returncode == 2, chamadas3 vazio, "lixo.txt" em p3.stderr,
+      "until/" ausente de p3.stderr).
+    status: complete
+  - id: AC3
+    descricao: >-
+      cepa-doctor --projeto: com fila single-track pendente e só o registro
+      em until/, o check [execucao] confirma que larga (não avisa); com
+      sujeira real junto, continua avisando.
+    altitude: cli
+    surface: "common/bin/cepa-doctor --projeto"
+    test: tests/test_doctor_arvore_suja.py::test_registro_do_cepa_until_nao_conta_como_sujeira
+    layer: cli-subprocess (roda o binário real via subprocess.run, git real)
+    evidence: verified
+    run: >-
+      python3 tests/test_doctor_arvore_suja.py -> rc=0; dentro do teste:
+      "ok  só o registro do run → confirma que larga" e
+      "ok  registro + sujeira de verdade → ainda avisa"; arquivo inteiro
+      terminou com "✓ tudo verde".
+    status: complete
+notas: >-
+  Diff confirmado (git diff 440860d..HEAD) toca exatamente as duas
+  superfícies citadas: common/bin/cepa-until (novo REGISTRO_DO_RUN =
+  re.compile aplicado em arvore_suja) e common/bin/cepa-doctor (mesmo filtro
+  aplicado em check_arvore_suja). Os dois testes demonstradores rodam no
+  altitude certo: disparam o binário real via subprocess com um repo git
+  real montado em tempfile, não mockam a função de filtro isoladamente.
+  bash tests/run-all.sh (suíte completa) foi lançado em primeiro plano mas
+  excedeu o timeout de 120s da chamada e o próprio harness moveu o processo
+  para segundo plano; por instrução operacional este auditor não fica
+  parado aguardando notificação de processo em background — o veredito
+  acima foi fechado só com a evidência direta dos dois testes nomeados na
+  tarefa, rodados isoladamente em primeiro plano, com rc=0 e N>0 asserções.
+  Depois de o veredito já estar escrito, a notificação de conclusão desse
+  processo em segundo plano chegou por conta própria (sem esta sessão ter
+  ficado esperando por ela) e trouxe: "arquivos rodados: 85 de 85",
+  "tudo verde", família pytest "52 passed in 0.23s", `exited with code 0`.
+  Isso confirma, a posteriori, o "85/85 verde" citado no enunciado da
+  tarefa — mas não foi o que sustentou o veredito de nenhum dos 3
+  critérios, que já estava fechado antes dessa notificação chegar.
