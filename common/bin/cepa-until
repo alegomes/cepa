@@ -304,6 +304,14 @@ ENV_JANELA = "CEPA_UNTIL_RUN"
 #
 # Valor já posto no ambiente pelo operador ganha: quem escolheu explicitamente
 # sabe o que quer.
+#
+# MEDIDO EM 27/09/2026 (claude 2.1.283): a espera não acontece. Com a variável
+# em 0, ausente ou 120000, um `claude -p` que deixou `bash build.sh` em segundo
+# plano saiu em ~15s e o build morreu junto; um `Monitor` armado também não
+# segura o turno. O que colhe um build de mais de 10 min hoje é a receita que o
+# `no-background-build` ensina: gravar `EXIT=` num arquivo e esperá-lo em
+# primeiro plano. A exportação fica porque não custa nada e o comportamento
+# pode voltar numa versão futura; não conte com ela.
 ENV_ESPERA_FUNDO = "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS"
 
 # Quanto da saída do subprocesso o reconhecedor de limite olha. Ler o pedaço
@@ -391,6 +399,20 @@ def consulta_fila(nome, repo):
         return json.loads(p.stdout), None
     except json.JSONDecodeError as e:
         return None, f"o `cepa-plan queue` não devolveu JSON ({e})"
+
+
+# Quanto do `evidence` de um item travado o resumo do fim mostra. O comando que
+# o dono precisa rodar costuma estar no fim do texto ("deixei X para você
+# rodar"), então o corte guarda o começo E o fim, não só o começo.
+MOTIVO_NO_RESUMO = 600
+
+
+def resume_motivo(texto):
+    texto = " ".join(str(texto).split())
+    if len(texto) <= MOTIVO_NO_RESUMO:
+        return texto
+    metade = MOTIVO_NO_RESUMO // 2
+    return f"{texto[:metade]} [...] {texto[-metade:]}"
 
 
 def le_item(caminho_plano, ident):
@@ -1395,7 +1417,13 @@ def main(argv=None):
         if estado == "done":
             entregues.append(ident)
         elif estado == "blocked":
-            travados.append(ident)
+            # O motivo vai junto: o resumo do fim é onde o dono lê o que fazer,
+            # e em 25/09 ele só dizia "Travados (1)" enquanto o comando que o
+            # WEGO-2334 deixou para ele rodar estava na `evidence` da fila.
+            relido, _ = le_item(caminho_plano, ident)
+            relido = relido or {}
+            travados.append((ident, relido.get("human_pending"),
+                             relido.get("evidence")))
 
         # A REDE caiu, antes do teto e do disjuntor: o item não andou porque o
         # `claude` não alcançou a API. Devolve a vez, espera a rede voltar e
@@ -1561,10 +1589,15 @@ def main(argv=None):
           + (f" · {len(limitados)} interrompida(s) pelo teto de uso da conta"
              if limitados else ""))
     if travados:
-        print(f"\n   Travados ({len(travados)}) — o motivo de cada um está no "
-              "`evidence` da fila:")
-        for ident in travados:
+        print(f"\n   Travados ({len(travados)}):")
+        for ident, rota, evid in travados:
             print(f"     - {ident}")
+            if evid:
+                print(f"       motivo: {resume_motivo(evid)}")
+            elif rota:
+                print("       motivo: a rota em \"Espera por você\", abaixo")
+            else:
+                print("       o item não registrou motivo na fila")
     if vermelhos:
         print(f"\n   Build vermelho depois do item ({len(vermelhos)}):")
         for ident, lateral, motivo in vermelhos:

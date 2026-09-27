@@ -504,6 +504,19 @@ either `run_in_background: true` or shell-level detachment (trailing `&`,
 the `Monitor` tool. The `Stop` registration catches a session that ends
 mid-build.
 
+Exception since 2026-09-27: a build that declares its own end
+(`...; echo EXIT=$? >> <file>`) may go to the background, because a build
+longer than 10 minutes has no foreground option (the Bash tool moves it to
+the background anyway). The turn must then wait for that file in the
+foreground with a loop that exits on its own before the 10-minute cap
+(`for i in $(seq 27); do grep -q EXIT= <file> && break; sleep 20; done
+# espera-ok`), repeated until `EXIT=` shows up (a full 10-minute wait is
+itself moved to the background), and `Stop` is blocked while the file
+lacks `EXIT=`. Measured the same day
+on claude 2.1.283: `claude -p` kills background tasks when the turn ends
+whatever `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` says (0, unset or 120000),
+and an armed `Monitor` does not keep the turn alive.
+
 ### reforma-gate.py (PreToolUse, matchers `Bash` and `Edit\|Write\|MultiEdit\|NotebookEdit`)
 
 Owner: `common/hooks/`. Blocks editing an EXTERNAL test while the

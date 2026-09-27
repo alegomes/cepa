@@ -3671,9 +3671,14 @@ perdeu além do prazo.
 
 **Plano:** `cepa/until-build-longo-sem-trava`
 
-**Status:** pendente · **Lar provável:** `common/hooks/no-background-build.py` e
-`common/bin/cepa-until` · **Origem:** run `WEGO` de 25/09/2026 20:05, item WEGO-2334;
-pedido do dono em 26/09.
+**Status:** feito em 27/09/2026, com o passo 2 trocado pelo que o passo 1 mediu: o
+`claude -p` (2.1.283) mata o segundo plano no fim do turno com o teto em 0, ausente ou
+120000, e o `Monitor` não segura o turno. O hook libera o build em segundo plano que grava
+`EXIT=` num arquivo, ensina esperar esse arquivo em primeiro plano (`# espera-ok`) e barra
+a parada antes do `EXIT=`; o resumo do fim mostra o motivo de cada travado. Testes em
+`tests/test_no_background_build.py` e `tests/test_cepa_until.py` · **Lar:**
+`common/hooks/no-background-build.py` e `common/bin/cepa-until` · **Origem:** run `WEGO`
+de 25/09/2026 20:05, item WEGO-2334; pedido do dono em 26/09.
 
 ### Problema
 
