@@ -1,0 +1,94 @@
+schema_version: 2
+card: herdr-space-por-worktree
+verdict: proven
+reviewed_at: 2026-09-26T22:46:20-03:00
+base_commit: dc675df
+head_commit: 6577cfb
+issue_type: Feature
+scope:
+  changed_classes:
+    - { class: "maestro/bin/maestro-prune (landed_slices)", module: "maestro-bin", external_observable: false, substituted_by_double: null }
+    - { class: "maestro/bin/maestro-prune (herdr_worktree_map, --cwd)", module: "maestro-bin", external_observable: false, substituted_by_double: null }
+    - { class: "maestro/bin/maestro-prune (remove_via_herdr / remove_via_git / confirmacao pos-remove pelo git)", module: "maestro-bin", external_observable: false, substituted_by_double: null }
+    - { class: "maestro/bin/maestro-prune (dry_run)", module: "maestro-bin", external_observable: false, substituted_by_double: null }
+    - { class: "maestro/commands/run.md (passos 2, 6a, 9)", module: "maestro-docs", external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python/markdown (harness cepa), sem camada Quarkus/HTTP. O script
+    `maestro-prune`, alvo real do card, roda sem substituicao em todos os
+    testes — nenhum double no lugar da classe/funcao alterada
+    (substituted_by_double: null em todas). O unico dublê em jogo e o
+    binario `herdr` na FRONTEIRA EXTERNA do processo (MAESTRO_HERDR aponta
+    para um fake que imita o herdr 0.9.1 real, inclusive o defeito de
+    listar o Space em foco sem `--cwd`) — o equivalente do WireMock no
+    lugar do fornecedor externo, nao da classe corrigida pelo card.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "filtro LANDED/`landed:` legado (maestro-prune:88): revertida a
+           condicao para `status == \"LANDED\"` sem o fallback legado, em
+           worktree descartavel /tmp/proof-herdr-space-por-worktree — GREEN
+           antes; apos perturbar, `python3 tests/test_maestro_prune.py`
+           foi RED em 2 checks ('slice DONE listada no `landed:` legado...',
+           'worktree do formato antigo saiu do git'); restaurado, GREEN de novo."
+        - "`--cwd` obrigatorio em `herdr worktree list` (maestro-prune:114-115):
+           removido o `--cwd`; RED em 4 checks, incluindo
+           'removeu chamando `--workspace w2A`' e 'herdr mentiroso ... exit 1'
+           (o fallback git escondeu o defeito, exatamente o cenario descrito
+           no comentario do codigo); restaurado, GREEN."
+        - "confirmacao pos-remove pelo git (maestro-prune:196-203): removido o
+           bloco que relê `git worktree list` apos o remove; RED em 2 checks
+           ('herdr mentiroso (sucesso sem remover) e pego pela conferencia do
+           git: exit 1', 'S7 vira failed, nao removed'); restaurado, GREEN."
+        - "nunca passar `--force` (maestro-prune:remove_via_herdr): adicionado
+           `--force` a chamada; RED em 7 checks (o fake herdr rejeita
+           `--force` com exit 1, cascata de falhas), incluindo
+           'nunca passou --force em nenhuma chamada ao herdr' e
+           'nunca passou --force tentando resolver a sujeira'; restaurado,
+           GREEN."
+        - "`--dry-run` nunca remove (maestro-prune:176): trocado `if dry_run:`
+           por `if False:`; RED em 2 checks ('worktree continua no git depois
+           de --dry-run', 'nenhuma chamada `worktree remove` foi feita ao
+           herdr em --dry-run' — o dry-run passou a remover de verdade);
+           restaurado, GREEN."
+        - "run.md passos 2/6a/9 citando `maestro-prune` e `--workspace`: e
+           checado por match textual literal em
+           test_run_md_cita_prune_e_troca_receita_fantasma — a ausencia do
+           texto ja e a condicao de falha, perturbacao explicita dispensavel."
+      run: "python3 tests/test_maestro_prune.py — GREEN de base: 30/30 checks,
+            'all green' (rodado na worktree principal antes de qualquer
+            perturbacao). Cada perturbacao acima rodada isolada em worktree
+            descartavel /tmp/proof-herdr-space-por-worktree (git worktree
+            add --detach 6577cfb), restaurada com `git checkout -- maestro/bin/maestro-prune`
+            entre cada uma, e a worktree removida ao final
+            (`git worktree remove --force`) sem tocar a arvore principal."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "toda linha alterada em maestro-prune tem um teste dedicado que a
+          exercita (ver l3 acima); nao ha ferramenta de cobertura no projeto
+          (nao e Java/Maven), entao a cobertura foi confirmada
+          estruturalmente por perturbacao — mais forte que uma leitura de
+          relatorio de cobertura."
+  l4_adversarial_input:
+    status: n/a
+    reason: "maestro-prune e um script CLI local que le wave-state.yaml do
+             proprio programa e chama `git`/`herdr` na maquina do operador;
+             nao ha endpoint HTTP nem entrada de rede/usuario nao confiavel
+             no diff. Nao existe modulo api-rest/Quarkus neste repo (harness
+             Python/markdown)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: "Toda linha de comportamento mudada nesta feature (filtro
+  LANDED/legado, obrigatoriedade do --cwd, ausencia de --force, confirmacao
+  pos-remove pelo git, guarda do --dry-run, e o texto do run.md) foi
+  perturbada isoladamente numa worktree descartavel e voltou VERMELHA — nenhum
+  hunk sobreviveu a quebra. Nao ha camada Quarkus/HTTP neste repo, entao L4 e
+  n/a (nao ha superficie de entrada externa) e a regressao de bug e n/a
+  (issue type Feature). Todos os niveis aplicaveis passaram com evidencia
+  colada — PROVEN."

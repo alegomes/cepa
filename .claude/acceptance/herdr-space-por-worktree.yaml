@@ -1,0 +1,79 @@
+item: herdr-space-por-worktree
+diff: dc675df..6577cfb
+branch: until/2026-09-26-2203
+status: complete
+criteria:
+  - id: AC1
+    desc: "Ao aterrissar a onda, o /maestro:run remove Space + worktree das slices LANDED (passo 9 chama maestro/bin/maestro-prune)"
+    altitude: cli
+    surface: "maestro/commands/run.md passo 9 (\"prune só ao fim da onda inteira\": `python3 maestro/bin/maestro-prune PROGDIR --repo <raiz-principal>`); maestro/bin/maestro-prune: prune() + landed_slices() + remove_via_herdr()"
+    test: "tests/test_maestro_prune.py::test_landed_com_space_remove_via_workspace (worktree git real + herdr fake, LANDED com Space aberto); ::test_landed_formato_antigo (landed: legado); ::test_run_md_cita_prune_e_troca_receita_fantasma (grep: passo 9 cita maestro-prune)"
+    layer: "cli (subprocess real do binário maestro-prune contra repo git real + herdr fake injetado por MAESTRO_HERDR) + grep de prosa para run.md (comando de agente, não código)"
+    evidence: verified
+    run: "python3 tests/test_maestro_prune.py -> 30 checks, 0 failures, 'all green' (rodado desta sessão; inclui '✓ S1 aparece em removed', '✓ removeu chamando `--workspace w2A`', '✓ passo 9 nomeia `maestro-prune`')"
+    status: complete
+
+  - id: AC2
+    desc: "Slices não aterrissadas (DONE sem LANDED, FAIL, TIMEOUT, ESCALATED, pending, running) mantêm worktree e Space"
+    altitude: cli
+    surface: "maestro/bin/maestro-prune: landed_slices() (qualquer status != LANDED e fora da lista `landed:` legada cai em __kept__, sem chamar remove)"
+    test: "tests/test_maestro_prune.py::test_done_e_fail_sao_mantidas (DONE e FAIL ficam em kept, worktree segue em `git worktree list`, nenhuma chamada `worktree remove` ao herdr)"
+    layer: "cli (subprocess real)"
+    evidence: verified
+    run: "python3 tests/test_maestro_prune.py -> '✓ S2 (DONE, não aterrissada) fica em kept com status DONE', '✓ S3 (FAIL) fica em kept com status FAIL', '✓ nenhuma chamada de `worktree remove` foi feita'"
+    status: complete
+
+  - id: AC3
+    desc: "Remoção nunca força worktree suja; falha nomeada, exit 1"
+    altitude: cli
+    surface: "maestro/bin/maestro-prune: remove_via_herdr() nunca passa --force; prune() registra falha em `result[\"failed\"]` com detalhe e main() retorna 1 se houver failed"
+    test: "tests/test_maestro_prune.py::test_landed_suja_falha_sem_forcar (herdr fake responde dirty_worktree_requires_force; worktree continua no git; nenhuma chamada com --force)"
+    layer: "cli (subprocess real)"
+    evidence: verified
+    run: "python3 tests/test_maestro_prune.py -> '✓ worktree LANDED suja: exit 1', '✓ S6 aparece em failed', '✓ worktree suja continua no git (não forçou)', '✓ nunca passou --force tentando resolver a sujeira'"
+    status: complete
+
+  - id: AC4
+    desc: "O resultado é confirmado pelo git, não pela resposta do herdr"
+    altitude: cli
+    surface: "maestro/bin/maestro-prune: prune() relê git_worktree_paths(repo) depois do remove e só marca `removed` se o path já não está lá"
+    test: "tests/test_maestro_prune.py::test_herdr_reporta_sucesso_sem_remover (herdr fake devolve sucesso sem remover de fato; a conferência pelo git pega e marca failed)"
+    layer: "cli (subprocess real)"
+    evidence: verified
+    run: "python3 tests/test_maestro_prune.py -> '✓ herdr mentiroso (sucesso sem remover) é pego pela conferência do git: exit 1', '✓ S7 vira failed, não removed', '✓ worktree ainda está lá de fato'"
+    status: complete
+
+  - id: AC5
+    desc: "A premissa condicional foi conferida: `herdr worktree remove --workspace` derruba Space + worktree git (fato ao vivo, herdr 0.9.1) — evidência docs/proof/evidence/herdr-space-por-worktree-e2e.{sh,out}"
+    altitude: cli
+    surface: "docs/proof/evidence/herdr-space-por-worktree-e2e.sh rodado contra o herdr 0.9.1 instalado de verdade (não fake): cria duas worktrees+Spaces via `herdr worktree create --cwd`, aplica o maestro-prune, confere via `herdr workspace get` e `git worktree list`"
+    test: "docs/proof/evidence/herdr-space-por-worktree-e2e.sh (roteiro ao vivo, não pytest)"
+    layer: "e2e ao vivo contra o binário herdr real instalado (0.9.1)"
+    evidence: verified
+    run: "bash docs/proof/evidence/herdr-space-por-worktree-e2e.sh rodado nesta sessão contra o herdr 0.9.1 em execução -> reproduz literalmente o .out gravado: 'A: removida (herdr --workspace w2M)', 'Space de A (w2M) existe? nao', 'Space de B (w2N) existe? sim', worktree de B seguindo em `git worktree list`, e Spaces voltando ao estado original ('cepa', 'samba-arniqueiras') após a limpeza do próprio script"
+    status: complete
+
+  - id: AC6
+    desc: "O gc de órfãos (passo 2) remove o Space junto (via --workspace) e lista pelo repo certo (--cwd)"
+    altitude: cli
+    surface: "maestro/commands/run.md passo 2 (gc de órfãos): `herdr worktree list --cwd <raiz-principal> --json` para listar, e `herdr worktree remove --workspace <open_workspace_id>` para remover worktree de programa concluído com Space aberto"
+    test: "tests/test_maestro_prune.py::test_run_md_cita_prune_e_troca_receita_fantasma (grep: 'herdr worktree list --cwd <raiz-principal> --json' presente no run.md)"
+    layer: "grep de prosa — passo 2 é instrução para o agente (prompt), não há código executável isolado para o gc de órfãos como existe para o prune de fim de onda (maestro-prune); a mesma mecânica de `--cwd` e `--workspace` já é testada em cli real dentro de maestro-prune (herdr_worktree_map exige --cwd, remove_via_herdr usa --workspace), então a garantia comportamental vem dali — o teste desta AC confere apenas que a prosa do passo 2 não regrediu para a forma sem --cwd que causou o defeito original"
+    evidence: verified
+    run: "python3 tests/test_maestro_prune.py -> '✓ passo 2 (gc) lista as worktrees com `--cwd`, não pelo Space em foco'; texto do passo 2 lido diretamente no diff (dc675df..6577cfb) confirma também a frase 'remova com `herdr worktree remove --workspace <open_workspace_id>`'"
+    status: complete
+
+notes: >
+  Nenhum gap encontrado. maestro-prune é testado com git real + herdr fake
+  (contrato mecânico, tests/test_maestro_prune.py, 30 checks) e também
+  confirmado ao vivo contra o herdr 0.9.1 de verdade instalado nesta máquina
+  (docs/proof/evidence/herdr-space-por-worktree-e2e.sh) — rodei o roteiro ao
+  vivo eu mesmo nesta auditoria e o resultado bateu exatamente com o .out
+  gravado (Space de A cai, Space de B permanece, git confirma). As partes de
+  run.md (passo 2, 6a, 9) são instrução para agente (prompt), não código; a
+  verificação possível para essas é textual (grep), convenção já usada em
+  outras auditorias deste repo (ex.: .claude/acceptance/maestro-run-nao-diz-a-aba.yaml).
+  AC2 cobre DONE e FAIL diretamente; TIMEOUT/ESCALATED/pending/running não têm
+  teste dedicado mas passam pelo mesmo caminho de código (`landed_slices`: só
+  `status == "LANDED"` ou presença em `landed:` legado entra em prune) — risco
+  residual baixo, registrado aqui por transparência, não como gap.
