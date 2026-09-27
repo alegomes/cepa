@@ -1,0 +1,110 @@
+schema_version: 2
+card: maestro-merge-train-nao-roda
+verdict: proven
+reviewed_at: 2026-09-26T22:20:00-03:00
+base_commit: 6c01a4a
+head_commit: 2dbb99e
+issue_type: Feature
+repo_kind: harness            # NOT Quarkus/Maven — Python CLI + prompt files, própria suíte em tests/*.py
+scope:
+  changed_classes:
+    - class: "maestro/bin/maestro-wave-state (aguardando_merge() — slices DONE não LANDED, lendo também a lista `landed:` legada)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "maestro/bin/maestro-wave-state (cmd_landed — recusa slice não-DONE com exit 2; slice DONE vira LANDED)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "maestro/bin/maestro-wave-state (TERMINAL — LANDED passa a contar como estado terminal em check-terminal)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "maestro/bin/maestro-wave-state (novo subcomando aguardando-merge)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "maestro/bin/maestro-programs (importa a regra de maestro-wave-state; --aguardando-merge; linha \"N slice(s) terminada(s) esperando merge\")"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-doctor (check_aguardando_merge — área [maestro] ⚠, chamada por check_project)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "tests/test_maestro_merge_pendente.py (suíte nova — 8 testes cobrindo o fluxo completo)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+    - class: "tests/test_maestro_run_cores.py (test_wave_state ampliado — landed exige DONE antes, e checa status LANDED)"
+      module: test-harness
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é JVM); mecanismo aplicável é perturbação manual em worktree descartável"
+    perturbation:
+      status: pass
+      results:
+        - "PASS (RED) — maestro-wave-state:152 (`if st not in (\"DONE\", \"LANDED\"): return 2` em cmd_landed): trocado por `if False:` → test_landed_recusa_slice_que_nao_terminou_bem foi a VERMELHO (3 falhas: exit 2 esperado veio 0, mensagem 'set-slice' sumiu, FAIL virou LANDED indevidamente). Restaurado do .bak, git status limpo."
+        - "PASS (RED) — maestro-wave-state:44 (`TERMINAL = {\"DONE\", \"LANDED\", \"FAIL\", \"TIMEOUT\", \"ESCALATED\"}`): removido LANDED do conjunto → test_landed_tira_da_espera_e_silencia caiu em 'LANDED conta como terminal na fronteira de término'. Restaurado, git status limpo."
+        - "PASS (RED) — maestro-wave-state:47-60 (aguardando_merge — a regra core): corpo trocado por `return []` → 9 falhas em cascata em test_maestro_merge_pendente.py, incluindo os testes que passam por maestro-programs --aguardando-merge e por cepa-doctor (confirma o wiring: maestro-programs importa a função, cepa-doctor chama maestro-programs). Restaurado, git status limpo."
+        - "PASS (RED) — common/bin/cepa-doctor:513 (chamada `check_aguardando_merge(root)` dentro de check_project): substituída por `pass` → as 2 asserções do teste 'doctor avisa na área [maestro]' e '...com a contagem e a rota' foram a VERMELHO, provando que o aviso [maestro] depende dessa chamada e não é coincidência de outro check. Restaurado, git status limpo."
+        - "PASS (RED) — maestro-wave-state:159 (`sl[\"status\"] = \"LANDED\"` em cmd_landed): trocado por `pass` → test_maestro_run_cores.py::test_wave_state caiu em 'landed registra o merge' (status ficou DONE em vez de LANDED, apesar de landed:[S1] ter sido gravado). Restaurado, git status limpo."
+        - "CONFIRMADO RED NO BASE (6c01a4a) — worktree descartável em base_commit com os 2 arquivos de teste trazidos do HEAD (2dbb99e): tests/test_maestro_merge_pendente.py falhou logo no primeiro assert com `unrecognized arguments: --aguardando-merge` (exit 1); tests/test_maestro_run_cores.py falhou em 'landed registra o merge' (exit 1, status continuava DONE)."
+      run: >-
+        Worktree descartável fora da árvore principal (`git worktree add
+        --detach 2dbb99e /var/folders/.../tmp.tCYqnUdddr/red`) — worktree
+        principal /Users/alegomes/cepa-worktrees/cepa-pendencias_until-until-2026-09-26-2203
+        NUNCA tocado. GREEN de partida confirmado: `python3
+        tests/test_maestro_merge_pendente.py` → "8 testes ok"; `python3
+        tests/test_maestro_run_cores.py` → "all green". Confirmação de base:
+        `git checkout --detach 6c01a4a` + `git checkout 2dbb99e -- tests/...py`
+        (só os testes trazidos do HEAD) → ambos os arquivos RED (exit 1). De
+        volta a 2dbb99e (`git reset --hard 2dbb99e`), cada perturbação foi um
+        `sed -i.bak` num único ponto do arquivo alvo, seguido do teste
+        correspondente, e restaurado via `mv arquivo.bak arquivo`
+        (confirmado `git status --short` vazio após cada restauração e ao
+        final). GREEN final re-confirmado nas duas suítes antes de remover o
+        worktree (`git worktree remove --force`).
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      Todo hunk comportamental do diff 6c01a4a..2dbb99e em maestro-wave-state,
+      maestro-programs e cepa-doctor tem uma perturbação correspondente acima
+      que foi a RED contra o teste que deveria guardá-lo. Os hunks de
+      documentação (maestro/commands/resume.md, run.md, common/commands/next.md,
+      doctor.md) são cobertos apenas por test_comandos_chamam_a_checagem (grep
+      textual) — nível estrutural, não comportamental; não abrem superfície de
+      perturbação de código e não afetam o veredito.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      O diff não abre superfície de entrada externa nova: é CLI local (lê
+      wave-state.yaml e plan.yaml do próprio disco do projeto, sem parsear
+      entrada de rede ou de usuário não confiável) e documentação de comandos.
+      Nenhuma classe mudada está em módulo input-bearing tipo api-rest (este
+      projeto nem tem esse módulo — é um harness Python, não Quarkus).
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — não há regressão pontual a reproduzir na base; o equivalente (testes novos RED no base_commit) foi feito e registrado em l3_load_bearing."
+routing_reason: >-
+  As 5 perturbações no comportamento novo (guarda de cmd_landed, LANDED como
+  terminal, a regra aguardando_merge, o wiring do cepa-doctor, e a atribuição
+  de status LANDED) foram todas GREEN→RED→GREEN contra os testes que a
+  descrição do item aponta como cobertura (test_maestro_merge_pendente.py e
+  test_maestro_run_cores.py). Os dois arquivos de teste, quando levados ao
+  base_commit com a produção antiga, ficam RED (comportamento realmente novo,
+  não teste vazio). Não há dependência de Quarkus/PIT neste repo; a
+  perturbação em worktree descartável é o mecanismo certo e foi aplicada em
+  cada ponto de risco do diff. L4 é n/a porque o diff não abre superfície de
+  entrada externa (CLI local + docs), e a condição mecânica do n/a
+  (reason + nenhuma classe em módulo input-bearing) está satisfeita. Nada
+  ficou assumed/skipped/gap. PROVEN.
