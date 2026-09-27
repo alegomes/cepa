@@ -554,6 +554,20 @@ def test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok():
         check("...sem sugerir --sujo-ok", "--sujo-ok" not in p.stderr,
               p.stderr[:600])
 
+        # Fantasma e sujeira de verdade juntos: a sujeira vai para a lista de
+        # "há mais", e os arquivos da pasta acentuada não aparecem de novo lá
+        # (o `git status` escreve o nome deles escapado).
+        (raiz / "lixo.txt").write_text("pendura", encoding="utf-8")
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        mais = p.stderr.split("E há mais", 1)
+        check("fantasma com sujeira ao lado recusa",
+              p.returncode == 2 and not chamadas, f"saiu {p.returncode}")
+        check("...e a sujeira de verdade é a única de 'há mais'",
+              len(mais) == 2 and mais[1].startswith(" 1 arquivo(s)")
+              and "lixo.txt" in mais[1] and "wego-2229" not in mais[1],
+              p.stderr[:800])
+
 
 def test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje():
     """O contraponto: arquivo que o run anterior tocou e está diferente no
@@ -566,6 +580,7 @@ def test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje():
         raiz = monta_repo(tmp, [item("a1"), item("a2")])
         (raiz / "tocado.txt").write_text("v0", encoding="utf-8")
         (raiz / "relatório.txt").write_text("v0", encoding="utf-8")
+        (raiz / "intocado.txt").write_text("v0", encoding="utf-8")
         _commita(raiz, "base2")
         binv = fake_claude(
             tmp,
@@ -594,6 +609,20 @@ def test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje():
               p.stderr[:600])
         check("...e não chama a deleção de arquivo tocado de fantasma",
               "sumiram do disco" not in p.stderr, p.stderr[:600])
+
+        # Com um fantasma de verdade ao lado, a deleção do arquivo tocado não
+        # some: ela vai para a lista de "há mais", pelo nome cru.
+        (raiz / "intocado.txt").unlink()
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        mais = p.stderr.split("E há mais", 1)
+        check("fantasma ao lado de arquivo tocado vira a recusa nova",
+              "1 arquivo(s) commitado(s) sumiram" in p.stderr
+              and "git restore -- intocado.txt\n" in p.stderr, p.stderr[:800])
+        check("...e a deleção do arquivo tocado segue listada em 'há mais'",
+              len(mais) == 2 and mais[1].startswith(" 2 arquivo(s)")
+              and " D relatório.txt" in mais[1] and "tocado.txt" in mais[1],
+              p.stderr[:800])
 
 
 def test_fila_inexistente_recusa_antes_de_disparar():
