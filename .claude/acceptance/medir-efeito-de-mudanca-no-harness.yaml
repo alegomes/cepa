@@ -1,0 +1,87 @@
+key: medir-efeito-de-mudanca-no-harness
+status: complete
+diff_range: 24e3e2d..8d6b57b
+audited_at: "2026-09-27"
+criteria:
+  - id: AC1
+    descricao: >
+      Número de referência registrado em tests/eval/README.md com conta
+      explícita (taxa, custo, tempo), batendo com os JSONs em
+      tests/eval/results/.
+    altitude: domain
+    surface: tests/eval/README.md (seção "A corrida de referência") vs
+      tests/eval/results/baseline-2026-09-27.json,
+      ref-2026-09-27-bounce.json, ref-2026-09-27-reactor.json
+    status: complete
+    evidence: verified
+    run: |
+      Conferência manual, linha a linha, entre a tabela do README e os JSONs:
+      - acceptance-gate-direcao: turns 27, cost_usd 1.7759260000000001 (README: 27, US$ 1,78) ✓
+      - bounce-reason (ref): turns 24, cost_usd 1.4606126000000004 (README: 24, US$ 1,46) ✓
+      - reactor-guard (ref): turns 21, cost_usd 1.4518066 (README: 21, US$ 1,45) ✓
+      - soma referência: 1,7759+1,4606+1,4518 = 4,6883 ≈ US$ 4,69 (README bate)
+      - soma da medição toda (com 1ª passada de bounce e reactor):
+        1,7759+1,5022+1,6022+1,4606+1,4518 = 7,7927 ≈ US$ 7,79 (README bate)
+      - duração em série: 323,4+298,2+300,8 = 922,4s (README arredonda 323+298+301=922s) ✓
+      - reactor-guard 1ª passada teve 3 falhas (baseline JSON), inclui
+        "# stale-ok libera"; a corrida de referência (ref-reactor.json) mostra
+        essa mesma falha corrigida (2 falhas restantes) — bate com a tabela
+        do README ("falhou (3 casos)" → "falhou (2 casos)").
+    gap: null
+
+  - id: AC2
+    descricao: >
+      Casos que cobravam convenção não informada ao agente (# stale-ok no
+      reactor-guard; "NOT in a recognized format" no bounce-reason) passam a
+      constar no contrato: das tarefas, sem vazar a solução no prompt:, e
+      `pytest tests/test_eval_suite.py` passa.
+    altitude: domain
+    surface: tests/eval/tasks/reactor-guard.yaml (contrato:),
+      tests/eval/tasks/bounce-reason.yaml (contrato:), tests/test_eval_suite.py
+    status: complete
+    evidence: verified
+    run: |
+      $ python3 -m pytest tests/test_eval_suite.py -q
+      7 passed in 0.16s
+
+      Grep confirmou que "# stale-ok" e "NOT in a recognized format" aparecem
+      apenas no bloco contrato: de cada yaml, e não aparecem no bloco prompt:
+      de nenhuma das duas tarefas (grep vazio no trecho prompt:).
+    gap: null
+
+  - id: AC3
+    descricao: >
+      As tarefas continuam vermelhas sem agente
+      (`python3 tests/eval/run-eval.py --validate`, sem gastar modelo).
+    altitude: cli
+    surface: tests/eval/run-eval.py --validate
+    status: complete
+    evidence: verified
+    run: |
+      $ timeout 20 python3 tests/eval/run-eval.py --validate
+      acceptance-gate-direcao    base=9d54f23 … ✓ vermelha, como tem de ser
+      bounce-reason              base=a90272f … ✓ vermelha, como tem de ser
+      reactor-guard              base=2319856 … ✓ vermelha, como tem de ser
+      todas as tarefas provam que exigem trabalho real.
+      EXIT=0
+    gap: null
+
+  - id: AC4
+    descricao: >
+      BACKLOG.md seção P1-4 atualiza o status sem afirmar A/B feito.
+    altitude: domain
+    surface: BACKLOG.md (seção P1-4, linha "Status:")
+    status: complete
+    evidence: verified
+    run: |
+      Diff 24e3e2d..8d6b57b em BACKLOG.md lido diretamente: novo texto é
+      "REFERÊNCIA MEDIDA 2026-09-27 — 2/3 tarefas, US$ 4,69 por volta da
+      suíte (...). Nenhum A/B feito ainda: falta uma mudança de harness para
+      comparar." Não afirma A/B feito; nomeia o gap de tamanho da suíte
+      (3 tarefas, abaixo de 8-12) como pendência conhecida, coerente com o
+      escopo declarado fora deste card.
+    gap: null
+
+out_of_scope_confirmado:
+  - "A/B do harness (precisa de mudança de harness escolhida pelo dono) — não foi feito, e o BACKLOG.md/README não afirmam que foi."
+  - "Ampliação da suíte para 8-12 tarefas — não foi feita, e o BACKLOG.md nomeia isso como pendência."
