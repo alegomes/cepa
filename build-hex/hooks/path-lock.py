@@ -233,7 +233,10 @@ def build_allowed_writes(roles: dict, extra_write_globs: dict = None) -> dict:
         "planning-lead":     ["spec/**", "specs/**", "docs/**"],
         "engineering-lead":  ["docs/tasks/**", "docs/investigations/**",
                               "pom.xml", "**/pom.xml"],
-        "validation-lead":   [],
+        # Its verdict, which `cepa-plan finish --status done` requires. With
+        # `[]` the lock blocked it and the orchestrator transcribed the verdict
+        # by hand (WEGO-2323/2324/2325, 2026-09-27) — no longer independent.
+        "validation-lead":   [".claude/validation/**"],
 
         # Planning workers — write specs and decomposition artifacts.
         "epic-author":         ["spec/**", "specs/**", "docs/**"],
