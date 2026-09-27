@@ -1,0 +1,77 @@
+card: cepa-until-no-build-roda-suite
+titulo: "`cepa-until` pula a suíte do cepa por causa do `.claude/no-build`"
+commit: b250a42
+diff_base: a82e2f6
+status: complete
+criterios:
+  - id: AC1
+    descricao: >
+      Repo com `.claude/no-build` E `tests/run-all.sh` faz o `cepa-until`,
+      sem `--verify` nem `--sem-verify`, gravar no `run_start` do `.jsonl`
+      "verify": "tests/run-all.sh" (não null) e rodar a suíte depois de cada
+      item done.
+    altitude: cli
+    surface: "invocação do processo `common/bin/cepa-until fila ...` (sem --verify/--sem-verify) sobre um repo com .claude/no-build + tests/run-all.sh"
+    test: tests/test_cepa_until_branch_da_noite.py::test_no_build_com_suite_roda_a_suite
+    layer: cli-e2e (subprocess.run do binário real, lê o .jsonl e um arquivo-marca escrito pela suíte fake)
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_branch_da_noite.py -k no_build -v -> 2 passed, 8 deselected in 3.05s"
+    gap: null
+    status: complete
+
+  - id: AC2
+    descricao: >
+      Repo só com `.claude/no-build` continua dispensando o verify
+      ("verify": null).
+    altitude: cli
+    surface: "invocação do processo `common/bin/cepa-until fila ...` sobre um repo só com .claude/no-build (sem tests/run-all.sh)"
+    test: tests/test_cepa_until_branch_da_noite.py::test_no_build_sem_suite_continua_dispensando
+    layer: cli-e2e (subprocess.run do binário real, lê o run_start do .jsonl)
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_branch_da_noite.py -k no_build -v -> 2 passed, 8 deselected in 3.05s"
+    gap: null
+    status: complete
+
+  - id: AC3
+    descricao: >
+      --verify explícito e --sem-verify continuam ganhando; mvnw/gradlew
+      continuam detectados.
+    altitude: cli
+    surface: "ordem de precedência em comando_de_verify(): dispensado > explícito > .claude/no-build > VERIFY_POR_ARQUIVO (mvnw/gradlew/tests/run-all.sh)"
+    test: >
+      tests/test_cepa_until_branch_da_noite.py::test_mvnw_na_raiz_vira_o_build_padrao
+      (mvnw + --verify explícito ganhando) e
+      test_repo_sem_build_conhecido_nao_comeca_sem_dizer_qual (recusa sem
+      mvnw/gradlew/flag). O diff não tocou a ordem das checagens
+      (dispensado/explicito continuam antes do bloco .claude/no-build) nem o
+      caminho gradlew, que já existia e não foi alterado.
+    layer: cli-e2e para mvnw/--verify; leitura de código (sem teste dedicado)
+      para gradlew, que é caminho pré-existente e não tocado pelo diff.
+    evidence: verified
+    run: "python3 -m pytest tests/test_cepa_until_branch_da_noite.py -v -> 10 passed in 12.70s"
+    gap: >
+      gradlew não tem teste dedicado (só aparece na mensagem de recusa), mas
+      esse caminho já existia antes do diff e não foi alterado por ele -
+      fora do escopo desta mudança, não é regressão introduzida aqui.
+    status: complete
+
+  - id: AC4
+    descricao: "O .claude/no-build continua valendo para o gate-advance (nenhuma mudança lá)."
+    altitude: cli
+    surface: "common/hooks/gate-advance.py e seu uso de .claude/no-build"
+    test: "N/A - confirmação por ausência de diff"
+    layer: leitura de diff
+    evidence: verified
+    run: "git diff a82e2f6..b250a42 -- common/hooks/gate-advance.py -> sem saída (arquivo intocado)"
+    gap: null
+    status: complete
+
+resumo:
+  suite_completa: "tests/test_cepa_until_branch_da_noite.py: 10 passed in 12.70s (python3 -m pytest tests/test_cepa_until_branch_da_noite.py -v)"
+  observacao: >
+    Os dois testes novos (test_no_build_com_suite_roda_a_suite,
+    test_no_build_sem_suite_continua_dispensando) exercitam o binário real
+    via subprocess, na altitude CLI correta para a criteria (invocação do
+    cepa-until como processo). Não há mock de comando_de_verify - o teste
+    lê o .jsonl de saída e um arquivo-marca escrito pela suíte fake para
+    confirmar que ela de fato rodou.

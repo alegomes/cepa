@@ -1,0 +1,44 @@
+schema_version: 2
+card: cepa-until-no-build-roda-suite
+verdict: proven
+reviewed_at: 2026-09-27T00:00:00-03:00
+base_commit: a82e2f6
+head_commit: 1782e61
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until::comando_de_verify (bloco SUITE_SEM_BUILD, linhas ~846-850)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until::VERIFY_POR_ARQUIVO (nova tupla tests/run-all.sh, linha ~197)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until::main (mensagem de erro 'não sei o build completo', linhas ~1058-1059)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "GREEN (correto, não perturbado): worktree descartável /tmp/proof-cepa-until-2/head (git worktree add --detach 1782e61); python3 tests/test_cepa_until_branch_da_noite.py -> 38 ok, 0 falhas, exit 0, 'tudo verde'."
+        - "PASS: bloco 'if (repo / SUITE_SEM_BUILD).exists(): return SUITE_SEM_BUILD, (...)' dentro de comando_de_verify (linhas 847-850) revertido para o comportamento pré-fix (sempre 'return None, \".claude/no-build\"') na mesma worktree descartável -> python3 tests/test_cepa_until_branch_da_noite.py RED (exit 1, 2 falhas: '...e o run_start grava a suíte como verify, não null' e '...e a suíte rodou depois do item done'). Restaurado via 'git checkout -- common/bin/cepa-until'. Linha load-bearing."
+        - "PASS: tupla nova ('tests/run-all.sh', 'tests/run-all.sh') removida de VERIFY_POR_ARQUIVO (linha ~197) na mesma worktree descartável -> python3 tests/test_cepa_until_branch_da_noite.py RED (exit 1, 2 falhas: 'só com tests/run-all.sh, o run começa com a suíte como verify' e '...e a suíte rodou'), capturadas pelo teste novo test_suite_sem_no_build_vira_o_verify (adicionado em 1782e61). Restaurado. Linha agora load-bearing — cobria o gap do UNPROVEN anterior."
+        - "PASS: string do stderr em main() revertida de 'nem `gradlew` na raiz, nem `tests/run-all.sh`)' para o texto antigo 'nem `gradlew` na raiz)' na mesma worktree descartável -> python3 tests/test_cepa_until_branch_da_noite.py RED (exit 1, 1 falha: '...e nomeia a suíte que teria bastado'), capturada pelo check novo em test_repo_sem_build_conhecido_nao_comeca_sem_dizer_qual (adicionado em 1782e61). Restaurado. Linha agora load-bearing — cobria o outro gap do UNPROVEN anterior."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "As duas linhas marcadas 'gap' na prova anterior (docs/proof/cepa-until-no-build-roda-suite.yaml, veredito unproven de b250a42) agora têm teste dedicado: tupla em VERIFY_POR_ARQUIVO -> test_suite_sem_no_build_vira_o_verify; texto do stderr -> check '...e nomeia a suíte que teria bastado' em test_repo_sem_build_conhecido_nao_comeca_sem_dizer_qual. Confirmado por perturbação em l3, não por ferramenta de cobertura (repo Python sem coverage.py configurado; reachability estrutural + perturbação RED é a evidência)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff só altera a heurística de detecção de build (leitura de arquivos na raiz do repo-alvo: .claude/no-build, tests/run-all.sh) e uma mensagem de stderr; não há módulo api-rest/HTTP neste repo (plugin Python + Markdown para Claude Code) nem parsing de entrada externa nova além do estado de arquivos já exercitado pelos 3 testes novos/alterados. Nenhuma classe alterada pertence a um módulo de entrada externa."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "worktree descartável /tmp/proof-cepa-until-2/base (git worktree add --detach a82e2f6); trouxe tests/test_cepa_until_branch_da_noite.py de 1782e61 via 'git checkout 1782e61 -- tests/test_cepa_until_branch_da_noite.py' (mantendo common/bin/cepa-until do base, sem o fix); python3 tests/test_cepa_until_branch_da_noite.py -> exit 1, '✗ 5 falha(s): ...e o run_start grava a suíte como verify, não null, ...e a suíte rodou depois do item done, ...e nomeia a suíte que teria bastado, só com tests/run-all.sh, o run começa com a suíte como verify, ...e a suíte rodou'. Regressão comprovadamente vermelha na base para as 3 mudanças de comportamento do diff completo."
+routing_reason: "O commit 1782e61 fechou exatamente os dois gaps que fizeram a prova anterior (sobre b250a42) dar UNPROVEN: a tupla nova em VERIFY_POR_ARQUIVO e o texto do stderr agora têm teste próprio (test_suite_sem_no_build_vira_o_verify e o check '...e nomeia a suíte que teria bastado'). Perturbando cada uma das 3 linhas de comportamento alteradas no diff completo a82e2f6..1782e61 (bloco SUITE_SEM_BUILD em comando_de_verify, tupla tests/run-all.sh em VERIFY_POR_ARQUIVO, texto do stderr em main), cada uma produz RED isolado quando revertida, e o GREEN é restabelecido ao restaurar. A regressão do bug original fica RED no base_commit a82e2f6 com o teste de 1782e61 (5 falhas), confirmando o bug reproduzido. Nenhuma linha sobrevive à perturbação; L4 é n/a (repo sem superfície de entrada HTTP/externa); L2 sem gap. PROVEN."
