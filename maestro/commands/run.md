@@ -167,6 +167,12 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
      contexto, opções). Grave a decisão no próprio `escalations/<id>.yaml`
      (`estado: answered`) e **re-spawne a filha** injetando "decisão do dono
      sobre <id>: ..." no prompt — ela continua do worktree onde parou.
+   - **Retentativa com nome novo** (`S-2067R` nascendo de `S-2067`): registre-a
+     no mesmo instante em que forka,
+     `maestro-wave-state set-slice PROGDIR <slice>R running --pane <id> --worktree <path>
+     --detail "retentativa de <slice>"`. Na onda 1 do WEGO-paralelo as
+     retentativas só entraram no wave-state na onda seguinte, e duas sessões
+     acharam que eram donas delas.
    - **Saúde do porteiro**: se `poll` reportar `gatekeeper.alive:false`,
      ressuba-o (mesma porta/state) e siga — filha sem porteiro recebe deny e
      escala (fail-mode declarado).
@@ -179,7 +185,7 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
    python3 maestro/bin/maestro-wave-state check-terminal PROGDIR
    ```
 
-   Exit 0 = toda slice em estado terminal (`DONE|FAIL|TIMEOUT|ESCALATED`).
+   Exit 0 = toda slice em estado terminal (`DONE|LANDED|FAIL|TIMEOUT|ESCALATED`).
    Exit 2 = ainda há slice pendurada, e o comando nomeia quais. **Com exit 2 não
    siga para o merge train nem para o relatório**: volte ao event loop, ou force
    o estado terminal honesto (`set-slice PROGDIR <slice> ESCALATED --detail "<o
@@ -196,7 +202,10 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
      o verify do slice — conflito semântico entre superfícies disjuntas só
      aparece aqui). Vermelho pós-merge → revert do merge, slice vira FAIL;
    - conflito → PARE e mostre (não auto-resolva);
-   - `maestro-wave-state landed PROGDIR <slice>` a cada merge;
+   - `maestro-wave-state landed PROGDIR <slice>` a cada merge (a slice passa de
+     `DONE` para `LANDED`). É isso que deixa `aguardando-merge` responder, depois
+     de uma sessão morta, o que ficou para aterrissar: `DONE` sem `LANDED` é o
+     que o `/common:next` e o doctor cobram como ação sua;
    - **prune só ao fim da onda inteira** (worktree é barato; evidência não volta).
 
 10. **Relatório + debrief.** Só depois do passo 8 verde. Resuma: veredito de

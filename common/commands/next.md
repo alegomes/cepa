@@ -112,6 +112,15 @@ Collect, in plan order:
 
 - **open human debt** — every item (any status, including `done`) whose
   `human_pending` is a real route rather than the explicit null;
+- **maestro waves waiting to land** — run
+  `python3 maestro/bin/maestro-programs . --aguardando-merge` (it reads the same
+  main-clone root). Each line it prints is a program whose slices finished
+  (`DONE`) and nobody merged. That is human debt too: the merge train only runs
+  while the `/maestro:run` session is alive, and when it dies the branches sit
+  there with nothing on disk saying so (WEGO-paralelo wave 1, 2026-08-24: five
+  ready branches, merged by hand hours later). List each line verbatim under
+  "Pendente com você" — "5 slices terminadas esperando merge" — with
+  `/maestro:resume <programa>` as the route. Empty output means nothing waits;
 - **the candidate** — the first `pending` item whose `blocked_by` contains no
   unfinished item;
 - **blocked items ahead of the candidate** — each with what blocks it, so a
@@ -202,6 +211,8 @@ Default precedence, to be overridden with a stated reason:
    sliding backwards outranks work not yet started.
 2. **Human debt that blocks the queue** — a route that must pass before the next
    card is meaningful (e.g. the next card builds on the one awaiting validation).
+   A maestro wave waiting to land counts here: finished work that isn't in the
+   integration branch is invisible to everything built after it.
 3. **The candidate card.**
 4. **Non-blocking human debt** — real, but it can ride along; list it, don't lead
    with it.

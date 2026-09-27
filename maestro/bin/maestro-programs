@@ -15,6 +15,7 @@ Só lê. Nunca escreve, nunca sobe porteiro, nunca forka.
 Uso:
   maestro-programs [REPO] [--json]
   maestro-programs [REPO] --check-name NOME
+  maestro-programs [REPO] --aguardando-merge [--json]
 Saída (humana): uma linha por programa com modo, próxima onda e o veredito
 `roda` / `não roda: <motivo>`. Exit 0 sempre que conseguiu listar (inclusive
 com zero programas); 2 se o diretório não é um repo git.
@@ -27,8 +28,16 @@ diretório — /board-flow:triage escreve a fila do board em
 (mode: parallel-waves) — e o nome do programa é escolha livre de quem chama.
 Sem esta checagem, `/maestro:program-plan WEGO` num board `WEGO` sobrescreve a
 fila priorizada e o `why` de cada item sem uma palavra. Exit 3 = colisão.
+
+`--aguardando-merge` responde a pergunta do /common:next e do doctor: algum
+programa tem slice que terminou (DONE) e ninguém aterrissou? Imprime uma linha
+por programa nessa situação e nada quando não há; exit 0 nos dois casos. Existe
+porque o merge train só roda com a sessão do maestro viva, e quando ela morre o
+disco precisa dizer "onda esperando você", não "onda rodando".
 """
 import argparse
+import importlib.machinery
+import importlib.util
 import json
 import os
 import subprocess
@@ -40,6 +49,18 @@ try:
 except ImportError:
     print("maestro-programs precisa de PyYAML", file=sys.stderr)
     sys.exit(2)
+
+def _wave_state_mod():
+    """O maestro-wave-state, importado: a regra de "esperando merge" mora lá."""
+    caminho = Path(__file__).resolve().parent / "maestro-wave-state"
+    loader = importlib.machinery.SourceFileLoader("maestro_wave_state", str(caminho))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+WS = _wave_state_mod()
 
 # Modos de plano que ESTE comando sabe executar. O complemento não é erro do
 # usuário — é outro documento, com outro consumidor (single-track → /common:next).
@@ -88,7 +109,8 @@ def _run_em_curso(progdir):
                 estados[nome] = st or "?"
         else:
             estados = {}
-        info["wave_state"] = {"wave": data.get("wave"), "slices": estados}
+        info["wave_state"] = {"wave": data.get("wave"), "slices": estados,
+                              "aguardando_merge": WS.aguardando_merge(data)}
     pidfile = progdir / "gatekeeper" / "gatekeeper.pid"
     if pidfile.is_file():
         pid = pidfile.read_text().strip()
@@ -183,6 +205,8 @@ def imprime(raiz, progs):
             estados = ", ".join(f"{k}={v}" for k, v in (ws["slices"] or {}).items())
             print(f"      execução anterior: onda {ws['wave']}"
                   + (f" · {estados}" if estados else ""))
+            if ws.get("aguardando_merge"):
+                print("      " + _linha_aguardando(p["nome"], ws))
         if p.get("gatekeeper_pid"):
             vivo = "VIVO" if p["gatekeeper_vivo"] else "morto (órfão — o gc do run limpa)"
             print(f"      porteiro pid {p['gatekeeper_pid']}: {vivo}")
@@ -192,6 +216,26 @@ def imprime(raiz, progs):
         print("Rodáveis agora: " + ", ".join(rodaveis))
     else:
         print("Nenhum programa rodável — /maestro:program-plan <nome> cria um.")
+
+
+def _linha_aguardando(nome, ws):
+    pend = ws["aguardando_merge"]
+    return (f"{nome}: {len(pend)} slice(s) terminada(s) esperando merge na "
+            f"onda {ws['wave']} ({', '.join(pend)}) → /maestro:resume {nome}")
+
+
+def cmd_aguardando(raiz, como_json):
+    progs = [p for p in coleta(raiz)
+             if (p.get("wave_state") or {}).get("aguardando_merge")]
+    if como_json:
+        print(json.dumps({"raiz": str(raiz), "programas": [
+            {"nome": p["nome"], "wave": p["wave_state"]["wave"],
+             "aguardando_merge": p["wave_state"]["aguardando_merge"]}
+            for p in progs]}, ensure_ascii=False, indent=2))
+    else:
+        for p in progs:
+            print(_linha_aguardando(p["nome"], p["wave_state"]))
+    return 0
 
 
 def cmd_check_name(raiz, nome):
@@ -227,6 +271,8 @@ def main(argv=None):
     ap.add_argument("--check-name", metavar="NOME",
                     help="o nome de programa está livre? exit 3 se colide com "
                          "uma fila single-track")
+    ap.add_argument("--aguardando-merge", action="store_true",
+                    help="só os programas com slice DONE ainda não aterrissada")
     a = ap.parse_args(argv)
 
     raiz = raiz_principal(a.repo)
@@ -235,6 +281,8 @@ def main(argv=None):
         return 2
     if a.check_name:
         return cmd_check_name(raiz, a.check_name)
+    if a.aguardando_merge:
+        return cmd_aguardando(raiz, a.json)
     progs = coleta(raiz)
     if a.json:
         print(json.dumps({"raiz": str(raiz), "programas": progs},

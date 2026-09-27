@@ -109,9 +109,14 @@ def test_wave_state(tmp):
           ws["slices"]["S1"]["started_epoch"] == 1000, ws["slices"]["S1"])
     r = sh([BIN / "maestro-wave-state", "set-slice", pd, "S1", "GARBAGE"])
     check("status inválido é recusado", r.returncode == 2, r.stdout)
+    # O merge train só aterrissa DONE (landed de running é recusado; ver
+    # tests/test_maestro_merge_pendente.py).
+    sh([BIN / "maestro-wave-state", "set-slice", pd, "S1", "DONE"])
     sh([BIN / "maestro-wave-state", "landed", pd, "S1"])
     r = sh([BIN / "maestro-wave-state", "get", pd, "--json"])
-    check("landed registra o merge", "S1" in json.loads(r.stdout)["landed"], r.stdout)
+    ws = json.loads(r.stdout)
+    check("landed registra o merge",
+          "S1" in ws["landed"] and ws["slices"]["S1"]["status"] == "LANDED", r.stdout)
 
 
 def test_check_terminal(tmp):

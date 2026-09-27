@@ -510,6 +510,7 @@ def check_project(cwd: Path):
     check_arvore_suja(root)
     check_env_manifest(root)
     check_divergencia_plano(root)
+    check_aguardando_merge(root)
 
 
 # ── Ambiente (.claude/env.yaml) ─────────────────────────────────────────
@@ -752,6 +753,44 @@ def check_divergencia_plano(root: Path):
         partes.append(f"{len(inexistente)} `**Plano:**` citando id fora da fila `{fila}`: "
                       + ", ".join(f"{i['secao']} → {i['plano']}" for i in inexistente))
     warn("plano", f"fila `{fila}` × BACKLOG.md diverge — " + "; ".join(partes))
+
+
+def maestro_programs():
+    """O listador do plugin maestro: irmão deste arquivo no repo cepa, ou no
+    clone do marketplace. Sem ele (maestro não instalado), None."""
+    for base in (Path(__file__).resolve().parents[2], cepa_repo_root()):
+        if base and (base / "maestro" / "bin" / "maestro-programs").is_file():
+            return base / "maestro" / "bin" / "maestro-programs"
+    return None
+
+
+def check_aguardando_merge(root: Path):
+    """Onda do Maestro que terminou e ninguém aterrissou é ação humana.
+
+    O merge train só roda com a sessão do maestro viva. Quando ela morre, as
+    slices DONE esperam sem nada dizer que esperam (onda 1 do WEGO-paralelo,
+    2026-08-24: cinco branches prontas, mescladas à mão horas depois). A regra
+    é do maestro-wave-state; aqui só se traduz em ⚠.
+    """
+    mp = maestro_programs()
+    if mp is None or not (root / ".claude" / "programs").is_dir():
+        return
+    try:
+        p = subprocess.run([sys.executable, str(mp), str(root),
+                            "--aguardando-merge", "--json"],
+                           capture_output=True, text=True, timeout=30)
+        if p.returncode != 0:
+            return  # fora de repo git — o check de projeto já disse
+        progs = json.loads(p.stdout).get("programas") or []
+    except Exception as e:  # noqa: BLE001 — diagnóstico não pode quebrar o doctor
+        warn("maestro", f"checagem de merge pendente não rodou: {e}")
+        return
+    for prog in progs:
+        pend = prog["aguardando_merge"]
+        warn("maestro", f"programa `{prog['nome']}`: {len(pend)} slice(s) "
+                        f"terminada(s) esperando merge na onda {prog['wave']} "
+                        f"({', '.join(pend)}) — /maestro:resume {prog['nome']} "
+                        f"vai direto ao merge train")
 
 
 # ── Correções em lote (--fix) ───────────────────────────────────────────

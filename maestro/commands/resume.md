@@ -32,14 +32,22 @@ aterrissou. Reusa o padrão do `/common:autonomous-resume` — não inventa outr
      E se o `resultado.txt` já tem `MAESTRO-EXIT`. Filha morta sem marcador →
      trate como a próxima iteração do poll decidirá (TIMEOUT se estourou o
      prazo); filha viva → segue no loop.
-   - **merges**: `landed` diz o que já entrou no main; não re-mergeie.
+   - **merges**: slice `LANDED` (ou, em wave-state antigo, nome na lista
+     `landed:`) já entrou no main; não re-mergeie.
 
-3. **Continuar.** Retome o `/maestro:run` a partir do Passo 7 (event loop):
+3. **Onda terminada sem merge vai direto ao merge train.** Se
+   `maestro-wave-state check-terminal` sai 0 e
+   `maestro-wave-state aguardando-merge` lista slices, a onda não está "sem nada
+   rodando": está esperando você. Pule o event loop e retome o `/maestro:run` no
+   Passo 9 (merge train) com essas slices. Concluir "não há nada rodando" e parar
+   é o que deixou cinco branches prontas paradas na onda 1 do WEGO-paralelo.
+
+4. **Continuar.** Nos outros casos, retome o `/maestro:run` a partir do Passo 7 (event loop):
    `maestro-poll` em rodízio → transições → escalações → merge train dos DONE
    ainda não em `landed`. Slices FAIL/TIMEOUT/ESCALATED da onda re-forkam na
    próxima onda, como no fluxo normal.
 
-4. **Relatar** o que foi reconstruído (porteiro ressuscitado? filhas ainda
+5. **Relatar** o que foi reconstruído (porteiro ressuscitado? filhas ainda
    vivas? merges já feitos?) antes de prosseguir, para o usuário ver o estado
    herdado — não afirme "retomado" sem mostrar a reconciliação.
 

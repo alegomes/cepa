@@ -52,6 +52,13 @@ para um momento em que consertar é barato.
    mais de uma fila possível o script fica calado — não adivinha qual o dono quer
    ver. É relatório, nunca correção: nenhum `--fix` mexe aqui.
 
+   A área `maestro` (quando aparece) é uma onda do Maestro que terminou e ninguém
+   aterrissou: slice `DONE` no `wave-state.yaml` que não está `LANDED`. O merge
+   train só roda com a sessão do `/maestro:run` viva; quando ela morre antes, as
+   branches prontas ficam paradas sem nada no disco dizer que esperam (onda 1 do
+   WEGO-paralelo, 2026-08-24). A rota é `/maestro:resume <programa>`, que vai
+   direto ao merge train. Também só relatório.
+
 3. **Se `--live` foi passado** e existe `board-flow.yaml` no projeto: delegue ao
    `board-flow:atlassian-expert` (se o plugin board-flow estiver instalado):
 

@@ -12,11 +12,18 @@ Subcomandos:
   set-slice <program-dir> <slice> <status> [--pane ID] [--worktree PATH]
         [--pid N] [--started-epoch E] [--detail TEXT]
   set-gk <program-dir> --pid N [--url URL]
-  landed <program-dir> <slice>          # marca merge aterrissado
+  landed <program-dir> <slice>          # marca merge aterrissado (slice → LANDED)
   get <program-dir> [--json]            # imprime o estado (resume lê isto)
   check-terminal <program-dir> [--json] # exit 0 se toda slice terminou; 2 senão
+  aguardando-merge <program-dir> [--json]
+        # slices DONE que ainda não aterrissaram; exit 0 sempre que leu
 
-Estados terminais por slice: DONE | FAIL | TIMEOUT | ESCALATED (nunca "pendurado").
+Estados terminais por slice: DONE | LANDED | FAIL | TIMEOUT | ESCALATED (nunca
+"pendurado"). DONE quer dizer "a filha terminou"; LANDED, "a branch está na
+integração". Separar os dois é o que deixa o disco dizer "onda esperando você"
+em vez de "onda rodando": na onda 1 do WEGO-paralelo (2026-08-24) a sessão do
+maestro morreu antes do merge train, o `landed:` ficou [] e cinco branches
+prontas esperaram horas até alguém reparar.
 """
 import argparse
 import sys
@@ -29,12 +36,28 @@ except ImportError:
     print("maestro-wave-state precisa de PyYAML", file=sys.stderr)
     sys.exit(2)
 
-VALID = {"pending", "running", "DONE", "FAIL", "TIMEOUT", "ESCALATED"}
+VALID = {"pending", "running", "DONE", "LANDED", "FAIL", "TIMEOUT", "ESCALATED"}
 
 # Estados que ENCERRAM uma slice. O complemento (pending/running) não é um
 # resultado — é a ausência de um. Uma onda que aterrissa com slice aí dentro
 # some do radar sem ninguém ter decidido nada sobre ela.
-TERMINAL = {"DONE", "FAIL", "TIMEOUT", "ESCALATED"}
+TERMINAL = {"DONE", "LANDED", "FAIL", "TIMEOUT", "ESCALATED"}
+
+
+def aguardando_merge(ws):
+    """Slices que terminaram e ninguém aterrissou, na ordem do wave-state.
+
+    Lê também o formato antigo, em que o merge só aparecia na lista solta
+    `landed:` do topo e a slice seguia DONE: nome na lista conta como
+    aterrissada. É a única cópia desta regra; o maestro-programs a importa.
+    """
+    landed = set((ws or {}).get("landed") or [])
+    slices = (ws or {}).get("slices") or {}
+    if not isinstance(slices, dict):
+        return []
+    return [s for s, v in slices.items()
+            if isinstance(v, dict) and v.get("status") == "DONE"
+            and s not in landed]
 
 
 def _path(d):
@@ -124,6 +147,16 @@ def cmd_set_gk(a):
 
 def cmd_landed(a):
     ws = _load(a.program_dir)
+    sl = (ws.get("slices") or {}).get(a.slice)
+    st = (sl or {}).get("status")
+    if st not in ("DONE", "LANDED"):
+        # O merge train só aterrissa DONE. Mesclar outra coisa e marcar aqui
+        # apagaria o FAIL/TIMEOUT/ESCALATED que manda a slice re-forkar.
+        print(f"{a.slice} está {st or 'fora do wave-state'}, não DONE — só "
+              f"slice DONE aterrissa (merge feito à mão? registre antes: "
+              f"set-slice {a.program_dir} {a.slice} DONE)", file=sys.stderr)
+        return 2
+    sl["status"] = "LANDED"
     landed = ws.setdefault("landed", [])
     if a.slice not in landed:
         landed.append(a.slice)
@@ -156,6 +189,21 @@ def cmd_check_terminal(a):
     else:
         print(f"onda {ws.get('wave')}: {len(slices)} slice(s), todas terminais")
     return 2 if pend else 0
+
+
+def cmd_aguardando_merge(a):
+    ws = _load(a.program_dir)
+    pend = aguardando_merge(ws)
+    if a.json:
+        import json
+        print(json.dumps({"wave": ws.get("wave"), "aguardando_merge": pend},
+                         ensure_ascii=False, indent=2))
+    elif pend:
+        print(f"onda {ws.get('wave')}: {len(pend)} slice(s) terminada(s) "
+              f"esperando merge: {', '.join(pend)}")
+    else:
+        print(f"onda {ws.get('wave')}: nenhuma slice esperando merge")
+    return 0
 
 
 def cmd_get(a):
@@ -197,6 +245,10 @@ def main():
     p = sub.add_parser("check-terminal"); p.add_argument("program_dir")
     p.add_argument("--json", action="store_true")
     p.set_defaults(fn=cmd_check_terminal)
+
+    p = sub.add_parser("aguardando-merge"); p.add_argument("program_dir")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(fn=cmd_aguardando_merge)
 
     a = ap.parse_args()
     return a.fn(a)
