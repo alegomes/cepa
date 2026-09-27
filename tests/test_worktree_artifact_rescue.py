@@ -66,6 +66,7 @@ def make_repo(root: Path, ignore_claude=True):
     (art / "sessions").mkdir()
     (art / "sessions" / "abc.json").write_text("{}\n")
     (art / "last-build.json").write_text("{}\n")
+    (art / "session-mode").write_text("modo: construcao\nrotina: null\n")
     return r, w
 
 
@@ -92,6 +93,10 @@ def test_doomed_lists_artifacts_and_skips_ephemeral(tmp):
           not any("sessions/" in d for d in doomed), doomed)
     check("last-build.json is skipped",
           ".claude/last-build.json" not in doomed, doomed)
+    # 26/09/2026: o resgate guardou dois session-mode e mais nada, e o aviso do
+    # SessionStart anunciou "plans, proof and acceptance files" por causa deles.
+    check("session-mode is skipped",
+          ".claude/session-mode" not in doomed, doomed)
 
 
 def test_tracked_artifacts_are_not_rescued(tmp):

@@ -466,6 +466,9 @@ RESCUE_SKIP = (
     "doctor-last-run",
     "session-log.md",
     "worktree-seed",
+    "session-mode",       # modo da sessão que está acabando; resgatado, só
+                          # disparava o aviso de "plans, proof and acceptance"
+                          # no SessionStart seguinte (alarme falso, 26/09/2026)
     "settings.local.json",
     "__pycache__/",
 )

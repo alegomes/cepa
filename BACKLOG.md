@@ -3681,27 +3681,3 @@ para o `gate-advance`.
 
 Repo falso com `.claude/no-build` e `tests/run-all.sh`: espera `run_start` com `verify`
 apontando para o script, e não `null`.
-
----
-
-## Resgate de worktree guarda o `session-mode` e dispara aviso falso
-
-**Status:** pendente · **Lar provável:** `common/hooks/_wtlib.py` (`RESCUE_SKIP`, linha ~448)
-· **Origem:** sessão `pendencias_until` (2026-09-26).
-
-### Problema
-
-Quando uma worktree é removida, o `rescue_artifacts` copia para `.claude/rescued/<branch>/`
-todo arquivo ignorado de `.claude/`, e o SessionStart seguinte avisa que ali há "plans, proof
-and acceptance files". Em 26/09 a pasta tinha só dois `session-mode` (78 bytes cada:
-`modo: construcao`, `aberto_em: ...`), o marcador do modo da sessão, que morre com ela. O
-aviso era alarme falso, e aviso falso ensina a ignorar o verdadeiro.
-
-### Esboço de solução
-
-Acrescentar `"session-mode"` ao `RESCUE_SKIP`, com o comentário do porquê.
-
-### Teste que falta
-
-Worktree falsa com `.claude/session-mode` ignorado e um `.claude/programs/x/plan.yaml`
-ignorado: espera que o resgate copie só o `plan.yaml`.
