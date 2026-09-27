@@ -2378,8 +2378,23 @@ nascerem em A. Hoje falha: nascem em B.
 
 **Plano:** `cepa/herdr-space-por-worktree`
 
-**Status:** pendente, prioridade baixa · **Lar provável:** `maestro/commands/run.md`
-(passo do `worktree create`) ou apenas nota de operação · **Origem:** mesma reflexão.
+**Status:** feito nesta branch · **Lar:** `maestro/bin/maestro-prune` (novo) +
+`maestro/commands/run.md` (passo 2, gc de órfãos; passo 6a, registro fantasma;
+passo 9, prune de fim de onda) · **Origem:** mesma reflexão.
+
+**Fato verificado (herdr 0.9.1, 2026-09-26, repo descartável em `/tmp`):**
+`herdr worktree remove --workspace ID --trust-repository` derruba o Space, a
+worktree git E o diretório numa tacada só — a BRANCH fica. Worktree suja
+(arquivo não commitado/untracked) sem `--force`: exit 1,
+`dirty_worktree_requires_force`, nada é removido — o `maestro-prune` nunca
+passa `--force`, quem decide é o dono. A forma posicional
+(`herdr worktree remove` com o caminho direto) NÃO existe no 0.9.1: "unknown
+option: <path>", só `--workspace ID` identifica o alvo. `herdr worktree list`
+sem `--cwd` lista o repo do Space EM FOCO e ignora o diretório corrente: a
+primeira versão do `maestro-prune` caiu nisso e só o teste ao vivo pegou (o
+herdr falso do teste listava pelo diretório corrente). Também observado, sem
+tratamento (fora de escopo): `herdr worktree create --cwd` num repo sem Space
+aberto abre também um Space para o clone principal.
 
 ### Problema
 

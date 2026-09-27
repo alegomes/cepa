@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+"""maestro-prune — remove Space + worktree do herdr das slices que ATERRISSARAM.
+
+Por que existir (reflexão 2026-08-24 + fato verificado ao vivo no herdr 0.9.1,
+2026-09-26): o `/maestro:run` cria cada slice com `herdr worktree create`, e o
+herdr trata worktree **como** Space — a própria remoção do herdr é
+`herdr worktree remove --workspace ID`, não um comando de git puro. Sem prune,
+cada onda acrescenta um Space por slice à barra lateral e eles nunca somem
+sozinhos: em 2026-08-24 havia 11 Spaces (`w12`–`w1D`) sobrando de duas ondas.
+
+O que este script NÃO remove, e por quê: DONE-não-aterrissada (a evidência da
+filha ainda não virou merge — apagar o worktree apagaria a evidência antes de
+alguém decidir), FAIL/TIMEOUT/ESCALATED (essas slices re-forkam na onda
+seguinte a partir do worktree onde pararam) e qualquer slice ainda pending ou
+running. Só LANDED — merge já está na integração, nada mais a preservar ali —
+é candidata a prune. `landed` no formato antigo (lista solta no topo do
+wave-state, sem `status: LANDED` na slice) também conta, pela mesma regra que
+`maestro-wave-state aguardando-merge` já usa.
+
+Fatos verificados ao vivo contra o herdr 0.9.1 (repo descartável em /tmp,
+2026-09-26), porque o BACKLOG só tinha esboço não confirmado:
+  - `herdr worktree remove --workspace ID --trust-repository` derruba o Space
+    E a worktree git E o diretório numa tacada só; a BRANCH fica.
+  - Worktree suja (arquivo não commitado/untracked) sem `--force`: exit 1,
+    `dirty_worktree_requires_force` — nada é removido. Este script NUNCA passa
+    `--force`; dono decide o que fazer com uma slice LANDED ainda suja.
+  - A forma posicional `herdr worktree remove <path>` NÃO existe no 0.9.1
+    ("unknown option: <path>") — só `--workspace ID` identifica o alvo.
+  - `herdr worktree list` sem `--cwd` lista o repo do Space em FOCO, não o
+    do diretório corrente — daí o `--cwd <repo>` explícito.
+  - `herdr worktree list --json` só devolve `open_workspace_id` para worktree
+    com Space aberto; se o dono fechou o Space à mão, a chave some e este
+    script cai para `git worktree remove` puro (sem `--force`).
+
+Mesmo princípio do passo 6a do `/maestro:run` (confira pelo git, não pela
+palavra de ferramenta externa): depois de mandar remover, este script relê
+`git worktree list --porcelain` do repo e só marca "removida" se o path já não
+está lá. Path ausente de saída já ao PRIMEIRO exame conta como "já removida"
+(o dono limpou à mão) — não é falha e não dispara remove nenhum.
+
+Uso:
+  maestro-prune <program-dir> --repo <raiz-principal> [--dry-run] [--json]
+
+Variável de ambiente `MAESTRO_HERDR` troca o binário do herdr (default:
+`herdr`) — é o que os testes usam para injetar um fake.
+
+Exit 0 = nenhuma falha (removidas/mantidas/já-removidas contam como sucesso).
+Exit 1 = alguma slice LANDED falhou ao remover (worktree suja, herdr/git deu
+erro, ou o git ainda mostra o path depois do remove).
+Exit 2 = uso incorreto ou wave-state.yaml ausente.
+"""
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("maestro-prune precisa de PyYAML", file=sys.stderr)
+    sys.exit(2)
+
+
+def herdr_bin():
+    return os.environ.get("MAESTRO_HERDR", "herdr")
+
+
+def _load_wave_state(program_dir):
+    p = Path(program_dir) / "wave-state.yaml"
+    if not p.is_file():
+        return None
+    return yaml.safe_load(p.read_text()) or {}
+
+
+def landed_slices(ws):
+    """Slices aterrissadas: `status: LANDED` OU listadas no `landed:` legado
+    (mesma regra de compatibilidade que `maestro-wave-state
+    aguardando-merge` usa para o formato antigo)."""
+    landed_names = set((ws or {}).get("landed") or [])
+    slices = (ws or {}).get("slices") or {}
+    out = {}
+    for name, v in (slices.items() if isinstance(slices, dict) else []):
+        v = v or {}
+        status = v.get("status")
+        if status == "LANDED" or name in landed_names:
+            out[name] = v
+        else:
+            out.setdefault("__kept__", []).append((name, status or "sem status"))
+    return out
+
+
+def git_worktree_paths(repo):
+    """Paths de worktree ligadas registradas pelo git, resolvidos (realpath),
+    para comparar com o que o wave-state/herdr apontam."""
+    r = subprocess.run(["git", "-C", str(repo), "worktree", "list", "--porcelain"],
+                       capture_output=True, text=True)
+    paths = []
+    for line in r.stdout.splitlines():
+        if line.startswith("worktree "):
+            paths.append(os.path.realpath(line[len("worktree "):]))
+    return set(paths)
+
+
+def herdr_worktree_map(repo):
+    """path resolvido -> open_workspace_id (ausente = sem Space aberto).
+
+    `--cwd` é obrigatório: sem ele o herdr 0.9.1 lista o repo do Space EM
+    FOCO e ignora o diretório corrente do processo (medido ao vivo em
+    2026-09-26: rodado de dentro do repo da onda, devolveu o clone do cepa,
+    que estava em foco; nenhuma slice casou, tudo caiu no `git worktree
+    remove` puro e os Spaces ficaram na barra lateral — o defeito inteiro)."""
+    r = subprocess.run([herdr_bin(), "worktree", "list",
+                        "--cwd", str(repo), "--json"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        # Sem herdr respondendo, cai tudo para o fallback git puro.
+        return {}
+    try:
+        data = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return {}
+    out = {}
+    for wt in (data.get("result") or {}).get("worktrees") or []:
+        path = wt.get("path")
+        if not path:
+            continue
+        wsid = wt.get("open_workspace_id")
+        if wsid:
+            out[os.path.realpath(path)] = wsid
+    return out
+
+
+def remove_via_herdr(workspace_id):
+    r = subprocess.run([herdr_bin(), "worktree", "remove",
+                        "--workspace", workspace_id, "--trust-repository"],
+                       capture_output=True, text=True)
+    return r
+
+
+def remove_via_git(repo, path):
+    r = subprocess.run(["git", "-C", str(repo), "worktree", "remove", path],
+                       capture_output=True, text=True)
+    return r
+
+
+def prune(program_dir, repo, dry_run):
+    ws = _load_wave_state(program_dir)
+    if ws is None:
+        return None, "wave-state.yaml não encontrado em " + str(program_dir)
+
+    grouped = landed_slices(ws)
+    kept = [{"slice": s, "status": st} for s, st in grouped.pop("__kept__", [])]
+
+    result = {"removed": [], "kept": kept, "failed": [], "already_gone": []}
+
+    if not grouped:
+        return result, None
+
+    git_paths_before = git_worktree_paths(repo)
+    ws_map = herdr_worktree_map(repo)
+
+    for slice_name, v in grouped.items():
+        wt_path = v.get("worktree")
+        if not wt_path:
+            result["failed"].append({"slice": slice_name,
+                                     "detail": "wave-state não tem `worktree` registrado para esta slice"})
+            continue
+        real_path = os.path.realpath(wt_path)
+
+        if real_path not in git_paths_before:
+            result["already_gone"].append(slice_name)
+            continue
+
+        if dry_run:
+            wsid = ws_map.get(real_path)
+            via = f"herdr worktree remove --workspace {wsid}" if wsid else \
+                  f"git worktree remove {wt_path}"
+            result["removed"].append({"slice": slice_name, "via": "dry-run: " + via})
+            continue
+
+        wsid = ws_map.get(real_path)
+        if wsid:
+            r = remove_via_herdr(wsid)
+            via = f"herdr --workspace {wsid}"
+        else:
+            r = remove_via_git(repo, wt_path)
+            via = "git worktree remove (sem Space aberto)"
+
+        if r.returncode != 0:
+            msg = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
+            result["failed"].append({"slice": slice_name, "detail": f"{via}: {msg}"})
+            continue
+
+        # Confirmação por git, não pela palavra do herdr — mesmo princípio do
+        # passo 6a do /maestro:run.
+        git_paths_after = git_worktree_paths(repo)
+        if real_path in git_paths_after:
+            result["failed"].append({
+                "slice": slice_name,
+                "detail": f"{via} devolveu sucesso mas `git worktree list` ainda mostra {wt_path}",
+            })
+            continue
+
+        result["removed"].append({"slice": slice_name, "via": via})
+
+    return result, None
+
+
+def render_human(result, dry_run):
+    lines = []
+    for r in result["removed"]:
+        prefixo = "removeria" if dry_run else "removida"
+        lines.append(f"{r['slice']}: {prefixo} ({r['via']})")
+    for k in result["kept"]:
+        lines.append(f"{k['slice']}: mantida — status {k['status']}")
+    for a in result["already_gone"]:
+        lines.append(f"{a}: já removida (não estava mais em `git worktree list`)")
+    for f in result["failed"]:
+        lines.append(f"{f['slice']}: falhou — {f['detail']}")
+    return "\n".join(lines) if lines else "nenhuma slice aterrissada nesta onda"
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="maestro-prune")
+    ap.add_argument("program_dir")
+    ap.add_argument("--repo", required=True,
+                    help="raiz-principal onde `git worktree` e `herdr worktree list` rodam")
+    ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+
+    result, err = prune(a.program_dir, a.repo, a.dry_run)
+    if err:
+        print(err, file=sys.stderr)
+        return 2
+
+    if a.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        print(render_human(result, a.dry_run))
+
+    return 1 if result["failed"] else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

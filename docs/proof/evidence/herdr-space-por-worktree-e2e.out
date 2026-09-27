@@ -1,0 +1,12 @@
+em foco: ['cepa']
+Spaces antes:  ['cepa', 'herdr-space-e2e.emPn', 's-a', 's-b', 'samba-arniqueiras']
+A: removida (herdr --workspace w2H)
+B: mantida — status FAIL
+prune exit=0
+Spaces depois: ['cepa', 'herdr-space-e2e.emPn', 's-b', 'samba-arniqueiras']
+Space de A (w2H) existe? nao
+Space de B (w2J) existe? sim
+git worktree list:
+/private<repo>                         22b554c [main]
+~/.herdr/worktrees/herdr-space-e2e.emPn/s-b 22b554c [s/B]
+Spaces após limpeza: ['cepa', 'samba-arniqueiras']

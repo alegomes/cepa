@@ -84,12 +84,20 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
 
 2. **gc de órfãos** (o análogo do que o cepa-doctor faz para cepa-worktrees —
    restos de programas anteriores custam a próxima onda):
-   - `herdr worktree list --json` → worktrees de programas já concluídos;
+   - `herdr worktree list --cwd <raiz-principal> --json` → worktrees de programas
+     já concluídos (o `--cwd` é obrigatório: sem ele o herdr 0.9.1 lista o repo
+     do Space em FOCO, não o do diretório corrente);
    - porteiro órfão: `PROGDIR/gatekeeper/gatekeeper.pid` de PID morto;
    - panes zumbis (`herdr agent list` sem processo vivo);
    - escalações expiradas (`estado: pending`, `ttl` vencido).
    Liste o que achou e ofereça limpar. Só remova o que o usuário confirmar
-   (exceto restos claramente do MESMO programa nesta reexecução).
+   (exceto restos claramente do MESMO programa nesta reexecução). Worktree de
+   programa concluído com `open_workspace_id` nessa lista:
+   remova com `herdr worktree remove --workspace <open_workspace_id>` — é isso
+   que derruba o Space junto (um `git worktree remove` puro tira a worktree do
+   git e deixa o Space fantasma na barra lateral do herdr). Só sem
+   `open_workspace_id` (o dono já fechou o Space à mão) use `git worktree
+   remove` puro.
 
 3. **Intake gate.** Rode
    `python3 common/bin/cepa-dor PROGDIR/plan.yaml --wave N --repo .`.
@@ -138,8 +146,11 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
       `herdr agent start` rodam contra caminho inexistente e a onda inteira
       nasce morta falhando como se fosse problema das filhas.
 
-      Se a linha não existir: remova o registro fantasma
-      (`herdr worktree remove <path>`, tolerando erro) e tente **uma** vez mais.
+      Se a linha não existir: remova o registro fantasma —
+      `herdr worktree remove --workspace <workspace_id devolvido pelo create>
+      --trust-repository`, tolerando erro (a forma posicional com o caminho
+      direto NÃO existe no herdr 0.9.1 instalado: "unknown option: <path>",
+      só `--workspace ID` identifica o alvo) — e tente **uma** vez mais.
       Persistindo, a slice é **FAIL** com detalhe nomeado —
       `maestro-wave-state set-slice PROGDIR <slice> fail --detail "worktree create reportou sucesso mas <path> não aparece em git worktree list (2 tentativas)"`
       — e as demais slices da onda **não** forkam em silêncio: pare o fork,
@@ -269,7 +280,17 @@ arquivos, e é justamente o que responde antes de o usuário ter um nome na mão
      `DONE` para `LANDED`). É isso que deixa `aguardando-merge` responder, depois
      de uma sessão morta, o que ficou para aterrissar: `DONE` sem `LANDED` é o
      que o `/common:next` e o doctor cobram como ação sua;
-   - **prune só ao fim da onda inteira** (worktree é barato; evidência não volta).
+   - **prune só ao fim da onda inteira** (worktree é barato; evidência não
+     volta): `python3 maestro/bin/maestro-prune PROGDIR --repo <raiz-principal>`.
+     Cada slice é um Space na barra lateral do herdr (`herdr worktree create`
+     cria worktree **e** Space); sem prune uma onda de 5 slices deixa 5 Spaces
+     — em 2026-08-24 havia 11 sobrando de duas ondas. O `maestro-prune` remove
+     Space + worktree só das slices LANDED (`herdr worktree remove --workspace`
+     derruba os dois numa tacada, e o resultado é confirmado pelo git — não
+     pela palavra do herdr, mesmo princípio do passo 6a); mantém as demais
+     (DONE-não-aterrissada, FAIL/TIMEOUT/ESCALATED, pending, running) porque a
+     evidência delas ainda pode servir; e nunca força uma worktree suja — reporta
+     e deixa o dono decidir. Mostre a saída dele no relatório do passo 10.
 
 10. **Relatório + debrief.** Só depois do passo 8 verde. Resuma: veredito de
    intake por slice, estados terminais, escalações e como foram decididas,
