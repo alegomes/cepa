@@ -1,0 +1,104 @@
+card: portao-modo-escrita-le-heredoc
+status: complete
+auditado_em: "2026-09-27"
+diff: 979ddd3..e32e82e
+superficie: >
+  common/hooks/modo-escrita-gate.py invocado como processo, com o payload JSON
+  no stdin (é como o Claude Code o chama). Os testes em
+  tests/test_modo_escrita_gate.py (classe Repo.call) fazem exatamente isso via
+  subprocess.run.
+criterios:
+  - id: AC1
+    descricao: >
+      Esboço de solução (1): o corpo do heredoc não é varrido como alvo de
+      redirecionamento.
+    altitude: cli
+    surface: "processo modo-escrita-gate.py, payload Bash com heredoc"
+    test: tests/test_modo_escrita_gate.py::test_corpo_do_heredoc_nao_e_alvo
+    layer: subprocess (invocação real do hook, não unidade interna)
+    evidence: verified
+    run: >
+      python3 tests/test_modo_escrita_gate.py -> "ok   heredoc liberado: crase
+      no corpo", "ok   heredoc liberado: redirecionamento no corpo", "ok
+      heredoc liberado: redirecionamento no corpo, delimitador sem aspas", "ok
+      heredoc para destino fora do modo ainda barra"; saída final "tudo verde"
+      (rc=0), sem "FAIL" no output.
+    verdict: complete
+    nota: >
+      Este episódio (2 e 3) já estava consertado antes deste diff, pelo
+      mascaramento do corpo do heredoc em common/hooks/_shellscan.py
+      (04/09/2026). O diff auditado adiciona apenas o teste de guarda; a
+      correção de produção não está neste diff. O critério ainda é
+      verificável e passa com evidência real.
+  - id: AC2
+    descricao: >
+      Esboço de solução (2): atribuições simples do próprio comando são
+      expandidas antes de casar o alvo.
+    altitude: cli
+    surface: "processo modo-escrita-gate.py, payload Bash com D=...; cmd $D/..."
+    test: tests/test_modo_escrita_gate.py::test_variavel_do_proprio_comando_e_expandida
+    layer: subprocess (invocação real do hook)
+    evidence: verified
+    run: >
+      python3 tests/test_modo_escrita_gate.py -> quatro casos "ok   variável
+      do comando expandida: ..." (D=...;, export D=..., D=...&&, cadeia
+      D=docs;E=$D/sub), mais "ok   variável expandida para fora do modo
+      barra" e "ok   o bloqueio mostra o alvo já expandido"; saída final
+      "tudo verde".
+    verdict: complete
+  - id: AC3
+    descricao: >
+      Esboço de solução (3): alvo não resolvível bloqueia com "não consegui
+      resolver o alvo", nunca com a mensagem de "fora do modo".
+    altitude: cli
+    surface: "processo modo-escrita-gate.py, payload Bash com variável não atribuída, $(...), ${X:-y}"
+    test: tests/test_modo_escrita_gate.py::test_alvo_nao_resolvivel_nao_culpa_o_modo
+    layer: subprocess (invocação real do hook)
+    evidence: verified
+    run: >
+      python3 tests/test_modo_escrita_gate.py -> para os três comandos
+      (variável não atribuída, $(pwd), ${D:-docs}): "ok   não resolvido
+      barra", "ok   diz que não resolveu", "ok   não culpa o modo" (nega
+      "fora do que esse modo produz" e "encerre"); mais "ok   variável de
+      ambiente definida resolve"; saída final "tudo verde".
+    verdict: complete
+  - id: AC4
+    descricao: >
+      Teste que falta, caso 1: heredoc para caminho liberado cujo CORPO
+      contém crases, esperando LIBERADO.
+    altitude: cli
+    surface: mesma de AC1
+    test: tests/test_modo_escrita_gate.py::test_corpo_do_heredoc_nao_e_alvo (caso "crase no corpo")
+    layer: subprocess
+    evidence: verified
+    run: "ok   heredoc liberado: crase no corpo (rc==0)"
+    verdict: complete
+  - id: AC5
+    descricao: >
+      Teste que falta, caso 2: heredoc para caminho liberado cujo CORPO
+      contém redirecionamento para caminho NÃO liberado, esperando LIBERADO
+      (episódio 3).
+    altitude: cli
+    surface: mesma de AC1
+    test: tests/test_modo_escrita_gate.py::test_corpo_do_heredoc_nao_e_alvo (caso "redirecionamento no corpo")
+    layer: subprocess
+    evidence: verified
+    run: >
+      "ok   heredoc liberado: redirecionamento no corpo" e "ok   heredoc
+      liberado: redirecionamento no corpo, delimitador sem aspas" (rc==0);
+      o corpo cita "echo x > common/hooks/novo.py", caminho fora do modo, e
+      isso não vaza para o alvo real.
+    verdict: complete
+  - id: AC6
+    descricao: >
+      Teste que falta, caso 3: escrita em caminho liberado montado por
+      variável do próprio comando, esperando LIBERADO ou mensagem de "alvo
+      não resolvível" (nunca "fora do modo").
+    altitude: cli
+    surface: mesma de AC2
+    test: tests/test_modo_escrita_gate.py::test_variavel_do_proprio_comando_e_expandida
+    layer: subprocess
+    evidence: verified
+    run: "quatro variações, todas rc==0 (LIBERADO) — ver AC2."
+    verdict: complete
+gaps: []
