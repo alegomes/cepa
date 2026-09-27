@@ -1,0 +1,57 @@
+key: classificador-nh-doc-so-nada-a-provar
+status: complete
+commit: 833946c217581e6416756e9a7cc0ca775d8f772b
+base: da5a9d3
+criteria:
+  - id: AC1
+    text: >
+      board-flow/bin/classify_needs_human.py reconhece artefato de prova só de
+      documentação como `nada-a-provar` usando o sinal estrutural
+      (scope.changed_classes vazio, l4 n/a, perturbação skipped) sem depender
+      de prosa. WEGO-2117, WEGO-2275, WEGO-2276 saem `nada-a-provar` (antes
+      caíam em `teste-cego` pelo fallback pert.status == skipped).
+    altitude: application
+    surface: "função classify() em board-flow/bin/classify_needs_human.py"
+    test: tests/test_needs_human_motivos.py::test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais e test_classifica_artefato_real[WEGO-2117/2275/2276]
+    layer: unit (regressão sobre fixtures reais)
+    evidence: verified
+    run: "python3 -m pytest tests/test_needs_human_motivos.py -q -> '45 passed in 0.21s'"
+    status: complete
+  - id: AC2
+    text: >
+      Trava extra: quando o artefato lista changed_files, todos têm que ser
+      documentação. WEGO-2021 muda application.properties e continua
+      `teste-cego` mesmo tendo os três sinais estruturais.
+    altitude: application
+    surface: "_so_documentacao() dentro de classify() em board-flow/bin/classify_needs_human.py"
+    test: tests/test_needs_human_motivos.py::test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais (caso `config`) e test_classifica_artefato_real[WEGO-2021]
+    layer: unit (regressão sobre fixtures reais)
+    evidence: verified
+    run: "python3 -m pytest tests/test_needs_human_motivos.py -q -> '45 passed in 0.21s'"
+    status: complete
+  - id: AC3
+    text: >
+      A superfície é a função classify() e o script CLI
+      classify_needs_human.py <repo>, que o /board-flow:decide consome —
+      confirmado contra os artefatos reais citados no card (WEGO-2117,
+      WEGO-2275, WEGO-2276, WEGO-2021) em
+      /Users/alegomes/coding/wego/wego-acessos-backend/docs/proof/.
+    altitude: cli
+    surface: "python3 board-flow/bin/classify_needs_human.py <repo>"
+    test: "execução direta do CLI contra o repo real wego-acessos-backend"
+    layer: cli end-to-end (repo real, não fixture)
+    evidence: verified
+    run: >
+      python3 board-flow/bin/classify_needs_human.py
+      /Users/alegomes/coding/wego/wego-acessos-backend ->
+      bucket "[10] Não havia o que provar aqui (nada-a-provar)" contém
+      WEGO-2117, WEGO-2275, WEGO-2276 com evidência "diff sem classe de
+      produção (changed_classes vazio)"; WEGO-2021 aparece em
+      "[6] O teste não consegue enxergar essa mudança (teste-cego)" com
+      evidência "perturbação externa não pôde rodar".
+    status: complete
+notes: >
+  Não rodada suíte completa nem build integral, por instrução do orquestrador.
+  Comandos executados: `python3 -m pytest tests/test_needs_human_motivos.py -q`
+  (0.21s, 45 testes) e o CLI contra o repo real
+  wego-acessos-backend (segundos, sem processo em segundo plano).

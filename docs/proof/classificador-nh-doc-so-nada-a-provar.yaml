@@ -1,0 +1,144 @@
+schema_version: 2
+card: classificador-nh-doc-so-nada-a-provar
+verdict: proven
+reviewed_at: 2026-09-26T23:10:00-03:00
+base_commit: da5a9d3
+head_commit: a0acdfe
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "board-flow/bin/classify_needs_human.py (_so_documentacao, e o bloco novo dentro de classify() que devolve 'nada-a-provar' quando changed_classes==[] + perturbação skipped + L4 n/a + _so_documentacao)", module: "board-flow-bin", external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_needs_human_motivos.py (ESPERADO['WEGO-2021']='teste-cego', ESPERADO['WEGO-2117'|'2275'|'2276']='nada-a-provar', test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais, e o novo caso sintético pert_rodou adicionado em a0acdfe)", module: "tests", external_observable: false, substituted_by_double: null }
+    - { class: "tests/fixtures/needs-human/WEGO-2021.yaml, WEGO-2117.yaml, WEGO-2275.yaml, WEGO-2276.yaml (fixtures novas de 833946c)", module: "tests-fixtures", external_observable: false, substituted_by_double: null }
+    - { class: "docs/needs-human-motivos.md (4 linhas de doc)", module: "docs", external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python (harness board-flow, não Quarkus). A "superfície externa"
+    aqui é a função `classify()` invocada pelo CLI
+    `python3 board-flow/bin/classify_needs_human.py <repo>` e coberta por
+    `tests/test_needs_human_motivos.py` (não-Quarkus, instrumentável por
+    perturbação universal; PIT não está listado no projeto e não foi
+    provisionado). Técnica usada: perturbação em worktree descartável
+    (`git worktree add --detach /tmp/proof-classificador-nh2 a0acdfe`),
+    quebrando cada uma das 4 condições do bloco novo e exigindo RED na
+    suíte, depois restaurando com `git checkout --`. Worktree removida ao
+    final com `git worktree remove --force`; a árvore principal nunca foi
+    tocada.
+
+    Reprova solicitada pelo coordenador após o commit a0acdfe, que fecha o
+    único gap da rodada anterior (UNPROVEN em head 833946c): a condição
+    `pert.get('status') == 'skipped'` do bloco novo sobrevivia à
+    perturbação (removida do `if`, a suíte de 45 testes continuava verde)
+    porque nenhum dos 4 fixtures reais (WEGO-2021/2117/2275/2276) tinha
+    `perturbation.status` diferente de `skipped` para contrastar.
+    a0acdfe acrescenta um caso sintético sem prosa (`pert_rodou`, sem
+    `routing_reason` que casasse outra regra) com `changed_classes: []`,
+    L4 `n/a`, arquivo só `docs/x.md`, mas `perturbation.status: pass`,
+    exigindo `classify(pert_rodou)[0] != "nada-a-provar"`. Reperturbando a
+    mesma condição isolada nesta rodada, esse caso agora vai RED.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "PASS (RED confirmado): removido o bloco novo inteiro (a
+           condição `changed_classes==[] and pert.status=='skipped' and
+           l4.status=='n/a' and _so_documentacao(...)` e seu `return`,
+           linhas 285-300 de board-flow/bin/classify_needs_human.py em
+           HEAD a0acdfe); GREEN antes (45 passed); RED depois em 4 checks:
+           test_classifica_artefato_real[WEGO-2117/2275/2276-nada-a-provar]
+           e test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais;
+           restaurado com `git checkout --
+           board-flow/bin/classify_needs_human.py`, GREEN de novo (45
+           passed)."
+        - "PASS (RED confirmado): removida a condição
+           `_so_documentacao(scope.get('changed_files'))` isolada (mantendo
+           changed_classes==[], pert==skipped, l4==n/a); GREEN antes; RED
+           depois em 2 checks: test_classifica_artefato_real[WEGO-2021-teste-cego]
+           (o card com application.properties passa a virar
+           'nada-a-provar' incorretamente) e
+           test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais (caso
+           `config`); restaurado, GREEN de novo."
+        - "PASS (RED confirmado): removida a condição
+           `l4.get('status') == 'n/a'` isolada; GREEN antes; RED depois em 1
+           check: test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais
+           (caso `l4_rodou`, que seta l4_adversarial_input.status='pass');
+           restaurado, GREEN de novo."
+        - "PASS (RED confirmado — fecha o gap da rodada anterior, head
+           833946c, onde esta mesma perturbação isolada tinha sobrevivido
+           com 45 passed / zero falhas): removida a condição
+           `pert.get('status') == 'skipped'` isolada (mantendo
+           changed_classes==[], l4==n/a, _so_documentacao(...)); GREEN
+           antes; RED depois em 1 check:
+           test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais, no
+           novo caso sintético `pert_rodou` (changed_classes=[], L4 n/a,
+           changed_files=[docs/x.md], perturbation.status='pass', sem
+           routing_reason): `assert classify(pert_rodou)[0] !=
+           'nada-a-provar'` -> AssertionError ('nada-a-provar' !=
+           'nada-a-provar'), porque sem essa condição o bloco novo passa a
+           classificar até perturbação que RODOU e passou como
+           'nada-a-provar'. Restaurado com `git checkout --
+           board-flow/bin/classify_needs_human.py`, GREEN de novo (45
+           passed)."
+      run: "Baseline GREEN confirmado numa worktree descartável nova
+            (`git worktree add --detach /tmp/proof-classificador-nh2
+            a0acdfe`) antes de qualquer perturbação: `python3 -m pytest
+            tests/test_needs_human_motivos.py -q` -> '45 passed' (0.22s-0.23s).
+            As 4 perturbações acima foram refeitas isoladas, uma condição
+            por vez, cada uma restaurada com `git checkout --
+            board-flow/bin/classify_needs_human.py` antes da próxima.
+            CLI real rodado ao final contra artefatos de produção
+            (`python3 board-flow/bin/classify_needs_human.py
+            /Users/alegomes/coding/wego/wego-acessos-backend`) confirmou
+            WEGO-2117/2275/2276/2287 -> 'nada-a-provar' com a evidência
+            'diff sem classe de produção (changed_classes vazio)' e
+            WEGO-2021 -> 'teste-cego' com 'perturbação externa não pôde
+            rodar'. Worktree removida ao final (`git worktree remove
+            --force /tmp/proof-classificador-nh2`) sem tocar a árvore
+            principal."
+    pit:
+      status: absent
+      results:
+        - "pitest não está no pom/setup deste repo (harness Python, sem
+           Maven); não provisionado por instrução explícita da tarefa."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "As 4 fixtures reais (WEGO-2021/2117/2275/2276) mais o caso
+          sintético `pert_rodou` (adicionado em a0acdfe) cobrem, em
+          conjunto, as 4 condições do bloco novo: changed_classes==[]
+          (com contraste em `com_classe`), pert.status=='skipped' (com
+          contraste em `pert_rodou`), l4.status=='n/a' (com contraste em
+          `l4_rodou`) e _so_documentacao (com contraste em `config` e no
+          próprio WEGO-2021). Nenhuma condição do bloco ficou sem um caso
+          que a contrastasse — ver l3_load_bearing.perturbation, todos os
+          4 resultados 'pass'."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff muda um classificador Python puro (regex/dict lookup
+             sobre um YAML já carregado) e sua suíte de testes/fixtures;
+             não abre parser de rede, endpoint HTTP nem qualquer entrada
+             não confiável -- a única 'entrada' é o artefato YAML que o
+             próprio harness já escreveu antes. Nenhum changed_class
+             pertence a módulo input-bearing (não há api-rest neste
+             repo)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type=Task, não Bug; não há regressão a reproduzir."
+routing_reason: "As 4 condições do bloco novo em classify() (mudança sem
+  código de produção só vira 'nada-a-provar' quando changed_classes==[] e
+  a perturbação está 'skipped' e L4 é 'n/a' e todo arquivo tocado é
+  documentação) agora são todas load-bearing: perturbadas isoladamente,
+  cada uma virou RED na suíte de 45 testes, incluindo a quarta condição
+  (pert.status=='skipped') que tinha sobrevivido na rodada anterior (head
+  833946c, UNPROVEN) e que o commit a0acdfe fechou com um caso sintético
+  sem prosa (`pert_rodou`) exigindo `!= 'nada-a-provar'` quando a
+  perturbação rodou de verdade. CLI real contra wego-acessos-backend
+  confirma o efeito pretendido nos 4 cards citados na tarefa (mais
+  WEGO-2287, beneficiado pela mesma regra) e a exceção correta (WEGO-2021,
+  mudança de configuração, continua 'teste-cego'). L4 é n/a (classificador
+  Python sem superfície de entrada) e a regressão de bug é n/a (issue_type
+  Task). Todos os níveis aplicáveis passaram com evidência colada --
+  PROVEN."
