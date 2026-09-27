@@ -21,8 +21,9 @@ Checks do projeto (cwd):
   - worktrees de agente esquecidas DENTRO do repo (.claude/worktrees/): elas
     duplicam o código-fonte para toda ferramenta que varre o projeto com find
   - handoffs: arquivos sem update há >30d (fonte de fatos stale)
-  - ambiente (.claude/env.yaml, ver docs/env-manifest.md): portas declaradas
-    ocupadas por processo de OUTRO diretório (lsof) e containers de `services`
+  - ambiente (docs/env.yaml, legado .claude/env.yaml ainda lido; ver
+    docs/env-manifest.md): portas declaradas ocupadas por processo de OUTRO
+    diretório (lsof) e containers de `services`
     ausentes no `docker ps` (best-effort; sem docker → skip silencioso).
     O `healthcheck:` do manifest NUNCA roda aqui — doctor é só leitura.
   - versão da CLI `twg` (Atlassian): a instalada (`twg --version`) contra a
@@ -526,7 +527,7 @@ def check_project(cwd: Path):
     check_aguardando_merge(root)
 
 
-# ── Ambiente (.claude/env.yaml) ─────────────────────────────────────────
+# ── Ambiente (docs/env.yaml, legado .claude/env.yaml) ───────────────────
 
 def env_manifest_list(path: Path, key: str):
     """Lê uma chave-lista de topo do env.yaml sem pyyaml (formato raso —
@@ -646,15 +647,18 @@ def check_arvore_suja(root: Path):
 
 
 def check_env_manifest(root: Path):
-    """Confere o manifesto de ambiente (.claude/env.yaml) contra a realidade.
-    Só leitura: o `healthcheck:` declarado NUNCA é executado aqui."""
-    ef = root / ".claude" / "env.yaml"
-    if not ef.exists():
+    """Confere o manifesto de ambiente (docs/env.yaml, legado .claude/env.yaml
+    ainda lido) contra a realidade. Só leitura: o `healthcheck:` declarado
+    NUNCA é executado aqui."""
+    if WT is None:
+        return
+    ef = WT.env_manifest_path(str(root))
+    if ef is None:
         return
     ports = env_manifest_list(ef, "ports")
     services = env_manifest_list(ef, "services")
     if not ports and not services:
-        ok("ambiente", "env.yaml presente, sem ports/services declarados")
+        ok("ambiente", f"{ef.relative_to(root)} presente, sem ports/services declarados")
         return
 
     root_real = os.path.realpath(str(root))
