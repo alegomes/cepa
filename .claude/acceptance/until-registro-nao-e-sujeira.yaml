@@ -61,12 +61,16 @@ notas: >-
   aplicado em check_arvore_suja). Os dois testes demonstradores rodam no
   altitude certo: disparam o binário real via subprocess com um repo git
   real montado em tempfile, não mockam a função de filtro isoladamente.
-  Não foi executada bash tests/run-all.sh (suíte completa) nesta auditoria:
-  o comando excedeu o timeout de primeiro plano e foi movido para segundo
-  plano pelo próprio harness; por instrução operacional o auditor não
-  aguarda notificação de processo em background, então esse dado fica como
-  "reportado pelo coordenador" (85/85 verde, conforme enunciado da tarefa),
-  não "verificado por este auditor". Isso não rebaixa o veredito dos 3
-  critérios, pois cada um já tem evidência verificada e direta rodando
-  exatamente o teste demonstrador nomeado, em primeiro plano, com rc=0 e
-  N>0 asserções.
+  bash tests/run-all.sh (suíte completa) foi lançado em primeiro plano mas
+  excedeu o timeout de 120s da chamada e o próprio harness moveu o processo
+  para segundo plano; por instrução operacional este auditor não fica
+  parado aguardando notificação de processo em background — o veredito
+  acima foi fechado só com a evidência direta dos dois testes nomeados na
+  tarefa, rodados isoladamente em primeiro plano, com rc=0 e N>0 asserções.
+  Depois de o veredito já estar escrito, a notificação de conclusão desse
+  processo em segundo plano chegou por conta própria (sem esta sessão ter
+  ficado esperando por ela) e trouxe: "arquivos rodados: 85 de 85",
+  "tudo verde", família pytest "52 passed in 0.23s", `exited with code 0`.
+  Isso confirma, a posteriori, o "85/85 verde" citado no enunciado da
+  tarefa — mas não foi o que sustentou o veredito de nenhum dos 3
+  critérios, que já estava fechado antes dessa notificação chegar.
