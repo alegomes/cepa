@@ -60,6 +60,7 @@ LANES = {
     "design":        ("ux-architect",  "docs/design/f.md", "src/f.js"),
     "discovery":     ("user-researcher", "docs/discovery/f.md", "src/f.js"),
     "docs-topology": ("doc-author",    "docs/how-to/f.md", "src/f.js"),
+    "marketing":     ("copywriter",    "docs/marketing/x/pecas/f.md", "src/f.js"),
 }
 
 # Marcas nos comandos: {IN} arquivo na pista, {OUT} arquivo fora da pista,

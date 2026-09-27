@@ -4,11 +4,12 @@ A denormalized view of every agent across all topologies in this
 marketplace. Source of truth for each agent's prose is its own file
 under `<topology>/agents/`. Source of truth for write-glob enforcement
 is each topology's own `hooks/path-lock.py` (build-team, build-hex,
-discovery, design, and docs have one; build-solo doesn't, by design).
+discovery, design, marketing, and docs have one; build-solo doesn't, by
+design).
 
-The marketplace ships **ten plugins**: `common` (skills + expertise),
-six topologies (`build-team`, `build-solo`, `build-hex`, `discovery`,
-`design`, `docs`), two cross-cutting layers (`board-flow`,
+The marketplace ships **eleven plugins**: `common` (skills + expertise),
+seven topologies (`build-team`, `build-solo`, `build-hex`, `discovery`,
+`design`, `marketing`, `docs`), two cross-cutting layers (`board-flow`,
 `review-gate`), and the experimental `maestro` orchestrator. Every one of
 them is documented below.
 
@@ -194,6 +195,41 @@ Explore → Spec'd → Handed off) can also be driven per-column via
 `docs/design/reviews/**`). Design agents cannot write code, only design
 artifacts. `prototyper` is the only agent in the marketplace holding the
 Gamma/Canva MCP tools.
+
+---
+
+## marketing
+
+Content-production topology. Turns a raw content request (sales-enablement,
+copy, proposals) into a reviewed, factually grounded set of pieces. Produces
+artifacts, never code.
+
+| Agent | Role | Reports to | Delegates to | Tools | Writes |
+|---|---|---|---|---|---|
+| `content-lead` | lead (orchestrator) | main session | the 4 workers below | Read, Glob, Grep, Task | nothing except own expertise |
+| `content-strategist` | worker (Strategize) — sole writer of `BRIEF.md` | content-lead | — | Read, Glob, Grep, Write | `docs/marketing/*/BRIEF.md` |
+| `copywriter` | worker (Write) — one piece per invocation, parallelizable | content-lead | — | Read, Glob, Grep, Write | `docs/marketing/*/pecas/**` |
+| `brand-style-critic` | worker (Review) — gate, PASS / REVISE | content-lead | — | Read, Glob, Grep, Write | `docs/marketing/reviews/**` |
+| `fact-checker` | worker (Review) — gate, PASS / REVISE | content-lead | — | Read, Glob, Grep, Write | `docs/marketing/reviews/**` |
+
+**Commands:**
+
+| Command | Purpose |
+|---|---|
+| `/marketing:brief-write-review <request>` | Run the canonical content loop: brief (content-strategist) → write (copywriters in parallel, one per piece) → review (brand-style-critic ∥ fact-checker) ⇄ write, capped at 2 revise rounds → delivery report. |
+
+Can also be driven per-column via `/board-flow:advance`, the same seam
+`design` uses today. No new board-flow code — it's the existing generic
+column-lifecycle mechanism.
+
+**Path-lock** is keyed to `docs/marketing/**`, split per worker:
+`content-strategist` is the only agent that may write `BRIEF.md`;
+`copywriter` is locked to its own piece under `pecas/**`; both gates are
+locked to `docs/marketing/reviews/**`. Marketing agents cannot write code,
+only content artifacts. An optional project-level
+`docs/marketing/brand-rules.yaml` configures `brand-style-critic`'s gate
+(see `marketing/brand-rules.example.yaml`); absent, it applies universal
+rules only and says so in its report.
 
 ---
 

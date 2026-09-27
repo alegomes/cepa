@@ -88,6 +88,7 @@ TOPOLOGIES = {
     "discovery": ["discovery"],
     "design": ["design"],
     "docs-topology": ["docs-topology", "docs"],
+    "marketing": ["marketing"],
 }
 
 # Funções do path-lock.py que TÊM de ser idênticas nas cópias onde existem.

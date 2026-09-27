@@ -123,6 +123,10 @@ form (`/plan-build-validate`) returns "Unknown command".
 
 - `/design:explore-critique-spec <feature>`.
 
+### "I want to write sales-enablement copy, marketing content, or a proposal"
+
+- `/marketing:brief-write-review <request>`.
+
 ### "I want to document an existing project for onboarding"
 
 - `/docs:survey`, then `/docs:declutter`, `/docs:checkpoint`, `/docs:author`, `/docs:finalize`. `/docs:status` shows where you are.
@@ -236,6 +240,12 @@ Discovery cards advance column-by-column via `/board-flow:advance` (no
 | Command | Argument | What it does |
 |---|---|---|
 | `/design:explore-critique-spec` | `<feature description or docs/design/<slug>/ path>` | The canonical design flow: explore (flows and visual in parallel), reconcile against the design system, prototype via Gamma/Canva, critique, and assemble a build-ready design spec. |
+
+## marketing
+
+| Command | Argument | What it does |
+|---|---|---|
+| `/marketing:brief-write-review` | `<content request or docs/marketing/<slug>/ path>` | The canonical content flow: `content-strategist` distills a shared, sourced brief (audience, offer, canonical-numbers table, brand/style rules); `copywriter` writes every piece in parallel, one invocation per piece; `brand-style-critic` and `fact-checker` review in parallel and loop REVISE findings back to the owning worker, capped at 2 rounds before reporting BLOCKED with the named disagreement. |
 
 ## docs
 

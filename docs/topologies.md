@@ -1,12 +1,14 @@
 # Choosing a topology
 
-The marketplace ships six topology plugins, plus `common` (required)
+The marketplace ships seven topology plugins, plus `common` (required)
 and the `board-flow` + `review-gate` workflow plugins (optional). Pick **one build
 topology per project**
 — importing two snippets gives the orchestrator conflicting instructions.
 `bin/install.sh --topology=NAME` wires `build-hex`, `build-team`,
-`build-solo`, `discovery` and `docs`; `design` is installed as a plugin
-but not wired by `--topology` (see [design](#design-product-design-upstream-of-the-build)).
+`build-solo`, `discovery` and `docs`; `design` and `marketing` are installed
+as plugins but not wired by `--topology` (see
+[design](#design-product-design-upstream-of-the-build) and
+[marketing](#marketing-content-production)).
 The `maestro` plugin, which runs several work slices in parallel
 worktrees, is also installed; it is experimental and not a topology. See
 [`maestro.md`](maestro.md).
@@ -18,6 +20,7 @@ worktrees, is also installed; it is experimental and not a topology. See
 | **build-solo** | 2 | One-file tweaks, bug fixes, small refactors. No leads, no per-Task loop. | tool-allowlist only (`pair-reviewer` is read-only via tools) | none — describe in chat |
 | **discovery** | 6 | Continuous product discovery: signals → opportunities → validated bets → engineering brief. Sits *upstream* of build topologies. | `docs/discovery/**` | `capture` (plus generic `/board-flow:advance` for column transitions) |
 | **design** | 6 | Product design: a feature brief → a build-ready design spec, before engineering builds. Upstream of the build teams. | `docs/design/**` | `explore-critique-spec` (+ per-column lifecycle via `/board-flow:advance`) |
+| **marketing** | 5 | Content production: a raw request → reviewed, grounded commercial prose (sales-enablement, copy, proposals). | `docs/marketing/**` | `brief-write-review` (+ per-column lifecycle via `/board-flow:advance`) |
 | **docs** | 9 | Sweep an existing project into a grounded Diátaxis doc tree for onboarding. | `docs/**`, `docs/_survey/**` | `survey`, `declutter`, `checkpoint`, `author`, `finalize`, `status` |
 
 ## How to choose
@@ -198,6 +201,37 @@ the design instructions, do by hand what the installer does for the
 other topologies: copy `design/design-topology.md` from this repo into
 your project's `.claude/` and add the line `@.claude/design-topology.md`
 to your `CLAUDE.md`.
+
+### marketing (content production)
+
+5 agents (content-lead + content-strategist, copywriter, brand-style-critic,
+fact-checker). Turns a raw content request into a **reviewed, grounded set
+of pieces** — sales-enablement kits, ad copy, proposal sections — before
+they ship. Not a build topology: it produces artifacts under
+`docs/marketing/**`, never code, and composes *alongside* a build topology
+rather than replacing it.
+
+Run `/marketing:brief-write-review "<request>"` for the linear flow, or
+drive it per-column with `/board-flow:advance`, the same seam `design`
+uses. `content-strategist` is the sole writer of the versioned
+`BRIEF.md` (audience, offer, sourced canonical-numbers table, brand/style
+rules); `copywriter` is parallelizable, one piece per invocation,
+write-locked to its own file, and never invents a number outside the
+brief. `brand-style-critic` and `fact-checker` run as two independent
+gates in parallel — both must PASS before a piece is Delivered.
+
+An optional project-level `docs/marketing/brand-rules.yaml` (style
+prohibitions, reserved terminology, anonymization list, honest-claims
+rules) configures `brand-style-critic`'s gate; see
+`marketing/brand-rules.example.yaml` for the shape. Absent, the critic
+applies only the universal rules and says so in its report.
+
+`bin/install.sh` installs the `marketing` plugin but `--topology=marketing`
+is rejected, so the snippet is not wired for you. To give the orchestrator
+the marketing instructions, do by hand what the installer does for the
+other topologies: copy `marketing/marketing-topology.md` from this repo
+into your project's `.claude/` and add the line
+`@.claude/marketing-topology.md` to your `CLAUDE.md`.
 
 ### docs (documentation & onboarding)
 

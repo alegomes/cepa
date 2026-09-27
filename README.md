@@ -332,7 +332,11 @@ team behind one of the modes:
 |---|---|---|
 | **`discovery`** | descoberta | Turns raw signals into validated opportunities and hands engineering a delivery brief |
 | **`design`** | design | Turns a feature brief into a build-ready design spec (flows, visual, prototype, critique) |
+| **`marketing`** | *(none yet)* | Turns a raw content request into reviewed, grounded commercial prose (brief, copy, brand-style and fact-check gates) |
 | **`docs`** | documentação | Sweeps an existing project into a grounded doc tree for onboarding, in five checkpointed phases |
+
+`marketing` has no dedicated session mode yet — drive it with
+`/marketing:brief-write-review` directly, or per-column via `board-flow`.
 
 **A workflow.** A workflow plugin ships no builders. It runs a process *around* whichever
 team you installed: it decides when the team is called, on what, and what has to be true

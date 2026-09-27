@@ -67,6 +67,7 @@ TOPOLOGIES = [
     {"dir": "discovery",     "plugin": "discovery",  "alias": "discovery", "noun": "artefatos"},
     {"dir": "design",        "plugin": "design",     "alias": "design",    "noun": "artefatos"},
     {"dir": "docs-topology", "plugin": "docs",       "alias": "docs",      "noun": "artefatos"},
+    {"dir": "marketing",     "plugin": "marketing",  "alias": "marketing", "noun": "artefatos"},
 ]
 
 # Como cada cópia obtém o allowlist do path-lock irmão. O build-hex é o único

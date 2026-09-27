@@ -1,0 +1,47 @@
+# Example brand-rules.yaml — copy to <project-root>/docs/marketing/brand-rules.yaml
+# and edit for your project. `brand-style-critic` reads this file if it
+# exists; if it's absent, the critic applies only the universal rules
+# (no em dash in pt-BR prose, honest claims vs. roadmap, no unattributed
+# superlatives, cross-piece consistency) and says so in its report.
+#
+# Nothing here is enforced by any hook — this is read by an agent
+# (brand-style-critic), not by a path-lock. Keep it small and specific:
+# a rule nobody can check against a piece of text is noise the critic
+# will skip.
+
+# Words/phrases the copy must never use, with the reason. A style
+# prohibition, not a factual one — "cutting-edge" might be true and still
+# banned because it's a cliché the brand doesn't want.
+style_prohibitions:
+  - term: "revolutionary"
+    reason: "overused superlative; say what specifically changed instead"
+  - term: "seamless"
+    reason: "vague; describe the actual integration point"
+
+# Terminology that MUST be used verbatim when referring to a named
+# concept — the brand's own vocabulary, not a synonym a copywriter reached
+# for. A mismatch here is a BLOCKER finding, not a style nit.
+reserved_terminology:
+  - use: "WeGo Suite"
+    not: ["the platform", "our system", "WeGo Platform"]
+  - use: "Customer Success"
+    not: ["support team", "CS team"]
+
+# Names, logos, or figures that must be anonymized or generalized before
+# a piece ships externally — e.g. a named pilot customer who hasn't
+# signed off on being referenced.
+anonymization:
+  - subject: "Client Alpha (internal codename)"
+    replace_with: "a mid-market logistics customer"
+    reason: "no external-reference sign-off yet — see legal thread LINK"
+
+# What may be claimed as shipped/available today vs. what must read as
+# roadmap/beta/planned. `brand-style-critic` treats a roadmap item
+# presented as shipped as at least a MAJOR finding regardless of this
+# list; use this section for project-specific nuance (e.g. a feature in
+# limited beta that can be named but not promised generally).
+honest_claims:
+  - claim: "real-time sync"
+    status: "beta — invite-only, not GA"
+    may_say: "available in limited beta"
+    must_not_say: "available today for all customers"

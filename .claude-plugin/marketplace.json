@@ -96,6 +96,18 @@
       ]
     },
     {
+      "name": "marketing",
+      "source": "./marketing",
+      "description": "Content-production topology — content-lead + 4 workers (content-strategist, copywriter, brand-style-critic, fact-checker) that turn a raw content request into reviewed, grounded commercial prose (sales-enablement, copy, proposals). Path-lock keyed to docs/marketing/**; produces artifacts, never code. content-strategist is the sole writer of BRIEF.md; copywriter is parallelizable, one piece per invocation. Two gates run in parallel: brand-style-critic (style/terminology/anonymization/honesty) and fact-checker (every claim traces to the brief). One entry point: /marketing:brief-write-review. Requires common@cepa. Pair with discovery for the upstream brief.",
+      "tags": [
+        "agents",
+        "marketing",
+        "copywriting",
+        "content",
+        "sales-enablement"
+      ]
+    },
+    {
       "name": "review-gate",
       "source": "./review-gate",
       "description": "Pre-merge review gate — code reaches main through a reviewed pull request, not a direct merge. Two doors owned here: open (hygiene gate via /code-review) and merge (QA gate via the topology's proof-reviewer). One quarantined adapter (bitbucket-expert) owns all Bitbucket REST via bundled bin/open-pr.sh + bin/merge-pr.sh. A fence hook (no-direct-main) blocks direct push/merge to the default branch and redirects to the flow; a nudge hook (push-nudge) suggests a PR after a feature-branch push; auto_merge merges on a PROVEN QA verdict. Optional board-flow seam maps open→In Review, merge→Done. Standalone otherwise. Pair with board-flow@cepa for the Jira lifecycle.",
