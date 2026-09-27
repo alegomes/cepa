@@ -1,6 +1,6 @@
 ---
 description: Executa em lote a fila `single-track` do repo — `.claude/programs/<nome>/plan.yaml` — NA ORDEM QUE ELA GUARDA. É a etapa 3 do desenho "um escritor, três fontes", e fecha o ciclo sem tracker: `/common:plan` escreve a fila, `/common:next` aponta UM passo, este comando executa vários. Não exige Jira e nunca consulta um: o único lote que existia até aqui, o `/board-flow:drain`, tira a ordem do rank do quadro — exatamente a ordem que o plano existe para substituir. Copia do drain o que vale: parar no primeiro item travado e o teto `--max`. Uma rota que só o humano fecha ADIA o item e o lote segue, cobrando todas as rotas no fim. Reserva cada item antes de tocá-lo — com dono registrado, para saber se é sessão viva ou run morto — e registra o desfecho de todos. Reconcilia contra o quadro antes de montar o lote, e transiciona o card ao fechar, quando o repo tem Jira.
-argument-hint: <nome> [--max N] [--dry-run] [--na-branch <branch>]
+argument-hint: <nome> [--max N] [--dry-run] [--offline] [--na-branch <branch>]
 interaction: routine
 ---
 

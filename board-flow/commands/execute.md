@@ -15,6 +15,7 @@ Execute a single, already-tracked Jira card. Reviews the card detail before exec
 ## Variables
 
 - `$ARGUMENTS` — the Jira issue key (e.g., `WEGO-1234`).
+- `--force-feature-flow` — run the feature flow (plan-build-validate) even when the card is a Bug, instead of dispatching to `/board-flow:fix` (see step 1a).
 - `--no-scope` — suppress the out-of-scope warning (see step 1). You named the card by key, so it runs regardless; this just silences the heads-up.
 
 ## Instructions

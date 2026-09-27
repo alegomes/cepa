@@ -13,6 +13,7 @@ Kick off an unattended run. The team works without asking you questions, decides
 ## Variables
 
 - `$ARGUMENTS` — the task description. May be prefixed with `--topology=NAME` and/or `--flow=NAME` flags. The description after the flags is what you'd normally pass to `plan-build-validate` / `reproduce-fix-verify` / `investigate`.
+- `--no-jira` — don't wrap the run with the Jira lifecycle even when the description has a Jira key and `board-flow.yaml` exists: no transition to In Progress, no Implementation Summary. The run is not Jira-tracked (see step 3).
 
 ## Instructions
 
