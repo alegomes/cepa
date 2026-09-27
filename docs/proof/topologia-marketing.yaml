@@ -1,0 +1,137 @@
+schema_version: 2
+card: topologia-marketing
+verdict: unproven
+reviewed_at: 2026-09-26T22:55:00-03:00
+base_commit: bf3b4f1
+head_commit: d8f7b21
+issue_type: Feature
+scope:
+  changed_classes:
+    - { class: "marketing/hooks/path-lock.py (ALLOWED_WRITES, path_matches, detect_agent, is_own_expertise_file)", module: "marketing-hooks", external_observable: false, substituted_by_double: null }
+    - { class: "marketing/hooks/bash-path-lock.py (gerado pelo molde comum de bin/gen-locks.py)", module: "marketing-hooks", external_observable: false, substituted_by_double: null }
+    - { class: "bin/gen-locks.py (linha 'marketing' em TOPOLOGIES)", module: "build-scripts", external_observable: false, substituted_by_double: null }
+    - { class: ".claude-plugin/marketplace.json (entrada 'marketing')", module: "manifest", external_observable: false, substituted_by_double: null }
+    - { class: "bin/install.sh (linha de listagem da topologia marketing)", module: "build-scripts", external_observable: false, substituted_by_double: null }
+    - { class: "tests/test_lock_copies_drift.py (linha 'marketing': ['marketing'] em TOPOLOGIES)", module: "tests", external_observable: false, substituted_by_double: null }
+    - { class: "tests/test_bash_path_lock_exec.py (linha 'marketing' em LANES)", module: "tests", external_observable: false, substituted_by_double: null }
+    - { class: "docs/commands.md (linha da tabela de /marketing:brief-write-review)", module: "docs", external_observable: false, substituted_by_double: null }
+    - { class: "marketing/agents/*.md, marketing/commands/brief-write-review.md", module: "marketing-prompts", external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python/markdown (harness cepa), sem camada Quarkus/HTTP nem Maven —
+    PIT nao se aplica; a tecnica universal foi perturbacao em worktree
+    descartavel via `git worktree add --detach`. `marketing/agents/*.md` e
+    `marketing/commands/brief-write-review.md` sao texto de prompt
+    declarativo (instrucao para o LLM, nao codigo executavel); marcados n/a
+    para perturbacao por instrucao explicita da tarefa — as checagens que os
+    cobrem (`test_agentes_frontmatter`, `test_content_lead_nunca_produz`,
+    `test_comando_brief_write_review`) sao asserts textuais literais sobre o
+    proprio arquivo, cuja natureza de prova (grep estrutural, nao
+    comportamento executavel) ja e auto-evidente sem perturbacao.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: survived
+      results:
+        - "PASS (RED confirmado): marketing/hooks/path-lock.py:46 — alargado o
+           glob do copywriter de docs/marketing/*/pecas/** para
+           docs/marketing/** (deixando-o escrever BRIEF.md); GREEN antes,
+           `python3 tests/test_topologia_marketing.py` foi RED em 1 check
+           ('copywriter NÃO pode escrever BRIEF.md (só lê)'); restaurado
+           via `git checkout -- marketing/hooks/path-lock.py`, GREEN de novo."
+        - "PASS (RED confirmado): .claude-plugin/marketplace.json — removida a
+           entrada 'marketing' de plugins[]; GREEN antes, RED em 1 check
+           ('marketplace.json tem exatamente uma entrada marketing');
+           restaurado, GREEN de novo."
+        - "PASS (RED confirmado): docs/commands.md:248 — removida a linha da
+           tabela do comando; GREEN antes, RED em
+           test_topologia_marketing.py ('docs/commands.md tem a linha do
+           /marketing:brief-write-review') E em test_catalogo_comandos.py
+           ('todo comando está em docs/commands.md — fora do catálogo:
+           /marketing:brief-write-review'); restaurado, GREEN nos dois."
+        - "PASS (RED confirmado): tests/test_bash_path_lock_exec.py:63 —
+           removida a linha 'marketing' de LANES; GREEN antes, RED (KeyError
+           'marketing' em test_baldes — o HOOKS é descoberto por glob
+           */hooks/bash-path-lock.py e inclui marketing independente de
+           LANES, então a ausência derruba o processo inteiro em vez de só
+           pular a topologia); restaurado, GREEN de novo."
+        - "PASS (RED confirmado): marketing/hooks/bash-path-lock.py:80 —
+           trocado PLUGIN_NAME de 'marketing' para 'wrong' no arquivo GERADO
+           (prova que o arquivo em disco, não uma cópia teórica, é o que
+           roda); GREEN antes, RED em 99 checks nas 6 cópias (cascata: todo
+           DENY vira ALLOW porque o hook deixa de reconhecer o agent_type
+           'marketing:...'); restaurado, GREEN de novo."
+        - "SURVIVOU (gap real): bin/gen-locks.py:70 — removida a linha
+           '{\"dir\": \"marketing\", ...}' de TOPOLOGIES; GREEN antes E
+           DEPOIS. `python3 bin/gen-locks.py --check` continuou imprimindo
+           '✓ as 5 cópias são exatamente o molde renderizado' (contando só
+           as 5 topologias remanescentes, sem notar que marketing sumiu da
+           lista) e `python3 tests/test_lock_copies_drift.py` continuou
+           'all green' — nenhum teste falha quando a linha de registro em
+           bin/gen-locks.py desaparece; ela só deixa de existir uma
+           verificação futura (a próxima vez que o molde comum mudar,
+           marketing não será regenerado nem cobrado por --check)."
+        - "SURVIVOU (mesmo gap, na cópia espelhada): tests/test_lock_copies_drift.py:91
+           — removida a linha 'marketing': ['marketing'] do dict TOPOLOGIES
+           deste próprio arquivo de teste; GREEN antes E DEPOIS
+           ('all green'). `test_todas_as_copias_existem` compara
+           len(found) == len(TOPOLOGIES) usando o MESMO dict que perdeu a
+           chave, então a contagem cai em par e o teste não percebe que
+           marketing deixou de ser comparado."
+      run: "Baseline GREEN confirmado na worktree principal antes de
+            qualquer perturbação: test_topologia_marketing.py,
+            test_lock_copies_drift.py, test_bash_path_lock_exec.py e
+            test_catalogo_comandos.py — 'all green' / 'tudo verde em 6
+            cópias' / 'tudo ok (64 comandos no catálogo)' nos quatro. Cada
+            perturbação acima rodada isolada em worktree descartável detached
+            de d8f7b21 (git worktree add --detach), restaurada com
+            `git checkout -- <arquivo>` entre cada uma, worktree removida ao
+            final (`git worktree remove --force`) sem tocar a árvore
+            principal."
+  l2_coverage:
+    status: gap
+    uncovered_lines:
+      - "bin/gen-locks.py:70 (linha 'marketing' em TOPOLOGIES) — nenhum
+         teste falha se removida; sem ferramenta de cobertura no projeto
+         (não é Java/Maven), gap confirmado estruturalmente por perturbação
+         (ver l3 acima), não por relatório de cobertura."
+      - "tests/test_lock_copies_drift.py:91 (linha 'marketing' em TOPOLOGIES
+         deste arquivo) — mesmo gap, espelhado no teste que deveria pegá-lo."
+    run: "todas as outras linhas alteradas no diff (path-lock.py, o arquivo
+          gerado bash-path-lock.py, marketplace.json, LANES em
+          test_bash_path_lock_exec.py, a linha de docs/commands.md) têm
+          teste dedicado que virou RED ao serem perturbadas — ver l3."
+  l4_adversarial_input:
+    status: n/a
+    reason: "marketing/hooks/path-lock.py e bash-path-lock.py são hooks
+             PreToolUse que leem um payload JSON gerado pelo próprio Claude
+             Code na máquina do operador (não há endpoint HTTP nem entrada de
+             rede/usuário não confiável); os demais arquivos tocados
+             (marketplace.json, gen-locks.py, install.sh, docs/commands.md,
+             markdown de agentes/comando) são manifesto, script de build e
+             prosa. Não existe módulo api-rest/Quarkus neste repo (harness
+             Python/markdown) nem qualquer módulo input-bearing tocado pelo
+             diff."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: "Quase todo hunk mudado (path-lock.py, o arquivo GERADO
+  bash-path-lock.py, marketplace.json, LANES do teste de execução, a linha do
+  catálogo de comandos) foi perturbado isoladamente numa worktree descartável
+  e voltou VERMELHO — nenhum desses sobreviveu à quebra. Mas um hunk real do
+  diff sobreviveu: a linha que registra 'marketing' em
+  bin/gen-locks.py:TOPOLOGIES (e sua espelhada em
+  tests/test_lock_copies_drift.py:TOPOLOGIES) pode ser apagada sem que
+  NENHUM teste do repositório acuse — o `--check` do gerador e o teste de
+  anti-deriva contam quantas cópias existem usando a MESMA lista que perdeu a
+  entrada, então a contagem sempre bate consigo mesma. Isso não é
+  externamente observável (não há camada HTTP neste harness), mas é
+  exatamente o `defense-in-depth` que este gate existe para pegar: um passo
+  do onboarding da topologia nova (a linha em TOPOLOGIES) não é hoje
+  load-bearing — se ela sumir por engano numa edição futura, a cópia
+  `marketing/hooks/bash-path-lock.py` para de ser regenerada quando o molde
+  comum mudar, e nada avisa. Rota mecânica: hunk sobrevivente em nível não
+  PIT-instrumentável → l3.perturbation: survived → l2_coverage: gap →
+  `proven` estruturalmente indisponível → UNPROVEN."

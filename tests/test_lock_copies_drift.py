@@ -62,6 +62,7 @@ nomeando a cópia divergente. Se ficar verde, ele não está provando nada.
 """
 
 import ast
+import importlib.util
 import re
 import subprocess
 import sys
@@ -483,8 +484,72 @@ def test_bash_path_lock_sai_do_molde():
           r.returncode == 0, (r.stdout + r.stderr).strip()[:300])
 
 
+def _gen_locks_topologias():
+    """Carrega bin/gen-locks.py como módulo e devolve seu TOPOLOGIES.
+
+    `importlib` porque o nome do arquivo tem hífen (`gen-locks.py`) e não dá
+    para `import` direto. Carregar o módulo não executa nada: o gerador só
+    age dentro de `if __name__ == "__main__"`, e este teste nunca é chamado
+    como `__main__`.
+    """
+    caminho = REPO / "bin" / "gen-locks.py"
+    spec = importlib.util.spec_from_file_location("gen_locks_drift_check", str(caminho))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.TOPOLOGIES
+
+
+def test_lista_de_topologias_bate_com_o_disco():
+    """As 3 fontes da lista de topologias com hook têm de dizer a mesma coisa.
+
+    O gap que o proof-gate achou: apagar a linha `marketing` só de
+    `bin/gen-locks.py` (ou só do `TOPOLOGIES` deste arquivo) deixava os dois
+    testes correspondentes verdes, porque cada um comparava só contra a
+    própria lista — nenhum comparava a lista contra o disco. Uma topologia
+    podia sumir de uma fonte sem que ninguém detectasse, porque a outra fonte
+    nunca era consultada como árbitro.
+
+    As três fontes:
+
+      1. o disco — todo diretório com `hooks/bash-path-lock.py` de fato;
+      2. `bin/gen-locks.py`'s `TOPOLOGIES` — o que o gerador escreve;
+      3. o `TOPOLOGIES` deste arquivo — o que os outros casos deste arquivo
+         comparam.
+
+    As três têm de ser exatamente o mesmo conjunto de diretórios. Uma
+    divergência é reportada nomeando qual conjunto tem o quê, não só "não
+    bateu" — é isso que torna o teste, e não só a leitura do código, quem
+    decide se uma topologia nova (ou apagada) está registrada em todo lugar.
+
+    Perturbação (como saber que este caso prova algo): apague a linha
+    `marketing` de UMA das duas listas (`bin/gen-locks.py` ou o `TOPOLOGIES`
+    deste arquivo) e rode este arquivo — ele tem de ficar vermelho nomeando
+    a lista da qual ela sumiu. Se ficar verde, ele não está provando nada.
+    """
+    do_disco = {p.parent.parent.name
+                for p in REPO.glob("*/hooks/bash-path-lock.py")}
+    do_gerador = {t["dir"] for t in _gen_locks_topologias()}
+    deste_arquivo = set(TOPOLOGIES)
+
+    check("disco e bin/gen-locks.py: mesmo conjunto de topologias",
+          do_disco == do_gerador,
+          f"só no disco: {sorted(do_disco - do_gerador) or '—'}; "
+          f"só no gen-locks: {sorted(do_gerador - do_disco) or '—'}")
+
+    check("disco e TOPOLOGIES deste arquivo: mesmo conjunto de topologias",
+          do_disco == deste_arquivo,
+          f"só no disco: {sorted(do_disco - deste_arquivo) or '—'}; "
+          f"só no TOPOLOGIES do teste: {sorted(deste_arquivo - do_disco) or '—'}")
+
+    check("bin/gen-locks.py e TOPOLOGIES deste arquivo: mesmo conjunto de topologias",
+          do_gerador == deste_arquivo,
+          f"só no gen-locks: {sorted(do_gerador - deste_arquivo) or '—'}; "
+          f"só no TOPOLOGIES do teste: {sorted(deste_arquivo - do_gerador) or '—'}")
+
+
 def main():
     test_todas_as_copias_existem()
+    test_lista_de_topologias_bate_com_o_disco()
     test_bash_path_lock_sai_do_molde()
     test_bash_path_lock_identico()
     test_path_lock_nucleo_identico()

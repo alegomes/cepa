@@ -1,0 +1,116 @@
+card: topologia-marketing
+diff: bf3b4f1..d8f7b21
+status: complete
+criteria:
+  - id: AC1
+    description: >-
+      Novo plugin instalável marketing registrado como os irmãos (marketplace.json,
+      bin/install.sh, bin/gen-locks.py, docs/topologies.md, README).
+    altitude: install
+    surface: .claude-plugin/marketplace.json, bin/install.sh, bin/gen-locks.py, docs/topologies.md, README.md
+    test: tests/test_topologia_marketing.py (test_marketplace_entry, test_plugin_json) + inspeção do diff para bin/install.sh, bin/gen-locks.py, docs/topologies.md, README.md
+    layer: install-surface (parse de manifest) + diff review (linhas adicionadas nos 4 outros pontos de registro)
+    evidence: verified
+    run: "python3 tests/test_topologia_marketing.py -> exit 0, 51 checks 'ok', 'all green'"
+    result: complete
+
+  - id: AC2
+    description: >-
+      5 papéis: content-lead (lead, delega via Task, não escreve prosa),
+      content-strategist (BRIEF.md com tabela de números canônicos, cada linha
+      com fonte), copywriter (worker, uma peça por chamada, nunca inventa
+      número fora do brief), brand-style-critic (gate PASS/REVISE: proibições
+      de estilo, termos reservados, anonimização, claims honestos),
+      fact-checker (gate PASS/REVISE: todo número rastreia ao brief).
+    altitude: domain (conteúdo declarativo de prompt de agente — não há runtime LLM para exercitar em teste automatizado)
+    surface: marketing/agents/{content-lead,content-strategist,copywriter,brand-style-critic,fact-checker}.md
+    test: tests/test_topologia_marketing.py (test_agentes_frontmatter, test_content_lead_nunca_produz)
+    layer: structural (frontmatter tools/Task, frase "never delegates", frase "nothing except own expertise")
+    evidence: verified
+    run: "python3 tests/test_topologia_marketing.py -> exit 0, checks para os 5 agentes 'ok'"
+    result: complete
+    note: >-
+      A checagem estrutural (tools/frontmatter/frases-chave) é a altitude honesta
+      disponível para conteúdo declarativo de prompt; o comportamento em runtime
+      (copywriter realmente nunca inventar número) não é verificável sem rodar o
+      agente de fato, o que está fora do escopo de um teste determinístico. Li o
+      corpo integral dos 5 arquivos de agente e confirmei que as regras descritas
+      no card (uma peça por chamada, nunca inventa número, PASS/REVISE
+      determinístico, leitura de brand-rules.yaml opcional) estão escritas.
+
+  - id: AC3
+    description: >-
+      Um comando de flow /marketing:brief-write-review (brief → write em
+      paralelo → review dos dois gates ⇄ write, teto de 2 rodadas de REVISE
+      então BLOCKED).
+    altitude: cli (slash command)
+    surface: marketing/commands/brief-write-review.md, docs/commands.md
+    test: tests/test_topologia_marketing.py (test_comando_brief_write_review, test_catalogo_cita_o_comando) + tests/test_catalogo_comandos.py
+    layer: structural (frontmatter interaction/argument-hint, menção a content-lead e ao teto "2"+"REVISE") + varredura do catálogo de comandos
+    evidence: verified
+    run: >-
+      python3 tests/test_topologia_marketing.py -> exit 0;
+      python3 tests/test_catalogo_comandos.py -> exit 0, 'tudo ok (64 comandos no catálogo)'
+    result: complete
+
+  - id: AC4
+    description: >-
+      As 3 pendências de design respondidas em marketing/marketing-topology.md
+      "Decisões": brand-rules.yaml opcional por projeto (crítico avisa quando
+      ausente; exemplo incluído), board-flow no mesmo nível do design, BRIEF.md
+      versionado como fonte única.
+    altitude: domain (documento de decisão)
+    surface: marketing/marketing-topology.md ("## Decisões"), marketing/brand-rules.example.yaml
+    test: leitura direta do arquivo (não há teste automatizado para prosa de decisão)
+    layer: manual review
+    evidence: verified
+    run: "cat marketing/marketing-topology.md (lido integralmente) + ls marketing/brand-rules.example.yaml -> existe"
+    result: complete
+    note: >-
+      As 3 perguntas do BACKLOG.md são respondidas nominalmente na seção
+      "Decisões": (1) brand-rules.yaml opcional, crítico diz "no brand-rules
+      file found: universal rules only" quando ausente, exemplo comentado em
+      marketing/brand-rules.example.yaml; (2) board-flow no mesmo nível que
+      design hoje, via /board-flow:advance, sem código novo de board-flow;
+      (3) BRIEF.md versionado no repo do projeto como fonte única, fact-checker
+      confere contra a versão corrente, não uma cópia congelada.
+
+  - id: AC5
+    description: >-
+      Path-lock aplica a pista de escrita de cada papel (strategist só
+      BRIEF.md, copywriter só pecas/**, gates só reviews/**, lead nada) e o
+      Bash path-lock é o gerado (não copiado à mão).
+    altitude: hook (PreToolUse, invocado via JSON no stdin — subprocess)
+    surface: marketing/hooks/path-lock.py, marketing/hooks/bash-path-lock.py
+    test: >-
+      tests/test_topologia_marketing.py (test_pathlock_permite_peca_dentro_da_pista,
+      test_pathlock_nega_fora_da_arvore, test_pathlock_content_strategist_e_o_unico_dono_do_brief,
+      test_pathlock_gates_so_escrevem_reviews, test_pathlock_lead_nao_produz_nada,
+      test_pathlock_expertise_propria_sempre_liberada) + tests/test_lock_copies_drift.py
+      (bash-path-lock.py:* idêntico em 6 cópias, path-lock.py:* idêntico) +
+      tests/test_bash_path_lock_exec.py (lane marketing exercitada via subprocess
+      com comandos Bash reais)
+    layer: subprocess (payload JSON no stdin do hook real, exatamente como o
+      Claude Code invoca)
+    evidence: verified
+    run: >-
+      python3 tests/test_topologia_marketing.py -> exit 0 (copywriter permitido em
+      docs/marketing/x/pecas/a.md, negado em common/hooks/x.py e em BRIEF.md;
+      content-strategist permitido em BRIEF.md; brand-style-critic e fact-checker
+      permitidos só em reviews/**, negados em pecas/**; content-lead negado em
+      BRIEF.md; expertise própria sempre liberada);
+      python3 tests/test_lock_copies_drift.py -> exit 0, 'all green' (bash-path-lock.py
+      e path-lock.py idênticos nas 6 cópias, incluindo marketing);
+      python3 tests/test_bash_path_lock_exec.py -> exit 0, 'tudo verde em 6 cópias'
+      (lane marketing libera awk/curl/docker/python3/git dentro da pista e nega
+      balde 1 fora dela)
+    result: complete
+
+summary: >-
+  5 critérios, 5 complete. Rodei os 4 arquivos de teste indicados
+  (test_topologia_marketing.py, test_lock_copies_drift.py,
+  test_catalogo_comandos.py, test_bash_path_lock_exec.py) em primeiro plano,
+  cada um isolado, exit 0 e contagem de checks > 0 em todos. AC2 e AC4 são
+  conteúdo declarativo de prompt/decisão de design; a altitude honesta ali é
+  revisão estrutural/manual do texto, não um teste de comportamento em
+  runtime — nomeado explicitamente em cada nota, não escondido.
