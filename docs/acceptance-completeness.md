@@ -158,11 +158,19 @@ to its logical state through `status_map` in `board-flow.yaml`, or by normalisin
 (`In Review` -> `in_review`), and a name it cannot resolve is gated by default. A `twg` call that
 touches Jira but can't be read (for example `twg api ... -X POST`, or no
 card key on the command line) is blocked outright. The hook extracts the
-issue key and reads `.claude/acceptance/<KEY>.yaml`:
+issue key and looks for `<KEY>.yaml` in four places, first found wins:
+this worktree's `.claude/acceptance/` and `docs/acceptance/`, then the same two
+under the main clone (parent of `git rev-parse --git-common-dir`). Until
+2026-09-26 it read only the worktree's `.claude/acceptance/`, which is not
+versioned and not copied into a new worktree, so every transition made from a
+fresh worktree passed unaudited (WEGO-2218 reached Done on 2026-09-16 with the
+main clone's artifact saying `incomplete`). Reading the main clone is a
+deliberate exception to `session_root`: the build baseline describes one
+tree's code, the audit describes a card.
 
 | Artifact state | Hook |
 |---|---|
-| absent | ALLOW (audit hasn't run; not gated) |
+| absent in all four places | ALLOW (audit hasn't run; not gated) |
 | present, `status: complete` | ALLOW |
 | present, `status:` anything else, target is `in_review` or `done` | BLOCK (exit 2) |
 | present, `status:` anything else, target is another declared status (e.g. `in_progress`) | ALLOW (sending the card back is what an incomplete audit should cause) |

@@ -3428,7 +3428,7 @@ sem `claude -p` e sem token. Atualizar `docs/loop-engineering.md`, que ainda des
 
 ## `acceptance-gate.py` fica cego em worktree e libera Done sem auditoria
 
-**Status:** 🔵 ABERTO · **Plano:** `acceptance-gate-cego-em-worktree` · **Lar:**
+**Status:** passo 1 FEITO em 2026-09-26 (a trava procura em `.claude/acceptance/` e `docs/acceptance/` da worktree e do clone principal; teste em `tests/test_acceptance_gate.py`). Passo 2 aguarda o dono: ausente em ida para `done` segue liberando. Passo 3 e "complete com rota humana aberta passa" ficaram de fora. · **Plano:** `acceptance-gate-cego-em-worktree` · **Lar:**
 `common/hooks/acceptance-gate.py` · **Origem:** feedback `fb-20260919-1`, diagnosticado no card WEGO-2287 do wego-acesso-backend
 (`docs/investigations/wego-2287-trava-de-validacao-manual.md`). O dono aceitou o
 diagnóstico e pediu o item aqui em 2026-09-25.

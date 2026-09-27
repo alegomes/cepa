@@ -39,7 +39,9 @@ Mechanism — artifact presence, THEN direction:
                                                         missing config)
 
 Matches the Atlassian MCP transition tool (any server prefix). Extracts the
-issue key from the tool input, looks for `.claude/acceptance/<KEY>.yaml`:
+issue key from the tool input, looks for `<KEY>.yaml` (see `find_artifact` for
+where — this worktree first, then the main clone, `.claude/acceptance/` and
+`docs/acceptance/` in each):
 
   - absent                       -> allow (audit hasn't run; not gated)
   - present, status: complete    -> allow
@@ -148,6 +150,38 @@ def resolve_target(mut: dict, tid: str | None, cwd: Path) -> str | None:
     return transition_map(cwd).get(tid) if tid else None
 
 
+ACCEPTANCE_DIRS = (Path(".claude") / "acceptance", Path("docs") / "acceptance")
+
+
+def find_artifact(key: str, session: Path, main: Path) -> Path | None:
+    """The acceptance artifact for `key`, or None when no tree has one.
+
+    Order: this worktree's `.claude/acceptance/`, its `docs/acceptance/`, then
+    the same two under the MAIN clone. The first found wins, so a fresh audit
+    written in this worktree outranks an older one left in the main clone.
+
+    Looking only at `<session root>/.claude/acceptance/` made the gate blind in
+    every new worktree: `.claude/` is not versioned and `seed-worktree.py` does
+    not copy `acceptance/`, so the file was "absent" and the transition passed.
+    On 2026-09-16 the prove-drain, running in the `session/decide` worktree,
+    moved WEGO-2218 to Done while the main clone's artifact said `incomplete`.
+    `docs/acceptance/` is where wego-acesso-backend versions its artifacts.
+
+    This is a deliberate exception to `session_root` (item `session-root`,
+    2026-08-25), which keeps per-worktree state per worktree. The build
+    baseline describes the CODE in one tree, so reading another tree's is
+    wrong. The acceptance audit describes a CARD, and a card is the same card
+    whichever tree moves it on the board.
+    """
+    roots = [session] if session == main else [session, main]
+    for root in roots:
+        for d in ACCEPTANCE_DIRS:
+            p = root / d / f"{key}.yaml"
+            if p.is_file():
+                return p
+    return None
+
+
 def empty_build(cwd: Path) -> dict | None:
     """The session's `.claude/last-build.json` when its status is EMPTY, or
     STALE with `last_known_status: EMPTY` (edited after the empty run).
@@ -234,8 +268,12 @@ def main():
     # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
     # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
     # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
-    cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
-    artifact = cwd / ".claude" / "acceptance" / f"{key}.yaml"
+    here = payload.get("cwd") or os.getcwd()
+    cwd = Path(L.session_root(here)).resolve()
+    # Fora de um repo git o `main_root` é "", e `Path("")` seria o diretório
+    # do processo: sem clone principal, só a própria raiz conta.
+    main = L.main_root(here)
+    artifact = find_artifact(key, cwd, Path(main).resolve() if main else cwd)
 
     tid = extract_transition_id(tool_input)
     target = resolve_target(_mut, tid, cwd)
@@ -249,10 +287,12 @@ def main():
         if empty is not None:
             block_empty(key, target, empty, cwd)
 
-    if not artifact.exists():
-        # No audit on disk yet (e.g. the To Do -> In Progress transition).
+    if artifact is None:
+        # No audit in any tree yet (e.g. the To Do -> In Progress transition).
         # Nothing to enforce. The completion-auditor writes this file right
         # before the In-Review transition; that's when teeth appear.
+        # Ausente em ida para `done` ainda libera: mudar isso é decisão do
+        # dono, aberta no item `acceptance-gate-cego-em-worktree`.
         sys.exit(0)
 
     try:
