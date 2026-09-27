@@ -617,6 +617,9 @@ def check_arvore_suja(root: Path):
     suja = sujeira(str(root))
     if suja is None:
         return
+    # o registro dos runs anteriores não conta: o `cepa-until` também o ignora
+    suja = [l for l in suja
+            if not re.match(r"^.. \.claude/programs/[^/]+/until/", l)]
     if not suja:
         ok("execucao", f"fila `{fila}` pendente e árvore limpa — "
                        f"`cepa-until {fila} --for 12h` larga sem recusa")

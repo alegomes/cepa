@@ -667,6 +667,13 @@ def bloqueia_item(nome, repo, ident, tentativas):
 
 # ── guardas de largada ──────────────────────────────────────────────────────
 
+# O registro do próprio run (`.jsonl`, `.log`, `.review.md`) mora dentro do
+# repo, em `.claude/programs/<fila>/until/`. Não é sujeira: sem este filtro, o
+# primeiro run deixa a pasta como não rastreada e o seguinte recusa a largada
+# por causa do que o anterior escreveu.
+REGISTRO_DO_RUN = re.compile(r"^.. \.claude/programs/[^/]+/until/")
+
+
 def arvore_suja(repo):
     try:
         p = subprocess.run(["git", "status", "--porcelain"], cwd=str(repo),
@@ -675,7 +682,8 @@ def arvore_suja(repo):
         return None
     if p.returncode != 0:
         return None
-    return [l for l in p.stdout.splitlines() if l.strip()]
+    return [l for l in p.stdout.splitlines()
+            if l.strip() and not REGISTRO_DO_RUN.match(l)]
 
 
 def branch_atual(repo):

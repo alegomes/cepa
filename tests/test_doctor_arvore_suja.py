@@ -132,6 +132,32 @@ def test_limpa_com_fila_pendente_confirma_que_pode_largar():
         check("...e não é um aviso", "⚠ [execucao]" not in out, out[-600:])
 
 
+def test_registro_do_cepa_until_nao_conta_como_sujeira():
+    """O registro dos runs anteriores mora em `.claude/programs/<fila>/until/`
+    e o `cepa-until` não recusa por causa dele — então o doctor não pode
+    avisar que vai recusar."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta(tmp)
+        # o doctor grava `.claude/doctor-last-run` na 1ª passada; fora da conta
+        (raiz / ".gitignore").write_text(".claude/doctor-last-run\n",
+                                         encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", "ignore"], cwd=raiz, check=True)
+        d = raiz / ".claude" / "programs" / "fila" / "until"
+        d.mkdir(parents=True)
+        (d / "2026-09-26-1809.jsonl").write_text("{}\n", encoding="utf-8")
+        (d / "2026-09-26-1809.log").write_text("saida\n", encoding="utf-8")
+        out = roda(raiz)
+        check("só o registro do run → confirma que larga",
+              "[execucao]" in out and "⚠ [execucao]" not in out, out[-600:])
+        suja(raiz)
+        out = roda(raiz)
+        check("registro + sujeira de verdade → ainda avisa",
+              "⚠ [execucao]" in out and "1 arquivo(s)" in out,
+              [l for l in out.splitlines() if "execucao" in l])
+
+
 def main():
     print("cepa-doctor — árvore suja vs. fila pendente\n")
     for nome, fn in sorted(globals().items()):

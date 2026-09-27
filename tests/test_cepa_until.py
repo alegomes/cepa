@@ -472,6 +472,45 @@ def test_arvore_suja_recusa_o_run():
               f"saiu {p2.returncode}, disparou {len(chamadas2)}x")
 
 
+def test_registro_do_run_anterior_nao_e_sujeira():
+    """O `cepa-until` grava `.jsonl`/`.log`/`.review.md` em
+    `.claude/programs/<fila>/until/`, dentro do repo. Antes do filtro, o run
+    seguinte via a pasta como não rastreada e recusava a largada por causa do
+    que o próprio run anterior escreveu (visto em 2026-09-26, fila `cepa`)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        p1, _ = roda(raiz, binv, plano, ["--for", "2h"])
+        check("o primeiro run anda", p1.returncode == 0, p1.stderr[-300:])
+        # a manhã: o dono aterrissa o que o run fez e a fila volta a ter item
+        # pendente; só o registro do run fica para trás, como no clone real
+        subprocess.run(["git", "checkout", "-q", "--", str(plano)], cwd=raiz,
+                       check=True)
+        st = subprocess.run(["git", "status", "--porcelain"], cwd=raiz,
+                            capture_output=True, text=True).stdout
+        check("...e deixa o registro não rastreado na árvore",
+              "?? .claude/programs/fila/until/" in st, st)
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p2, chamadas2 = roda(raiz, binv, plano, ["--for", "2h"])
+        check("o run seguinte larga mesmo com o registro do anterior",
+              "modificado(s)" not in p2.stderr and len(chamadas2) == 1,
+              f"saiu {p2.returncode}, disparou {len(chamadas2)}x: "
+              f"{p2.stderr[:300]}")
+
+        # o filtro é só para o registro: sujeira de verdade ao lado ainda recusa
+        subprocess.run(["git", "checkout", "-q", "--", str(plano)], cwd=raiz,
+                       check=True)
+        (raiz / "lixo.txt").write_text("pendura", encoding="utf-8")
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p3, chamadas3 = roda(raiz, binv, plano, ["--for", "2h"])
+        check("sujeira de verdade ao lado do registro ainda recusa",
+              p3.returncode == 2 and not chamadas3, f"saiu {p3.returncode}")
+        check("...e a lista mostra só a sujeira, não o registro",
+              "lixo.txt" in p3.stderr and "until/" not in p3.stderr,
+              p3.stderr[:400])
+
+
 def test_fila_inexistente_recusa_antes_de_disparar():
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1")])
