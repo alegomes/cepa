@@ -1,0 +1,122 @@
+schema_version: 2
+card: portao-modo-escrita-le-heredoc
+verdict: proven
+reviewed_at: 2026-09-27T00:00:00-03:00
+base_commit: 979ddd3
+head_commit: d192cf0
+issue_type: Bug
+repo_kind: harness   # hooks Python do Claude Code, não Maven/Quarkus — perturbação + re-run é o mecanismo, não PIT
+scope:
+  changed_classes:
+    - class: "common/hooks/modo-escrita-gate.py (_expande, _atribuicoes, alvos_bash — inclusive o laço de invalidação de variável acrescentado em d192cf0, nao_resolvido, main)"
+      module: hooks
+      external_observable: true   # a superfície é o próprio hook rodando como subprocesso PreToolUse/PostToolUse; a prova é o processo real recebendo o payload JSON no stdin, exit code + stderr, não uma chamada de função isolada
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); o cobridor é um subprocesso Python (python3 common/hooks/modo-escrita-gate.py) recebendo o payload JSON de verdade no stdin — perturbação de cada função/ramo mudado + re-run do processo é o mecanismo aplicável, não PIT."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida no HEAD final (worktree descartável /tmp/proof-portao-modo-escrita-head2, git worktree add --detach d192cf0): python3 tests/test_modo_escrita_gate.py → 'tudo verde' (todas as asserções, exit 0), incluindo as 3 novas de 'mutação invalida o valor' (unset D, read D, ((D+=1))); python3 tests/test_cepa_modo.py → 'tudo verde' (vizinho); python3 tests/test_lock_copies_drift.py → 'all green' (vizinho, não tocado pelo diff)."
+        - "BUG REGRESSION AT BASE (ver bugfix_regression_red_at_base abaixo): confirma que o episódio 1 estava vermelho antes do fix de e32e82e."
+        - "PERTURBAÇÃO 1 — `_expande` virou no-op (`return texto`, sem substituir `$X`/`${X}`), verificada primeiro contra e32e82e: python3 tests/test_modo_escrita_gate.py → 5 falhas, exit 1 (todas em test_variavel_do_proprio_comando_e_expandida). Restaurado, GREEN reconfirmado."
+        - "PERTURBAÇÃO 2 — `_atribuicoes` virou `return None` sempre (nunca reconhece `D=valor` como atribuição da própria linha), verificada contra e32e82e: python3 tests/test_modo_escrita_gate.py → 5 falhas, mesmas 5 de test_variavel_do_proprio_comando_e_expandida. Restaurado, GREEN reconfirmado."
+        - "PERTURBAÇÃO 3 — em `alvos_bash`, a chamada `t = _expande(t, conhecidas)` sobre o ALVO foi neutralizada (`pass`), verificada contra e32e82e: python3 tests/test_modo_escrita_gate.py → 5 falhas, mesmas 5 de test_variavel_do_proprio_comando_e_expandida. Restaurado, GREEN reconfirmado."
+        - "PERTURBAÇÃO 4 — `nao_resolvido` virou `return False` sempre (o alvo nunca é tratado como não-resolvido), verificada contra e32e82e: python3 tests/test_modo_escrita_gate.py → 6 falhas, exit 1 (as 3 asserções 'não resolvido barra' + as 3 'diz que não resolveu'/'não culpa o modo' em test_alvo_nao_resolvivel_nao_culpa_o_modo). Restaurado, GREEN reconfirmado."
+        - "PERTURBAÇÃO 5 — o ramo de bloqueio novo no `main()` (`sys.exit(2)` depois da mensagem 'não consegui resolver o alvo') virou `sys.exit(0)` (deixa passar em vez de barrar), verificada contra e32e82e: python3 tests/test_modo_escrita_gate.py → 3 falhas, exit 1 (as 3 asserções 'não resolvido barra' de rc==2; a mensagem continuou em stderr porque o print é anterior ao exit, então só o código de saída caiu — foi exatamente isso que o teste flagrou). Restaurado, GREEN reconfirmado."
+        - "PERTURBAÇÃO 6 — o laço novo de d192cf0 em `alvos_bash` que esquece uma variável quando um segmento cita o NOME sem `$` sem ser atribuição simples (`unset D`, `read D`, `((D+=1))`) foi neutralizado (`for nome in []:` em vez de iterar `conhecidas` casadas por regex), verificada contra d192cf0 (worktree /tmp/proof-portao-modo-escrita-head2): python3 tests/test_modo_escrita_gate.py → 3 falhas, exit 1 (as 3 novas asserções 'mutação invalida o valor: unset D...', 'read D...', '((D+=1))...' em test_alvo_nao_resolvivel_nao_culpa_o_modo — sem a invalidação, o valor velho de D continuava valendo e o alvo `docs/y.md` era liberado, o furo relatado pelo pair-reviewer). Restaurado (sed -i + mv do .bak), GREEN reconfirmado (tudo verde) e revalidado com test_cepa_modo.py e test_lock_copies_drift.py."
+        - "Cada perturbação foi feita com sed dentro da worktree descartável (nunca na árvore principal), verificada com `python3 -c 'import ast; ast.parse(...)'` quando havia risco de sintaxe quebrada, e restaurada a partir de uma cópia (.bak) antes da perturbação seguinte; `git status --short` no fim confirmou cada worktree sem resíduo."
+      run: >-
+        Worktrees descartáveis usadas: /tmp/proof-portao-modo-escrita-base
+        (git worktree add --detach 979ddd3, só para a regressão),
+        /tmp/proof-portao-modo-escrita-head (git worktree add --detach
+        e32e82e, perturbações 1-5) e /tmp/proof-portao-modo-escrita-head2
+        (git worktree add --detach d192cf0, GREEN final + perturbação 6, após
+        o coordenador avisar que o HEAD avançou). Comando repetido a cada
+        perturbação: `python3 tests/test_modo_escrita_gate.py` (roda em
+        segundos, sem pytest, sem suíte completa — só este arquivo, conforme
+        o escopo pedido; vizinhos tests/test_cepa_modo.py e
+        tests/test_lock_copies_drift.py rodados à parte para confirmar que o
+        diff não os afetou). As três worktrees removidas com `git worktree
+        remove --force` ao final; árvore principal
+        (cepa-pendencias_until-until-2026-09-26-2203) nunca tocada.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      leitura estrutural (não há coverage tool wired neste repo Python; os
+      testes cobrem estaticamente as 6 linhas de comportamento novas do diff
+      base_commit..d192cf0). Confirmado por perturbação: as 6 mudanças
+      (_expande, _atribuicoes, expansão do alvo em alvos_bash, o laço de
+      invalidação de variável mexida sem atribuição simples, nao_resolvido, e
+      o ramo de bloqueio com a mensagem nova no main) foram cada uma
+      perturbada e cada uma foi para VERMELHO — nenhuma ficou
+      verde-quando-quebrada, logo nenhuma está sem cobertura na altitude que
+      importa (o processo do hook rodando de verdade). A segunda metade de
+      `alvos()` (o `S.extract_write_targets(comando)[1]` para `indecidivel`)
+      não mudou de comportamento no diff — já era coberta antes e continua
+      coberta por test_construcao_indecidivel_avisa_sem_barrar, não precisou
+      de perturbação nova.
+  l4_adversarial_input:
+    status: n/a
+    reason: >-
+      O hook não abre superfície de entrada HTTP/anônima: ele roda como
+      subprocesso local invocado pelo próprio Claude Code, recebendo no stdin
+      o payload JSON que O PRÓPRIO harness monta a partir da chamada de
+      ferramenta do agente — não há usuário externo desconhecido compondo esse
+      payload. Este repo não tem módulo equivalente a `api-rest` (é Python,
+      não Maven/Quarkus), então a condição estrutural do guard (nenhuma classe
+      mudada em módulo com superfície de entrada) vale trivialmente. A
+      superfície adversarial que existiria — strings de shell com quoting e
+      expansão estranhos (heredoc, crase, `$(...)`, `${X:-y}`, atribuição
+      encadeada, `unset`/`read`/`((...))` mexendo na variável, `>=` em
+      condição) — já é exatamente o que os próprios testes de regressão do L3
+      exercitam de forma exaustiva; não há vetor adicional razoável fora desse
+      conjunto que a suíte já cobre.
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: >-
+      No worktree descartável /tmp/proof-portao-modo-escrita-base
+      (git worktree add --detach 979ddd3), copiei o arquivo de teste do HEAD
+      de então (`git show e32e82e:tests/test_modo_escrita_gate.py >
+      tests/test_modo_escrita_gate.py`) e rodei
+      `python3 tests/test_modo_escrita_gate.py` contra o hook AINDA NÃO
+      CORRIGIDO (979ddd3): 11 falhas, exit 1 — as 4 asserções de
+      test_variavel_do_proprio_comando_e_expandida (episódio 1: variável
+      atribuída na própria linha chegava ao gate como o literal `$D/x.md`,
+      não casava lista nenhuma, e era barrada com a mensagem de "fora do
+      modo") e as 7 asserções de test_alvo_nao_resolvivel_nao_culpa_o_modo
+      (mesmo bug: alvo não resolvido virava veredito sobre o modo). As duas
+      falhas de test_variavel_expandida_para_fora_do_modo_barra e a suíte
+      test_corpo_do_heredoc_nao_e_alvo (episódios 2 e 3, já mortos pelo
+      `_shellscan` desde 04/09/2026, antes de base_commit) já passavam em
+      979ddd3 — confirmando que só ficam como guarda de regressão, não como
+      prova do diff, exatamente como o card descreve. No HEAD final
+      (d192cf0), o mesmo arquivo de teste (agora com as 3 asserções extras de
+      d192cf0) dá 'tudo verde', exit 0. O achado do pair-reviewer que motivou
+      d192cf0 (D=docs; unset D; echo x > $D/y liberava docs/y) não tem
+      "episódio" formal com regressão isolada contra a base — foi tratado
+      como o hunk de maior risco do commit e provado pela PERTURBAÇÃO 6 acima
+      (verde→vermelho→verde), o mesmo mecanismo, sob l3.
+routing_reason: >-
+  Todos os níveis aplicáveis passaram com evidência verified, agora contra o
+  HEAD final d192cf0: a regressão do episódio 1 foi comprovada vermelha na
+  base (979ddd3, 11 falhas) e verde no head; cada uma das 6 linhas de
+  comportamento novas do diff base_commit..d192cf0 (_expande, _atribuicoes, a
+  expansão do alvo em alvos_bash, o laço de invalidação de variável mexida
+  sem atribuição simples acrescentado em d192cf0, nao_resolvido, e o ramo de
+  bloqueio com a mensagem "não consegui resolver o alvo" no main) foi
+  perturbada isoladamente numa worktree descartável e foi para VERMELHO
+  quando quebrada, com GREEN reconfirmado depois de cada restauração. L4 é
+  n/a porque o hook não abre superfície de entrada externa e este repo não
+  tem módulo equivalente a api-rest — condição que o guard mecânico do n/a
+  exige e que aqui vale trivialmente. Nada assumido, nada skip, nenhum
+  mock/double substituindo a classe mudada (é um processo real recebendo
+  payload JSON real). PROVEN.
