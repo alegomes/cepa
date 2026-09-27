@@ -1,0 +1,76 @@
+schema_version: 2
+card: fixar-versao-twg
+verdict: proven
+reviewed_at: 2026-09-27T00:34:42-03:00
+base_commit: b207088
+head_commit: 4f2ac16
+issue_type: Feature
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-doctor::check_twg_version", module: script, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-doctor::twg_version_instalada", module: script, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::twg_version_instalada", module: script, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until::main (evento item_start)", module: script, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: >
+    Não é projeto Quarkus/hex; "external_observable" aqui significa "aparece
+    na saída de `cepa-doctor --projeto` ou no .jsonl do ledger do
+    cepa-until" — a única superfície que os agentes/humanos leem. Não há
+    camada interna vs. externa distinta (sem PIT, sem @QuarkusTest); a técnica
+    universal usada foi perturbação de linha em worktree descartável, com o
+    próprio teste de regressão do repo (`python3 tests/<arquivo>.py`) como
+    guarda.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "sem pitest no projeto (harness Python, não Maven/JVM) — não é decisão minha provisionar"
+    perturbation:
+      status: pass
+      results:
+        - "worktree /tmp/proof-twg-4f2ac16 (git worktree add --detach, 4f2ac16); todas revertidas via git checkout -- ao final"
+        - "cepa-doctor:725 guarda 'sem twg_version: declarado → silêncio': `if not declarada: return` → `if False: return` (declarada[0] estoura IndexError) — GREEN antes (python3 tests/test_doctor_twg_version.py: 6/6 ok); RED depois (IndexError não capturado, `test_sem_twg_version_declarado_e_silenciosa` falha)"
+        - "cepa-doctor:733 comparação igual/diferente: `if instalada_v == declarada_v:` → `if True:` (sempre ok) — RED: 3 falhas (versão diferente não avisa, agendador não é nomeado, legado .claude/env.yaml também para de avisar)"
+        - "cepa-doctor:729 guarda 'None quando ausente': `if instalada_v is None:` → `if False:` — RED: `test_twg_ausente_do_path_avisa` falha, saída mostra '⚠ ... está em None' em vez do aviso de ausência"
+        - "cepa-until:597-613 leitura por item (nunca cache): função reescrita com memoização em dict de módulo (simula cache indevido em run_start) — GREEN antes (python3 tests/test_cepa_until_twg_version.py: 3/3 ok); RED depois: os dois item_start do run gravam a MESMA versão (1.3.1) quando o twg fake trocou para 1.4.0 no meio do run — teste que prova a leitura por item falha em 2 asserts"
+        - "cepa-until:1136 campo twg_version no evento item_start: removido do dict `registra({...})` — RED: 4/5 falhas (o valor esperado 1.3.1/1.4.0 nunca aparece, pois a chave simplesmente não existe mais no evento)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "cada linha alterada nos dois scripts tem teste próprio de altitude certa (saída do cepa-doctor via subprocess real; .jsonl do ledger via subprocess real do cepa-until) — sem gap estrutural"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings:
+      - "adhoc (worktree descartável /tmp/proof-twg-4f2ac16-l4, removida ao final): 4 entradas adversárias contra a extração de versão via regex (\\d+(?:\\.\\d+)+) e o timeout de 10s — sufixo tipo '1.3.1-beta.2', múltiplos números na saída ('2.0.0 ... runtime 17.0.9'), CLI travando além do timeout (11.3s medidos), e CLI falhando com exit 1 sem número na saída. Nenhum produziu falso-verde; todos resultaram em comportamento correto (compara/avisa/ignora ruído). Único nit cosmético: quando a CLI trava, a mensagem diz 'não está instalada ou não está no PATH', que é tecnicamente imprecisa (ela está instalada, só não respondeu a tempo) — não é um bug funcional, é redação."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature, não Bug — sem regressão a reproduzir no base_commit"
+routing_reason: >
+  Todas as linhas de comportamento alteradas nos dois scripts (guarda de
+  silêncio sem declaração, comparação igual/diferente, None quando ausente,
+  leitura por item vs. cache, e a própria gravação do campo twg_version no
+  evento item_start) foram quebradas uma a uma em worktree descartável e cada
+  quebra fez o teste de regressão correspondente ir de verde para vermelho.
+  O L4 adversarial rodou 4 entradas atacando a extração por regex e o
+  timeout, todas limpas. A resolução docs-vs-.claude do manifesto de
+  ambiente é código pré-existente (_wtlib.env_manifest_path), não tocado
+  neste diff, e já coberto por teste que passou verde na baseline sem
+  perturbação minha. O bump de versão do plugin.json e a atualização de
+  docs/env-manifest.md são não-comportamentais.
+finding_vacuous_test: >
+  test_sem_twg_no_path_grava_null (tests/test_cepa_until_twg_version.py)
+  continuou verde mesmo com o campo twg_version REMOVIDO do evento — porque
+  o assert é `.get("twg_version") is None`, que é verdadeiro tanto para
+  "campo ausente" quanto para "campo presente e None". Não bloqueia o
+  veredito porque as outras duas asserções do MESMO arquivo já capturaram a
+  quebra (RED), mas o teste em si é vácuo para este caso específico e vale
+  reforçar com um `"twg_version" in evento` explícito.
+finding_message_accuracy: >
+  Quando a CLI `twg` trava além do timeout de 10s (não crasha, não sai do
+  PATH, só demora), o doctor e o cepa-until tratam isso como se ela
+  estivesse ausente ('não está instalada ou não está no PATH'). Funciona
+  (nunca trava o run, sempre avisa), mas a mensagem confunde quem for
+  investigar depois.

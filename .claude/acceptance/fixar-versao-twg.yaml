@@ -1,0 +1,69 @@
+card: fixar-versao-twg
+repo: /Users/alegomes/cepa-worktrees/cepa-pendencias_until-until-2026-09-26-2203
+diff: b207088..4f2ac16 (commit 4f2ac16)
+escopo: |
+  Peça 3 (desligar ou não o auto-update do agendador com.atlassian.twg.upkeep)
+  está FORA por decisão explícita do backlog ("Não decidido") — não é
+  auditada aqui, não gera gap.
+status: complete
+criteria:
+  - id: AC1
+    descricao: >-
+      Registrar a versão da CLI `twg` em cada artefato que dependa dela —
+      adaptado para o evento `item_start` do jsonl do cepa-until, lido a
+      cada item, porque o vetor descrito no backlog (versão trocar entre
+      dois cards do mesmo lote desatendido) é exatamente isso, e os YAMLs
+      de prova de aceite não são produzidos com a twg (twg é a CLI de
+      Jira/Confluence, não a ferramenta de build/teste).
+    altitude: cli
+    surface: >-
+      `common/bin/cepa-until` executado de ponta a ponta (subprocess real,
+      via `python3 common/bin/cepa-until fila --repo <raiz>`), lendo o
+      ledger `.jsonl` gravado em disco e conferindo o campo `twg_version`
+      de cada evento `item_start`.
+    test: tests/test_cepa_until_twg_version.py
+    layer: integration (subprocess real do binário + leitura do artefato em disco)
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until_twg_version.py → "✓ tudo verde";
+      3 testes, 7 checagens, todas ok (inclui o caso central: `twg` falso
+      reescrito NO MEIO do run pelo `claude` falso, e os dois `item_start`
+      trazem versões diferentes — 1.3.1 e depois 1.4.0 — provando leitura
+      por item, nunca cache no `run_start`; também cobre ausência do `twg`
+      no PATH gravando `null`).
+    veredito: complete
+  - id: AC2
+    descricao: >-
+      Check no `/common:doctor` comparando a versão instalada (`twg
+      --version`) com a declarada em `twg_version:` no manifesto de
+      ambiente (docs/env.yaml ganha de .claude/env.yaml), com aviso na
+      divergência e silêncio total quando não declarado.
+    altitude: cli
+    surface: >-
+      `common/bin/cepa-doctor --projeto` executado de ponta a ponta
+      (subprocess real) contra repositórios git temporários com
+      combinações de `docs/env.yaml` / `.claude/env.yaml` e um `twg` falso
+      no PATH, conferindo a linha `✓`/`⚠ [ambiente]` na saída.
+    test: tests/test_doctor_twg_version.py
+    layer: integration (subprocess real do binário)
+    evidence: verified
+    run: >-
+      python3 tests/test_doctor_twg_version.py → "✓ tudo verde"; 6 testes,
+      todos ok (sem declaração → silêncio; igual → ok; diferente → aviso
+      nomeando as duas versões e o agendador `com.atlassian.twg.upkeep`;
+      legado `.claude/env.yaml` também dispara; `twg` ausente do PATH →
+      aviso de ausente; `docs/env.yaml` ganha do legado).
+    veredito: complete
+  - id: AC-dep
+    descricao: >-
+      Dependência de AC2: resolução de caminho do manifesto de ambiente
+      (`docs/env.yaml` ganha de `.claude/env.yaml`) usada pelo
+      `check_twg_version`, via `_wtlib.env_manifest_path`.
+    altitude: application
+    surface: tests/test_env_manifest_path.py (não alterado neste diff, rodado como checagem de vizinhança/regressão)
+    test: tests/test_env_manifest_path.py
+    layer: unit
+    evidence: verified
+    run: "python3 tests/test_env_manifest_path.py → \"all env-manifest path tests passed\"; 10 checagens, todas ok."
+    veredito: complete (regressão, não é critério novo deste card)
+gaps: []
