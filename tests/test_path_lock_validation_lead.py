@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""O validation-lead consegue gravar o próprio veredito em .claude/validation/.
+"""O validation-lead grava o próprio veredito em docs/validation/, e só lá.
 
 No third-party deps — run with `python3 tests/test_path_lock_validation_lead.py`.
 Exits non-zero on the first failure.
@@ -11,6 +11,11 @@ barrava a escrita, e o orquestrador transcrevia o veredito à mão. Aconteceu no
 3 itens entregues do run cepa-until 2026-09-27-0832 do wego-acessos-backend
 (WEGO-2323, 2324, 2325). O veredito gravado por outro agente deixa de ser
 independente de quem validou.
+
+O destino é docs/validation/ (27/09/2026), e não .claude/validation/: nos
+projetos que rodam o portão `.claude/*` é ignorado pelo git, então o veredito
+morria com a worktree descartável do run. É o mesmo motivo que levou o
+proof-reviewer para docs/proof/.
 
 Dirige cada cópia do hook como subprocesso, como test_path_lock_out_of_root.
 """
@@ -67,9 +72,13 @@ def main():
 
         cases = [
             # (label, file_path, expected_exit, why)
-            ("veredito em .claude/validation -> allow",
-             proj / ".claude/validation/WEGO-1.yaml", 0,
+            ("veredito em docs/validation  -> allow",
+             proj / "docs/validation/WEGO-1.yaml", 0,
              "é o arquivo que o agente tem ordem de gravar e o finish exige"),
+            ("caminho antigo .claude/validation -> block",
+             proj / ".claude/validation/WEGO-1.yaml", 2,
+             ".claude/ é ignorado pelo git nos projetos: o veredito gravado lá "
+             "some com a worktree, como acontecia com .claude/proof/"),
             ("código de produção           -> block",
              proj / "src/main/java/Foo.java", 2,
              "a liberação não pode abrir o código para quem só valida"),

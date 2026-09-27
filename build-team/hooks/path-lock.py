@@ -35,8 +35,9 @@ ALLOWED_WRITES = {
     "orchestrator":      [],
     "planning-lead":     ["specs/**"],
     "engineering-lead":  [],
-    # its verdict, which `cepa-plan finish --status done` requires
-    "validation-lead":   [".claude/validation/**"],
+    # its verdict, which `cepa-plan finish --status done` requires; docs/ and
+    # not .claude/, which is gitignored and dies with the session's worktree
+    "validation-lead":   ["docs/validation/**"],
 
     # workers — domain-locked
     "product-manager":   ["specs/**"],
