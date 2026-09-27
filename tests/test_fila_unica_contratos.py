@@ -46,7 +46,7 @@ def ler(rel):
 def test_capture_add():
     f = ler("board-flow/commands/capture.md")
     check("chama cepa-plan add <project_key> <KEY> --title",
-          "cepa-plan add <project_key> <KEY> --title" in f,
+          "cepa-plan\" add <project_key> <KEY> --title" in f,
           "sem o comando exato, o card pode nascer e nunca entrar na fila")
     check("exit 4 (já na fila) é tratado como normal, não erro",
           "Exit 4" in f and "not an error" in f,
@@ -63,7 +63,7 @@ def test_capture_add():
 def test_drain_ordena():
     f = ler("board-flow/commands/drain.md")
     check("chama cepa-plan ordena <project_key> --keys",
-          "cepa-plan ordena <project_key> --keys" in f,
+          "cepa-plan\" ordena <project_key> --keys" in f,
           "sem o comando exato, o drain volta a ordenar só pelo rank do Jira")
     check("pede a coluna inteira ao Jira quando a fila existe",
           "the whole column, no limit, if the single-track queue exists" in f,

@@ -65,8 +65,12 @@ If 0 cards → report "Nothing in column <column>" (note the effective scope, so
 - `plan.yaml` exists → run:
 
   ```
-  python3 common/bin/cepa-plan ordena <project_key> --keys <K1,K2,...> --json
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" ordena <project_key> --keys <K1,K2,...> --json
   ```
+
+  (`common/bin/cepa-plan` is a relative path that only exists inside the
+  `cepa` repo — this shim finds the real `cepa-plan` from `common`, in the
+  repo or the plugin cache, so it also works in host projects like WEGO.)
 
   passing every key step 2 returned, in the order Jira gave them. The command
   returns the queue's order for keys that are items of it, then the rest —
@@ -75,7 +79,7 @@ If 0 cards → report "Nothing in column <column>" (note the effective scope, so
   two calls) falls back to Jira order, same as "no `plan.yaml`" above.
 - Cards in `fora_do_plano` are **named** in the step-3 confirmation screen and
   the final report, with the hint that `/common:plan <project_key> --from-jira`
-  or `python3 common/bin/cepa-plan add <project_key> <key> --title "..."` is
+  or `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" add <project_key> <key> --title "..."` is
   what puts a card into the queue.
 - Apply `--max` to the reordered list now, not to the raw Jira listing from
   step 2.
