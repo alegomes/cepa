@@ -180,6 +180,18 @@ def test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais():
     for caso in (sem_chave, com_classe, l4_rodou, config):
         assert classify(caso)[0] == "teste-cego"
 
+    # Perturbação que RODOU não é diff sem nada a provar, mesmo só com .md.
+    # Sintético e sem prosa: a do WEGO-2117 casa outra regra de `nada-a-provar`
+    # e esconderia a condição que este caso existe para segurar.
+    pert_rodou = {
+        "card": "X-4", "verdict": "needs-human", "base_commit": "abc1234",
+        "scope": {"changed_classes": [], "changed_files": [{"file": "docs/x.md"}]},
+        "levels": {"l3_load_bearing": {"perturbation": {"status": "pass"}},
+                   "l2_coverage": {"status": "assumed"},
+                   "l4_adversarial_input": {"status": "n/a"}},
+    }
+    assert classify(pert_rodou)[0] != "nada-a-provar"
+
 
 def test_so_nao_rodou_deixa_de_virar_pergunta():
     assert NAO_PERGUNTA == {"nao-rodou"}
