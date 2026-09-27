@@ -1,0 +1,42 @@
+key: reconcile-nao-rebaixa-done
+status: complete
+criteria:
+  - id: AC1
+    text: >-
+      R3 (BACKLOG.md ~linha 3573): "Status vai do Jira para o plano, nunca
+      volta, e nunca rebaixa item `done`." cepa-plan reconcile para de
+      rebaixar item done para pending quando o card volta no Jira; o card
+      divergente vira aviso nomeado (citando R3), não uma divergência
+      pending, e o disco continua com o item done após --apply.
+    altitude: cli
+    surface: >-
+      python3 common/bin/cepa-plan reconcile <nome> --board <json> --apply
+      --repo . --json
+    test: tests/test_common_drain_plan.py::test_reconcile_nunca_rebaixa_item_done
+    layer: cli-subprocess (helper `run()` chama subprocess.run no
+      sys.executable + common/bin/cepa-plan; não é chamada de função mockada)
+    evidence: verified
+    run: >-
+      $ python3 tests/test_common_drain_plan.py
+      -> "all green" ; 154 asserções "ok" nesta execução, exit code 0.
+      Assert específico do teste-alvo:
+      "ok  nenhum item done vira divergência, qualquer que seja o quadro" /
+      "ok  e o disco guarda todos como done depois do --apply" /
+      "ok  W-1..W-4 divergente é nomeado num aviso com a regra".
+    verdict: complete
+    notes: >-
+      Testes de regressão vizinhos (test_reconcile_traz_o_quadro_para_a_fila
+      e test_reconcile_done_em_review_nao_e_bounce) também foram atualizados
+      no mesmo commit para não esperar mais o bounce antigo e passam junto
+      (mesma execução, mesmo comando). test_common_next.py e
+      test_cepa_plan_fila_unica.py também executados, "all green" cada,
+      exit 0, cobrindo a doc do /common:next (recomendação de reabrir via
+      /common:plan) e a fila única sem regressão.
+gaps: []
+runs:
+  - command: python3 tests/test_common_drain_plan.py
+    result: "all green (154 ok), exit 0"
+  - command: python3 tests/test_common_next.py
+    result: "all green, exit 0"
+  - command: python3 tests/test_cepa_plan_fila_unica.py
+    result: "all green, exit 0"
