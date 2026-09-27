@@ -273,6 +273,90 @@ def test_multiedit_com_file_path_aplica_em_sequencia():
         caminho.unlink(missing_ok=True)
 
 
+DUAS_SUPERFICIES_OK = """# Especificação: duas superfícies
+**Status:** pronta-para-construir
+## Critérios de sucesso
+### CS-1: POST /api/v1/assinaturas sem responsável responde 422
+**Superfície:** http
+**Teste vermelho:** AssinaturaResourceIT#post_menorSemResponsavel_retorna422 — hoje não existe.
+### CS-2: GET /api/v1/assinaturas retorna lista
+**Superfície:** http
+**Teste vermelho:** AssinaturaResourceIT#get_lista_retorna200 — hoje não existe.
+"""
+
+
+def test_multiedit_replace_all_troca_TODAS_as_ocorrencias():
+    # old_string ("**Superfície:** http") aparece nos DOIS blocos, e o
+    # veredito só fica certo se replace_all trocar as duas. Se a
+    # implementação "esquecesse" o replace_all e caísse na checagem de
+    # unicidade (que existe para o Edit sem replace_all), old_string bateria
+    # 2x sem replace_all pedido, e o código teria que liberar (rc 0) em vez
+    # de aplicar a troca. Aqui a troca É esperada, então o rc correto é 2
+    # (as duas Superfícies viram inválidas) -- bem diferente do rc 0 que a
+    # implementação quebrada devolveria.
+    caminho = com_arquivo_temporario(DUAS_SUPERFICIES_OK)
+    try:
+        rc, err = run({
+            "tool_name": "MultiEdit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "edits": [
+                    {"old_string": "**Superfície:** http",
+                     "new_string": "**Superfície:** banco de dados",
+                     "replace_all": True},
+                ],
+            },
+        })
+        check("replace_all troca as duas ocorrências e as duas ficam inválidas",
+              rc == 2, f"rc={rc} err={err[:200]}")
+        check("mensagem cita os dois critérios", "CS-1" in err and "CS-2" in err,
+              err[:400])
+    finally:
+        caminho.unlink(missing_ok=True)
+
+
+DUAS_CS_UMA_INVALIDA = """# Especificação: duas superfícies
+**Status:** pronta-para-construir
+## Critérios de sucesso
+### CS-1: POST /api/v1/assinaturas sem responsável responde 422
+**Superfície:** http
+**Teste vermelho:** AssinaturaResourceIT#post_menorSemResponsavel_retorna422 — hoje não existe.
+### CS-2: GET /api/v1/assinaturas retorna lista
+**Superfície:** banco de dados
+**Teste vermelho:** AssinaturaResourceIT#get_lista_retorna200 — hoje não existe.
+"""
+
+
+def test_multiedit_acumula_sobre_o_resultado_da_edicao_anterior():
+    # edit1 conserta a Superfície inválida do CS-2. edit2 mexe numa região que
+    # edit1 NÃO tocou (o Teste vermelho do CS-1) -- o old_string de edit2
+    # existe tanto no arquivo ORIGINAL quanto no resultado de edit1 (porque
+    # edit1 não passou perto dali). Uma implementação que aplicasse cada
+    # edição sobre o texto ORIGINAL (em vez de acumular sobre o resultado da
+    # edição anterior) casaria os dois old_string igualmente -- só que o
+    # resultado final dela DESCARTARIA o conserto de edit1: CS-2 continuaria
+    # com "banco de dados" e o rc ficaria 2, contra o rc 0 da implementação
+    # correta (que preserva os dois consertos).
+    caminho = com_arquivo_temporario(DUAS_CS_UMA_INVALIDA)
+    try:
+        rc, err = run({
+            "tool_name": "MultiEdit",
+            "tool_input": {
+                "file_path": str(caminho),
+                "edits": [
+                    {"old_string": "**Superfície:** banco de dados",
+                     "new_string": "**Superfície:** http"},
+                    {"old_string": "**Teste vermelho:** AssinaturaResourceIT#post_menorSemResponsavel_retorna422 — hoje não existe.",
+                     "new_string": "**Teste vermelho:** AssinaturaResourceIT#post_menorSemResponsavel_retorna422 — falha hoje porque o endpoint não existe."},
+                ],
+            },
+        })
+        check("os dois consertos se acumulam e a spec completa libera",
+              rc == 0, f"rc={rc} err={err[:200]}")
+    finally:
+        caminho.unlink(missing_ok=True)
+
+
 def test_multiedit_replace_all():
     doc = PRONTA_OK.replace("**Status:** pronta-para-construir",
                             "**Status:** rascunho")
