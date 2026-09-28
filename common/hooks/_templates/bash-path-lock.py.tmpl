@@ -50,8 +50,10 @@ de comando de um agente trancado cai em exatamente um balde:
    na linha cita a raiz → tudo permitido. É o mesmo carve-out out-of-root do
    path-lock.py, que a perturbação do proof-reviewer precisa.
 4. TODO O RESTO → NEGA. Interpretador inline, shell aninhado, heredoc/pipe para
-   interpretador, script fora do projeto ou dentro da própria pista, xargs com
-   escritor, verbo que ninguém listou. Um vetor novo cai aqui por construção.
+   interpretador, script fora do projeto ou dentro da própria pista — salvo
+   dentro de um worktree deste repo (a cópia descartável de perturbação), que
+   é jurisdição do balde 3 —, xargs com escritor, verbo que ninguém listou. Um
+   vetor novo cai aqui por construção.
 
 Substituição de comando (`$(...)`, crase, `<(...)`) é outro comando e é
 classificada com as mesmas regras antes do segmento que a contém. Um `cd` só
@@ -460,9 +462,10 @@ def extract_write_targets(command: str) -> tuple:
 #      estão fora da raiz, e nada na linha cita a raiz: é o worktree descartável
 #      de perturbação. Tudo permitido.
 #   4. TODO O RESTO → NEGADO. Interpretador inline, shell aninhado, script que o
-#      próprio agente poderia ter escrito, verbo que ninguém listou. Um vetor
-#      novo cai aqui POR CONSTRUÇÃO: ele não precisa constar em lista nenhuma,
-#      basta não constar na de inocentes.
+#      próprio agente poderia ter escrito — salvo dentro de um worktree deste
+#      repo (a cópia descartável de perturbação), que é jurisdição do balde 3
+#      —, verbo que ninguém listou. Um vetor novo cai aqui POR CONSTRUÇÃO: ele
+#      não precisa constar em lista nenhuma, basta não constar na de inocentes.
 #
 # Manutenção vira acrescentar verbo inocente (falso-positivo: barulhento,
 # visível, barato) em vez de caçar bypass (falso-negativo: invisível).
@@ -580,6 +583,11 @@ class _Ctx:
         # Não negam nada sozinhos; entram na mensagem de uma negação que vier
         # depois, porque são quase sempre a causa dela.
         self.dirs_desconhecidos = []
+        # argv + redirecionamentos do segmento corrente, para _script_rule
+        # reusar _refs_root sem precisar recalculá-los.
+        self.seg_args = []
+        # cache preguiçoso dos worktrees registrados deste repo (ver _worktrees).
+        self._worktrees = None
 
 
 # ─── leitura da linha: substituições e heredocs ─────────────────────────────
@@ -890,6 +898,34 @@ def _inside(p, root):
         return False
 
 
+def _worktrees(ctx):
+    """Worktrees registrados deste repo (git worktree list), exceto a raiz.
+
+    Cache em ctx: só chamado quando um script FORA da raiz é de fato
+    executado, então não custa nada no caminho comum. Fail-silent: erro ou
+    timeout devolve lista vazia — pior caso é o script cair na negação
+    antiga, nunca liberar por engano.
+    """
+    if ctx._worktrees is not None:
+        return ctx._worktrees
+    result = []
+    try:
+        import subprocess
+        out = subprocess.run(
+            ["git", "-C", str(ctx.root), "worktree", "list", "--porcelain"],
+            capture_output=True, text=True, timeout=5)
+        if out.returncode == 0:
+            for line in out.stdout.splitlines():
+                if line.startswith("worktree "):
+                    p = Path(line[len("worktree "):]).resolve()
+                    if p != ctx.root:
+                        result.append(p)
+    except Exception:
+        result = []
+    ctx._worktrees = result
+    return result
+
+
 def _refs_root(ctx, text, args, cwds):
     """A linha cita a raiz? (condição para o balde 3 NÃO valer)
 
@@ -960,13 +996,26 @@ def _script_rule(ctx, arg, cwds, verbo, seg):
     `source .venv/bin/activate`): foi escrito por outro — é o equivalente a um
     `npm test`. Script fora da raiz (/tmp) ou dentro da própria pista: o agente
     pode tê-lo escrito agora mesmo, então executar é escrever arbitrariamente.
+
+    Exceção: script dentro de um worktree registrado deste repo (a cópia
+    descartável de perturbação criada com `git worktree add`) é a mesma
+    jurisdição do balde 3 — executar o script de dentro da cópia não abre
+    nada que `cd <cópia> && <o mesmo script>` (balde 3, já permitido) não
+    abrisse, desde que a linha não cite a raiz. Achado no run
+    2026-09-28-0558: o proof-reviewer criava a cópia em /tmp e era barrado ao
+    rodar o teste de dentro dela.
     """
     if not arg.known:
         _deny(4, verbo, f"o arquivo executado vem de valor que não sei avaliar ({arg.raw})", seg)
     for p in _resolve_all(arg.value, cwds):
         if not _inside(p, ctx.root):
+            if any(_inside(p, wt) for wt in _worktrees(ctx)) and not _refs_root(
+                    ctx, seg, ctx.seg_args, cwds):
+                continue
             _deny(4, verbo, f"executar arquivo fora do projeto ({arg.value}) — "
-                            f"você pode tê-lo escrito, e aí ele escreve o que quiser", seg)
+                            f"você pode tê-lo escrito, e aí ele escreve o que quiser. "
+                            f"Cópia descartável criada com `git worktree add` é a "
+                            f"exceção: script de dentro dela passa", seg)
         ps = str(p)
         if ctx.pl.is_own_expertise_file(ps, ctx.agent) or (
                 ctx.allowed and ctx.pl.path_matches(ps, ctx.allowed, ctx.root)):
@@ -2088,6 +2137,10 @@ def _classify_segment(ctx, text, cwds):
                 e = _expand(ctx, mm.group(3), cwds)
                 ctx.vars[mm.group(1)] = e.value if e.known else None
         return cwds, cwds
+
+    # torna argv + redirs deste segmento disponível para _script_rule, que
+    # precisa de _refs_root fora daqui (balde 4, script dentro de worktree).
+    ctx.seg_args = args + redirs
 
     # balde 1 — redirecionamentos
     verbo = args[0].value if args and args[0].known else "?"

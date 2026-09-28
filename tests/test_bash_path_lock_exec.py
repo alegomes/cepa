@@ -507,6 +507,91 @@ def test_agentes_de_prova_enderecam_worktree_por_caminho_literal():
               and "python3 -c" in txt)
 
 
+def test_script_na_copia_descartavel():
+    """Script python3 rodado de DENTRO do worktree descartável passa (balde 3).
+
+    Achado no run 2026-09-28-0558: o proof-reviewer, path-locked, cria a cópia
+    descartável com `git worktree add /tmp/proof-<KEY> <commit>` e era negado
+    ao rodar o teste de dentro dela. Duas das formas reais que caíram no
+    balde 4 ("script fora do projeto"):
+
+      cd /tmp/proof-agb-head && ls tests/ | grep -i gate_status; \\
+        timeout 120 python3 tests/test_gate_status_por_nome.py; echo "EXIT=$?"
+
+      python3 /tmp/proof-vigia-solo/tests/test_no_background_build.py 2>&1 \\
+        | grep -A5 ...
+
+    A distinção do caso legítimo é o script morar dentro de um worktree
+    REGISTRADO deste repo (`git worktree list --porcelain`), não em qualquer
+    /tmp: um script solto fora da raiz e fora de qualquer worktree continua
+    negado (pinned em DENY acima, "script em /tmp executado por sh").
+    """
+    for hook in HOOKS:
+        topo = hook.parent.parent.name
+        agent, _lane_in, lane_out = LANES[topo]
+        at = f"{plugin_of(hook)}:{agent}"
+        proj = Path(tempfile.mkdtemp(prefix="bpl-proj-")).resolve()
+        outside = Path(tempfile.mkdtemp(prefix="bpl-wtreg-")).resolve()
+        wt = outside / "proof-x"
+        solto = outside / "solto"
+        solto.mkdir()
+        (solto / "x.sh").write_text("#!/bin/sh\necho hi\n")
+
+        def git(*args):
+            subprocess.run(["git", "-C", str(proj), *args], check=True,
+                            capture_output=True, text=True)
+
+        git("init", "-q")
+        git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
+            "--allow-empty", "-m", "init")
+        # "harness/", não "tests/": em build-team a pista do qa-engineer É
+        # "tests/**" — um script ali dentro cairia no deny de "própria pista"
+        # (pinned em DENY: "script DENTRO da própria pista"), mascarando o
+        # caso que este teste prova.
+        (proj / "harness").mkdir(exist_ok=True)
+        tpy = proj / "harness" / "t.py"
+        tpy.write_text("#!/usr/bin/env python3\nprint(1)\n")
+        tpy.chmod(0o755)
+        git("add", "harness/t.py")
+        git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
+            "-m", "add t.py")
+        git("worktree", "add", "-q", str(wt), "HEAD")
+
+        try:
+            for label, cmd in (
+                ("cd {WT}; python3 harness/t.py (cd pode falhar)",
+                 f"cd {wt}; python3 harness/t.py"),
+                ("caso real 1: cd && ls|grep ; timeout python3 ; echo EXIT",
+                 f'cd {wt} && ls harness/ | grep t; '
+                 f'timeout 120 python3 harness/t.py; echo "EXIT=$?"'),
+                ("caso real 2: cd && heredoc && python3 | tail",
+                 f"cd {wt} && python3 - <<'EOF'\nprint(1)\nEOF\n"
+                 f"python3 harness/t.py 2>&1 | tail -3"),
+                ("caso real 3: python3 <WT>/harness/t.py | grep",
+                 f"python3 {wt}/harness/t.py 2>&1 | grep -A5 x"),
+                ("bash <WT>/harness/t.py", f"bash {wt}/harness/t.py"),
+                ("<WT>/harness/t.py direto", f"{wt}/harness/t.py"),
+            ):
+                rc, err = run(hook, at, cmd, proj)
+                check(f"[{topo:13}] libera: {label}", rc == 0, err[:300])
+
+            rc, err = run(hook, at, f"python3 {wt}/harness/t.py {proj}/{lane_out}", proj)
+            check(f"[{topo:13}] nega: script na cópia citando a raiz (paridade balde 3)",
+                  rc == 2 and "erro interno" not in err, err[:300])
+
+            rc, err = run(hook, at, f"sh {solto}/x.sh", proj)
+            check(f"[{topo:13}] nega: script fora da raiz e fora de worktree registrado",
+                  rc == 2 and "erro interno" not in err, err[:300])
+
+            git("worktree", "remove", "--force", str(wt))
+            rc, err = run(hook, at, f"python3 {wt}/harness/t.py", proj)
+            check(f"[{topo:13}] nega: worktree removido do registro (perturbação)",
+                  rc == 2 and "erro interno" not in err, err[:300])
+        finally:
+            subprocess.run(["git", "-C", str(proj), "worktree", "remove", "--force", str(wt)],
+                           capture_output=True, text=True)
+
+
 def main():
     if not HOOKS:
         print("FAIL: nenhum */hooks/bash-path-lock.py em", REPO)
@@ -518,6 +603,7 @@ def main():
     test_dica_diretorio_nao_resolvido()
     test_agentes_de_prova_enderecam_worktree_por_caminho_literal()
     test_modo_sombra_e_telemetria()
+    test_script_na_copia_descartavel()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} falha(s) em {len(HOOKS)} cópias")
