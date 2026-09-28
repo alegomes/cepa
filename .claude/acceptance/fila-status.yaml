@@ -118,12 +118,12 @@ criterios:
     veredito: complete
 
 notas: >
-  Suite completa `bash tests/run-all.sh` nao foi reexecutada ate o fim por
-  este auditor (estourou o timeout de 120s em primeiro plano e foi movida
-  para segundo plano pelo harness; notificacao de segundo plano nao chega
-  a subagentes, entao essa saida foi ignorada e nao usada como evidencia).
-  Em vez disso, os dois arquivos de teste que demonstram os 7 criterios
-  foram rodados isoladamente em primeiro piano, com contagem N>0 de casos
-  e "all green"/"tudo ok" — essa e a evidencia registrada acima. O dono
-  reportou 102 de 102 na suite completa; esse numero e claim do
-  coordenador, nao verificado por este auditor.
+  `bash tests/run-all.sh` foi lancado em primeiro plano, estourou o
+  timeout de 120s e o harness moveu para segundo plano; o veredito acima
+  foi fechado sem esperar por essa notificacao (evidencia dos 7 criterios
+  veio dos dois arquivos de teste rodados isoladamente em primeiro plano,
+  com N>0 casos e "all green"/"tudo ok"). O job de segundo plano terminou
+  depois, por conta propria, e sua saida foi conferida so entao, sem
+  polling: "arquivos rodados: 102 de 102 / tudo verde", familia pytest
+  "65 passed in 0.55s". Isso confirma o numero que o dono do pedido citou
+  e reforca, sem alterar, o veredito complete ja registrado acima.
