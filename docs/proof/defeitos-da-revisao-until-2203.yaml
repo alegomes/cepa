@@ -1,0 +1,38 @@
+schema_version: 2
+card: defeitos-da-revisao-until-2203
+verdict: proven
+reviewed_at: 2026-09-28T06:30:00-03:00
+base_commit: 8961f65
+head_commit: c0b259a
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until-digest:plano_da_fila", module: harness, external_observable: false, substituted_by_double: null }
+    - { class: "common/bin/cepa-until:contagem de quedas de rede", module: harness, external_observable: false, substituted_by_double: null }
+    - { class: "tests/eval/run-eval.py:save_patch/cmd_run", module: harness, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não é projeto Maven/PIT; harness Python puro, mecanismo universal de perturbação usado para os três defeitos."
+    perturbation:
+      status: pass
+      results:
+        - "cepa-until-digest: revertido plano_da_fila() para a leitura antiga (ledger.parent.parent/plan.yaml) em worktree /tmp/proof-defeitos-until-2203 (git checkout 8961f65 -- common/bin/cepa-until-digest); `python3 tests/test_cepa_until_digest.py` foi de 0 falhas (GREEN em HEAD) para 3 falhas (lê o estado da fila do clone principal / não lê a cópia velha da worktree / diz de qual arquivo leu a fila), exit 1. RED confirmado. Restaurado com git checkout c0b259a."
+        - "cepa-until: revertida a contagem de quedas de rede para o append-só-na-volta antigo (queda = [ident, caiu, None]; quedas.append(queda) removido; quedas.append((ident, caiu, voltou)) restaurado dentro do if espera_a_rede). `time python3 tests/test_cepa_until_rede.py` (27s) foi de 0 falhas para 4 falhas (run_end conta a queda mesmo sem ter esperado / run_end conta a queda da qual a rede não voltou / o resumo do fim lista a queda sem volta / run_end conta as 3 quedas, inclusive a que parou o run), exit 1. RED confirmado. Restaurado com git checkout c0b259a."
+        - "tests/eval/run-eval.py: revertido para a versão do base_commit (sem save_patch, com drop_worktree condicional a passed). `python3 tests/test_eval_suite.py` foi de all green para 5 falhas (nenhuma worktree da corrida fica registrada / nem o diretório dela fica no disco / o resultado aponta o .patch com o que o agente escreveu / o .patch mora ao lado do resultado, não em /tmp / não sobra o campo que apontava a worktree), exit 1. RED confirmado. Restaurado com git checkout c0b259a."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "cada linha alterada nos três arquivos é exercitada pelas asserções que foram RED na perturbação correspondente (ver l3); reachability confirmada estruturalmente pelos próprios testes novos do diff, sem tooling de cobertura no harness (não é projeto Maven/JaCoCo)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff não abre superfície de entrada externa nova: é harness interno (scripts de supervisão/relatório do cepa-until e do run-eval), sem endpoint HTTP nem parsing de input de terceiros; nenhuma classe tocada está em módulo de input-bearing (api-rest não existe neste repo)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "worktree /tmp/proof-defeitos-until-2203: git checkout -q 8961f65 -- . (código-fonte na base) seguido de git checkout c0b259a -- tests/test_cepa_until_digest.py tests/test_cepa_until_rede.py tests/test_eval_suite.py (testes novos do HEAD). `python3 tests/test_cepa_until_digest.py` → 3 falhas no teste novo (mesmas do RED da perturbação), exit 1. `python3 tests/test_cepa_until_rede.py` → 4 falhas nos checks novos, exit 1. `python3 tests/test_eval_suite.py` → 5 falhas no teste novo, exit 1. Os três confirmam RED na base. Restaurado com git checkout -q c0b259a -- ."
+routing_reason: "Os três defeitos da revisão (cepa-until-digest lendo a cópia velha do plan.yaml; cepa-until perdendo a contagem de quedas de rede sem volta; run-eval mantendo worktrees órfãs em vez de salvar o .patch) foram provados load-bearing: GREEN em HEAD, RED quando a linha do fix é revertida (perturbação) e RED do teste novo aplicado sobre o base_commit (regressão). Nenhuma superfície de input externa é aberta pelo diff (harness Python interno), então L4 é n/a, não skipped. Todos os níveis aplicáveis passaram com evidência verificada. PROVEN."
