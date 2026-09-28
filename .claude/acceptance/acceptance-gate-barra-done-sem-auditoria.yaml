@@ -1,0 +1,97 @@
+key: acceptance-gate-barra-done-sem-auditoria
+status: complete
+diff: ad2ad52..e00a1f3
+criteria:
+  - id: AC1
+    text: >
+      common/hooks/acceptance-gate.py, invoked as a PreToolUse hook on a Jira
+      transition (both MCP dialects and twg via Bash), exits 2 when the
+      target resolves to done and no <KEY>.yaml exists in any of the four
+      places (worktree and main clone, .claude/acceptance/ and
+      docs/acceptance/), including from a fresh git worktree.
+    altitude: subprocess
+    surface: >
+      stdin JSON payload (tool_name + tool_input + cwd) piped into
+      common/hooks/acceptance-gate.py, asserting on returncode and stderr.
+    test: tests/test_acceptance_gate.py
+    layer: subprocess (hook binary)
+    evidence: verified
+    run: >
+      python3 tests/test_acceptance_gate.py -> "all acceptance-gate tests
+      passed", EXIT:0, 35 checks including "nenhuma árvore tem artefato →
+      Done BLOQUEIA (decisão do dono, 2026-09-27)" (fresh worktree pair via
+      make_worktree_pair(None), cloud MCP dialect, transition id 51/done),
+      "nenhuma árvore tem artefato, dialeto mcp-atlassian → Done BLOQUEIA"
+      (jira_transition_issue dialect), and "twg Bash, sem artefato, transição
+      por nome 'Done' → BLOQUEIA" (Bash tool_name with a twg command string).
+      All three asserted r.returncode == 2.
+    gap: null
+  - id: AC2
+    text: "Review continues allowed: absent artifact + target in_review exits 0."
+    altitude: subprocess
+    surface: same as AC1 (stdin JSON -> exit code)
+    test: tests/test_acceptance_gate.py
+    layer: subprocess (hook binary)
+    evidence: verified
+    run: >
+      python3 tests/test_acceptance_gate.py -> EXIT:0; check "nenhuma árvore
+      tem artefato → In Review PASSA" (transition id 41, no artifact in
+      either tree) asserted r.returncode == 0.
+    gap: null
+  - id: AC3
+    text: >
+      No regression: absent + backward moves / unresolved target exit 0;
+      present-artifact behavior unchanged.
+    altitude: subprocess
+    surface: same as AC1 (stdin JSON -> exit code)
+    test: tests/test_acceptance_gate.py
+    layer: subprocess (hook binary)
+    evidence: verified
+    run: >
+      python3 tests/test_acceptance_gate.py -> EXIT:0, including "nenhuma
+      árvore tem artefato → In Progress PASSA", "nenhuma árvore tem
+      artefato, sem board-flow.yaml (alvo não resolvido) → PASSA", plus the
+      pre-existing present-artifact matrix (incomplete audit backward moves
+      PASS / forward BLOCK, complete audit PASS both directions, worktree
+      artifact precedence, docs/acceptance/ lookup, other-tool/no-key/
+      malformed-payload fail-open) all still green in the same run.
+    gap: null
+  - id: AC4
+    text: >
+      The block message tells the agent how to fix (run completion-auditor)
+      and names the searched paths.
+    altitude: subprocess
+    surface: stderr text of the blocked run
+    test: tests/test_acceptance_gate.py (block_no_artifact in common/hooks/acceptance-gate.py)
+    layer: subprocess (hook binary)
+    evidence: verified
+    run: >
+      python3 tests/test_acceptance_gate.py -> EXIT:0; check "…e a mensagem
+      cita .claude/acceptance e o clone principal" asserts
+      ".claude/acceptance" in r.stderr and str(main.resolve()) in r.stderr.
+      Read common/hooks/acceptance-gate.py:252-266 (block_no_artifact):
+      stderr prints "Searched:" with the four candidate_paths and "Fix: run
+      the completion-auditor (it writes `.claude/acceptance/{key}.yaml`) and
+      get `status: complete`".
+    gap: null
+  - id: AC5
+    text: "docs (docs/acceptance-completeness.md) and BACKLOG.md reflect the new rule."
+    altitude: docs
+    surface: docs/acceptance-completeness.md status table, BACKLOG.md item status/plan
+    test: n/a (documentation, verified by direct read of the diff)
+    layer: docs
+    evidence: verified
+    run: >
+      git diff ad2ad52..e00a1f3 -- BACKLOG.md docs/acceptance-completeness.md
+      read directly: docs/acceptance-completeness.md gained the
+      "absent, target is done -> BLOCK" row (both the status table and the
+      four-places table); BACKLOG.md's item
+      "acceptance-gate.py fica cego em worktree e libera Done sem auditoria"
+      marks passo 2 FEITO em 2026-09-28 and updates the numbered TODO to
+      strike out the "decidir" line with the resolution.
+    gap: null
+report:
+  summary: >
+    All five acceptance criteria for acceptance-gate-barra-done-sem-auditoria
+    are demonstrated at the hook's declared altitude (subprocess: stdin JSON
+    payload -> exit code + stderr) and verified green in this run. No gaps.
