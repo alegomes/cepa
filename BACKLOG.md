@@ -3776,6 +3776,8 @@ zero intervenção para o vermelho e nada novo para lembrar.
 
 ## `cepa-until` pula a suíte do cepa por causa do `.claude/no-build`
 
+**Plano:** fora da fila (feito direto em 2026-09-27, sem item na fila `cepa`: commits `b250a42`, `1782e61`, `e7da35f`)
+
 **Status:** feito em 2026-09-27 (`comando_de_verify` roda `tests/run-all.sh` quando o repo tem os dois; teste em `tests/test_cepa_until_branch_da_noite.py`) · **Lar provável:** `common/bin/cepa-until` (`comando_de_verify`, linha ~746)
 · **Origem:** análise do run `cepa` `2026-09-26-1809` (`/common:until-review`).
 
