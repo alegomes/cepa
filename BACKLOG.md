@@ -3741,9 +3741,10 @@ zero intervenção para o vermelho e nada novo para lembrar.
 
 ### Sequência (detalhes e critérios no documento)
 
-0. Rodar `/common:advisors` sobre a "Revisão 2" do documento (decisão do dono, 26/09): o
-   painel anterior só viu a triagem com reexecução isolada. Em seguida, medir quanto custa um segundo `./mvnw -B clean verify` e uma reexecução do
-   `CadastroComTagsE2ETest` na worktree de 26/09.
+0. ~~Painel de advisors sobre a "Revisão 2" e medição do custo~~ **feito em 2026-09-28.** O
+   painel derrubou o `FIX-<teste>` (a fila travava e o conserto rodava sem o código do card);
+   o dono aprovou a **Revisão 3** (`docs/discovery/until-fim-sem-dono/revisao-3.md`), que vale
+   sobre a Revisão 2 onde as duas divergem. Segundo build: mediana 958 s em 24 medições.
 1. **Garantia:** os commits de todas as tentativas de um item vão para a branch lateral, com
    as duas checagens antes do `reset` (SHA ancestral do HEAD; nenhum outro `done` no meio).
    Teste vermelho: item com duas tentativas, e a lateral precisa conter os commits das duas.
@@ -3757,20 +3758,18 @@ zero intervenção para o vermelho e nada novo para lembrar.
    (`common/commands/worktree-merge.md:38`) e não acha `until/<run>`. Reusar os guardas
    dele exige ensiná-lo a aceitar `until/`, ou extrair os guardas para um executável que
    os dois chamem. Até lá, tirar essa sugestão do resumo.
-4. **Vermelho que se resolve:** segundo build completo; verde fecha `done`; vermelho de novo
-   põe `FIX-<teste>` na frente da fila e devolve o item para `pending` bloqueado por ele;
-   registro de instabilidade entre runs; lateral consumida e apagada pelo próprio supervisor.
+4. **Vermelho que se resolve** (Revisão 3, subpassos 4a-4f com critério e teste vermelho no
+   documento): segundo build completo; verde fecha `done` e grava `build_instavel` na
+   telemetria; qualquer outro desfecho devolve o **próprio item** a `pending` com o recado na
+   `evidence`, que o `cepa-plan start` passa a imprimir; teto de duas voltas (a segunda vai para
+   `blocked`); cada volta conta no disjuntor; lateral só é apagada depois do `format-patch`.
 5. Cabeçalho curto, caminhos relativos, custo no resumo; `/common:next` e `/common:doctor`
    leem o estado do run.
 
 ### Teste que falta
 
-- Build falso que falha uma vez e depois passa: espera item `done` e uma linha no registro de
-  instabilidade.
-- Build falso que falha duas vezes no mesmo teste: espera lateral com os commits de todas as
-  tentativas, `FIX-<teste>` na frente da fila e o item `pending` bloqueado por ele.
-- Próximo run com o `FIX-<teste>` `done`: espera cherry-pick da lateral antes do agente e a
-  lateral apagada quando o item fecha.
+A tabela "Sequência e critérios de aceite" da Revisão 3 (um teste vermelho por subpasso, todos
+na superfície cli).
 
 ---
 
