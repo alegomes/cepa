@@ -478,9 +478,9 @@ items:
   human_pending: null
   evidence: 'Condicao de fora: mesma do rodar-onda-lotes-sweep-verify (em 2026-09-25
     o herdr estava fora do ar; em 2026-09-28 esta de pe, e sobra a decisao do dono
-    de nao rodar a onda num lote desatendido). Alem disso
-    segue aberta a contradicao do why: P5 (cascata multi-repo) done em melhorias-2026-07
-    e pendente aqui; resolver antes de rodar. Quem resolve: o dono.'
+    de nao rodar a onda num lote desatendido). Alem disso segue aberta a contradicao
+    do why: P5 (cascata multi-repo) done em melhorias-2026-07 e pendente aqui; resolver
+    antes de rodar. Quem resolve: o dono.'
 - id: atrito-decisao-fase-1
   title: 'Spike do hook em AskUserQuestion (30 min) + autonomy.yaml com detect:
     + extensão do decide'
@@ -1410,10 +1410,24 @@ items:
     sessao com alarme falso. Se repete em toda rodada que investiga transcripts,
     que e o que o conserto destes hooks exige. (ainda não priorizado: entrou no
     fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Branch da noite until/2026-09-28-1146, commits e37c6cf (fix + teste
+    de regressao) e o seguinte (docs/proof). Causa: pendencias() do no-background-build.py
+    aplicava _VIGIA_ARMADO a qualquer tool_result; agora so quando o tool_use_id
+    pertence a um tool_use name=Monitor com id presente (conjunto vigias_chamados).
+    Regressao: test_texto_monitor_started_na_saida_de_outra_ferramenta_nao_arma_vigia
+    (3 checagens: grep do Bash, tool_result orfao, colisao em None) RED na base
+    508694a, verde no HEAD; fixture CHAMA_VIGIA mantem os 7 usos de ARMA_VIGIA testando
+    Monitor real. tests/test_no_background_build.py 56 ok/0 FAIL; tests/test_common_drain_plan.py
+    verde. pair-reviewer APPROVE (nota: _VIGIA_PARADO segue lendo todo tool_result,
+    efeito conservador, fora do escopo). completion-auditor COMPLETE (.claude/acceptance/vigia-conta-so-monitor-real.yaml,
+    com RED reproduzido de forma independente no HEAD anterior). proof-reviewer
+    PROVEN (docs/proof/vigia-conta-so-monitor-real.yaml: regressao RED na base +
+    4 perturbacoes RED). Build completo fica com o supervisor da branch da noite;
+    sem merge, sem push. Plugin common instalado precisa ser reinstalado para o
+    hook novo valer nas sessoes.'
 - id: path-lock-libera-proof-reviewer-na-copia
   title: bash-path-lock deixa o proof-reviewer rodar testes dentro da própria cópia
     descartável em /tmp
@@ -1421,10 +1435,20 @@ items:
     em /tmp/proof-* nas rodadas 2, 5 e 6 (''executar arquivo fora do projeto'').
     E exatamente onde ele deve perturbar o codigo; contornou, mas gastou turnos.
     (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 44e6a67 (fix no molde common/hooks/_templates/bash-path-lock.py.tmpl
+    + 6 copias regeneradas + teste novo test_script_na_copia_descartavel em tests/test_bash_path_lock_exec.py)
+    e o commit seguinte com os artefatos dos gates, na branch until/2026-09-28-1146
+    (sem merge, sem push; build completo e do supervisor). pair-reviewer OK; completion-auditor
+    COMPLETE (.claude/acceptance/path-lock-libera-proof-reviewer-na-copia.yaml);
+    proof-reviewer PROVEN (docs/proof/path-lock-libera-proof-reviewer-na-copia.yaml):
+    3 perturbacoes RED, regressao RED na base 4e7205d. Regra: script fora da raiz
+    passa se mora em worktree registrado deste repo (git worktree list) e a linha
+    nao cita a raiz; sh /tmp/x.sh solto segue negado. Fora: proof-reviewer.md nao
+    foi alterado (a receita ''cd /tmp/proof-<KEY> && ...'' continua valendo e nao
+    precisa mudar).'
 - id: reconcile-ignora-dropped-igual
   title: cepa-plan reconcile para de listar como divergência item descartado na
     fila e descartado no quadro
@@ -1432,16 +1456,53 @@ items:
     WEGO listou os 12 Descartados como dropped->dropped, ruido que esconde a unica
     divergencia real (WEGO-1412 pending->Done). (ainda não priorizado: entrou no
     fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits fd4b749 (fix em reconcilia: item dropped na fila + Won''t Do
+    ou missing no quadro vai para in_sync, sem carimbo reconciled), 2c2445c (teste
+    W-4/W-5: pending + Won''t Do/missing segue divergindo pending->dropped, fecha
+    mutante P4 que o proof-reviewer achou), 3o commit com artefatos. pair-reviewer
+    OK; completion-auditor COMPLETE (.claude/acceptance/reconcile-ignora-dropped-igual.yaml);
+    proof-reviewer PROVEN na 2a rodada (docs/proof/reconcile-ignora-dropped-igual.yaml):
+    regressao RED na base 987a906, 5 perturbacoes RED. Rodado so tests/test_common_drain_plan.py
+    + test_common_next.py + test_common_plan.py (all green); build completo e do
+    supervisor do cepa-until. Codigo esta na branch da noite until/2026-09-28-1146,
+    sem merge nem push.'
 - id: digest-mostra-worktree-e-build-alheio-do-qa
   title: cepa-until-digest mostra quando o qa-engineer abre worktree descartável
     ou apresenta build verde de outro módulo
   why: 'Parte (3) do item until-progresso-ignora-commits-e-retomada-perde-branch,
     deixada de fora no run 2026-09-28-0558 e anotada na evidence dele como merecendo
     item proprio. (ainda não priorizado: entrou no fim da fila)'
+  status: done
+  blocked_by: []
+  human_pending: null
+  evidence: 'Na branch da noite until/2026-09-28-1146 (sem merge, sem push): feat
+    2caf850, gates 4e0582c (aceite e prova versionados). cepa-until-digest imprime
+    por rodada a linha ''sinais de processo'': worktree aberta (Bash git worktree
+    add, EnterWorktree, Agent isolation=worktree) e relato de gate de build contornado
+    com o verde de outro modulo, cada um com quem e trecho; sinais de texto so em
+    relatorio devolvido por agente e conteudo de Write/Edit (o qa-engineer e neto,
+    as chamadas dele nao estao no .log; a dica do hook de path-lock em resultado
+    de ferramenta virava sinal falso); worktree --detach do proof-reviewer anotada
+    como permitida e por ultimo. Conferido no run real WEGO 2026-09-27-1632: worktree
+    do qa-engineer nas rodadas 2327/2328/2329/2283 e o build verde de outro modulo
+    no 2329. Teste tests/test_cepa_until_digest.py::test_sinais_de_processo_worktree_e_build_alheio
+    (10 checagens) RED na base 0311291, verde no HEAD; tests/run-all.sh cepa_until
+    until_review drain_plan 11/11 verde. pair-reviewer APROVAR, completion-auditor
+    COMPLETE (.claude/acceptance/digest-mostra-worktree-e-build-alheio-do-qa.yaml),
+    proof-reviewer PROVEN com 5 perturbacoes RED (docs/proof/digest-mostra-worktree-e-build-alheio-do-qa.yaml).
+    until-review.md ganhou a pergunta 8 (sinais de processo); common 2.26.4, plugin
+    ainda nao reinstalado. Build completo fica com o supervisor.'
+- id: until-avisa-hook-so-vale-apos-reinstalar
+  title: cepa-until avisa no banner do run quando a branch da noite altera hook
+    que so passa a valer depois de mesclar e reinstalar o plugin
+  why: 'Run 2026-09-28-1146: o item 2 corrigiu o bash-path-lock e o item 1 o no-background-build,
+    mas as 4 rodadas seguiram barradas pelos hooks antigos, porque os hooks rodam
+    do plugin instalado no cache (igual ao main), nao da branch da noite. Nenhuma
+    rodada foi perdida, mas o intervalo e invisivel no run; decisao do dono em 2026-09-28
+    de abrir o item. (ainda não priorizado: entrou no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
