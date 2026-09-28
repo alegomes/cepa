@@ -135,9 +135,11 @@ def test_build_vermelho_tira_o_item_da_branch_sem_perder_os_commits():
         check("o card seguinte começa sem o código vermelho",
               "a3" in vistos, str(vistos))
         fim = [e for e in ev if e["evento"] == "run_end"][0]
+        # Revisão 3: o a2 volta a `pending` na 1ª volta vermelha e só vira
+        # `blocked` na 2ª, então são dois vermelhos para um travado.
         check("o registro conta entregues, travados e vermelhos",
               (fim.get("entregues"), fim.get("travados"),
-               fim.get("verify_vermelho")) == (2, 1, 1), str(fim))
+               fim.get("verify_vermelho")) == (2, 1, 2), str(fim))
         check("o resumo separa entregues de travados",
               "2 entregue(s) · 1 travado(s)" in p.stdout, p.stdout[-800:])
 
@@ -455,6 +457,140 @@ def test_item_esgotado_leva_os_commits_das_tentativas_para_a_lateral():
         check("...que a evidência nomeia",
               laterais and laterais[-1] in (status(raiz, "a1").get("evidence")
                                             or ""), str(status(raiz, "a1")))
+
+
+# ── o vermelho se resolve sem o dono (Revisão 3, passos 4a, 4b, 4d, 4e) ─────
+
+# Um `claude` falso que, a cada chamada, anota a `evidence` que o item tinha ao
+# ser pego: é o recado que o agente veria no `cepa-plan start`.
+TRABALHA_E_LE = TRABALHA.replace(
+    "ident = primeiro_pendente()\n",
+    "ident = primeiro_pendente()\n"
+    "_ev = [it.get('evidence') for it in carrega()['items'] if it['id'] == ident][0]\n"
+    "with open(os.environ['FAKE_CHAMADAS'] + '.recado', 'a') as f:\n"
+    "    f.write(json.dumps({'id': ident, 'evidence': _ev}) + '\\n')\n", 1)
+
+SEMPRE_VERMELHO = "false"
+
+
+def recados(raiz):
+    f = Path(raiz).parent / "chamadas.jsonl.recado"
+    return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
+
+
+def telemetria(dirt):
+    ev = []
+    for f in Path(dirt).glob("*.jsonl"):
+        ev += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+    return ev
+
+
+def test_4a_segundo_build_verde_fecha_done_e_grava_a_instabilidade():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, TRABALHA)
+        cont = Path(tmp) / "n-verify"
+        # vermelho na 1ª chamada, verde da 2ª em diante
+        verify = (f"n=$(cat {cont} 2>/dev/null || echo 0); "
+                  f"echo $((n+1)) > {cont}; [ $n -ge 1 ]")
+        tele = Path(tmp) / "tele"
+        p, _ = roda(raiz, binv, plano_de(raiz),
+                    ["--for", "2h", "--verify", verify],
+                    extra_env={"CEPA_TELEMETRY_DIR": str(tele)})
+        check("o item fecha done", status(raiz, "a1")["status"] == "done",
+              str(status(raiz, "a1")) + p.stdout[-600:])
+        ev = ledger_de(raiz)
+        check("o registro grava verify_repetido_verde",
+              any(e["evento"] == "verify_repetido_verde" and e["id"] == "a1"
+                  for e in ev), str(ev))
+        t = [e for e in telemetria(tele) if e.get("event") == "build_instavel"]
+        check("a telemetria grava build_instavel com card e run",
+              len(t) == 1 and t[0].get("card") == "a1" and t[0].get("run"),
+              str(telemetria(tele)))
+        branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
+        check("o commit fica na branch da noite",
+              "a1" in git(raiz, "log", "--format=%s", branch).splitlines())
+
+
+def test_4b_volta_vermelha_devolve_o_item_a_pending_com_recado():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, TRABALHA_E_LE)
+        p, _ = roda(raiz, binv, plano_de(raiz),
+                    ["--for", "2h", "--verify", SEMPRE_VERMELHO,
+                     "--max-falhas", "5"])
+        ev = ledger_de(raiz)
+        branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
+        vistos = recados(raiz)
+        check("o item volta a ser executado depois da 1ª volta",
+              len(vistos) >= 2, str(vistos) + p.stdout[-800:])
+        recado = (vistos[1]["evidence"] or "") if len(vistos) >= 2 else ""
+        check("...como pending, com a lateral no recado",
+              f"{branch}-vermelho-a1" in recado, recado)
+        check("...o motivo e o número da volta",
+              "saiu 1" in recado and "volta 1" in recado, recado)
+        check("...e que desligar teste não conserta",
+              "desabilitar" in recado.lower(), recado)
+        check("o registro grava volta_vermelha",
+              any(e["evento"] == "volta_vermelha" and e["id"] == "a1"
+                  for e in ev), str(ev))
+        check("o 2º build rodou antes da volta",
+              len([e for e in ev if e["evento"] == "verify"
+                   and e["id"] == "a1"]) >= 2, str(ev))
+
+
+def test_4d_segunda_volta_vermelha_vira_blocked():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, TRABALHA)
+        p, _ = roda(raiz, binv, plano_de(raiz),
+                    ["--for", "2h", "--verify", SEMPRE_VERMELHO])
+        check("o run termina com o item blocked",
+              status(raiz, "a1")["status"] == "blocked",
+              str(status(raiz, "a1")) + p.stdout[-600:])
+        voltas = [e for e in ledger_de(raiz)
+                  if e["evento"] == "volta_vermelha" and e["id"] == "a1"]
+        check("...e exatamente duas voltas vermelhas", len(voltas) == 2,
+              str(voltas))
+        branch = [e for e in ledger_de(raiz)
+                  if e["evento"] == "run_start"][0]["branch"]
+        check("a 2ª volta não sobrescreve a lateral da 1ª",
+              git(raiz, "branch", "--list", f"{branch}-vermelho-a1")
+              and git(raiz, "branch", "--list", f"{branch}-vermelho-a1-v2"),
+              git(raiz, "branch", "--list", "until/*"))
+
+
+def test_4d_voltas_contam_entre_runs():
+    """O teto conta nos `.jsonl` da fila, e não só na janela corrente."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, TRABALHA)
+        d = raiz / ".claude" / "programs" / "fila" / "until"
+        d.mkdir(parents=True)
+        (d / "2026-01-01-0000.jsonl").write_text(json.dumps(
+            {"evento": "volta_vermelha", "id": "a1", "volta": 1}) + "\n")
+        subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", "run anterior"], cwd=raiz, check=True)
+        roda(raiz, binv, plano_de(raiz),
+             ["--for", "2h", "--verify", SEMPRE_VERMELHO])
+        check("com uma volta de um run anterior, a 1ª deste já vira blocked",
+              status(raiz, "a1")["status"] == "blocked"
+              and len(recados(raiz)) == 0 and len(cwds(raiz)) == 1,
+              str(status(raiz, "a1")) + str(cwds(raiz)))
+
+
+def test_4e_cada_volta_conta_no_disjuntor():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        binv = fake_claude(tmp, TRABALHA)
+        roda(raiz, binv, plano_de(raiz),
+             ["--for", "2h", "--verify", SEMPRE_VERMELHO, "--max-falhas", "2"])
+        fim = [e for e in ledger_de(raiz) if e["evento"] == "run_end"][0]
+        check("o run para pelo disjuntor", fim["motivo"] == "disjuntor", str(fim))
+        check("...sem nenhum item done",
+              not any(status(raiz, i)["status"] == "done"
+                      for i in ("a1", "a2", "a3")), str(fim))
 
 
 def main():

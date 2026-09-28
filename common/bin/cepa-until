@@ -249,6 +249,13 @@ MAX_TRAVADOS_PADRAO = 3
 # plano e fechou na repetição, quando o build já tinha acabado.
 TENTATIVAS_POR_ITEM_PADRAO = 2
 
+# Quantas voltas vermelhas um item aguenta antes de ir para `blocked`
+# (Revisão 3 do until-fim-sem-dono). Uma volta é o item que fechou `done`,
+# ficou vermelho em dois builds completos seguidos e voltou para `pending` com
+# o recado. Na segunda, o agente já teve a lateral e o motivo na mão e não
+# resolveu: repetir de novo gasta a janela no mesmo card.
+VOLTAS_VERMELHAS_MAX = 2
+
 # O que o `claude` imprime quando a CONTA bateu o teto de uso — não o item, não
 # a fila, não a topologia. Sem reconhecer isto o supervisor lê só "saiu 1 e o
 # item não andou" e culpa o card: em 2026-08-30 duas tentativas de 92s e 4s
@@ -1035,7 +1042,7 @@ def roda_verify(comando, arvore, limite_seg, log):
 
 
 def desfaz_item(repo, arvore, run_id, ident, desde, no_meio=(),
-                sufixo="vermelho"):
+                sufixo="vermelho", volta=1):
     """Tira da branch da noite os commits de um item cujo build ficou
     vermelho, sem perdê-los: eles ficam em `until/<run>-<sufixo>-<id>`.
 
@@ -1058,7 +1065,10 @@ def desfaz_item(repo, arvore, run_id, ident, desde, no_meio=(),
     if codigo != 0:
         return None, (f"{desde[:10]}, o começo da 1ª tentativa do {ident}, "
                       "não é ancestral do HEAD da branch da noite")
-    lateral = f"until/{run_id}-{sufixo}-{ident}"
+    # A 2ª volta do mesmo item no mesmo run não pode sobrescrever a lateral da
+    # 1ª: ali estão commits que o agente pode não ter aproveitado.
+    lateral = (f"until/{run_id}-{sufixo}-{ident}"
+               + (f"-v{volta}" if volta > 1 else ""))
     codigo, saida = git(["branch", "-f", lateral, "HEAD"], arvore)
     if codigo != 0:
         return None, saida
@@ -1066,6 +1076,37 @@ def desfaz_item(repo, arvore, run_id, ident, desde, no_meio=(),
     if codigo != 0:
         return None, saida
     return lateral, None
+
+
+def voltas_vermelhas(ledger_dir, ident):
+    """Quantas voltas vermelhas o item já teve, contadas nos `.jsonl` de TODOS
+    os runs da fila: o teto vale entre runs, e sem arquivo novo."""
+    n = 0
+    for reg in ledger_dir.glob("*.jsonl"):
+        try:
+            linhas = reg.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for linha in linhas:
+            try:
+                e = json.loads(linha)
+            except ValueError:
+                continue
+            if (isinstance(e, dict) and e.get("evento") == "volta_vermelha"
+                    and str(e.get("id")) == str(ident)):
+                n += 1
+    return n
+
+
+def emite_telemetria(evento, repo, **campos):
+    """Um evento no ledger de `~/.claude/cepa-telemetry/`, pelo mesmo módulo
+    dos hooks. Nunca derruba o run: telemetria é rede, não portão."""
+    try:
+        sys.path.insert(0, str(AQUI.parent / "hooks"))
+        import _telemetry
+        _telemetry.emit(evento, cwd=str(repo), **campos)
+    except Exception:
+        pass
 
 
 def finaliza_item(nome, repo, ident, status, evidencia):
@@ -1489,6 +1530,7 @@ def main(argv=None):
                   "cota_5h": ([leituras[0][0], leituras[-1][0]]
                               if leituras else None)})
 
+        volta_agora = False
         # O build completo da branch da noite, depois de cada `done` que
         # commitou. É o supervisor quem roda, não o agente: o agente pode
         # rodar antes do último refactor, rodar em duas metades ou pular a
@@ -1505,29 +1547,84 @@ def main(argv=None):
                 verify, arvore, restam, log)
             registra({"evento": "verify", "id": ident, "verde": verde,
                       "segundos": int(seg_verify), "motivo": motivo_verify})
+            if not verde:
+                # Segundo build completo no mesmo código (Revisão 3, exceção
+                # assumida à regra 4 do green-or-revert, pedida pelo dono em
+                # 26/09). Sem tempo para ele, é volta vermelha: a próxima
+                # tentativa faz o resto.
+                restam = (prazo + folga - datetime.now()).total_seconds()
+                if restam >= seg_verify:
+                    print(f"          → vermelho ({motivo_verify}); rodo o "
+                          "build completo de novo, no mesmo código")
+                    verde, seg2, motivo2 = roda_verify(verify, arvore, restam,
+                                                       log)
+                    registra({"evento": "verify", "id": ident, "verde": verde,
+                              "segundos": int(seg2), "motivo": motivo2,
+                              "repeticao": 2})
+                else:
+                    motivo2 = "não coube no que sobra da janela"
+                if verde:
+                    registra({"evento": "verify_repetido_verde", "id": ident,
+                              "motivo_1": motivo_verify})
+                    emite_telemetria("build_instavel", repo, card=ident,
+                                     run=run_id, fila=a.fila,
+                                     motivo=motivo_verify)
+                    print("          → verde na 2ª vez: build instável, "
+                          "registrado na telemetria")
             if verde:
                 print(f"          → verde ({humano(timedelta(seconds=seg_verify))})")
             else:
+                volta = voltas_vermelhas(ledger_dir, ident) + 1
                 desde, n_antes = primeira[ident]
                 lateral, erro_desfaz = desfaz_item(
                     repo, arvore, run_id, ident, desde,
-                    no_meio=entregues[n_antes:])
-                evid = (f"O item fechou `done`, mas o build completo da branch "
-                        f"da noite (`{verify}`) {motivo_verify}. Saída no "
-                        f"`.log` do run {run_id}. ")
-                evid += (f"Os commits do item estão em `{lateral}` e a branch "
-                         f"da noite voltou para {desde[:10]}; o card no Jira "
-                         "pode ter ido para Review antes do build — confira."
-                         if lateral else
-                         f"NÃO consegui tirar os commits da branch da noite: "
-                         f"{erro_desfaz}")
-                erro_fin = finaliza_item(a.fila, repo, ident, "blocked", evid)
+                    no_meio=entregues[n_antes:], volta=volta)
+                ultima = volta >= VOLTAS_VERMELHAS_MAX or bool(erro_desfaz)
+                novo_status = "blocked" if ultima else "pending"
+                if lateral:
+                    # O reset já tirou as tentativas; a próxima começa do zero.
+                    primeira.pop(ident, None)
+                    evid = (f"Esta é a volta {volta} de "
+                            f"{VOLTAS_VERMELHAS_MAX}: o item fechou `done`, "
+                            f"mas o build completo da branch da noite "
+                            f"(`{verify}`) {motivo_verify}, e o 2º build "
+                            f"{motivo2 or 'também ficou vermelho'}. Saída no "
+                            f"`.log` do run {run_id}. Os commits de todas as "
+                            f"tentativas estão em `{lateral}` e a branch da "
+                            f"noite voltou para {desde[:10]}. ")
+                    if ultima:
+                        evid += ("Marquei `blocked`: o item já voltou com o "
+                                 "recado e ficou vermelho de novo. O card no "
+                                 "Jira pode ter ido para Review antes do "
+                                 "build — confira.")
+                    else:
+                        evid += ("O item voltou para `pending`: aproveite a "
+                                 "lateral (`git cherry-pick` ou `git merge` "
+                                 "dentro da tentativa) ou refaça; o build do "
+                                 "supervisor julga o resultado. Desabilitar ou "
+                                 "apagar o teste que falhou não conta como "
+                                 "conserto.")
+                else:
+                    evid = (f"O item fechou `done`, mas o build completo da "
+                            f"branch da noite (`{verify}`) {motivo_verify}. "
+                            f"Saída no `.log` do run {run_id}. NÃO consegui "
+                            f"tirar os commits da branch da noite: "
+                            f"{erro_desfaz}")
+                erro_fin = finaliza_item(a.fila, repo, ident, novo_status, evid)
                 vermelhos.append((ident, lateral, motivo_verify))
                 registra({"evento": "verify_vermelho", "id": ident,
                           "lateral": lateral, "erro": erro_desfaz or erro_fin})
+                if lateral:
+                    registra({"evento": "volta_vermelha", "id": ident,
+                              "volta": volta, "lateral": lateral,
+                              "motivo": motivo_verify, "motivo_2": motivo2,
+                              "status": novo_status})
+                    volta_agora = True
                 print(f"          → VERMELHO ({motivo_verify}): commits "
-                      f"guardados em `{lateral}`, item marcado `blocked`")
-                estado = "blocked"
+                      f"guardados em `{lateral}`, item marcado `{novo_status}`"
+                      + (f" (volta {volta}/{VOLTAS_VERMELHAS_MAX})"
+                         if lateral else ""))
+                estado = novo_status
                 if erro_desfaz:
                     motivo_fim = "verify-vermelho"
                     detalhe_fim = (f"o build ficou vermelho depois do {ident} e "
@@ -1545,6 +1642,30 @@ def main(argv=None):
             relido = relido or {}
             travados.append((ident, relido.get("human_pending"),
                              relido.get("evidence")))
+
+        # A volta vermelha conta como falha seguida (Revisão 3, 4e): um
+        # ambiente quebrado deixa todo build vermelho, e sem isto cada card
+        # voltaria a `pending` sem nenhum contador enxergar o problema. A
+        # última volta (`blocked`) também entra no contador de fila travada.
+        if volta_agora:
+            falhas_seguidas += 1
+            if estado == "blocked":
+                travados_seguidos.append(ident)
+            if falhas_seguidas >= a.max_falhas:
+                motivo_fim = "disjuntor"
+                detalhe_fim = (f"{falhas_seguidas} itens seguidos sem fechar "
+                               "verde (o último, volta vermelha do "
+                               f"{ident}) — isso é sistêmico, não azar; "
+                               "seguir queimaria a janela no mesmo problema")
+                break
+            if len(travados_seguidos) >= a.max_travados:
+                motivo_fim = "fila-travada"
+                detalhe_fim = (
+                    f"{len(travados_seguidos)} itens seguidos saíram `blocked` "
+                    f"({', '.join(travados_seguidos)}); o motivo de cada um "
+                    "está no `evidence` da fila")
+                break
+            continue
 
         # A REDE caiu, antes do teto e do disjuntor: o item não andou porque o
         # `claude` não alcançou a API. Devolve a vez, espera a rede voltar e
@@ -1689,6 +1810,8 @@ def main(argv=None):
                         no_meio=entregues[n_antes:], sufixo="parado")
                     registra({"evento": "tentativas_separadas", "id": ident,
                               "lateral": lateral, "erro": erro_desfaz})
+                    if lateral:
+                        primeira.pop(ident, None)
                 if erro_desfaz:
                     motivo_fim = "item-preso"
                     detalhe_fim = (
