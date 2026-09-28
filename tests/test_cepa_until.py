@@ -750,8 +750,8 @@ def test_folga_e_reserva_tem_os_defaults_declarados():
         p, _ = roda(raiz, binv, plano, ["--for", "12h", "--dry-run"])
         check("a folga default é 60min",
               "mata item que passar 1h00 do prazo" in p.stdout, p.stdout[:800])
-        check("a reserva mínima default é 25min",
-              "não começa item com menos de 25min" in p.stdout, p.stdout[:800])
+        check("a reserva mínima default é 45min",
+              "não começa item com menos de 45min" in p.stdout, p.stdout[:800])
 
 
 def test_dry_run_nao_executa_nada():

@@ -80,7 +80,7 @@ Este arquivo é a fiação em volta disso: relógio, disjuntor e registro.
 Entre itens, NUNCA no meio de um. Matar um item pela metade deixa árvore suja e
 reserva pendurada. Duas folgas controlam isso:
 
-  - `--reserva-minima` (default 25min): não COMEÇA um item se sobra menos que
+  - `--reserva-minima` (default 45min): não COMEÇA um item se sobra menos que
     isso. Um item que não cabe na janela é trabalho jogado fora.
   - `--folga` (default 60min): quanto um item JÁ RODANDO pode passar do prazo
     antes de ser morto. Passou disso, é morte por timeout — registrada, e a
@@ -207,7 +207,10 @@ SUITE_SEM_BUILD = "tests/run-all.sh"
 # não o `.log` inteiro; 20 minutos é folga, não estimativa.
 LIMITE_DA_ANALISE_SEG = int(os.environ.get("CEPA_UNTIL_LIMITE_ANALISE", "1200"))
 
-RESERVA_MINIMA_PADRAO = "25m"
+# 45min e nao 25: no run 2026-09-27-1632 do wego-acessos-backend, 3 dos 4 itens
+# entregues passaram de 25min (1610 s, 2127 s, 2700 s) e o WEGO-2283 comecou com
+# 35min de sobra, rodou 95min e passou 1h do prazo ate ser morto pela folga.
+RESERVA_MINIMA_PADRAO = "45m"
 FOLGA_PADRAO = "60m"
 MAX_FALHAS_PADRAO = 3
 
