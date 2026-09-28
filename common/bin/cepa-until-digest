@@ -15,6 +15,9 @@ Este script escolhe o que ler de forma MECÂNICA, e diz o que escolheu:
   - o registro inteiro (largada, fim, cada item, cada build);
   - de cada rodada, o relatório final do `claude` (o `result` do stream-json),
     as chamadas de agente por tipo, os erros de ferramenta e o custo;
+  - de cada rodada, os SINAIS DE PROCESSO: worktree aberta por quem não é o
+    proof-reviewer, e relato de gate de build contornado com o verde de outro
+    módulo (ver `SINAIS`, abaixo);
   - de cada build completo do supervisor, a cauda da saída;
   - o `status` e a `evidence` ATUAIS de cada item tocado, lidos do plano.
 
@@ -27,6 +30,7 @@ Uso:
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -40,6 +44,67 @@ except ImportError:
 RESULT_MAX_PADRAO = 3000
 ERROS_POR_RODADA = 5
 CAUDA_DO_VERIFY = 15
+SINAIS_POR_RODADA = 8
+TRECHO_DO_SINAL = 160
+
+# ## SINAIS de processo
+#
+# No run 2026-09-27-1632 do WEGO o `qa-engineer` abriu worktree descartável
+# (proibida nas regras da noite) no WEGO-2327 e no WEGO-2329, e no 2329
+# contornou o hook que barra commit com build vermelho apresentando o build
+# verde de OUTRO módulo. Nada disso apareceu neste resumo: o `qa-engineer` é
+# neto do orquestrador (engineering-lead → qa-engineer), e o stream-json do
+# `claude -p` só traz as chamadas de ferramenta dos filhos diretos. O que o
+# log TEM é o relatório que cada agente devolve a quem o chamou (o
+# `tool_result` da chamada `Agent`), e os arquivos que o filho escreve (o
+# RESULT.md do engineering-lead citou os dois desvios). É nesses textos que os
+# sinais abaixo são procurados, além das chamadas de ferramenta visíveis.
+#
+# Os sinais de TEXTO só são procurados no relatório devolvido por um agente e
+# no conteúdo que um agente escreve (Write/Edit): o resultado de qualquer
+# outra ferramenta traz a dica que o hook de path-lock imprime ("provar RED
+# revertendo código: worktree descartável FORA da raiz"), e a leitura de um
+# RESULT.md repete o que ele já disse — cada um deles virava um sinal falso.
+#
+# Cada sinal sai com QUEM (o agente cuja chamada ou relatório o trouxe) e um
+# trecho literal. Este script não julga: worktree `--detach` do proof-reviewer
+# para perturbação é permitida (e vem anotada assim), e quem decide é o
+# /common:until-review.
+SINAIS_DE_TEXTO = [
+    ("worktree descartável relatada",
+     re.compile(r"worktree\s+descart[aá]vel|c[oó]pia\s+descart[aá]vel"
+                r"|worktree\s+tempor[aá]ri[ao]", re.I)),
+    ("build verde de outro módulo / gate de build contornado",
+     re.compile(r"build\s+verde\s+de\s+outro\s+m[oó]dulo"
+                r"|outro\s+m[oó]dulo[^.\n]{0,60}(?:verde|BUILD SUCCESS)"
+                r"|contorn(?:ei|ou|amos|ad[oa]|ando)\b[^.\n]{0,80}(?:gate|hook)"
+                r"|re-?estabelec\w*[^.\n]{0,40}baseline\s+verde"
+                r"|re-establishing\s+green\s+build", re.I)),
+]
+WORKTREE_ADD = re.compile(r"git\s+(?:-C\s+\S+\s+)?worktree\s+add\b")
+
+
+def _texto_do_conteudo(c):
+    t = c.get("content")
+    if isinstance(t, list):
+        t = " ".join(str(x.get("text", "")) for x in t if isinstance(x, dict))
+    return str(t or "")
+
+
+def _trecho(texto, m):
+    ini = max(0, m.start() - TRECHO_DO_SINAL // 2)
+    fim = min(len(texto), m.end() + TRECHO_DO_SINAL)
+    return " ".join(texto[ini:fim].split())
+
+
+def sinais_no_texto(texto, quem, origem):
+    achados = []
+    for nome, rx in SINAIS_DE_TEXTO:
+        m = rx.search(texto)
+        if m:
+            achados.append({"sinal": nome, "quem": quem, "origem": origem,
+                            "trecho": _trecho(texto, m)})
+    return achados
 
 
 def le_jsonl(caminho):
@@ -73,7 +138,17 @@ def segmentos_do_log(caminho):
 
 def resume_rodada(linhas, result_max):
     """O que importa de UM subprocesso `claude` em stream-json."""
-    agentes, erros, resultado = Counter(), [], None
+    agentes, erros, resultado, sinais = Counter(), [], None, []
+    # id da chamada `Agent` → tipo do agente chamado: é o que diz DE QUEM é
+    # o relatório devolvido (tool_result) e de quem é cada chamada de
+    # ferramenta (parent_tool_use_id).
+    agente_por_chamada = {}
+
+    def autor(e):
+        pai = e.get("parent_tool_use_id")
+        return agente_por_chamada.get(pai, "orquestrador" if not pai
+                                      else f"agente {pai[:12]}")
+
     for linha in linhas:
         try:
             e = json.loads(linha)
@@ -82,19 +157,64 @@ def resume_rodada(linhas, result_max):
         tipo = e.get("type")
         if tipo == "assistant":
             for c in (e.get("message") or {}).get("content") or []:
-                if c.get("type") == "tool_use" and c.get("name") in ("Agent", "Task"):
-                    agentes[(c.get("input") or {}).get("subagent_type") or "?"] += 1
+                if not isinstance(c, dict) or c.get("type") != "tool_use":
+                    continue
+                nome, inp = c.get("name"), c.get("input") or {}
+                if nome in ("Agent", "Task"):
+                    alvo = inp.get("subagent_type") or "?"
+                    agentes[alvo] += 1
+                    if c.get("id"):
+                        agente_por_chamada[c["id"]] = alvo
+                    if inp.get("isolation") == "worktree":
+                        sinais.append({"sinal": "worktree aberta (Agent com "
+                                                "isolation=worktree)",
+                                       "quem": autor(e),
+                                       "origem": f"chamada a {alvo}",
+                                       "trecho": ""})
+                elif nome == "EnterWorktree":
+                    sinais.append({"sinal": "worktree aberta (EnterWorktree)",
+                                   "quem": autor(e), "origem": "ferramenta",
+                                   "trecho": json.dumps(inp,
+                                                        ensure_ascii=False)[:TRECHO_DO_SINAL]})
+                elif nome == "Bash":
+                    cmd = str(inp.get("command") or "")
+                    m = WORKTREE_ADD.search(cmd)
+                    if m:
+                        flag = ("--detach" if "--detach" in cmd
+                                else "-b" if re.search(r"\s-b\s", cmd)
+                                else "sem --detach")
+                        sinais.append({"sinal": f"worktree aberta ({flag})",
+                                       "quem": autor(e), "origem": "Bash",
+                                       "trecho": _trecho(cmd, m)})
+                elif nome in ("Write", "Edit", "MultiEdit"):
+                    texto = str(inp.get("content") or inp.get("new_string")
+                                or "")
+                    alvo = str(inp.get("file_path") or "")
+                    sinais.extend(sinais_no_texto(
+                        texto, autor(e), f"{nome} em {Path(alvo).name}"))
         elif tipo == "user":
             for c in (e.get("message") or {}).get("content") or []:
-                if isinstance(c, dict) and c.get("type") == "tool_result" \
-                        and c.get("is_error"):
-                    texto = c.get("content")
-                    if isinstance(texto, list):
-                        texto = " ".join(str(x.get("text", "")) for x in texto
-                                         if isinstance(x, dict))
-                    erros.append(" ".join(str(texto or "").split())[:240])
+                if not isinstance(c, dict) or c.get("type") != "tool_result":
+                    continue
+                texto = _texto_do_conteudo(c)
+                if c.get("is_error"):
+                    erros.append(" ".join(texto.split())[:240])
+                devolvido_por = agente_por_chamada.get(c.get("tool_use_id"))
+                if devolvido_por:
+                    sinais.extend(sinais_no_texto(texto, devolvido_por,
+                                                  "relatório devolvido"))
         elif tipo == "result":
             resultado = e
+    vistos, unicos = set(), []
+    for sn in sinais:
+        chave = (sn["sinal"], sn["quem"], sn["trecho"][:80])
+        if chave not in vistos:
+            vistos.add(chave)
+            unicos.append(sn)
+    # a worktree do proof-reviewer é a permitida: vai por último, para o teto
+    # de SINAIS_POR_RODADA não esconder a que não é
+    sinais = sorted(unicos, key=lambda sn: sn["sinal"].startswith("worktree")
+                    and "proof-reviewer" in sn["quem"])
     r = resultado or {}
     texto = r.get("result") if isinstance(r.get("result"), str) else ""
     cortado = len(texto) > result_max
@@ -107,6 +227,7 @@ def resume_rodada(linhas, result_max):
         "terminal": r.get("terminal_reason") or r.get("subtype"),
         "relatorio": texto[:result_max] + ("\n[… cortado]" if cortado else ""),
         "tem_result": resultado is not None,
+        "sinais": sinais,
     }
 
 
@@ -217,6 +338,21 @@ def monta(ledger, result_max):
                            f"primeiros {min(len(r['erros']), ERROS_POR_RODADA)}:")
                 for erro in r["erros"][:ERROS_POR_RODADA]:
                     out.append(f"  - {erro}")
+            if r["sinais"]:
+                out.append(f"- sinais de processo: {len(r['sinais'])}"
+                           + (f"; os primeiros {SINAIS_POR_RODADA}:"
+                              if len(r["sinais"]) > SINAIS_POR_RODADA else ":"))
+                for sn in r["sinais"][:SINAIS_POR_RODADA]:
+                    prova = (sn["sinal"].startswith("worktree")
+                             and "proof-reviewer" in sn["quem"])
+                    out.append(f"  - {sn['sinal']} · quem: {sn['quem']}"
+                               + (" (prova por perturbação: permitida na noite)"
+                                  if prova else "")
+                               + f" · onde: {sn['origem']}"
+                               + (f" · «{sn['trecho']}»" if sn["trecho"] else ""))
+            else:
+                out.append("- sinais de processo: nenhum (nenhuma worktree "
+                           "aberta, nenhum relato de gate contornado)")
             if not r["tem_result"]:
                 out.append("- SEM `result` final: o subprocesso morreu antes de "
                            "relatar")

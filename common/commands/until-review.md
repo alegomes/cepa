@@ -77,6 +77,17 @@ Se o `.jsonl` não existir, pare dizendo qual caminho você procurou.
 7. **O próprio laço.** Esperas de cota, quedas de rede, `done_sem_commit`,
    sobras guardadas em stash, disjuntor. Algo aqui é defeito do `cepa-until` e
    não do item? Se for, diga que é do harness.
+8. **Sinais de processo.** Cada rodada traz a linha `sinais de processo`:
+   worktree aberta (por Bash, `EnterWorktree` ou `Agent` com
+   `isolation=worktree`) e relato de gate de build contornado com o verde de
+   outro módulo, cada um com QUEM. A do `proof-reviewer` com `--detach` é a
+   permitida, e vem anotada; qualquer outra fere a regra da noite. Um agente
+   que não é filho direto (o `qa-engineer` chamado pelo `engineering-lead`)
+   não tem as chamadas no `.log`: o sinal dele vem do relatório devolvido e do
+   RESULT.md, e é por isso que o resumo varre esses textos. No run
+   2026-09-27-1632 o `qa-engineer` abriu worktree em 2 de 4 itens e no
+   WEGO-2329 apresentou o build verde de outro módulo para passar pelo hook
+   de build vermelho, e nada disso aparecia no resumo.
 
 Pergunta sem achado não entra no relatório.
 
