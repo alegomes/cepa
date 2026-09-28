@@ -204,6 +204,10 @@ def test_tres_quedas_seguidas_param_o_run_sem_culpar_o_item():
               str(status(plano_de(raiz))))
         check("o detalhe explica que a sonda vê rede e o claude não",
               "3ª queda seguida" in fim["detalhe"], fim["detalhe"])
+        eventos = [e for e in ledger_de(raiz) if e.get("evento") == "queda_de_rede"]
+        check("run_end conta as 3 quedas, inclusive a que parou o run",
+              fim["quedas_de_rede"] == len(eventos) == 3,
+              f"run_end={fim['quedas_de_rede']} eventos={len(eventos)}")
 
 
 # ── 3. a rede não volta a tempo: para com `sem-rede` ────────────────────────
@@ -227,6 +231,11 @@ def test_rede_que_nao_volta_dentro_da_janela_para_o_run():
               5 <= gasto <= 14, f"{gasto:.1f}s")
         check("o detalhe diz até quando esperou",
               "não voltou até" in fim["detalhe"], fim["detalhe"])
+        check("run_end conta a queda da qual a rede não voltou",
+              fim["quedas_de_rede"] == 1, str(fim))
+        check("o resumo do fim lista a queda sem volta",
+              "não voltou" in p.stdout and "Quedas de rede (1)" in p.stdout,
+              p.stdout[-600:])
 
 
 def test_queda_perto_do_fim_da_janela_para_sem_sondar():
@@ -251,6 +260,8 @@ def test_queda_perto_do_fim_da_janela_para_sem_sondar():
               f"{len(chamadas)} chamadas · {fim} · {queda}")
         check("o detalhe diz que não sobra tempo, não que esperou",
               "não sobra tempo" in fim["detalhe"], fim["detalhe"])
+        check("run_end conta a queda mesmo sem ter esperado",
+              fim["quedas_de_rede"] == 1, str(fim))
         check("não ficou sondando", gasto < 9, f"{gasto:.1f}s")
 
 

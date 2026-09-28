@@ -1217,7 +1217,8 @@ def main(argv=None):
     # já inclui o item anterior, e as esperas feitas.
     inicios, ultima_leitura, leitura_fresca = [], None, False
     esperas, esperas_seguidas = [], 0
-    # As quedas de rede: (item, quando caiu, quando voltou), e as seguidas.
+    # As quedas de rede: [item, quando caiu, quando voltou ou None], e as
+    # seguidas.
     quedas, quedas_seguidas = [], 0
     # Itens começados com a cota apertada e o reset fora da janela.
     apertados = []
@@ -1436,6 +1437,12 @@ def main(argv=None):
             cabe = quedas_seguidas < MAX_QUEDAS_SEGUIDAS and ate > caiu
             registra({"evento": "queda_de_rede", "id": ident, "espera": cabe,
                       "ate": ate.isoformat(), "seguidas": quedas_seguidas})
+            # Conta na hora em que caiu, não quando volta: a queda que PARA o
+            # run é justamente a que não volta, e contada só na volta ela
+            # sumia do `run_end` (o run de 2026-09-26-2203 terminou `sem-rede`
+            # com `quedas_de_rede: 0`). `voltou` fica None até a rede voltar.
+            queda = [ident, caiu, None]
+            quedas.append(queda)
             print(f"          → SEM REDE: o `claude` não alcançou a API — não é "
                   "falha do item")
             if cabe:
@@ -1443,7 +1450,7 @@ def main(argv=None):
                       f"máximo até {ate.strftime('%H:%M')}) e retomo o {ident}")
                 if espera_a_rede(ate):
                     voltou = datetime.now()
-                    quedas.append((ident, caiu, voltou))
+                    queda[2] = voltou
                     registra({"evento": "rede_voltou", "id": ident,
                               "segundos": int((voltou - caiu).total_seconds())})
                     print(f"[{voltou.strftime('%H:%M')}] rede de volta "
@@ -1643,6 +1650,10 @@ def main(argv=None):
     if quedas:
         print(f"\n   Quedas de rede ({len(quedas)}) — não é falha do item:")
         for ident, caiu, voltou in quedas:
+            if voltou is None:
+                print(f"     - durante o {ident}: sem rede desde as "
+                      f"{caiu.strftime('%H:%M')}, e ela não voltou a tempo")
+                continue
             print(f"     - durante o {ident}: sem rede das "
                   f"{caiu.strftime('%H:%M')} às {voltou.strftime('%H:%M')}, "
                   "depois retomei o item")

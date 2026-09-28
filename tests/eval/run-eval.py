@@ -125,6 +125,24 @@ def worktree_summary(wt: Path) -> dict:
         return {}
 
 
+def save_patch(wt: Path, dest: Path) -> Path | None:
+    """O diff inteiro do agente contra o base_commit, arquivos novos inclusive.
+
+    É a evidência de uma tarefa que falhou. Ela morava na worktree, que ficava
+    em /tmp/cepa-eval registrada no `git worktree list` do repo até alguém
+    lembrar de apagar (três delas sobraram da corrida de 2026-09-26). O patch
+    guarda o mesmo conteúdo e deixa a worktree ir embora.
+    """
+    try:
+        git("add", "-A", cwd=wt, check=False)
+        diff = git("diff", "--cached", "--binary", cwd=wt, check=False).stdout
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(diff, encoding="utf-8")
+        return dest
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def build_prompt(task: dict) -> str:
     """Enunciado + contrato de aceitação.
 
@@ -272,13 +290,15 @@ def cmd_run(tasks, label: str, timeout_min: int) -> int:
                 # A primeira corrida (0/3) só pôde ser diagnosticada porque a
                 # causa estava nos testes de aceitação; se estivesse no trabalho
                 # do agente, não haveria como saber — a worktree já tinha ido
-                # embora. Worktree é barata; evidência perdida não é.
+                # embora. Evidência perdida não tem volta; por isso, na falha,
+                # o diff inteiro vira um .patch antes da worktree sair.
                 rec["agent_diff"] = worktree_summary(wt)
-                if rec.get("passed"):
-                    drop_worktree(wt)
-                else:
-                    rec["worktree_kept"] = str(wt)
-                    print(f"      evidência preservada em {wt}")
+                if not rec.get("passed"):
+                    patch = save_patch(wt, RESULTS_DIR / f"{label}-{t['id']}.patch")
+                    if patch:
+                        rec["evidencia_patch"] = str(patch)
+                        print(f"      evidência preservada em {patch}")
+                drop_worktree(wt)
         results.append(rec)
         print(f"{'PASSOU' if rec.get('passed') else 'falhou'} "
               f"({rec['duration_s']}s, {rec.get('turns') or '?'} voltas, "

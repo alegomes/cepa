@@ -22,6 +22,7 @@ O que está travado aqui:
     pouco.
 """
 
+import json
 import re
 import subprocess
 import sys
@@ -159,6 +160,74 @@ def test_validate_e_obrigatorio_no_readme():
           "0/3" in readme and "contrato" in readme.lower())
 
 
+def test_corrida_que_falha_guarda_o_diff_e_nao_deixa_worktree():
+    """Tarefa que falha guardava a worktree inteira em /tmp/cepa-eval como
+    evidência, registrada no `git worktree list` do repo para sempre (3 delas
+    em 2026-09-26). A evidência é o que o agente escreveu: vira um .patch ao
+    lado do resultado, e a worktree sai do registro em qualquer desfecho.
+
+    Roda o `cmd_run` de verdade contra um repo descartável, com um `claude`
+    falso que escreve um arquivo e uma aceitação que falha."""
+    import os
+    import tempfile
+    run = load_runner()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp).resolve()
+        repo = tmp / "repo"
+        repo.mkdir()
+        g = lambda *a, cwd=repo: subprocess.run(
+            ["git", *a], cwd=str(cwd), capture_output=True, text=True)
+        g("init", "-q")
+        (repo / "tests").mkdir()
+        (repo / "base.txt").write_text("base\n")
+        g("add", "-A")
+        g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "base")
+        base = g("rev-parse", "HEAD").stdout.strip()
+        (repo / "tests" / "test_x.py").write_text("raise SystemExit(1)\n")
+        g("add", "-A")
+        g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "fix")
+        fix = g("rev-parse", "HEAD").stdout.strip()
+        g("checkout", "-q", base)
+
+        binv = tmp / "bin"
+        binv.mkdir()
+        claude = binv / "claude"
+        claude.write_text("#!/bin/sh\necho 'ESCRITO PELO AGENTE' > agente.txt\n"
+                          "echo '{\"num_turns\": 1, \"total_cost_usd\": 0}'\n")
+        claude.chmod(0o755)
+
+        orig_git = run.git
+        run.git = lambda *a, cwd=repo, check=True: orig_git(*a, cwd=cwd, check=check)
+        run.WORKTREE_ROOT = tmp / "wts"
+        run.RESULTS_DIR = tmp / "results"
+        velho_path = os.environ["PATH"]
+        os.environ["PATH"] = f"{binv}:{velho_path}"
+        try:
+            task = {"id": "t1", "base_commit": base, "fix_commit": fix,
+                    "acceptance_test": "tests/test_x.py",
+                    "acceptance_cmd": "python3 tests/test_x.py",
+                    "prompt": "faça", "contrato": ""}
+            run.cmd_run([task], "lbl", 1)
+        finally:
+            os.environ["PATH"] = velho_path
+            run.git = orig_git
+
+        lista = g("worktree", "list", "--porcelain").stdout
+        check("nenhuma worktree da corrida fica registrada",
+              lista.count("worktree ") == 1, lista)
+        restos = list((tmp / "wts").glob("*")) if (tmp / "wts").exists() else []
+        check("nem o diretório dela fica no disco", not restos, str(restos))
+        res = json.loads((tmp / "results" / "lbl.json").read_text())["results"][0]
+        check("a tarefa falhou, como devia", res.get("passed") is False, str(res))
+        patch = Path(res.get("evidencia_patch") or "/nao/existe")
+        check("o resultado aponta o .patch com o que o agente escreveu",
+              patch.is_file() and "ESCRITO PELO AGENTE" in patch.read_text(),
+              str(res))
+        check("o .patch mora ao lado do resultado, não em /tmp",
+              patch.parent == tmp / "results", str(patch))
+        check("não sobra o campo que apontava a worktree", "worktree_kept" not in res)
+
+
 def main():
     test_parser_le_bloco_multilinha()
     test_manifestos_completos()
@@ -167,6 +236,7 @@ def main():
     test_enunciado_nao_entrega_a_solucao()
     test_dificuldade_variada()
     test_validate_e_obrigatorio_no_readme()
+    test_corrida_que_falha_guarda_o_diff_e_nao_deixa_worktree()
 
     print()
     if FAILURES:
