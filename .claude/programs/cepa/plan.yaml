@@ -213,13 +213,23 @@ items:
   status: pending
   blocked_by:
   - instalar-leva-fio-condutor
-  human_pending: null
-  evidence: 'Destravado em 2026-09-28: as duas condicoes da validacao de 2026-09-25
-    foram entregues no run until 2026-09-27-1213 e aterrissadas na main (62b7217),
-    com plugin reinstalado: reconcile-nao-rebaixa-done (8f84bb2, PROVEN) e triagem-parcial-preserva-ordem
-    (15da11b, PROVEN). Proximo passo: re-rodar a validacao contra o Jira vivo do
-    WEGO (wego-assinatura-backend). Historico: em 2026-09-25 a triagem parcial reordenou
-    a fila e o reconcile rebaixaria WEGO-1550, 1982 e 1973; triagem em wego-assinatura-backend/.claude/programs/WEGO/triagem-2026-09-25.json.'
+  human_pending: 'Numa sessao acompanhada em wego-assinatura-backend: rodar /board-flow:triage
+    no To Do do WEGO, confirmar as transicoes que ela propuser, gravar com /common:plan
+    WEGO --from-jira e conferir que os itens ja na fila mantem a ordem. Depois fechar
+    esta rota.'
+  evidence: 'Run until 2026-09-28-0558, commits fbb532e (docs/investigations/2026-09-28-fio-condutor-no-wego.md)
+    e ad2ad52 (auditoria). Tudo leitura, nenhum card tocado, plan.yaml do WEGO com
+    md5 igual antes/depois. (1) cepa-plan reconcile WEGO contra o quadro vivo (twg,
+    25 ids) sem --apply: WEGO-1550 e 1982 (In Review) em dia, WEGO-1973 (In Progress)
+    so aviso R3, nada rebaixado; unica divergencia real WEGO-1412 pending->Done.
+    (2) cepa-plan write --from-triage da triagem de 2026-09-25 em --dry-run: sem
+    --on-missing recusa (exit 4) nomeando os 25; com keep, os 25 saem identicos
+    e na mesma ordem, WEGO-1438/1439/1440 no fim. completion-auditor INCOMPLETE
+    (.claude/acceptance/validar-fio-condutor-em-board-real.yaml): AC1 e AC2 complete;
+    AC3, a triagem nova ao vivo com revisao do dono, nao rodou porque o /board-flow:triage
+    transiciona cards e pede confirmacao. Achado de passagem, fora do escopo: o
+    reconcile lista os 12 Descartados como divergencia dropped->dropped, ruido sem
+    efeito.'
 - id: produtor-de-plano-sem-tracker
   title: Decidir quem escreve o plano single-track num repo sem Jira
   why: 'registrado como ITEM, e não como parágrafo no BACKLOG, porque o receio do
@@ -1263,10 +1273,23 @@ items:
     do harness roda o completion-auditor antes do Review, entao so chega a Done
     sem auditoria quem pulou o fluxo; ja deixou WEGO-1891, 2202 e 2218 passarem.
     (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Codigo na branch da noite until/2026-09-28-0558: e00a1f3 (acceptance-gate.py
+    barra transicao para done quando nao ha <KEY>.yaml em nenhuma das quatro pastas;
+    in_review, alvo nao resolvido e devolucoes seguem liberando; candidate_paths
+    compartilhado entre find_artifact e a mensagem; docs/acceptance-completeness.md,
+    BACKLOG.md passo 2 FEITO; common 2.26.2) e 1 commit de proof+acceptance em seguida.
+    Gates: pair-reviewer APPROVE; completion-auditor COMPLETE (5/5 criterios, .claude/acceptance/acceptance-gate-barra-done-sem-auditoria.yaml);
+    proof-reviewer PROVEN (4 testes novos RED na base ad2ad52; perturbacoes done->in_review
+    e mensagem sem caminhos ficaram RED; docs/proof/acceptance-gate-barra-done-sem-auditoria.yaml).
+    Testes: tests/test_acceptance_gate.py 34/34, test_gate_status_por_nome.py 19/19,
+    e test_cepa_plan_fila_unica, test_jiramut_deteccao_por_efeito, test_session_anchor_root,
+    test_verde_sem_teste verdes. Build completo fica com o supervisor. Fora do escopo:
+    passo 3 (merge-truth-gate) e ''complete com rota humana aberta passa''. Efeito
+    colateral a observar: card que chega a Review sem auditoria (ex. ALREADY-IMPLEMENTED
+    do triage) agora e barrado no prove-drain ao ir para Done.'
 - id: defeitos-da-revisao-until-2203
   title: 'Tres defeitos do harness achados na revisao do run 2026-09-26-2203: digest
     le fila velha, run_end conta zero quedas de rede, suite de avaliacao deixa worktrees
@@ -1280,10 +1303,20 @@ items:
     deixou 3 worktrees em /private/tmp/cepa-eval/ registradas no git worktree list.
     Os dois primeiros enganam a proxima revisao de run. (ainda não priorizado: entrou
     no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits c0b259a (fix: digest le a fila do clone principal via git-common-dir;
+    cepa-until conta queda de rede na hora da queda, run_end sem-rede deixa de gravar
+    0; run-eval salva o diff da tarefa que falha num .patch e sempre remove a worktree)
+    e o commit de proof+acceptance, na branch da noite until/2026-09-28-0558 (sem
+    merge, sem push). Gates: pair-reviewer APROVAR; completion-auditor COMPLETE
+    (.claude/acceptance/defeitos-da-revisao-until-2203.yaml); proof-reviewer PROVEN
+    (docs/proof/defeitos-da-revisao-until-2203.yaml, cada reversao deixa o teste
+    vermelho e os testes novos ficam vermelhos no base 8961f65). Testes rodados:
+    run-all.sh until eval digest, 10 de 10 verdes; build completo fica com o supervisor.
+    Fora do escopo: as 3 worktrees antigas de 2026-09-26 ja nao estao no git worktree
+    list. common 2.26.3.'
 - id: until-rodada-herda-handoff-da-anterior
   title: Subprocesso do cepa-until herda o handoff da rodada anterior na mesma worktree
     e trabalha no item errado
@@ -1297,10 +1330,20 @@ items:
     com o relatorio de outro. Conserto provavel: o cepa-until limpar ou isolar o
     handoff entre rodadas, ou o prompt da rodada declarar o item e mandar ignorar
     handoff de outro id. (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 9c13f73 (fix: session-registry.py resume_notice nao entrega
+    nem reserva o handoff do branch quando CEPA_UNTIL_RUN esta no ambiente; avisa
+    que o item e o que o drain-plan reservar) e o commit de proof+acceptance seguinte,
+    na branch da noite until/2026-09-28-0558. Causa confirmada ao vivo: esta propria
+    rodada recebeu no SessionStart o handoff da rodada anterior (item defeitos-da-revisao-until-2203).
+    completion-auditor COMPLETE (.claude/acceptance/until-rodada-herda-handoff-da-anterior.yaml);
+    proof-reviewer PROVEN (docs/proof/until-rodada-herda-handoff-da-anterior.yaml),
+    RED comportamental com 7 falhas removendo o bloco. Testes: tests/test_until_nao_herda_handoff.py
+    (inclui SessionStart real por subprocesso), test_handoff_claim.py, test_memoria_validade.py
+    verdes. Build completo fica com o supervisor. Fora do escopo: o hook so passa
+    a valer apos reinstalar o plugin (cache).'
 - id: no-background-build-vigia-que-termina-sozinho
   title: no-background-build conta como ativo para sempre o vigia de build que termina
     sozinho (sem TaskStop) e barra parada legitima
@@ -1310,6 +1353,93 @@ items:
     no registro virou a resposta a esse bloqueio. Barrar parada legitima gasta a
     unica chance de segurar um build de verdade nao colhido. (ainda não priorizado:
     entrou no fim da fila)'
+  status: done
+  blocked_by: []
+  human_pending: null
+  evidence: 'Na branch da noite until/2026-09-28-0558: 7799e35 (hook reconhece <task-notification>
+    terminal: status completed/failed/killed, Monitor expired, Monitor timed out,
+    e ''No task found with ID'' do TaskStop tardio), 70c060b (testes failed/killed),
+    commit dos gates logo depois. pair-reviewer APPROVE; completion-auditor COMPLETE
+    (.claude/acceptance/no-background-build-vigia-que-termina-sozinho.yaml); proof-reviewer
+    PROVEN (docs/proof/no-background-build-vigia-que-termina-sozinho.yaml; 1a rodada
+    UNPROVEN por failed/killed sem teste, fechado em 70c060b). Replay do transcript
+    real 7e182946 (run 2026-09-26-2203, 189 linhas, vigia b1pa0ro5t expirado): hook
+    antigo bloqueia, novo libera. Rodado so tests/test_no_background_build.py; build
+    completo e do supervisor. Fora do escopo: aviso de fim ecoado por texto de usuario
+    nao-harness poderia soltar vigia (borda estreita, anotada pelo pair-reviewer).'
+- id: until-progresso-ignora-commits-e-retomada-perde-branch
+  title: 'cepa-until: item morto com commits conta como sem progresso, e o run seguinte
+    retoma a reserva orfa a partir da main sem os commits dela'
+  why: 'decidido em 2026-09-28 (pergunta 5 da revisao do run 2026-09-27-1632 do
+    wego-acessos-backend). (1) O item_end do WEGO-2283 gravou progresso:false com
+    commits:15 (morto pela folga, exit 143); se o disjuntor ler esse campo, trata
+    como parado um item que andou muito. (2) abre_branch_da_noite cria until/<run>
+    a partir do HEAD do clone; o start do run seguinte reivindica a reserva orfa
+    do 2283, mas os 15 commits dela ficaram em until/2026-09-27-1632 e nao entram
+    na branch nova (hoje contornado a mao: a evidence do item manda mesclar a branch
+    antiga primeiro). (3) Nas rodadas do WEGO-2327 e WEGO-2329 o qa-engineer abriu
+    worktree descartavel, proibida nas regras da noite, e no 2329 contornou o hook
+    de build vermelho apresentando o build verde de outro modulo (registrado no
+    RESULT.md do 2329). Os tres enganam o supervisor sem aparecer no resumo do digest.
+    (ainda não priorizado: entrou no fim da fila)'
+  status: done
+  blocked_by: []
+  human_pending: null
+  evidence: 'Na branch da noite until/2026-09-28-0558 (sem merge, sem push): fix
+    97b43ec, gates 36bca26. (1) commit na branch da noite conta como progresso no
+    item_end mesmo sem desfecho (disjuntor e teto de tentativas nao disparam; tela
+    mostra ''N commit(s) sem fechar''). (2) na largada, heranca_do_run_anterior
+    acha no .jsonl mais novo que executou cada item ainda aberto a branch until/<run>
+    com commits>0 dele; se a branch existe e nao e ancestral do HEAD do clone, a
+    branch da noite nasce com ela mesclada (run_start.herdou, banner e resumo avisam);
+    conflito recusa a largada (exit 2) sem deixar worktree nem branch. Testes: tests/test_cepa_until_retomada.py
+    (6 casos) RED na base d88110a (14 checagens), verde no HEAD; tests/run-all.sh
+    cepa_until until_review drain_plan 11/11 verde. completion-auditor COMPLETE
+    (.claude/acceptance/until-progresso-ignora-commits-e-retomada-perde-branch.yaml),
+    proof-reviewer PROVEN com 5 perturbacoes RED (docs/proof/until-progresso-ignora-commits-e-retomada-perde-branch.yaml).
+    Build completo fica com o supervisor. FORA DE ESCOPO: parte (3) do why (qa-engineer
+    abrindo worktree descartavel e apresentando build verde de outro modulo; torna-los
+    visiveis no cepa-until-digest) nao foi feita e merece item proprio na fila.'
+- id: vigia-conta-so-monitor-real
+  title: no-background-build conta como vigia armado só o resultado de uma chamada
+    real ao Monitor, não qualquer saída com o texto 'Monitor started'
+  why: 'Revisao do run 2026-09-28-0558, rodada 5: um grep em transcripts antigos
+    imprimiu ''Monitor started (task b1pa0ro5t...'' e o hook bloqueou a parada da
+    sessao com alarme falso. Se repete em toda rodada que investiga transcripts,
+    que e o que o conserto destes hooks exige. (ainda não priorizado: entrou no
+    fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: path-lock-libera-proof-reviewer-na-copia
+  title: bash-path-lock deixa o proof-reviewer rodar testes dentro da própria cópia
+    descartável em /tmp
+  why: 'Revisao do run 2026-09-28-0558: o balde 4 negou python3 tests/... do proof-reviewer
+    em /tmp/proof-* nas rodadas 2, 5 e 6 (''executar arquivo fora do projeto'').
+    E exatamente onde ele deve perturbar o codigo; contornou, mas gastou turnos.
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: reconcile-ignora-dropped-igual
+  title: cepa-plan reconcile para de listar como divergência item descartado na
+    fila e descartado no quadro
+  why: 'Revisao do run 2026-09-28-0558, item validar-fio-condutor: o reconcile do
+    WEGO listou os 12 Descartados como dropped->dropped, ruido que esconde a unica
+    divergencia real (WEGO-1412 pending->Done). (ainda não priorizado: entrou no
+    fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: digest-mostra-worktree-e-build-alheio-do-qa
+  title: cepa-until-digest mostra quando o qa-engineer abre worktree descartável
+    ou apresenta build verde de outro módulo
+  why: 'Parte (3) do item until-progresso-ignora-commits-e-retomada-perde-branch,
+    deixada de fora no run 2026-09-28-0558 e anotada na evidence dele como merecendo
+    item proprio. (ainda não priorizado: entrou no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
