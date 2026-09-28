@@ -1,0 +1,34 @@
+schema_version: 2
+card: until-rodada-herda-handoff-da-anterior
+verdict: proven
+reviewed_at: 2026-09-28T09:40:00-03:00
+base_commit: 093cebc
+head_commit: 9c13f73
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/session-registry.py:resume_notice", module: harness, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não é projeto Maven/PIT; harness Python puro, mecanismo universal de perturbação usado abaixo."
+    perturbation:
+      status: pass
+      results:
+        - "worktree descartável /tmp/proof-handoff-until (git worktree add --detach a partir de 9c13f73). Passo 1 — assinatura: git checkout 093cebc -- common/hooks/session-registry.py (repõe resume_notice sem o parâmetro env); `python3 tests/test_until_nao_herda_handoff.py` foi de GREEN (confirmado em HEAD antes da perturbação) para TypeError: resume_notice() got an unexpected keyword argument 'env', exit 1. RED confirmado (a base nem aceita a chamada que o teste faz). Passo 2 — comportamental: restaurado HEAD (git checkout 9c13f73 -- common/hooks/session-registry.py), mantida a assinatura nova (env=None) e removido só o bloco `if env.get(ENV_JANELA): return (...)`. `python3 tests/test_until_nao_herda_handoff.py` foi de 0 falhas para 7 falhas (frontmatter sem resumed_by / sem arquivo de reserva / conteúdo da rodada anterior não é entregue / aviso aponta para o item reservado pelo drain-plan / SessionStart da rodada não traz o handoff / SessionStart da rodada avisa que não entregou / handoff segue sem reserva), exit 1. RED confirmado. Restaurado com git checkout 9c13f73 -- . e reconfirmado GREEN antes de remover a worktree (git worktree remove --force)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "as duas linhas alteradas em resume_notice (assinatura com env=None / linha `env = os.environ if env is None else env` e o bloco `if env.get(ENV_JANELA): return (...)`) são exatamente as exercitadas pelas asserções que foram RED na perturbação l3 acima; reachability confirmada estruturalmente pelo próprio teste novo do diff (function-level via R.resume_notice(..., env=...) e subprocess-level via SessionStart real), sem tooling de cobertura no harness (não é projeto Maven/JaCoCo)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff não abre superfície de entrada externa nova: altera apenas a leitura de uma variável de ambiente já definida pelo próprio harness (CEPA_UNTIL_RUN, exportada pelo cepa-until) dentro de um hook interno de SessionStart; não há endpoint HTTP nem parsing de input de terceiros; nenhuma classe tocada está em módulo input-bearing (api-rest não existe neste repo)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "worktree /tmp/proof-handoff-until: git checkout -q 093cebc -- common/hooks/session-registry.py (código-fonte na base) com tests/test_until_nao_herda_handoff.py do HEAD (o teste novo já passa env= kwarg, que não existe na base). `python3 tests/test_until_nao_herda_handoff.py` → TypeError: resume_notice() got an unexpected keyword argument 'env', exit 1. RED confirmado na base — o comportamento antigo herdava o handoff da rodada anterior sem sequer aceitar o parâmetro que evita isso. Restaurado com git checkout -q 9c13f73 -- ."
+routing_reason: "O defeito (rodada do cepa-until herdando o handoff da rodada anterior, sobre outro item) foi provado load-bearing: GREEN em HEAD nos três testes pedidos (test_until_nao_herda_handoff.py, test_handoff_claim.py, test_memoria_validade.py); RED tanto pela regressão contra a base quanto pela perturbação comportamental que remove só o desvio de CEPA_UNTIL_RUN mantendo a assinatura nova. Diff não abre superfície de input externa, então L4 é n/a, não skipped. Todos os níveis aplicáveis passaram com evidência verificada. Worktree descartável removida ao final; árvore principal nunca foi tocada. PROVEN."
