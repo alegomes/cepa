@@ -210,22 +210,24 @@ items:
     não comportamento: o triage nunca escreveu um plano de verdade e o next nunca
     reconciliou contra Jira vivo. Antes disto, "pronto" é code-exists (L0 da escada
     de confiança), não funciona.'
-  status: pending
+  status: done
   blocked_by:
   - instalar-leva-fio-condutor
   human_pending: null
-  evidence: 'Validacao ao vivo em 2026-09-28, sessao acompanhada na fila do wego-acessos-backend
-    (nao no wego-assinatura-backend que a rota citava; o board 971/WEGO e o mesmo).
-    (1) /board-flow:triage --column "To Do": 27 cards no escopo, 15 classificados
-    (9 ready, todos ja na fila com rota humana; 6 Epicos needs-refinement, comentados
-    no Jira), 0 implemented, 0 obsoleto; dono confirmou o plano de escrita numa
-    unica rodada. Repasse em .claude/programs/WEGO/triagem-2026-09-28.json com remaining_in_column
-    12. (2) cepa-plan write WEGO --from-triage sem --on-missing recusou (exit 4)
-    nomeando os 240 itens do disco; com --on-missing keep gravou 249 itens com ordem,
-    status e human_pending IDENTICOS ao arquivo anterior (diff da lista id/status/human_pending
-    vazio), WEGO-2283 na posicao 243 antes e depois, e a linha source ganhou a nota
-    PARCIAL. So mudaram title/why dos 9 itens citados e o cabecalho. Rota humana
-    fechada pelo dono nesta sessao.'
+  evidence: 'Fechado pelo dono em 2026-09-28 apos a validacao ao vivo na fila do
+    wego-acessos-backend (board WEGO/971, mesmo do wego-assinatura-backend que a
+    rota citava). (1) /board-flow:triage --column "To Do": 27 cards no escopo, 15
+    classificados (9 ready ja na fila, 6 Epicos needs-refinement comentados no Jira,
+    ids 38384-38389), 0 implemented, 0 obsoleto, nenhuma transicao; dono confirmou
+    numa unica rodada; repasse .claude/programs/WEGO/triagem-2026-09-28.json com
+    remaining_in_column 12. (2) cepa-plan write --from-triage sem --on-missing recusou
+    (exit 4) nomeando 240 itens; com keep gravou 249 itens com ordem, status e human_pending
+    identicos (WEGO-2283 na mesma posicao), so cabecalho, nota PARCIAL e title/why
+    dos 9 citados mudaram; commit 19d76204 na main do wego-acessos-backend. (3)
+    completion-auditor COMPLETE (.claude/acceptance/validar-fio-condutor-em-board-real.yaml,
+    commit 75f4640), AC3 verificado por diff real do plan.yaml, repasse no disco
+    e comentario lido no Jira. proof-reviewer nao aplicavel: item sem diff de codigo.
+    Rota humana fechada pelo dono (eab1cee). Achado lateral virou WEGO-2340.'
 - id: produtor-de-plano-sem-tracker
   title: Decidir quem escreve o plano single-track num repo sem Jira
   why: 'registrado como ITEM, e não como parágrafo no BACKLOG, porque o receio do
