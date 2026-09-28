@@ -1,0 +1,72 @@
+schema_version: 2
+card: digest-mostra-worktree-e-build-alheio-do-qa
+verdict: proven
+reviewed_at: 2026-09-28T15:54:00-03:00
+base_commit: 0311291
+head_commit: 2caf850
+issue_type: Feature
+repo_kind: harness   # cepa CLI (Python), sem Quarkus/Maven/PIT — perturbação + re-run é o mecanismo
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-until-digest::resume_rodada (detecção de sinais de processo: worktree aberta, gate de build contornado)"
+      module: cli-script
+      external_observable: true   # superfície é a saída de texto do CLI, consumida por humano no /common:until-review
+      substituted_by_double: null
+    - class: "common/bin/cepa-until-digest::sinais_no_texto / SINAIS_DE_TEXTO / WORKTREE_ADD"
+      module: cli-script
+      external_observable: true
+      substituted_by_double: null
+    - class: "common/bin/cepa-until-digest::monta (bloco 'sinais de processo' impresso por rodada)"
+      module: cli-script
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a   # projeto Python, sem PIT/pluginManagement — não provisionado
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN prévio (obrigatório antes de perturbar): python3 tests/test_cepa_until_digest.py no head 2caf850 -> todos os 'ok', linha final '✓ tudo verde' (0.44s, worktree primária, sem alterar nada)."
+        - "Perturbação 1 — dropar o ramo `devolvido_por` (hand-backs de Agent deixam de ser escaneados) em worktree /tmp/proof-digest-p1 (git worktree add --detach, HEAD 2caf850): RED — 'FAIL mostra o gate de build contornado, e de quem veio o relato' e crash em r1.index('gate de build contornado') (substring not found)."
+        - "Perturbação 2 — escanear TAMBÉM resultado comum de ferramenta (não só hand-back de Agent) em /tmp/proof-digest-p2: RED — a dica do hook de path-lock ('FORA da raiz') virou sinal falso: 'FAIL a dica do hook em resultado de ferramenta NÃO vira sinal' e 'FAIL conta os sinais (5: ...)' (contou 6)."
+        - "Perturbação 3 — afrouxar o regex de contorn para contorn\\w* (perde a exigência de conjugação ei/ou/amos/ado/ando) em /tmp/proof-digest-p3: RED — o worker que RECUSA contornar ('Não posso contornar...hook ser desativado') virou sinal falso: 'FAIL worker que se recusa a contornar NÃO vira sinal' e contagem de sinais quebrada."
+        - "Perturbação 4 — dropar a detecção de `git worktree add` via Bash (WORKTREE_ADD) em /tmp/proof-digest-p4: RED — crash em r1.index('permitida na noite') (substring not found): a worktree aberta por Bash pelo filho direto e a anotação do proof-reviewer desaparecem."
+        - "Perturbação 5 — remover a anotação '(prova por perturbação: permitida na noite)' e o sort que põe a worktree do proof-reviewer por último em /tmp/proof-digest-p5: RED — mesmo crash em r1.index('permitida na noite') (substring not found)."
+        - "Todas as 5 worktrees descartáveis (/tmp/proof-digest-p1..p5) foram removidas com git worktree remove --force ao final de cada perturbação; a árvore primária nunca foi tocada (única escrita nela é este yaml)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Sem coverage tool no projeto (é script Python solto, sem jacoco/coverage.py wired). Cobertura verificada estruturalmente: todo o diff em common/bin/cepa-until-digest (SINAIS_DE_TEXTO, WORKTREE_ADD, sinais_no_texto, o ramo Bash/EnterWorktree/Agent-isolation em resume_rodada, o dedupe+sort, e o bloco 'sinais de processo' em monta) é exercitado por tests/test_cepa_until_digest.py::test_sinais_de_processo_worktree_e_build_alheio, e cada trecho perturbado (5/5) foi confirmado load-bearing por green->red->green. Não há linha nova sem cobertura identificada."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff não abre superfície de entrada nova: cepa-until-digest já lia stream-json de forma tolerante (json.loads em try/except, linhas malformadas ignoradas) antes deste card; a mudança só adiciona classificação sobre dados já parseados (tool_use/tool_result já validados pelo parser existente). Nenhuma classe tocada está em módulo input-bearing tipo api-rest; é script CLI read-only sobre um arquivo .jsonl local."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: >
+      base_commit 0311291 em worktree descartável /tmp/proof-digest-base (git
+      worktree add --detach 0311291): copiado
+      tests/test_cepa_until_digest.py de HEAD (2caf850) sobre a base (git show
+      2caf850:tests/test_cepa_until_digest.py). Rodando python3
+      tests/test_cepa_until_digest.py na base -> RED: múltiplos FAIL
+      ('mostra o Agent forkado com isolation=worktree', 'a worktree do
+      proof-reviewer vem anotada como permitida') seguidos de Traceback
+      (ValueError: substring not found em r1.index('gate de build
+      contornado')) — o teste novo não passa contra o código antigo, como
+      esperado. Worktree removida com git worktree remove --force.
+levels_note: "issue_type=Feature (não Bug); bugfix_regression_red_at_base é usado aqui no sentido estendido pedido pela tarefa: 'o novo teste deve ser RED na base' — que é exatamente a regressão AC do diff completo, não de um bug isolado."
+routing_reason: >
+  Diff sem base_commit ausente (0311291 resolvido), sem mock/double no
+  caminho provado (é script Python puro, sem boundary externo neste card),
+  e as 5 perturbações sugeridas pelo comando mais o teste novo na base
+  produziram RED em 100% dos casos, com GREEN estabelecido antes de cada
+  perturbação e restaurado depois (o teste roda limpo no HEAD 2caf850,
+  verificado antes de qualquer worktree ser criada). L4 é 'n/a' com reason e
+  nenhuma classe tocada é input-bearing, então não bloqueia PROVEN. L2 é
+  'pass' por análise estrutural (sem coverage tool no projeto, mas 100% do
+  diff funcional é exercitado pelo teste único usado nas 5 perturbações).
+  Nada ficou 'assumed'/'skipped'/'gap'/'survived' -> PROVEN.

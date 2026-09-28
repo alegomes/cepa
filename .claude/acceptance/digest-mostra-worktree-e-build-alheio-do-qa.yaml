@@ -1,0 +1,148 @@
+item: digest-mostra-worktree-e-build-alheio-do-qa
+repo: /Users/alegomes/cepa-worktrees/cepa-until-2026-09-28-1146
+branch: until/2026-09-28-1146
+diff: 0311291..2caf850
+status: complete
+criteria:
+  - id: AC1
+    descricao: >
+      Worktree aberta pelo qa-engineer (neto, sem chamadas visíveis no
+      stream-json) aparece no digest com o sinal e QUEM relatou, vindo do
+      texto devolvido pelo filho direto ou de um arquivo que ele escreveu
+      (RESULT.md).
+    altitude: application
+    surface: >
+      common/bin/cepa-until-digest::sinais_no_texto aplicado ao tool_result
+      devolvido por um Agent filho e ao conteúdo Write/Edit desse filho
+      (função resume_rodada em common/bin/cepa-until-digest).
+    test: tests/test_cepa_until_digest.py::test_sinais_de_processo_worktree_e_build_alheio
+    layer: unit/integration do script (subprocess real do binário, sem mocks)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_digest.py -> "ok  mostra a worktree
+      descartável relatada no RESULT.md" e "ok  mostra o gate de build
+      contornado, e de quem veio o relato"; ao final "✓ tudo verde".
+      Confirmado também no run real (AC6): rodada 2 (WEGO-2327) traz
+      "worktree descartável relatada · quem: build-hex:qa-engineer · onde:
+      relatório devolvido"; rodada 4 (WEGO-2329) traz o mesmo sinal com
+      "onde: Write em RESULT.md · quem: build-hex:engineering-lead" (RESULT.md
+      escrito pelo filho direto citando o neto).
+    status: complete
+
+  - id: AC2
+    descricao: >
+      Rodada onde um agente relata ter contornado o gate de build vermelho
+      apresentando o build verde de outro módulo tem esse sinal nomeado, com
+      QUEM.
+    altitude: application
+    surface: >
+      regex SINAIS_DE_TEXTO ("build verde de outro módulo / gate de build
+      contornado") aplicada ao tool_result devolvido, em
+      common/bin/cepa-until-digest.
+    test: tests/test_cepa_until_digest.py::test_sinais_de_processo_worktree_e_build_alheio
+    layer: unit/integration do script (subprocess real)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_digest.py -> "ok  mostra o gate de build
+      contornado, e de quem veio o relato". No run real (AC6): rodada 4
+      (WEGO-2329) traz "build verde de outro módulo / gate de build
+      contornado · quem: build-hex:qa-engineer · onde: relatório devolvido" e
+      repetido com "quem: build-hex:engineering-lead" (relatório e RESULT.md).
+    status: complete
+
+  - id: AC3
+    descricao: >
+      Worktree aberta diretamente por um filho visível (Bash `git worktree
+      add`, EnterWorktree, ou Agent isolation=worktree) aparece com QUEM; a
+      worktree --detach do proof-reviewer aparece mas anotada como permitida.
+    altitude: application
+    surface: >
+      detecção de WORKTREE_ADD em chamadas Bash, EnterWorktree e
+      Agent(isolation=worktree) em resume_rodada; anotação "(prova por
+      perturbação: permitida na noite)" quando quem é proof-reviewer, ordenada
+      por último.
+    test: tests/test_cepa_until_digest.py::test_sinais_de_processo_worktree_e_build_alheio
+    layer: unit/integration do script (subprocess real)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_digest.py -> "ok  mostra a worktree que um
+      filho direto abriu por Bash", "ok  mostra o Agent forkado com
+      isolation=worktree", "ok  a worktree do proof-reviewer vem anotada como
+      permitida", "ok  a permitida vem depois das outras". No run real: rodada
+      2 e 4 trazem "worktree aberta (--detach) · quem: build-hex:proof-reviewer
+      (prova por perturbação: permitida na noite) · onde: Bash".
+    status: complete
+
+  - id: AC4
+    descricao: Rodada sem nenhum desses sinais diz explicitamente que não há sinal.
+    altitude: application
+    surface: >
+      ramo "senão" em monta() (common/bin/cepa-until-digest) que escreve
+      "sinais de processo: nenhum (nenhuma worktree aberta, nenhum relato de
+      gate contornado)" quando r["sinais"] está vazio.
+    test: tests/test_cepa_until_digest.py::test_sinais_de_processo_worktree_e_build_alheio
+    layer: unit/integration do script (subprocess real)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_digest.py -> "ok  rodada sem desvio diz
+      que não há sinal". Confirmado no run real: rodada 5 (WEGO-2044) mostra
+      "sinais de processo: nenhum (nenhuma worktree aberta, nenhum relato de
+      gate contornado)".
+    status: complete
+
+  - id: AC5
+    descricao: >
+      A dica do hook de path-lock em resultado comum de ferramenta, e um
+      worker relatando que se recusa a contornar, NÃO viram sinal.
+    altitude: application
+    surface: >
+      sinais_no_texto só é chamada sobre tool_result devolvido por um Agent
+      filho (não sobre qualquer tool_result) e sobre conteúdo Write/Edit —
+      nunca sobre o resultado bruto de outras ferramentas como o próprio hook
+      de path-lock.
+    test: tests/test_cepa_until_digest.py::test_sinais_de_processo_worktree_e_build_alheio
+    layer: unit/integration do script (subprocess real)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_digest.py -> "ok  a dica do hook em
+      resultado de ferramenta NÃO vira sinal", "ok  worker que se recusa a
+      contornar NÃO vira sinal". Confirmado no run real: grep "FORA da raiz"
+      no digest do run 2026-09-27-1632 não encontrou nenhuma ocorrência apesar
+      de a dica aparecer nos erros de ferramenta brutos da rodada 2.
+    status: complete
+
+  - id: AC6
+    descricao: >
+      Rodando o digest de verdade contra o log real do WEGO
+      (2026-09-27-1632.jsonl), a worktree do qa-engineer aparece nas rodadas 2
+      (WEGO-2327) e 4 (WEGO-2329), e o sinal de build verde de outro módulo
+      aparece na rodada 4.
+    altitude: cli
+    surface: >
+      execução real de `python3 common/bin/cepa-until-digest
+      /Users/alegomes/coding/wego/wego-acessos-backend/.claude/programs/WEGO/until/2026-09-27-1632.jsonl`
+      contra o log de produção (não sintético).
+    test: execução manual do binário (read-only) contra o run real
+    layer: end-to-end (CLI, log de produção)
+    evidence: verified
+    run: >
+      python3 common/bin/cepa-until-digest
+      /Users/alegomes/coding/wego/wego-acessos-backend/.claude/programs/WEGO/until/2026-09-27-1632.jsonl
+      > /tmp/digest_wego.out ; exit=0. Rodada 2 (### 2. WEGO-2327) traz
+      "sinais de processo: 3" incluindo "worktree descartável relatada ·
+      quem: build-hex:qa-engineer · onde: relatório devolvido". Rodada 4
+      (### 4. WEGO-2329) traz "sinais de processo: 8" incluindo "build verde
+      de outro módulo / gate de build contornado · quem: build-hex:qa-engineer
+      · onde: relatório devolvido" e "worktree descartável relatada · quem:
+      build-hex:engineering-lead · onde: Write em RESULT.md".
+    status: complete
+
+resumo: >
+  As seis pistas (AC1-AC6) foram checadas: o teste unitário/integração
+  tests/test_cepa_until_digest.py::test_sinais_de_processo_worktree_e_build_alheio
+  roda em segundos, sem mocks (subprocess real do binário), cobrindo AC1-AC5
+  com fixtures que reproduzem literalmente o padrão do run 2026-09-27-1632
+  citado no comentário do próprio script (linha 52-61). AC6 foi checado
+  rodando o binário direto contra o log de produção real (não sintético),
+  read-only, confirmando os dois números de rodada e o sinal esperados. Suíte
+  completa do arquivo de teste também rodou verde (11 testes, 0 falhas).
