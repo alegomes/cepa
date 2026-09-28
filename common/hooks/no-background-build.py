@@ -62,8 +62,9 @@ trabalho de segundo plano que ninguém vai colher`, e ele tem três portas:
               janela ele só segura o turno até o relógio do item matar tudo.
               Vigia com fim declarado continua liberado: ele termina e é colhido;
   Stop      — a parada em si. Se ficou subagente despachado sem resultado no
-              transcript, ou vigia armado sem `TaskStop`, a parada é bloqueada
-              uma vez com a lista do que falta colher.
+              transcript, ou vigia armado que nem recebeu `TaskStop` nem
+              terminou sozinho (aviso `<task-notification>` de fim), a parada
+              é bloqueada uma vez com a lista do que falta colher.
 
 O par com o `cepa-until`: o supervisor agora exporta
 `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0` para o item esperar o segundo plano em
@@ -229,13 +230,62 @@ def vigia_bloqueia(entrada, ambiente=None):
 
 # ── porta 3: a parada com trabalho pendente (Stop) ──────────────────────────
 _VIGIA_ARMADO = re.compile(r"Monitor started \(task ([A-Za-z0-9_-]{4,})")
-_VIGIA_PARADO = re.compile(r"[Ss]topped task:? ([A-Za-z0-9_-]{4,})")
+_VIGIA_PARADO = re.compile(
+    r"[Ss]topped task:? ([A-Za-z0-9_-]{4,})"
+    r"|No task found with ID:? ([A-Za-z0-9_-]{4,})")
 _DESPACHO = ("Agent", "Task")
+
+# O vigia que termina SOZINHO não passa por `TaskStop`: o harness grava um
+# `<task-notification>` com `<status>` terminal (fonte acabou) ou com o evento
+# de expiração. Sem ler isso, o hook tratava o vigia como armado para sempre e
+# barrava a parada legítima — no run de 2026-09-27 (item
+# until-build-longo-sem-trava) o relatório final virou resposta ao bloqueio.
+# Formatos conferidos nos transcripts de 2026-09: `completed`/`failed`/`killed`
+# e "Monitor expired after 10m ..." / "Monitor timed out". `running` não fecha.
+_AVISO = re.compile(r"<task-notification>(.*?)</task-notification>", re.S)
+_AVISO_ID = re.compile(r"<task-id>([A-Za-z0-9_-]{4,})</task-id>")
+_AVISO_FIM = re.compile(
+    r"<status>(?:completed|failed|killed)</status>"
+    r"|Monitor expired\b|Monitor timed out\b")
 
 
 def _blocos(linha):
     conteudo = ((linha.get("message") or {}).get("content"))
     return conteudo if isinstance(conteudo, list) else []
+
+
+def _textos_do_harness(linha):
+    """O texto que o HARNESS escreveu nesta linha — onde mora o aviso de fim.
+
+    O aviso aparece como `queue-operation` (content), como `attachment`
+    (prompt) ou como mensagem de usuário. Linha de assistente fica de fora:
+    o agente citar um aviso não encerra vigia nenhum.
+    """
+    if linha.get("type") == "assistant":
+        return []
+    textos = []
+    if isinstance(linha.get("content"), str):
+        textos.append(linha["content"])
+    anexo = linha.get("attachment")
+    if isinstance(anexo, dict) and isinstance(anexo.get("prompt"), str):
+        textos.append(anexo["prompt"])
+    conteudo = (linha.get("message") or {}).get("content")
+    if isinstance(conteudo, str):
+        textos.append(conteudo)
+    elif isinstance(conteudo, list):
+        textos.extend(b.get("text") for b in conteudo
+                      if isinstance(b, dict) and b.get("type") == "text"
+                      and isinstance(b.get("text"), str))
+    return textos
+
+
+def vigias_encerrados(texto):
+    """Ids de tarefa que um `<task-notification>` terminal dá por encerradas."""
+    for m in _AVISO.finditer(texto or ""):
+        corpo = m.group(1)
+        ident = _AVISO_ID.search(corpo)
+        if ident and _AVISO_FIM.search(corpo):
+            yield ident.group(1)
 
 
 def pendencias(transcript_path):
@@ -256,6 +306,10 @@ def pendencias(transcript_path):
                     linha = json.loads(bruta)
                 except json.JSONDecodeError:
                     continue
+                if not isinstance(linha, dict):
+                    continue
+                for texto in _textos_do_harness(linha):
+                    parados.update(vigias_encerrados(texto))
                 for b in _blocos(linha):
                     tipo = b.get("type")
                     if tipo == "tool_use" and b.get("name") == "Bash":
@@ -278,7 +332,7 @@ def pendencias(transcript_path):
                         for m in _VIGIA_ARMADO.finditer(texto):
                             armados[m.group(1)] = m.group(1)
                         for m in _VIGIA_PARADO.finditer(texto):
-                            parados.add(m.group(1))
+                            parados.add(m.group(1) or m.group(2))
     except OSError:
         return [], [], []
     subagentes = [r for i, r in despachados.items() if i not in respondidos]
