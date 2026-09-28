@@ -1,0 +1,38 @@
+schema_version: 2
+card: vigia-conta-so-monitor-real
+verdict: proven
+reviewed_at: 2026-09-28T00:00:00-03:00
+base_commit: 508694a
+head_commit: e37c6cf
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/no-background-build.py:pendencias", module: hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/shell sem pitest; PIT não se aplica"
+    perturbation:
+      status: pass
+      results:
+        - "P1 (bug de volta): `if alvo in vigias_chamados:` -> `if True:` em pendencias() -> `python3 tests/test_no_background_build.py` em /tmp/proof-vigia-9f21: 3 falhas nas 3 checagens do teste novo (`texto 'Monitor started' na saida de um Bash nao arma vigia`, `tool_result sem tool_use Monitor correspondente nao arma vigia`, `Monitor sem id e tool_result sem tool_use_id nao colidem em None`), resto verde -> RED confirmado"
+        - "P2 (nunca arma): `if alvo in vigias_chamados:` -> `if False:` -> mesma suite: 4 falhas, incluindo `test_parada_com_vigia_armado_e_bloqueada` e as 3 checagens de `test_aviso_nao_terminal_ou_citado_nao_solta_o_vigia` -> RED confirmado no caminho positivo (o vigia real deixa de armar)"
+        - "P3 (nome errado): `b.get(\"name\") == \"Monitor\"` -> `b.get(\"name\") == \"Bash\"` -> mesma suite: 5 falhas, incluindo o check do grep-Bash (`texto 'Monitor started' na saida de um Bash nao arma vigia`, que devia ficar verde e ficou vermelho) e os 4 positivos de P2 -> RED confirmado"
+        - "P4 (guarda `if ident:` removida): `vigias_chamados.add(ident)` incondicional -> mesma suite: 1 falha, exatamente `Monitor sem id e tool_result sem tool_use_id nao colidem em None` -> RED confirmado, resto verde"
+        - "run das 4 perturbacoes: cd /tmp/proof-vigia-9f21 && python3 tests/test_no_background_build.py (worktree descartavel `git worktree add --detach /tmp/proof-vigia-9f21 HEAD`, removido ao final com `git worktree remove --force`)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "todo o trecho alterado (vigias_chamados, o if de guarda, a condicao alvo in vigias_chamados) e exercitado pelas 4 perturbacoes acima, cada uma acertando uma linha/condicao distinta do diff"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o hook nao expoe superficie de entrada externa nova: le um transcript JSONL ja existente e decide bloquear/liberar o Stop; o diff nao toca modulo de input-bearing (nao ha api-rest neste repo)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git worktree add --detach /tmp/proof-vigia-9f21 HEAD; git checkout 508694a -- common/hooks/no-background-build.py; git checkout e37c6cf -- tests/test_no_background_build.py; python3 tests/test_no_background_build.py -> 3 falhas nas 3 checagens do teste novo (test_texto_monitor_started_na_saida_de_outra_ferramenta_nao_arma_vigia), resto verde -> RED confirmado na base"
+routing_reason: "Regressao vermelha na base (508694a) com o teste do HEAD, confirmando que o bug existia e o teste o captura. Quatro perturbacoes no worktree descartavel /tmp/proof-vigia-9f21 (removido ao final) provam cada trecho alterado carga: reintroduzir o bug (P1), nunca armar (P2), trocar o nome da ferramenta (P3) e remover a guarda de id (P4) — todas foram RED no teste que deveria acusar. HEAD sem perturbacao roda 56 ok, 0 FAIL. PIT nao se aplica (repo Python/shell). L4 e n/a: o hook nao abre superficie de entrada nova. Nada assumed/skipped. PROVEN."
