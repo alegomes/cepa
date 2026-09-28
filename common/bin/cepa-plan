@@ -1111,6 +1111,121 @@ def cmd_queue(raiz, nome, teto, como_json):
     return 0
 
 
+# ── status: a fila inteira, só leitura ───────────────────────────────────────
+#
+# O `queue` responde "o que o próximo lote executa" e por isso esconde o que já
+# fechou e para no primeiro travamento. O `/common:next` aponta UM passo. Nenhum
+# dos dois responde "como está a fila agora?", e em 2026-09-28 o dono perguntou
+# exatamente isso e não havia comando: só abrir o YAML de 72 itens à mão.
+
+GRUPOS_STATUS = (
+    ("in_progress", "em andamento"),
+    ("pending", "pendentes"),
+    ("blocked", "bloqueados"),
+    ("done", "concluídos"),
+    ("dropped", "descartados"),
+)
+
+
+def filas_single_track(raiz):
+    """Os nomes das filas single-track do repo, em ordem alfabética."""
+    base = raiz / ".claude" / "programs"
+    nomes = []
+    for arq in sorted(base.glob("*/plan.yaml")):
+        plan, erro = le_plano(arq)
+        if not erro and isinstance(plan, dict) and modo_de(plan) == MODE:
+            nomes.append(arq.parent.name)
+    return nomes
+
+
+def primeira_frase(texto, limite=160):
+    t = " ".join(str(texto or "").split())
+    if len(t) <= limite:
+        return t
+    return t[:limite - 1].rstrip() + "…"
+
+
+def cmd_status(raiz, nome, filtro, como_json):
+    if not nome:
+        nomes = filas_single_track(raiz)
+        if not nomes:
+            print(f"nenhuma fila em {raiz / '.claude' / 'programs'} — quem "
+                  "escreve é o /common:plan", file=sys.stderr)
+            return 2
+        if len(nomes) > 1:
+            print("há mais de uma fila; diga qual: " + ", ".join(nomes),
+                  file=sys.stderr)
+            return 2
+        nome = nomes[0]
+    alvo = caminho_do_plano(raiz, nome)
+    if not alvo.is_file():
+        print(f"{alvo} não existe — quem escreve a fila é o /common:plan",
+              file=sys.stderr)
+        return 2
+    plan, erro = le_plano(alvo)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    if modo_de(plan) != MODE:
+        print(f"COLISÃO: {alvo} é um plano '{modo_de(plan)}' — ondas do "
+              "/maestro:program-plan, não uma fila", file=sys.stderr)
+        return 3
+
+    items = plan.get("items") or []
+    linhas = []
+    for pos, it in enumerate(items, 1):
+        dono = it.get("claimed_by") or {}
+        linhas.append({
+            "posicao": pos, "id": it.get("id"), "title": it.get("title"),
+            "status": status_de(it), "why": it.get("why"),
+            "blocked_by": it.get("blocked_by") or [],
+            "human_pending": it.get("human_pending"),
+            "evidence": it.get("evidence"),
+            "claimed_by": ({"session_id": dono.get("session_id"),
+                            "branch": dono.get("branch"),
+                            "started_at": dono.get("started_at")}
+                           if dono else None),
+        })
+    contagem = {st: sum(1 for l in linhas if l["status"] == st)
+                for st in STATUSES}
+    visiveis = [l for l in linhas if not filtro or l["status"] == filtro]
+
+    if como_json:
+        print(json.dumps({"program": plan.get("program") or nome,
+                          "path": str(alvo), "total": len(linhas),
+                          "por_status": contagem, "filtro": filtro,
+                          "items": visiveis}, ensure_ascii=False, indent=2))
+        return 0
+
+    print(f"fila {plan.get('program') or nome} · {alvo}")
+    print("  " + " · ".join(f"{contagem[st]} {rot}" for st, rot in GRUPOS_STATUS)
+          + f" · {len(linhas)} no total")
+    abertas = [l for l in linhas if l["human_pending"] is not None]
+    if abertas:
+        print(f"  {len(abertas)} com ação humana aberta: "
+              + ", ".join(l["id"] for l in abertas))
+    for st, rot in GRUPOS_STATUS:
+        grupo = [l for l in visiveis if l["status"] == st]
+        if not grupo:
+            continue
+        print(f"\n{rot} ({len(grupo)})")
+        for l in grupo:
+            print(f"  {l['posicao']:>3}. {l['id']} — {l['title']}")
+            if st in ("done", "dropped"):
+                continue
+            if l["claimed_by"]:
+                c = l["claimed_by"]
+                print(f"       reservado: sessão {c['session_id'] or '?'}"
+                      f" desde {c['started_at'] or '?'}")
+            if l["blocked_by"]:
+                print(f"       espera: {', '.join(map(str, l['blocked_by']))}")
+            if l["human_pending"] is not None:
+                print(f"       ação humana: {primeira_frase(l['human_pending'])}")
+            if st == "blocked" and l["evidence"]:
+                print(f"       motivo: {primeira_frase(l['evidence'])}")
+    return 0
+
+
 # ── promoção: as demandas que a fila entrega ao /maestro:program-plan ────────
 
 # Piso D7 do Maestro (common/plan-schema.yaml, "Piso de uso"): abaixo de 4
@@ -2335,6 +2450,16 @@ def main(argv=None):
     q.add_argument("--repo", default=".")
     q.add_argument("--json", action="store_true", dest="como_json")
 
+    stt = sub.add_parser("status",
+                         help="a fila inteira agrupada por status, na ordem "
+                              "gravada; só lê, não reserva nem executa")
+    stt.add_argument("nome", nargs="?",
+                     help="nome da fila; omitido, usa a única que existir")
+    stt.add_argument("--status", choices=STATUSES, dest="filtro",
+                     help="mostra só os itens com este status")
+    stt.add_argument("--repo", default=".")
+    stt.add_argument("--json", action="store_true", dest="como_json")
+
     pr = sub.add_parser("promote",
                         help="as demandas que a fila entrega ao "
                              "/maestro:program-plan --from-plan")
@@ -2465,6 +2590,8 @@ def main(argv=None):
         return cmd_ordena(raiz, a.nome, chaves, a.como_json)
     if a.cmd == "divergencia":
         return cmd_divergencia(raiz, a.nome, a.board, a.backlog, a.como_json)
+    if a.cmd == "status":
+        return cmd_status(raiz, a.nome, a.filtro, a.como_json)
     if a.cmd == "queue":
         return cmd_queue(raiz, a.nome, a.teto, a.como_json)
     if a.cmd == "promote":
