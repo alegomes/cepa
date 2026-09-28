@@ -741,18 +741,33 @@ def test_reconcile_nao_lista_dropped_igual_dos_dois_lados(base):
     com_quadro(d)
     alvo = escreve_fila(d, [item("W-1", status="dropped"),
                             item("W-2", status="dropped"),
-                            item("W-3", status="pending")])
+                            item("W-3", status="pending"),
+                            item("W-4", status="pending"),
+                            item("W-5", status="pending")])
     arq = board(d, [{"key": "W-1", "status": "Won't Do"},
-                    {"key": "W-3", "status": "Concluído"}],
-                missing=["W-2"])
+                    {"key": "W-3", "status": "Concluído"},
+                    {"key": "W-4", "status": "Won't Do"}],
+                missing=["W-2", "W-5"])
     _, out = reconcile(d, arq)
     ids_div = {x["id"] for x in out["divergences"]}
-    check("único divergente é o pending → done, não os dois dropped → dropped",
-          ids_div == {"W-3"}, out["divergences"])
+    check("divergem o pending → done e os dois pending → dropped "
+          "(quadro e sumido), não os dropped → dropped",
+          ids_div == {"W-3", "W-4", "W-5"}, out["divergences"])
+    div_por_id = {x["id"]: x for x in out["divergences"]}
+    check("W-4 (pending, Won't Do no quadro) vira pending → dropped",
+          div_por_id["W-4"]["de"] == "pending"
+          and div_por_id["W-4"]["para"] == "dropped", div_por_id["W-4"])
+    check("W-5 (pending, sumido do quadro) vira pending → dropped",
+          div_por_id["W-5"]["de"] == "pending"
+          and div_por_id["W-5"]["para"] == "dropped", div_por_id["W-5"])
     check("dropped descartado no quadro (Won't Do) fica em dia",
           "W-1" in out["in_sync"], out)
     check("dropped sumido do quadro (missing) fica em dia",
           "W-2" in out["in_sync"], out)
+    check("W-4 não fica em dia, é divergência",
+          "W-4" not in out["in_sync"], out)
+    check("W-5 não fica em dia, é divergência",
+          "W-5" not in out["in_sync"], out)
 
     _, out = reconcile(d, arq, "--apply")
     no_disco = por_id(plano_de(alvo))
@@ -760,6 +775,14 @@ def test_reconcile_nao_lista_dropped_igual_dos_dois_lados(base):
           "reconciled" not in no_disco["W-1"], no_disco["W-1"])
     check("nem o outro dropped",
           "reconciled" not in no_disco["W-2"], no_disco["W-2"])
+    check("W-4 vira dropped no disco",
+          no_disco["W-4"]["status"] == "dropped", no_disco["W-4"])
+    check("W-4 recebe carimbo de reconciliação",
+          "reconciled" in no_disco["W-4"], no_disco["W-4"])
+    check("W-5 vira dropped no disco",
+          no_disco["W-5"]["status"] == "dropped", no_disco["W-5"])
+    check("W-5 recebe carimbo de reconciliação",
+          "reconciled" in no_disco["W-5"], no_disco["W-5"])
 
 
 def test_na_branch_da_noite(base):
