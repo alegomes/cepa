@@ -1,0 +1,42 @@
+schema_version: 2
+card: path-lock-libera-proof-reviewer-na-copia
+verdict: proven
+reviewed_at: 2026-09-28T00:00:00-03:00
+base_commit: 4e7205d
+head_commit: 44e6a67
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/_templates/bash-path-lock.py.tmpl:_worktrees", module: hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_templates/bash-path-lock.py.tmpl:_script_rule", module: hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_templates/bash-path-lock.py.tmpl:_classify_segment (ctx.seg_args)", module: hooks, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_bash_path_lock_exec.py:test_script_na_copia_descartavel", module: tests, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python; PIT não se aplica (nenhum pitest no projeto)"
+    perturbation:
+      status: pass
+      results:
+        - "GREEN prévio (HEAD 44e6a67, worktree descartável /tmp/proof-path-lock-1): `python3 bin/gen-locks.py --check` confirma as 6 cópias == molde; `python3 tests/test_bash_path_lock_exec.py` completo roda 1286 checagens, 0 falhas ('tudo verde em 6 cópias'); isolado, `test_script_na_copia_descartavel` sozinho também verde nas 6 topologias."
+        - "P1 — `_worktrees` sempre `[]` (o registro de worktrees git nunca é consultado): `python3 bin/gen-locks.py --write` + rerun de `test_script_na_copia_descartavel` -> 36 falhas, todos os 6 casos 'libera: ...' nas 6 topologias ficam RED (o script dentro da cópia descartável volta a cair no balde 4, negado). RED confirmado."
+        - "P2 — remove `and not _refs_root(...)` (a checagem de citação da raiz deixa de valer): rerun -> 6 falhas, exatamente o caso 'nega: script na cópia citando a raiz (paridade balde 3)' nas 6 topologias vira RED (a linha que citava a raiz do projeto passa a ser liberada por engano). RED confirmado, cirúrgico — nenhum outro caso do teste foi afetado."
+        - "P3 — troca `any(_inside(p, wt) for wt in _worktrees(ctx)) and not _refs_root(...)` por `if True:` (qualquer script fora da raiz passa, mesmo fora de qualquer worktree registrado): rerun -> 18 falhas nas 6 topologias, nos 3 casos que deviam negar ('nega: script na cópia citando a raiz', 'nega: script fora da raiz e fora de worktree registrado', 'nega: worktree removido do registro'). RED confirmado — inclusive o caso pinned de script solto em /tmp fora de qualquer worktree, que é o comportamento antigo do balde 4 que a mudança não deveria afrouxar."
+        - "P4 — remove a linha `ctx.seg_args = args + redirs`: rerun -> 0 falhas, permanece GREEN. Investigado: não é gap. `_refs_root(ctx, seg, args, cwds)` também checa `root_s in text` (o texto bruto do segmento) antes de olhar `args`; o cenário de teste 'cita a raiz' usa o caminho literal do projeto na linha de comando, que bate no `root_s in text` independente de `ctx.seg_args`. O papel de `ctx.seg_args` é só o fallback via `a.known` (arg cujo valor não dá para resolver estaticamente) — cenário que este teste não constrói e que a suíte de balde 3/4 mais ampla também não cobre isoladamente para este caminho novo. Registrado como achado, não como falha estrutural: a proteção primária (checagem textual) segue ativa."
+        - "run: `git worktree add --detach /tmp/proof-path-lock-1 44e6a67` (removido ao final com `git worktree remove --force`); cada perturbação editou só `common/hooks/_templates/bash-path-lock.py.tmpl`, regenerou as 6 cópias com `python3 bin/gen-locks.py --write`, rodou o teste isolado, e foi revertida com `git checkout HEAD -- common/hooks/_templates/bash-path-lock.py.tmpl` + `--write` antes da próxima."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "as 3 linhas centrais do diff comportamental (_worktrees, a condição composta em _script_rule, e ctx.seg_args em _classify_segment) foram cada uma isoladamente perturbada (P1, P2/P3, P4) e o teste novo as exercita; P4 não vira RED mas por razão estrutural verificada (checagem redundante via texto), não por ausência de cobertura."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera regra de um hook de enforcement local (PreToolUse), não abre superfície de entrada externa/HTTP; nenhuma classe tocada está em módulo de input-bearing (api-rest não existe neste repo)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "test_script_na_copia_descartavel copiado de HEAD para worktree em base_commit 4e7205d (/tmp/proof-path-lock-base, removido ao final): 36 falhas — exatamente os 6 casos 'libera: ...' x 6 topologias, porque na base o carve-out de worktree ainda não existe e o script dentro da cópia descartável cai no balde 4. RED confirmado na base; GREEN confirmado em HEAD (ver l3 acima)."
+routing_reason: "Mudança load-bearing nas 3 perturbações centrais (P1, P2, P3), todas RED como esperado quando a condição correspondente é quebrada. P4 fica GREEN mas por razão estrutural válida (checagem redundante via texto do segmento), não por gap de cobertura — registrado como achado, não como falha. Regressão confirmada RED na base e GREEN em HEAD. Diff não abre superfície de input externo (hook local), então L4 é n/a com justificativa. Nada assumed/skipped/gap/survived. PROVEN."

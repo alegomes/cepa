@@ -1,0 +1,82 @@
+key: path-lock-libera-proof-reviewer-na-copia
+title: "bash-path-lock deixa o proof-reviewer rodar testes dentro da própria cópia descartável em /tmp"
+commit: 44e6a67
+base: 4e7205d
+status: complete
+criteria:
+  - id: AC1
+    description: >
+      Um agente trancado (ex. build-hex:proof-reviewer), a partir do cwd da
+      raiz do projeto, rodando os três formatos reais do run 2026-09-28-0558
+      contra um worktree registrado com `git worktree add <tmp>/proof-x HEAD`,
+      é PERMITIDO (hook exit 0).
+    altitude: cli
+    surface: "subprocess do hook bash-path-lock.py recebendo o payload PreToolUse (tool_name=Bash) via stdin, exit code"
+    test: "tests/test_bash_path_lock_exec.py::test_script_na_copia_descartavel — casos 'caso real 1/2/3' e variantes 'cd {WT}; ...', 'bash <WT>/...', '<WT>/... direto'"
+    layer: hook-subprocess (external surface, exercised via run() spawning subprocess do arquivo real)
+    evidence: verified
+    run: >
+      python3 tests/test_bash_path_lock_exec.py -> "tudo verde em 6 cópias"
+      (54 linhas "ok" impressas para test_script_na_copia_descartavel, 9 checks
+      x 6 cópias de hook: build-hex, build-team, design, discovery,
+      docs-topology, marketing — todas com "libera: ..." rc == 0)
+  - id: AC2
+    description: >
+      `sh /tmp/<dir-solto>/x.sh` (script fora da raiz e NÃO dentro de nenhum
+      worktree registrado) continua NEGADO (exit 2).
+    altitude: cli
+    surface: mesmo subprocess do hook, payload com script solto fora de worktree
+    test: "tests/test_bash_path_lock_exec.py::test_script_na_copia_descartavel — check 'nega: script fora da raiz e fora de worktree registrado'"
+    layer: hook-subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_bash_path_lock_exec.py -> ok em todas as 6 cópias
+      para essa checagem (rc == 2, "erro interno" ausente)
+  - id: AC3
+    description: >
+      Linha cujo script está dentro do worktree mas que também cita a raiz do
+      projeto é NEGADA (paridade com a regra do balde 3).
+    altitude: cli
+    surface: mesmo subprocess do hook, payload citando a raiz junto do script no worktree
+    test: "tests/test_bash_path_lock_exec.py::test_script_na_copia_descartavel — check 'nega: script na cópia citando a raiz (paridade balde 3)'"
+    layer: hook-subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_bash_path_lock_exec.py -> ok em todas as 6 cópias
+      (rc == 2, "erro interno" ausente)
+  - id: AC4
+    description: >
+      Depois de `git worktree remove --force <wt>`, o mesmo comando do caso
+      (c) volta a ser NEGADO — o registro de worktrees é load-bearing, não
+      cache indefinido.
+    altitude: cli
+    surface: mesmo subprocess do hook, chamado após remoção real do worktree do registro git
+    test: "tests/test_bash_path_lock_exec.py::test_script_na_copia_descartavel — check 'nega: worktree removido do registro (perturbação)'"
+    layer: hook-subprocess
+    evidence: verified
+    run: >
+      python3 tests/test_bash_path_lock_exec.py -> ok em todas as 6 cópias
+      (rc == 2, "erro interno" ausente), após `git worktree remove --force`
+      real executado dentro do teste
+  - id: AC5
+    description: >
+      As seis cópias geradas (`*/hooks/bash-path-lock.py`) carregam a mudança:
+      `python3 bin/gen-locks.py --check` fica verde.
+    altitude: cli
+    surface: "bin/gen-locks.py --check comparando as 6 cópias com o molde renderizado"
+    test: "bin/gen-locks.py --check (comando dedicado, não um test file)"
+    layer: cli
+    evidence: verified
+    run: >
+      python3 bin/gen-locks.py --check ->
+      "✓ as 6 cópias são exatamente o molde renderizado"
+gaps: []
+notes: >
+  Rodei apenas tests/test_bash_path_lock_exec.py e bin/gen-locks.py --check,
+  não tests/run-all.sh (suíte completa é do supervisor, conforme instrução da
+  tarefa). O teste novo (test_script_na_copia_descartavel) chama run(), que
+  sobe um subprocess real do arquivo de hook com payload PreToolUse via
+  stdin — é a superfície externa real do hook, não uma chamada interna
+  mockada. As 6 cópias (build-hex, build-team, design, discovery,
+  docs-topology, marketing) foram exercitadas individualmente pelo laço
+  `for hook in HOOKS`.
