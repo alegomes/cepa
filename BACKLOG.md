@@ -3745,9 +3745,11 @@ zero intervenção para o vermelho e nada novo para lembrar.
    painel derrubou o `FIX-<teste>` (a fila travava e o conserto rodava sem o código do card);
    o dono aprovou a **Revisão 3** (`docs/discovery/until-fim-sem-dono/revisao-3.md`), que vale
    sobre a Revisão 2 onde as duas divergem. Segundo build: mediana 958 s em 24 medições.
-1. **Garantia:** os commits de todas as tentativas de um item vão para a branch lateral, com
-   as duas checagens antes do `reset` (SHA ancestral do HEAD; nenhum outro `done` no meio).
-   Teste vermelho: item com duas tentativas, e a lateral precisa conter os commits das duas.
+1. ~~**Garantia:** os commits de todas as tentativas de um item vão para a branch lateral, com
+   as duas checagens antes do `reset` (SHA ancestral do HEAD; nenhum outro `done` no meio).~~
+   **Feito em 2026-09-28**, no vermelho do build e no item que gasta as tentativas
+   (lateral `-parado-`); testes em `tests/test_cepa_until_branch_da_noite.py`. Vale para as
+   tentativas da mesma janela: a de um run anterior chega pela herança e não é desfeita.
 2. **Estado do run e lista de ações** gravados antes da análise do modelo, impressos no fim do
    terminal, lidos pelo `/common:until-review`; uma linha por item no resumo.
 3. **`cepa-until aterrissar <fila>/<run>`** como camada fina sobre os guardas do
@@ -3761,7 +3763,7 @@ zero intervenção para o vermelho e nada novo para lembrar.
 4. **Vermelho que se resolve** (Revisão 3, subpassos 4a-4f com critério e teste vermelho no
    documento): segundo build completo; verde fecha `done` e grava `build_instavel` na
    telemetria; qualquer outro desfecho devolve o **próprio item** a `pending` com o recado na
-   `evidence`, que o `cepa-plan start` passa a imprimir; teto de duas voltas (a segunda vai para
+   `evidence`, que o `cepa-plan start` passa a imprimir (4c **feito em 2026-09-28**); teto de duas voltas (a segunda vai para
    `blocked`); cada volta conta no disjuntor; lateral só é apagada depois do `format-patch`.
 5. Cabeçalho curto, caminhos relativos, custo no resumo; `/common:next` e `/common:doctor`
    leem o estado do run.

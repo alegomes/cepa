@@ -1540,6 +1540,14 @@ def cmd_start(raiz, nome, ident, cwd="."):
     print(f"  dono: {dono['session_id']} (host {dono['hostname']}, "
           f"pid {dono['pid']}) — é o que responde \"outra sessão está nele "
           "agora ou um run morreu?\" no próximo `queue`")
+    # O recado de quem tirou o item daqui antes (o `cepa-until` devolve a
+    # `pending` o item de build vermelho, com a lateral e o motivo): quem lê é
+    # o agente que acabou de reservar. Sem imprimir, ninguém lia.
+    anterior = str(it.get("evidence") or "").strip()
+    if anterior:
+        print("  evidence anterior (leia antes de começar):")
+        for linha in anterior.splitlines():
+            print(f"    {linha}")
     return 0
 
 
