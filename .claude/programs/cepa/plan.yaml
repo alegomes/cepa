@@ -922,10 +922,10 @@ items:
     3/3, vizinhos verdes; suite completa fica com o supervisor. Peca 1 adaptada:
     versao registrada no jsonl do cepa-until por item, nao nos YAMLs de prova (que
     nao sao produzidos com a twg). Fora: peca 3 (auto-update), aberta como rota
-    humana. Codigo esta na branch da noite until/2026-09-26-2203, sem merge.
-    Fechado em 2026-09-27: auto-update da twg segue ligado (decisao do dono);
-    twg_version: 1.3.1 declarado em docs/env.yaml nos 13 repos de ~/coding/wego,
-    commit local em cada um, lido pelo cepa-doctor.'
+    humana. Codigo esta na branch da noite until/2026-09-26-2203, sem merge. Fechado
+    em 2026-09-27: auto-update da twg segue ligado (decisao do dono); twg_version:
+    1.3.1 declarado em docs/env.yaml nos 13 repos de ~/coding/wego, commit local
+    em cada um, lido pelo cepa-doctor.'
 - id: detector-contexto-twg
   title: Detector de contexto de execução, se o `twg` virar caminho canônico local
   why: 'ainda não priorizado: seção do BACKLOG.md sem item na fila, achada na varredura
@@ -1108,10 +1108,18 @@ items:
     ainda rebaixa em bounce; ja rebaixou 11 cards prontos no wego-acesso-backend
     (BACKLOG, secao Fila unica, fato 5). (ainda não priorizado: entrou no fim da
     fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 8f84bb2 (fix em cepa-plan reconcilia + testes + next.md) e
+    cf45f50 (artefato de aceite) na branch until/2026-09-27-1213. Item done agora
+    fica done contra qualquer status do quadro (To Do, Doing, Won''t Do, card sumido);
+    a divergencia vira aviso citando R3. completion-auditor COMPLETE (.claude/acceptance/reconcile-nao-rebaixa-done.yaml).
+    Prova por perturbacao: com o cepa-plan de 7aa500b o teste novo test_reconcile_nunca_rebaixa_item_done
+    e as asserções trocadas dão 12 FAILs; com 8f84bb2 all green. Topologia build-solo:
+    sem validation-lead nem proof-reviewer; build completo fica com o supervisor.
+    Fora do escopo: o reconcile ainda lista ''dropped -> dropped'' sem mudança (ruído
+    visto na validação de 2026-09-25).'
 - id: triagem-parcial-preserva-ordem
   title: Triagem parcial acrescenta os cards novos DEPOIS dos pendentes ja priorizados,
     sem mexer na ordem deles
@@ -1120,10 +1128,23 @@ items:
     na frente dos 5 pendentes que o dono priorizou e manda os antigos para o fim.
     Colado ao reconcile-nao-rebaixa-done porque os dois juntos destravam aquela
     validacao. Aprovado pelo dono em 2026-09-26.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 15da11b (fix em cepa-plan write: triagem parcial com --on-missing
+    keep mantem a fila do disco na ordem dela e acrescenta os cards novos depois,
+    na ordem da triagem; teste test_triagem_parcial_preserva_a_ordem_da_fila; plan.md
+    e docstring) e 06eee35 (artefato de aceite) na branch until/2026-09-27-1213.
+    completion-auditor COMPLETE (.claude/acceptance/triagem-parcial-preserva-ordem.yaml).
+    Prova por perturbacao: com o cepa-plan de cf45f50 o teste novo da 2 FAILs e
+    reproduz a reordenacao do achado (W-1438, W-1600, W-1439, W-1440, W-1437...);
+    com 15da11b all green; vizinhos test_common_drain_plan e test_common_next verdes.
+    Topologia build-solo: sem validation-lead nem proof-reviewer; build completo
+    fica com o supervisor. Decisoes: triagem que cobre a fila inteira continua reordenando;
+    item que a triagem tambem cita fica na posicao do disco mas title/why vem da
+    triagem (regra do funde inalterada); cards novos entram no fim da lista. Destrava
+    (junto com reconcile-nao-rebaixa-done) re-rodar validar-fio-condutor-em-board-real,
+    que segue blocked ate o dono devolve-lo para pending.'
 - id: prova-descartavel-caminho-literal
   title: proof-reviewer e ui-proof-reviewer usam caminho literal ou git -C na worktree
     descartavel; bash-path-lock sugere isso ao negar variavel nao resolvida
@@ -1133,10 +1154,24 @@ items:
     pelo dono em 2026-09-26. Posicao dada pelo dono em 2026-09-26: logo depois do
     triagem-parcial-preserva-ordem, porque e pequeno e enquanto nao sai os agentes
     de prova seguem esbarrando no cadeado.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Na branch da noite until/2026-09-27-1213 (sem merge, sem push). Commits:
+    83b08fa (fix: molde do bash-path-lock + 6 copias regeneradas registram cd/pushd
+    e git -C com diretorio nao resolvido; a negacao nomeia a variavel e sugere caminho
+    literal ou git -C; receita da worktree na mensagem mostra caminho literal; proof-reviewer.md
+    e ui-proof-reviewer.md enderecam a worktree pelo caminho literal; testes em
+    tests/test_bash_path_lock_exec.py) e o commit de proof+acceptance. Nenhuma decisao
+    de negar/liberar mudou, so a mensagem. Gates: pair-reviewer APPROVE; completion-auditor
+    COMPLETE (.claude/acceptance/prova-descartavel-caminho-literal.yaml, 3/3 criterios);
+    proof-reviewer PROVEN (docs/proof/prova-descartavel-caminho-literal.yaml: 3
+    perturbacoes RED, regressao RED no base 06eee35). Testes rodados: test_bash_path_lock_exec,
+    test_lock_copies_drift, test_bash_path_lock_redir, test_path_lock_out_of_root,
+    test_multiline_quoted_shell, test_write_lock_rename, test_verde_sem_teste, todos
+    verdes; suite completa fica com o supervisor. Fora de escopo: ui-proof-reviewer
+    (plugin common) nao esta sob o bash-path-lock, entao para ele a mudanca e so
+    de instrucao. Efeito nos agentes exige reinstalar os plugins.'
 - id: board-flow-acha-cepa-plan-fora-do-cepa
   title: Comandos do board-flow acham o cepa-plan fora do repo cepa (hoje chamam
     python3 common/bin/cepa-plan, caminho relativo)
@@ -1145,28 +1180,64 @@ items:
     na fila e o /board-flow:drain cai na ordem do Jira, anulando a fila unica fora
     do cepa. Convencao herdada do triage.md. (ainda não priorizado: entrou no fim
     da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Na branch da noite until/2026-09-27-1213: 4c4b465 (shim board-flow/bin/cepa-plan
+    resolve o cepa-plan do common: repo -> cache de plugin na versao mais alta ->
+    PATH sem se auto-chamar; exit 127 nomeando caminhos; capture/drain/triage chamam
+    ${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan; board-flow 0.25.0->0.25.1), c543ea0 (teste
+    da trava de auto-chamada, lacuna do 1o proof), c6ba8eb (artefatos). pair-reviewer
+    OK; completion-auditor COMPLETE; proof-reviewer PROVEN na 2a rodada (5 perturbacoes
+    RED, 8 testes RED na base 9bf1bcb). Testes rodados so os tocados; suite completa
+    e do supervisor. Fora de escopo: common/ e maestro/ ainda chamam common/bin/cepa-dor,
+    cepa-hotspots e cepa-plan por caminho relativo (maestro/commands/run.md, program-plan.md).
+    Validacao em host real (WEGO) nao feita: cache de plugin so atualiza com reinstalacao.'
 - id: until-git-quebrado-vira-troca-de-branch
   title: O cepa-until lê "git quebrado" como "trocaram de branch" e encerra a janela
   why: 'pedido do dono em 26/09/2026 depois do run WEGO de 25/09, que perdeu 5h40
     de prazo por isso. Detalhe na seção de mesmo título do BACKLOG.md. (ainda não
     priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Na branch da noite until/2026-09-27-1213: e210106 (fix: le_branch devolve
+    o erro do git; repara_ligacao recria .git/worktrees/<nome> e o run segue, senao
+    encerra com motivo git-quebrado em vez de branch-mudou), 9ae3d39 (testes do
+    indice refeito e da guarda de caminho), commit dos gates. tests/test_cepa_until_git_quebrado.py
+    vermelho no codigo antigo (9 falhas, branch-mudou com ''?''), verde no novo;
+    test_cepa_until, _branch_da_noite e _adversarial verdes. completion-auditor
+    COMPLETE; proof-reviewer PROVEN na 2a rodada (1a UNPROVEN: git reset e guarda
+    sem teste, corrigido em 9ae3d39). git worktree repair nao serve (recusa sem
+    a pasta, git 2.55). Fora: passo 3 do BACKLOG (quem apaga .git/worktrees, suspeita
+    Insync) segue aberto. Build completo e do supervisor.'
 - id: until-build-longo-sem-trava
   title: Build de mais de 10 min dentro do cepa-until vira trava para o dono
   why: 'pedido do dono em 26/09/2026 depois do WEGO-2334, travado pelo teto de 10
     min. Detalhe na seção de mesmo título do BACKLOG.md. (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: blocked
   blocked_by: []
-  human_pending: null
-  evidence: null
+  human_pending: 'Depois de mesclar until/2026-09-27-1213 e reinstalar o plugin
+    common: rodar um cepa-until curto numa fila com um item que peca build de mais
+    de 10 min e conferir que ele sai done com o resultado colhido (ou decidir que
+    o e2e com claude -p basta), e entao devolver este item para done.'
+  evidence: 'Codigo na branch da noite until/2026-09-27-1213 (e29eb08, 5f0ff71,
+    85848ad, d52162a). Passo 1 medido em 27/09 com claude 2.1.283: claude -p mata
+    o segundo plano ao fim do turno com CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS em
+    0, ausente ou 120000 (sai em ~15s), e Monitor nao segura o turno; por isso o
+    passo 2 virou: no-background-build libera build em segundo plano que grava EXIT=
+    num arquivo, ensina esperar em primeiro plano num laco que sai antes de 10 min
+    (seq 27 x 20s, # espera-ok) e barra a parada sem EXIT=. Passo 3 feito: resumo
+    do fim do cepa-until mostra o motivo de cada travado. Ponta a ponta com claude
+    -p real e os hooks desta arvore: tests/e2e_build_longo_claude_p.py colheu make
+    verify de 700s (737s, BUILD SUCCESS e 0, US$ 0,16). Gates: proof-reviewer PROVEN
+    (docs/proof/until-build-longo-sem-trava.yaml); completion-auditor INCOMPLETE
+    (.claude/acceptance/until-build-longo-sem-trava.yaml): falta a colheita passando
+    pelo cepa-until real com /common:drain-plan. Condicao de fora: o cepa-until
+    carrega os hooks do plugin instalado (clone principal), entao esse teste so
+    mede este codigo depois de mesclar a branch na main e reinstalar o plugin common.
+    Quem resolve: o dono.'
 - id: maven-reactor-guard-libera-o-inocente
   title: maven-reactor-guard libera goals que nao compilam, -pl sem -am apos install
     da raiz posterior a ultima edicao, e quarkus:*
@@ -1175,10 +1246,31 @@ items:
     quarkus:* quebra com -am (BACKLOG, adf873f). Antes de construir: conferir numa
     amostra de 10 bloqueios que o install veio depois da ultima edicao. Aprovado
     pelo dono em 2026-09-26. (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Codigo na branch da noite until/2026-09-27-1213: 94185f0 (hooks + testes)
+    e c11d22d (gates + BACKLOG). Conferencia previa pedida pelo item, nos transcripts
+    do wego-acesso-backend (/tmp/rg-amostra/amostra.py): 366 bloqueios, 187 com
+    install da raiz depois da ultima edicao, 143 com edicao depois do install, 36
+    sem install; amostra de 10 (semente 20260927): 4, 5 e 1. Por isso a liberacao
+    compara horario do install com o mtime dos fontes, e nao so se houve install.
+    Entregue: (1) goal que nao compila (clean, validate, initialize, dependency:*,
+    help:*) passa, avaliado trecho a trecho; install fica barrado de proposito;
+    (2) capture-build-result grava .claude/last-root-install.json em install com
+    sucesso do reator inteiro (sem -pl/-rf; -f e cd so contam no pom da raiz da
+    sessao) e o guard libera quando nenhum fonte do reator mudou depois; (3) quarkus:*
+    nunca recebe o conselho de -am. pair-reviewer: 2 rodadas NEEDS-FIX (comando
+    com dois trechos; -f de submodulo; cd de submodulo), os 3 consertados com teste;
+    a terceira rodada de conserto passou do limite de 1 do fluxo build-solo por
+    ser defeito novo, nao discordancia. Testes tocados e vizinhos verdes (test_maven_reactor_guard
+    39 checagens, test_capture_build_result_root_install 15, mais 7 vizinhos); build
+    completo delegado ao supervisor. Gates: completion-auditor COMPLETE (.claude/acceptance/maven-reactor-guard-libera-o-inocente.yaml),
+    proof-reviewer PROVEN (docs/proof/maven-reactor-guard-libera-o-inocente.yaml,
+    6 perturbacoes todas vermelhas). Fora do escopo: -pl . (pom raiz) continua barrado;
+    install feito em OUTRA worktree nao e visto (o ~/.m2 e compartilhado), mesma
+    cegueira do stale-ok. Vale em producao so depois de mesclar na main e reinstalar
+    o plugin common.'
 - id: acceptance-gate-barra-done-sem-auditoria
   title: acceptance-gate.py barra a ida para Done quando nao existe artefato de
     aceite em nenhuma das quatro pastas (Review continua liberado)
@@ -1204,6 +1296,36 @@ items:
     deixou 3 worktrees em /private/tmp/cepa-eval/ registradas no git worktree list.
     Os dois primeiros enganam a proxima revisao de run. (ainda não priorizado: entrou
     no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: until-rodada-herda-handoff-da-anterior
+  title: Subprocesso do cepa-until herda o handoff da rodada anterior na mesma worktree
+    e trabalha no item errado
+  why: 'decidido em 2026-09-27 (pergunta 7 da revisao do run 2026-09-27-0832 do
+    wego-acessos-backend). Na rodada 2 desse run, o subprocesso que devia fazer
+    o WEGO-2321 nunca reservou o item: rodou 4 comandos de leitura e reescreveu
+    o relatorio do WEGO-2337, da rodada anterior (US$ 0,50, 41 s; o supervisor tentou
+    de novo e a segunda tentativa andou). Causa provavel, ainda hipotese: o SessionStart
+    mostra .claude/handoffs/<branch-slug>.md da mesma worktree, e o handoff da rodada
+    anterior manda continuar o 2337. Risco: o mesmo vazamento pode fechar um item
+    com o relatorio de outro. Conserto provavel: o cepa-until limpar ou isolar o
+    handoff entre rodadas, ou o prompt da rodada declarar o item e mandar ignorar
+    handoff de outro id. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: no-background-build-vigia-que-termina-sozinho
+  title: no-background-build conta como ativo para sempre o vigia de build que termina
+    sozinho (sem TaskStop) e barra parada legitima
+  why: 'decidido em 2026-09-27 (pergunta 5 da revisao do run 2026-09-27-1213). O
+    hook so da por encerrado um vigia quando ve TaskStop; no item until-build-longo-sem-trava
+    um vigia terminou sozinho, o hook barrou a parada e o relatorio final do item
+    no registro virou a resposta a esse bloqueio. Barrar parada legitima gasta a
+    unica chance de segurar um build de verdade nao colhido. (ainda não priorizado:
+    entrou no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
