@@ -1,0 +1,54 @@
+item: vigia-conta-so-monitor-real
+status: complete
+criteria:
+  - id: AC1
+    text: >-
+      no-background-build conta como vigia armado só o resultado de uma
+      chamada real ao Monitor, não qualquer saída com o texto
+      "Monitor started".
+    altitude: cli
+    surface: >-
+      subprocess do hook common/hooks/no-background-build.py invocado com
+      payload JSON no stdin (hook_event_name: Stop, transcript_path
+      apontando para um transcript real em disco) e resposta JSON no
+      stdout — é exatamente como o harness chama o hook.
+    test: >-
+      tests/test_no_background_build.py::test_texto_monitor_started_na_saida_de_outra_ferramenta_nao_arma_vigia
+    layer: hook-subprocess (via roda_stop -> subprocess.run([sys.executable, HOOK], ...))
+    evidence: verified
+    run: |
+      $ python3 tests/test_no_background_build.py
+      test_texto_monitor_started_na_saida_de_outra_ferramenta_nao_arma_vigia:
+        ok  texto 'Monitor started' na saída de um Bash não arma vigia
+        ok  tool_result sem tool_use Monitor correspondente não arma vigia
+      ...
+      ✓ tudo verde
+      (55 checks "ok" no total, 0 falhas)
+    independent_check: >-
+      Reproduzi a regressão fora do teste do implementador: copiei a versão
+      do hook em HEAD (antes do diff, via `git show HEAD:...`) para um
+      arquivo temporário e rodei o mesmo cenário do teste novo (Bash com
+      grep ecoando "Monitor started (task b1pa0ro5t...") diretamente por
+      subprocess. Resultado: `{"decision": "block", ...vigia(s) do Monitor
+      ainda armado(s): b1pa0ro5t...}` — confirma que o hook antigo (HEAD)
+      de fato dava o falso alarme relatado no run 2026-09-28-0558 round 5.
+      Com o hook do working tree (patch aplicado), o mesmo payload não
+      bloqueia. RED->GREEN confirmado de forma independente, não apenas
+      pela palavra do implementador.
+    positive_case_still_covered: >-
+      test_parada_com_vigia_armado_e_bloqueada (vigia real via CHAMA_VIGIA
+      tool_use Monitor + ARMA_VIGIA tool_result correspondente ainda
+      bloqueia o Stop) e as demais fixtures que dependiam de um vigia
+      armado (test_parada_limpa_passa, test_vigia_que_termina_sozinho_nao_barra_a_parada,
+      test_aviso_nao_terminal_ou_citado_nao_solta_o_vigia,
+      test_parada_fora_da_janela_passa) foram atualizadas para incluir o
+      tool_use CHAMA_VIGIA correspondente e continuam verdes — a mudança
+      não quebrou o caminho positivo (vigia real ainda arma e bloqueia).
+    gap: null
+notes: >-
+  Todos os 55 checks do arquivo de teste passaram (contagem obtida por
+  `grep -c "^  ok"` na saída), incluindo os dois novos checks do teste que
+  demonstra o critério e os checks de regressão dos vigias reais. Nenhum
+  self-certification: rodei o teste eu mesmo e reproduzi o bug antigo
+  isoladamente contra a versão do hook em HEAD para confirmar o RED
+  original antes do patch.

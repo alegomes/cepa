@@ -296,6 +296,7 @@ def pendencias(transcript_path):
     """
     despachados, respondidos, armados, parados = {}, set(), {}, set()
     marcas = {}
+    vigias_chamados = set()
     try:
         with open(transcript_path, encoding="utf-8", errors="replace") as f:
             for bruta in f:
@@ -319,6 +320,10 @@ def pendencias(transcript_path):
                         if arq and _BUILD.search(_unquoted_view(cmd)) and \
                                 desanexa(cmd, bool(ent.get("run_in_background"))):
                             marcas[arq] = (ent.get("description") or cmd)[:80]
+                    if tipo == "tool_use" and b.get("name") == "Monitor":
+                        ident = b.get("id")
+                        if ident:
+                            vigias_chamados.add(ident)
                     if tipo == "tool_use" and b.get("name") in _DESPACHO:
                         rotulo = (b.get("input") or {}).get("description") or b.get("name")
                         despachados[b.get("id")] = str(rotulo)[:80]
@@ -329,8 +334,16 @@ def pendencias(transcript_path):
                         texto = b.get("content")
                         if not isinstance(texto, str):
                             texto = json.dumps(texto, ensure_ascii=False)
-                        for m in _VIGIA_ARMADO.finditer(texto):
-                            armados[m.group(1)] = m.group(1)
+                        # Só conta "Monitor started" como vigia armado se o
+                        # tool_result responde a um tool_use Monitor de
+                        # verdade. Sem isso, um `grep` do agente sobre
+                        # transcripts antigos que ecoa esse texto no
+                        # resultado do Bash já disparava alarme falso (run
+                        # 2026-09-28-0558): o Stop era bloqueado por um
+                        # vigia que nunca existiu.
+                        if alvo in vigias_chamados:
+                            for m in _VIGIA_ARMADO.finditer(texto):
+                                armados[m.group(1)] = m.group(1)
                         for m in _VIGIA_PARADO.finditer(texto):
                             parados.add(m.group(1) or m.group(2))
     except OSError:

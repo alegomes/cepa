@@ -245,6 +245,8 @@ DESPACHO = [{"type": "tool_use", "id": "tu_1", "name": "Agent",
              "input": {"description": "Build WEGO-2224"}}]
 RESULTADO = [{"type": "tool_result", "tool_use_id": "tu_1",
               "content": "pronto, Tasks mescladas"}]
+CHAMA_VIGIA = [{"type": "tool_use", "id": "tu_2", "name": "Monitor",
+                "input": {"command": "...", "description": "vigia do build"}}]
 ARMA_VIGIA = [{"type": "tool_result", "tool_use_id": "tu_2",
                "content": "Monitor started (task bqwpma178, timeout 3600000ms)."}]
 PARA_VIGIA = [{"type": "tool_result", "tool_use_id": "tu_3",
@@ -267,17 +269,50 @@ def test_parada_com_subagente_pendente_e_bloqueada():
 def test_parada_com_vigia_armado_e_bloqueada():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [ARMA_VIGIA])
+        c = _transcript(Path(d), [CHAMA_VIGIA, ARMA_VIGIA])
         _, saida = roda_stop(c)
         check("parada com vigia armado é bloqueada",
               saida.get("decision") == "block",
               json.dumps(saida)[:160])
 
 
+def test_texto_monitor_started_na_saida_de_outra_ferramenta_nao_arma_vigia():
+    import tempfile
+    grep_use = [{"type": "tool_use", "id": "tu_grep", "name": "Bash",
+                 "input": {"command":
+                           "grep -h 'Monitor started' ~/.claude/projects/*/*.jsonl"}}]
+    grep_result = [{"type": "tool_result", "tool_use_id": "tu_grep",
+                     "content": "Monitor started (task b1pa0ro5t, timeout 3600000ms)."}]
+    with tempfile.TemporaryDirectory() as d:
+        c = _transcript(Path(d), [grep_use, grep_result])
+        p, saida = roda_stop(c)
+        check("texto 'Monitor started' na saída de um Bash não arma vigia",
+              not saida and p.returncode == 0,
+              f"saiu {p.returncode}: {p.stdout[:160]}")
+    orfao = [{"type": "tool_result", "tool_use_id": "tu_sem_tool_use",
+              "content": "Monitor started (task b1pa0ro5t, timeout 3600000ms)."}]
+    with tempfile.TemporaryDirectory() as d:
+        c = _transcript(Path(d), [orfao])
+        p, saida = roda_stop(c)
+        check("tool_result sem tool_use Monitor correspondente não arma vigia",
+              not saida and p.returncode == 0,
+              f"saiu {p.returncode}: {p.stdout[:160]}")
+    monitor_sem_id = [{"type": "tool_use", "name": "Monitor",
+                        "input": {"command": "..."}}]
+    resultado_sem_id = [{"type": "tool_result",
+                          "content": "Monitor started (task b1pa0ro5t, timeout 3600000ms)."}]
+    with tempfile.TemporaryDirectory() as d:
+        c = _transcript(Path(d), [monitor_sem_id, resultado_sem_id])
+        p, saida = roda_stop(c)
+        check("Monitor sem id e tool_result sem tool_use_id não colidem em None",
+              not saida and p.returncode == 0,
+              f"saiu {p.returncode}: {p.stdout[:160]}")
+
+
 def test_parada_limpa_passa():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [DESPACHO, RESULTADO, ARMA_VIGIA, PARA_VIGIA])
+        c = _transcript(Path(d), [DESPACHO, RESULTADO, CHAMA_VIGIA, ARMA_VIGIA, PARA_VIGIA])
         p, saida = roda_stop(c)
         check("subagente colhido e vigia parado: a parada passa",
               not saida and p.returncode == 0,
@@ -333,7 +368,7 @@ def test_vigia_que_termina_sozinho_nao_barra_a_parada():
                       ("TaskStop respondeu que a tarefa não existe",
                        TASKSTOP_TARDIO)):
         with tempfile.TemporaryDirectory() as d:
-            c = _transcript_misto(Path(d), [ARMA_VIGIA, fim])
+            c = _transcript_misto(Path(d), [CHAMA_VIGIA, ARMA_VIGIA, fim])
             p, saida = roda_stop(c)
             check(f"vigia encerrado sozinho ({nome}): a parada passa",
                   not saida and p.returncode == 0,
@@ -343,20 +378,20 @@ def test_vigia_que_termina_sozinho_nao_barra_a_parada():
 def test_aviso_nao_terminal_ou_citado_nao_solta_o_vigia():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript_misto(Path(d), [ARMA_VIGIA, AINDA_RODANDO])
+        c = _transcript_misto(Path(d), [CHAMA_VIGIA, ARMA_VIGIA, AINDA_RODANDO])
         _, saida = roda_stop(c)
         check("aviso com status running não encerra o vigia",
               saida.get("decision") == "block", json.dumps(saida)[:160])
     with tempfile.TemporaryDirectory() as d:
         citado = [{"type": "text", "text": FIM_DA_FONTE["content"]}]
-        c = _transcript_misto(Path(d), [ARMA_VIGIA, citado])
+        c = _transcript_misto(Path(d), [CHAMA_VIGIA, ARMA_VIGIA, citado])
         _, saida = roda_stop(c)
         check("o agente citar o aviso não encerra o vigia",
               saida.get("decision") == "block", json.dumps(saida)[:160])
     with tempfile.TemporaryDirectory() as d:
         outro = {"type": "queue-operation", "content": _aviso(
             "<task-id>outra123</task-id>\n<status>completed</status>")}
-        c = _transcript_misto(Path(d), [ARMA_VIGIA, outro])
+        c = _transcript_misto(Path(d), [CHAMA_VIGIA, ARMA_VIGIA, outro])
         _, saida = roda_stop(c)
         check("fim de OUTRA tarefa não encerra este vigia",
               saida.get("decision") == "block", json.dumps(saida)[:160])
@@ -365,7 +400,7 @@ def test_aviso_nao_terminal_ou_citado_nao_solta_o_vigia():
 def test_parada_fora_da_janela_passa():
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        c = _transcript(Path(d), [DESPACHO, ARMA_VIGIA])
+        c = _transcript(Path(d), [DESPACHO, CHAMA_VIGIA, ARMA_VIGIA])
         _, saida = roda_stop(c, na_janela=False)
         check("fora da janela a parada nunca é bloqueada", not saida,
               json.dumps(saida)[:160])
