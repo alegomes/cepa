@@ -1763,10 +1763,16 @@ def reconcilia(items, board, ausentes, papel_de):
                     "dono, pelo /common:plan")
             continue
         if ident in ausentes:
-            div.append({"id": ident, "de": st, "para": "dropped",
-                        "board": "(não existe mais)", "leitura":
-                        f"{ident} não existe mais no quadro — some da fila como "
-                        "`dropped`, com o motivo, em vez de sumir calado"})
+            if st == "dropped":
+                # 2026-09-28-0558: item já `dropped` na fila e sumido do
+                # quadro não é divergência — listar `dropped → dropped` é
+                # ruído que escondeu a única divergência real da rodada.
+                em_dia.append(ident)
+            else:
+                div.append({"id": ident, "de": st, "para": "dropped",
+                            "board": "(não existe mais)", "leitura":
+                            f"{ident} não existe mais no quadro — some da fila como "
+                            "`dropped`, com o motivo, em vez de sumir calado"})
             continue
         if ident not in board:
             continue
@@ -1779,8 +1785,14 @@ def reconcilia(items, board, ausentes, papel_de):
                 "porque adivinhar o papel dele é inventar o estado do trabalho")
             continue
         if papel == "descartado":
-            div.append({"id": ident, "de": st, "para": "dropped", "board": bruto,
-                        "leitura": f"o quadro descartou {ident} ({bruto})"})
+            if st == "dropped":
+                # 2026-09-28-0558: mesma razão do ramo `ausentes` acima —
+                # item já `dropped` na fila e descartado no quadro não é
+                # divergência, é ruído.
+                em_dia.append(ident)
+            else:
+                div.append({"id": ident, "de": st, "para": "dropped", "board": bruto,
+                            "leitura": f"o quadro descartou {ident} ({bruto})"})
         elif papel == "done" and st != "done":
             div.append({"id": ident, "de": st, "para": "done", "board": bruto,
                         "leitura": f"{ident} fechou fora deste plano ({bruto}). "

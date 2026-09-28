@@ -732,6 +732,36 @@ def test_reconcile_recusa_status_que_o_mapa_nao_conhece(base):
     check("e diz por quê", "status_map" in r.stderr, r.stderr)
 
 
+def test_reconcile_nao_lista_dropped_igual_dos_dois_lados(base):
+    """WEGO 2026-09-28-0558: `reconcile` listou 12 itens como `dropped →
+    dropped`, ruído que escondeu a única divergência real (um `pending →
+    done`). Item já `dropped` na fila e descartado no quadro — pelos dois
+    caminhos (`missing` e status `Won't Do`) — não é divergência."""
+    d = repo_git(base, "dropped-igual")
+    com_quadro(d)
+    alvo = escreve_fila(d, [item("W-1", status="dropped"),
+                            item("W-2", status="dropped"),
+                            item("W-3", status="pending")])
+    arq = board(d, [{"key": "W-1", "status": "Won't Do"},
+                    {"key": "W-3", "status": "Concluído"}],
+                missing=["W-2"])
+    _, out = reconcile(d, arq)
+    ids_div = {x["id"] for x in out["divergences"]}
+    check("único divergente é o pending → done, não os dois dropped → dropped",
+          ids_div == {"W-3"}, out["divergences"])
+    check("dropped descartado no quadro (Won't Do) fica em dia",
+          "W-1" in out["in_sync"], out)
+    check("dropped sumido do quadro (missing) fica em dia",
+          "W-2" in out["in_sync"], out)
+
+    _, out = reconcile(d, arq, "--apply")
+    no_disco = por_id(plano_de(alvo))
+    check("dropped que já estava certo não recebe carimbo de reconciliação",
+          "reconciled" not in no_disco["W-1"], no_disco["W-1"])
+    check("nem o outro dropped",
+          "reconciled" not in no_disco["W-2"], no_disco["W-2"])
+
+
 def test_na_branch_da_noite(base):
     """O `cepa-until` passa `--na-branch`. Sem o comando declarar o que isso
     muda, o agente volta a abrir worktree própria a partir de `origin/main`,
@@ -871,6 +901,7 @@ def main():
                    test_reconcile_nunca_rebaixa_item_done,
                    test_reconcile_nunca_anexa_card_nem_fecha_divida_humana,
                    test_reconcile_recusa_status_que_o_mapa_nao_conhece,
+                   test_reconcile_nao_lista_dropped_igual_dos_dois_lados,
                    test_queue_recusa_ondas_e_fila_inexistente,
                    test_start_reserva_e_recusa_reserva_dupla,
                    test_start_recusa_item_fechado_e_item_com_rota_aberta,
