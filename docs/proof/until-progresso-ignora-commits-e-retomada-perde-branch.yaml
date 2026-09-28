@@ -1,0 +1,40 @@
+schema_version: 2
+card: until-progresso-ignora-commits-e-retomada-perde-branch
+verdict: proven
+reviewed_at: 2026-09-28T10:08:06-03:00
+base_commit: d88110a
+head_commit: 97b43ec
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (heranca_do_run_anterior, abre_branch_da_noite, main/progresso)", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN na base (após o fix): `cd /Users/alegomes/cepa-worktrees/cepa-until-2026-09-28-0558 && python3 tests/test_cepa_until_retomada.py` -> 6 funções, 19 checks, 'tudo verde'."
+        - "RED-na-base (regressão): worktree descartável /tmp/proof-until-regressao em d88110a, cópia de tests/test_cepa_until_retomada.py de 97b43ec por cima -> 'python3 tests/test_cepa_until_retomada.py' -> 14 de 19 checks falharam (herança inexistente, commit não conta como progresso, rollback de merge inexistente). Confirma que o teste novo captura o bug."
+        - "Perturbação 1 (progresso ignora commit): removida a cláusula `or n_commits > 0` da linha de `progresso = (...)` em main() -> `python3 tests/test_cepa_until_retomada.py` em /tmp/proof-until-p1 -> RED em 4 checks (registro diz progresso, teto de tentativas, disjuntor, tela 'commit(s) sem fechar')."
+        - "Perturbação 2 (herança nunca acontece): `heranca_do_run_anterior` alterada para sempre `return []` -> RED em 10 checks (item não vê o trabalho do run anterior, run_start não registra herdou, tela não avisa, merge de branch conflitante deixa de ser exigido — teste de conflito também cai porque a largada não é mais recusada)."
+        - "Perturbação 3 (rollback do merge com conflito é pulado): removido o bloco `git merge --abort` / `git worktree remove --force` / `git branch -D` no erro de merge em `abre_branch_da_noite` -> RED em 2 checks ('não sobra branch da noite nova', '...nem worktree'), confirmando que o rollback é o que garante 'sem deixar rastro'."
+        - "Perturbação 4 (ancestralidade não é checada): removido o `if git(['merge-base','--is-ancestor',...]) == 0: continue` em `heranca_do_run_anterior` -> RED em 1 check ('nada a herdar: a largada não registra herança'), confirmando que sem esse guard uma branch já mesclada voltaria a ser herdada."
+        - "Perturbação 5 (filtro de commits>0 removido): trocado `if branch and any((e.get('commits') or 0) > 0 for e in lista):` por `if branch:` -> RED em 1 check ('item que saiu sem commit não puxa a branch antiga'), confirmando que sem o filtro um item sem commit herdaria a branch mesmo assim."
+        - "Cada perturbação foi restaurada (`git checkout -- common/bin/cepa-until` no worktree descartável) e o teste voltou a 'tudo verde' antes da próxima."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Estrutural (não há ferramenta de cobertura no repo): todo hunk alterado em common/bin/cepa-until foi exercitado por pelo menos uma perturbação acima que produziu RED; nenhum trecho do diff ficou sem uma perturbação correspondente."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff não abre superfície de entrada externa nova: é lógica interna de CLI (herança de branch e cálculo de progresso) já coberta pelos próprios testes de cenário (fila corrompida, branch conflitante, item sem commit) que os 6 casos novos já exercitam como adversariais. Não há endpoint HTTP nem parsing de dado externo novo neste módulo (repositório Python, sem api-rest)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "Worktree descartável /tmp/proof-until-regressao criado com `git worktree add --detach /tmp/proof-until-regressao d88110a`; tests/test_cepa_until_retomada.py de 97b43ec copiado por cima; `python3 tests/test_cepa_until_retomada.py` -> 14 de 19 checks falharam na base (RED). No HEAD (97b43ec), mesmo comando -> 'tudo verde' (GREEN). Worktree removido com `git worktree remove --force`."
+routing_reason: "Card de bug: regressão vermelha na base e verde no fix (green-at-base descartado). Cada comportamento novo do hunk (commit conta como progresso, herança de branch órfã, rollback do merge conflitante, filtro de ancestralidade, filtro de commits>0) foi perturbado isoladamente em worktree descartável e cada perturbação levou o teste que deveria cobri-lo a RED. Suíte antiga (test_cepa_until.py) segue verde no HEAD, sem regressão. Nada assumido/skipped. PROVEN."
