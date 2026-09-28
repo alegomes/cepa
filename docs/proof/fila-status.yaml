@@ -1,0 +1,42 @@
+schema_version: 2
+card: fila-status
+verdict: proven
+reviewed_at: 2026-09-28T00:00:00-03:00
+base_commit: 8095c71
+head_commit: 73b16bf
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan:cmd_status/filas_single_track/primeira_frase/GRUPOS_STATUS", module: harness, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/fila.md", module: harness, external_observable: true, substituted_by_double: null }
+scope_note: "base_commit 8095c71 não tem o subcomando `status` nem tests/test_common_fila.py; ambos nasceram em 73b16bf. Diff tratado como criação, não modificação de hunk."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não é projeto Maven/PIT; harness Python puro. A superfície externa é o CLI `python3 common/bin/cepa-plan status ...` chamado via subprocess por tests/test_common_fila.py — mecanismo universal de perturbação usado abaixo."
+    perturbation:
+      status: pass
+      results:
+        - "worktree descartável /tmp/proof-fila-status (git worktree add --detach a partir de 73b16bf, removida ao final via git worktree remove --force). GREEN inicial confirmado na árvore de origem antes de abrir a worktree: `python3 tests/test_common_fila.py` -> 25 checks ok, 'all green', exit 0."
+        - "Perturbação 1 — pular itens done/dropped: removidas as entradas ('done','concluídos') e ('dropped','descartados') de GRUPOS_STATUS (common/bin/cepa-plan). `python3 tests/test_common_fila.py` -> 3 falhas ('cabeçalho com as contagens', 'grupos na ordem pendentes, bloqueados, concluídos, descartados', 'concluído sai numa linha só, sem evidência'), exit 1. RED confirmado."
+        - "Perturbação 2 — não mostrar motivo de bloqueado: removido o bloco `if st == \"blocked\" and l[\"evidence\"]: print(f\"  motivo: ...\")` de cmd_status. `python3 tests/test_common_fila.py` -> 1 falha ('bloqueado mostra o motivo da evidência'), exit 1. RED confirmado."
+        - "Perturbação 3 — gravar o arquivo (quebra a promessa de só leitura): inserida `alvo.write_text(alvo.read_text(encoding='utf-8'), encoding='utf-8')` logo após ler o plano em cmd_status. `python3 tests/test_common_fila.py` -> 1 falha ('o plan.yaml sai byte a byte igual e sem ser tocado'), exit 1. RED confirmado."
+        - "Perturbação 4 — ignorar o filtro --status: trocado `visiveis = [l for l in linhas if not filtro or l[\"status\"] == filtro]` por `visiveis = linhas`. `python3 tests/test_common_fila.py` -> 1 falha ('--status pending traz só os pendentes'), exit 1. RED confirmado."
+        - "Perturbação 5 — escolher uma fila quando há duas em vez de recusar: removido o bloco `if len(nomes) > 1: print(...); return 2` em cmd_status, deixando `nome = nomes[0]` sempre. `python3 tests/test_common_fila.py` -> 1 falha ('com duas, recusa e nomeia as duas'), exit 1. RED confirmado."
+        - "Perturbação 6 — resolver contra o cwd em vez do clone principal: trocado `cmd_status(raiz, ...)` por `cmd_status(Path(a.repo), ...)` em main(), fazendo o subcomando status ignorar raiz_principal() (git-common-dir) e usar o cwd cru. `python3 tests/test_common_fila.py` -> 1 falha ('a worktree enxerga a fila do clone principal'), exit 1. RED confirmado."
+        - "Cada perturbação restaurada com `git checkout 73b16bf -- common/bin/cepa-plan` antes da próxima; GREEN reconfirmado ('all green', exit 0) ao final de todas, antes de remover a worktree. Árvore principal (/Users/alegomes/cepa-worktrees/cepa-fila-status) nunca tocada — todo o ciclo rodou em /tmp/proof-fila-status."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "as seis linhas/blocos de comportamento tocados pelo diff (agrupamento GRUPOS_STATUS, impressão do motivo de bloqueado, não-escrita do plan.yaml, aplicação do filtro --status, recusa com fila ambígua, resolução via raiz_principal) são exatamente as exercitadas pelas asserções que foram RED nas seis perturbações l3 acima; reachability confirmada estruturalmente pelo próprio teste do diff. Sem tooling de cobertura configurado neste harness Python (não há coverage.py/pytest-cov no projeto)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o comando `status` só lê um plan.yaml já validado por outros comandos do mesmo CLI (write/finish/etc.) e argumentos de linha de comando (nome da fila, --status escolhido de STATUSES fechado via argparse choices); não abre parsing de payload externo não confiável nem endpoint HTTP. Não há módulo api-rest neste repo — é um harness de linha de comando."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "worktree /tmp/proof-fila-status: git checkout 8095c71 -- common/bin/cepa-plan (versão sem cmd_status/subcomando status) com tests/test_common_fila.py de HEAD 73b16bf. `python3 tests/test_common_fila.py` -> argparse recusa 'status' como choice inválido, TypeError subsequente em 'NoneType' object is not subscriptable, exit 1. RED confirmado na base — o subcomando não existe em 8095c71. Restaurado com git checkout 73b16bf -- common/bin/cepa-plan; GREEN reconfirmado."
+routing_reason: "O comando novo `cepa-plan status` (chamado pelo /common:fila) está provado load-bearing nos seis comportamentos que o diff introduz: listar todos os status inclusive done/dropped, mostrar o motivo de item bloqueado, não escrever o plan.yaml (só leitura), respeitar o filtro --status, recusar quando há mais de uma fila em vez de escolher sozinho, e resolver a fila contra o clone principal (raiz_principal/git-common-dir) mesmo quando chamado de dentro de uma worktree — cada um vira RED quando quebrado isoladamente, restaurado, e o conjunto volta a GREEN. A regressão contra a base 8095c71 confirma que o subcomando simplesmente não existia antes. Todos os níveis aplicáveis (l3 perturbação, l2 coverage estrutural, l4 n/a por não abrir superfície de input externo, regressão) passaram com evidência verificada e run: citado. Worktree descartável /tmp/proof-fila-status removida ao final; árvore principal nunca foi tocada além da escrita deste artifact. PROVEN."

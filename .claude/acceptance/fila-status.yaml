@@ -1,0 +1,129 @@
+item: fila-status
+repo: /Users/alegomes/cepa-worktrees/cepa-fila-status
+branch: session/fila-status
+commit: 73b16bf
+base: 8095c71
+status: complete
+auditor: completion-auditor
+data: 2026-09-28
+criterios:
+  - id: AC1
+    descricao: >
+      Existe um comando de barra proprio, /common:fila
+      (common/commands/fila.md), que chama `cepa-plan status` e mostra a
+      saida na integra.
+    altitude: cli
+    surface: "common/commands/fila.md (contrato de prosa) + common/bin/cepa-plan status"
+    test: tests/test_common_fila.py::test_contrato_do_comando
+    layer: contrato de prosa do comando de barra (nao ha runtime de slash command para testar em CI; auditado como texto, conforme instrucao explicita do pedido)
+    evidence: verified
+    run: >
+      python3 tests/test_common_fila.py -> "ok  o comando chama o
+      `cepa-plan status`" / "ok  manda mostrar a saida na integra" /
+      "ok  declara que so le" ; suite terminou "all green"
+    veredito: complete
+
+  - id: AC2
+    descricao: >
+      `cepa-plan status [nome] [--status X] [--json] [--repo]` lista TODOS
+      os itens da fila, inclusive done e dropped, na ordem gravada,
+      agrupados por status, com contagem por status.
+    altitude: cli
+    surface: "subprocess `cepa-plan status` (JSON e texto)"
+    test: >
+      tests/test_common_fila.py::test_lista_todos_os_itens_na_ordem_gravada,
+      test_texto_agrupa_e_mostra_motivo_e_acao_humana,
+      test_filtro_por_status
+    layer: cli (subprocess real, nao mock)
+    evidence: verified
+    run: >
+      python3 tests/test_common_fila.py -> "ok  traz os 5 itens, inclusive
+      concluido e descartado" / "ok  a posicao e a da fila gravada" /
+      "ok  conta por status" / "ok  --status pending traz so os
+      pendentes" / "ok  status desconhecido e recusado" ; "all green"
+    veredito: complete
+
+  - id: AC3
+    descricao: >
+      Bloqueados mostram o motivo (evidence); pendentes mostram
+      blocked_by; acoes humanas abertas (human_pending) aparecem.
+    altitude: cli
+    surface: "saida texto de `cepa-plan status`"
+    test: tests/test_common_fila.py::test_texto_agrupa_e_mostra_motivo_e_acao_humana
+    layer: cli (subprocess real)
+    evidence: verified
+    run: >
+      python3 tests/test_common_fila.py -> "ok  bloqueado mostra o motivo
+      da evidencia" / "ok  pendente mostra de quem depende" /
+      "ok  acao humana aberta aparece no item e no cabecalho" ; "all green"
+    veredito: complete
+
+  - id: AC4
+    descricao: "So leitura: o plan.yaml nao e tocado."
+    altitude: cli
+    surface: "arquivo plan.yaml antes/depois de `cepa-plan status`"
+    test: tests/test_common_fila.py::test_nao_toca_no_arquivo
+    layer: cli (subprocess real, compara bytes + mtime)
+    evidence: verified
+    run: >
+      python3 tests/test_common_fila.py -> "ok  o plan.yaml sai byte a
+      byte igual e sem ser tocado" ; "all green"
+    veredito: complete
+
+  - id: AC5
+    descricao: >
+      Nome omitido usa a unica fila; com mais de uma recusa e nomeia; sem
+      fila recusa apontando /common:plan. Plano de ondas e recusado
+      (exit 3).
+    altitude: cli
+    surface: "codigos de saida e stderr de `cepa-plan status`"
+    test: >
+      tests/test_common_fila.py::test_nome_omitido,
+      test_recusa_plano_de_ondas
+    layer: cli (subprocess real)
+    evidence: verified
+    run: >
+      python3 tests/test_common_fila.py -> "ok  com uma fila so, usa ela"
+      / "ok  com duas, recusa e nomeia as duas" / "ok  sem fila, recusa
+      apontando o /common:plan" / "ok  plano de ondas sai com codigo 3" ;
+      "all green"
+    veredito: complete
+
+  - id: AC6
+    descricao: >
+      Funciona de dentro de uma worktree ligada, lendo a fila do clone
+      principal.
+    altitude: cli
+    surface: "`cepa-plan status` rodado com cwd dentro de `git worktree add`"
+    test: tests/test_common_fila.py::test_de_dentro_de_uma_worktree_le_o_clone_principal
+    layer: cli (subprocess real, cria worktree de verdade com git)
+    evidence: verified
+    run: >
+      python3 tests/test_common_fila.py -> "ok  a worktree enxerga a fila
+      do clone principal" ; "all green"
+    veredito: complete
+
+  - id: AC7
+    descricao: "O comando esta no catalogo docs/commands.md."
+    altitude: docs
+    surface: docs/commands.md (tabela de comandos)
+    test: tests/test_catalogo_comandos.py::"todo comando esta em docs/commands.md"
+    layer: varredura de catalogo (subprocess real)
+    evidence: verified
+    run: >
+      python3 tests/test_catalogo_comandos.py -> "ok  todo comando esta
+      em docs/commands.md" ; "tudo ok (65 comandos no catalogo)" ;
+      confirmado tambem por grep direto: docs/commands.md:153 lista
+      `/common:fila`
+    veredito: complete
+
+notas: >
+  Suite completa `bash tests/run-all.sh` nao foi reexecutada ate o fim por
+  este auditor (estourou o timeout de 120s em primeiro plano e foi movida
+  para segundo plano pelo harness; notificacao de segundo plano nao chega
+  a subagentes, entao essa saida foi ignorada e nao usada como evidencia).
+  Em vez disso, os dois arquivos de teste que demonstram os 7 criterios
+  foram rodados isoladamente em primeiro piano, com contagem N>0 de casos
+  e "all green"/"tudo ok" — essa e a evidencia registrada acima. O dono
+  reportou 102 de 102 na suite completa; esse numero e claim do
+  coordenador, nao verificado por este auditor.
