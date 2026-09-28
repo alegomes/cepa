@@ -412,6 +412,20 @@ items:
     perturbados um a um, todos vermelhos em COMPORTAMENTO e nenhum so na checagem
     estrutural). 41 casos no arquivo novo; suite 52/52 arquivos verdes. NAO esta
     live: exige bin/install.sh --clean (common 2.8.0).'
+- id: until-fim-sem-dono
+  title: 'Fim do cepa-until sem intervenção do dono: vermelho que se resolve sozinho
+    e aterrissagem por comando'
+  why: 'Primeiro da fila por decisão do dono em 2026-09-28 ("quero que esse item
+    seja o primeiro da fila. Aguardo por ele ansiosamente."). O problema, do BACKLOG.md:
+    no fim do run o dono não sabe o que fazer, um teste instável faz card pronto
+    aparecer como travado (WEGO-2320, run WEGO 2026-09-26-1102) e commits de tentativa
+    sem progresso ficam na branch da noite sem passar pelo build do supervisor;
+    o dono pediu zero intervenção para o vermelho. Sequência e critérios na seção
+    de mesmo título do BACKLOG.md e em docs/estrategia-fim-do-cepa-until.md.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
 - id: onboarding-maestro-blocos-1-3
   title: Retomar a sessão de onboarding do Maestro (blocos 1-3)
   why: pedidos em 23/07 e 27/07, mas o que ficou entendido não foi registrado em

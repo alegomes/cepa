@@ -29,3 +29,4 @@ para impedir (docs/modos-de-trabalho.md).
 - [ ] 2026-09-27 · modo: exploracao · atravessei a fronteira a pedido do dono ("resolva as pendências de until/2026-09-27-1213"): provas, teste novo 5464f2b em tests/test_common_next.py, worktree integra/until-2026-09-27-1213, item novo na fila cepa
 - [ ] 2026-09-27 · modo: exploracao · bash-path-lock le `sed -i` com a palavra "stays" no texto como um s///t e nega por engano; relatado pelo proof-reviewer de reconcile-nao-rebaixa-done
 - [ ] 2026-09-27 · modo: exploracao · aviso do SessionStart disse "Auto-removed session/docs-validation" mas a worktree seguiu no git worktree list (sumiu depois, ~16:30)
+- [ ] 2026-09-28 · modo: descoberta · docs/estrategia-fim-do-cepa-until.md precisa de aviso no topo apontando para docs/discovery/until-fim-sem-dono/revisao-3.md, que substitui partes da Revisão 2, e da linha Status atualizada; vi ao escrever a Revisão 3 (a escrita foi barrada pelo modo-escrita-gate)
