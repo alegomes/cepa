@@ -699,7 +699,7 @@ def executa_item(nome, arvore, branch, permissoes, limite_seg, log):
     return codigo, matou, time.monotonic() - inicio, trecho_do_log(log, marca)
 
 
-def bloqueia_item(nome, repo, ident, tentativas):
+def bloqueia_item(nome, repo, ident, tentativas, lateral=None):
     """Tira da frente da fila o item que gastou o teto de tentativas.
     Devolve None se conseguiu, ou o erro em texto.
 
@@ -720,6 +720,9 @@ def bloqueia_item(nome, repo, ident, tentativas):
         "condição de fora: é o supervisor tirando o item da frente para a fila "
         "andar. A saída do `claude` de cada tentativa está no `.log` do run; "
         "devolva o item para `pending` quando souber o que travou.")
+    if lateral:
+        evidencia += (f" Os commits das tentativas, que não passaram pelo "
+                      f"build do supervisor, estão em `{lateral}`.")
     return finaliza_item(nome, repo, ident, "blocked", evidencia)
 
 
@@ -1031,14 +1034,35 @@ def roda_verify(comando, arvore, limite_seg, log):
     return codigo == 0, gasto, (None if codigo == 0 else f"saiu {codigo}")
 
 
-def desfaz_item(repo, arvore, run_id, ident, antes):
+def desfaz_item(repo, arvore, run_id, ident, desde, no_meio=(),
+                sufixo="vermelho"):
     """Tira da branch da noite os commits de um item cujo build ficou
-    vermelho, sem perdê-los: eles ficam em `until/<run>-vermelho-<id>`."""
-    lateral = f"until/{run_id}-vermelho-{ident}"
+    vermelho, sem perdê-los: eles ficam em `until/<run>-<sufixo>-<id>`.
+
+    `desde` é o HEAD do começo da PRIMEIRA tentativa do item nesta janela, e
+    não o da última: o WEGO-2320 levou duas tentativas, e o reset até o começo
+    da segunda deixou os 9 commits da primeira na branch da noite sem nunca
+    passarem pelo build (A5/C4). O reset até lá só é seguro com duas
+    checagens, e se uma falha o supervisor devolve o erro em vez de resetar:
+    `desde` precisa ser ancestral do HEAD, e nenhum outro item pode ter fechado
+    `done` desde então (`no_meio`), porque o reset apagaria o trabalho verde
+    dele."""
+    if not desde:
+        return None, f"não li o HEAD do começo da 1ª tentativa do {ident}"
+    if no_meio:
+        return None, (
+            f"{', '.join(no_meio)} fechou `done` depois da 1ª tentativa do "
+            f"{ident}; voltar a branch da noite para {desde[:10]} apagaria "
+            "esse trabalho verde")
+    codigo, _ = git(["merge-base", "--is-ancestor", desde, "HEAD"], arvore)
+    if codigo != 0:
+        return None, (f"{desde[:10]}, o começo da 1ª tentativa do {ident}, "
+                      "não é ancestral do HEAD da branch da noite")
+    lateral = f"until/{run_id}-{sufixo}-{ident}"
     codigo, saida = git(["branch", "-f", lateral, "HEAD"], arvore)
     if codigo != 0:
         return None, saida
-    codigo, saida = git(["reset", "-q", "--hard", antes], arvore)
+    codigo, saida = git(["reset", "-q", "--hard", desde], arvore)
     if codigo != 0:
         return None, saida
     return lateral, None
@@ -1293,6 +1317,10 @@ def main(argv=None):
     # Quantas vezes ESTA janela já disparou um subprocesso para cada item, e o
     # que ela tirou da frente por esgotamento ou pelo teto de uso da conta.
     tentativas, esgotados, limitados = {}, [], []
+    # O HEAD do começo da 1ª tentativa de cada item nesta janela, e quantos
+    # itens já tinham sido entregues ali: é até esse HEAD que o vermelho volta
+    # a branch da noite, e só se ninguém fechou `done` no meio (C4).
+    primeira = {}
     motivo_fim, detalhe_fim = None, None
     # A cota de 5h vista pelos `rate_limit_event`: a leitura de largada de cada
     # tentativa (é dela que sai o custo de um item), a última leitura, se ela
@@ -1405,12 +1433,14 @@ def main(argv=None):
         print(f"[{datetime.now().strftime('%H:%M')}] {ident} — {item.get('title')} "
               f"({humano(restante)} restantes"
               + (f", tentativa {vez}/{a.tentativas_item}" if vez > 1 else "") + ")")
+        antes = cabeca(arvore)
+        primeira.setdefault(ident, (antes, len(entregues)))
         registra({"evento": "item_start", "id": ident, "title": item.get("title"),
                   "restante_seg": int(restante.total_seconds()),
-                  "tentativa": vez, "twg_version": twg_version_instalada()})
+                  "tentativa": vez, "twg_version": twg_version_instalada(),
+                  "head": antes})
 
         limite = (restante + folga).total_seconds()
-        antes = cabeca(arvore)
         codigo, matou, gasto, saida = executa_item(
             a.fila, arvore, branch_largada, a.permissoes, limite, log)
 
@@ -1478,13 +1508,15 @@ def main(argv=None):
             if verde:
                 print(f"          → verde ({humano(timedelta(seconds=seg_verify))})")
             else:
-                lateral, erro_desfaz = desfaz_item(repo, arvore, run_id, ident,
-                                                   antes)
+                desde, n_antes = primeira[ident]
+                lateral, erro_desfaz = desfaz_item(
+                    repo, arvore, run_id, ident, desde,
+                    no_meio=entregues[n_antes:])
                 evid = (f"O item fechou `done`, mas o build completo da branch "
                         f"da noite (`{verify}`) {motivo_verify}. Saída no "
                         f"`.log` do run {run_id}. ")
                 evid += (f"Os commits do item estão em `{lateral}` e a branch "
-                         f"da noite voltou para {antes[:10]}; o card no Jira "
+                         f"da noite voltou para {desde[:10]}; o card no Jira "
                          "pode ter ido para Review antes do build — confira."
                          if lateral else
                          f"NÃO consegui tirar os commits da branch da noite: "
@@ -1646,7 +1678,26 @@ def main(argv=None):
                   f"(status ainda `{estado}`) · {falhas_seguidas}/{a.max_falhas}")
 
             if vez >= a.tentativas_item:
-                erro_bloqueio = bloqueia_item(a.fila, repo, ident, vez)
+                # Uma tentativa anterior pode ter commitado sem fechar: esses
+                # commits nunca passaram pelo build e não podem ficar embaixo
+                # do próximo card (C4).
+                lateral, erro_desfaz = None, None
+                desde, n_antes = primeira[ident]
+                if desde and cabeca(arvore) != desde:
+                    lateral, erro_desfaz = desfaz_item(
+                        repo, arvore, run_id, ident, desde,
+                        no_meio=entregues[n_antes:], sufixo="parado")
+                    registra({"evento": "tentativas_separadas", "id": ident,
+                              "lateral": lateral, "erro": erro_desfaz})
+                if erro_desfaz:
+                    motivo_fim = "item-preso"
+                    detalhe_fim = (
+                        f"{ident} gastou as {vez} tentativas com commits que "
+                        f"não passaram pelo build, e não consegui tirá-los da "
+                        f"branch da noite ({erro_desfaz}); o próximo card "
+                        "começaria em cima deles")
+                    break
+                erro_bloqueio = bloqueia_item(a.fila, repo, ident, vez, lateral)
                 if erro_bloqueio:
                     motivo_fim = "item-preso"
                     detalhe_fim = (
