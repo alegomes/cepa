@@ -1,0 +1,40 @@
+schema_version: 2
+card: reconcile-ignora-dropped-igual
+verdict: proven
+reviewed_at: 2026-09-28T00:00:00-03:00
+base_commit: 987a906
+head_commit: 2c2445c
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan:reconcilia", module: cli, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/CLI sem pitest; PIT não se aplica"
+    perturbation:
+      status: pass
+      results:
+        - "P1 (ramo `ausentes`, linha 1766): `if st == \"dropped\":` -> `if st == \"__never__\":` em /tmp/proof-reconcile-v2 (worktree descartável em 2c2445c) -> `python3 tests/test_common_drain_plan.py`: 3 falhas ('divergem o pending → done e os dois pending → dropped (quadro e sumido), não os dropped → dropped', 'dropped sumido do quadro (missing) fica em dia', 'nem o outro dropped') -> RED confirmado"
+        - "P2 (ramo `descartado`, linha 1788): mesma troca -> `if st == \"__never__\":` -> mesma suíte: 3 falhas ('divergem o pending → done...', \"dropped descartado no quadro (Won't Do) fica em dia\", 'dropped que já estava certo não recebe carimbo de reconciliação') -> RED confirmado"
+        - "P3 (ramo `ausentes`, linha 1766, guarda alargada): `if st == \"dropped\":` -> `if st in (\"dropped\", \"pending\"):` -> mesma suíte: FAIL na checagem 'divergem o pending → done e os dois pending → dropped...' seguido de KeyError: 'W-5' (o item W-5, pending+missing, some da lista de divergências e o teste aborta ao tentar ler div_por_id['W-5']) -> RED confirmado"
+        - "P4 (ramo `descartado`, linha 1788, guarda alargada — o gap que sobrevivia na rodada anterior contra fd4b749): `if st == \"dropped\":` -> `if st in (\"dropped\", \"pending\"):` -> mesma suíte: FAIL na mesma checagem seguido de KeyError: 'W-4' (o item W-4, pending+Won't Do, some da lista de divergências) -> RED confirmado. O teste estendido por 2c2445c (W-4 pending+Won't Do, W-5 pending+missing) fecha o gap: agora a linha 1788 é load-bearing para distinguir 'dropped' de 'pending'"
+        - "P5 (ramo `ausentes`, linha 1770, remove em_dia.append): `em_dia.append(ident)` -> `pass` -> mesma suíte: 1 falha ('dropped sumido do quadro (missing) fica em dia') -> RED confirmado"
+        - "baseline verde antes de cada perturbação: `python3 tests/test_common_drain_plan.py` -> all green, confirmado antes de P1, P2, P3/restaurado, P4/restaurado e P5"
+        - "worktree descartável usado: /tmp/proof-reconcile-v2, `git worktree add --detach /tmp/proof-reconcile-v2 2c2445c`, restaurado com `git checkout -- common/bin/cepa-plan` entre perturbações e removido com `git worktree remove --force` ao final"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "as 5 linhas alteradas pelo diff original (1766, 1770, 1774-1775 no ramo ausentes; 1788, 1792-1793 no ramo descartado) são todas exercitadas: P1/P3/P5 cobrem o ramo ausentes, P2/P4 cobrem o ramo descartado — cada uma RED na perturbação correspondente, sem sobra"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff só reordena o roteamento interno de itens já lidos da fila/quadro (reconcilia); não abre superfície de entrada nova, e este repo não tem módulo api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git worktree add --detach /tmp/proof-reconcile-base-v2 987a906; git show 2c2445c:tests/test_common_drain_plan.py > tests/test_common_drain_plan.py; python3 tests/test_common_drain_plan.py -> 5 falhas ('divergem o pending → done e os dois pending → dropped (quadro e sumido), não os dropped → dropped', \"dropped descartado no quadro (Won't Do) fica em dia\", 'dropped sumido do quadro (missing) fica em dia', 'dropped que já estava certo não recebe carimbo de reconciliação', 'nem o outro dropped'), resto verde -> RED confirmado na base; worktree removido ao final"
+routing_reason: "Regressão vermelha na base (987a906) e as 5 perturbações (P1-P5) voltaram RED em 2c2445c, cobrindo os dois ramos do diff (ausentes e descartado) nas três frentes: guarda invertida, guarda alargada para 'pending' e remoção do em_dia.append. O gap que sobrevivia na rodada anterior (P4, ramo descartado, linha 1788, sem cobertura para item pending+Won't Do) foi fechado pelo teste estendido em 2c2445c (item W-4) e agora é RED. Sem PIT (repo Python/CLI). L4 é n/a: o diff não abre superfície de entrada nova. Nada assumed/skipped/gap/survived. PROVEN."

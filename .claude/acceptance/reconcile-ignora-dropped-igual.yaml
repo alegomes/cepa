@@ -1,0 +1,80 @@
+key: reconcile-ignora-dropped-igual
+status: complete
+criteria:
+  - id: AC1
+    description: >-
+      Item `dropped` no plan.yaml com status do quadro mapeado para o papel
+      "descartado" (ex.: "Won't Do") NAO aparece em `divergences`, aparece em
+      `in_sync`.
+    altitude: cli
+    surface: >-
+      python3 common/bin/cepa-plan reconcile <nome> --board <file> --repo .
+      --json
+    test: tests/test_common_drain_plan.py::test_reconcile_nao_lista_dropped_igual_dos_dois_lados
+    layer: cli-integration (subprocesso via helper run(), nao chamada direta
+      de funcao Python)
+    evidence: verified
+    run: >-
+      python3 tests/test_common_drain_plan.py -> "ok  dropped descartado no
+      quadro (Won't Do) fica em dia" (5 checks do teste, todos ok; suite
+      completa termina em "all green", exit 0)
+    result: complete
+
+  - id: AC2
+    description: >-
+      Item `dropped` no plan.yaml listado em `missing` no arquivo do quadro
+      NAO aparece em `divergences`, aparece em `in_sync`.
+    altitude: cli
+    surface: >-
+      python3 common/bin/cepa-plan reconcile <nome> --board <file> --repo .
+      --json
+    test: tests/test_common_drain_plan.py::test_reconcile_nao_lista_dropped_igual_dos_dois_lados
+    layer: cli-integration
+    evidence: verified
+    run: >-
+      python3 tests/test_common_drain_plan.py -> "ok  dropped sumido do
+      quadro (missing) fica em dia"
+    result: complete
+
+  - id: AC3
+    description: >-
+      Uma divergencia real (pending -> done) no mesmo arquivo de quadro
+      continua aparecendo, sozinha.
+    altitude: cli
+    surface: >-
+      python3 common/bin/cepa-plan reconcile <nome> --board <file> --repo .
+      --json
+    test: tests/test_common_drain_plan.py::test_reconcile_nao_lista_dropped_igual_dos_dois_lados
+    layer: cli-integration
+    evidence: verified
+    run: >-
+      python3 tests/test_common_drain_plan.py -> "ok  unico divergente e o
+      pending -> done, nao os dois dropped -> dropped"
+    result: complete
+
+  - id: AC4
+    description: >-
+      Com `--apply`, os itens ja `dropped` (pelos dois caminhos: missing e
+      status mapeado) nao recebem carimbo `reconciled` no disco.
+    altitude: cli
+    surface: >-
+      python3 common/bin/cepa-plan reconcile <nome> --board <file> --repo .
+      --json --apply
+    test: tests/test_common_drain_plan.py::test_reconcile_nao_lista_dropped_igual_dos_dois_lados
+    layer: cli-integration
+    evidence: verified
+    run: >-
+      python3 tests/test_common_drain_plan.py -> "ok  dropped que ja estava
+      certo nao recebe carimbo de reconciliacao" e "ok  nem o outro dropped"
+    result: complete
+
+summary:
+  demonstrating_test: tests/test_common_drain_plan.py::test_reconcile_nao_lista_dropped_igual_dos_dois_lados
+  command_run: python3 tests/test_common_drain_plan.py
+  result_line: "all green (exit 0); 5/5 checks ok no teste-alvo, suite completa sem falhas"
+  notes: >-
+    Teste passa pela CLI real via subprocesso (helper run()), nao pela funcao
+    reconcilia() diretamente — altitude bate com o que /common:drain-plan e
+    /common:next --sync chamam. Nao rodei tests/run-all.sh (suite completa),
+    conforme instrucao explicita do orquestrador; rodei apenas
+    tests/test_common_drain_plan.py, escopo minimo que contem o teste-alvo.
