@@ -213,23 +213,19 @@ items:
   status: pending
   blocked_by:
   - instalar-leva-fio-condutor
-  human_pending: 'Numa sessao acompanhada em wego-assinatura-backend: rodar /board-flow:triage
-    no To Do do WEGO, confirmar as transicoes que ela propuser, gravar com /common:plan
-    WEGO --from-jira e conferir que os itens ja na fila mantem a ordem. Depois fechar
-    esta rota.'
-  evidence: 'Run until 2026-09-28-0558, commits fbb532e (docs/investigations/2026-09-28-fio-condutor-no-wego.md)
-    e ad2ad52 (auditoria). Tudo leitura, nenhum card tocado, plan.yaml do WEGO com
-    md5 igual antes/depois. (1) cepa-plan reconcile WEGO contra o quadro vivo (twg,
-    25 ids) sem --apply: WEGO-1550 e 1982 (In Review) em dia, WEGO-1973 (In Progress)
-    so aviso R3, nada rebaixado; unica divergencia real WEGO-1412 pending->Done.
-    (2) cepa-plan write --from-triage da triagem de 2026-09-25 em --dry-run: sem
-    --on-missing recusa (exit 4) nomeando os 25; com keep, os 25 saem identicos
-    e na mesma ordem, WEGO-1438/1439/1440 no fim. completion-auditor INCOMPLETE
-    (.claude/acceptance/validar-fio-condutor-em-board-real.yaml): AC1 e AC2 complete;
-    AC3, a triagem nova ao vivo com revisao do dono, nao rodou porque o /board-flow:triage
-    transiciona cards e pede confirmacao. Achado de passagem, fora do escopo: o
-    reconcile lista os 12 Descartados como divergencia dropped->dropped, ruido sem
-    efeito.'
+  human_pending: null
+  evidence: 'Validacao ao vivo em 2026-09-28, sessao acompanhada na fila do wego-acessos-backend
+    (nao no wego-assinatura-backend que a rota citava; o board 971/WEGO e o mesmo).
+    (1) /board-flow:triage --column "To Do": 27 cards no escopo, 15 classificados
+    (9 ready, todos ja na fila com rota humana; 6 Epicos needs-refinement, comentados
+    no Jira), 0 implemented, 0 obsoleto; dono confirmou o plano de escrita numa
+    unica rodada. Repasse em .claude/programs/WEGO/triagem-2026-09-28.json com remaining_in_column
+    12. (2) cepa-plan write WEGO --from-triage sem --on-missing recusou (exit 4)
+    nomeando os 240 itens do disco; com --on-missing keep gravou 249 itens com ordem,
+    status e human_pending IDENTICOS ao arquivo anterior (diff da lista id/status/human_pending
+    vazio), WEGO-2283 na posicao 243 antes e depois, e a linha source ganhou a nota
+    PARCIAL. So mudaram title/why dos 9 itens citados e o cabecalho. Rota humana
+    fechada pelo dono nesta sessao.'
 - id: produtor-de-plano-sem-tracker
   title: Decidir quem escreve o plano single-track num repo sem Jira
   why: 'registrado como ITEM, e não como parágrafo no BACKLOG, porque o receio do
