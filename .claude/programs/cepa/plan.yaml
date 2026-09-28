@@ -1507,3 +1507,19 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: resgate-devolve-aceite-ao-gate
+  title: Arquivo de aceite resgatado de worktree removida volta para onde o acceptance-gate
+    procura
+  why: 'Achado em 2026-09-28 fechando o WEGO-2283: ao remover a worktree do run
+    until 2026-09-28-1137, o _wtlib.py rescue guardou os <KEY>.yaml do completion-auditor
+    em .claude/rescued/until-2026-09-28-1137/, pasta que o acceptance-gate.py nao
+    consulta (so .claude/acceptance/ e docs/acceptance/, na worktree e no clone).
+    Resultado: a ida para Done de WEGO-2283, 2261, 2331 e 2332 seria barrada como
+    ''sem auditoria'' com auditoria COMPLETE feita. Contornado a mao copiando os
+    4 arquivos. Conserto: o rescue devolve acceptance/*.yaml para .claude/acceptance/
+    do clone (sem sobrescrever), ou o gate tambem procura em .claude/rescued/*/.
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
