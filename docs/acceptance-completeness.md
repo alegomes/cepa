@@ -104,7 +104,8 @@ artifact exists and what its `status` says:
 
 | `status` | Meaning | Gate behavior |
 |---|---|---|
-| absent | Audit hasn't run yet (e.g. To Do → In Progress). | ALLOW — nothing to enforce. |
+| absent, target is `done` | No audit anywhere, and the card is heading to Done. | BLOCK — every harness flow runs the completion-auditor before Review, so no audit at all by the time Done is attempted means the flow was skipped, not that the audit "hasn't run yet" (decided 2026-09-27, item `acceptance-gate-barra-done-sem-auditoria`). |
+| absent, target is anything else (or unresolved) | Audit hasn't run yet (e.g. To Do → In Progress), or the target is In Review, where the hook is still about to see the artifact appear. | ALLOW — nothing to enforce. |
 | `incomplete` | At least one criterion isn't demonstrated at its altitude, or its evidence isn't `verified`. | BLOCK the In-Review transition. |
 | `complete` | Every criterion has a demonstrating test at its altitude, run green. | ALLOW. |
 | unparseable | Malformed artifact. | BLOCK (treated as not-complete). |
@@ -170,7 +171,8 @@ tree's code, the audit describes a card.
 
 | Artifact state | Hook |
 |---|---|
-| absent in all four places | ALLOW (audit hasn't run; not gated) |
+| absent in all four places, target is `done` | BLOCK (reaching Done with no audit anywhere means the flow skipped the completion-auditor, not that it hasn't run yet; decided 2026-09-27) |
+| absent in all four places, target is `in_review`, another declared status, or unresolved | ALLOW (audit hasn't run; not gated — failing closed on an unresolved target would block every To Do → In Progress transition in repos with no `transition_ids` map) |
 | present, `status: complete` | ALLOW |
 | present, `status:` anything else, target is `in_review` or `done` | BLOCK (exit 2) |
 | present, `status:` anything else, target is another declared status (e.g. `in_progress`) | ALLOW (sending the card back is what an incomplete audit should cause) |

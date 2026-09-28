@@ -1,0 +1,4 @@
+aviso: 2 card(s) `needs-refinement` ficaram FORA da fila, por desenho — o destino deles é o backlog, sem mudança: WEGO-1441, WEGO-1461
+aviso: a triagem parou no teto e deixou 152 card(s) na coluna sem classificar — esta fila é um pedaço do quadro, não o quadro. Está dito na linha `source`.
+a fila que está no disco tem 25 item(ns) que a lista nova não menciona: WEGO-1437, WEGO-1436, WEGO-1434, WEGO-1412, WEGO-1981, WEGO-1962, WEGO-1974, WEGO-1550, WEGO-1982, WEGO-1973, WEGO-1757, WEGO-1394, WEGO-1389, WEGO-1390, WEGO-1391, WEGO-1392, WEGO-1393, WEGO-1395, WEGO-1396, WEGO-1397, WEGO-1398, WEGO-1414, WEGO-1416, WEGO-1415, WEGO-1406.
+Sumir com eles em silêncio apaga posição e `why` que alguém decidiu. Inclua-os na lista, ou diga explicitamente o que fazer: --on-missing keep (mantém no fim, sem posição escolhida; com --from-triage, mantém a fila do disco na ordem dela e acrescenta os cards novos depois) ou --on-missing drop (marca status: dropped).

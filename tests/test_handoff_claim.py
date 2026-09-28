@@ -37,6 +37,9 @@ sys.path.insert(0, str(REPO / "tests"))
 from _telemetria_isolada import isola  # noqa: E402
 
 isola()
+# Rodado dentro de uma rodada do cepa-until, a marca da janela desliga a
+# retomada (ver test_until_nao_herda_handoff.py); aqui se testa a sessão normal.
+os.environ.pop("CEPA_UNTIL_RUN", None)
 
 import _handoff as H  # noqa: E402
 import _wtlib as L  # noqa: E402

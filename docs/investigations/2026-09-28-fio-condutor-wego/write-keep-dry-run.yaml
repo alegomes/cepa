@@ -1,0 +1,502 @@
+# plan.yaml — fila `single-track`, escrita por /common:plan.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: Jira WEGO · coluna To Do · escopo "Team[Team]" in (fdc1c0b0-da9d-44ac-9556-9391f0325619) AND (labels IS EMPTY OR labels != ops) · triado em 2026-09-25 (classificado por /board-flow:triage) — PARCIAL: 152 card(s) da coluna ficaram sem classificar neste run
+# Escrito em: (data não informada)
+
+schema_version: 2
+mode: single-track
+program: WEGO
+source: 'Jira WEGO · coluna To Do · escopo "Team[Team]" in (fdc1c0b0-da9d-44ac-9556-9391f0325619)
+  AND (labels IS EMPTY OR labels != ops) · triado em 2026-09-25 (classificado por
+  /board-flow:triage) — PARCIAL: 152 card(s) da coluna ficaram sem classificar neste
+  run'
+items:
+- id: WEGO-1437
+  title: Implementar POST /send-request
+  why: 'Primeiro porque é o único card da fila com aceite FECHADO e escrito pelo
+    dono ontem (2026-08-03), depois de o proof gate ter devolvido UNPROVEN em 07-30
+    — e porque mexe na invariante que os outros assumem: se data de nascimento vira
+    obrigatória no Signatario, o contrato com a PlugSign muda para todo mundo. Os
+    5 critérios da reabertura estão TODOS ausentes no código de hoje (verificado
+    em 2026-08-04, HEAD 018b1b1c): PlugSignPort.java:201-226 ainda documenta "dataNascimento
+    e mensagem são opcionais"; os 4 fallbacks de SolicitarAssinaturaService.java:684,696,762,770
+    seguem passando nulo adiante (o ramo MÉDICO, :717-718, já falha explícito —
+    é o padrão a replicar); allow_birth_date segue condicional em PlugSignAdapter.java:984,1010,1018;
+    e o ramo PRESTADOR → signature_type="Contratado" existe em :1021 mas nenhum
+    teste o afirma (zero ocorrências de "Contratado" em arquivos de teste).
+
+    '
+  status: pending
+  blocked_by: []
+  human_pending: null
+  notes: 'Proof hint: os critérios 4 e 5 são de COBERTURA, não de implementação
+    — o código do ramo PRESTADOR já existe. A prova tem de ser por perturbação:
+    forçar signature_type e ver o teste ficar VERMELHO. Foi exatamente essa a lacuna
+    que derrubou o card em 2026-07-30 (perturbação em PlugSignAdapter.java manteve
+    PlugSignAdapterContractTest e PlugSignLoteChainDoisMedicosFieldsWireMockE2ETest
+    verdes, porque o contract test só instancia PapelSignatario.PACIENTE). ⚠ O critério
+    2 tem risco de volume: os fallbacks que hoje toleram ausência de data de nascimento
+    podem estar carregando pedidos reais. Medir antes de fazer falhar, e escalar
+    ao dono se houver volume relevante.
+
+    '
+- id: WEGO-1436
+  title: Implementar POST /upload
+  why: 'Segundo porque a decisão que o travava foi resolvida hoje e o resto é pequeno.
+    Upload e document_key já estão implementados e cobertos (PlugSignAdapter.java:238-265,
+    PedidoArquivoEntity.java:67, PlugSignAdapterContractTest.java:111) — falta só
+    o guard de tamanho, que hoje não existe: uploadFile faz readAllBytes + base64
+    e envia, com tratamento apenas reativo ao 413 do fornecedor. Decisão do dono
+    em 2026-08-04: o limite é 20 MB, não os 25 MB que o card dizia. 25 MB não existe
+    em lugar nenhum do código; o limite real do produto é DocumentoAtendimento.java:27
+    (TAMANHO_MAX_BYTES = 20 MB) e specs/upload-documentos-batch.md:10. Implementar
+    25 faria o adapter aceitar arquivo que o domínio já recusa. A descrição do card
+    foi corrigida.
+
+    '
+  status: pending
+  blocked_by: []
+  human_pending: null
+  notes: 'Critério de aceite atualizado no card (comentário 36935): guard proativo
+    antes do readAllBytes; SEM duplicar o literal 20 MB — reusar a constante de
+    domínio, para os dois limites não divergirem de novo; recusa afirmada por teste
+    com um caso acima e um abaixo; e o tratamento reativo do 413 permanece como
+    rede.
+
+    '
+- id: WEGO-1434
+  title: Implementar geração e atualização de token por empresa via API
+  why: 'Terceiro porque é o maior dos três e o único que depende de uma decisão
+    de modelo de conta ainda não tomada. Hoje a autenticação com a PlugSign é uma
+    chave estática única (plugsign.api-key ← PLUGSIGN_API_KEY, application.properties:53,
+    injetada em PlugSignAdapter.java:76-77 e enviada como Bearer em :830, :1234,
+    :1295). O endpoint POST /create-token não é chamado em lugar nenhum — zero ocorrências
+    de "create-token"/"createToken" no repositório inteiro — e não há rotação da
+    chave. ⚠ Não confundir: existe rotação de signing_key por signatário (ReenviarPedidoService.java:146-162,
+    WEGO-1834). É outra coisa — chave do documento, não credencial de acesso à API.
+
+    '
+  status: pending
+  blocked_by: []
+  human_pending: 'Antes de construir, decidir o modelo de conta que este card pressupõe
+    (uma empresa filiada por hospital, com token próprio). Essa decisão vive no
+    WEGO-1411, que é card de operação e está fora do escopo das varreduras de desenvolvimento.
+    Falha se o build começar com a chave estática única sendo, na prática, o modelo
+    escolhido — aí o card inteiro é desnecessário.
+
+    '
+- id: WEGO-1412
+  title: '[PlugSign] Integração via API Java'
+  why: 'Não é mais trabalho de desenvolvimento — fica na fila só até a validação
+    humana acontecer. Quatro dos seis critérios estão implementados e cobertos:
+    upload (DocumentoAtendimentoResource.java:76-78, commit 42921682), CPF + data
+    de nascimento (PlugSignAdapter.java:1009-1010, commit fcd85110), webhook de
+    status (WebhookResource.java:28-58, commit 823133bd) e download (AssinaturaResource.java:186-194,
+    DocumentoDownloadE2ETest). Os outros dois foram RISCADOS por decisão do dono
+    em 2026-08-04: "pelo menos um documento real assinado" é validação em ambiente,
+    não código; e "testes de carga ~83 disparos/minuto" contradiz decisão já registrada
+    no próprio repositório (archive/historico/plugsign-tests-decisions.md:79 — "Não
+    criei testes de carga. Fora do escopo declarado do Épico."), sem Gatling/JMeter/k6
+    em nenhum pom.xml.
+
+    '
+  status: pending
+  blocked_by:
+  - WEGO-1437
+  human_pending: 'Assinar um documento de verdade contra o staging da PlugSign e
+    confirmar o ciclo inteiro: upload, solicitação, webhook de status e download
+    do assinado. Falha se qualquer etapa não completar. Hoje o único teste que toca
+    a API real (PlugSignStagingReproTest) só resolve folderId e está atrás de -DrunRealE2E=true.
+    Fazer DEPOIS do WEGO-1437, senão a assinatura de validação sai com o contrato
+    antigo de data de nascimento e terá de ser refeita.
+
+    '
+- id: WEGO-1981
+  title: '[wego-tasy-gateway] Resposta de erro ecoa a URL completa com query string'
+  why: 'Último da fila por um motivo mecânico, não de importância: NÃO SE CONSTRÓI
+    NESTE REPOSITÓRIO. O alvo é /Users/alegomes/coding/wego/wego-tasy-gateway, outro
+    clone. Um /board-flow:drain rodando aqui não consegue tocá-lo. Defeito confirmado
+    em disco pela triagem de 2026-08-03: GlobalExceptionMapper.java:99-104 devolve
+    uriInfo.getRequestUri().toString() inteiro, com query string, no corpo JSON
+    e no log — credencial passada em query string volta para quem a mandou. Introduzido
+    pelo commit 926f164 (WEGO-1770); antes a mensagem era a constante "Recurso nao
+    encontrado.".
+
+    '
+  status: pending
+  blocked_by: []
+  human_pending: null
+  notes: 'Dois defeitos na mesma linha: o vazamento e o "route_not_found" enganoso
+    (falha de conversão de @PathParam e rota inexistente caem no mesmo ramo). Um
+    conserto atende os dois. ⚠ A triagem de 08-03 corrigiu a própria descrição do
+    card: o WEGO-1976 é citado como precedente do mesmo padrão mas NUNCA foi consertado
+    (zero commits com essa chave). O precedente real e único é o WEGO-1962, já landado
+    aqui — o molde está em SigningKeyRedactor.java:67-70, que cobre justamente a
+    forma query-string-dentro-de-URL. ⚠ O conserto não cabe só nas linhas 53-57:
+    currentPath() também é logado em :35, :39, :43, :50 e :66. A fonte é o método,
+    não o ramo.
+
+    '
+- id: WEGO-1962
+  title: signing_key do PlugSign gravada em texto puro nos logs do PlugSignAdapter
+  why: 'Único card de código entre os 15 triados, e o único de prioridade Alta em
+    toda a coluna To Do (160 cards). Segredo de assinatura legível em log é exposição
+    sem controle de acesso: quem alcança o agregador de logs alcança a chave. O
+    caminho já está desobstruído — SigningKeyMasker.mask existe (domain/…/normalizer/SigningKeyMasker.java:41,
+    commit 05207f76) e há precedente de sanitização de corpo cru no webhook (ProcessarWebhookAssinaturaService.mascararPayloadDiagnostico).
+    Falta só aplicar no adapter e criar o utilitário compartilhado que o módulo
+    infrastructure alcance.
+
+    '
+  status: done
+  blocked_by: []
+  human_pending: null
+  notes: '✅ CONCLUÍDO 2026-08-02 — In Review, aceite COMPLETE (.claude/acceptance/WEGO-1962.yaml).
+    Fix entregue em 2026-07-30; o proof gate devolveu UNPROVEN em 08-01 por lacuna
+    de COBERTURA (só parte dos pontos tinha teste dedicado) e a rodada de 08-02
+    fechou os 8 descobertos, com matriz de perturbação 8/8 e isolamento 1→1 — cada
+    ponto revertido individualmente derruba exatamente um teste. Inventário reconciliado:
+    são 15 pontos no PlugSignAdapter (7 já cobertos + 8 novos), não 11 como diz
+    o corpo do card nem 13 como dizia o gate; conjunto de descobertos idêntico nas
+    três contagens. Nenhum vazamento ativo remanescente. Zero linhas de src/main
+    nesta rodada. Commits locais em main, NÃO pushados. Follow-ups nomeados e ainda
+    SEM card: (a) não há guarda estrutural que barre um ponto de log NOVO sem redação
+    — é o modo de falha mais provável daqui pra frente; (b) SigningKeyRedactor:67-70
+    reconhece signing_key/signingKey mas não grafias alternativas (signing-key),
+    risco futuro condicionado a mudança do fornecedor. ⚠ A rotação da credencial
+    exposta segue ADIADA por decisão do dono para o deploy de produção — não é pendência
+    ativa, não reabrir. --- Diagnóstico original da triagem (2026-07-29), mantido
+    por histórico e HOJE SUPERADO: Evidência de que NÃO está implementado (Explore,
+    2026-07-29): PlugSignAdapter.java não importa SigningKeyMasker; 10 dos 11 pontos
+    citados no card seguem logando a chave legível (:342, :457, :510, :593, :1184,
+    :1188, :1192, :1237, :1241, :1245). Só :750 mascara, e ad-hoc inline (substring(0,4)+"****"),
+    com formato divergente do SigningKeyMasker (first4...last4). Nenhum teste do
+    diretório infrastructure/…/plugsign/ instala handler de log — os asserts sobre
+    signing_key que existem lá são sobre mensagem de exceção, não log. Pontos EXTRA
+    não listados no card, encontrados na busca: :1180 e :1233 (rawRequest com jsonBody),
+    :1190 (PlugSignBusinessException com response.body()), :820/:825/:829 (download),
+    e :339/:454/:507/:590 (logam body=%s cru em WARN). Decidir no build se entram
+    no escopo. Proof hint: é Bug — o teste de regressão tem de ficar VERMELHO no
+    base_commit.
+
+    '
+- id: WEGO-1974
+  title: PlugSignAdapter não trata HTTP 408 — Request Timeout vira erro de negócio
+    e não retenta
+  why: 'Mesmo defeito do WEGO-1973, outro status code. 408 cai na regra genérica
+    `>= 400 && < 500` (PlugSignAdapter.java:1237 e :1294) → PlugSignBusinessException
+    → abortOn dos 11 @Retry → não retenta. "A conexão com o fornecedor demorou demais"
+    chega ao cliente como "você mandou dado errado" (422). 503/504 já estão corretos
+    — o buraco é só nos 4xx transitórios. Urgência MÉDIA (validation-lead): 408
+    é bem mais raro que 429 e o conserto é de uma linha no mesmo ponto. Fazer no
+    próximo toque neste arquivo, de preferência junto com WEGO-1962 (mesmo adapter).
+
+    '
+  status: done
+  blocked_by: []
+  human_pending: null
+  notes: '✅ CONCLUÍDO 2026-08-02 — In Review, aceite COMPLETE (.claude/acceptance/WEGO-1974.yaml).
+    Human validation route: not applicable (substrato interno) — o sintoma só seria
+    reproduzível à mão provocando um 408 real do fornecedor, o que exigiria bater
+    na API de produção; a prova automatizada é mais forte e já está feita. Fix:
+    PlugSignRequestTimeoutException nova em domain (herda de PlugSignException,
+    a base retentável, e NÃO de PlugSignClientException, que está no abortOn) +
+    classificação do 408 antes da regra genérica de 4xx nos três sítios do adapter.
+    Diff +941/-0, puramente aditivo; as 11 anotações @Retry NÃO foram tocadas. Full
+    verify verde em 018b1b1c (2.743 testes, 0 falhas). RED-at-base refeito do zero
+    pelo completion-auditor: Tests run: 5, Failures: 5. Correção de premissa apurada
+    na execução: o teste original cobria o sítio :1328, não os que se supunha —
+    os outros dois estavam descobertos e foram cobertos. Matriz de perturbação com
+    isolamento 1→1 nos três. Achados que NÃO viraram card ainda: (a) downloadFile
+    não tem @Retry, só @Timeout(30s), então o 408 ali é classificado certo mas nunca
+    repetido — fechar exige mudar produção; (b) a classificação status→exceção segue
+    escrita 3× (o débito que o próprio card citava); (c) getOrResolveFolderId()
+    não tem catch do tipo novo — 408 ali vira PlugSignException base, ainda retentável,
+    mas perde identidade e retryAfterSeconds. Débito introduzido: PlugSignRequestTimeoutException
+    é clone estrutural de PlugSignRateLimitException. Revisit trigger: extrair superclasse
+    PlugSignTransientException ANTES que apareça um terceiro status transitório
+    — foi copiando que o 429 e o 408 passaram despercebidos, um de cada vez. ---
+    Diagnóstico original da triagem, mantido por histórico: Fica MUITO mais barato
+    depois que a branch `wego-1973-plugsign-429-rate-limit` mergear: a infra de
+    teste já existe lá (PlugSignUploadRateLimitRetryWireMockE2ETest + cenário na
+    matriz de erro). ⚠ Armadilha já paga no WEGO-1973: `@Retry` é interceptor CDI
+    e fica INERTE em `new PlugSignAdapter()` — a prova de retry precisa viver em
+    @QuarkusTest, não no teste de infra. Custou um retrabalho naquele card. Débito
+    relacionado no mesmo ponto: a classificação status→exceção está escrita 3× (2
+    sobrecargas de callPlugSign + downloadFile). Extrair `classifyErrorResponse`
+    evitaria a próxima ocorrência desta classe de bug — foi assim que o 429 passou.
+    Proof hint: é Bug — teste de regressão VERMELHO no base_commit.
+
+    '
+- id: WEGO-1550
+  title: '[wego-assinatura] Cobertura de testes resilientes contra a API PlugSign
+    (drift detection)'
+  why: 'Epic fechado pelo último critério que faltava (AC4). AC1 (cobertura mock
+    dos 13 endpoints), AC2 (suíte vendor-drift e01..e13) e AC3 (pipeline agendada)
+    já estavam atendidos; faltava só a seção "como adicionar um novo cenário" em
+    docs/plugsign-vendor-drift.md — a outra metade do AC4, "como o alerta funciona",
+    já existia. Escolhido primeiro na fila por ser barato e de risco zero: só texto.
+
+    '
+  status: done
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1982
+  title: Fallback silencioso de tenant está ligado em staging — requisição sem X-Cliente-Id
+    é servida como primeiro tenant
+  why: 'Decisão de produto que o card deixava em aberto, resolvida pelo dono em
+    2026-08-03: staging passa a recusar, como produção. O ponto não óbvio, e a razão
+    de o card ter gerado um teste novo: toda a suíte roda no perfil %test, onde
+    o fallback continua ligado — logo a mudança de uma linha era INVISÍVEL para
+    todos os testes existentes e podia ser revertida com o build verde.
+
+    '
+  status: done
+  blocked_by: []
+  human_pending: 'Avisar quem usa bin/run-dev-staging.sh para testar contra PlugSign
+    real que requisição sem X-Cliente-Id passa a receber 403 TENANT_NAO_RESOLVIDO.
+    NÃO há deploy a fazer: não existe ambiente staging implantado (helm tem values
+    dev/qa/prod e nenhum values-staging; "staging" não aparece no chart). O %staging
+    é perfil LOCAL, ligado só pelo bin/run-dev-staging.sh. Vale na próxima execução
+    do script.
+
+    '
+- id: WEGO-1973
+  title: PlugSignAdapter não trata HTTP 429 — rate-limit vaza como erro de negócio,
+    sem backoff
+  why: 'Spin-off do WEGO-1757, executado a pedido do dono em 2026-07-30. Ficou urgente
+    porque o schedule do vendor-drift acabou de ser ATIVADO: passou a existir tráfego
+    RECORRENTE contra a produção da PlugSign com a chave de produção (não há sandbox),
+    e o adapter é COMPARTILHADO com o fluxo de assinatura de cliente real — um rate-limit
+    mal tratado não afetaria só o job.
+
+    '
+  status: done
+  blocked_by: []
+  human_pending: 'Nenhuma rota de validação manual: provocar um 429 real exigiria
+    estourar de propósito a cota do fornecedor em produção, que é o risco que o
+    card existe para conter. A evidência automatizada fecha. O que resta ao humano
+    é a decisão de merge/deploy — enquanto ficar na branch, o 429 segue vazando
+    como erro de negócio no ambiente.
+
+    '
+  notes: 'Commit `9bb089b626cd5ad1ec69f07980851d712e0ae0d2` na branch `wego-1973-plugsign-429-rate-limit`
+    (criada de `main`/`d16eac14`), NÃO mergeada e NÃO pushada. Card em In Review;
+    proof gate ainda não rodou. Causa raiz: PlugSignBusinessException estende PlugSignClientException,
+    que está no `abortOn` dos 11 @Retry — o 429 abortava o retry na hora. Nenhuma
+    das 11 anotações foi tocada; mudar só a classificação corrigiu os 11 sítios
+    de forma uniforme. Verify: BUILD SUCCESS, 17:49min, 5 módulos, zero falhas.
+    completion-auditor COMPLETE (5/5) — e ele NÃO aceitou a evidência de fé: reproduziu
+    o RED em worktree descartável e inspecionou o log HTTP bruto, observando 1 chamada
+    por cenário no RED contra 3 no verde. LIMITAÇÃO DECLARADA: `Retry-After` não
+    é honrado como atraso efetivo (MicroProfile @Retry tem delay constante em tempo
+    de compilação e não lê header). É parseado, preservado em retryAfterSeconds()
+    e logado em WARN; backoff efetivo 1s × 2 retries. Registrado no javadoc. ⚠ Segurança
+    — security-reviewer pediu BLOCK, validation-lead REBAIXOU a caveat após checar
+    a premissa no disco e ela não se sustentar: o novo WARN grava signingKey em
+    texto puro, mas `d16eac14:803` JÁ gravava no mesmo caminho. Agrava por duplicação,
+    não abre buraco novo — é o WEGO-1962, onde deve ser consertado. Follow-up sem
+    card: adicionar JITTER ao backoff de 429 (3 tentativas com pausa fixa de 1s
+    retentam em sincronia e empurram a fila do fornecedor). Teto de amplificação
+    3×, não ilimitado.
+
+    '
+- id: WEGO-1757
+  title: Operacionalizar job vendor-drift PlugSign (schedule + alerta + quota)
+  why: 'Não estava no rank triado em 2026-07-29 — entrou por pedido direto do dono
+    em 2026-07-30. A auditoria de detalhe re-escopou o card: dos 3 critérios originais,
+    só 1 era codificável. Schedule do Bitbucket é clique humano (Bitbucket Cloud
+    não aceita schedule declarado no yaml) e a quota da PlugSign só a Tecnospeed
+    responde. Além disso a ordem do card estava invertida — a quota é PRÉ-REQUISITO
+    do schedule, não item paralelo, porque ligar tráfego recorrente contra a produção
+    do fornecedor usando a chave de produção (não há sandbox) sem saber o limite
+    é o risco central. Decisão do dono: sem webhook — a falha do próprio pipeline
+    é o alerta. Entregue: operabilidade do job (`-q` removido para a falha nomear
+    o endpoint driftado; `-am` adicionado ao `-pl` para não repetir o falso-resultado
+    do WEGO-1949; doc corrigida de ~15 para 16 chamadas/execução com memória de
+    cálculo; TODOs do pipeline realinhados às decisões).
+
+    '
+  status: done
+  blocked_by: []
+  human_pending: 'As duas pendências originais foram RESOLVIDAS pelo dono em 2026-07-30:
+    (1) quota — decisão de ASSUMIR o rate-limit como aceitável para 16 chamadas/dia.
+    ⚠ É assunção do dono, NÃO confirmação da Tecnospeed; se a PlugSign barrar por
+    excesso, este é o pressuposto a revisitar primeiro; (2) schedule CRIADO: pipeline
+    `custom: vendor-drift`, branch `develop`, diário 05:00–06:00 local = 08:00–09:00
+    UTC. ⚠ SOBROU UMA PENDÊNCIA NOVA, e ela invalida o schedule na prática: o schedule
+    roda a partir de `develop`, mas `origin/develop` ainda tem o script VELHO —
+    verificado em 2026-07-30 com `git show origin/develop:scripts/run-vendor-drift.sh`
+    → linha 40 ainda é `./mvnw -q test -pl infrastructure \` (com `-q`, sem `-am`).
+    Até o merge chegar em `develop`, a execução agendada roda o script antigo: o
+    log NÃO nomeia o endpoint driftado e o `-pl` sem `-am` mantém o risco de resultado
+    falso por jar stale (WEGO-1949). Ação humana: decidir e executar o merge/push.
+
+    '
+  notes: 'Commit `3ea6efc8` na branch `wego-1757-vendor-drift-operabilidade` (base
+    `d16eac14`), NÃO mergeado em `main` e NÃO pushado. Card em In Review; proof
+    gate ainda não rodou. Veredito READY-WITH-CAVEATS: o verify completo ficou vermelho
+    por causa ambiental (container Postgres do Dev Services estourou a sonda de
+    5s no minuto ~18 de máquina carregada) e o teste `MultiTenantMutatingVerbsCrossTenantE2ETest`
+    é reproduzidamente verde em isolamento (8/8, 15s); o diff não tem uma linha
+    de Java. Follow-up nomeado e NÃO absorvido: `PlugSignAdapter` não trata HTTP
+    429 — o `@Retry` tem `abortOn=PlugSignClientException`, então rate-limit propaga
+    sem backoff e vaza como erro de negócio (provado por PlugSignFoldersErrorMatrixTest.java:288-309).
+    Deveria preceder qualquer tráfego recorrente contra o fornecedor. Segundo follow-up:
+    o step `&compile` (bitbucket-pipelines.yml:55) ainda usa `-q`, mesma classe
+    de defeito, e roda em todo PR.
+
+    '
+- id: WEGO-1394
+  title: Elaborar pipeline de CI/CD
+  why: 'Roteado direto para Done por decisão do dono em 2026-07-29, sem passar pela
+    fila de prova: o pipeline roda a cada push, então a prova é operacional e diária.
+
+    '
+  status: done
+  blocked_by: []
+  human_pending: null
+  notes: 'Evidência: bitbucket-pipelines.yml (12 KB) com 8 steps — install-commons,
+    compile, unit-test, mocked-e2e-test, package, build-image, push-image, deploy-dev.
+    Commits f1f275b9, 4e4a95c8, 49b1ce5b. Não perturbável (CI/config): a confiança
+    vem de inspeção. ⚠ Risco assumido explicitamente: o card tinha descrição VAZIA,
+    então a evidência casa com o título, não com critérios de aceitação — que nunca
+    foram escritos.
+
+    '
+- id: WEGO-1389
+  title: Preparação da infraestrutura de desenvolvimento
+  why: Epic de 27/mar nunca tocado desde 27/mar; superseded por WEGO-1406 (canônico,
+    9 filhas, 3 já Done)
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1390
+  title: Configurar PlugSign
+  why: sem descrição; superseded por WEGO-1408 + WEGO-1409, que têm critério de
+    conclusão escrito
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1391
+  title: Obter credenciais de acesso
+  why: sem descrição; superseded por WEGO-1419. Credenciais em uso (WEGO-1407 registra
+    conta ativa + API key)
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1392
+  title: Gerar API access token
+  why: sem descrição; token em uso comprovado — assinatura real ponta a ponta em
+    2026-07-29
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1393
+  title: Configurar white label
+  why: sem descrição; superseded por WEGO-1409. White Label no ar (assinador.wego.com.vc,
+    2026-07-29)
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1395
+  title: Esclarecer dúvidas com a PlugSign
+  why: as 2 perguntas da checklist já respondidas — API do Dashboard no próprio
+    comentário de 27/mar
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1396
+  title: Definir etapas do pipe
+  why: absorvido pela entrega de WEGO-1394 — as 8 steps existem e rodam
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1397
+  title: Definir ferramenta para cada etapa do pipe
+  why: absorvido por WEGO-1394 — Maven/Docker/Harbor/ArgoCD escolhidos e em produção
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1398
+  title: Configurar ferramentas
+  why: absorvido por WEGO-1394 — configuradas, pipeline roda a cada push
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1414
+  title: Definir subdomínio para o portal de assinatura
+  why: órfã de pai fechado (WEGO-1407 Done 09/abr); resposta já no comentário dele
+    — assinador.wego.com.vc
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1416
+  title: Definir endereço de e-mail no-reply da plataforma
+  why: órfã de pai fechado (WEGO-1407 Done 09/abr); resposta já no comentário dele
+    — no-reply@wego.com.vc
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1415
+  title: Mapear acesso ao gerenciador de DNS da WeGo
+  why: 'Descartado por necessidade extinta, NÃO por conclusão — decisão do dono
+    em 2026-07-29. O registro DNS foi criado (o domínio resolve e serviu uma assinatura
+    real), mas o "responsável mapeado + processo documentado" que o critério pedia
+    nunca foi produzido e o White Label subiu sem ele.
+
+    '
+  status: dropped
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1406
+  title: '[PlugSign] Onboarding PlugSign — Configuração e Integração'
+  why: 'Epic CANÔNICO do onboarding PlugSign — é o que substituiu o WEGO-1389. Epic
+    não se executa direto; fecha quando as 6 filhas abertas fecharem (1408, 1409,
+    1410, 1411, 1412, 1413). Mantido em To Do de propósito.
+
+    '
+  status: pending
+  blocked_by:
+  - WEGO-1408
+  - WEGO-1409
+  - WEGO-1410
+  - WEGO-1411
+  - WEGO-1412
+  - WEGO-1413
+  human_pending: null
+- id: WEGO-1438
+  title: Implementar receptor de webhooks de status
+  why: o endpoint POST /api/v1/webhooks/plugsign ja existe e e testado; faltam o
+    evento de upload e um endpoint que consulte o historico persistido por solicitacao
+    (hoje o historico so e gravado na trilha de auditoria e o GET .../historico
+    consulta o PlugSign ao vivo). Antes do 1439 porque o pipeline de download depende
+    do status finalizado chegar por webhook.
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1439
+  title: Implementar GET /download
+  why: 'o download ja existe (WEGO-1460, DocumentoDownloadE2ETest); falta o resto
+    do criterio: so baixar com status finalizado, arquivar em storage e excluir
+    no PlugSign (PlugSignPort nao tem delete; DELETE /documentos e stub 501). Depois
+    do 1438 pelo status finalizado.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: WEGO-1440
+  title: Configurar lembretes automaticos de assinatura via API
+  why: 'nada implementado: POST .../lembretes-automaticos e stub 501. Por ultimo
+    porque provavelmente duplica o WEGO-1663 (TODO WEGO-1663 em AssinaturaAcoesE2ETest:48);
+    conferir o 1663 antes de comecar, e se for o mesmo, descartar um dos dois.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+

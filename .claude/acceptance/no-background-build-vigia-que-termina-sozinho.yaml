@@ -1,0 +1,99 @@
+key: no-background-build-vigia-que-termina-sozinho
+status: complete
+diff: 06e2906..7799e35
+worktree: /Users/alegomes/cepa-worktrees/cepa-until-2026-09-28-0558
+
+criteria:
+  - id: AC1
+    text: >
+      Dentro da janela do cepa-until (CEPA_UNTIL_RUN), um Monitor armado que
+      terminou sozinho, sem TaskStop, NÃO barra a parada (Stop). Superfície: o
+      hook invocado como o harness invoca (payload JSON no stdin com
+      hook_event_name=Stop e transcript_path), sobre transcript no formato real.
+    altitude: cli
+    surface: >
+      common/hooks/no-background-build.py invocado como PreToolUse/Stop hook
+      via stdin JSON, lendo transcript_path em disco (formato .jsonl do harness).
+    test: >
+      tests/test_no_background_build.py::test_vigia_que_termina_sozinho_nao_barra_a_parada
+      (fixtures sintéticas nos 4 formatos: status completed, expirou, timed out,
+      TaskStop tardio) + reprodução direta feita nesta auditoria contra transcript
+      REAL do run 2026-09-26-2203
+      (/Users/alegomes/.claude/projects/-Users-alegomes-cepa-worktrees-cepa-pendencias-until-until-2026-09-26-2203/7e182946-89ea-4642-890c-ff06e4afe591.jsonl,
+      primeiras 189 linhas, vigia b1pa0ro5t expirado sozinho).
+    layer: subprocess (invocação real via stdin, sem mock do hook)
+    evidence: verified
+    run: |
+      $ python3 tests/test_no_background_build.py
+      ok  vigia encerrado sozinho (fonte acabou (status completed)): a parada passa
+      ok  vigia encerrado sozinho (expirou aos 10 min): a parada passa
+      ok  vigia encerrado sozinho (timed out): a parada passa
+      ok  vigia encerrado sozinho (TaskStop respondeu que a tarefa não existe): a parada passa
+      ✓ tudo verde
+
+      Reprodução direta contra o transcript real (primeiras 189 linhas, inclui o
+      <task-notification> "Monitor expired after 10m..." do vigia b1pa0ro5t):
+      $ python3 -c '... subprocess.run([sys.executable, "common/hooks/no-background-build.py"],
+        input=json.dumps({"hook_event_name":"Stop",
+        "transcript_path":"/tmp/real_transcript_189.jsonl","stop_hook_active":False}),
+        env={**os.environ,"CEPA_UNTIL_RUN":"1"}) ...'
+      returncode: 0
+      stdout: (vazio — sem bloqueio)
+    status: complete
+
+  - id: AC2
+    text: >
+      O vigia ainda vivo continua barrando a parada (não regredir a porta 3):
+      aviso não terminal, aviso citado pelo agente, aviso de outra tarefa.
+    altitude: cli
+    surface: mesmo hook, mesmo payload Stop via stdin.
+    test: >
+      tests/test_no_background_build.py::test_aviso_nao_terminal_ou_citado_nao_solta_o_vigia
+      (3 subcasos: status running, texto citado por bloco assistant/"text", aviso
+      de outro task-id) + test_parada_com_vigia_armado_e_bloqueada.
+    layer: subprocess (invocação real via stdin)
+    evidence: verified
+    run: |
+      $ python3 tests/test_no_background_build.py
+      ok  aviso com status running não encerra o vigia
+      ok  o agente citar o aviso não encerra o vigia
+      ok  fim de OUTRA tarefa não encerra este vigia
+      ok  parada com vigia armado é bloqueada
+      ✓ tudo verde
+    status: complete
+
+  - id: AC3
+    text: >
+      Evidência de formato real: os avisos de fim tratados correspondem ao que
+      o harness grava, sobre o transcript real do run 2026-09-26-2203 (vigia
+      b1pa0ro5t, primeiras 189 linhas).
+    altitude: cli
+    surface: transcript .jsonl real do harness em disco, lido por pendencias().
+    test: >
+      Reprodução direta (não é um test_ do arquivo, é evidência ad hoc desta
+      auditoria): hook invocado com transcript_path apontando para uma cópia
+      truncada (head -189) do arquivo real citado no critério.
+    layer: subprocess sobre arquivo real do harness
+    evidence: verified
+    run: |
+      Contraprova (antes/depois) com o MESMO arquivo real:
+      - head -100 (antes do <task-notification> de expiração, linha 101): hook
+        bloqueia — {"decision":"block","reason":"...vigia(s) do Monitor ainda
+        armado(s): b1pa0ro5t..."}
+      - head -189 (inclui o <task-notification> "Monitor expired after 10m",
+        linha 101-108): hook libera — returncode 0, stdout vazio.
+      Comando usado: python3 -c com subprocess.run(["python3",
+      "common/hooks/no-background-build.py"], input=payload JSON,
+      env={CEPA_UNTIL_RUN:"1"}), payload igual ao que o harness emite
+      (hook_event_name=Stop, transcript_path=<arquivo>, stop_hook_active=false).
+    status: complete
+
+overall:
+  build_rule: >
+    Não foi rodado build completo (regra de execução do item — build completo é
+    do supervisor). Rodado apenas `python3 tests/test_no_background_build.py`
+    (34 checagens, todas ok) e reproduções diretas do hook contra payload real e
+    transcript real em disco.
+  full_suite_run: |
+    $ python3 tests/test_no_background_build.py
+    ✓ tudo verde

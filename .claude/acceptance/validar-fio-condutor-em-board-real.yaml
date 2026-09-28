@@ -1,0 +1,118 @@
+key: validar-fio-condutor-em-board-real
+status: incomplete
+criteria:
+  - id: AC1
+    text: >-
+      "Reconcile contra o quadro vivo do WEGO não rebaixa item `done`" (regra
+      R3) — a primeira das duas condições que travavam este item em
+      2026-09-25, agora re-testada contra o quadro real (não um fixture),
+      depois do fix `reconcile-nao-rebaixa-done` (8f84bb2).
+    altitude: cli
+    surface: >-
+      python3 common/bin/cepa-plan reconcile WEGO --board <status vivo do
+      Jira> --repo <wego-assinatura-backend> --json (sem --apply)
+    test: docs/investigations/2026-09-28-fio-condutor-wego/quadro-vivo.json +
+      re-execução direta do comando pelo auditor
+    layer: cli-subprocess contra o plan.yaml real do wego-assinatura-backend
+      (não um fixture sintético) e status lidos ao vivo do Jira via `twg`
+    evidence: verified
+    run: >-
+      $ python3 common/bin/cepa-plan reconcile WEGO --board
+      docs/investigations/2026-09-28-fio-condutor-wego/quadro-vivo.json
+      --repo /Users/alegomes/coding/wego/wego-assinatura-backend --json
+      -> reproduzido pelo auditor: WEGO-1973 aparece só em `warnings`
+      ("não rebaixei (regra R3)"), `applied: []`, `wrote: false`; única
+      divergência real é WEGO-1412 (pending -> done, fechou de verdade no
+      quadro); os 12 "dropped -> dropped" são ruído sem efeito. Md5 do
+      plan.yaml do wego-assinatura-backend antes e depois do comando:
+      861987bcd0abba27e516e1867e77cb98 (idêntico, nada foi escrito).
+    verdict: complete
+    notes: >-
+      Bate exatamente com o relatado em
+      docs/investigations/2026-09-28-fio-condutor-no-wego.md, seção 1. O board
+      vivo é real (25 ids lidos via `twg`), o repo é o real
+      wego-assinatura-backend, e o comando roda sem --apply — read-only
+      confirmado pelo md5 estável.
+
+  - id: AC2
+    text: >-
+      "Triagem parcial preserva a ordem da fila" ao gravar contra a fila real
+      do WEGO — a segunda condição que travava o item, depois do fix
+      `triagem-parcial-preserva-ordem` (15da11b).
+    altitude: cli
+    surface: >-
+      python3 common/bin/cepa-plan write WEGO --from-triage <repasse.json>
+      --repo <wego-assinatura-backend> --on-missing keep --dry-run
+    test: docs/investigations/2026-09-28-fio-condutor-wego/write-keep-dry-run.yaml
+      + re-execução direta do comando pelo auditor
+    layer: cli-subprocess contra o plan.yaml real do wego-assinatura-backend
+    evidence: verified
+    run: >-
+      $ python3 common/bin/cepa-plan write WEGO --from-triage
+      .../triagem-2026-09-25.json --repo
+      /Users/alegomes/coding/wego/wego-assinatura-backend --on-missing keep
+      --dry-run -> saída idêntica (exceto 2 linhas de aviso já cobertas em
+      texto) ao arquivo do relatório; os 25 itens do disco saem na mesma
+      ordem e idênticos campo a campo, os 3 `ready` (WEGO-1438/1439/1440)
+      entram no fim; --dry-run confirmado (md5 do plan.yaml real inalterado
+      antes/depois: 861987bcd0abba27e516e1867e77cb98).
+    verdict: complete
+    notes: >-
+      Único porém: usa o repasse arquivado de 2026-09-25
+      (triagem-2026-09-25.json), não uma classificação nova. Isso é adequado
+      *para este critério específico* (ele testa se o comando de escrita
+      preserva ordem, não se a triagem classifica bem cards novos), e o
+      próprio relatório é explícito sobre esse limite.
+
+  - id: AC3
+    text: >-
+      Critério literal do título do item: "Rodar /board-flow:triage num
+      board com fila real e ver a ordem sobreviver à revisão." Isto é, o
+      comando de triagem em si (não apenas os comandos de baixo nível que
+      ele alimenta) rodando contra cards vivos e classificando-os, com o
+      dono revisando a fila resultante e a ordem sobrevivendo a essa revisão.
+    altitude: cli (board-flow) + human-review
+    surface: /board-flow:triage (roda ao vivo, transiciona cards, pede
+      confirmação do dono) sobre o board WEGO real
+    test: nenhum — não existe execução deste run
+    layer: n/a
+    evidence: missing
+    run: n/a — nenhum comando foi rodado nesta superfície
+    verdict: incomplete
+    notes: >-
+      O próprio relatório (seção "O que isto não cobre") diz isto sem
+      rodeio: "Uma triagem nova do /board-flow:triage classificando cards ao
+      vivo e o dono revisando a fila resultante" não foi feita. O que rodou
+      foi `cepa-plan reconcile` e `cepa-plan write --from-triage`, os dois
+      comandos de baixo nível que os fixes 8f84bb2 e 15da11b corrigem — uma
+      re-confirmação legítima de que os fixes seguem valendo contra o quadro
+      real, mas não é o comando `/board-flow:triage` e não passou por revisão
+      do dono. O título do item nomeia essa superfície explicitamente
+      ("Rodar /board-flow:triage... e ver a ordem sobreviver à revisão"); os
+      dois comandos re-executados ficam uma camada abaixo dela.
+gaps:
+  - id: AC3
+    gap: >-
+      Falta uma execução real de /board-flow:triage contra o board WEGO
+      (wego-assinatura-backend), com o dono presente para confirmar as
+      transições de card que o comando pede, seguida de revisão do dono
+      sobre a fila (plan.yaml) resultante — confirmando que a ordem
+      sobrevive a essa revisão sem regressão manual.
+    followup: >-
+      Agendar uma sessão com o dono para rodar /board-flow:triage ao vivo no
+      WEGO (fora de horário de lote desatendido, já que o comando transiciona
+      cards e pede confirmação humana); comparar a fila antes/depois e pedir
+      ao dono para revisar explicitamente se a ordem resultante bate com a
+      prioridade que ele esperava.
+runs:
+  - command: >-
+      python3 common/bin/cepa-plan reconcile WEGO --board
+      docs/investigations/2026-09-28-fio-condutor-wego/quadro-vivo.json
+      --repo /Users/alegomes/coding/wego/wego-assinatura-backend --json
+    result: "applied: [] / wrote: false; única divergência real WEGO-1412; WEGO-1973 em warnings (R3)"
+  - command: >-
+      python3 common/bin/cepa-plan write WEGO --from-triage
+      /Users/alegomes/coding/wego/wego-assinatura-backend/.claude/programs/WEGO/triagem-2026-09-25.json
+      --repo /Users/alegomes/coding/wego/wego-assinatura-backend --on-missing
+      keep --dry-run
+    result: "saída idêntica ao write-keep-dry-run.yaml do relatório; ordem dos 25 itens preservada; nada gravado"

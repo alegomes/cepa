@@ -1,0 +1,82 @@
+item: until-rodada-herda-handoff-da-anterior
+status: complete
+diff_base: 093cebc..9c13f73
+resumo: >
+  Rodada do cepa-until (claude -p na mesma worktree/branch) herdava o handoff
+  da rodada anterior, sobre outro item, e "siga de onde parou" fez a rodada
+  do WEGO-2321 reescrever o relatório do WEGO-2337 (run 2026-09-27-0832).
+  Fix: com CEPA_UNTIL_RUN no ambiente (exportado por
+  common/bin/cepa-until::ambiente_do_item), resume_notice() em
+  common/hooks/session-registry.py não entrega o conteúdo do handoff nem o
+  reserva, e avisa que o item da rodada é o que o /common:drain-plan reservar.
+
+criteria:
+  - id: AC1
+    descricao: >
+      Numa rodada do cepa-until (CEPA_UNTIL_RUN=1), o hook SessionStart
+      (common/hooks/session-registry.py) NÃO entrega o conteúdo do handoff
+      da rodada anterior.
+    altitude: event
+    surface: "hook SessionStart (common/hooks/session-registry.py), invocado como subprocesso via stdin JSON, igual ao Claude Code faz de verdade"
+    test: tests/test_until_nao_herda_handoff.py::test_session_start_da_rodada_nao_entrega
+    layer: subprocess (hook real, não só a função isolada)
+    evidence: verified
+    run: "python3 tests/test_until_nao_herda_handoff.py → 'tudo ok', EXIT=0 (5 cenários, todos 'ok', nenhum FAIL)"
+    resultado: complete
+
+  - id: AC2
+    descricao: >
+      A rodada é avisada de que o item dela é o que o /common:drain-plan
+      reservar, não a continuação de outro id.
+    altitude: event
+    surface: texto de additionalContext devolvido pelo hook SessionStart
+    test: tests/test_until_nao_herda_handoff.py::test_rodada_nao_recebe_o_handoff (checa "drain-plan" no texto) + test_session_start_da_rodada_nao_entrega (checa "NÃO entregue" na saída real do subprocesso)
+    layer: unit (mensagem) + subprocess (hook real)
+    evidence: verified
+    run: "python3 tests/test_until_nao_herda_handoff.py → 'tudo ok', EXIT=0"
+    resultado: complete
+
+  - id: AC3
+    descricao: >
+      A rodada não consome nem reserva o handoff (sem resumed_by no
+      frontmatter, sem arquivo .claim) — o dono ainda pode retomá-lo de manhã.
+    altitude: persistence
+    surface: arquivo de handoff (.claude/handoffs/<branch-slug>.md) e seu .claim
+    test: tests/test_until_nao_herda_handoff.py::test_rodada_nao_consome_o_handoff + test_session_start_da_rodada_nao_entrega
+    layer: unit + subprocess
+    evidence: verified
+    run: "python3 tests/test_until_nao_herda_handoff.py → 'tudo ok', EXIT=0"
+    resultado: complete
+
+  - id: AC4
+    descricao: >
+      Sessões normais (sem CEPA_UNTIL_RUN) seguem retomando o handoff como
+      antes.
+    altitude: event
+    surface: hook SessionStart, mesmo caminho de código, sem a marca de ambiente
+    test: tests/test_until_nao_herda_handoff.py::test_sessao_normal_segue_retomando + test_session_start_normal_entrega
+    layer: unit + subprocess (hook real)
+    evidence: verified
+    run: "python3 tests/test_until_nao_herda_handoff.py → 'tudo ok', EXIT=0"
+    resultado: complete
+
+testes_de_regressao_relacionados:
+  - test: tests/test_handoff_claim.py
+    motivo: >
+      Cobre a retomada normal de handoff (claim/release/overlap); recebeu
+      `os.environ.pop("CEPA_UNTIL_RUN", None)` no diff para não ser
+      contaminado por rodar, ele mesmo, dentro de uma rodada do cepa-until.
+    evidence: verified
+    run: "python3 tests/test_handoff_claim.py → 'tudo ok', EXIT=0 (8 cenários, todos 'ok')"
+  - test: tests/test_memoria_validade.py
+    motivo: teste de regressão geral pedido para a auditoria; não tocado pelo diff, roda para garantir que nada quebrou ao redor.
+    evidence: verified
+    run: "python3 tests/test_memoria_validade.py → 'tudo ok', EXIT=0 (9 cenários, todos 'ok')"
+
+observacao_adicional: >
+  A própria sessão que fez esta auditoria é uma rodada do cepa-until e, antes
+  do fix (commit 9c13f73), teria recebido o handoff da rodada anterior no seu
+  próprio SessionStart — reprodução ao vivo do defeito, consistente com o
+  cenário descrito no item da fila.
+
+verdict: COMPLETE

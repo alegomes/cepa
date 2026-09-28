@@ -1,0 +1,78 @@
+schema_version: 2
+card: acceptance-gate-barra-done-sem-auditoria
+verdict: proven
+reviewed_at: 2026-09-28T06:20:00-03:00
+base_commit: ad2ad52
+head_commit: e00a1f3
+issue_type: Feature
+repo_kind: harness            # não é Quarkus/Maven — este repo é o próprio cepa: hooks Python. Superfície = subprocesso do hook (JSON no stdin -> exit code/stderr)
+scope:
+  changed_classes:
+    - class: "common/hooks/acceptance-gate.py (main — quando o artefato de aceite está ausente nas quatro pastas E o alvo resolvido é `done`, bloqueia com exit 2 via block_no_artifact; alvo unresolved/in_review/backward continua liberando)"
+      module: hook
+      external_observable: true   # superfície é a transição de card no Jira (mcp-atlassian/cloud connector/twg via Bash), que o agente dispara
+      substituted_by_double: null
+    - class: "common/hooks/acceptance-gate.py (candidate_paths — extraída de find_artifact, agora também usada por block_no_artifact para listar as quatro pastas pesquisadas na mensagem de bloqueio)"
+      module: hook
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não há pitest neste repo (não é Maven/JVM); perturbação manual via git checkout/sed em worktree descartável é o mecanismo aplicável."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN de partida confirmado em HEAD e00a1f3 (worktree descartável /tmp/proof-agb-head): `python3 tests/test_acceptance_gate.py` -> 34/34 ok ('all acceptance-gate tests passed'); `python3 tests/test_gate_status_por_nome.py` -> 19/19 ok ('tudo verde') — suíte irmã que exercita a mesma resolução de alvo (resolve_target/logical_status), não tocada pelo diff mas rodada para garantir que a mudança não quebrou o vizinho."
+        - "RED-na-base: os testes novos de e00a1f3 (tests/test_acceptance_gate.py) copiados para o worktree descartável em ad2ad52 (base, /tmp/proof-agb-base) e rodados contra o hook da base -> 4 falhas, exatamente as 4 asserções novas do card ('nenhuma árvore tem artefato -> Done BLOQUEIA', '...a mensagem cita .claude/acceptance e o clone principal', 'dialeto mcp-atlassian -> Done BLOQUEIA', 'twg Bash, transição por nome Done -> BLOQUEIA'); as 23 asserções pré-existentes continuaram verdes. Confirma que o teste novo amarra no comportamento novo, não em código já existente na base."
+        - "Perturbação 1 (condição de direção): em worktree descartável a partir de HEAD (/tmp/proof-agb-pert), `if target == \"done\":` trocado para `if target == \"in_review\":` em acceptance-gate.py linha 331 -> `python3 tests/test_acceptance_gate.py` foi a RED em 7 asserções, incluindo as 4 do card e mais 3 adjacentes que dependiam da direção correta ('fora de git... In Review PASSA' virou BLOQUEIA por engano, 'sem artefato de auditoria -> PASSA' virou BLOQUEIA por engano). Restaurado com `git checkout e00a1f3 -- common/hooks/acceptance-gate.py`; `git status --short` conferido limpo."
+        - "Perturbação 2 (conteúdo da mensagem): na mesma worktree, em `block_no_artifact`, a linha `f\"  Searched:\\n{paths_str}\\n\"` trocada para `f\"  Searched: (omitted)\\n\"` -> RED isolado em exatamente 1 asserção ('...e a mensagem cita .claude/acceptance e o clone principal'), as outras 33 continuaram verdes — confirma que a listagem das quatro pastas pesquisadas na mensagem de stderr é load-bearing e não um acidente de string. Restaurado com `git checkout e00a1f3 -- common/hooks/acceptance-gate.py`; `python3 tests/test_acceptance_gate.py` voltou a 34/34 ok antes de remover a worktree."
+      run: >-
+        Três worktrees descartáveis fora da árvore principal, criadas com
+        `git worktree add --detach <path> <commit>` e removidas ao final com
+        `git worktree remove --force <path>`: /tmp/proof-agb-base (ad2ad52),
+        /tmp/proof-agb-head (e00a1f3), /tmp/proof-agb-pert (e00a1f3, usada
+        para as duas perturbações, cada uma restaurada com `git checkout
+        e00a1f3 -- common/hooks/acceptance-gate.py` antes da seguinte). Cada
+        comando de teste rodado isoladamente (só os dois arquivos indicados
+        na tarefa, nunca a suíte completa), em primeiro plano, sem
+        `run_in_background`. Nenhuma escrita na árvore principal do
+        worktree de sessão.
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: >-
+      As duas linhas novas de comportamento (`if target == \"done\":
+      block_no_artifact(...)` e a extração `candidate_paths` reusada na
+      mensagem) são exercitadas por 4 asserções novas dedicadas em
+      tests/test_acceptance_gate.py, confirmadas por perturbação (não só
+      leitura estrutural) — ver l3 acima.
+  l4_adversarial_input:
+    status: clean
+    findings: []
+    run: >-
+      Casos adjacentes cobertos pelos testes novos e verificados: dialeto
+      mcp-atlassian (transition_id) além do cloud connector; transição via
+      `twg` Bash por nome de status ('Done') além de id numérico; alvo
+      unresolved (sem board-flow.yaml) continua liberando por desenho (não
+      há ainda card algum para gatear nesse ponto do fluxo); devoluções
+      (in_progress/to_do) continuam livres mesmo sem artefato e com alvo
+      done noutro teste da mesma bateria. Nenhum achado adicional fora do
+      que os testes do card já cobrem.
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "issue_type Feature (item do BACKLOG.md / decisão de dono 2026-09-27), não Bug — não há regressão point-in-time a reproduzir na base."
+routing_reason: >-
+  Os dois comportamentos novos (bloquear done sem nenhum artefato de aceite
+  nas quatro pastas; e listar as quatro pastas pesquisadas na mensagem de
+  stderr) foram provados load-bearing por green->red->green: GREEN de
+  partida em HEAD (34/34 e 19/19), RED confirmado ao rodar os testes novos
+  contra o hook da base (4 falhas exatas), e RED confirmado ao perturbar
+  cada uma das duas linhas de HEAD isoladamente (7 falhas na perturbação de
+  direção, 1 falha isolada na perturbação de mensagem), com restauração e
+  novo GREEN entre as duas. Nenhum nível ficou assumed/skipped/gap/survived.
+  PROVEN.

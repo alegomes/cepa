@@ -1,0 +1,62 @@
+key: defeitos-da-revisao-until-2203
+status: complete
+audited_at: "2026-09-28"
+diff: c0b259a (base 8961f65)
+criteria:
+  - id: AC1
+    description: >
+      cepa-until-digest deve ler a fila do clone principal (o caminho que
+      caminho_do_plano/raiz_principal do cepa-plan resolve), não
+      ledger.parent.parent/plan.yaml (a cópia da worktree de largada).
+    altitude: cli
+    surface: "saída de `cepa-until-digest <ledger>` rodado com um ledger dentro de uma worktree ligada"
+    test: tests/test_cepa_until_digest.py::test_estado_da_fila_vem_do_clone_principal_nao_da_worktree
+    layer: cli (invoca o binário real common/bin/cepa-until-digest via subprocess)
+    evidence: verified
+    run: "python3 tests/test_cepa_until_digest.py -> 'ok  lê o estado da fila do clone principal' / 'ok  não lê a cópia velha da worktree' / 'ok  diz de qual arquivo leu a fila'; suíte inteira: '✓ tudo verde' (13 checks, 0 FAIL)"
+    result: complete
+    gap: null
+
+  - id: AC2
+    description: >
+      Um run do cepa-until que termina `sem-rede` deve gravar em run_end um
+      quedas_de_rede igual ao número de eventos queda_de_rede (não 0).
+    altitude: cli
+    surface: "ledger .jsonl escrito pelo CLI real do cepa-until com um `claude` falso"
+    test: >
+      tests/test_cepa_until_rede.py::test_rede_que_nao_volta_dentro_da_janela_para_o_run
+      e test_tres_quedas_seguidas_param_o_run_sem_culpar_o_item (ambos cenários
+      terminam com motivo `sem-rede`)
+    layer: cli (usa `roda`/`fake_claude` de tests/test_cepa_until.py, que invocam o binário common/bin/cepa-until de verdade)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_rede.py -> 'ok  run_end conta a queda da qual a
+      rede não voltou' (fim["quedas_de_rede"] == 1), 'ok  run_end conta as 3 quedas,
+      inclusive a que parou o run' (fim["quedas_de_rede"] == len(eventos) == 3);
+      suíte inteira: 'todos passaram' (33 checks, 0 FAIL)
+    result: complete
+    gap: null
+
+  - id: AC3
+    description: >
+      A suíte de eval (tests/eval/run-eval.py, usada pelo item
+      medir-efeito-de-mudanca-no-harness) não pode deixar worktrees em
+      /tmp/cepa-eval registradas em `git worktree list`.
+    altitude: cli
+    surface: "cmd_run end-to-end contra um repo descartável"
+    test: tests/test_eval_suite.py::test_corrida_que_falha_guarda_o_diff_e_nao_deixa_worktree
+    layer: cli (chama run.cmd_run real, com git/PATH apontados para um repo/binário `claude` falsos)
+    evidence: verified
+    run: >
+      python3 tests/test_eval_suite.py -> 'ok  nenhuma worktree da corrida fica
+      registrada', 'ok  nem o diretório dela fica no disco', 'ok  a tarefa falhou,
+      como devia', 'ok  o resultado aponta o .patch com o que o agente escreveu',
+      'ok  o .patch mora ao lado do resultado, não em /tmp', 'ok  não sobra o campo
+      que apontava a worktree'; suíte inteira: 'all green'
+    result: complete
+    gap: null
+
+out_of_scope:
+  - "Remover as 3 worktrees antigas de 2026-09-26: checado, `git worktree list` mostra só o clone principal e esta worktree."
+
+overall_gap: null

@@ -284,6 +284,84 @@ def test_parada_limpa_passa():
               f"saiu {p.returncode}: {p.stdout[:160]}")
 
 
+# O vigia que termina SOZINHO: sem `TaskStop`, o fim chega como aviso do
+# harness. Formatos copiados dos transcripts do run 2026-09-26-2203.
+def _aviso(corpo):
+    return f"<task-notification>\n{corpo}\n</task-notification>"
+
+
+FIM_DA_FONTE = {"type": "queue-operation", "operation": "enqueue",
+                "content": _aviso(
+                    "<task-id>bqwpma178</task-id>\n<status>completed</status>\n"
+                    "<summary>Monitor \"commit\" stream ended</summary>")}
+EXPIROU = {"type": "attachment", "attachment": {
+    "type": "queued_command", "prompt": _aviso(
+        "<task-id>bqwpma178</task-id>\n<summary>Monitor event</summary>\n"
+        "<event>[Monitor expired after 10m with no events delivered.]</event>")}}
+TIMED_OUT = {"type": "user", "message": {"role": "user", "content": _aviso(
+    "<task-id>bqwpma178</task-id>\n<event>[Monitor timed out — re-arm if "
+    "needed.]</event>")}}
+FALHOU, MORTO = ({"type": "queue-operation", "operation": "enqueue",
+                  "content": _aviso(f"<task-id>bqwpma178</task-id>\n"
+                                    f"<status>{st}</status>")}
+                 for st in ("failed", "killed"))
+AINDA_RODANDO = {"type": "queue-operation", "operation": "enqueue",
+                 "content": _aviso("<task-id>bqwpma178</task-id>\n"
+                                   "<status>running</status>")}
+TASKSTOP_TARDIO = [{"type": "tool_result", "tool_use_id": "tu_4",
+                    "content": "<tool_use_error>No task found with ID: "
+                               "bqwpma178</tool_use_error>"}]
+
+
+def _transcript_misto(tmp, linhas):
+    caminho = tmp / "t.jsonl"
+    with caminho.open("w", encoding="utf-8") as f:
+        for l in linhas:
+            if isinstance(l, list):
+                l = {"type": "assistant", "message": {"content": l}}
+            f.write(json.dumps(l, ensure_ascii=False) + "\n")
+    return caminho
+
+
+def test_vigia_que_termina_sozinho_nao_barra_a_parada():
+    import tempfile
+    for nome, fim in (("fonte acabou (status completed)", FIM_DA_FONTE),
+                      ("expirou aos 10 min", EXPIROU),
+                      ("timed out", TIMED_OUT),
+                      ("status failed", FALHOU),
+                      ("status killed", MORTO),
+                      ("TaskStop respondeu que a tarefa não existe",
+                       TASKSTOP_TARDIO)):
+        with tempfile.TemporaryDirectory() as d:
+            c = _transcript_misto(Path(d), [ARMA_VIGIA, fim])
+            p, saida = roda_stop(c)
+            check(f"vigia encerrado sozinho ({nome}): a parada passa",
+                  not saida and p.returncode == 0,
+                  f"saiu {p.returncode}: {p.stdout[:160]}")
+
+
+def test_aviso_nao_terminal_ou_citado_nao_solta_o_vigia():
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        c = _transcript_misto(Path(d), [ARMA_VIGIA, AINDA_RODANDO])
+        _, saida = roda_stop(c)
+        check("aviso com status running não encerra o vigia",
+              saida.get("decision") == "block", json.dumps(saida)[:160])
+    with tempfile.TemporaryDirectory() as d:
+        citado = [{"type": "text", "text": FIM_DA_FONTE["content"]}]
+        c = _transcript_misto(Path(d), [ARMA_VIGIA, citado])
+        _, saida = roda_stop(c)
+        check("o agente citar o aviso não encerra o vigia",
+              saida.get("decision") == "block", json.dumps(saida)[:160])
+    with tempfile.TemporaryDirectory() as d:
+        outro = {"type": "queue-operation", "content": _aviso(
+            "<task-id>outra123</task-id>\n<status>completed</status>")}
+        c = _transcript_misto(Path(d), [ARMA_VIGIA, outro])
+        _, saida = roda_stop(c)
+        check("fim de OUTRA tarefa não encerra este vigia",
+              saida.get("decision") == "block", json.dumps(saida)[:160])
+
+
 def test_parada_fora_da_janela_passa():
     import tempfile
     with tempfile.TemporaryDirectory() as d:

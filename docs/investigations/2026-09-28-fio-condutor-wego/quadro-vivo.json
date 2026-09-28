@@ -1,0 +1,30 @@
+{
+  "cards": [
+    {"key": "WEGO-1437", "status": "To Do"},
+    {"key": "WEGO-1436", "status": "To Do"},
+    {"key": "WEGO-1434", "status": "To Do"},
+    {"key": "WEGO-1412", "status": "Done"},
+    {"key": "WEGO-1981", "status": "To Do"},
+    {"key": "WEGO-1962", "status": "Done"},
+    {"key": "WEGO-1974", "status": "Done"},
+    {"key": "WEGO-1550", "status": "In Review"},
+    {"key": "WEGO-1982", "status": "In Review"},
+    {"key": "WEGO-1973", "status": "In Progress"},
+    {"key": "WEGO-1757", "status": "Done"},
+    {"key": "WEGO-1394", "status": "Done"},
+    {"key": "WEGO-1389", "status": "Descartados"},
+    {"key": "WEGO-1390", "status": "Descartados"},
+    {"key": "WEGO-1391", "status": "Descartados"},
+    {"key": "WEGO-1392", "status": "Descartados"},
+    {"key": "WEGO-1393", "status": "Descartados"},
+    {"key": "WEGO-1395", "status": "Descartados"},
+    {"key": "WEGO-1396", "status": "Descartados"},
+    {"key": "WEGO-1397", "status": "Descartados"},
+    {"key": "WEGO-1398", "status": "Descartados"},
+    {"key": "WEGO-1414", "status": "Descartados"},
+    {"key": "WEGO-1416", "status": "Descartados"},
+    {"key": "WEGO-1415", "status": "Descartados"},
+    {"key": "WEGO-1406", "status": "In Review"}
+  ],
+  "missing": []
+}

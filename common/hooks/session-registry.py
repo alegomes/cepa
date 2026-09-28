@@ -33,7 +33,11 @@ def emit_context(text: str) -> None:
     }))
 
 
-def resume_notice(session_id: str, cwd: str, root: str):
+# A marca que o `cepa-until` exporta para cada rodada (ver ENV_JANELA lá).
+ENV_JANELA = "CEPA_UNTIL_RUN"
+
+
+def resume_notice(session_id: str, cwd: str, root: str, env=None):
     """Direct lookup of this branch's handoff, left by a previous session.
 
     Branch-keyed, so no scan: the new session knows its own branch. We offer the
@@ -41,10 +45,24 @@ def resume_notice(session_id: str, cwd: str, root: str):
     this same tree (that's the overlap case, handled separately), and fresh.
     Returns the context block (with its own "don't announce" rule) or None.
     """
+    env = os.environ if env is None else env
     branch = L.current_branch(cwd)
     path = H.handoff_path(root, branch)
     if not path.exists():
         return None
+    # Rodada do cepa-until: cada rodada é um `claude -p` novo na MESMA worktree
+    # e no MESMO branch, então o handoff é o da rodada anterior, sobre OUTRO
+    # item. Entregá-lo com "siga de onde parou" fez a rodada do WEGO-2321
+    # reescrever o relatório do WEGO-2337 (run 2026-09-27-0832). O item da
+    # rodada é o que o drain-plan reservar. Não reserva o handoff: o dono ainda
+    # o retoma de manhã.
+    if env.get(ENV_JANELA):
+        return (
+            "[resume] Handoff deste branch NÃO entregue: esta sessão é uma rodada "
+            "do cepa-until, e o handoff é da rodada anterior, sobre outro item. "
+            "O seu item é o que o /common:drain-plan reservar com `cepa-plan start`; "
+            "não continue trabalho de outro id."
+        )
     meta, auto, note = H.parse(path)
     if meta.get("session_id") == session_id:
         return None  # already ours

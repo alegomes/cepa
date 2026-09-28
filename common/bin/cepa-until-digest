@@ -27,6 +27,7 @@ Uso:
 
 import argparse
 import json
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -120,13 +121,39 @@ def itens_do_plano(caminho_plano):
             if isinstance(it, dict)}
 
 
+def plano_da_fila(ledger, fila):
+    """O plan.yaml de verdade: o do clone PRINCIPAL, não o da árvore de onde o
+    `cepa-until` largou.
+
+    O registro mora em `<árvore>/.claude/programs/<fila>/until/`. Quando essa
+    árvore é uma worktree ligada, o plan.yaml ao lado dele é uma cópia que
+    ninguém atualiza: quem grava a fila é o `cepa-plan`, sempre no clone
+    principal (o pai de `git rev-parse --git-common-dir`, a mesma regra do
+    `raiz_principal` dele). Em 2026-09-26 este resumo leu a cópia e mostrou 21
+    itens `pending` que já estavam fechados. Fora de um repo git, sobra a
+    vizinha do registro.
+    """
+    vizinho = ledger.parent.parent / "plan.yaml"
+    r = subprocess.run(["git", "-C", str(ledger.parent), "rev-parse",
+                        "--git-common-dir"], capture_output=True, text=True)
+    if r.returncode != 0:
+        return vizinho
+    comum = Path(r.stdout.strip())
+    if not comum.is_absolute():
+        comum = (ledger.parent / comum).resolve()
+    raiz = comum.parent if comum.name == ".git" else comum
+    return raiz / ".claude" / "programs" / (fila or ledger.parent.parent.name) \
+        / "plan.yaml"
+
+
 def monta(ledger, result_max):
     ledger = Path(ledger).resolve()
     log = ledger.with_suffix(".log")
     eventos = le_jsonl(ledger)
     inicio = next((e for e in eventos if e.get("evento") == "run_start"), {})
     fim = next((e for e in eventos if e.get("evento") == "run_end"), {})
-    plano = itens_do_plano(ledger.parent.parent / "plan.yaml")
+    caminho_plano = plano_da_fila(ledger, inicio.get("fila"))
+    plano = itens_do_plano(caminho_plano)
 
     rodadas = [s for s in segmentos_do_log(log) if " · verify · " not in s[0]
                and "/common:until-review" not in s[0]]
@@ -213,7 +240,7 @@ def monta(ledger, result_max):
         if st.get("id") not in tocados:
             tocados.append(st.get("id"))
     out.append("## Estado ATUAL na fila dos itens tocados")
-    out.append("(lido do plan.yaml agora, não do momento do run)")
+    out.append(f"(lido agora de `{caminho_plano}`, não do momento do run)")
     for ident in tocados:
         it = plano.get(str(ident))
         if not it:

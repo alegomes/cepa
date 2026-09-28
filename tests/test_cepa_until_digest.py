@@ -119,6 +119,39 @@ def test_pareamento_que_nao_fecha_e_avisado():
               "ATENÇÃO: 2 item_start" in p.stdout, p.stdout[:800])
 
 
+def test_estado_da_fila_vem_do_clone_principal_nao_da_worktree():
+    """O registro mora na árvore de onde o `cepa-until` largou. Se ela é uma
+    worktree ligada, o plan.yaml dela é uma cópia velha; a fila de verdade é a
+    do clone principal (mesma regra do `cepa-plan`). Em 2026-09-26 o resumo
+    leu a cópia e mostrou 21 itens `pending` que já estavam fechados."""
+    with tempfile.TemporaryDirectory() as tmp:
+        principal = Path(tmp) / "principal"
+        principal.mkdir()
+        g = lambda *a, cwd=principal: subprocess.run(
+            ["git", *a], cwd=str(cwd), capture_output=True, text=True, check=True)
+        g("init", "-q")
+        g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
+          "--allow-empty", "-m", "raiz")
+        wt = Path(tmp) / "wt"
+        g("worktree", "add", "-q", "--detach", str(wt))
+        ledger = monta_run(wt)  # cópia velha na worktree: A2 blocked
+        fila = principal / ".claude" / "programs" / "F"
+        fila.mkdir(parents=True)
+        (fila / "plan.yaml").write_text(yaml.safe_dump({"items": [
+            {"id": "A1", "status": "done", "blocked_by": [],
+             "evidence": "commits abc; build verde"},
+            {"id": "A2", "status": "done", "blocked_by": [],
+             "evidence": "FECHADO NO CLONE PRINCIPAL"}]}), encoding="utf-8")
+        p = roda(ledger)
+        check("lê o estado da fila do clone principal",
+              "FECHADO NO CLONE PRINCIPAL" in p.stdout, p.stdout[-900:])
+        check("não lê a cópia velha da worktree",
+              "depende do A1 que não está na main" not in p.stdout)
+        check("diz de qual arquivo leu a fila",
+              str((fila / "plan.yaml").resolve()) in p.stdout
+              or str(fila / "plan.yaml") in p.stdout, p.stdout[-900:])
+
+
 def test_registro_inexistente_sai_2():
     p = roda("/nao/existe.jsonl")
     check("registro inexistente sai 2", p.returncode == 2, p.stderr)

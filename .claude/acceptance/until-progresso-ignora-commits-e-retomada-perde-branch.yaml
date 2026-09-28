@@ -1,0 +1,103 @@
+item: until-progresso-ignora-commits-e-retomada-perde-branch
+status: complete
+titulo: >-
+  cepa-until: item morto com commits conta como sem progresso, e o run
+  seguinte retoma a reserva orfa a partir da main sem os commits dela
+diff: d88110a..97b43ec
+arquivos:
+  - common/bin/cepa-until
+  - tests/test_cepa_until_retomada.py
+fora_de_escopo:
+  - descricao: >-
+      Parte (3) do "por que" do item: o qa-engineer abrindo uma worktree
+      descartável e apresentando o build verde de outro módulo, e tornar isso
+      visível no cepa-until-digest.
+    razao: >-
+      Explicitamente marcado como fora de escopo no enunciado do audit; não é
+      um gap deste diff, é um item separado.
+criterios:
+  - id: AC1
+    descricao: >-
+      Tentativa que deixa commits na branch da noite mas sem status terminal
+      registra progresso:true no item_end, não conta para o disjuntor nem
+      para o teto de tentativas-por-item, e a tela diz "N commit(s) sem
+      fechar".
+    altitude: cli
+    surface: >-
+      `cepa-until` end-to-end com `claude` falso; observado via ledger
+      .jsonl (item_end.progresso, item_end.commits) e stdout.
+    test: tests/test_cepa_until_retomada.py::test_item_que_commitou_sem_fechar_conta_como_progresso
+    layer: cli-e2e
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until_retomada.py -> "✓ tudo verde" (6 testes,
+      22 checks, 0 falhas); confirmado também via
+      `tests/run-all.sh cepa_until` -> "arquivos rodados: 9 de 9 / tudo
+      verde" (inclui test_cepa_until_retomada.py).
+    status: complete
+  - id: AC2
+    descricao: >-
+      Tentativa sem commit e sem desfecho permanece progresso:false (o
+      disjuntor continua disparando).
+    altitude: cli
+    surface: mesma acima (ledger .jsonl item_end.progresso + stdout "· disjuntor")
+    test: tests/test_cepa_until_retomada.py::test_item_sem_commit_e_sem_desfecho_continua_sem_progresso
+    layer: cli-e2e
+    evidence: verified
+    run: "python3 tests/test_cepa_until_retomada.py -> ok em ambos os checks do teste"
+    status: complete
+  - id: AC3
+    descricao: >-
+      Na largada, item ainda aberto na fila cuja última execução anterior
+      teve commits>0 no item_end e cuja branch until/<old> existe e não é
+      ancestral do HEAD do clone faz a branch da noite nascer com essa
+      branch mesclada; run_start registra herdou:[{branch,itens,commits}];
+      banner e resumo final avisam; o clone não recebe nada.
+    altitude: cli
+    surface: >-
+      `cepa-until` end-to-end com item_end de um run anterior fabricado no
+      ledger e branch until/<old> real no repo; observado via ledger
+      run_start.herdou, stdout, git log da branch nova e do clone.
+    test: tests/test_cepa_until_retomada.py::test_retomada_da_reserva_orfa_herda_os_commits_do_run_anterior
+    layer: cli-e2e
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until_retomada.py -> todos os 5 checks do
+      teste ok, incluindo "a branch nova tem o commit antigo e o novo" e
+      "o clone principal não recebeu nada".
+    status: complete
+  - id: AC4
+    descricao: >-
+      Branch já mesclada, ou run anterior onde o item teve 0 commits, não é
+      herdada.
+    altitude: cli
+    surface: mesma acima (run_start.herdou vazio)
+    test: >-
+      tests/test_cepa_until_retomada.py::test_branch_ja_mesclada_nao_e_herdada
+      e ::test_run_anterior_sem_commit_do_item_nao_e_herdado
+    layer: cli-e2e
+    evidence: verified
+    run: "python3 tests/test_cepa_until_retomada.py -> ambos os testes ok"
+    status: complete
+  - id: AC5
+    descricao: >-
+      Herança com conflito de merge recusa a largada (exit 2), stderr nomeia
+      a branch e `git merge`, nenhum item roda, não sobra worktree nem
+      branch until/ nova, e a reserva órfã continua in_progress.
+    altitude: cli
+    surface: >-
+      `cepa-until` end-to-end forçando conflito real de merge; observado via
+      returncode, stderr, `git branch --list until/*`, diretório de
+      worktrees e status do item no plan.yaml.
+    test: tests/test_cepa_until_retomada.py::test_heranca_que_conflita_recusa_a_largada_sem_deixar_rastro
+    layer: cli-e2e
+    evidence: verified
+    run: >-
+      python3 tests/test_cepa_until_retomada.py -> todos os 6 checks do
+      teste ok (rc==2, branch+"git merge" no stderr, nenhum item rodou,
+      só sobra a branch antiga, sem worktree, item segue in_progress).
+    status: complete
+regressao:
+  comando: "tests/run-all.sh cepa_until"
+  resultado: "9 de 9 arquivos ok, tudo verde (inclui test_cepa_until.py e os 7 demais arquivos da família)"
+  evidence: verified
