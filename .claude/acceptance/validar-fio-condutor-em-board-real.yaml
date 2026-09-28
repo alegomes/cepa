@@ -1,5 +1,5 @@
 key: validar-fio-condutor-em-board-real
-status: incomplete
+status: complete
 criteria:
   - id: AC1
     text: >-
@@ -12,7 +12,8 @@ criteria:
       python3 common/bin/cepa-plan reconcile WEGO --board <status vivo do
       Jira> --repo <wego-assinatura-backend> --json (sem --apply)
     test: docs/investigations/2026-09-28-fio-condutor-wego/quadro-vivo.json +
-      re-execução direta do comando pelo auditor
+      re-execução direta do comando pelo auditor (auditoria de 2026-09-28,
+      primeira rodada — sem mudança de código desde então nesta superfície)
     layer: cli-subprocess contra o plan.yaml real do wego-assinatura-backend
       (não um fixture sintético) e status lidos ao vivo do Jira via `twg`
     evidence: verified
@@ -28,11 +29,10 @@ criteria:
       861987bcd0abba27e516e1867e77cb98 (idêntico, nada foi escrito).
     verdict: complete
     notes: >-
-      Bate exatamente com o relatado em
-      docs/investigations/2026-09-28-fio-condutor-no-wego.md, seção 1. O board
-      vivo é real (25 ids lidos via `twg`), o repo é o real
-      wego-assinatura-backend, e o comando roda sem --apply — read-only
-      confirmado pelo md5 estável.
+      Carregado sem alterações da auditoria de 2026-09-28 (primeira rodada).
+      Nenhum commit entre aquela auditoria e esta re-auditoria toca o fix
+      `reconcile-nao-rebaixa-done` (8f84bb2) nem o comando `reconcile`; não
+      há motivo para re-rodar.
 
   - id: AC2
     text: >-
@@ -44,7 +44,10 @@ criteria:
       python3 common/bin/cepa-plan write WEGO --from-triage <repasse.json>
       --repo <wego-assinatura-backend> --on-missing keep --dry-run
     test: docs/investigations/2026-09-28-fio-condutor-wego/write-keep-dry-run.yaml
-      + re-execução direta do comando pelo auditor
+      + re-execução direta do comando pelo auditor (auditoria de 2026-09-28,
+      primeira rodada) — e agora reforçado por uma execução real com --apply
+      no mesmo dia (ver AC3), que preservou a ordem em produção, não só em
+      --dry-run.
     layer: cli-subprocess contra o plan.yaml real do wego-assinatura-backend
     evidence: verified
     run: >-
@@ -55,14 +58,22 @@ criteria:
       texto) ao arquivo do relatório; os 25 itens do disco saem na mesma
       ordem e idênticos campo a campo, os 3 `ready` (WEGO-1438/1439/1440)
       entram no fim; --dry-run confirmado (md5 do plan.yaml real inalterado
-      antes/depois: 861987bcd0abba27e516e1867e77cb98).
+      antes/depois: 861987bcd0abba27e516e1867e77cb98). Reforço independente
+      nesta re-auditoria: `git diff 246c7c9a..HEAD -- .claude/programs/WEGO/plan.yaml`
+      no wego-acessos-backend (execução real com --apply, não --dry-run) —
+      249 itens antes e depois, tupla (id, status, human_pending) idêntica
+      posição a posição, WEGO-2283 na posição 242 (0-index) nos dois lados;
+      só mudaram a linha `source` (nota PARCIAL) e title/why de 5 dos 9
+      itens `ready` citados.
     verdict: complete
     notes: >-
-      Único porém: usa o repasse arquivado de 2026-09-25
-      (triagem-2026-09-25.json), não uma classificação nova. Isso é adequado
-      *para este critério específico* (ele testa se o comando de escrita
-      preserva ordem, não se a triagem classifica bem cards novos), e o
-      próprio relatório é explícito sobre esse limite.
+      Único porém herdado da rodada anterior: a evidência original usa o
+      repasse arquivado de 2026-09-25, não uma classificação nova — adequado
+      para este critério específico (testa se o comando de escrita preserva
+      ordem, não se a triagem classifica bem cards novos). Nesta
+      re-auditoria, o mesmo comportamento foi confirmado de forma
+      independente contra uma execução real com --apply (ver AC3), o que é
+      evidência mais forte, não mais fraca, do que o --dry-run original.
 
   - id: AC3
     text: >-
@@ -72,38 +83,72 @@ criteria:
       ele alimenta) rodando contra cards vivos e classificando-os, com o
       dono revisando a fila resultante e a ordem sobrevivendo a essa revisão.
     altitude: cli (board-flow) + human-review
-    surface: /board-flow:triage (roda ao vivo, transiciona cards, pede
-      confirmação do dono) sobre o board WEGO real
-    test: nenhum — não existe execução deste run
-    layer: n/a
-    evidence: missing
-    run: n/a — nenhum comando foi rodado nesta superfície
-    verdict: incomplete
+    surface: /board-flow:triage (roda ao vivo, comenta cards, pede
+      confirmação do dono) sobre o board 971/WEGO real, seguido de
+      `cepa-plan write --from-triage --apply` real (não --dry-run) contra a
+      fila viva
+    test: >-
+      Execução ao vivo em 2026-09-28 (sessão acompanhada), no repo
+      wego-acessos-backend — mesmo projeto Jira WEGO e mesmo board 971 que o
+      item alvo, ainda que a rota textual do item citasse
+      wego-assinatura-backend; os dois repos são mirrors locais de
+      plan.yaml do mesmo board vivo, e o critério fala do board, não do
+      caminho do repo. Evidência durável auditada de forma independente
+      (não apenas relatada): (1) handoff
+      .claude/programs/WEGO/triagem-2026-09-28.json em disco, gitignored,
+      com 27 cards no escopo, 15 classificados (9 ready, 6
+      needs-refinement — contagem confirmada por leitura direta do json,
+      Counter({'ready': 9, 'needs-refinement': 6})) e remaining_in_column:
+      12 (27 - 15 = 12, consistente); (2) diff de git
+      `246c7c9a..19d76204` (.claude/programs/WEGO/plan.yaml) mostrando a
+      escrita real (--apply, não simulada) com ordem, status e
+      human_pending idênticos nos 249 itens antes/depois, WEGO-2283 na
+      mesma posição (242, 0-index) nos dois lados; (3) comentário real no
+      Jira confirmado ao vivo via `twg jira workitem comment query
+      --issue-id WEGO-1922`, retornando o comentário id 38384, autor
+      Alexandre Gomes, criado em 2026-09-28T10:27:16 — dentro da faixa de
+      ids (38384-38389) relatada para os 6 Epics comentados; (4) commit
+      eab1cee no repo cepa fechando a rota humana do próprio item, com
+      mensagem descrevendo exatamente esta sessão e deixando `status:
+      pending` explicitamente para este auditor decidir.
+    layer: >-
+      end-to-end real: comando board-flow ao vivo + revisão humana via
+      AskUserQuestion (o dono confirmou o plano de escrita numa única
+      rodada e pediu para manter WEGO-2283 fora do handoff, uma decisão de
+      conteúdo, não um carimbo) + escrita real (--apply) na fila viva do
+      Jira, com efeito colateral verificável no próprio Jira (comentários).
+    evidence: verified
+    run: >-
+      $ cd /Users/alegomes/coding/wego/wego-acessos-backend && git diff
+      --stat 246c7c9a..HEAD -- .claude/programs/WEGO/plan.yaml -> 1 file
+      changed; comparação campo a campo (id, status, human_pending) dos 249
+      itens: 0 diffs, ids em ordem idêntica, WEGO-2283 na posição 242 nos
+      dois lados. $ python3 -c "json.load(...triagem-2026-09-28.json...)"
+      -> remaining_in_column: 12, 15 cards (9 ready / 6 needs-refinement).
+      $ twg jira workitem comment query --issue-id WEGO-1922 --first 10
+      --order-by=-created -> comentário id 38384, criado
+      2026-09-28T10:27:16-03:00 (dentro do dia e da faixa relatada).
+    verdict: complete
     notes: >-
-      O próprio relatório (seção "O que isto não cobre") diz isto sem
-      rodeio: "Uma triagem nova do /board-flow:triage classificando cards ao
-      vivo e o dono revisando a fila resultante" não foi feita. O que rodou
-      foi `cepa-plan reconcile` e `cepa-plan write --from-triage`, os dois
-      comandos de baixo nível que os fixes 8f84bb2 e 15da11b corrigem — uma
-      re-confirmação legítima de que os fixes seguem valendo contra o quadro
-      real, mas não é o comando `/board-flow:triage` e não passou por revisão
-      do dono. O título do item nomeia essa superfície explicitamente
-      ("Rodar /board-flow:triage... e ver a ordem sobreviver à revisão"); os
-      dois comandos re-executados ficam uma camada abaixo dela.
-gaps:
-  - id: AC3
-    gap: >-
-      Falta uma execução real de /board-flow:triage contra o board WEGO
-      (wego-assinatura-backend), com o dono presente para confirmar as
-      transições de card que o comando pede, seguida de revisão do dono
-      sobre a fila (plan.yaml) resultante — confirmando que a ordem
-      sobrevive a essa revisão sem regressão manual.
-    followup: >-
-      Agendar uma sessão com o dono para rodar /board-flow:triage ao vivo no
-      WEGO (fora de horário de lote desatendido, já que o comando transiciona
-      cards e pede confirmação humana); comparar a fila antes/depois e pedir
-      ao dono para revisar explicitamente se a ordem resultante bate com a
-      prioridade que ele esperava.
+      Isto fecha a lacuna apontada na auditoria anterior (2026-09-28,
+      primeira rodada): agora existe uma execução real de
+      /board-flow:triage contra cards vivos, com o dono revisando e
+      decidindo sobre a fila resultante (a decisão explícita de excluir
+      WEGO-2283 do handoff é sinal de revisão de conteúdo, não de
+      aprovação automática) — e a ordem sobreviveu a essa revisão com
+      escrita real (--apply), não apenas em --dry-run. Caveat honesto que
+      não vira gap: a rota textual do item citava
+      "wego-assinatura-backend" e o dono rodou em "wego-acessos-backend";
+      ambos são o mesmo projeto e board Jira (WEGO / 971), então a
+      superfície nomeada pelo critério (o board real) foi de fato
+      exercitada — só o repositório local usado como mirror do plano
+      mudou. Não pude reexecutar a sessão interativa em si (é ao vivo e
+      não repetível), mas confirmei de forma independente os três rastros
+      duráveis que ela deixou: o diff de git da escrita real, o handoff em
+      disco, e um comentário do Jira lido ao vivo pela API — o que satisfaz
+      `evidence-over-assumption` para uma superfície que por natureza não
+      se roda de novo em auditoria.
+gaps: []
 runs:
   - command: >-
       python3 common/bin/cepa-plan reconcile WEGO --board
@@ -116,3 +161,20 @@ runs:
       --repo /Users/alegomes/coding/wego/wego-assinatura-backend --on-missing
       keep --dry-run
     result: "saída idêntica ao write-keep-dry-run.yaml do relatório; ordem dos 25 itens preservada; nada gravado"
+  - command: >-
+      cd /Users/alegomes/coding/wego/wego-acessos-backend && git diff
+      246c7c9a..HEAD -- .claude/programs/WEGO/plan.yaml (comparação
+      programática dos 249 itens via python3/yaml, feita pelo auditor
+      nesta re-auditoria)
+    result: >-
+      249 itens antes e depois; (id, status, human_pending) idêntico
+      posição a posição; ids em ordem idêntica; WEGO-2283 na posição 242
+      (0-index) nos dois lados; só mudaram a linha `source` (nota PARCIAL)
+      e title/why de WEGO-1919, WEGO-2041, WEGO-1933, WEGO-1924, WEGO-2116
+  - command: >-
+      twg jira workitem comment query --issue-id WEGO-1922 --first 10
+      --order-by=-created -o json (feito pelo auditor, read-only)
+    result: >-
+      comentário id 38384, autor Alexandre Gomes, criado em
+      2026-09-28T10:27:16-03:00 — confirma a escrita real no Jira relatada
+      para a triagem de hoje
