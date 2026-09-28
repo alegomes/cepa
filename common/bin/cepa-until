@@ -109,7 +109,13 @@ ficaram sem uso, e o item em voo perdeu o que já tinha feito. Duas regras:
     no meio não perde o trabalho: a worktree dele fica no disco com o que já
     foi feito e o `start` do próximo run reivindica a reserva órfã e retoma
     dali (o WEGO-2293, cortado aos 30min em 2026-09-18, fechou no run
-    seguinte em 1h05). Já parar deixa a janela toda sem uso: em 2026-09-18 o
+    seguinte em 1h05). O run seguinte nasce do HEAD do clone, então os
+    commits que o item deixou na branch da noite anterior só chegam a ele
+    pela HERANÇA: na largada, a branch que guarda commits de um item ainda
+    aberto na fila, e que o clone não tem, é mesclada na branch nova (em
+    27/09 o WEGO-2283 recomeçou do zero com 15 commits parados em
+    `until/2026-09-27-1632`). Mescla com conflito recusa a largada. Já parar
+    deixa a janela toda sem uso: em 2026-09-18 o
     supervisor parou às 19:45 com 24% de cota e 1h35 de janela sobrando.
     Meio item vale mais do que zero — o supervisor avisa que o item
     provavelmente será cortado, registra `cota_apertada` e segue.
@@ -829,9 +835,61 @@ def cabeca(arvore):
     return saida if codigo == 0 else None
 
 
-def abre_branch_da_noite(repo, run_id):
+def heranca_do_run_anterior(repo, fila, caminho_plano):
+    """As branches de runs anteriores que guardam commits de um item que
+    ficou pela metade e que o clone ainda não tem. Lista de
+    {"branch", "itens", "commits"}, da mais antiga para a mais nova.
+
+    Em 27/09 o WEGO-2283 foi morto pela folga com 15 commits em
+    `until/2026-09-27-1632`. O run seguinte nasceu do HEAD do clone, o `start`
+    reivindicou a reserva órfã e o item recomeçou do zero, porque os commits
+    dele estavam na branch da noite anterior. O registro do run é quem sabe
+    onde eles estão: para cada item ainda aberto na fila, o `.jsonl` mais
+    novo que o executou diz a branch, e o `item_end` diz se houve commit."""
+    try:
+        plano = yaml.safe_load(Path(caminho_plano).read_text(encoding="utf-8"))
+    except (OSError, TypeError, yaml.YAMLError):
+        return []
+    abertos = {str(it.get("id")) for it in (plano or {}).get("items") or []
+               if str(it.get("status") or "pending").strip().lower()
+               not in TERMINAIS}
+    d = repo / ".claude" / "programs" / fila / "until"
+    vistos, por_branch = set(), {}
+    for reg in sorted(d.glob("*.jsonl"), reverse=True):
+        try:
+            eventos = [json.loads(l) for l in
+                       reg.read_text(encoding="utf-8").splitlines() if l.strip()]
+        except (OSError, ValueError):
+            continue
+        branch = next((e.get("branch") for e in eventos
+                       if e.get("evento") == "run_start"), None)
+        fins = {}
+        for e in eventos:
+            if e.get("evento") == "item_end" and str(e.get("id")) in abertos:
+                fins.setdefault(str(e["id"]), []).append(e)
+        for ident, lista in fins.items():
+            if ident in vistos:
+                continue
+            vistos.add(ident)
+            if branch and any((e.get("commits") or 0) > 0 for e in lista):
+                por_branch.setdefault((reg.name, branch), []).append(ident)
+    heranca = []
+    for (_, branch), itens in sorted(por_branch.items()):
+        if git(["rev-parse", "--verify", "-q", f"refs/heads/{branch}"],
+               repo)[0] != 0:
+            continue
+        if git(["merge-base", "--is-ancestor", branch, "HEAD"], repo)[0] == 0:
+            continue
+        c, n = git(["rev-list", "--count", f"HEAD..{branch}"], repo)
+        heranca.append({"branch": branch, "itens": sorted(itens),
+                        "commits": int(n) if c == 0 and n.isdigit() else None})
+    return heranca
+
+
+def abre_branch_da_noite(repo, run_id, heranca=()):
     """Cria `until/<run>` a partir do HEAD do clone e a worktree dela fora da
-    árvore sincronizada. Devolve (arvore, branch, erro)."""
+    árvore sincronizada, e mescla nela as branches de `heranca`. Devolve
+    (arvore, branch, erro). Com erro, não sobra nem worktree nem branch."""
     branch = f"until/{run_id}"
     casa = Path(os.environ.get(ENV_CASA_WORKTREES)
                 or Path.home() / "cepa-worktrees")
@@ -841,6 +899,19 @@ def abre_branch_da_noite(repo, run_id):
                          "HEAD"], repo)
     if codigo != 0:
         return None, branch, saida or f"`git worktree add` saiu {codigo}"
+    for h in heranca:
+        codigo, saida = git(["merge", "--no-edit", h["branch"]], arvore)
+        if codigo != 0:
+            git(["merge", "--abort"], arvore)
+            git(["worktree", "remove", "--force", str(arvore)], repo)
+            git(["branch", "-D", branch], repo)
+            return None, branch, (
+                f"a branch `{h['branch']}` guarda commits de "
+                f"{', '.join(h['itens'])}, que ficou pela metade no run "
+                f"anterior, e não mescla com o HEAD do clone:\n{saida[-800:]}\n"
+                f"Mescle à mão no clone (`git merge {h['branch']}`), resolva o "
+                "conflito e rode de novo. Começar sem ela faria o item "
+                "recomeçar do zero")
     return arvore, branch, None
 
 
@@ -1159,6 +1230,11 @@ def main(argv=None):
              else "--dangerously-skip-permissions LIGADO"))
     print(f"  branch noite: until/{run_id} (worktree fora da árvore; nada vai "
           "para a main nem para o origin)")
+    heranca = heranca_do_run_anterior(repo, a.fila, dados.get("path"))
+    for h in heranca:
+        print(f"  herda       : `{h['branch']}` ({h['commits']} commit(s) que o "
+              f"clone não tem) — {', '.join(h['itens'])} ficou pela metade "
+              "lá, e a branch da noite nasce com esses commits")
     print(f"  build       : " + (f"{verify} depois de cada item done "
                                  f"({origem_verify})" if verify else
                                  f"dispensado ({origem_verify})"))
@@ -1185,16 +1261,19 @@ def main(argv=None):
         with ledger.open("a", encoding="utf-8") as f:
             f.write(json.dumps(evento, ensure_ascii=False) + "\n")
 
-    arvore, branch_largada, erro = abre_branch_da_noite(repo, run_id)
+    arvore, branch_largada, erro = abre_branch_da_noite(repo, run_id, heranca)
     if erro:
         print(f"cepa-until: não consegui criar a branch da noite "
               f"`{branch_largada}`: {erro}", file=sys.stderr)
         return 2
+    # Com herança, a base é o HEAD DEPOIS da mescla: o que a noite conta como
+    # "commits sobre a largada" é o que ela fez, não o que herdou.
     base_da_noite = cabeca(arvore)
     registra({"evento": "run_start", "fila": a.fila, "prazo": prazo.isoformat(),
               "max_falhas": a.max_falhas, "max_travados": a.max_travados,
               "branch": branch_largada,
               "arvore": str(arvore), "base": base_da_noite,
+              "herdou": heranca,
               "branch_do_clone": branch_atual(repo), "verify": verify})
     # O que a noite ENTREGOU (done com build verde na branch da noite) e o que
     # travou (`blocked`). Os dois contam como progresso para o disjuntor —
@@ -1341,27 +1420,33 @@ def main(argv=None):
                   + (f"; guardei no stash {sha[:10]}" if sha else
                      f" e NÃO consegui guardá-los: {erro_sobra}"))
 
-        depois, erro_item = le_item(caminho_plano, ident)
-        if erro_item:
-            estado, progresso = "?", False
-            pendencia = None
-        else:
-            estado = str(depois.get("status") or "pending").strip().lower()
-            pendencia = depois.get("human_pending")
-            progresso = estado in TERMINAIS or pendencia is not None
-
-        leituras = leituras_de_cota(saida)
-        if leituras:
-            inicios.append(leituras[0])
-            ultima_leitura = leituras[-1]
-            leitura_fresca = leituras[-1][0] > leituras[0][0]
-
         depois_head = cabeca(arvore)
         n_commits = 0
         if antes and depois_head and antes != depois_head:
             c, contagem = git(["rev-list", "--count", f"{antes}..{depois_head}"],
                               arvore)
             n_commits = int(contagem) if c == 0 and contagem.isdigit() else -1
+
+        # Commit na branch da noite é progresso, com ou sem desfecho: o
+        # WEGO-2283 morreu pela folga com 15 commits e saiu `progresso: false`,
+        # e o disjuntor e o teto de tentativas o tratariam como parado. A
+        # próxima tentativa (ou o próximo run, pela herança) parte dali.
+        depois, erro_item = le_item(caminho_plano, ident)
+        if erro_item:
+            estado = "?"
+            pendencia = None
+            progresso = n_commits > 0
+        else:
+            estado = str(depois.get("status") or "pending").strip().lower()
+            pendencia = depois.get("human_pending")
+            progresso = (estado in TERMINAIS or pendencia is not None
+                         or n_commits > 0)
+
+        leituras = leituras_de_cota(saida)
+        if leituras:
+            inicios.append(leituras[0])
+            ultima_leitura = leituras[-1]
+            leitura_fresca = leituras[-1][0] > leituras[0][0]
 
         registra({"evento": "item_end", "id": ident, "status": estado,
                   "human_pending": pendencia, "exit_code": codigo,
@@ -1530,6 +1615,8 @@ def main(argv=None):
             marca = estado
             if pendencia:
                 marca += " · rota humana em aberto"
+            if estado not in TERMINAIS and not pendencia:
+                marca += f" · {n_commits} commit(s) sem fechar"
             print(f"          → {marca} ({humano(timedelta(seconds=gasto))})")
 
             if estado == "blocked":
@@ -1666,6 +1753,9 @@ def main(argv=None):
               f"({n if c == 0 else '?'} commit(s) sobre a largada), em {arvore}")
         print(f"   para aterrissar: no clone, `git merge {branch_largada}` (ou "
               f"/common:worktree-merge), build completo, push")
+        for h in heranca:
+            print(f"   ela já contém `{h['branch']}` (herdada na largada): "
+                  "mesclar a da noite leva as duas")
     print(f"\n   registro: {ledger}")
     print(f"   saída do claude: {log}")
 
