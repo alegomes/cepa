@@ -461,7 +461,10 @@ items:
   evidence: 'Condicao de fora: /maestro:run exige o herdr rodando (binario em /opt/homebrew/bin/herdr,
     processo fora do ar em 2026-09-25). Dono decidiu no drain-plan de 2026-09-25
     nao subir o herdr num lote desatendido (4 worktrees por onda, caro, sem acompanhamento).
-    Quem resolve: o dono, numa sessao acompanhada com herdr de pe.'
+    Quem resolve: o dono, numa sessao acompanhada com herdr de pe. Atualizado em
+    2026-09-28: o herdr esta de pe (processos 2085 e 2094, sessao do dono rodando
+    dentro dele); a condicao que sobra e so a decisao de 2026-09-25, rodar a onda
+    acompanhado e nao num lote desatendido.'
 - id: rodar-onda-lotes-2026-08-23
   title: Rodar a onda 1 do plano de ondas lotes-2026-08-23 (4 slices)
   why: 'mesma costura do item anterior, para o segundo plano de ondas pendente:
@@ -473,8 +476,9 @@ items:
   status: blocked
   blocked_by: []
   human_pending: null
-  evidence: 'Condicao de fora: mesma do rodar-onda-lotes-sweep-verify (herdr fora
-    do ar; dono decidiu em 2026-09-25 nao subir num lote desatendido). Alem disso
+  evidence: 'Condicao de fora: mesma do rodar-onda-lotes-sweep-verify (em 2026-09-25
+    o herdr estava fora do ar; em 2026-09-28 esta de pe, e sobra a decisao do dono
+    de nao rodar a onda num lote desatendido). Alem disso
     segue aberta a contradicao do why: P5 (cascata multi-repo) done em melhorias-2026-07
     e pendente aqui; resolver antes de rodar. Quem resolve: o dono.'
 - id: atrito-decisao-fase-1
