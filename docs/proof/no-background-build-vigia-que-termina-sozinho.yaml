@@ -1,0 +1,43 @@
+schema_version: 2
+card: no-background-build-vigia-que-termina-sozinho
+verdict: proven
+reviewed_at: 2026-09-28T06:45:00-03:00
+base_commit: 06e2906
+head_commit: 70c060b
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/no-background-build.py:pendencias/vigias_encerrados/_textos_do_harness/_VIGIA_PARADO/_AVISO_FIM", module: harness, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "não é projeto Maven/PIT; harness Python puro (hook de linha de comando), mecanismo universal de perturbação usado abaixo."
+    perturbation:
+      status: pass
+      results:
+        - "worktree descartável /tmp/proof-vigia-solo2 (git worktree add --detach a partir de 70c060b, removida ao final). GREEN inicial confirmado: `python3 tests/test_no_background_build.py` -> 'tudo verde' em HEAD, incluindo os dois casos novos do commit 70c060b (status failed / status killed)."
+        - "commit 70c060b (test(common): vigia encerrado com status failed/killed solta a parada) fecha a lacuna encontrada na rodada anterior: acrescenta FALHOU/MORTO em test_vigia_que_termina_sozinho_nao_barra_a_parada, cobrindo <status>failed</status> e <status>killed</status>, que antes não tinham caso de teste algum."
+        - "Ramo A — remover só `completed` de `_AVISO_FIM` (common/hooks/no-background-build.py:248, ficando `<status>(?:failed|killed)</status>`): `python3 tests/test_no_background_build.py` foi de GREEN para 1 falha (vigia encerrado sozinho (fonte acabou (status completed))), exit 1. RED confirmado."
+        - "Ramo B — remover só `failed` (ficando `<status>(?:completed|killed)</status>`): foi de GREEN para 1 falha (vigia encerrado sozinho (status failed)), exit 1. RED confirmado."
+        - "Ramo C — remover só `killed` (ficando `<status>(?:completed|failed)</status>`): foi de GREEN para 1 falha (vigia encerrado sozinho (status killed)), exit 1. RED confirmado. As três alternativas do enum de status terminal agora têm prova própria e isolada — o gap da rodada anterior está fechado."
+        - "Ramo D — alternativa `Monitor expired|Monitor timed out` de `_AVISO_FIM` (linha 249): já provada RED na rodada anterior (2026-09-28, mesmo hook, hash idêntico entre 7799e35 e 70c060b — `git diff 7799e35..70c060b -- common/hooks/no-background-build.py` não muda uma linha do hook, só o teste); reaproveitada, não re-executada nesta rodada."
+        - "Ramo E — filtro de linha de assistente (linha 264, `if linha.get(\"type\") == \"assistant\": return []`): já provado RED na rodada anterior pelo mesmo motivo (hook idêntico); reaproveitado."
+        - "Ramo F — casamento de task-id (linha 312, `parados.update(vigias_encerrados(texto))`): já provado RED na rodada anterior pelo mesmo motivo (hook idêntico); reaproveitado."
+        - "Ramo G — alternativa `No task found with ID` em `_VIGIA_PARADO` (linhas 233-235): já provado RED na rodada anterior pelo mesmo motivo (hook idêntico); reaproveitado."
+        - "Cada ramo A/B/C restaurado com `git checkout 70c060b -- common/hooks/no-background-build.py` antes do próximo; GREEN reconfirmado ao final de todos, antes de remover a worktree (git worktree remove --force). Árvore principal nunca tocada."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "as três alternativas do enum de status em _AVISO_FIM (completed/failed/killed, linha 248) são agora exatamente as exercitadas pelas asserções que foram RED nos ramos A/B/C da perturbação l3 acima; reachability confirmada estruturalmente pelo próprio teste do diff. Sem tooling de cobertura no harness (não é projeto com jacoco/coverage.py configurado neste repo)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff altera só a leitura do transcript de uma sessão do próprio harness (payload Stop já validado pelo `claude -p`) dentro de um hook interno; não abre endpoint HTTP nem parsing de input de terceiro não confiável — o `<task-notification>` é gerado pelo próprio harness, não por um usuário externo. Nenhuma classe tocada está em módulo input-bearing (api-rest não existe neste repo)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "worktree /tmp/proof-vigia-solo2: git checkout 06e2906 -- common/hooks/no-background-build.py (código-fonte na base, sem _textos_do_harness/vigias_encerrados/segunda alternativa de _VIGIA_PARADO) com tests/test_no_background_build.py do HEAD 70c060b. `python3 tests/test_no_background_build.py` -> 6 falhas nos seis casos de test_vigia_que_termina_sozinho_nao_barra_a_parada (fonte acabou / expirou aos 10 min / timed out / status failed / status killed / TaskStop respondeu que a tarefa não existe), exit 1. RED confirmado na base. Restaurado com git checkout 70c060b -- ."
+routing_reason: "O defeito (vigia do Monitor que termina sozinho barrando a parada indevidamente) está provado load-bearing nos seis casos: as três alternativas de status terminal (completed/failed/killed), a alternativa Monitor expired/timed out, o filtro de linha de assistente, o casamento de id e o TaskStop tardio ('No task found with ID') todos viram RED quando quebrados isoladamente, e a regressão contra a base confirma RED nos seis. O gap encontrado na rodada anterior (failed/killed sem teste) foi fechado pelo commit 70c060b e reconfirmado por perturbação isolada de cada alternativa nesta rodada. Todos os níveis aplicáveis passaram com evidência verificada. Worktree descartável removida ao final; árvore principal nunca foi tocada. PROVEN."
