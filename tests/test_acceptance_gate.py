@@ -5,7 +5,11 @@ No third-party deps beyond PyYAML (already required by the hook) — run with
 `python3 tests/test_acceptance_gate.py`. Exits non-zero on failure.
 
 Guards the contracts of the acceptance gate:
-  - no artifact on disk -> allow (the audit hasn't run yet);
+  - no artifact anywhere + target == done -> BLOCK (decided 2026-09-27, item
+    `acceptance-gate-barra-done-sem-auditoria`): reaching Done with zero audit
+    means the completion-auditor step was skipped, not that it "hasn't run yet";
+  - no artifact anywhere + target in_review, in_progress, or unresolved ->
+    allow (the audit hasn't run yet; nothing to enforce before Review);
   - artifact `complete` -> allow, in any direction;
   - artifact incomplete + FORWARD transition (in_review / done) -> BLOCK;
   - artifact incomplete + BACKWARD transition (in_progress / to_do / wont_do)
@@ -203,19 +207,44 @@ check("artefato em docs/acceptance/ da própria árvore → In Review BLOQUEIA",
 # Fora de git o main_root é "", e Path("") seria o diretório do PROCESSO. Com
 # o processo parado numa árvore que tem artefato incompleto, um projeto limpo
 # fora de git não pode herdar esse artefato.
+# Alvo In Review (não done) para não confundir com a regra nova de "ausente +
+# done bloqueia" — o que este teste verifica é só o vazamento entre árvores.
 alheio = make_project(audit=AUDIT_INCOMPLETE)
 limpo = make_project(board_flow=BOARD_FLOW)
 r = subprocess.run(
     [sys.executable, str(HOOK)], cwd=alheio, capture_output=True, text=True,
-    input=json.dumps({"tool_name": CLOUD_TOOL, "tool_input": cloud("51"),
+    input=json.dumps({"tool_name": CLOUD_TOOL, "tool_input": cloud("41"),
                       "cwd": str(limpo)}))
-check("fora de git, artefato no diretório do processo não conta → Done PASSA",
+check("fora de git, artefato no diretório do processo não conta → In Review PASSA",
       r.returncode == 0, r.stderr[:200])
 
 main, wt = make_worktree_pair(None)
 r = run_hook(wt, tool_input=cloud("51"))
-check("nenhuma árvore tem artefato → Done PASSA (decisão do dono em aberto)",
+check("nenhuma árvore tem artefato → Done BLOQUEIA (decisão do dono, 2026-09-27)",
+      r.returncode == 2, f"rc={r.returncode} {r.stderr[:200]}")
+check("…e a mensagem cita .claude/acceptance e o clone principal",
+      ".claude/acceptance" in r.stderr and str(main.resolve()) in r.stderr,
+      r.stderr[:400])
+
+r = run_hook(wt, tool_name=LOCAL_TOOL, tool_input=local("51"))
+check("nenhuma árvore tem artefato, dialeto mcp-atlassian → Done BLOQUEIA",
+      r.returncode == 2, f"rc={r.returncode} {r.stderr[:200]}")
+
+r = run_hook(wt, tool_input=cloud("41"))
+check("nenhuma árvore tem artefato → In Review PASSA", r.returncode == 0, r.stderr[:200])
+
+r = run_hook(wt, tool_input=cloud("31"))
+check("nenhuma árvore tem artefato → In Progress PASSA", r.returncode == 0, r.stderr[:200])
+
+no_flow = make_project()
+r = run_hook(no_flow, tool_input=cloud("51"))
+check("nenhuma árvore tem artefato, sem board-flow.yaml (alvo não resolvido) → PASSA",
       r.returncode == 0, r.stderr[:200])
+
+r = run_hook(no_flow, tool_name="Bash", tool_input={
+    "command": f'twg jira workitem transition --id {KEY} --transition-id "Done"'})
+check("twg Bash, sem artefato, transição por nome 'Done' → BLOQUEIA",
+      r.returncode == 2, f"rc={r.returncode} {r.stderr[:200]}")
 
 # ── unchanged contracts ────────────────────────────────────────────────────
 clean = make_project(board_flow=BOARD_FLOW)

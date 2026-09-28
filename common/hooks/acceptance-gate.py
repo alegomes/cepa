@@ -43,7 +43,14 @@ issue key from the tool input, looks for `<KEY>.yaml` (see `find_artifact` for
 where — this worktree first, then the main clone, `.claude/acceptance/` and
 `docs/acceptance/` in each):
 
-  - absent                       -> allow (audit hasn't run; not gated)
+  - absent, target == done       -> BLOCK: reaching Done with no audit in any
+                                    of the four places means the completion-
+                                    auditor step was skipped, not that it
+                                    hasn't run yet (item
+                                    `acceptance-gate-barra-done-sem-auditoria`,
+                                    decided 2026-09-27)
+  - absent, target unresolved or
+    anything else                -> allow (audit hasn't run yet; not gated)
   - present, status: complete    -> allow
   - present, status: <anything>  -> BLOCK, unless the target status is
                                     declared and is not an enforced one
@@ -153,6 +160,18 @@ def resolve_target(mut: dict, tid: str | None, cwd: Path) -> str | None:
 ACCEPTANCE_DIRS = (Path(".claude") / "acceptance", Path("docs") / "acceptance")
 
 
+def candidate_paths(key: str, session: Path, main: Path) -> list[Path]:
+    """The (up to four) artifact paths this gate looks at, in lookup order.
+
+    Session root's `.claude/acceptance/` and `docs/acceptance/`, then the same
+    two under the MAIN clone — deduped to two when `session == main` (no
+    worktree involved). Shared by `find_artifact` and by the block message for
+    a missing artifact, so the two never drift apart.
+    """
+    roots = [session] if session == main else [session, main]
+    return [root / d / f"{key}.yaml" for root in roots for d in ACCEPTANCE_DIRS]
+
+
 def find_artifact(key: str, session: Path, main: Path) -> Path | None:
     """The acceptance artifact for `key`, or None when no tree has one.
 
@@ -173,12 +192,9 @@ def find_artifact(key: str, session: Path, main: Path) -> Path | None:
     wrong. The acceptance audit describes a CARD, and a card is the same card
     whichever tree moves it on the board.
     """
-    roots = [session] if session == main else [session, main]
-    for root in roots:
-        for d in ACCEPTANCE_DIRS:
-            p = root / d / f"{key}.yaml"
-            if p.is_file():
-                return p
+    for p in candidate_paths(key, session, main):
+        if p.is_file():
+            return p
     return None
 
 
@@ -228,6 +244,23 @@ def block_empty(key: str, target: str | None, state: dict, cwd: Path):
         f"  tests you mean and re-run it, or make the build fail on an empty filter\n"
         f"  (Maven: -Dsurefire.failIfNoSpecifiedTests=true). A green run with N > 0 tests\n"
         f"  clears this. Bouncing the card back (e.g. to in_progress) stays allowed.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
+def block_no_artifact(key: str, session: Path, main: Path):
+    paths = candidate_paths(key, session, main)
+    paths_str = "\n".join(f"    - {p}" for p in paths)
+    print(
+        f"[acceptance-gate] BLOCKED: cannot move {key} to done — no acceptance audit found\n"
+        f"  Searched:\n{paths_str}\n"
+        f"  Every harness flow runs the completion-auditor before Review, so reaching Done\n"
+        f"  with no audit anywhere means the flow was skipped, not that the audit hasn't\n"
+        f"  run yet — WEGO-1891, 2202 and 2218 all reached Done this way.\n"
+        f"  Fix: run the completion-auditor (it writes `.claude/acceptance/{key}.yaml`) and\n"
+        f"  get `status: complete`. Never create the artifact by hand. Bouncing the card\n"
+        f"  back (e.g. to in_progress) stays allowed.",
         file=sys.stderr,
     )
     sys.exit(2)
@@ -288,11 +321,25 @@ def main():
             block_empty(key, target, empty, cwd)
 
     if artifact is None:
-        # No audit in any tree yet (e.g. the To Do -> In Progress transition).
-        # Nothing to enforce. The completion-auditor writes this file right
-        # before the In-Review transition; that's when teeth appear.
-        # Ausente em ida para `done` ainda libera: mudar isso é decisão do
-        # dono, aberta no item `acceptance-gate-cego-em-worktree`.
+        # Ausente + alvo == done: BARRA (decisão do dono, 2026-09-27, item
+        # `acceptance-gate-barra-done-sem-auditoria`, pergunta 6 da revisão do
+        # run 2026-09-26-2203). Toda esteira do harness roda o
+        # completion-auditor antes de Review; chegar a Done sem NENHUM
+        # artefato nas quatro árvores significa que o fluxo foi pulado, não
+        # que a auditoria "ainda não rodou" — WEGO-1891, 2202 e 2218
+        # chegaram a Done assim.
+        if target == "done":
+            block_no_artifact(key, cwd, Path(main).resolve() if main else cwd)
+        # Ausente + alvo NÃO resolvido (None): ainda libera, de propósito.
+        # Falhar fechado aqui bloquearia toda transição To Do -> In Progress
+        # em repos sem `transition_ids`, já que nenhuma auditoria existe
+        # nesse ponto do fluxo (o completion-auditor só roda depois da
+        # implementação). Falhar fechado é o comportamento certo quando HÁ
+        # um `target` resolvido para `done`; sem alvo resolvido, seria só
+        # ruído.
+        # Ausente + alvo in_review ou qualquer outro: nada a fazer ainda, o
+        # completion-auditor escreve este arquivo bem antes da transição para
+        # In Review; é aí que os dentes aparecem.
         sys.exit(0)
 
     try:

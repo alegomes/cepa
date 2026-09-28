@@ -3504,7 +3504,7 @@ sem `claude -p` e sem token. Atualizar `docs/loop-engineering.md`, que ainda des
 
 ## `acceptance-gate.py` fica cego em worktree e libera Done sem auditoria
 
-**Status:** passo 1 FEITO em 2026-09-26 (a trava procura em `.claude/acceptance/` e `docs/acceptance/` da worktree e do clone principal; teste em `tests/test_acceptance_gate.py`). Passo 2 aguarda o dono: ausente em ida para `done` segue liberando. Passo 3 e "complete com rota humana aberta passa" ficaram de fora. · **Plano:** `acceptance-gate-cego-em-worktree` · **Lar:**
+**Status:** passo 1 FEITO em 2026-09-26 (a trava procura em `.claude/acceptance/` e `docs/acceptance/` da worktree e do clone principal; teste em `tests/test_acceptance_gate.py`). Passo 2 FEITO em 2026-09-28 (item `acceptance-gate-barra-done-sem-auditoria`): ausente em ida para `done` agora BARRA; ausente em ida para `in_review` ou com alvo não resolvido segue liberando (fechar em `in_review`/unresolved abriria a trava justamente na transição To Do → In Progress, que roda antes de qualquer auditoria existir). Passo 3 e "complete com rota humana aberta passa" ficaram de fora. · **Plano:** `acceptance-gate-cego-em-worktree` · **Lar:**
 `common/hooks/acceptance-gate.py` · **Origem:** feedback `fb-20260919-1`, diagnosticado no card WEGO-2287 do wego-acesso-backend
 (`docs/investigations/wego-2287-trava-de-validacao-manual.md`). O dono aceitou o
 diagnóstico e pediu o item aqui em 2026-09-25.
@@ -3527,7 +3527,14 @@ contra o common 2.21.0 (arquivo idêntico ao 2.20.0).
 1. Para alvo `in_review` ou `done`, procurar também em `<raiz principal>/.claude/acceptance/`
    (pai de `git rev-parse --git-common-dir`) e em `docs/acceptance/`, que é onde o
    wego-acesso-backend versiona os artefatos.
-2. Decidir se artefato ausente em transição para `done` continua liberando. Hoje libera.
+2. ~~Decidir se artefato ausente em transição para `done` continua liberando.~~ FEITO em
+   2026-09-28: artefato ausente em NENHUMA das quatro árvores, com alvo `done`, agora BARRA
+   (exit 2) — toda esteira do harness roda o completion-auditor antes de Review, então chegar
+   a Done sem nenhum artefato significa que o fluxo pulou essa etapa, não que "ainda não
+   rodou" (WEGO-1891, 2202, 2218 chegaram a Done assim). Alvo `in_review` ou não resolvido
+   (sem `transition_ids` mapeado) seguem liberando, de propósito: falhar fechado nesses casos
+   bloquearia toda transição To Do → In Progress em repos sem mapa, antes de a auditoria ter
+   como existir.
 3. Lateral: `merge-truth-gate.py:158` aceita qualquer commit em `origin/main` que cite a
    chave, inclusive o commit que só grava o veredito de prova.
 
