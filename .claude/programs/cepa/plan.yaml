@@ -210,25 +210,16 @@ items:
     não comportamento: o triage nunca escreveu um plano de verdade e o next nunca
     reconciliou contra Jira vivo. Antes disto, "pronto" é code-exists (L0 da escada
     de confiança), não funciona.'
-  status: blocked
+  status: pending
   blocked_by:
   - instalar-leva-fio-condutor
   human_pending: null
-  evidence: 'Validacao executada em 2026-09-25 contra o Jira vivo (WEGO, wego-assinatura-backend,
-    161 cards em To Do no escopo de triage) e a ordem NAO sobreviveu. (1) triage
-    de 5 cards (WEGO-1438/1439/1440 ready; 1441 e 1461 needs-refinement, comentados
-    no Jira); repasse gravado em wego-assinatura-backend/.claude/programs/WEGO/triagem-2026-09-25.json.
-    (2) cepa-plan write --from-triage recusou (exit 4) sumir com os 25 itens antigos,
-    correto. Com --on-missing keep (dry-run) os 3 cards novos entram NA FRENTE dos
-    5 pendentes que o dono priorizou (WEGO-1437 primeiro) e os antigos vao para
-    o fim ''sem posicao escolhida'': triagem parcial reordena a fila. Plano NAO
-    gravado por isso (backup em scratchpad). (3) cepa-plan reconcile contra o quadro
-    vivo (sem --apply) rebaixaria done->pending WEGO-1550 e WEGO-1982 (In Review)
-    e WEGO-1973 (In Progress): e o defeito do item reconcile-nao-rebaixa-done, agora
-    reproduzido em quadro real; tambem lista 12 ''dropped -> dropped'' que nao mudam
-    nada. Condicao para destravar: consertar reconcile-nao-rebaixa-done (ja na fila)
-    e a fusao da triagem parcial no cepa-plan write (item novo, o dono decide a
-    posicao); depois re-rodar esta validacao.'
+  evidence: 'Destravado em 2026-09-28: as duas condicoes da validacao de 2026-09-25
+    foram entregues no run until 2026-09-27-1213 e aterrissadas na main (62b7217),
+    com plugin reinstalado: reconcile-nao-rebaixa-done (8f84bb2, PROVEN) e triagem-parcial-preserva-ordem
+    (15da11b, PROVEN). Proximo passo: re-rodar a validacao contra o Jira vivo do
+    WEGO (wego-assinatura-backend). Historico: em 2026-09-25 a triagem parcial reordenou
+    a fila e o reconcile rebaixaria WEGO-1550, 1982 e 1973; triagem em wego-assinatura-backend/.claude/programs/WEGO/triagem-2026-09-25.json.'
 - id: produtor-de-plano-sem-tracker
   title: Decidir quem escreve o plano single-track num repo sem Jira
   why: 'registrado como ITEM, e não como parágrafo no BACKLOG, porque o receio do
@@ -1218,26 +1209,19 @@ items:
     entrou no fim da fila)'
   status: blocked
   blocked_by: []
-  human_pending: 'Depois de mesclar until/2026-09-27-1213 e reinstalar o plugin
-    common: rodar um cepa-until curto numa fila com um item que peca build de mais
-    de 10 min e conferir que ele sai done com o resultado colhido (ou decidir que
-    o e2e com claude -p basta), e entao devolver este item para done.'
-  evidence: 'Codigo na branch da noite until/2026-09-27-1213 (e29eb08, 5f0ff71,
-    85848ad, d52162a). Passo 1 medido em 27/09 com claude 2.1.283: claude -p mata
-    o segundo plano ao fim do turno com CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS em
-    0, ausente ou 120000 (sai em ~15s), e Monitor nao segura o turno; por isso o
-    passo 2 virou: no-background-build libera build em segundo plano que grava EXIT=
-    num arquivo, ensina esperar em primeiro plano num laco que sai antes de 10 min
-    (seq 27 x 20s, # espera-ok) e barra a parada sem EXIT=. Passo 3 feito: resumo
-    do fim do cepa-until mostra o motivo de cada travado. Ponta a ponta com claude
-    -p real e os hooks desta arvore: tests/e2e_build_longo_claude_p.py colheu make
-    verify de 700s (737s, BUILD SUCCESS e 0, US$ 0,16). Gates: proof-reviewer PROVEN
-    (docs/proof/until-build-longo-sem-trava.yaml); completion-auditor INCOMPLETE
-    (.claude/acceptance/until-build-longo-sem-trava.yaml): falta a colheita passando
-    pelo cepa-until real com /common:drain-plan. Condicao de fora: o cepa-until
-    carrega os hooks do plugin instalado (clone principal), entao esse teste so
-    mede este codigo depois de mesclar a branch na main e reinstalar o plugin common.
-    Quem resolve: o dono.'
+  human_pending: 'No proximo cepa-until do WEGO (primeiro com o codigo de 2026-09-28):
+    conferir no .jsonl e no .log que um item com build de mais de 10 min saiu done
+    com o resultado colhido (EXIT= lido), sem trava do no-background-build; entao
+    devolver este item para done.'
+  evidence: 'Codigo aterrissado na main em 2026-09-28 (4be85b9, push 62b7217) e
+    plugin reinstalado; cache igual ao clone em no-background-build.py, capture-build-result.py
+    e cepa-until. Antes: codigo e29eb08, 5f0ff71, 85848ad, d52162a; e2e com claude
+    -p real colheu make verify de 700s; proof-reviewer PROVEN (docs/proof/until-build-longo-sem-trava.yaml);
+    completion-auditor INCOMPLETE (.claude/acceptance/until-build-longo-sem-trava.yaml):
+    falta a colheita passando pelo cepa-until real. Decisao do dono em 2026-09-28:
+    nao montar run so para isso; o proximo cepa-until do WEGO serve de teste, porque
+    o ./mvnw clean verify do wego-acessos-backend leva 979 a 1150 s (8 eventos verify
+    dos runs 2026-09-27-0832 e 1632, ambos ainda com os hooks antigos).'
 - id: maven-reactor-guard-libera-o-inocente
   title: maven-reactor-guard libera goals que nao compilam, -pl sem -am apos install
     da raiz posterior a ultima edicao, e quarkus:*
