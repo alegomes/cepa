@@ -301,6 +301,10 @@ EXPIROU = {"type": "attachment", "attachment": {
 TIMED_OUT = {"type": "user", "message": {"role": "user", "content": _aviso(
     "<task-id>bqwpma178</task-id>\n<event>[Monitor timed out — re-arm if "
     "needed.]</event>")}}
+FALHOU, MORTO = ({"type": "queue-operation", "operation": "enqueue",
+                  "content": _aviso(f"<task-id>bqwpma178</task-id>\n"
+                                    f"<status>{st}</status>")}
+                 for st in ("failed", "killed"))
 AINDA_RODANDO = {"type": "queue-operation", "operation": "enqueue",
                  "content": _aviso("<task-id>bqwpma178</task-id>\n"
                                    "<status>running</status>")}
@@ -324,6 +328,8 @@ def test_vigia_que_termina_sozinho_nao_barra_a_parada():
     for nome, fim in (("fonte acabou (status completed)", FIM_DA_FONTE),
                       ("expirou aos 10 min", EXPIROU),
                       ("timed out", TIMED_OUT),
+                      ("status failed", FALHOU),
+                      ("status killed", MORTO),
                       ("TaskStop respondeu que a tarefa não existe",
                        TASKSTOP_TARDIO)):
         with tempfile.TemporaryDirectory() as d:
