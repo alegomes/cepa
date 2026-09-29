@@ -759,6 +759,96 @@ def test_2_run_sem_commit_termina_encerrado_sem_acao():
               str(est))
 
 
+# ── passo 1 entre runs: a tentativa do run anterior chega pela herança ──────
+
+# Na 1ª chamada, os itens de FAKE_METADE commitam e ficam com uma rota humana
+# aberta: o run A termina com eles pela metade, sem que o laço os repita.
+METADE = TENTA.replace(
+    "if ident not in lista('FAKE_DUAS') or n >= 2:\n",
+    "if n == 1 and ident in lista('FAKE_METADE'):\n"
+    "    marca(ident, human_pending='pela metade')\n"
+    "elif ident not in lista('FAKE_DUAS') or n >= 2:\n", 1)
+
+
+def run_ids(raiz):
+    return [e["branch"] for e in ledger_de(raiz) if e["evento"] == "run_start"]
+
+
+def libera(raiz, *idents):
+    """O dono fecha a rota humana entre os dois runs e commita a fila (a
+    largada recusa a fila modificada fora do que o run anterior tocou)."""
+    p = yaml.safe_load(plano_de(raiz).read_text())
+    for it in p["items"]:
+        if it["id"] in idents:
+            it["human_pending"] = None
+    plano_de(raiz).write_text(yaml.safe_dump(p, allow_unicode=True))
+    git(raiz, "add", str(plano_de(raiz)))
+    git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+        "dono: fecha a rota")
+
+
+def test_1_tentativa_do_run_anterior_tambem_vai_para_a_lateral():
+    """Achado do completion-auditor (2026-09-28): o reset voltava até o começo
+    da 1ª tentativa DESTE run, que é depois da mescla da herança, e os commits
+    do run anterior ficavam na branch da noite sem passar pelo build.
+
+    O a2 entra na fila só no run B e fecha verde depois do a1: é ele que mantém
+    a branch da noite do run B viva para o teste olhar dentro dela."""
+    import time
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2", status="dropped")])
+        binv = fake_claude(tmp, METADE)
+        env = {"FAKE_METADE": "a1", "FAKE_QUEBRA": "a1"}
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY],
+             extra_env=env)
+        libera(raiz, "a1")
+        p_ = yaml.safe_load(plano_de(raiz).read_text())
+        for it in p_["items"]:
+            if it["id"] == "a2":
+                it["status"] = "pending"
+        plano_de(raiz).write_text(yaml.safe_dump(p_, allow_unicode=True))
+        git(raiz, "add", str(plano_de(raiz)))
+        git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+            "dono: a2 entra na fila")
+        time.sleep(61)  # o id do run é por minuto
+        p, _ = roda(raiz, binv, plano_de(raiz),
+                    ["--for", "2h", "--verify", VERIFY], extra_env=env)
+        runs = run_ids(raiz)
+        check("o run B herdou a branch do run A",
+              len(runs) == 2 and "herda" in p.stdout, p.stdout[:900])
+        check("...e o a2 fechou verde nele",
+              status(raiz, "a2")["status"] == "done", str(status(raiz, "a2")))
+        noite_b = git(raiz, "log", "--format=%s", runs[-1]).splitlines()
+        check("a branch da noite do run B não tem o commit do run A",
+              "a2-t1" in noite_b and "a1-t1" not in noite_b, str(noite_b))
+        lateral = git(raiz, "log", "--format=%s",
+                      f"{runs[-1]}-vermelho-a1").splitlines()
+        check("...que está na lateral da 1ª volta",
+              "a1-t1" in lateral and "a1-t2" in lateral, str(lateral))
+
+
+def test_1_heranca_com_outro_item_aberto_para_em_vez_de_resetar():
+    import time
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, METADE)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY],
+             extra_env={"FAKE_METADE": "a1,a2"})
+        libera(raiz, "a1")
+        time.sleep(61)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY],
+             extra_env={"FAKE_METADE": "a1,a2", "FAKE_QUEBRA": "a1"})
+        ev = ledger_de(raiz)
+        fim = [e for e in ev if e["evento"] == "run_end"][-1]
+        check("o run B para no vermelho", fim["motivo"] == "verify-vermelho",
+              str(fim))
+        check("...e o aviso nomeia o outro item herdado",
+              "a2" in (fim.get("detalhe") or ""), str(fim))
+        noite_b = git(raiz, "log", "--format=%s", run_ids(raiz)[-1]).splitlines()
+        check("o trabalho do a2 continua na branch da noite",
+              "a2-t1" in noite_b, str(noite_b))
+
+
 def main():
     print("cepa-until — branch da noite\n")
     for nome, fn in sorted(globals().items()):

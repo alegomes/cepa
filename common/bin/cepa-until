@@ -1058,9 +1058,9 @@ def desfaz_item(repo, arvore, run_id, ident, desde, no_meio=(),
         return None, f"não li o HEAD do começo da 1ª tentativa do {ident}"
     if no_meio:
         return None, (
-            f"{', '.join(no_meio)} fechou `done` depois da 1ª tentativa do "
-            f"{ident}; voltar a branch da noite para {desde[:10]} apagaria "
-            "esse trabalho verde")
+            f"voltar a branch da noite para {desde[:10]}, o começo da 1ª "
+            f"tentativa do {ident}, apagaria o trabalho de "
+            f"{', '.join(no_meio)}, que entrou depois dele")
     codigo, _ = git(["merge-base", "--is-ancestor", desde, "HEAD"], arvore)
     if codigo != 0:
         return None, (f"{desde[:10]}, o começo da 1ª tentativa do {ident}, "
@@ -1678,6 +1678,10 @@ def main(argv=None):
         with ledger.open("a", encoding="utf-8") as f:
             f.write(json.dumps(evento, ensure_ascii=False) + "\n")
 
+    # O HEAD do clone ANTES da mescla da herança: é até aqui que volta o
+    # vermelho de um item herdado, cujos commits do run anterior entram pela
+    # mescla e não passaram pelo build deste run.
+    base_do_clone = cabeca(repo)
     arvore, branch_largada, erro = abre_branch_da_noite(repo, run_id, heranca)
     if erro:
         print(f"cepa-until: não consegui criar a branch da noite "
@@ -1748,6 +1752,22 @@ def main(argv=None):
     # itens já tinham sido entregues ali: é até esse HEAD que o vermelho volta
     # a branch da noite, e só se ninguém fechou `done` no meio (C4).
     primeira = {}
+    # Item herdado (ficou pela metade no run anterior): a 1ª tentativa dele
+    # começou lá, e o ponto de volta é o clone antes da mescla da herança. Os
+    # outros itens herdados ainda abertos entram no "no meio": a volta tiraria
+    # o trabalho deles também, e aí o supervisor para em vez de resetar (C4).
+    herdados = {str(i) for h in heranca for i in h.get("itens") or []}
+    for i in herdados:
+        primeira[i] = (base_do_clone, 0)
+
+    def no_meio_de(ident, n_antes):
+        outros = []
+        if ident in herdados:
+            outros = [f"{o} (herdado do run anterior, ainda aberto)"
+                      for o in sorted(herdados - {ident})
+                      if o not in entregues]
+        return entregues[n_antes:] + outros
+
     # O desfecho de cada item nesta janela, na ordem em que apareceu: é a lista
     # "uma linha por item" do fim (A4). Vale o último desfecho do item.
     desfechos = {}
@@ -1980,12 +2000,13 @@ def main(argv=None):
                 desde, n_antes = primeira[ident]
                 lateral, erro_desfaz = desfaz_item(
                     repo, arvore, run_id, ident, desde,
-                    no_meio=entregues[n_antes:], volta=volta)
+                    no_meio=no_meio_de(ident, n_antes), volta=volta)
                 ultima = volta >= VOLTAS_VERMELHAS_MAX or bool(erro_desfaz)
                 novo_status = "blocked" if ultima else "pending"
                 if lateral:
                     # O reset já tirou as tentativas; a próxima começa do zero.
                     primeira.pop(ident, None)
+                    herdados.discard(ident)
                     evid = (f"Esta é a volta {volta} de "
                             f"{VOLTAS_VERMELHAS_MAX}: o item fechou `done`, "
                             f"mas o build completo da branch da noite "
@@ -2249,11 +2270,12 @@ def main(argv=None):
                 if desde and cabeca(arvore) != desde:
                     lateral, erro_desfaz = desfaz_item(
                         repo, arvore, run_id, ident, desde,
-                        no_meio=entregues[n_antes:], sufixo="parado")
+                        no_meio=no_meio_de(ident, n_antes), sufixo="parado")
                     registra({"evento": "tentativas_separadas", "id": ident,
                               "lateral": lateral, "erro": erro_desfaz})
                     if lateral:
                         primeira.pop(ident, None)
+                        herdados.discard(ident)
                 if erro_desfaz:
                     motivo_fim = "item-preso"
                     detalhe_fim = (
