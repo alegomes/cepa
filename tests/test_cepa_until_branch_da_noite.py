@@ -106,7 +106,8 @@ def test_subprocesso_roda_na_branch_da_noite_e_o_clone_fica_parado():
               git(raiz, "rev-list", "--count", f"{inicio['base']}..{branch}")
               == "2", p.stdout[-600:])
         check("o resumo diz como aterrissar",
-              f"git merge {branch}" in p.stdout, p.stdout[-600:])
+              f"cepa-until aterrissar fila/{branch.split('/', 1)[1]}"
+              in p.stdout, p.stdout[-600:])
 
 
 def test_build_vermelho_tira_o_item_da_branch_sem_perder_os_commits():
@@ -710,7 +711,8 @@ def test_2_estado_do_run_rodando_e_depois_esperando_dono_antes_da_analise():
                   if e["evento"] == "run_start"][0]["branch"]
         check("a única ação é aterrissar, com a branch da noite",
               [a.get("id") for a in acoes] == ["aterrissar"]
-              and branch in (acoes[0].get("comando") or ""), str(acoes))
+              and f"fila/{branch.split('/', 1)[1]}"
+              in (acoes[0].get("comando") or ""), str(acoes))
         check("...com a frase leiga do efeito",
               acoes and acoes[0].get("frase"), str(acoes))
         itens = est.get("itens") or []

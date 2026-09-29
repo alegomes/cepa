@@ -1205,7 +1205,305 @@ def analisa_o_run(repo, arvore, ledger, permissoes):
 
 # ── o laço ──────────────────────────────────────────────────────────────────
 
+# ── aterrissar: o dono leva a branch da noite para a branch do clone ────────
+
+WORKTREE_GUARD = AQUI.parent / "hooks" / "worktree-guard.py"
+WTLIB = AQUI.parent / "hooks" / "_wtlib.py"
+
+
+def cmd_aterrissar(argv):
+    """`cepa-until aterrissar <fila>/<run> [--sim]` — passo 3 do
+    until-fim-sem-dono.
+
+    O run não toca a branch principal (decisão 3 do dono, 26/09): quem dispara
+    a aterrissagem é o dono, e este comando é camada fina sobre os guardas que
+    já existem (C3 de `docs/estrategia-fim-do-cepa-until.md`): dono único pelo
+    `worktree-guard.py`, parar no conflito, nunca fazer push com build
+    vermelho, gravar o ponto de retorno e recusar se a branch da noite andou
+    depois da proposta. Rodar de novo retoma de onde parou: com o merge já
+    feito, segue do build. Sem `--sim`, só mostra o plano."""
+    ap = argparse.ArgumentParser(
+        prog="cepa-until aterrissar",
+        description="leva a branch da noite de um run para a branch do clone")
+    ap.add_argument("alvo", help="<fila>/<run>, como o resumo do run imprime")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--sim", action="store_true",
+                    help="executa; sem ele, só mostra o plano")
+    a = ap.parse_args(argv)
+    if "/" not in a.alvo:
+        print("cepa-until aterrissar: o alvo é <fila>/<run> (ex.: "
+              "cepa/2026-09-28-2137)", file=sys.stderr)
+        return 2
+    fila, run_id = a.alvo.split("/", 1)
+    repo = Path(a.repo).resolve()
+    caminho = repo / ".claude" / "programs" / fila / "until" / \
+        f"{run_id}.estado.json"
+    try:
+        est = json.loads(caminho.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"cepa-until aterrissar: não li o estado do run em {caminho} "
+              f"({e})", file=sys.stderr)
+        return 2
+
+    def grava(**campos):
+        est.update(campos)
+        est["atualizado"] = datetime.now().isoformat(timespec="seconds")
+        tmp = caminho.parent / (caminho.name + ".tmp")
+        tmp.write_text(json.dumps(est, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8")
+        os.replace(tmp, caminho)
+
+    def recusa(texto):
+        print(f"cepa-until aterrissar: {texto}", file=sys.stderr)
+        return 3
+
+    if est.get("estado") == "aterrissado":
+        print(f"o run {run_id} já foi aterrissado "
+              f"({(est.get('aterrissagem') or {}).get('quando', '?')})")
+        return 0
+    if est.get("estado") != "esperando-dono":
+        return recusa(f"o run {run_id} está `{est.get('estado')}`, e só se "
+                      "aterrissa um run `esperando-dono`")
+    acao = next((x for x in est.get("acoes") or []
+                 if x.get("id") == "aterrissar"), None)
+    if not acao:
+        return recusa(f"o run {run_id} não propôs `aterrissar` (a branch da "
+                      "noite ficou sem commit)")
+    branch, destino = est.get("branch"), acao.get("destino")
+    sha, arvore = acao.get("sha"), acao.get("arvore")
+    ater = dict(est.get("aterrissagem") or {})
+
+    # Já mesclado (o dono resolveu um conflito e concluiu o merge, ou a
+    # tentativa anterior parou depois dele): segue do build.
+    codigo, _ = git(["merge-base", "--is-ancestor", sha, "HEAD"], repo)
+    ja_mesclado = codigo == 0
+
+    atual = branch_atual(repo)
+    if atual != destino:
+        return recusa(f"o clone está em `{atual}`, e a ação foi proposta para "
+                      f"`{destino}`. Volte para `{destino}` e rode de novo")
+    if not ja_mesclado:
+        codigo, agora = git(["rev-parse", branch], repo)
+        if codigo != 0:
+            return recusa(f"a branch da noite `{branch}` não existe mais")
+        if agora != sha:
+            return recusa(
+                f"a branch da noite `{branch}` mudou desde que a ação foi "
+                f"proposta ({sha[:10]} → {agora[:10]}). O que entrou depois "
+                "do fim do run não passou pelo build do supervisor; confira "
+                "e rode um novo run, ou volte a branch para o SHA proposto")
+
+    print(f"aterrissar `{branch}` em `{destino}` ({repo})")
+    print(f"  efeito : {acao.get('frase')}")
+    print(f"  build  : {est.get('verify') or 'nenhum (o run dispensou o build)'}")
+    print("  push   : " + ("sim, para o upstream de "
+                           f"`{destino}`" if tem_upstream(repo) else
+                           f"não (`{destino}` não tem upstream)"))
+    if ja_mesclado:
+        print("  merge  : já feito; retomo do build")
+    if not a.sim:
+        print(f"\nnada foi feito. Para executar: cepa-until aterrissar "
+              f"{a.alvo} --sim")
+        return 0
+
+    # Dono único (o mesmo guarda do /common:worktree-merge). Antes da checagem
+    # de árvore suja: o registro de sessões mora em `.claude/sessions/`.
+    try:
+        g = subprocess.run([sys.executable, str(WORKTREE_GUARD), branch,
+                            "--cwd", str(repo),
+                            "--exclude-cwd", os.getcwd()],
+                           capture_output=True, text=True, timeout=60)
+        guarda = g.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return recusa(f"não consegui rodar o guarda de dono único: {e}")
+    if guarda.startswith("BLOCK"):
+        return recusa("outra sessão viva está numa das branches:\n" + guarda)
+
+    sujos = arvore_suja(repo)
+    if sujos is None:
+        return recusa("não consegui ler o `git status` do clone")
+    # A fila mora no clone e o próprio run a atualiza (`cepa-plan finish`):
+    # depois de todo run ela está modificada. A branch da noite não a toca, e
+    # o merge e o `reset --keep` a preservam.
+    fila_do_clone = f".claude/programs/{fila}/plan.yaml"
+    fila_suja = [l for l in sujos if l.endswith(fila_do_clone)]
+    sujos = [l for l in sujos if l not in fila_suja]
+    if sujos:
+        return recusa("o clone tem mudança sem commit; um merge só leva "
+                      "histórico commitado:\n  " + "\n  ".join(sujos[:10]))
+    if arvore and Path(arvore).exists() and arvore_suja(arvore):
+        return recusa(f"a worktree da noite ({arvore}) tem mudança sem commit")
+
+    if not ja_mesclado:
+        retorno = cabeca(repo)
+        ater.update({"retorno": retorno, "destino": destino})
+        grava(aterrissagem=ater)
+        print(f"\nponto de retorno: `{destino}` em {retorno[:10]}")
+        codigo, saida = git(["merge", "--no-ff", "--no-edit", branch], repo)
+        if codigo != 0:
+            conflitos = git(["diff", "--name-only", "--diff-filter=U"],
+                            repo)[1].splitlines()
+            if conflitos:
+                ater["parou"] = "conflito"
+                grava(aterrissagem=ater)
+                print("CONFLITO no merge, nos arquivos:")
+                for c in conflitos:
+                    print(f"  {c}")
+                print("resolva, `git add`, `git commit` para concluir o merge, "
+                      f"e rode `cepa-until aterrissar {a.alvo} --sim` de novo: "
+                      "ele retoma do build")
+                return 4
+            git(["merge", "--abort"], repo)
+            return recusa(f"o merge falhou: {saida}")
+    ater["merge"] = cabeca(repo)
+    ater.pop("parou", None)
+    grava(aterrissagem=ater)
+
+    verify = est.get("verify")
+    if verify:
+        print(f"build completo: {verify}")
+        log = caminho.parent / f"{run_id}.log"
+        verde, seg, motivo = roda_verify(verify, repo, 4 * 3600, log)
+        if not verde:
+            retorno = ater.get("retorno")
+            # Só desfaz o que este comando fez: o HEAD tem que ser o merge
+            # dele, com o retorno como 1º pai.
+            codigo, primeiro = git(["rev-parse", "HEAD^1"], repo)
+            if retorno and codigo == 0 and primeiro == retorno:
+                # `--keep`, não `--hard`: preserva a fila modificada pelo run.
+                git(["reset", "-q", "--keep", retorno], repo)
+                volta = f"`{destino}` voltou para {retorno[:10]}"
+            else:
+                volta = (f"`{destino}` NÃO foi desfeito (o HEAD não é o merge "
+                         "deste comando); confira à mão")
+            ater.update({"parou": "build-vermelho", "motivo": motivo})
+            ater.pop("merge", None)
+            grava(aterrissagem=ater)
+            print(f"BUILD VERMELHO depois do merge ({motivo}): {volta}, sem "
+                  f"push. A saída está em {log}")
+            return 5
+        print(f"  verde ({humano(timedelta(seconds=seg))})")
+
+    if tem_upstream(repo):
+        codigo, saida = git(["push"], repo, timeout=300)
+        if codigo != 0:
+            ater["parou"] = "push"
+            grava(aterrissagem=ater)
+            print(f"o push falhou ({saida}); o merge e o build verde ficam. "
+                  f"Rode `cepa-until aterrissar {a.alvo} --sim` de novo")
+            return 6
+        ater["push"] = True
+        print("push feito")
+
+    if arvore and Path(arvore).exists():
+        r = subprocess.run([sys.executable, str(WTLIB), "rescue", arvore,
+                            branch], capture_output=True, text=True)
+        if (r.stdout or "").strip():
+            print(r.stdout.strip())
+        git(["worktree", "remove", arvore], repo)
+    codigo, saida = git(["branch", "-d", branch], repo)
+    if codigo != 0:
+        print(f"aviso: não apaguei `{branch}` ({saida})")
+    ater["quando"] = datetime.now().isoformat(timespec="seconds")
+    grava(estado="aterrissado", aterrissagem=ater)
+    print(f"aterrissado: `{branch}` está em `{destino}`; worktree e branch da "
+          "noite removidas")
+    if fila_suja:
+        print(f"a fila ({fila_do_clone}) tem as marcações do run sem commit; "
+              "commite quando quiser")
+    return 0
+
+
+def curto(caminho, repo):
+    """Caminho para ler na tela (A6): relativo ao repo quando está dentro
+    dele, `~/...` quando está na home, e inteiro só no resto."""
+    c = Path(caminho)
+    for base, prefixo in ((Path(repo), ""), (Path.home(), "~/")):
+        for b in (base, base.resolve()):
+            try:
+                return prefixo + str(c.relative_to(b))
+            except ValueError:
+                continue
+    return str(c)
+
+
+def raiz_principal(repo):
+    """O clone principal de `repo` (de uma worktree, o clone dono dela): é lá
+    que moram as filas e o registro dos runs."""
+    codigo, comum = git(["rev-parse", "--path-format=absolute",
+                         "--git-common-dir"], repo)
+    if codigo != 0:
+        return Path(repo).resolve()
+    comum = Path(comum)
+    return comum.parent if comum.name == ".git" else comum
+
+
+def runs_esperando(repo):
+    """Os runs cuja ação `aterrissar` ainda vale: estado `esperando-dono`,
+    branch da noite existente e ainda fora da branch de destino. Um merge feito
+    à mão, fora do `aterrissar`, também tira o run da lista."""
+    raiz = raiz_principal(repo)
+    achados = []
+    for caminho in sorted((raiz / ".claude" / "programs").glob(
+            "*/until/*.estado.json")):
+        try:
+            est = json.loads(caminho.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(est, dict) or est.get("estado") != "esperando-dono":
+            continue
+        acao = next((x for x in est.get("acoes") or []
+                     if isinstance(x, dict) and x.get("id") == "aterrissar"),
+                    None)
+        if not acao:
+            continue
+        codigo, sha = git(["rev-parse", "--verify", "-q",
+                           str(est.get("branch"))], raiz)
+        if codigo != 0:
+            continue
+        destino = acao.get("destino") or branch_atual(raiz)
+        codigo, _ = git(["merge-base", "--is-ancestor", sha, destino], raiz)
+        if codigo == 0:
+            continue
+        fila, run = est.get("fila"), est.get("run")
+        achados.append({"fila": fila, "run": run, "branch": est.get("branch"),
+                        "destino": destino,
+                        "fica_com_voce": len(est.get("fica_com_voce") or []),
+                        "comando": f"cepa-until aterrissar {fila}/{run}"})
+    return achados
+
+
+def cmd_pendentes(argv):
+    """`cepa-until pendentes [--repo R] [--json]`: o que o `/common:next` e o
+    `/common:doctor` leem para dizer que um run espera o dono (C6)."""
+    ap = argparse.ArgumentParser(prog="cepa-until pendentes")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+    achados = runs_esperando(Path(a.repo).resolve())
+    if a.json:
+        print(json.dumps({"runs": achados}, ensure_ascii=False))
+        return 0
+    for r in achados:
+        print(f"fila {r['fila']} · run {r['run']}: `{r['branch']}` espera "
+              f"aterrissagem em `{r['destino']}`"
+              + (f" ({r['fica_com_voce']} item(ns) em \"Fica com você\")"
+                 if r["fica_com_voce"] else "")
+              + f" — {r['comando']}")
+    return 0
+
+
+def tem_upstream(repo):
+    codigo, _ = git(["rev-parse", "--abbrev-ref", "@{u}"], repo)
+    return codigo == 0
+
+
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "aterrissar":
+        return cmd_aterrissar(argv[1:])
+    if argv and argv[0] == "pendentes":
+        return cmd_pendentes(argv[1:])
     ap = argparse.ArgumentParser(
         description="executa a fila single-track do repo por uma janela de tempo")
     ap.add_argument("fila", help="nome da fila em .claude/programs/<nome>/plan.yaml")
@@ -1338,38 +1636,34 @@ def main(argv=None):
     ledger = ledger_dir / f"{run_id}.jsonl"
     log = ledger_dir / f"{run_id}.log"
 
-    print(f"cepa-until · fila {dados.get('program')} · {repo}")
-    print(f"  branch      : {branch_atual(repo)}")
-    print(f"  janela      : agora → {prazo.strftime('%d/%m %H:%M')} "
-          f"({humano(prazo - agora)})")
-    print(f"  disjuntor   : {a.max_falhas} falhas seguidas")
-    print(f"  fila travada: {a.max_travados} itens `blocked` seguidos")
-    print(f"  por item    : até {a.tentativas_item} tentativa(s); depois disso "
-          "vira `blocked` e a fila anda")
-    print(f"  reserva     : não começa item com menos de {humano(reserva)}")
-    print(f"  folga       : mata item que passar {humano(folga)} do prazo")
-    print(f"  permissões  : "
+    # Cabeçalho curto (A6): o run de 26/09 abria com 15 linhas de configuração
+    # e caminhos absolutos pela pasta do Insync ocupando meia tela.
+    prox = (dados.get("batch") or [{}])[0]
+    t = dados.get("totals") or {}
+    print(f"cepa-until · fila {dados.get('program')} · {repo.name} · até "
+          f"{prazo.strftime('%d/%m %H:%M')} ({humano(prazo - agora)})")
+    print(f"  noite  : trabalha em `until/{run_id}`, numa worktree fora do "
+          f"clone; `{branch_atual(repo)}` e o origin não mudam")
+    print(f"  build  : " + (f"{verify} depois de cada item done "
+                            f"({origem_verify})" if verify else
+                            f"dispensado ({origem_verify})"))
+    print(f"  paradas: {a.max_falhas} itens seguidos sem avançar (disjuntor) · "
+          f"{a.max_travados} itens `blocked` seguidos (fila travada) · "
+          f"{a.tentativas_item} tentativa(s) por item")
+    print(f"  tempo  : não começa item com menos de {humano(reserva)}; mata "
+          f"item que passar {humano(folga)} do prazo")
+    print(f"  permissões: "
           + ("PEDE (vai travar sem alguém olhando)" if a.permissoes
              else "--dangerously-skip-permissions LIGADO"))
-    print(f"  branch noite: until/{run_id} (worktree fora da árvore; nada vai "
-          "para a main nem para o origin)")
+    print(f"  1º item: {prox.get('id', '(nenhum — fila sem item executável)')}"
+          + (f" — {prox.get('title')}" if prox.get("id") else "")
+          + f" · fila: {t.get('por_status', {}).get('pending', 0)} "
+            f"pendente(s), {t.get('por_status', {}).get('done', 0)} done")
     heranca = heranca_do_run_anterior(repo, a.fila, dados.get("path"))
     for h in heranca:
-        print(f"  herda       : `{h['branch']}` ({h['commits']} commit(s) que o "
+        print(f"  herda  : `{h['branch']}` ({h['commits']} commit(s) que o "
               f"clone não tem) — {', '.join(h['itens'])} ficou pela metade "
               "lá, e a branch da noite nasce com esses commits")
-    print(f"  build       : " + (f"{verify} depois de cada item done "
-                                 f"({origem_verify})" if verify else
-                                 f"dispensado ({origem_verify})"))
-    print(f"  análise     : " + ("desligada (--sem-analise)" if a.sem_analise
-                                 else "/common:until-review no fim"))
-    print(f"  registro    : {ledger}")
-    prox = (dados.get("batch") or [{}])[0]
-    print(f"  1º item     : {prox.get('id', '(nenhum — fila sem item executável)')}"
-          + (f" — {prox.get('title')}" if prox.get("id") else ""))
-    t = dados.get("totals") or {}
-    print(f"  fila        : {t.get('por_status', {}).get('pending', 0)} pendente(s), "
-          f"{t.get('por_status', {}).get('done', 0)} done")
 
     if a.dry:
         print("\n(--dry-run: nada foi executado)")
@@ -1407,6 +1701,7 @@ def main(argv=None):
     def grava_estado(estado, **resto):
         corpo = {"run": run_id, "fila": a.fila, "estado": estado,
                  "branch": branch_largada, "registro": ledger.name,
+                 "verify": verify,
                  "atualizado": datetime.now().isoformat(timespec="seconds")}
         corpo.update(resto)
         tmp = caminho_estado.parent / (caminho_estado.name + ".tmp")
@@ -1456,6 +1751,9 @@ def main(argv=None):
     # O desfecho de cada item nesta janela, na ordem em que apareceu: é a lista
     # "uma linha por item" do fim (A4). Vale o último desfecho do item.
     desfechos = {}
+    # O `total_cost_usd` de cada rodada do `claude`: o custo só aparecia na
+    # análise do modelo (A6), e a análise pode não rodar.
+    custos = []
 
     def desfecho(ident, tipo, texto):
         desfechos[ident] = (tipo, texto)
@@ -1615,6 +1913,10 @@ def main(argv=None):
                          or n_commits > 0)
 
         leituras = leituras_de_cota(saida)
+        for r in _objetos_json(saida, "result"):
+            v = r.get("total_cost_usd")
+            if _numero(v):
+                custos.append(float(v))
         if leituras:
             inicios.append(leituras[0])
             ultima_leitura = leituras[-1]
@@ -2035,6 +2337,7 @@ def main(argv=None):
             print(f"     - durante o {ident}: sem rede das "
                   f"{caiu.strftime('%H:%M')} às {voltou.strftime('%H:%M')}, "
                   "depois retomei o item")
+    custo = round(sum(custos), 2)
     # A lista de ações é fechada (R2): depois da Revisão 3 sobra só
     # `aterrissar`. O que nenhum comando executa vai para "fica com você".
     acoes = []
@@ -2045,14 +2348,17 @@ def main(argv=None):
         c, n = git(["rev-list", "--count", f"{base_da_noite}..HEAD"], arvore)
         n = n if c == 0 else "?"
         print(f"\n   branch da noite: `{branch_largada}` "
-              f"({n} commit(s) sobre a largada), em {arvore}")
+              f"({n} commit(s) sobre a largada), em {curto(arvore, repo)}")
         acoes.append({
             "id": "aterrissar",
             "frase": (f"leva os {n} commit(s) da branch da noite para a "
                       f"`{branch_atual(repo)}` do clone; só você dispara, porque "
                       "mexe na branch principal"),
-            "comando": (f"no clone, `git merge {branch_largada}`, build "
-                        "completo, push")})
+            "comando": (f"cepa-until aterrissar {a.fila}/{run_id} (sem "
+                        "--sim só mostra o plano; com --sim faz merge, build "
+                        "completo e push)"),
+            "sha": cabeca(arvore), "destino": branch_atual(repo),
+            "arvore": str(arvore)})
         for h in heranca:
             print(f"   ela já contém `{h['branch']}` (herdada na largada): "
                   "mesclar a da noite leva as duas")
@@ -2081,9 +2387,14 @@ def main(argv=None):
                  motivo_fim=motivo_fim,
                  itens=[{"id": i, "desfecho": t, "texto": x}
                         for i, (t, x) in desfechos.items()],
-                 acoes=acoes, fica_com_voce=fica)
-    print(f"\n   registro: {ledger}")
-    print(f"   saída do claude: {log}")
+                 acoes=acoes, fica_com_voce=fica,
+                 custo_usd=custo if custos else None)
+    if custos:
+        br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
+        print(f"\n   custo: US$ {br(custo)} (soma do `total_cost_usd` de "
+              f"{len(custos)} rodada(s): {' + '.join(br(v) for v in custos)})")
+    print(f"\n   registro: {curto(ledger, repo)}")
+    print(f"   saída do claude: {curto(log, repo)}")
 
     # A análise gasta cota: parar pela cota e analisar em seguida bate no
     # mesmo teto. Nesses casos, e com nada executado, fica para a mão.
@@ -2091,7 +2402,8 @@ def main(argv=None):
         return 0
     if motivo_fim == "limite-de-uso":
         print("   análise: não rodei (o run parou pela cota) — rode "
-              f"`/common:until-review {ledger}` quando a cota voltar")
+              f"`/common:until-review {curto(ledger, repo)}` quando a cota "
+              "voltar")
         registra({"evento": "analise", "feita": False, "motivo": "cota"})
         return 0
     print("   análise: rodando /common:until-review…")
@@ -2100,10 +2412,10 @@ def main(argv=None):
     registra({"evento": "analise", "feita": revisao is not None,
               "arquivo": str(revisao) if revisao else None, "erro": erro_rev})
     if revisao:
-        print(f"   análise: {revisao}")
+        print(f"   análise: {curto(revisao, repo)}")
     else:
         print(f"   análise: falhou ({erro_rev}) — rode `/common:until-review "
-              f"{ledger}` à mão")
+              f"{curto(ledger, repo)}` à mão")
     return 0
 
 

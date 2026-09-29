@@ -121,6 +121,13 @@ Collect, in plan order:
   ready branches, merged by hand hours later). List each line verbatim under
   "Pendente com você" — "5 slices terminadas esperando merge" — with
   `/maestro:resume <programa>` as the route. Empty output means nothing waits;
+- **`cepa-until` runs waiting to land** — run
+  `python3 common/bin/cepa-until pendentes --repo .` (same main-clone root).
+  Each line is a night whose branch `until/<run>` is waiting for the owner: the
+  run never touches the main branch, and nothing else on disk says it waits.
+  List each line verbatim under "Pendente com você", with the
+  `cepa-until aterrissar <fila>/<run>` it prints as the route (without `--sim`
+  it only shows the plan). Empty output means no run waits;
 - **the candidate** — the first `pending` item whose `blocked_by` contains no
   unfinished item;
 - **blocked items ahead of the candidate** — each with what blocks it, so a
