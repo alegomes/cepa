@@ -1,0 +1,51 @@
+key: until-supervisor-morto
+status: complete
+diff_range: 68fe2bc..HEAD
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      common/bin/cepa-until rodando como subprocesso com stdout/stderr num
+      pty; SIGHUP com item em voo e o terminal fechado em seguida.
+    test: tests/test_cepa_until_supervisor_morto.py::test_sighup_com_o_terminal_fechado_nao_mata_o_supervisor
+    layer: cli/subprocess real com pty
+    evidence: verified
+    run: "python3 tests/test_cepa_until_supervisor_morto.py -> 'ok o supervisor sobrevive ao SIGHUP e sai 0', 'ok fecha o item (item_end)', 'ok roda o build completo (verify)', 'ok e fecha o registro (run_end)'; 24 checks ok, '✓ tudo verde'. Vermelho em 68fe2bc (teste copiado sobre checkout detached): 18 FAIL, incluindo 'saiu -1; eventos [run_start, item_start]'."
+  - id: AC2
+    altitude: cli
+    surface: >
+      SIGTERM e SIGINT enviados ao cepa-until uma vez com item em voo; evento
+      run_interrompido no <run>.jsonl (sinal + item) e <run>.estado.json
+      com estado `interrompido`.
+    test: tests/test_cepa_until_supervisor_morto.py::test_sigterm_grava_run_interrompido_com_o_item_em_voo e ::test_ctrl_c_grava_run_interrompido_com_o_item_em_voo
+    layer: cli/subprocess real
+    evidence: verified
+    run: "python3 tests/test_cepa_until_supervisor_morto.py -> 'ok SIGTERM fecha o registro com run_interrompido', 'ok com o sinal e o item em voo', 'ok o estado vira interrompido com o item', 'ok sai com 143', 'ok Ctrl+C fecha o registro com run_interrompido (SIGINT, a1)'; tudo verde. Vermelho em 68fe2bc."
+    gap: "nenhum bloqueante (nota: a checagem do estado `interrompido` no caso SIGINT aparece só na linha de FAIL do vermelho; verde passa)."
+  - id: AC3
+    altitude: cli
+    surface: run_start no <run>.jsonl e <run>.estado.json de uma execução real do cepa-until.
+    test: tests/test_cepa_until_supervisor_morto.py::test_run_start_e_estado_carregam_pid_e_host
+    layer: cli/subprocess real
+    evidence: verified
+    run: "python3 tests/test_cepa_until_supervisor_morto.py -> 'ok run_start tem pid (int) e o host desta máquina', 'ok o estado tem o mesmo pid e host'; tudo verde. Vermelho em 68fe2bc."
+  - id: AC4
+    altitude: cli
+    surface: >
+      `cepa-until pendentes --json` (lista mortos), `cepa-doctor --projeto`
+      (linha [until]) e o texto de common/commands/until-review.md.
+    test: >
+      test_pendentes_acusa_run_rodando_com_o_pid_morto, test_pendentes_nao_acusa_*,
+      test_run_antigo_sem_pid_passado_do_prazo_e_acusado,
+      test_doctor_aponta_o_run_com_o_supervisor_morto (subprocesso real do doctor),
+      test_until_review_confere_o_supervisor_morto
+    layer: cli/subprocess real; until-review.md só por asserção de texto (comando de prompt, sem execução possível)
+    evidence: verified
+    run: "python3 tests/test_cepa_until_supervisor_morto.py -> 'ok o doctor avisa em [until] que o supervisor morreu', 'ok pendentes --json lista o run em mortos', 'ok oferecendo o build completo que faltou', 'ok o /common:until-review manda conferir mortos no pendentes'; tudo verde."
+  - id: AC5
+    altitude: cli
+    surface: teste vermelho antes do fix, cobrindo cada parte.
+    test: tests/test_cepa_until_supervisor_morto.py (commit 1efd937 antes de 2664bcf)
+    layer: cli
+    evidence: verified
+    run: "Arquivo de teste copiado sobre git worktree --detach de 68fe2bc: 18 FAIL cobrindo SIGHUP, SIGTERM/SIGINT, pid/host, pendentes/mortos, doctor e until-review. HEAD: 24 ok, tudo verde."
