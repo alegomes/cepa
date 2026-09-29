@@ -262,6 +262,8 @@ def test_only_acceptance_yaml_goes_back(tmp):
           not (live / "WEGO-2001.yaml").exists())
     check("subpasta de acceptance/ não é achatada",
           not (live / "WEGO-7.yaml").exists())
+    check("nem copiada com o nome da subpasta",
+          not (live / "old").exists())
     check("arquivo que não é .yaml fica só em rescued/",
           not (live / "notas.txt").exists())
 
