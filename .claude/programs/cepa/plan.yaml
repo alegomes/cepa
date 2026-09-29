@@ -1537,3 +1537,13 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: until-blocked-com-commits
+  title: 'cepa-until: item que o agente marca blocked depois de commitar deixa os
+    commits na branch da noite sem build'
+  why: 'Achado ao construir o passo 1 do until-fim-sem-dono (2026-09-28): o supervisor
+    só roda o build depois de done; um blocked com commits deixa código não verificado
+    embaixo do próximo card. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
