@@ -133,6 +133,47 @@ def test_hook_que_saiu_com_o_build_vermelho_nao_e_cobrado_no_fim():
               "reinstalar-plugin" not in p.stdout, p.stdout[-1200:])
 
 
+# 1ª tentativa do a1: commita o hook e sai `pending` (commit é progresso, o
+# supervisor avisa o hook). 2ª: commita `quebra.txt` e fecha `done`; o build
+# vermelho leva os commits das DUAS tentativas para a lateral. Depois disso o
+# a1 sai `blocked` para o run acabar.
+AVISA_E_SAI = (
+    "import subprocess\n"
+    "ident = primeiro_pendente()\n"
+    "cont = os.environ['FAKE_CHAMADAS'] + '.vez'\n"
+    "vez = (int(open(cont).read()) if os.path.exists(cont) else 0) + 1\n"
+    "open(cont, 'w').write(str(vez))\n"
+    "def commita(alvo):\n"
+    "    open(alvo, 'a').write(str(vez) + '\\n')\n"
+    "    subprocess.run(['git', 'add', '-A'], check=True)\n"
+    "    subprocess.run(['git', '-c', 'user.email=t@t', '-c', 'user.name=t',\n"
+    "                    'commit', '-qm', f'{ident} {vez}'], check=True)\n"
+    "if vez == 1:\n"
+    "    commita('meuplug/hooks/trava.py')\n"
+    "elif vez == 2:\n"
+    "    commita('quebra.txt')\n"
+    "    marca(ident, status='done', evidence='ok')\n"
+    "else:\n"
+    "    marca(ident, status='blocked', evidence='fim do teste')\n")
+
+
+def test_hook_avisado_que_saiu_depois_nao_e_cobrado_no_fim():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = com_plugin(monta_repo(tmp, [item("a1")]))
+        binv = fake_claude(tmp, AVISA_E_SAI)
+        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h",
+                                                 "--verify", VERIFY])
+        check("a 1ª tentativa deixou o hook na branch e a tela avisou",
+              len(avisos(raiz)) == 1, str(avisos(raiz)))
+        check("o build vermelho da 2ª levou o hook para a lateral",
+              "vermelho-a1" in p.stdout, p.stdout[-1500:])
+        check("o fim recalcula e não cobra o hook que saiu",
+              "reinstalar-plugin" not in p.stdout
+              and all(f["id"] != "reinstalar-plugin" for f in
+                      estado_de(raiz).get("fica_com_voce", [])),
+              p.stdout[-1500:])
+
+
 def main():
     print("cepa-until — hook que só vale depois de reinstalar\n")
     for nome, fn in sorted(globals().items()):
