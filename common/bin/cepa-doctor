@@ -871,10 +871,24 @@ def check_until_esperando(root: Path):
         p = subprocess.run([sys.executable, str(until), "pendentes",
                             "--repo", str(root), "--json"],
                            capture_output=True, text=True, timeout=60)
-        runs = json.loads(p.stdout).get("runs") or [] if p.returncode == 0 else []
+        dados = json.loads(p.stdout) if p.returncode == 0 else {}
+        runs = dados.get("runs") or []
+        mortos = dados.get("mortos") or []
     except Exception as e:  # noqa: BLE001 — diagnóstico não pode quebrar o doctor
         warn("until", f"checagem de run esperando o dono não rodou: {e}")
         return
+    # Run `rodando` cujo supervisor morreu (WEGO 2026-09-28-2003): o registro
+    # parou no meio, e o build completo do último `done` nunca rodou. A frase
+    # e o comando vêm prontos do `pendentes`.
+    for m in mortos:
+        item = ""
+        if m.get("item"):
+            item = f"; {m['item']} ficou `{m.get('status')}`"
+        warn("until", f"fila `{m['fila']}`: o supervisor do run {m['run']} "
+                      f"morreu sem fechar o registro ({m['como']}){item} — "
+                      + (f"o build completo que faltou: {m['comando']}"
+                         if m.get("comando") else
+                         "o run não tinha build completo"))
     for r in runs:
         warn("until", f"fila `{r['fila']}`: o run {r['run']} deixou "
                       f"`{r['branch']}` esperando aterrissagem em "

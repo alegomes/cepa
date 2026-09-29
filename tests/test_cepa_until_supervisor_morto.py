@@ -222,6 +222,10 @@ def noite_que_morreu(tmp, **troca):
     eventos = eventos[:corte + 1]
     if "prazo" in troca:
         eventos[0]["prazo"] = troca.pop("prazo")
+    for k in ("pid", "host"):
+        # Run anterior ao pid no estado também não o tem no `run_start`.
+        if k in troca and troca[k] is None:
+            eventos[0].pop(k, None)
     jsonl.write_text("".join(json.dumps(e) + "\n" for e in eventos))
     caminho = sorted(dir_until(raiz).glob("*.estado.json"))[-1]
     est = json.loads(caminho.read_text())

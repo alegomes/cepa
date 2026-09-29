@@ -61,6 +61,23 @@ nome, outro sufixo). O `cepa-until` grava esse arquivo antes de chamar você:
 `fica_com_voce` (o que nenhum comando executa). Run anterior a 2026-09-28 não
 tem o arquivo: diga isso e siga só com o resumo.
 
+**Supervisor morto ou interrompido.** Dois estados dizem que o run não chegou
+ao fim:
+
+- `interrompido`: o supervisor recebeu SIGTERM ou Ctrl+C e gravou o evento
+  `run_interrompido` no `.jsonl`, com o `sinal` e o item em voo (`id`, `fase`
+  e o `pid_filho`, o `claude` ou o build que roda em sessão própria e pode ter
+  seguido sozinho).
+- `rodando` sem `run_end` no `.jsonl`: ou o run ainda roda, ou o supervisor
+  morreu calado (o run WEGO 2026-09-28-2003 parou em `item_start`, o card
+  fechou `done` sozinho e o build completo nunca rodou). Não chute: rode
+  `python3 common/bin/cepa-until pendentes --json` e veja a lista `mortos`,
+  que confere o `pid` e o `host` gravados no estado (run sem pid conta como
+  morto 3h depois do prazo). Se o run estiver lá, a primeira pergunta do
+  relatório é rodar o build completo que faltou, com o `comando` que a lista
+  traz; o item em voo com status `done` está na fila sem esse build. Se não
+  estiver, o run ainda roda: diga isso e pare.
+
 ### 2. Ler procurando estas perguntas
 
 1. **O que ficou pronto e onde está.** Itens `done`, commits na branch da
