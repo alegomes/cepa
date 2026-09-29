@@ -496,6 +496,21 @@ def test_fecha_morto_aceita_run_interrompido():
               p.stdout + p.stderr)
 
 
+def test_help_lista_os_subcomandos():
+    """Os subcomandos são despachados antes do argparse do modo principal: sem
+    o epílogo, o `--help` não diz que eles existem."""
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "--help"],
+                       capture_output=True, text=True, timeout=30)
+    for sub in ("aterrissar", "pendentes", "fecha-morto"):
+        check(f"--help cita o subcomando {sub}",
+              f"cepa-until {sub}" in p.stdout, p.stdout[-800:])
+        q = subprocess.run([sys.executable, str(CEPA_UNTIL), sub, "--help"],
+                           capture_output=True, text=True, timeout=30)
+        check(f"...e `{sub} --help` mostra o uso dele",
+              q.returncode == 0 and f"cepa-until {sub}" in q.stdout,
+              q.stdout + q.stderr)
+
+
 def test_until_review_confere_o_supervisor_morto():
     texto = UNTIL_REVIEW.read_text(encoding="utf-8")
     check("o /common:until-review manda conferir `mortos` no pendentes",
