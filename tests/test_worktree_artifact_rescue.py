@@ -180,6 +180,71 @@ def test_cli_refuses_the_main_worktree(tmp):
     check("and explains why", "main worktree" in res.stderr, res.stderr)
 
 
+def test_acceptance_goes_back_where_the_gate_looks(tmp):
+    """28/09/2026, fechando o WEGO-2283: o resgate guardou os <KEY>.yaml do
+    completion-auditor em .claude/rescued/<branch>/acceptance/, pasta que o
+    acceptance-gate.py não consulta. A ida para Done de quatro cards com
+    auditoria COMPLETE seria barrada como "sem auditoria"."""
+    r, w = make_repo(Path(tmp) / "accept")
+    (w / ".claude" / "acceptance").mkdir()
+    (w / ".claude" / "acceptance" / "WEGO-2283.yaml").write_text(
+        "verdict: COMPLETE\n")
+    L.rescue_artifacts(str(w), str(r), "session/todo")
+    git(["worktree", "remove", str(w)], r)
+
+    live = r / ".claude" / "acceptance" / "WEGO-2283.yaml"
+    check("o aceite volta para .claude/acceptance/ do clone",
+          live.exists() and live.read_text() == "verdict: COMPLETE\n")
+    check("e a cópia de rescued/ continua lá",
+          (r / ".claude" / "rescued" / "session-todo" / "acceptance" /
+           "WEGO-2283.yaml").exists())
+
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "acceptance_gate", REPO / "common" / "hooks" / "acceptance-gate.py")
+    gate = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gate)
+    found = gate.find_artifact("WEGO-2283", r, r)
+    check("o acceptance-gate encontra o aceite depois da remoção",
+          found == live, found)
+
+
+def test_acceptance_restore_never_clobbers_the_clone(tmp):
+    """O clone já tem um aceite do mesmo card: ele é de outra árvore e pode
+    ser mais novo. Sobrescrever trocaria uma perda silenciosa por outra."""
+    r, w = make_repo(Path(tmp) / "accept-clobber")
+    (w / ".claude" / "acceptance").mkdir()
+    (w / ".claude" / "acceptance" / "WEGO-2283.yaml").write_text(
+        "verdict: INCOMPLETE\n")
+    live_dir = r / ".claude" / "acceptance"
+    live_dir.mkdir(parents=True)
+    (live_dir / "WEGO-2283.yaml").write_text("verdict: COMPLETE\n")
+    L.rescue_artifacts(str(w), str(r), "session/todo")
+    check("o aceite do clone fica intacto",
+          (live_dir / "WEGO-2283.yaml").read_text() == "verdict: COMPLETE\n")
+    check("o da worktree fica só em rescued/",
+          (r / ".claude" / "rescued" / "session-todo" / "acceptance" /
+           "WEGO-2283.yaml").read_text() == "verdict: INCOMPLETE\n")
+
+
+def test_acceptance_lands_in_the_main_clone_not_the_base(tmp):
+    """session-registry passa como base a worktree de onde a sessão saiu, que
+    pode ser outra worktree ligada. O gate procura na worktree da sessão e no
+    clone PRINCIPAL; devolver o aceite para uma worktree base o esconderia de
+    novo assim que ela também fosse removida."""
+    r, w = make_repo(Path(tmp) / "accept-base")
+    b = Path(tmp) / "accept-base" / "b"
+    git(["worktree", "add", "-q", str(b), "-b", "session/base"], r)
+    (w / ".claude" / "acceptance").mkdir()
+    (w / ".claude" / "acceptance" / "WEGO-2331.yaml").write_text(
+        "verdict: COMPLETE\n")
+    L.rescue_artifacts(str(w), str(b), "session/todo")
+    check("o aceite vai para o clone principal",
+          (r / ".claude" / "acceptance" / "WEGO-2331.yaml").exists())
+    check("e não para a worktree base",
+          not (b / ".claude" / "acceptance" / "WEGO-2331.yaml").exists())
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         for fn in (test_ignored_file_dies_silently,
@@ -189,7 +254,10 @@ def main():
                    test_rescue_never_clobbers_the_live_plan,
                    test_rescued_dirs_reports_for_session_start,
                    test_cli_rescues_on_command_removal_path,
-                   test_cli_refuses_the_main_worktree):
+                   test_cli_refuses_the_main_worktree,
+                   test_acceptance_goes_back_where_the_gate_looks,
+                   test_acceptance_restore_never_clobbers_the_clone,
+                   test_acceptance_lands_in_the_main_clone_not_the_base):
             print(f"\n{fn.__name__}")
             fn(tmp)
     if FAILURES:

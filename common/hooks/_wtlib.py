@@ -556,7 +556,41 @@ def rescue_artifacts(wt_path: str, base_root: str, branch: str):
             saved.append(rel)
         except OSError:
             continue    # one unreadable file must not abort the whole rescue
+    restore_acceptance(wt_path, base_root, doomed)
     return saved
+
+
+def restore_acceptance(wt_path: str, base_root: str, doomed):
+    """Put a dying worktree's `.claude/acceptance/<KEY>.yaml` back where the
+    acceptance-gate looks: the MAIN clone's `.claude/acceptance/`.
+
+    rescued/ keeps its copy too, but the gate never reads rescued/. On
+    2026-09-28, closing WEGO-2283, the Done transition of four cards with a
+    COMPLETE audit would have been blocked as "no audit" because their files
+    sat in `.claude/rescued/until-2026-09-28-1137/acceptance/`. The audit
+    describes a CARD, not a tree (see acceptance-gate.find_artifact), so it
+    belongs to the clone. Main clone, not `base_root`: session-registry passes
+    the tree the session came from, which may itself be a linked worktree the
+    gate stops seeing once it is removed. Never overwrites: a file already in
+    the clone came from another tree and may be the newer audit. Returns the
+    worktree-relative paths restored.
+    """
+    target = Path(main_root(wt_path) or base_root) / ".claude" / "acceptance"
+    restored = []
+    for rel in doomed:
+        parts = Path(rel).parts
+        if len(parts) != 3 or parts[1] != "acceptance" or not rel.endswith(".yaml"):
+            continue
+        dest = target / parts[2]
+        if dest.exists():
+            continue
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(Path(wt_path) / rel, dest)
+            restored.append(rel)
+        except OSError:
+            continue
+    return restored
 
 
 def rescued_dirs(root: str):

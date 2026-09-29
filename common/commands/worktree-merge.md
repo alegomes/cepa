@@ -91,8 +91,10 @@ session worktree, tell them to switch to the integration session/worktree first.
 7. **Prune.** Once the merge is committed:
    - `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_wtlib.py" rescue "<worktree-path>"`
      FIRST — copies the worktree's gitignored `.claude/` artifacts (plans,
-     proofs, acceptances) into the main worktree's `.claude/rescued/<branch>/`.
-     A raw remove destroys them silently: git returns 0 for ignored content
+     proofs, acceptances) into the main worktree's `.claude/rescued/<branch>/`,
+     and puts each `acceptance/<KEY>.yaml` back in the main clone's
+     `.claude/acceptance/` (never over an existing one), where the
+     acceptance-gate looks. A raw remove destroys them silently: git returns 0 for ignored content
      even without `--force`, and that is how a 47-item triage plan was lost on
      2026-08-16. Relay whatever the rescue prints.
    - `git worktree remove "<worktree-path>"` (use `--force` only if the user
