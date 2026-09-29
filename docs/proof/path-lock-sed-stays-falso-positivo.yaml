@@ -1,0 +1,44 @@
+schema_version: 2
+card: path-lock-sed-stays-falso-positivo
+verdict: unproven
+reviewed_at: 2026-09-29T20:00:00-03:00
+base_commit: d9593e5
+head_commit: 06f5a1f
+issue_type: Bug
+scope:
+  changed_classes:
+    - class: "common/hooks/_templates/bash-path-lock.py.tmpl::_sed_executes_or_writes (+ 6 copias geradas)"
+      module: common
+      external_observable: true
+      substituted_by_double: null   # o hook roda de verdade, como subprocesso com JSON no stdin
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "BYPASS (decisivo): sed -n '#c\\<nl>w OUT' IN e sed -n 'r x\\<nl>w OUT' IN retornam False em _sed_executes_or_writes; hook sai com exit=0 nas 6 copias (esperado 2). No sed real (BSD, macOS) o comentario NAO continua depois de barra-newline: 'sed -n \"#c\\<nl>p\"' imprime as linhas, ou seja o comando da linha seguinte executa. Em base d9593e5 os mesmos dois casos sao NEGADOS (0 falhas), entao e regressao introduzida pela reescrita (_sed_fim_da_linha trata barra-newline como continuacao tambem para # e r/R)."
+        - "Suspeita nao confirmada (GNU sed nao instalado): ':a w OUT' e 'ba w OUT' retornam False; no BSD sed o rotulo vai ate o fim da linha (nao e bypass); no GNU sed o rotulo termina no espaco e o w executaria."
+        - "Mutacao a/i/c nao pula texto -> RED (libera: stays no texto do a, do c)."
+        - "Mutacao w/W/e retorna False -> RED (nega: sed w depois de endereco com stays, sed w na linha seguinte ao texto do a, sed e depois de rotulo)."
+        - "Mutacao comando desconhecido retorna False -> RED (nega: sed -i 'k')."
+        - "Mutacao rotulo :btT vai ate fim da linha -> RED (nega: sed e depois de rotulo)."
+        - "Mutantes SOBREVIVENTES (verde apesar da quebra; nenhum teste os guarda): flag e/w do s deixa de retornar True (equivalente, a checagem de flag desconhecida logo abaixo ainda nega), flag desconhecida do s, y/s mal formado retorna False, comando simples nao avanca ate ; (equivalente na pratica), r/R nao pula a linha, endereco sem comando retorna False."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "sem quarkus-jacoco/coverage rodada; alcance estrutural inferido pelas perturbacoes acima"
+  l4_adversarial_input:
+    status: findings
+    reason: ""
+    findings:
+      - "sed -n '#c\\<nl>w OUT' IN  -> exit 0 (deveria ser 2)"
+      - "sed -n 'r x\\<nl>w OUT' IN -> exit 0 (deveria ser 2)"
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "python3 tests/test_bash_path_lock_exec.py em worktree de d9593e5 com o arquivo de teste do HEAD: 4 casos vermelhos x 6 copias (libera: sed -i com stays no endereco / no texto do a / no texto do c; nega: sed com comando que ninguem conhece). No HEAD: 'tudo verde em 6 copias'."
+routing_reason: "Os 4 casos de regressao ficam vermelhos no base e as ramificacoes principais do leitor novo sao guardadas (4 de 4 mutacoes principais RED). Mas a reescrita abriu um furo que o scanner antigo nao tinha: comentario ou r/R terminado em barra seguida de w/e na linha seguinte passa pelo hook, e o sed real executa esse w. UNPROVEN."
