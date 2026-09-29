@@ -3726,7 +3726,8 @@ por um vigia no mesmo turno, é colhido.
 
 **Plano:** `cepa/until-fim-sem-dono`
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-until`, `common/bin/cepa-plan`,
+**Status:** feito em 2026-09-28 (merge 9db5fbc; completion-auditor COMPLETE em
+`.claude/acceptance/until-fim-sem-dono.yaml`) · **Lar provável:** `common/bin/cepa-until`, `common/bin/cepa-plan`,
 `common/commands/until-review.md`, `common/bin/cepa-doctor` · **Origem:** run `WEGO`
 `2026-09-26-1102` (WEGO-2320 marcado `blocked` por um teste que passou no build anterior do
 mesmo código); estratégia em `docs/estrategia-fim-do-cepa-until.md` (proposta, revisão do
