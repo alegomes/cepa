@@ -48,6 +48,7 @@ UNTIL_REVIEW = CEPA_UNTIL.parent.parent / "commands" / "until-review.md"
 # janela em que o teste manda o sinal com o item em voo.
 ESPERA_E_TRABALHA = (
     "segue = os.path.join(os.path.dirname(os.environ['FAKE_CHAMADAS']), 'segue')\n"
+    "open(segue + '.pid', 'w').write(str(os.getpid()))\n"
     "fim = time.time() + 60\n"
     "while not os.path.exists(segue) and time.time() < fim:\n"
     "    time.sleep(0.1)\n"
@@ -133,6 +134,19 @@ def test_sighup_com_o_terminal_fechado_nao_mata_o_supervisor():
 
 # ── 2. SIGTERM e Ctrl+C ─────────────────────────────────────────────────────
 
+def vivo(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    # Zumbi que ninguém colheu ainda conta como morto.
+    ps = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)],
+                        capture_output=True, text=True).stdout.strip()
+    return bool(ps) and not ps.startswith("Z")
+
+
 def _interrompe(sinal):
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1")])
@@ -149,16 +163,23 @@ def _interrompe(sinal):
             except subprocess.TimeoutExpired:
                 proc.kill()
                 saida, _ = proc.communicate()
+            arq = Path(tmp) / "segue.pid"
+            filho = int(arq.read_text()) if arq.exists() else None
+            time.sleep(0.5)
+            filho_vivo = filho is not None and vivo(filho)
         finally:
             # Solta o `claude` falso, que roda na própria sessão e sobrevive.
             (Path(tmp) / "segue").write_text("")
             time.sleep(1.5)
-        return proc.returncode, saida, ledger_de(raiz), estado(raiz)
+        return (proc.returncode, saida, ledger_de(raiz), estado(raiz),
+                filho_vivo)
 
 
 def test_sigterm_grava_run_interrompido_com_o_item_em_voo():
-    codigo, saida, ev, est = _interrompe(signal.SIGTERM)
+    codigo, saida, ev, est, filho_vivo = _interrompe(signal.SIGTERM)
     fim = ev[-1] if ev else {}
+    check("SIGTERM encerra o `claude` do item (sessão própria) antes de sair",
+          not filho_vivo and fim.get("filho_encerrado") is True, str(fim))
     check("SIGTERM fecha o registro com run_interrompido",
           fim.get("evento") == "run_interrompido", str(ev[-2:]))
     check("...com o sinal e o item em voo",
@@ -172,8 +193,10 @@ def test_sigterm_grava_run_interrompido_com_o_item_em_voo():
 
 
 def test_ctrl_c_grava_run_interrompido_com_o_item_em_voo():
-    codigo, saida, ev, est = _interrompe(signal.SIGINT)
+    codigo, saida, ev, est, filho_vivo = _interrompe(signal.SIGINT)
     fim = ev[-1] if ev else {}
+    check("Ctrl+C encerra o `claude` do item antes de sair",
+          not filho_vivo and fim.get("filho_encerrado") is True, str(fim))
     check("Ctrl+C fecha o registro com run_interrompido (SIGINT, a1)",
           fim.get("evento") == "run_interrompido"
           and fim.get("sinal") == "SIGINT" and fim.get("id") == "a1",
@@ -320,11 +343,131 @@ def test_doctor_aponta_o_run_com_o_supervisor_morto():
               any(VERIFY in l for l in linhas), "\n".join(linhas))
 
 
+def fecha(raiz, run_id, *extra):
+    env = dict(os.environ, CEPA_WORKTREE_HOME=str(raiz.parent / "worktrees"))
+    return subprocess.run([sys.executable, str(CEPA_UNTIL), "fecha-morto",
+                           f"fila/{run_id}", "--repo", str(raiz), *extra],
+                          capture_output=True, text=True, cwd=str(raiz),
+                          env=env, timeout=120)
+
+
+def run_de(inicio):
+    return inicio["branch"].split("/", 1)[1]
+
+
+def test_pendentes_e_doctor_mandam_rodar_o_fecha_morto():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, inicio = noite_que_morreu(tmp)
+        m = (pendentes(raiz).get("mortos") or [{}])[0]
+        check("pendentes traz o comando do fecha-morto",
+              m.get("fechar") == f"cepa-until fecha-morto fila/{run_de(inicio)}",
+              str(m))
+        p = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
+                           cwd=str(raiz), capture_output=True, text=True,
+                           timeout=120, env=dict(os.environ,
+                                                 CEPA_DOCTOR_INSTALL="off"))
+        check("...e o doctor também",
+              f"cepa-until fecha-morto fila/{run_de(inicio)}" in p.stdout,
+              p.stdout[-1500:])
+
+
+def test_fecha_morto_sem_sim_so_mostra_o_plano():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, inicio = noite_que_morreu(tmp)
+        p = fecha(raiz, run_de(inicio))
+        check("sem --sim sai 0 e diz como confirmar",
+              p.returncode == 0 and "--sim" in p.stdout, p.stdout + p.stderr)
+        check("...e não mexe no estado", estado(raiz)["estado"] == "rodando",
+              str(estado(raiz)))
+        n = sum(1 for e in ledger_de(raiz) if e["evento"] == "verify")
+        check("...nem roda o build", n == 0, str(ledger_de(raiz)))
+
+
+def test_fecha_morto_verde_deixa_o_run_pronto_para_aterrissar():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, inicio = noite_que_morreu(tmp)
+        run_id = run_de(inicio)
+        p = fecha(raiz, run_id, "--sim")
+        check("fecha-morto --sim sai 0 com o build verde", p.returncode == 0,
+              p.stdout + p.stderr)
+        ev = ledger_de(raiz)
+        check("...grava o build no registro, marcado como fechamento",
+              any(e["evento"] == "verify" and e.get("fechamento")
+                  and e.get("verde") for e in ev), str(ev[-3:]))
+        check("...e fecha o registro com run_end",
+              ev[-1]["evento"] == "run_end"
+              and ev[-1].get("motivo") == "supervisor-morto", str(ev[-1]))
+        est = estado(raiz)
+        check("...o estado vira esperando-dono com a ação aterrissar",
+              est.get("estado") == "esperando-dono"
+              and any(x.get("id") == "aterrissar" for x in est.get("acoes") or []),
+              str(est))
+        env = dict(os.environ, CEPA_WORKTREE_HOME=str(raiz.parent / "worktrees"))
+        a = subprocess.run([sys.executable, str(CEPA_UNTIL), "aterrissar",
+                            f"fila/{run_id}", "--repo", str(raiz), "--sim"],
+                           capture_output=True, text=True, cwd=str(raiz),
+                           env=env, timeout=120)
+        check("...e o aterrissar aceita o run", a.returncode == 0,
+              a.stdout + a.stderr)
+        check("...o doctor para de apontar o run",
+              not pendentes(raiz).get("mortos"), str(pendentes(raiz)))
+
+
+def test_fecha_morto_vermelho_nao_muda_o_estado():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, inicio = noite_que_morreu(tmp)
+        arvore = Path(inicio["arvore"])
+        (arvore / "quebra.txt").write_text("x")
+        subprocess.run(["git", "add", "-A"], cwd=arvore, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", "quebra"], cwd=arvore, check=True)
+        p = fecha(raiz, run_de(inicio), "--sim")
+        check("build vermelho sai com erro", p.returncode != 0,
+              p.stdout + p.stderr)
+        check("...o registro guarda o vermelho",
+              any(e["evento"] == "verify" and e.get("fechamento")
+                  and e.get("verde") is False for e in ledger_de(raiz)),
+              str(ledger_de(raiz)[-2:]))
+        check("...e o estado continua `rodando` (o doctor segue apontando)",
+              estado(raiz)["estado"] == "rodando"
+              and pendentes(raiz).get("mortos"), str(estado(raiz)))
+
+
+def test_fecha_morto_recusa_supervisor_vivo():
+    with tempfile.TemporaryDirectory() as tmp:
+        vivo_ = subprocess.Popen([sys.executable, "-c",
+                                  "import time; time.sleep(60)", "cepa-until"])
+        try:
+            raiz, inicio = noite_que_morreu(tmp, pid=vivo_.pid)
+            p = fecha(raiz, run_de(inicio), "--sim")
+            check("fecha-morto recusa run com o supervisor vivo",
+                  p.returncode != 0 and str(vivo_.pid) in p.stderr,
+                  p.stdout + p.stderr)
+            check("...sem rodar o build",
+                  not any(e["evento"] == "verify" and e.get("fechamento")
+                          for e in ledger_de(raiz)))
+        finally:
+            vivo_.kill()
+
+
+def test_fecha_morto_aceita_run_interrompido():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, inicio = noite_que_morreu(tmp, estado="interrompido")
+        check("run interrompido também aparece em `mortos`",
+              len(pendentes(raiz).get("mortos") or []) == 1,
+              str(pendentes(raiz)))
+        p = fecha(raiz, run_de(inicio), "--sim")
+        check("...e o fecha-morto o fecha",
+              p.returncode == 0
+              and estado(raiz)["estado"] == "esperando-dono",
+              p.stdout + p.stderr)
+
+
 def test_until_review_confere_o_supervisor_morto():
     texto = UNTIL_REVIEW.read_text(encoding="utf-8")
     check("o /common:until-review manda conferir `mortos` no pendentes",
           "cepa-until pendentes" in texto and "mortos" in texto
-          and "interrompido" in texto)
+          and "interrompido" in texto and "fecha-morto" in texto)
 
 
 def main():
