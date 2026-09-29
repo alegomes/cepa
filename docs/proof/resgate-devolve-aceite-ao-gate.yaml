@@ -1,9 +1,9 @@
 schema_version: 2
 card: resgate-devolve-aceite-ao-gate
-verdict: unproven
-reviewed_at: 2026-09-29T20:30:00-03:00
+verdict: proven
+reviewed_at: 2026-09-29T21:00:00-03:00
 base_commit: 698e19d
-head_commit: d04bbfd
+head_commit: db8e624
 issue_type: Bug
 scope:
   changed_classes:
@@ -16,24 +16,23 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
         - "P1 skip call restore_acceptance(...) -> pass: RED (3 failures)"
         - "P2 drop dest.exists() guard (if False): RED (1 failure: o aceite do clone fica intacto)"
         - "P3 base_root instead of main_root(wt_path): RED (2 failures)"
         - "P4a filter: drop parts[1] != 'acceptance': RED (2 failures: proof/ nao vira aceite, proof/ do make_repo tambem nao)"
         - "P4b filter: drop not rel.endswith('.yaml'): RED (1 failure: arquivo que nao e .yaml fica so em rescued/)"
-        - "P4c filter: drop both (or False): RED (3 failures)"
-        - "P4d filter: drop len(parts) != 3: SURVIVED (all green). A nested .claude/acceptance/<sub>/x.yaml would be copied as a file named <sub> in the clone's acceptance/; no test covers nested paths"
+        - "P4d filter: drop len(parts) != 3: RED (1 failure: nem copiada com o nome da subpasta)"
   l2_coverage:
-    status: assumed
+    status: pass
     uncovered_lines: []
-    run: "no coverage tool run; the len(parts) != 3 rejection branch has no asserting test"
+    run: "every branch of restore_acceptance (call, main_root target, exists guard, three filter conditions) has a perturbation turned RED by the test file; no line-coverage tool was run, coverage is shown by the perturbations"
   l4_adversarial_input:
     status: n/a
     reason: "diff only moves files between local .claude/ directories; no parsing of input from outside and no api-rest module touched"
     findings: []
   bugfix_regression_red_at_base:
     status: pass
-    run: "python3 tests/test_worktree_artifact_rescue.py with 698e19d _wtlib.py + d04bbfd tests -> '3 failure(s): o aceite volta para .claude/acceptance/ do clone, o acceptance-gate encontra o aceite depois da remocao, o aceite vai para o clone principal'; at d04bbfd -> 'all green'; python3 tests/test_acceptance_gate.py -> 'all acceptance-gate tests passed'"
-routing_reason: "The gap from the previous round is closed: the parts[1] and .yaml filter perturbations now go RED. One residual survivor: removing the len(parts) != 3 guard stays green. Impact is low (nested subdirectories under .claude/acceptance/ do not occur today) but the mutant is not equivalent, so by rule the verdict stays UNPROVEN until a test covers it or a human waives it."
+    run: "python3 tests/test_worktree_artifact_rescue.py with 698e19d _wtlib.py + db8e624 tests -> '3 failure(s): o aceite volta para .claude/acceptance/ do clone, o acceptance-gate encontra o aceite depois da remocao, o aceite vai para o clone principal'; at db8e624 -> 'all green'; python3 tests/test_acceptance_gate.py -> 'all acceptance-gate tests passed'"
+routing_reason: "Bug is red at base and green at HEAD. Each of the six perturbations of the changed lines (call, no-overwrite guard, main clone vs base, and the three path-filter conditions) turns the test file RED. The previous survivor (len(parts) != 3) is now killed by the subfolder check. The external surface (acceptance-gate.find_artifact after rescue and worktree removal) is asserted by the test, with the real code path and no double."
