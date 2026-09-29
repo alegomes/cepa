@@ -1,0 +1,341 @@
+#!/usr/bin/env python3
+"""cepa-until — o supervisor que morre calado.
+
+O run WEGO 2026-09-28-2003 terminou com o registro `.jsonl` só com `run_start`
+e `item_start`. O card fechou `done` sozinho às 20:13, mas não houve `verify`,
+`item_end` nem `run_end`, e a fila ficou com um `done` sem o build completo. Não
+houve kill em nenhuma sessão nem repouso do Mac. A hipótese que sobrou foi o
+SIGHUP de uma aba de terminal fechada: o `claude` roda com
+`start_new_session=True`, fora do grupo do terminal, e sobrevive; o supervisor
+não tratava sinal nenhum e morria no meio do item.
+
+O que estes testes fixam:
+
+  1. SIGHUP (e o terminal sumindo junto) não mata o supervisor: o item em voo
+     termina, o build completo roda e o registro fecha com `run_end`;
+  2. SIGTERM e Ctrl+C gravam `run_interrompido` no `.jsonl`, com o sinal e o
+     item em voo, e deixam o `<run>.estado.json` como `interrompido`;
+  3. o `run_start` e o estado carregam o pid e o host do supervisor;
+  4. o `cepa-until pendentes`, o `cepa-doctor` e o `/common:until-review`
+     apontam o run `rodando` cujo supervisor morreu, com o build completo que
+     faltou.
+
+Run: python3 tests/test_cepa_until_supervisor_morto.py
+"""
+
+import json
+import os
+import pty
+import signal
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_cepa_until import (  # noqa: E402
+    CEPA_UNTIL, FAILURES, check, fake_claude, item, ledger_de, monta_repo, roda)
+from test_cepa_until_branch_da_noite import (  # noqa: E402
+    TRABALHA, VERIFY, plano_de)
+
+DOCTOR = CEPA_UNTIL.parent / "cepa-doctor"
+UNTIL_REVIEW = CEPA_UNTIL.parent.parent / "commands" / "until-review.md"
+
+# O `claude` falso espera o arquivo `<tmp>/segue` antes de trabalhar: é a
+# janela em que o teste manda o sinal com o item em voo.
+ESPERA_E_TRABALHA = (
+    "segue = os.path.join(os.path.dirname(os.environ['FAKE_CHAMADAS']), 'segue')\n"
+    "fim = time.time() + 60\n"
+    "while not os.path.exists(segue) and time.time() < fim:\n"
+    "    time.sleep(0.1)\n"
+    + TRABALHA)
+
+
+def dir_until(raiz):
+    return raiz / ".claude" / "programs" / "fila" / "until"
+
+
+def estado(raiz):
+    return json.loads(sorted(dir_until(raiz).glob("*.estado.json"))[-1]
+                      .read_text())
+
+
+def espera(cond, segundos=30):
+    fim = time.time() + segundos
+    while time.time() < fim:
+        if cond():
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def item_em_voo(raiz):
+    try:
+        return any(e["evento"] == "item_start" for e in ledger_de(raiz))
+    except (OSError, ValueError):
+        return False
+
+
+def larga(raiz, binv, plano, args, **popen):
+    """Sobe o `cepa-until` em segundo plano (o `roda` do test_cepa_until
+    espera o fim, e aqui o teste precisa mandar o sinal no meio)."""
+    env = dict(os.environ)
+    env["PATH"] = f"{binv}:{env['PATH']}"
+    env["FAKE_PLANO"] = str(plano)
+    env["FAKE_CHAMADAS"] = str(raiz.parent / "chamadas.jsonl")
+    env["CEPA_WORKTREE_HOME"] = str(raiz.parent / "worktrees")
+    return subprocess.Popen(
+        [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz)] + args
+        + ["--sem-analise"], env=env, stdin=subprocess.DEVNULL, **popen)
+
+
+# ── 1. SIGHUP ───────────────────────────────────────────────────────────────
+
+def test_sighup_com_o_terminal_fechado_nao_mata_o_supervisor():
+    """A aba fechada manda SIGHUP e leva o terminal junto: depois dela, cada
+    `print` do supervisor bate num terminal que não existe mais."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, ESPERA_E_TRABALHA)
+        mestre, escravo = pty.openpty()
+        proc = larga(raiz, binv, plano_de(raiz),
+                     ["--for", "2h", "--verify", VERIFY],
+                     stdout=escravo, stderr=escravo, start_new_session=True)
+        os.close(escravo)
+        try:
+            check("o item entrou em voo",
+                  espera(lambda: item_em_voo(raiz)), str(ledger_de(raiz)))
+            os.kill(proc.pid, signal.SIGHUP)
+            time.sleep(0.5)
+            os.close(mestre)
+            mestre = None
+            (Path(tmp) / "segue").write_text("")
+            try:
+                codigo = proc.wait(timeout=90)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                codigo = "não terminou"
+        finally:
+            if mestre is not None:
+                os.close(mestre)
+            (Path(tmp) / "segue").write_text("")
+        ev = [e["evento"] for e in ledger_de(raiz)]
+        check("o supervisor sobrevive ao SIGHUP e sai 0", codigo == 0,
+              f"saiu {codigo}; eventos {ev}")
+        check("...fecha o item (item_end)", "item_end" in ev, str(ev))
+        check("...roda o build completo (verify)", "verify" in ev, str(ev))
+        check("...e fecha o registro (run_end)",
+              ev and ev[-1] == "run_end", str(ev))
+
+
+# ── 2. SIGTERM e Ctrl+C ─────────────────────────────────────────────────────
+
+def _interrompe(sinal):
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, ESPERA_E_TRABALHA)
+        proc = larga(raiz, binv, plano_de(raiz),
+                     ["--for", "2h", "--verify", VERIFY],
+                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                     text=True)
+        try:
+            espera(lambda: item_em_voo(raiz))
+            os.kill(proc.pid, sinal)
+            try:
+                saida, _ = proc.communicate(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                saida, _ = proc.communicate()
+        finally:
+            # Solta o `claude` falso, que roda na própria sessão e sobrevive.
+            (Path(tmp) / "segue").write_text("")
+            time.sleep(1.5)
+        return proc.returncode, saida, ledger_de(raiz), estado(raiz)
+
+
+def test_sigterm_grava_run_interrompido_com_o_item_em_voo():
+    codigo, saida, ev, est = _interrompe(signal.SIGTERM)
+    fim = ev[-1] if ev else {}
+    check("SIGTERM fecha o registro com run_interrompido",
+          fim.get("evento") == "run_interrompido", str(ev[-2:]))
+    check("...com o sinal e o item em voo",
+          fim.get("sinal") == "SIGTERM" and fim.get("id") == "a1",
+          str(fim))
+    check("...o estado vira `interrompido` com o item",
+          est.get("estado") == "interrompido"
+          and (est.get("item_em_voo") or {}).get("id") == "a1", str(est))
+    check("...e o processo sai com 143 (128 + SIGTERM)", codigo == 143,
+          f"{codigo}: {saida[-500:]}")
+
+
+def test_ctrl_c_grava_run_interrompido_com_o_item_em_voo():
+    codigo, saida, ev, est = _interrompe(signal.SIGINT)
+    fim = ev[-1] if ev else {}
+    check("Ctrl+C fecha o registro com run_interrompido (SIGINT, a1)",
+          fim.get("evento") == "run_interrompido"
+          and fim.get("sinal") == "SIGINT" and fim.get("id") == "a1",
+          str(ev[-2:]))
+    check("...o estado vira `interrompido`",
+          est.get("estado") == "interrompido", str(est))
+    check("...e o processo sai com 130", codigo == 130,
+          f"{codigo}: {saida[-500:]}")
+
+
+# ── 3. pid e host ───────────────────────────────────────────────────────────
+
+def test_run_start_e_estado_carregam_pid_e_host():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, TRABALHA)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY])
+        inicio = [e for e in ledger_de(raiz) if e["evento"] == "run_start"][0]
+        est = estado(raiz)
+        check("run_start tem pid (int) e o host desta máquina",
+              isinstance(inicio.get("pid"), int)
+              and inicio.get("host") == socket.gethostname(), str(inicio))
+        check("o estado tem o mesmo pid e host",
+              est.get("pid") == inicio.get("pid")
+              and est.get("host") == inicio.get("host"), str(est))
+
+
+# ── 4. o run `rodando` com o supervisor morto ───────────────────────────────
+
+def pid_morto():
+    p = subprocess.Popen(["true"])
+    p.wait()
+    return p.pid
+
+
+def noite_que_morreu(tmp, **troca):
+    """Uma noite de verdade (a1 entregue), com o estado e o registro
+    rebobinados para o ponto em que o supervisor do WEGO morreu: `rodando`,
+    item em voo, sem `item_end`, `verify` nem `run_end`."""
+    raiz = monta_repo(tmp, [item("a1")])
+    binv = fake_claude(tmp, TRABALHA)
+    roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY])
+    jsonl = sorted(dir_until(raiz).glob("*.jsonl"))[-1]
+    eventos = [json.loads(l) for l in jsonl.read_text().splitlines()]
+    corte = next(i for i, e in enumerate(eventos) if e["evento"] == "item_start")
+    eventos = eventos[:corte + 1]
+    if "prazo" in troca:
+        eventos[0]["prazo"] = troca.pop("prazo")
+    jsonl.write_text("".join(json.dumps(e) + "\n" for e in eventos))
+    caminho = sorted(dir_until(raiz).glob("*.estado.json"))[-1]
+    est = json.loads(caminho.read_text())
+    est.update(estado="rodando", pid=pid_morto(), host=socket.gethostname())
+    for k in ("acoes", "fica_com_voce", "itens", "motivo_fim"):
+        est.pop(k, None)
+    for k, v in troca.items():
+        if v is None:
+            est.pop(k, None)
+        else:
+            est[k] = v
+    caminho.write_text(json.dumps(est))
+    return raiz, eventos[0]
+
+
+def pendentes(raiz):
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL), "pendentes",
+                        "--repo", str(raiz), "--json"],
+                       capture_output=True, text=True, timeout=60)
+    try:
+        return json.loads(p.stdout)
+    except ValueError:
+        return {"erro": p.stdout + p.stderr}
+
+
+def test_pendentes_acusa_run_rodando_com_o_pid_morto():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, inicio = noite_que_morreu(tmp)
+        mortos = pendentes(raiz).get("mortos") or []
+        check("pendentes --json lista o run em `mortos`",
+              len(mortos) == 1 and mortos[0].get("item") == "a1", str(mortos))
+        m = mortos[0] if mortos else {}
+        check("...oferecendo o build completo que faltou, na worktree da noite",
+              VERIFY in (m.get("comando") or "")
+              and inicio["arvore"] in (m.get("comando") or ""), str(m))
+        texto = subprocess.run([sys.executable, str(CEPA_UNTIL), "pendentes",
+                                "--repo", str(raiz)], capture_output=True,
+                               text=True, timeout=60).stdout
+        check("...e o texto diz que o supervisor morreu", "morreu" in texto,
+              texto)
+
+
+def test_pendentes_nao_acusa_run_com_o_supervisor_vivo():
+    with tempfile.TemporaryDirectory() as tmp:
+        vivo = subprocess.Popen([sys.executable, "-c",
+                                 "import time; time.sleep(60)", "cepa-until"])
+        try:
+            raiz, _ = noite_que_morreu(tmp, pid=vivo.pid)
+            check("supervisor vivo não entra em `mortos`",
+                  not pendentes(raiz).get("mortos"), str(pendentes(raiz)))
+        finally:
+            vivo.kill()
+
+
+def test_pendentes_nao_acusa_pid_de_outra_maquina():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, _ = noite_que_morreu(tmp, host="outra-maquina.local")
+        check("pid de outro host não é conferido aqui",
+              not pendentes(raiz).get("mortos"), str(pendentes(raiz)))
+
+
+def test_run_antigo_sem_pid_passado_do_prazo_e_acusado():
+    """O próprio run do WEGO (2026-09-28-2003) é anterior ao pid no estado:
+    sem pid, o que diz que ele morreu é o prazo ter passado há muito."""
+    with tempfile.TemporaryDirectory() as tmp:
+        velho = (datetime.now() - timedelta(hours=6)).isoformat()
+        raiz, _ = noite_que_morreu(tmp, pid=None, host=None, prazo=velho)
+        mortos = pendentes(raiz).get("mortos") or []
+        check("run sem pid, 6h depois do prazo, entra em `mortos`",
+              len(mortos) == 1, str(mortos))
+
+
+def test_run_sem_pid_dentro_do_prazo_nao_e_acusado():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, _ = noite_que_morreu(tmp, pid=None, host=None)
+        check("run sem pid ainda dentro do prazo não entra em `mortos`",
+              not pendentes(raiz).get("mortos"), str(pendentes(raiz)))
+
+
+def test_doctor_aponta_o_run_com_o_supervisor_morto():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, inicio = noite_que_morreu(tmp)
+        p = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
+                           cwd=str(raiz), capture_output=True, text=True,
+                           timeout=120, env=dict(os.environ,
+                                                 CEPA_DOCTOR_INSTALL="off"))
+        out = p.stdout + p.stderr
+        linhas = [l for l in out.splitlines() if "[until]" in l]
+        check("o doctor avisa em [until] que o supervisor morreu",
+              any("morreu" in l for l in linhas), out[-1500:])
+        check("...com o build completo que faltou",
+              any(VERIFY in l for l in linhas), "\n".join(linhas))
+
+
+def test_until_review_confere_o_supervisor_morto():
+    texto = UNTIL_REVIEW.read_text(encoding="utf-8")
+    check("o /common:until-review manda conferir `mortos` no pendentes",
+          "cepa-until pendentes" in texto and "mortos" in texto
+          and "interrompido" in texto)
+
+
+def main():
+    print("cepa-until — supervisor morto\n")
+    for nome, fn in sorted(globals().items()):
+        if nome.startswith("test_") and callable(fn):
+            print(f"{nome}:")
+            fn()
+    print()
+    if FAILURES:
+        print(f"✗ {len(FAILURES)} falha(s): {', '.join(FAILURES)}")
+        return 1
+    print("✓ tudo verde")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
