@@ -1,0 +1,63 @@
+key: until-avisa-hook-so-vale-apos-reinstalar
+status: complete
+diff: dee46f1..9f08c21
+audited_at: "2026-09-29"
+criteria:
+  - id: AC1
+    text: >
+      Quando um item da noite commita arquivo sob `<plugin>/hooks/` (pasta com
+      `.claude-plugin/plugin.json`), a tela do run avisa logo depois do item e
+      antes do próximo começar que o hook só vale depois de aterrissar a
+      branch e rodar `bin/install.sh`.
+    altitude: cli
+    surface: stdout de `common/bin/cepa-until` rodado como subprocesso contra `claude` falso
+    test: tests/test_cepa_until_hook_reinstalar.py::test_item_que_muda_hook_de_plugin_e_avisado_na_hora_e_no_fim
+    layer: cli-e2e (subprocesso, claude falso)
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_hook_reinstalar.py` -> "a tela avisa o hook
+      logo depois do a1, antes do a2 começar" e "...e o aviso diz o que fazer"
+      ok (posição do aviso < posição do início do a2); "✓ tudo verde".
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: O registro ganha evento `hook_so_apos_reinstalar` com o id do item e os arquivos.
+    altitude: cli
+    surface: registro .jsonl do run
+    test: tests/test_cepa_until_hook_reinstalar.py::test_item_que_muda_hook_de_plugin_e_avisado_na_hora_e_no_fim
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      mesma execução -> "o registro ganha hook_so_apos_reinstalar do a1" ok.
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: O fim do run cobra `reinstalar-plugin` em "Fica com você" (tela e `fica_com_voce` do estado).
+    altitude: cli
+    surface: stdout final e <run>.estado.json
+    test: tests/test_cepa_until_hook_reinstalar.py::test_item_que_muda_hook_de_plugin_e_avisado_na_hora_e_no_fim
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      mesma execução -> "o estado do run cobra a reinstalação em fica_com_voce"
+      e "o resumo do fim traz a reinstalação em Fica com você" ok.
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: >
+      `hooks/` fora de plugin não avisa; hook que saiu da branch com build
+      vermelho não é cobrado no fim.
+    altitude: cli
+    surface: stdout, registro e estado do run
+    test: >
+      test_hooks_fora_de_plugin_nao_avisa,
+      test_hook_que_saiu_com_o_build_vermelho_nao_e_cobrado_no_fim,
+      test_hook_avisado_que_saiu_depois_nao_e_cobrado_no_fim
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      mesma execução -> "pasta hooks/ sem plugin.json não gera aviso", "...nem
+      cobrança no fim", "o fim recalcula e não cobra o hook que saiu" ok;
+      "✓ tudo verde". 4 cenários executados (N>0).
+    verdict: complete
+    gap: null
