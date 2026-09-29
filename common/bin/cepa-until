@@ -1212,9 +1212,11 @@ def voltas_vermelhas(ledger_dir, ident):
 
 
 # As laterais que o supervisor cria: `until/<run>-vermelho-<id>[-v<n>]` no
-# build vermelho e `until/<run>-parado-<id>` no item que gastou as tentativas.
+# build vermelho, `until/<run>-parado-<id>` no item que gastou as tentativas e
+# `until/<run>-travado-<id>` no item que o agente fechou `blocked` com commits.
 LATERAL = re.compile(
-    r"^until/\d{4}-\d{2}-\d{2}-\d{4}-(?:vermelho|parado)-(.+?)(?:-v\d+)?$")
+    r"^until/\d{4}-\d{2}-\d{2}-\d{4}-(?:vermelho|parado|travado)-(.+?)"
+    r"(?:-v\d+)?$")
 
 
 def limpa_laterais(repo, caminho_plano, destino, noite):

@@ -366,8 +366,8 @@ def test_run_parado_pela_cota_nao_roda_a_analise():
 # `<id>-t<n>`. Os itens em FAKE_DUAS só fecham na 2ª; os em FAKE_QUEBRA deixam
 # o build vermelho na 2ª; os em FAKE_ADIA vão para o fim da fila depois da 1ª
 # (para outro item fechar no meio); os em FAKE_PARA não fazem nada da 2ª em
-# diante (tentativa sem progresso); os em FAKE_TRAVA commitam e fecham
-# `blocked` em vez de `done`.
+# diante (tentativa sem progresso); os em FAKE_TRAVA commitam e, na tentativa
+# em que fechariam, fecham `blocked` em vez de `done`.
 TENTA = (
     "import subprocess\n"
     "ident = primeiro_pendente()\n"
@@ -383,10 +383,11 @@ TENTA = (
     "subprocess.run(['git', 'add', '-A'], check=True)\n"
     "subprocess.run(['git', '-c', 'user.email=t@t', '-c', 'user.name=t',\n"
     "                'commit', '-qm', f'{ident}-t{n}'], check=True)\n"
-    "if ident in lista('FAKE_TRAVA'):\n"
-    "    marca(ident, status='blocked', evidence='condicao de fora')\n"
-    "elif ident not in lista('FAKE_DUAS') or n >= 2:\n"
-    "    marca(ident, status='done', evidence='ok')\n"
+    "if ident not in lista('FAKE_DUAS') or n >= 2:\n"
+    "    if ident in lista('FAKE_TRAVA'):\n"
+    "        marca(ident, status='blocked', evidence='condicao de fora')\n"
+    "    else:\n"
+    "        marca(ident, status='done', evidence='ok')\n"
     "elif ident in lista('FAKE_ADIA'):\n"
     "    p = carrega()\n"
     "    p['items'].sort(key=lambda it: it['id'] == ident)\n"
@@ -496,6 +497,59 @@ def test_item_que_o_agente_trava_depois_de_commitar_sai_da_branch_da_noite():
         separados = [e["id"] for e in ev if e["evento"] == "travado_separado"]
         check("o registro diz o que foi separado", separados == ["a1", "a2"],
               str(separados))
+
+
+def test_item_travado_com_outro_done_no_meio_para_em_vez_de_resetar():
+    """Tirar os commits do item travado voltaria a branch para o começo da 1ª
+    tentativa e apagaria o item que fechou verde no meio. O run para."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, TENTA)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY],
+             extra_env={"FAKE_DUAS": "a1", "FAKE_ADIA": "a1",
+                        "FAKE_TRAVA": "a1"})
+        ev = ledger_de(raiz)
+        branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
+        noite = git(raiz, "log", "--format=%s", branch).splitlines()
+        fim = [e for e in ev if e["evento"] == "run_end"][0]
+        check("o run para com item-preso", fim["motivo"] == "item-preso",
+              str(fim))
+        check("...e o aviso nomeia o item do meio",
+              "a2" in (fim.get("detalhe") or ""), str(fim))
+        check("nada foi apagado da branch da noite",
+              all(c in noite for c in ("a1-t1", "a2-t1", "a1-t2")), str(noite))
+
+
+def test_item_travado_sem_commit_nao_mexe_na_branch():
+    """Sem commit do item, não há o que separar: nem lateral nem reset."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        corpo = ("import subprocess\n"
+                 "ident = primeiro_pendente()\n"
+                 "if ident == 'a1':\n"
+                 "    marca(ident, status='blocked', evidence='condicao de fora')\n"
+                 "    sys.exit(0)\n"
+                 "open(ident + '.txt', 'w').write('feito')\n"
+                 "subprocess.run(['git', 'add', '-A'], check=True)\n"
+                 "subprocess.run(['git', '-c', 'user.email=t@t', '-c',\n"
+                 "                'user.name=t', 'commit', '-qm', ident],\n"
+                 "               check=True)\n"
+                 "marca(ident, status='done', evidence='ok')\n")
+        binv = fake_claude(tmp, corpo)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY])
+        ev = ledger_de(raiz)
+        branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
+        check("nenhum travado_separado no registro",
+              not [e for e in ev if e["evento"] == "travado_separado"], str(ev))
+        check("nenhuma lateral travado",
+              not git(raiz, "branch", "--list", f"{branch}-travado-*"),
+              git(raiz, "branch", "--list", "until/*"))
+        check("a evidência do a1 fica como o agente escreveu",
+              status(raiz, "a1").get("evidence") == "condicao de fora",
+              str(status(raiz, "a1")))
+        check("...e o a2 entra na branch da noite",
+              "a2" in git(raiz, "log", "--format=%s", branch).splitlines(),
+              git(raiz, "log", "--format=%s", branch))
 
 # ── o vermelho se resolve sem o dono (Revisão 3, passos 4a, 4b, 4d, 4e) ─────
 
@@ -650,19 +704,22 @@ def test_4f_lateral_de_item_fechado_vira_patch_antes_de_sumir():
         lateral_antiga(raiz, "until/2026-01-01-0000-vermelho-a1", "l1.txt")
         lateral_antiga(raiz, "until/2026-01-01-0000-vermelho-a1-v2", "l1b.txt")
         lateral_antiga(raiz, "until/2026-01-01-0000-parado-a3", "l3.txt")
+        lateral_antiga(raiz, "until/2026-01-01-0000-travado-a1", "l1c.txt")
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
         roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
         d = raiz / ".claude" / "programs" / "fila" / "until"
         patches = sorted(d.glob("*.laterais/*.patch"))
         nomes = [p.name for p in patches]
-        check("as duas laterais do item dropped viram patch",
-              len(patches) == 2 and all("vermelho-a1" in n for n in nomes),
-              str(nomes))
+        check("as três laterais do item dropped viram patch",
+              len(patches) == 3 and all(n.endswith(("-a1.patch", "-a1-v2.patch"))
+                                        for n in nomes), str(nomes))
+        check("...inclusive a do item que o agente travou com commits",
+              any("travado-a1" in n for n in nomes), str(nomes))
         check("...com o commit dentro",
               any("commit de l1.txt" in p.read_text() for p in patches),
               str(nomes))
         check("...e só então somem",
-              not git(raiz, "branch", "--list", "until/*-vermelho-a1*"),
+              not git(raiz, "branch", "--list", "until/*-a1*"),
               git(raiz, "branch", "--list", "until/*"))
         check("a lateral de item ainda aberto (blocked) fica",
               git(raiz, "branch", "--list", "until/2026-01-01-0000-parado-a3"),
