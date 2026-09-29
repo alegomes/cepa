@@ -1,0 +1,38 @@
+schema_version: 2
+card: resgate-devolve-aceite-ao-gate
+verdict: unproven
+reviewed_at: 2026-09-29T20:00:00-03:00
+base_commit: 698e19d
+head_commit: 63aec90
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/_wtlib.py::restore_acceptance (+ call in rescue_artifacts)", module: hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "P1 skip call restore_acceptance(...) -> pass: RED (3 failures)"
+        - "P2 drop dest.exists() guard (if False): RED (1 failure: o aceite do clone fica intacto)"
+        - "P3 base_root instead of main_root(wt_path): RED (2 failures)"
+        - "P4a loosen filter, drop parts[1] != 'acceptance': SURVIVED (all green)"
+        - "P4b loosen filter, drop not rel.endswith('.yaml'): SURVIVED (all green)"
+        - "P4c loosen filter, drop both (or False): SURVIVED (all green)"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool run; filter line in restore_acceptance is reached but its rejection branches are not asserted"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff only moves files between local .claude/ directories; no parsing of input from outside and no api-rest module touched"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "python3 tests/test_worktree_artifact_rescue.py with 698e19d _wtlib.py -> '3 failure(s): o aceite volta para .claude/acceptance/ do clone, o acceptance-gate encontra o aceite depois da remoção, o aceite vai para o clone principal'; at 63aec90 -> 'all green'; python3 tests/test_acceptance_gate.py -> 'all acceptance-gate tests passed'"
+routing_reason: "Fix is load-bearing for the three main behaviors (call, no-overwrite, main clone vs base). But the path filter in restore_acceptance can be removed entirely and the suite stays green: doomed also lists .claude/proof/<KEY>.yaml (3 parts), which the loosened filter would copy into the clone's .claude/acceptance/ and fake an audit for the gate. No test asserts that non-acceptance files are NOT copied there. UNPROVEN, deterministic gap."

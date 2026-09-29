@@ -245,6 +245,27 @@ def test_acceptance_lands_in_the_main_clone_not_the_base(tmp):
           not (b / ".claude" / "acceptance" / "WEGO-2331.yaml").exists())
 
 
+def test_only_acceptance_yaml_goes_back(tmp):
+    """Só o aceite volta. Um proof/<KEY>.yaml copiado para acceptance/ seria
+    uma auditoria que ninguém fez, e o gate a aceitaria."""
+    r, w = make_repo(Path(tmp) / "accept-filter")
+    (w / ".claude" / "proof" / "WEGO-9.yaml").write_text("verdict: PROVEN\n")
+    acc = w / ".claude" / "acceptance"
+    (acc / "old").mkdir(parents=True)
+    (acc / "old" / "WEGO-7.yaml").write_text("verdict: COMPLETE\n")
+    (acc / "notas.txt").write_text("rascunho\n")
+    L.rescue_artifacts(str(w), str(r), "session/todo")
+    live = r / ".claude" / "acceptance"
+    check("proof/ não vira aceite",
+          not (live / "WEGO-9.yaml").exists())
+    check("proof/ do make_repo também não",
+          not (live / "WEGO-2001.yaml").exists())
+    check("subpasta de acceptance/ não é achatada",
+          not (live / "WEGO-7.yaml").exists())
+    check("arquivo que não é .yaml fica só em rescued/",
+          not (live / "notas.txt").exists())
+
+
 def main():
     with tempfile.TemporaryDirectory() as tmp:
         for fn in (test_ignored_file_dies_silently,
@@ -257,7 +278,8 @@ def main():
                    test_cli_refuses_the_main_worktree,
                    test_acceptance_goes_back_where_the_gate_looks,
                    test_acceptance_restore_never_clobbers_the_clone,
-                   test_acceptance_lands_in_the_main_clone_not_the_base):
+                   test_acceptance_lands_in_the_main_clone_not_the_base,
+                   test_only_acceptance_yaml_goes_back):
             print(f"\n{fn.__name__}")
             fn(tmp)
     if FAILURES:
