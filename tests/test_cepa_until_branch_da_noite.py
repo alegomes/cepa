@@ -366,7 +366,8 @@ def test_run_parado_pela_cota_nao_roda_a_analise():
 # `<id>-t<n>`. Os itens em FAKE_DUAS só fecham na 2ª; os em FAKE_QUEBRA deixam
 # o build vermelho na 2ª; os em FAKE_ADIA vão para o fim da fila depois da 1ª
 # (para outro item fechar no meio); os em FAKE_PARA não fazem nada da 2ª em
-# diante (tentativa sem progresso).
+# diante (tentativa sem progresso); os em FAKE_TRAVA commitam e fecham
+# `blocked` em vez de `done`.
 TENTA = (
     "import subprocess\n"
     "ident = primeiro_pendente()\n"
@@ -382,7 +383,9 @@ TENTA = (
     "subprocess.run(['git', 'add', '-A'], check=True)\n"
     "subprocess.run(['git', '-c', 'user.email=t@t', '-c', 'user.name=t',\n"
     "                'commit', '-qm', f'{ident}-t{n}'], check=True)\n"
-    "if ident not in lista('FAKE_DUAS') or n >= 2:\n"
+    "if ident in lista('FAKE_TRAVA'):\n"
+    "    marca(ident, status='blocked', evidence='condicao de fora')\n"
+    "elif ident not in lista('FAKE_DUAS') or n >= 2:\n"
     "    marca(ident, status='done', evidence='ok')\n"
     "elif ident in lista('FAKE_ADIA'):\n"
     "    p = carrega()\n"
@@ -459,6 +462,40 @@ def test_item_esgotado_leva_os_commits_das_tentativas_para_a_lateral():
               laterais and laterais[-1] in (status(raiz, "a1").get("evidence")
                                             or ""), str(status(raiz, "a1")))
 
+
+
+def test_item_que_o_agente_trava_depois_de_commitar_sai_da_branch_da_noite():
+    """O supervisor só roda o build depois de `done`: um item que o agente
+    fecha `blocked` depois de commitar deixava os commits na
+    branch da noite, sem build, embaixo do próximo card."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        binv = fake_claude(tmp, TENTA)
+        p, _ = roda(raiz, binv, plano_de(raiz),
+                    ["--for", "2h", "--verify", VERIFY],
+                    extra_env={"FAKE_TRAVA": "a1,a2"})
+        ev = ledger_de(raiz)
+        branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
+        noite = git(raiz, "log", "--format=%s", branch).splitlines()
+        check("a branch da noite não tem os commits dos itens travados",
+              "a1-t1" not in noite and "a2-t1" not in noite, str(noite))
+        check("...e guarda o item entregue depois deles",
+              "a3-t1" in noite, str(noite))
+        for ident in ("a1", "a2"):
+            it = status(raiz, ident)
+            laterais = git(raiz, "branch", "--list", f"{branch}-*-{ident}").split()
+            check(f"{ident} continua `blocked`", it["status"] == "blocked",
+                  str(it))
+            check(f"o commit do {ident} fica numa lateral",
+                  laterais and f"{ident}-t1" in git(raiz, "log", "--format=%s",
+                                                    laterais[-1]), str(laterais))
+            ev_item = it.get("evidence") or ""
+            check(f"...que a evidência do {ident} nomeia, sem perder o motivo "
+                  "do agente", laterais and laterais[-1] in ev_item
+                  and "condicao de fora" in ev_item, ev_item)
+        separados = [e["id"] for e in ev if e["evento"] == "travado_separado"]
+        check("o registro diz o que foi separado", separados == ["a1", "a2"],
+              str(separados))
 
 # ── o vermelho se resolve sem o dono (Revisão 3, passos 4a, 4b, 4d, 4e) ─────
 

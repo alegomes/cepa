@@ -2542,6 +2542,46 @@ def main(argv=None):
                                    f"({erro_desfaz}); o próximo card começaria "
                                    "em cima de código quebrado")
                     break
+        # O build só roda depois de `done`: um item que o agente fecha
+        # `blocked` depois de commitar deixava esses commits na branch da
+        # noite sem build, embaixo do próximo card. Vão para a lateral, como
+        # os do item esgotado, e a evidência diz onde estão.
+        elif estado == "blocked" and ident in primeira:
+            desde, n_antes = primeira[ident]
+            if desde and cabeca(arvore) != desde:
+                lateral, erro_desfaz = desfaz_item(
+                    repo, arvore, run_id, ident, desde,
+                    no_meio=no_meio_de(ident, n_antes), sufixo="travado")
+                erro_fin = None
+                if lateral:
+                    primeira.pop(ident, None)
+                    herdados.discard(ident)
+                    relido, _ = le_item(caminho_plano, ident)
+                    ev = str((relido or {}).get("evidence") or "").strip()
+                    erro_fin = finaliza_item(
+                        a.fila, repo, ident, "blocked",
+                        (ev + " " if ev else "") +
+                        f"[supervisor] Os commits do item, que não passaram "
+                        f"pelo build do supervisor (ele só roda depois de "
+                        f"`done`), estão em `{lateral}`; a branch da noite "
+                        f"voltou para {desde[:10]}.")
+                registra({"evento": "travado_separado", "id": ident,
+                          "lateral": lateral,
+                          "erro": erro_desfaz or erro_fin})
+                if erro_desfaz:
+                    desfecho(ident, "travado",
+                             "`blocked` com commits que continuam na branch "
+                             f"da noite sem build: {erro_desfaz}")
+                    motivo_fim = "item-preso"
+                    detalhe_fim = (
+                        f"{ident} saiu `blocked` com commits que não passaram "
+                        f"pelo build, e não consegui tirá-los da branch da "
+                        f"noite ({erro_desfaz}); o próximo card começaria em "
+                        "cima deles")
+                    break
+                print(f"          → `blocked` com commits: guardei em "
+                      f"`{lateral}` e a branch da noite voltou para "
+                      f"{desde[:10]}")
         if estado == "done":
             entregues.append(ident)
         elif estado == "blocked":
