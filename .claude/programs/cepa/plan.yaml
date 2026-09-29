@@ -7,14 +7,14 @@
 # Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
 # fecha — agente nenhum troca o texto por null por conta própria.
 #
-# Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor) + itens de 2026-09-24
-# Escrito em: 2026-09-26
+# Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor) + itens de 2026-09-24 + desvios.md (2026-09-29)
+# Escrito em: 2026-09-29
 
 schema_version: 2
 mode: single-track
 program: cepa
 source: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor)
-  + itens de 2026-09-24
+  + itens de 2026-09-24 + desvios.md (2026-09-29)
 items:
 - id: common-plan-etapa1
   title: /common:plan <nome> — escreve a fila single-track a partir de uma spec
@@ -1513,14 +1513,13 @@ items:
     proof-reviewer PROVEN com 5 perturbacoes RED (docs/proof/digest-mostra-worktree-e-build-alheio-do-qa.yaml).
     until-review.md ganhou a pergunta 8 (sinais de processo); common 2.26.4, plugin
     ainda nao reinstalado. Build completo fica com o supervisor.'
-- id: until-avisa-hook-so-vale-apos-reinstalar
-  title: cepa-until avisa no banner do run quando a branch da noite altera hook
-    que so passa a valer depois de mesclar e reinstalar o plugin
-  why: 'Run 2026-09-28-1146: o item 2 corrigiu o bash-path-lock e o item 1 o no-background-build,
-    mas as 4 rodadas seguiram barradas pelos hooks antigos, porque os hooks rodam
-    do plugin instalado no cache (igual ao main), nao da branch da noite. Nenhuma
-    rodada foi perdida, mas o intervalo e invisivel no run; decisao do dono em 2026-09-28
-    de abrir o item. (ainda não priorizado: entrou no fim da fila)'
+- id: until-blocked-com-commits
+  title: 'cepa-until: item que o agente marca blocked depois de commitar deixa os
+    commits na branch da noite sem build'
+  why: 'Achado ao construir o passo 1 do until-fim-sem-dono (2026-09-28): o supervisor
+    só roda o build depois de done; um blocked com commits deixa código não verificado
+    embaixo do próximo card. Posição decidida pelo dono em 2026-09-29: 1º dos abertos,
+    porque deixa código sem build embaixo do próximo card em todo run noturno.'
   status: pending
   blocked_by: []
   human_pending: null
@@ -1536,17 +1535,84 @@ items:
     ''sem auditoria'' com auditoria COMPLETE feita. Contornado a mao copiando os
     4 arquivos. Conserto: o rescue devolve acceptance/*.yaml para .claude/acceptance/
     do clone (sem sobrescrever), ou o gate tambem procura em .claude/rescued/*/.
+    Posição decidida pelo dono em 2026-09-29: 2º, porque todo run que remove a worktree
+    barra a ida para Done de cards já auditados.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: until-avisa-hook-so-vale-apos-reinstalar
+  title: cepa-until avisa no banner do run quando a branch da noite altera hook
+    que so passa a valer depois de mesclar e reinstalar o plugin
+  why: 'Run 2026-09-28-1146: o item 2 corrigiu o bash-path-lock e o item 1 o no-background-build,
+    mas as 4 rodadas seguiram barradas pelos hooks antigos, porque os hooks rodam
+    do plugin instalado no cache (igual ao main), nao da branch da noite. Nenhuma
+    rodada foi perdida, mas o intervalo e invisivel no run; decisao do dono em 2026-09-28
+    de abrir o item. Posição decidida pelo dono em 2026-09-29: 3º, porque nenhuma
+    rodada se perde, só falta visibilidade.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: feedback-nudge-fora-do-git
+  title: Tirar .claude/feedback-nudge do git (.gitignore + git rm --cached)
+  why: 'desvios.md 2026-09-26: o dono aprovou; o hook feedback-nudge reescreve o
+    arquivo a cada sessão e ele deu conflito no merge 3f4fe2e. Barrado na hora pelo
+    modo exploração; conferido em 2026-09-29 que segue versionado. (ainda não priorizado:
+    entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: aviso-estrategia-aponta-revisao-3
+  title: Aviso no topo de docs/estrategia-fim-do-cepa-until.md apontando para a
+    Revisão 3, e linha Status atualizada
+  why: 'desvios.md 2026-09-28: a Revisão 3 (docs/discovery/until-fim-sem-dono/revisao-3.md)
+    substitui partes da Revisão 2 e quem lê a estratégia não fica sabendo. Barrado
+    na hora pelo modo descoberta; conferido em 2026-09-29 que o aviso não existe.
     (ainda não priorizado: entrou no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
   evidence: null
-- id: until-blocked-com-commits
-  title: 'cepa-until: item que o agente marca blocked depois de commitar deixa os
-    commits na branch da noite sem build'
-  why: 'Achado ao construir o passo 1 do until-fim-sem-dono (2026-09-28): o supervisor
-    só roda o build depois de done; um blocked com commits deixa código não verificado
-    embaixo do próximo card. (ainda não priorizado: entrou no fim da fila)'
+- id: path-lock-sed-stays-falso-positivo
+  title: bash-path-lock nega sed -i quando o texto contém a palavra 'stays' (lida
+    como s///t)
+  why: 'desvios.md 2026-09-27, relatado pelo proof-reviewer de reconcile-nao-rebaixa-done:
+    nega comando legítimo por engano. Não reproduzido em 2026-09-29; o item começa
+    reproduzindo. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: feedback-nudge-ignora-notificacao
+  title: feedback-nudge não dispara em turno que é notificação de subagente, sem
+    fala do dono
+  why: 'desvios.md 2026-08-30: o hook mandou registrar queixa ''com o texto do dono
+    verbatim'' num turno que era task-notification; cumprir seria inventar a queixa.
+    Conferido em 2026-09-29: common/hooks/feedback-nudge.py não menciona notificação.
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: marketplace-descricao-common-lista-comandos
+  title: Descrição do plugin common no .claude-plugin/marketplace.json lista /plan,
+    /spec, /session, /doctor e os demais
+  why: 'desvios.md 2026-08-25: mesma classe do item catalogo-listar-os-8-comandos,
+    que cobriu só docs/commands.md. Conferido em 2026-09-29: a descrição ainda cita
+    só as skills de mentalidade. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
+- id: drain-plan-rotulos-pela-direcao
+  title: drain-plan troca 'Reconciliar' e 'Sync Jira' por rótulos que dizem a direção
+    da escrita
+  why: 'desvios.md 2026-08-29: o dono precisou perguntar qual era qual; sugestão
+    registrada: ''Trazer status do Jira (grava no plano)'' / ''Atualizar o Jira
+    (grava no quadro)''. Só rótulo, sem mudar mecânica. (ainda não priorizado: entrou
+    no fim da fila)'
   status: pending
   blocked_by: []
   human_pending: null
