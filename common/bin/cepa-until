@@ -1916,7 +1916,20 @@ def main(argv=None):
     if argv and argv[0] == "fecha-morto":
         return cmd_fecha_morto(argv[1:])
     ap = argparse.ArgumentParser(
-        description="executa a fila single-track do repo por uma janela de tempo")
+        description="executa a fila single-track do repo por uma janela de tempo",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        # Os subcomandos são despachados antes deste parser: sem o epílogo,
+        # o `--help` não diz que eles existem.
+        epilog=(
+            "subcomandos (cada um com o próprio --help):\n"
+            "  cepa-until pendentes [--repo R] [--json]\n"
+            "      runs esperando o dono e runs cujo supervisor morreu\n"
+            "  cepa-until aterrissar <fila>/<run> [--sim]\n"
+            "      leva a branch da noite para a branch do clone (merge,\n"
+            "      build completo e push); sem --sim só mostra o plano\n"
+            "  cepa-until fecha-morto <fila>/<run> [--sim]\n"
+            "      roda o build que faltou num run cujo supervisor morreu ou\n"
+            "      foi interrompido e o deixa pronto para o aterrissar"))
     ap.add_argument("fila", help="nome da fila em .claude/programs/<nome>/plan.yaml")
     janela = ap.add_mutually_exclusive_group(required=True)
     janela.add_argument("--for", dest="duracao", metavar="12h",
