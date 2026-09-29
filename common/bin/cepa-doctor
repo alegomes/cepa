@@ -888,7 +888,10 @@ def check_until_esperando(root: Path):
                       f"morreu sem fechar o registro ({m['como']}){item} — "
                       + (f"o build completo que faltou: {m['comando']}"
                          if m.get("comando") else
-                         "o run não tinha build completo"))
+                         "o run não tinha build completo")
+                      + (f"; {m['fechar']} mostra o plano, com --sim roda o "
+                         "build e deixa o run pronto para aterrissar"
+                         if m.get("fechar") else ""))
     for r in runs:
         warn("until", f"fila `{r['fila']}`: o run {r['run']} deixou "
                       f"`{r['branch']}` esperando aterrissagem em "

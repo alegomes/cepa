@@ -73,10 +73,13 @@ ao fim:
   fechou `done` sozinho e o build completo nunca rodou). Não chute: rode
   `python3 common/bin/cepa-until pendentes --json` e veja a lista `mortos`,
   que confere o `pid` e o `host` gravados no estado (run sem pid conta como
-  morto 3h depois do prazo). Se o run estiver lá, a primeira pergunta do
-  relatório é rodar o build completo que faltou, com o `comando` que a lista
-  traz; o item em voo com status `done` está na fila sem esse build. Se não
-  estiver, o run ainda roda: diga isso e pare.
+  morto 3h depois do prazo; run `interrompido` também entra na lista). Se o
+  run estiver lá, a primeira pergunta do relatório é fechá-lo com o comando
+  do campo `fechar` (`cepa-until fecha-morto <fila>/<run> --sim`): ele roda o
+  build completo que faltou na worktree da noite e, verde, grava o `run_end`
+  e deixa o run `esperando-dono` com a ação `aterrissar`. O item em voo com
+  status `done` está na fila sem esse build. Se não estiver na lista, o run
+  ainda roda: diga isso e pare.
 
 ### 2. Ler procurando estas perguntas
 
