@@ -1,9 +1,9 @@
 schema_version: 2
 card: until-avisa-hook-so-vale-apos-reinstalar
-verdict: unproven
-reviewed_at: 2026-09-29T20:10:00-03:00
+verdict: proven
+reviewed_at: 2026-09-29T20:20:00-03:00
 base_commit: dee46f1
-head_commit: fcee999
+head_commit: dc8f4e3
 issue_type: Feature
 scope:
   changed_classes:
@@ -18,22 +18,23 @@ levels:
     pit:
       status: n/a
       results:
-        - "repo Python, sem PIT; perturbacao manual em worktree descartavel"
+        - "repo Python, sem PIT; perturbacao manual em worktree descartavel (/tmp/proof-until-hook, removida no fim)"
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "baseline HEAD: python3 tests/test_cepa_until_hook_reinstalar.py -> 14 checks ok, 'tudo verde'"
-        - "RED: tirar avisa_hooks do topo do laco (linha 2328) -> FAIL em 4+ checks"
-        - "RED: hooks_alterados sem exigir plugin.json (is_file() or True) -> FAIL 'hook do item vermelho nao fica na branch' e 'fim nao cobra'"
-        - "RED: remover o item reinstalar-plugin de fica (if False) -> FAIL 'estado cobra reinstalacao', 'resumo traz'"
-        - "RED: dedupe hooks_avisados removido -> FAIL (aviso duplicado)"
-        - "RED: base do diff HEAD em vez de base_do_clone -> FAIL (heranca nao avisada)"
-        - "SURVIVED: tirar o avisa_hooks antes do run_end (linha 2896) -> 'tudo verde'. Caminhos de break dentro do corpo do laco (ex.: falhas seguidas, l.2893) saem sem passar pelo topo; nenhum teste cobre hook do ultimo item seguido de saida por esse caminho"
-        - "SURVIVED: fim usar list(hooks_avisados) em vez de recalcular do diff (linha 2967) -> 'tudo verde'. O teste test_hook_avisado_que_saiu_depois usa cenario com `acoes` vazio, que ja zera hooks_da_noite pelo `if acoes else []`; a distincao recalcular vs. avisados nunca e exercida (teste vacuo para essa propriedade). A perturbacao citada pelo implementador nao reproduziu vermelho aqui"
+        - "baseline HEAD dc8f4e3: python3 tests/test_cepa_until_hook_reinstalar.py -> checks ok, 'tudo verde'"
+        - "P1 RED: avisa_hooks do topo do laco (l.2328) trocado por pass -> FAIL 'a 1a tentativa deixou o hook na branch e a tela avisou' e outros"
+        - "P2 RED: hooks_alterados sem exigir plugin.json (.is_file() or True, l.1118) -> FAIL 'hook do item vermelho nao fica na branch' e 'fim nao cobra reinstalacao'"
+        - "P3 RED: `if hooks_da_noite:` -> `if False:` (l.2968) -> FAIL 'estado do run cobra a reinstalacao' e 'resumo traz a reinstalacao'"
+        - "P4 RED: dedupe `if f not in hooks_avisados` removido (l.2314) -> FAIL (aviso duplicado do a2)"
+        - "P5 RED: base do diff HEAD em vez de base_do_clone (l.2313) -> FAIL 'a 1a tentativa deixou o hook...' e 'a tela avisa o hook logo depois do a1'"
+        - "P6 RED (antes SURVIVED): avisa_hooks antes do run_end (l.2896) -> pass -> FAIL 'o registro ganha hook_so_apos_reinstalar do a1' e 'a tela avisa antes do resumo do fim' (test_hook_do_item_que_encerra_o_run_por_dentro_do_laco_e_avisado)"
+        - "P7 RED (antes SURVIVED): fim com list(hooks_avisados) if acoes else [] (l.2967) -> FAIL 'o fim nao cobra o hook que saiu' (test_hook_avisado_que_saiu_nao_e_cobrado_num_run_com_o_que_aterrissar; cenario agora tem acoes nao vazias)"
+        - "cada perturbacao aplicada com sed em copia descartavel, confirmada por git diff (1 linha), revertida por git checkout; worktree principal limpa"
   l2_coverage:
-    status: gap
-    uncovered_lines: ["common/bin/cepa-until:2896 (avisa_hooks antes do run_end)", "common/bin/cepa-until:2967 (recalculo no fim distinto de hooks_avisados)"]
-    run: "sem ferramenta de cobertura; inferido pelas perturbacoes que ficaram verdes"
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as linhas antes descobertas (2896 e 2967) agora ficam vermelhas sob perturbacao (P6, P7), o que prova que sao exercitadas pelo CLI real"
   l4_adversarial_input:
     status: n/a
     reason: "o diff so le `git diff --name-only` da propria branch e imprime avisos; nao abre entrada nova vinda de fora e nao toca modulo api-rest"
@@ -41,4 +42,4 @@ levels:
   bugfix_regression_red_at_base:
     status: n/a
     run: "card e feature, nao bug"
-routing_reason: "Duas linhas mudadas sobrevivem a perturbacao no CLI real: o aviso antes do fim e o recalculo do fim a partir do diff. Nenhum teste fica vermelho quando elas sao quebradas. Devolver ao dev-worker para fechar."
+routing_reason: "As 7 perturbacoes ficam vermelhas no CLI real rodado como subprocesso, incluindo as duas que sobreviviam na prova anterior. Nenhum teste substitui a classe alterada; so o claude e falso."
