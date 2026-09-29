@@ -1617,3 +1617,15 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: plan-bak-barra-until
+  title: cepa-plan write não deixa plan.yaml.bak como arquivo não rastreado que
+    faz o cepa-until recusar a largada
+  why: 'Achado em 2026-09-29 ao preparar um cepa-until da fila cepa: o write copia
+    a versão anterior para plan.yaml.bak, o cepa-until recusa árvore suja e só ignora
+    a pasta until/ e o próprio plan.yaml, então toda reescrita da fila barra o run
+    seguinte até alguém apagar o .bak à mão. Decisão do dono em 2026-09-29 de abrir
+    o item. (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
