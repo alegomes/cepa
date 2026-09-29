@@ -23,6 +23,9 @@ common/expertise/expertise
 .claude/last-build.json
 .claude/loop-state.json
 .claude/session-mode
+# Marcador do hook feedback-nudge (id da última sessão avisada). Reescrito a
+# cada sessão; versionado, deu conflito no merge 3f4fe2e.
+.claude/feedback-nudge
 .claude/sessions/
 .claude/handoffs/
 # Artefatos salvos de um worktree removido (rescue do session-registry). Caixa
