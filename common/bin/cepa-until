@@ -151,6 +151,28 @@ ou teto de uso da conta cuja espera não cabe na janela.
 Um item que sai `blocked` PARA o lote — regra do `cepa-plan`, herdada do
 `/board-flow:drain`: re-executar mede o mesmo travamento.
 
+## Sinais
+
+Em 2026-09-28 o run 2003 do WEGO morreu calado: o `.jsonl` parou em
+`item_start`, o card fechou `done` sozinho e o build completo nunca rodou. A
+hipótese que sobrou foi a aba de terminal fechada: o SIGHUP vai para o grupo
+do terminal, o `claude` roda em sessão própria e sobrevive, o supervisor não.
+
+  - **SIGHUP é ignorado**, e a saída na tela passa a tolerar o terminal
+    sumido (sem isso o próximo `print` mata o run com EIO).
+  - **SIGTERM e Ctrl+C** gravam `run_interrompido` no `.jsonl` (sinal, item
+    em voo, fase e pid do filho) e deixam o `<run>.estado.json` como
+    `interrompido`.
+  - O `run_start` e o estado gravam **pid e host** do supervisor. O
+    `cepa-until pendentes` (e por ele o `cepa-doctor` e o
+    `/common:until-review`) aponta o run `rodando` cujo pid morreu, e o
+    `interrompido`, com o build completo que faltou.
+  - **SIGTERM e Ctrl+C encerram o filho** (o grupo do `claude` ou do build):
+    seguindo sozinho, ele mudaria o card sem ninguém para rodar o build
+    depois. Morto, a reserva vira órfã e o próximo run retoma o item.
+  - `cepa-until fecha-morto <fila>/<run> --sim` roda o build que faltou e,
+    verde, fecha o registro e deixa o run pronto para o `aterrissar`.
+
 ## Depois do fim
 
 Com o run encerrado, um último `claude -p "/common:until-review <run>"` lê o
@@ -163,12 +185,14 @@ Uso:
     cepa-until minha-fila --for 12h
     cepa-until minha-fila --until 07:00
     cepa-until minha-fila --for 3h --dry-run     # o plano do run, sem executar
+    cepa-until fecha-morto minha-fila/<run> --sim  # fecha run de supervisor morto
 """
 
 import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -358,6 +382,53 @@ MAX_QUEDAS_SEGUIDAS = 3
 # ── relógio ─────────────────────────────────────────────────────────────────
 
 _DUR = re.compile(r"^(\d+(?:\.\d+)?)\s*([hm])$", re.I)
+
+
+# Run `rodando` de estado sem pid (gravado antes de 2026-09-29): sem como
+# perguntar ao sistema se o supervisor vive, o sinal de morte é o prazo ter
+# passado há mais que isso. Cobre a folga default (60min), o build completo do
+# último item e a análise do fim.
+MARGEM_SEM_PID = timedelta(hours=3)
+
+
+class SaidaTolerante:
+    """stdout/stderr que sobrevivem ao terminal fechado.
+
+    Ignorar o SIGHUP (a aba fechada) não basta: o terminal some junto, e o
+    próximo `print` do supervisor estoura `OSError` (EIO) e o mata do mesmo
+    jeito, só que um passo depois. Na primeira escrita que falha, o descritor
+    passa a apontar para /dev/null e o run segue; o registro `.jsonl` e o
+    `.log`, que são arquivos, continuam contando tudo."""
+
+    def __init__(self, fluxo):
+        self._fluxo = fluxo
+
+    def _descarta(self):
+        try:
+            nulo = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(nulo, self._fluxo.fileno())
+            os.close(nulo)
+        except (OSError, ValueError):
+            pass
+
+    def write(self, texto):
+        try:
+            return self._fluxo.write(texto)
+        except (OSError, ValueError):
+            self._descarta()
+            try:
+                return self._fluxo.write(texto)
+            except (OSError, ValueError):
+                return len(texto)
+
+    def flush(self):
+        try:
+            self._fluxo.flush()
+        except (OSError, ValueError):
+            self._descarta()
+
+    def __getattr__(self, nome):
+        return getattr(self._fluxo, nome)
 
 
 def parse_duracao(texto, flag="--for"):
@@ -659,9 +730,12 @@ def twg_version_instalada():
     return m.group(0) if m else None
 
 
-def executa_item(nome, arvore, branch, permissoes, limite_seg, log):
+def executa_item(nome, arvore, branch, permissoes, limite_seg, log,
+                 ao_lancar=None):
     """Dispara UM subprocesso, com `arvore` (a worktree da noite) como cwd.
-    Devolve (codigo, matou_por_timeout, segundos, saida_desta_tentativa)."""
+    Devolve (codigo, matou_por_timeout, segundos, saida_desta_tentativa).
+    `ao_lancar` recebe o pid do filho: é o que o `run_interrompido` diz que
+    ficou rodando."""
     repo = arvore
     cmd = monta_comando(nome, branch, permissoes)
     inicio = time.monotonic()
@@ -687,6 +761,8 @@ def executa_item(nome, arvore, branch, permissoes, limite_seg, log):
             # encerra em 3, com o motivo escrito.
             saida.write(f"MAESTRO-SPAWN-FALHOU: {e}\n".encode("utf-8"))
             return -2, False, time.monotonic() - inicio, ""
+        if ao_lancar:
+            ao_lancar(proc.pid)
         try:
             codigo = proc.wait(timeout=max(limite_seg, 1))
             matou = False
@@ -704,6 +780,41 @@ def executa_item(nome, arvore, branch, permissoes, limite_seg, log):
                     pass
             codigo = proc.returncode if proc.returncode is not None else -1
     return codigo, matou, time.monotonic() - inicio, trecho_do_log(log, marca)
+
+
+def encerra_grupo(pid, graca):
+    """Encerra o grupo do filho (o `claude` e o que ele lançou: builds, mvn),
+    que roda em sessão própria e não recebe o sinal do terminal. SIGTERM, até
+    `graca` segundos, e SIGKILL no que sobrar. Devolve se o grupo acabou."""
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        return False
+    fim = time.monotonic() + graca
+    while True:
+        try:
+            os.waitpid(pid, os.WNOHANG)
+        except ChildProcessError:
+            pass
+        try:
+            os.killpg(pid, 0)
+        except ProcessLookupError:
+            return True
+        except OSError:
+            return False
+        if time.monotonic() >= fim:
+            break
+        time.sleep(0.1)
+    try:
+        os.killpg(pid, signal.SIGKILL)
+        os.waitpid(pid, 0)
+    except (ChildProcessError, ProcessLookupError):
+        pass
+    except OSError:
+        return False
+    return True
 
 
 def bloqueia_item(nome, repo, ident, tentativas, lateral=None):
@@ -1014,7 +1125,7 @@ def comando_de_verify(repo, explicito, dispensado):
     return "", None
 
 
-def roda_verify(comando, arvore, limite_seg, log):
+def roda_verify(comando, arvore, limite_seg, log, ao_lancar=None):
     """Roda o build completo na branch da noite, com a saída no `.log` do run.
     Devolve (verde, segundos, motivo)."""
     inicio = time.monotonic()
@@ -1028,6 +1139,8 @@ def roda_verify(comando, arvore, limite_seg, log):
                                     start_new_session=True)
         except OSError as e:
             return False, time.monotonic() - inicio, f"não lançou: {e}"
+        if ao_lancar:
+            ao_lancar(proc.pid)
         try:
             codigo = proc.wait(timeout=max(limite_seg, 1))
         except subprocess.TimeoutExpired:
@@ -1414,6 +1527,165 @@ def cmd_aterrissar(argv):
     return 0
 
 
+def acao_aterrissar(repo, arvore, fila, run_id, n):
+    """A ação `aterrissar` do estado do run: o fim normal do run e o
+    `fecha-morto` propõem a mesma."""
+    return {
+        "id": "aterrissar",
+        "frase": (f"leva os {n} commit(s) da branch da noite para a "
+                  f"`{branch_atual(repo)}` do clone; só você dispara, porque "
+                  "mexe na branch principal"),
+        "comando": (f"cepa-until aterrissar {fila}/{run_id} (sem --sim só "
+                    "mostra o plano; com --sim faz merge, build completo e "
+                    "push)"),
+        "sha": cabeca(arvore), "destino": branch_atual(repo),
+        "arvore": str(arvore)}
+
+
+def cmd_fecha_morto(argv):
+    """`cepa-until fecha-morto <fila>/<run> [--sim]` — fecha o run cujo
+    supervisor morreu (ou foi interrompido) antes do fim.
+
+    O run WEGO 2026-09-28-2003 parou em `item_start`: o card fechou `done`
+    sozinho e o build completo que o supervisor roda depois de cada `done`
+    nunca rodou. O estado ficou `rodando`, e o `aterrissar` só aceita
+    `esperando-dono`. Este comando faz o que o supervisor não fez: roda o
+    build completo na worktree da noite e, verde, grava o `run_end` e deixa o
+    run `esperando-dono` com a ação `aterrissar`. Vermelho, não muda o estado:
+    o `cepa-doctor` segue apontando o run. Sem `--sim`, só mostra o plano."""
+    ap = argparse.ArgumentParser(
+        prog="cepa-until fecha-morto",
+        description="roda o build que faltou num run cujo supervisor morreu")
+    ap.add_argument("alvo", help="<fila>/<run>, como o doctor imprime")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--sim", action="store_true",
+                    help="executa; sem ele, só mostra o plano")
+    a = ap.parse_args(argv)
+
+    def recusa(texto):
+        print(f"cepa-until fecha-morto: {texto}", file=sys.stderr)
+        return 3
+
+    if "/" not in a.alvo:
+        print("cepa-until fecha-morto: o alvo é <fila>/<run> (ex.: "
+              "wego/2026-09-28-2003)", file=sys.stderr)
+        return 2
+    fila, run_id = a.alvo.split("/", 1)
+    repo = raiz_principal(Path(a.repo).resolve())
+    caminho = repo / ".claude" / "programs" / fila / "until" / \
+        f"{run_id}.estado.json"
+    try:
+        est = json.loads(caminho.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"cepa-until fecha-morto: não li o estado do run em {caminho} "
+              f"({e})", file=sys.stderr)
+        return 2
+    m = next((x for x in runs_mortos(repo)
+              if x.get("fila") == fila and x.get("run") == run_id), None)
+    if not m:
+        if est.get("estado") not in ("rodando", "interrompido"):
+            return recusa(f"o run {run_id} está `{est.get('estado')}`: ele "
+                          "chegou ao fim, e não há o que fechar")
+        pid = est.get("pid")
+        if pid and supervisor_vivo(pid):
+            return recusa(f"o supervisor do run {run_id} está vivo (pid {pid} "
+                          f"em {est.get('host')}); espere o fim dele")
+        return recusa(f"não consigo dizer que o supervisor do run {run_id} "
+                      "morreu (pid de outra máquina, ou run sem pid ainda "
+                      "dentro do prazo), ou a branch da noite já entrou "
+                      "ou sumiu")
+    filho = (est.get("item_em_voo") or {}).get("pid_filho")
+    if filho:
+        try:
+            os.killpg(int(filho), 0)
+            return recusa(f"o processo filho do item em voo (pid {filho}) "
+                          "ainda roda; espere ele acabar ou encerre-o")
+        except (ProcessLookupError, ValueError, TypeError):
+            pass
+        except OSError:
+            pass
+    arvore, branch, verify = m.get("arvore"), m.get("branch"), m.get("verify")
+    if not arvore:
+        return recusa("o run não gravou a worktree da noite")
+    arvore = Path(arvore)
+    recria = not arvore.is_dir()
+
+    print(f"fechar o run {run_id} da fila {fila} ({m['como']})")
+    if m.get("item"):
+        print(f"  item em voo: {m['item']}, status `{m.get('status')}`")
+    print(f"  worktree   : {arvore}"
+          + (f" (sumiu; recrio a partir de `{branch}`)" if recria else ""))
+    print(f"  build      : {verify or 'nenhum (o run dispensou o build)'}")
+    print("  verde      : grava `run_end` e deixa o run `esperando-dono` com a "
+          "ação `aterrissar`")
+    print("  vermelho   : não muda nada; o doctor segue apontando o run")
+    if not a.sim:
+        print(f"\nnada foi feito. Para executar: cepa-until fecha-morto "
+              f"{a.alvo} --sim")
+        return 0
+
+    if recria:
+        git(["worktree", "prune"], repo)
+        c, erro = git(["worktree", "add", str(arvore), str(branch)], repo)
+        if c != 0:
+            return recusa(f"não recriei a worktree da noite: {erro}")
+    sujos = arvore_suja(arvore)
+    if sujos:
+        return recusa("a worktree da noite tem mudança sem commit; o build "
+                      "mediria o que não vai para a branch. Commite ou guarde "
+                      "antes:\n  " + "\n  ".join(sujos[:10]))
+
+    registro = Path(m["registro"])
+
+    def registra(evento):
+        evento["quando"] = datetime.now().isoformat(timespec="seconds")
+        with registro.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(evento, ensure_ascii=False) + "\n")
+
+    if verify:
+        print(f"\nbuild completo: {verify}")
+        verde, seg, motivo = roda_verify(verify, arvore, 4 * 3600,
+                                         registro.with_suffix(".log"))
+        registra({"evento": "verify", "id": m.get("item"), "verde": verde,
+                  "segundos": int(seg), "motivo": motivo, "fechamento": True})
+        if not verde:
+            print(f"vermelho ({motivo}). O estado não mudou; a saída está em "
+                  f"{curto(registro.with_suffix('.log'), repo)}")
+            return 1
+        print(f"verde em {humano(timedelta(seconds=int(seg)))}")
+
+    base = m.get("base")
+    c, n = git(["rev-list", "--count", f"{base}..HEAD"], arvore)
+    n = int(n) if c == 0 and n.isdigit() else -1
+    motivo = ("interrompido" if est.get("estado") == "interrompido"
+              else "supervisor-morto")
+    registra({"evento": "run_end", "motivo": motivo,
+              "detalhe": f"fechado pelo fecha-morto ({m['como']})",
+              "fechado_por": "fecha-morto", "item_em_voo": m.get("item")})
+    fica = []
+    if m.get("item") and m.get("status") != "done":
+        fica.append({"id": m["item"], "texto": (
+            f"ficou `{m.get('status')}` quando o supervisor morreu; o próximo "
+            "run o retoma pela reserva órfã")})
+    acoes = [] if n == 0 else [acao_aterrissar(repo, arvore, fila, run_id,
+                                               n if n > 0 else "?")]
+    est.update(estado="esperando-dono" if acoes or fica else "encerrado",
+               motivo_fim=motivo, acoes=acoes, fica_com_voce=fica,
+               fechado_por="fecha-morto",
+               atualizado=datetime.now().isoformat(timespec="seconds"))
+    tmp = caminho.parent / (caminho.name + ".tmp")
+    tmp.write_text(json.dumps(est, ensure_ascii=False, indent=2) + "\n",
+                   encoding="utf-8")
+    os.replace(tmp, caminho)
+    if acoes:
+        print(f"o run está `esperando-dono`. Próximo passo: "
+              f"{acoes[0]['comando']}")
+    else:
+        print(f"o run está `{est['estado']}` (a branch da noite não tem "
+              "commit sobre a largada)")
+    return 0
+
+
 def curto(caminho, repo):
     """Caminho para ler na tela (A6): relativo ao repo quando está dentro
     dele, `~/...` quando está na home, e inteiro só no resto."""
@@ -1473,6 +1745,139 @@ def runs_esperando(repo):
     return achados
 
 
+def supervisor_vivo(pid):
+    """O pid ainda é um `cepa-until` nesta máquina? O `ps` separa o
+    supervisor vivo do pid reciclado por outro processo."""
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    except (OSError, ValueError, TypeError):
+        return True
+    try:
+        p = subprocess.run(["ps", "-o", "command=", "-p", str(int(pid))],
+                           capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return True
+    if p.returncode != 0 and not p.stdout.strip():
+        return False
+    return "cepa-until" in p.stdout
+
+
+def runs_mortos(repo, agora=None):
+    """Os runs com estado `rodando` cujo supervisor morreu sem fechar o
+    registro. O caso que pagou por isto (WEGO 2026-09-28-2003): o `.jsonl`
+    parou em `item_start`, o card fechou `done` sozinho e o build completo que
+    o supervisor roda depois de cada `done` nunca rodou. O pid só vale na
+    máquina que o gravou; o run sem pid (anterior a 2026-09-29) conta como
+    morto quando o prazo passou há mais de `MARGEM_SEM_PID`. Sai da lista o
+    run cuja branch da noite já entrou na branch do clone ou sumiu."""
+    agora = agora or datetime.now()
+    raiz = raiz_principal(repo)
+    host = socket.gethostname()
+    achados = []
+    for caminho in sorted((raiz / ".claude" / "programs").glob(
+            "*/until/*.estado.json")):
+        try:
+            est = json.loads(caminho.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(est, dict) or est.get("estado") not in (
+                "rodando", "interrompido"):
+            continue
+        registro = caminho.parent / (est.get("registro") or caminho.name.replace(
+            ".estado.json", ".jsonl"))
+        eventos = []
+        try:
+            for linha in registro.read_text(encoding="utf-8").splitlines():
+                try:
+                    eventos.append(json.loads(linha))
+                except ValueError:
+                    continue
+        except OSError:
+            pass
+        inicio = next((e for e in eventos if e.get("evento") == "run_start"),
+                      {})
+        pid = est.get("pid") or inicio.get("pid")
+        dono = est.get("host") or inicio.get("host")
+        if est.get("estado") == "interrompido":
+            como = (f"interrompido por {est.get('sinal') or 'um sinal'}, sem o "
+                    "fim normal")
+        elif pid:
+            if dono and dono != host:
+                continue
+            if supervisor_vivo(pid):
+                continue
+            como = f"o supervisor (pid {pid}) não existe mais em {host}"
+        else:
+            try:
+                prazo = datetime.fromisoformat(str(inicio.get("prazo")))
+            except ValueError:
+                continue
+            if agora < prazo + MARGEM_SEM_PID:
+                continue
+            como = (f"o run não grava o pid do supervisor e o prazo "
+                    f"({prazo.strftime('%d/%m %H:%M')}) passou há "
+                    f"{humano(agora - prazo)}")
+        branch = est.get("branch") or inicio.get("branch")
+        codigo, sha = git(["rev-parse", "--verify", "-q", str(branch)], raiz)
+        if codigo != 0:
+            continue
+        codigo, _ = git(["merge-base", "--is-ancestor", sha, "HEAD"], raiz)
+        if codigo == 0:
+            continue
+        em_voo = None
+        for e in eventos:
+            if e.get("evento") == "item_start":
+                em_voo = e.get("id")
+            elif e.get("evento") == "item_end":
+                em_voo = None
+        fila = est.get("fila") or inicio.get("fila")
+        status = None
+        if em_voo:
+            it, _ = le_item(raiz / ".claude" / "programs" / str(fila)
+                            / "plan.yaml", em_voo)
+            status = str((it or {}).get("status") or "?")
+        arvore = est.get("arvore") or inicio.get("arvore")
+        verify = est.get("verify") if "verify" in est else inicio.get("verify")
+        comando = None
+        if verify and arvore:
+            comando = f"cd {shlex.quote(arvore)} && {verify}"
+            if not Path(arvore).is_dir():
+                comando = (f"git -C {shlex.quote(str(raiz))} worktree add "
+                           f"{shlex.quote(arvore)} {branch} && " + comando)
+        achados.append({"fila": fila, "run": est.get("run"), "branch": branch,
+                        "estado": est.get("estado"),
+                        "como": como, "item": em_voo, "status": status,
+                        "arvore": arvore, "verify": verify,
+                        "comando": comando,
+                        "fechar": f"cepa-until fecha-morto {fila}/"
+                                  f"{est.get('run')}",
+                        "estado_json": str(caminho), "registro": str(registro),
+                        "base": inicio.get("base")})
+    return achados
+
+
+def frase_do_morto(m):
+    """Uma linha para o run cujo supervisor morreu: o `pendentes` e o
+    `cepa-doctor` dizem a mesma coisa."""
+    item = ""
+    if m.get("item"):
+        item = (f"; o item em voo, {m['item']}, está `{m.get('status')}`"
+                + (" sem o build completo que o supervisor roda depois de "
+                   "cada done" if m.get("status") == "done" else ""))
+    oferta = (f" — o build completo que faltou: {m['comando']}"
+              if m.get("comando") else
+              " — o run não tinha build completo (verify dispensado)")
+    return (f"fila {m['fila']} · run {m['run']}: o supervisor morreu no meio "
+            f"do run ({m['como']}) e o registro ficou sem `run_end`{item}. "
+            f"A branch da noite `{m['branch']}` está como ele deixou"
+            + oferta + f". Para rodar o build e deixar o run pronto para "
+            f"aterrissar: {m['fechar']} (sem --sim só mostra o plano)")
+
+
 def cmd_pendentes(argv):
     """`cepa-until pendentes [--repo R] [--json]`: o que o `/common:next` e o
     `/common:doctor` leem para dizer que um run espera o dono (C6)."""
@@ -1481,9 +1886,13 @@ def cmd_pendentes(argv):
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     achados = runs_esperando(Path(a.repo).resolve())
+    mortos = runs_mortos(Path(a.repo).resolve())
     if a.json:
-        print(json.dumps({"runs": achados}, ensure_ascii=False))
+        print(json.dumps({"runs": achados, "mortos": mortos},
+                         ensure_ascii=False))
         return 0
+    for m in mortos:
+        print(frase_do_morto(m))
     for r in achados:
         print(f"fila {r['fila']} · run {r['run']}: `{r['branch']}` espera "
               f"aterrissagem em `{r['destino']}`"
@@ -1504,6 +1913,8 @@ def main(argv=None):
         return cmd_aterrissar(argv[1:])
     if argv and argv[0] == "pendentes":
         return cmd_pendentes(argv[1:])
+    if argv and argv[0] == "fecha-morto":
+        return cmd_fecha_morto(argv[1:])
     ap = argparse.ArgumentParser(
         description="executa a fila single-track do repo por uma janela de tempo")
     ap.add_argument("fila", help="nome da fila em .claude/programs/<nome>/plan.yaml")
@@ -1673,6 +2084,15 @@ def main(argv=None):
         print(f"\nnada a fazer: {parada.get('reason')} — {parada.get('detail')}")
         return 0
 
+    # A aba de terminal fechada manda SIGHUP ao grupo do terminal. O `claude`
+    # roda em sessão própria e sobrevive; o supervisor morria calado no meio
+    # do item, sem `verify`, `item_end` nem `run_end` (WEGO 2026-09-28-2003).
+    # Daqui em diante ele ignora o SIGHUP e escreve na tela sem depender dela.
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    sys.stdout = SaidaTolerante(sys.stdout)
+    sys.stderr = SaidaTolerante(sys.stderr)
+    pid, host = os.getpid(), socket.gethostname()
+
     def registra(evento):
         evento["quando"] = datetime.now().isoformat(timespec="seconds")
         with ledger.open("a", encoding="utf-8") as f:
@@ -1695,7 +2115,8 @@ def main(argv=None):
               "branch": branch_largada,
               "arvore": str(arvore), "base": base_da_noite,
               "herdou": heranca,
-              "branch_do_clone": branch_atual(repo), "verify": verify})
+              "branch_do_clone": branch_atual(repo), "verify": verify,
+              "pid": pid, "host": host})
     # O estado do run, ao lado do `.jsonl` (C6): `rodando` agora, e no fim
     # `esperando-dono` (há ação ou pendência) ou `encerrado`. É gravado ANTES da
     # análise do modelo, que pode falhar pela cota (C7); o `/common:until-review`
@@ -1705,7 +2126,8 @@ def main(argv=None):
     def grava_estado(estado, **resto):
         corpo = {"run": run_id, "fila": a.fila, "estado": estado,
                  "branch": branch_largada, "registro": ledger.name,
-                 "verify": verify,
+                 "verify": verify, "pid": pid, "host": host,
+                 "arvore": str(arvore), "prazo": prazo.isoformat(),
                  "atualizado": datetime.now().isoformat(timespec="seconds")}
         corpo.update(resto)
         tmp = caminho_estado.parent / (caminho_estado.name + ".tmp")
@@ -1718,6 +2140,48 @@ def main(argv=None):
                   f"{e}")
 
     grava_estado("rodando")
+
+    # O que está em voo quando chega um SIGTERM ou Ctrl+C: o item, a fase
+    # (`item` é o `claude`, `verify` é o build completo) e o pid do filho, que
+    # roda em sessão própria e não recebe o sinal.
+    em_voo = {}
+    fechado = [False]
+
+    def interrompe(signum, _frame):
+        nome = signal.Signals(signum).name
+        if fechado[0]:
+            raise SystemExit(128 + signum)
+        fechado[0] = True
+        voo = dict(em_voo) or None
+        filho = (voo or {}).get("pid_filho")
+        # O filho roda em sessão própria e seguiria sozinho: um card mudando
+        # sem ninguém para rodar o build completo depois. Morto, a reserva
+        # dele vira órfã e o próximo `queue` devolve o item.
+        encerrado = (encerra_grupo(filho, min(GRACA_SIGTERM, 10))
+                     if filho else None)
+        registra({"evento": "run_interrompido", "sinal": nome,
+                  "id": (voo or {}).get("id"), "fase": (voo or {}).get("fase"),
+                  "pid_filho": filho, "filho_encerrado": encerrado})
+        grava_estado("interrompido", sinal=nome, item_em_voo=voo)
+        print(f"\ncepa-until: interrompido por {nome}"
+              + (f" com {voo['id']} em voo ({voo.get('fase')})" if voo else
+                 " entre itens")
+              + f". Registrei em {curto(ledger, repo)}.", file=sys.stderr)
+        if filho:
+            print(f"  o processo filho (pid {filho}) "
+                  + ("foi encerrado; o próximo `queue` devolve o item como "
+                     "reserva órfã." if encerrado else
+                     "NÃO morreu, e segue sem supervisor."), file=sys.stderr)
+        print(f"  para rodar o build que faltou e deixar o run pronto para "
+              f"aterrissar: cepa-until fecha-morto {a.fila}/{run_id}",
+              file=sys.stderr)
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, interrompe)
+    signal.signal(signal.SIGINT, interrompe)
+
+    def lancou(pid_filho):
+        em_voo["pid_filho"] = pid_filho
     laterais_mantidas = []
     for lat, patch, erro_lat in limpa_laterais(
             repo, dados.get("path"), ledger_dir / f"{run_id}.laterais",
@@ -1792,6 +2256,7 @@ def main(argv=None):
 
     print()
     while True:
+        em_voo.clear()
         restante = prazo - datetime.now()
         if restante < reserva:
             motivo_fim = "prazo"
@@ -1897,9 +2362,12 @@ def main(argv=None):
                   "tentativa": vez, "twg_version": twg_version_instalada(),
                   "head": antes})
 
+        em_voo.update(id=ident, fase="item", tentativa=vez)
         limite = (restante + folga).total_seconds()
         codigo, matou, gasto, saida = executa_item(
-            a.fila, arvore, branch_largada, a.permissoes, limite, log)
+            a.fila, arvore, branch_largada, a.permissoes, limite, log,
+            ao_lancar=lancou)
+        em_voo.pop("pid_filho", None)
 
         # Sobra não commitada não passa para o próximo item.
         if arvore_suja(arvore):
@@ -1964,8 +2432,10 @@ def main(argv=None):
         elif estado == "done" and verify:
             print(f"          → build completo: {verify}")
             restam = (prazo + folga - datetime.now()).total_seconds()
+            em_voo["fase"] = "verify"
             verde, seg_verify, motivo_verify = roda_verify(
-                verify, arvore, restam, log)
+                verify, arvore, restam, log, ao_lancar=lancou)
+            em_voo.pop("pid_filho", None)
             registra({"evento": "verify", "id": ident, "verde": verde,
                       "segundos": int(seg_verify), "motivo": motivo_verify})
             if not verde:
@@ -1978,7 +2448,8 @@ def main(argv=None):
                     print(f"          → vermelho ({motivo_verify}); rodo o "
                           "build completo de novo, no mesmo código")
                     verde, seg2, motivo2 = roda_verify(verify, arvore, restam,
-                                                       log)
+                                                       log, ao_lancar=lancou)
+                    em_voo.pop("pid_filho", None)
                     registra({"evento": "verify", "id": ident, "verde": verde,
                               "segundos": int(seg2), "motivo": motivo2,
                               "repeticao": 2})
@@ -2312,6 +2783,7 @@ def main(argv=None):
                                "janela no mesmo problema")
                 break
 
+    em_voo.clear()
     registra({"evento": "run_end", "motivo": motivo_fim, "detalhe": detalhe_fim,
               "itens": itens, "com_progresso": len(feitos),
               "sem_progresso": len(falhados), "esgotados": len(esgotados),
@@ -2371,16 +2843,7 @@ def main(argv=None):
         n = n if c == 0 else "?"
         print(f"\n   branch da noite: `{branch_largada}` "
               f"({n} commit(s) sobre a largada), em {curto(arvore, repo)}")
-        acoes.append({
-            "id": "aterrissar",
-            "frase": (f"leva os {n} commit(s) da branch da noite para a "
-                      f"`{branch_atual(repo)}` do clone; só você dispara, porque "
-                      "mexe na branch principal"),
-            "comando": (f"cepa-until aterrissar {a.fila}/{run_id} (sem "
-                        "--sim só mostra o plano; com --sim faz merge, build "
-                        "completo e push)"),
-            "sha": cabeca(arvore), "destino": branch_atual(repo),
-            "arvore": str(arvore)})
+        acoes.append(acao_aterrissar(repo, arvore, a.fila, run_id, n))
         for h in heranca:
             print(f"   ela já contém `{h['branch']}` (herdada na largada): "
                   "mesclar a da noite leva as duas")
@@ -2411,6 +2874,9 @@ def main(argv=None):
                         for i, (t, x) in desfechos.items()],
                  acoes=acoes, fica_com_voce=fica,
                  custo_usd=custo if custos else None)
+    # Estado final gravado: um sinal daqui em diante (na análise) só encerra,
+    # sem trocar o estado para `interrompido`.
+    fechado[0] = True
     if custos:
         br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
         print(f"\n   custo: US$ {br(custo)} (soma do `total_cost_usd` de "
