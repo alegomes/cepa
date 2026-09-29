@@ -1084,6 +1084,31 @@ def repara_ligacao(repo, arvore, branch):
     return None
 
 
+def hooks_alterados(arvore, desde):
+    """Hooks de plugin que a branch da noite mudou desde `desde`.
+
+    Os hooks rodam do plugin instalado no cache, que é cópia do clone na
+    última instalação, e não da branch da noite. No run 2026-09-28-1146 os
+    itens 1 e 2 consertaram o `no-background-build` e o `bash-path-lock`, e as
+    4 rodadas seguintes continuaram barradas pelas versões antigas sem nada
+    no run dizer isso. Hook é arquivo sob `<plugin>/hooks/`, onde `<plugin>`
+    tem `.claude-plugin/plugin.json`; num repo que não é de plugin a lista
+    sai sempre vazia."""
+    if not desde:
+        return []
+    c, saida = git(["diff", "--name-only", f"{desde}..HEAD"], arvore)
+    if c != 0:
+        return []
+    achados = []
+    for linha in saida.splitlines():
+        partes = linha.strip().split("/")
+        if (len(partes) >= 3 and partes[1] == "hooks"
+                and (arvore / partes[0] / ".claude-plugin" / "plugin.json")
+                .is_file()):
+            achados.append(linha.strip())
+    return achados
+
+
 def fecha_branch_vazia(repo, arvore, branch, base):
     """Noite sem nenhum commit não deixa worktree nem branch para trás."""
     if cabeca(arvore) != base or arvore_suja(arvore):
@@ -2268,10 +2293,28 @@ def main(argv=None):
     quedas, quedas_seguidas = [], 0
     # Itens começados com a cota apertada e o reset fora da janela.
     apertados = []
+    # Hooks de plugin que a branch da noite mudou e que a tela já avisou. A
+    # base é o HEAD do clone, e não o da noite, para a herança entrar: o que
+    # ela trouxe também não está no plugin instalado.
+    hooks_avisados = []
+
+    def avisa_hooks(origem):
+        novos = [f for f in hooks_alterados(arvore, base_do_clone)
+                 if f not in hooks_avisados]
+        if not novos:
+            return
+        hooks_avisados.extend(novos)
+        registra({"evento": "hook_so_apos_reinstalar", "id": origem,
+                  "arquivos": novos})
+        print(f"          → {origem} mudou hook de plugin "
+              f"({', '.join(novos)}): só passa a valer depois de aterrissar "
+              "a branch da noite e rodar `bin/install.sh`. Até lá as "
+              "rodadas desta noite seguem com a versão instalada")
 
     print()
     while True:
         em_voo.clear()
+        avisa_hooks(ident if itens else "a herança da largada")
         restante = prazo - datetime.now()
         if restante < reserva:
             motivo_fim = "prazo"
@@ -2839,6 +2882,7 @@ def main(argv=None):
                 break
 
     em_voo.clear()
+    avisa_hooks(ident if itens else "a herança da largada")
     registra({"evento": "run_end", "motivo": motivo_fim, "detalhe": detalhe_fim,
               "itens": itens, "com_progresso": len(feitos),
               "sem_progresso": len(falhados), "esgotados": len(esgotados),
@@ -2907,6 +2951,15 @@ def main(argv=None):
             if tipo in ("travado", "rota-humana", "done-sem-commit")]
     fica += [{"id": lat, "texto": f"lateral não apagada, a cópia falhou: {erro}"}
              for lat, erro in laterais_mantidas]
+    # Recalculado no fim, e não tirado de `hooks_avisados`: um hook avisado
+    # pode ter saído da branch com o item vermelho que o trouxe.
+    hooks_da_noite = hooks_alterados(arvore, base_do_clone) if acoes else []
+    if hooks_da_noite:
+        fica.append({"id": "reinstalar-plugin", "texto": (
+            f"a branch da noite muda {len(hooks_da_noite)} hook(s) de plugin "
+            f"({', '.join(hooks_da_noite)}), e nenhuma rodada desta noite "
+            "rodou com eles: os hooks vêm do plugin instalado. Passam a valer "
+            "depois do `aterrissar` e de `bin/install.sh`")})
     if acoes:
         print(f"\n   Ações:")
         for i, acao in enumerate(acoes, 1):
