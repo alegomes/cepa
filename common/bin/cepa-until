@@ -173,6 +173,17 @@ do terminal, o `claude` roda em sessão própria e sobrevive, o supervisor não.
   - `cepa-until fecha-morto <fila>/<run> --sim` roda o build que faltou e,
     verde, fecha o registro e deixa o run pronto para o `aterrissar`.
 
+## Hook que só vale depois de reinstalar
+
+Os hooks rodam do plugin instalado no cache, cópia do clone na última
+instalação, e não da branch da noite. No run 2026-09-28-1146 dois itens
+consertaram hooks e as 4 rodadas seguintes seguiram barradas pelas versões
+antigas, sem nada no run dizer isso. Agora, quando a branch da noite muda um
+arquivo sob `<plugin>/hooks/` (pasta com `.claude-plugin/plugin.json`), a tela
+avisa logo depois do item, o registro ganha `hook_so_apos_reinstalar`, e o fim
+cobra `reinstalar-plugin` em "Fica com você": vale depois do `aterrissar` e
+de `bin/install.sh`.
+
 ## Depois do fim
 
 Com o run encerrado, um último `claude -p "/common:until-review <run>"` lê o
