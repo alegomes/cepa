@@ -1,0 +1,44 @@
+key: until-blocked-com-commits
+status: complete
+diff_range: 62d9cbf..f946570
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "common/bin/cepa-until num run real com claude falso; branch da noite após item blocked com commit"
+    test: tests/test_cepa_until_branch_da_noite.py::test_item_que_o_agente_trava_depois_de_commitar_sai_da_branch_da_noite
+    layer: cli/run completo com repo git real
+    evidence: verified
+    run: "python3 -c 'import sys; sys.path.insert(0,\"tests\"); import test_cepa_until_branch_da_noite as t; t.test_item_que_o_agente_trava_depois_de_commitar_sai_da_branch_da_noite(); print(t.FAILURES)' -> 9 checks ok, FAILURES []"
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: "branch lateral <branch>-*-<id> contém o commit"
+    test: mesmo teste (check 'o commit do a1/a2 fica numa lateral')
+    layer: cli
+    evidence: verified
+    run: "mesma execução, checks ok"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: "evidence do item na fila nomeia a lateral e mantém 'condicao de fora'"
+    test: mesmo teste (check da evidência)
+    layer: cli
+    evidence: verified
+    run: "mesma execução, checks ok"
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: "run para com motivo item-preso quando o reset do item blocked é inseguro (outro item done no meio)"
+    test: tests/test_cepa_until_branch_da_noite.py::test_item_travado_com_outro_done_no_meio_para_em_vez_de_resetar
+    layer: cli/run completo com repo git real
+    evidence: verified
+    run: "python3 -c (import test_cepa_until_branch_da_noite; 4 funcoes novas/alteradas) -> 'ok o run para com item-preso', 'ok ...o aviso nomeia o item do meio', 'ok nada foi apagado da branch da noite'; FAILURES []"
+    status: complete
+  - id: AC5
+    altitude: cli
+    surface: "blocked sem commits e caminhos done/vermelho/esgotado inalterados"
+    test: test_item_travado_sem_commit_nao_mexe_na_branch + suítes cepa_until (7 arquivos)
+    layer: cli
+    evidence: verified
+    run: "teste isolado rodado por mim: 4 checks ok, FAILURES []. Suítes inteiras: saídas do coordenador em /tmp/out.test_cepa_until*.txt, todas terminam em '✓ tudo verde' (lidas por mim; nao reexecutadas)"
+    status: complete
