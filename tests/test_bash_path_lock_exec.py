@@ -119,6 +119,12 @@ DENY = [
     ("sed -i fora da pista (balde 1)", "sed -i 's/a/b/' {OUT}"),
     ("sed com comando w", "sed 's/a/b/w {OUT}' {IN}"),
     ("sed com flag e (executa)", "sed 's/.*/date/e' {IN}"),
+    # comando w/e depois de um endereço ou de um texto de a/i/c: o leitor por
+    # comando que tirou o falso positivo do "stays" não pode abrir este furo
+    ("sed w depois de endereço com stays", "sed '/stays/w {OUT}' {IN}"),
+    ("sed w na linha seguinte ao texto do a", "sed -i '1a stays\nw {OUT}' {IN}"),
+    ("sed e depois de rótulo", "sed ':a;e date' {IN}"),
+    ("sed com comando que ninguém conhece", "sed -i 'k' {IN}"),
     ("find -exec", "find . -name '*.java' -exec rm {} \\;"),
     ("find -delete", "find . -name '*.java' -delete"),
     ("rg --pre executa", "rg --pre ./x.sh foo"),
@@ -248,6 +254,12 @@ ALLOW = [
     ("cp para a pista", "cp {OUT} {IN}"),
     ("redirect para a pista", "echo x > {IN}"),
     ("sed -i na pista", "sed -i 's/a/b/' {IN}"),
+    # desvios.md 2026-09-27: "stays" fora de um s/// era lido como s + delimitador t
+    ("sed -i com stays no endereço", "sed -i '/o item stays at the entry/d' {IN}"),
+    ("sed -i com stays no texto do a", "sed -i '/^fim/a o item stays até que o teste rode' {IN}"),
+    ("sed -i com stays no texto do c",
+     "sed -i '/^Status/c\\\nO card stays at the top of the entry' {IN}"),
+    ("sed -i com rótulo e laço", "sed -i ':a;N;/fim/!ba;s/\\n/ /g' {IN}"),
     ("mkdir na pista", "mkdir -p {INDIR}/sub"),
     ("redirect para /tmp", "echo x > {TMP}/out.txt"),
     ("tee para /tmp", "git diff | tee {TMP}/d.patch"),
