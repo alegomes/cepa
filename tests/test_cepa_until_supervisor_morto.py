@@ -207,6 +207,39 @@ def test_ctrl_c_grava_run_interrompido_com_o_item_em_voo():
           f"{codigo}: {saida[-500:]}")
 
 
+def test_sigterm_no_build_completo_encerra_o_build():
+    """O build completo também roda em sessão própria: o SIGTERM no meio dele
+    precisa levá-lo junto, e o registro diz que a fase era `verify`."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, TRABALHA)
+        marca = Path(tmp) / "build.pid"
+        build = f"echo $$ > {marca}; sleep 60"
+        proc = larga(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", build],
+                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        try:
+            espera(lambda: marca.exists() and marca.read_text().strip())
+            os.kill(proc.pid, signal.SIGTERM)
+            try:
+                proc.communicate(timeout=30)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
+            pid_build = int(marca.read_text())
+            time.sleep(0.5)
+            build_vivo = vivo(pid_build)
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+        fim = ledger_de(raiz)[-1]
+        check("SIGTERM no build registra a fase `verify`",
+              fim.get("evento") == "run_interrompido"
+              and fim.get("fase") == "verify" and fim.get("id") == "a1",
+              str(fim))
+        check("...e encerra o build", not build_vivo
+              and fim.get("filho_encerrado") is True, str(fim))
+
+
 # ── 3. pid e host ───────────────────────────────────────────────────────────
 
 def test_run_start_e_estado_carregam_pid_e_host():

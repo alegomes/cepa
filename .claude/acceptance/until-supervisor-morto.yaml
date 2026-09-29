@@ -1,6 +1,6 @@
 key: until-supervisor-morto
 status: complete
-diff_range: 68fe2bc..HEAD
+diff_range: 68fe2bc..HEAD  # rodada 2 auditada em e32c8f2..d40cb49
 criteria:
   - id: AC1
     altitude: cli
@@ -49,3 +49,41 @@ criteria:
     layer: cli
     evidence: verified
     run: "Arquivo de teste copiado sobre git worktree --detach de 68fe2bc: 18 FAIL cobrindo SIGHUP, SIGTERM/SIGINT, pid/host, pendentes/mortos, doctor e until-review. HEAD: 24 ok, tudo verde."
+  - id: AC6
+    altitude: cli
+    surface: >
+      SIGTERM e SIGINT enviados ao cepa-until com item em voo; o grupo do
+      `claude` (sessão própria) deve estar morto ao sair, e o evento
+      run_interrompido deve registrar filho_encerrado.
+    test: tests/test_cepa_until_supervisor_morto.py::test_sigterm_grava_run_interrompido_com_o_item_em_voo e ::test_ctrl_c_grava_run_interrompido_com_o_item_em_voo
+    layer: cli/subprocess real (checa que o filho não está vivo e filho_encerrado is True)
+    evidence: verified
+    run: "python3 tests/test_cepa_until_supervisor_morto.py -> 'ok SIGTERM encerra o `claude` do item (sessão própria) antes de sair', 'ok Ctrl+C encerra o `claude` do item antes de sair'; tudo verde, exit 0. Vermelho em e32c8f2 (teste do HEAD copiado sobre worktree detached): FAIL nas duas checagens de filho_encerrado."
+    gap: "nota: o build (verify) em sessão própria não é interrompido por teste próprio; o teste cobre o filho claude do item."
+  - id: AC7
+    altitude: cli
+    surface: >
+      `cepa-until fecha-morto <fila>/<run> [--sim]` como subprocesso real:
+      plano sem --sim; --sim verde grava verify(fechamento) e run_end e deixa
+      esperando-dono com ação aterrissar, aceito pelo `aterrissar`; vermelho
+      não muda o estado; recusa supervisor vivo; aceita `interrompido`.
+    test: tests/test_cepa_until_supervisor_morto.py::test_fecha_morto_sem_sim_so_mostra_o_plano, ::test_fecha_morto_verde_deixa_o_run_pronto_para_aterrissar, ::test_fecha_morto_vermelho_nao_muda_o_estado, ::test_fecha_morto_recusa_supervisor_vivo, ::test_fecha_morto_aceita_run_interrompido
+    layer: cli/subprocess real com repo git e worktree temporários
+    evidence: verified
+    run: "python3 tests/test_cepa_until_supervisor_morto.py -> todos os checks ok dessas 5 funções (inclui 'ok ...e o aterrissar aceita o run'), '✓ tudo verde', exit 0. Vermelho em e32c8f2: FAIL com 'usage: cepa-until' (subcomando inexistente) em todas."
+  - id: AC8
+    altitude: cli
+    surface: >
+      `cepa-until pendentes --json` (campo mortos[].fechar), saída do
+      `cepa-doctor --projeto` e texto de common/commands/until-review.md.
+    test: tests/test_cepa_until_supervisor_morto.py::test_pendentes_e_doctor_mandam_rodar_o_fecha_morto, ::test_until_review_confere_o_supervisor_morto
+    layer: cli/subprocess real (pendentes, doctor); until-review.md por asserção de texto (comando de prompt, sem execução possível)
+    evidence: verified
+    run: "python3 tests/test_cepa_until_supervisor_morto.py -> 'ok pendentes traz o comando do fecha-morto', 'ok ...e o doctor também', 'ok o /common:until-review manda conferir `mortos` no pendentes'; tudo verde. Vermelho em e32c8f2: FAIL nas três."
+  - id: AC9
+    altitude: cli
+    surface: teste vermelho antes da implementação da rodada 2.
+    test: tests/test_cepa_until_supervisor_morto.py (commit afb0f2c antes de d40cb49)
+    layer: cli
+    evidence: verified
+    run: "Teste do HEAD copiado sobre git worktree --detach de e32c8f2 (removida depois): 16 FAIL cobrindo AC6, AC7 e AC8. HEAD: tudo verde, exit 0."
