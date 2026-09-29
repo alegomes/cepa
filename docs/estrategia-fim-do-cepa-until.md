@@ -2,10 +2,12 @@
 
 > **Aviso:** a versão que vale é a Revisão 3, em
 > [`docs/discovery/until-fim-sem-dono/revisao-3.md`](discovery/until-fim-sem-dono/revisao-3.md)
-> (2026-09-28). Ela substitui partes da Revisão 2 deste documento: o item `FIX-<teste>`
-> criado no vermelho duplo, o cherry-pick da lateral feito pelo supervisor, a tabela de ações
-> do Caminho 1 e o passo 0 da sequência revisada. No vermelho, quem volta com o recado é o
-> próprio card. Leia a Revisão 3 antes de tomar qualquer trecho daqui como regra.
+> (2026-09-28). Ela substitui partes deste documento. Da Revisão 2: o item `FIX-<teste>`
+> criado no vermelho duplo, o cherry-pick da lateral feito pelo supervisor antes do agente, a
+> frase "a regra green-or-revert é cumprida ao pé da letra" e "o dono não vê nada". Da revisão
+> pós-painel: a tabela de ações do Caminho 1 e o passo 0 da sequência revisada. No vermelho,
+> quem volta com o recado é o próprio card. Leia a Revisão 3 antes de tomar qualquer trecho
+> daqui como regra.
 
 Status: implementado pela Revisão 3 (item `until-fim-sem-dono` da fila `cepa`, merge 9db5fbc
 de 2026-09-28). Este documento fica como registro do caminho até ela: a proposta de

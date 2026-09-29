@@ -1,7 +1,7 @@
 # Revisão 3 do fim do `cepa-until`: o próprio card volta com o recado
 
 Data: 2026-09-28. Revisa a "Revisão 2: o vermelho se resolve sem o dono" de
-`docs/estrategia-fim-do-cepa-until.md` (linhas 349-439). Item da fila: `cepa/until-fim-sem-dono`.
+`docs/estrategia-fim-do-cepa-until.md` (linhas 351-441). Item da fila: `cepa/until-fim-sem-dono`.
 
 A Revisão 2 passou pelo painel de 7 lentes em 2026-09-28 (síntese em
 `.claude/programs/cepa/advisors-until-fim-revisao2-sintese.md` do clone principal, fora do git).
