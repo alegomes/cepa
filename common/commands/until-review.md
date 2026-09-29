@@ -54,6 +54,13 @@ python3 common/bin/cepa-until-digest <run>.jsonl
 
 Se o `.jsonl` não existir, pare dizendo qual caminho você procurou.
 
+Leia também o estado do run, `<run>.estado.json`, ao lado do `.jsonl` (mesmo
+nome, outro sufixo). O `cepa-until` grava esse arquivo antes de chamar você:
+`estado` (`esperando-dono` ou `encerrado`), `itens` (uma linha por item),
+`acoes` (a lista fechada do que um comando executa; hoje só `aterrissar`) e
+`fica_com_voce` (o que nenhum comando executa). Run anterior a 2026-09-28 não
+tem o arquivo: diga isso e siga só com o resumo.
+
 ### 2. Ler procurando estas perguntas
 
 1. **O que ficou pronto e onde está.** Itens `done`, commits na branch da
@@ -101,6 +108,14 @@ vem com a conta. Todo termo aparece explicado na primeira menção.
 
 A ordem das perguntas é a ordem em que o dono deve responder: o que destrava
 mais trabalho vem primeiro.
+
+**Uma lista só** (C7 de `docs/estrategia-fim-do-cepa-until.md`). Comente cada
+ação de `acoes` pelo id, sem numeração própria: a pergunta sobre ela leva o id
+como rótulo (`aterrissar`), diz o efeito com a `frase` do estado e traz a sua
+recomendação. Os itens de `fica_com_voce` aparecem num bloco "Fica com você",
+com o que o dono precisa fazer em cada um. Não invente ação fora da lista: o
+que você achar e nenhum comando executa (abrir card para um teste instável,
+corrigir o harness) entra em "Fica com você".
 
 ## Constraints
 

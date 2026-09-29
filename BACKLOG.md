@@ -3750,8 +3750,10 @@ zero intervenção para o vermelho e nada novo para lembrar.
    **Feito em 2026-09-28**, no vermelho do build e no item que gasta as tentativas
    (lateral `-parado-`); testes em `tests/test_cepa_until_branch_da_noite.py`. Vale para as
    tentativas da mesma janela: a de um run anterior chega pela herança e não é desfeita.
-2. **Estado do run e lista de ações** gravados antes da análise do modelo, impressos no fim do
-   terminal, lidos pelo `/common:until-review`; uma linha por item no resumo.
+2. ~~**Estado do run e lista de ações** gravados antes da análise do modelo, impressos no fim do
+   terminal, lidos pelo `/common:until-review`; uma linha por item no resumo.~~ **Feito em
+   2026-09-28**: `<run>.estado.json` (`rodando` → `esperando-dono`/`encerrado`), ação única
+   `aterrissar`, bloco "Fica com você"; a sugestão do `/common:worktree-merge` saiu do resumo.
 3. **`cepa-until aterrissar <fila>/<run>`** como camada fina sobre os guardas do
    `/common:worktree-merge` (decisão do dono, 26/09). O run continua sem tocar a `main`:
    o dono recusou a aterrissagem automática em 26/09.

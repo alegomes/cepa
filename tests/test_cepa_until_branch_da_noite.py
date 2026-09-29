@@ -655,6 +655,108 @@ def test_4f_sem_patch_a_lateral_fica():
               str(ledger_de(raiz)))
 
 
+# ── estado do run e lista de ações (passo 2; C6, C7 e A4) ───────────────────
+
+def estado_de(raiz):
+    d = raiz / ".claude" / "programs" / "fila" / "until"
+    arqs = sorted(d.glob("*.estado.json"))
+    return json.loads(arqs[-1].read_text()) if arqs else None
+
+
+# O `claude` falso anota o estado do run que vê: durante o item, e na análise
+# do fim (chamada `/common:until-review`).
+OLHA_ESTADO = (
+    "import glob\n"
+    "def _estado():\n"
+    "    d = os.path.join(os.path.dirname(PLANO), 'until')\n"
+    "    a = sorted(glob.glob(os.path.join(d, '*.estado.json')))\n"
+    "    return json.load(open(a[-1])) if a else None\n"
+    "with open(os.environ['FAKE_CHAMADAS'] + '.estado', 'a') as f:\n"
+    "    f.write(json.dumps({'args0': ARGS[1][:30] if len(ARGS) > 1 else '',\n"
+    "                        'estado': _estado()}) + '\\n')\n"
+    "if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+    "    print(json.dumps({'type': 'result', 'result': 'analise'}))\n"
+    "    sys.exit(0)\n")
+
+
+def vistos_estado(raiz):
+    f = Path(raiz).parent / "chamadas.jsonl.estado"
+    return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
+
+
+def test_2_estado_do_run_rodando_e_depois_esperando_dono_antes_da_analise():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        corpo = OLHA_ESTADO + TRABALHA.replace(
+            "marca(ident, status='done', evidence='ok')\n",
+            "if ident == 'a2':\n"
+            "    marca(ident, status='blocked', evidence='travou no Keycloak')\n"
+            "else:\n"
+            "    marca(ident, status='done', evidence='ok')\n")
+        binv = fake_claude(tmp, corpo)
+        p, _ = roda(raiz, binv, plano_de(raiz),
+                    ["--for", "2h", "--verify", VERIFY, "--com-analise"])
+        vistos = vistos_estado(raiz)
+        durante = [v for v in vistos if not v["args0"].startswith("/common:until")]
+        check("durante o item, o estado é rodando",
+              durante and all((v["estado"] or {}).get("estado") == "rodando"
+                              for v in durante), str(durante)[:400])
+        analise = [v for v in vistos if v["args0"].startswith("/common:until")]
+        est = (analise[0]["estado"] or {}) if analise else {}
+        check("a análise já encontra o estado final gravado",
+              est.get("estado") == "esperando-dono", str(analise)[:400])
+        acoes = est.get("acoes") or []
+        branch = [e for e in ledger_de(raiz)
+                  if e["evento"] == "run_start"][0]["branch"]
+        check("a única ação é aterrissar, com a branch da noite",
+              [a.get("id") for a in acoes] == ["aterrissar"]
+              and branch in (acoes[0].get("comando") or ""), str(acoes))
+        check("...com a frase leiga do efeito",
+              acoes and acoes[0].get("frase"), str(acoes))
+        itens = est.get("itens") or []
+        check("uma linha por item",
+              [i.get("id") for i in itens] == ["a1", "a2"], str(itens))
+        fica = est.get("fica_com_voce") or []
+        check("o travado vai para 'fica com você' com o motivo",
+              any(f.get("id") == "a2" and "Keycloak" in (f.get("texto") or "")
+                  for f in fica), str(fica))
+        check("o terminal imprime a ação numerada",
+              "1. aterrissar" in p.stdout, p.stdout[-900:])
+        check("...e o bloco 'Fica com você'",
+              "Fica com você" in p.stdout, p.stdout[-900:])
+        check("o resumo não sugere o /common:worktree-merge",
+              "worktree-merge" not in p.stdout, p.stdout[-900:])
+
+
+def test_2_cada_item_aparece_uma_vez_no_resumo():
+    """A4: o WEGO-2320 aparecia em "Travados", "Build vermelho" e "Sem
+    progresso", e lia-se como três problemas."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        binv = fake_claude(tmp, TRABALHA)
+        p, _ = roda(raiz, binv, plano_de(raiz),
+                    ["--for", "2h", "--verify", VERIFY],
+                    extra_env={"FAKE_QUEBRA": "a2"})
+        fim = p.stdout[p.stdout.find("── fim"):]
+        for ident in ("a1", "a2", "a3"):
+            check(f"{ident} aparece uma vez na lista de itens do fim",
+                  fim.count(f"- {ident}:") == 1, fim)
+        check("a linha do a2 diz volta vermelha e a lateral",
+              "vermelho-a2" in fim and "volta vermelha" in fim, fim)
+
+
+def test_2_run_sem_commit_termina_encerrado_sem_acao():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='dropped',"
+                                " evidence='não precisa mais')")
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
+        est = estado_de(raiz) or {}
+        check("sem commit e sem pendência, o estado é encerrado",
+              est.get("estado") == "encerrado" and not est.get("acoes"),
+              str(est))
+
+
 def main():
     print("cepa-until — branch da noite\n")
     for nome, fn in sorted(globals().items()):
