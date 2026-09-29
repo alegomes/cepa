@@ -3763,8 +3763,7 @@ zero intervenção para o vermelho e nada novo para lembrar.
 4. **Vermelho que se resolve** (Revisão 3, subpassos 4a-4f com critério e teste vermelho no
    documento): segundo build completo; verde fecha `done` e grava `build_instavel` na
    telemetria; qualquer outro desfecho devolve o **próprio item** a `pending` com o recado na
-   `evidence`, que o `cepa-plan start` passa a imprimir (4a, 4b, 4c, 4d e 4e **feitos em
-   2026-09-28**; falta o 4f); teto de duas voltas (a segunda vai para
+   `evidence`, que o `cepa-plan start` passa a imprimir (4a-4f **feitos em 2026-09-28**); teto de duas voltas (a segunda vai para
    `blocked`); cada volta conta no disjuntor; lateral só é apagada depois do `format-patch`.
 5. Cabeçalho curto, caminhos relativos, custo no resumo; `/common:next` e `/common:doctor`
    leem o estado do run.

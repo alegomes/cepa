@@ -593,6 +593,68 @@ def test_4e_cada_volta_conta_no_disjuntor():
                       for i in ("a1", "a2", "a3")), str(fim))
 
 
+# ── a lateral só some com cópia (Revisão 3, passo 4f) ───────────────────────
+
+def lateral_antiga(raiz, nome, arquivo):
+    """Uma lateral de um run anterior com um commit que a main não tem."""
+    git(raiz, "checkout", "-q", "-b", nome)
+    (raiz / arquivo).write_text("x")
+    git(raiz, "add", "-A")
+    git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+        f"commit de {arquivo}")
+    git(raiz, "checkout", "-q", "-")
+
+
+def test_4f_lateral_de_item_fechado_vira_patch_antes_de_sumir():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1", status="dropped"), item("a2"),
+                                item("a3", status="blocked")])
+        lateral_antiga(raiz, "until/2026-01-01-0000-vermelho-a1", "l1.txt")
+        lateral_antiga(raiz, "until/2026-01-01-0000-vermelho-a1-v2", "l1b.txt")
+        lateral_antiga(raiz, "until/2026-01-01-0000-parado-a3", "l3.txt")
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
+        d = raiz / ".claude" / "programs" / "fila" / "until"
+        patches = sorted(d.glob("*.laterais/*.patch"))
+        nomes = [p.name for p in patches]
+        check("as duas laterais do item dropped viram patch",
+              len(patches) == 2 and all("vermelho-a1" in n for n in nomes),
+              str(nomes))
+        check("...com o commit dentro",
+              any("commit de l1.txt" in p.read_text() for p in patches),
+              str(nomes))
+        check("...e só então somem",
+              not git(raiz, "branch", "--list", "until/*-vermelho-a1*"),
+              git(raiz, "branch", "--list", "until/*"))
+        check("a lateral de item ainda aberto (blocked) fica",
+              git(raiz, "branch", "--list", "until/2026-01-01-0000-parado-a3"),
+              git(raiz, "branch", "--list", "until/*"))
+        check("o registro grava a lateral apagada com o patch",
+              any(e["evento"] == "lateral_apagada" and e.get("patch")
+                  for e in ledger_de(raiz)), str(ledger_de(raiz)))
+
+
+def test_4f_sem_patch_a_lateral_fica():
+    import shutil
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1", status="done"), item("a2")])
+        lateral_antiga(raiz, "until/2026-01-01-0000-vermelho-a1", "l1.txt")
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        falso = binv / "git"
+        falso.write_text(
+            "#!/bin/sh\n"
+            "for a in \"$@\"; do [ \"$a\" = format-patch ] && exit 1; done\n"
+            f"exec {shutil.which('git')} \"$@\"\n")
+        falso.chmod(0o755)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
+        check("com o format-patch falhando, a branch continua",
+              git(raiz, "branch", "--list", "until/2026-01-01-0000-vermelho-a1"),
+              git(raiz, "branch", "--list", "until/*"))
+        check("...e o registro diz por quê",
+              any(e["evento"] == "lateral_mantida" for e in ledger_de(raiz)),
+              str(ledger_de(raiz)))
+
+
 def main():
     print("cepa-until — branch da noite\n")
     for nome, fn in sorted(globals().items()):

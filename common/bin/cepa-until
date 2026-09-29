@@ -1098,6 +1098,61 @@ def voltas_vermelhas(ledger_dir, ident):
     return n
 
 
+# As laterais que o supervisor cria: `until/<run>-vermelho-<id>[-v<n>]` no
+# build vermelho e `until/<run>-parado-<id>` no item que gastou as tentativas.
+LATERAL = re.compile(
+    r"^until/\d{4}-\d{2}-\d{2}-\d{4}-(?:vermelho|parado)-(.+?)(?:-v\d+)?$")
+
+
+def limpa_laterais(repo, caminho_plano, destino, noite):
+    """Apaga as laterais de itens em `done` ou `dropped`, mas só depois de
+    gravar em `destino` o `git format-patch` dos commits que a branch da noite
+    não tem (Revisão 3, 4f). Sem o patch no disco, a branch fica: o dono pediu
+    para não ter o que lembrar, e não para perder código.
+
+    Devolve [(branch, patch, erro)]; `patch` None quando a branch ficou."""
+    codigo, saida = git(["for-each-ref", "--format=%(refname:short)",
+                         "refs/heads/until/"], repo)
+    if codigo != 0:
+        return []
+    try:
+        itens = (yaml.safe_load(Path(caminho_plano).read_text(encoding="utf-8"))
+                 or {}).get("items") or []
+    except (OSError, TypeError, yaml.YAMLError):
+        return []
+    status = {str(it.get("id")): str(it.get("status") or "").lower()
+              for it in itens if isinstance(it, dict)}
+    feitos = []
+    for branch in saida.splitlines():
+        m = LATERAL.match(branch.strip())
+        if not m or status.get(m.group(1)) not in ("done", "dropped"):
+            continue
+        arquivo = destino / (branch[len("until/"):] + ".patch")
+        try:
+            destino.mkdir(parents=True, exist_ok=True)
+            with open(arquivo, "wb") as f:
+                p = subprocess.run(["git", "format-patch", "--stdout",
+                                    f"{noite}..{branch}"], cwd=str(repo),
+                                   stdout=f, stderr=subprocess.PIPE,
+                                   timeout=120)
+            erro = (None if p.returncode == 0 else
+                    (p.stderr.decode("utf-8", "replace").strip()
+                     or f"format-patch saiu {p.returncode}"))
+        except (OSError, subprocess.TimeoutExpired) as e:
+            erro = str(e)
+        if erro:
+            try:
+                arquivo.unlink()
+            except OSError:
+                pass
+            feitos.append((branch, None, erro))
+            continue
+        codigo, saida_d = git(["branch", "-D", branch], repo)
+        feitos.append((branch, str(arquivo) if codigo == 0 else None,
+                       None if codigo == 0 else saida_d))
+    return feitos
+
+
 def emite_telemetria(evento, repo, **campos):
     """Um evento no ledger de `~/.claude/cepa-telemetry/`, pelo mesmo módulo
     dos hooks. Nunca derruba o run: telemetria é rede, não portão."""
@@ -1343,6 +1398,19 @@ def main(argv=None):
               "arvore": str(arvore), "base": base_da_noite,
               "herdou": heranca,
               "branch_do_clone": branch_atual(repo), "verify": verify})
+    for lat, patch, erro_lat in limpa_laterais(
+            repo, dados.get("path"), ledger_dir / f"{run_id}.laterais",
+            branch_largada):
+        if patch:
+            registra({"evento": "lateral_apagada", "branch": lat,
+                      "patch": patch})
+            print(f"  lateral     : apaguei `{lat}` (item fechado); cópia em "
+                  f"{Path(patch).relative_to(repo)}")
+        else:
+            registra({"evento": "lateral_mantida", "branch": lat,
+                      "erro": erro_lat})
+            print(f"  lateral     : mantive `{lat}`: não gravei a cópia "
+                  f"({erro_lat})")
     # O que a noite ENTREGOU (done com build verde na branch da noite) e o que
     # travou (`blocked`). Os dois contam como progresso para o disjuntor —
     # tirar um item da fila com motivo não é falha do run —, mas o resumo não
