@@ -548,6 +548,26 @@ def test_start_grava_o_dono_e_o_finish_o_apaga(base):
           por_id(plano_de(alvo))["A"])
 
 
+def test_start_imprime_a_evidence_anterior(base):
+    """Revisão 3 do until-fim-sem-dono, passo 4c: o item que volta a `pending`
+    depois de um build vermelho leva o recado na `evidence`, e quem lê o
+    recado é o agente que reserva o item de novo. Sem o `start` imprimir, o
+    recado fica no arquivo sem ninguém ler."""
+    d = repo_git(base, "recado")
+    escreve_fila(d, [item("A", evidence="recado X: build vermelho, lateral "
+                                        "until/r-vermelho-A"),
+                     item("B")])
+    r = run(d, "start", "fila", "A", "--repo", ".")
+    check("o start reserva o item com evidence", r.returncode == 0, r.stderr)
+    check("...e imprime a evidence anterior", "recado X" in r.stdout, r.stdout)
+    r = run(d, "start", "fila", "B", "--repo", ".")
+    check("item sem evidence não imprime seção de recado",
+          "evidence anterior" not in r.stdout, r.stdout)
+    texto = CMD.read_text(encoding="utf-8")
+    check("o drain-plan manda levar a evidence anterior ao flow",
+          "evidence anterior" in texto and "lateral" in texto)
+
+
 def test_start_recupera_reserva_orfa_e_recusa_a_viva(base):
     d = repo_git(base, "reivindica")
     morto = {"session_id": "sessao-morta", "pid": pid_morto(),
@@ -919,6 +939,7 @@ def main():
                    test_in_progress_sem_dono_registrado_adia_e_admite_que_nao_sabe,
                    test_start_grava_o_dono_e_o_finish_o_apaga,
                    test_start_recupera_reserva_orfa_e_recusa_a_viva,
+                   test_start_imprime_a_evidence_anterior,
                    test_reconcile_traz_o_quadro_para_a_fila,
                    test_reconcile_done_em_review_nao_e_bounce,
                    test_reconcile_nunca_rebaixa_item_done,

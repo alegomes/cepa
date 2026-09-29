@@ -249,6 +249,13 @@ MAX_TRAVADOS_PADRAO = 3
 # plano e fechou na repetição, quando o build já tinha acabado.
 TENTATIVAS_POR_ITEM_PADRAO = 2
 
+# Quantas voltas vermelhas um item aguenta antes de ir para `blocked`
+# (Revisão 3 do until-fim-sem-dono). Uma volta é o item que fechou `done`,
+# ficou vermelho em dois builds completos seguidos e voltou para `pending` com
+# o recado. Na segunda, o agente já teve a lateral e o motivo na mão e não
+# resolveu: repetir de novo gasta a janela no mesmo card.
+VOLTAS_VERMELHAS_MAX = 2
+
 # O que o `claude` imprime quando a CONTA bateu o teto de uso — não o item, não
 # a fila, não a topologia. Sem reconhecer isto o supervisor lê só "saiu 1 e o
 # item não andou" e culpa o card: em 2026-08-30 duas tentativas de 92s e 4s
@@ -699,7 +706,7 @@ def executa_item(nome, arvore, branch, permissoes, limite_seg, log):
     return codigo, matou, time.monotonic() - inicio, trecho_do_log(log, marca)
 
 
-def bloqueia_item(nome, repo, ident, tentativas):
+def bloqueia_item(nome, repo, ident, tentativas, lateral=None):
     """Tira da frente da fila o item que gastou o teto de tentativas.
     Devolve None se conseguiu, ou o erro em texto.
 
@@ -720,6 +727,9 @@ def bloqueia_item(nome, repo, ident, tentativas):
         "condição de fora: é o supervisor tirando o item da frente para a fila "
         "andar. A saída do `claude` de cada tentativa está no `.log` do run; "
         "devolva o item para `pending` quando souber o que travou.")
+    if lateral:
+        evidencia += (f" Os commits das tentativas, que não passaram pelo "
+                      f"build do supervisor, estão em `{lateral}`.")
     return finaliza_item(nome, repo, ident, "blocked", evidencia)
 
 
@@ -1031,17 +1041,127 @@ def roda_verify(comando, arvore, limite_seg, log):
     return codigo == 0, gasto, (None if codigo == 0 else f"saiu {codigo}")
 
 
-def desfaz_item(repo, arvore, run_id, ident, antes):
+def desfaz_item(repo, arvore, run_id, ident, desde, no_meio=(),
+                sufixo="vermelho", volta=1):
     """Tira da branch da noite os commits de um item cujo build ficou
-    vermelho, sem perdê-los: eles ficam em `until/<run>-vermelho-<id>`."""
-    lateral = f"until/{run_id}-vermelho-{ident}"
+    vermelho, sem perdê-los: eles ficam em `until/<run>-<sufixo>-<id>`.
+
+    `desde` é o HEAD do começo da PRIMEIRA tentativa do item nesta janela, e
+    não o da última: o WEGO-2320 levou duas tentativas, e o reset até o começo
+    da segunda deixou os 9 commits da primeira na branch da noite sem nunca
+    passarem pelo build (A5/C4). O reset até lá só é seguro com duas
+    checagens, e se uma falha o supervisor devolve o erro em vez de resetar:
+    `desde` precisa ser ancestral do HEAD, e nenhum outro item pode ter fechado
+    `done` desde então (`no_meio`), porque o reset apagaria o trabalho verde
+    dele."""
+    if not desde:
+        return None, f"não li o HEAD do começo da 1ª tentativa do {ident}"
+    if no_meio:
+        return None, (
+            f"voltar a branch da noite para {desde[:10]}, o começo da 1ª "
+            f"tentativa do {ident}, apagaria o trabalho de "
+            f"{', '.join(no_meio)}, que entrou depois dele")
+    codigo, _ = git(["merge-base", "--is-ancestor", desde, "HEAD"], arvore)
+    if codigo != 0:
+        return None, (f"{desde[:10]}, o começo da 1ª tentativa do {ident}, "
+                      "não é ancestral do HEAD da branch da noite")
+    # A 2ª volta do mesmo item no mesmo run não pode sobrescrever a lateral da
+    # 1ª: ali estão commits que o agente pode não ter aproveitado.
+    lateral = (f"until/{run_id}-{sufixo}-{ident}"
+               + (f"-v{volta}" if volta > 1 else ""))
     codigo, saida = git(["branch", "-f", lateral, "HEAD"], arvore)
     if codigo != 0:
         return None, saida
-    codigo, saida = git(["reset", "-q", "--hard", antes], arvore)
+    codigo, saida = git(["reset", "-q", "--hard", desde], arvore)
     if codigo != 0:
         return None, saida
     return lateral, None
+
+
+def voltas_vermelhas(ledger_dir, ident):
+    """Quantas voltas vermelhas o item já teve, contadas nos `.jsonl` de TODOS
+    os runs da fila: o teto vale entre runs, e sem arquivo novo."""
+    n = 0
+    for reg in ledger_dir.glob("*.jsonl"):
+        try:
+            linhas = reg.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for linha in linhas:
+            try:
+                e = json.loads(linha)
+            except ValueError:
+                continue
+            if (isinstance(e, dict) and e.get("evento") == "volta_vermelha"
+                    and str(e.get("id")) == str(ident)):
+                n += 1
+    return n
+
+
+# As laterais que o supervisor cria: `until/<run>-vermelho-<id>[-v<n>]` no
+# build vermelho e `until/<run>-parado-<id>` no item que gastou as tentativas.
+LATERAL = re.compile(
+    r"^until/\d{4}-\d{2}-\d{2}-\d{4}-(?:vermelho|parado)-(.+?)(?:-v\d+)?$")
+
+
+def limpa_laterais(repo, caminho_plano, destino, noite):
+    """Apaga as laterais de itens em `done` ou `dropped`, mas só depois de
+    gravar em `destino` o `git format-patch` dos commits que a branch da noite
+    não tem (Revisão 3, 4f). Sem o patch no disco, a branch fica: o dono pediu
+    para não ter o que lembrar, e não para perder código.
+
+    Devolve [(branch, patch, erro)]; `patch` None quando a branch ficou."""
+    codigo, saida = git(["for-each-ref", "--format=%(refname:short)",
+                         "refs/heads/until/"], repo)
+    if codigo != 0:
+        return []
+    try:
+        itens = (yaml.safe_load(Path(caminho_plano).read_text(encoding="utf-8"))
+                 or {}).get("items") or []
+    except (OSError, TypeError, yaml.YAMLError):
+        return []
+    status = {str(it.get("id")): str(it.get("status") or "").lower()
+              for it in itens if isinstance(it, dict)}
+    feitos = []
+    for branch in saida.splitlines():
+        m = LATERAL.match(branch.strip())
+        if not m or status.get(m.group(1)) not in ("done", "dropped"):
+            continue
+        arquivo = destino / (branch[len("until/"):] + ".patch")
+        try:
+            destino.mkdir(parents=True, exist_ok=True)
+            with open(arquivo, "wb") as f:
+                p = subprocess.run(["git", "format-patch", "--stdout",
+                                    f"{noite}..{branch}"], cwd=str(repo),
+                                   stdout=f, stderr=subprocess.PIPE,
+                                   timeout=120)
+            erro = (None if p.returncode == 0 else
+                    (p.stderr.decode("utf-8", "replace").strip()
+                     or f"format-patch saiu {p.returncode}"))
+        except (OSError, subprocess.TimeoutExpired) as e:
+            erro = str(e)
+        if erro:
+            try:
+                arquivo.unlink()
+            except OSError:
+                pass
+            feitos.append((branch, None, erro))
+            continue
+        codigo, saida_d = git(["branch", "-D", branch], repo)
+        feitos.append((branch, str(arquivo) if codigo == 0 else None,
+                       None if codigo == 0 else saida_d))
+    return feitos
+
+
+def emite_telemetria(evento, repo, **campos):
+    """Um evento no ledger de `~/.claude/cepa-telemetry/`, pelo mesmo módulo
+    dos hooks. Nunca derruba o run: telemetria é rede, não portão."""
+    try:
+        sys.path.insert(0, str(AQUI.parent / "hooks"))
+        import _telemetry
+        _telemetry.emit(evento, cwd=str(repo), **campos)
+    except Exception:
+        pass
 
 
 def finaliza_item(nome, repo, ident, status, evidencia):
@@ -1085,7 +1205,305 @@ def analisa_o_run(repo, arvore, ledger, permissoes):
 
 # ── o laço ──────────────────────────────────────────────────────────────────
 
+# ── aterrissar: o dono leva a branch da noite para a branch do clone ────────
+
+WORKTREE_GUARD = AQUI.parent / "hooks" / "worktree-guard.py"
+WTLIB = AQUI.parent / "hooks" / "_wtlib.py"
+
+
+def cmd_aterrissar(argv):
+    """`cepa-until aterrissar <fila>/<run> [--sim]` — passo 3 do
+    until-fim-sem-dono.
+
+    O run não toca a branch principal (decisão 3 do dono, 26/09): quem dispara
+    a aterrissagem é o dono, e este comando é camada fina sobre os guardas que
+    já existem (C3 de `docs/estrategia-fim-do-cepa-until.md`): dono único pelo
+    `worktree-guard.py`, parar no conflito, nunca fazer push com build
+    vermelho, gravar o ponto de retorno e recusar se a branch da noite andou
+    depois da proposta. Rodar de novo retoma de onde parou: com o merge já
+    feito, segue do build. Sem `--sim`, só mostra o plano."""
+    ap = argparse.ArgumentParser(
+        prog="cepa-until aterrissar",
+        description="leva a branch da noite de um run para a branch do clone")
+    ap.add_argument("alvo", help="<fila>/<run>, como o resumo do run imprime")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--sim", action="store_true",
+                    help="executa; sem ele, só mostra o plano")
+    a = ap.parse_args(argv)
+    if "/" not in a.alvo:
+        print("cepa-until aterrissar: o alvo é <fila>/<run> (ex.: "
+              "cepa/2026-09-28-2137)", file=sys.stderr)
+        return 2
+    fila, run_id = a.alvo.split("/", 1)
+    repo = Path(a.repo).resolve()
+    caminho = repo / ".claude" / "programs" / fila / "until" / \
+        f"{run_id}.estado.json"
+    try:
+        est = json.loads(caminho.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"cepa-until aterrissar: não li o estado do run em {caminho} "
+              f"({e})", file=sys.stderr)
+        return 2
+
+    def grava(**campos):
+        est.update(campos)
+        est["atualizado"] = datetime.now().isoformat(timespec="seconds")
+        tmp = caminho.parent / (caminho.name + ".tmp")
+        tmp.write_text(json.dumps(est, ensure_ascii=False, indent=2) + "\n",
+                       encoding="utf-8")
+        os.replace(tmp, caminho)
+
+    def recusa(texto):
+        print(f"cepa-until aterrissar: {texto}", file=sys.stderr)
+        return 3
+
+    if est.get("estado") == "aterrissado":
+        print(f"o run {run_id} já foi aterrissado "
+              f"({(est.get('aterrissagem') or {}).get('quando', '?')})")
+        return 0
+    if est.get("estado") != "esperando-dono":
+        return recusa(f"o run {run_id} está `{est.get('estado')}`, e só se "
+                      "aterrissa um run `esperando-dono`")
+    acao = next((x for x in est.get("acoes") or []
+                 if x.get("id") == "aterrissar"), None)
+    if not acao:
+        return recusa(f"o run {run_id} não propôs `aterrissar` (a branch da "
+                      "noite ficou sem commit)")
+    branch, destino = est.get("branch"), acao.get("destino")
+    sha, arvore = acao.get("sha"), acao.get("arvore")
+    ater = dict(est.get("aterrissagem") or {})
+
+    # Já mesclado (o dono resolveu um conflito e concluiu o merge, ou a
+    # tentativa anterior parou depois dele): segue do build.
+    codigo, _ = git(["merge-base", "--is-ancestor", sha, "HEAD"], repo)
+    ja_mesclado = codigo == 0
+
+    atual = branch_atual(repo)
+    if atual != destino:
+        return recusa(f"o clone está em `{atual}`, e a ação foi proposta para "
+                      f"`{destino}`. Volte para `{destino}` e rode de novo")
+    if not ja_mesclado:
+        codigo, agora = git(["rev-parse", branch], repo)
+        if codigo != 0:
+            return recusa(f"a branch da noite `{branch}` não existe mais")
+        if agora != sha:
+            return recusa(
+                f"a branch da noite `{branch}` mudou desde que a ação foi "
+                f"proposta ({sha[:10]} → {agora[:10]}). O que entrou depois "
+                "do fim do run não passou pelo build do supervisor; confira "
+                "e rode um novo run, ou volte a branch para o SHA proposto")
+
+    print(f"aterrissar `{branch}` em `{destino}` ({repo})")
+    print(f"  efeito : {acao.get('frase')}")
+    print(f"  build  : {est.get('verify') or 'nenhum (o run dispensou o build)'}")
+    print("  push   : " + ("sim, para o upstream de "
+                           f"`{destino}`" if tem_upstream(repo) else
+                           f"não (`{destino}` não tem upstream)"))
+    if ja_mesclado:
+        print("  merge  : já feito; retomo do build")
+    if not a.sim:
+        print(f"\nnada foi feito. Para executar: cepa-until aterrissar "
+              f"{a.alvo} --sim")
+        return 0
+
+    # Dono único (o mesmo guarda do /common:worktree-merge). Antes da checagem
+    # de árvore suja: o registro de sessões mora em `.claude/sessions/`.
+    try:
+        g = subprocess.run([sys.executable, str(WORKTREE_GUARD), branch,
+                            "--cwd", str(repo),
+                            "--exclude-cwd", os.getcwd()],
+                           capture_output=True, text=True, timeout=60)
+        guarda = g.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return recusa(f"não consegui rodar o guarda de dono único: {e}")
+    if guarda.startswith("BLOCK"):
+        return recusa("outra sessão viva está numa das branches:\n" + guarda)
+
+    sujos = arvore_suja(repo)
+    if sujos is None:
+        return recusa("não consegui ler o `git status` do clone")
+    # A fila mora no clone e o próprio run a atualiza (`cepa-plan finish`):
+    # depois de todo run ela está modificada. A branch da noite não a toca, e
+    # o merge e o `reset --keep` a preservam.
+    fila_do_clone = f".claude/programs/{fila}/plan.yaml"
+    fila_suja = [l for l in sujos if l.endswith(fila_do_clone)]
+    sujos = [l for l in sujos if l not in fila_suja]
+    if sujos:
+        return recusa("o clone tem mudança sem commit; um merge só leva "
+                      "histórico commitado:\n  " + "\n  ".join(sujos[:10]))
+    if arvore and Path(arvore).exists() and arvore_suja(arvore):
+        return recusa(f"a worktree da noite ({arvore}) tem mudança sem commit")
+
+    if not ja_mesclado:
+        retorno = cabeca(repo)
+        ater.update({"retorno": retorno, "destino": destino})
+        grava(aterrissagem=ater)
+        print(f"\nponto de retorno: `{destino}` em {retorno[:10]}")
+        codigo, saida = git(["merge", "--no-ff", "--no-edit", branch], repo)
+        if codigo != 0:
+            conflitos = git(["diff", "--name-only", "--diff-filter=U"],
+                            repo)[1].splitlines()
+            if conflitos:
+                ater["parou"] = "conflito"
+                grava(aterrissagem=ater)
+                print("CONFLITO no merge, nos arquivos:")
+                for c in conflitos:
+                    print(f"  {c}")
+                print("resolva, `git add`, `git commit` para concluir o merge, "
+                      f"e rode `cepa-until aterrissar {a.alvo} --sim` de novo: "
+                      "ele retoma do build")
+                return 4
+            git(["merge", "--abort"], repo)
+            return recusa(f"o merge falhou: {saida}")
+    ater["merge"] = cabeca(repo)
+    ater.pop("parou", None)
+    grava(aterrissagem=ater)
+
+    verify = est.get("verify")
+    if verify:
+        print(f"build completo: {verify}")
+        log = caminho.parent / f"{run_id}.log"
+        verde, seg, motivo = roda_verify(verify, repo, 4 * 3600, log)
+        if not verde:
+            retorno = ater.get("retorno")
+            # Só desfaz o que este comando fez: o HEAD tem que ser o merge
+            # dele, com o retorno como 1º pai.
+            codigo, primeiro = git(["rev-parse", "HEAD^1"], repo)
+            if retorno and codigo == 0 and primeiro == retorno:
+                # `--keep`, não `--hard`: preserva a fila modificada pelo run.
+                git(["reset", "-q", "--keep", retorno], repo)
+                volta = f"`{destino}` voltou para {retorno[:10]}"
+            else:
+                volta = (f"`{destino}` NÃO foi desfeito (o HEAD não é o merge "
+                         "deste comando); confira à mão")
+            ater.update({"parou": "build-vermelho", "motivo": motivo})
+            ater.pop("merge", None)
+            grava(aterrissagem=ater)
+            print(f"BUILD VERMELHO depois do merge ({motivo}): {volta}, sem "
+                  f"push. A saída está em {log}")
+            return 5
+        print(f"  verde ({humano(timedelta(seconds=seg))})")
+
+    if tem_upstream(repo):
+        codigo, saida = git(["push"], repo, timeout=300)
+        if codigo != 0:
+            ater["parou"] = "push"
+            grava(aterrissagem=ater)
+            print(f"o push falhou ({saida}); o merge e o build verde ficam. "
+                  f"Rode `cepa-until aterrissar {a.alvo} --sim` de novo")
+            return 6
+        ater["push"] = True
+        print("push feito")
+
+    if arvore and Path(arvore).exists():
+        r = subprocess.run([sys.executable, str(WTLIB), "rescue", arvore,
+                            branch], capture_output=True, text=True)
+        if (r.stdout or "").strip():
+            print(r.stdout.strip())
+        git(["worktree", "remove", arvore], repo)
+    codigo, saida = git(["branch", "-d", branch], repo)
+    if codigo != 0:
+        print(f"aviso: não apaguei `{branch}` ({saida})")
+    ater["quando"] = datetime.now().isoformat(timespec="seconds")
+    grava(estado="aterrissado", aterrissagem=ater)
+    print(f"aterrissado: `{branch}` está em `{destino}`; worktree e branch da "
+          "noite removidas")
+    if fila_suja:
+        print(f"a fila ({fila_do_clone}) tem as marcações do run sem commit; "
+              "commite quando quiser")
+    return 0
+
+
+def curto(caminho, repo):
+    """Caminho para ler na tela (A6): relativo ao repo quando está dentro
+    dele, `~/...` quando está na home, e inteiro só no resto."""
+    c = Path(caminho)
+    for base, prefixo in ((Path(repo), ""), (Path.home(), "~/")):
+        for b in (base, base.resolve()):
+            try:
+                return prefixo + str(c.relative_to(b))
+            except ValueError:
+                continue
+    return str(c)
+
+
+def raiz_principal(repo):
+    """O clone principal de `repo` (de uma worktree, o clone dono dela): é lá
+    que moram as filas e o registro dos runs."""
+    codigo, comum = git(["rev-parse", "--path-format=absolute",
+                         "--git-common-dir"], repo)
+    if codigo != 0:
+        return Path(repo).resolve()
+    comum = Path(comum)
+    return comum.parent if comum.name == ".git" else comum
+
+
+def runs_esperando(repo):
+    """Os runs cuja ação `aterrissar` ainda vale: estado `esperando-dono`,
+    branch da noite existente e ainda fora da branch de destino. Um merge feito
+    à mão, fora do `aterrissar`, também tira o run da lista."""
+    raiz = raiz_principal(repo)
+    achados = []
+    for caminho in sorted((raiz / ".claude" / "programs").glob(
+            "*/until/*.estado.json")):
+        try:
+            est = json.loads(caminho.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(est, dict) or est.get("estado") != "esperando-dono":
+            continue
+        acao = next((x for x in est.get("acoes") or []
+                     if isinstance(x, dict) and x.get("id") == "aterrissar"),
+                    None)
+        if not acao:
+            continue
+        codigo, sha = git(["rev-parse", "--verify", "-q",
+                           str(est.get("branch"))], raiz)
+        if codigo != 0:
+            continue
+        destino = acao.get("destino") or branch_atual(raiz)
+        codigo, _ = git(["merge-base", "--is-ancestor", sha, destino], raiz)
+        if codigo == 0:
+            continue
+        fila, run = est.get("fila"), est.get("run")
+        achados.append({"fila": fila, "run": run, "branch": est.get("branch"),
+                        "destino": destino,
+                        "fica_com_voce": len(est.get("fica_com_voce") or []),
+                        "comando": f"cepa-until aterrissar {fila}/{run}"})
+    return achados
+
+
+def cmd_pendentes(argv):
+    """`cepa-until pendentes [--repo R] [--json]`: o que o `/common:next` e o
+    `/common:doctor` leem para dizer que um run espera o dono (C6)."""
+    ap = argparse.ArgumentParser(prog="cepa-until pendentes")
+    ap.add_argument("--repo", default=".")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+    achados = runs_esperando(Path(a.repo).resolve())
+    if a.json:
+        print(json.dumps({"runs": achados}, ensure_ascii=False))
+        return 0
+    for r in achados:
+        print(f"fila {r['fila']} · run {r['run']}: `{r['branch']}` espera "
+              f"aterrissagem em `{r['destino']}`"
+              + (f" ({r['fica_com_voce']} item(ns) em \"Fica com você\")"
+                 if r["fica_com_voce"] else "")
+              + f" — {r['comando']}")
+    return 0
+
+
+def tem_upstream(repo):
+    codigo, _ = git(["rev-parse", "--abbrev-ref", "@{u}"], repo)
+    return codigo == 0
+
+
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "aterrissar":
+        return cmd_aterrissar(argv[1:])
+    if argv and argv[0] == "pendentes":
+        return cmd_pendentes(argv[1:])
     ap = argparse.ArgumentParser(
         description="executa a fila single-track do repo por uma janela de tempo")
     ap.add_argument("fila", help="nome da fila em .claude/programs/<nome>/plan.yaml")
@@ -1218,38 +1636,34 @@ def main(argv=None):
     ledger = ledger_dir / f"{run_id}.jsonl"
     log = ledger_dir / f"{run_id}.log"
 
-    print(f"cepa-until · fila {dados.get('program')} · {repo}")
-    print(f"  branch      : {branch_atual(repo)}")
-    print(f"  janela      : agora → {prazo.strftime('%d/%m %H:%M')} "
-          f"({humano(prazo - agora)})")
-    print(f"  disjuntor   : {a.max_falhas} falhas seguidas")
-    print(f"  fila travada: {a.max_travados} itens `blocked` seguidos")
-    print(f"  por item    : até {a.tentativas_item} tentativa(s); depois disso "
-          "vira `blocked` e a fila anda")
-    print(f"  reserva     : não começa item com menos de {humano(reserva)}")
-    print(f"  folga       : mata item que passar {humano(folga)} do prazo")
-    print(f"  permissões  : "
+    # Cabeçalho curto (A6): o run de 26/09 abria com 15 linhas de configuração
+    # e caminhos absolutos pela pasta do Insync ocupando meia tela.
+    prox = (dados.get("batch") or [{}])[0]
+    t = dados.get("totals") or {}
+    print(f"cepa-until · fila {dados.get('program')} · {repo.name} · até "
+          f"{prazo.strftime('%d/%m %H:%M')} ({humano(prazo - agora)})")
+    print(f"  noite  : trabalha em `until/{run_id}`, numa worktree fora do "
+          f"clone; `{branch_atual(repo)}` e o origin não mudam")
+    print(f"  build  : " + (f"{verify} depois de cada item done "
+                            f"({origem_verify})" if verify else
+                            f"dispensado ({origem_verify})"))
+    print(f"  paradas: {a.max_falhas} itens seguidos sem avançar (disjuntor) · "
+          f"{a.max_travados} itens `blocked` seguidos (fila travada) · "
+          f"{a.tentativas_item} tentativa(s) por item")
+    print(f"  tempo  : não começa item com menos de {humano(reserva)}; mata "
+          f"item que passar {humano(folga)} do prazo")
+    print(f"  permissões: "
           + ("PEDE (vai travar sem alguém olhando)" if a.permissoes
              else "--dangerously-skip-permissions LIGADO"))
-    print(f"  branch noite: until/{run_id} (worktree fora da árvore; nada vai "
-          "para a main nem para o origin)")
+    print(f"  1º item: {prox.get('id', '(nenhum — fila sem item executável)')}"
+          + (f" — {prox.get('title')}" if prox.get("id") else "")
+          + f" · fila: {t.get('por_status', {}).get('pending', 0)} "
+            f"pendente(s), {t.get('por_status', {}).get('done', 0)} done")
     heranca = heranca_do_run_anterior(repo, a.fila, dados.get("path"))
     for h in heranca:
-        print(f"  herda       : `{h['branch']}` ({h['commits']} commit(s) que o "
+        print(f"  herda  : `{h['branch']}` ({h['commits']} commit(s) que o "
               f"clone não tem) — {', '.join(h['itens'])} ficou pela metade "
               "lá, e a branch da noite nasce com esses commits")
-    print(f"  build       : " + (f"{verify} depois de cada item done "
-                                 f"({origem_verify})" if verify else
-                                 f"dispensado ({origem_verify})"))
-    print(f"  análise     : " + ("desligada (--sem-analise)" if a.sem_analise
-                                 else "/common:until-review no fim"))
-    print(f"  registro    : {ledger}")
-    prox = (dados.get("batch") or [{}])[0]
-    print(f"  1º item     : {prox.get('id', '(nenhum — fila sem item executável)')}"
-          + (f" — {prox.get('title')}" if prox.get("id") else ""))
-    t = dados.get("totals") or {}
-    print(f"  fila        : {t.get('por_status', {}).get('pending', 0)} pendente(s), "
-          f"{t.get('por_status', {}).get('done', 0)} done")
 
     if a.dry:
         print("\n(--dry-run: nada foi executado)")
@@ -1264,6 +1678,10 @@ def main(argv=None):
         with ledger.open("a", encoding="utf-8") as f:
             f.write(json.dumps(evento, ensure_ascii=False) + "\n")
 
+    # O HEAD do clone ANTES da mescla da herança: é até aqui que volta o
+    # vermelho de um item herdado, cujos commits do run anterior entram pela
+    # mescla e não passaram pelo build deste run.
+    base_do_clone = cabeca(repo)
     arvore, branch_largada, erro = abre_branch_da_noite(repo, run_id, heranca)
     if erro:
         print(f"cepa-until: não consegui criar a branch da noite "
@@ -1278,6 +1696,43 @@ def main(argv=None):
               "arvore": str(arvore), "base": base_da_noite,
               "herdou": heranca,
               "branch_do_clone": branch_atual(repo), "verify": verify})
+    # O estado do run, ao lado do `.jsonl` (C6): `rodando` agora, e no fim
+    # `esperando-dono` (há ação ou pendência) ou `encerrado`. É gravado ANTES da
+    # análise do modelo, que pode falhar pela cota (C7); o `/common:until-review`
+    # comenta a mesma lista, e o `/common:next` e o `/common:doctor` a leem.
+    caminho_estado = ledger.parent / (ledger.stem + ".estado.json")
+
+    def grava_estado(estado, **resto):
+        corpo = {"run": run_id, "fila": a.fila, "estado": estado,
+                 "branch": branch_largada, "registro": ledger.name,
+                 "verify": verify,
+                 "atualizado": datetime.now().isoformat(timespec="seconds")}
+        corpo.update(resto)
+        tmp = caminho_estado.parent / (caminho_estado.name + ".tmp")
+        try:
+            tmp.write_text(json.dumps(corpo, ensure_ascii=False, indent=2)
+                           + "\n", encoding="utf-8")
+            os.replace(tmp, caminho_estado)
+        except OSError as e:
+            print(f"  aviso: não gravei o estado do run em {caminho_estado}: "
+                  f"{e}")
+
+    grava_estado("rodando")
+    laterais_mantidas = []
+    for lat, patch, erro_lat in limpa_laterais(
+            repo, dados.get("path"), ledger_dir / f"{run_id}.laterais",
+            branch_largada):
+        if patch:
+            registra({"evento": "lateral_apagada", "branch": lat,
+                      "patch": patch})
+            print(f"  lateral     : apaguei `{lat}` (item fechado); cópia em "
+                  f"{Path(patch).relative_to(repo)}")
+        else:
+            registra({"evento": "lateral_mantida", "branch": lat,
+                      "erro": erro_lat})
+            laterais_mantidas.append((lat, erro_lat))
+            print(f"  lateral     : mantive `{lat}`: não gravei a cópia "
+                  f"({erro_lat})")
     # O que a noite ENTREGOU (done com build verde na branch da noite) e o que
     # travou (`blocked`). Os dois contam como progresso para o disjuntor —
     # tirar um item da fila com motivo não é falha do run —, mas o resumo não
@@ -1293,6 +1748,36 @@ def main(argv=None):
     # Quantas vezes ESTA janela já disparou um subprocesso para cada item, e o
     # que ela tirou da frente por esgotamento ou pelo teto de uso da conta.
     tentativas, esgotados, limitados = {}, [], []
+    # O HEAD do começo da 1ª tentativa de cada item nesta janela, e quantos
+    # itens já tinham sido entregues ali: é até esse HEAD que o vermelho volta
+    # a branch da noite, e só se ninguém fechou `done` no meio (C4).
+    primeira = {}
+    # Item herdado (ficou pela metade no run anterior): a 1ª tentativa dele
+    # começou lá, e o ponto de volta é o clone antes da mescla da herança. Os
+    # outros itens herdados ainda abertos entram no "no meio": a volta tiraria
+    # o trabalho deles também, e aí o supervisor para em vez de resetar (C4).
+    herdados = {str(i) for h in heranca for i in h.get("itens") or []}
+    for i in herdados:
+        primeira[i] = (base_do_clone, 0)
+
+    def no_meio_de(ident, n_antes):
+        outros = []
+        if ident in herdados:
+            outros = [f"{o} (herdado do run anterior, ainda aberto)"
+                      for o in sorted(herdados - {ident})
+                      if o not in entregues]
+        return entregues[n_antes:] + outros
+
+    # O desfecho de cada item nesta janela, na ordem em que apareceu: é a lista
+    # "uma linha por item" do fim (A4). Vale o último desfecho do item.
+    desfechos = {}
+    # O `total_cost_usd` de cada rodada do `claude`: o custo só aparecia na
+    # análise do modelo (A6), e a análise pode não rodar.
+    custos = []
+
+    def desfecho(ident, tipo, texto):
+        desfechos[ident] = (tipo, texto)
+
     motivo_fim, detalhe_fim = None, None
     # A cota de 5h vista pelos `rate_limit_event`: a leitura de largada de cada
     # tentativa (é dela que sai o custo de um item), a última leitura, se ela
@@ -1405,12 +1890,14 @@ def main(argv=None):
         print(f"[{datetime.now().strftime('%H:%M')}] {ident} — {item.get('title')} "
               f"({humano(restante)} restantes"
               + (f", tentativa {vez}/{a.tentativas_item}" if vez > 1 else "") + ")")
+        antes = cabeca(arvore)
+        primeira.setdefault(ident, (antes, len(entregues)))
         registra({"evento": "item_start", "id": ident, "title": item.get("title"),
                   "restante_seg": int(restante.total_seconds()),
-                  "tentativa": vez, "twg_version": twg_version_instalada()})
+                  "tentativa": vez, "twg_version": twg_version_instalada(),
+                  "head": antes})
 
         limite = (restante + folga).total_seconds()
-        antes = cabeca(arvore)
         codigo, matou, gasto, saida = executa_item(
             a.fila, arvore, branch_largada, a.permissoes, limite, log)
 
@@ -1446,6 +1933,10 @@ def main(argv=None):
                          or n_commits > 0)
 
         leituras = leituras_de_cota(saida)
+        for r in _objetos_json(saida, "result"):
+            v = r.get("total_cost_usd")
+            if _numero(v):
+                custos.append(float(v))
         if leituras:
             inicios.append(leituras[0])
             ultima_leitura = leituras[-1]
@@ -1459,6 +1950,8 @@ def main(argv=None):
                   "cota_5h": ([leituras[0][0], leituras[-1][0]]
                               if leituras else None)})
 
+        volta_agora = False
+        instavel = False
         # O build completo da branch da noite, depois de cada `done` que
         # commitou. É o supervisor quem roda, não o agente: o agente pode
         # rodar antes do último refactor, rodar em duas metades ou pular a
@@ -1475,28 +1968,90 @@ def main(argv=None):
                 verify, arvore, restam, log)
             registra({"evento": "verify", "id": ident, "verde": verde,
                       "segundos": int(seg_verify), "motivo": motivo_verify})
+            if not verde:
+                # Segundo build completo no mesmo código (Revisão 3, exceção
+                # assumida à regra 4 do green-or-revert, pedida pelo dono em
+                # 26/09). Sem tempo para ele, é volta vermelha: a próxima
+                # tentativa faz o resto.
+                restam = (prazo + folga - datetime.now()).total_seconds()
+                if restam >= seg_verify:
+                    print(f"          → vermelho ({motivo_verify}); rodo o "
+                          "build completo de novo, no mesmo código")
+                    verde, seg2, motivo2 = roda_verify(verify, arvore, restam,
+                                                       log)
+                    registra({"evento": "verify", "id": ident, "verde": verde,
+                              "segundos": int(seg2), "motivo": motivo2,
+                              "repeticao": 2})
+                else:
+                    motivo2 = "não coube no que sobra da janela"
+                if verde:
+                    registra({"evento": "verify_repetido_verde", "id": ident,
+                              "motivo_1": motivo_verify})
+                    emite_telemetria("build_instavel", repo, card=ident,
+                                     run=run_id, fila=a.fila,
+                                     motivo=motivo_verify)
+                    print("          → verde na 2ª vez: build instável, "
+                          "registrado na telemetria")
+                    instavel = True
             if verde:
                 print(f"          → verde ({humano(timedelta(seconds=seg_verify))})")
             else:
-                lateral, erro_desfaz = desfaz_item(repo, arvore, run_id, ident,
-                                                   antes)
-                evid = (f"O item fechou `done`, mas o build completo da branch "
-                        f"da noite (`{verify}`) {motivo_verify}. Saída no "
-                        f"`.log` do run {run_id}. ")
-                evid += (f"Os commits do item estão em `{lateral}` e a branch "
-                         f"da noite voltou para {antes[:10]}; o card no Jira "
-                         "pode ter ido para Review antes do build — confira."
-                         if lateral else
-                         f"NÃO consegui tirar os commits da branch da noite: "
-                         f"{erro_desfaz}")
-                erro_fin = finaliza_item(a.fila, repo, ident, "blocked", evid)
+                volta = voltas_vermelhas(ledger_dir, ident) + 1
+                desde, n_antes = primeira[ident]
+                lateral, erro_desfaz = desfaz_item(
+                    repo, arvore, run_id, ident, desde,
+                    no_meio=no_meio_de(ident, n_antes), volta=volta)
+                ultima = volta >= VOLTAS_VERMELHAS_MAX or bool(erro_desfaz)
+                novo_status = "blocked" if ultima else "pending"
+                if lateral:
+                    # O reset já tirou as tentativas; a próxima começa do zero.
+                    primeira.pop(ident, None)
+                    herdados.discard(ident)
+                    evid = (f"Esta é a volta {volta} de "
+                            f"{VOLTAS_VERMELHAS_MAX}: o item fechou `done`, "
+                            f"mas o build completo da branch da noite "
+                            f"(`{verify}`) {motivo_verify}, e o 2º build "
+                            f"{motivo2 or 'também ficou vermelho'}. Saída no "
+                            f"`.log` do run {run_id}. Os commits de todas as "
+                            f"tentativas estão em `{lateral}` e a branch da "
+                            f"noite voltou para {desde[:10]}. ")
+                    if ultima:
+                        evid += ("Marquei `blocked`: o item já voltou com o "
+                                 "recado e ficou vermelho de novo. O card no "
+                                 "Jira pode ter ido para Review antes do "
+                                 "build — confira.")
+                    else:
+                        evid += ("O item voltou para `pending`: aproveite a "
+                                 "lateral (`git cherry-pick` ou `git merge` "
+                                 "dentro da tentativa) ou refaça; o build do "
+                                 "supervisor julga o resultado. Desabilitar ou "
+                                 "apagar o teste que falhou não conta como "
+                                 "conserto.")
+                else:
+                    evid = (f"O item fechou `done`, mas o build completo da "
+                            f"branch da noite (`{verify}`) {motivo_verify}. "
+                            f"Saída no `.log` do run {run_id}. NÃO consegui "
+                            f"tirar os commits da branch da noite: "
+                            f"{erro_desfaz}")
+                erro_fin = finaliza_item(a.fila, repo, ident, novo_status, evid)
                 vermelhos.append((ident, lateral, motivo_verify))
                 registra({"evento": "verify_vermelho", "id": ident,
                           "lateral": lateral, "erro": erro_desfaz or erro_fin})
+                if lateral:
+                    registra({"evento": "volta_vermelha", "id": ident,
+                              "volta": volta, "lateral": lateral,
+                              "motivo": motivo_verify, "motivo_2": motivo2,
+                              "status": novo_status})
+                    volta_agora = True
                 print(f"          → VERMELHO ({motivo_verify}): commits "
-                      f"guardados em `{lateral}`, item marcado `blocked`")
-                estado = "blocked"
+                      f"guardados em `{lateral}`, item marcado `{novo_status}`"
+                      + (f" (volta {volta}/{VOLTAS_VERMELHAS_MAX})"
+                         if lateral else ""))
+                estado = novo_status
                 if erro_desfaz:
+                    desfecho(ident, "travado",
+                             f"build vermelho ({motivo_verify}) e os commits "
+                             f"continuam na branch da noite: {erro_desfaz}")
                     motivo_fim = "verify-vermelho"
                     detalhe_fim = (f"o build ficou vermelho depois do {ident} e "
                                    f"não consegui desfazer os commits dele "
@@ -1513,6 +2068,61 @@ def main(argv=None):
             relido = relido or {}
             travados.append((ident, relido.get("human_pending"),
                              relido.get("evidence")))
+
+        if volta_agora:
+            desfecho(ident, "volta-vermelha" if estado == "pending" else
+                     "travado",
+                     f"volta vermelha {volta}/{VOLTAS_VERMELHAS_MAX} "
+                     f"({motivo_verify}); commits em `{lateral}`, "
+                     + ("voltou para `pending` com o recado"
+                        if estado == "pending" else "marcado `blocked`"))
+        elif pendencia:
+            desfecho(ident, "rota-humana",
+                     f"`{estado}`, espera por você: {pendencia}")
+        elif estado == "done" and ident in sem_commit:
+            desfecho(ident, "done-sem-commit",
+                     "`done` sem commit na branch da noite: procure o "
+                     "trabalho em outra branch")
+        elif estado == "done":
+            desfecho(ident, "entregue",
+                     "entregue" + ("; build verde na 2ª vez (instável)"
+                                   if instavel else
+                                   ", build verde" if verify else ""))
+        elif estado in ("blocked", "dropped"):
+            relido, _ = le_item(caminho_plano, ident)
+            ev = (relido or {}).get("evidence")
+            desfecho(ident, "travado" if estado == "blocked" else "dropped",
+                     f"`{estado}`: "
+                     + (resume_motivo(ev) if ev else
+                        "o item não registrou motivo na fila"))
+        elif n_commits > 0:
+            desfecho(ident, "em-andamento",
+                     f"{n_commits} commit(s) sem fechar; a próxima tentativa "
+                     "(ou o próximo run) parte daí")
+
+        # A volta vermelha conta como falha seguida (Revisão 3, 4e): um
+        # ambiente quebrado deixa todo build vermelho, e sem isto cada card
+        # voltaria a `pending` sem nenhum contador enxergar o problema. A
+        # última volta (`blocked`) também entra no contador de fila travada.
+        if volta_agora:
+            falhas_seguidas += 1
+            if estado == "blocked":
+                travados_seguidos.append(ident)
+            if falhas_seguidas >= a.max_falhas:
+                motivo_fim = "disjuntor"
+                detalhe_fim = (f"{falhas_seguidas} itens seguidos sem fechar "
+                               "verde (o último, volta vermelha do "
+                               f"{ident}) — isso é sistêmico, não azar; "
+                               "seguir queimaria a janela no mesmo problema")
+                break
+            if len(travados_seguidos) >= a.max_travados:
+                motivo_fim = "fila-travada"
+                detalhe_fim = (
+                    f"{len(travados_seguidos)} itens seguidos saíram `blocked` "
+                    f"({', '.join(travados_seguidos)}); o motivo de cada um "
+                    "está no `evidence` da fila")
+                break
+            continue
 
         # A REDE caiu, antes do teto e do disjuntor: o item não andou porque o
         # `claude` não alcançou a API. Devolve a vez, espera a rede voltar e
@@ -1531,6 +2141,8 @@ def main(argv=None):
             # com `quedas_de_rede: 0`). `voltou` fica None até a rede voltar.
             queda = [ident, caiu, None]
             quedas.append(queda)
+            desfecho(ident, "sem-rede", "a rede caiu durante o item; não é "
+                     "falha dele, e ele continua onde estava")
             print(f"          → SEM REDE: o `claude` não alcançou a API — não é "
                   "falha do item")
             if cabe:
@@ -1572,6 +2184,8 @@ def main(argv=None):
             bateu, reset, reset_em = limite_de_uso(saida)
             if bateu:
                 limitados.append((ident, reset))
+                desfecho(ident, "limite-de-uso", "interrompido pelo teto de "
+                         "uso da conta; não é falha do item")
                 # A tentativa cortada pelo teto não é do item: devolve a vez.
                 tentativas[ident] -= 1
                 esperas_seguidas += 1
@@ -1642,11 +2256,35 @@ def main(argv=None):
                      "não consegui nem lançar o `claude`" if codigo == -2 else
                      f"claude saiu {codigo}" if codigo else
                      "o item não saiu do lugar")
+            desfecho(ident, "sem-progresso",
+                     f"sem progresso ({razao}), status `{estado}`")
             print(f"          → SEM PROGRESSO: {razao} "
                   f"(status ainda `{estado}`) · {falhas_seguidas}/{a.max_falhas}")
 
             if vez >= a.tentativas_item:
-                erro_bloqueio = bloqueia_item(a.fila, repo, ident, vez)
+                # Uma tentativa anterior pode ter commitado sem fechar: esses
+                # commits nunca passaram pelo build e não podem ficar embaixo
+                # do próximo card (C4).
+                lateral, erro_desfaz = None, None
+                desde, n_antes = primeira[ident]
+                if desde and cabeca(arvore) != desde:
+                    lateral, erro_desfaz = desfaz_item(
+                        repo, arvore, run_id, ident, desde,
+                        no_meio=no_meio_de(ident, n_antes), sufixo="parado")
+                    registra({"evento": "tentativas_separadas", "id": ident,
+                              "lateral": lateral, "erro": erro_desfaz})
+                    if lateral:
+                        primeira.pop(ident, None)
+                        herdados.discard(ident)
+                if erro_desfaz:
+                    motivo_fim = "item-preso"
+                    detalhe_fim = (
+                        f"{ident} gastou as {vez} tentativas com commits que "
+                        f"não passaram pelo build, e não consegui tirá-los da "
+                        f"branch da noite ({erro_desfaz}); o próximo card "
+                        "começaria em cima deles")
+                    break
+                erro_bloqueio = bloqueia_item(a.fila, repo, ident, vez, lateral)
                 if erro_bloqueio:
                     motivo_fim = "item-preso"
                     detalhe_fim = (
@@ -1658,6 +2296,10 @@ def main(argv=None):
                               "bloqueado": False, "erro": erro_bloqueio})
                     break
                 esgotados.append((ident, vez))
+                desfecho(ident, "travado",
+                         f"tirado da frente da fila (`blocked`) depois de "
+                         f"{vez} tentativa(s) sem sair do lugar"
+                         + (f"; commits em `{lateral}`" if lateral else ""))
                 registra({"evento": "esgotado", "id": ident, "tentativas": vez,
                           "bloqueado": True, "erro": None})
                 print(f"          → {vez} tentativa(s) sem progresso: marquei "
@@ -1685,40 +2327,10 @@ def main(argv=None):
           f"{len(travados)} travado(s) · {len(falhados)} sem progresso"
           + (f" · {len(limitados)} interrompida(s) pelo teto de uso da conta"
              if limitados else ""))
-    if travados:
-        print(f"\n   Travados ({len(travados)}):")
-        for ident, rota, evid in travados:
-            print(f"     - {ident}")
-            if evid:
-                print(f"       motivo: {resume_motivo(evid)}")
-            elif rota:
-                print("       motivo: a rota em \"Espera por você\", abaixo")
-            else:
-                print("       o item não registrou motivo na fila")
-    if vermelhos:
-        print(f"\n   Build vermelho depois do item ({len(vermelhos)}):")
-        for ident, lateral, motivo in vermelhos:
-            print(f"     - {ident}: {motivo}; commits em `{lateral}`")
-    if sem_commit:
-        print(f"\n   `done` sem commit na branch da noite ({len(sem_commit)}) "
-              "— procure o trabalho em outra branch:")
-        for ident in sem_commit:
-            print(f"     - {ident}")
-    abertas = [(i, p) for i, _, p in feitos if p]
-    if abertas:
-        print(f"\n   Espera por você ({len(abertas)}):")
-        for ident, rota in abertas:
-            print(f"     - {ident}: {rota}")
-    if falhados:
-        print(f"\n   Sem progresso ({len(falhados)}):")
-        for ident, estado, codigo, matou in falhados:
-            print(f"     - {ident}: status `{estado}`"
-                  + (" · morto por timeout" if matou else f" · exit {codigo}"))
-    if esgotados:
-        print(f"\n   Tirados da frente da fila ({len(esgotados)}) — estão "
-              "`blocked`, devolva para `pending` quando souber o que travou:")
-        for ident, vez in esgotados:
-            print(f"     - {ident}: {vez} tentativa(s) sem sair do lugar")
+    if desfechos:
+        print(f"\n   Itens ({len(desfechos)}):")
+        for ident, (_, texto) in desfechos.items():
+            print(f"     - {ident}: {texto}")
     if limitados:
         print(f"\n   Teto de uso da conta ({len(limitados)}) — não é falha "
               "do item:")
@@ -1747,20 +2359,64 @@ def main(argv=None):
             print(f"     - durante o {ident}: sem rede das "
                   f"{caiu.strftime('%H:%M')} às {voltou.strftime('%H:%M')}, "
                   "depois retomei o item")
+    custo = round(sum(custos), 2)
+    # A lista de ações é fechada (R2): depois da Revisão 3 sobra só
+    # `aterrissar`. O que nenhum comando executa vai para "fica com você".
+    acoes = []
     if fecha_branch_vazia(repo, arvore, branch_largada, base_da_noite):
         print(f"\n   branch da noite: nenhum commit — removi `{branch_largada}` "
               "e a worktree dela")
     else:
         c, n = git(["rev-list", "--count", f"{base_da_noite}..HEAD"], arvore)
+        n = n if c == 0 else "?"
         print(f"\n   branch da noite: `{branch_largada}` "
-              f"({n if c == 0 else '?'} commit(s) sobre a largada), em {arvore}")
-        print(f"   para aterrissar: no clone, `git merge {branch_largada}` (ou "
-              f"/common:worktree-merge), build completo, push")
+              f"({n} commit(s) sobre a largada), em {curto(arvore, repo)}")
+        acoes.append({
+            "id": "aterrissar",
+            "frase": (f"leva os {n} commit(s) da branch da noite para a "
+                      f"`{branch_atual(repo)}` do clone; só você dispara, porque "
+                      "mexe na branch principal"),
+            "comando": (f"cepa-until aterrissar {a.fila}/{run_id} (sem "
+                        "--sim só mostra o plano; com --sim faz merge, build "
+                        "completo e push)"),
+            "sha": cabeca(arvore), "destino": branch_atual(repo),
+            "arvore": str(arvore)})
         for h in heranca:
             print(f"   ela já contém `{h['branch']}` (herdada na largada): "
                   "mesclar a da noite leva as duas")
-    print(f"\n   registro: {ledger}")
-    print(f"   saída do claude: {log}")
+    fica = [{"id": ident, "texto": texto}
+            for ident, (tipo, texto) in desfechos.items()
+            if tipo in ("travado", "rota-humana", "done-sem-commit")]
+    fica += [{"id": lat, "texto": f"lateral não apagada, a cópia falhou: {erro}"}
+             for lat, erro in laterais_mantidas]
+    if acoes:
+        print(f"\n   Ações:")
+        for i, acao in enumerate(acoes, 1):
+            print(f"     {i}. {acao['id']}: {acao['frase']}")
+            print(f"        como: {acao['comando']}")
+    if fica:
+        # Os itens já têm linha em "Itens"; aqui só o nome, para o mesmo item
+        # não aparecer como dois problemas (A4).
+        dos_itens = [f_["id"] for f_ in fica if f_["id"] in desfechos]
+        print(f"\n   Fica com você ({len(fica)}):")
+        if dos_itens:
+            print(f"     {', '.join(dos_itens)} (o motivo está na linha de "
+                  "cada um, em Itens)")
+        for f_ in fica:
+            if f_["id"] not in desfechos:
+                print(f"     - {f_['id']}: {f_['texto']}")
+    grava_estado("esperando-dono" if acoes or fica else "encerrado",
+                 motivo_fim=motivo_fim,
+                 itens=[{"id": i, "desfecho": t, "texto": x}
+                        for i, (t, x) in desfechos.items()],
+                 acoes=acoes, fica_com_voce=fica,
+                 custo_usd=custo if custos else None)
+    if custos:
+        br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
+        print(f"\n   custo: US$ {br(custo)} (soma do `total_cost_usd` de "
+              f"{len(custos)} rodada(s): {' + '.join(br(v) for v in custos)})")
+    print(f"\n   registro: {curto(ledger, repo)}")
+    print(f"   saída do claude: {curto(log, repo)}")
 
     # A análise gasta cota: parar pela cota e analisar em seguida bate no
     # mesmo teto. Nesses casos, e com nada executado, fica para a mão.
@@ -1768,7 +2424,8 @@ def main(argv=None):
         return 0
     if motivo_fim == "limite-de-uso":
         print("   análise: não rodei (o run parou pela cota) — rode "
-              f"`/common:until-review {ledger}` quando a cota voltar")
+              f"`/common:until-review {curto(ledger, repo)}` quando a cota "
+              "voltar")
         registra({"evento": "analise", "feita": False, "motivo": "cota"})
         return 0
     print("   análise: rodando /common:until-review…")
@@ -1777,10 +2434,10 @@ def main(argv=None):
     registra({"evento": "analise", "feita": revisao is not None,
               "arquivo": str(revisao) if revisao else None, "erro": erro_rev})
     if revisao:
-        print(f"   análise: {revisao}")
+        print(f"   análise: {curto(revisao, repo)}")
     else:
         print(f"   análise: falhou ({erro_rev}) — rode `/common:until-review "
-              f"{ledger}` à mão")
+              f"{curto(ledger, repo)}` à mão")
     return 0
 
 

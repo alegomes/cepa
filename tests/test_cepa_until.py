@@ -402,16 +402,17 @@ def test_resumo_do_fim_diz_por_que_cada_item_travou():
         binv = fake_claude(tmp, corpo)
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
         p, _ = roda(raiz, binv, plano, ["--for", "2h"])
-        resumo = p.stdout[p.stdout.find("Travados ("):]
-        check("o resumo dos travados existe", "Travados (2)" in resumo,
+        # Desde o passo 2 do until-fim-sem-dono (A4), cada item tem UMA linha
+        # em "Itens", e não uma por lista em que cai.
+        resumo = p.stdout[p.stdout.find("Itens ("):]
+        check("o resumo dos travados existe", "Itens (2)" in resumo,
               p.stdout[-800:])
         check("o comando no FIM de uma evidence longa chega ao resumo",
               "rodar-par-head.sh" in resumo, resumo[:900])
         check("...e a evidence longa é cortada, não despejada inteira",
               "[...]" in resumo and resumo.count("EXIT=124") < 30, resumo[:900])
-        check("travado sem evidence aponta para a rota, sem repeti-la",
-              "a rota em \"Espera por você\"" in resumo
-              and resumo.count("aprove o PR 12 na interface") == 1, resumo[:900])
+        check("travado sem evidence mostra a rota, uma vez só",
+              resumo.count("aprove o PR 12 na interface") == 1, resumo[:900])
 
 
 def test_n_blocked_seguidos_encerram_o_run_como_fila_travada():
@@ -476,7 +477,7 @@ def test_max_travados_configuravel_e_validado():
         check("--max-travados 2 para no 2º", len(chamadas) == 2,
               f"disparou {len(chamadas)}x")
         check("o banner mostra o teto escolhido",
-              "fila travada: 2 itens `blocked` seguidos" in p.stdout,
+              "2 itens `blocked` seguidos (fila travada)" in p.stdout,
               p.stdout[:600])
         largada = [e for e in ledger_de(raiz) if e.get("evento") == "run_start"]
         check("o run_start registra o teto, para a análise da manhã",
@@ -1024,7 +1025,7 @@ def test_teto_de_tentativas_tira_o_item_da_frente_e_a_fila_anda():
         check("...o run acaba pela fila, não pelo disjuntor",
               fim["motivo"] == "fim-da-fila" and fim["esgotados"] == 1, str(fim))
         check("...e o relatório cobra o item que ficou blocked",
-              "Tirados da frente da fila" in p.stdout and "a1" in p.stdout,
+              "tirado da frente da fila" in p.stdout and "a1" in p.stdout,
               p.stdout[-600:])
 
 

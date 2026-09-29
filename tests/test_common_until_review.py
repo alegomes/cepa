@@ -39,6 +39,11 @@ def main():
     check("manda conferir no git antes de afirmar",
           "confira antes de afirmar" in limpo)
     check("relata em plain-report", "plain-report" in f)
+    check("lê o estado do run e comenta cada ação pelo id",
+          ".estado.json" in f and "pelo id" in limpo)
+    check("não numera as ações por conta própria",
+          "sem numeração própria" in limpo)
+    check("repete o bloco 'fica com você'", "fica com você" in limpo)
     check("fecha com perguntas fechadas com recomendação",
           "perguntas" in limpo and "recomendo sim/não" in limpo)
     print()

@@ -1,0 +1,179 @@
+key: until-fim-sem-dono
+status: complete
+diff: ae65c44..93d6e26
+audited_at: "2026-09-28"
+criteria:
+  - id: AC1
+    text: >
+      (passo 1) A lateral contém os commits de TODAS as tentativas do item,
+      com as duas checagens da C4 antes do reset.
+    altitude: cli
+    surface: cepa-until real contra repo falso e build falso, via .jsonl e git.
+    test: >
+      tests/test_cepa_until_branch_da_noite.py::test_build_vermelho_leva_os_commits_de_todas_as_tentativas,
+      ::test_outro_done_no_meio_das_tentativas_para_em_vez_de_resetar,
+      ::test_item_esgotado_leva_os_commits_das_tentativas_para_a_lateral
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_branch_da_noite.py` -> "ok a lateral tem
+      os commits das duas tentativas", "ok o run para no vermelho", linha final
+      "tudo verde".
+    verdict: complete
+    gap: null
+    reaudit: >
+      Re-auditado no 93d6e26. Testes novos test_1_tentativa_do_run_anterior_tambem_vai_para_a_lateral
+      e test_1_heranca_com_outro_item_aberto_para_em_vez_de_resetar.
+      `python3 tests/test_cepa_until_branch_da_noite.py` -> "ok o run B herdou a
+      branch do run A", "ok a branch da noite do run B não tem o commit do run A",
+      "ok ...que está na lateral da 1ª volta", "ok o run B para no vermelho",
+      "ok ...e o aviso nomeia o outro item herdado"; final "tudo verde".
+  - id: AC4a
+    text: >
+      Build vermelho seguido de segundo build verde fecha done, grava
+      verify_repetido_verde no .jsonl e build_instavel na telemetria.
+    altitude: cli
+    surface: cepa-until real, build falso (falha na 1ª chamada, passa na 2ª).
+    test: tests/test_cepa_until_branch_da_noite.py::test_4a_segundo_build_verde_fecha_done_e_grava_a_instabilidade
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_branch_da_noite.py` -> 4 "ok" do 4a
+      (item done, verify_repetido_verde, build_instavel com card e run,
+      commit na branch da noite).
+    verdict: complete
+    gap: null
+  - id: AC4b
+    text: >
+      Qualquer desfecho do 2º build que não seja verde devolve o item a
+      pending, com evidence citando lateral, motivo e número da volta, e grava
+      volta_vermelha.
+    altitude: cli
+    surface: cepa-until real, build sempre vermelho, --max-falhas 5.
+    test: tests/test_cepa_until_branch_da_noite.py::test_4b_volta_vermelha_devolve_o_item_a_pending_com_recado
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_branch_da_noite.py` -> 6 "ok" do 4b
+      (pending com lateral, motivo, número da volta, volta_vermelha).
+    verdict: complete
+    gap: >
+      Nota, não bloqueia: o ramo "2º build não coube na janela" (motivo2)
+      existe em common/bin/cepa-until (~linha 1955) mas nenhum teste o
+      exercita; só o caso "sempre vermelho" é demonstrado.
+  - id: AC4c
+    text: cepa-plan start imprime a evidence anterior de um item que a tem.
+    altitude: cli
+    surface: cepa-plan start, stdout.
+    test: tests/test_common_drain_plan.py::test_start_imprime_a_evidence_anterior
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      `python3 tests/test_common_drain_plan.py` -> "ok ...e imprime a evidence
+      anterior", "ok item sem evidence não imprime seção de recado"; final
+      "all green".
+    verdict: complete
+    gap: null
+  - id: AC4d
+    text: Na 2ª volta vermelha do mesmo item (contada nos .jsonl da fila) o item vai a blocked.
+    altitude: cli
+    surface: cepa-until real, build sempre vermelho, um item.
+    test: >
+      tests/test_cepa_until_branch_da_noite.py::test_4d_segunda_volta_vermelha_vira_blocked
+      e ::test_4d_voltas_contam_entre_runs
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_branch_da_noite.py` -> "ok o run termina
+      com o item blocked", "ok ...e exatamente duas voltas vermelhas", "ok com
+      uma volta de um run anterior, a 1ª deste já vira blocked".
+    verdict: complete
+    gap: null
+  - id: AC4e
+    text: Cada volta vermelha conta como falha seguida no disjuntor.
+    altitude: cli
+    surface: cepa-until real, build sempre vermelho, 3 itens, --max-falhas 2.
+    test: tests/test_cepa_until_branch_da_noite.py::test_4e_cada_volta_conta_no_disjuntor
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_branch_da_noite.py` -> "ok o run para pelo
+      disjuntor", "ok ...sem nenhum item done".
+    verdict: complete
+    gap: null
+  - id: AC4f
+    text: >
+      A lateral de item done/dropped só é apagada depois de o patch estar em
+      <run>.laterais/; sem patch, a branch fica.
+    altitude: cli
+    surface: cepa-until real, git real, format-patch falhando.
+    test: >
+      tests/test_cepa_until_branch_da_noite.py::test_4f_lateral_de_item_fechado_vira_patch_antes_de_sumir
+      e ::test_4f_sem_patch_a_lateral_fica
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_branch_da_noite.py` -> "ok as duas
+      laterais do item dropped viram patch", "ok com o format-patch falhando,
+      a branch continua".
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: >
+      Estado do run e lista de ações gravados antes da análise, impressos no
+      fim do terminal, lidos pelo /common:until-review; uma linha por item.
+    altitude: cli
+    surface: cepa-until real; <run>.estado.json, stdout, contrato do until-review.
+    test: >
+      tests/test_cepa_until_branch_da_noite.py::test_2_* (3 testes) e
+      tests/test_common_until_review.py
+    layer: cli-e2e (o until-review é contrato textual do comando)
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_branch_da_noite.py` -> "ok a análise já
+      encontra o estado final gravado", "ok uma linha por item", "ok o terminal
+      imprime a ação numerada"; `python3 tests/test_common_until_review.py` ->
+      "ok lê o estado do run e comenta cada ação pelo id", "tudo verde".
+    verdict: complete
+    gap: >
+      Nota, não bloqueia: a C6 lista os estados aterrissado e descartado; só
+      aterrissado existe (a Revisão 3 deixou só a ação aterrissar, coerente).
+  - id: AC3
+    text: >
+      cepa-until aterrissar <fila>/<run> sobre os guardas do worktree-merge:
+      só mostra o plano sem confirmação, recusa se o estado mudou, dono vivo ou
+      clone sujo, ponto de retorno, para no conflito e retoma, nunca faz push
+      com build vermelho.
+    altitude: cli
+    surface: cepa-until aterrissar real, repo falso com origin, git real.
+    test: tests/test_cepa_until_aterrissar.py (8 testes de aterrissagem)
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_aterrissar.py` -> todos "ok" (merge --no-ff,
+      push, branch e worktree somem, estado aterrissado; vermelho volta ao
+      retorno sem push; conflito e retomada; recusas), "tudo verde".
+    verdict: complete
+    gap: >
+      Nota, não bloqueia: só --sim como confirmação (sem prompt "1 sim, 2 não").
+      Compatível com a Revisão 3 ("oferece só a própria aterrissagem") e com
+      a D3 (só ação irreversível pergunta); aceito como decisão de escopo.
+  - id: AC5
+    text: >
+      Cabeçalho curto, caminhos relativos, custo no resumo; /common:next e
+      /common:doctor leem o estado do run (A4, A6, A7, C6, C7).
+    altitude: cli
+    surface: cepa-until (cabeçalho/resumo), cepa-until pendentes, cepa-doctor.
+    test: >
+      tests/test_cepa_until_aterrissar.py::test_5_* (pendentes, merge à mão,
+      doctor, next, cabeçalho)
+    layer: cli-e2e
+    evidence: verified
+    run: >
+      `python3 tests/test_cepa_until_aterrissar.py` -> "ok pendentes lista o
+      run com o comando", "ok ...e some depois de aterrissado", testes 5_doctor,
+      5_next e 5_cabeçalho todos ok, "tudo verde".
+    verdict: complete
+    gap: >
+      Nota, não bloqueia: pendentes só lista runs com ação aterrissar viva
+      (única ação existente); aceito.

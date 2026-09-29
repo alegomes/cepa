@@ -3745,26 +3745,31 @@ zero intervenção para o vermelho e nada novo para lembrar.
    painel derrubou o `FIX-<teste>` (a fila travava e o conserto rodava sem o código do card);
    o dono aprovou a **Revisão 3** (`docs/discovery/until-fim-sem-dono/revisao-3.md`), que vale
    sobre a Revisão 2 onde as duas divergem. Segundo build: mediana 958 s em 24 medições.
-1. **Garantia:** os commits de todas as tentativas de um item vão para a branch lateral, com
-   as duas checagens antes do `reset` (SHA ancestral do HEAD; nenhum outro `done` no meio).
-   Teste vermelho: item com duas tentativas, e a lateral precisa conter os commits das duas.
-2. **Estado do run e lista de ações** gravados antes da análise do modelo, impressos no fim do
-   terminal, lidos pelo `/common:until-review`; uma linha por item no resumo.
-3. **`cepa-until aterrissar <fila>/<run>`** como camada fina sobre os guardas do
-   `/common:worktree-merge` (decisão do dono, 26/09). O run continua sem tocar a `main`:
-   o dono recusou a aterrissagem automática em 26/09.
-   Atenção: hoje o resumo do fim do run sugere "ou `/common:worktree-merge`"
-   (`cepa-until:1391`), mas esse comando só resolve branches `session/<slice>`
-   (`common/commands/worktree-merge.md:38`) e não acha `until/<run>`. Reusar os guardas
-   dele exige ensiná-lo a aceitar `until/`, ou extrair os guardas para um executável que
-   os dois chamem. Até lá, tirar essa sugestão do resumo.
+1. ~~**Garantia:** os commits de todas as tentativas de um item vão para a branch lateral, com
+   as duas checagens antes do `reset` (SHA ancestral do HEAD; nenhum outro `done` no meio).~~
+   **Feito em 2026-09-28**, no vermelho do build e no item que gasta as tentativas
+   (lateral `-parado-`); testes em `tests/test_cepa_until_branch_da_noite.py`. Vale para as
+   tentativas da mesma janela: a de um run anterior chega pela herança e não é desfeita.
+2. ~~**Estado do run e lista de ações** gravados antes da análise do modelo, impressos no fim do
+   terminal, lidos pelo `/common:until-review`; uma linha por item no resumo.~~ **Feito em
+   2026-09-28**: `<run>.estado.json` (`rodando` → `esperando-dono`/`encerrado`), ação única
+   `aterrissar`, bloco "Fica com você"; a sugestão do `/common:worktree-merge` saiu do resumo.
+3. ~~**`cepa-until aterrissar <fila>/<run>`** como camada fina sobre os guardas do
+   `/common:worktree-merge`~~ **Feito em 2026-09-28**: reusa o `worktree-guard.py` (que passou a
+   aceitar `until/`) e o `_wtlib.py rescue`; sem `--sim` só mostra o plano; recusa se a branch da
+   noite andou depois da proposta; grava o ponto de retorno; para no conflito e retoma do build
+   quando rodado de novo; build vermelho depois do merge volta ao retorno (`reset --keep`, que
+   preserva a fila marcada pelo run) e não faz push. A sugestão do `/common:worktree-merge` saiu
+   do resumo. Testes em `tests/test_cepa_until_aterrissar.py`.
 4. **Vermelho que se resolve** (Revisão 3, subpassos 4a-4f com critério e teste vermelho no
    documento): segundo build completo; verde fecha `done` e grava `build_instavel` na
    telemetria; qualquer outro desfecho devolve o **próprio item** a `pending` com o recado na
-   `evidence`, que o `cepa-plan start` passa a imprimir; teto de duas voltas (a segunda vai para
+   `evidence`, que o `cepa-plan start` passa a imprimir (4a-4f **feitos em 2026-09-28**); teto de duas voltas (a segunda vai para
    `blocked`); cada volta conta no disjuntor; lateral só é apagada depois do `format-patch`.
-5. Cabeçalho curto, caminhos relativos, custo no resumo; `/common:next` e `/common:doctor`
-   leem o estado do run.
+5. ~~Cabeçalho curto, caminhos relativos, custo no resumo; `/common:next` e `/common:doctor`
+   leem o estado do run.~~ **Feito em 2026-09-28**: cabeçalho de 15 para 7 linhas, caminhos
+   relativos ao repo ou `~/`, custo com a conta no resumo e no estado; `cepa-until pendentes`
+   lista os runs esperando aterrissagem, e o doctor (área `[until]`) e o `/common:next` o chamam.
 
 ### Teste que falta
 

@@ -525,6 +525,7 @@ def check_project(cwd: Path):
     check_twg_version(root)
     check_divergencia_plano(root)
     check_aguardando_merge(root)
+    check_until_esperando(root)
 
 
 # ── Ambiente (docs/env.yaml, legado .claude/env.yaml) ───────────────────
@@ -856,6 +857,29 @@ def check_aguardando_merge(root: Path):
                         f"terminada(s) esperando merge na onda {prog['wave']} "
                         f"({', '.join(pend)}) — /maestro:resume {prog['nome']} "
                         f"vai direto ao merge train")
+
+
+def check_until_esperando(root: Path):
+    """Run do `cepa-until` que terminou com a branch da noite esperando o
+    dono (C6 de docs/estrategia-fim-do-cepa-until.md). O run não toca a branch
+    principal, e sem este aviso nada lembra que ele espera: o mesmo modo de
+    falha da onda do maestro que ninguém aterrissou."""
+    until = Path(__file__).resolve().parent / "cepa-until"
+    if not until.is_file() or not (root / ".claude" / "programs").is_dir():
+        return
+    try:
+        p = subprocess.run([sys.executable, str(until), "pendentes",
+                            "--repo", str(root), "--json"],
+                           capture_output=True, text=True, timeout=60)
+        runs = json.loads(p.stdout).get("runs") or [] if p.returncode == 0 else []
+    except Exception as e:  # noqa: BLE001 — diagnóstico não pode quebrar o doctor
+        warn("until", f"checagem de run esperando o dono não rodou: {e}")
+        return
+    for r in runs:
+        warn("until", f"fila `{r['fila']}`: o run {r['run']} deixou "
+                      f"`{r['branch']}` esperando aterrissagem em "
+                      f"`{r['destino']}` — {r['comando']} mostra o plano, "
+                      "com --sim executa")
 
 
 # ── Correções em lote (--fix) ───────────────────────────────────────────

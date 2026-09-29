@@ -225,6 +225,14 @@ Para cada item do lote, na ordem:
      isso no relatório — significa que um run anterior morreu no meio daquele
      item, e o que ele deixou pela metade é seu para conferir.
 
+     Se a saída trouxer **`evidence anterior`**, o item já passou por aqui e
+     voltou com recado (o `cepa-until` devolve a `pending` o item cujo build
+     ficou vermelho, dizendo qual build falhou, o motivo e a branch lateral com
+     os commits). Leve o recado inteiro para o flow do passo b como parte do
+     pedido: é ele que diz se vale aproveitar a lateral (`git cherry-pick` ou
+     `merge` dentro desta tentativa) ou refazer. Desabilitar ou apagar o teste
+     que ficou vermelho não conta como conserto.
+
      A reserva é o equivalente, sem tracker, ao claim que o `/board-flow:drain`
      publica no card: a lista do passo 1 é uma foto, e entre a foto e a hora de
      chegar no item N outra janela pode ter pegado o mesmo item. O custo de não
