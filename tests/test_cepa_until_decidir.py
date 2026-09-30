@@ -82,7 +82,9 @@ def em_tty(cmd, cwd, entradas=(), env=None, timeout=120):
             gatilho, resposta = fila.pop(0)
             # Consome o gatilho para a próxima pergunta igual não casar nele.
             saida = saida.replace(gatilho, f"<{gatilho}>", 1)
-            os.write(fd, (resposta + "\n").encode())
+            if isinstance(resposta, str):
+                resposta = resposta.encode()
+            os.write(fd, resposta + b"\n")
     _, st = os.waitpid(pid, 0)
     return os.waitstatus_to_exitcode(st), saida
 
@@ -515,6 +517,53 @@ def test_run_ja_aterrissado_nao_pergunta_de_novo():
     tela2 = []
     m.pendencias_em_texto("fila", "run1", est, [], {}, saida=tela2.append)
     check("...nem lista sem terminal", tela2 == [], tela2)
+
+
+def test_byte_invalido_no_terminal_nao_derruba_o_decidir():
+    """No decidir WEGO 2026-09-29-2059 o dono digitou `não` e o terminal
+    entregou `n\\xcb...` (o til da tecla morta, apagado pela metade): o
+    `input()` estourou UnicodeDecodeError e as perguntas morreram com
+    traceback. A linha ilegível tem de ser pedida de novo."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOQUEIA_COM_PERGUNTA)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
+        run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = em_tty(
+            [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
+             "--repo", str(raiz)], str(raiz), entradas=[
+                ("[r] respondo e devolvo", b"n\xcb\xc3\xa3o"),
+                ("digite de novo", "r"),
+                ("Sua resposta", "vira checklist")])
+        check("sem traceback", "Traceback" not in out, out[-1500:])
+        check("...avisa que não leu e pede de novo",
+              "digite de novo" in out, out[-1500:])
+        a1 = itens_de(raiz)["a1"]
+        check("...e a resposta seguinte ainda é aplicada",
+              rc == 0 and a1["status"] == "pending"
+              and "vira checklist" in a1["evidence"], a1)
+
+
+def test_texto_solto_no_prompt_de_opcoes_nao_some():
+    """No mesmo decidir o dono escreveu a resposta direto no prompt de
+    opções (`eu não faço ideia...`, `não`): não era r/f/e/q, o item foi
+    para depois e o texto sumiu sem aviso. Tem de avisar e perguntar de
+    novo."""
+    m = carrega_modulo()
+    respostas = iter(["eu não faço ideia de como resolver isso", "r",
+                      "não sei"])
+    tela, respondidos = [], []
+    m.decide(Path("/nao/existe"), "fila", "run1", {},
+             [{"id": "W-1", "title": "t", "reason": "bloqueado-antes",
+               "question": "Ligou a flag?"}], {},
+             pergunta=lambda _p: next(respostas), saida=tela.append,
+             responde=lambda i, t: (respondidos.append((i, t)), (0, "ok"))[1])
+    texto = "\n".join(tela)
+    check("avisa que o texto não é uma opção",
+          "não é uma das opções" in texto, texto)
+    check("...e a resposta dada depois do r é gravada",
+          respondidos == [("W-1", "não sei")], respondidos)
 
 
 def main():

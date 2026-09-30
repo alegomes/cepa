@@ -1659,10 +1659,26 @@ def eh_sim(r):
     return str(r or "").strip().lower() in ("s", "sim", "y", "yes")
 
 
-def decide(repo, fila, run_id, est, adiados, analise, pergunta=input,
+def le_linha(prompt, saida=print):
+    """`input()` que não morre com linha ilegível. Um acento de tecla morta
+    apagado pela metade chega como byte solto (`n\\xcb\\xc3\\xa3o`) e o
+    `input()` estoura UnicodeDecodeError; a linha já foi consumida, então
+    basta pedir de novo (decidir WEGO 2026-09-29-2059)."""
+    while True:
+        try:
+            return input(prompt)
+        except UnicodeDecodeError:
+            saida("       não consegui ler essa linha (algum acento chegou "
+                  "pela metade); digite de novo")
+
+
+def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
            saida=print, responde=None, aterrissa=None):
     """Percorre o que só o dono destrava e aplica cada resposta. Devolve
     (aplicados, para_depois), em texto, para o fecho."""
+    if pergunta is None:
+        def pergunta(prompt):
+            return le_linha(prompt, saida)
     analise = analise or {}
     por_item = analise.get("itens") or {}
     if responde is None:
@@ -1726,18 +1742,25 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=input,
         if rec:
             saida(recuado(rec))
         if rota is not None:
-            opcoes = "[f] já fiz, conto o que vi"
+            letra, opcoes = "f", "[f] já fiz, conto o que vi"
         else:
-            opcoes = "[r] respondo e devolvo para a fila"
+            letra, opcoes = "r", "[r] respondo e devolvo para a fila"
         mostrar = bool(texto_pergunta) and bool(ad.get("evidence"))
+        validas = {letra, "", "q"} | ({"e"} if mostrar else set())
         while True:
-            r = str(pergunta(f"       {opcoes}"
-                             + (" · [e] mostra a evidência inteira"
-                                if mostrar else "")
-                             + " · [Enter] depois · [q] encerra: ")
-                    ).strip().lower()
+            bruto = str(pergunta(f"       {opcoes}"
+                                 + (" · [e] mostra a evidência inteira"
+                                    if mostrar else "")
+                                 + " · [Enter] depois · [q] encerra: "))
+            r = bruto.strip().lower()
             if r == "e" and mostrar:
                 saida(recuado(f"Evidência: {ad.get('evidence')}"))
+                continue
+            if r not in validas:
+                # Texto solto aqui ia para depois calado, e a resposta
+                # que o dono escreveu sumia (decidir WEGO 2026-09-29-2059).
+                saida(f"       \"{bruto.strip()}\" não é uma das opções; "
+                      f"para gravar uma resposta, digite {letra} primeiro")
                 continue
             break
         if r == "q":
