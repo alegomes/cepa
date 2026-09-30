@@ -1,13 +1,14 @@
 schema_version: 2
 card: path-lock-sed-stays-falso-positivo
 verdict: unproven
-reviewed_at: 2026-09-29T20:00:00-03:00
+reviewed_at: 2026-09-29T21:00:00-03:00
 base_commit: d9593e5
-head_commit: 06f5a1f
+head_commit: 9735e51
 issue_type: Bug
+round: 2   # rodada 1 (commit 62af23a, HEAD 06f5a1f) devolveu UNPROVEN por furo real; esta rodada mede 9735e51
 scope:
   changed_classes:
-    - class: "common/hooks/_templates/bash-path-lock.py.tmpl::_sed_executes_or_writes (+ 6 copias geradas)"
+    - class: "common/hooks/_templates/bash-path-lock.py.tmpl::_sed_executes_or_writes/_sed_fim_da_linha (+ 6 copias geradas)"
       module: common
       external_observable: true
       substituted_by_double: null   # o hook roda de verdade, como subprocesso com JSON no stdin
@@ -21,24 +22,19 @@ levels:
     perturbation:
       status: survived
       results:
-        - "BYPASS (decisivo): sed -n '#c\\<nl>w OUT' IN e sed -n 'r x\\<nl>w OUT' IN retornam False em _sed_executes_or_writes; hook sai com exit=0 nas 6 copias (esperado 2). No sed real (BSD, macOS) o comentario NAO continua depois de barra-newline: 'sed -n \"#c\\<nl>p\"' imprime as linhas, ou seja o comando da linha seguinte executa. Em base d9593e5 os mesmos dois casos sao NEGADOS (0 falhas), entao e regressao introduzida pela reescrita (_sed_fim_da_linha trata barra-newline como continuacao tambem para # e r/R)."
-        - "Suspeita nao confirmada (GNU sed nao instalado): ':a w OUT' e 'ba w OUT' retornam False; no BSD sed o rotulo vai ate o fim da linha (nao e bypass); no GNU sed o rotulo termina no espaco e o w executaria."
-        - "Mutacao a/i/c nao pula texto -> RED (libera: stays no texto do a, do c)."
-        - "Mutacao w/W/e retorna False -> RED (nega: sed w depois de endereco com stays, sed w na linha seguinte ao texto do a, sed e depois de rotulo)."
-        - "Mutacao comando desconhecido retorna False -> RED (nega: sed -i 'k')."
-        - "Mutacao rotulo :btT vai ate fim da linha -> RED (nega: sed e depois de rotulo)."
-        - "Mutantes SOBREVIVENTES (verde apesar da quebra; nenhum teste os guarda): flag e/w do s deixa de retornar True (equivalente, a checagem de flag desconhecida logo abaixo ainda nega), flag desconhecida do s, y/s mal formado retorna False, comando simples nao avanca ate ; (equivalente na pratica), r/R nao pula a linha, endereco sem comando retorna False."
+        - "Furos da rodada 1 FECHADOS e guardados. Perturbacoes no template + gen-locks --write + tests/test_bash_path_lock_exec.py, todas RED: continua so em a/i/c removido (# e r voltam a continuar) -> 12 falhas (comentario com barra, r com barra); r/R voltando a continuar -> 6 falhas (r com barra); comentario retornando False -> 6 falhas; rotulo ignorando espaco -> 6 falhas (rotulo e espaco GNU); rotulo indo ate fim da linha -> 12 falhas; rotulo ignorando ';' -> 12 falhas; a/i/c sem pular barra-quebra -> 6 falhas (stays no texto do c); flag desconhecida do s ignorada -> 6 falhas; y/s mal formado retornando False -> 6 falhas; endereco sem comando retornando False -> 6 falhas; '!' nao pulado -> 6 falhas."
+        - "MUTANTES SOBREVIVENTES COM RISCO DE SEGURANCA (teste verde apesar da quebra; nenhum DENY do arquivo de teste usa chaves): (a) '{' devolvendo False -> passam sem ser negados '1{w OUT}', '/x/{p;w OUT}', '{p}\\nw OUT'; (b) '}' devolvendo False -> passam '{p}\\nw OUT', '{p};w OUT', 's/a/b/}w OUT'; (c) comando simples nao parando em '}' -> passa '{p}w OUT'; (d) rotulo nao parando em '}' -> passa '{bx}wOUT' (em sed cujo rotulo termine em '}' isso executaria o w). No HEAD todos estes scripts SAO negados (sonda direta na funcao, ~105 scripts), entao nao ha bypass vivo: falta o teste que o prenda."
+        - "Sobreviventes equivalentes/conservadores (nao geram bypass na sonda): flags do s sem parar em '}' ou em espaco, segundo endereco vazio aceito, newline dentro de delimitado aceito, 'W' removido de 'eWw' (cai no 'comando desconhecido' e nega igual)."
   l2_coverage:
     status: assumed
     uncovered_lines: []
-    run: "sem quarkus-jacoco/coverage rodada; alcance estrutural inferido pelas perturbacoes acima"
+    run: "sem quarkus-jacoco/coverage rodada; alcance estrutural inferido pelas perturbacoes acima (ramos de chaves e '}' nunca exercitados por DENY)"
   l4_adversarial_input:
-    status: findings
+    status: clean
     reason: ""
-    findings:
-      - "sed -n '#c\\<nl>w OUT' IN  -> exit 0 (deveria ser 2)"
-      - "sed -n 'r x\\<nl>w OUT' IN -> exit 0 (deveria ser 2)"
+    findings: []
+    run: "sonda direta em _sed_executes_or_writes do HEAD com ~105 scripts (w/W/e/flags do s/y/rotulos b t T :/comentarios/r R/a i c com e sem barra-quebra/enderecos 1,3 1~2 2,~4 +N /re/I \\,x, /!/chaves aninhadas/CR/VT): zero bypass; unicos 2 'desvios' eram expectativas erradas minhas (p<CR>w e c\\<nl>\\<nl>w sao texto/erro no sed, nao execucao). BSD sed real confirma que rotulo termina em ';' e engole '}' ('1{bx};p' da 'pending }'), logo o leitor, que para em '}', e mais estrito que o BSD."
   bugfix_regression_red_at_base:
     status: pass
-    run: "python3 tests/test_bash_path_lock_exec.py em worktree de d9593e5 com o arquivo de teste do HEAD: 4 casos vermelhos x 6 copias (libera: sed -i com stays no endereco / no texto do a / no texto do c; nega: sed com comando que ninguem conhece). No HEAD: 'tudo verde em 6 copias'."
-routing_reason: "Os 4 casos de regressao ficam vermelhos no base e as ramificacoes principais do leitor novo sao guardadas (4 de 4 mutacoes principais RED). Mas a reescrita abriu um furo que o scanner antigo nao tinha: comentario ou r/R terminado em barra seguida de w/e na linha seguinte passa pelo hook, e o sed real executa esse w. UNPROVEN."
+    run: "tests/test_bash_path_lock_exec.py com o arquivo de teste do HEAD: em d9593e5 -> '48 falha(s) em 6 copias' (stays no endereco/no texto do a/no texto do c, comando desconhecido, endereco sem comando, ...); em 06f5a1f -> '18 falha(s) em 6 copias' (comentario com barra, r com barra, rotulo e espaco, 3 casos x 6); em 9735e51 -> 'tudo verde em 6 copias'. Vizinhos no HEAD: test_lock_copies_drift 'all green', test_multiline_quoted_shell 'tudo verde em 6 copias ... + os 2 guards', test_bash_path_lock_redir 'All checks passed across 6 hook copies'."
+routing_reason: "Os tres furos da rodada 1 estao fechados e guardados (todas as perturbacoes deles ficam RED) e a sonda adversarial nao achou nenhum bypass no HEAD. O que falta e prova de que o tratamento de chaves esta guardado: se alguem quebrar '{' ou '}' no leitor, nenhum teste fica vermelho e 'sed -n \"/x/{p;w OUT}\"' passaria pelo hook. Mutacao sobrevivente em linha alterada => UNPROVEN, ate entrarem DENY com chaves."
