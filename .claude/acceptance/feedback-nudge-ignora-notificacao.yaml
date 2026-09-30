@@ -1,0 +1,30 @@
+key: feedback-nudge-ignora-notificacao
+status: complete
+criteria:
+  - id: AC1
+    text: "Prompt que é só <task-notification> (com forma de queixa + alvo dentro) não injeta o aviso"
+    altitude: cli
+    surface: "processo common/hooks/feedback-nudge.py com payload JSON no stdin (subprocess)"
+    test: "tests/test_cepa_feedback.py::test_hook_ignora_aviso_de_subagente ('aviso de subagente sozinho é silêncio')"
+    layer: subprocess/stdin
+    evidence: verified
+    run: "python3 tests/test_cepa_feedback.py -> 'ok hook: aviso de subagente sozinho é silêncio', 'tudo verde'"
+    status: complete
+  - id: AC2
+    text: "Esse turno não gasta o aviso único por sessão"
+    altitude: cli
+    surface: "mesmo processo, mesma session_id n1: aviso duas vezes, depois queixa real"
+    test: "test_hook_ignora_aviso_de_subagente ('aviso não gasta o aviso único da sessão')"
+    layer: subprocess/stdin
+    evidence: verified
+    run: "python3 tests/test_cepa_feedback.py -> 'ok hook: aviso não gasta o aviso único da sessão'"
+    status: complete
+  - id: AC3
+    text: "Queixa real junto do aviso ainda avisa; fala neutra junto do aviso não"
+    altitude: cli
+    surface: "mesmo processo, sessões n2 e n3"
+    test: "test_hook_ignora_aviso_de_subagente ('queixa do dono junto do aviso ainda conta', 'fala neutra ... é silêncio')"
+    layer: subprocess/stdin
+    evidence: verified
+    run: "python3 tests/test_cepa_feedback.py -> 2 checks ok; python3 tests/test_feedback_nudge_fora_do_git.py -> tudo verde"
+    status: complete

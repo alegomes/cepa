@@ -1,0 +1,39 @@
+schema_version: 2
+card: feedback-nudge-ignora-notificacao
+verdict: unproven
+reviewed_at: 2026-09-29T20:10:00-03:00
+base_commit: cc1ccf2
+head_commit: 6e1e5e3
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/feedback-nudge.py (regex AVISO + fala_do_dono + chamada no main)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "verde em HEAD: python3 tests/test_cepa_feedback.py -> tudo verde; tests/test_feedback_nudge_fora_do_git.py -> tudo verde"
+        - "P1 (regex AVISO nunca casa, <task-notificationXX>): 3 falhas (aviso sozinho, aviso nao gasta o aviso unico, fala neutra junto do aviso) -> RED"
+        - "P2 (main volta a usar so .strip(), sem fala_do_dono): 3 falhas -> RED"
+        - "P3 (re.S removido, bloco multilinha nao casa): 3 falhas -> RED"
+        - "P4 (ramo \\Z removido: bloco sem </task-notification> de fechamento): tudo verde -> SOBREVIVEU; nenhum teste manda aviso truncado/sem fechamento"
+        - "restaurado ao HEAD: verde de novo; worktree /tmp/proof-fnin removida"
+  l2_coverage:
+    status: gap
+    uncovered_lines:
+      - "common/hooks/feedback-nudge.py: ramo \\Z da regex AVISO (aviso sem tag de fechamento)"
+    run: "P4 verde com o ramo removido: o teste nao exercita bloco aberto sem fechamento"
+  l4_adversarial_input:
+    status: skipped
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "hook do base (cc1ccf2) com o teste do HEAD: python3 tests/test_cepa_feedback.py -> 3 falhas (aviso de subagente sozinho e silencio; aviso nao gasta o aviso unico; fala neutra junto do aviso e silencio); hook do HEAD -> tudo verde"
+routing_reason: "O defeito esta provado: teste vermelho no base, verde no HEAD, e tres das quatro perturbacoes (regex, chamada no main, re.S) ficam vermelhas. Mas o ramo \\Z da regex AVISO (aviso truncado, sem fechamento) e comportamento adicionado no diff e pode ser removido sem nenhum teste reclamar. Falta um caso com <task-notification> sem fechamento no test_hook_ignora_aviso_de_subagente."

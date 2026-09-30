@@ -368,6 +368,15 @@ def test_hook_ignora_aviso_de_subagente():
         p = c.hook(AVISO + "\nrode o próximo item", session_id="n3")
         check("hook: fala neutra do dono junto do aviso é silêncio",
               p.stdout.strip() == "", p.stdout)
+        cortado = AVISO.replace("</task-notification>", "")
+        p = c.hook(cortado, session_id="n4")
+        check("hook: aviso sem fechamento é silêncio", p.stdout.strip() == "", p.stdout)
+        p = c.hook(AVISO + "\n" + AVISO, session_id="n5")
+        check("hook: dois avisos seguidos são silêncio", p.stdout.strip() == "", p.stdout)
+        longo = AVISO.replace("Veredito", "x" * 5000 + " Veredito")
+        p = c.hook(longo + "\nesse gate me irrita demais", session_id="n6")
+        check("hook: aviso longo não esconde a queixa curta do dono",
+              "feedback-capture" in p.stdout, p.stdout)
 
 
 def main():
