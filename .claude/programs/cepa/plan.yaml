@@ -1629,3 +1629,10 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: gate-advance-repo-do-push
+  title: gate-advance avalia o build do repo que recebe o push, não o da sessão
+  why: 'ainda não priorizado: entrou no fim da fila'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
