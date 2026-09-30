@@ -1520,10 +1520,26 @@ items:
     só roda o build depois de done; um blocked com commits deixa código não verificado
     embaixo do próximo card. Posição decidida pelo dono em 2026-09-29: 1º dos abertos,
     porque deixa código sem build embaixo do próximo card em todo run noturno.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Codigo na branch da noite until/2026-09-29-1916 (sem merge, sem push):
+    2977bec (item que o agente fecha blocked com commits tem os commits levados
+    para until/<run>-travado-<id>, branch da noite volta ao comeco da 1a tentativa,
+    evidencia do item regravada com o motivo original + nome da lateral; reset inseguro
+    para o run com item-preso) e f946570 (regex LATERAL inclui travado, para limpa_laterais
+    apagar com patch quando o item fecha; testes do reset inseguro e do blocked
+    sem commit). Gates: pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/until-blocked-com-commits.yaml,
+    commit seguinte). Prova manual green-red-green: com o codigo de 62d9cbf os testes
+    novos ficam vermelhos (item-preso e limpeza da lateral travado); o de blocked
+    sem commit e guarda e passa nos dois. proof-reviewer nao rodou: topologia build-solo
+    nao tem, e o do build-hex e Quarkus/PIT. Suites rodadas inteiras, todas verdes:
+    test_cepa_until_branch_da_noite, test_cepa_until, _retomada, _adversarial, _supervisor_morto,
+    _git_quebrado, _aterrissar. Build completo e do supervisor. Fora do escopo:
+    dropped com commits (cepa-plan finish nao aceita dropped, entao o agente nao
+    fecha assim pelo caminho legitimo); mensagem ''os commits do item'' fica imprecisa
+    para item herdado que sai blocked sem commit novo (leva tambem a heranca, sem
+    teste proprio).'
 - id: resgate-devolve-aceite-ao-gate
   title: Arquivo de aceite resgatado de worktree removida volta para onde o acceptance-gate
     procura
@@ -1537,10 +1553,22 @@ items:
     do clone (sem sobrescrever), ou o gate tambem procura em .claude/rescued/*/.
     Posição decidida pelo dono em 2026-09-29: 2º, porque todo run que remove a worktree
     barra a ida para Done de cards já auditados.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Na branch da noite until/2026-09-29-1916: 63aec90 (restore_acceptance
+    em _wtlib.py: o resgate devolve cada .claude/acceptance/<KEY>.yaml da worktree
+    para .claude/acceptance/ do clone PRINCIPAL, sem sobrescrever; nota em worktree-merge.md),
+    d04bbfd e db8e624 (testes do filtro de caminho pedidos pelo proof-reviewer).
+    Testes: tests/test_worktree_artifact_rescue.py all green (4 testes novos, incluindo
+    find_artifact do acceptance-gate real achando o aceite depois do git worktree
+    remove); vizinhos test_acceptance_gate, test_plan_anchor_root e os de worktree
+    verdes. completion-auditor COMPLETE (.claude/acceptance/resgate-devolve-aceite-ao-gate.yaml);
+    proof-reviewer PROVEN na 3a rodada (docs/proof/resgate-devolve-aceite-ao-gate.yaml;
+    1a e 2a UNPROVEN por filtro sem teste, corrigido). Build completo delegado ao
+    supervisor. Fora do escopo: os aceites ja parados em .claude/rescued/* de runs
+    antigos nao sao devolvidos (so resgates daqui em diante); o plugin instalado
+    so pega o conserto apos reinstalar.'
 - id: until-avisa-hook-so-vale-apos-reinstalar
   title: cepa-until avisa no banner do run quando a branch da noite altera hook
     que so passa a valer depois de mesclar e reinstalar o plugin
@@ -1550,20 +1578,39 @@ items:
     rodada foi perdida, mas o intervalo e invisivel no run; decisao do dono em 2026-09-28
     de abrir o item. Posição decidida pelo dono em 2026-09-29: 3º, porque nenhuma
     rodada se perde, só falta visibilidade.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Codigo na branch da noite until/2026-09-29-1916 (sem merge nem push;
+    build completo fica com o supervisor). Commits: 26fffc9 feat (hooks_alterados
+    + avisa_hooks no topo do laco e antes do run_end: linha na tela, evento hook_so_apos_reinstalar
+    no .jsonl; fim cobra reinstalar-plugin em Fica com voce e no fica_com_voce do
+    estado, recalculado do diff base_do_clone..HEAD), 8d4bd40 e dc8f4e3 testes,
+    9f08c21 docstring. Teste: tests/test_cepa_until_hook_reinstalar.py (6 cenarios,
+    18 checks, cepa-until real com claude falso); vizinhas test_cepa_until, _branch_da_noite,
+    _retomada, test_common_until_review verdes. Gates: completion-auditor COMPLETE
+    (fcee999, .claude/acceptance/until-avisa-hook-so-vale-apos-reinstalar.yaml);
+    proof-reviewer UNPROVEN na 1a passada (98ae930, 2 perturbacoes sobreviveram),
+    PROVEN na 2a com 7/7 perturbacoes vermelhas (515cbe9, docs/proof/until-avisa-hook-so-vale-apos-reinstalar.yaml).
+    Fora do escopo: o aviso olha so <plugin>/hooks/; skills, commands e agents alterados
+    tambem so valem apos reinstalar e nao sao avisados. Topologia build-solo, sem
+    validation-lead.'
 - id: feedback-nudge-fora-do-git
   title: Tirar .claude/feedback-nudge do git (.gitignore + git rm --cached)
   why: 'desvios.md 2026-09-26: o dono aprovou; o hook feedback-nudge reescreve o
     arquivo a cada sessão e ele deu conflito no merge 3f4fe2e. Barrado na hora pelo
     modo exploração; conferido em 2026-09-29 que segue versionado. (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Na branch da noite until/2026-09-29-1916: c1deab4 (.claude/feedback-nudge
+    no .gitignore + git rm --cached; teste tests/test_feedback_nudge_fora_do_git.py,
+    vermelho antes e verde depois), 26531be (completion-auditor COMPLETE, .claude/acceptance/feedback-nudge-fora-do-git.yaml),
+    commit do proof-reviewer PROVEN (docs/proof/feedback-nudge-fora-do-git.yaml;
+    perturbar .gitignore ou reindexar o arquivo deixa o teste RED). Arquivo local
+    preservado. Build completo fica com o supervisor. Fora do escopo: nenhum outro
+    estado de runtime mexido.'
 - id: aviso-estrategia-aponta-revisao-3
   title: Aviso no topo de docs/estrategia-fim-do-cepa-until.md apontando para a
     Revisão 3, e linha Status atualizada
@@ -1571,20 +1618,42 @@ items:
     substitui partes da Revisão 2 e quem lê a estratégia não fica sabendo. Barrado
     na hora pelo modo descoberta; conferido em 2026-09-29 que o aviso não existe.
     (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits e97aece e 86620a0 na branch until/2026-09-29-1916 (sem merge,
+    sem push): aviso no topo de docs/estrategia-fim-do-cepa-until.md apontando para
+    docs/discovery/until-fim-sem-dono/revisao-3.md, separando o que a Revisao 3
+    substitui da Revisao 2 e da revisao pos-painel; linha Status passou de ''Nada
+    implementado'' para ''implementado pela Revisao 3 (until-fim-sem-dono, merge
+    9db5fbc)''; referencia de linhas da Revisao 2 em revisao-3.md atualizada para
+    351-441. completion-auditor COMPLETE na 2a rodada (a 1a deu INCOMPLETE por atribuir
+    2 itens a Revisao 2 em vez da pos-painel; corrigido), .claude/acceptance/aviso-estrategia-aponta-revisao-3.yaml.
+    proof-reviewer nao se aplica: so documentacao, nenhum comportamento mudou. Build
+    completo fica com o supervisor.'
 - id: path-lock-sed-stays-falso-positivo
   title: bash-path-lock nega sed -i quando o texto contém a palavra 'stays' (lida
     como s///t)
   why: 'desvios.md 2026-09-27, relatado pelo proof-reviewer de reconcile-nao-rebaixa-done:
     nega comando legítimo por engano. Não reproduzido em 2026-09-29; o item começa
     reproduzindo. (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Codigo na branch da noite until/2026-09-29-1916 (sem merge/push; build
+    completo fica com o supervisor). Commits: 06f5a1f (leitor do script do sed comando
+    a comando no molde common/hooks/_templates/bash-path-lock.py.tmpl + 6 copias
+    regeneradas por bin/gen-locks.py), 9735e51 (fecha 3 furos achados pela prova:
+    comentario e r/R com barra no fim, rotulo seguido de espaco), 0512da2 (casos
+    DENY de blocos { }). Reproduzido antes do conserto: ''/stays at the entry/d'',
+    ''$a o item stays...'' e o texto de c negados. Teste: tests/test_bash_path_lock_exec.py
+    verde em 6 copias; vermelho no base d9593e5 nos casos do stays. Gates: completion-auditor
+    COMPLETE (.claude/acceptance/path-lock-sed-stays-falso-positivo.yaml, auditado
+    em 06f5a1f; commits seguintes so fecham furos e acrescentam testes), proof-reviewer
+    PROVEN na 3a rodada (docs/proof/path-lock-sed-stays-falso-positivo.yaml, cc1ccf2;
+    rodadas 1 e 2 UNPROVEN, corrigidas). Fora do escopo: $ dentro de aspas simples
+    num script de sed continua negado como variavel de shell desconhecida (falso
+    positivo anterior e separado; precisa de item proprio via /common:plan).'
 - id: feedback-nudge-ignora-notificacao
   title: feedback-nudge não dispara em turno que é notificação de subagente, sem
     fala do dono
@@ -1592,20 +1661,39 @@ items:
     verbatim'' num turno que era task-notification; cumprir seria inventar a queixa.
     Conferido em 2026-09-29: common/hooks/feedback-nudge.py não menciona notificação.
     (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Codigo na branch da noite until/2026-09-29-1916 (sem merge, sem push):
+    6e1e5e3 fix (feedback-nudge.py tira blocos <task-notification> do prompt antes
+    das regex; aviso sozinho nao gasta o aviso unico da sessao), 4ac3079 testes
+    de borda, proof commit seguinte. Vereditos: pair-reviewer APPROVE; completion-auditor
+    COMPLETE (.claude/acceptance/feedback-nudge-ignora-notificacao.yaml); proof-reviewer
+    PROVEN na 2a rodada (docs/proof/feedback-nudge-ignora-notificacao.yaml; 1a rodada
+    UNPROVEN porque o ramo \Z nao tinha teste, corrigido). Rodado so tests/test_cepa_feedback.py
+    e tests/test_feedback_nudge_fora_do_git.py; build completo e do supervisor.
+    Fora: o plugin instalado ainda roda o hook antigo ate reinstalar (o proprio
+    hook disparou numa notificacao de subagente durante este run); a entrada de
+    2026-08-30 no .claude/desvios.md segue desmarcada.'
 - id: marketplace-descricao-common-lista-comandos
   title: Descrição do plugin common no .claude-plugin/marketplace.json lista /plan,
     /spec, /session, /doctor e os demais
   why: 'desvios.md 2026-08-25: mesma classe do item catalogo-listar-os-8-comandos,
     que cobriu só docs/commands.md. Conferido em 2026-09-29: a descrição ainda cita
     só as skills de mentalidade. (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 447909c (descricao do common em .claude-plugin/marketplace.json
+    nomeia os 28 comandos de common/commands, agrupados por finalidade, mais os
+    2 agentes; teste novo tests/test_marketplace_descricao_common.py exige cada
+    /<nome> com fronteira de palavra, verde no HEAD e vermelho com os 28 faltando
+    contra 447909c^) e 32f61da (aceite). pair-reviewer OK-WITH-NOTES, notas aplicadas
+    (numero 28 tirado, /consolidate regrupado). completion-auditor COMPLETE (.claude/acceptance/marketplace-descricao-common-lista-comandos.yaml).
+    proof-reviewer nao rodou: mudanca e texto de metadado, sem comportamento de
+    codigo; a prova vermelho->verde e a do proprio teste. Codigo esta na branch
+    da noite until/2026-09-29-1916; build completo fica com o supervisor. De fora:
+    common/.claude-plugin/plugin.json nao foi tocado.'
 - id: drain-plan-rotulos-pela-direcao
   title: drain-plan troca 'Reconciliar' e 'Sync Jira' por rótulos que dizem a direção
     da escrita
@@ -1613,10 +1701,21 @@ items:
     registrada: ''Trazer status do Jira (grava no plano)'' / ''Atualizar o Jira
     (grava no quadro)''. Só rótulo, sem mudar mecânica. (ainda não priorizado: entrou
     no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch until/2026-09-29-1916: 0f7d233 (drain-plan.md: passo
+    0 vira ''Trazer status do Jira (grava no plano)'', transicao do card no 3.e
+    vira ''Atualizar o Jira (grava no quadro)'', as duas pontas aparecem na introducao,
+    na tela da largada e no bullet Quadro do relatorio; teste test_rotulos_do_quadro_dizem_a_direcao_da_escrita),
+    2875057 (assercao da introducao, lacuna apontada pelo proof-reviewer), commit
+    do artefato de prova. Gates: completion-auditor COMPLETE (.claude/acceptance/drain-plan-rotulos-pela-direcao.yaml),
+    proof-reviewer PROVEN (docs/proof/drain-plan-rotulos-pela-direcao.yaml, cada
+    trecho revertido deixa o teste vermelho). Rodados so tests/test_common_drain_plan.py,
+    test_common_next, test_fio_condutor, test_common_plan: verdes; build completo
+    e do supervisor. Fora do escopo: o passo ''4. Sync'' do common/commands/next.md
+    (mesma direcao do passo 0, grava no plano) manteve o nome; a entrada de 2026-08-29
+    no .claude/desvios.md segue aberta. Codigo na branch da noite.'
 - id: plan-bak-barra-until
   title: cepa-plan write não deixa plan.yaml.bak como arquivo não rastreado que
     faz o cepa-until recusar a largada
@@ -1625,10 +1724,21 @@ items:
     a pasta until/ e o próprio plan.yaml, então toda reescrita da fila barra o run
     seguinte até alguém apagar o .bak à mão. Decisão do dono em 2026-09-29 de abrir
     o item. (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Branch da noite until/2026-09-29-1916: 2ffee82 (filtro BAK_DA_FILA
+    em arvore_suja do cepa-until: ignora so o ''?? .claude/programs/<fila>/plan.yaml.bak''
+    nao rastreado), e4a9cf4 (caso: .bak da fila commitado e depois mudado continua
+    sujeira), 0a6a37b (artefatos dos gates). Teste tests/test_cepa_until.py::test_bak_da_reescrita_da_fila_nao_e_sujeira
+    roda o cepa-plan write real e o cepa-until real; vermelho no base dde360c, verde
+    no HEAD; arquivo inteiro tests/test_cepa_until.py verde (~2 min). completion-auditor
+    COMPLETE (.claude/acceptance/plan-bak-barra-until.yaml); proof-reviewer PROVEN
+    (docs/proof/plan-bak-barra-until.yaml) apos fechar o mutante ''^.. '' que sobrevivia
+    na 1a rodada. Escolha: o conserto ficou no cepa-until (filtro), nao no write,
+    para cobrir tambem filas em outros repos sem .gitignore e .bak ja existentes
+    no disco; o write continua gravando o .bak no mesmo lugar. Build completo fica
+    com o supervisor.'
 - id: gate-advance-repo-do-push
   title: gate-advance avalia o build do repo que recebe o push, não o da sessão
   why: 'ainda não priorizado: entrou no fim da fila'
