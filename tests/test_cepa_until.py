@@ -590,6 +590,17 @@ def test_bak_da_reescrita_da_fila_nao_e_sujeira():
               p2.returncode == 2 and not chamadas2
               and "lixo.bak" in p2.stderr, f"saiu {p2.returncode}")
 
+        (raiz / "lixo.bak").unlink()
+        bak = raiz / ".claude" / "programs" / "fila" / "plan.yaml.bak"
+        bak.write_text("commitado\n", encoding="utf-8")
+        _commita(raiz, "alguém commitou o .bak")
+        bak.write_text("mudou depois\n", encoding="utf-8")
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p3, chamadas3 = roda(raiz, binv, plano, ["--for", "2h"])
+        check("um .bak da fila commitado e depois mudado ainda é sujeira",
+              p3.returncode == 2 and not chamadas3
+              and "plan.yaml.bak" in p3.stderr, f"saiu {p3.returncode}")
+
 
 def _commita(raiz, msg):
     subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
