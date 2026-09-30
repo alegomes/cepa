@@ -1,0 +1,16 @@
+key: erro-cepa-decidir
+status: complete
+base: 4df006d..bbe49dc
+criteria:
+  - {id: AC1, altitude: cli, surface: "cepa-until decidir <fila>/<run> em pty: linha com byte invalido (b'n\\xcb\\xc3\\xa3o') nao derruba; avisa e pede de novo; resposta seguinte aplicada no plan",
+     test: "test_byte_invalido_no_terminal_nao_derruba_o_decidir", layer: "cli em pty, processo real (em_tty)",
+     evidence: verified, run: "python3 tests/test_cepa_until_decidir.py -> 3 checks ok (sem traceback; avisa 'digite de novo'; a1 pending com 'vira checklist'); tudo verde",
+     status: complete}
+  - {id: AC2, altitude: cli, surface: "cepa-until decidir em pty: texto livre no prompt de opcoes avisa 'nao e uma das opcoes', manda digitar r primeiro e pergunta de novo; resposta seguinte gravada",
+     test: "test_texto_solto_no_terminal_avisa_e_ainda_grava (complementado por test_texto_solto_no_prompt_de_opcoes_nao_some, nivel de funcao)", layer: "cli em pty, processo real (em_tty)",
+     evidence: verified, run: "python3 tests/test_cepa_until_decidir.py -> 2 checks ok (aviso 'nao e uma das opcoes' + 'digite r primeiro' na tela; rc==0, a1 pending com 'nao sei ainda' na evidencia); tudo verde",
+     status: complete}
+  - {id: AC3, altitude: cli, surface: "demais suites tests/test_cepa_until*.py continuam verdes",
+     test: "tests/test_cepa_until*.py (13 arquivos)", layer: "suites existentes",
+     evidence: verified, run: "13 arquivos rodados no diff 1345f07: todos 'tudo verde'/'todos passaram', rc=0; bbe49dc so acrescenta teste em test_cepa_until_decidir.py (re-rodado, verde)",
+     status: complete}

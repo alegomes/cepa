@@ -1,0 +1,39 @@
+schema_version: 2
+card: erro-cepa-decidir
+verdict: needs-human
+reviewed_at: 2026-09-30T00:00:00-03:00
+base_commit: 4df006d
+head_commit: 1345f07
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until :: le_linha", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until :: decide (validacao de opcao)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: ["projeto Python, sem PIT"]
+    perturbation:
+      status: pass
+      results:
+        - "P1 le_linha sem tratar UnicodeDecodeError (linha 1670) -> test_byte_invalido... RED (traceback no pty real)"
+        - "P2 validacao 'if r not in validas' desligada (linha 1759) -> test_texto_solto... RED (2 checks)"
+        - "P3 decide volta a usar input() em vez de le_linha (linha 1681) -> test_byte_invalido... RED (3 checks)"
+        - "amostragem: nao perturbados a mensagem de aviso de le_linha e o ramo 'e' em validas; o texto do aviso e coberto por assert em 'nao e uma das opcoes'"
+      run: "worktree /tmp/proof-erro-cepa @1345f07: baseline 'python3 tests/test_cepa_until_decidir.py' rc=0 '✓ tudo verde'; P1/P2/P3 rc=1 cada"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance das linhas alteradas demonstrado pelas perturbacoes P1-P3, que ficaram RED (linha nao alcancada nao poderia ficar RED)"
+  l4_adversarial_input:
+    status: findings
+    reason: ""
+    findings:
+      - "stdin por pipe (nao tty) com bytes invalidos: o decode falha sobre o bloco lido inteiro, entao le_linha descarta as linhas seguintes do mesmo bloco e acaba em EOFError sem tratamento. No tty (caso do bug) a linha e consumida sozinha. Nao e regressao (antes era traceback), mas nao tem teste."
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "cepa-until de 4df006d + testes de 1345f07: rc=1; test_byte_invalido RED (UnicodeDecodeError 0xcb), test_texto_solto RED ('nao e uma das opcoes' ausente); HEAD rc=0"
+routing_reason: "Correcao provada load-bearing e vermelha no base. Sobra um achado de entrada adversarial (stdin por pipe com byte invalido termina em EOFError sem tratamento) que exige decisao humana. NEEDS-HUMAN."
