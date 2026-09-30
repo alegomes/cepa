@@ -1,0 +1,36 @@
+schema_version: 2
+card: plan-bak-barra-until
+verdict: proven
+reviewed_at: 2026-09-29T20:30:00-03:00
+base_commit: dde360c6a5641afe6474f9a46b9055a8e7c1d511
+head_commit: e4a9cf4
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (BAK_DA_FILA, arvore_suja)", module: common, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "HEAD e4a9cf4: test_bak_da_reescrita_da_fila_nao_e_sujeira -> FAILURES [] (5 checks ok)"
+        - "P1 remover o filtro (equivale ao base): RED, saiu 2 por '?? .claude/programs/fila/plan.yaml.bak'"
+        - "P2 regex '^.. ' (qualquer status): RED, 'um .bak da fila commitado e depois mudado ainda e sujeira' saiu 0 (antes sobrevivia)"
+        - "P3 regex '^\\?\\? .*\\.bak$' (qualquer .bak): RED, 'um .bak fora da fila ainda e sujeira' saiu 0"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as 3 perturbacoes da linha alterada ficaram vermelhas, logo ela e alcancada pelo teste"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so filtra a saida do git status; nenhuma entrada externa e parseada"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base dde360c + teste do HEAD: FAILURES ['o run larga mesmo com o .bak da reescrita'], saiu 2; HEAD e4a9cf4: FAILURES []"
+routing_reason: "Regressao vermelha no base, verde no HEAD; as tres perturbacoes do filtro (remover, aceitar qualquer status, aceitar qualquer .bak) ficam vermelhas. A lacuna do mutante '^.. ' foi fechada pelo commit e4a9cf4. PROVEN."
