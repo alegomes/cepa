@@ -1782,6 +1782,13 @@ def cmd_decidir(argv):
               "WEGO/2026-09-29-2059)", file=sys.stderr)
         return 2
     fila, run_id = a.alvo.split("/", 1)
+    # Nome de fila e de run são um segmento só: `fila/../../x` leria um
+    # estado de fora da pasta do run e perguntaria sobre ele.
+    if not all(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", x) and ".." not in x
+               for x in (fila, run_id)):
+        print(f"cepa-until decidir: alvo inválido {a.alvo!r}; é <fila>/<run>, "
+              "sem barras nem `..` dentro de cada parte", file=sys.stderr)
+        return 2
     repo = Path(a.repo).resolve()
     pasta = repo / ".claude" / "programs" / fila / "until"
     try:

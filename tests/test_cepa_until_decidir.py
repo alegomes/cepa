@@ -483,14 +483,23 @@ def test_entrada_hostil_nao_corrompe_a_fila_nem_sai_da_pasta():
                         "a1", "--resposta", "   ", "--repo", str(raiz)],
                        str(raiz))
         check("resposta só de espaços é recusada", vazio[0] == 2, vazio[1])
-        for alvo in ("../../etc/passwd", "semBarra", "fila/../../x"):
+        # Um estado de verdade fora da pasta do run: sem ele, o alvo com `..`
+        # recusava só porque o arquivo não existia (achado da prova, 30/09).
+        fora = raiz / ".claude" / "programs" / "x.estado.json"
+        fora.write_text('{"acoes": []}')
+        # `until/..` só resolve se a pasta do run existir, como existe depois
+        # do primeiro run.
+        (raiz / ".claude" / "programs" / "fila" / "until").mkdir()
+        for alvo in ("../../etc/passwd", "semBarra", "fila/../../x",
+                     "fila/../x", "../fila/x"):
             p_ = subprocess.run([sys.executable, str(CEPA_UNTIL), "decidir",
                                  alvo, "--repo", str(raiz)],
                                 capture_output=True, text=True,
                                 stdin=subprocess.DEVNULL, timeout=60)
             check(f"alvo {alvo!r} recusa com 2, sem traceback",
-                  p_.returncode == 2 and "Traceback" not in p_.stderr,
-                  p_.stderr)
+                  p_.returncode == 2 and "Traceback" not in p_.stderr
+                  and "esperam por você" not in p_.stdout,
+                  p_.stdout + p_.stderr)
 
 
 def main():
