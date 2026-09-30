@@ -368,6 +368,100 @@ def test_instrucoes_dos_agentes_pedem_a_pergunta():
           "--pergunta" in drain, "")
 
 
+REVIEW_COM_BLOCO = (
+    "if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+    "    print('RELATORIO')\n"
+    "    print('```json cepa-decisoes')\n"
+    "    print(json.dumps({'itens': [{'id': 'a1', 'pergunta': "
+    "'Movo a medição para o checklist?', 'recomendo': 'sim', "
+    "'porque': 'não trava a fila'}]}))\n"
+    "    print('```')\n"
+    "    sys.exit(0)\n")
+
+
+def test_fim_com_analise_pergunta_com_a_redacao_do_bloco():
+    """Caminho de saída 3 (com análise): a pergunta vem do bloco da análise
+    quando o agente não gravou nenhuma."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        corpo = REVIEW_COM_BLOCO + (
+            "marca(primeiro_pendente(), status='blocked', "
+            "evidence='evidência crua longa')\n")
+        binv = fake_claude(tmp, corpo)
+        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--com-analise"])
+        fim = p.stdout.split("── esperam por você")[-1]
+        check("com análise, o fim lista o que espera o dono",
+              "── esperam por você" in p.stdout, p.stdout[-1200:])
+        check("...com a pergunta redigida pela análise",
+              "Movo a medição para o checklist?" in fim, fim)
+
+
+def test_fim_parado_pela_cota_tambem_pergunta():
+    """Caminho de saída 2 (cota): a análise não roda, mas as perguntas sim."""
+    with tempfile.TemporaryDirectory() as tmp:
+        travado = item("a1", status="blocked")
+        travado["evidence"] = "sem produção"
+        travado["owner_question"] = "Fecho o card?"
+        raiz = monta_repo(tmp, [travado, item("a2")])
+        corpo = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+                 "    sys.exit(0)\n"
+                 "print(json.dumps({'type': 'result', 'result': "
+                 "\"You've hit your session limit\"}))\n")
+        binv = fake_claude(tmp, corpo)
+        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--com-analise"])
+        from test_cepa_until import ledger_de
+        fim = [e for e in ledger_de(raiz) if e["evento"] == "run_end"][0]
+        check("o run parou pela cota", fim["motivo"] == "limite-de-uso", str(fim))
+        check("...e mesmo assim termina perguntando",
+              "── esperam por você" in p.stdout
+              and "Fecho o card?" in p.stdout, p.stdout[-1200:])
+
+
+def test_lista_sem_terminal_filtra_o_que_nao_e_do_dono():
+    m = carrega_modulo()
+    tela = []
+    m.pendencias_em_texto(
+        "fila", "run1", {"acoes": [{"id": "aterrissar", "frase": "leva 3"}]},
+        [{"id": "W-1", "reason": "human_pending",
+          "human_pending": "rode o login real"},
+         {"id": "W-2", "reason": "reservado", "detail": "sessão viva"},
+         {"id": "W-3", "reason": "depende-de-adiado", "detail": "de W-1"}],
+        {}, saida=tela.append)
+    texto = "\n".join(tela)
+    check("sem terminal, lista aterrissar", "aterrissar: leva 3" in texto,
+          texto)
+    check("...e a rota humana verbatim", "rode o login real" in texto, texto)
+    check("...contando 2, sem reservado nem cascata",
+          "esperam por você: 2" in texto and "W-2" not in texto
+          and "W-3" not in texto, texto)
+
+
+def test_bloco_que_nao_e_objeto_e_ignorado():
+    m = carrega_modulo()
+    check("lista no lugar de objeto devolve vazio",
+          m.decisoes_da_analise("```json cepa-decisoes\n[1, 2]\n```") == {})
+
+
+def test_pergunta_sai_quando_o_item_volta_a_andar_e_reserva_some_no_responde():
+    with tempfile.TemporaryDirectory() as tmp:
+        travado = item("a1", status="blocked")
+        travado["owner_question"] = "Fecho?"
+        outro = item("a2", status="blocked")
+        outro["evidence"] = "x"
+        outro["claimed_by"] = {"session": "morta"}
+        raiz = monta_repo(tmp, [travado, outro])
+        subprocess.run(
+            [sys.executable, str(CEPA_PLAN), "finish", "fila", "a1",
+             "--status", "pending", "--evidence", "destravou",
+             "--repo", str(raiz)], capture_output=True, text=True, check=True)
+        check("finish pending sem --pergunta tira a pergunta velha",
+              "owner_question" not in itens_de(raiz)["a1"], itens_de(raiz)["a1"])
+        em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila", "a2",
+                "--resposta", "segue", "--repo", str(raiz)], str(raiz))
+        check("responde limpa a reserva do item",
+              "claimed_by" not in itens_de(raiz)["a2"], itens_de(raiz)["a2"])
+
+
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
     for nome, fn in sorted(globals().items()):
