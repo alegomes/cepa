@@ -1155,11 +1155,12 @@ def _sed_endereco(script, i):
     return i
 
 
-def _sed_fim_da_linha(script, i):
-    """Avança até o fim da linha lógica (continuação com barra no fim)."""
+def _sed_fim_da_linha(script, i, continua=False):
+    """Avança até o fim da linha. Só o texto de a/i/c continua na linha
+    seguinte com barra no fim; comentário e nome de arquivo acabam na quebra."""
     n = len(script)
     while i < n:
-        if script[i] == "\\":
+        if continua and script[i] == "\\":
             i += 2
             continue
         if script[i] == "\n":
@@ -1211,13 +1212,15 @@ def _sed_executes_or_writes(script):
         if c == "{":
             continue
         if c in "aic":
-            i = _sed_fim_da_linha(script, i)  # texto, nunca comando
+            i = _sed_fim_da_linha(script, i, continua=True)  # texto, nunca comando
             continue
         if c in "rR#":
             i = _sed_fim_da_linha(script, i)  # nome de arquivo lido, ou comentário
             continue
-        if c in ":btT":  # rótulo termina no `;`, como no GNU sed
-            while i < n and script[i] not in ";\n}":
+        if c in ":btT":  # rótulo termina no `;` ou no espaço, como no GNU sed
+            while i < n and script[i] in " \t":
+                i += 1
+            while i < n and script[i] not in " \t;\n}":
                 i += 1
             continue
         if c in "sy":

@@ -125,6 +125,14 @@ DENY = [
     ("sed w na linha seguinte ao texto do a", "sed -i '1a stays\nw {OUT}' {IN}"),
     ("sed e depois de rótulo", "sed ':a;e date' {IN}"),
     ("sed com comando que ninguém conhece", "sed -i 'k' {IN}"),
+    # prova de 2026-09-29: barra no fim de comentário ou de `r arquivo` não
+    # continua a linha — o comando seguinte executa no sed real
+    ("sed w depois de comentário com barra", "sed -n '#c\\\nw {OUT}' {IN}"),
+    ("sed w depois de r com barra", "sed -n 'r x\\\nw {OUT}' {IN}"),
+    ("sed w depois de rótulo e espaço (GNU)", "sed -n 'ba w {OUT}' {IN}"),
+    ("sed com flag do s desconhecida", "sed -i 's/a/b/Z' {IN}"),
+    ("sed com y malformado", "sed -i 'y/ab/' {IN}"),
+    ("sed com endereço sem comando", "sed -i '/x/' {IN}"),
     ("find -exec", "find . -name '*.java' -exec rm {} \\;"),
     ("find -delete", "find . -name '*.java' -delete"),
     ("rg --pre executa", "rg --pre ./x.sh foo"),
