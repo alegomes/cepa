@@ -1,11 +1,11 @@
 schema_version: 2
 card: path-lock-sed-stays-falso-positivo
-verdict: unproven
-reviewed_at: 2026-09-29T21:00:00-03:00
+verdict: proven
+reviewed_at: 2026-09-29T22:00:00-03:00
 base_commit: d9593e5
-head_commit: 9735e51
+head_commit: 0512da2
 issue_type: Bug
-round: 2   # rodada 1 (commit 62af23a, HEAD 06f5a1f) devolveu UNPROVEN por furo real; esta rodada mede 9735e51
+round: 3   # rodada 1 (62af23a, HEAD 06f5a1f) e rodada 2 (94399db, HEAD 9735e51) devolveram UNPROVEN; esta rodada mede 0512da2 (so testes novos sobre 9735e51)
 scope:
   changed_classes:
     - class: "common/hooks/_templates/bash-path-lock.py.tmpl::_sed_executes_or_writes/_sed_fim_da_linha (+ 6 copias geradas)"
@@ -20,21 +20,21 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "Furos da rodada 1 FECHADOS e guardados. Perturbacoes no template + gen-locks --write + tests/test_bash_path_lock_exec.py, todas RED: continua so em a/i/c removido (# e r voltam a continuar) -> 12 falhas (comentario com barra, r com barra); r/R voltando a continuar -> 6 falhas (r com barra); comentario retornando False -> 6 falhas; rotulo ignorando espaco -> 6 falhas (rotulo e espaco GNU); rotulo indo ate fim da linha -> 12 falhas; rotulo ignorando ';' -> 12 falhas; a/i/c sem pular barra-quebra -> 6 falhas (stays no texto do c); flag desconhecida do s ignorada -> 6 falhas; y/s mal formado retornando False -> 6 falhas; endereco sem comando retornando False -> 6 falhas; '!' nao pulado -> 6 falhas."
-        - "MUTANTES SOBREVIVENTES COM RISCO DE SEGURANCA (teste verde apesar da quebra; nenhum DENY do arquivo de teste usa chaves): (a) '{' devolvendo False -> passam sem ser negados '1{w OUT}', '/x/{p;w OUT}', '{p}\\nw OUT'; (b) '}' devolvendo False -> passam '{p}\\nw OUT', '{p};w OUT', 's/a/b/}w OUT'; (c) comando simples nao parando em '}' -> passa '{p}w OUT'; (d) rotulo nao parando em '}' -> passa '{bx}wOUT' (em sed cujo rotulo termine em '}' isso executaria o w). No HEAD todos estes scripts SAO negados (sonda direta na funcao, ~105 scripts), entao nao ha bypass vivo: falta o teste que o prenda."
-        - "Sobreviventes equivalentes/conservadores (nao geram bypass na sonda): flags do s sem parar em '}' ou em espaco, segundo endereco vazio aceito, newline dentro de delimitado aceito, 'W' removido de 'eWw' (cai no 'comando desconhecido' e nega igual)."
+        - "Rodada 3, worktree descartavel /tmp/proof-r3 em 0512da2, mutacao no template + 'python3 bin/gen-locks.py --write' + 'python3 tests/test_bash_path_lock_exec.py'. Os 4 mutantes de chaves que sobreviveram na rodada 2 agora ficam RED: (a) '{' devolvendo False -> '24 falha(s) em 6 cópias' (4 casos x 6); (b) '}' devolvendo False -> '18 falha(s) em 6 cópias' (3 casos x 6: w colado ao fim do bloco, w depois de rotulo fechado por }, w na linha depois do bloco); (c) comando simples nao parando em '}' -> '6 falha(s) em 6 cópias' (w colado ao fim do bloco); (d) rotulo nao parando em '}' -> '6 falha(s) em 6 cópias' (w depois de rotulo fechado por })."
+        - "Perturbacoes das rodadas 1 e 2 (continua so em a/i/c, r/R, comentario, rotulo, flags do s, y/s malformado, endereco sem comando, '!') seguem RED: nenhum arquivo de hook mudou desde 9735e51 ('git diff 9735e51..0512da2 -- *.tmpl */hooks/*' vazio; so tests/test_bash_path_lock_exec.py e este yaml mudaram)."
+        - "Sobreviventes equivalentes/conservadores da rodada 2 (flags do s sem parar em '}' ou espaco, segundo endereco vazio aceito, newline dentro de delimitado aceito, 'W' removido de 'eWw') nao geram bypass na sonda; o leitor continua negando por comando desconhecido."
   l2_coverage:
-    status: assumed
+    status: pass
     uncovered_lines: []
-    run: "sem quarkus-jacoco/coverage rodada; alcance estrutural inferido pelas perturbacoes acima (ramos de chaves e '}' nunca exercitados por DENY)"
+    run: "sem quarkus-jacoco/coverage; alcance provado por perturbacao: cada ramo alterado (comentario, '}', '{', a/i/c, r/R, rotulo, s/y, comando simples, endereco) tem mutante que deixa 'python3 tests/test_bash_path_lock_exec.py' RED (ex.: '24 falha(s) em 6 cópias' para '{'), logo os testes de DENY alcancam todos"
   l4_adversarial_input:
     status: clean
     reason: ""
     findings: []
-    run: "sonda direta em _sed_executes_or_writes do HEAD com ~105 scripts (w/W/e/flags do s/y/rotulos b t T :/comentarios/r R/a i c com e sem barra-quebra/enderecos 1,3 1~2 2,~4 +N /re/I \\,x, /!/chaves aninhadas/CR/VT): zero bypass; unicos 2 'desvios' eram expectativas erradas minhas (p<CR>w e c\\<nl>\\<nl>w sao texto/erro no sed, nao execucao). BSD sed real confirma que rotulo termina em ';' e engole '}' ('1{bx};p' da 'pending }'), logo o leitor, que para em '}', e mais estrito que o BSD."
+    run: "sonda da rodada 2 (~105 scripts sed contra _sed_executes_or_writes) zero bypass; vale para 0512da2 porque o codigo do hook e identico (diff vazio desde 9735e51). Fora de escopo: '$' entre aspas simples negado como variavel de shell desconhecida (pre-existente)."
   bugfix_regression_red_at_base:
     status: pass
-    run: "tests/test_bash_path_lock_exec.py com o arquivo de teste do HEAD: em d9593e5 -> '48 falha(s) em 6 copias' (stays no endereco/no texto do a/no texto do c, comando desconhecido, endereco sem comando, ...); em 06f5a1f -> '18 falha(s) em 6 copias' (comentario com barra, r com barra, rotulo e espaco, 3 casos x 6); em 9735e51 -> 'tudo verde em 6 copias'. Vizinhos no HEAD: test_lock_copies_drift 'all green', test_multiline_quoted_shell 'tudo verde em 6 copias ... + os 2 guards', test_bash_path_lock_redir 'All checks passed across 6 hook copies'."
-routing_reason: "Os tres furos da rodada 1 estao fechados e guardados (todas as perturbacoes deles ficam RED) e a sonda adversarial nao achou nenhum bypass no HEAD. O que falta e prova de que o tratamento de chaves esta guardado: se alguem quebrar '{' ou '}' no leitor, nenhum teste fica vermelho e 'sed -n \"/x/{p;w OUT}\"' passaria pelo hook. Mutacao sobrevivente em linha alterada => UNPROVEN, ate entrarem DENY com chaves."
+    run: "tests/test_bash_path_lock_exec.py do HEAD: em d9593e5 -> '48 falha(s) em 6 copias' (rodada 2); em 0512da2 -> 'tudo verde em 6 cópias' (rodada 3). Vizinhos em 0512da2: test_lock_copies_drift 'all green', test_multiline_quoted_shell 'tudo verde em 6 cópias do bash-path-lock + os 2 guards do common', test_bash_path_lock_redir 'All checks passed across 6 hook copies'."
+routing_reason: "Os quatro mutantes de chaves que sobreviveram na rodada 2 agora ficam vermelhos (24, 18, 6 e 6 falhas em 6 copias), o HEAD fica verde em 6 copias com os vizinhos verdes, e o codigo do hook nao mudou desde 9735e51, entao a sonda adversarial da rodada 2 (zero bypass) continua valendo. Nada externamente observavel sem guarda: PROVEN."
