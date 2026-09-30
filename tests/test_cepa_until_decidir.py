@@ -462,6 +462,37 @@ def test_pergunta_sai_quando_o_item_volta_a_andar_e_reserva_some_no_responde():
               "claimed_by" not in itens_de(raiz)["a2"], itens_de(raiz)["a2"])
 
 
+def test_entrada_hostil_nao_corrompe_a_fila_nem_sai_da_pasta():
+    """Nível adversarial: a resposta é texto livre do dono e vai para o YAML
+    da fila; o alvo do `decidir` vira caminho no disco."""
+    hostil = "a: b\n- c # x 'q' \"z\" {{}} [1] ---\n!!python/object:os.system"
+    with tempfile.TemporaryDirectory() as tmp:
+        travado = item("a1", status="blocked")
+        raiz = monta_repo(tmp, [travado])
+        rc, out = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+                          "a1", "--resposta", hostil, "--repo", str(raiz)],
+                         str(raiz))
+        check("resposta com sintaxe de YAML é aceita", rc == 0, out)
+        v = subprocess.run([sys.executable, str(CEPA_PLAN), "validate",
+                            str(plano_de(raiz))], capture_output=True, text=True)
+        check("...a fila continua válida", v.returncode == 0, v.stdout + v.stderr)
+        ev = itens_de(raiz)["a1"]["evidence"]
+        check("...e o texto fica como texto, numa linha",
+              "!!python/object:os.system" in ev and "\n" not in ev, ev)
+        vazio = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+                        "a1", "--resposta", "   ", "--repo", str(raiz)],
+                       str(raiz))
+        check("resposta só de espaços é recusada", vazio[0] == 2, vazio[1])
+        for alvo in ("../../etc/passwd", "semBarra", "fila/../../x"):
+            p_ = subprocess.run([sys.executable, str(CEPA_UNTIL), "decidir",
+                                 alvo, "--repo", str(raiz)],
+                                capture_output=True, text=True,
+                                stdin=subprocess.DEVNULL, timeout=60)
+            check(f"alvo {alvo!r} recusa com 2, sem traceback",
+                  p_.returncode == 2 and "Traceback" not in p_.stderr,
+                  p_.stderr)
+
+
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
     for nome, fn in sorted(globals().items()):
