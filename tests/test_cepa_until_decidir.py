@@ -257,7 +257,7 @@ def test_run_no_terminal_termina_perguntando_e_aplica():
         rc, out = em_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz),
              "--for", "2h", "--sem-verify", "--sem-analise"], str(raiz),
-            entradas=[("[r] respondo agora", "r"),
+            entradas=[("[r] respondo e devolvo", "r"),
                       ("Sua resposta", "vira item do checklist")], env=env)
         check("o run sai 0", rc == 0, out[-1500:])
         check("pergunta o item travado com a pergunta gravada",
@@ -341,7 +341,7 @@ def test_decidir_como_processo_com_e_sem_terminal():
         check("...sem mexer na fila",
               itens_de(raiz)["a1"]["status"] == "blocked")
         rc, out = em_tty(cmd, str(raiz), entradas=[
-            ("[r] respondo agora", "r"), ("Sua resposta", "vira checklist"),
+            ("[r] respondo e devolvo", "r"), ("Sua resposta", "vira checklist"),
             ("[f] já fiz", "f"), ("Sua resposta", "login ok")])
         a1, a2 = itens_de(raiz)["a1"], itens_de(raiz)["a2"]
         check("no terminal, decidir aplica o blocked",
@@ -500,6 +500,21 @@ def test_entrada_hostil_nao_corrompe_a_fila_nem_sai_da_pasta():
                   p_.returncode == 2 and "Traceback" not in p_.stderr
                   and "esperam por você" not in p_.stdout,
                   p_.stdout + p_.stderr)
+
+
+def test_run_ja_aterrissado_nao_pergunta_de_novo():
+    """No run WEGO 2026-09-29-2059 o dono aterrissou às 07:15 e o `decidir`
+    ainda listava a aterrissagem: a ação fica no estado como registro."""
+    m = carrega_modulo()
+    est = {"estado": "aterrissado",
+           "acoes": [{"id": "aterrissar", "frase": "leva 5"}]}
+    tela, perguntas = [], []
+    m.decide(Path("/nao/existe"), "fila", "run1", est, [], {},
+             pergunta=lambda p_: perguntas.append(p_) or "", saida=tela.append)
+    check("run aterrissado não pergunta aterrissar", perguntas == [], perguntas)
+    tela2 = []
+    m.pendencias_em_texto("fila", "run1", est, [], {}, saida=tela2.append)
+    check("...nem lista sem terminal", tela2 == [], tela2)
 
 
 def main():

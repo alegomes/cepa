@@ -1646,6 +1646,15 @@ def linha_de_recomendacao(d):
                                            if d.get("porque") else "")
 
 
+def acao_pendente(est):
+    """A ação `aterrissar` do estado, se ainda falta fazê-la. O `aterrissar`
+    grava `aterrissado` no estado e deixa a ação na lista, como registro."""
+    if (est or {}).get("estado") == "aterrissado":
+        return None
+    return next((x for x in (est or {}).get("acoes") or []
+                 if isinstance(x, dict) and x.get("id") == "aterrissar"), None)
+
+
 def eh_sim(r):
     return str(r or "").strip().lower() in ("s", "sim", "y", "yes")
 
@@ -1670,8 +1679,7 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=input,
     aplicados, para_depois = [], []
     do_dono = [ad for ad in adiados if ad.get("reason") in MOTIVO_DO_DONO]
     sem_dono = [ad for ad in adiados if ad.get("reason") in MOTIVO_SEM_DONO]
-    acao = next((x for x in (est or {}).get("acoes") or []
-                 if isinstance(x, dict) and x.get("id") == "aterrissar"), None)
+    acao = acao_pendente(est)
     total = (1 if acao else 0) + len(do_dono)
     if not total:
         saida("\n── nada espera por você neste run")
@@ -1720,7 +1728,7 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=input,
         if rota is not None:
             opcoes = "[f] já fiz, conto o que vi"
         else:
-            opcoes = "[r] respondo agora"
+            opcoes = "[r] respondo e devolvo para a fila"
         mostrar = bool(texto_pergunta) and bool(ad.get("evidence"))
         while True:
             r = str(pergunta(f"       {opcoes}"
@@ -1765,8 +1773,7 @@ def pendencias_em_texto(fila, run_id, est, adiados, analise, saida=print):
     a mesma lista, sem perguntar."""
     analise = analise or {}
     por_item = analise.get("itens") or {}
-    acao = next((x for x in (est or {}).get("acoes") or []
-                 if isinstance(x, dict) and x.get("id") == "aterrissar"), None)
+    acao = acao_pendente(est)
     do_dono = [ad for ad in adiados if ad.get("reason") in MOTIVO_DO_DONO]
     if not acao and not do_dono:
         return
