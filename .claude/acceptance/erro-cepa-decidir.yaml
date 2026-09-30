@@ -1,0 +1,17 @@
+key: erro-cepa-decidir
+status: incomplete
+base: 4df006d..1345f07
+criteria:
+  - {id: AC1, altitude: cli, surface: "cepa-until decidir <fila>/<run> em pty: linha com byte invalido (b'n\\xcb\\xc3\\xa3o') nao derruba; avisa e pede de novo; resposta seguinte aplicada no plan",
+     test: "test_byte_invalido_no_terminal_nao_derruba_o_decidir", layer: "cli em pty, processo real (em_tty)",
+     evidence: verified, run: "python3 tests/test_cepa_until_decidir.py -> 3 checks ok (sem traceback; avisa 'digite de novo'; a1 pending com 'vira checklist' na evidencia); tudo verde, 73 checks ok, 0 falhas",
+     status: complete}
+  - {id: AC2, altitude: cli, surface: "cepa-until decidir em pty: texto livre no prompt de opcoes avisa 'nao e uma das opcoes', manda digitar r/f e pergunta de novo",
+     test: "test_texto_solto_no_prompt_de_opcoes_nao_some", layer: "funcao decide() chamada direto, pergunta=lambda, sem processo nem pty",
+     evidence: verified, run: "python3 tests/test_cepa_until_decidir.py -> 2 checks ok (aviso aparece; resposta apos o r gravada); mas no nivel de funcao, nao do CLI",
+     status: incomplete,
+     gap: "Altitude abaixo da do criterio. O criterio fala do CLI em terminal real; o unico teste chama m.decide() com callbacks injetados. Falta um teste em em_tty (como o do AC1) que rode `cepa-until decidir fila/<run>`, envie texto solto no prompt '[r] respondo... [q] encerra:', assert que a tela traz 'nao e uma das opcoes' e 'digite r primeiro', depois envie 'r' + resposta e assert que o item no plan.yaml volta a pending com a resposta na evidencia. Sugestao: worker de testes adiciona essa variante pty."}
+  - {id: AC3, altitude: cli, surface: "demais suites tests/test_cepa_until*.py continuam verdes",
+     test: "tests/test_cepa_until*.py (13 arquivos)", layer: "suites existentes",
+     evidence: verified, run: "for f in tests/test_cepa_until*.py; python3 $f -> todos 'tudo verde'/'todos passaram', rc=0 (adversarial, aterrissar, branch_da_noite, cota, decidir, digest, git_quebrado, hook_reinstalar, rede, retomada, supervisor_morto, twg_version, until)",
+     status: complete}

@@ -566,6 +566,31 @@ def test_texto_solto_no_prompt_de_opcoes_nao_some():
           respondidos == [("W-1", "não sei")], respondidos)
 
 
+def test_texto_solto_no_terminal_avisa_e_ainda_grava():
+    """O mesmo caso do teste acima, pelo `cepa-until decidir` num terminal
+    de verdade: o texto solto é recusado com aviso e a resposta dada
+    depois do r chega ao plan.yaml."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOQUEIA_COM_PERGUNTA)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
+        run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        rc, out = em_tty(
+            [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
+             "--repo", str(raiz)], str(raiz), entradas=[
+                ("[r] respondo e devolvo", "eu não faço ideia"),
+                ("digite r primeiro", "r"),
+                ("Sua resposta", "não sei ainda")])
+        check("avisa que o texto solto não é opção",
+              "não é uma das opções" in out and "digite r primeiro" in out,
+              out[-1500:])
+        a1 = itens_de(raiz)["a1"]
+        check("...e a resposta dada depois do r chega ao plano",
+              rc == 0 and a1["status"] == "pending"
+              and "não sei ainda" in a1["evidence"], a1)
+
+
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
     for nome, fn in sorted(globals().items()):
