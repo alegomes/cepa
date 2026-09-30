@@ -1,0 +1,46 @@
+schema_version: 2
+card: until-decidir
+verdict: needs-human
+reviewed_at: 2026-09-30T00:00:00-03:00
+base_commit: 62d9cbf
+head_commit: 84256e9
+issue_type: Feature
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/bin/cepa-plan (finish --pergunta, responde, queue/monta_lote adia)"
+      module: cli
+      external_observable: true
+      substituted_by_double: null        # os testes rodam o cepa-plan como processo, e responde em pty
+    - class: "common/bin/cepa-until (decidir, decide, decisoes_da_analise, pendencias_em_texto, fecha_com_o_dono, pergunta_ao_dono no fim do run)"
+      module: cli
+      external_observable: true
+      # far boundary: fake_claude no lugar do `claude` (correto). O teste unitario de `decide` injeta
+      # responde/aterrissa/pergunta, mas o responde real e o aterrissar real (com `s`) rodam no pty.
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline em 84256e9: python3 tests/test_cepa_until_decidir.py -> tudo verde; python3 tests/test_cepa_until.py -> tudo verde"
+        - "rodadas 1-2: os 7 sobreviventes originais ficaram RED (cepa-until:3176, :3187, :1627, :1726, :1582; cepa-plan:1701, :1754), mais cmd_decidir :1795; e os pontos ja vermelhos seguem RED (cepa-plan:1718, :1748, :1746, :1698, :981; cepa-until:3170; decisoes_da_analise :1576/:1580/:1586/:1588). Producao dessas linhas nao mudou desde e6eb126."
+        - "guarda nova do decidir (cepa-until:1787), guarda inteira desligada (if False and ...) -> RED: FAIL 'alvo fila/../../x recusa com 2, sem traceback' (o estado de fora existe agora, entao o teste deixou de ser vacuo)"
+        - "SOBREVIVENTE tolerado: clausula '.. not in x' removida -> verde. Equivalente na pratica: a regex ja exige comecar por [A-Za-z0-9] e nao aceita '/', entao um nome com '..' no meio (a..b) e um segmento so e nao sai da pasta."
+        - "SOBREVIVENTE tolerado: '/' permitido na regex (fila/a/b) -> verde. Nao ha escape da pasta (a clausula '..' ainda barra fila/a/../../x); no maximo leria uma subpasta de until/, e nenhum teste cobre esse ramo."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "python3 -m coverage --version -> 'No module named coverage': nao instalado, e nao provisionei (decisao de setup do projeto). Os testes exercitam o CLI como subprocesso e em pty, entao um coverage do processo pai nao veria essas linhas sem instrumentar subprocessos. Precisao por linha nao medida (assumed). NAO ha dispensa registrada: a coordenacao retirou a dispensa e so o dono do card pode aceitar este nivel."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "84256e9: test_entrada_hostil_nao_corrompe_a_fila_nem_sai_da_pasta passa (YAML/tag python aceitos como texto, so espacos recusado com 2, alvos '../../etc/passwd', 'semBarra', 'fila/../../x', 'fila/../x', '../fila/x' recusados com 2 e sem imprimir 'esperam por voce'). Manual na copia descartavel com .claude/programs/x.estado.json existente: 'fila/../../x' -> rc=2 'alvo invalido'; 'fila/.x' -> rc=2; 'fila//../../x' -> rc=2. Antes da correcao (83f25ef) 'fila/../../x' saia 0 e lia o arquivo de fora: achado fechado. Resposta '*alias &anc | {x: [1' aceita e a fila continua valida. Nao medido: caracteres de controle/unicode e resposta gigante em --resposta (hook do ambiente recusou a chamada de pty com $'...'); risco baixo, texto so vai para YAML escapado pelo safe_dump."
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Sem sobreviventes relevantes: todas as perturbacoes pedidas ficam RED, a guarda nova do decidir tambem, e o achado adversarial anterior esta fechado. Nao e PROVEN por uma unica pendencia: a cobertura por linha (l2) esta 'assumed' porque nao ha coverage e os testes rodam em subprocesso. Essa decisao e do dono do card; a dispensa da coordenacao foi retirada e nao esta registrada aqui. Em 2026-09-30 a coordenacao relatou que o dono respondeu "1. sim" ao aceite da cobertura por linha; isso chegou por mensagem de agente, nao verificavel por mim, e o esquema do artefato nao tem campo de dispensa: o veredito continua calculado dos niveis (l2 assumed => needs-human). Se o dono aceitou, o aceite e registrado por ele no card/PR, e nao por mim."

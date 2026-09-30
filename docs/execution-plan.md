@@ -270,7 +270,14 @@ one reserved by another session, or the `--max` ceiling. It never skips a stuck
 item to reach the one below, because that is reordering the queue in silence.
 Each item is reserved before it is touched (`cepa-plan start` — the trackerless
 equivalent of the claim `/board-flow:drain` posts on a card) and gets a named
-terminal outcome with evidence (`cepa-plan finish`).
+terminal outcome with evidence (`cepa-plan finish`). An item that ends `blocked`, or
+that opens a `human_pending`, also records the closed question that would unblock it
+(`finish --pergunta`, stored as `owner_question`). The owner answers it with
+`cepa-plan responde <queue> <id> --resposta "..."`: a `blocked` item goes back to
+`pending` and an open route closes, with the answer prepended to the evidence the
+next run reads. `responde` refuses without a terminal, so an unattended `claude -p`
+cannot close a human route on the owner's behalf. `cepa-until` calls it for you when
+it asks its end-of-run questions.
 
 **Stage 4 is built** (2026-08-25): `/maestro:program-plan --from-plan <name>`
 reads the `single-track` queue as its source instead of a prose file. This is

@@ -404,7 +404,12 @@ def test_resumo_do_fim_diz_por_que_cada_item_travou():
         p, _ = roda(raiz, binv, plano, ["--for", "2h"])
         # Desde o passo 2 do until-fim-sem-dono (A4), cada item tem UMA linha
         # em "Itens", e não uma por lista em que cai.
+        # O fim termina, desde 30/09, com as perguntas ao dono ("esperam
+        # por você"), que repetem a pergunta ou a rota de propósito: ali ela é
+        # pergunta, não mais uma lista do mesmo problema. A regra A4 vale da
+        # lista de itens até esse bloco.
         resumo = p.stdout[p.stdout.find("Itens ("):]
+        resumo = resumo.split("── esperam por você")[0]
         check("o resumo dos travados existe", "Itens (2)" in resumo,
               p.stdout[-800:])
         check("o comando no FIM de uma evidence longa chega ao resumo",

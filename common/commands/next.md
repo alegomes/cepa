@@ -199,7 +199,9 @@ missing and that `/common:plan <key> --from-jira` is what places them — `/boar
 
 **Closing human debt.** `reconcile` never touches `human_pending` — closing one
 is the user's, and this command's, alone. A `human_pending` is cleared by
-setting it to `null`, and **only the user clears it** — they are the only one who knows whether they
+`cepa-plan responde <nome> <id> --resposta "<what the user saw>"` (it refuses
+without a terminal, so hand the user the command, or let `cepa-until decidir`
+ask), and **only the user clears it** — they are the only one who knows whether they
 actually ran the route. Ask, one item at a time, naming the route verbatim
 ("did you open /admin/devolucoes and confirm the refusal?"). Never infer it from
 a green test, a card status, or the passage of time: a list that closes itself

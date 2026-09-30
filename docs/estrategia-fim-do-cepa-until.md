@@ -439,3 +439,27 @@ conserto na fila) responde à objeção principal dele, mas as lentes não a vir
   disparado pelo dono.
 - **Passar a revisão 2 pelo painel de advisors no começo da sessão de construção: sim.** Vira
   o passo 0 da sequência no BACKLOG, antes de qualquer código.
+
+# Construído em 2026-09-30: o fim do run pergunta
+
+O dono leu no fim do run WEGO `2026-09-29-2059` "a fila acabou, e 14 ficaram adiados (cada um
+com o motivo, no relatório)" e "Fica com você: WEGO-2336 (o motivo está na linha de cada um)",
+e perguntou o que fazer com aquilo. A aterrissagem aparecia como comando para copiar, e a
+pergunta que travava o WEGO-2336 estava no meio de 600 caracteres de evidência.
+
+O que mudou (branch `session/until-decidir`, `tests/test_cepa_until_decidir.py`):
+
+- **Num terminal, o fim do run pergunta**, uma coisa por vez: `Aterrisso agora?` e, para
+  cada adiado que só o dono destrava (`bloqueado-antes` e `human_pending`), a pergunta
+  fechada com a recomendação. Enter deixa para depois, `q` encerra. `reservado` e
+  `depende-de-adiado` aparecem numa linha, sem pergunta.
+- **A resposta é aplicada na hora** pelo `cepa-plan responde`: `blocked` volta para
+  `pending`, a rota `human_pending` fecha, e a resposta entra na evidência que o próximo run
+  lê. O `responde` recusa sem TTY: o `claude -p` de um run não tem terminal e não fecha a
+  rota no lugar do dono.
+- **De onde vem a pergunta:** o agente grava com `cepa-plan finish --pergunta` (campo
+  `owner_question`), por instrução do `/common:drain-plan`. Para itens antigos, o
+  `/common:until-review` grava o bloco `json cepa-decisoes`. O bloco só dá a redação (R2):
+  as ações seguem de lista fechada, aterrissar e `responde`.
+- **Sem terminal** o fim lista as pendências com a pergunta e o comando
+  `cepa-until decidir <fila>/<run>`, que refaz as perguntas depois.

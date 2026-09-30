@@ -1,0 +1,26 @@
+key: until-decidir
+status: complete
+base: 62d9cbf..d0ac2a3
+criteria:
+  - {id: AC1, altitude: cli, surface: "fim do run em TTY: 'Aterrisso agora?' e aterrissa com s",
+     test: "test_run_no_terminal_pergunta_aterrissar_e_aterrissa_com_s", layer: "cli em pty, run real",
+     evidence: verified, run: "python3 tests/test_cepa_until_decidir.py -> tudo verde; pytest 11 passed", status: complete}
+  - {id: AC2, altitude: cli, surface: "pergunta registrada + recomendacao; resposta aplicada na fila; rota humana fechada",
+     test: "test_decide_pergunta_e_aplica_cada_resposta; test_responde_no_terminal_destrava_blocked_e_fecha_rota; test_decidir_como_processo_com_e_sem_terminal",
+     layer: "cli em pty", evidence: verified, run: "idem, 11 passed", status: complete}
+  - {id: AC3, altitude: cli, surface: "reservado e depende-de-adiado nao viram pergunta",
+     test: "test_reservado_nao_vira_pergunta; test_decide_pergunta_e_aplica_cada_resposta (W-4)", layer: unit do decide,
+     evidence: verified, run: "idem, 11 passed", status: complete}
+  - {id: AC4, altitude: cli, surface: "sem TTY (claude -p) nao fecha rota humana",
+     test: "test_responde_recusa_sem_terminal; test_decidir_como_processo_com_e_sem_terminal (sem TTY nao mexe na fila)", layer: cli,
+     evidence: verified, run: "idem, 11 passed", status: complete}
+  - {id: AC5, altitude: cli, surface: "run sem TTY lista pendencias + comando; 'cepa-until decidir <fila>/<run>' refaz",
+     test: "test_run_sem_terminal_lista_as_pendencias_e_o_comando; test_decidir_como_processo_com_e_sem_terminal", layer: "cli processo, com e sem pty",
+     evidence: verified, run: "idem, 11 passed", status: complete}
+  - {id: AC6, altitude: cli, surface: "finish --pergunta; bloco cepa-decisoes; instrucoes de until-review e drain-plan",
+     test: "test_finish_grava_a_pergunta_e_o_queue_a_devolve; test_analise_sem_bloco_ou_quebrada_nao_derruba; test_instrucoes_dos_agentes_pedem_a_pergunta",
+     layer: "cli + parser + asserção de texto",
+     evidence: verified, run: "idem, 11 passed",
+     status: complete,
+     gap: "Ressalva: a geracao do bloco pelo modelo em /common:until-review so e checada por texto da instrucao, nao por execucao do modelo."}
+suites_existentes: "test_cepa_until*.py (todas, incl. adversarial, aterrissar, branch_da_noite, cota, digest, git_quebrado, rede, retomada, supervisor_morto, twg_version), test_common_until_review.py e test_until_nao_herda_handoff.py: verdes, rodadas por mim."

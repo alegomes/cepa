@@ -106,6 +106,22 @@ the window rediscovering it. On 2026-09-23 that was 20 rounds and US$ 14.30; on 
 7 in a row in 11 minutes. Any other outcome (`done`, `dropped`, a human route) resets the
 count; an attempt with no progress belongs to the circuit breaker and leaves it alone.
 
+## When it ends: the questions
+
+The end-of-run summary only counts. Right after it, when the run is attached to a terminal,
+`cepa-until` asks the owner, one at a time, about everything that waits on them: whether to
+land the night branch (`aterrissar`), and every deferred item that only the owner unblocks
+(`blocked` from an outside condition, open `human_pending` route). Each item shows the closed
+question the agent recorded with `cepa-plan finish --pergunta` (or the one the
+`/common:until-review` analysis wrote in its `cepa-decisoes` block), with the recommendation.
+An answer is applied on the spot by `cepa-plan responde`: a `blocked` item goes back to
+`pending` and an open route closes, with the owner's answer in the item's evidence, where the
+next run reads it. Enter leaves an item for later; `q` stops asking.
+
+`responde` refuses without a terminal: a `claude -p` subprocess has no TTY, so an agent cannot
+close a human route in the owner's place. Without a terminal (`nohup`, cron) the run prints
+the same list and the command to come back: `cepa-until decidir <fila>/<run>`.
+
 ## Before you leave it running
 
 - **The tree must be clean.** It refuses a dirty working tree, because otherwise nothing

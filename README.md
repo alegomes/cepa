@@ -105,7 +105,10 @@ back with the gap named. `/board-flow:prove-drain` does the whole Review column.
 **6. Go to sleep.** `cepa-until my-queue --until 07:00` runs steps 4 and 5 for every item
 in the queue, one fresh Claude process per item, until the clock runs out.
 
-**7. Come back.** `/board-flow:decide` reads what is sitting in Review, drops what is
+**7. Come back.** When the window ends, `cepa-until` asks you in the terminal, one thing at
+a time: land the night branch? and, for every item that only you can unblock, the closed
+question that holds it, with a recommendation. Your answer is applied on the spot. Missed
+it? `cepa-until decidir <queue>/<run>` asks again. `/board-flow:decide` reads what is sitting in Review, drops what is
 nobody's decision (Docker was down, a tool was missing), groups the rest by reason and asks
 **one yes/no question per group**, with a recommendation. You answer "1 yes, 2 no" and it
 applies.
@@ -264,6 +267,9 @@ next.
 The rest is about not wasting the night: it cuts between items and never in the middle of
 one, stops after 3 failures in a row, and when the account's 5-hour usage cap hits it sleeps
 until the reset and resumes the same item. The gates are what make this safe to leave alone.
+
+It does not end with a count. It ends with questions: land the night branch, and one closed
+question per item that only you can unblock, answered right there in the terminal.
 
 Two things to know before you use it: it runs with `--dangerously-skip-permissions` by
 default (turn that off with `--com-permissoes`), and it needs a queue on disk.

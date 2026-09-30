@@ -137,6 +137,44 @@ com o que o dono precisa fazer em cada um. Não invente ação fora da lista: o
 que você achar e nenhum comando executa (abrir card para um teste instável,
 corrigir o harness) entra em "Fica com você".
 
+### 4. Bloco de decisões para o terminal
+
+Depois do relatório, e só no fim do arquivo, grave um bloco cercado
+```` ```json cepa-decisoes ```` que o `cepa-until` lê para perguntar ao dono,
+uma por vez, no terminal (o `cepa-until decidir`). O bloco NÃO decide o que é
+executado: as ações vêm de uma lista fechada do `cepa-until` (aterrissar, e o
+`cepa-plan responde`, que devolve um item `blocked` para a fila ou fecha a
+rota humana com a resposta do dono). Ele só dá a redação da pergunta e a sua
+recomendação.
+
+Cubra **todos os itens adiados da fila**, não só os deste run: rode
+`python3 common/bin/cepa-plan queue <fila> --max 1 --json --repo <raiz>` e
+pegue a lista `deferred`. Entram os de motivo `bloqueado-antes` e
+`human_pending`; `reservado` e `depende-de-adiado` não são do dono e ficam de
+fora. Item que já tem `question` (a pergunta que o agente gravou com
+`finish --pergunta`) não precisa de linha, a menos que você recomende outra
+coisa.
+
+```json cepa-decisoes
+{"aterrissar": {"recomendo": "sim", "porque": "uma linha"},
+ "itens": [
+   {"id": "WEGO-2336",
+    "pergunta": "Fecho o card como 'medir depois do go-live'? (a alternativa é virar item do checklist do primeiro deploy)",
+    "recomendo": "não",
+    "porque": "o checklist preserva a medição sem deixar o card travando a fila"}
+ ]}
+```
+
+Regras do bloco:
+
+- `pergunta` é fechada, respondível sem abrir o card, na voz de quem pergunta
+  ao dono, e cita as opções quando houver mais de uma.
+- `recomendo` é `sim` ou `não`; `porque` cabe numa linha.
+- Rota `human_pending` que é tarefa (validar à mão, rodar um login real):
+  pergunte se ela já foi feita e o que se viu, e diga o que o dono precisa
+  ter à mão.
+- JSON válido. Se não houver nada, grave `{"itens": []}`.
+
 ## Constraints
 
 - Nunca execute uma providência, mesmo reversível. Este comando responde "o
