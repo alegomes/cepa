@@ -58,6 +58,21 @@ QUEIXA = re.compile(
     re.IGNORECASE,
 )
 
+# Aviso do harness que chega pelo mesmo canal do prompt: o fim de um subagente ou
+# de um comando em segundo plano entra no UserPromptSubmit como
+# `<task-notification>...</task-notification>`, com o texto do AGENTE dentro
+# (um veredito com "não funciona", um resumo que cita o gate). Não é fala do
+# dono, e mandar registrar a queixa "com o texto do dono verbatim" ali seria
+# pedir para inventar uma (desvios.md, 2026-08-30). Só o que sobra fora desses
+# blocos conta como prompt.
+AVISO = re.compile(r"<task-notification>.*?(?:</task-notification>|\Z)", re.S)
+
+
+def fala_do_dono(prompt):
+    """O prompt sem os avisos do harness — o que o dono de fato escreveu."""
+    return AVISO.sub("", prompt).strip()
+
+
 LINHA = (
     "[feedback] Este turno tem forma de queixa sobre o harness. Antes de seguir "
     "com o trabalho pedido, registre-a pelo skill `feedback-capture` "
@@ -89,7 +104,7 @@ def main():
         if os.environ.get("CEPA_FEEDBACK_NUDGE", "on") == "off":
             sys.exit(0)
 
-        prompt = (payload.get("prompt") or "").strip()
+        prompt = fala_do_dono(payload.get("prompt") or "")
         if not prompt or len(prompt) > 4000:
             sys.exit(0)
         if not (QUEIXA.search(prompt) and ALVO.search(prompt)):

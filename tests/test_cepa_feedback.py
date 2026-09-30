@@ -344,6 +344,32 @@ def test_hook_kill_switch_e_falha_aberta():
         check("hook: payload inválido não injeta", p.stdout.strip() == "", p.stdout)
 
 
+# Formato conferido em .claude/session-log.md (o prompt que o UserPromptSubmit
+# recebeu em 2026-09): o aviso de fim de tarefa vem sozinho no prompt.
+AVISO = ("<task-notification>\n<task-id>a1b2c3d4</task-id>\n"
+         "<status>completed</status>\n<summary>Agent \"completion-auditor\" "
+         "completed</summary>\n<result>Veredito COMPLETE. O gate não funciona "
+         "fora do git e o hook está errado no caso X.</result>\n"
+         "</task-notification>")
+
+
+def test_hook_ignora_aviso_de_subagente():
+    with Caixa() as c:
+        p = c.hook(AVISO, session_id="n1")
+        check("hook: aviso de subagente sozinho é silêncio",
+              p.stdout.strip() == "", p.stdout)
+        p = c.hook(AVISO, session_id="n1")
+        p = c.hook("esse gate me irrita, barrou um commit legítimo", session_id="n1")
+        check("hook: aviso não gasta o aviso único da sessão",
+              "feedback-capture" in p.stdout, p.stdout)
+        p = c.hook(AVISO + "\nesse gate me irrita demais", session_id="n2")
+        check("hook: queixa do dono junto do aviso ainda conta",
+              "feedback-capture" in p.stdout, p.stdout)
+        p = c.hook(AVISO + "\nrode o próximo item", session_id="n3")
+        check("hook: fala neutra do dono junto do aviso é silêncio",
+              p.stdout.strip() == "", p.stdout)
+
+
 def main():
     print("test_cepa_feedback")
     for fn in (test_add_grava_verbatim_com_contexto, test_add_recusa_vazio_e_curto,
@@ -358,7 +384,8 @@ def main():
                test_list_sem_nada_registrado,
                test_hook_injeta_em_queixa_sobre_o_harness,
                test_hook_calado_sem_uma_das_duas_condicoes,
-               test_hook_uma_vez_por_sessao, test_hook_kill_switch_e_falha_aberta):
+               test_hook_uma_vez_por_sessao, test_hook_kill_switch_e_falha_aberta,
+               test_hook_ignora_aviso_de_subagente):
         fn()
     if failures:
         print(f"\n{len(failures)} falha(s): {', '.join(failures)}")

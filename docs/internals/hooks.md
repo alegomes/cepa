@@ -353,7 +353,11 @@ telling the agent to record it (`common:feedback-capture` skill →
 
 ```python
 1. CEPA_FEEDBACK_NUDGE=off → silent (kill switch).
-2. Require BOTH regexes on the prompt:
+   Strip every <task-notification>...</task-notification> block first: a
+   subagent/background-task notice arrives as the prompt, carrying the
+   AGENT's text, not the owner's. Nothing left → silent (and the
+   once-per-session marker is not spent).
+2. Require BOTH regexes on the remaining prompt:
    - QUEIXA: complaint shape ("me irrita", "para de", "não devia", ...)
    - ALVO:   a harness target (cepa|hook|gate|comando|skill|agente|
              worktree|plugin|/plugin:command|...)
