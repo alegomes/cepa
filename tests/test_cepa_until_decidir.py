@@ -268,6 +268,106 @@ def test_run_no_terminal_termina_perguntando_e_aplica():
               and "vira item do checklist" in a1["evidence"], a1)
 
 
+def env_do_run(tmp, raiz, binv):
+    env = dict(os.environ)
+    env["PATH"] = f"{binv}:{env['PATH']}"
+    env["FAKE_PLANO"] = str(plano_de(raiz))
+    env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
+    env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
+    return env
+
+
+def test_run_no_terminal_pergunta_aterrissar_e_aterrissa_com_s():
+    """AC1: o `s` no prompt do fim do run aterrissa de verdade."""
+    from test_cepa_until_aterrissar import com_origin, estado
+    from test_cepa_until_branch_da_noite import TRABALHA, VERIFY, git
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        com_origin(raiz)
+        binv = fake_claude(tmp, TRABALHA)
+        rc, out = em_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz),
+             "--for", "2h", "--verify", VERIFY, "--sem-analise"], str(raiz),
+            entradas=[("Aterrisso agora?", "s")],
+            env=env_do_run(tmp, raiz, binv), timeout=240)
+        check("o run sai 0", rc == 0, out[-1500:])
+        check("o fim pergunta se aterrissa", "Aterrisso agora?" in out,
+              out[-1500:])
+        log = git(raiz, "log", "--format=%s", "HEAD").splitlines()
+        check("com s, o commit do item chega à main", "a1" in log, str(log))
+        check("...e o estado do run vira aterrissado",
+              estado(raiz).get("estado") == "aterrissado", str(estado(raiz)))
+
+
+def test_reservado_nao_vira_pergunta():
+    """AC3: outra sessão viva no item não é assunto do dono."""
+    m = carrega_modulo()
+    tela, perguntas = [], []
+    m.decide(Path("/nao/existe"), "fila", "run1", {},
+             [{"id": "W-9", "title": "em outra sessão", "reason": "reservado"},
+              {"id": "W-8", "title": "cascata",
+               "reason": "depende-de-adiado"}],
+             {}, pergunta=lambda p_: perguntas.append(p_) or "",
+             saida=tela.append)
+    texto = "\n".join(tela)
+    check("nenhuma pergunta é feita", perguntas == [], perguntas)
+    check("...e o fecho diz que nada espera por você",
+          "nada espera por você" in texto, texto)
+
+
+def test_decidir_como_processo_com_e_sem_terminal():
+    """AC5: `cepa-until decidir <fila>/<run>` depois do run, e AC2 na ponta:
+    a rota humana fecha respondendo dentro do decide."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        corpo = ("ident = primeiro_pendente()\n"
+                 "if ident == 'a1':\n"
+                 "    marca(ident, status='blocked', evidence='sem produção',\n"
+                 "          owner_question='Fecho o card?')\n"
+                 "elif ident == 'a2':\n"
+                 "    marca(ident, status='pending', evidence='feito',\n"
+                 "          human_pending='valide o login real')\n")
+        binv = fake_claude(tmp, corpo)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
+        run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        cmd = [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
+               "--repo", str(raiz)]
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=60)
+        check("sem terminal, decidir sai 0 e lista", p.returncode == 0
+              and "Fecho o card?" in p.stdout
+              and "valide o login real" in p.stdout, p.stdout + p.stderr)
+        check("...sem mexer na fila",
+              itens_de(raiz)["a1"]["status"] == "blocked")
+        rc, out = em_tty(cmd, str(raiz), entradas=[
+            ("[r] respondo agora", "r"), ("Sua resposta", "vira checklist"),
+            ("[f] já fiz", "f"), ("Sua resposta", "login ok")])
+        a1, a2 = itens_de(raiz)["a1"], itens_de(raiz)["a2"]
+        check("no terminal, decidir aplica o blocked",
+              rc == 0 and a1["status"] == "pending"
+              and "vira checklist" in a1["evidence"], out[-1200:])
+        check("...e fecha a rota humana com a resposta",
+              a2.get("human_pending") is None
+              and "login ok" in a2["evidence"], a2)
+
+
+def test_instrucoes_dos_agentes_pedem_a_pergunta():
+    """AC6: sem estas linhas, o agente volta a travar item sem pergunta e a
+    análise volta a não gravar o bloco que o terminal lê."""
+    comandos = CEPA_UNTIL.parent.parent / "commands"
+    review = (comandos / "until-review.md").read_text(encoding="utf-8")
+    drain = (comandos / "drain-plan.md").read_text(encoding="utf-8")
+    check("until-review manda gravar o bloco cepa-decisoes",
+          "```json cepa-decisoes" in review, "")
+    check("...cobrindo todos os adiados da fila, pelo queue",
+          "deferred" in review and "cepa-plan queue" in review, "")
+    check("...e diz que as ações vêm da lista fechada",
+          "lista fechada" in review, "")
+    check("drain-plan manda gravar --pergunta ao travar",
+          "--pergunta" in drain, "")
+
+
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
     for nome, fn in sorted(globals().items()):
