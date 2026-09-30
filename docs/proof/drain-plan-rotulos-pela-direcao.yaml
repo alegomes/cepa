@@ -1,0 +1,41 @@
+schema_version: 2
+card: drain-plan-rotulos-pela-direcao
+verdict: proven
+reviewed_at: 2026-09-29T22:30:00-03:00
+base_commit: 0f7d233^
+head_commit: 2875057
+issue_type: Task
+scope:
+  changed_classes:
+    - class: "common/commands/drain-plan.md (prompt-command markdown, not Quarkus)"
+      module: common
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN baseline at 2875057: python3 tests/test_common_drain_plan.py -> all green"
+        - "hunk 1 (intro 'Por que', bullets antes/ao fechar) reverted -> RED: 'as Instructions apresentam as duas pontas pela direcao' (antes do commit 2875057 sobrevivia)"
+        - "hunk 2 (passo 0 heading + paragrafo da direcao) reverted, em serie -> RED: 'o titulo do passo 0...', 'nao se chama mais so Reconciliar'"
+        - "hunk 3 (tela da largada, bloco Quadro) reverted, em serie -> RED: 'a tela da largada nomeia as duas pontas pela direcao'"
+        - "hunk 4 (passo 3.e rotulo) reverted -> RED: 'a transicao do card no passo 3 leva o rotulo de quem grava no quadro'"
+        - "hunk 5 (passo 5 relatorio Quadro) reverted -> RED: 'o relatorio separa as duas pontas pela direcao'"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; os 5 trechos alterados foram todos revertidos um a um e cada reversao deixou o teste vermelho (python3 tests/test_common_drain_plan.py)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff altera so um markdown de comando e seu teste de prosa; nao le nada vindo de fora e nao toca api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base 0f7d233^ drain-plan.md + teste de 2875057 -> 6 FAIL (titulo passo 0, 'Reconciliar', tela da largada, passo 3.e, Instructions, relatorio); HEAD 2875057 -> all green"
+routing_reason: "Os 5 trechos alterados do drain-plan.md foram revertidos um a um em worktree descartavel e cada reversao deixa o teste vermelho; o teste tambem fica vermelho com o drain-plan.md do base. A lacuna do trecho 1 foi fechada pelo commit 2875057. PROVEN."
