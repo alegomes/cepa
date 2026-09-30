@@ -1,0 +1,37 @@
+schema_version: 2
+card: feedback-nudge-fora-do-git
+verdict: proven
+reviewed_at: 2026-09-29T19:30:00-03:00
+base_commit: 515cbe9
+head_commit: c1deab4
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: ".gitignore (linha .claude/feedback-nudge)", module: repo-root, external_observable: true, substituted_by_double: null }
+    - { class: ".claude/feedback-nudge (git rm --cached)", module: repo-root, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "verde em HEAD: python3 tests/test_feedback_nudge_fora_do_git.py -> tudo verde, exit 0"
+        - "P1 (.gitignore do base, sem a linha): 2 falhas (git status limpo depois do hook; o .gitignore do repo ignora o marcador), exit 1"
+        - "P2 (arquivo de volta ao indice, .gitignore do HEAD): 1 falha (marcador fora do indice do repo), exit 1"
+        - "P1+P2 = estado do base: 3 falhas, exit 1; restaurado -> verde de novo"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "as duas metades da mudanca (linha do .gitignore, remocao do indice) sao cada uma cobradas por um teste distinto, provado pelas perturbacoes P1 e P2"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so muda uma linha de .gitignore, remove um arquivo de estado do indice e adiciona um teste; nao le nada vindo de fora"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "estado do base (515cbe9: .gitignore sem a linha + arquivo no indice) com o teste do HEAD: 3 falhas, exit 1"
+routing_reason: "As duas metades do conserto foram quebradas uma de cada vez numa worktree descartavel e o teste ficou vermelho em cada quebra; no estado do base o teste e vermelho; o hook real roda no teste (sem dublê)."

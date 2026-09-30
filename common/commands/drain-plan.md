@@ -73,10 +73,10 @@ por fora, nenhuma dessas recusas acontece.
 nunca tira a ordem do Jira — é exatamente o que o `/board-flow:drain` faz e o
 que o plano existe para substituir. Mas ele deixou de ignorar o quadro:
 
-- **antes** de montar o lote, reconcilia (passo 0) — sem isso o lote executa um
-  item que alguém já fechou em outro lugar;
-- **ao fechar** um item cujo `id` é chave de card, transiciona o card (passo
-  3.d). Sem isso, cada lote drenado PRODUZ a divergência que a reconciliação
+- **antes** de montar o lote, **Trazer status do Jira (grava no plano)** (passo 0): lê o Jira e escreve na
+  fila — sem isso o lote executa um item que alguém já fechou em outro lugar;
+- **ao fechar** um item cujo `id` é chave de card, **Atualizar o Jira (grava no quadro)** (passo
+  3.e): lê a fila e transiciona o card. Sem isso, cada lote drenado PRODUZ a divergência que a reconciliação
   seguinte teria que consertar: o comando geraria a própria dívida.
 
 Quem fala com o Jira é sempre o `atlassian-expert` — este comando não chama
@@ -86,7 +86,12 @@ acontece, e a fila é a única verdade.
 
 ## Workflow
 
-### 0. Reconciliar com o quadro (só quando há quadro)
+### 0. Trazer status do Jira (grava no plano) — só quando há quadro
+
+O nome diz a direção: este passo LÊ o Jira e ESCREVE no `plan.yaml`. Não
+toca o quadro. (O contrário, escrever no quadro, é o "Atualizar o Jira (grava no quadro)" do
+passo 3.e.) "Reconciliar" e "sync" eram os nomes antigos e não diziam qual
+dos dois lados mudava; o dono precisou perguntar (desvios.md, 2026-08-29).
 
 Pule este passo inteiro se não existir `board-flow.yaml` (nem
 `.claude/board-flow.lifecycle.yaml`), ou com `--offline`. Sem quadro não há o
@@ -184,6 +189,10 @@ Adiados (não rodam agora, não travam o lote):
 
 Depois deles o lote para: <stop.reason> — <stop.detail>
 <avisos, se houver>
+
+Quadro (só quando há; sem quadro: "sem quadro, status da fila auto-declarado"):
+  Trazer status do Jira (grava no plano): <o que o passo 0 mudou na fila, ou "nada mudou">
+  Atualizar o Jira (grava no quadro): ao fechar cada item que é card, ele vai para <in_review>
 
 Rodo? Cada item roda o flow inteiro da topologia + os gates de aceite e prova.
 
@@ -333,7 +342,7 @@ Para cada item do lote, na ordem:
      ela sobrevive à sessão. **Nunca feche uma rota**: só quem rodou sabe se
      ela passou, e o comando recusa.
 
-     **Se o `id` é chave de card e o repo tem quadro** (e não veio
+     **Atualizar o Jira (grava no quadro).** Se o `id` é chave de card e o repo tem quadro (e não veio
      `--offline`), transicione o card logo depois, delegando ao
      `atlassian-expert` — o único que fala com o Jira — para
      `defaults.status_map.in_review` com o Implementation Summary, exatamente
@@ -388,9 +397,11 @@ Um relatório só, no formato `plain-report`, e em pt-BR:
   encontrou ou abriu, verbatim — inclusive as dos itens adiados por causa
   delas. Nenhuma? Diga "nada a validar à mão" — silêncio aqui é a ambiguidade
   que o campo existe para matar.
-- **Quadro:** o que a reconciliação do passo 0 mudou, os cards do quadro sem
-  posição na fila, e os cards transicionados por este run. Sem quadro, uma
-  linha dizendo que o status da fila é auto-declarado.
+- **Quadro:** em duas linhas, uma por direção. **Trazer status do Jira (grava no plano)**: o que o
+  passo 0 mudou na fila, e os cards do quadro sem posição nela. **Atualizar o Jira (grava no quadro)**:
+  os cards transicionados por este run, e os que ficaram pendentes de
+  transição. Sem quadro, uma linha dizendo que o status da fila é
+  auto-declarado.
 - **Onde o lote parou e o que sobrou:** o `stop` do próximo `queue` e quantos
   pendentes ficaram.
 - **E agora:** `/common:next` para o próximo passo, ou este comando de novo se

@@ -541,6 +541,67 @@ def test_registro_do_run_anterior_nao_e_sujeira():
               p3.stderr[:400])
 
 
+def test_bak_da_reescrita_da_fila_nao_e_sujeira():
+    """O `cepa-plan write` copia a fila anterior para `plan.yaml.bak` antes de
+    reescrever (é onde ficam os comentários escritos à mão). O arquivo nasce
+    não rastreado, e antes do filtro toda reescrita da fila barrava o run
+    seguinte até alguém apagar o `.bak` à mão (visto em 2026-09-29, fila
+    `cepa`)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        itens = Path(tmp) / "itens.json"
+        itens.write_text(json.dumps([
+            {"id": "a1", "title": "item a1", "why": "porque",
+             "human_pending": None},
+            {"id": "a2", "title": "item a2", "why": "entrou depois",
+             "human_pending": None}]),
+            encoding="utf-8")
+        w = subprocess.run([sys.executable, str(REPO / "common" / "bin" /
+                                                "cepa-plan"),
+                            "write", "fila", "--items", str(itens),
+                            "--repo", str(raiz)],
+                           capture_output=True, text=True)
+        check("a reescrita da fila grava", w.returncode == 0, w.stderr[:300])
+        # o dono commita a fila nova; o `.bak` não entra no commit
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", "fila reescrita", "--", str(plano)],
+                       cwd=raiz, check=True)
+        st = subprocess.run(["git", "status", "--porcelain"], cwd=raiz,
+                            capture_output=True, text=True).stdout
+        check("...e deixa o .bak não rastreado na árvore",
+              "?? .claude/programs/fila/plan.yaml.bak" in st, st)
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+        check("o run larga mesmo com o .bak da reescrita",
+              "modificado(s)" not in p.stderr and len(chamadas) >= 1,
+              f"saiu {p.returncode}, disparou {len(chamadas)}x: "
+              f"{p.stderr[:300]}")
+
+        # o filtro é só para o `.bak` não rastreado: um `.bak` que alguém
+        # commitou e depois mudou é mudança de verdade
+        (raiz / ".claude" / "programs" / "fila" / "plan.yaml.bak").unlink()
+        subprocess.run(["git", "checkout", "-q", "--", str(plano)], cwd=raiz,
+                       check=True)
+        (raiz / "lixo.bak").write_text("pendura", encoding="utf-8")
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p2, chamadas2 = roda(raiz, binv, plano, ["--for", "2h"])
+        check("um .bak fora da fila ainda é sujeira",
+              p2.returncode == 2 and not chamadas2
+              and "lixo.bak" in p2.stderr, f"saiu {p2.returncode}")
+
+        (raiz / "lixo.bak").unlink()
+        bak = raiz / ".claude" / "programs" / "fila" / "plan.yaml.bak"
+        bak.write_text("commitado\n", encoding="utf-8")
+        _commita(raiz, "alguém commitou o .bak")
+        bak.write_text("mudou depois\n", encoding="utf-8")
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        p3, chamadas3 = roda(raiz, binv, plano, ["--for", "2h"])
+        check("um .bak da fila commitado e depois mudado ainda é sujeira",
+              p3.returncode == 2 and not chamadas3
+              and "plan.yaml.bak" in p3.stderr, f"saiu {p3.returncode}")
+
+
 def _commita(raiz, msg):
     subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",

@@ -1,0 +1,39 @@
+schema_version: 2
+card: feedback-nudge-ignora-notificacao
+verdict: proven
+reviewed_at: 2026-09-29T21:00:00-03:00
+base_commit: cc1ccf2
+head_commit: 4ac3079
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/feedback-nudge.py (regex AVISO + fala_do_dono + chamada no main)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "verde em HEAD 4ac3079: python3 tests/test_cepa_feedback.py -> 'tudo verde' (inclui os 7 checks de test_hook_ignora_aviso_de_subagente); python3 tests/test_feedback_nudge_fora_do_git.py -> 'tudo verde'"
+        - "P1 (regex AVISO nunca casa, <task-notificationXX>): 6 falhas -> RED"
+        - "P2 (main volta a usar so .strip(), sem fala_do_dono): 6 falhas -> RED"
+        - "P3 (re.S removido, bloco multilinha nao casa): 6 falhas -> RED"
+        - "P4 (ramo \\Z removido, so </task-notification>): 1 falha ('aviso sem fechamento e silencio') -> RED (era sobrevivente na rodada 1)"
+        - "P5 extra (quantificador guloso .* no lugar de .*?): 2 falhas (queixa do dono junto do aviso; aviso longo nao esconde a queixa) -> RED"
+        - "restaurado ao HEAD: verde de novo; worktree /tmp/proof-fnin2 removida (git worktree list so mostra a principal e a da branch)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; todo ramo alterado (regex, fala_do_dono, chamada no main, ramo \\Z) foi quebrado por perturbacao e derrubou pelo menos um teste (P1 a P5)"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "hook do base (cc1ccf2) com o teste do HEAD: python3 tests/test_cepa_feedback.py -> 6 falhas (aviso sozinho; aviso nao gasta o aviso unico; fala neutra junto do aviso; aviso sem fechamento; dois avisos; aviso longo com queixa curta); hook do HEAD -> tudo verde"
+routing_reason: "Defeito provado: 6 falhas no base, verde no HEAD. As quatro perturbacoes pedidas (P1 a P4) e uma extra (P5, quantificador guloso) ficam vermelhas; o P4 que sobrevivia na rodada 1 agora e morto pelo caso do aviso sem fechamento. L4: os tres casos novos (aviso truncado, dois avisos, aviso acima de 4000 caracteres) sao entrada adversarial real no prompt e passam. Observacao nao bloqueante: aviso sem fechamento engole uma queixa do dono escrita DEPOIS dele (o \\Z consome ate o fim); e o lado seguro (deixa de lembrar de gravar, nunca inventa queixa) e nenhum teste fixa isso."

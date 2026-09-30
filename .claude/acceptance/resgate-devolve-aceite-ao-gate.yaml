@@ -1,0 +1,30 @@
+key: resgate-devolve-aceite-ao-gate
+status: complete
+criteria:
+  - id: AC1
+    text: "Apos rescue + remocao da worktree, acceptance-gate.find_artifact(KEY) encontra a auditoria (rescue devolve acceptance/*.yaml ao .claude/acceptance/ do clone principal, sem sobrescrever)"
+    altitude: persistence
+    surface: "_wtlib.rescue_artifacts + git worktree remove -> acceptance-gate.find_artifact (modulo real carregado do hook)"
+    test: tests/test_worktree_artifact_rescue.py::test_acceptance_goes_back_where_the_gate_looks
+    layer: integration (repo git real, worktree real, gate real)
+    evidence: verified
+    run: "python3 tests/test_worktree_artifact_rescue.py -> ok 'o acceptance-gate encontra o aceite depois da remoção'; 'all green'"
+    verdict: complete
+  - id: AC2
+    text: "Nao sobrescreve arquivo existente no clone"
+    altitude: persistence
+    surface: "_wtlib.restore_acceptance"
+    test: tests/test_worktree_artifact_rescue.py::test_acceptance_restore_never_clobbers_the_clone
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_worktree_artifact_rescue.py -> all green"
+    verdict: complete
+  - id: AC3
+    text: "Destino e o clone principal, nao a base"
+    altitude: persistence
+    surface: "_wtlib.restore_acceptance target"
+    test: tests/test_worktree_artifact_rescue.py::test_acceptance_lands_in_the_main_clone_not_the_base
+    layer: integration
+    evidence: verified
+    run: "python3 tests/test_worktree_artifact_rescue.py -> all green; tests/test_acceptance_gate.py -> all passed"
+    verdict: complete

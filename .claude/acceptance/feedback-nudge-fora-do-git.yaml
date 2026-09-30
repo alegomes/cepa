@@ -1,0 +1,53 @@
+key: feedback-nudge-fora-do-git
+status: complete
+diff: 515cbe9..c1deab4
+audited_at: "2026-09-29"
+criteria:
+  - id: AC1
+    text: ".claude/feedback-nudge não está mais no índice do git do repo."
+    altitude: persistence
+    surface: índice do git (git ls-files)
+    test: tests/test_feedback_nudge_fora_do_git.py::test_repo_nao_versiona_o_marcador
+    layer: script de regressão contra o repo real
+    evidence: verified
+    run: >
+      `python3 tests/test_feedback_nudge_fora_do_git.py` -> "ok marcador fora
+      do índice do repo"; "✓ tudo verde" (5 checagens).
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "O .gitignore do repo ignora o arquivo."
+    altitude: persistence
+    surface: .gitignore (git check-ignore --no-index)
+    test: tests/test_feedback_nudge_fora_do_git.py::test_repo_nao_versiona_o_marcador
+    layer: script de regressão contra o repo real
+    evidence: verified
+    run: >
+      mesmo comando -> "ok o .gitignore do repo ignora o marcador";
+      `git check-ignore -v` aponta .gitignore:28.
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Depois do hook real gravar o marcador, git status fica limpo."
+    altitude: cli
+    surface: git status --porcelain num repo temporário com o .gitignore real, após rodar common/hooks/feedback-nudge.py de verdade
+    test: tests/test_feedback_nudge_fora_do_git.py::test_hook_grava_e_status_fica_limpo
+    layer: e2e (hook real como subprocesso + git real)
+    evidence: verified
+    run: >
+      mesmo comando -> "o hook disparou o aviso", "o hook gravou o marcador",
+      "git status limpo depois do hook" ok.
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "O arquivo local continua existindo (git rm --cached, não rm)."
+    altitude: persistence
+    surface: arquivo no disco da worktree
+    test: "verificação direta: ls -la .claude/feedback-nudge (o teste não afirma isso; é estado local, não propriedade do repo)"
+    layer: comando
+    evidence: verified
+    run: >
+      `ls -la .claude/feedback-nudge` -> arquivo de 36 bytes presente;
+      `git diff --stat` mostra a remoção só no índice.
+    verdict: complete
+    gap: null

@@ -1,0 +1,19 @@
+schema_version: 1
+card: plan-bak-barra-until
+status: complete
+audited_at: 2026-09-29T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "cepa-plan write não deixa plan.yaml.bak como arquivo não rastreado que faz o cepa-until recusar a largada"
+    altitude: cli
+    surface: "cepa-until largando depois de um cepa-plan write real (subprocessos reais, claude falso no PATH)"
+    demonstrated_by:
+      test: "tests/test_cepa_until.py::test_bak_da_reescrita_da_fila_nao_e_sujeira"
+      layer: "CLI/integração: roda common/bin/cepa-plan write real, commita a fila, confirma '?? .../plan.yaml.bak' no git status, roda common/bin/cepa-until real e exige que largue (>=1 chamada); contra-caso: lixo.bak fora da fila ainda recusa com exit 2"
+      evidence: verified
+      run: |
+        python3 -c "import sys; sys.path.insert(0,'tests'); import test_cepa_until as t; t.test_bak_da_reescrita_da_fila_nao_e_sujeira(); t.test_registro_do_run_anterior_nao_e_sujeira(); print('FAILURES',t.FAILURES)"
+        -> 4 checagens "ok" do teste novo (reescrita grava; .bak não rastreado presente; run larga; .bak fora da fila ainda é sujeira) + 5 do vizinho, "FAILURES []"
+    verdict: complete
+    gap: null
+    note: "Não rodei o teste sem o filtro (sem Edit); o teste afirma a pré-condição '?? plan.yaml.bak' presente, então o 'larga' só passa por causa do filtro."

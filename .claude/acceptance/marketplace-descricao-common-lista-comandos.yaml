@@ -1,0 +1,19 @@
+schema_version: 1
+card: marketplace-descricao-common-lista-comandos
+status: complete
+audited_at: 2026-09-29T22:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Descrição do plugin common no .claude-plugin/marketplace.json lista /plan, /spec, /session, /doctor e os demais"
+    altitude: domain
+    surface: "campo description da entrada common em .claude-plugin/marketplace.json (arquivo de dados lido pela UI do marketplace; não há camada de código acima dele)"
+    demonstrated_by:
+      test: "tests/test_marketplace_descricao_common.py::todo comando do common está na descrição"
+      layer: "asserção sobre o arquivo real: cada common/commands/*.md deve aparecer como /<nome> com fronteira de palavra"
+    evidence: verified
+    run: "python3 tests/test_marketplace_descricao_common.py -> 'tudo ok (28 comandos na descrição)'; contra marketplace.json de 447909c^ -> 'FAIL todo comando do common está na descrição ... 1 falha(s)' (o teste falha antes, passa depois). ls common/commands = 28 arquivos. python3 tests/test_catalogo_comandos.py -> 'tudo ok (65 comandos no catálogo)'."
+    checks:
+      - "diff 447909c toca só a linha description no marketplace.json (+ o teste novo); JSON válido"
+      - "glosses conferidas: agentes completion-auditor e ui-proof-reviewer existem em common/agents; hooks existem; descrições de advisors, until-review, prove-ui e consolidate em common/commands batem com as glosses"
+    status: complete
+    gap: null

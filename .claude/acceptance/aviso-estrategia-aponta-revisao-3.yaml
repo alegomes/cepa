@@ -1,0 +1,28 @@
+item: aviso-estrategia-aponta-revisao-3
+status: complete
+surface: docs/estrategia-fim-do-cepa-until.md (arquivo markdown), diff 9846728..HEAD (HEAD 86620a0)
+criteria:
+  - id: AC1
+    altitude: docs
+    text: aviso no topo aponta para revisao-3.md com link que resolve a partir de docs/
+    evidence: verified
+    run: "sed -n 1,20p do arquivo: aviso nas linhas 3-10, antes da primeira secao; link relativo discovery/until-fim-sem-dono/revisao-3.md; arquivo existe"
+    status: complete
+  - id: AC2
+    altitude: docs
+    text: aviso diz o que a Revisao 3 substitui e bate com o paragrafo "Esta revisao substitui"
+    evidence: verified
+    run: "aviso linhas 5-9 vs revisao-3.md linhas 13-19: Revisao 2 = FIX-<teste>, cherry-pick da lateral, frase green-or-revert, 'o dono nao ve nada'; pos-painel = tabela do Caminho 1 e passo 0. Identico."
+    status: complete
+  - id: AC3
+    altitude: docs
+    text: Status nao diz mais "Nada implementado" e e verdade no git/plan
+    evidence: verified
+    run: "git merge-base --is-ancestor 9db5fbc HEAD -> ancestor; merge 'session/until-fim-sem-dono (revisao 3)' de 2026-09-28; plan.yaml until-fim-sem-dono status: done"
+    status: complete
+  - id: AC4
+    altitude: docs
+    text: referencias de linha deslocadas continuam certas
+    evidence: verified
+    run: "grep -n '^# ' -> '# Revisao 2' na linha 351; wc -l -> 441; revisao-3.md cita 351-441; unica outra citacao de linha no arquivo (113733) e do .log, nao deste arquivo"
+    status: complete

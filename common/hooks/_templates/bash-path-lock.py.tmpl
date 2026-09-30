@@ -1101,42 +1101,153 @@ def _h_sed(ctx, verbo, args, cwds, seg):
         _check_targets(ctx, _generic_targets("sed", args), cwds, verbo, seg)
 
 
-_SED_CMD_RE = re.compile(
-    r"(?:^|[;\n{}])\s*(?:[0-9$]+|/(?:\\.|[^/\\])*/)?"
-    r"(?:\s*,\s*(?:[0-9$]+|/(?:\\.|[^/\\])*/))?\s*!?\s*[wWe](?:\s|$|;)"
-)
+# O script do sed é lido comando a comando, como o próprio sed lê. A versão
+# anterior varria o texto caractere a caractere atrás de um `s`: numa palavra
+# como "stays" dentro de um endereço `/.../` ou do texto de um `a`/`i`/`c`, ela
+# lia `s` + delimitador `t` e achava um `e` nas "flags" — negando `sed -i`
+# legítimo (desvios.md, 2026-09-27). Ler por comando é o que separa texto de
+# comando; o que este leitor não reconhece é negado, nunca liberado.
+_SED_SIMPLES = set("=dDgGhHlnNpPxzFqQLv")
+
+
+def _sed_delimitado(script, i, d):
+    """Avança de `i` até depois do próximo `d` não escapado; -1 se não fecha."""
+    n = len(script)
+    while i < n:
+        c = script[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == d:
+            return i + 1
+        if c == "\n" and d != "\n":
+            return -1
+        i += 1
+    return -1
+
+
+def _sed_endereco(script, i):
+    """Consome um endereço (número, $, /re/, \\cREc, first~step); -1 se malformado."""
+    n = len(script)
+    if i < n and script[i].isdigit():
+        while i < n and script[i].isdigit():
+            i += 1
+        if i < n and script[i] == "~":
+            i += 1
+            while i < n and script[i].isdigit():
+                i += 1
+        return i
+    if i < n and script[i] == "$":
+        return i + 1
+    if i < n and script[i] in "/\\":
+        if script[i] == "\\":
+            if i + 1 >= n or script[i + 1] in "\n\\":
+                return -1
+            d, i = script[i + 1], i + 2
+        else:
+            d, i = "/", i + 1
+        i = _sed_delimitado(script, i, d)
+        if i < 0:
+            return -1
+        while i < n and script[i] in "IM":
+            i += 1
+        return i
+    return i
+
+
+def _sed_fim_da_linha(script, i, continua=False):
+    """Avança até o fim da linha. Só o texto de a/i/c continua na linha
+    seguinte com barra no fim; comentário e nome de arquivo acabam na quebra."""
+    n = len(script)
+    while i < n:
+        if continua and script[i] == "\\":
+            i += 2
+            continue
+        if script[i] == "\n":
+            return i
+        i += 1
+    return n
 
 
 def _sed_executes_or_writes(script):
-    if _SED_CMD_RE.search(script):
-        return True
-    # flags do comando s: s<d>padrão<d>troca<d>FLAGS — `w arquivo` e `e` são perigosas
+    """True se o script escreve arquivo (w/W, flag w do s) ou executa (e,
+    flag e do s) — ou se não dá para ler. Falha fechada: o chamador nega."""
     i, n = 0, len(script)
     while i < n:
-        if script[i] == "s" and i + 1 < n and script[i + 1] not in " \t\n;\\":
-            if i > 0 and (script[i - 1].isalnum() or script[i - 1] == "_"):
+        while i < n and script[i] in " \t\n;":
+            i += 1
+        if i >= n:
+            break
+        c = script[i]
+        if c == "#":
+            i = _sed_fim_da_linha(script, i)
+            continue
+        if c == "}":
+            i += 1
+            continue
+        i = _sed_endereco(script, i)
+        if i < 0:
+            return True
+        if i < n and script[i] == ",":
+            i += 1
+            while i < n and script[i] in " \t":
                 i += 1
-                continue
-            d = script[i + 1]
-            j = i + 2
-            partes = 0
-            while j < n and partes < 2:
-                if script[j] == "\\":
-                    j += 2
-                    continue
-                if script[j] == d:
-                    partes += 1
-                j += 1
-            if partes == 2:
-                k = j
+            if i < n and script[i] in "+~":
+                i += 1
+                while i < n and script[i].isdigit():
+                    i += 1
+            else:
+                j = _sed_endereco(script, i)
+                if j < 0 or j == i:
+                    return True
+                i = j
+        while i < n and script[i] in " \t!":
+            i += 1
+        if i >= n:
+            return True  # endereço sem comando: o sed recusa, eu não adivinho
+        c = script[i]
+        i += 1
+        if c in "eWw":
+            return True
+        if c == "{":
+            continue
+        if c in "aic":
+            i = _sed_fim_da_linha(script, i, continua=True)  # texto, nunca comando
+            continue
+        if c in "rR#":
+            i = _sed_fim_da_linha(script, i)  # nome de arquivo lido, ou comentário
+            continue
+        if c in ":btT":  # rótulo termina no `;` ou no espaço, como no GNU sed
+            while i < n and script[i] in " \t":
+                i += 1
+            while i < n and script[i] not in " \t;\n}":
+                i += 1
+            continue
+        if c in "sy":
+            if i >= n or script[i] in "\n\\":
+                return True
+            d = script[i]
+            i = _sed_delimitado(script, i + 1, d)
+            if i >= 0:
+                i = _sed_delimitado(script, i, d)
+            if i < 0:
+                return True
+            if c == "s":
+                k = i
                 while k < n and script[k] not in " \t\n;}":
                     k += 1
-                flags = script[j:k]
-                if "e" in flags or "w" in flags:
+                flags = script[i:k]
+                if "e" in flags or "w" in flags or "W" in flags:
                     return True
+                if flags.strip("gpiImM0123456789"):
+                    return True  # flag desconhecida
                 i = k
-                continue
-        i += 1
+            continue
+        if c in _SED_SIMPLES:
+            while i < n and script[i] not in ";\n}#":
+                i += 1
+            continue
+        return True  # comando que o sed não tem, ou que este leitor não conhece
     return False
 
 

@@ -1,0 +1,31 @@
+key: path-lock-sed-stays-falso-positivo
+status: complete
+criteria:
+  - id: AC1
+    text: sed -i legitimo na pista com "stays" fora de s/// (endereco, texto de a/i/c) e liberado
+    altitude: cli
+    surface: hook bash-path-lock.py executado como subprocesso (exit code), nas 6 copias
+    test: tests/test_bash_path_lock_exec.py (casos "sed -i com stays no endereco / texto do a / texto do c / rotulo e laco")
+    layer: subprocess
+    evidence: verified
+    run: "python3 tests/test_bash_path_lock_exec.py -> 'tudo verde em 6 copias' (90 linhas ok de sed, 0 falhas)"
+    verdict: complete
+  - id: AC2
+    text: w/W/s///w e e/s///e continuam negados, inclusive apos endereco com stays ou rotulo; comando desconhecido nega (fail-closed)
+    altitude: cli
+    surface: hook bash-path-lock.py como subprocesso, 6 copias
+    test: tests/test_bash_path_lock_exec.py (casos "sed w depois de endereco com stays", "sed w na linha seguinte ao texto do a", "sed e depois de rotulo", "sed com comando que ninguem conhece", "sed com comando w", "sed com flag e")
+    layer: subprocess
+    evidence: verified
+    run: "python3 tests/test_bash_path_lock_exec.py -> 'tudo verde em 6 copias'"
+    verdict: complete
+  - id: AC3
+    text: copias iguais ao molde
+    altitude: cli
+    surface: bin/gen-locks.py --check
+    test: python3 bin/gen-locks.py --check; tests/test_lock_copies_drift.py
+    layer: cli
+    evidence: verified
+    run: "gen-locks --check -> 'as 6 copias sao exatamente o molde renderizado'; test_lock_copies_drift -> all green"
+    verdict: complete
+notes: vizinhos tambem verdes (test_multiline_quoted_shell, test_bash_path_lock_redir). "$" em aspas simples de sed fica fora de escopo (problema pre-existente).

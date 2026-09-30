@@ -119,6 +119,25 @@ DENY = [
     ("sed -i fora da pista (balde 1)", "sed -i 's/a/b/' {OUT}"),
     ("sed com comando w", "sed 's/a/b/w {OUT}' {IN}"),
     ("sed com flag e (executa)", "sed 's/.*/date/e' {IN}"),
+    # comando w/e depois de um endereço ou de um texto de a/i/c: o leitor por
+    # comando que tirou o falso positivo do "stays" não pode abrir este furo
+    ("sed w depois de endereço com stays", "sed '/stays/w {OUT}' {IN}"),
+    ("sed w na linha seguinte ao texto do a", "sed -i '1a stays\nw {OUT}' {IN}"),
+    ("sed e depois de rótulo", "sed ':a;e date' {IN}"),
+    ("sed com comando que ninguém conhece", "sed -i 'k' {IN}"),
+    # prova de 2026-09-29: barra no fim de comentário ou de `r arquivo` não
+    # continua a linha — o comando seguinte executa no sed real
+    ("sed w depois de comentário com barra", "sed -n '#c\\\nw {OUT}' {IN}"),
+    ("sed w depois de r com barra", "sed -n 'r x\\\nw {OUT}' {IN}"),
+    ("sed w depois de rótulo e espaço (GNU)", "sed -n 'ba w {OUT}' {IN}"),
+    ("sed com flag do s desconhecida", "sed -i 's/a/b/Z' {IN}"),
+    ("sed com y malformado", "sed -i 'y/ab/' {IN}"),
+    ("sed com endereço sem comando", "sed -i '/x/' {IN}"),
+    # chaves: o `w` dentro de um bloco, ou colado ao `}`, continua sendo w
+    ("sed w dentro de bloco", "sed -n '/x/{p;w {OUT}}' {IN}"),
+    ("sed w na linha depois do bloco", "sed -n '{p}\nw {OUT}' {IN}"),
+    ("sed w colado ao fim do bloco", "sed -n '{p}w {OUT}' {IN}"),
+    ("sed w depois de rótulo fechado por }", "sed -n '{bx}w{OUT}' {IN}"),
     ("find -exec", "find . -name '*.java' -exec rm {} \\;"),
     ("find -delete", "find . -name '*.java' -delete"),
     ("rg --pre executa", "rg --pre ./x.sh foo"),
@@ -248,6 +267,12 @@ ALLOW = [
     ("cp para a pista", "cp {OUT} {IN}"),
     ("redirect para a pista", "echo x > {IN}"),
     ("sed -i na pista", "sed -i 's/a/b/' {IN}"),
+    # desvios.md 2026-09-27: "stays" fora de um s/// era lido como s + delimitador t
+    ("sed -i com stays no endereço", "sed -i '/o item stays at the entry/d' {IN}"),
+    ("sed -i com stays no texto do a", "sed -i '/^fim/a o item stays até que o teste rode' {IN}"),
+    ("sed -i com stays no texto do c",
+     "sed -i '/^Status/c\\\nO card stays at the top of the entry' {IN}"),
+    ("sed -i com rótulo e laço", "sed -i ':a;N;/fim/!ba;s/\\n/ /g' {IN}"),
     ("mkdir na pista", "mkdir -p {INDIR}/sub"),
     ("redirect para /tmp", "echo x > {TMP}/out.txt"),
     ("tee para /tmp", "git diff | tee {TMP}/d.patch"),

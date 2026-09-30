@@ -1,6 +1,17 @@
 # O que o dono faz quando o `cepa-until` termina, e como reduzir esse atrito
 
-Status: proposta de estratégia. Nada implementado.
+> **Aviso:** a versão que vale é a Revisão 3, em
+> [`docs/discovery/until-fim-sem-dono/revisao-3.md`](discovery/until-fim-sem-dono/revisao-3.md)
+> (2026-09-28). Ela substitui partes deste documento. Da Revisão 2: o item `FIX-<teste>`
+> criado no vermelho duplo, o cherry-pick da lateral feito pelo supervisor antes do agente, a
+> frase "a regra green-or-revert é cumprida ao pé da letra" e "o dono não vê nada". Da revisão
+> pós-painel: a tabela de ações do Caminho 1 e o passo 0 da sequência revisada. No vermelho,
+> quem volta com o recado é o próprio card. Leia a Revisão 3 antes de tomar qualquer trecho
+> daqui como regra.
+
+Status: implementado pela Revisão 3 (item `until-fim-sem-dono` da fila `cepa`, merge 9db5fbc
+de 2026-09-28). Este documento fica como registro do caminho até ela: a proposta de
+2026-09-26, a revisão pós-painel e a Revisão 2.
 Data: 2026-09-26. Base: `common/bin/cepa-until` (1425 linhas), `docs/cepa-until.md`,
 run `WEGO` `2026-09-26-1102` no `wego-acessos-backend` (registro `.jsonl`, análise
 `.review.md` e o resumo impresso no terminal).
