@@ -977,7 +977,10 @@ def monta_lote(items, teto, estado_da_reserva=reserva_de):
     def adia(ident, it, motivo, detalhe):
         ids_adiados.add(ident)
         adiados.append({"id": ident, "title": it.get("title"),
-                        "reason": motivo, "detail": detalhe})
+                        "reason": motivo, "detail": detalhe,
+                        "question": it.get("owner_question"),
+                        "human_pending": it.get("human_pending"),
+                        "evidence": it.get("evidence")})
 
     lote, parada = [], {"reason": "fim-da-fila", "item": None, "detail":
                         "a fila acabou — nenhum item pendente sobrou"}
@@ -1645,7 +1648,8 @@ def validacao_faltando(repo, ident):
             "ele nomeou, ou feche como `blocked` com o motivo.")
 
 
-def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo="."):
+def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo=".",
+               pergunta=None):
     if status == "done":
         falta = validacao_faltando(repo, ident)
         if falta is not None:
@@ -1690,10 +1694,67 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo="."):
                   "uma, passe o texto dela.", file=sys.stderr)
             return 2
         it["human_pending"] = human_pending
+    if pergunta is not None and str(pergunta).strip():
+        it["owner_question"] = " ".join(str(pergunta).split())
+    elif status in ("done", "pending"):
+        # A pergunta era do travamento; o item andou, e ela não vale mais.
+        it.pop("owner_question", None)
     grava_corpo(alvo, plan, plan.get("items") or [])
     print(f"{ident} → `{status}` em {alvo}")
     if human_pending:
         print(f"  rota aberta para você: {human_pending}")
+    return 0
+
+
+# ── responde: o dono destrava um item adiado ────────────────────────────────
+#
+# O `finish` nunca fecha uma rota humana, e ninguém devolvia um `blocked` para
+# a fila: os dois esperavam o dono editar o plan.yaml à mão, e o fim do
+# `cepa-until` só dizia "14 ficaram adiados". O `responde` é a porta do dono,
+# e por isso exige um terminal: o `claude -p` de um run não tem TTY, então um
+# agente não consegue fechar a rota no lugar do humano por este caminho.
+
+def cmd_responde(raiz, nome, ident, resposta):
+    if not sys.stdin.isatty():
+        print("`responde` é a resposta do dono e só roda num terminal: sem "
+              "TTY, quem chama é um agente, e só o humano fecha uma rota "
+              "`human_pending` ou destrava um `blocked`.", file=sys.stderr)
+        return 2
+    resposta = " ".join(str(resposta or "").split())
+    if not resposta:
+        print("resposta vazia não destrava nada: o próximo run precisa saber "
+              "o que você decidiu ou viu.", file=sys.stderr)
+        return 2
+    alvo, plan, por_id, rc = abre_plano_para_marcar(raiz, nome)
+    if rc:
+        return rc
+    it = por_id.get(str(ident))
+    if it is None:
+        print(f"a fila {nome} não tem item '{ident}'", file=sys.stderr)
+        return 2
+    st = status_de(it)
+    rota = it.get("human_pending")
+    if st != "blocked" and rota is None:
+        print(f"{ident} está `{st}` e sem rota humana aberta: não há o que "
+              "responder.", file=sys.stderr)
+        return 2
+    hoje = datetime.now().strftime("%Y-%m-%d")
+    anterior = " ".join(str(it.get("evidence") or "").split())
+    partes = [f"Resposta do dono em {hoje}: {resposta}."]
+    if rota is not None:
+        partes.append(f"Rota humana fechada pelo dono: {rota}.")
+        it.pop("human_pending", None)
+    if st == "blocked":
+        it["status"] = "pending"
+        partes.append("O item voltou de `blocked` para `pending`.")
+    if anterior:
+        partes.append(f"Evidência anterior: {anterior}")
+    it["evidence"] = " ".join(partes)
+    it.pop("owner_question", None)
+    it.pop("claimed_by", None)
+    grava_corpo(alvo, plan, plan.get("items") or [])
+    print(f"{ident} → `{status_de(it)}` em {alvo}"
+          + (" · rota humana fechada" if rota is not None else ""))
     return 0
 
 
@@ -2497,7 +2558,24 @@ def main(argv=None):
     fi.add_argument("--human-pending", dest="human_pending",
                     help="ABRE uma rota que só o humano fecha (validar à mão, "
                          "aprovar PR). Nunca fecha uma: só o humano faz isso")
+    fi.add_argument("--pergunta",
+                    help="a pergunta FECHADA que destrava o item, com a sua "
+                         "recomendação (\"Fecho o card como 'medir depois do "
+                         "go-live'? Recomendo sim: ...\"). Use com `blocked` "
+                         "e com `--human-pending`: é o que o `cepa-until "
+                         "decidir` mostra ao dono em vez da evidência inteira")
     fi.add_argument("--repo", default=".")
+
+    rs = sub.add_parser("responde",
+                        help="o DONO responde a um item adiado: `blocked` volta "
+                             "para `pending` com a resposta, e a rota "
+                             "`human_pending` fecha. Só num terminal")
+    rs.add_argument("nome")
+    rs.add_argument("id")
+    rs.add_argument("--resposta", required=True,
+                    help="a resposta do dono, verbatim; o próximo run a lê "
+                         "na evidência do item")
+    rs.add_argument("--repo", default=".")
 
     rc = sub.add_parser("reconcile",
                         help="compara a fila com o quadro e (com --apply) "
@@ -2611,7 +2689,9 @@ def main(argv=None):
         return cmd_start(raiz, a.nome, a.id, a.repo)
     if a.cmd == "finish":
         return cmd_finish(raiz, a.nome, a.id, a.status, a.evidence,
-                          a.human_pending, a.repo)
+                          a.human_pending, a.repo, a.pergunta)
+    if a.cmd == "responde":
+        return cmd_responde(raiz, a.nome, a.id, a.resposta)
     return cmd_write(raiz, a)
 
 

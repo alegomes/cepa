@@ -349,6 +349,15 @@ Para cada item do lote, na ordem:
      `in_progress` para sempre e trava o lote seguinte. Não pergunte nada
      agora: o usuário já respondeu isso na largada.
 
+     Junto, grave `--pergunta "<a pergunta fechada que destrava o item, com a
+     sua recomendação>"`, e faça o mesmo ao abrir um `--human-pending`. Ex.:
+     `--pergunta "Fecho o card como 'medir depois do go-live' ou movo a
+     medição para o checklist do primeiro deploy? Recomendo o checklist: a
+     pergunta sobrevive sem travar a fila"`. É o que o `cepa-until decidir`
+     mostra ao dono no fim da noite; sem ela, ele recebe a evidência inteira e
+     precisa achar a pergunta sozinho. A resposta dele volta pela evidência
+     do item (`cepa-plan responde`), e o próximo run a lê ali.
+
 ### 4. Desfecho terminal — nenhum item sai do lote sem nome
 
 O lote não termina enquanto um item tocado estiver sem desfecho nomeado. Todo

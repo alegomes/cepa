@@ -1542,6 +1542,260 @@ def acao_aterrissar(repo, arvore, fila, run_id, n):
         "arvore": str(arvore)}
 
 
+# ── decidir: o fim do run pergunta, em vez de só contar ─────────────────────
+#
+# O fim do run dizia "14 ficaram adiados (cada um com o motivo, no relatório)"
+# e "Fica com você: WEGO-2336 (o motivo está na linha de cada um)", e o dono
+# ficava sem saber o que fazer com isso (30/09). Aqui cada item que só o dono
+# destrava vira uma pergunta, uma por vez, e a resposta é aplicada na hora.
+#
+# As AÇÕES continuam de uma lista fechada (R2 de
+# docs/estrategia-fim-do-cepa-until.md): aterrissar, e `cepa-plan responde`,
+# que devolve um `blocked` para a fila ou fecha a rota humana com a resposta do
+# dono. O texto da pergunta pode vir da análise do modelo, mas só é mostrado:
+# nenhuma redação decide o que é executado.
+
+MOTIVO_DO_DONO = {
+    "bloqueado-antes": "travou numa condição de fora",
+    "human_pending": "espera uma rota que só você fecha",
+}
+MOTIVO_SEM_DONO = {
+    "reservado": "outra sessão está nele agora",
+    "depende-de-adiado": "depende de um item adiado e anda junto com ele",
+}
+BLOCO_DE_DECISOES = re.compile(r"```json cepa-decisoes\s*\n(.*?)\n```", re.S)
+
+
+def decisoes_da_analise(texto):
+    """O bloco ```json cepa-decisoes``` do fim do `.review.md`: a pergunta e a
+    recomendação que o /common:until-review redigiu para cada pendência.
+    Serve só para MOSTRAR. Sem bloco, ou com JSON quebrado, devolve {} e o
+    comando mostra a evidência do item, que é o que o agente gravou."""
+    m = BLOCO_DE_DECISOES.search(texto or "")
+    if not m:
+        return {}
+    try:
+        dados = json.loads(m.group(1))
+    except ValueError:
+        return {}
+    if not isinstance(dados, dict):
+        return {}
+    itens = {}
+    for d in dados.get("itens") or []:
+        if isinstance(d, dict) and d.get("id"):
+            itens[str(d["id"])] = d
+    aterrissar = dados.get("aterrissar")
+    return {"aterrissar": aterrissar if isinstance(aterrissar, dict) else None,
+            "itens": itens}
+
+
+def recuado(texto, recuo="       ", largura=96):
+    import textwrap
+    return textwrap.fill(" ".join(str(texto).split()), width=largura,
+                         initial_indent=recuo, subsequent_indent=recuo)
+
+
+def linha_de_recomendacao(d):
+    if not d or not d.get("recomendo"):
+        return None
+    return f"Recomendo {d['recomendo']}" + (f": {d['porque']}"
+                                           if d.get("porque") else "")
+
+
+def eh_sim(r):
+    return str(r or "").strip().lower() in ("s", "sim", "y", "yes")
+
+
+def decide(repo, fila, run_id, est, adiados, analise, pergunta=input,
+           saida=print, responde=None, aterrissa=None):
+    """Percorre o que só o dono destrava e aplica cada resposta. Devolve
+    (aplicados, para_depois), em texto, para o fecho."""
+    analise = analise or {}
+    por_item = analise.get("itens") or {}
+    if responde is None:
+        def responde(ident, texto):
+            p = subprocess.run(
+                [sys.executable, str(CEPA_PLAN), "responde", fila, ident,
+                 "--resposta", texto, "--repo", str(repo)],
+                capture_output=True, text=True, timeout=60)
+            return p.returncode, (p.stdout or p.stderr).strip()
+    if aterrissa is None:
+        def aterrissa():
+            return cmd_aterrissar([f"{fila}/{run_id}", "--repo", str(repo),
+                                   "--sim"])
+    aplicados, para_depois = [], []
+    do_dono = [ad for ad in adiados if ad.get("reason") in MOTIVO_DO_DONO]
+    sem_dono = [ad for ad in adiados if ad.get("reason") in MOTIVO_SEM_DONO]
+    acao = next((x for x in (est or {}).get("acoes") or []
+                 if isinstance(x, dict) and x.get("id") == "aterrissar"), None)
+    total = (1 if acao else 0) + len(do_dono)
+    if not total:
+        saida("\n── nada espera por você neste run")
+        return aplicados, para_depois
+
+    saida(f"\n── {total} coisa(s) esperam por você. Uma por vez; Enter deixa "
+          "para depois, q encerra as perguntas")
+    parou = False
+
+    if acao:
+        saida(f"\n   Aterrissar: {acao.get('frase')}")
+        rec = linha_de_recomendacao(analise.get("aterrissar"))
+        if rec:
+            saida(recuado(rec, "   "))
+        r = pergunta("   Aterrisso agora? [s/N/q] ")
+        if str(r).strip().lower() == "q":
+            parou = True
+        elif eh_sim(r):
+            rc = aterrissa()
+            (aplicados if rc == 0 else para_depois).append(
+                "aterrissar" + ("" if rc == 0 else
+                                f" (parou com código {rc}; a saída está acima)"))
+        if not eh_sim(r):
+            para_depois.append(f"aterrissar: cepa-until aterrissar "
+                               f"{fila}/{run_id} --sim")
+
+    for i, ad in enumerate(do_dono, 1):
+        ident = str(ad.get("id"))
+        if parou:
+            para_depois.append(f"{ident}: {MOTIVO_DO_DONO[ad['reason']]}")
+            continue
+        d = por_item.get(ident) or {}
+        rota = ad.get("human_pending")
+        saida(f"\n   [{i}/{len(do_dono)}] {ident} — {ad.get('title') or ''}")
+        saida(f"       {MOTIVO_DO_DONO[ad['reason']]}.")
+        texto_pergunta = ad.get("question") or d.get("pergunta")
+        if texto_pergunta:
+            saida(recuado(f"Pergunta: {texto_pergunta}"))
+        elif rota is not None:
+            saida(recuado(f"A rota: {rota}"))
+        else:
+            saida(recuado(f"O que o agente registrou: {ad.get('evidence')}"))
+        rec = linha_de_recomendacao(d)
+        if rec:
+            saida(recuado(rec))
+        if rota is not None:
+            opcoes = "[f] já fiz, conto o que vi"
+        else:
+            opcoes = "[r] respondo agora"
+        mostrar = bool(texto_pergunta) and bool(ad.get("evidence"))
+        while True:
+            r = str(pergunta(f"       {opcoes}"
+                             + (" · [e] mostra a evidência inteira"
+                                if mostrar else "")
+                             + " · [Enter] depois · [q] encerra: ")
+                    ).strip().lower()
+            if r == "e" and mostrar:
+                saida(recuado(f"Evidência: {ad.get('evidence')}"))
+                continue
+            break
+        if r == "q":
+            parou = True
+        if r in ("r", "f"):
+            texto = str(pergunta("       Sua resposta, numa linha (o próximo "
+                                 "run lê isto): ")).strip()
+            if texto:
+                rc, msg = responde(ident, texto)
+                if rc == 0:
+                    aplicados.append(f"{ident}: {msg}")
+                    saida(f"       → {msg}")
+                    continue
+                saida(f"       → não gravei: {msg}")
+        para_depois.append(f"{ident}: {MOTIVO_DO_DONO[ad['reason']]}")
+
+    if sem_dono:
+        saida(f"\n   Não dependem de você ({len(sem_dono)}): "
+              + "; ".join(f"{ad.get('id')} ({MOTIVO_SEM_DONO[ad['reason']]})"
+                          for ad in sem_dono))
+    saida(f"\n   Respondido agora: {len(aplicados)} · para depois: "
+          f"{len(para_depois)}")
+    for x in aplicados:
+        saida(f"     ✓ {x}")
+    if para_depois:
+        saida(f"   Para voltar a estas perguntas: cepa-until decidir "
+              f"{fila}/{run_id}")
+    return aplicados, para_depois
+
+
+def pendencias_em_texto(fila, run_id, est, adiados, analise, saida=print):
+    """Sem terminal (o run lançado por `nohup`, ou lido por outro programa):
+    a mesma lista, sem perguntar."""
+    analise = analise or {}
+    por_item = analise.get("itens") or {}
+    acao = next((x for x in (est or {}).get("acoes") or []
+                 if isinstance(x, dict) and x.get("id") == "aterrissar"), None)
+    do_dono = [ad for ad in adiados if ad.get("reason") in MOTIVO_DO_DONO]
+    if not acao and not do_dono:
+        return
+    saida(f"\n── esperam por você: {(1 if acao else 0) + len(do_dono)}")
+    if acao:
+        saida(f"   - aterrissar: {acao.get('frase')}")
+    for ad in do_dono:
+        d = por_item.get(str(ad.get("id"))) or {}
+        q = ad.get("question") or d.get("pergunta") or ad.get("human_pending") \
+            or resume_motivo(ad.get("evidence") or "")
+        saida(f"   - {ad.get('id')} ({MOTIVO_DO_DONO[ad['reason']]}): {q}")
+    saida(f"   Para responder uma por uma, num terminal: cepa-until decidir "
+          f"{fila}/{run_id}")
+
+
+def fecha_com_o_dono(repo, fila, run_id, est, revisao=None, interativo=None):
+    """O fecho do run e do `cepa-until decidir`: consulta a fila de novo (o
+    estado dela agora, não o da largada) e pergunta, ou lista sem terminal."""
+    dados, erro = consulta_fila(fila, repo)
+    if erro:
+        print(f"\n── não consegui listar os adiados ({erro})")
+        adiados = []
+    else:
+        adiados = (dados or {}).get("deferred") or []
+    analise = {}
+    if revisao:
+        try:
+            analise = decisoes_da_analise(
+                Path(revisao).read_text(encoding="utf-8"))
+        except OSError:
+            analise = {}
+    if interativo is None:
+        interativo = sys.stdin.isatty() and sys.stdout.isatty()
+    if not interativo:
+        pendencias_em_texto(fila, run_id, est, adiados, analise)
+        return 0
+    try:
+        decide(repo, fila, run_id, est, adiados, analise)
+    except (EOFError, KeyboardInterrupt):
+        print(f"\n   perguntas interrompidas; volte com: cepa-until decidir "
+              f"{fila}/{run_id}")
+    return 0
+
+
+def cmd_decidir(argv):
+    """`cepa-until decidir <fila>/<run>`: as perguntas do fim do run, de novo,
+    para quando o dono não estava lá ou deixou alguma para depois."""
+    ap = argparse.ArgumentParser(
+        prog="cepa-until decidir",
+        description="pergunta, uma por vez, o que um run deixou para o dono: "
+                    "aterrissar e cada item adiado que só ele destrava")
+    ap.add_argument("alvo", help="<fila>/<run>, como o resumo do run imprime")
+    ap.add_argument("--repo", default=".")
+    a = ap.parse_args(argv)
+    if "/" not in a.alvo:
+        print("cepa-until decidir: o alvo é <fila>/<run> (ex.: "
+              "WEGO/2026-09-29-2059)", file=sys.stderr)
+        return 2
+    fila, run_id = a.alvo.split("/", 1)
+    repo = Path(a.repo).resolve()
+    pasta = repo / ".claude" / "programs" / fila / "until"
+    try:
+        est = json.loads((pasta / f"{run_id}.estado.json").read_text(
+            encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"cepa-until decidir: não li o estado do run em {pasta} ({e})",
+              file=sys.stderr)
+        return 2
+    revisao = pasta / f"{run_id}.review.md"
+    return fecha_com_o_dono(repo, fila, run_id, est,
+                            revisao if revisao.exists() else None)
+
+
 def cmd_fecha_morto(argv):
     """`cepa-until fecha-morto <fila>/<run> [--sim]` — fecha o run cujo
     supervisor morreu (ou foi interrompido) antes do fim.
@@ -1915,6 +2169,8 @@ def main(argv=None):
         return cmd_pendentes(argv[1:])
     if argv and argv[0] == "fecha-morto":
         return cmd_fecha_morto(argv[1:])
+    if argv and argv[0] == "decidir":
+        return cmd_decidir(argv[1:])
     ap = argparse.ArgumentParser(
         description="executa a fila single-track do repo por uma janela de tempo",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1929,7 +2185,10 @@ def main(argv=None):
             "      build completo e push); sem --sim só mostra o plano\n"
             "  cepa-until fecha-morto <fila>/<run> [--sim]\n"
             "      roda o build que faltou num run cujo supervisor morreu ou\n"
-            "      foi interrompido e o deixa pronto para o aterrissar"))
+            "      foi interrompido e o deixa pronto para o aterrissar\n"
+            "  cepa-until decidir <fila>/<run>\n"
+            "      pergunta, uma por vez, o que o run deixou para você:\n"
+            "      aterrissar e cada item adiado que só você destrava"))
     ap.add_argument("fila", help="nome da fila em .claude/programs/<nome>/plan.yaml")
     janela = ap.add_mutually_exclusive_group(required=True)
     janela.add_argument("--for", dest="duracao", metavar="12h",
@@ -2876,8 +3135,8 @@ def main(argv=None):
         dos_itens = [f_["id"] for f_ in fica if f_["id"] in desfechos]
         print(f"\n   Fica com você ({len(fica)}):")
         if dos_itens:
-            print(f"     {', '.join(dos_itens)} (o motivo está na linha de "
-                  "cada um, em Itens)")
+            print(f"     {', '.join(dos_itens)} (a pergunta de cada um vem "
+                  "no fim, em \"esperam por você\")")
         for f_ in fica:
             if f_["id"] not in desfechos:
                 print(f"     - {f_['id']}: {f_['texto']}")
@@ -2897,16 +3156,24 @@ def main(argv=None):
     print(f"\n   registro: {curto(ledger, repo)}")
     print(f"   saída do claude: {curto(log, repo)}")
 
+    def pergunta_ao_dono(revisao=None):
+        # O resumo acima só conta; aqui cada pendência vira pergunta (30/09).
+        try:
+            est = json.loads(caminho_estado.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            est = {}
+        return fecha_com_o_dono(repo, a.fila, run_id, est, revisao)
+
     # A análise gasta cota: parar pela cota e analisar em seguida bate no
     # mesmo teto. Nesses casos, e com nada executado, fica para a mão.
     if a.sem_analise or itens == 0:
-        return 0
+        return pergunta_ao_dono()
     if motivo_fim == "limite-de-uso":
         print("   análise: não rodei (o run parou pela cota) — rode "
               f"`/common:until-review {curto(ledger, repo)}` quando a cota "
               "voltar")
         registra({"evento": "analise", "feita": False, "motivo": "cota"})
-        return 0
+        return pergunta_ao_dono()
     print("   análise: rodando /common:until-review…")
     revisao, erro_rev = analisa_o_run(repo, arvore if arvore.exists() else None,
                                       ledger, a.permissoes)
@@ -2917,7 +3184,7 @@ def main(argv=None):
     else:
         print(f"   análise: falhou ({erro_rev}) — rode `/common:until-review "
               f"{curto(ledger, repo)}` à mão")
-    return 0
+    return pergunta_ao_dono(revisao)
 
 
 if __name__ == "__main__":
