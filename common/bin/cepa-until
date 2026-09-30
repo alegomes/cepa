@@ -862,6 +862,11 @@ def bloqueia_item(nome, repo, ident, tentativas, lateral=None):
 # primeiro run deixa a pasta como não rastreada e o seguinte recusa a largada
 # por causa do que o anterior escreveu.
 REGISTRO_DO_RUN = re.compile(r"^.. \.claude/programs/[^/]+/until/")
+# Pelo mesmo motivo, a cópia que o `cepa-plan write` faz da fila anterior antes
+# de reescrevê-la: nasce não rastreada, e sem este filtro toda reescrita da
+# fila barrava o run seguinte até alguém apagar o `.bak` à mão. Só o não
+# rastreado (`??`): um `.bak` commitado e depois mudado é mudança de verdade.
+BAK_DA_FILA = re.compile(r"^\?\? \.claude/programs/[^/]+/plan\.yaml\.bak$")
 
 
 def arvore_suja(repo):
@@ -873,7 +878,8 @@ def arvore_suja(repo):
     if p.returncode != 0:
         return None
     return [l for l in p.stdout.splitlines()
-            if l.strip() and not REGISTRO_DO_RUN.match(l)]
+            if l.strip() and not REGISTRO_DO_RUN.match(l)
+            and not BAK_DA_FILA.match(l)]
 
 
 def tocados_pelo_ultimo_run(repo, fila):
