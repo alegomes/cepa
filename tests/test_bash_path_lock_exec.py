@@ -133,6 +133,11 @@ DENY = [
     ("sed com flag do s desconhecida", "sed -i 's/a/b/Z' {IN}"),
     ("sed com y malformado", "sed -i 'y/ab/' {IN}"),
     ("sed com endereço sem comando", "sed -i '/x/' {IN}"),
+    # chaves: o `w` dentro de um bloco, ou colado ao `}`, continua sendo w
+    ("sed w dentro de bloco", "sed -n '/x/{p;w {OUT}}' {IN}"),
+    ("sed w na linha depois do bloco", "sed -n '{p}\nw {OUT}' {IN}"),
+    ("sed w colado ao fim do bloco", "sed -n '{p}w {OUT}' {IN}"),
+    ("sed w depois de rótulo fechado por }", "sed -n '{bx}w{OUT}' {IN}"),
     ("find -exec", "find . -name '*.java' -exec rm {} \\;"),
     ("find -delete", "find . -name '*.java' -delete"),
     ("rg --pre executa", "rg --pre ./x.sh foo"),
