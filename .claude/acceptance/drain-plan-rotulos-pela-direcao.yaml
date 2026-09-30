@@ -1,0 +1,44 @@
+key: drain-plan-rotulos-pela-direcao
+status: complete
+diff_range: 0f7d233^..0f7d233
+criteria:
+  - id: AC1
+    altitude: domain
+    surface: >
+      Prosa do prompt-command common/commands/drain-plan.md, título do
+      passo 0 ("### 0. Trazer status do Jira (grava no plano)"). Altitude é a
+      própria prosa: não há camada acima do texto que o modelo lê.
+    test: tests/test_common_drain_plan.py::test_rotulos_do_quadro_dizem_a_direcao_da_escrita
+    layer: teste de contrato sobre o texto do comando
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 'ok o título do passo 0 diz que ele grava no plano', 'ok e não se chama mais só Reconciliar' -> 'all green' (177 checks ok, 0 fail)"
+  - id: AC2
+    altitude: domain
+    surface: >
+      Prosa do drain-plan.md, passo 3.e: a transição do card para
+      status_map.in_review abre com "Atualizar o Jira (grava no quadro)".
+    test: tests/test_common_drain_plan.py::test_rotulos_do_quadro_dizem_a_direcao_da_escrita
+    layer: teste de contrato sobre o texto do comando
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 'ok a transição do card no passo 3 leva o rótulo de quem grava no quadro' -> 'all green'"
+  - id: AC3
+    altitude: domain
+    surface: >
+      Prosa do drain-plan.md: tela de confirmação do lote (passo 2) e
+      relatório (passo 5) trazem as duas pontas pela direção.
+    test: tests/test_common_drain_plan.py::test_rotulos_do_quadro_dizem_a_direcao_da_escrita
+    layer: teste de contrato sobre o texto do comando
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 'ok a tela da largada nomeia as duas pontas pela direção', 'ok o relatório separa as duas pontas pela direção' -> 'all green'"
+  - id: AC4
+    altitude: domain
+    surface: >
+      Nenhum comando/flag alterado: o diff de 0f7d233 em drain-plan.md só
+      mexe em prosa e rótulos (git show inspecionado; os blocos de código
+      cepa-plan finish/queue e as flags --offline/--status ficam intactos).
+      A suíte inteira do arquivo segue verde, inclusive os checks de
+      --offline nas duas pontas.
+    test: tests/test_common_drain_plan.py (checks de contrato existentes, ex. 'e o --offline desliga as DUAS pontas', 'manda transicionar o card ao fechar')
+    layer: teste de contrato + inspeção do diff
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 'all green' (177 ok, 0 fail); git show 0f7d233 sem linha de código de comando alterada"

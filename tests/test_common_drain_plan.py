@@ -857,6 +857,11 @@ def test_rotulos_do_quadro_dizem_a_direcao_da_escrita(base):
     check("a transição do card no passo 3 leva o rótulo de quem grava no quadro",
           k != -1 and leva in passo3[max(0, k - 600):k + 200],
           passo3[max(0, k - 600):k + 200][:300])
+    ii, iw = f.find("## Instructions"), f.find("## Workflow")
+    intro = f[ii:iw] if -1 not in (ii, iw) else ""
+    check("as Instructions apresentam as duas pontas pela direção",
+          traz in intro and leva in intro,
+          "é ali que o leitor encontra as duas pontas pela primeira vez")
     i5 = f.find("### 5.")
     rel = f[i5:f.find("## Constraints")] if i5 != -1 else ""
     check("o relatório separa as duas pontas pela direção",
