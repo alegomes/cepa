@@ -833,6 +833,36 @@ def test_na_branch_da_noite(base):
           "qa-engineer" in regra and "validation-lead" in regra, regra[:300])
 
 
+def test_rotulos_do_quadro_dizem_a_direcao_da_escrita(base):
+    """desvios.md 2026-08-29: "Reconciliar" e "Sync" são sinônimos em
+    português comum, e o dono precisou perguntar qual gravava onde. Cada ponta
+    do quadro é nomeada pela direção: uma grava no plano, a outra no quadro."""
+    f = CMD.read_text(encoding="utf-8")
+    traz = "Trazer status do Jira (grava no plano)"
+    leva = "Atualizar o Jira (grava no quadro)"
+    i0, i1 = f.find("### 0."), f.find("### 1.")
+    cab0 = f[i0:f.find("\n", i0)] if i0 != -1 else ""
+    check("o título do passo 0 diz que ele grava no plano",
+          traz in cab0, cab0)
+    check("e não se chama mais só 'Reconciliar'",
+          not cab0.startswith("### 0. Reconciliar"), cab0)
+    i2, i3 = f.find("### 2."), f.find("### 3.")
+    tela = f[i2:i3] if -1 not in (i2, i3) else ""
+    check("a tela da largada nomeia as duas pontas pela direção",
+          traz in tela and leva in tela,
+          "a pergunta do lote é onde o dono lê o que vai ser escrito, e onde")
+    i4 = f.find("### 4.")
+    passo3 = f[i3:i4] if -1 not in (i3, i4) else ""
+    k = passo3.find("status_map.in_review")
+    check("a transição do card no passo 3 leva o rótulo de quem grava no quadro",
+          k != -1 and leva in passo3[max(0, k - 600):k + 200],
+          passo3[max(0, k - 600):k + 200][:300])
+    i5 = f.find("### 5.")
+    rel = f[i5:f.find("## Constraints")] if i5 != -1 else ""
+    check("o relatório separa as duas pontas pela direção",
+          traz in rel and leva in rel, rel[:300])
+
+
 def test_finish_done_exige_o_veredito_do_validation_lead(base):
     """Item `drain-plan-pula-validacao-build-hex`: no run de 2026-09-23 nenhum
     dos 5 cards do WEGO passou pelo validation-lead, e o WEGO-2318 fechou sem
@@ -955,6 +985,7 @@ def main():
                    test_topologias_com_validacao_batem_com_os_agentes,
                    test_marcacao_preserva_cabecalho_e_campos_extras,
                    test_na_branch_da_noite,
+                   test_rotulos_do_quadro_dizem_a_direcao_da_escrita,
                    test_contrato_do_comando):
             print(f"\n{fn.__name__}")
             fn(base)
