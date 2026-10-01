@@ -144,7 +144,8 @@ Depois do relatório, e só no fim do arquivo, grave um bloco cercado
 uma por vez, no terminal (o `cepa-until decidir`). O bloco NÃO decide o que é
 executado: as ações vêm de uma lista fechada do `cepa-until` (aterrissar, e o
 `cepa-plan responde`, que devolve um item `blocked` para a fila ou fecha a
-rota humana com a resposta do dono). Ele só dá a redação da pergunta e a sua
+rota humana com a resposta do dono, ou, com `--mantem`, só grava a resposta
+e deixa o item travado). Ele só dá a redação da pergunta e a sua
 recomendação.
 
 Cubra **todos os itens adiados da fila**, não só os deste run: rode

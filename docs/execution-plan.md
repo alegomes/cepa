@@ -275,7 +275,8 @@ that opens a `human_pending`, also records the closed question that would unbloc
 (`finish --pergunta`, stored as `owner_question`). The owner answers it with
 `cepa-plan responde <queue> <id> --resposta "..."`: a `blocked` item goes back to
 `pending` and an open route closes, with the answer prepended to the evidence the
-next run reads. `responde` refuses without a terminal, so an unattended `claude -p`
+next run reads. With `--mantem` the answer is recorded and the item stays as it
+was: still `blocked`, route still open. `responde` refuses without a terminal, so an unattended `claude -p`
 cannot close a human route on the owner's behalf. `cepa-until` calls it for you when
 it asks its end-of-run questions.
 

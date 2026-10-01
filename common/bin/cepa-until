@@ -1682,10 +1682,11 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
     analise = analise or {}
     por_item = analise.get("itens") or {}
     if responde is None:
-        def responde(ident, texto):
+        def responde(ident, texto, mantem=False):
             p = subprocess.run(
                 [sys.executable, str(CEPA_PLAN), "responde", fila, ident,
-                 "--resposta", texto, "--repo", str(repo)],
+                 "--resposta", texto, "--repo", str(repo)]
+                + (["--mantem"] if mantem else []),
                 capture_output=True, text=True, timeout=60)
             return p.returncode, (p.stdout or p.stderr).strip()
     if aterrissa is None:
@@ -1745,8 +1746,12 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
             letra, opcoes = "f", "[f] já fiz, conto o que vi"
         else:
             letra, opcoes = "r", "[r] respondo e devolvo para a fila"
+        # Sem [m], "mantenha travado" só cabia no [r], que destrava
+        # (decidir WEGO 2026-09-30-2016: WEGO-2337 e WEGO-1933).
+        opcoes += (" · [m] respondo e mantenho "
+                   + ("a rota aberta" if rota is not None else "travado"))
         mostrar = bool(texto_pergunta) and bool(ad.get("evidence"))
-        validas = {letra, "", "q"} | ({"e"} if mostrar else set())
+        validas = {letra, "m", "", "q"} | ({"e"} if mostrar else set())
         while True:
             bruto = str(pergunta(f"       {opcoes}"
                                  + (" · [e] mostra a evidência inteira"
@@ -1765,11 +1770,12 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
             break
         if r == "q":
             parou = True
-        if r in ("r", "f"):
+        if r in ("r", "f", "m"):
             texto = str(pergunta("       Sua resposta, numa linha (o próximo "
                                  "run lê isto): ")).strip()
             if texto:
-                rc, msg = responde(ident, texto)
+                rc, msg = (responde(ident, texto, mantem=True) if r == "m"
+                           else responde(ident, texto))
                 if rc == 0:
                     aplicados.append(f"{ident}: {msg}")
                     saida(f"       → {msg}")

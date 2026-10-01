@@ -164,6 +164,66 @@ def test_responde_no_terminal_destrava_blocked_e_fecha_rota():
               and "trilha gravada" in a2["evidence"], a2["evidence"])
 
 
+def test_responde_mantem_grava_a_resposta_sem_destravar():
+    """WEGO 2026-09-30-2016: o dono respondeu "mantenha travado" ao WEGO-2337
+    e "não liguei" ao WEGO-1933, e os dois voltaram para `pending` — o
+    `responde` destravava todo `blocked` que recebia resposta, qualquer que
+    fosse ela. O próximo run executaria os dois."""
+    with tempfile.TemporaryDirectory() as tmp:
+        travado = item("a1", status="blocked")
+        travado["evidence"] = "causa não determinada"
+        travado["owner_question"] = "Destravo?"
+        rota = item("a2", human_pending="ligue a flag")
+        raiz = monta_repo(tmp, [travado, rota])
+        rc, out = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+                          "a1", "--resposta", "mantenha travado", "--mantem",
+                          "--repo", str(raiz)], str(raiz))
+        a1 = itens_de(raiz)["a1"]
+        check("`responde --mantem` sai 0", rc == 0, out)
+        check("...e o blocked continua blocked", a1["status"] == "blocked", a1)
+        check("...com a resposta do dono na evidência",
+              "mantenha travado" in a1["evidence"]
+              and "causa não determinada" in a1["evidence"], a1["evidence"])
+        check("...sem dizer que voltou para pending",
+              "voltou de `blocked`" not in a1["evidence"], a1["evidence"])
+        check("...e a pergunta continua aberta para o próximo decidir",
+              a1.get("owner_question") == "Destravo?", a1)
+        rc, out = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+                          "a2", "--resposta", "não liguei", "--mantem",
+                          "--repo", str(raiz)], str(raiz))
+        a2 = itens_de(raiz)["a2"]
+        check("`--mantem` numa rota humana não fecha a rota",
+              a2.get("human_pending") == "ligue a flag", a2)
+        check("...mas grava a resposta", "não liguei" in a2["evidence"], a2)
+
+
+def test_decide_oferece_manter_travado():
+    m = carrega_modulo()
+    adiados = [
+        {"id": "W-1", "title": "flaky", "reason": "bloqueado-antes",
+         "question": "Destravo?", "human_pending": None, "evidence": "x"},
+        {"id": "W-2", "title": "flag", "reason": "human_pending",
+         "question": None, "human_pending": "ligue a flag", "evidence": None},
+    ]
+    respostas = iter(["m", "mantenha", "m", "não liguei"])
+    tela, respondidos, perguntas = [], [], []
+
+    def pergunta(p_):
+        perguntas.append(p_)
+        return next(respostas)
+    aplicados, depois = m.decide(
+        Path("/nao/existe"), "fila", "run1", {}, adiados, {},
+        pergunta=pergunta, saida=tela.append,
+        responde=lambda i, t, mantem=False: (
+            respondidos.append((i, t, mantem)), (0, f"{i} ok"))[1])
+    check("as opções oferecem [m] para manter",
+          all("[m]" in p_ for p_ in perguntas if "[Enter]" in p_), perguntas)
+    check("[m] chama o responde com mantem=True",
+          respondidos == [("W-1", "mantenha", True),
+                          ("W-2", "não liguei", True)], respondidos)
+    check("...e conta como respondido", len(aplicados) == 2, aplicados)
+
+
 def test_decide_pergunta_e_aplica_cada_resposta():
     m = carrega_modulo()
     adiados = [

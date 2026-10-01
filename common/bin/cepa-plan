@@ -1713,8 +1713,13 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo=".",
 # `cepa-until` só dizia "14 ficaram adiados". O `responde` é a porta do dono,
 # e por isso exige um terminal: o `claude -p` de um run não tem TTY, então um
 # agente não consegue fechar a rota no lugar do humano por este caminho.
+#
+# `--mantem` grava a resposta sem mexer em status nem rota. Sem ele, toda
+# resposta destravava: em 2026-09-30 o dono respondeu "mantenha travado" ao
+# WEGO-2337 e "não liguei" ao WEGO-1933, e os dois voltaram para `pending`,
+# prontos para o próximo run executar o que o dono mandou segurar.
 
-def cmd_responde(raiz, nome, ident, resposta):
+def cmd_responde(raiz, nome, ident, resposta, mantem=False):
     if not sys.stdin.isatty():
         print("`responde` é a resposta do dono e só roda num terminal: sem "
               "TTY, quem chama é um agente, e só o humano fecha uma rota "
@@ -1741,20 +1746,30 @@ def cmd_responde(raiz, nome, ident, resposta):
     hoje = datetime.now().strftime("%Y-%m-%d")
     anterior = " ".join(str(it.get("evidence") or "").split())
     partes = [f"Resposta do dono em {hoje}: {resposta}."]
-    if rota is not None:
-        partes.append(f"Rota humana fechada pelo dono: {rota}.")
-        it.pop("human_pending", None)
-    if st == "blocked":
-        it["status"] = "pending"
-        partes.append("O item voltou de `blocked` para `pending`.")
+    if mantem:
+        partes.append(f"O dono manteve o item como estava (`{st}`"
+                      + (", rota humana aberta" if rota is not None else "")
+                      + ").")
+    else:
+        if rota is not None:
+            partes.append(f"Rota humana fechada pelo dono: {rota}.")
+            it.pop("human_pending", None)
+        if st == "blocked":
+            it["status"] = "pending"
+            partes.append("O item voltou de `blocked` para `pending`.")
     if anterior:
         partes.append(f"Evidência anterior: {anterior}")
     it["evidence"] = " ".join(partes)
-    it.pop("owner_question", None)
+    if not mantem:
+        # Mantido, a pergunta segue aberta e o próximo `decidir` a refaz.
+        it.pop("owner_question", None)
     it.pop("claimed_by", None)
     grava_corpo(alvo, plan, plan.get("items") or [])
-    print(f"{ident} → `{status_de(it)}` em {alvo}"
-          + (" · rota humana fechada" if rota is not None else ""))
+    if mantem:
+        print(f"{ident} continua `{st}` em {alvo} · resposta gravada")
+    else:
+        print(f"{ident} → `{status_de(it)}` em {alvo}"
+              + (" · rota humana fechada" if rota is not None else ""))
     return 0
 
 
@@ -2575,6 +2590,9 @@ def main(argv=None):
     rs.add_argument("--resposta", required=True,
                     help="a resposta do dono, verbatim; o próximo run a lê "
                          "na evidência do item")
+    rs.add_argument("--mantem", action="store_true",
+                    help="grava a resposta e deixa o item como está: o "
+                         "`blocked` segue travado e a rota segue aberta")
     rs.add_argument("--repo", default=".")
 
     rc = sub.add_parser("reconcile",
@@ -2691,7 +2709,7 @@ def main(argv=None):
         return cmd_finish(raiz, a.nome, a.id, a.status, a.evidence,
                           a.human_pending, a.repo, a.pergunta)
     if a.cmd == "responde":
-        return cmd_responde(raiz, a.nome, a.id, a.resposta)
+        return cmd_responde(raiz, a.nome, a.id, a.resposta, a.mantem)
     return cmd_write(raiz, a)
 
 

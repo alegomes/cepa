@@ -116,7 +116,9 @@ question the agent recorded with `cepa-plan finish --pergunta` (or the one the
 `/common:until-review` analysis wrote in its `cepa-decisoes` block), with the recommendation.
 An answer is applied on the spot by `cepa-plan responde`: a `blocked` item goes back to
 `pending` and an open route closes, with the owner's answer in the item's evidence, where the
-next run reads it. Enter leaves an item for later; `q` stops asking.
+next run reads it. `m` records the answer and keeps the item as it was (still `blocked`,
+route still open), for answers like "keep it blocked". Enter leaves an item for later; `q`
+stops asking.
 
 `responde` refuses without a terminal: a `claude -p` subprocess has no TTY, so an agent cannot
 close a human route in the owner's place. Without a terminal (`nohup`, cron) the run prints
