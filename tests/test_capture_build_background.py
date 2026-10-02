@@ -279,6 +279,19 @@ def main():
         check("install da raiz em segundo plano grava last-root-install.json",
               (s.root / ".claude" / "last-root-install.json").exists())
 
+        # O registro guarda build_dir e marker_root separados: num `cd` para
+        # submódulo eles divergem, e trocar um pelo outro na colheita marcava
+        # a raiz como instalada quando só o submódulo foi.
+        s = Sessao(base, "install-submodulo")
+        (s.root / "domain").mkdir()
+        s.lanca("cd domain && ./mvnw install", "bsubm001")
+        s.termina("bsubm001", MVN_OK, 0)
+        s.outro_bash()
+        check("install de submódulo em segundo plano grava o SUCCESS na raiz da sessão",
+              (s.baseline() or {}).get("status") == "SUCCESS", str(s.baseline()))
+        check("install de submódulo em segundo plano NÃO marca a raiz como instalada",
+              not (s.root / ".claude" / "last-root-install.json").exists())
+
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s)")
         sys.exit(1)

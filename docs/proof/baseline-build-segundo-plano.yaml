@@ -1,9 +1,9 @@
 schema_version: 2
 card: baseline-build-segundo-plano
 verdict: unproven
-reviewed_at: 2026-10-02T12:00:00-03:00
+reviewed_at: 2026-10-02T13:00:00-03:00
 base_commit: 366f30a
-head_commit: f568510
+head_commit: a53be43
 issue_type: Task
 scope:
   base_commit_resolved: true
@@ -25,21 +25,22 @@ levels:
     perturbation:
       status: survived
       results:
-        - "verde sem perturbar: python3 tests/test_capture_build_background.py -> 17 ok, 'todos ok' (HEAD f568510)"
-        - "base 366f30a + o teste do HEAD: 10 FAIL (confere com o relato do implementador)"
-        - "31 perturbacoes de uma linha em worktree descartavel, mesmo comando de teste; 21 aplicadas ficaram VERMELHAS (colheita em main, colheita no gate, exit!=0, descarte por baseline movido, chave 'since', ordem do timestamp, exigir linha de fim, remocao do pendente, refine_empty, registro, non-build, backgroundTaskId, started_at/command/background_task gravados, state_path, leitura do tail, expiracao 'sempre apaga')"
-        - "SOBREVIVERAM (teste continua verde com a linha quebrada): chave 'at' ignorada em _baseline_moved_since; classify() trocado por SUCCESS fixo (exit 0 com BUILD FAILURE); regex do exit sem sinal negativo; expiracao de 6h 'nunca apaga'; pendente nao removido na expiracao; registro sem checar se .output existe; excecao de colheita propagando (capture e gate-advance)"
-        - "equivalentes, nao contam: task_dirs sem TMPDIR (tempfile.gettempdir ja le TMPDIR); task_dirs sem session_id (glob nao casa)"
-        - "nao verificado: marcador last-root-install.json pela via de fundo (a tentativa de perturbar foi bloqueada pelo path-lock; o teste de primeiro plano test_capture_build_result_root_install.py passa sem perturbacao)"
+        - "verde sem perturbar: python3 tests/test_capture_build_background.py -> 29 ok, 'todos ok' (HEAD a53be43)"
+        - "rodada 1 (HEAD f568510): 7 lacunas; a53be43 fechou 6 delas e adicionou 12 verificacoes"
+        - "rodada 2 sobre a53be43: 31 perturbacoes anteriores, 29 aplicaveis: 27 VERMELHAS, 2 equivalentes (task_dirs sem TMPDIR; task_dirs sem session_id). As 6 que sobreviviam agora ficam vermelhas: chave 'at', classify() fixo, regex sem sinal negativo, limpeza 6h (nunca apaga e pendente nao removido), registro sem .output, propagacao de excecao no gate"
+        - "perturbacoes novas sobre as linhas novas: try externo do harvest removido, pendente corrompido propagando, limiar 6h virado em 6s e em 360h, gate com colheita que sai 9, gravacao do last-root-install.json -> todas VERMELHAS"
+        - "SOBREVIVEM: (a) Path(entry['marker_root']) trocado por build_dir e (b) Path(entry['build_dir']) trocado por marker_root na colheita: teste de fundo e teste de primeiro plano ficam verdes. Em producao os dois diferem quando o build roda fora da raiz da sessao ou `cd modulo && mvn install`; a fixture usa o mesmo diretorio para os dois"
+        - "sobrevivem sem peso: troca do texto do aviso 'went to the background' (cosmetica); started_at ausente/ilegivel deixando de expirar (TypeError capturado, pendente fica; borda de arquivo corrompido); `kind == 'maven'` no guard do marcador (runs_root_install ja exige comando Maven, sem efeito observavel)"
+        - "`and so SUCCESS` do guard do marcador: VERMELHO pelo teste de primeiro plano test_capture_build_result_root_install.py (rc=1), nao pelo de fundo"
   l2_coverage:
     status: assumed
     uncovered_lines: []
-    run: "sem ferramenta de cobertura; as linhas sobreviventes acima sao as nao guardadas, inferidas por perturbacao"
+    run: "sem ferramenta de cobertura; lacunas inferidas por perturbacao"
   l4_adversarial_input:
     status: skipped
     reason: ""
     findings: []
   bugfix_regression_red_at_base:
     status: pass
-    run: "base 366f30a + teste do HEAD -> 10 FAIL; HEAD -> 0 FAIL, 17 ok"
-routing_reason: "Os 17 casos protegem o caminho principal (lanca, espera, colhe verde/vermelho, exit != 0, edicao descarta, gate colhe), mas varias linhas mudadas podem ser quebradas sem nenhum caso ficar vermelho. Falta caso para: build mais novo (chave 'at') descartar o antigo; exit 0 com BUILD FAILURE na saida; exit negativo; limpeza do pendente apos 6h; registro sem .output; falha na colheita nao derrubar a chamada."
+    run: "base 366f30a + teste de f568510 -> 10 FAIL; a53be43 -> 0 FAIL, 29 ok"
+routing_reason: "Das 7 lacunas anteriores, todas fechadas. Resta uma que pode produzir resultado errado: o build de fundo guarda build_dir e marker_root, e trocar um pelo outro na colheita nao deixa nenhum teste vermelho porque a fixture usa o mesmo diretorio. Isso decide se last-root-install.json e gravado para um `cd modulo && mvn install` em segundo plano."
