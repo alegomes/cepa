@@ -1,0 +1,57 @@
+key: baseline-build-segundo-plano
+status: complete
+diff_range: 366f30a..f568510
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      common/hooks/capture-build-result.py invocado como subprocesso com
+      payload PostToolUse de build em segundo plano (backgroundTaskId) e,
+      depois, com outro Bash; deve gravar .claude/last-build.json SUCCESS
+      quando o .output da tarefa termina com [exited with code 0].
+    test: tests/test_capture_build_background.py (bloco "lançamento + build ainda rodando + fim verde")
+    layer: cli/subprocess com git init e arvore tasks/ do CC sob TMPDIR falso
+    evidence: verified
+    run: "python3 tests/test_capture_build_background.py -> 'ok build terminado grava SUCCESS na proxima chamada de Bash', 'ok sem a linha de fim, nada e gravado' -> 'todos ok' (17 checks, exit 0)"
+  - id: AC2
+    altitude: cli
+    surface: >
+      Mesmo hook; saida com BUILD FAILURE grava FAILURE, e exit != 0 com
+      BUILD SUCCESS na saida tambem grava FAILURE.
+    test: tests/test_capture_build_background.py (blocos "fim vermelho" e "código de saída vence o marcador")
+    layer: cli/subprocess
+    evidence: verified
+    run: "mesma execucao: 'ok BUILD FAILURE grava FAILURE', 'ok exit != 0 grava FAILURE mesmo com BUILD SUCCESS na saida'"
+  - id: AC3
+    altitude: cli
+    surface: >
+      common/hooks/gate-advance.py como subprocesso (PreToolUse, git commit)
+      com build de fundo terminado sem outro Bash no meio: sai 0 e grava
+      SUCCESS; com o build ainda rodando sai 2.
+    test: tests/test_capture_build_background.py (blocos "gate" e "gate-rodando")
+    layer: cli/subprocess
+    evidence: verified
+    run: "mesma execucao: 'ok gate-advance libera o commit com o build de fundo terminado', 'ok gate-advance gravou o SUCCESS colhido', 'ok gate-advance continua barrando enquanto o build roda'"
+  - id: AC4
+    altitude: cli
+    surface: >
+      Baseline STALE com since posterior ao lancamento; build termina verde;
+      proximo Bash nao sobrescreve o STALE e remove o registro pendente.
+    test: tests/test_capture_build_background.py (bloco "edição depois do lançamento")
+    layer: cli/subprocess
+    evidence: verified
+    run: "mesma execucao: 'ok edicao depois do lancamento mantem STALE', 'ok registro do build descartado e removido'"
+  - id: AC5
+    altitude: cli
+    surface: tests/ coberta pelo runner tests/run-all.sh (glob test_*.py)
+    test: tests/test_capture_build_background.py
+    layer: suite
+    evidence: verified
+    run: "arquivo test_*.py esta na arvore tests/ e roda isolado com exit 0. A suite completa nao foi concluida por mim (run-all.sh passou de 120 s e foi para segundo plano); as falhas previas de test_cepa_modo/test_cepa_prompt sao relato do implementador."
+notes: >
+  Resíduo declarado, nao bloqueante: os payloads dos testes sao sinteticos,
+  montados a partir do que o implementador mediu no claude 2.1.287
+  (backgroundTaskId no tool_response). Conferi so o final real de
+  b2heurpak.output ('BUILD SUCCESS' + '[exited with code 0]'), que casa com
+  a regex do hook. Nao ha teste com claude -p real para este caminho.
+  Gap separado (30 min de limite do segundo plano) ja virou item no BACKLOG.

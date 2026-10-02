@@ -1,0 +1,44 @@
+schema_version: 2
+card: baseline-build-segundo-plano
+verdict: needs-human
+reviewed_at: 2026-10-02T14:00:00-03:00
+base_commit: 366f30a
+head_commit: 861a4ca
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/hooks/capture-build-result.py (record, register_background, harvest_background, _harvest_one, _baseline_moved_since, main)"
+      module: common-hooks
+      external_observable: true
+      substituted_by_double: null   # o hook real roda como subprocesso; so o tasks/ do CC e fixture em TMPDIR falso
+    - class: "common/hooks/gate-advance.py (harvest_background)"
+      module: common-hooks
+      external_observable: true
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "verde sem perturbar: python3 tests/test_capture_build_background.py -> 31 ok, 'todos ok' (HEAD 861a4ca; hooks identicos aos de a53be43)"
+        - "perturbacoes de uma linha em worktree descartavel (removida): 31 da primeira rodada + 12 de a53be43 + 5 de root-install; 'marker_root->build_dir' e 'build_dir->marker_root' agora VERMELHAS (rc=1 no teste de fundo)"
+        - "todas as perturbacoes que mudam comportamento observavel ficam vermelhas. Sobreviventes restantes, nenhum de peso: texto do aviso (cosmetico); started_at ilegivel nao expira (TypeError capturado, borda de arquivo corrompido, decisao do coordenador de nao testar); `kind == 'maven'` no guard do marcador (runs_root_install ja exige Maven, equivalente); task_dirs sem TMPDIR e sem session_id (equivalentes)"
+        - "`so SUCCESS` do guard do marcador: VERMELHO por tests/test_capture_build_result_root_install.py (rc=1), guarda de primeiro plano da mesma linha de record()"
+        - "NAO verificado: perturbacao da ancora `$` da regex [exited with code N] nao se aplicou (escape do texto no script); ancora nao foi testada"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; lacunas inferidas por perturbacao, sem medir cobertura de linha"
+  l4_adversarial_input:
+    status: skipped
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base 366f30a + teste de f568510 -> 10 FAIL; 861a4ca -> 0 FAIL, 31 ok"
+routing_reason: "Prova de carga fechada: nenhuma linha mudada com efeito observavel sobrevive. Nao e PROVEN porque cobertura (sem ferramenta no repo) e entrada adversarial (nao rodada) ficam assumed/skipped, e o criterio de aceite nao permite eu mesmo dispensar. Sugestao ao humano: aceitar L2/L4 neste item, pois o hook so le o payload do CC e o .output da propria sessao."

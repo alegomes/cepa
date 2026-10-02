@@ -1,0 +1,10 @@
+motivo: nada-a-provar
+escopo: common/hooks/capture-build-result.py
+razao: 'Cobertura de linha (L2) e entrada hostil (L4) dispensadas no item baseline-build-segundo-plano:
+  a prova por perturbação fechou sem sobrevivente com efeito observável; o hook só
+  lê o payload do Claude Code e o .output da própria sessão; o repo não tem ferramenta
+  de cobertura para os hooks em Python.'
+autor: alegomes
+criado_em: '2026-10-02'
+revisit_trigger: quando o repo ganhar ferramenta de cobertura para os hooks, ou quando
+  o hook passar a ler entrada de fora da sessão

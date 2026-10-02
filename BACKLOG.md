@@ -506,9 +506,13 @@ calibração tem contra o que rodar. O que é perecível são os worktrees das f
 
 **Plano:** `cepa/baseline-cega-builds-longos` (descartado)
 
-**Status:** pendente · **Lar:** `common/hooks/capture-build-result.py` (+ possivelmente
-`gate-advance.py`) · **Origem:** sessão wego 2026-07-20 — build Maven de ~14:30 nunca
-grava baseline, diagnóstico confirmado como limite de desenho, não uso errado.
+**Status:** feito em 2026-10-02 pelo caminho 1. Medido no claude 2.1.287: o CC grava a
+saída do segundo plano em `<tmp>/claude-<uid>/<projeto>/<session_id>/tasks/<id>.output` e
+acrescenta `[exited with code N]` no fim. O hook registra o build ao lançá-lo e o colhe na
+próxima chamada de Bash ou no `gate-advance`. Testes em `tests/test_capture_build_background.py`
+· **Lar:** `common/hooks/capture-build-result.py` e `gate-advance.py` · **Origem:** sessão
+wego 2026-07-20 — build Maven de ~14:30 nunca grava baseline, diagnóstico confirmado como
+limite de desenho, não uso errado.
 
 ### Problema
 
@@ -547,6 +551,37 @@ Caminhos (não exclusivos, decidir no design):
 Build sintético > teto de foreground (ex.: `sleep 660 && echo BUILD SUCCESS`) termina
 com baseline gravada verde; variante com FAILURE grava vermelho; suite `tests/` cobre
 o caso.
+
+---
+
+## Build em segundo plano morre aos 30 min sem resultado
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` ·
+**Origem:** sessão `fix_build_timeout` de 2026-10-02, ao medir o conserto da baseline cega.
+
+### Problema
+
+O claude 2.1.287 avisa, ao mandar um comando para segundo plano: "If it is still running
+after 30m in the background, it will be stopped". O `./mvnw verify` do wego leva ~25 min.
+Se crescer uns 5 min, o CC para o build, o `.output` termina sem a linha
+`[exited with code N]` (não medido: conferir o que o CC escreve ao parar) e o
+`capture-build-result` descarta o registro pendente depois de 6 h sem dizer nada. A
+baseline fica cega de novo, agora sem aviso.
+
+### Esboço de solução
+
+1. Medir primeiro: um comando de 31 min em segundo plano, e ler o fim do `.output` e o
+   `<task-notification>` que chega.
+2. Se a parada deixa marca reconhecível, o hook grava FAILURE com o motivo "parado pelo
+   limite de 30 min do segundo plano", para o `gate-advance` dizer por que barra.
+3. Avaliar se o limite é configurável por variável de ambiente.
+
+### Aceite
+
+Build sintético de 31 min em segundo plano termina com `last-build.json` explicando a
+parada, e não com silêncio.
 
 ---
 
