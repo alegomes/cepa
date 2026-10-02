@@ -50,12 +50,29 @@ reactor last see a full install?" a few commands later. `maven-reactor-guard.py`
 reads this file to liberate `-pl` without `-am` when no reactor source is newer
 than `at` — see that hook's docstring for the full rationale
 (docs/investigations/2026-09-25-stale-e-reactor-no-wego.md, seção 5).
+
+Background builds (2026-10-02): a build that goes to the background — by
+`run_in_background: true`, or because it outlived the Bash timeout and CC
+moved it — returns a tool_response with `backgroundTaskId` and no output, so
+there is nothing to classify at that moment. The wego `./mvnw verify` takes
+~25 min and never fits in the foreground, so its baseline was never written.
+Measured on claude 2.1.287: CC keeps writing the command's output to
+`<tmp>/claude-<uid>/<project>/<session_id>/tasks/<id>.output` and appends
+`[exited with code N]` when it ends. So at launch this hook leaves
+`<id>.cepa-build.json` next to that file (outside the repo: no `git status`
+noise), and every later Bash call — here and in gate-advance, BEFORE it reads
+the baseline — harvests the finished ones with the same markers, plus the
+real exit code. A result is discarded when the baseline changed after the
+launch (a source edit marked STALE, or a newer build ran): it describes code
+that is no longer the code on disk. See harvest_background().
 """
 
+import glob
 import json
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -525,6 +542,200 @@ def runs_root_install(command: str, build_dir: Path, marker_root: Path) -> bool:
     return False
 
 
+# ─── recording ────────────────────────────────────────────────────────
+
+def record(command, kind, status, text, tests_run, empty_reason,
+           state_path: Path, build_dir: Path, marker_root: Path, cwd: Path,
+           extra=None):
+    """Write last-build.json (+ the root-install marker) and emit telemetry."""
+    new_state = {
+        "status": status,
+        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "command": command[:200],
+        "kind": kind,
+        "tail": tail(text),
+    }
+    if tests_run is not None:
+        new_state["tests_run"] = tests_run
+    if empty_reason:
+        new_state["reason"] = empty_reason
+        print(f"[capture-build-result] EMPTY, not green: {empty_reason}", file=sys.stderr)
+    new_state.update(extra or {})
+
+    try:
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        state_path.write_text(json.dumps(new_state, indent=2) + "\n", encoding="utf-8")
+    except OSError as e:
+        print(f"[capture-build-result] could not write {state_path}: {e}", file=sys.stderr)
+
+    if status == "SUCCESS" and kind == "maven" and runs_root_install(command, build_dir, marker_root):
+        # Marcador SEPARADO do last-build.json (mesmo diretório): o de cima é
+        # sobrescrito a cada build, inclusive por um `-pl` posterior que não
+        # instalou nada — perderia exatamente o dado que o
+        # maven-reactor-guard precisa para liberar depois. Ver docstring.
+        root_install_path = state_path.parent / "last-root-install.json"
+        try:
+            root_install_path.write_text(json.dumps({
+                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "command": command[:200],
+            }, indent=2) + "\n", encoding="utf-8")
+        except OSError as e:
+            print(f"[capture-build-result] could not write {root_install_path}: {e}",
+                  file=sys.stderr)
+
+    try:
+        import _telemetry as T
+        T.emit("build_result", cwd=str(cwd), status=status, kind=kind)
+    except Exception:
+        pass  # telemetry never breaks the capture
+
+
+# ─── background builds ────────────────────────────────────────────────
+
+PENDING_SUFFIX = ".cepa-build.json"
+# CC appends this line to the task's .output file when the command ends.
+_EXIT_LINE = re.compile(r"\[exited with code (-?\d+)\]\s*$")
+# A task CC never finished (session killed, task stopped) leaves no exit
+# line; its pending file is dropped after this long instead of piling up.
+PENDING_MAX_AGE_S = 6 * 3600
+
+
+def background_task_id(tool_response):
+    if isinstance(tool_response, dict):
+        task_id = tool_response.get("backgroundTaskId")
+        if isinstance(task_id, str) and task_id:
+            return task_id
+    return None
+
+
+def task_dirs(session_id):
+    """CC's `tasks/` directories for this session. The project segment of the
+    path is a slug of the launch dir that we don't rebuild — glob for it."""
+    if not session_id:
+        return []
+    found = []
+    roots = [os.environ.get("TMPDIR"), tempfile.gettempdir(), "/tmp", "/private/tmp"]
+    for root in dict.fromkeys(r for r in roots if r):
+        pattern = os.path.join(glob.escape(root), "claude-*", "*",
+                               glob.escape(session_id), "tasks")
+        for d in glob.glob(pattern):
+            real = os.path.realpath(d)
+            if real not in found:
+                found.append(real)
+    return found
+
+
+def register_background(task_id, session_id, command, kind,
+                        state_path: Path, build_dir: Path, marker_root: Path, cwd: Path):
+    for d in task_dirs(session_id):
+        output = Path(d) / f"{task_id}.output"
+        if not output.exists():
+            continue
+        entry = {
+            "task_id": task_id,
+            "output": str(output),
+            "command": command,
+            "kind": kind,
+            "started_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "state_path": str(state_path),
+            "build_dir": str(build_dir),
+            "marker_root": str(marker_root),
+            "cwd": str(cwd),
+        }
+        try:
+            (Path(d) / f"{task_id}{PENDING_SUFFIX}").write_text(
+                json.dumps(entry, indent=2) + "\n", encoding="utf-8")
+        except OSError as e:
+            print(f"[capture-build-result] could not register background build: {e}",
+                  file=sys.stderr)
+            return False
+        print(f"[capture-build-result] build in background ({task_id}); its result "
+              f"will be recorded when it ends.", file=sys.stderr)
+        return True
+    print(f"[capture-build-result] build went to the background ({task_id}) but its "
+          f"output file was not found; its result will NOT be recorded.", file=sys.stderr)
+    return False
+
+
+def _parse_ts(raw):
+    try:
+        ts = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+
+
+def _baseline_moved_since(state_path: Path, started_at) -> bool:
+    """True when last-build.json was rewritten after the launch: an edit
+    marked it STALE (`since`) or another build recorded (`at`)."""
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    for key in ("since", "at"):
+        ts = _parse_ts(state.get(key)) if state.get(key) else None
+        if ts and started_at and ts > started_at:
+            return True
+    return False
+
+
+def _read_tail(path: Path, size=4096) -> str:
+    with open(path, "rb") as f:
+        f.seek(0, os.SEEK_END)
+        f.seek(max(0, f.tell() - size))
+        return f.read().decode("utf-8", errors="replace")
+
+
+def harvest_background(session_id, now=None):
+    """Record every finished background build of this session. Never raises."""
+    now = now or datetime.now(timezone.utc)
+    for d in task_dirs(session_id):
+        for pending in glob.glob(os.path.join(glob.escape(d), "*" + PENDING_SUFFIX)):
+            try:
+                _harvest_one(Path(pending), now)
+            except Exception as e:  # a harvest bug never breaks the tool call
+                print(f"[capture-build-result] harvest of {pending} failed: {e}",
+                      file=sys.stderr)
+
+
+def _harvest_one(pending: Path, now):
+    entry = json.loads(pending.read_text(encoding="utf-8"))
+    output = Path(entry["output"])
+    started_at = _parse_ts(entry.get("started_at"))
+    m = _EXIT_LINE.search(_read_tail(output)) if output.exists() else None
+    if not m:
+        if started_at is None or (now - started_at).total_seconds() > PENDING_MAX_AGE_S:
+            pending.unlink(missing_ok=True)
+        return
+
+    pending.unlink(missing_ok=True)
+    command, kind = entry["command"], entry.get("kind")
+    state_path = Path(entry["state_path"])
+    if _baseline_moved_since(state_path, started_at):
+        print(f"[capture-build-result] background build {entry['task_id']} ended, but the "
+              f"baseline changed after it started (edit or newer build); result discarded.",
+              file=sys.stderr)
+        return
+
+    text = output.read_text(encoding="utf-8", errors="replace")
+    exit_code = int(m.group(1))
+    if exit_code != 0:
+        # The real exit code is the strongest signal there is: fail-closed
+        # even when a success marker printed before something later failed.
+        status, kind, _ = "FAILURE", kind, f"background exit code {exit_code}"
+    else:
+        status, kind, _ = classify(command, text, exit_code)
+    status, tests_run, empty_reason = refine_empty(command, kind, status, text)
+    if status is None:
+        return
+    record(command, kind, status, text, tests_run, empty_reason, state_path,
+           Path(entry["build_dir"]), Path(entry["marker_root"]), Path(entry["cwd"]),
+           extra={"started_at": entry.get("started_at"),
+                  "background_task": entry["task_id"]})
+    print(f"[capture-build-result] background build {entry['task_id']} recorded: {status}.",
+          file=sys.stderr)
+
+
 # ─── main ─────────────────────────────────────────────────────────────
 
 def main():
@@ -537,6 +748,9 @@ def main():
 
     if payload.get("tool_name") != "Bash":
         sys.exit(0)
+
+    # Any Bash call is a chance to record a background build that ended.
+    harvest_background(payload.get("session_id"))
 
     command = (payload.get("tool_input") or {}).get("command", "")
     if not command:
@@ -553,7 +767,8 @@ def main():
 
     debug_log(payload, response_text, exit_code, status, kind, reason)
 
-    if status is None:
+    task_id = background_task_id(tool_response)
+    if status is None and not (kind and task_id):
         sys.exit(0)  # Not a build command we recognize, or result was ambiguous.
 
     # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
@@ -584,47 +799,13 @@ def main():
         marker_root = cwd
         state_path = cwd / ".claude" / "last-build.json"
 
-    new_state = {
-        "status": status,
-        "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "command": command[:200],
-        "kind": kind,
-        "tail": tail(response_text),
-    }
-    if tests_run is not None:
-        new_state["tests_run"] = tests_run
-    if empty_reason:
-        new_state["reason"] = empty_reason
-        print(f"[capture-build-result] EMPTY, not green: {empty_reason}", file=sys.stderr)
+    if status is None:
+        register_background(task_id, payload.get("session_id"), command, kind,
+                            state_path, build_dir, marker_root, cwd)
+        sys.exit(0)
 
-    try:
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(json.dumps(new_state, indent=2) + "\n", encoding="utf-8")
-    except OSError as e:
-        print(f"[capture-build-result] could not write {state_path}: {e}", file=sys.stderr)
-
-    if status == "SUCCESS" and kind == "maven" and runs_root_install(command, build_dir, marker_root):
-        # Marcador SEPARADO do last-build.json (mesmo diretório): o de cima é
-        # sobrescrito a cada build, inclusive por um `-pl` posterior que não
-        # instalou nada — perderia exatamente o dado que o
-        # maven-reactor-guard precisa para liberar depois. Ver docstring.
-        root_install_path = state_path.parent / "last-root-install.json"
-        try:
-            root_install_path.write_text(json.dumps({
-                "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "command": command[:200],
-            }, indent=2) + "\n", encoding="utf-8")
-        except OSError as e:
-            print(f"[capture-build-result] could not write {root_install_path}: {e}",
-                  file=sys.stderr)
-
-    try:
-        sys.path.insert(0, str(Path(__file__).resolve().parent))
-        import _telemetry as T
-        T.emit("build_result", cwd=str(cwd), status=status, kind=kind)
-    except Exception:
-        pass  # telemetry never breaks the capture
-
+    record(command, kind, status, response_text, tests_run, empty_reason,
+           state_path, build_dir, marker_root, cwd)
     sys.exit(0)
 
 
