@@ -137,6 +137,12 @@ def main():
         check("sem a linha de fim, nada é gravado (Maven pode ter mais módulos)",
               s.baseline() is None and s.pendente("bverde01"), str(s.baseline()))
 
+        (s.tasks / "bverde01.output").write_text(
+            "[exited with code 0]\n[INFO] Building module 2/5...\n")
+        s.outro_bash()
+        check("linha de fim no meio da saída não conta como fim (só a última linha)",
+              s.baseline() is None and s.pendente("bverde01"), str(s.baseline()))
+
         s.termina("bverde01", MVN_OK, 0)
         s.outro_bash()
         b = s.baseline() or {}
