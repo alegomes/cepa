@@ -1,0 +1,45 @@
+schema_version: 2
+card: baseline-build-segundo-plano
+verdict: unproven
+reviewed_at: 2026-10-02T12:00:00-03:00
+base_commit: 366f30a
+head_commit: f568510
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - class: "common/hooks/capture-build-result.py (record, register_background, harvest_background, _harvest_one, _baseline_moved_since, main)"
+      module: common-hooks
+      external_observable: true
+      substituted_by_double: null   # o hook real roda como subprocesso; so o tasks/ do CC e fixture em TMPDIR falso
+    - class: "common/hooks/gate-advance.py (harvest_background)"
+      module: common-hooks
+      external_observable: true
+      substituted_by_double: null
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "verde sem perturbar: python3 tests/test_capture_build_background.py -> 17 ok, 'todos ok' (HEAD f568510)"
+        - "base 366f30a + o teste do HEAD: 10 FAIL (confere com o relato do implementador)"
+        - "31 perturbacoes de uma linha em worktree descartavel, mesmo comando de teste; 21 aplicadas ficaram VERMELHAS (colheita em main, colheita no gate, exit!=0, descarte por baseline movido, chave 'since', ordem do timestamp, exigir linha de fim, remocao do pendente, refine_empty, registro, non-build, backgroundTaskId, started_at/command/background_task gravados, state_path, leitura do tail, expiracao 'sempre apaga')"
+        - "SOBREVIVERAM (teste continua verde com a linha quebrada): chave 'at' ignorada em _baseline_moved_since; classify() trocado por SUCCESS fixo (exit 0 com BUILD FAILURE); regex do exit sem sinal negativo; expiracao de 6h 'nunca apaga'; pendente nao removido na expiracao; registro sem checar se .output existe; excecao de colheita propagando (capture e gate-advance)"
+        - "equivalentes, nao contam: task_dirs sem TMPDIR (tempfile.gettempdir ja le TMPDIR); task_dirs sem session_id (glob nao casa)"
+        - "nao verificado: marcador last-root-install.json pela via de fundo (a tentativa de perturbar foi bloqueada pelo path-lock; o teste de primeiro plano test_capture_build_result_root_install.py passa sem perturbacao)"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as linhas sobreviventes acima sao as nao guardadas, inferidas por perturbacao"
+  l4_adversarial_input:
+    status: skipped
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base 366f30a + teste do HEAD -> 10 FAIL; HEAD -> 0 FAIL, 17 ok"
+routing_reason: "Os 17 casos protegem o caminho principal (lanca, espera, colhe verde/vermelho, exit != 0, edicao descarta, gate colhe), mas varias linhas mudadas podem ser quebradas sem nenhum caso ficar vermelho. Falta caso para: build mais novo (chave 'at') descartar o antigo; exit 0 com BUILD FAILURE na saida; exit negativo; limpeza do pendente apos 6h; registro sem .output; falha na colheita nao derrubar a chamada."

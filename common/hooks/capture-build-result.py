@@ -689,13 +689,18 @@ def _read_tail(path: Path, size=4096) -> str:
 def harvest_background(session_id, now=None):
     """Record every finished background build of this session. Never raises."""
     now = now or datetime.now(timezone.utc)
-    for d in task_dirs(session_id):
-        for pending in glob.glob(os.path.join(glob.escape(d), "*" + PENDING_SUFFIX)):
-            try:
-                _harvest_one(Path(pending), now)
-            except Exception as e:  # a harvest bug never breaks the tool call
-                print(f"[capture-build-result] harvest of {pending} failed: {e}",
-                      file=sys.stderr)
+    try:
+        pendings = [p for d in task_dirs(session_id)
+                    for p in glob.glob(os.path.join(glob.escape(d), "*" + PENDING_SUFFIX))]
+    except Exception as e:  # a harvest bug never breaks the tool call
+        print(f"[capture-build-result] background harvest failed: {e}", file=sys.stderr)
+        return
+    for pending in pendings:
+        try:
+            _harvest_one(Path(pending), now)
+        except Exception as e:
+            print(f"[capture-build-result] harvest of {pending} failed: {e}",
+                  file=sys.stderr)
 
 
 def _harvest_one(pending: Path, now):

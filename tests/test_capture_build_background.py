@@ -26,6 +26,7 @@ Guards the contract:
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -71,8 +72,9 @@ class Sessao:
         return subprocess.run([sys.executable, str(hook)], input=json.dumps(payload),
                               capture_output=True, text=True, env=self.env)
 
-    def lanca(self, command, task_id):
-        (self.tasks / f"{task_id}.output").write_text("")
+    def lanca(self, command, task_id, cria_output=True):
+        if cria_output:
+            (self.tasks / f"{task_id}.output").write_text("")
         return self._run(CAPTURE, {
             "tool_name": "Bash",
             "tool_input": {"command": command, "run_in_background": True},
@@ -84,13 +86,19 @@ class Sessao:
         (self.tasks / f"{task_id}.output").write_text(
             f"{saida}\n\n[exited with code {codigo}]\n")
 
-    def outro_bash(self):
-        return self._run(CAPTURE, {"tool_name": "Bash", "tool_input": {"command": "ls"},
-                                   "tool_response": {"stdout": "pom.xml"}})
+    def outro_bash(self, command="ls", stdout="pom.xml", **extra):
+        return self._run(CAPTURE, {"tool_name": "Bash", "tool_input": {"command": command},
+                                   "tool_response": {"stdout": stdout}, **extra})
 
-    def commit(self):
-        return self._run(GATE, {"tool_name": "Bash", "hook_event_name": "PreToolUse",
-                                "tool_input": {"command": "git commit -m x"}})
+    def commit(self, hook=GATE, **extra):
+        return self._run(hook, {"tool_name": "Bash", "hook_event_name": "PreToolUse",
+                                "tool_input": {"command": "git commit -m x"}, **extra})
+
+    def envelhece(self, task_id, horas):
+        p = self.tasks / f"{task_id}.cepa-build.json"
+        entry = json.loads(p.read_text())
+        entry["started_at"] = iso(-horas * 3600)
+        p.write_text(json.dumps(entry))
 
     def pendente(self, task_id):
         return (self.tasks / f"{task_id}.cepa-build.json").exists()
@@ -198,6 +206,78 @@ def main():
         s = Sessao(base, "nao-build")
         s.lanca("python3 -m http.server", "bserv001")
         check("comando que não é build não deixa registro", not s.pendente("bserv001"))
+
+        # ── casos pedidos pelo proof-reviewer (2026-10-02) ──────────────────
+        s = Sessao(base, "mais-novo")
+        s.lanca("./mvnw verify", "bnovo001")
+        s.grava_baseline({"status": "SUCCESS", "at": iso(+5), "command": "./mvnw -pl x verify"})
+        s.termina("bnovo001", MVN_FAIL, 1)
+        s.outro_bash()
+        b = s.baseline() or {}
+        check("build mais novo em primeiro plano não é sobrescrito pelo antigo",
+              b.get("status") == "SUCCESS" and b.get("command") == "./mvnw -pl x verify", str(b))
+
+        s = Sessao(base, "marcador-falha")
+        s.lanca("./mvnw verify", "bmfal001")
+        s.termina("bmfal001", MVN_FAIL, 0)
+        s.outro_bash()
+        check("exit 0 com BUILD FAILURE na saída grava FAILURE",
+              (s.baseline() or {}).get("status") == "FAILURE", str(s.baseline()))
+
+        s = Sessao(base, "exit-negativo")
+        s.lanca("./mvnw verify", "bneg0001")
+        s.termina("bneg0001", "[INFO] Building...", -9)
+        s.outro_bash()
+        check("exit negativo (processo morto por sinal) grava FAILURE",
+              (s.baseline() or {}).get("status") == "FAILURE", str(s.baseline()))
+
+        s = Sessao(base, "abandonado")
+        s.lanca("./mvnw verify", "babnd001")
+        s.envelhece("babnd001", 7)
+        s.outro_bash()
+        check("pendente sem fim há mais de 6 h é removido", not s.pendente("babnd001"))
+        check("pendente abandonado não grava baseline", s.baseline() is None, str(s.baseline()))
+
+        s = Sessao(base, "recente")
+        s.lanca("./mvnw verify", "brcnt001")
+        s.envelhece("brcnt001", 5)
+        s.outro_bash()
+        check("pendente sem fim há menos de 6 h continua", s.pendente("brcnt001"))
+
+        s = Sessao(base, "sem-output")
+        res = s.lanca("./mvnw verify", "bsout001", cria_output=False)
+        check("sem o .output do CC, não deixa registro", not s.pendente("bsout001"))
+        check("sem o .output do CC, avisa que não vai gravar",
+              "will NOT be recorded" in res.stderr, res.stderr)
+
+        s = Sessao(base, "pendente-corrompido")
+        (s.tasks / "bcorr001.cepa-build.json").write_text("{nao é json")
+        res = s.outro_bash("./mvnw verify", MVN_OK)
+        check("pendente corrompido não derruba o hook",
+              res.returncode == 0 and (s.baseline() or {}).get("status") == "SUCCESS",
+              f"rc={res.returncode} {res.stderr[-300:]}")
+        res = s.outro_bash("./mvnw verify", MVN_OK, session_id=12345)
+        check("session_id que não é texto não derruba o hook", res.returncode == 0,
+              res.stderr[-300:])
+
+        # O gate carrega o capture pelo caminho. Se ele não carregar, o gate
+        # continua julgando o baseline em vez de morrer e liberar o commit.
+        hooks = base / "hooks-quebrados"
+        shutil.copytree(GATE.parent, hooks)
+        (hooks / "capture-build-result.py").write_text("raise RuntimeError('quebrado')\n")
+        s = Sessao(base, "capture-quebrado")
+        s.grava_baseline({"status": "STALE", "since": iso(-60), "after_edit_to": "src/A.java"})
+        res = s.commit(hook=hooks / "gate-advance.py")
+        check("capture que não carrega não derruba o gate: ele ainda barra o STALE",
+              res.returncode == 2 and "harvest failed" in res.stderr,
+              f"rc={res.returncode} {res.stderr[-300:]}")
+
+        s = Sessao(base, "root-install")
+        s.lanca("./mvnw install", "binst001")
+        s.termina("binst001", MVN_OK, 0)
+        s.outro_bash()
+        check("install da raiz em segundo plano grava last-root-install.json",
+              (s.root / ".claude" / "last-root-install.json").exists())
 
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s)")
