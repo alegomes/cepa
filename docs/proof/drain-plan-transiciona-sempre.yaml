@@ -1,0 +1,41 @@
+schema_version: 2
+card: drain-plan-transiciona-sempre
+verdict: proven
+reviewed_at: 2026-10-02T00:00:00-03:00
+base_commit: a4248a5
+head_commit: working-tree (nao commitado)
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/commands/drain-plan.md", module: commands, external_observable: false, substituted_by_double: null }
+    - { class: "tests/test_common_drain_plan.py:test_card_anda_no_quadro_em_todo_desfecho", module: tests, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/markdown sem pitest; PIT nao se aplica"
+    perturbation:
+      status: pass
+      results:
+        - "HEAD sem perturbar (2a rodada, teste apertado): cd /tmp/proof-dpts2 && python3 tests/test_common_drain_plan.py -> 'all green', rc=0 (worktree descartavel de a4248a5 + os 2 arquivos da arvore de trabalho)"
+        - "P1 (reserva sem in_progress, `status_map.in_progress` -> `status_map.XX` na linha 260): 1 FAIL 'a reserva move o card para in_progress antes de qualquer trabalho', rc=1 -> RED"
+        - "P2/P6 (paragrafo 'no travamento' inteiro removido, linhas 382-390): 4 FAIL: 'o item travado comenta o motivo no card', 'e vai para a coluna de bloqueados', 'o travamento cobre tambem o item que volta para pending', 'e proibe deixar o card em to_do'; rc=1 -> RED (blocked, pending e to_do acusam, nao so o comentario)"
+        - "P3 (Constraint antiga 'Nao fala com tracker nenhum' recolocada): 1 FAIL 'as Constraints nao dizem mais que o comando nao fala com tracker', rc=1 -> RED"
+        - "P4 (ressalva 'vale so para ESTE pedido' removida do passo 0): 1 FAIL 'o Do not transition do passo 0 e marcado como so da leitura', rc=1 -> RED"
+        - "P5 (obrigatorio/obrigatorias -> facultativo/facultativas nas linhas 79, 119, 486): 1 FAIL 'a transicao e declarada obrigatoria nas Instructions', rc=1 -> RED. Na 1a rodada esta perturbacao sobreviveu (checagem vazia por causa da linha 359 pre-existente); o teste foi apertado e agora acusa"
+        - "nota: no md da arvore de trabalho os numeros de linha estavam 4 acima dos da 1a rodada (bloco do travamento em 382, nao 378); o conteudo perturbado e o mesmo"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "cada trecho do diff do .md (reserva, travamento, constraint, ressalva do passo 0, palavra 'obrigatorio') foi atingido por perturbacao propria que ficou RED (P1-P6)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff e um prompt em markdown e seu teste de contrato de prosa; nao le nem parseia entrada vinda de fora e nao toca modulo input-bearing (nao ha api-rest neste repo)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git show a4248a5:common/commands/drain-plan.md > common/commands/drain-plan.md (teste apertado mantido); python3 tests/test_common_drain_plan.py -> 10 FAIL, rc=1 -> RED na base"
+routing_reason: "Regressao vermelha na base (10 FAIL) e as perturbacoes P1 a P6 deixam o teste vermelho, cada uma na checagem esperada. A falha da 1a rodada (P5 verde porque 'obrigatorio' ja existia na linha 359) foi fechada apertando a checagem para o paragrafo 'durante' das Instructions. HEAD sem perturbar: all green. Nada assumed/skipped. L4 n/a. PROVEN."

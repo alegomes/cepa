@@ -1,0 +1,44 @@
+key: drain-plan-transiciona-sempre
+status: complete
+diff_range: a4248a5..working-tree (nao commitado)
+limit: >
+  A superficie e o PROMPT (common/commands/drain-plan.md). O teste e contrato de prosa: prova que o
+  texto que o agente le manda transicionar; nao prova que o agente transiciona no Jira. Isso so um
+  run vivo prova (nao feito). Registrado como limite da superficie, decisao final do humano na revisao.
+run_global: "python3 tests/test_common_drain_plan.py -> 'all green', exit 0; test_card_anda_no_quadro_em_todo_desfecho com 11 checks ok. Contra o drain-plan.md de a4248a5 (copia do teste em scratchpad): 9 FAIL, ou seja, os checks nao passam em vazio."
+criteria:
+  - id: AC1
+    altitude: prompt-contract
+    surface: passo 3.a, apos cepa-plan start, in_progress via atlassian-expert antes de qualquer trabalho
+    test: test_common_drain_plan.py::test_card_anda_no_quadro_em_todo_desfecho ("a reserva move o card...", exige status_map.in_progress + atlassian-expert + "antes de qualquer trabalho" no trecho da reserva)
+    layer: contrato de prosa
+    evidence: verified
+    status: complete
+  - id: AC2
+    altitude: prompt-contract
+    surface: passo 3.e done -> in_review com Implementation Summary
+    test: mesmo teste ("o done leva o card para in_review com o Implementation Summary", trecho 3.e)
+    layer: contrato de prosa
+    evidence: verified
+    status: complete
+  - id: AC3
+    altitude: prompt-contract
+    surface: passo 3.f blocked/pending -> comentario, status_map.blocked, nunca to_do
+    test: mesmo teste (4 checks: comentario, blocked, pending, "Nunca o deixe em `to_do`")
+    layer: contrato de prosa
+    evidence: verified
+    status: complete
+  - id: AC4
+    altitude: prompt-contract
+    surface: obrigatoriedade; Do not transition so da leitura; Constraint removida; --offline/sem board-flow.yaml
+    test: mesmo teste (3 checks) + checks preexistentes de --offline
+    layer: contrato de prosa
+    evidence: verified
+    status: complete
+  - id: AC5
+    altitude: prompt-contract
+    surface: tela do passo 2 e relatorio do passo 5 nomeiam as tres pontas
+    test: mesmo teste ("a tela da largada nomeia as tres pontas", "o relatorio lista as tres pontas")
+    layer: contrato de prosa
+    evidence: verified
+    status: complete

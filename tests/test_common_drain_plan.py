@@ -959,6 +959,66 @@ def test_topologias_com_validacao_batem_com_os_agentes(base):
           and "delegated-to-supervisor" in passo, passo[:300])
 
 
+def test_card_anda_no_quadro_em_todo_desfecho(base):
+    """Run 2026-10-02-0838 no WEGO: o WEGO-2349 foi reservado, ganhou 7
+    commits, travou no gate de prova e continuou em To Do no quadro. O comando
+    só mandava transicionar ao fechar `done`, e a última regra dizia "Não fala
+    com tracker nenhum". Decisão do dono: item da fila que é card move o card,
+    obrigatoriamente, em todo desfecho."""
+    f = CMD.read_text(encoding="utf-8")
+    i3, i4 = f.find("### 3."), f.find("### 4.")
+    passo3 = f[i3:i4] if -1 not in (i3, i4) else ""
+    ia = passo3.find("cepa-plan start")
+    ib = passo3.find("  b. ")
+    reserva = " ".join((passo3[ia:ib] if -1 not in (ia, ib) else "").split())
+    check("a reserva move o card para in_progress antes de qualquer trabalho",
+          "status_map.in_progress" in reserva
+          and "atlassian-expert" in reserva
+          and "antes de qualquer trabalho" in reserva,
+          "sem isso o card fica em To Do enquanto o item é trabalhado")
+    i_e = passo3.find("  e. ")
+    fecha = passo3[i_e:passo3.find("  f. ")] if i_e != -1 else ""
+    check("o done leva o card para in_review com o Implementation Summary",
+          "status_map.in_review" in fecha
+          and "Implementation Summary" in fecha)
+    i_f = passo3.find("no travamento.**")
+    trava = passo3[i_f:] if i_f != -1 else ""
+    check("o item travado comenta o motivo no card",
+          "atlassian-expert" in trava and "comentário" in trava,
+          "sem isso o card travado não diz no quadro por que parou")
+    check("e vai para a coluna de bloqueados quando o quadro a declara",
+          "status_map.blocked" in trava)
+    check("o travamento cobre também o item que volta para pending",
+          "pending" in trava and "status_map.blocked" in trava)
+    check("e proíbe deixar o card em to_do",
+          "Nunca o deixe em `to_do`" in trava)
+    i2 = f.find("### 2.")
+    tela = f[i2:i3] if -1 not in (i2, i3) else ""
+    check("a tela da largada nomeia as três pontas do quadro",
+          all(s in tela for s in ("<in_progress>", "<in_review>", "ao travar")),
+          "o dono aprova o lote lendo esta tela")
+    i5 = f.find("### 5.")
+    rel = " ".join((f[i5:f.find("## Constraints")] if i5 != -1 else "").split())
+    check("o relatório lista as três pontas do quadro",
+          all(s in rel for s in ("In Progress", "In Review",
+                                 "travados comentados")))
+    ii, iw = f.find("## Instructions"), f.find("## Workflow")
+    intro = " ".join((f[ii:iw] if -1 not in (ii, iw) else "").split())
+    k = intro.find("durante")
+    check("a transição é declarada obrigatória nas Instructions",
+          k != -1 and "é **obrigatório**, não opcional" in intro[k:k + 300],
+          "a palavra solta já existia no arquivo (`--evidence` é obrigatório)")
+    fim = f[f.find("## Constraints"):]
+    check("as Constraints não dizem mais que o comando não fala com tracker",
+          "não fala com tracker" not in fim.lower(),
+          "a regra contradizia os passos 0 e 3 e foi lida como proibição")
+    i0, i1 = f.find("### 0."), f.find("### 1.")
+    passo0 = f[i0:i1] if -1 not in (i0, i1) else ""
+    check("o 'Do not transition' do passo 0 é marcado como só da leitura",
+          "Do not transition" in passo0 and "só para ESTE pedido" in passo0,
+          "a frase foi lida como política do lote no relatório do WEGO-2349")
+
+
 def main():
     with tempfile.TemporaryDirectory() as base:
         for fn in (test_lote_segue_a_ordem_da_fila_e_o_teto,
@@ -991,6 +1051,7 @@ def main():
                    test_marcacao_preserva_cabecalho_e_campos_extras,
                    test_na_branch_da_noite,
                    test_rotulos_do_quadro_dizem_a_direcao_da_escrita,
+                   test_card_anda_no_quadro_em_todo_desfecho,
                    test_contrato_do_comando):
             print(f"\n{fn.__name__}")
             fn(base)
