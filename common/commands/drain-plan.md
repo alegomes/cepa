@@ -1,5 +1,5 @@
 ---
-description: Executa em lote a fila `single-track` do repo — `.claude/programs/<nome>/plan.yaml` — NA ORDEM QUE ELA GUARDA. É a etapa 3 do desenho "um escritor, três fontes", e fecha o ciclo sem tracker: `/common:plan` escreve a fila, `/common:next` aponta UM passo, este comando executa vários. Não exige Jira e nunca consulta um: o único lote que existia até aqui, o `/board-flow:drain`, tira a ordem do rank do quadro — exatamente a ordem que o plano existe para substituir. Copia do drain o que vale: parar no primeiro item travado e o teto `--max`. Uma rota que só o humano fecha ADIA o item e o lote segue, cobrando todas as rotas no fim. Reserva cada item antes de tocá-lo — com dono registrado, para saber se é sessão viva ou run morto — e registra o desfecho de todos. Reconcilia contra o quadro antes de montar o lote, e transiciona o card ao fechar, quando o repo tem Jira.
+description: Executa em lote a fila `single-track` do repo — `.claude/programs/<nome>/plan.yaml` — NA ORDEM QUE ELA GUARDA. É a etapa 3 do desenho "um escritor, três fontes", e fecha o ciclo sem tracker: `/common:plan` escreve a fila, `/common:next` aponta UM passo, este comando executa vários. Não exige Jira e nunca tira a ORDEM de um: o único lote que existia até aqui, o `/board-flow:drain`, tira a ordem do rank do quadro — exatamente a ordem que o plano existe para substituir. Copia do drain o que vale: parar no primeiro item travado e o teto `--max`. Uma rota que só o humano fecha ADIA o item e o lote segue, cobrando todas as rotas no fim. Reserva cada item antes de tocá-lo — com dono registrado, para saber se é sessão viva ou run morto — e registra o desfecho de todos. Quando o repo tem Jira, reconcilia contra o quadro antes de montar o lote e move o card de todo item que é card, sempre: In Progress ao reservar, In Review ao fechar, comentário com o motivo ao travar.
 argument-hint: <nome> [--max N] [--dry-run] [--offline] [--na-branch <branch>]
 interaction: routine
 ---
@@ -75,9 +75,17 @@ que o plano existe para substituir. Mas ele deixou de ignorar o quadro:
 
 - **antes** de montar o lote, **Trazer status do Jira (grava no plano)** (passo 0): lê o Jira e escreve na
   fila — sem isso o lote executa um item que alguém já fechou em outro lugar;
-- **ao fechar** um item cujo `id` é chave de card, **Atualizar o Jira (grava no quadro)** (passo
-  3.e): lê a fila e transiciona o card. Sem isso, cada lote drenado PRODUZ a divergência que a reconciliação
-  seguinte teria que consertar: o comando geraria a própria dívida.
+- **durante** o lote, todo item cujo `id` é chave de card passa pelo
+  **Atualizar o Jira (grava no quadro)**, e isso é **obrigatório**, não opcional: ao reservar
+  (passo 3.a) o card vai para `defaults.status_map.in_progress`; ao fechar
+  `done` (passo 3.e) vai para `defaults.status_map.in_review` com o
+  Implementation Summary; ao travar ou voltar para `pending` (passo 3.f)
+  recebe um comentário com o motivo, e vai para `defaults.status_map.blocked`
+  quando o quadro declara essa coluna. É o mesmo ciclo do
+  `/board-flow:execute`. Sem isso, cada lote drenado PRODUZ a divergência que
+  a reconciliação seguinte teria que consertar, e o dono vê no quadro um card
+  em To Do que já tem código pronto numa branch (WEGO-2349, run
+  2026-10-02-0838).
 
 Quem fala com o Jira é sempre o `atlassian-expert` — este comando não chama
 ferramenta de Atlassian direta, e a comparação plano × quadro é do
@@ -105,6 +113,10 @@ card**, e quais dessas chaves o Jira diz não existir:
 > `{"cards": [{"key": ..., "status": "<the literal Jira status name>"}],
 > "missing": ["<keys Jira reports as nonexistent>"]}`. Do not transition
 > anything.
+
+O "Do not transition anything" vale só para ESTE pedido, que é de leitura.
+Não é a política do lote sobre o quadro: as transições do passo 3 são
+obrigatórias.
 
 Salve a resposta e passe ao comparador:
 
@@ -192,7 +204,8 @@ Depois deles o lote para: <stop.reason> — <stop.detail>
 
 Quadro (só quando há; sem quadro: "sem quadro, status da fila auto-declarado"):
   Trazer status do Jira (grava no plano): <o que o passo 0 mudou na fila, ou "nada mudou">
-  Atualizar o Jira (grava no quadro): ao fechar cada item que é card, ele vai para <in_review>
+  Atualizar o Jira (grava no quadro): cada item que é card vai para <in_progress> ao ser
+    reservado, para <in_review> ao fechar, e recebe o motivo ao travar
 
 Rodo? Cada item roda o flow inteiro da topologia + os gates de aceite e prova.
 
@@ -241,6 +254,14 @@ Para cada item do lote, na ordem:
      pedido: é ele que diz se vale aproveitar a lateral (`git cherry-pick` ou
      `merge` dentro desta tentativa) ou refazer. Desabilitar ou apagar o teste
      que ficou vermelho não conta como conserto.
+
+     **Atualizar o Jira (grava no quadro), na reserva.** Se o `id` é chave de
+     card e o repo tem quadro (e não veio `--offline`), transicione o card
+     para `defaults.status_map.in_progress` logo depois do `start` e antes de
+     qualquer trabalho, delegando ao `atlassian-expert`, como o passo 4 do
+     `/board-flow:execute`. Card que já está em `in_progress` não precisa de
+     transição. Falha na transição não desfaz a reserva nem para o item:
+     registre o card como pendente de transição no relatório.
 
      A reserva é o equivalente, sem tracker, ao claim que o `/board-flow:drain`
      publica no card: a lista do passo 1 é uma foto, e entre a foto e a hora de
@@ -358,6 +379,15 @@ Para cada item do lote, na ordem:
      `in_progress` para sempre e trava o lote seguinte. Não pergunte nada
      agora: o usuário já respondeu isso na largada.
 
+     **Atualizar o Jira (grava no quadro), no travamento.** Item que é card e
+     fechou `blocked`, ou voltou para `pending`, com quadro e sem `--offline`:
+     delegue ao `atlassian-expert` um comentário no card com o motivo da
+     evidência, os vereditos dos gates e a branch onde os commits ficaram. Se
+     `defaults.status_map.blocked` estiver declarado, mova o card para ele;
+     sem a coluna, o card fica em `defaults.status_map.in_progress`, onde a
+     reserva o colocou. Nunca o deixe em `to_do`: o quadro diria que ninguém
+     tocou num card que tem código pronto.
+
      Junto, grave `--pergunta "<a pergunta fechada que destrava o item, com a
      sua recomendação>"`, e faça o mesmo ao abrir um `--human-pending`. Ex.:
      `--pergunta "Fecho o card como 'medir depois do go-live' ou movo a
@@ -408,8 +438,8 @@ Um relatório só, no formato `plain-report`, e em pt-BR:
   que o campo existe para matar.
 - **Quadro:** em duas linhas, uma por direção. **Trazer status do Jira (grava no plano)**: o que o
   passo 0 mudou na fila, e os cards do quadro sem posição nela. **Atualizar o Jira (grava no quadro)**:
-  os cards transicionados por este run, e os que ficaram pendentes de
-  transição. Sem quadro, uma linha dizendo que o status da fila é
+  os cards transicionados por este run (In Progress, In Review e travados
+  comentados), e os que ficaram pendentes de transição. Sem quadro, uma linha dizendo que o status da fila é
   auto-declarado.
 - **Onde o lote parou e o que sobrou:** o `stop` do próximo `queue` e quantos
   pendentes ficaram.
@@ -452,4 +482,6 @@ Um relatório só, no formato `plain-report`, e em pt-BR:
 - **Recusa plano `parallel-waves`** — quem executa ondas é o `/maestro:run`.
 - **Não escreve a fila.** Item que falta na fila é do `/common:plan`; inventar
   posição e `why` aqui forjaria exatamente a decisão que o documento guarda.
-- **Não fala com tracker nenhum.** É o ponto do comando.
+- **Não precisa de tracker.** Sem `board-flow.yaml`, a fila é a única
+  verdade. Com quadro, mover o card de todo item que é card é obrigatório
+  (passos 3.a, 3.e e 3.f), sempre pelo `atlassian-expert`.
