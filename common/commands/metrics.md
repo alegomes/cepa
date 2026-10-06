@@ -16,8 +16,11 @@ respostas: onde o gate bloqueia demais, qual repo queima mais builds, quantos
 `proven` sobre-declarados o guard barrou.
 
 Desde 03/08/2026 inclui a seção **Formato de relatório** — quantas respostas de
-trabalho feito saíram do padrão `plain-report` e por qual motivo. É o número que
-decide se o aviso do `report-style-lint` precisa virar bloqueio.
+trabalho feito saíram do padrão `plain-report` e por qual motivo. Desde
+25/08/2026 o `report-style-lint` bloqueia e o turno reescreve, então a seção
+separa (06/10/2026) a primeira escrita, que o bloqueio devolve, do que
+persistiu após a reescrita e chegou ao usuário. O segundo é o número que
+importa.
 
 ## Steps
 

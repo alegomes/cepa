@@ -130,18 +130,33 @@ def main():
         elif e.get("event") == "proof_block":
             proof_blocks[e.get("repo") or "?"] += 1
 
-    # Formato de relatório: o usuário escolheu "avisa e mede" (03/08/2026) — o
-    # número que decide se o aviso vira bloqueio é a fração de relatórios fora
-    # do formato ao longo do tempo, não o total de medições.
+    # Formato de relatório. Desde 25/08/2026 o report-style-lint BLOQUEIA a
+    # parada quando o relatório sai do formato, e o turno reescreve. Por isso
+    # uma medição fora do formato não é um relatório ruim que o usuário leu:
+    # pode ser a primeira escrita, que o bloqueio devolveu. O número que
+    # importa é quantos desvios PERSISTIRAM após a reescrita (evento com
+    # `reincidente`), porque só esses chegam ao usuário. Correção de
+    # 06/10/2026: até aqui o agregador somava os dois e sugeria "passar para
+    # bloqueio" de um hook que já bloqueava.
     relatorios = 0
     relatorios_fora = 0
+    relatorios_bloqueados = 0
+    relatorios_persistiram = 0
     desvios_tipo = Counter()
+    desvios_persistiram_tipo = Counter()
     for e in events:
         if e.get("event") != "report_style":
             continue
         relatorios += 1
-        if (e.get("desvios") or 0) > 0:
+        fora = (e.get("desvios") or 0) > 0
+        if fora:
             relatorios_fora += 1
+        if e.get("bloqueou"):
+            relatorios_bloqueados += 1
+        if fora and e.get("reincidente"):
+            relatorios_persistiram += 1
+            for t in (e.get("tipos") or []):
+                desvios_persistiram_tipo[t] += 1
         for t in (e.get("tipos") or []):
             desvios_tipo[t] += 1
 
@@ -214,7 +229,11 @@ def main():
             "proof_verdicts": {" ".join(k): v for k, v in proof_verdicts.items()},
             "proof_blocks": dict(proof_blocks),
             "report_style": {"medidos": relatorios, "fora": relatorios_fora,
-                             "desvios_por_tipo": dict(desvios_tipo)},
+                             "bloqueados": relatorios_bloqueados,
+                             "persistiram": relatorios_persistiram,
+                             "desvios_por_tipo": dict(desvios_tipo),
+                             "desvios_persistiram_por_tipo":
+                                 dict(desvios_persistiram_tipo)},
             "atrito": {"sessoes_medidas": len(antes),
                        "turnos_antes_da_rotina": antes,
                        "turnos_depois_da_rotina": depois,
@@ -275,11 +294,23 @@ def main():
 
     if relatorios:
         pct = 100.0 * relatorios_fora / relatorios
-        print(f"\n## Formato de relatório — {relatorios_fora}/{relatorios} fora do "
-              f"padrão ({pct:.0f}%)")
-        print(f"    memória de cálculo: {relatorios_fora} relatórios com ao menos "
-              f"um desvio ÷ {relatorios} medidos × 100 = {pct:.0f}%")
+        pct_p = 100.0 * relatorios_persistiram / relatorios
+        print(f"\n## Formato de relatório — {relatorios_persistiram}/{relatorios} "
+              f"chegaram ao usuário fora do padrão ({pct_p:.0f}%)")
+        print(f"    primeira escrita fora do padrão: {relatorios_fora} "
+              f"({pct:.0f}%) · bloqueadas e reescritas pelo report-style-lint: "
+              f"{relatorios_bloqueados} · persistiram após a reescrita: "
+              f"{relatorios_persistiram}")
+        print(f"    memória de cálculo: {relatorios_persistiram} medições com "
+              f"desvio E marcadas `reincidente` (a parada já vinha de um "
+              f"bloqueio do hook) ÷ {relatorios} medidas × 100 = {pct_p:.0f}%; "
+              f"a primeira escrita é {relatorios_fora} com desvio ÷ "
+              f"{relatorios} × 100 = {pct:.0f}%")
+        if desvios_persistiram_tipo:
+            print("    desvios que persistiram após a reescrita:")
+            print(fmt_counter(desvios_persistiram_tipo))
         if desvios_tipo:
+            print("    desvios na primeira escrita (o bloqueio devolve estes):")
             print(fmt_counter(desvios_tipo))
 
     # ── Relógio: espera ativa e onde foi o tempo ───────────────────────
@@ -338,11 +369,19 @@ def main():
 
     # ── Leituras sugeridas ─────────────────────────────────────────────
     hints = []
-    if relatorios >= 20 and relatorios_fora / relatorios > 0.3:
-        hints.append(f"- formato de relatório: {relatorios_fora} de {relatorios} "
-                     f"fora do padrão ({100.0*relatorios_fora/relatorios:.0f}%) — o "
-                     f"aviso não está bastando; considere passar o "
-                     f"report-style-lint para bloqueio.")
+    if relatorios >= 20 and relatorios_persistiram / relatorios > 0.05:
+        hints.append(f"- formato de relatório: {relatorios_persistiram} de "
+                     f"{relatorios} chegaram ao usuário fora do padrão "
+                     f"({100.0*relatorios_persistiram/relatorios:.0f}%) mesmo "
+                     f"após o bloqueio e a reescrita — o motivo do bloqueio não "
+                     f"está sendo entendido; veja os tipos que persistem.")
+    elif relatorios >= 20 and relatorios_fora / relatorios > 0.3:
+        hints.append(f"- formato de relatório: a primeira escrita sai fora do "
+                     f"padrão em {100.0*relatorios_fora/relatorios:.0f}% "
+                     f"({relatorios_fora} de {relatorios}), mas o report-style-lint "
+                     f"bloqueia e a reescrita corrige — só "
+                     f"{relatorios_persistiram} chegaram ao usuário. Custo é o "
+                     f"turno extra de reescrita, não relatório ruim.")
     for (repo, tier, reason), n in gate_blocks.items():
         if reason in ("stale", "failure") and n >= 5:
             hints.append(f"- {repo}: {n} bloqueios por build {reason.upper()} — loop de verify lento ou baseline com escopo errado.")
