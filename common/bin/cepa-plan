@@ -468,6 +468,12 @@ def valida_plano(plan):
     if not str(plan.get("source") or "").strip():
         faltas.append("sem `source` — de onde as demandas vieram é o que permite "
                       "conferir a fila contra a fonte depois")
+    if "demonstra" in plan:
+        d = plan.get("demonstra")
+        if not isinstance(d, str) or not d.strip():
+            faltas.append(f"`demonstra` é {d!r} — o campo é opcional, mas se "
+                          "estiver no cabeçalho tem que ser uma frase dizendo "
+                          "o que a fila demonstra quando acaba")
     faltas.extend(valida_itens(plan.get("items")))
     return faltas
 
@@ -552,14 +558,18 @@ def funde(novos, antigos):
     return saida, reaproveitados
 
 
-def serializa(nome, fonte, itens, quando):
+def serializa(nome, fonte, itens, quando, demonstra=None):
     corpo = {
         "schema_version": SCHEMA_VERSION,
         "mode": MODE,
         "program": nome,
         "source": fonte,
-        "items": itens,
     }
+    # `demonstra` só existe quando alguém o escreveu: a fila sem ele continua
+    # válida, e um `demonstra: null` gravado por default seria ruído.
+    if demonstra:
+        corpo["demonstra"] = demonstra
+    corpo["items"] = itens
     dump = yaml.dump(corpo, allow_unicode=True, sort_keys=False,
                      default_flow_style=False, width=78)
     return CABECALHO.format(fonte=fonte, quando=quando) + "\n" + dump
@@ -1226,6 +1236,41 @@ def cmd_status(raiz, nome, filtro, como_json):
                 print(f"       ação humana: {primeira_frase(l['human_pending'])}")
             if st == "blocked" and l["evidence"]:
                 print(f"       motivo: {primeira_frase(l['evidence'])}")
+    return 0
+
+
+def cmd_show(raiz, nome, como_json):
+    """O cabeçalho da fila: de onde veio e o que ela demonstra quando acaba.
+
+    O `status` responde "em que pé estão os itens"; este responde "para que
+    serve esta fila", que é a pergunta de quem abre uma fila de ciclo.
+    """
+    alvo = caminho_do_plano(raiz, nome)
+    if not alvo.is_file():
+        print(f"{alvo} não existe — quem escreve a fila é o /common:plan",
+              file=sys.stderr)
+        return 2
+    plan, erro = le_plano(alvo)
+    if erro:
+        print(erro, file=sys.stderr)
+        return 2
+    if modo_de(plan) != MODE:
+        print(f"COLISÃO: {alvo} é um plano '{modo_de(plan)}' — ondas do "
+              "/maestro:program-plan, não uma fila", file=sys.stderr)
+        return 3
+    itens = plan.get("items") or []
+    demonstra = plan.get("demonstra")
+    if como_json:
+        print(json.dumps({"program": plan.get("program") or nome,
+                          "path": str(alvo), "source": plan.get("source"),
+                          "demonstra": demonstra, "total": len(itens)},
+                         ensure_ascii=False, indent=2))
+        return 0
+    print(f"fila {plan.get('program') or nome} · {alvo}")
+    print(f"  fonte: {plan.get('source') or '(sem `source`)'}")
+    print(f"  demonstra: {demonstra}" if demonstra else
+          "  sem `demonstra:` — a fila não diz o que demonstra quando acaba")
+    print(f"  {len(itens)} itens · a situação de cada um: cepa-plan status {nome}")
     return 0
 
 
@@ -2399,7 +2444,7 @@ def cmd_write(raiz, a):
         return 2
 
     alvo = caminho_do_plano(raiz, a.nome)
-    antigos, fonte_antiga = [], None
+    antigos, fonte_antiga, demonstra_antigo = [], None, None
     if alvo.is_file():
         plan, err = le_plano(alvo)
         if err:
@@ -2414,6 +2459,9 @@ def cmd_write(raiz, a):
             return 3
         antigos = plan.get("items") or []
         fonte_antiga = plan.get("source")
+        # Repriorizar mexe nos itens, não no que a fila demonstra: o campo
+        # vem do disco, senão a primeira reescrita o apaga em silêncio.
+        demonstra_antigo = plan.get("demonstra")
 
         novos_ids = {str(i.get("id")) for i in itens}
         sumidos = [str(x.get("id")) for x in antigos
@@ -2473,7 +2521,8 @@ def cmd_write(raiz, a):
         if a.from_spec else None) or (
         fonte_da_triagem(repasse) if a.from_triage else None
         ) or fonte_antiga or "ditada à mão em /common:plan"
-    texto = serializa(a.nome, fonte, fundidos, a.quando or "(data não informada)")
+    texto = serializa(a.nome, fonte, fundidos, a.quando or "(data não informada)",
+                      demonstra_antigo)
 
     if a.dry_run:
         print(texto)
@@ -2543,6 +2592,13 @@ def main(argv=None):
                      help="mostra só os itens com este status")
     stt.add_argument("--repo", default=".")
     stt.add_argument("--json", action="store_true", dest="como_json")
+
+    sh = sub.add_parser("show",
+                        help="o cabeçalho da fila: fonte e o que ela "
+                             "`demonstra:` quando acaba; só lê")
+    sh.add_argument("nome")
+    sh.add_argument("--repo", default=".")
+    sh.add_argument("--json", action="store_true", dest="como_json")
 
     pr = sub.add_parser("promote",
                         help="as demandas que a fila entrega ao "
@@ -2696,6 +2752,8 @@ def main(argv=None):
         return cmd_divergencia(raiz, a.nome, a.board, a.backlog, a.como_json)
     if a.cmd == "status":
         return cmd_status(raiz, a.nome, a.filtro, a.como_json)
+    if a.cmd == "show":
+        return cmd_show(raiz, a.nome, a.como_json)
     if a.cmd == "queue":
         return cmd_queue(raiz, a.nome, a.teto, a.como_json)
     if a.cmd == "promote":
