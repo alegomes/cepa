@@ -1,0 +1,101 @@
+# plan.yaml — fila `single-track`, escrita por /common:plan.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/spec/cepa-espiral-c1.md (6 critérios; ordem proposta pelo agente, confirmada pelo dono em 2026-10-08)
+# Escrito em: 2026-10-08
+
+schema_version: 2
+mode: single-track
+program: cepa-espiral-c1
+source: docs/spec/cepa-espiral-c1.md (6 critérios; ordem proposta pelo agente, confirmada
+  pelo dono em 2026-10-08)
+items:
+- id: CS-1
+  title: '`cepa-plan` aceita o campo `demonstra:` no cabeçalho de uma fila `single-track`'
+  why: 'é o campo que o CS-6 escreve e que o ciclo 1 do Epic Contratos precisa para
+    nascer como fila; sem ele nenhuma fila sabe o que demonstra · superfície onde
+    se observa: cli · teste vermelho declarado: `cepa-plan validate` sobre um `plan.yaml`
+    single-track com `demonstra: "o operador carrega o PDF e vê 3 respostas"` no
+    cabeçalho devolve OK e `cepa-plan show` imprime o texto; hoje o campo é recusado
+    como desconhecido pelo validador do `common/plan-schema.yaml`.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-2
+  title: '`cepa-metrics scorecard` imprime os três números com a conta'
+  why: 'decisão 8 da estratégia: medir antes de mudar; os três números já existem
+    no cepa-metrics, só falta imprimi-los juntos, e são a base para comparar o resto
+    do ciclo · superfície onde se observa: cli · teste vermelho declarado: `cepa-metrics
+    scorecard` sobre um diretório de telemetria e de transcrições de teste imprime
+    três linhas, "turnos após rotina por sessão", "builds vermelhos" e "sessões
+    no repo cepa", cada uma com numerador, denominador e resultado, para os últimos
+    7 dias e desde o início; hoje o subcomando não existe e o comando sai com erro.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-3
+  title: o launcher `cepa` abre a sessão seguinte quando a anterior deixou o próximo
+    passo gravado
+  why: 'é o pedaço que tira o dono do papel de abrir a sessão seguinte (causa C1);
+    vem antes do CS-4 porque pode ser provado com o arquivo escrito à mão · superfície
+    onde se observa: cli · teste vermelho declarado: com `.claude/sessions/<id>.next.json`
+    contendo `{"repo": "<path>", "modo": "descoberta", "brief": "<texto>"}` escrito
+    pela sessão que acabou de sair, o launcher `cepa` (em modo de teste, com `claude`
+    substituído por um stub que registra argumentos) executa o stub uma segunda
+    vez com cwd igual a `repo`, `--modo descoberta` e o brief como prompt inicial,
+    e apaga o arquivo; hoje o launcher sai depois do primeiro `claude` e o arquivo
+    não é lido.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-4
+  title: '`/common:wrap-up` grava o próximo passo a partir do handoff'
+  why: 'fecha o encadeamento pelo lado de quem termina a sessão; depende do launcher
+    saber ler o arquivo (CS-3) · superfície onde se observa: application · teste
+    vermelho declarado: dado um handoff cuja zona NOTE contém a linha `**Próximo:**
+    repo=/Users/alegomes/coding/wego/wego-product modo=descoberta comando=/common:epic
+    contratos-e-regras`, o passo L7 do wrap-up escreve `.claude/sessions/<id>.next.json`
+    com esses três campos e o brief igual ao parágrafo "Próximo passo" do handoff;
+    sem a linha, não escreve nada e diz isso no relatório. Hoje o wrap-up não conhece
+    a linha e o arquivo nunca existe.'
+  status: pending
+  blocked_by:
+  - CS-3
+  human_pending: null
+- id: CS-5
+  title: '`/common:epic <nome>` entrevista o dono no estilo "grill me" e escreve
+    `docs/epics/<nome>.md`'
+  why: 'é a conversa grill-me que o dono pediu em 2026-10-08 para escrever o Epic
+    Contratos; só precisa do formato docs/epics, que já existe à mão · superfície
+    onde se observa: application · teste vermelho declarado: uma transcrição de
+    teste do comando mostra: uma pergunta por turno, em prosa, nunca lista de opções;
+    cada resposta do dono é desafiada uma vez antes de ser aceita ("quem vê isso
+    e onde?", "o que quebra se faltar?") e a resposta aceita é gravada no arquivo
+    no mesmo turno; o comando só grava `Status: pronta` quando cada ciclo da escada
+    tem roteiro com efeito observável em tela e em backend, a lista de invariantes
+    não está vazia e a seção "Decidido sem perguntar" existe; o hook `spec-readiness-gate`
+    barra `Status: pronta` sem isso. Hoje o comando não existe.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: CS-6
+  title: '`/common:plan --from-epic docs/epics/<nome>.md --ciclo N` deriva a fila
+    do ciclo'
+  why: 'transforma o roteiro de um ciclo em fila; depende do campo demonstra (CS-1)
+    e do documento que o CS-5 produz · superfície onde se observa: cli · teste vermelho
+    declarado: sobre `docs/epics/cepa-em-espiral.md`, `/common:plan cepa-espiral-c2
+    --from-epic docs/epics/cepa-em-espiral.md --ciclo 2 --dry-run` imprime uma fila
+    cujo cabeçalho tem `demonstra:` igual ao roteiro do ciclo 2 e um item por frase
+    de "o que atravessa", cada item com critério de aceite e superfície, na ordem
+    do texto; hoje `--from-epic` é flag desconhecida.'
+  status: pending
+  blocked_by:
+  - CS-1
+  - CS-5
+  human_pending: null
