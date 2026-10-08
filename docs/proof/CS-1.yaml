@@ -1,0 +1,40 @@
+schema_version: 2
+card: CS-1
+verdict: proven
+reviewed_at: 2026-10-08T21:00:00-03:00
+base_commit: 06d7dd503d6f2ecd6a62afd92dda199bd1a876f1
+head_commit: 2c469ef
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (valida_plano, serializa, cmd_write, cmd_show, main)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python sem pitest; perturbação manual em worktree descartável"
+    perturbation:
+      status: pass
+      results:
+        - "baseline HEAD: python3 tests/test_cepa_plan_demonstra.py -> all green"
+        - "P1 valida_plano sem checagem de demonstra (if False and ...) -> RED (validate recusa lista/vazio)"
+        - "P2 cmd_write descarta demonstra_antigo (= None) -> RED (nao apaga o demonstra do disco; start/finish)"
+        - "P3 cmd_show omite demonstra (demonstra = None) -> RED (show imprime o texto; show --json)"
+        - "P4 serializa nunca grava demonstra (if False) -> RED (nao apaga do disco; start/finish)"
+        - "P5 cmd_show --json sem a chave demonstra -> RED (show --json traz o campo)"
+        - "restaurado: git status limpo na worktree; teste de novo -> all green"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; os 5 hunks alterados (valida_plano, serializa, cmd_write, cmd_show texto/json) foram todos alcancados pelo teste coberto, provado por P1-P5 vermelhos"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff nao abre entrada externa (sem rede, sem api-rest); o unico dado novo e um campo de YAML local, e a propria validacao alterada o recusa quando nao-string ou vazio (P1 prova)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "item nao e Bug"
+routing_reason: "Cada comportamento alterado (validacao, show texto/json, preservacao na reescrita) ficou vermelho ao ser quebrado e verde ao restaurar. Vizinho: python3 tests/test_common_plan.py -> all green. Ressalva: a documentacao em common/plan-schema.yaml nao tem teste que a quebre."
