@@ -159,6 +159,10 @@ Painel de 2026-10-07, sete lentes isoladas (contrarian, fundamentalista, expansi
 
 Cada item é uma pergunta fechada, com a recomendação e o porquê. **Respostas do dono (2026-10-08): sim nas dez.** Na 4 o dono pediu confirmação do efeito: o ciclo é interrompido (`aguardando-dono`) só quando o needs-human cai em item que aparece no `blocked_by` de outros; needs-human em item sem dependentes não interrompe, a pergunta espera o fim do ciclo.
 
+11. **A demo do Contratos vive em repositório próprio (`wego-contratos-demo`), como no ADR 0013, e não como módulo do `wego-contratos-backend`?** Eu recomendei o módulo; o dono decidiu **repositório próprio** (2026-10-08). Consequência: o ciclo 1 do Contratos é multi-repo desde o início (X9), e o P1 precisa aceitar `demonstra:` apontando para a prova de UI em outro repositório.
+
+**Quando o Cepa muda.** As três peças são elas mesmas um Epic, `docs/epics/cepa-em-espiral.md`, com quatro ciclos e seus roteiros, construído por filas `single-track` drenadas pelo `cepa-until` à noite, intercalado com o Epic de produto.
+
 1. **O condutor nasce da união cepa-until + Maestro, com o cepa-until como tronco (janela, cota, lateral, estado em disco) e o fork de filhos e o merge train do Maestro extraídos como biblioteca, e o `/maestro:run` deprecado quando o condutor rodar a primeira onda paralela?** Recomendo sim: resolve X1 sem terceiro orquestrador e sem reimplementar o que o Maestro já provou numa onda real.
 2. **O Epic é um documento acima do plano, e cada ciclo materializa um `single-track` comum com um campo `demonstra:` no cabeçalho, sem terceiro modo no esquema?** Recomendo sim: unanimidade do painel (X2), zero consumidor a mudar.
 3. **A troca de modo por estágio fica permitida só para filhos do condutor, como revogação explícita e registrada da Peça 2b nesse escopo, enquanto a sessão interativa mantém o custo de trocar?** Recomendo sim: preserva a fricção onde ela protege o dono de si mesmo e tira onde só atrapalha a máquina (X3). O `/common:modos --delegar` da expansionista entra como primeiro uso da mesma primitiva.
