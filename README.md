@@ -41,6 +41,9 @@ declares the session's working mode and isolates parallel sessions from each oth
 
 You need Claude Code, a git repository and Python 3. A tracker such as Jira is optional.
 
+For one page that shows how these pieces connect, with diagrams, see
+[docs/how-it-fits.md](docs/how-it-fits.md).
+
 ## Work has modes
 
 Most wasted agent time comes from mixing three different moments: wandering around a
@@ -422,6 +425,7 @@ Book-writing and git-history analysis live in the separate **cepa-labs** marketp
 | Document | Read it for |
 |---|---|
 | **[docs/getting-started.md](docs/getting-started.md)** | Install, pick a topology, run your first command. |
+| **[docs/how-it-fits.md](docs/how-it-fits.md)** | How the pieces connect, in five diagrams: layers, a session inside, a card's path, the night, the two terminals. |
 | **[docs/topologies.md](docs/topologies.md)** | Choosing between the build teams and composing the rest. |
 | **[docs/commands.md](docs/commands.md)** | Every command: first by what you are trying to do, then the full reference by plugin. |
 | **[docs/modos-de-trabalho.md](docs/modos-de-trabalho.md)** | The working modes: what each one asks to enter, produces, and needs to close. (Portuguese.) |
