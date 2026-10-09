@@ -1,0 +1,51 @@
+schema_version: 1
+card: CS-5
+status: complete
+audited_at: 2026-10-08T00:00:00-03:00
+note: "Segunda reauditoria, sobre cadafbc..d21e45b. Prova do CS-5 e transcricao gravada (a spec manda; Riscos). Nao rodei claude -p, conferi coerencia interna da Rodada 5 (diffs x falas x Status x script) e rodei o teste mecanico do hook."
+criteria:
+  - id: AC1
+    text: "/common:epic <nome> entrevista o dono no estilo 'grill me' e escreve docs/epics/<nome>.md; uma pergunta por turno, em prosa, nunca lista de opcoes."
+    altitude: application
+    surface: "common/commands/epic.md; observavel = transcricao do comando"
+    demonstrated_by:
+      test: "docs/proof/CS-5-transcricao.md Rodadas 4, 5 e 7 (HEAD 2149350; epic.md identico ao de e0c7d05, git diff e0c7d05..HEAD -- common/ vazio)"
+      layer: "transcricao gravada de execucao real"
+      evidence: verified
+      run: "Conferi as dez falas da Rodada 7 uma a uma: zero-1..5 e semeado-1..5 terminam cada uma em um unico '?' com um unico pedido, em prosa, sem lista (10 de 10). Turnos 2+ das rodadas 4 e 5: 0 duplas em 8. python3 tests/test_epic_readiness_gate.py -> OK."
+    verdict: complete
+    gap: null
+    observacao: "Fora do criterio: em semeado-2 e semeado-4 o agente perguntou pelo ciclo 2/escada em vez da lacuna 'Efeito em tela' do ciclo 1 (ordem do passo 3), declarado na transcricao. Nao fere 'uma pergunta por turno'. Amostra de 5 por cenario e comportamento do modelo, sem gate mecanico que conte perguntas."
+  - id: AC2
+    text: "Cada resposta do dono e desafiada uma vez ('quem ve isso e onde?', 'o que quebra se faltar?') antes de ser aceita, e a resposta aceita e gravada no arquivo no mesmo turno."
+    altitude: application
+    surface: "epic.md passos 3-4; transcricao e diffs de contratos-demo.md"
+    demonstrated_by:
+      test: "docs/proof/CS-5-transcricao.md Rodada 5 turnos 2, 3, 5, 6"
+      layer: "transcricao gravada com diff do arquivo por turno"
+      evidence: verified
+      run: "Conferido: t2 desafio sobre efeito em tela (caso omisso) e linha '- [ ]' provisoria no diff; t3 aceite, celula 'Efeito em tela' preenchida e '- [x]' no mesmo turno, desafio nao respondido vai a Riscos; t5 desafio 'o que quebra se o registro nao guardar o trecho' e '- [ ]' provisoria; t6 aceite, celula de backend preenchida, '- [x]'. Desafio uma vez por resposta, sem segundo desafio."
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "O comando so grava 'Status: pronta' quando cada ciclo tem roteiro com efeito em tela e em backend, invariantes nao vazios e a secao 'Decidido sem perguntar' existe."
+    altitude: application
+    surface: "epic.md passo 5 + crivo no spec-readiness-gate.py"
+    demonstrated_by:
+      test: "docs/proof/CS-5-transcricao.md Rodada 5 turnos 4 e 6 + tests/test_epic_readiness_gate.py"
+      layer: "transcricao (modelo) + subprocesso do hook (mecanico)"
+      evidence: verified
+      run: "python3 tests/test_epic_readiness_gate.py -> todas as linhas 'ok', termina em 'OK'. Transcricao: t4 dono pede pronta, agente recusa em voz alta ('A coluna Efeito em backend do ciclo 1 esta vazia'), arquivo sem mudanca; t6 crivo passa, diff troca 'rascunho' por 'pronta' no mesmo turno em que a ultima lacuna fecha, 0 bloqueios de hook."
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "O hook spec-readiness-gate barra 'Status: pronta' sem isso."
+    altitude: application
+    surface: "common/hooks/spec-readiness-gate.py (PreToolUse Write/Edit/MultiEdit)"
+    demonstrated_by:
+      test: "tests/test_epic_readiness_gate.py"
+      layer: "subprocesso do hook, exit code e stderr"
+      evidence: verified
+      run: "python3 tests/test_epic_readiness_gate.py -> todas 'ok', 'OK' (rodado agora)."
+    verdict: complete
+    gap: null
