@@ -192,10 +192,11 @@ def t_sem_arquivo():
 def t_desligado():
     print("CEPA_ENCADEAR=off: não encadeia e o arquivo fica")
     with World() as w:
-        w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF},
-              env={"CEPA_ENCADEAR": "off"})
+        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF},
+                  env={"CEPA_ENCADEAR": "off", "STUB_RC": "7"})
         check("o stub rodou uma vez", len(w.calls()) == 1, f"{len(w.calls())}")
         check("o arquivo continua lá", (w.sessions / "sess-1.next.json").exists())
+        check("o código de saída é o do claude", r.returncode == 7, f"rc={r.returncode}")
 
 
 def t_invalido():
