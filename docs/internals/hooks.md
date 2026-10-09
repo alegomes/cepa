@@ -625,7 +625,12 @@ that routes the decision to the right reviewer at `/common:debrief` time
 Owner: `common/hooks/`. Blocks a specification declaring itself
 build-ready (`Status: ready`) while some success criterion still has no
 surface + red test: the failure mode is the `/common:spec` interrogation
-ending from agent fatigue rather than actual readiness.
+ending from agent fatigue rather than actual readiness. Epics (`docs/epics/*.md`
+or a document opening with `# Epic:`, written by `/common:epic`) get their own
+sieve: `Status: pronta` is blocked until every cycle of the value ladder fills
+"Roteiro", "Efeito em tela" and "Efeito em backend", the invariants list has at
+least one item, the "Decidido sem perguntar" section exists and no open
+question is left.
 
 ### ui-proof-verdict-guard.py (PreToolUse, matcher `Write`)
 
