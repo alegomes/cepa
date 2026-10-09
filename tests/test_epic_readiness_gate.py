@@ -135,6 +135,29 @@ def test_pronta_sem_backend_bloqueia():
           "1. Ler" in err and "backend" in err.lower(), err)
 
 
+def test_celula_que_nao_diz_nada_bloqueia():
+    for vazio in ("—", "nenhum", "n/d"):
+        escada = ESCADA_OK.replace(
+            "| a conta aparece com a glosa e o motivo |", f"| {vazio} |")
+        rc, err = write(epic(escada=escada))
+        check(f'célula de tela "{vazio}" bloqueia', rc == 2, err)
+
+
+def test_barra_escapada_nao_desloca_coluna():
+    # `\|` dentro do roteiro não é divisor: sem isso a tela vira backend e
+    # o backend vira "o que atravessa", e o ciclo passa com a coluna errada.
+    escada = ESCADA_OK.replace("O operador carrega o PDF",
+                               "O operador escolhe PDF \\| DOCX, carrega o PDF")
+    rc, err = write(epic(escada=escada))
+    check("barra escapada na célula não quebra Epic completo", rc == 0, err)
+    escada = escada.replace(
+        "| `GET /api/v1/contratos/{id}/respostas` devolve as 3 com o nonce do upload |",
+        "|  |")
+    rc, err = write(epic(escada=escada))
+    check("com barra escapada, backend vazio ainda é achado no ciclo 1",
+          rc == 2 and "1. Ler" in err and "backend" in err.lower(), err)
+
+
 def test_pronta_sem_roteiro_bloqueia():
     escada = ESCADA_OK.replace(
         "| O operador carrega o PDF do contrato e vê as 3 respostas. |", "| - |")
@@ -300,6 +323,8 @@ def test_comando_existe_e_e_grill_me():
     # (Pra você + pergunta numerada), puxado pela regra global de plain-report.
     check("turno de entrevista não usa plain-report",
           "não relatório de trabalho" in texto and "plain-report" in texto)
+    check("recusa pronta antes do crivo em voz alta",
+          "recuse em voz alta" in texto)
     check("carrega guided-interrogation", "guided-interrogation" in texto)
     check("fecha pelo spec-readiness-gate", "spec-readiness-gate" in texto)
     check("formato traz as colunas de efeito",
@@ -368,8 +393,16 @@ def test_lint_poupa_turno_de_entrevista():
     # com outra roupa, e é o que o grill me proíbe.
     check("lint não bloqueia turno que só gravou docs/epics e termina em pergunta",
           not _lint_stop("/r/docs/epics/contratos.md"))
-    check("lint não bloqueia o mesmo turno do /common:spec (docs/spec)",
-          not _lint_stop("/r/docs/spec/x.md"))
+    check("controle: turno do /common:spec (docs/spec) segue medido",
+          _lint_stop("/r/docs/spec/x.md"))
+    # A revisão de par de 61b71db: o relatório de fechamento termina na lista
+    # de decisões numerada, que tem `?` no último parágrafo. Ele é relatório.
+    fechamento = (FALA.replace("?", ".") + "\n\n**Pra você:** 1 decisão.\n\n"
+                  "### Detalhe técnico\nGravei o Status como pronta.\n\n"
+                  "### Decisões e próximos passos\n"
+                  "1. Rodo o plan do ciclo 1? Recomendo sim, a fila nasce dele.")
+    check("controle: relatório de fechamento terminando em pergunta é medido",
+          _lint_stop("/r/docs/epics/c.md", fala=fechamento))
     check("controle: mesma fala editando código é medida e bloqueada",
           _lint_stop("/r/common/hooks/x.py"))
     check("lint poupa a pergunta seguida da proposta no mesmo parágrafo",

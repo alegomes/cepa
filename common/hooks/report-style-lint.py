@@ -30,15 +30,17 @@ MultiEdit, NotebookEdit ou rodou `git commit`. Se não usou, ele nem abre o
 texto: conversa, pergunta curta e discussão de design ficam de fora, porque
 formatar um "sim, existe" em três blocos seria pior que o problema.
 
-Exceção (CS-5, 2026-10-08): o turno de ENTREVISTA do `/common:epic` e do
-`/common:spec`. Ali o comando manda gravar a resposta aceita no documento no
-mesmo turno, então todo turno escreve, e o hook o tratava como relatório: na
+Exceção (CS-5, 2026-10-08): o turno de ENTREVISTA do `/common:epic`. Ali o
+comando manda gravar a resposta aceita no documento no mesmo turno, então todo turno escreve, e o hook o tratava como relatório: na
 transcrição de teste do `/common:epic` ele mandou reescrever o desafio no
 formato plain-report, e a pergunta virou item numerado com "Recomendo sim",
 que é o menu que a entrevista proíbe. O turno é poupado quando TODA escrita
-dele foi em `docs/epics/<nome>.md` ou `docs/spec/<slug>.md`, não houve
-commit, e o último parágrafo da fala tem uma pergunta. Fechar o documento
-(último parágrafo sem pergunta) volta a ser medido.
+dele foi em `docs/epics/<nome>.md`, não houve commit, o último parágrafo da
+fala tem uma pergunta e a fala não traz nenhuma marca do relatório
+(`**Pra você:**`, "Detalhe técnico", "Decisões e próximos passos"). O
+relatório de fechamento tem essas marcas e termina em pergunta numerada, então
+continua medido. O `/common:spec` fica fora da exceção: o turno dele pergunta
+em rodadas de até quatro, e poupá-lo é outra decisão.
 
 Saída: exit 0 sempre. O bloqueio viaja no JSON de stdout, não no código de
 saída — o hook nunca derruba o turno por erro próprio.
@@ -227,7 +229,7 @@ def turno_alterou_algo(rows) -> bool:
     return False
 
 
-DOC_DE_ENTREVISTA = re.compile(r"(^|/)docs/(epics|spec)/[^/]+\.md$")
+DOC_DE_ENTREVISTA = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
 
 
 def turno_de_entrevista(rows, fala: str) -> bool:
@@ -237,6 +239,9 @@ def turno_de_entrevista(rows, fala: str) -> bool:
     caractere: a proposta que acompanha a pergunta às vezes vem depois dela
     ("...? Minha proposta: X. Corrija."), e foi esse o turno barrado na
     transcrição."""
+    if (MARCADOR_PRA_VOCE.search(fala) or MARCADOR_TECNICO.search(fala)
+            or MARCADOR_PASSOS.search(fala)):
+        return False
     paragrafos = [p for p in re.split(r"\n\s*\n", fala) if p.strip()]
     if not paragrafos or "?" not in paragrafos[-1]:
         return False

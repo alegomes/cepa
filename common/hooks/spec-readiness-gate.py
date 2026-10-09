@@ -240,12 +240,19 @@ def secao(content: str, prefixo: str):
 
 
 def celulas(linha: str):
+    """As células de uma linha de tabela. `\\|` é barra escapada dentro da
+    célula, não divisor: dividir nela deslocaria as colunas seguintes."""
     s = linha.strip()
     if s.startswith("|"):
         s = s[1:]
-    if s.endswith("|"):
+    if s.endswith("|") and not s.endswith("\\|"):
         s = s[:-1]
-    return [c.strip() for c in s.split("|")]
+    return [c.strip() for c in re.split(r"(?<!\\)\|", s)]
+
+
+# Célula de escada que ocupa o lugar sem dizer nada, além do que `e_vazio`
+# já pega. Fica só no crivo de Epic para não mexer na régua da especificação.
+VAZIO_EPIC = ("—", "–", "nenhum", "nenhuma", "n/d", "nd", "-/-")
 
 
 def problemas_do_epic(content: str):
@@ -283,7 +290,7 @@ def problemas_do_epic(content: str):
                 for chave, nome, _ in COLUNAS_EPIC:
                     i = idx[chave]
                     valor = cel[i] if i < len(cel) else ""
-                    if e_vazio(valor):
+                    if e_vazio(valor) or limpa(valor).lower() in VAZIO_EPIC:
                         problemas.append(
                             f'ciclo "{nome_ciclo}": falta "{nome}"'
                         )

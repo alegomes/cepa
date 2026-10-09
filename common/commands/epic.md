@@ -159,6 +159,12 @@ do `Status: pronta` enquanto faltar qualquer item, dizendo qual ciclo e qual
 coluna. Se ele barrar, **a resposta certa é voltar a perguntar**, nunca encher a
 célula até passar.
 
+**Quando o dono pede `pronta` antes do crivo passar, recuse em voz alta.** Diga
+em uma frase o que ainda falta (qual ciclo, qual coluna, qual seção) e faça a
+pergunta dessa lacuna. Não marcar e não dizer nada deixa o dono achando que
+foi atendido. Fora isso, quando a última lacuna fecha, o crivo passa e você
+grava `pronta` no mesmo turno, sem esperar o dono pedir.
+
 Ao fechar, diga ao dono o caminho do arquivo e o próximo passo: `/common:plan
 <nome>-c1 --from-epic docs/epics/<nome>.md --ciclo 1` deriva a fila do primeiro
 ciclo.
