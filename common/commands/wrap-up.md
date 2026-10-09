@@ -59,7 +59,8 @@ git constraints follow, and the whole command is built around them:
 - Current branch: `git rev-parse --abbrev-ref HEAD`.
 - **If the current branch is not `session/*`** → there's no worktree lifecycle to
   run. Degrade gracefully: this becomes a plain *commit + handoff (+ push if a
-  remote exists)*. Skip the merge/prune steps, tell the user that's what you're
+  remote exists)*. Skip the merge/prune steps (but still record the next step,
+  the second bullet of L7), tell the user that's what you're
   doing, and otherwise follow the same confirm-once shape.
 - Find this worktree's registry entry and its **integration branch**: read
   `<root>/.claude/sessions/*.json` for the entry whose `cwd`/`worktree_path`
@@ -227,12 +228,29 @@ a one-shot marker the SessionEnd hook consumes after your final turn:
   dead cwd. (Backstop: if the session crashes before SessionEnd, `auto_clean` on
   the next session start reaps the now-merged, clean, not-alive worktree anyway.)
 
+- **Grave o próximo passo, se o handoff tiver um.** Depois do marker, rode:
+  ```
+  python3 "${CLAUDE_PLUGIN_ROOT}/hooks/session-next.py" \
+      --handoff <root>/.claude/handoffs/<branch-slug>.md --session-id <session_id>
+  ```
+  Ele lê a zona NOTE do handoff escrito no L3 e, se achar a linha
+  `**Próximo:** repo=<caminho> modo=<modo> comando=<comando>`, escreve
+  `<root>/.claude/sessions/<session_id>.next.json` com esses três campos e o
+  brief igual ao parágrafo `## Próximo passo`. É esse arquivo que o launcher
+  `cepa` lê quando você dá `exit`, para abrir a sessão seguinte no repo e no
+  modo certos sem você digitar (CS-3). Sem a linha, ele não escreve nada, e
+  isso não é erro: o handoff sem `Próximo:` continua válido. A primeira linha
+  da saída vai, como está, para o relatório do L8. Nunca escreva o
+  `.next.json` à mão: o script recusa repo inexistente, modo desconhecido e
+  brief vazio, que o launcher recusaria depois apagando o próximo passo.
+
 ### L8. Report
 
 One block: landed `session/<slice>` → `<base>`; pushed (or local-only); handoff
 at `<path>`; **the worktree + branch will be removed automatically when you
 `exit`** (or run `/common:worktree-discard <slice>` from the base window to drop
-it now). Close with: **"Safe to `exit`."** (A slash command can't close the
+it now); and the **Próximo passo** line — the first line `session-next.py`
+printed in L7, verbatim (gravado, or não gravado and why). Close with: **"Safe to `exit`."** (A slash command can't close the
 session for you — that last keystroke is yours, but everything is already landed,
 so it's a no-op safety-wise.)
 
