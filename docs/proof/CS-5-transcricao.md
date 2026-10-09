@@ -1,5 +1,7 @@
 # Transcrição de teste: `/common:epic` (CS-5)
 
+Duas transcrições: a rodada 4 (entrevista do zero, quatro turnos) e, ao fim, a rodada 5 (Epic semeado até `pronta`, seis turnos).
+
 **Gravada em:** 2026-10-08, na branch `until/2026-10-08-2047`.
 **Como:** `claude -p --plugin-dir common --model sonnet --permission-mode acceptEdits`, num repo git descartável com `.claude/session-mode` = `modo: descoberta` e só um README. Quatro turnos encadeados por `--resume`; as falas do dono são roteiro fixo (o script está ao fim). O arquivo `docs/epics/contratos-demo.md` foi copiado depois de cada turno.
 **Custo:** soma do `total_cost_usd` dos quatro turnos, listado em cada um.
@@ -213,5 +215,305 @@ for i in "${!TURNS[@]}"; do
   printf '%s' "${TURNS[$i]}" > $OUT/t$n.dono.txt
   cp $R/docs/epics/contratos-demo.md $OUT/t$n.arquivo.md 2>/dev/null || echo "(sem arquivo)" > $OUT/t$n.arquivo.md
 done
+echo "session=$SID"
+```
+
+
+# Rodada 5: Epic semeado até `pronta` (depois da revisão de 61b71db)
+
+**Gravada em:** 2026-10-08, sobre o commit c9d8ee1. **Por quê:** o completion-auditor marcou INCOMPLETE sobre a rodada 4: faltava o desafio sobre roteiro ou efeito, faltava o caso em que o Epic passa no crivo e vira `pronta`, e o pedido de `pronta` antes da hora foi recusado em silêncio. O comando passou a mandar recusar em voz alta.
+**Como:** mesmo método da rodada 4, seis turnos, partindo de `docs/epics/contratos-demo.md` já com intenção, um invariante, "Decidido sem perguntar" e o ciclo 1 com roteiro, mas com "Efeito em tela" e "Efeito em backend" vazios (o arquivo de partida está abaixo). Custo: 0.192 + 0.229 + 0.269 + 0.284 + 0.319 + 0.371 = US$ 1.66. Bloqueios de hook no registro da sessão: 0.
+
+| Pedido do CS-5 | Onde nesta rodada |
+|---|---|
+| desafio antes de aceitar | turno 2 (efeito em tela: "o que o operador vê quando o contrato não diz nada?") e turno 5 (backend: "o que quebra se o registro não guardar o trecho?"); cada um vira `- [ ]` provisória |
+| resposta aceita gravada no mesmo turno | turno 3: a célula "Efeito em tela" é preenchida e a linha vira `- [x]`; turno 6: a célula "Efeito em backend" é preenchida e a linha vira `- [x]` |
+| discordância que sobra vai para Riscos, sem segundo desafio | turnos 3 e 6 (contrato omisso; registro sem trecho) |
+| recusa de `pronta` antes do crivo, dita em voz alta | turno 4: "A coluna Efeito em backend do ciclo 1 está vazia" |
+| grava `pronta` quando o crivo passa | turno 6: Status `rascunho` vira `pronta`, com o relatório de fechamento e o próximo passo `/common:plan ... --from-epic ... --ciclo 1` |
+
+**Ressalvas desta rodada:** o turno 1 ainda junta duas perguntas numa frase ("Onde, na tela, ..., e o que ele precisa enxergar ali...?"); o desafio do turno 2 não é literalmente "quem vê isso e onde?", e sim uma pergunta sobre o caso omisso (o comando admite "apontada para o buraco mais caro"); o dono não respondeu esse desafio e o agente aceitou a resposta e registrou a discordância em Riscos, como o comando manda.
+
+## Arquivo de partida
+
+```markdown
+# Epic: contratos-demo
+
+**Status:** rascunho · **Aberto em:** 2026-10-08 · **Origem:** pedido do dono via /common:epic
+
+## Intenção
+
+O operador da operadora quer saber se um procedimento tem cobertura e com qual carência sem ligar para o setor de contratos, que hoje leva até dois dias para responder.
+
+## Invariantes (nunca regridem)
+
+- Toda resposta sobre cobertura e carência vem com o trecho literal do contrato e a página do PDF.
+
+## Escada de valor
+
+| Ciclo | Roteiro de demonstração (o que o dono vê) | Efeito em tela | Efeito em backend | O que atravessa | Quando |
+|---|---|---|---|---|---|
+| 1. Um contrato | O operador escolhe um contrato já carregado, digita "ressonância magnética" e vê cobertura, carência, o trecho e a página. |  |  | Extrator de cláusulas do PDF. Tela de consulta. | próxima quinzena |
+
+## Decidido sem perguntar (vete aqui)
+
+- Um contrato por vez no ciclo 1; vários contratos ficam para depois.
+
+## Perguntas em aberto
+
+- [x] O que o operador pergunta ao contrato? Aceita: sempre "tem cobertura e com qual carência".
+
+## Riscos
+```
+
+## Rodada 5, turno 1
+
+**Dono:**
+
+> /common:epic contratos-demo
+
+**Agente** (US$ 0.192):
+
+> Retomei o rascunho. Intenção, invariante e roteiro do ciclo 1 já estão gravados. O repo só tem um README e nenhum código, então a lacuna mais próxima é o "Efeito em tela" do ciclo 1.
+>
+> Minha proposta é que, na própria tela de consulta, o operador veja um cartão com "Coberto" ou "Não coberto", a carência em dias, o trecho literal do contrato e "p. N" ao lado. Eu faria esse "p. N" abrir o PDF direto naquela página, porque é assim que o operador confere o trecho sem pedir ao setor de contratos. Onde, na tela, o operador deveria ver que a consulta deu certo, e o que ele precisa enxergar ali para confiar na resposta?
+
+**O que mudou no arquivo neste turno:**
+
+```diff
+(sem mudança)
+```
+
+## Rodada 5, turno 2
+
+**Dono:**
+
+> Na tela de consulta aparece um cartão com 'Coberto' ou 'Não coberto', a carência em dias, o trecho e o número da página.
+
+**Agente** (US$ 0.229):
+
+> Gravei sua resposta como provisória em "Perguntas em aberto".
+>
+> O buraco que vejo é este: o cartão só tem "Coberto" e "Não coberto", e os dois trazem trecho e página. Se o contrato for omisso sobre o procedimento, não existe trecho nem página para mostrar. O cartão diria "Não coberto" sem ter base no contrato, e isso quebraria a invariante de que toda resposta vem com o trecho literal. Minha proposta é um terceiro estado, "Não encontrei no contrato", sem veredito, para o operador ligar ao setor de contratos só nesse caso. O que o operador vê na tela quando o contrato não diz nada sobre o procedimento digitado?
+
+**O que mudou no arquivo neste turno:**
+
+```diff
+@@ -24,4 +24,6 @@
+ 
+ - [x] O que o operador pergunta ao contrato? Aceita: sempre "tem cobertura e com qual carência".
+ 
++- [ ] Onde, na tela, o operador vê que a consulta deu certo? Desafiada: o que o cartão mostra quando o contrato não diz nada sobre o procedimento? (provisória: cartão na tela de consulta com "Coberto" ou "Não coberto", carência em dias, trecho e número da página)
++
+ ## Riscos
+```
+
+## Rodada 5, turno 3
+
+**Dono:**
+
+> Quem vê é o operador da central, na tela de consulta, logo depois de clicar em Consultar. Ninguém mais.
+
+**Agente** (US$ 0.269):
+
+> Gravei o "Efeito em tela" do ciclo 1, e o contrato omisso ficou em "Riscos".
+>
+> Agora o "Efeito em backend": o que prova que a consulta aconteceu de verdade, e não só que a tela mostrou algo. Minha proposta é que cada clique em Consultar grave um registro com contrato, texto digitado, veredito, página e trecho devolvidos, operador e horário. Assim dá para conferir depois, sem olhar a tela, que a resposta veio do contrato. Que registro, endpoint ou evento deveria existir no backend depois de um Consultar?
+
+**O que mudou no arquivo neste turno:**
+
+```diff
+@@ -14,7 +14,7 @@
+ 
+ | Ciclo | Roteiro de demonstração (o que o dono vê) | Efeito em tela | Efeito em backend | O que atravessa | Quando |
+ |---|---|---|---|---|---|
+-| 1. Um contrato | O operador escolhe um contrato já carregado, digita "ressonância magnética" e vê cobertura, carência, o trecho e a página. |  |  | Extrator de cláusulas do PDF. Tela de consulta. | próxima quinzena |
++| 1. Um contrato | O operador escolhe um contrato já carregado, digita "ressonância magnética" e vê cobertura, carência, o trecho e a página. | Na tela de consulta, logo depois de clicar em Consultar, o operador da central vê um cartão com "Coberto" ou "Não coberto", a carência em dias, o trecho e o número da página. Ninguém mais vê. |  | Extrator de cláusulas do PDF. Tela de consulta. | próxima quinzena |
+ 
+ ## Decidido sem perguntar (vete aqui)
+ 
+@@ -24,6 +24,8 @@
+ 
+ - [x] O que o operador pergunta ao contrato? Aceita: sempre "tem cobertura e com qual carência".
+ 
+-- [ ] Onde, na tela, o operador vê que a consulta deu certo? Desafiada: o que o cartão mostra quando o contrato não diz nada sobre o procedimento? (provisória: cartão na tela de consulta com "Coberto" ou "Não coberto", carência em dias, trecho e número da página)
++- [x] Onde, na tela, o operador vê que a consulta deu certo? Aceita: na tela de consulta, logo depois de clicar em Consultar, o operador da central vê um cartão com "Coberto" ou "Não coberto", a carência em dias, o trecho e o número da página. Ninguém mais vê. (O desafio sobre o contrato omisso não foi respondido; foi para Riscos.)
+ 
+ ## Riscos
++
++- Contrato omisso: o cartão só tem "Coberto" e "Não coberto", e os dois exigem trecho e página. Se o contrato não diz nada sobre o procedimento, o cartão afirmaria "Não coberto" sem trecho, contra a invariante. Proposta do agente, não aceita pelo dono: um terceiro estado, "Não encontrei no contrato", sem veredito.
+```
+
+## Rodada 5, turno 4
+
+**Dono:**
+
+> Pode marcar o Epic como pronta agora.
+
+**Agente** (US$ 0.284):
+
+> Ainda não dá para marcar `pronta`. A coluna **Efeito em backend** do ciclo 1 está vazia, e o crivo exige que ela esteja preenchida. Não vou encher a célula só para passar. A seção "Decidido sem perguntar" já existe, e não há `- [ ]` em aberto.
+>
+> Falta só o registro, endpoint ou evento que prova que a consulta aconteceu de verdade. Minha proposta continua sendo um registro por clique em Consultar, com contrato, texto digitado, veredito, página, trecho, operador e horário. O que deveria existir no backend depois de um Consultar?
+
+**O que mudou no arquivo neste turno:**
+
+```diff
+(sem mudança)
+```
+
+## Rodada 5, turno 5
+
+**Dono:**
+
+> No backend, a consulta grava um registro em consultas_cobertura com o id do contrato, o procedimento, a resposta e a página citada.
+
+**Agente** (US$ 0.319):
+
+> Gravei a resposta como provisória em "Perguntas em aberto". Falta o desafio, e só depois dele o Epic pode virar `pronta`.
+>
+> O registro em `consultas_cobertura` guarda a página, mas não o trecho. A invariante diz que toda resposta vem com o trecho literal do contrato. Sem o trecho gravado, ninguém consegue conferir depois, só pelo registro, se a resposta foi fiel ao contrato. Se o PDF mudar, nem a página basta para reconstruir o que o operador viu. Minha proposta é gravar o trecho junto com a página, e também o operador e o horário. O que quebra se o registro guardar a página e não o trecho devolvido?
+
+**O que mudou no arquivo neste turno:**
+
+```diff
+@@ -25,6 +25,7 @@
+ - [x] O que o operador pergunta ao contrato? Aceita: sempre "tem cobertura e com qual carência".
+ 
+ - [x] Onde, na tela, o operador vê que a consulta deu certo? Aceita: na tela de consulta, logo depois de clicar em Consultar, o operador da central vê um cartão com "Coberto" ou "Não coberto", a carência em dias, o trecho e o número da página. Ninguém mais vê. (O desafio sobre o contrato omisso não foi respondido; foi para Riscos.)
++- [ ] O que prova no backend que a consulta aconteceu de verdade? Desafiada: o que quebra se o registro não guardar o trecho devolvido? (provisória: a consulta grava um registro em consultas_cobertura com o id do contrato, o procedimento, a resposta e a página citada)
+ 
+ ## Riscos
+ 
+```
+
+## Rodada 5, turno 6
+
+**Dono:**
+
+> Se faltar esse registro, a auditoria não consegue provar o que foi dito ao beneficiário. Mantém.
+
+**Agente** (US$ 0.371):
+
+> O Epic `contratos-demo` está `pronta`. Ele define o que o operador da central vê no fim do ciclo 1: o cartão de cobertura e carência com trecho e página, e o registro que prova a consulta no backend.
+>
+> **Pra você:** 2 perguntas fechadas esperam por você, no fim.
+>
+> ### Detalhe técnico
+>
+> - **Arquivo:** `docs/epics/contratos-demo.md`.
+> - **Crivo (as quatro condições para `pronta`):**
+>   - O ciclo 1 tem Roteiro, Efeito em tela e Efeito em backend preenchidos.
+>   - Há um item em Invariantes: toda resposta traz o trecho literal e a página.
+>   - A seção "Decidido sem perguntar" existe.
+>   - Nenhuma `- [ ]` sobrou em "Perguntas em aberto".
+> - **Efeito em tela:** o operador da central vê, na tela de consulta e logo depois de clicar em Consultar, um cartão com Coberto ou Não coberto, a carência em dias, o trecho e a página.
+> - **Efeito em backend:** cada consulta grava um registro em `consultas_cobertura` com o id do contrato, o procedimento, a resposta e a página citada.
+> - **Dois riscos nomeados em "Riscos"**, porque a discordância sobrou depois do desafio:
+>   - **Contrato omisso:** o cartão só tem Coberto e Não coberto. Se o contrato não diz nada sobre o procedimento, o cartão afirmaria "Não coberto" sem trecho, contra a invariante.
+>   - **Registro sem trecho:** `consultas_cobertura` guarda a página, mas não o trecho literal, nem operador e horário. A auditoria não confere o trecho pelo registro, e se o PDF mudar a página sozinha não reconstrói o que o operador viu.
+> - **O hook `spec-readiness-gate` não barrou a escrita.**
+> - **Doctor:** o `/common:doctor` ainda não rodou neste repo (uns 30s). Não rodei porque você não pediu.
+>
+> ### Decisões e próximos passos
+>
+> 1. Adiciono ao ciclo 1 um terceiro estado cego, "Não encontrei no contrato", para o contrato omisso? Recomendo sim: sem ele o cartão afirma "Não coberto" sem trecho e quebra a invariante.
+> 2. Acrescento trecho, operador e horário ao registro `consultas_cobertura`? Recomendo sim: sem o trecho gravado a auditoria não prova o que foi dito ao beneficiário, que foi o motivo que você deu para manter o registro.
+>
+> Se não tiver opinião, responda sim aos dois. O próximo passo é `/common:plan contratos-demo-c1 --from-epic docs/epics/contratos-demo.md --ciclo 1`, que deriva a fila do primeiro ciclo.
+
+**O que mudou no arquivo neste turno:**
+
+```diff
+@@ -1,6 +1,6 @@
+ # Epic: contratos-demo
+ 
+-**Status:** rascunho · **Aberto em:** 2026-10-08 · **Origem:** pedido do dono via /common:epic
++**Status:** pronta · **Aberto em:** 2026-10-08 · **Origem:** pedido do dono via /common:epic
+ 
+ ## Intenção
+ 
+@@ -14,7 +14,7 @@
+ 
+ | Ciclo | Roteiro de demonstração (o que o dono vê) | Efeito em tela | Efeito em backend | O que atravessa | Quando |
+ |---|---|---|---|---|---|
+-| 1. Um contrato | O operador escolhe um contrato já carregado, digita "ressonância magnética" e vê cobertura, carência, o trecho e a página. | Na tela de consulta, logo depois de clicar em Consultar, o operador da central vê um cartão com "Coberto" ou "Não coberto", a carência em dias, o trecho e o número da página. Ninguém mais vê. |  | Extrator de cláusulas do PDF. Tela de consulta. | próxima quinzena |
++| 1. Um contrato | O operador escolhe um contrato já carregado, digita "ressonância magnética" e vê cobertura, carência, o trecho e a página. | Na tela de consulta, logo depois de clicar em Consultar, o operador da central vê um cartão com "Coberto" ou "Não coberto", a carência em dias, o trecho e o número da página. Ninguém mais vê. | Cada consulta grava um registro em consultas_cobertura com o id do contrato, o procedimento, a resposta e a página citada. Sem ele, a auditoria não prova o que foi dito ao beneficiário. | Extrator de cláusulas do PDF. Tela de consulta. | próxima quinzena |
+ 
+ ## Decidido sem perguntar (vete aqui)
+ 
+@@ -25,8 +25,10 @@
+ - [x] O que o operador pergunta ao contrato? Aceita: sempre "tem cobertura e com qual carência".
+ 
+ - [x] Onde, na tela, o operador vê que a consulta deu certo? Aceita: na tela de consulta, logo depois de clicar em Consultar, o operador da central vê um cartão com "Coberto" ou "Não coberto", a carência em dias, o trecho e o número da página. Ninguém mais vê. (O desafio sobre o contrato omisso não foi respondido; foi para Riscos.)
+-- [ ] O que prova no backend que a consulta aconteceu de verdade? Desafiada: o que quebra se o registro não guardar o trecho devolvido? (provisória: a consulta grava um registro em consultas_cobertura com o id do contrato, o procedimento, a resposta e a página citada)
++- [x] O que prova no backend que a consulta aconteceu de verdade? Aceita: a consulta grava um registro em consultas_cobertura com o id do contrato, o procedimento, a resposta e a página citada. Se faltar, a auditoria não prova o que foi dito ao beneficiário.
+ 
+ ## Riscos
+ 
++- O registro em consultas_cobertura não guarda o trecho literal devolvido, nem operador e horário. A invariante exige o trecho em toda resposta, mas a auditoria não consegue conferir o trecho pelo registro, e se o PDF mudar a página sozinha não reconstrói o que o operador viu. Proposta do agente, não aceita pelo dono: gravar também trecho, operador e horário.
++
+ - Contrato omisso: o cartão só tem "Coberto" e "Não coberto", e os dois exigem trecho e página. Se o contrato não diz nada sobre o procedimento, o cartão afirmaria "Não coberto" sem trecho, contra a invariante. Proposta do agente, não aceita pelo dono: um terceiro estado, "Não encontrei no contrato", sem veredito.
+```
+
+## Script da rodada 5
+
+```bash
+#!/bin/bash
+set -u
+PLUG=/Users/alegomes/cepa-worktrees/cepa-until-2026-10-08-2047/common
+R=/tmp/cs5-epic-seed; OUT=/tmp/cs5-transcript-seed; rm -rf $R $OUT; mkdir -p $R/.claude $R/docs/epics $OUT
+cd $R; git init -q; printf 'modo: descoberta\n' > .claude/session-mode
+printf '# demo\nRepo de demonstração: lê contratos de operadora de saúde em PDF.\n' > README.md
+cat > docs/epics/contratos-demo.md <<'MD'
+# Epic: contratos-demo
+
+**Status:** rascunho · **Aberto em:** 2026-10-08 · **Origem:** pedido do dono via /common:epic
+
+## Intenção
+
+O operador da operadora quer saber se um procedimento tem cobertura e com qual carência sem ligar para o setor de contratos, que hoje leva até dois dias para responder.
+
+## Invariantes (nunca regridem)
+
+- Toda resposta sobre cobertura e carência vem com o trecho literal do contrato e a página do PDF.
+
+## Escada de valor
+
+| Ciclo | Roteiro de demonstração (o que o dono vê) | Efeito em tela | Efeito em backend | O que atravessa | Quando |
+|---|---|---|---|---|---|
+| 1. Um contrato | O operador escolhe um contrato já carregado, digita "ressonância magnética" e vê cobertura, carência, o trecho e a página. |  |  | Extrator de cláusulas do PDF. Tela de consulta. | próxima quinzena |
+
+## Decidido sem perguntar (vete aqui)
+
+- Um contrato por vez no ciclo 1; vários contratos ficam para depois.
+
+## Perguntas em aberto
+
+- [x] O que o operador pergunta ao contrato? Aceita: sempre "tem cobertura e com qual carência".
+
+## Riscos
+MD
+git add -A; git commit -qm init
+TURNS=(
+"/common:epic contratos-demo"
+"Na tela de consulta aparece um cartão com 'Coberto' ou 'Não coberto', a carência em dias, o trecho e o número da página."
+"Quem vê é o operador da central, na tela de consulta, logo depois de clicar em Consultar. Ninguém mais."
+"Pode marcar o Epic como pronta agora."
+"No backend, a consulta grava um registro em consultas_cobertura com o id do contrato, o procedimento, a resposta e a página citada."
+"Se faltar esse registro, a auditoria não consegue provar o que foi dito ao beneficiário. Mantém."
+)
+SID=""
+for i in "${!TURNS[@]}"; do
+  n=$((i+1))
+  if [ -z "$SID" ]; then RES=(); else RES=(--resume "$SID"); fi
+  timeout 540 claude -p ${RES[@]+"${RES[@]}"} --plugin-dir "$PLUG" --model sonnet --permission-mode acceptEdits --max-budget-usd 3 --output-format json "${TURNS[$i]}" > $OUT/t$n.json 2>$OUT/t$n.err
+  echo "turno $n exit=$?"
+  SID=$(python3 -c "import json;print(json.load(open('$OUT/t$n.json'))['session_id'])")
+  printf '%s' "${TURNS[$i]}" > $OUT/t$n.dono.txt
+  cp $R/docs/epics/contratos-demo.md $OUT/t$n.arquivo.md
+done
+cp $OUT/../cs5-transcript-seed/t1.arquivo.md /dev/null 2>&1
+git -C $R show HEAD:docs/epics/contratos-demo.md > $OUT/t0.arquivo.md
 echo "session=$SID"
 ```
