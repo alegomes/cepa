@@ -558,6 +558,23 @@ def test_prosa_da_intencao_e_do_fechamento():
     check("intenção em dois turnos", "**Intenção**, em dois turnos" in texto)
     check("grava pronta no mesmo turno em que a última lacuna fecha",
           "grava `pronta` no mesmo turno" in texto)
+    # S17: a linha de e0c7d05, que levou o turno 1 a 10 de 10 na rodada 7.
+    check("com a intenção no argumento, turno 1 pergunta só o que se faz hoje",
+          "Se a intenção veio no" in texto and "grave-a e pergunte só" in texto
+          and "o que dói nesse caminho" in texto)
+
+
+def test_textos_descritivos():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_modos", REPO / "common" / "hooks" / "_modos.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    check("o gate da descoberta cita docs/epics",
+          "docs/epics" in mod.MODOS["descoberta"]["gate"])
+    cat = (REPO / "docs" / "commands.md").read_text()
+    check("o cenário 'ideia vaga' do catálogo cita /common:epic",
+          re.search(r"^- `/common:epic <nome>`", cat, re.M) is not None)
 
 
 def main():
