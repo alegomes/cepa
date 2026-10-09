@@ -1,6 +1,6 @@
 # Transcrição de teste: `/common:epic` (CS-5)
 
-Duas transcrições: a rodada 4 (entrevista do zero, quatro turnos), a rodada 5 (Epic semeado até `pronta`, seis turnos) e a rodada 6 (só o turno 1, regravado seis vezes).
+Duas transcrições: a rodada 4 (entrevista do zero, quatro turnos), a rodada 5 (Epic semeado até `pronta`, seis turnos) a rodada 6 (só o turno 1, regravado seis vezes) e a rodada 7 (turno 1, cinco gravações por cenário com o texto final: 10 de 10 com uma pergunta).
 
 **Gravada em:** 2026-10-08, na branch `until/2026-10-08-2047`.
 **Como:** `claude -p --plugin-dir common --model sonnet --permission-mode acceptEdits`, num repo git descartável com `.claude/session-mode` = `modo: descoberta` e só um README. Quatro turnos encadeados por `--resume`; as falas do dono são roteiro fixo (o script está ao fim). O arquivo `docs/epics/contratos-demo.md` foi copiado depois de cada turno.
@@ -634,4 +634,159 @@ for cen in zero; do for k in 1 2; do
   printf '%s' "$P" > $OUT/$cen-$k.dono.txt
   cd /; rm -rf $R
 done; done
+```
+
+
+# Rodada 7: turno 1, cinco gravações por cenário, com o `epic.md` de e0c7d05
+
+**Por quê:** a reauditoria de 65908ee pediu 5 de 5 gravações com uma pergunta só, por cenário, com o texto final do comando. Antes de medir, o comando ganhou uma linha: com a intenção no argumento, o turno 1 pergunta só o que se faz hoje (commit e0c7d05).
+**Como:** o script ao fim, as dez gravações sobre o mesmo `epic.md`. Custo total: US$ 1.94.
+
+| Cenário | Gravações com uma pergunta só |
+|---|---|
+| Epic do zero | 5 de 5 |
+| Epic retomado (semeado) | 5 de 5 |
+
+**Ressalva:** no Epic retomado, as gravações 2 e 4 perguntaram pelo ciclo 2 em vez da lacuna "Efeito em tela" do ciclo 1, fora da ordem que o passo 3 do comando manda. A pergunta é única e em prosa; a ordem é que escapou.
+
+Abaixo, a última pergunta de cada gravação (o parágrafo com `?`); a fala inteira está no `result` de cada gravação, reproduzida em seguida.
+
+### zero-1 (US$ 0.183)
+
+**Dono:**
+
+> /common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas.
+
+**Agente:**
+
+> Gravei a intenção que veio no argumento em `docs/epics/contratos-demo.md` (rascunho). O repo só tem um README, então nada do que li responde as perguntas de produto.
+>
+> Minha proposta é que hoje o operador receba a pergunta de um beneficiário ou de um prestador, procure o contrato da operadora no PDF e leia à mão até achar o trecho que responde. Quando isso acontece, o que ele faz hoje, passo a passo, para descobrir o que o contrato diz?
+
+### zero-2 (US$ 0.203)
+
+**Dono:**
+
+> /common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas.
+
+**Agente:**
+
+> Gravei a intenção que veio no argumento em `docs/epics/contratos-demo.md` (status `rascunho`). O repo só tem um README de uma linha, então não há código nem doc que responda isto por mim.
+>
+> Minha proposta é que hoje o operador receba uma pergunta de um cliente ou de outro setor, procure o PDF numa pasta ou sistema e vá rolando até achar a cláusula, porque é o que costuma acontecer com contrato de 80 páginas. O que o operador faz hoje, passo a passo, quando precisa saber o que um contrato diz?
+
+### zero-3 (US$ 0.205)
+
+**Dono:**
+
+> /common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas.
+
+**Agente:**
+
+> Gravei a intenção no rascunho `docs/epics/contratos-demo.md`. O repo só tem um README de uma linha ("lê contratos de operadora de saúde em PDF"), então não há código nem doc que responda por você.
+>
+> Minha proposta é que hoje o operador abra o PDF, use a busca por texto (Ctrl+F) com palavras que ele imagina que o contrato usa, e vá lendo trechos até achar a cláusula, porque é o que qualquer pessoa faz com um PDF de 80 páginas. O que o operador faz hoje, passo a passo, quando chega uma pergunta sobre um contrato?
+
+### zero-4 (US$ 0.193)
+
+**Dono:**
+
+> /common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas.
+
+**Agente:**
+
+> Gravei a intenção e criei o rascunho em `docs/epics/contratos-demo.md`. O repo só tem o README, então não havia mais nada para ler antes de perguntar.
+>
+> Minha proposta é que hoje o operador receba uma dúvida (de um beneficiário ou de um colega), procure o PDF do contrato certo numa pasta ou sistema, abra as 80 páginas e use Ctrl+F até achar a cláusula. Esse é o caminho que o Epic precisa encurtar. O que o operador faz hoje, passo a passo, desde que surge a dúvida até ele ter a resposta?
+
+### zero-5 (US$ 0.206)
+
+**Dono:**
+
+> /common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas.
+
+**Agente:**
+
+> Gravei a intenção em `docs/epics/contratos-demo.md` (rascunho). O repo só tem um README, então não havia nada para ler que respondesse isto.
+>
+> Minha proposta é que hoje o operador receba uma pergunta de um cliente ou de um colega, procure o PDF do contrato em alguma pasta ou sistema, abra o arquivo e role ou busque por palavra até achar a cláusula que responde. Quando o operador precisa saber o que um contrato diz, o que ele faz hoje, passo a passo, até chegar à resposta?
+
+### semeado-1 (US$ 0.195)
+
+**Dono:**
+
+> /common:epic contratos-demo
+
+**Agente:**
+
+> Retomei o rascunho que já existia: a intenção, a primeira pergunta e um invariante estão gravados. As células "Efeito em tela" e "Efeito em backend" do ciclo 1 estão vazias, então começo pela de tela.
+>
+> Minha proposta é que o resultado apareça na própria tela de consulta, logo abaixo do campo onde o operador digitou "ressonância magnética". Ali ficam "Cobertura: sim ou não" e "Carência: N dias", e depois o trecho do contrato entre aspas com "página X do PDF". Assim ele não troca de tela para conferir a fonte. Onde, na tela, o operador deveria ver a resposta com o trecho e a página?
+
+### semeado-2 (US$ 0.198)
+
+**Dono:**
+
+> /common:epic contratos-demo
+
+**Agente:**
+
+> Retomei o rascunho. A intenção, o que dói (até dois dias de espera pelo setor de contratos), o invariante e o roteiro do ciclo 1 já estão gravados. Faltam a escada além do ciclo 1 e as colunas de efeito em tela e em backend.
+>
+> Minha proposta é que o ciclo 2 seja "vários contratos": o operador digita "ressonância magnética" sem escolher contrato e vê a resposta de cada contrato carregado, cada uma com trecho e página. Escolhi essa porque o ciclo 1 já deixou "vários contratos" para depois e porque o operador no dia a dia raramente sabe de antemão em qual contrato olhar. Depois do ciclo 1, o que você quer ver funcionando no fim do ciclo seguinte?
+
+### semeado-3 (US$ 0.192)
+
+**Dono:**
+
+> /common:epic contratos-demo
+
+**Agente:**
+
+> O arquivo `docs/epics/contratos-demo.md` já existe como rascunho. Retomo dele, sem refazer o que já está marcado. Ficaram vazias as colunas "Efeito em tela" e "Efeito em backend" do ciclo 1.
+>
+> Minha proposta: o operador vê o resultado na própria tela de consulta, logo abaixo do campo onde digitou "ressonância magnética". Ali aparecem o selo "Coberto, carência de N dias" e o trecho literal do contrato com "página X". Como o invariante exige o trecho, ele fica visível sem clique extra. Onde, na tela, o operador deveria ver que a resposta apareceu?
+
+### semeado-4 (US$ 0.183)
+
+**Dono:**
+
+> /common:epic contratos-demo
+
+**Agente:**
+
+> Retomei `docs/epics/contratos-demo.md`. A intenção, um invariante e o roteiro do ciclo 1 já estão gravados, então não repito essas perguntas. Falta a escada inteira: só existe o ciclo 1, e as colunas de efeito em tela e em backend estão vazias.
+>
+> Minha proposta é uma escada de três ciclos, porque o ciclo 1 já deixa explícito que "vários contratos ficam para depois". O ciclo 1 seria um contrato, o ciclo 2 buscaria em todos os contratos da operadora e o ciclo 3 cuidaria do que fazer quando o contrato não responde com clareza. Depois do ciclo 1 funcionando, o que você quer que o operador consiga fazer a mais?
+
+### semeado-5 (US$ 0.185)
+
+**Dono:**
+
+> /common:epic contratos-demo
+
+**Agente:**
+
+> Retomei o `docs/epics/contratos-demo.md`, que já existia: a intenção, um invariante e o roteiro do ciclo 1 estão gravados. A primeira lacuna é o "Efeito em tela" do ciclo 1.
+>
+> Minha proposta é que, depois de digitar "ressonância magnética", o operador veja na própria tela de consulta um cartão com "Cobertura: sim" e "Carência: N dias", o trecho literal da cláusula logo abaixo e a página do PDF ao lado. Eu ligaria a página a um link que abre o PDF naquela página, porque é assim que ele confere sem ligar para o contrato. Onde, na tela, o operador precisa ver que a resposta veio do contrato e não de um palpite?
+
+## Script da rodada 7
+
+```bash
+#!/bin/bash
+# Turno 1 do /common:epic, 5 gravações por cenário, com o epic.md do HEAD.
+set -u
+PLUG=/Users/alegomes/cepa-worktrees/cepa-until-2026-10-08-2047/common
+OUT=/tmp/cs5-t1x5; rm -rf $OUT; mkdir -p $OUT
+grava() { cen=$1; k=$2
+  R=/tmp/cs5-t1x5-$cen-$k; rm -rf $R; mkdir -p $R/.claude $R/docs/epics; cd $R; git init -q
+  printf 'modo: descoberta\n' > .claude/session-mode
+  printf '# demo\nRepo de demonstração: lê contratos de operadora de saúde em PDF.\n' > README.md
+  if [ $cen = semeado ]; then cp /tmp/cs5-transcript-seed/t0.arquivo.md docs/epics/contratos-demo.md; P="/common:epic contratos-demo";
+  else P="/common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas."; fi
+  git add -A; git commit -qm init
+  timeout 400 claude -p --plugin-dir "$PLUG" --model sonnet --permission-mode acceptEdits --max-budget-usd 2 --output-format json "$P" > $OUT/$cen-$k.json 2>$OUT/$cen-$k.err
+  echo "$cen-$k exit=$?"; printf '%s' "$P" > $OUT/$cen-$k.dono.txt; cd /; rm -rf $R; }
+for k in 1 2 3 4 5; do grava zero $k & grava semeado $k & wait; done
 ```

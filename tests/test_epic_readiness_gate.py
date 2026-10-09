@@ -423,6 +423,143 @@ def test_lint_poupa_turno_de_entrevista():
           _lint_stop("/r/docs/epics/c.md", extra=outro))
 
 
+# ── buracos que o proof-reviewer achou em 65908ee (perturbações S1-S16) ────
+
+def test_epic_pronta_para_construir_tambem_e_gateado():
+    # S1: sem isto, um Epic que use a palavra da especificação escapa do crivo.
+    rc, err = write(epic(status="pronta-para-construir", invariantes=""))
+    check("Epic com pronta-para-construir incompleto bloqueia", rc == 2, err)
+
+
+def test_invariante_so_checkbox_nao_conta():
+    # S2: item `- [x]` é pergunta respondida, não invariante.
+    inv = "## Invariantes (nunca regridem)\n\n- [x] A conta nunca muda.\n"
+    rc, err = write(epic(invariantes=inv))
+    check("Invariantes só com - [x] bloqueia", rc == 2, err)
+
+
+def test_pergunta_modelo_nao_conta_como_aberta():
+    # S3: a linha-modelo `- [ ] <pergunta>` não é pergunta em aberto.
+    rc, err = write(epic(perguntas="## Perguntas em aberto\n\n- [ ] <pergunta>\n"))
+    check("'- [ ] <pergunta>' (modelo) não bloqueia Epic completo", rc == 0, err)
+
+
+def test_linha_curta_sem_coluna_de_backend_bloqueia():
+    # S4: a linha que termina antes da coluna de backend não a preenche.
+    escada = """## Escada de valor
+
+| Ciclo | Roteiro de demonstração | Efeito em tela | Efeito em backend |
+|---|---|---|---|
+| 1. Ler | O operador vê as 3 respostas. | a tela mostra as 3 |
+"""
+    rc, err = write(epic(escada=escada))
+    check("linha de ciclo curta (sem backend) bloqueia",
+          rc == 2 and "backend" in err.lower(), err)
+
+
+def test_muitas_perguntas_abertas_resumidas():
+    # S5: a mensagem não despeja todas; diz quantas sobram.
+    abertas = "".join(f"- [ ] pergunta {i}?\n" for i in range(7))
+    rc, err = write(epic(perguntas="## Perguntas em aberto\n\n" + abertas))
+    check("7 perguntas abertas: bloqueia e diz 'e mais 2'",
+          rc == 2 and "e mais 2" in err, err)
+
+
+def _gate_mod():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("srg", HOOK)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_celulas_barra_escapada_no_fim():
+    # S6: `\|` no fim da linha é conteúdo da última célula, não o divisor.
+    cel = _gate_mod().celulas("| a | b \\|")
+    check("celulas: '\\|' no fim fica na última célula",
+          cel == ["a", "b \\|"], repr(cel))
+
+
+def test_vazio_epic_ignora_caixa():
+    # S7: "Nenhum" com maiúscula também é célula que não diz nada.
+    escada = ESCADA_OK.replace(
+        "| a conta aparece com a glosa e o motivo |", "| Nenhum |")
+    rc, err = write(epic(escada=escada))
+    check("célula 'Nenhum' (maiúscula) bloqueia", rc == 2, err)
+
+
+def test_status_com_separador_bolinha():
+    # S8: `**Status:** pronta • **Aberto em:**` ainda é pronta.
+    doc = epic(invariantes="").replace("**Status:** pronta ·", "**Status:** pronta •")
+    rc, err = write(doc)
+    check("Status 'pronta •' incompleto bloqueia", rc == 2, err)
+
+
+def _lint_rows(rows, fala=FALA):
+    d = Path(tempfile.mkdtemp(prefix="cs5-lint-"))
+    rows = list(rows) + [{"type": "assistant", "message": {
+        "role": "assistant", "content": [{"type": "text", "text": fala}]}}]
+    t = d / "t.jsonl"
+    t.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+    env = dict(os.environ, CEPA_REPORT_STYLE_DIR=str(d / "st"),
+               CEPA_TELEMETRY_DIR=str(d / "tel"))
+    p = subprocess.run([sys.executable, str(LINT)], input=json.dumps({
+        "hook_event_name": "Stop", "session_id": "s", "transcript_path": str(t),
+        "cwd": str(d)}), capture_output=True, text=True, env=env)
+    return '"block"' in p.stdout
+
+
+def _u(texto="responde"):
+    return {"type": "user", "message": {"role": "user", "content": [
+        {"type": "text", "text": texto}]}}
+
+
+def _tool(nome, entrada, sidechain=False):
+    return {"type": "assistant", "isSidechain": sidechain, "message": {
+        "role": "assistant", "content": [
+            {"type": "tool_use", "name": nome, "input": entrada}]}}
+
+
+def test_lint_regras_da_excecao():
+    epic_md = {"file_path": "/r/docs/epics/c.md"}
+    # S9 + S11: escrita só de subagente não é a entrevista gravando.
+    check("controle: só subagente gravou docs/epics, turno é medido",
+          _lint_rows([_u(), _tool("Edit", epic_md, sidechain=True)]))
+    # S10: o que veio antes do último prompt não conta para este turno.
+    check("escrita de código em turno ANTERIOR não tira a exceção",
+          not _lint_rows([_u("antes"), _tool("Edit", {"file_path": "/r/x.py"}),
+                          _u(), _tool("Edit", epic_md)]))
+    # S12: o caminho precisa ser docs/epics de verdade, não sufixo dele.
+    check("controle: mydocs/epics/ não é docs/epics/, turno é medido",
+          _lint_rows([_u(), _tool("Edit", {"file_path": "/r/mydocs/epics/c.md"})]))
+    # S13: MultiEdit e NotebookEdit fora de docs/epics tiram a exceção.
+    check("controle: MultiEdit em código junto, turno é medido",
+          _lint_rows([_u(), _tool("Edit", epic_md),
+                      _tool("MultiEdit", {"file_path": "/r/x.py", "edits": []})]))
+    check("controle: NotebookEdit junto, turno é medido",
+          _lint_rows([_u(), _tool("Edit", epic_md),
+                      _tool("NotebookEdit", {"notebook_path": "/r/n.ipynb"})]))
+    # S14: merge e push também são trabalho entregue.
+    for cmd in ("git merge x", "git push"):
+        check(f"controle: '{cmd}' no turno, turno é medido",
+              _lint_rows([_u(), _tool("Edit", epic_md),
+                          _tool("Bash", {"command": cmd})]))
+    # Cada marca do relatório, sozinha, já tira a exceção.
+    for marca in ("**Pra você:** nada.", "### Detalhe técnico\nx",
+                  "### Decisões e próximos passos\n1. x?"):
+        fala = marca + "\n\n" + FALA
+        check(f"controle: marca de relatório sozinha ({marca[:14]!r}) é medida",
+              _lint_rows([_u(), _tool("Edit", epic_md)], fala=fala))
+
+
+def test_prosa_da_intencao_e_do_fechamento():
+    texto = CMD.read_text()
+    # S15 e S16: as duas regras da prosa que a transcrição exercita.
+    check("intenção em dois turnos", "**Intenção**, em dois turnos" in texto)
+    check("grava pronta no mesmo turno em que a última lacuna fecha",
+          "grava `pronta` no mesmo turno" in texto)
+
+
 def main():
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
