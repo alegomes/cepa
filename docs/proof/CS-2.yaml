@@ -1,0 +1,45 @@
+schema_version: 2
+card: CS-2
+verdict: proven
+reviewed_at: 2026-10-08T22:00:00-03:00
+base_commit: fa37c1b
+head_commit: c5168c5
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-metrics (scorecard, _turnos_apos_rotina, _builds_vermelhos, _sessoes_no_cepa, _linha, dispatch em __main__)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python sem pitest; perturbacao manual em worktree descartavel"
+    perturbation:
+      status: pass
+      results:
+        - "baseline c5168c5: python3 tests/test_cepa_metrics_scorecard.py -> 0 FAIL, 'ok'"
+        - "base: common/bin/cepa-metrics em fa37c1b + teste de HEAD -> 6 falha(s), RED"
+        - "P10 remove evs.sort(...) -> RED (4 FAIL); antes do reforco era verde (lacuna fechada)"
+        - "P13 remove filtro de session em _turnos_apos_rotina -> RED (6 FAIL); antes verde (lacuna fechada)"
+        - "P1 ultima rotina -> primeira -> RED (4 FAIL)"
+        - "P3 EMPTY contado como vermelho -> RED (5 FAIL)"
+        - "P4 SCORECARD_REPO=wego -> RED (2 FAIL)"
+        - "P5 janela 7 dias -> 60 -> RED (6 FAIL)"
+        - "P9 remove despacho do subcomando -> RED (6 FAIL)"
+        - "P12 janela desde o inicio -> 7 dias -> RED (7 FAIL)"
+        - "amostra: na rodada anterior (ae28119) P2, P3b, P6, P7, P8, P11 tambem ficaram RED; o diff de producao nao mudou entre ae28119 e c5168c5 (so o teste, +8 linhas), nao foram re-rodadas"
+        - "restaurado: git status limpo, teste de novo -> ok; worktree removida"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as duas linhas antes sem efeito (sort e filtro de session) agora ficam RED ao quebrar (P10, P13); todos os hunks novos alcancados por perturbacao vermelha"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so le o ledger local de telemetria (jsonl); sem rede, sem api-rest, nenhuma entrada de fora do harness"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "item nao e Bug. Complementar: teste de HEAD contra fa37c1b -> 6 falha(s)"
+routing_reason: "Teste vermelho no base; P10 e P13, os dois sobreviventes da rodada anterior, agora ficam vermelhos, e a amostra das demais continua vermelha. Todo comportamento novo e load-bearing no CLI."
