@@ -1,6 +1,6 @@
 ---
-description: Escreve a fila de execução `single-track` do repo — `.claude/programs/<nome>/plan.yaml`, o documento que guarda a ORDEM e o PORQUÊ de cada item estar naquela posição, que é o que o tracker perde. Aceita três fontes: `--from-spec`, que transforma cada critério de sucesso de uma especificação do /common:spec num item herdando a ordem do texto (e dizendo que herdou); `--from-jira`, que pega a classificação do /board-flow:triage — quem lê os cards e caça evidência no código — e grava a ordem que ela propôs; e a fila ditada à mão, para repo sem tracker e sem spec. Não exige Jira. É o ÚNICO escritor da fila, e recusa gravar por cima de um plano de ondas do /maestro:program-plan. Quem lê a fila depois é o /common:next.
-argument-hint: <nome> [--from-spec docs/spec/<slug>.md | --from-jira [coluna|repasse.json]] [--dry-run] [--on-missing refuse|keep|drop]
+description: Escreve a fila de execução `single-track` do repo — `.claude/programs/<nome>/plan.yaml`, o documento que guarda a ORDEM e o PORQUÊ de cada item estar naquela posição, que é o que o tracker perde. Aceita quatro fontes: `--from-spec`, que transforma cada critério de sucesso de uma especificação do /common:spec num item herdando a ordem do texto (e dizendo que herdou); `--from-epic` com `--ciclo N`, que faz de cada frase de "O que atravessa" de um ciclo de um Epic do /common:epic um item e do roteiro do ciclo o `demonstra:` da fila; `--from-jira`, que pega a classificação do /board-flow:triage — quem lê os cards e caça evidência no código — e grava a ordem que ela propôs; e a fila ditada à mão, para repo sem tracker e sem spec. Não exige Jira. É o ÚNICO escritor da fila, e recusa gravar por cima de um plano de ondas do /maestro:program-plan. Quem lê a fila depois é o /common:next.
+argument-hint: <nome> [--from-spec docs/spec/<slug>.md | --from-epic docs/epics/<nome>.md --ciclo N | --from-jira [coluna|repasse.json]] [--dry-run] [--on-missing refuse|keep|drop]
 interaction: conversational
 ---
 
@@ -46,6 +46,13 @@ mesmo diretório e são distinguidos por um campo interno, então este comando
   leva.
 - `--from-spec docs/spec/<slug>.md` — cada critério de sucesso da especificação
   vira um item da fila.
+- `--from-epic docs/epics/<nome>.md` — a fila sai de UM ciclo da escada de
+  valor de um Epic do `/common:epic`: cada frase da coluna "O que atravessa"
+  vira um item, e o roteiro de demonstração do ciclo vira o `demonstra:` do
+  cabeçalho. Sempre com `--ciclo`.
+- `--ciclo N` — qual ciclo da escada vira fila (o número da coluna "Ciclo").
+  Um Epic tem vários ciclos e uma fila é de um só; o costume é o nome da fila
+  terminar em `-c<N>`.
 - `--from-jira [coluna|repasse.json]` — a fila sai da classificação de uma
   triagem. Com um arquivo, grava um repasse que uma triagem já produziu; com um
   nome de coluna (ou nada, que é `Backlog`), roda o `/board-flow:triage` antes e
@@ -164,6 +171,42 @@ fechar a especificação antes (`/common:spec --fechar <slug>`) ou escrever a fi
 assim mesmo. Recomende fechar antes — um critério sem superfície observável vira
 um item de fila que ninguém sabe quando terminou.
 
+#### Com `--from-epic` e `--ciclo`
+
+A fonte aqui é um ciclo da escada de valor de um Epic (`docs/epics/<nome>.md`,
+escrito pelo `/common:epic`). **A leitura é mecânica**, não sua:
+
+```
+python3 common/bin/cepa-plan from-epic docs/epics/<nome>.md --ciclo N
+```
+
+Ele devolve um JSON com o `demonstra` e os `items` do ciclo, e aplica as regras
+que antes não tinham dono:
+
+- **o `demonstra:` da fila é o roteiro do ciclo**, verbatim. É o que o Epic
+  declara como aceite, e é o que o `cepa-plan show` imprime depois;
+- **um item por frase de "O que atravessa"**, na ordem do texto, com id
+  `C<N>-<k>`. Frase é o trecho terminado em `.` ou `;` fora de crase: o
+  `/common:epic` escreve uma frase por peça, e o Epic escrito à mão antes dele
+  separa as peças com `;`;
+- **o `why` de cada item diz** de que ciclo e de que Epic a peça veio, que a
+  ordem foi herdada do texto (ninguém priorizou as peças entre si), o
+  **critério de aceite** (o roteiro do ciclo) e a **superfície onde se
+  observa** (as colunas "Efeito em tela" e "Efeito em backend"). Peça nenhuma
+  ganha critério próprio inventado: o Epic não o escreveu;
+- **Epic sem as colunas de efeito não é recusado**, e é dito: cada item nasce
+  com a superfície "não declarada" e um aviso. Recomende ao dono preencher o
+  ciclo pelo `/common:epic` antes de drenar a fila;
+- **Epic em `rascunho`, ou com pergunta `- [ ]`, é aviso**, como na spec.
+  Faça a mesma pergunta fechada: fechar o Epic antes ou escrever a fila assim
+  mesmo. Recomende fechar antes;
+- **ciclo que não existe, sem roteiro ou com "O que atravessa" vazio é
+  recusa**, com exit 2 e o motivo. Não preencha a lacuna por conta própria.
+
+Quando nada mudou no que o `from-epic` devolveu, grave direto com
+`--from-epic <arquivo> --ciclo N` no lugar do `--items`: é o único caminho que
+leva o `demonstra:` ao cabeçalho, porque a lista de itens não o carrega.
+
 #### Com `--from-jira`
 
 A fonte aqui é a **classificação** de uma triagem, não a coluna do quadro.
@@ -258,9 +301,10 @@ python3 common/bin/cepa-plan write <nome> \
   --items <arquivo.json> --source "<de onde veio>" --quando <YYYY-MM-DD> --repo .
 ```
 
-Quando nada mudou no que o `from-spec` (ou o `from-triage`) devolveu,
-`--from-spec <arquivo>` / `--from-triage <arquivo>` faz as duas coisas de uma
-vez, no lugar do `--items`.
+Quando nada mudou no que o `from-spec` (ou o `from-triage`, ou o
+`from-epic`) devolveu, `--from-spec <arquivo>` / `--from-triage <arquivo>` /
+`--from-epic <arquivo> --ciclo N` faz as duas coisas de uma vez, no lugar do
+`--items`.
 
 Escreva os itens num arquivo JSON temporário (ou mande por stdin com `-`). O
 script:

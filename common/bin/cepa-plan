@@ -698,6 +698,192 @@ def cmd_from_spec(caminho, como_json=True):
     return 0
 
 
+# ── leitura de um ciclo de um Epic do /common:epic ───────────────────────────
+
+HERDADO_EPIC = ("herdado da ordem do texto da coluna \"O que atravessa\"; "
+                "ninguém priorizou as peças entre si")
+
+# As colunas da escada que a fila usa, pelo começo do cabeçalho em minúsculas
+# — a mesma regra do crivo de Epic no spec-readiness-gate. "Efeito em tela" e
+# "Efeito em backend" são opcionais AQUI: o Epic escrito à mão antes do
+# /common:epic (docs/epics/cepa-em-espiral.md) não as tem, e recusá-lo deixaria
+# o primeiro Epic do harness sem fila.
+COLUNAS_DA_FILA = (("ciclo", "Ciclo"), ("roteiro", "Roteiro de demonstração"),
+                   ("efeito em tela", "Efeito em tela"),
+                   ("efeito em backend", "Efeito em backend"),
+                   ("o que atravessa", "O que atravessa"))
+OBRIGATORIAS_DA_FILA = ("ciclo", "roteiro", "o que atravessa")
+VAZIO_DE_CELULA = ("", "—", "–", "-", "nenhum", "nenhuma", "n/d", "nd")
+
+RE_SECAO = re.compile(r"^##\s+(.+?)\s*$", re.M)
+
+
+def celulas_da_linha(linha):
+    """As células de uma linha de tabela. `\\|` é barra escapada dentro da
+    célula, não divisor — a mesma regra do spec-readiness-gate."""
+    s = linha.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|") and not s.endswith("\\|"):
+        s = s[:-1]
+    return [c.strip().replace("\\|", "|") for c in re.split(r"(?<!\\)\|", s)]
+
+
+def frases_de(celula):
+    """Uma frase por peça: o texto partido em `.` ou `;` seguidos de espaço ou
+    do fim, fora de crase. O /common:epic escreve a coluna em frases curtas
+    terminadas em ponto; o Epic escrito à mão antes dele separa as peças com
+    `;`. Dentro de crase não parte, senão `docs/epics/x.md` viraria duas."""
+    frases, atual, em_crase = [], [], False
+    for i, ch in enumerate(celula):
+        if ch == "`":
+            em_crase = not em_crase
+        if ch in ".;" and not em_crase and (i + 1 == len(celula)
+                                            or celula[i + 1].isspace()):
+            frases.append("".join(atual))
+            atual = []
+            continue
+        atual.append(ch)
+    frases.append("".join(atual))
+    return [" ".join(f.split()) for f in frases if f.strip()]
+
+
+def itens_de_epic(texto, ciclo, caminho):
+    """(demonstra, itens, avisos, erro). Um item por frase de "O que
+    atravessa" do ciclo pedido, na ordem do texto; o roteiro do ciclo vira o
+    `demonstra:` da fila.
+
+    O critério de aceite de cada item é o roteiro do ciclo, porque é o que o
+    Epic declara como aceite ("o roteiro de demonstração de cada ciclo"); a
+    superfície sai das colunas de efeito. Peça nenhuma ganha critério próprio
+    inventado aqui: o Epic não o escreveu.
+    """
+    avisos = []
+    m = re.search(r"^\*\*Status:\*\*\s*([^\s·*]+)", texto, re.M)
+    status = m.group(1) if m else None
+    if status != "pronta":
+        avisos.append(f"o Epic está com `Status: {status}` — só `pronta` passou "
+                      "pelo crivo do /common:epic (todo ciclo com roteiro e "
+                      "efeito observável em tela e em backend)")
+    abertas = len(re.findall(r"^-\s+\[ \]", texto, re.M))
+    if abertas:
+        avisos.append(f"{abertas} pergunta(s) ainda em aberto no Epic")
+
+    marcas = list(RE_SECAO.finditer(texto))
+    escada = None
+    for i, s in enumerate(marcas):
+        if s.group(1).strip().lower().startswith("escada de valor"):
+            fim = marcas[i + 1].start() if i + 1 < len(marcas) else len(texto)
+            escada = texto[s.end():fim]
+            break
+    if escada is None:
+        return None, [], avisos, (f"{caminho} não tem a seção `## Escada de "
+                                  "valor` — sem ciclo não há fila a derivar")
+    linhas = [l for l in escada.splitlines() if l.strip().startswith("|")]
+    if not linhas:
+        return None, [], avisos, ("a `## Escada de valor` não tem tabela — "
+                                  "sem ciclo não há fila a derivar")
+    cab = [c.lower() for c in celulas_da_linha(linhas[0])]
+    idx = {}
+    for chave, _ in COLUNAS_DA_FILA:
+        pos = [i for i, c in enumerate(cab) if c.startswith(chave)]
+        if pos:
+            idx[chave] = pos[0]
+    faltam = [nome for chave, nome in COLUNAS_DA_FILA
+              if chave in OBRIGATORIAS_DA_FILA and chave not in idx]
+    if faltam:
+        return None, [], avisos, ("a `## Escada de valor` não tem a(s) "
+                                  f"coluna(s) {', '.join(faltam)}")
+
+    linha_do_ciclo, nomes = None, []
+    for l in linhas[1:]:
+        if re.fullmatch(r"[\s|:\-]*", l):
+            continue
+        cel = celulas_da_linha(l)
+        rotulo = cel[idx["ciclo"]] if idx["ciclo"] < len(cel) else ""
+        nomes.append(rotulo)
+        n = re.match(r"\D*?(\d+)", rotulo)
+        if n and int(n.group(1)) == ciclo:
+            linha_do_ciclo = cel
+            break
+    if linha_do_ciclo is None:
+        return None, [], avisos, (f"o Epic não tem o ciclo {ciclo} na escada "
+                                  f"de valor (ciclos: {', '.join(nomes) or 'nenhum'})")
+
+    def valor(chave):
+        i = idx.get(chave)
+        v = linha_do_ciclo[i] if i is not None and i < len(linha_do_ciclo) else ""
+        return "" if v.lower() in VAZIO_DE_CELULA else " ".join(v.split())
+
+    rotulo = valor("ciclo") or str(ciclo)
+    roteiro = valor("roteiro")
+    if not roteiro:
+        return None, [], avisos, (f"o ciclo \"{rotulo}\" não tem roteiro de "
+                                  "demonstração — a fila não teria o que demonstrar")
+    frases = frases_de(valor("o que atravessa"))
+    if not frases:
+        return None, [], avisos, (f"o ciclo \"{rotulo}\" tem a coluna \"O que "
+                                  "atravessa\" vazia — não há peça a virar item")
+
+    tela, backend = valor("efeito em tela"), valor("efeito em backend")
+    if tela or backend:
+        superficie = "; ".join(p for p in (
+            f"tela: {tela}" if tela else "", f"backend: {backend}" if backend else "")
+            if p)
+    else:
+        superficie = ("não declarada no Epic (a escada não tem \"Efeito em "
+                      "tela\" nem \"Efeito em backend\" para este ciclo; quem "
+                      "pergunta é o /common:epic)")
+        avisos.append(f"o ciclo \"{rotulo}\" não declara \"Efeito em tela\" nem "
+                      "\"Efeito em backend\" — cada item nasce com a superfície "
+                      "\"não declarada\"")
+
+    itens = []
+    for k, frase in enumerate(frases, 1):
+        itens.append({
+            "id": f"C{ciclo}-{k}",
+            "title": frase,
+            "why": " · ".join((
+                f"peça {k} de {len(frases)} do ciclo \"{rotulo}\" do Epic "
+                f"{caminho}",
+                HERDADO_EPIC,
+                f"critério de aceite: o roteiro do ciclo — {roteiro}",
+                f"superfície onde se observa: {superficie}")),
+            "status": "pending",
+            "blocked_by": [],
+            "human_pending": None,
+        })
+    return roteiro, itens, avisos, None
+
+
+def le_epic(caminho, ciclo):
+    """(demonstra, itens, rotulo-da-fonte) ou None depois de dizer o erro."""
+    p = Path(caminho)
+    if not p.is_file():
+        print(f"{p} não existe", file=sys.stderr)
+        return None
+    demonstra, itens, avisos, erro = itens_de_epic(
+        p.read_text(encoding="utf-8"), ciclo, caminho)
+    for a in avisos:
+        print(f"aviso: {a}", file=sys.stderr)
+    if erro:
+        print(erro, file=sys.stderr)
+        return None
+    fonte = (f"{caminho}, ciclo {ciclo} ({len(itens)} peças de \"O que "
+             "atravessa\"; ordem herdada do texto)")
+    return demonstra, itens, fonte
+
+
+def cmd_from_epic(caminho, ciclo):
+    lido = le_epic(caminho, ciclo)
+    if lido is None:
+        return 2
+    demonstra, itens, _ = lido
+    print(json.dumps({"demonstra": demonstra, "items": itens},
+                     ensure_ascii=False, indent=2))
+    return 0
+
+
 # ── leitura do repasse de uma triagem do /board-flow:triage ──────────────────
 
 # Os cinco destinos que a triagem dá a um card. Os nomes são os do balde no
@@ -2430,6 +2616,12 @@ def cmd_write(raiz, a):
                   file=sys.stderr)
             return 2
         erro = None
+    elif a.from_epic:
+        lido = le_epic(a.from_epic, a.ciclo)
+        if lido is None:
+            return 2
+        demonstra_do_epic, itens, fonte_do_epic = lido
+        erro = None
     else:
         itens, erro = carrega_itens(a.items)
     if erro:
@@ -2520,9 +2712,12 @@ def cmd_write(raiz, a):
         f"{a.from_spec} ({len(itens)} critérios de sucesso; ordem herdada do texto)"
         if a.from_spec else None) or (
         fonte_da_triagem(repasse) if a.from_triage else None
+        ) or (fonte_do_epic if a.from_epic else None
         ) or fonte_antiga or "ditada à mão em /common:plan"
+    # Com --from-epic o `demonstra:` é o roteiro do ciclo e vem do Epic, que é
+    # onde ele é decidido; nas outras fontes ele vem do disco, intocado.
     texto = serializa(a.nome, fonte, fundidos, a.quando or "(data não informada)",
-                      demonstra_antigo)
+                      demonstra_do_epic if a.from_epic else demonstra_antigo)
 
     if a.dry_run:
         print(texto)
@@ -2567,6 +2762,13 @@ def main(argv=None):
     s = sub.add_parser("from-spec",
                        help="lê uma spec do /common:spec e devolve os itens (JSON)")
     s.add_argument("spec")
+
+    e = sub.add_parser("from-epic",
+                       help="extrai a fila de um ciclo de um Epic (JSON com "
+                            "`demonstra` e `items`); só lê")
+    e.add_argument("epic")
+    e.add_argument("--ciclo", type=int, required=True, metavar="N",
+                   help="o ciclo da escada de valor que vira fila")
 
     t = sub.add_parser("from-triage",
                        help="lê o repasse de uma triagem do /board-flow:triage "
@@ -2716,6 +2918,11 @@ def main(argv=None):
     w.add_argument("--from-triage", metavar="ARQUIVO",
                    help="lê os itens do repasse de uma triagem do "
                         "/board-flow:triage, na ordem que ela classificou")
+    w.add_argument("--from-epic", metavar="ARQUIVO",
+                   help="lê os itens de um ciclo de um Epic do /common:epic, "
+                        "um por frase de \"O que atravessa\"; pede --ciclo")
+    w.add_argument("--ciclo", type=int, metavar="N",
+                   help="o ciclo da escada de valor que vira fila (com --from-epic)")
     w.add_argument("--source", help="de onde as demandas vieram")
     w.add_argument("--quando", help="data a registrar no cabeçalho (YYYY-MM-DD)")
     w.add_argument("--repo", default=".")
@@ -2733,8 +2940,15 @@ def main(argv=None):
         return cmd_from_spec(a.spec)
     if a.cmd == "from-triage":
         return cmd_from_triage(a.repasse)
-    if a.cmd == "write" and not (a.items or a.from_spec or a.from_triage):
-        ap.error("write precisa de --items, --from-spec ou --from-triage")
+    if a.cmd == "from-epic":
+        return cmd_from_epic(a.epic, a.ciclo)
+    if a.cmd == "write" and not (a.items or a.from_spec or a.from_triage
+                                 or a.from_epic):
+        ap.error("write precisa de --items, --from-spec, --from-triage ou "
+                 "--from-epic")
+    if a.cmd == "write" and bool(a.from_epic) != (a.ciclo is not None):
+        ap.error("--from-epic e --ciclo andam juntos: o Epic tem vários ciclos "
+                 "e a fila é de um só")
 
     raiz = raiz_principal(a.repo)
     if raiz is None:
