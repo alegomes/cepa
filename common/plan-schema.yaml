@@ -43,6 +43,14 @@ mode: single-track              # single-track | parallel-waves
 program: exemplo                # nome do plano (vira .claude/programs/<nome>/)
 source: "Jira WEGO · coluna To Do, priorizada em 2026-07-28"
                                 # de onde as demandas vieram (rastreio, não costura)
+demonstra: "o operador carrega o PDF e vê 3 respostas"
+                                # OPCIONAL. O que a fila demonstra quando acaba,
+                                # numa frase observável — é o roteiro do ciclo
+                                # de um Epic (/common:plan --from-epic). Ausente
+                                # = a fila não declara; presente tem que ser
+                                # texto não-vazio (`cepa-plan validate` recusa
+                                # o resto). Repriorizar não o apaga. Quem lê:
+                                # `cepa-plan show <nome>`.
 
 items:                          # ORDEM DA LISTA = ordem de execução. É o dado.
   - id: WEGO-1958               # chave do card OU âncora na fonte ("P9 do BACKLOG")

@@ -30,6 +30,18 @@ MultiEdit, NotebookEdit ou rodou `git commit`. Se não usou, ele nem abre o
 texto: conversa, pergunta curta e discussão de design ficam de fora, porque
 formatar um "sim, existe" em três blocos seria pior que o problema.
 
+Exceção (CS-5, 2026-10-08): o turno de ENTREVISTA do `/common:epic`. Ali o
+comando manda gravar a resposta aceita no documento no mesmo turno, então todo turno escreve, e o hook o tratava como relatório: na
+transcrição de teste do `/common:epic` ele mandou reescrever o desafio no
+formato plain-report, e a pergunta virou item numerado com "Recomendo sim",
+que é o menu que a entrevista proíbe. O turno é poupado quando TODA escrita
+dele foi em `docs/epics/<nome>.md`, não houve commit, o último parágrafo da
+fala tem uma pergunta e a fala não traz nenhuma marca do relatório
+(`**Pra você:**`, "Detalhe técnico", "Decisões e próximos passos"). O
+relatório de fechamento tem essas marcas e termina em pergunta numerada, então
+continua medido. O `/common:spec` fica fora da exceção: o turno dele pergunta
+em rodadas de até quatro, e poupá-lo é outra decisão.
+
 Saída: exit 0 sempre. O bloqueio viaja no JSON de stdout, não no código de
 saída — o hook nunca derruba o turno por erro próprio.
 """
@@ -215,6 +227,48 @@ def turno_alterou_algo(rows) -> bool:
                 if re.search(r"\bgit\s+(commit|merge|push)\b", cmd):
                     return True
     return False
+
+
+DOC_DE_ENTREVISTA = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
+
+
+def turno_de_entrevista(rows, fala: str) -> bool:
+    """O turno só gravou o documento da entrevista e termina perguntando?
+
+    "Termina perguntando" é o último parágrafo ter `?`, não o último
+    caractere: a proposta que acompanha a pergunta às vezes vem depois dela
+    ("...? Minha proposta: X. Corrija."), e foi esse o turno barrado na
+    transcrição."""
+    if (MARCADOR_PRA_VOCE.search(fala) or MARCADOR_TECNICO.search(fala)
+            or MARCADOR_PASSOS.search(fala)):
+        return False
+    paragrafos = [p for p in re.split(r"\n\s*\n", fala) if p.strip()]
+    if not paragrafos or "?" not in paragrafos[-1]:
+        return False
+    inicio = 0
+    for i in range(len(rows) - 1, -1, -1):
+        if _is_user_prompt(rows[i]):
+            inicio = i
+            break
+    escreveu = False
+    for row in rows[inicio:]:
+        if row.get("type") != "assistant" or row.get("isSidechain"):
+            continue
+        for bloco in (row.get("message") or {}).get("content") or []:
+            if not isinstance(bloco, dict) or bloco.get("type") != "tool_use":
+                continue
+            nome = bloco.get("name", "")
+            entrada = bloco.get("input") or {}
+            if nome in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+                alvo = str(entrada.get("file_path") or entrada.get("notebook_path") or "")
+                if not DOC_DE_ENTREVISTA.search(alvo.replace("\\", "/")):
+                    return False
+                escreveu = True
+            elif nome == "Bash" and re.search(
+                    r"\bgit\s+(commit|merge|push)\b",
+                    str(entrada.get("command", ""))):
+                return False
+    return escreveu
 
 
 def ultimo_relatorio(rows) -> str:
@@ -425,6 +479,8 @@ def on_stop(payload):
 
     relatorio = ultimo_relatorio(rows)
     if conta_palavras(relatorio) < MIN_PALAVRAS_PARA_MEDIR:
+        return None
+    if turno_de_entrevista(rows, relatorio):
         return None
 
     desvios = medir(relatorio, load_jargao(), load_abstracoes(), load_higiene())

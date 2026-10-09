@@ -57,6 +57,7 @@ Write tight, scannable Markdown — a handoff, not a transcript. Structure:
 
 ## Próximo passo
 <a ÚNICA coisa mais importante a fazer a seguir — concreta, acionável>
+**Próximo:** repo=<caminho absoluto> modo=<modo> comando=<comando e argumentos>   ← opcional
 
 ## ⚠ Cuidados / pendências
 - <armadilhas, "não-live até reinstall", coisas a não esquecer>
@@ -66,6 +67,12 @@ Write tight, scannable Markdown — a handoff, not a transcript. Structure:
 ```
 
 Rules:
+- **A linha `**Próximo:**` é opcional e é o que encadeia a sessão seguinte.**
+  Escreva-a só quando o próximo passo é uma sessão nova com repo, modo e
+  comando conhecidos (ex.: `**Próximo:** repo=/Users/alegomes/coding/wego/wego-product
+  modo=descoberta comando=/common:epic contratos-e-regras`). O `/common:wrap-up`
+  a transforma no `.next.json` que o launcher `cepa` lê no `exit`, e o parágrafo
+  de `## Próximo passo` vira o brief dessa sessão. Sem a linha, nada encadeia.
 - **Concrete over vague.** "Fix the bug" is useless; "rodar `bin/install.sh
   --clean` + restart para os hooks novos valerem" is useful. Cite commits /
   `file:line` where it helps.

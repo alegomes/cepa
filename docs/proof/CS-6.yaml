@@ -1,0 +1,39 @@
+schema_version: 2
+card: CS-6
+verdict: proven
+reviewed_at: 2026-10-09T03:00:00-03:00
+base_commit: 8dc6d13
+head_commit: d57490f
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (itens_de_epic, frases_de, celulas_da_linha, le_epic, cmd_from_epic, ramo --from-epic do cmd_write, parser, checagem --from-epic/--ciclo no main)", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/plan.md (prosa)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: "Segunda volta. d57490f so mexeu em tests/test_cepa_plan_from_epic.py e numa frase de plan.md; common/bin/cepa-plan e identico ao de 81a2421. A superficie e a CLI: o teste chama common/bin/cepa-plan como subprocesso real, sem duble da classe alterada. Prosa de plan.md so tem duas presencas de trecho como guarda (argument-hint e 'cepa-plan from-epic'); ela descreve comportamento que o codigo ja prova."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "green em d57490f (worktree descartavel /tmp/proof-CS-6b): python3 tests/test_cepa_plan_from_epic.py -> 'tudo ok', rc=0, 43 linhas 'ok'. Dry-run real: cepa-plan from-epic docs/epics/cepa-em-espiral.md --ciclo 2 -> demonstra = roteiro do ciclo 2 'Conduzir', itens C2-1 e C2-2 na ordem do texto, cada um com criterio de aceite e superficie no why."
+        - "9 sobreviventes da 1a volta, todos agora RED (cada um confirmado por git diff --numstat 1/1 na linha certa): :769 'if abertas'->'if False' (1 FAIL); :794 'if faltam'->'if False' (2 FAIL); :783 'if not linhas'->'if False' (FAIL, Traceback); :715 OBRIGATORIAS_DA_FILA=('ciclo',) (2 FAIL); :2770 required=False (FAIL); :741 sem 'and not em_crase' (FAIL); :742 isspace->True (FAIL); :727 sem 'not endswith(\\\\|)' (FAIL, apos reaplicar: a 1a tentativa de sed nao aplicou e foi descartada); :703 HERDADO_EPIC, tanto 'herdado da ordem do texto da coluna' quanto 'ninguem priorizou as pecas entre si' trocados por XX (FAIL em C2-1 e C2-2)."
+        - "amostra de 8 das 25 que ja eram vermelhas, todas RED: :2949 checagem --from-epic/--ciclo no main (2 FAIL); :2619 ramo elif a.from_epic (4 FAIL); :2944 return cmd_from_epic (9 FAIL); blocked_by (3 FAIL); id C{ciclo}-{k} (3 FAIL); ciclo == N invertido (14 FAIL); status != pronta (1 FAIL); criterio de aceite {roteiro} (2 FAIL)."
+        - "worktree removida com git worktree remove --force; git worktree list sem /tmp/proof-CS-6b; arvore principal intocada alem deste arquivo."
+    base_regression: "1a volta: base 8dc6d13 (cepa-plan e plan.md da base + teste de HEAD) -> 12 FAIL"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as quatro linhas que a 1a volta apontou sem guarda (:769, :783, :794, :2770) agora ficam vermelhas ao serem desligadas (python3 tests/test_cepa_plan_from_epic.py -> FAIL em cada uma)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so le um .md local passado pelo proprio operador via CLI; sem rede, sem api-rest, sem chamador externo. As fronteiras de validacao (ciclo inexistente, escada ausente, escada sem tabela, coluna obrigatoria ausente, roteiro vazio, atravessa vazio, --ciclo sem --from-epic, crase, barra escapada) estao perturbadas acima."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "Task (funcionalidade nova), nao Bug; verificado na 1a volta: teste de HEAD contra cepa-plan/plan.md de 8dc6d13 -> 12 FAIL."
+routing_reason: "PROVEN: as 9 linhas que sobreviviam na 1a volta agora quebram o teste, e a amostra de 8 das 25 ja vermelhas continua vermelha. O criterio (demonstra = roteiro do ciclo 2, um item por frase de 'o que atravessa', na ordem, com criterio de aceite e superficie) esta guardado contra o CLI real. Ressalva nao bloqueante: no Epic atual o ciclo 2 nao declara 'Efeito em tela/backend', entao a superficie de cada item sai como 'nao declarada no Epic' (com aviso); e o comportamento correto, mas a superficie concreta depende do Epic ser completado."

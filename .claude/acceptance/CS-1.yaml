@@ -1,0 +1,14 @@
+key: CS-1
+status: complete
+criteria:
+  - id: AC1
+    text: "cepa-plan aceita o campo demonstra: no cabecalho de uma fila single-track (validate OK, show imprime o texto)"
+    altitude: cli
+    surface: "common/bin/cepa-plan validate e show, executados como subprocesso"
+    test: tests/test_cepa_plan_demonstra.py (test_validate_aceita_demonstra, test_show_imprime_o_texto)
+    layer: cli (subprocess)
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_demonstra.py -> 'all green' (checks ok, 0 falhas)"
+    status: complete
+    gap: ""
+note: "Spec dizia que validate recusava o campo; o implementador reportou que ja aceitava. Vermelho real era show inexistente, write apagando o campo e validate aceitando valor vazio/nao-texto. Criterio literal coberto."

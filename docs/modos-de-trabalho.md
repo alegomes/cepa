@@ -311,7 +311,7 @@ DESTINOS por modo — o que aquele modo produz — declarada em
 | modo | pode escrever |
 |---|---|
 | `exploracao` | `docs/**`, `.claude/**`, `BACKLOG.md` |
-| `descoberta` | `docs/discovery/**`, `docs/spec/**`, `.claude/**`, `BACKLOG.md` |
+| `descoberta` | `docs/discovery/**`, `docs/spec/**`, `docs/epics/**`, `.claude/**`, `BACKLOG.md` |
 | `design` | `docs/design/**`, `.claude/**`, `BACKLOG.md` |
 | `reflexao` | `.claude/reflexao/**`, `docs/**`, `BACKLOG.md` |
 | `documentacao` | `docs/**`, `.claude/**`, `BACKLOG.md` |

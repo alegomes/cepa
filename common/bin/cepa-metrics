@@ -13,6 +13,7 @@ Usage:
   cepa-metrics --month 2026-07  # a specific month
   cepa-metrics --repo wego-acesso-backend   # filter to one repo
   cepa-metrics --json           # machine-readable dump of the aggregates
+  cepa-metrics scorecard        # os três números do scorecard, com a conta
 
 Reading the numbers:
   - gate_block reason=stale/failure with HIGH counts on one repo → the verify
@@ -65,6 +66,93 @@ def fmt_counter(c: Counter, indent="    ", top=None) -> str:
         return f"{indent}(nenhum)"
     width = max(len(str(k)) for k, _ in items)
     return "\n".join(f"{indent}{str(k):<{width}}  {v}" for k, v in items)
+
+
+# ── Scorecard ──────────────────────────────────────────────────────────
+# Os três números que a estratégia (docs/estrategia-cepa-proximo-nivel.md,
+# decisão 8, achados F3, F8 e F10) pôs como base de comparação do Epic Cepa em
+# espiral: mudança no harness que não move nenhum deles não entra. As contas
+# são as mesmas do documento, para que o número daqui e o de lá batam.
+SCORECARD_REPO = "cepa"
+
+
+def _turnos_apos_rotina(events):
+    """F3: prompts depois da ÚLTIMA rotina, somados, ÷ sessões com rotina."""
+    por_sessao = defaultdict(list)
+    for e in events:
+        if e.get("event") == "prompt" and e.get("session"):
+            por_sessao[e["session"]].append(e)
+    sessoes, depois = 0, 0
+    for evs in por_sessao.values():
+        evs.sort(key=lambda x: x.get("ts", ""))
+        idx = [i for i, x in enumerate(evs) if x.get("kind") == "rotina"]
+        if not idx:
+            continue
+        sessoes += 1
+        depois += len(evs) - idx[-1] - 1
+    return depois, sessoes
+
+
+def _builds_vermelhos(events):
+    """F8: builds FAILURE ÷ todos os build_result (EMPTY entra no denominador)."""
+    st = [e.get("status") for e in events if e.get("event") == "build_result"]
+    return sum(1 for s in st if s == "FAILURE"), len(st)
+
+
+def _sessoes_no_cepa(events):
+    """F10: session_start no repo cepa ÷ session_start em todos os repos."""
+    rs = [e.get("repo") for e in events if e.get("event") == "session_start"]
+    return sum(1 for r in rs if r == SCORECARD_REPO), len(rs)
+
+
+def _linha(nome, num, den, pct, unid):
+    if not den:
+        return f"    {nome}: sem dados ({unid[1]} = 0)"
+    res = f"{100 * num / den:.1f}%" if pct else f"{num / den:.1f}"
+    op = f"{num} ÷ {den} × 100" if pct else f"{num} ÷ {den}"
+    return f"    {nome}: {res}  ({num} {unid[0]} ÷ {den} {unid[1]}; {op} = {res})"
+
+
+def scorecard(argv):
+    ap = argparse.ArgumentParser(prog="cepa-metrics scorecard",
+                                 description="Os três números do scorecard, com a conta.")
+    ap.add_argument("--json", action="store_true", dest="as_json")
+    args = ap.parse_args(argv)
+
+    now = datetime.now(timezone.utc)
+    janelas = [("últimos 7 dias", now - timedelta(days=7)),
+               ("desde o início", datetime.min.replace(tzinfo=timezone.utc))]
+    out = {}
+    for rotulo, since in janelas:
+        evs = load_events(since, now)
+        out[rotulo] = {
+            "turnos após rotina por sessão": _turnos_apos_rotina(evs),
+            "builds vermelhos": _builds_vermelhos(evs),
+            "sessões no repo cepa": _sessoes_no_cepa(evs),
+        }
+
+    if args.as_json:
+        print(json.dumps({r: {k: {"numerador": n, "denominador": d,
+                                  "resultado": (n / d if d else None)}
+                              for k, (n, d) in m.items()}
+                          for r, m in out.items()}, indent=2, ensure_ascii=False))
+        return 0
+
+    print(f"# Scorecard do harness · ledger: {TELEMETRY_DIR}")
+    for rotulo, m in out.items():
+        print(f"\n## {rotulo}")
+        print(_linha("turnos após rotina por sessão", *m["turnos após rotina por sessão"],
+                     False, ("prompts depois da última rotina", "sessões com rotina")))
+        print(_linha("builds vermelhos", *m["builds vermelhos"],
+                     True, ("builds FAILURE", "builds")))
+        print(_linha("sessões no repo cepa", *m["sessões no repo cepa"],
+                     True, ("sessões no cepa", "sessões")))
+    print("\nmemória de cálculo (docs/estrategia-cepa-proximo-nivel.md, F3, F8, F10):")
+    print("  turnos após rotina = soma, nas sessões com algum comando de rotina, dos")
+    print("    prompts do usuário depois da última rotina ÷ número dessas sessões;")
+    print("  builds vermelhos = eventos build_result FAILURE ÷ todos os build_result × 100;")
+    print("  sessões no repo cepa = session_start com repo=cepa ÷ todos os session_start × 100.")
+    return 0
 
 
 def main():
@@ -403,4 +491,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["scorecard"]:
+        sys.exit(scorecard(sys.argv[2:]))
     sys.exit(main())

@@ -25,6 +25,13 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+# O cepa lê CEPA_PROMPT/CEPA_PROMPT_MODO do ambiente. Herdadas do shell de quem
+# roda a suíte (o cepa-until roda com elas), viram um prompt que o teste não
+# pediu e quebram o "repassa só os args do usuário". Quem quer o prompt passa
+# no env= do próprio caso.
+for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO"):
+    os.environ.pop(_k, None)
+
 REPO = Path(__file__).resolve().parent.parent
 CEPA = REPO / "common" / "bin" / "cepa"
 

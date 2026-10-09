@@ -1,0 +1,16 @@
+key: CS-3
+status: complete
+criteria:
+  - id: AC1
+    text: "com `.claude/sessions/<id>.next.json` ({repo, modo: descoberta, brief}) escrito pela sessão que saiu, o launcher `cepa` (claude substituído por stub) executa o stub uma segunda vez com cwd = repo, `--modo descoberta` e o brief como prompt inicial, e apaga o arquivo; antes o launcher saía após o primeiro claude."
+    altitude: cli
+    surface: "subprocesso `common/bin/cepa --modo construcao` com CLAUDE_BIN apontando para stub; stub registra argv, cwd e .claude/session-mode; hook real session-registry roda no stub e anota CEPA_LAUNCH_ID; stdout/stderr, exit code e estado de arquivos"
+    test: tests/test_cepa_encadeamento.py (cenário 'com o próximo passo gravado, a sessão seguinte abre sozinha')
+    layer: cli
+    evidence: verified
+    run: "python3 tests/test_cepa_encadeamento.py -> 25 linhas 'ok', 0 FAIL, rc=0, linha final 'OK' (N=25 > 0). Vermelho no base a1030d7 (7 FAIL) conforme relatado pelo coordenador, não reexecutado por mim."
+    status: complete
+    notes: >
+      Interpretação aceita: `--modo` é flag do próprio cepa; a segunda sessão abre via cepa (session-chain.py faz exec do cepa com --modo <modo> brief), observável em .claude/session-mode ('modo: descoberta'), não argumento ao claude real. O <id> é o session_id; o elo é CEPA_LAUNCH_ID anotado pelo session-registry real. Cobertos: cwd da segunda = repo, modo gravado, brief verbatim como prompt, .next.json e anotação .launch apagados, não isola em worktree. Sem arquivo: sai como antes com o rc do claude. Extras: CEPA_ENCADEAR=off, repo inexistente e JSON quebrado não encadeiam e preservam o arquivo; read_entries ignora *.next.json.
+      Ressalva (não bloqueia): o stub é quem dispara o hook session-registry (não o claude real), logo a fiação SessionStart real do Claude Code não é exercida; é o limite do "modo de teste" do critério.
+    gap: ""

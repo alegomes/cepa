@@ -1,0 +1,22 @@
+key: CS-2
+status: complete
+criteria:
+  - id: AC1
+    text: "`cepa-metrics scorecard` sobre um diretório de telemetria imprime três linhas (turnos após rotina por sessão, builds vermelhos, sessões no repo cepa), cada uma com numerador, denominador e resultado, para os últimos 7 dias e desde o início; antes o subcomando não existia."
+    altitude: cli
+    surface: "subprocesso `python3 common/bin/cepa-metrics scorecard` com CEPA_TELEMETRY_DIR apontando para ledger sintético; stdout e exit code"
+    test: tests/test_cepa_metrics_scorecard.py::test_texto (+ test_json, test_ledger_vazio, test_relatorio_antigo_intacto)
+    layer: cli
+    evidence: verified
+    run: "python3 tests/test_cepa_metrics_scorecard.py -> 22 checks ok, 0 FAIL, linha final 'ok' (N=22 > 0)"
+    status: complete
+    notes: >
+      Valores esperados contados à mão (3.0 e 4.0 turnos; 25.0% e 42.9% builds; 25.0% e 50.0% sessões cepa)
+      conferem com as contas F3/F8/F10 da estratégia (última rotina, EMPTY no denominador, session_start).
+      Fontes: o implementado lê só o ledger (CEPA_TELEMETRY_DIR); "transcrições" não é lida. Isso é consistente
+      com "Decidido sem perguntar" da spec (mesmas fontes do cepa-metrics) e os eventos prompt(kind,session),
+      build_result e session_start(repo) existem nos produtores reais (session-log.py, capture-build-result.py,
+      session-registry.py via _telemetry.emit). O teste não fornece diretório de transcrições, então a
+      expressão literal "e de transcrições de teste" do critério não é exercida; é decisão da spec, sinalizada
+      para o humano.
+    gap: ""

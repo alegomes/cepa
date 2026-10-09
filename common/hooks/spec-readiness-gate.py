@@ -40,6 +40,20 @@ Mecanismo:
   - A linha-modelo do próprio formato (enumeração ou <placeholder>) passa, senão
     o gate impede editar o documento que define o formato.
 
+Crivo de Epic (`/common:epic`, CS-5 do ciclo 1 do Epic Cepa em espiral):
+  - Um Epic fecha por roteiro, não por critério. É Epic o documento em
+    `docs/epics/*.md` ou o que abre com `# Epic:`; nele, `Status: pronta` (ou
+    `pronta-para-construir`) é a afirmação gateada, e o crivo é outro:
+      · a tabela de `## Escada de valor` tem pelo menos um ciclo, e as colunas
+        "Roteiro", "Efeito em tela" e "Efeito em backend";
+      · cada linha de ciclo preenche as três, sem placeholder: o roteiro é o
+        que o dono vê, e tela e backend são onde alguém observa que aconteceu;
+      · `## Invariantes` tem pelo menos um item de lista que não é placeholder;
+      · a seção `## Decidido sem perguntar` existe;
+      · nenhuma pergunta em aberto (`- [ ]`) sobrou.
+  - Documento que não é Epic segue com a régua de antes: `Status: pronta` nele
+    não é gateado, só `pronta-para-construir`.
+
 Exit codes:
   0 — liberado
   2 — bloqueado (o stderr chega ao agente, que corrige sozinho)
@@ -80,6 +94,25 @@ CAMPO_RE = {
 
 # Pergunta em aberto no formato checklist markdown.
 ABERTA_RE = re.compile(r"^\s*[-*+]\s*\[\s\]\s*(.+)$", re.MULTILINE)
+
+# Epic: o status que ele afirma ao fechar. `pronta-para-construir` também vale,
+# senão um Epic que use a palavra da especificação escapa do crivo dele.
+EPIC_PRONTA = ("pronta", PRONTA)
+
+EPIC_TITULO_RE = re.compile(r"^#\s+Epic\s*:", re.MULTILINE | re.IGNORECASE)
+EPIC_CAMINHO_RE = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
+
+SECAO_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+
+# Colunas da escada que o crivo exige, achadas pelo cabeçalho da tabela.
+COLUNAS_EPIC = (
+    ("roteiro", "Roteiro", "o que o dono vê funcionando no fim do ciclo"),
+    ("efeito em tela", "Efeito em tela", "onde, na tela, alguém vê que aconteceu"),
+    ("efeito em backend", "Efeito em backend",
+     "o registro, endpoint ou evento que prova que aconteceu de verdade"),
+)
+
+ITEM_RE = re.compile(r"^\s*[-*+]\s+(?!\[[ xX]\])(.+)$", re.MULTILINE)
 
 
 def extract_content(tool_input: dict):
@@ -181,6 +214,131 @@ def blocos_de_criterio(content: str):
         yield m.group(1), content[m.end():fim]
 
 
+def e_epic(content: str, file_path) -> bool:
+    if isinstance(file_path, str) and EPIC_CAMINHO_RE.search(
+            file_path.replace("\\", "/")):
+        return True
+    return EPIC_TITULO_RE.search(content) is not None
+
+
+def secoes(content: str):
+    """{título da seção ## em minúsculas: corpo até a próxima ##}."""
+    marcas = list(SECAO_RE.finditer(content))
+    out = {}
+    for i, m in enumerate(marcas):
+        fim = marcas[i + 1].start() if i + 1 < len(marcas) else len(content)
+        out.setdefault(m.group(1).strip().lower(), content[m.end():fim])
+    return out
+
+
+def secao(content: str, prefixo: str):
+    """O corpo da primeira seção `## <prefixo>...`, ou None se não existe."""
+    for titulo, corpo in secoes(content).items():
+        if titulo.startswith(prefixo):
+            return corpo
+    return None
+
+
+def celulas(linha: str):
+    """As células de uma linha de tabela. `\\|` é barra escapada dentro da
+    célula, não divisor: dividir nela deslocaria as colunas seguintes."""
+    s = linha.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|") and not s.endswith("\\|"):
+        s = s[:-1]
+    return [c.strip() for c in re.split(r"(?<!\\)\|", s)]
+
+
+# Célula de escada que ocupa o lugar sem dizer nada, além do que `e_vazio`
+# já pega. Fica só no crivo de Epic para não mexer na régua da especificação.
+VAZIO_EPIC = ("—", "–", "nenhum", "nenhuma", "n/d", "nd", "-/-")
+
+
+def problemas_do_epic(content: str):
+    problemas = []
+
+    escada = secao(content, "escada de valor")
+    if escada is None:
+        problemas.append(
+            "falta a seção `## Escada de valor` — um Epic pronto sem ciclo "
+            "não tem o que demonstrar"
+        )
+    else:
+        linhas = [l for l in escada.splitlines() if l.strip().startswith("|")]
+        cab = [c.lower() for c in celulas(linhas[0])] if linhas else []
+        idx = {}
+        for chave, nome, _ in COLUNAS_EPIC:
+            pos = [i for i, c in enumerate(cab) if c.startswith(chave)]
+            if pos:
+                idx[chave] = pos[0]
+            else:
+                problemas.append(
+                    f'Escada de valor: falta a coluna "{nome}"'
+                )
+        ciclos = [l for l in linhas[1:]
+                  if not re.fullmatch(r"[\s|:\-]*", l)]
+        if not ciclos:
+            problemas.append(
+                "Escada de valor: nenhum ciclo — a tabela precisa de pelo menos "
+                "uma linha"
+            )
+        if len(idx) == len(COLUNAS_EPIC):
+            for l in ciclos:
+                cel = celulas(l)
+                nome_ciclo = limpa(cel[0]) if cel and cel[0] else "(sem nome)"
+                for chave, nome, _ in COLUNAS_EPIC:
+                    i = idx[chave]
+                    valor = cel[i] if i < len(cel) else ""
+                    if e_vazio(valor) or limpa(valor).lower() in VAZIO_EPIC:
+                        problemas.append(
+                            f'ciclo "{nome_ciclo}": falta "{nome}"'
+                        )
+
+    invariantes = secao(content, "invariantes")
+    if invariantes is None:
+        problemas.append("falta a seção `## Invariantes`")
+    else:
+        itens = [v for v in ITEM_RE.findall(invariantes) if not e_vazio(v)]
+        if not itens:
+            problemas.append(
+                "Invariantes: a lista está vazia — diga o que nunca pode "
+                "regredir enquanto os ciclos andam"
+            )
+
+    if secao(content, "decidido sem perguntar") is None:
+        problemas.append(
+            "falta a seção `## Decidido sem perguntar` — é onde o dono veta o "
+            "que você decidiu sozinho"
+        )
+
+    abertas = [limpa(q) for q in ABERTA_RE.findall(content) if not e_vazio(q)]
+    for q in abertas[:5]:
+        problemas.append(f'pergunta em aberto sem resposta: "{q}"')
+    if len(abertas) > 5:
+        problemas.append(f"... e mais {len(abertas) - 5} pergunta(s) em aberto")
+
+    return problemas
+
+
+def bloqueia_epic(problemas):
+    linhas = "\n".join(f"   · {p}" for p in problemas)
+    colunas = "\n".join(f'   · "{nome}": {o_que}' for _, nome, o_que in COLUNAS_EPIC)
+    print(
+        "[spec-readiness-gate] BLOQUEADO: o Epic se declara `Status: pronta` "
+        "mas ainda não passa no crivo.\n"
+        f"{linhas}\n"
+        "  O que o crivo exige de CADA ciclo da escada:\n"
+        f"{colunas}\n"
+        "  E do documento: pelo menos um invariante, a seção \"Decidido sem "
+        "perguntar\" e nenhuma pergunta em aberto.\n"
+        "  Enquanto faltar qualquer um, o Status correto é `rascunho` — e a "
+        "resposta certa é voltar a perguntar ao dono, não relaxar o campo.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -211,6 +369,19 @@ def main():
     status = [s for s in status if not s.startswith("<")]
     # A linha-modelo "rascunho | pronta-para-construir" ensina o formato.
     status = [s for s in status if "|" not in s]
+
+    if e_epic(content, file_path):
+        # O Status do Epic costuma dividir a linha com outros campos
+        # (`**Status:** pronta · **Aberto em:** ...`): vale a primeira palavra.
+        primeiras = [re.split(r"\s*[·•]\s*|\s+\*\*|\s+__", s)[0].strip()
+                     for s in status]
+        if not any(s in EPIC_PRONTA for s in primeiras):
+            sys.exit(0)      # rascunho corre livre
+        problemas = problemas_do_epic(content)
+        if problemas:
+            bloqueia_epic(problemas)
+        sys.exit(0)
+
     if not any(s == PRONTA for s in status):
         sys.exit(0)          # rascunho corre livre; só a afirmação é gateada
 
