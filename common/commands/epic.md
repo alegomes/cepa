@@ -81,7 +81,9 @@ A ordem das lacunas:
 
 1. **Intenção**, em dois turnos: primeiro o que o dono quer, em duas ou três
    frases na voz dele; no turno seguinte, o que hoje dói. São duas perguntas,
-   e juntá-las é a pergunta dupla do primeiro turno.
+   e juntá-las é a pergunta dupla do primeiro turno. Se a intenção veio no
+   argumento, grave-a e pergunte só o que o operador (ou quem sofre) faz hoje;
+   o que dói nesse caminho é a pergunta do turno seguinte.
 2. **Invariantes** — o que nunca pode regredir enquanto os ciclos andam.
 3. **A escada** — quantos ciclos e o nome de cada um; depois, ciclo a ciclo:
    **Roteiro** (o que o dono vê funcionando no fim do ciclo), **Efeito em tela**
