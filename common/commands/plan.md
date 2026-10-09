@@ -188,7 +188,8 @@ que antes não tinham dono:
 - **um item por frase de "O que atravessa"**, na ordem do texto, com id
   `C<N>-<k>`. Frase é o trecho terminado em `.` ou `;` fora de crase: o
   `/common:epic` escreve uma frase por peça, e o Epic escrito à mão antes dele
-  separa as peças com `;`;
+  separa as peças com `;`. Abreviação com ponto ("etc.", "p. ex.")
+  também parte a frase: no Epic, ela vai entre crases;
 - **o `why` de cada item diz** de que ciclo e de que Epic a peça veio, que a
   ordem foi herdada do texto (ninguém priorizou as peças entre si), o
   **critério de aceite** (o roteiro do ciclo) e a **superfície onde se

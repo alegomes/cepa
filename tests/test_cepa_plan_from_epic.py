@@ -69,8 +69,8 @@ Um Epic no formato do /common:epic.
 
 | Ciclo | Roteiro de demonstração (o que o dono vê) | Efeito em tela | Efeito em backend | O que atravessa | Quando |
 |---|---|---|---|---|---|
-| 1. Ler | O operador carrega o PDF e vê 3 respostas. | a lista de respostas na tela de upload | registro `contrato_lido` no banco | O leitor de PDF extrai o texto. O classificador lê `docs/regras.md` e marca a cláusula a \\| b. A tela mostra as 3 respostas. | já |
-| 2. Comparar | O operador vê a diferença entre duas versões. | o diff lado a lado | evento `versao_comparada` | O comparador de versões. | depois |
+| 1. Ler | O operador carrega o PDF e vê 3 respostas. | a lista de respostas na tela de upload | registro `contrato_lido` no banco | O leitor de PDF extrai o texto. O classificador lê `docs/regras.md` e marca `art. 5` na cláusula a \\| b. A tela mostra as 3 respostas. | já |
+| 2. Comparar | O operador vê a diferença entre duas versões. | o diff lado a lado | evento `versao_comparada` | O comparador de versões 2.0. | depois |
 
 ## Decidido sem perguntar (vete aqui)
 
@@ -137,6 +137,7 @@ def test_epic_real_ciclo_2(base):
         check(f"{i.get('id')}: `why` traz a superfície onde se observa",
               "superfície onde se observa:" in why, why)
         check(f"{i.get('id')}: `why` diz que a ordem foi herdada do texto",
+              'herdado da ordem do texto da coluna "O que atravessa"; '
               "ninguém priorizou as peças entre si" in why, why)
         check(f"{i.get('id')}: nasce pending, sem dependência deduzida",
               i.get("status") == "pending" and i.get("blocked_by") == [], repr(i))
@@ -170,7 +171,7 @@ def test_formato_do_epic_command(base):
     check("frase terminada em ponto vira item; ponto dentro de crase e `\\|` "
           "não partem",
           titulos == ["O leitor de PDF extrai o texto",
-                      "O classificador lê `docs/regras.md` e marca a cláusula a | b",
+                      "O classificador lê `docs/regras.md` e marca `art. 5` na cláusula a | b",
                       "A tela mostra as 3 respostas"], repr(titulos))
     sup = ("superfície onde se observa: tela: a lista de respostas na tela de "
            "upload; backend: registro `contrato_lido` no banco")
@@ -182,7 +183,7 @@ def test_formato_do_epic_command(base):
     r2 = run(d, "from-epic", "docs/epics/fixture.md", "--ciclo", "2")
     t2 = [i["title"] for i in json.loads(r2.stdout)["items"]] if r2.returncode == 0 else r2.stderr
     check("outro ciclo, outra fila: só as peças do ciclo 2",
-          t2 == ["O comparador de versões"], repr(t2))
+          t2 == ["O comparador de versões 2.0"], repr(t2))
 
 
 def test_grava_e_reescreve(base):
@@ -237,7 +238,7 @@ def test_recusas(base):
     check("Epic sem `## Escada de valor` é recusa",
           r.returncode == 2 and "Escada de valor" in r.stderr, r.stderr)
     vazio = d / "vazio.md"
-    vazio.write_text(EPIC_NOVO.replace("O comparador de versões.", "—"),
+    vazio.write_text(EPIC_NOVO.replace("O comparador de versões 2.0.", "—"),
                      encoding="utf-8")
     r = run(d, "from-epic", str(vazio), "--ciclo", "2")
     check("ciclo com \"O que atravessa\" vazio é recusa",
@@ -249,6 +250,50 @@ def test_recusas(base):
     check("ciclo sem roteiro é recusa",
           r.returncode == 2 and "roteiro" in r.stderr, r.stderr)
     check("nada foi gravado nas recusas", not (d / ".claude").exists())
+
+
+def test_avisos_e_recusas_de_epic_malformado(base):
+    d = repo_git(base, "malformado")
+
+    aberta = d / "aberta.md"
+    aberta.write_text(EPIC_NOVO.replace("- [x] alguma? não",
+                                        "- [ ] quem aprova?"), encoding="utf-8")
+    r = run(d, "from-epic", str(aberta), "--ciclo", "1")
+    check("pergunta `- [ ]` em Epic pronto vira aviso, e a fila sai",
+          r.returncode == 0 and "1 pergunta(s) ainda em aberto" in r.stderr,
+          r.stderr)
+
+    for coluna, cabecalho in (("O que atravessa", "O que atravessa"),
+                              ("Roteiro de demonstração", "Roteiro de demonstração (o que o dono vê)")):
+        sem = d / f"sem-{coluna[:7].replace(' ', '')}.md"
+        sem.write_text(EPIC_NOVO.replace(f"| {cabecalho} |", "| Outra |"),
+                       encoding="utf-8")
+        r = run(d, "from-epic", str(sem), "--ciclo", "1")
+        check(f"escada sem a coluna \"{coluna}\" é recusa que a nomeia",
+              r.returncode == 2 and "não tem a(s) coluna(s)" in r.stderr
+              and coluna in r.stderr, r.stderr)
+
+    sem_tabela = d / "semtabela.md"
+    sem_tabela.write_text("# Epic: x\n\n## Escada de valor\n\nainda não escrita\n"
+                          "\n## Invariantes\n\n- y\n", encoding="utf-8")
+    r = run(d, "from-epic", str(sem_tabela), "--ciclo", "1")
+    check("escada sem tabela é recusa",
+          r.returncode == 2 and "não tem tabela" in r.stderr, r.stderr)
+
+    r = run(d, "from-epic", str(aberta))
+    check("o subcomando from-epic sem --ciclo é recusa",
+          r.returncode != 0 and "--ciclo" in r.stderr, r.stderr)
+
+    # A coluna "O que atravessa" por último, sem o `|` de fechamento: o `\|`
+    # no fim da linha é barra escapada da célula, não o divisor.
+    ultima = d / "ultima.md"
+    ultima.write_text("# Epic: x\n\n## Escada de valor\n\n"
+                      "| Ciclo | Roteiro | O que atravessa\n|---|---|---\n"
+                      "| 1. Um | o dono vê. | A peça a \\|\n", encoding="utf-8")
+    r = run(d, "from-epic", str(ultima), "--ciclo", "1")
+    t = [i["title"] for i in json.loads(r.stdout)["items"]] if r.returncode == 0 else r.stderr
+    check("`\\|` no fim da última célula é texto, não divisor",
+          t == ["A peça a |"], repr(t))
 
 
 def test_contrato_de_prosa():
@@ -265,6 +310,7 @@ def main():
         test_formato_do_epic_command(base)
         test_grava_e_reescreve(base)
         test_recusas(base)
+        test_avisos_e_recusas_de_epic_malformado(base)
     test_contrato_de_prosa()
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s)")
