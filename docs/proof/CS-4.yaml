@@ -1,0 +1,41 @@
+schema_version: 2
+card: CS-4
+verdict: proven
+reviewed_at: 2026-10-08T23:10:00-03:00
+base_commit: 91134c5
+head_commit: b877c3c
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/hooks/session-next.py", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/wrap-up.md", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/handoff.md", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: "Script real roda como subprocesso em raiz temporaria; sem dublê da classe alterada. O teste ainda alimenta o .next.json gravado ao session-chain.py real (CS-3), com um fakecepa no lugar do binario cepa (fronteira distante, aceitavel). wrap-up.md e handoff.md sao prosa de comando; o teste as guarda por presenca de trechos."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "green: python3 tests/test_wrapup_proximo_passo.py em b877c3c (worktree descartavel /tmp/proof-CS-4) -> todos ok, exit 0; python3 tests/test_cepa_encadeamento.py -> OK"
+        - "RED (21 de 22 no script, uma a uma, arquivo restaurado entre elas; todas as substituicoes casaram): sem exit 0 quando nao ha linha (2 FAIL); NOTE_RE ignorada (1); LINHA_RE sem **Proximo:** exato (28); comando so ate o espaco (3); fim do campo ignora proxima chave (16); campo faltando aceito (3); sem isdir do repo (3); sem checagem de modo em _modos.MODOS (3); sem recusa de reforma (3); sem checagem de brief vazio (6); brief com a linha Proximo dentro (6); brief sem corte na proxima secao (6); brief sem strip (6); sem secao -> brief da NOTE inteira (3); repo gravado alterado (3); nome do arquivo sem .next (14); sem mkdir do diretorio (13); motivo nao impresso (8); recusa devolve exit 0 (8); saida de sucesso sem 'gravado' (1); --root ignorado (11)"
+        - "RED (3 de 3 na prosa): wrap-up.md sem 'session-next.py' ; wrap-up.md sem 'Proximo passo' no L8 ; handoff.md sem '**Proximo:** repo=' -> todas FAIL, exit 1"
+        - "total: 25 perturbacoes, 24 RED, 1 sobrevivente declarado como equivalente (abaixo)"
+        - "SOBREVIVENTE, equivalente: ensure_ascii=False -> True em json.dumps (session-next.py:116). O JSON gravado passa a escapar acentos (\\u00f3) mas json.loads devolve exatamente as mesmas strings, e o launcher le por json.loads (session-chain.py), entao nenhum comportamento lido muda; so a legibilidade humana do arquivo. Nao contado como coberto. Fica para o humano decidir se quer um teste que leia o texto cru."
+    # unico mutante sobrevivente acima e equivalente; ver routing_reason
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; mesma regra de CS-1/2/3: os hunks de session-next.py foram alcancados por perturbacao vermelha (21 de 22 RED; a 22a e equivalente, declarada). Ramos so de erro de E/S nao perturbados: handoff ilegivel (OSError, exit 2) e raiz nao encontrada (L.main_root vazio, exit 2); nao cobertos por teste nem contados como cobertos."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so le um handoff .md local escrito pela propria sessao e grava um .json local em .claude/sessions/; sem rede, sem api-rest, sem chamador externo. A validacao da linha (repo, modo, reforma, campos, brief) e a unica fronteira e ficou provada por perturbacoes vermelhas."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git checkout 91134c5 (teste de b877c3c) && python3 tests/test_wrapup_proximo_passo.py -> 24 linhas FAIL e traceback, exit 1 (session-next.py nao existe); em b877c3c -> todos ok, exit 0"
+routing_reason: "24 de 25 perturbacoes RED; vermelho na base 91134c5 (24 FAIL), verde em b877c3c. O unico sobrevivente (ensure_ascii) e equivalente para quem le o arquivo via json.loads, declarado e nao contado como coberto. Ressalvas honestas: ramos de erro de E/S (handoff ilegivel, raiz nao encontrada) sem teste. PROVEN."

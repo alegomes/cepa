@@ -1,0 +1,27 @@
+schema_version: 1
+card: CS-4
+status: complete
+audited_at: 2026-10-08T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Dado um handoff com a linha `**Próximo:** repo=/Users/alegomes/coding/wego/wego-product modo=descoberta comando=/common:epic contratos-e-regras` na zona NOTE, o passo L7 do /common:wrap-up escreve .claude/sessions/<id>.next.json com os três campos e o brief igual ao parágrafo 'Próximo passo'."
+    altitude: application
+    surface: "common/hooks/session-next.py (script que o L7 de common/commands/wrap-up.md manda rodar); wrap-up é prosa, a superfície mecânica é o script"
+    demonstrated_by:
+      test: "tests/test_wrapup_proximo_passo.py (seções 'com a linha', 'a linha do critério, verbatim', 'ordem das chaves trocada', 'o arquivo escrito é aceito pelo encadeamento do launcher (CS-3)', 'o wrap-up e o handoff conhecem a linha')"
+      layer: "subprocesso do session-next.py contra handoff real em disco; o JSON gravado é consumido pelo session-chain.py (CS-3) de verdade"
+      evidence: verified
+      run: "python3 tests/test_wrapup_proximo_passo.py -> 49 linhas 'ok', 0 FAIL, 'todos ok' (inclui 'ok literal: campos' com o repo real /Users/alegomes/coding/wego/wego-product, que existe nesta máquina); python3 tests/test_cepa_encadeamento.py -> 38 'ok', 'OK'"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "Sem a linha, não escreve nada e diz isso no relatório."
+    altitude: application
+    surface: "session-next.py (exit 0, primeira linha do stdout 'próximo passo não gravado: ...') + L8 do wrap-up.md que leva essa linha ao relatório"
+    demonstrated_by:
+      test: "tests/test_wrapup_proximo_passo.py ('sem a linha: não escreve e diz', 'linha só no AUTO não conta', 8 casos 'inutilizável', checagem de que o L8 cita Próximo passo)"
+      layer: "subprocesso + leitura do texto do wrap-up.md"
+      evidence: verified
+      run: "mesma execução: 49 ok, 0 FAIL, 'todos ok'"
+    verdict: complete
+    gap: "Observação, não bloqueante: o trecho em prosa do L7/L8 (o modelo de fato rodar o script e copiar a linha) só é verificado por busca de texto em wrap-up.md, não por execução do comando; isso é inerente a um comando em prosa."
