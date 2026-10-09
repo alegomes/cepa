@@ -1,0 +1,18 @@
+schema_version: 1
+card: CS-6
+status: complete
+audited_at: 2026-10-08T00:00:00-03:00
+note: "Auditoria sobre 8dc6d13..81a2421. Rodei o comando do criterio no Epic real e os testes do item e vizinhos."
+criteria:
+  - id: AC1
+    text: "Sobre docs/epics/cepa-em-espiral.md, '/common:plan cepa-espiral-c2 --from-epic ... --ciclo 2 --dry-run' imprime fila cujo cabecalho tem demonstra: igual ao roteiro do ciclo 2 e um item por frase de 'o que atravessa', cada item com criterio de aceite e superficie, na ordem do texto."
+    altitude: cli
+    surface: "common/bin/cepa-plan write <nome> --from-epic <arq> --ciclo N --dry-run (stdout) + common/commands/plan.md"
+    demonstrated_by:
+      test: "tests/test_cepa_plan_from_epic.py (inclui test_epic_real_ciclo_2 sobre o Epic real)"
+      layer: "subprocesso do binario cepa-plan"
+      evidence: verified
+      run: "python3 tests/test_cepa_plan_from_epic.py -> todas as linhas ok, termina em 'tudo ok'. Rodei tambem o comando do criterio: imprime demonstra: igual a celula do roteiro do ciclo 2, 2 itens (C2-1, C2-2) na ordem do texto, cada why com criterio de aceite (roteiro) e superficie ('nao declarada no Epic'), mais 3 avisos em stderr. Vizinhos: test_cepa_plan_demonstra, test_cepa_plan_fila_unica, test_common_plan, test_plan_anchor_root -> all green; test_board_flow_cepa_plan_shim rc=0."
+    verdict: complete
+    gap: null
+    observacao: "Decisoes (frase = ate '.' ou ';'; aceite = roteiro do ciclo; superficie 'nao declarada' no Epic real) sao interpretacoes do implementador, nao inventam conteudo. Criterio e superficie ficam dentro do campo why, sem campos proprios no schema. Julgamento humano: no Epic real a superficie nao esta declarada, entao o criterio 'com superficie' e atendido so de forma literal. pytest puro da erro de fixture no arquivo (o teste e script, roda por python3), sem relacao com o criterio."
