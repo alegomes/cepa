@@ -314,6 +314,8 @@ def test_comando_existe_e_e_grill_me():
           "AskUserQuestion" in texto and "lista de opções" in texto.lower())
     check("um único ? por turno, sem alternativas enumeradas na frase",
           "único `?` do turno" in texto and "menu escrito em linha" in texto)
+    check("releitura que corta a segunda pergunta ligada por 'e'",
+          "releia a pergunta" in texto and "corte o segundo" in texto)
     check("desafio único com as duas perguntas-modelo",
           "quem vê isso e onde?" in texto and "o que quebra se faltar?" in texto)
     check("grava no mesmo turno", "mesmo turno" in texto)

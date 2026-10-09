@@ -79,8 +79,9 @@ dono que a entrevista é burocracia.
 
 A ordem das lacunas:
 
-1. **Intenção** — o que o dono quer, em duas ou três frases na voz dele, e o que
-   hoje dói.
+1. **Intenção**, em dois turnos: primeiro o que o dono quer, em duas ou três
+   frases na voz dele; no turno seguinte, o que hoje dói. São duas perguntas,
+   e juntá-las é a pergunta dupla do primeiro turno.
 2. **Invariantes** — o que nunca pode regredir enquanto os ciclos andam.
 3. **A escada** — quantos ciclos e o nome de cada um; depois, ciclo a ciclo:
    **Roteiro** (o que o dono vê funcionando no fim do ciclo), **Efeito em tela**
@@ -98,6 +99,12 @@ cláusula?"), que é o mesmo menu escrito em linha. Menu faz o dono escolher
 entre as respostas que o agente imaginou, e o grill me existe para sair do que
 o agente imaginou. A alternativa que você acha mais provável vai na proposta,
 não na pergunta.
+
+**Antes de encerrar o turno, releia a pergunta.** Se ela tem um "e" ou uma
+vírgula ligando dois pedidos ("onde ele vê isso, e o que precisa enxergar
+ali?"), corte o segundo: ele é a pergunta do próximo turno. O primeiro turno é
+onde isso mais escapa, porque tudo parece urgente na largada; as transcrições
+de 2026-10-08 mostraram a pergunta dupla no turno 1 de duas rodadas seguidas.
 
 **Turno de entrevista é conversa, não relatório de trabalho.** Gravar no
 arquivo a cada turno não transforma o turno em relatório: não use o formato

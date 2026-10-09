@@ -1,6 +1,6 @@
 # Transcrição de teste: `/common:epic` (CS-5)
 
-Duas transcrições: a rodada 4 (entrevista do zero, quatro turnos) e, ao fim, a rodada 5 (Epic semeado até `pronta`, seis turnos).
+Duas transcrições: a rodada 4 (entrevista do zero, quatro turnos), a rodada 5 (Epic semeado até `pronta`, seis turnos) e a rodada 6 (só o turno 1, regravado seis vezes).
 
 **Gravada em:** 2026-10-08, na branch `until/2026-10-08-2047`.
 **Como:** `claude -p --plugin-dir common --model sonnet --permission-mode acceptEdits`, num repo git descartável com `.claude/session-mode` = `modo: descoberta` e só um README. Quatro turnos encadeados por `--resume`; as falas do dono são roteiro fixo (o script está ao fim). O arquivo `docs/epics/contratos-demo.md` foi copiado depois de cada turno.
@@ -516,4 +516,122 @@ done
 cp $OUT/../cs5-transcript-seed/t1.arquivo.md /dev/null 2>&1
 git -C $R show HEAD:docs/epics/contratos-demo.md > $OUT/t0.arquivo.md
 echo "session=$SID"
+```
+
+
+# Rodada 6: só o turno 1, regravado (depois da reauditoria de d21e45b)
+
+**Por quê:** a reauditoria fechou desafio, gravação no mesmo turno e `pronta`, e deixou uma lacuna: nas rodadas 4 e 5 o turno 1 juntava duas perguntas com "e" numa frase com um só `?`.
+
+**O que mudou no comando, em duas etapas:**
+- Etapa A: "Antes de encerrar o turno, releia a pergunta" e corte o segundo pedido ligado por "e".
+- Etapa B: a lacuna 1 ("o que o dono quer e o que hoje dói") virou dois turnos. Era o próprio comando pedindo a pergunta dupla.
+
+**Resultado, contado pergunta a pergunta** (uma pergunta = um pedido; "X, e Y?" conta como dupla):
+
+| Gravação | Texto do comando | Cenário | Perguntas no turno 1 |
+|---|---|---|---|
+| semeado-1 | etapa A | Epic retomado | 1 |
+| semeado-2 | etapa A | Epic retomado | 1 |
+| zero-1 (A) | etapa A | Epic do zero | 2 ("qual a situação real..., e o que acontece hoje...?") |
+| zero-2 (A) | etapa A | Epic do zero | 2 ("o que estava tentando descobrir, e o que aconteceu...?") |
+| zero-1 (B) | etapa B | Epic do zero | 2 ("como essa pessoa descobre e o que faz esse caminho doer?") |
+| zero-2 (B) | etapa B | Epic do zero | 1 |
+
+Conta: com o texto final (etapa B), o Epic do zero saiu com uma pergunta em 1 de 2 gravações (50%). O Epic retomado saiu com uma pergunta em 2 de 2 com a etapa A, e a etapa B não muda nada nele (só mexe na lacuna da intenção, que no semeado já está preenchida). Nos turnos 2 em diante das rodadas 4 e 5 (8 turnos), 0 perguntas duplas. Isto é comportamento do modelo, não do hook: nenhum gate mecânico conta perguntas, e o texto do comando é a única alavanca.
+
+### semeado-1 (US$ 0.184) · etapa A
+
+**Dono:**
+
+> /common:epic contratos-demo
+
+**Agente:**
+
+> Retomei o rascunho. Falta o **Efeito em tela** do ciclo 1, e Efeito em backend também, mas esse vem depois.
+>
+> Minha proposta é que, depois de digitar "ressonância magnética", o operador veja na própria tela de consulta um cartão com "Coberto" ou "Não coberto", a carência em dias, o trecho literal da cláusula e "página N do PDF". Faço assim porque o invariante exige trecho e página junto da resposta, e a tela de consulta já é onde ele digita. Onde na tela o operador deveria ver isso?
+
+### semeado-2 (US$ 0.197) · etapa A
+
+**Dono:**
+
+> /common:epic contratos-demo
+
+**Agente:**
+
+> Retomei o rascunho. Intenção, invariante e roteiro do ciclo 1 já estão gravados, e faltam as colunas **Efeito em tela** e **Efeito em backend** desse ciclo. Ainda não gravei nada neste turno, porque não houve resposta nova.
+>
+> Minha proposta: depois de digitar "ressonância magnética", o operador vê abaixo do campo de busca um cartão. No topo ficam "Cobertura: sim" e "Carência: N dias". Embaixo vem o trecho literal entre aspas e "contrato X, página N", e clicar na página abre o PDF nela. Eu proponho isso porque o invariante promete trecho e página, e o operador só confia na resposta se conseguir conferir ali mesmo.
+>
+> Na tela de consulta, o que o operador precisa ver para saber que a resposta veio do contrato e não de um chute do sistema?
+
+### zero-1 (US$ 0.202) · etapa A
+
+**Dono:**
+
+> /common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas.
+
+**Agente:**
+
+> Gravei a intenção inicial em `docs/epics/contratos-demo.md` (status rascunho). O repo só tem um README, então não há código nem docs que respondam o que vem a seguir.
+>
+> Minha proposta é que a dor hoje seja o operador abrir o PDF de 80 páginas e rolar até achar o trecho de que precisa, gastando minutos num caso que um atendente deveria resolver em segundos. Qual é a situação real em que esse operador precisa saber o que o contrato diz, e o que acontece hoje quando ele não consegue?
+
+### zero-2 (US$ 0.203) · etapa A
+
+**Dono:**
+
+> /common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas.
+
+**Agente:**
+
+> Gravei o esqueleto em `docs/epics/contratos-demo.md` (status rascunho). Só o README existe no repo, então a pergunta é sua.
+>
+> Minha proposta é que a dor seja o operador ter uma dúvida concreta sobre um contrato (por exemplo, "esse plano cobre fisioterapia?") e hoje precisar rolar 80 páginas até achar a cláusula, porque o que ele quer é a resposta e não o documento. Me conta numa situação real recente: o que o operador estava tentando descobrir, e o que aconteceu quando ele foi atrás no PDF?
+
+### zero-1 (B) (US$ 0.197) · etapa B
+
+**Dono:**
+
+> /common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas.
+
+**Agente:**
+
+> Gravei o esqueleto em `docs/epics/contratos-demo.md` (rascunho) com a sua frase como intenção. O repo só tem o README, então nada nele responde perguntas de produto.
+>
+> Minha proposta: o operador cola ou sobe um contrato e digita uma pergunta do dia a dia, como "esse plano cobre fisioterapia e com qual carência?", e recebe a resposta em poucas linhas, com a página do PDF de onde ela saiu. Isso daria a ele a resposta sem abrir o arquivo, e ainda poderia conferir na fonte. Hoje, quando alguém da operadora precisa saber o que um contrato diz, como essa pessoa descobre e o que faz esse caminho doer?
+
+### zero-2 (B) (US$ 0.189) · etapa B
+
+**Dono:**
+
+> /common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas.
+
+**Agente:**
+
+> Gravei o esqueleto em `docs/epics/contratos-demo.md` (status `rascunho`). O repo só tem o README, então não havia nada para eu ler que respondesse perguntas.
+>
+> Minha proposta é registrar sua intenção como você a contou: o operador quer saber o que um contrato diz sem abrir o PDF de 80 páginas. O que ele faz hoje, na prática, quando precisa descobrir o que um contrato diz?
+
+## Script da rodada 6
+
+```bash
+#!/bin/bash
+# Grava só o turno 1, em dois cenários: Epic do zero e Epic retomado (semeado).
+set -u
+PLUG=/Users/alegomes/cepa-worktrees/cepa-until-2026-10-08-2047/common
+OUT=/tmp/cs5-t1rounds-b; rm -rf $OUT; mkdir -p $OUT
+for cen in zero; do for k in 1 2; do
+  R=/tmp/cs5-t1-$cen-$k; rm -rf $R; mkdir -p $R/.claude $R/docs/epics; cd $R; git init -q
+  printf 'modo: descoberta\n' > .claude/session-mode
+  printf '# demo\nRepo de demonstração: lê contratos de operadora de saúde em PDF.\n' > README.md
+  if [ $cen = semeado ]; then cp /tmp/cs5-transcript-seed/t0.arquivo.md docs/epics/contratos-demo.md; P="/common:epic contratos-demo";
+  else P="/common:epic contratos-demo O operador da operadora quer saber o que um contrato diz sem abrir o PDF de 80 páginas."; fi
+  git add -A; git commit -qm init
+  timeout 400 claude -p --plugin-dir "$PLUG" --model sonnet --permission-mode acceptEdits --max-budget-usd 2 --output-format json "$P" > $OUT/$cen-$k.json 2>$OUT/$cen-$k.err
+  echo "$cen-$k exit=$?"
+  printf '%s' "$P" > $OUT/$cen-$k.dono.txt
+  cd /; rm -rf $R
+done; done
 ```
