@@ -1,0 +1,41 @@
+schema_version: 2
+card: CS-3
+verdict: proven
+reviewed_at: 2026-10-08T22:30:00-03:00
+base_commit: a1030d7
+head_commit: f8764d3
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/session-chain.py", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/session-registry.py", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_wtlib.py", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: "Terceira rodada. Codigo de producao identico ao de 889ab85; f8764d3 so acrescenta ao teste o caso t_desligado (stub do claude sai com 7 sob CEPA_ENCADEAR=off, cepa deve sair 7). Stub no lugar do binario claude (fronteira distante, aceitavel); cepa, session-chain e session-registry reais rodam. session-launch.py so teve comentario alterado (nao perturbado)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "green: python3 tests/test_cepa_encadeamento.py em f8764d3 (worktree descartavel /tmp/proof-CS-3) -> OK, exit 0"
+        - "RED (sobrevivente bloqueante da rodada 2): exit \"$_rc\" -> exit 0 em common/bin/cepa (fallback do launcher) -> exit 1, FAIL"
+        - "RED (as 15 restantes, todas reexecutadas nesta rodada, uma a uma, arquivo restaurado entre elas): exec do chain removido; sem escrita do .launch (11 FAIL); sem unlink do .next.json; sem limpeza do registro por pid; sem skip de *.next.json em read_entries; sem isdir do repo (3 FAIL); sem chdir (3 FAIL); --modo removido (5 FAIL); sem unlink do .launch; rc perdido no session-chain (return 0 sem next); CEPA_ENCADEAR ignorado nas duas camadas (4 FAIL); sem brief.strip() (4 FAIL); sem validacao de brief (6 FAIL); sem validacao de modo vazio (3 FAIL); reversed(sids)->sids (3 FAIL)"
+        - "total: 16 perturbacoes, 16 RED, 0 sobreviventes entre as executadas; todas as substituicoes casaram."
+        - "nao perturbados, declarado: checagem de hostname na limpeza do registro (session-chain.py:94), equivalente no teste (pid e hostname sempre coincidem; so importa com registro de outra maquina de mesmo pid); CEPA_ENCADEAR ignorado so no launcher (redundancia defensiva, o chain cobre e as duas juntas ficam RED)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; mesma regra de CS-1/CS-2: os hunks novos de common/bin/cepa, session-chain.py, session-registry.py e _wtlib.py foram alcancados por perturbacao vermelha (16 de 16 RED). Unica linha sem perturbacao vermelha: checagem de hostname (session-chain.py:94), equivalente no teste, declarada acima e nao contada como coberta."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so le arquivos locais (.next.json e .launch em .claude/sessions/) gravados pelo proprio harness; sem rede, sem api-rest, nenhum chamador externo; a validacao do .next.json (repo, modo, brief) e a unica fronteira e ficou provada por perturbacoes vermelhas (isdir, modo, brief, strip)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git checkout a1030d7 -- common (testes de f8764d3) && python3 tests/test_cepa_encadeamento.py -> 12 linhas FAIL, exit 1 (RED no base); em f8764d3 -> OK, exit 0"
+routing_reason: "Sobrevivente bloqueante da rodada 2 agora RED; 16 de 16 perturbacoes reexecutadas ficam RED; vermelho no base a1030d7 (12 FAIL), verde em f8764d3. L2 pass e L4 n/a pela mesma regra de CS-1 e CS-2 (launcher local, entradas so de arquivos do proprio harness, sem ferramenta de cobertura). Ressalva honesta: a checagem de hostname em session-chain.py:94 nao tem perturbacao vermelha (equivalente no teste); so importa com registro de outra maquina de mesmo pid. PROVEN."
