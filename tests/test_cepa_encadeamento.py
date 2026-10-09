@@ -74,6 +74,13 @@ if nxt:
     sdir = Path(os.environ["STUB_SESSIONS"])
     sdir.mkdir(parents=True, exist_ok=True)
     (sdir / f"{sid}.next.json").write_text(nxt)
+# Um /clear abre outro session_id no mesmo processo: o segundo também deixa
+# próximo passo, e é o dele que vale.
+nxt2 = os.environ.get("STUB_NEXT2")
+if nxt2:
+    sid = "sess-2"
+    hook("SessionStart")
+    (Path(os.environ["STUB_SESSIONS"]) / f"{sid}.next.json").write_text(nxt2)
 if os.environ.get("STUB_SKIP_END") != "1":
     hook("SessionEnd")
 sys.exit(int(os.environ.get("STUB_RC", "0")))
@@ -204,6 +211,36 @@ def t_invalido():
         check("json quebrado: o cepa diz", "ilegível" in r.stderr, r.stderr)
 
 
+def t_campos_vazios():
+    print("brief ou modo vazio, ou brief que não é texto: não encadeia, avisa, deixa o arquivo")
+    casos = {
+        "brief em branco": {"modo": "descoberta", "brief": "   \n"},
+        "brief não-texto": {"modo": "descoberta", "brief": 42},
+        "modo vazio": {"modo": "", "brief": BRIEF},
+    }
+    for nome, campos in casos.items():
+        with World() as w:
+            r = w.run(nxt={"repo": str(w.b), **campos})
+            check(f"{nome}: o stub rodou uma vez", len(w.calls()) == 1, f"{len(w.calls())}")
+            check(f"{nome}: o arquivo continua lá", (w.sessions / "sess-1.next.json").exists())
+            check(f"{nome}: o cepa diz que é inválido", "inválido" in r.stderr, r.stderr)
+
+
+def t_mais_recente_vence():
+    print("duas sessões na mesma abertura (/clear): vale o próximo passo da mais recente")
+    with World() as w:
+        w.run(nxt={"repo": str(w.a), "modo": "descoberta", "brief": "da primeira"},
+              env={"STUB_NEXT2": json.dumps({"repo": str(w.b), "modo": "descoberta",
+                                             "brief": "da segunda"})})
+        c = w.calls()
+        check("o stub rodou duas vezes", len(c) == 2, f"{len(c)}")
+        if len(c) == 2:
+            check("a sessão seguinte é a da mais recente (repo b)", same(c[1]["cwd"], w.b),
+                  c[1]["cwd"])
+            check("com o brief da mais recente", c[1]["args"][-1:] == ["da segunda"],
+                  repr(c[1]["args"]))
+
+
 def t_sem_session_end():
     print("sem o SessionEnd, o registro da sessão que saiu não isola a seguinte")
     with World() as w:
@@ -231,6 +268,8 @@ if __name__ == "__main__":
     t_sem_arquivo()
     t_desligado()
     t_invalido()
+    t_campos_vazios()
+    t_mais_recente_vence()
     t_sem_session_end()
     t_registro_ignora_next()
     if failures:
