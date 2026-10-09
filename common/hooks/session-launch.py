@@ -63,7 +63,7 @@ def main() -> int:
             entry = {
                 "session_id": claim_id,
                 "claim": True,
-                "pid": os.getppid(),  # cepa's pid → becomes claude's pid after exec
+                "pid": os.getppid(),  # cepa's pid — cepa waits on claude (it chains), so it lives as long
                 "hostname": L.host(),
                 "started_at": L.now_iso(),
                 "last_seen": L.now_iso(),

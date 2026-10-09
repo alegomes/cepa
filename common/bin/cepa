@@ -38,6 +38,12 @@
 # impede a sessão de abrir, e sai do caminho com CEPA_PREFLIGHT=off
 # (intervalo: CEPA_PREFLIGHT_TTL, em horas).
 #
+# Encadeamento: quando o claude sai, se a sessão deixou o próximo passo em
+# <raiz-principal>/.claude/sessions/<session_id>.next.json ({"repo", "modo",
+# "brief"}), o cepa apaga o arquivo e abre a sessão seguinte em `repo`, com
+# `--modo <modo>` e o brief como prompt inicial. Sem o arquivo, sai como antes.
+# Desligue com CEPA_ENCADEAR=off. Detalhe em common/hooks/session-chain.py.
+#
 # Toda sessão nasce em bypassPermissions, porque o modo `auto` do Claude Code
 # interrompe uma rotina longa: ele consulta um classificador a cada comando e,
 # depois de 3 bloqueios seguidos, passa a perguntar tudo. Os hooks do harness
@@ -67,6 +73,8 @@ while [ -L "$SELF" ]; do
 done
 SCRIPT_DIR=$(cd "$(dirname "$SELF")" && pwd)
 LAUNCH_PY="$SCRIPT_DIR/../hooks/session-launch.py"
+CHAIN_PY="$SCRIPT_DIR/../hooks/session-chain.py"
+CEPA_SELF="$SCRIPT_DIR/$(basename "$SELF")"
 DOCTOR="$SCRIPT_DIR/cepa-doctor"
 MODOS_BIN="$SCRIPT_DIR/cepa-modos"
 
@@ -205,7 +213,28 @@ prompt_erro() {
 # no diretório onde a sessão vai de fato rodar (raiz OU worktree isolada).
 launch_here() {
   write_modo "$PWD"
-  exec "$CLAUDE_BIN" "$@"
+  run_claude "$@"
+}
+
+# Encadeamento: o claude NÃO é mais `exec`. Quando ele sai, o session-chain.py
+# procura o próximo passo que a sessão deixou em
+# <raiz-principal>/.claude/sessions/<session_id>.next.json e, se achar, apaga o
+# arquivo e reabre este launcher no repo e no modo dele, com o brief como prompt.
+# O CEPA_LAUNCH_ID é o que liga esta abertura ao session_id: o hook
+# session-registry o anota no SessionStart. Sem o arquivo, sai com o código do
+# claude, como antes. Desligue com CEPA_ENCADEAR=off.
+run_claude() {
+  CEPA_LAUNCH_ID=$(od -An -N8 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')
+  export CEPA_LAUNCH_ID
+  set +e
+  "$CLAUDE_BIN" "$@"
+  _rc=$?
+  set -e
+  if [ "${CEPA_ENCADEAR:-on}" != "off" ] && [ -n "$CEPA_LAUNCH_ID" ] \
+      && [ -f "$CHAIN_PY" ] && command -v python3 >/dev/null 2>&1; then
+    exec python3 "$CHAIN_PY" "$CEPA_LAUNCH_ID" "$CEPA_SELF" "$_rc"
+  fi
+  exit "$_rc"
 }
 
 write_modo() {
@@ -419,4 +448,6 @@ if [ "$DIR" != "$ROOT" ]; then
 fi
 
 write_modo "$PWD"
-exec env CLAUDE_WT_CLAIM="$CLAIM" "$CLAUDE_BIN" "$@"
+CLAUDE_WT_CLAIM="$CLAIM"
+export CLAUDE_WT_CLAIM
+run_claude "$@"

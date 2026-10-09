@@ -271,6 +271,8 @@ def read_entries(root: str):
     if not d.is_dir():
         return out
     for f in sorted(d.glob("*.json")):
+        if f.name.endswith(".next.json"):  # próximo passo do encadeamento, não sessão
+            continue
         try:
             out.append((f, json.loads(f.read_text(encoding="utf-8"))))
         except (OSError, json.JSONDecodeError):

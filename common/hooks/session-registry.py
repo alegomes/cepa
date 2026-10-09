@@ -152,6 +152,17 @@ def on_start(session_id: str, cwd: str) -> None:
     entry.pop("claim", None)
     L.write_entry(root, session_id, entry)
 
+    # 1b. Encadeamento: o `cepa` só conhece o CEPA_LAUNCH_ID que gerou. Anotar
+    #     aqui o session_id nascido dessa abertura é o que deixa o launcher, quando
+    #     o claude sair, achar o <session_id>.next.json (session-chain.py).
+    launch_id = os.environ.get("CEPA_LAUNCH_ID", "").strip()
+    if launch_id and "/" not in launch_id:
+        try:
+            with open(sdir / f"{launch_id}.launch", "a", encoding="utf-8") as f:
+                f.write(session_id + "\n")
+        except OSError:
+            pass
+
     # 2. Reclaim dead entries.
     L.prune_dead(root, keep_key=session_id)
 
