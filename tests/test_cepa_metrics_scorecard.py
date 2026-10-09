@@ -50,6 +50,14 @@ def ledger(tmp):
     kinds = ["prosa", "rotina", "prosa", "prosa", "rotina", "prosa", "prosa", "fechamento"]
     for i, k in enumerate(kinds):
         ev.append({"ts": ts(rec, i), "event": "prompt", "session": "r1", "kind": k})
+    # O ledger é lido um arquivo por mês, então a sessão que atravessa a virada
+    # de mês chega fora de ordem: grava a r1 de trás para frente para exigir
+    # que a contagem ordene por horário antes de achar a última rotina.
+    ev.reverse()
+    # Prompt sem sessão (hook antigo, evento truncado): não forma sessão. Uma
+    # rotina seguida de prosa, para que contá-lo mudasse os dois lados da conta.
+    for i, k in enumerate(["rotina", "prosa"]):
+        ev.append({"ts": ts(rec, 10 + i), "event": "prompt", "kind": k})
     # Sessão recente sem rotina: não entra no denominador.
     for i in range(4):
         ev.append({"ts": ts(rec, 20 + i), "event": "prompt", "session": "r2", "kind": "prosa"})
