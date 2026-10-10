@@ -140,6 +140,10 @@ PATTERNS = [
     # "** TEST FAILED **". Medido no pastinha-ios, 2026-10-10.
     (re.compile(r"(?:^|\s)xcodebuild\b.*\b(?:build|test|build-for-testing|test-without-building)\b"),
      "xcodebuild", ["** BUILD SUCCEEDED **", "** TEST SUCCEEDED **"], ["** BUILD FAILED **", "** TEST FAILED **"]),
+    # SwiftPM: "Build complete!" no sucesso; "error:" na falha de compilação; teste vermelho
+    # termina em "Test run with N tests ... failed after".
+    (re.compile(r"(?:^|[\s/])swift\s+(?:build|test)\b"),
+     "swiftpm", ["Build complete!", " passed after"], ["error:", " failed after"]),
     (re.compile(r"(?:^|\s)go\s+test\b"),
      "go-test", None, None),
     # docker build emits no exit code the hook can read, so classify on
