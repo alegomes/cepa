@@ -120,8 +120,14 @@ PATTERNS = [
      "npm", _JS_SUCCESS, _JS_FAILURE),
     (re.compile(r"(?:^|\s)(?:yarn|pnpm)\b.*\b(?:test|build)\b"),
      "yarn", _JS_SUCCESS, _JS_FAILURE),
+    # pytest: a linha de resumo é "== 10 passed in 0.01s ==" ou "== 1 failed,
+    # 9 passed ==" / "!!! Interrupted: 3 errors during collection !!!". Sem
+    # marcador, um pytest verde nunca era registrado (o CC omite o exit code
+    # no sucesso) e o gate-advance ficava STALE para sempre em projeto Python
+    # (medido no pastinha-pipeline, 2026-10-10). Falha vence: "1 failed, 9
+    # passed" é FAILURE.
     (re.compile(r"(?:^|\s)pytest\b"),
-     "pytest", None, None),
+     "pytest", [" passed"], [" failed", " error", "errors during collection", "no tests ran"]),
     (re.compile(r"(?:^|\s)cargo\b.*\b(?:test|build|check)\b"),
      "cargo", None, None),
     (re.compile(r"(?:^|\s)go\s+test\b"),
