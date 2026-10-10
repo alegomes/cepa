@@ -1740,8 +1740,20 @@ items:
     no disco; o write continua gravando o .bak no mesmo lugar. Build completo fica
     com o supervisor.'
 - id: gate-advance-repo-do-push
-  title: gate-advance avalia o build do repo que recebe o push, não o da sessão
-  why: 'ainda não priorizado: entrou no fim da fila'
+  title: gate-advance avalia o build do repo que recebe o commit/push, não o da
+    sessão
+  why: 'ainda não priorizado: entrou no fim da fila. Reproduzido em 2026-10-10:
+    sessão aberta em ~/coding/al2.digital/kodez.cool (sem build nenhum, mas com
+    last-build.json STALE por uma edição de 92 dias antes) rodou `cd ~/coding/cepa
+    && git commit` e o hook barrou duas vezes lendo o estado de kodez.cool, não o
+    do cepa. O hook classifica o comando pelo texto (classify) e ancora o estado
+    em session_root(cwd do payload), que é a raiz da sessão, não a do repo em que
+    o git vai rodar; `cd <outro repo> && git ...` e `git -C <outro repo> ...`
+    caem no repo errado. Saída usada no dia: criar .claude/no-build em
+    kodez.cool, que é honesta ali mas não resolve o caso de sessão em repo A
+    commitando em repo B com build. Esboço: extrair do comando o diretório alvo
+    (`cd X &&`, `git -C X`) e avaliar last-build.json/no-build desse repo; se não
+    houver alvo explícito, manter session_root.'
   status: pending
   blocked_by: []
   human_pending: null
