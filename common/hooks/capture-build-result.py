@@ -130,6 +130,16 @@ PATTERNS = [
      "pytest", [" passed"], [" failed", " error", "errors during collection", "no tests ran"]),
     (re.compile(r"(?:^|\s)cargo\b.*\b(?:test|build|check)\b"),
      "cargo", None, None),
+    # deno: `deno task check` / `deno check` imprimem "Checked N files"; `deno test`
+    # imprime "ok | 3 passed | 0 failed" (por isso " failed" NÃO é marcador: "0 failed"
+    # está em todo verde). Falha: "error: ..." (check/compilação), "error[...]" e
+    # "Found N problems" (lint), "FAILED |" (test). Medido no pastinha-api, 2026-10-10.
+    (re.compile(r"(?:^|\s)deno\s+(?:task\s+\S*(?:check|test|lint|build|verify)\S*|check|test|lint)\b"),
+     "deno", ["Checked ", " passed |"], ["error:", "error[", "problems", "FAILED |"]),
+    # xcodebuild: "** BUILD SUCCEEDED **" / "** TEST SUCCEEDED **" vs "** BUILD FAILED **" /
+    # "** TEST FAILED **". Medido no pastinha-ios, 2026-10-10.
+    (re.compile(r"(?:^|\s)xcodebuild\b.*\b(?:build|test|build-for-testing|test-without-building)\b"),
+     "xcodebuild", ["** BUILD SUCCEEDED **", "** TEST SUCCEEDED **"], ["** BUILD FAILED **", "** TEST FAILED **"]),
     (re.compile(r"(?:^|\s)go\s+test\b"),
      "go-test", None, None),
     # docker build emits no exit code the hook can read, so classify on
