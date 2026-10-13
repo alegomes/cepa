@@ -24,9 +24,24 @@ items:
     single-track com `demonstra: "o operador carrega o PDF e vê 3 respostas"` no
     cabeçalho devolve OK e `cepa-plan show` imprime o texto; hoje o campo é recusado
     como desconhecido pelo validador do `common/plan-schema.yaml`.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Volta 2. O vermelho da volta 1 nao era do CS-1: tests/test_cepa_modo.py
+    e tests/test_cepa_prompt.py ja falhavam na base 06d7dd5 porque herdavam CEPA_PROMPT=smartass
+    do ambiente do cepa-until (sem a variavel, verdes). Commit 7f5a489 tira CEPA_PROMPT/CEPA_PROMPT_MODO
+    do os.environ no topo dos dois testes; vermelho->verde provado (sem o patch
+    e com CEPA_PROMPT setado: 1 e 2 falhas; com o patch: verdes). CS-1 trazido da
+    lateral until/2026-10-08-2047-vermelho-CS-1 por cherry-pick sem alteracao: 7c6c84c
+    (feat) e fa37c1b (aceite+prova), patch-id identico a 2c469ef/cf95f53, entao
+    valem os vereditos da volta 1: completion-auditor COMPLETE (.claude/acceptance/CS-1.yaml),
+    proof-reviewer PROVEN (docs/proof/CS-1.yaml, perturbacoes P1-P5 vermelhas).
+    tests/test_cepa_plan_demonstra.py: vermelho na base (8 FAIL), verde no HEAD;
+    21 testes vizinhos do cepa-plan/until/fila verdes. Ressalva do criterio: a spec
+    dizia que validate recusava demonstra: na base, mas a base ja aceitava; o vermelho
+    real era show sem o campo, reescrita apagando o campo e validate aceitando valor
+    vazio ou nao-texto. Build completo fica com o supervisor. Codigo na branch da
+    noite until/2026-10-08-2047, sem merge nem push.'
 - id: CS-2
   title: '`cepa-metrics scorecard` imprime os três números com a conta'
   why: 'decisão 8 da estratégia: medir antes de mudar; os três números já existem
@@ -36,9 +51,23 @@ items:
     três linhas, "turnos após rotina por sessão", "builds vermelhos" e "sessões
     no repo cepa", cada uma com numerador, denominador e resultado, para os últimos
     7 dias e desde o início; hoje o subcomando não existe e o comando sai com erro.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits ae28119 (feat: subcomando scorecard em common/bin/cepa-metrics),
+    c5168c5 (teste reforçado após UNPROVEN da 1a prova), a1030d7 (aceite+prova).
+    Imprime as três linhas F3/F8/F10 com numerador, denominador e resultado para
+    últimos 7 dias e desde o início, mais --json. Ledger real reproduz F3 da estratégia:
+    931 ÷ 52 = 17,9; F8 hoje 2577 ÷ 7346 = 35,1% e F10 180 ÷ 965 = 18,7% (ledger
+    cresceu desde o documento). tests/test_cepa_metrics_scorecard.py: vermelho na
+    base fa37c1b (6 FAIL), verde no HEAD; vizinhos test_atrito_pontas e test_cepa_tokens
+    verdes. pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/CS-2.yaml);
+    proof-reviewer UNPROVEN na 1a volta (ordenação por horário e filtro de prompt
+    sem sessão sobreviviam), PROVEN na 2a (docs/proof/CS-2.yaml, P10/P13 agora vermelhas).
+    Fora: o critério cita ''transcrições de teste'', mas a spec (Decidido sem perguntar)
+    manda ler só o ledger, e os três números saem dele; nenhuma transcrição é lida.
+    Build completo fica com o supervisor. Código na branch da noite until/2026-10-08-2047,
+    sem merge nem push.'
 - id: CS-3
   title: o launcher `cepa` abre a sessão seguinte quando a anterior deixou o próximo
     passo gravado
@@ -51,9 +80,28 @@ items:
     vez com cwd igual a `repo`, `--modo descoberta` e o brief como prompt inicial,
     e apaga o arquivo; hoje o launcher sai depois do primeiro `claude` e o arquivo
     não é lido.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 889ab85 (feat: common/bin/cepa nao faz mais exec do claude;
+    run_claude gera CEPA_LAUNCH_ID; common/hooks/session-chain.py novo le o .launch,
+    pega o .next.json da sessao mais recente, valida repo/modo/brief, apaga e reabre
+    o cepa em repo com --modo e o brief como prompt; session-registry anota o session_id
+    no SessionStart; _wtlib.read_entries ignora *.next.json; CEPA_ENCADEAR=off desliga),
+    8fe4010 e f8764d3 (testes reforcados apos UNPROVEN), 91134c5 (aceite+prova).
+    tests/test_cepa_encadeamento.py: vermelho na base a1030d7 (12 FAIL), verde no
+    HEAD; 18 arquivos de teste vizinhos (cepa_modo, cepa_prompt, session/worktree/registry)
+    verdes. pair-reviewer APPROVE com ressalvas; completion-auditor COMPLETE (.claude/acceptance/CS-3.yaml,
+    auditado em 889ab85, depois so o teste mudou); proof-reviewer UNPROVEN nas voltas
+    1 e 2 (validacao de brief/modo, reversed(sids), exit do rc sobreviviam), NEEDS-HUMAN
+    na 3 por L2/L4 sem ferramenta, PROVEN apos aplicar a mesma regua de CS-1/CS-2
+    (docs/proof/CS-3.yaml, 16 perturbacoes vermelhas). Interpretacao: ''--modo descoberta''
+    e o --modo do cepa (grava .claude/session-mode), nao flag do claude real. Fora/ressalvas:
+    modo invalido no .next.json apaga o arquivo antes do cepa recusar (proximo passo
+    perdido); brief iniciado por ''-'' vira flag do claude; SIGTERM so no pid do
+    cepa nao chega ao claude; checagem de hostname na limpeza do registro sem perturbacao
+    vermelha. Build completo fica com o supervisor. Codigo na branch da noite until/2026-10-08-2047,
+    sem merge nem push.'
 - id: CS-4
   title: '`/common:wrap-up` grava o próximo passo a partir do handoff'
   why: 'fecha o encadeamento pelo lado de quem termina a sessão; depende do launcher
@@ -64,10 +112,33 @@ items:
     com esses três campos e o brief igual ao parágrafo "Próximo passo" do handoff;
     sem a linha, não escreve nada e diz isso no relatório. Hoje o wrap-up não conhece
     a linha e o arquivo nunca existe.'
-  status: pending
+  status: done
   blocked_by:
   - CS-3
   human_pending: null
+  evidence: 'Commits b877c3c (feat: common/hooks/session-next.py novo le a linha
+    **Proximo:** repo=... modo=... comando=... da zona NOTE do handoff e grava <raiz>/.claude/sessions/<id>.next.json
+    com repo/modo/comando e brief = paragrafo ## Proximo passo; sem a linha nao
+    grava, exit 0, e diz; linha inutilizavel (repo inexistente, modo fora de _modos.MODOS,
+    reforma, campo faltando, brief vazio) nao grava, exit 2, e diz o motivo; wrap-up.md
+    L7 chama o script e L8 leva a primeira linha da saida ao relatorio, inclusive
+    no caminho sem session/*; handoff.md documenta a linha como opcional) e cadafbc
+    (aceite+prova). tests/test_wrapup_proximo_passo.py: vermelho na base 91134c5
+    (24 FAIL), verde no HEAD, inclui a linha literal do criterio e um caso em que
+    o session-chain.py real (CS-3) consome o arquivo gravado e reabre o cepa em
+    repo com --modo e o brief. Vizinhos verdes: test_cepa_encadeamento, test_catalogo_comandos,
+    test_handoff_claim, test_handoff_seeds_gate, test_lock_copies_drift, test_flags_hint_variables,
+    test_pluginver_boot. pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/CS-4.yaml);
+    proof-reviewer PROVEN (docs/proof/CS-4.yaml, 21 de 22 perturbacoes no script
+    e 3 de 3 na prosa vermelhas; sobrevivente ensure_ascii, equivalente). Fora/ressalvas:
+    o campo comando vai para o .next.json mas o launcher (CS-3) nao o usa, o prompt
+    inicial e so o brief; que o modelo de fato rode o L7 so e checado por busca
+    no wrap-up.md; ramos de handoff ilegivel e raiz nao encontrada sem teste. Build
+    completo fica com o supervisor. Codigo na branch da noite until/2026-10-08-2047,
+    sem merge nem push.'
+  owner_question: 'Faço o launcher pôr o campo comando como primeira linha do prompt
+    inicial da sessão encadeada? Recomendo sim: hoje o comando é gravado e ignorado,
+    e a sessão seguinte só o executa se o parágrafo Próximo passo o citar.'
 - id: CS-5
   title: '`/common:epic <nome>` entrevista o dono no estilo "grill me" e escreve
     `docs/epics/<nome>.md`'
@@ -81,9 +152,42 @@ items:
     tem roteiro com efeito observável em tela e em backend, a lista de invariantes
     não está vazia e a seção "Decidido sem perguntar" existe; o hook `spec-readiness-gate`
     barra `Status: pronta` sem isso. Hoje o comando não existe.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 61b71db (feat: common/commands/epic.md novo, interaction conversational,
+    grill me: uma pergunta por turno em prosa sem menu nem alternativas em linha,
+    proposta antes da pergunta, desafio unico, gravacao no mesmo turno; spec-readiness-gate
+    ganha crivo de Epic para docs/epics/*.md ou ''# Epic:'': Status pronta so com
+    escada com ciclo e Roteiro/Efeito em tela/Efeito em backend preenchidos, invariante,
+    secao Decidido sem perguntar e nenhuma - [ ]; descoberta escreve docs/epics/**;
+    report-style-lint poupa turno de entrevista; catalogo e marketplace), c9d8ee1
+    (revisao de par: excecao do lint so docs/epics e recusada com marcas de relatorio;
+    \| na celula; vazio para —/nenhum/n/d; recusa de pronta em voz alta), d21e45b/65908ee/e0c7d05
+    (rodadas 5-7 da transcricao e ajustes do turno 1), 2149350/4b08570 (testes para
+    os 17 sobreviventes da prova), 8dc6d13 (aceite+prova). tests/test_epic_readiness_gate.py:
+    vermelho na base cadafbc (29 FAIL na 1a versao), verde no HEAD; vizinhos verdes:
+    test_spec_readiness_gate, test_report_style_lint, test_catalogo_comandos, test_marketplace_descricao_common,
+    test_modo_escrita_gate, test_modos_fonte_unica, test_session_routine_guard,
+    test_cepa_modo, test_lock_copies_drift, test_pluginver_boot e outros 6. Transcricao
+    real (claude -p --plugin-dir common, sonnet) em docs/proof/CS-5-transcricao.md,
+    rodadas 4 a 7, cerca de US$ 10 no total: desafio e gravacao no mesmo turno,
+    recusa de pronta em voz alta, Epic semeado fechando pronta com o gate liberando,
+    turno 1 com uma pergunta em 10 de 10 gravacoes com o texto final. pair-reviewer
+    REQUEST-CHANGES em 61b71db e APPROVE em d21e45b; completion-auditor INCOMPLETE
+    duas vezes (falta de desafio/pronta positivo; pergunta dupla no turno 1) e COMPLETE
+    em 2149350 (.claude/acceptance/CS-5.yaml); proof-reviewer UNPROVEN em 65908ee
+    (16 sobreviventes) e 2149350 (1), PROVEN em 4b08570 (docs/proof/CS-5.yaml).
+    Fora/ressalvas: em 2 de 5 gravacoes do Epic retomado o agente pulou a lacuna
+    Efeito em tela do ciclo 1 (ordem, nao numero de perguntas); nenhum gate conta
+    perguntas, e comportamento do modelo; a excecao do lint nao cobre o /common:spec,
+    que tem o mesmo conflito; o plugin instalado so ganha o comando e a excecao
+    do lint depois de reinstalar. Build completo fica com o supervisor. Codigo na
+    branch da noite until/2026-10-08-2047, sem merge nem push.'
+  owner_question: 'Estendo ao /common:spec a exceção do report-style-lint que poupa
+    o turno de entrevista? Recomendo sim: a entrevista do spec também grava no arquivo
+    a cada turno, e hoje o lint a obriga ao formato de relatório com pergunta numerada,
+    o mesmo conflito que a transcrição do epic mostrou.'
 - id: CS-6
   title: '`/common:plan --from-epic docs/epics/<nome>.md --ciclo N` deriva a fila
     do ciclo'
@@ -94,8 +198,38 @@ items:
     cujo cabeçalho tem `demonstra:` igual ao roteiro do ciclo 2 e um item por frase
     de "o que atravessa", cada item com critério de aceite e superfície, na ordem
     do texto; hoje `--from-epic` é flag desconhecida.'
-  status: pending
+  status: done
   blocked_by:
   - CS-1
   - CS-5
   human_pending: null
+  evidence: 'Commits 81a2421 (feat: common/bin/cepa-plan ganha o subcomando from-epic
+    e as flags --from-epic/--ciclo no write; o roteiro do ciclo vira o demonstra:
+    do cabecalho e cada frase de ''O que atravessa'' (partida em . ou ; fora de
+    crase) vira item C<N>-<k>, com criterio de aceite (o roteiro do ciclo) e superficie
+    (colunas Efeito em tela/Efeito em backend) no why e a heranca da ordem dita;
+    Epic em rascunho, com pergunta aberta ou sem colunas de efeito e aviso; ciclo
+    inexistente, sem roteiro, sem peca, sem tabela ou sem coluna obrigatoria e recusa
+    exit 2; plan.md documenta a quarta fonte), d57490f (testes para os 9 sobreviventes
+    da 1a prova), 8adb845 (aceite+prova). Sobre o Epic real, write cepa-espiral-c2
+    --from-epic docs/epics/cepa-em-espiral.md --ciclo 2 --dry-run imprime demonstra
+    igual ao roteiro do ciclo 2 e 2 itens (C2-1 ''cepa-until como tronco + fork
+    de filhos e merge train extraidos do Maestro como biblioteca'', C2-2 ''/maestro:run
+    deprecado''), sem gravar. tests/test_cepa_plan_from_epic.py: vermelho na base
+    8dc6d13 (12 FAIL), verde no HEAD; vizinhos verdes: test_common_plan, test_cepa_plan_demonstra,
+    test_flags_hint_variables, test_catalogo_comandos, test_marketplace_descricao_common,
+    test_common_next, test_common_drain_plan, test_lock_copies_drift e todos os
+    que citam cepa-plan/plan.md. pair-reviewer APPROVE; completion-auditor COMPLETE
+    (.claude/acceptance/CS-6.yaml); proof-reviewer UNPROVEN em 81a2421 (9 sobreviventes)
+    e PROVEN em d57490f (docs/proof/CS-6.yaml, 9 + 8 perturbacoes vermelhas). Fora/ressalvas:
+    o Epic real nao tem as colunas Efeito em tela/backend, entao os itens do ciclo
+    2 saem com superficie ''nao declarada no Epic'' e aviso (nada foi inventado
+    nem editado no Epic); criterio e superficie ficam dentro do why, sem campo proprio
+    no schema; abreviacao com ponto fora de crase parte a frase (documentado no
+    plan.md). Build completo fica com o supervisor. Codigo na branch da noite until/2026-10-08-2047,
+    sem merge nem push.'
+  owner_question: 'Completo o ciclo 2 do Epic Cepa em espiral pelo /common:epic
+    (colunas Efeito em tela e Efeito em backend, e as peças de ''O que atravessa''
+    em frases) antes de gerar a fila cepa-espiral-c2? Recomendo sim: sem isso os
+    2 itens nascem com superfície ''não declarada'', e ninguém sabe onde observar
+    que terminaram.'
