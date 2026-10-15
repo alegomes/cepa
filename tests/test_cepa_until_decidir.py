@@ -323,6 +323,29 @@ def test_decide_s_e_n_respondem_a_pergunta_redigida():
               ("W-3", "sim: destravar o item. ligue a flag", False)],
           respondidos)
     check("os três contam como respondidos", len(aplicados) == 3, aplicados)
+    menus = [p_ for p_ in perguntas if "[Enter]" in p_]
+    check("o menu completo, com evidência: s, n, t, e, Enter, q",
+          menus and all("[s] sim" in p_ and "[n] não" in p_
+                        and "[t] escrevo a resposta" in p_
+                        and "[e] evidência inteira" in p_
+                        and "[Enter] depois" in p_ and "[q] encerra" in p_
+                        for p_ in menus), menus)
+    check("...e sem as teclas antigas [r]/[f]/[m]",
+          not any(k in p_ for p_ in menus for k in ("[r]", "[f]", "[m]")),
+          menus)
+    # AC3, ramo da rota humana sem pergunta redigida
+    tela2, resp2 = [], iter(["", "q"])
+    m.decide(Path("/nao/existe"), "fila", "run1", {},
+             [{"id": "W-9", "title": "rota", "reason": "human_pending",
+               "question": None, "human_pending": "valide o login real",
+               "evidence": None}], {},
+             pergunta=lambda _p: next(resp2), saida=tela2.append)
+    texto2 = "\n".join(tela2)
+    check("rota humana sem pergunta: mostra a tarefa e pergunta 'já fez?'",
+          "O que ficou para você fazer: valide o login real" in texto2
+          and "Pergunta: já fez?" in texto2, texto2)
+    check("...e sem evidência o menu não oferece [e]",
+          not any("[e]" in p_ for p_ in tela2), tela2)
 
 
 def test_analise_sem_bloco_ou_quebrada_nao_derruba():
@@ -478,6 +501,19 @@ def test_instrucoes_dos_agentes_pedem_a_pergunta():
           "lista fechada" in review, "")
     check("drain-plan manda gravar --pergunta ao travar",
           "--pergunta" in drain, "")
+    p = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-plan"),
+                        "finish", "--help"], capture_output=True, text=True,
+                       timeout=30)
+    ajuda = " ".join(p.stdout.split())
+    for nome, texto in (("until-review", review), ("drain-plan", drain),
+                        ("cepa-plan finish --help", ajuda)):
+        texto = " ".join(texto.replace("**", "").split())
+        check(f"{nome}: pergunta de até 25 palavras",
+              "25 palavras" in texto, texto[-600:])
+        check(f"{nome}: sem nome de branch, classe ou arquivo",
+              "sem nome de branch" in texto, texto[-600:])
+        check(f"{nome}: sim = o item volta para a fila",
+              "volta para a fila" in texto, texto[-600:])
 
 
 REVIEW_COM_BLOCO = (
@@ -627,6 +663,45 @@ def test_run_ja_aterrissado_nao_pergunta_de_novo():
     tela2 = []
     m.pendencias_em_texto("fila", "run1", est, [], {}, saida=tela2.append)
     check("...nem lista sem terminal", tela2 == [], tela2)
+
+
+def test_decidir_s_e_n_no_terminal_chegam_ao_plano():
+    """AC2 na ponta: `n` e `s` digitados num terminal de verdade passam pelo
+    `cepa-plan responde` real e gravam "não: <pergunta>" (item como está)
+    e "sim: <pergunta>" (item de volta à fila)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        corpo = ("ident = primeiro_pendente()\n"
+                 "if ident == 'a1':\n"
+                 "    marca(ident, status='blocked', evidence='sem produção',\n"
+                 "          owner_question='Fecho o card?')\n"
+                 "elif ident == 'a2':\n"
+                 "    marca(ident, status='pending', evidence='feito',\n"
+                 "          human_pending='valide o login real')\n")
+        binv = fake_claude(tmp, corpo)
+        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
+        run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
+                        .glob("*.estado.json"))[-1].name.split(".")[0]
+        cmd = [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
+               "--repo", str(raiz)]
+        rc, out = em_tty(cmd, str(raiz), entradas=[
+            ("[t] escrevo a resposta", "n"), ("Quer acrescentar algo", ""),
+            ("[t] escrevo a resposta", "s"), ("Quer acrescentar algo", "vi ok")])
+        a1, a2 = itens_de(raiz)["a1"], itens_de(raiz)["a2"]
+        check("n no terminal: o blocked continua blocked",
+              rc == 0 and a1["status"] == "blocked", (rc, a1, out[-1200:]))
+        check("...com 'não: <pergunta>' na evidência",
+              "não: Fecho o card?" in a1["evidence"], a1)
+        check("s na rota sem pergunta: a rota fecha",
+              a2.get("human_pending") is None, a2)
+        check("...com 'sim: <rota>. <acréscimo>' na evidência",
+              "sim: valide o login real. vi ok" in a2["evidence"], a2)
+        rc, out = em_tty(cmd, str(raiz), entradas=[
+            ("[t] escrevo a resposta", "s")])
+        a1 = itens_de(raiz)["a1"]
+        check("s no blocked com pergunta: volta para pending sem pedir linha",
+              rc == 0 and a1["status"] == "pending"
+              and "sim: Fecho o card?" in a1["evidence"], (a1, out[-800:]))
 
 
 def test_byte_invalido_no_terminal_nao_derruba_o_decidir():
