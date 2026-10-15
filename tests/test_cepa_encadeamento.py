@@ -83,6 +83,11 @@ if nxt2:
     (Path(os.environ["STUB_SESSIONS"]) / f"{sid}.next.json").write_text(nxt2)
 if os.environ.get("STUB_SKIP_END") != "1":
     hook("SessionEnd")
+# O wrap-up mescla e remove a worktree de dentro da sessão: o claude sai com o
+# cwd apontando para uma pasta que já não existe.
+if os.environ.get("STUB_RMCWD") == "1":
+    import shutil
+    shutil.rmtree(os.getcwd())
 sys.exit(int(os.environ.get("STUB_RC", "0")))
 '''
 
@@ -127,7 +132,7 @@ class World:
     def __exit__(self, *a):
         self.tmp.cleanup()
 
-    def run(self, nxt=None, env=None):
+    def run(self, nxt=None, env=None, args=None):
         e = {**os.environ,
              "CLAUDE_WT_CLAUDE_BIN": str(self.stub),
              "CEPA_PREFLIGHT": "off",
@@ -140,7 +145,8 @@ class World:
         if nxt is not None:
             e["STUB_NEXT"] = nxt if isinstance(nxt, str) else json.dumps(nxt)
         e.update(env or {})
-        return subprocess.run([str(CEPA), "--modo", "construcao"], cwd=self.a, env=e,
+        return subprocess.run([str(CEPA), "--modo", "construcao", *(args or [])],
+                              cwd=self.a, env=e,
                               capture_output=True, text=True, timeout=60,
                               stdin=subprocess.DEVNULL)
 
@@ -254,6 +260,24 @@ def t_sem_session_end():
                   c[1]["cwd"])
 
 
+def t_worktree_apagada():
+    print("a sessão apagou a própria worktree (wrap-up): encadeia mesmo assim, sem ruído")
+    with World() as w:
+        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF},
+                  env={"STUB_RMCWD": "1"}, args=["-s", "fatia"])
+        c = w.calls()
+        check("a primeira rodou numa worktree", len(c) >= 1
+              and Path(c[0]["cwd"]).resolve().is_relative_to(w.wt_home.resolve()),
+              repr(c[:1]))
+        check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
+        if len(c) == 2:
+            check("a segunda rodou com cwd = repo do arquivo", same(c[1]["cwd"], w.b), c[1]["cwd"])
+        check("sem 'shell-init' nem 'getcwd' no stderr",
+              "shell-init" not in r.stderr and "getcwd" not in r.stderr, r.stderr)
+        check("o .next.json foi apagado", not (w.sessions / "sess-1.next.json").exists())
+        check("sai 0", r.returncode == 0, f"rc={r.returncode} stderr={r.stderr!r}")
+
+
 def t_registro_ignora_next():
     print("o registro de sessões não lê .next.json como sessão")
     with World() as w:
@@ -272,6 +296,7 @@ if __name__ == "__main__":
     t_campos_vazios()
     t_mais_recente_vence()
     t_sem_session_end()
+    t_worktree_apagada()
     t_registro_ignora_next()
     if failures:
         print(f"\n{len(failures)} FAIL")
