@@ -307,8 +307,8 @@ def test_decide_s_e_n_respondem_a_pergunta_redigida():
         responde=lambda i, t, mantem=False: (
             respondidos.append((i, t, mantem)), (0, f"{i} ok"))[1])
     texto = "\n".join(tela)
-    check("o título longo é cortado", "t" * 90 not in texto
-          and "t" * 59 + "…" in texto, texto)
+    check("o título sai inteiro (cortado em 60, o dono respondia a uma "
+          "pergunta que via pela metade; 15/10)", "t" * 90 in texto, texto)
     check("a recomendação marca a letra no menu",
           any("[s] sim (recomendado)" in p_ for p_ in perguntas), perguntas)
     check("a legenda diz o que sim e não fazem",
@@ -342,10 +342,88 @@ def test_decide_s_e_n_respondem_a_pergunta_redigida():
              pergunta=lambda _p: next(resp2), saida=tela2.append)
     texto2 = "\n".join(tela2)
     check("rota humana sem pergunta: mostra a tarefa e pergunta 'já fez?'",
-          "O que ficou para você fazer: valide o login real" in texto2
+          "Tarefa que ficou para você: valide o login real" in texto2
           and "Pergunta: já fez?" in texto2, texto2)
     check("...e sem evidência o menu não oferece [e]",
           not any("[e]" in p_ for p_ in tela2), tela2)
+
+
+def test_decide_mostra_contexto_instrucao_e_avisa_pergunta_fora_das_regras():
+    """Feedback de 15/10 (decidir WEGO 2026-10-15-1128): a análise pôs 71
+    palavras, branch e classe de teste na pergunta, e tudo saía num bloco
+    só. Agora a análise separa `contexto` (leigo) e `instrucao` (técnica,
+    gravada com o sim), o terminal rotula cada parte, e uma pergunta fora
+    das regras ganha o aviso, sem deixar de ser mostrada."""
+    m = carrega_modulo()
+    longa = ("Fecho a rota humana B.14 e devolvo o item à fila com a "
+             "instrução: retomar da lateral until/2026-10-15-1128-vermelho "
+             "e dar tinta à página sem texto de PipelineSemVazamentoTest, "
+             "como nas outras 4 fixtures? (a alternativa é deixar adiado)")
+    adiados = [
+        {"id": "S5", "title": "Pipeline marca página em branco",
+         "reason": "human_pending", "question": None,
+         "human_pending": "rodar os 20 lotes", "evidence": "x"},
+        {"id": "S6", "title": "outro", "reason": "human_pending",
+         "question": None, "human_pending": "revisar a prova",
+         "evidence": "y"},
+    ]
+    analise = {"itens": {
+        "S5": {"pergunta": "Deixo a rodada dos 20 lotes para depois do merge "
+                           "e devolvo o item à fila?",
+               "contexto": "O código está pronto numa branch lateral; "
+                           "só um teste de fixture ficou vermelho.",
+               "instrucao": "retomar de until/2026-10-15-1128-vermelho-S5 e "
+                            "dar tinta à fixture de PipelineTest",
+               "recomendo": "sim", "porque": "a rodada só é possível após "
+                                             "o merge"},
+        "S6": {"pergunta": longa, "recomendo": "sim", "porque": "p"}}}
+    respostas = iter(["s", "", "s", ""])
+    tela, respondidos = [], []
+    m.decide(Path("/nao/existe"), "fila", "run1", {}, adiados, analise,
+             pergunta=lambda _p: next(respostas), saida=tela.append,
+             responde=lambda i, t, mantem=False: (
+                 respondidos.append((i, t, mantem)), (0, "ok"))[1])
+    texto = "\n".join(tela)
+    bloco_s5 = texto.split("━━ [1/2] S5")[1].split("━━ [2/2] S6")[0]
+    check("cada item abre com separador e id em linha própria",
+          "━━ [1/2] S5\n" in texto and "━━ [2/2] S6\n" in texto, texto)
+    check("o bloco tem Parou porque / Tarefa / Contexto / Pergunta / "
+          "Se sim / Recomendo, nesta ordem",
+          [bloco_s5.find(r) for r in (
+              "Parou porque: ficou uma tarefa que só você faz",
+              "Tarefa que ficou para você: rodar os 20 lotes",
+              "Contexto: O código está pronto numa branch lateral",
+              "Pergunta: Deixo a rodada dos 20 lotes",
+              "Se sim, o próximo run recebe: retomar de until/",
+              "Recomendo sim: a rodada só é possível")]
+          == sorted(i for i in (bloco_s5.find(r) for r in (
+              "Parou porque:", "Tarefa que ficou", "Contexto:",
+              "Pergunta:", "Se sim,", "Recomendo sim")))
+          and all(r in bloco_s5 for r in (
+              "Parou porque:", "Tarefa que ficou", "Contexto:",
+              "Pergunta:", "Se sim,", "Recomendo sim")), bloco_s5)
+    check("linha em branco antes da pergunta e antes da legenda do menu",
+          "\n\n       Pergunta:" in bloco_s5
+          and "\n\n       sim = o item volta" in bloco_s5, bloco_s5)
+    check("a pergunta dentro das regras não ganha aviso",
+          "fora das regras" not in bloco_s5, bloco_s5)
+    check("o sim grava a pergunta E a instrução, para o próximo run",
+          respondidos[0] == ("S5", "sim: Deixo a rodada dos 20 lotes para "
+                             "depois do merge e devolvo o item à fila? "
+                             "Instrução: retomar de until/2026-10-15-1128-"
+                             "vermelho-S5 e dar tinta à fixture de "
+                             "PipelineTest", False), respondidos)
+    bloco_s6 = " ".join(texto.split("━━ [2/2] S6")[1].split())
+    check("a pergunta longa com branch e classe é mostrada E avisada",
+          "Pergunta: Fecho a rota humana B.14" in bloco_s6
+          and "fora das regras: 37 palavras, o limite é 25; nome de branch, "
+              "classe de teste ou arquivo" in bloco_s6, bloco_s6)
+    check("pergunta_fora_das_regras: None dentro das regras",
+          m.pergunta_fora_das_regras("Fecho o card como 'medir depois'?")
+          is None, "")
+    check("...e pega a alternativa entre parênteses",
+          "classe" in (m.pergunta_fora_das_regras(
+              "Fecho? (a alternativa é não)") or ""), "")
 
 
 def test_analise_sem_bloco_ou_quebrada_nao_derruba():
@@ -514,6 +592,10 @@ def test_instrucoes_dos_agentes_pedem_a_pergunta():
               "sem nome de branch" in texto, texto[-600:])
         check(f"{nome}: sim = o item volta para a fila",
               "volta para a fila" in texto, texto[-600:])
+    r = " ".join(review.replace("`", "").split())
+    check("until-review: o bloco tem contexto (leigo) e instrucao (técnica)",
+          '"contexto"' in r and '"instrucao"' in r
+          and "contexto é" in r and "instrucao é" in r, r[-1500:])
 
 
 REVIEW_COM_BLOCO = (
