@@ -232,6 +232,11 @@ run_claude() {
   set -e
   if [ "${CEPA_ENCADEAR:-on}" != "off" ] && [ -n "$CEPA_LAUNCH_ID" ] \
       && [ -f "$CHAIN_PY" ] && command -v python3 >/dev/null 2>&1; then
+    # A sessão pode ter removido a própria worktree (wrap-up mescla e apaga).
+    # Um processo nascido num diretório apagado falha antes de rodar (o shim
+    # do pyenv é bash: "shell-init: error retrieving current directory") e o
+    # session-chain.py acha a raiz principal pelo cwd. Volta para a raiz.
+    cd "${ROOT:-$PWD}" 2>/dev/null || cd "$HOME" 2>/dev/null || cd /
     exec python3 "$CHAIN_PY" "$CEPA_LAUNCH_ID" "$CEPA_SELF" "$_rc"
   fi
   exit "$_rc"
