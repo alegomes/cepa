@@ -18,6 +18,7 @@ build. Sem alvo explícito, vale o cwd do payload, como sempre.
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -42,12 +43,13 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def run_hook(script, payload):
+def run_hook(script, payload, env=None):
     return subprocess.run(
         [sys.executable, str(HOOKS / script)],
         input=json.dumps(payload),
         capture_output=True,
         text=True,
+        env=env,
     )
 
 
@@ -81,12 +83,12 @@ def sem_build(repo):
     (repo / ".claude" / "no-build").write_text("", encoding="utf-8")
 
 
-def gate(command, cwd):
+def gate(command, cwd, env=None):
     return run_hook("gate-advance.py", {
         "tool_name": "Bash",
         "tool_input": {"command": command},
         "cwd": str(cwd),
-    })
+    }, env=env)
 
 
 def novo_par(tmp, nome):
@@ -188,6 +190,23 @@ with tempfile.TemporaryDirectory() as tmp:
     check("último cd (B, vermelho) vence o primeiro (C, no-build)", r.returncode == 2,
           f"exit={r.returncode} stderr={r.stderr[:200]}")
 
+    print("\n# git -C: commit, -c k=v e ~")
+    a, b = novo_par(tmp, "c13")
+    sem_build(a)
+    vermelho(b)
+    r = gate(f"git -C {b} commit -m x", a)
+    check("git -C B commit BARRADO", r.returncode == 2,
+          f"exit={r.returncode} stderr={r.stderr[:200]}")
+    # `git -c k=v -C B push` NÃO é testado ponta a ponta: o classify() só aceita
+    # `-C` entre `git` e o subcomando (decisão: não ampliar para `-c`). O
+    # alinhamento do -C depois de um `-c` é travado em segment_dirs, abaixo.
+    a, b = novo_par(tmp, "c14")
+    sem_build(a)
+    vermelho(b)
+    r = gate("git -C ~/c14/B push origin main", a, env={**os.environ, "HOME": str(tmp)})
+    check("git -C ~/B expande o HOME e BARRA", r.returncode == 2,
+          f"exit={r.returncode} stderr={r.stderr[:200]}")
+
     print("\n# fail-open — problema de parse nunca derruba o hook")
     a, _b = novo_par(tmp, "c9")
     vermelho(a)
@@ -200,11 +219,18 @@ with tempfile.TemporaryDirectory() as tmp:
     r = gate("cd /caminho/que/nao/existe && git push origin main", a)
     print(f"    (cd inexistente) exit={r.returncode}")
     check("cd inexistente: sem Traceback", "Traceback" not in r.stderr, r.stderr[:300])
-    # O alvo inexistente não é repo: session_root devolve o próprio caminho, sem
-    # manifesto de build, e o push sai liberado com aviso. Coerente: no shell o
-    # `cd` falha e o `&&` impede o push de rodar. O que importa aqui é não cair.
-    check("cd inexistente: não quebra (liberado com aviso, sem manifesto)",
-          r.returncode == 0, f"exit={r.returncode} stderr={r.stderr[:200]}")
+    # Alvo que não resolve a um diretório (inexistente) é falha de resolução, não
+    # um repo sem build: o hook volta ao repo da sessão (A, vermelho).
+    check("cd inexistente: cai no estado de A (barrado)", r.returncode == 2,
+          f"exit={r.returncode} stderr={r.stderr[:200]}")
+    for rotulo, cmd in (("cd $VAR", "cd $VAR && git push origin main"),
+                        ("cd -", "cd - && git push origin main"),
+                        ("cd inexistente;", "cd /nao/existe; git push origin main"),
+                        ("cd inexistente/xyz", "cd /nao/existe/xyz && git push origin main")):
+        r = gate(cmd, a)
+        check(f"{rotulo}: não resolve, cai no estado de A (barrado)",
+              r.returncode == 2 and "Traceback" not in r.stderr,
+              f"exit={r.returncode} stderr={r.stderr[:200]}")
     a2, _b2 = novo_par(tmp, "c10")
     sem_build(a2)
     r = gate("git -C && git push origin main", a2)
@@ -226,6 +252,8 @@ except Exception as e:  # noqa: BLE001
     check("aspas abertas: segment_dirs não levanta", False, repr(e))
 d = S.segment_dirs("cd /x/y && git -C ../z push", "/a")
 check("-C relativo ao último cd", d and d[0][1] == "/x/z" and d[0][2], d)
+d = S.segment_dirs("git -c user.name=x -C /b push", "/a")
+check("-c k=v não desalinha o -C", d and d[0][1] == "/b" and d[0][2], d)
 d = S.segment_dirs("git push", "/a")
 check("sem alvo explícito", d and d[0][1] == "/a" and not d[0][2], d)
 d = S.segment_dirs("git commit -m 'a && cd /q'", "/a")

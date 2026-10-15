@@ -182,7 +182,10 @@ def target_dir(command: str, cwd: str):
     try:
         for seg, d, explicit in S.segment_dirs(command, cwd):
             if classify(seg) in ("local", "sharing"):
-                return d if explicit else None
+                # Alvo que não resolve (`cd $VAR`, `cd -`, caminho inexistente)
+                # é falha de resolução, não um repo sem build: volta ao repo
+                # da sessão.
+                return d if explicit and os.path.isdir(d) else None
     except Exception:
         pass
     return None
