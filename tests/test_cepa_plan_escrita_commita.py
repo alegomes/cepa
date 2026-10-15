@@ -194,6 +194,8 @@ def test_entradas_adversariais_no_filtro_de_resposta():
             ("SIM: fecha", "prefixo do decidir em maiúsculas"),
             ("não :  mantém?", "prefixo do decidir com espaço antes dos dois pontos"),
             ("\u00e9 isso a\u00ed", "acentos não derrubam a checagem de palavra"),
+            ("SIM: Fecho o card?", "prefixo do decidir em maiúsculas com pergunta no fim"),
+            ("\u00e9", "texto só de letra acentuada não é 'só pontuação'"),
         ]
         for i, (texto, motivo) in enumerate(casos_aceitos):
             raiz = monta_repo(str(base / f"ok{i}"), [item("a1", status="blocked")])
