@@ -278,7 +278,19 @@ that opens a `human_pending`, also records the closed question that would unbloc
 next run reads. With `--mantem` the answer is recorded and the item stays as it
 was: still `blocked`, route still open. `responde` refuses without a terminal, so an unattended `claude -p`
 cannot close a human route on the owner's behalf. `cepa-until` calls it for you when
-it asks its end-of-run questions.
+it asks its end-of-run questions. It also refuses (exit 6) a text that does not answer the
+route — a request for clarification ("não entendi", "como assim") or a question — printing
+the route's question instead; `--forca` records it anyway (on 2026-10-14 a "não entendi"
+said in chat about something else landed as the owner's answer on an item).
+
+**Every write commits the queue or says it did not.** `responde` and `add` commit the
+`plan.yaml` (only it, `git commit -- <path>`) in the same step; `--no-commit` writes without
+committing and prints the commit command that is missing. `start` and `finish` print that
+the queue is modified and not committed (with the command), or commit it with `--commit`;
+inside a `cepa-until` run the notice says the clone stays modified on purpose until the owner
+is back. Reason (2026-10-15): three `responde` calls left the queue uncommitted, one answer
+ended up in someone else's commit with the wrong message, and `cepa-until`, which refuses a
+dirty tree, would not start.
 
 **Stage 4 is built** (2026-08-25): `/maestro:program-plan --from-plan <name>`
 reads the `single-track` queue as its source instead of a prose file. This is

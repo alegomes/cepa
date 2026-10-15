@@ -3911,7 +3911,11 @@ Itens abertos pelo `/common:feedback --triar` em 2026-10-15, a partir do ledger 
 
 **Plano:** nenhum ainda
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-plan` (`responde`, `add`, `marca`)
+**Status:** feito em 2026-10-15 (`fecha_escrita` no `cepa-plan`: `responde`/`add` commitam só o
+`plan.yaml` no mesmo passo, `--no-commit` desliga; `start`/`finish` avisam que falta commitar e
+`--commit` liga, dentro de um run do `cepa-until` o aviso diz que o clone fica assim de propósito;
+`responde` recusa com exit 6 texto que pede esclarecimento ou é pergunta, mostra a pergunta da rota,
+`--forca` grava; teste em `tests/test_cepa_plan_escrita_commita.py`) · **Lar:** `common/bin/cepa-plan` (`responde`, `add`, `start`, `finish`)
 · **Origem:** feedback `fb-20261015-1` (2026-10-15, `wego-digitacao-backend`) e
 `fb-20261014-4` (2026-10-14, `wego-product`).
 

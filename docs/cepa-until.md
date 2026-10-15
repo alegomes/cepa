@@ -126,7 +126,10 @@ route still open), for answers like "keep it blocked". Enter leaves an item for 
 stops asking.
 
 `responde` refuses without a terminal: a `claude -p` subprocess has no TTY, so an agent cannot
-close a human route in the owner's place. Without a terminal (`nohup`, cron) the run prints
+close a human route in the owner's place. It also refuses a text that does not answer the
+question (a "não entendi", a question back), showing the route's question, and it commits the
+`plan.yaml` in the same step, so the queue is never left dirty for the next run's guard
+(`--no-commit` writes without committing and says so). Without a terminal (`nohup`, cron) the run prints
 the same list and the command to come back: `cepa-until decidir <fila>/<run>`.
 
 ## Before you leave it running
