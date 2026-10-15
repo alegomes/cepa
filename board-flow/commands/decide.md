@@ -149,6 +149,14 @@ Por grupo aceito:
   avança os cards via `atlassian-expert`. A dispensa é **do humano**: o
   `proof-reviewer` continua sem poder dispensar nada e o artefato da prova
   continua sem campo para isso.
+  **Em run autônomo** (`CEPA_UNTIL_RUN` ou `CLAUDE_AUTONOMOUS_RUN_ID` no
+  ambiente) não há dono na frente: `waivers.gravar` grava uma **proposta**
+  (`status: proposta`, `autor: null`), não uma dispensa. Passe `fila=`/`item=`
+  e abra a rota humana no item: `cepa-plan finish <fila> <id> --status
+  blocked|pending --human-pending "Aceitar ou recusar a dispensa de <escopo>
+  (<motivo>)" --pergunta "Aceito a dispensa de <escopo> por <razão>? Recomendo
+  <sim/não>: <porquê>"`. Só o `cepa-plan responde <fila> <id> --resposta "sim:
+  ..."` do dono, num terminal, converte a proposta em dispensa (fb-20261014-3).
 - **não aceitar** → cria o card do teste que falta (um por lacuna real, não um
   por card travado) e devolve os cards com `**Reason:**` **por card** — o
   `bounce-reason-gate` bloqueia comentário sem isso, e razão colada igual em N
@@ -174,6 +182,8 @@ perguntas sobraram, e ele só significa alguma coisa ao lado do que foi cortado.
 
 - **Leitura por default.** Nada é escrito no Jira nem em `.claude/waivers/`
   antes da resposta do usuário. `--dry-run` nem pergunta.
+- **Em run autônomo, nunca grave dispensa:** `waivers.gravar` vira proposta e
+  o item ganha rota humana; quem converte é o `cepa-plan responde` do dono.
 - `atlassian-expert` é o único caminho de escrita no Jira.
 - **Uma pergunta por grupo, nunca por card** — o custo que este comando ataca é
   o número de vezes que você para para decidir.

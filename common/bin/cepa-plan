@@ -1753,14 +1753,23 @@ def outras_mudancas(raiz, rel):
     return [l for l in out.splitlines() if l.strip() and rel not in l]
 
 
-def fecha_escrita(raiz, alvo, mensagem, commit, dentro_de_run=None):
-    """Chamado depois de `grava_corpo`: commita só a fila, ou diz que falta."""
+def fecha_escrita(raiz, alvo, mensagem, commit, dentro_de_run=None, extras=()):
+    """Chamado depois de `grava_corpo`: commita só a fila, ou diz que falta.
+
+    `extras`: outros caminhos que a mesma escrita tocou (as dispensas do
+    `responde`). Entram no commit só se o `git add` os aceita; `.claude/` é
+    ignorado nos repos hospedeiros e o `add` recusa — aí o arquivo fica de fora,
+    sem falhar a escrita."""
     rel = _rel_da_fila(raiz, alvo)
     comando = f"git -C {shlex.quote(str(raiz))} commit -m {shlex.quote(mensagem)} -- {rel}"
     if commit:
         rc, _, err = _git(raiz, "add", "--", rel)
+        incluidos = [rel]
         if rc == 0:
-            rc, _, err = _git(raiz, "commit", "-q", "-m", mensagem, "--", rel)
+            for extra in extras:
+                if _git(raiz, "add", "--", _rel_da_fila(raiz, extra))[0] == 0:
+                    incluidos.append(_rel_da_fila(raiz, extra))
+            rc, _, err = _git(raiz, "commit", "-q", "-m", mensagem, "--", *incluidos)
         if rc == 0:
             _, sha, _ = _git(raiz, "rev-parse", "--short", "HEAD")
             print(f"  commit {sha.strip()}: {mensagem} ({rel})")
@@ -2054,8 +2063,90 @@ def nao_responde(texto):
     return None
 
 
+# ── responde × dispensa proposta ─────────────────────────────────────────────
+#
+# Em run autônomo o agente NÃO grava dispensa (waiver): grava uma PROPOSTA em
+# `.claude/waivers/*.yaml` (`status: proposta`, `autor: null`, `fila`, `item`) e
+# abre a rota humana no item. Quem converte em dispensa é o `responde` do dono,
+# num terminal (fb-20261014-3). A leitura/escrita abaixo é o GÊMEO INLINE de
+# `converter`/`recusar` em board-flow/bin/waivers.py — não importo aquele módulo
+# porque import entre plugins quebra com os diretórios de cache versionados; o
+# teste tests/test_cepa_plan_responde_dispensa.py confere que os dois concordam.
+
+def _pastas_de_dispensa(raiz, repo):
+    pastas = [Path(raiz) / ".claude" / "waivers"]
+    local = Path(repo).resolve() / ".claude" / "waivers"
+    if local != pastas[0].resolve() and local.is_dir():
+        pastas.append(local)
+    return pastas
+
+
+def propostas_do_item(raiz, repo, nome, ident):
+    """[(path, dict)] das propostas pendentes amarradas a este item da fila."""
+    achadas = []
+    for pasta in _pastas_de_dispensa(raiz, repo):
+        for path in sorted(pasta.glob("*.yaml")):
+            try:
+                d = yaml.safe_load(path.read_text(encoding="utf-8"))
+            except (yaml.YAMLError, OSError):
+                continue
+            if (isinstance(d, dict) and d.get("status") == "proposta"
+                    and str(d.get("item")) == str(ident)
+                    and (not d.get("fila") or d.get("fila") == nome)):
+                achadas.append((path, d))
+    return achadas
+
+
+def autor_do_dono(raiz, autor=None):
+    if autor and autor.strip():
+        return autor.strip()
+    rc, out, _ = _git(raiz, "config", "user.name")
+    if rc == 0 and out.strip():
+        return out.strip()
+    return os.environ.get("USER", "").strip()
+
+
+def decide_dispensas(propostas, resposta, mantem, hoje, autor):
+    """Aplica a resposta às propostas e devolve (linhas_de_saida, frases)."""
+    saida, frases = [], []
+    if not propostas:
+        return saida, frases
+    if mantem:
+        saida.append(f"  {len(propostas)} dispensa(s) proposta(s) seguem "
+                     "pendente(s): --mantem não decide dispensa")
+        return saida, [f"Dispensa {d.get('motivo')} em {d.get('escopo')}: "
+                       "segue proposta." for _, d in propostas]
+    if re.match(r"^sim\b", resposta, re.IGNORECASE):
+        for path, d in propostas:
+            novo = {k: v for k, v in d.items() if k not in ("status", "autor")}
+            novo["autor"] = autor
+            novo["criado_em"] = hoje
+            novo["resposta_do_dono"] = resposta
+            path.write_text(yaml.safe_dump(novo, allow_unicode=True,
+                                           sort_keys=False), encoding="utf-8")
+            saida.append(f"  dispensa aceita pelo dono: {path}")
+            frases.append(f"Dispensa {d.get('motivo')} em {d.get('escopo')}: "
+                          "aceita pelo dono.")
+    elif re.match(r"^n(ã|a)o\b", resposta, re.IGNORECASE):
+        for path, d in propostas:
+            d.update(status="recusada", recusada_em=hoje,
+                     resposta_do_dono=resposta)
+            path.write_text(yaml.safe_dump(d, allow_unicode=True,
+                                           sort_keys=False), encoding="utf-8")
+            saida.append(f"  dispensa recusada: {path}")
+            frases.append(f"Dispensa {d.get('motivo')} em {d.get('escopo')}: "
+                          "recusada pelo dono.")
+    else:
+        saida.append(f"  {len(propostas)} dispensa(s) proposta(s) seguem "
+                     "pendente(s): só uma resposta que começa com \"sim\" ou "
+                     "\"não\" decide dispensa")
+        frases = [f"Dispensa {d.get('motivo')} em {d.get('escopo')}: segue "
+                  "proposta." for _, d in propostas]
+    return saida, frases
+
+
 def cmd_responde(raiz, nome, ident, resposta, mantem=False, forca=False,
-                 commit=True):
+                 commit=True, repo=".", autor=None):
     if not sys.stdin.isatty():
         print("`responde` é a resposta do dono e só roda num terminal: sem "
               "TTY, quem chama é um agente, e só o humano fecha uma rota "
@@ -2094,6 +2185,11 @@ def cmd_responde(raiz, nome, ident, resposta, mantem=False, forca=False,
     hoje = datetime.now().strftime("%Y-%m-%d")
     anterior = " ".join(str(it.get("evidence") or "").split())
     partes = [f"Resposta do dono em {hoje}: {resposta}."]
+    propostas = propostas_do_item(raiz, repo, nome, ident)
+    linhas_dispensa, frases_dispensa = decide_dispensas(
+        propostas, resposta, mantem, hoje,
+        autor_do_dono(raiz, autor) if propostas else None)
+    partes.extend(frases_dispensa)
     if mantem:
         partes.append(f"O dono manteve o item como estava (`{st}`"
                       + (", rota humana aberta" if rota is not None else "")
@@ -2122,8 +2218,11 @@ def cmd_responde(raiz, nome, ident, resposta, mantem=False, forca=False,
     else:
         print(f"{ident} → `{status_de(it)}` em {alvo}"
               + (" · rota humana fechada" if rota is not None else ""))
+    for linha in linhas_dispensa:
+        print(linha)
     fecha_escrita(raiz, alvo, f"fila {nome}: resposta do dono a {ident} "
-                  f"({status_de(it)})", commit)
+                  f"({status_de(it)})", commit,
+                  extras=[p for p, _ in propostas])
     return 0
 
 
@@ -2988,6 +3087,9 @@ def main(argv=None):
     rs.add_argument("--forca", action="store_true",
                     help="grava mesmo um texto que parece não responder à "
                          "rota (pedido de esclarecimento, pergunta)")
+    rs.add_argument("--autor", default=None,
+                    help="quem assina a dispensa que a resposta \"sim\" aceita "
+                         "(default: `git config user.name`, depois $USER)")
     rs.add_argument("--no-commit", action="store_true", dest="no_commit",
                     help="grava a fila sem commitar (por default o `responde` "
                          "commita só o plan.yaml no mesmo passo)")
@@ -3125,7 +3227,7 @@ def main(argv=None):
                           a.human_pending, a.repo, a.pergunta, a.commit)
     if a.cmd == "responde":
         return cmd_responde(raiz, a.nome, a.id, a.resposta, a.mantem,
-                            a.forca, not a.no_commit)
+                            a.forca, not a.no_commit, a.repo, a.autor)
     return cmd_write(raiz, a)
 
 

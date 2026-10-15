@@ -256,6 +256,69 @@ def test_sinais_de_processo_worktree_e_build_alheio():
               "sinais de processo: nenhum" in r2, r2[:800])
 
 
+def test_dispensas_propostas_aparecem_para_o_review_ler_a_pergunta():
+    """Em run autônomo a dispensa vira proposta (fb-20261014-3); o resumo traz a
+    pergunta para o dono ler, tanto no item quanto na seção própria."""
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = monta_run(tmp)
+        w = Path(tmp) / ".claude" / "waivers"
+        w.mkdir(parents=True)
+        (w / "teste-cego--plugsign.yaml").write_text(yaml.safe_dump({
+            "status": "proposta", "motivo": "teste-cego", "escopo": "PlugSignAdapter",
+            "autor": None, "fila": "F", "item": "A2",
+            "pergunta": "Aceito a dispensa de PlugSignAdapter por prova interna?"},
+            allow_unicode=True), encoding="utf-8")
+        (w / "decidida--x.yaml").write_text(
+            "motivo: decidida\nescopo: X\nautor: alguem\n", encoding="utf-8")
+        (w / "quebrado.yaml").write_text("status: [proposta", encoding="utf-8")
+        out = roda(ledger).stdout
+        check("traz a seção das dispensas propostas",
+              "## Dispensas propostas pelo agente, sem resposta do dono" in out, out[-900:])
+        check("...com motivo, escopo e pergunta",
+              "teste-cego em PlugSignAdapter — pergunta: Aceito a dispensa de "
+              "PlugSignAdapter por prova interna?" in out, out[-900:])
+        check("...e nomeia o item", "item: A2" in out)
+        check("...e a lista no item tocado",
+              "  - dispensa proposta pelo agente: teste-cego em PlugSignAdapter" in out, out[-900:])
+        check("...sem listar a dispensa já decidida", "decidida" not in out)
+    with tempfile.TemporaryDirectory() as tmp:
+        out = roda(monta_run(tmp)).stdout
+        check("sem proposta, a seção diz `nenhuma`",
+              "## Dispensas propostas pelo agente, sem resposta do dono\nnenhuma" in out,
+              out[-600:])
+
+
+def test_proposta_so_na_arvore_do_registro_tambem_e_listada():
+    """O run grava a proposta na árvore onde roda (worktree do cepa-until), não
+    ao lado da fila do clone principal."""
+    with tempfile.TemporaryDirectory() as tmp:
+        principal = Path(tmp) / "principal"
+        principal.mkdir()
+        g = lambda *a: subprocess.run(["git", *a], cwd=str(principal),
+                                      capture_output=True, text=True, check=True)
+        g("init", "-q")
+        g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
+          "--allow-empty", "-m", "raiz")
+        wt = Path(tmp) / "wt"
+        g("worktree", "add", "-q", "--detach", str(wt))
+        ledger = monta_run(wt)
+        fila = principal / ".claude" / "programs" / "F"
+        fila.mkdir(parents=True)
+        (fila / "plan.yaml").write_text(yaml.safe_dump({"items": [
+            {"id": "A2", "status": "blocked", "blocked_by": []}]}), encoding="utf-8")
+        w = wt / ".claude" / "waivers"
+        w.mkdir(parents=True)
+        (w / "teste-cego--x.yaml").write_text(yaml.safe_dump({
+            "status": "proposta", "motivo": "teste-cego", "escopo": "SoNaWorktree",
+            "autor": None, "item": "A2", "pergunta": "Aceito a dispensa de SoNaWorktree?"},
+            allow_unicode=True), encoding="utf-8")
+        out = roda(ledger).stdout
+        check("proposta só na árvore do registro é listada",
+              "teste-cego em SoNaWorktree — pergunta: Aceito a dispensa de SoNaWorktree?" in out,
+              out[-700:])
+        check("...uma vez só na seção", out.count("teste-cego em SoNaWorktree") == 2, out[-700:])
+
+
 def test_registro_inexistente_sai_2():
     p = roda("/nao/existe.jsonl")
     check("registro inexistente sai 2", p.returncode == 2, p.stderr)

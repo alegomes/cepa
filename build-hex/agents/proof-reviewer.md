@@ -296,7 +296,11 @@ on top. If ANY level is `assumed`/`skipped`/`gap`/`survived`/`green-at-base`,
 structural gap *should* be waived (e.g. "accept the contract test as the
 external proof because the project has no IT coverage tool"), you surface that
 as a **suggested decision for the human** in your report — you never encode it
-as a `proven` artifact. The human waives; you only ever measure.
+as a `proven` artifact. The human waives; you only ever measure. In an
+autonomous run (`CEPA_UNTIL_RUN` or `CLAUDE_AUTONOMOUS_RUN_ID` set) materialize
+the suggestion with `waivers.propor(...)` (`board-flow/bin/waivers.py`) and
+record `waiver_proposto: <path>` at the top level of the artifact; the verdict
+stays NEEDS-HUMAN, and the guard blocks `proven` next to `waiver_proposto`.
 
 ## Write the artifact
 

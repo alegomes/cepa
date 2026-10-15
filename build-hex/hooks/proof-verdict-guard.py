@@ -250,9 +250,20 @@ def double_offenders(data) -> list:
     return out
 
 
+# Chaves de topo que dizem "há uma dispensa na mesa". Uma dispensa PROPOSTA é uma
+# pergunta ao dono (board-flow/bin/waivers.py `propor`), não prova: o artefato
+# que a carrega não pode declarar `proven`.
+WAIVER_KEYS = ("waiver_proposto", "dispensa_proposta", "waiver", "dispensa")
+
+
+def has_waiver(data) -> bool:
+    return isinstance(data, dict) and any(data.get(k) for k in WAIVER_KEYS)
+
+
 def parse_with_yaml(content: str):
     """Return (verdict, [(path, status)], [doubles], [l4 n/a violations],
-    [níveis com nome fora do conjunto fechado]). Raises if invalid."""
+    [níveis com nome fora do conjunto fechado], dispensa proposta?).
+    Raises if invalid."""
     import yaml  # noqa: deferred so absence falls back instead of crashing
     data = yaml.safe_load(content)
     if not isinstance(data, dict):
@@ -261,7 +272,7 @@ def parse_with_yaml(content: str):
     statuses: list = []
     collect_statuses(data.get("levels", {}), statuses)
     return (verdict, statuses, double_offenders(data),
-            l4_na_violations(data), unknown_levels(data))
+            l4_na_violations(data), unknown_levels(data), has_waiver(data))
 
 
 def parse_with_lines(content: str):
@@ -271,8 +282,13 @@ def parse_with_lines(content: str):
     acts only when the verdict is already `proven`, so the bias is toward
     blocking an over-claimed artifact, never toward a false `proven`."""
     verdict = None
+    waiver = False
     statuses: list = []
     for line in content.splitlines():
+        if re.match(r"^(waiver_proposto|dispensa_proposta|waiver|dispensa):\s*\S",
+                    line):
+            waiver = True
+            continue
         m = re.match(r"^verdict:\s*([^\s#]+)", line)
         if m:
             verdict = m.group(1).strip().strip("\"'")
@@ -290,7 +306,7 @@ def parse_with_lines(content: str):
                   if na else [])
     # sem pyyaml não dá para ver os nomes de nível: falha aberto, como o resto
     # deste fallback.
-    return verdict, statuses, [], violations, []
+    return verdict, statuses, [], violations, [], waiver
 
 
 def main():
@@ -316,10 +332,10 @@ def main():
         sys.exit(0)
 
     try:
-        verdict, statuses, doubles, na_violations, bad_levels = parse_with_yaml(content)
+        verdict, statuses, doubles, na_violations, bad_levels, waiver = parse_with_yaml(content)
     except Exception:
         try:
-            verdict, statuses, doubles, na_violations, bad_levels = parse_with_lines(content)
+            verdict, statuses, doubles, na_violations, bad_levels, waiver = parse_with_lines(content)
         except Exception:
             sys.exit(0)  # can't understand it → never block
 
@@ -351,6 +367,22 @@ def main():
     if not isinstance(verdict, str) or verdict.strip().lower() != "proven":
         _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict=declared)
         sys.exit(0)  # only `proven` can be contradicted
+
+    if waiver:
+        print(
+            f"[build-hex proof-verdict-guard] BLOCKED: {file_path} declares "
+            f"verdict: proven ao lado de uma dispensa (waiver_proposto / "
+            f"dispensa_proposta / waiver / dispensa).\n"
+            f"  Uma dispensa proposta é uma pergunta ao dono, não prova; "
+            f"veredito computado: needs-human.\n"
+            f"  Grave `verdict: needs-human` e deixe o `waiver_proposto` "
+            f"apontando para o arquivo em `.claude/waivers/`. Só o "
+            f"`cepa-plan responde` do dono converte a proposta em dispensa.",
+            file=sys.stderr,
+        )
+        _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven",
+                blocked="waiver_proposto")
+        sys.exit(2)
 
     unknown = unknown_statuses(statuses)
     if unknown:

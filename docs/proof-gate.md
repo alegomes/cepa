@@ -134,7 +134,7 @@ There is no branch-per-card convention. Instead:
 | `status_map.done` | `board-flow.yaml` | Optional. Set it to auto-advance PROVEN cards; leave unset for triage-only. |
 | `/board-flow:decide` | `board-flow` | Turns the NEEDS-HUMAN cards in Review into a short list of yes/no questions, one per reason group, and applies your batch answer. Runs no proof. |
 | `classify_needs_human.py` | `board-flow/bin/` | Sorts each NEEDS-HUMAN artifact into one of the seven reasons in [needs-human-motivos](needs-human-motivos.md). Used by `/board-flow:decide`. |
-| `waivers.py` | `board-flow/bin/` | Reads, matches (by reason + scope, never by card) and writes the human waivers in `.claude/waivers/`. |
+| `waivers.py` | `board-flow/bin/` | Reads, matches (by reason + scope, never by card) and writes the human waivers in `.claude/waivers/`. In an autonomous run it writes a *proposal* (`status: proposta`) instead; only the owner's `cepa-plan responde` converts it. |
 | `proof-verdict-guard.py` (hook) | `build-hex/hooks/` | Before a proof artifact is written, recomputes the verdict from the level statuses and blocks a `verdict: proven` that its own levels contradict. |
 
 The split is deliberate: `board-flow` stays topology-agnostic (it just prefixes

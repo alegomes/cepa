@@ -4069,8 +4069,9 @@ no resumo como desvio.
 
 **Plano:** nenhum ainda
 
-**Status:** pendente · **Lar provável:** `build-hex/agents/proof-reviewer.md`,
-`common/bin/cepa-until` (resumo) e `common/skills/autonomous-mode` · **Origem:** feedback
+**Status:** feito nesta branch (2026-10-15) · **Lar:** `board-flow/bin/waivers.py`,
+`common/bin/cepa-plan` (`responde`), `build-hex/hooks/proof-verdict-guard.py`,
+`common/bin/cepa-until-digest` e `common/skills/autonomous-mode` · **Origem:** feedback
 `fb-20261014-3` (2026-10-14, `wego-digitacao-backend`).
 
 > Me incomoda o agente gravar uma dispensa (waiver) em meu nome durante um run autonomo;
@@ -4083,6 +4084,13 @@ gravada como `proposta` (autor: agente, pendente), o item fica `human_pending` c
 "Aceito a dispensa de X por Y?", e só o `cepa-plan responde` do dono a converte em
 `waiver`. O `proof-verdict-guard` trata dispensa proposta como não-PROVEN. Teste que falta:
 proof-reviewer em modo autônomo grava `waiver_proposto`, e o `until-review` lista a pergunta.
+
+**Feito:** `waivers.gravar` em run autônomo (`CEPA_UNTIL_RUN`/`CLAUDE_AUTONOMOUS_RUN_ID`)
+grava `status: proposta` com `autor: null` (`propor`/`propostas`/`converter`/`recusar`); o
+`cepa-plan responde` converte a proposta do item (`sim`) ou a recusa (`não`); o
+`proof-verdict-guard` barra `proven` ao lado de `waiver_proposto`; o `cepa-until-digest` lista
+as propostas sem resposta. Testes: `test_waivers.py`, `test_cepa_plan_responde_dispensa.py`,
+`test_proof_waiver_proposto.py`, `test_cepa_until_digest.py`.
 
 ## `gate-advance` classifica `grep` com a palavra `verify` como build Maven, e não registra `./mvnw -q ... > log`
 

@@ -363,6 +363,14 @@ Para cada item do lote, na ordem:
      ela sobrevive à sessão. **Nunca feche uma rota**: só quem rodou sabe se
      ela passou, e o comando recusa.
 
+     **Dispensa produzida no item é proposta, não waiver.** Se durante o item
+     saiu uma dispensa (`waivers.gravar` em run autônomo grava
+     `status: proposta`, com `fila=`/`item=`), abra-a como `--human-pending
+     "Aceitar ou recusar a dispensa de <escopo> (<motivo>)"` com `--pergunta
+     "Aceito a dispensa de <escopo> por <razão>? Recomendo <sim/não>: <porquê>"`.
+     O `cepa-plan responde ... "sim: ..."` do dono converte a proposta em
+     dispensa (fb-20261014-3); o agente nunca grava uma dispensa em nome dele.
+
      **Atualizar o Jira (grava no quadro).** Se o `id` é chave de card e o repo tem quadro (e não veio
      `--offline`), transicione o card logo depois, delegando ao
      `atlassian-expert` — o único que fala com o Jira — para
