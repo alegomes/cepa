@@ -44,6 +44,10 @@ def main():
     check("não numera as ações por conta própria",
           "sem numeração própria" in limpo)
     check("repete o bloco 'fica com você'", "fica com você" in limpo)
+    check("tarefa do dono traz 'Pronto quando'", "pronto quando" in limpo)
+    j = limpo.find("fica com você")
+    check("'Fica com você' manda escrever o cepa-plan responde colável",
+          "cepa-plan responde" in limpo[j:j + 2500], limpo[j:j + 200])
     check("fecha com perguntas fechadas com recomendação",
           "perguntas" in limpo and "recomendo sim/não" in limpo)
     print()

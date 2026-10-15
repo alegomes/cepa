@@ -3990,9 +3990,9 @@ não é estável). Teste que falta: build lançado sob um session_id, colhido so
 
 ## As perguntas finais do relatório e do `until-review` não dizem o que fazer
 
-**Plano:** nenhum ainda
+**Plano:** fila cepa, item `perguntas-finais-nao-dizem-o-que-fazer`
 
-**Status:** pendente · **Lar provável:** `common/skills/plain-report/SKILL.md`,
+**Status:** implementado em 2026-10-15 na branch until/2026-10-15-1853 (skill, lint e until-review); falta validar com o dono em três relatórios reais · **Lar provável:** `common/skills/plain-report/SKILL.md`,
 `common/commands/until-review.md`, `common/hooks/report-style-lint.py` · **Origem:**
 feedback `fb-20261006-1` (2026-10-06), `fb-20261014-1` (2026-10-14, `wego-product`) e
 `fb-20261015-2` (2026-10-15, cepa). Memória do dono relacionada:

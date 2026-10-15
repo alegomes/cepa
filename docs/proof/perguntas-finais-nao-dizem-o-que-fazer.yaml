@@ -1,0 +1,42 @@
+schema_version: 2
+card: perguntas-finais-nao-dizem-o-que-fazer
+verdict: needs-human
+reviewed_at: 2026-10-15T19:50:00-03:00
+base_commit: b5e831cc84ee139b82d593bdede6623e4114a8d1
+head_commit: working-tree (uncommitted, 7 files)
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/hooks/report-style-lint.py", module: common/hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/until-review.md (prose, covered by grep-prose test)", module: common/commands, external_observable: false, substituted_by_double: null }
+  untested_prose_not_a_gap: ["common/skills/plain-report/SKILL.md", "BACKLOG.md", "docs/internals/hooks.md"]
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation (python hook run as subprocess by tests/test_report_style_lint.py; no PIT, no Quarkus)
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "P1 pra_voce_anuncia -> return False: RED. 'FAIL 14/10: Pra voce com categorias + \"Nada pendente.\" -> avisa'"
+        - "P2a medir_itens: sem_comando = []: first run SURVIVED (green); after new test added, re-run in fresh worktree /tmp/proof-pfndq2: RED. 'FAIL tarefa sem comando nem arquivo, com Pronto quando -> avisa \"comando ou arquivo\"' (1 failure); baseline green before, file restored via cmp"
+        - "P2b medir_itens: sem_pronto = []: RED. 'FAIL tarefa com comando mas sem Pronto quando -> avisa'"
+        - "P3 pra_voce_anuncia -> return True (drops 'nada' exit): RED, 3 failures incl. 'Pra voce nada ...; um commit + Nada pendente.'"
+        - "P4 itens_da_lista: 'elif not cercado' -> 'else': RED. 'FAIL linha em branco dentro de bloco cercado nao fecha o item'"
+        - "P5a until-review.md 'Pronto quando' removed: RED. 'FAIL tarefa do dono traz Pronto quando'"
+        - "P5b until-review.md 'cepa-plan responde' removed: RED. \"FAIL 'Fica com voce' manda escrever o cepa-plan responde colavel\""
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "no coverage tool in repo; reachability established by perturbation of every changed branch"
+  l4_adversarial_input:
+    status: skipped
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "not a Bug card"
+baseline_run: "python3 tests/test_report_style_lint.py -> 'all report-style tests passed'; python3 tests/test_common_until_review.py -> 'tudo verde'"
+routing_reason: "All seven perturbations now go RED (sem_comando closed by the new test). PROVEN is structurally unavailable only because l2_coverage is assumed (no coverage tool) and l4 was not run (skipped); no evidence of a defect. Human may waive these two at review."

@@ -26,7 +26,7 @@ seria pior que o problema.
 
 ## O formato
 
-```
+````
 <Abertura: até 3 frases, zero jargão. O resultado, não o mecanismo.>
 
 **Pra você:** <quantas decisões e quantos passos esperam por você — ou "nada">
@@ -39,7 +39,12 @@ seria pior que o problema.
 1. **<A pergunta fechada, respondível sem abrir nada.>**
    Recomendo **sim/não** — <o porquê em uma linha>.
    Se **<a outra resposta>**: <o que acontece então>.
-```
+2. **Você <faz a coisa que só você faz>?**
+   Onde: <repo ou diretório, e o arquivo quando há>.
+   Comando: <em bloco de código — ou "Abra <arquivo>" e o que preencher>.
+   Pronto quando: <o que você vê ao terminar>. Me diga "<frase>" e eu fecho a rota.
+   Recomendo **sim/não** — <o porquê em uma linha>.
+````
 
 Regras duras:
 
@@ -114,14 +119,86 @@ Regras da lista:
 - **Ordenada por quem trava o quê:** o que bloqueia os outros vem primeiro.
 - **Fora do teto de 200 palavras** — o teto vale só até o detalhe técnico. Mas
   lista de mais de 5 itens é sinal de que o turno fez coisa demais junto.
+- **Tudo que o `Pra você:` conta aparece na lista, um item por tarefa**, e
+  tarefa do dono traz Onde / Comando / Pronto quando (seção seguinte).
 
 Os três tipos continuam existindo; agora eles só mudam **o verbo da pergunta**:
 
 | Tipo | A pergunta soa assim |
 |---|---|
 | escolha de mérito | "Mantenho o critério X?" · "Troco Y por Z?" |
-| ação que só ele faz | "Você roda `bin/install.sh --clean` agora?" — e o item diz o que quebra se não rodar |
+| ação que só ele faz | "Você roda `bin/install.sh --clean` agora?" — e o item traz **Onde / Comando / Pronto quando** (ver a seção seguinte) e o que quebra se não rodar |
 | trabalho meu esperando o "vai" | "Rodo o `/board-flow:prove-drain` nos dois cards de In Review?" — e o item diz o custo |
+
+## Tarefa sua vem com o passo a passo
+
+O dono reprovou isso três vezes em dez dias. Em 06/10/2026, no relatório do
+`/board-flow:triage`: *"sinto falta de maior clareza sobre as providências que
+devem ser tomadas"*. Em 14/10/2026, no repo `wego-product`, depois de um
+relatório que fechava assim:
+
+> **Pra você:** fechar as duas rotas humanas no `wego-digitacao-backend` (o
+> comando do S3-port e a conferência dos 50 documentos) e os sete buracos do
+> RIPD. Nada mais pendente comigo nesta sessão.
+> [...]
+> ### Decisões e próximos passos
+>
+> Nada pendente.
+
+*"Essa é mais uma instrução que fala muito e não fala nada. **O que, afinal,
+que eu tenho que fazer? Dê-me o passo a passo.** É extremamente frustrante
+chegar na iminência de fechar uma sessão sem saber com clareza qual é o próximo
+passo."* E em 15/10/2026, sobre as perguntas do fim do `cepa-until`: *"Em 99%
+das vezes, eu não sei o que responder."*
+
+O defeito: o topo dava a **categoria** das tarefas ("as duas rotas humanas",
+"os sete buracos") e a lista do fim, que é onde ele volta, dizia "Nada
+pendente.". As tarefas dele só existiam como resumo. O mesmo relatório, certo:
+
+````
+**Pra você:** três tarefas, nenhuma decisão — lista no fim.
+
+### Decisões e próximos passos
+*Responda por número: sim, não, ou "vamos falar".*
+1. **Você roda o comando do S3-port agora?**
+   Onde: `wego-digitacao-backend`, na raiz do clone.
+   Comando:
+   ```
+   bin/ler-lote.sh --porta s3 inob/282243
+   ```
+   Pronto quando: o terminal imprime `20 lotes lidos` e aparece a pasta `saida/inob-282243/`.
+   Recomendo **sim** — é o único passo que destrava o S5.
+2. **Você confere os 50 documentos da amostra?**
+   Onde: `/tmp/s5-saida/inob-282243/amostra-50-conferencia.csv` (fora do git).
+   Como: abra o CSV e preencha as quatro colunas vazias (classe real, tipo real, guia-pai real, observação); os PDFs estão em `Shared drives/Projetos/wego-faturamento/captura de guias/dataset/inob/282243/`.
+   Pronto quando: as 50 linhas têm "classe real" preenchida. Me diga "amostra conferida" e eu fecho a rota.
+   Recomendo **sim** — sem ela a medida de acerto do S5 não existe.
+3. **Você preenche os sete campos `[[PREENCHER]]` do RIPD?**
+   Onde: `docs/lgpd/ripd-leitura-de-guias-fase-0.md` no `wego-product`, seção 9.
+   Pronto quando: `grep -c PREENCHER docs/lgpd/ripd-leitura-de-guias-fase-0.md` devolve 0.
+   Recomendo **sim** — dois deles só você sabe (a frase do termo da PoC e quem montou a PoC).
+````
+
+(RIPD é o relatório de impacto à proteção de dados; S3-port e S5 são etapas do
+projeto de leitura de guias, citadas aqui só porque estavam no relatório real.)
+
+Regras duras:
+
+1. **Tudo que o `Pra você:` conta aparece na lista do fim, um item por
+   tarefa.** "Nada pendente." só é válido quando o `Pra você:` diz "nada".
+   `Pra você:` que nomeia uma categoria ("as duas rotas humanas", "os sete
+   buracos", "as pendências") sem a tarefa na lista é o erro de 14/10.
+2. **Item de tarefa do dono (a pergunta começa por "Você ...") traz três
+   linhas:** `Onde:` (repo ou diretório, e o arquivo quando há), o `Comando:`
+   em bloco de código ou o arquivo a abrir, e `Pronto quando:` (o que ele vê
+   quando terminou, e o que me diz para eu fechar a rota). Sem comando nem
+   arquivo, o item é categoria, não passo.
+3. **Se eu posso executar, não é tarefa dele.** Passo a passo de comandos para
+   ele digitar, quando eu mesmo poderia rodar, é o mesmo sintoma (dono,
+   15/10/2026). A tarefa dele é a que só ele faz: credencial, conferência a
+   olho, decisão de mérito, ação irreversível.
+4. **Uma tarefa por item, ordenadas pela que destrava mais.** Se ele só ler a
+   primeira, sabe em que diretório digitar o quê.
 
 ## A regra que vale no texto inteiro
 
@@ -221,6 +298,12 @@ reescrito ali mesmo, antes de você ler. Ele passou de aviso a bloqueio em
 25/08/2026, quando `/common:metrics` mostrou 247 de 501 relatórios (49%) fora do
 padrão em um mês de aviso. Bloqueia uma vez por relatório: se a reescrita ainda
 desviar, o desvio vira aviso no turno seguinte em vez de prender a sessão.
+
+O hook também bloqueia quando o `Pra você:` anuncia algo e a lista do fim diz
+"Nada pendente." (ou não tem item numerado), e quando um item "Você ..." não
+traz comando, caminho de arquivo nem a linha "Pronto quando". Ele confere a
+forma do item, não se o comando está certo: isso é meu. A linha `Onde:` o hook
+não mede (só confere comando ou arquivo e "Pronto quando"); mantê-la é comigo.
 
 O que ele consegue medir do "e daí?" é só a parte literal: as frases de higiene
 da lista do glossário, e apenas na abertura e no `Pra você:`. Distinguir

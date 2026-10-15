@@ -42,6 +42,16 @@ relatório de fechamento tem essas marcas e termina em pergunta numerada, então
 continua medido. O `/common:spec` fica fora da exceção: o turno dele pergunta
 em rodadas de até quatro, e poupá-lo é outra decisão.
 
+Tarefa do dono com passo a passo (2026-10-15). Em 14/10/2026 o dono reprovou um
+relatório cujo `Pra você:` dizia "fechar as duas rotas humanas ... e os sete
+buracos do RIPD" e cuja lista do fim dizia "Nada pendente.": a tarefa dele só
+existia como categoria, e ele perguntou "O que, afinal, que eu tenho que fazer?
+Dê-me o passo a passo." Duas medições novas: `pra-voce-sem-lista` (o `Pra
+você:` anuncia algo pendente e a lista do fim não tem item numerado nenhum) e
+`tarefa-sem-passo` (item "Você ..." sem comando ou arquivo, ou sem a linha
+"Pronto quando"). A primeira só olha se o que o topo anuncia aparece no fim; a
+segunda só olha a forma do item, não se o comando está certo.
+
 Saída: exit 0 sempre. O bloqueio viaja no JSON de stdout, não no código de
 saída — o hook nunca derruba o turno por erro próprio.
 """
@@ -73,6 +83,16 @@ ITEM_DE_LISTA = re.compile(r"^\s{0,3}([-*+]|\d+[.)])\s+\S", re.M)
 # copiar o texto de volta. Marcador solto ("- ") não dá número para citar.
 ITEM_NUMERADO = re.compile(r"^\s{0,3}\d+[.)]\s+\S", re.M)
 RECOMENDACAO = re.compile(r"recomendo\b", re.I)
+# Item de tarefa do dono: a pergunta começa por "Você ..." (2026-10-15).
+ITEM_VOCE = re.compile(r"^\s*\d+[.)]\s+\**\s*voc[êe]\b", re.I)
+PRONTO_QUANDO = re.compile(r"pronto\s+quando", re.I)
+# Caminho de arquivo: começa por / ~/ ./ ../ ; ou tem 2+ trechos ASCII
+# separados por barra ("docs/lgpd"); ou é nome com extensão ("ripd.md").
+# Trecho com acento não conta, para "sim/não" não passar por caminho.
+CAMINHO = re.compile(
+    r"(?:(?:^|[\s(])(?:~|\.{1,2})?/[\w.-]+)"
+    r"|(?:(?:^|[\s(])[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+)"
+    r"|(?:\b[A-Za-z0-9_-]+\.[A-Za-z]\w{0,4}\b)")
 
 STATE_DIR = Path(os.environ.get("CEPA_REPORT_STYLE_DIR")
                  or (Path.home() / ".claude" / "cepa-report-style"))
@@ -316,16 +336,18 @@ def itens_da_lista(cauda: str) -> list:
     """Os itens da seção final, um por número. Linhas de continuação (indentadas
     ou soltas) pertencem ao item aberto — a recomendação quase sempre está na
     segunda linha."""
-    itens, atual = [], None
+    itens, atual, cercado = [], None, False
     for linha in cauda.splitlines():
-        if ITEM_NUMERADO.match(linha):
+        if atual is not None and linha.strip().startswith("```"):
+            cercado = not cercado
+        if ITEM_NUMERADO.match(linha) and not cercado:
             if atual is not None:
                 itens.append(atual)
             atual = linha
         elif atual is not None:
             if linha.strip():
                 atual += " " + linha.strip()
-            else:
+            elif not cercado:
                 itens.append(atual)
                 atual = None
     if atual is not None:
@@ -368,7 +390,41 @@ def medir_itens(cauda: str) -> list:
                         f"{len(sem_reco)} de {len(itens)} itens não trazem "
                         f"\"Recomendo sim/não\" — decisão crua sem recomendação "
                         f"devolve o trabalho para o usuário"))
+
+    tarefas = [i for i in itens if ITEM_VOCE.match(i)]
+    sem_comando = [i for i in tarefas if "`" not in i and not CAMINHO.search(
+        re.sub(r"^\s*\d+[.)]\s+", "", i))]
+    sem_pronto = [i for i in tarefas if not PRONTO_QUANDO.search(i)]
+    if sem_comando or sem_pronto:
+        ruins = [i for i in tarefas if i in sem_comando or i in sem_pronto]
+        falta = []
+        if sem_comando:
+            falta.append("comando ou arquivo")
+        if sem_pronto:
+            falta.append("a linha 'Pronto quando:'")
+        desvios.append(("tarefa-sem-passo",
+                        f"{len(ruins)} de {len(tarefas)} itens de tarefa sua "
+                        f"(\"Você ...\") não trazem o passo a passo — falta "
+                        f"{' e '.join(falta)} (ex.: {ruins[0][:70].strip()}…); "
+                        f"sem isso o item diz a categoria, não o passo"))
     return desvios
+
+
+def texto_do_pra_voce(relatorio: str) -> str:
+    """Do marcador `Pra você:` até o fim do parágrafo."""
+    m = MARCADOR_PRA_VOCE.search(relatorio)
+    if not m:
+        return ""
+    resto = relatorio[m.end():]
+    return re.split(r"\n\s*\n", resto, maxsplit=1)[0].strip()
+
+
+def pra_voce_anuncia(texto: str) -> bool:
+    """O `Pra você:` diz que algo espera pelo usuário?"""
+    limpo = re.sub(r"^[\W_]+", "", texto)
+    if not limpo:
+        return False
+    return not limpo.lower().startswith("nada")
 
 
 def medir(relatorio: str, jargao: list, abstracoes: list = (),
@@ -423,6 +479,15 @@ def medir(relatorio: str, jargao: list, abstracoes: list = (),
                             "a seção final não tem itens de lista — cada ação em "
                             "uma linha começando por verbo, não em prosa"))
         desvios += medir_itens(cauda)
+        topo = texto_do_pra_voce(cabeca)
+        if pra_voce_anuncia(topo) and not ITEM_NUMERADO.search(cauda):
+            desvios.append(("pra-voce-sem-lista",
+                            f"`Pra você:` diz que algo espera pelo usuário "
+                            f"({topo[:60].strip()}), e a lista do fim não tem "
+                            f"item numerado nenhum — cada tarefa dele é um item "
+                            f"numerado com Onde, Comando (ou arquivo) e Pronto "
+                            f"quando; só quando o Pra você diz \"nada\" a lista "
+                            f"pode dizer \"Nada pendente.\""))
 
     palavras = conta_palavras(cabeca)
     if palavras > MAX_PALAVRAS_ANTES_DO_TECNICO:
@@ -526,8 +591,9 @@ def motivo_bloqueio(desvios) -> str:
             "turno: abertura de até 3 frases sem jargão → **Pra você:** → "
             "### Detalhe técnico → ### Decisões e próximos passos (lista "
             "numerada, uma pergunta fechada por item, cada uma com "
-            "\"Recomendo sim/não\" e o porquê em uma linha, ou "
-            "\"Nada pendente.\"). Não peça desculpa e não explique a "
+            "\"Recomendo sim/não\" e o porquê em uma linha; tarefa sua com Onde, "
+            "Comando (ou arquivo) e Pronto quando; \"Nada pendente.\" só se o "
+            "Pra você disser nada). Não peça desculpa e não explique a "
             "reescrita — entregue o relatório corrigido e nada mais.")
 
 
@@ -547,7 +613,8 @@ def on_prompt(payload) -> None:
           "".join(f"  - {d}\n" for d in desvios) +
           "  Formato: abertura de até 3 frases sem jargão → **Pra você:** → "
           "### Detalhe técnico → ### Decisões e próximos passos (numerada, uma "
-          "pergunta fechada por item, cada uma com \"Recomendo sim/não\"). "
+          "pergunta fechada por item, cada uma com \"Recomendo sim/não\"; tarefa "
+          "sua com Onde, Comando e Pronto quando). "
           "Este é o caminho de aviso — o relatório anterior já tinha sido "
           "bloqueado uma vez e a reescrita ainda desviou. Aplique no próximo "
           "relatório em vez de reescrever o anterior.")
