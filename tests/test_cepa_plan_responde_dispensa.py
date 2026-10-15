@@ -185,6 +185,16 @@ def test_gitignore_em_dot_claude_nao_quebra_o_responde():
         check("...e o plan.yaml foi commitado", "resposta do dono a a1" in git(raiz, "log", "-1", "--format=%s"))
 
 
+def test_yaml_quebrado_ao_lado_nao_derruba_o_responde():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz, path = monta(tmp)
+        (path.parent / "quebrado.yaml").write_text("motivo: [unclosed", encoding="utf-8")
+        rc, out = responde(raiz, "a1", "sim: aceito")
+        check("com um YAML quebrado ao lado o responde sai 0", rc == 0, out)
+        check("...e converte a proposta do item",
+              "status" not in yaml.safe_load(path.read_text()))
+
+
 def main():
     for nome, fn in sorted(globals().items()):
         if nome.startswith("test_") and callable(fn):

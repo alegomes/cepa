@@ -75,8 +75,13 @@ def carregar(repo: str) -> list[dict]:
 
     fora = []
     for path in sorted(glob.glob(os.path.join(repo, DIR, "*.yaml"))):
-        with open(path) as fh:
-            d = yaml.safe_load(fh)
+        # YAML que não parseia (ou arquivo ilegível) é ignorado como o malformado:
+        # um arquivo corrompido não pode derrubar a checagem de todas as demais.
+        try:
+            with open(path) as fh:
+                d = yaml.safe_load(fh)
+        except (yaml.YAMLError, OSError):
+            continue
         if not isinstance(d, dict):
             continue
         # Proposta e recusa nunca dispensam, mesmo se alguém preencher `autor`:
@@ -164,6 +169,8 @@ def propor(repo: str, motivo: str, escopo: str, razao: str,
         raise ValueError(f"proposta sem {', '.join(faltando)} — não gravo")
 
     destino = caminho(repo, motivo, escopo)
+    # `_le` devolve None para YAML corrompido: arquivo corrompido não é dispensa
+    # válida nem recusa, então `propor` pode sobrescrevê-lo.
     existente = _le(destino)
     if _dispensa_valida(existente) or (
             isinstance(existente, dict) and existente.get("status") == "recusada"):

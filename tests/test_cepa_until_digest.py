@@ -319,6 +319,22 @@ def test_proposta_so_na_arvore_do_registro_tambem_e_listada():
         check("...uma vez só na seção", out.count("teste-cego em SoNaWorktree") == 2, out[-700:])
 
 
+def test_yaml_quebrado_ao_lado_da_proposta_nao_derruba_o_resumo():
+    with tempfile.TemporaryDirectory() as tmp:
+        ledger = monta_run(tmp)
+        w = Path(tmp) / ".claude" / "waivers"
+        w.mkdir(parents=True)
+        (w / "a-quebrado.yaml").write_text("motivo: [unclosed", encoding="utf-8")
+        (w / "b-proposta.yaml").write_text(yaml.safe_dump({
+            "status": "proposta", "motivo": "teste-cego", "escopo": "Viva",
+            "item": "A2", "pergunta": "Aceito a dispensa de Viva?"},
+            allow_unicode=True), encoding="utf-8")
+        p = roda(ledger)
+        check("resumo sai 0 com YAML quebrado ao lado", p.returncode == 0, p.stderr)
+        check("...e ainda lista a proposta", "teste-cego em Viva — pergunta:" in p.stdout,
+              p.stdout[-500:])
+
+
 def test_registro_inexistente_sai_2():
     p = roda("/nao/existe.jsonl")
     check("registro inexistente sai 2", p.returncode == 2, p.stderr)

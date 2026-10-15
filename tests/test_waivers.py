@@ -247,3 +247,12 @@ def test_propor_nao_reabre_o_que_o_dono_recusou(tmp_path, monkeypatch):
     d = yaml.safe_load(open(path))
     assert d["status"] == "recusada"
     assert d["resposta_do_dono"] == "não: prova de verdade"
+
+
+def test_yaml_corrompido_e_ignorado_sem_derrubar_as_outras_dispensas(tmp_path):
+    repo = str(tmp_path)
+    _grava(repo)
+    (tmp_path / ".claude" / "waivers" / "quebrado.yaml").write_text(
+        "motivo: [unclosed", encoding="utf-8")
+    assert [w["motivo"] for w in waivers.carregar(repo)] == ["teste-cego"]
+    assert waivers.propostas(repo) == []
