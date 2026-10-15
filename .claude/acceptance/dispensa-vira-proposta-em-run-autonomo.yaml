@@ -1,0 +1,71 @@
+schema_version: 1
+card: dispensa-vira-proposta-em-run-autonomo
+status: complete
+audited_at: 2026-10-15T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Em run autônomo, waivers.gravar nunca produz arquivo que carregar() honre; status proposta, autor null, aplicavel None; sem parâmetro que force dispensa real."
+    altitude: domain
+    surface: "board-flow/bin/waivers.py (módulo)"
+    demonstrated_by:
+      test: "tests/test_waivers.py::test_em_run_autonomo_gravar_vira_proposta (ambas as variáveis), test_status_proposta_nunca_dispensa_nem_com_autor_preenchido"
+      layer: "módulo (altitude declarada = módulo)"
+      evidence: verified
+      run: "python3 -m pytest tests/test_waivers.py -q -> 25 passed (CEPA_UNTIL_RUN=1 no ambiente); assinatura de gravar sem parâmetro de força lida no diff"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "converter/recusar recusam em run; fora do run converter(autor) gera dispensa honrada preservando proposto_*; propor não sobrescreve dispensa válida nem recusada."
+    altitude: domain
+    surface: "board-flow/bin/waivers.py"
+    demonstrated_by:
+      test: "tests/test_waivers.py: test_converter_e_recusar_sao_proibidos_no_run, test_dono_converte_a_proposta_em_dispensa_valida, test_propor_nao_sobrescreve_dispensa_valida, test_propor_nao_reabre_o_que_o_dono_recusou"
+      layer: "módulo"
+      evidence: verified
+      run: "python3 -m pytest tests/test_waivers.py -q -> 25 passed"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "cepa-plan responde (processo real com TTY): sim converte, não recusa, --mantem/outro texto mantém, outro item/fila intocado, .claude/waivers ignorado pelo git não quebra."
+    altitude: cli
+    surface: "common/bin/cepa-plan responde, via em_tty (pty) em repo git descartável"
+    demonstrated_by:
+      test: "tests/test_cepa_plan_responde_dispensa.py (7 testes, em_tty + subprocess, ENV sem variáveis de run)"
+      layer: "processo real com pty"
+      evidence: verified
+      run: "python3 tests/test_cepa_plan_responde_dispensa.py -> 35 checagens 'ok', 'all green', 0 FAIL (nota: o runner pytest 'passa' sem asserts reais porque o arquivo usa check(); o resultado válido é o do script)"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "proof-verdict-guard: proven + waiver_proposto (ou dispensa_proposta/waiver/dispensa) -> exit 2; needs-human -> 0; proven limpo -> 0."
+    altitude: event
+    surface: "build-hex/hooks/proof-verdict-guard.py, subprocess com payload em stdin"
+    demonstrated_by:
+      test: "tests/test_proof_waiver_proposto.py (subprocess.run do hook)"
+      layer: "processo real do hook"
+      evidence: verified
+      run: "python3 tests/test_proof_waiver_proposto.py -> 'all proof waiver_proposto tests passed', exit 0 (pytest coleta 0 testes; rodar como script)"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "cepa-until-digest lista propostas pendentes (arquivo ao lado do plano e só na árvore do registro); 'nenhuma' caso contrário."
+    altitude: cli
+    surface: "common/bin/cepa-until-digest, subprocess"
+    demonstrated_by:
+      test: "tests/test_cepa_until_digest.py::test_dispensas_propostas_aparecem_para_o_review_ler_a_pergunta, test_proposta_so_na_arvore_do_registro_tambem_e_listada"
+      layer: "processo real do CLI"
+      evidence: verified
+      run: "python3 tests/test_cepa_until_digest.py -> 'tudo verde', exit 0 (checagens da seção e de 'nenhuma' ok)"
+    verdict: complete
+    gap: null
+  - id: AC6
+    text: "Prosa (decide.md passo 7, proof-reviewer, autonomous-mode SKILL, drain-plan 3.e, proof-gate.md, BACKLOG) descreve o novo comportamento."
+    altitude: domain
+    surface: "markdown"
+    demonstrated_by:
+      test: "leitura do diff ea325d2..150e674 dos 6 arquivos; todos contêm o novo comportamento"
+      layer: "inspeção (prosa não tem teste executável)"
+      evidence: verified
+      run: "git diff ea325d2..150e674 -- <6 arquivos> (lido)"
+    verdict: complete
+    gap: null
