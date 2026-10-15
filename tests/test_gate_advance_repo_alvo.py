@@ -171,11 +171,40 @@ with tempfile.TemporaryDirectory() as tmp:
     check("git -C B status segue isento", r.returncode == 0,
           f"exit={r.returncode} stderr={r.stderr[:200]}")
 
+    print("\n# fail-open — problema de parse nunca derruba o hook")
+    a, _b = novo_par(tmp, "c9")
+    vermelho(a)
+    r = gate("cd 'B && git commit -m x", a)
+    print(f"    (aspas abertas) exit={r.returncode}")
+    check("aspas abertas: sem Traceback", "Traceback" not in r.stderr, r.stderr[:300])
+    check("aspas abertas: exit 0 ou 2, nunca 1", r.returncode in (0, 2), r.returncode)
+    check("aspas abertas: decide pelo estado de A (barrado)", r.returncode == 2,
+          f"exit={r.returncode}")
+    r = gate("cd /caminho/que/nao/existe && git push origin main", a)
+    print(f"    (cd inexistente) exit={r.returncode}")
+    check("cd inexistente: sem Traceback", "Traceback" not in r.stderr, r.stderr[:300])
+    # O alvo inexistente não é repo: session_root devolve o próprio caminho, sem
+    # manifesto de build, e o push sai liberado com aviso. Coerente: no shell o
+    # `cd` falha e o `&&` impede o push de rodar. O que importa aqui é não cair.
+    check("cd inexistente: não quebra (liberado com aviso, sem manifesto)",
+          r.returncode == 0, f"exit={r.returncode} stderr={r.stderr[:200]}")
+    a2, _b2 = novo_par(tmp, "c10")
+    sem_build(a2)
+    r = gate("git -C && git push origin main", a2)
+    print(f"    (-C pendurado) exit={r.returncode}")
+    check("-C pendurado: sem Traceback", "Traceback" not in r.stderr, r.stderr[:300])
+    check("-C pendurado: exit 0 ou 2", r.returncode in (0, 2), r.returncode)
+
 # O resolvedor de diretório também precisa acertar o -C, sem hook no meio.
 sys.path.insert(0, str(HOOKS))
 import _shellscan as S  # noqa: E402
 
 print("\n# segment_dirs — resolução de cd e -C")
+try:
+    d = S.segment_dirs("cd 'B && git commit -m x", "/a")
+    check("aspas abertas: segment_dirs não levanta", isinstance(d, list), d)
+except Exception as e:  # noqa: BLE001
+    check("aspas abertas: segment_dirs não levanta", False, repr(e))
 d = S.segment_dirs("cd /x/y && git -C ../z push", "/a")
 check("-C relativo ao último cd", d and d[0][1] == "/x/z" and d[0][2], d)
 d = S.segment_dirs("git push", "/a")
