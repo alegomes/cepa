@@ -1652,9 +1652,26 @@ def letra_recomendada(d):
     return {"sim": "s", "não": "n", "nao": "n"}.get(r)
 
 
-def titulo_curto(titulo, largura=60):
-    t = " ".join(str(titulo or "").split())
-    return t if len(t) <= largura else t[:largura - 1].rstrip() + "…"
+PALAVRAS_NA_PERGUNTA = 25
+JARGAO_NA_PERGUNTA = re.compile(
+    r"until/|session/|\b\w+Test\b|\w+\.(?:py|java|yaml|yml|md|sh|json)\b"
+    r"|\(a alternativa")
+
+
+def pergunta_fora_das_regras(texto):
+    """O que a pergunta da análise fura das regras do `/common:until-review`
+    (até 25 palavras; sem branch, classe de teste ou arquivo; sem a
+    alternativa entre parênteses), numa frase, ou None. Só avisa: a
+    pergunta é mostrada do mesmo jeito, porque é ela que o `sim` grava
+    (decidir WEGO 2026-10-15-1128: 71 palavras, com branch e classe)."""
+    texto = " ".join(str(texto or "").split())
+    motivos = []
+    n = len(texto.split())
+    if n > PALAVRAS_NA_PERGUNTA:
+        motivos.append(f"{n} palavras, o limite é {PALAVRAS_NA_PERGUNTA}")
+    if JARGAO_NA_PERGUNTA.search(texto):
+        motivos.append("nome de branch, classe de teste ou arquivo")
+    return "; ".join(motivos) or None
 
 
 def acao_pendente(est):
@@ -1742,28 +1759,47 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
         d = por_item.get(ident) or {}
         rota = ad.get("human_pending")
         texto_pergunta = ad.get("question") or d.get("pergunta")
-        saida(f"\n   [{i}/{len(do_dono)}] {ident}: "
-              f"{titulo_curto(ad.get('title'))}")
-        saida(f"       {MOTIVO_DO_DONO[ad['reason']]}.")
+        instrucao = " ".join(str(d.get("instrucao") or "").split())
+        contexto = " ".join(str(d.get("contexto") or "").split())
+        # Um bloco por item, com cada parte no seu rótulo e linha em branco
+        # entre contexto, pergunta e menu. Título inteiro: cortado em 60
+        # caracteres o dono respondia a uma pergunta que via pela metade
+        # (feedback de 15/10, decidir WEGO 2026-10-15-1128).
+        saida(f"\n   ━━ [{i}/{len(do_dono)}] {ident}")
+        saida(recuado(ad.get("title") or "", "   "))
+        saida("")
+        saida(recuado(f"Parou porque: {MOTIVO_DO_DONO[ad['reason']]}."))
+        if rota is not None:
+            saida(recuado(f"Tarefa que ficou para você: {rota}"))
+        if contexto:
+            saida(recuado(f"Contexto: {contexto}"))
         # Uma pergunta só, e `sim` quer dizer sempre a mesma coisa: o item
         # volta para a fila. O menu antigo ([r]/[f]/[m]) não tinha "sim",
         # embora a pergunta terminasse em "Recomendo sim" (feedback de
         # 15/10: "em 99% das vezes eu não sei o que responder"). Sem pergunta
         # redigida, o terminal faz a padrão, em vez de mostrar a evidência e
         # deixar o dono achar a pergunta sozinho.
+        saida("")
         if texto_pergunta:
             saida(recuado(f"Pergunta: {texto_pergunta}"))
+            fora = pergunta_fora_das_regras(texto_pergunta)
+            if fora:
+                saida(recuado(f"(a análise escreveu esta pergunta fora das "
+                              f"regras: {fora}. Se ela não fizer sentido, "
+                              "[e] mostra a evidência inteira)"))
         elif rota is not None:
-            saida(recuado(f"O que ficou para você fazer: {rota}"))
             saida(recuado("Pergunta: já fez? Com sim, a tarefa fecha e o "
                           "item volta para a fila."))
         else:
             saida(recuado("O agente parou porque: "
                           f"{resume_motivo(ad.get('evidence') or '')}"))
             saida(recuado("Pergunta: destravo o item e devolvo para a fila?"))
+        if instrucao:
+            saida(recuado(f"Se sim, o próximo run recebe: {instrucao}"))
         rec = linha_de_recomendacao(d)
         if rec:
             saida(recuado(rec))
+        saida("")
         saida(recuado("sim = o item volta para a fila com a sua resposta; "
                       "não = fica como está e eu só gravo o que você disser"))
         mostrar = bool(ad.get("evidence"))
@@ -1810,6 +1846,8 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
             extra = str(pergunta("       Quer acrescentar algo, numa "
                                  "linha? [Enter pula] ")).strip()
             texto = (("sim" if devolve else "não") + f": {base}"
+                     + (f" Instrução: {instrucao}" if devolve and instrucao
+                        else "")
                      + (f". {extra}" if extra else ""))
         if texto:
             rc, msg = (responde(ident, texto) if devolve

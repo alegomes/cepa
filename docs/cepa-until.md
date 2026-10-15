@@ -114,6 +114,11 @@ land the night branch (`aterrissar`), and every deferred item that only the owne
 (`blocked` from an outside condition, open `human_pending` route). Each item shows the closed
 question the agent recorded with `cepa-plan finish --pergunta` (or the one the
 `/common:until-review` analysis wrote in its `cepa-decisoes` block), with the recommendation.
+Each item is one block, with the full title, then labelled lines: why it stopped, the task left
+to the owner, the analysis' `contexto` (lay words), the question, and `instrucao` (the technical
+instruction the next run receives if the answer is yes, recorded together with the yes). A
+question over 25 words or carrying a branch, test class or file name is shown anyway, with a
+warning that the analysis broke the rules.
 An answer is applied on the spot by `cepa-plan responde`: a `blocked` item goes back to
 `pending` and an open route closes, with the owner's answer in the item's evidence, where the
 next run reads it. `m` records the answer and keeps the item as it was (still `blocked`,

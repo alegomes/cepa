@@ -160,13 +160,18 @@ coisa.
 {"aterrissar": {"recomendo": "sim", "porque": "uma linha"},
  "itens": [
    {"id": "WEGO-2336",
-    "pergunta": "Fecho o card como 'medir depois do go-live' e devolvo o item à fila?",
-    "recomendo": "não",
-    "porque": "o checklist preserva a medição sem deixar o card travando a fila"}
+    "contexto": "O código está pronto numa branch lateral e só um teste de fixture ficou vermelho. A rodada nos 20 lotes é a tarefa que ficou com você, e ela só é possível depois do merge.",
+    "pergunta": "Deixo a rodada dos 20 lotes para depois do merge e devolvo o item à fila?",
+    "instrucao": "retomar de until/2026-10-15-1128-vermelho-WEGO-2336 e dar tinta acima do corte à fixture sem texto de PipelineMultimodalSemVazamentoNoLogTest, como nas outras 4",
+    "recomendo": "sim",
+    "porque": "a rodada só é possível depois do merge, e o teste vermelho é uma fixture que o agente previu e sabe consertar"}
  ]}
 ```
 
-Regras do bloco:
+Regras do bloco (o terminal mostra cada campo com o seu rótulo, em linhas
+separadas; o que estiver fora do campo certo chega ao dono misturado, e em
+15/10 ele leu uma pergunta de 71 palavras com branch e classe de teste
+dentro e perguntou "o que diabos isso quer dizer?"):
 
 - `pergunta` é fechada, respondível sem abrir o card, na voz de quem pergunta
   ao dono. O terminal a mostra com um menu fixo, em que **sim = o item volta
@@ -174,8 +179,18 @@ Regras do bloco:
   pergunta de modo que "sim" signifique isso, e não escreva a alternativa
   entre parênteses: ela é sempre "não".
 - Até 25 palavras, nas palavras do dono: sem nome de branch, de classe de
-  teste, de fixture ou de arquivo. Esse detalhe vai em `porque` ou fica na
-  evidência do item, que o terminal mostra com `[e]`.
+  teste, de fixture ou de arquivo. O terminal confere e avisa o dono quando a
+  pergunta passa disso. Esse detalhe vai em `instrucao`, e o que não é
+  instrução fica na evidência do item, que o terminal mostra com `[e]`.
+- `contexto` é o que o dono precisa saber para responder sem abrir nada, em
+  até duas frases leigas: o que o agente fez, o que ficou vermelho ou
+  travado, e por quê. Sem nome de branch, classe ou arquivo. O terminal o
+  mostra antes da pergunta, junto com a tarefa que ficou para o dono.
+- `instrucao` é o que o próximo run deve fazer se o dono disser sim: branch
+  de onde retomar, teste ou fixture a consertar, arquivo a ajustar. É técnica
+  e vai para o agente: o terminal a mostra como "Se sim, o próximo run
+  recebe:" e a grava junto com o sim na evidência do item. Só quando houver
+  algo a mandar; sem ela, o sim grava só a pergunta.
 - `recomendo` é `sim` ou `não`; `porque` cabe numa linha.
 - Rota `human_pending` que é tarefa (validar à mão, rodar um login real):
   pergunte se ela já foi feita e o que se viu, e diga o que o dono precisa
