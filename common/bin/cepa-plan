@@ -1984,7 +1984,11 @@ def cmd_responde(raiz, nome, ident, resposta, mantem=False):
     else:
         if rota is not None:
             partes.append(f"Rota humana fechada pelo dono: {rota}.")
-            it.pop("human_pending", None)
+            # Nulo explícito, não ausência: o validador da fila (e o cepa-until)
+            # exigem a chave presente — "a chave ausente é omissão, e a dívida
+            # com o humano volta a ser invisível" (visto em 2026-10-15: o
+            # responde do S5 apagou a chave e o cepa-until recusou a fila).
+            it["human_pending"] = None
         if st == "blocked":
             it["status"] = "pending"
             partes.append("O item voltou de `blocked` para `pending`.")

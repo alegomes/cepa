@@ -159,6 +159,8 @@ def test_responde_no_terminal_destrava_blocked_e_fecha_rota():
                           "--repo", str(raiz)], str(raiz))
         a2 = itens_de(raiz)["a2"]
         check("a rota humana fecha", a2.get("human_pending") is None, a2)
+        check("...com a chave presente e nula, como o validador da fila exige",
+              "human_pending" in a2 and a2["human_pending"] is None, a2)
         check("...e o texto da rota fica na evidência",
               "valide o login real" in a2["evidence"]
               and "trilha gravada" in a2["evidence"], a2["evidence"])
