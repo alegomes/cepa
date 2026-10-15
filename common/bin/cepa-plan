@@ -2836,11 +2836,14 @@ def main(argv=None):
                     help="ABRE uma rota que só o humano fecha (validar à mão, "
                          "aprovar PR). Nunca fecha uma: só o humano faz isso")
     fi.add_argument("--pergunta",
-                    help="a pergunta FECHADA que destrava o item, com a sua "
-                         "recomendação (\"Fecho o card como 'medir depois do "
-                         "go-live'? Recomendo sim: ...\"). Use com `blocked` "
-                         "e com `--human-pending`: é o que o `cepa-until "
-                         "decidir` mostra ao dono em vez da evidência inteira")
+                    help="a pergunta FECHADA que destrava o item, até 25 "
+                         "palavras, sem nome de branch, classe ou arquivo, "
+                         "com a sua recomendação (\"Fecho o card como 'medir "
+                         "depois do go-live' e devolvo à fila? Recomendo sim: "
+                         "...\"). O `cepa-until decidir` a mostra num menu "
+                         "fixo: sim = o item volta para a fila com esta "
+                         "resposta, não = fica como está. Use com `blocked` "
+                         "e com `--human-pending`")
     fi.add_argument("--repo", default=".")
 
     rs = sub.add_parser("responde",

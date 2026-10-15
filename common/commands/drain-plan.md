@@ -393,8 +393,13 @@ Para cada item do lote, na ordem:
      `--pergunta "Fecho o card como 'medir depois do go-live' ou movo a
      medição para o checklist do primeiro deploy? Recomendo o checklist: a
      pergunta sobrevive sem travar a fila"`. É o que o `cepa-until decidir`
-     mostra ao dono no fim da noite; sem ela, ele recebe a evidência inteira e
-     precisa achar a pergunta sozinho. A resposta dele volta pela evidência
+     mostra ao dono no fim da noite, num menu fixo em que **sim = o item
+     volta para a fila com esta resposta** e **não = fica como está**:
+     escreva a pergunta de modo que "sim" signifique isso. Até 25 palavras,
+     sem nome de branch, de classe de teste ou de arquivo (isso fica na
+     evidência, que o dono abre com `[e]`). Sem pergunta, o terminal faz a
+     padrão ("destravo o item e devolvo para a fila?") e o dono decide sem o
+     contexto que só você tem. A resposta dele volta pela evidência
      do item (`cepa-plan responde`), e o próximo run a lê ali.
 
 ### 4. Desfecho terminal — nenhum item sai do lote sem nome

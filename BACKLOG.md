@@ -1531,6 +1531,17 @@ calada quando um worktree é removido); completar o mapa de ferramentas Jira nos
 extensão do `decide`), começando pelo spike de 30 min, para uma próxima sessão de
 build.
 
+### Episódio anexado — feedback `fb-20261006-2` (2026-10-06)
+
+Dono, sobre a sessão `ac145a5d-ca13-45e3-babf-b41f72328e42` (`/common:worktree-discard`):
+*"Era pra ser uma simples limpeza de worktree e se tornou numa longa interação que fugiu do
+contexto. Isso é recorrente. Quero resolver um pequeno problema e acabo sendo provocado a me
+envolver inúmeros desdobramentos que consomem valiosos minutos. Como melhorar isso?"* Mesmo
+sintoma desta seção, num comando de manutenção: o comando devolve ao dono cada desdobramento
+que encontra em vez de decidir pelo default e registrar. Candidato a primeiro alvo das faixas
+de autonomia: `worktree-discard` e `wrap-up` só perguntam quando há trabalho não mesclado que
+se perde.
+
 ---
 
 ## O plano de execução morre com o worktree, e o nome do programa colide
@@ -1808,6 +1819,17 @@ independentes verificando o trabalho em vez de confiar no auto-relato do executo
 teste fica vermelho sem a correção). O problema não foi o que ele fez, foi o cadeado ter
 dito "não" e não ter significado nada.
 
+### Episódio anexado — feedback `fb-20261001-1` (2026-10-01, `wego-acessos-extension`)
+
+O mesmo par de furos, agora no `modo-escrita-gate` em vez do `bash-path-lock`: *"o gancho de
+modo deixa passar escrita via python3 e barra sed por engano"*. Observado na sessão: um
+heredoc `python3` reescreveu `README.md` em modo `documentacao` sem bloqueio, enquanto
+`sed -e 's#...(docs/distribuicao-politica.md)#...#'` em `docs/` foi bloqueado com o texto da
+expressão lido como alvo. A camada 1 proposta aqui (`python3 -c`/heredoc conta como escrita)
+vale para os dois portões, e o lado do `sed` é o mesmo defeito do `_shellscan` que a seção "O
+portão de modo de escrita lê o corpo do heredoc" tratou para heredoc, mas não para o
+argumento do `sed`.
+
 ---
 
 ## `/common:gauntlet` — competição de designs com julgamento cego
@@ -1980,6 +2002,16 @@ o harness.** Sinais confirmatórios: `.claude/sessions/` com mtime anterior à
 remoção (ninguém iniciou sessão, logo `auto_clean` não rodou), ausência de
 marcador `*.prune-on-exit`, e `.git/worktrees/<nome>` também removido (apagar a
 pasta na mão deixaria esse resto).
+
+### Episódio anexado — feedback `fb-20261013-1` (2026-10-13, `wego-product`)
+
+O guard respondeu OK quando não devia: *"worktree-guard.py respondeu OK no /common:wrap-up com
+outra sessão viva (da317e35, pid 54145) no mesmo cwd da worktree session/guias; o
+--exclude-cwd exclui pelo diretório e some com a outra sessão. Agendar a remoção no exit
+apagaria a worktree debaixo dela."* O `--exclude-cwd` (commit `c296682`) existe para a sessão
+não se contar a si mesma, mas exclui por diretório, então duas sessões no mesmo cwd se tornam
+invisíveis uma para a outra. O conserto é excluir pelo próprio `session_id`/pid, nunca pelo
+caminho. Entra no mesmo hook desta seção.
 
 ---
 
@@ -3470,6 +3502,16 @@ merge. Agravante: os cards dos épicos tinham `blocked_by` vazio, e um antecesso
 
 Fila sintética com 1 item `done` sem merge seguido de 5 dependentes que travam: o
 run encerra depois de 3 `blocked` seguidos, com motivo nomeado no `.jsonl`.
+### Episódio anexado — feedback `fb-20260924-2` (2026-09-24)
+
+Dono, na mesma sessão: *"o blocked_by da fila está vazio [nos cards que dependem em
+sequência]... o .jsonl registra progresso: true também para item travado -> o que pode ser
+feito para que isso não aconteça mais?"* O `progresso: true` para item travado é o que o
+item 1 desta seção consertou (`--max-travados`). O `blocked_by` vazio em cards que dependem em
+sequência é do `/common:plan` (alvo registrado) e continua sem guarda: a fila aceita
+dependência implícita na ordem sem gravar a aresta, e o `cepa-until` só desconfia depois do
+travamento.
+
 ---
 
 ## `drain-plan` fecha card `done` sem a fase de validação do build-hex
@@ -3496,6 +3538,15 @@ não teve revisão de segurança.
 `validation-lead`, o veredito dele (READY) além de COMPLETE e PROVEN. Melhor ainda se for uma
 trava mecânica: o `cepa-plan finish --status done` recusa sem um artefato de validação gravado,
 do mesmo jeito que o gate de aceite lê `.claude/acceptance/<KEY>.yaml`.
+
+### Episódio anexado — feedback `fb-20260924-3` (2026-09-24)
+
+Dono, sobre o build do WEGO-2308 no `build-hex:plan-build-validate`: *"o clean verify rodou
+antes de um último refactor. Qual a origem dessa falha? Por que o refactor não foi feito
+previamente? Quais outros gates de qualidade não estão sendo aplicados?"* É o mesmo furo
+desta seção visto do lado do dono: o refactor-advisor roda depois do verify que o gate aceita
+como prova, e o card fecha com um build que não cobre o último diff. O critério de pronto
+daqui precisa incluir "nenhuma escrita em `src/` depois do verify que vale como baseline".
 
 ---
 
@@ -3812,6 +3863,14 @@ zero intervenção para o vermelho e nada novo para lembrar.
 A tabela "Sequência e critérios de aceite" da Revisão 3 (um teste vermelho por subpasso, todos
 na superfície cli).
 
+### Episódio anexado — feedback `fb-20260924-1` (2026-09-24)
+
+Pergunta do dono, na sessão `session/cepa-until-followup` do cepa, antes da aterrissagem por
+comando existir: *"Por que o cepa-until não faz o merge na main? A ausência do merge não
+atrapalha as próximas rodadas?"* A segunda parte foi respondida pela branch da noite
+(seção acima, "cepa-until conta BLOCKED como progresso"); a primeira, por esta seção. Fica
+registrado como a origem da pergunta, não como pendência nova.
+
 ---
 
 ## `cepa-until` pula a suíte do cepa por causa do `.claude/no-build`
@@ -3840,3 +3899,251 @@ para o `gate-advance`.
 
 Repo falso com `.claude/no-build` e `tests/run-all.sh`: espera `run_start` com `verify`
 apontando para o script, e não `null`.
+
+---
+
+# Triagem de feedback de 2026-10-15
+
+Itens abertos pelo `/common:feedback --triar` em 2026-10-15, a partir do ledger global
+`~/.claude/cepa-feedback/`. Cada seção cita o id do feedback de origem.
+
+## `cepa-plan responde` deixa o `plan.yaml` sujo e aceita qualquer frase como resposta à rota
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-plan` (`responde`, `add`, `marca`)
+· **Origem:** feedback `fb-20261015-1` (2026-10-15, `wego-digitacao-backend`) e
+`fb-20261014-4` (2026-10-14, `wego-product`).
+
+Dois episódios no mesmo subcomando. O primeiro, o dono (verbatim do registro):
+
+> em 2026-10-15 o dono rodou 'cepa-plan responde' tres vezes (S5, S3-fio,
+> S5-nivel-atendimento) e cada vez o plan.yaml ficou modificado e nao commitado; o agente
+> teve que commitar depois, e numa das vezes a mudanca do dono entrou num commit do agente
+> com mensagem errada; o cepa-until recusa arvore suja, entao o plan nao commitado tambem
+> trava a rodada noturna. Pedido: toda escrita do cepa-plan (responde, add, marca) commita o
+> plan.yaml no mesmo passo, ou avisa na saida que falta commitar
+
+O segundo, na sessão `session/ciclo1`:
+
+> Hook da fila interpretou um 'nao entendi' do chat (pergunta sobre uma frase do relatorio)
+> como resposta a rota humana do item S5-nivel-atendimento e gravou evidence 'Resposta do
+> dono: eu nao entendi a pergunta' no plan.yaml, fora do item que o usuario comentava.
+> Precisou de commit corretivo.
+
+A frase "Resposta do dono em <data>: ..." sai de `cepa-plan:1979`. Quem chamou foi o agente,
+não um hook, mas o resultado é o mesmo: o subcomando grava o que recebe sem exigir que o texto
+responda à pergunta da rota. Esboço: (1) `responde`/`add`/`marca` commitam o `plan.yaml` no
+mesmo passo (ou `--no-commit` explícito) e, se a árvore tiver outras mudanças, avisam na saída
+que falta commitar; (2) `responde` imprime a pergunta da rota e recusa resposta que não a
+fecha ("não entendi", "?", frase de menos de N palavras sem sim/não), com `--forca` para o
+caso raro. Teste que falta: `responde` em repo limpo deixa `git status` limpo; `responde
+"não entendi"` sai com código de recusa.
+
+## `cepa-plan write --from-triage` não consegue gravar a ordem aprovada na triagem
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-plan` (`write --from-triage`,
+`--on-missing`) · **Origem:** feedback `fb-20261002-1` (2026-10-02, `wego-acessos-backend`).
+
+> Na triagem de 02/10/2026 (WEGO, To Do, 37 cards) o dono aprovou uma ordem que punha cards
+> novos (WEGO-2346, 2348, 2343...) à frente de itens que já estavam na fila (WEGO-1919, 2041,
+> 2352, 2355). O cepa-plan write --from-triage recusou (exit 4) porque 236 itens done não
+> estavam na lista; --on-missing keep mantém a ordem do disco e põe os novos no fim;
+> --on-missing drop marcaria os 236 done como dropped. Não existe subcomando para reordenar,
+> e escrever o YAML à mão é proibido pela triagem. Resultado: a fila ficou 2352 → 2355 → 2346
+> em vez de 2346 primeiro, e a ordem aprovada se perdeu. Pedido: com --from-triage, itens
+> done fora da lista deveriam ser preservados sem exigir --on-missing, e a ordem da triagem
+> deveria valer para os itens abertos que ela menciona (ou um subcomando ordena/reorder que
+> grave a ordem).
+
+O defeito é de desenho: a única coisa que a fila existe para guardar é a ordem, e o único
+escritor dela não tem como gravar uma ordem nova sobre itens que já existem. Esboço: itens
+`done`/`dropped` ausentes da lista da triagem são preservados por default (eles não voltam a
+ser ordenados); os abertos mencionados assumem a ordem da triagem; os abertos não mencionados
+ficam depois, na ordem antiga. Teste que falta: fila com 3 done + 4 abertos, triagem lista 2
+abertos em ordem invertida mais 1 novo, resultado preserva os 3 done e grava novo → os 2 na
+ordem da triagem → os 2 não mencionados.
+
+## `capture-build-result` fica cego quando a sessão é continuada após estouro de contexto
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` (`task_dirs()`)
+e `gate-advance.py` · **Origem:** feedback `fb-20261005-1` (2026-10-05, `wego-acessos-backend`,
+branch `session/smoke_tests`).
+
+> O capture-build-result não registrou nenhum dos 3 builds em segundo plano desta sessão
+> (b2es1msx4, bldcyo140, by6ab8hom; dois com BUILD SUCCESS e [exited with code 0]). Causa
+> verificada: a sessão foi continuada após estouro de contexto; o session_id do payload passou
+> a ser 7e169811-6476-4146-b25e-ed91227c92f6, mas o CC (2.1.289) continua gravando as saídas
+> em /private/tmp/claude-501/<projeto>/4ae2dd6f-5ce5-4806-a25e-7e1c1de0fb91/tasks/, o id da
+> sessão original. task_dirs() procura só pelo session_id do payload, não acha a pasta, e o
+> gate-advance bloqueia o push mesmo com build verde.
+
+É um caso que a seção "Baseline cega para builds longos" (feita em 2026-10-02) não cobriu: a
+colheita assume que a pasta `tasks/` tem o id da sessão corrente. Esboço: ao não achar a pasta
+pelo `session_id`, `task_dirs()` varre as pastas irmãs de `<tmp>/claude-<uid>/<projeto>/` e
+aceita a que contém o `task_id` registrado no lançamento (o id do build é único, o da sessão
+não é estável). Teste que falta: build lançado sob um session_id, colhido sob outro.
+
+## As perguntas finais do relatório e do `until-review` não dizem o que fazer
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `common/skills/plain-report/SKILL.md`,
+`common/commands/until-review.md`, `common/hooks/report-style-lint.py` · **Origem:**
+feedback `fb-20261006-1` (2026-10-06), `fb-20261014-1` (2026-10-14, `wego-product`) e
+`fb-20261015-2` (2026-10-15, cepa). Memória do dono relacionada:
+`relatorio-termina-com-uma-acao`.
+
+Três registros em dez dias, o mesmo incômodo:
+
+> Às vezes eu sinto falta de maior clareza sobre as providências que devem ser tomadas
+> (relatório final do /board-flow:triage: bloco 'Decisões e próximos passos' com 3 perguntas
+> fechadas, mas as providências não ficam claras)
+
+> "fechar as duas rotas humanas no wego-digitacao-backend (o comando do S3-port e a
+> conferência dos 50 documentos) e os sete buracos do RIPD. Nada mais pendente comigo nesta
+> sessão." -> Essa é mais uma instrução que fala muito e não fala nada. O que, afinal, que eu
+> tenho que fazer? Dê-me o passo a passo. É extremamente frustrante chegar na iminência de
+> fechar uma sessão sem saber com clareza qual é o próximo passo.
+
+> Eu acho muito, mas muito confusa a escrita e o formato dessas perguntas ao final do
+> cepa-until. Em 99% das vezes, eu não sei o que responder.
+
+O formato `plain-report` exige pergunta fechada com recomendação, e o lint confere a forma,
+não se a pergunta é respondível. O bloco "Pra você" resume categorias ("as duas rotas
+humanas") em vez de listar passos com comando, arquivo e critério de pronto. Esboço: (1) cada
+item de "Pra você" e de "Decisões" carrega um comando ou um caminho de arquivo e o que o dono
+vê quando terminou; (2) o `until-review` troca a pergunta por uma ação por rota humana, com o
+comando que a fecha (`cepa-plan responde <item> "..."`) já escrito; (3) o lint barra item sem
+comando nem caminho. Validar com o dono em três relatórios reais antes de fechar.
+
+## `cepa-until` soma o bloco `result` repetido do `.log` e infla o custo do run
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (coleta de
+`total_cost_usd`, linha ~2634) · **Origem:** feedback `fb-20261013-2` (2026-10-13,
+`wego-guias-backend`).
+
+> O cepa-until somou o bloco result repetido no .log: o S5 aparece 11 vezes e o estado do run
+> diz US$ 334,94 quando a conta real e US$ 50,25 (21,78 + 28,47). Run
+> leitura-de-guias-fase-0-c1/2026-10-13-1553 do wego-guias-backend.
+
+Conta: 21,78 + 28,47 = 50,25; o run reportou 334,94, 6,7 vezes a mais. O `claude` reemite o
+bloco `result` em alguns fins de rodada (retomada, análise), e a coleta soma cada ocorrência.
+Esboço: deduplicar por `session_id` da rodada (um custo por rodada, vale o último bloco), e a
+pausa de cota (`pausa_de_cota`) passa a usar o custo deduplicado, porque hoje ela projeta a
+partir do número inflado. Teste que falta: `.log` com o mesmo `result` três vezes soma uma.
+
+## Worker de QA abre worktree descartável no run noturno, e o hook só vê o filho direto
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `build-hex/agents/qa-engineer.md`,
+`common/hooks/lead-no-worktree.py` ou um hook novo em `common/hooks` · **Origem:** feedback
+`fb-20261013-3` (2026-10-13, `wego-guias-backend`).
+
+> No run noturno o qa-engineer abriu worktree descartavel (--detach) no S5 e uma copia fora
+> do repo no S3-port para provar teste vermelho; so o proof-reviewer tem essa permissao na
+> noite, e o hook que bloqueia worktree nao alcanca agente neto. Run
+> leitura-de-guias-fase-0-c1/2026-10-13-1553.
+
+Mesma família da seção "O `bash-path-lock` bloqueia `cp`, mas deixa passar via `python3`": a
+regra existe em prosa e a guarda mecânica não alcança o nível que a fura. Hooks de plugin não
+rodam para subagentes de subagentes, então a prosa do `qa-engineer` é a única barreira.
+Esboço: o `qa-engineer` prova RED pelo mecanismo que o `proof-reviewer` já usa (reverter o
+diff num `git stash`-livre, ou `git worktree` só se o comando vier do `proof-reviewer`), e o
+`cepa-until` lista no resumo os `git worktree add` que aconteceram fora do `proof-reviewer`,
+lendo o `.jsonl`. Teste que falta: run com `qa-engineer` chamando `git worktree add` aparece
+no resumo como desvio.
+
+## Dispensa (waiver) gravada em nome do dono durante run autônomo
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `build-hex/agents/proof-reviewer.md`,
+`common/bin/cepa-until` (resumo) e `common/skills/autonomous-mode` · **Origem:** feedback
+`fb-20261014-3` (2026-10-14, `wego-digitacao-backend`).
+
+> Me incomoda o agente gravar uma dispensa (waiver) em meu nome durante um run autonomo;
+> aceitei a dispensa de S5-endurece (bin/ler-lote.sh sem teste, cobertura nao medida) mas o
+> padrao incomoda.
+
+A dispensa é a decisão que o modo autônomo mais precisa registrar e a que menos pode tomar
+sozinho: ela afirma que o dono aceitou prova nenhuma. Esboço: em run autônomo, a dispensa é
+gravada como `proposta` (autor: agente, pendente), o item fica `human_pending` com a pergunta
+"Aceito a dispensa de X por Y?", e só o `cepa-plan responde` do dono a converte em
+`waiver`. O `proof-verdict-guard` trata dispensa proposta como não-PROVEN. Teste que falta:
+proof-reviewer em modo autônomo grava `waiver_proposto`, e o `until-review` lista a pergunta.
+
+## `gate-advance` classifica `grep` com a palavra `verify` como build Maven, e não registra `./mvnw -q ... > log`
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` (classify),
+`common/hooks/_buildsource.py` · **Origem:** feedback `fb-20261008-1` (2026-10-08,
+`wego-recebiveis-backend`).
+
+> gate-advance gravou FAILURE kind=maven em .claude/last-build.json (2026-10-08T10:21Z) para
+> um comando que era só grep -E 'no-build|verify' sobre o script cepa-until; o falso vermelho
+> barrou um git commit de plan.yaml horas depois e só destravou rodando ./mvnw clean verify.
+> Além disso, ./mvnw -q clean verify > log com exit 0 não foi registrado como SUCCESS; só a
+> forma sem -q/redirecionamento atualizou o estado.
+
+Dois defeitos no mesmo classificador. O primeiro: a classificação casa `verify` no texto do
+comando inteiro, inclusive dentro de um padrão de `grep` entre aspas (o `_shellscan` já
+mascara aspas para o `maven-reactor-guard` desde `023c7f2`, e o `capture-build-result` não usa
+a mesma máscara). O segundo: com `-q` o Maven não imprime `BUILD SUCCESS`, e com `> log` a
+saída não chega ao hook, então o build verde não tem marcador e cai em EMPTY. Esboço: (1)
+classificar só sobre o comando com strings mascaradas, e exigir que o invocador seja
+`mvnw`/`mvn`; (2) para `-q` ou saída redirecionada, usar o código de saída quando o CC o
+devolve e, quando não devolve, ler o arquivo do redirecionamento. Testes que faltam: `grep
+-E 'verify' x` não grava nada; `./mvnw -q clean verify > log` com exit 0 grava SUCCESS.
+
+## Comentário do campo Team (`customfield_10001`) no `board-flow.yaml` não mostra o formato que falha
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** template do `board-flow.yaml` em
+`board-flow/commands/configure.md` e `board-flow/agents/atlassian-expert.md` · **Origem:**
+feedback `fb-20260902-1` (2026-09-02, `wego-acesso-backend-capture-openapi`). Observação do
+próprio `atlassian-expert`, não texto do dono.
+
+> O comentario de customfield_10001 (Team) em board-flow.yaml diz 'value DEVE ser UUID bare,
+> nao nome', mas o exemplo esta incompleto. Enviar {id: <uuid>} como objeto devolve 400 'Team
+> id ... is not valid'; so funciona com a string UUID pura, sem envelope. O campo vizinho
+> customfield_10414 usa objeto {id: ...}, entao e facil replicar o formato errado por
+> analogia. Sugestao: mostrar os dois formatos lado a lado no comentario.
+
+Conserto pequeno: o comentário do template mostra os dois formatos (`"<uuid>"` para Team,
+`{id: ...}` para o campo vizinho) e diz qual erro 400 cada formato errado devolve. Sem teste
+mecânico; o `jira-create-fields-gate` poderia recusar `customfield_10001` como objeto.
+
+## `test_telemetria_isolada.py` falha na `main`: o build completo nunca passa inteiro
+
+Registrado em 2026-10-15, ao rodar `tests/run-all.sh` na `main` (23b7b15) e numa
+branch filha: o único teste vermelho é sempre o mesmo, antes e depois de qualquer
+mudança.
+
+### Problema
+
+`tests/test_telemetria_isolada.py` exige que todo teste que executa um hook
+emissor de telemetria isole o ledger (`~/.claude/cepa-telemetry/`). Ele acusa
+`tests/test_capture_build_result_pytest.py` como "sem isolamento". Enquanto isso
+não for consertado, `tests/run-all.sh` termina sempre com "com falha: 1", e uma
+falha nova se esconde atrás da conhecida.
+
+### Esboço de solução
+
+Fazer `test_capture_build_result_pytest.py` rodar o hook com o mesmo isolamento
+que os outros testes usam (a variável ou fixture que `test_telemetria_isolada.py`
+procura), ou, se ele não emite telemetria de verdade, tirar o nome dele da
+lista que o teste de isolamento varre.
+
+### Critério de pronto
+
+`tests/run-all.sh` na `main` termina sem "com falha".
