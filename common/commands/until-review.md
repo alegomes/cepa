@@ -160,7 +160,7 @@ coisa.
 {"aterrissar": {"recomendo": "sim", "porque": "uma linha"},
  "itens": [
    {"id": "WEGO-2336",
-    "pergunta": "Fecho o card como 'medir depois do go-live'? (a alternativa é virar item do checklist do primeiro deploy)",
+    "pergunta": "Fecho o card como 'medir depois do go-live' e devolvo o item à fila?",
     "recomendo": "não",
     "porque": "o checklist preserva a medição sem deixar o card travando a fila"}
  ]}
@@ -169,7 +169,13 @@ coisa.
 Regras do bloco:
 
 - `pergunta` é fechada, respondível sem abrir o card, na voz de quem pergunta
-  ao dono, e cita as opções quando houver mais de uma.
+  ao dono. O terminal a mostra com um menu fixo, em que **sim = o item volta
+  para a fila com esta resposta** e **não = fica como está**; escreva a
+  pergunta de modo que "sim" signifique isso, e não escreva a alternativa
+  entre parênteses: ela é sempre "não".
+- Até 25 palavras, nas palavras do dono: sem nome de branch, de classe de
+  teste, de fixture ou de arquivo. Esse detalhe vai em `porque` ou fica na
+  evidência do item, que o terminal mostra com `[e]`.
 - `recomendo` é `sim` ou `não`; `porque` cabe numa linha.
 - Rota `human_pending` que é tarefa (validar à mão, rodar um login real):
   pergunte se ela já foi feita e o que se viu, e diga o que o dono precisa

@@ -1600,8 +1600,8 @@ def acao_aterrissar(repo, arvore, fila, run_id, n):
 # nenhuma redação decide o que é executado.
 
 MOTIVO_DO_DONO = {
-    "bloqueado-antes": "travou numa condição de fora",
-    "human_pending": "espera uma rota que só você fecha",
+    "bloqueado-antes": "travou por algo de fora do código",
+    "human_pending": "ficou uma tarefa que só você faz",
 }
 MOTIVO_SEM_DONO = {
     "reservado": "outra sessão está nele agora",
@@ -1644,6 +1644,17 @@ def linha_de_recomendacao(d):
         return None
     return f"Recomendo {d['recomendo']}" + (f": {d['porque']}"
                                            if d.get("porque") else "")
+
+
+def letra_recomendada(d):
+    """A letra do menu que a recomendação da análise aponta: `s` ou `n`."""
+    r = str((d or {}).get("recomendo") or "").strip().lower()
+    return {"sim": "s", "não": "n", "nao": "n"}.get(r)
+
+
+def titulo_curto(titulo, largura=60):
+    t = " ".join(str(titulo or "").split())
+    return t if len(t) <= largura else t[:largura - 1].rstrip() + "…"
 
 
 def acao_pendente(est):
@@ -1702,8 +1713,8 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
         saida("\n── nada espera por você neste run")
         return aplicados, para_depois
 
-    saida(f"\n── {total} coisa(s) esperam por você. Uma por vez; Enter deixa "
-          "para depois, q encerra as perguntas")
+    saida(f"\n── {total} pergunta(s) para você. Uma por vez: s ou n basta; "
+          "Enter deixa para depois, q encerra")
     parou = False
 
     if acao:
@@ -1730,34 +1741,47 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
             continue
         d = por_item.get(ident) or {}
         rota = ad.get("human_pending")
-        saida(f"\n   [{i}/{len(do_dono)}] {ident} — {ad.get('title') or ''}")
-        saida(f"       {MOTIVO_DO_DONO[ad['reason']]}.")
         texto_pergunta = ad.get("question") or d.get("pergunta")
+        saida(f"\n   [{i}/{len(do_dono)}] {ident}: "
+              f"{titulo_curto(ad.get('title'))}")
+        saida(f"       {MOTIVO_DO_DONO[ad['reason']]}.")
+        # Uma pergunta só, e `sim` quer dizer sempre a mesma coisa: o item
+        # volta para a fila. O menu antigo ([r]/[f]/[m]) não tinha "sim",
+        # embora a pergunta terminasse em "Recomendo sim" (feedback de
+        # 15/10: "em 99% das vezes eu não sei o que responder"). Sem pergunta
+        # redigida, o terminal faz a padrão, em vez de mostrar a evidência e
+        # deixar o dono achar a pergunta sozinho.
         if texto_pergunta:
             saida(recuado(f"Pergunta: {texto_pergunta}"))
         elif rota is not None:
-            saida(recuado(f"A rota: {rota}"))
+            saida(recuado(f"O que ficou para você fazer: {rota}"))
+            saida(recuado("Pergunta: já fez? Com sim, a tarefa fecha e o "
+                          "item volta para a fila."))
         else:
-            saida(recuado(f"O que o agente registrou: {ad.get('evidence')}"))
+            saida(recuado("O agente parou porque: "
+                          f"{resume_motivo(ad.get('evidence') or '')}"))
+            saida(recuado("Pergunta: destravo o item e devolvo para a fila?"))
         rec = linha_de_recomendacao(d)
         if rec:
             saida(recuado(rec))
-        if rota is not None:
-            letra, opcoes = "f", "[f] já fiz, conto o que vi"
-        else:
-            letra, opcoes = "r", "[r] respondo e devolvo para a fila"
-        # Sem [m], "mantenha travado" só cabia no [r], que destrava
-        # (decidir WEGO 2026-09-30-2016: WEGO-2337 e WEGO-1933).
-        opcoes += (" · [m] respondo e mantenho "
-                   + ("a rota aberta" if rota is not None else "travado"))
-        mostrar = bool(texto_pergunta) and bool(ad.get("evidence"))
-        validas = {letra, "m", "", "q"} | ({"e"} if mostrar else set())
+        saida(recuado("sim = o item volta para a fila com a sua resposta; "
+                      "não = fica como está e eu só gravo o que você disser"))
+        mostrar = bool(ad.get("evidence"))
+        rl = letra_recomendada(d)
+
+        def marca(letra):
+            return " (recomendado)" if rl == letra else ""
+        opcoes = (f"[s] sim{marca('s')} · [n] não{marca('n')} · "
+                  "[t] escrevo a resposta")
+        validas = {"s", "n", "t", "", "q"} | ({"e"} if mostrar else set())
         while True:
             bruto = str(pergunta(f"       {opcoes}"
-                                 + (" · [e] mostra a evidência inteira"
-                                    if mostrar else "")
+                                 + (" · [e] evidência inteira" if mostrar
+                                    else "")
                                  + " · [Enter] depois · [q] encerra: "))
             r = bruto.strip().lower()
+            r = {"sim": "s", "yes": "s", "y": "s",
+                 "não": "n", "nao": "n", "no": "n"}.get(r, r)
             if r == "e" and mostrar:
                 saida(recuado(f"Evidência: {ad.get('evidence')}"))
                 continue
@@ -1765,22 +1789,35 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
                 # Texto solto aqui ia para depois calado, e a resposta
                 # que o dono escreveu sumia (decidir WEGO 2026-09-29-2059).
                 saida(f"       \"{bruto.strip()}\" não é uma das opções; "
-                      f"para gravar uma resposta, digite {letra} primeiro")
+                      "para escrever uma resposta, digite t primeiro")
                 continue
             break
         if r == "q":
             parou = True
-        if r in ("r", "f", "m"):
+        texto, devolve = "", False
+        if r == "t":
             texto = str(pergunta("       Sua resposta, numa linha (o próximo "
                                  "run lê isto): ")).strip()
             if texto:
-                rc, msg = (responde(ident, texto, mantem=True) if r == "m"
-                           else responde(ident, texto))
-                if rc == 0:
-                    aplicados.append(f"{ident}: {msg}")
-                    saida(f"       → {msg}")
-                    continue
-                saida(f"       → não gravei: {msg}")
+                devolve = eh_sim(pergunta("       Devolvo o item para a fila "
+                                          "com essa resposta? [s/N] "))
+        elif r in ("s", "n"):
+            devolve = r == "s"
+            base = texto_pergunta or rota or "destravar o item"
+            extra = ""
+            if r == "n" or not texto_pergunta:
+                extra = str(pergunta("       Quer acrescentar algo, numa "
+                                     "linha? [Enter pula] ")).strip()
+            texto = (("sim" if devolve else "não") + f": {base}"
+                     + (f". {extra}" if extra else ""))
+        if texto:
+            rc, msg = (responde(ident, texto) if devolve
+                       else responde(ident, texto, mantem=True))
+            if rc == 0:
+                aplicados.append(f"{ident}: {msg}")
+                saida(f"       → {msg}")
+                continue
+            saida(f"       → não gravei: {msg}")
         para_depois.append(f"{ident}: {MOTIVO_DO_DONO[ad['reason']]}")
 
     if sem_dono:

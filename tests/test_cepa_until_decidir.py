@@ -207,7 +207,7 @@ def test_decide_oferece_manter_travado():
         {"id": "W-2", "title": "flag", "reason": "human_pending",
          "question": None, "human_pending": "ligue a flag", "evidence": None},
     ]
-    respostas = iter(["m", "mantenha", "m", "não liguei"])
+    respostas = iter(["t", "mantenha", "", "t", "não liguei", ""])
     tela, respondidos, perguntas = [], [], []
 
     def pergunta(p_):
@@ -218,9 +218,10 @@ def test_decide_oferece_manter_travado():
         pergunta=pergunta, saida=tela.append,
         responde=lambda i, t, mantem=False: (
             respondidos.append((i, t, mantem)), (0, f"{i} ok"))[1])
-    check("as opções oferecem [m] para manter",
-          all("[m]" in p_ for p_ in perguntas if "[Enter]" in p_), perguntas)
-    check("[m] chama o responde com mantem=True",
+    check("as opções oferecem [n] não e [t] escrevo",
+          all("[n] não" in p_ and "[t] escrevo" in p_
+              for p_ in perguntas if "[Enter]" in p_), perguntas)
+    check("[t] + N no 'devolvo?' chama o responde com mantem=True",
           respondidos == [("W-1", "mantenha", True),
                           ("W-2", "não liguei", True)], respondidos)
     check("...e conta como respondido", len(aplicados) == 2, aplicados)
@@ -249,7 +250,7 @@ def test_decide_pergunta_e_aplica_cada_resposta():
           analise["itens"]["W-1"]["pergunta"] == "Movo para o checklist?",
           analise)
     est = {"acoes": [{"id": "aterrissar", "frase": "leva 5 commits"}]}
-    respostas = iter(["s", "r", "vira checklist", "", "e", "q"])
+    respostas = iter(["s", "t", "vira checklist", "s", "", "e", "q"])
     tela, respondidos, aterrissou = [], [], []
     aplicados, depois = m.decide(
         Path("/nao/existe"), "fila", "run1", est, adiados, analise,
@@ -277,6 +278,51 @@ def test_decide_pergunta_e_aplica_cada_resposta():
           "cepa-until decidir fila/run1" in texto, texto)
     check("aplicados listam aterrissar e W-1",
           aplicados == ["aterrissar", "W-1: W-1 ok"], aplicados)
+
+
+def test_decide_s_e_n_respondem_a_pergunta_redigida():
+    """Feedback de 15/10: a pergunta era sim/não ("Fecho a rota...? Recomendo
+    sim") e o menu não tinha sim. Agora `s` devolve o item para a fila com
+    "sim: <pergunta>" e `n` grava "não: <pergunta>" mantendo o item."""
+    m = carrega_modulo()
+    adiados = [
+        {"id": "W-1", "title": "t" * 90, "reason": "human_pending",
+         "question": "Fecho a rota como 'fica para depois'?",
+         "human_pending": "rodar os 20 lotes", "evidence": "x"},
+        {"id": "W-2", "title": "flag", "reason": "bloqueado-antes",
+         "question": "Destravo?", "human_pending": None, "evidence": "y"},
+        {"id": "W-3", "title": "sem pergunta", "reason": "bloqueado-antes",
+         "question": None, "human_pending": None, "evidence": "sem produção"},
+    ]
+    analise = {"itens": {"W-1": {"recomendo": "sim", "porque": "só após merge"}}}
+    respostas = iter(["sim", "n", "por enquanto não", "s", "ligue a flag"])
+    tela, respondidos, perguntas = [], [], []
+
+    def pergunta(p_):
+        perguntas.append(p_)
+        return next(respostas)
+    aplicados, _ = m.decide(
+        Path("/nao/existe"), "fila", "run1", {}, adiados, analise,
+        pergunta=pergunta, saida=tela.append,
+        responde=lambda i, t, mantem=False: (
+            respondidos.append((i, t, mantem)), (0, f"{i} ok"))[1])
+    texto = "\n".join(tela)
+    check("o título longo é cortado", "t" * 90 not in texto
+          and "t" * 59 + "…" in texto, texto)
+    check("a recomendação marca a letra no menu",
+          any("[s] sim (recomendado)" in p_ for p_ in perguntas), perguntas)
+    check("a legenda diz o que sim e não fazem",
+          "sim = o item volta para a fila" in texto, texto)
+    check("sem pergunta redigida, o terminal faz a padrão",
+          "destravo o item e devolvo para a fila?" in texto
+          and "O agente parou porque: sem produção" in texto, texto)
+    check("sim/n/s viram respostas gravadas, com a pergunta dentro",
+          respondidos == [
+              ("W-1", "sim: Fecho a rota como 'fica para depois'?", False),
+              ("W-2", "não: Destravo?. por enquanto não", True),
+              ("W-3", "sim: destravar o item. ligue a flag", False)],
+          respondidos)
+    check("os três contam como respondidos", len(aplicados) == 3, aplicados)
 
 
 def test_analise_sem_bloco_ou_quebrada_nao_derruba():
@@ -321,8 +367,9 @@ def test_run_no_terminal_termina_perguntando_e_aplica():
         rc, out = em_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz),
              "--for", "2h", "--sem-verify", "--sem-analise"], str(raiz),
-            entradas=[("[r] respondo e devolvo", "r"),
-                      ("Sua resposta", "vira item do checklist")], env=env)
+            entradas=[("[t] escrevo a resposta", "t"),
+                      ("Sua resposta", "vira item do checklist"),
+                      ("Devolvo o item para a fila", "s")], env=env)
         check("o run sai 0", rc == 0, out[-1500:])
         check("pergunta o item travado com a pergunta gravada",
               "Fecho o card como medir depois do go-live?" in out, out[-1500:])
@@ -405,8 +452,9 @@ def test_decidir_como_processo_com_e_sem_terminal():
         check("...sem mexer na fila",
               itens_de(raiz)["a1"]["status"] == "blocked")
         rc, out = em_tty(cmd, str(raiz), entradas=[
-            ("[r] respondo e devolvo", "r"), ("Sua resposta", "vira checklist"),
-            ("[f] já fiz", "f"), ("Sua resposta", "login ok")])
+            ("[t] escrevo a resposta", "t"), ("Sua resposta", "vira checklist"),
+            ("Devolvo o item para a fila", "s"),
+            ("[t] escrevo a resposta", "s"), ("Quer acrescentar algo", "login ok")])
         a1, a2 = itens_de(raiz)["a1"], itens_de(raiz)["a2"]
         check("no terminal, decidir aplica o blocked",
               rc == 0 and a1["status"] == "pending"
@@ -595,9 +643,10 @@ def test_byte_invalido_no_terminal_nao_derruba_o_decidir():
         rc, out = em_tty(
             [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
              "--repo", str(raiz)], str(raiz), entradas=[
-                ("[r] respondo e devolvo", b"n\xcb\xc3\xa3o"),
-                ("digite de novo", "r"),
-                ("Sua resposta", "vira checklist")])
+                ("[t] escrevo a resposta", b"n\xcb\xc3\xa3o"),
+                ("digite de novo", "t"),
+                ("Sua resposta", "vira checklist"),
+                ("Devolvo o item para a fila", "s")])
         check("sem traceback", "Traceback" not in out, out[-1500:])
         check("...avisa que não leu e pede de novo",
               "digite de novo" in out, out[-1500:])
@@ -613,8 +662,8 @@ def test_texto_solto_no_prompt_de_opcoes_nao_some():
     para depois e o texto sumiu sem aviso. Tem de avisar e perguntar de
     novo."""
     m = carrega_modulo()
-    respostas = iter(["eu não faço ideia de como resolver isso", "r",
-                      "não sei"])
+    respostas = iter(["eu não faço ideia de como resolver isso", "t",
+                      "não sei", "s"])
     tela, respondidos = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", {},
              [{"id": "W-1", "title": "t", "reason": "bloqueado-antes",
@@ -641,11 +690,12 @@ def test_texto_solto_no_terminal_avisa_e_ainda_grava():
         rc, out = em_tty(
             [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
              "--repo", str(raiz)], str(raiz), entradas=[
-                ("[r] respondo e devolvo", "eu não faço ideia"),
-                ("digite r primeiro", "r"),
-                ("Sua resposta", "não sei ainda")])
+                ("[t] escrevo a resposta", "eu não faço ideia"),
+                ("digite t primeiro", "t"),
+                ("Sua resposta", "não sei ainda"),
+                ("Devolvo o item para a fila", "s")])
         check("avisa que o texto solto não é opção",
-              "não é uma das opções" in out and "digite r primeiro" in out,
+              "não é uma das opções" in out and "digite t primeiro" in out,
               out[-1500:])
         a1 = itens_de(raiz)["a1"]
         check("...e a resposta dada depois do r chega ao plano",
