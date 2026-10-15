@@ -319,6 +319,38 @@ def test_proposta_so_na_arvore_do_registro_tambem_e_listada():
         check("...uma vez só na seção", out.count("teste-cego em SoNaWorktree") == 2, out[-700:])
 
 
+def test_proposta_so_no_clone_principal_tambem_e_listada():
+    """Espelho do caso anterior: o plano e a proposta moram no clone principal,
+    e a worktree do registro não tem proposta nenhuma."""
+    with tempfile.TemporaryDirectory() as tmp:
+        principal = Path(tmp) / "principal"
+        principal.mkdir()
+        g = lambda *a: subprocess.run(["git", *a], cwd=str(principal),
+                                      capture_output=True, text=True, check=True)
+        g("init", "-q")
+        g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
+          "--allow-empty", "-m", "raiz")
+        wt = Path(tmp) / "wt"
+        g("worktree", "add", "-q", "--detach", str(wt))
+        ledger = monta_run(wt)
+        fila = principal / ".claude" / "programs" / "F"
+        fila.mkdir(parents=True)
+        (fila / "plan.yaml").write_text(yaml.safe_dump({"items": [
+            {"id": "A2", "status": "blocked", "blocked_by": []}]}), encoding="utf-8")
+        w = principal / ".claude" / "waivers"
+        w.mkdir(parents=True)
+        (w / "teste-cego--x.yaml").write_text(yaml.safe_dump({
+            "status": "proposta", "motivo": "teste-cego", "escopo": "SoNoPrincipal",
+            "autor": None, "item": "A2", "pergunta": "Aceito a dispensa de SoNoPrincipal?"},
+            allow_unicode=True), encoding="utf-8")
+        check("a worktree do registro não tem pasta de dispensas",
+              not (wt / ".claude" / "waivers").exists())
+        out = roda(ledger).stdout
+        check("proposta só no clone principal é listada",
+              "teste-cego em SoNoPrincipal — pergunta: Aceito a dispensa de SoNoPrincipal?" in out,
+              out[-700:])
+
+
 def test_yaml_quebrado_ao_lado_da_proposta_nao_derruba_o_resumo():
     with tempfile.TemporaryDirectory() as tmp:
         ledger = monta_run(tmp)
