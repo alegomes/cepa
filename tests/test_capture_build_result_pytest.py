@@ -3,6 +3,14 @@ marcador um pytest verde nunca limpava o STALE do gate-advance (pastinha-pipelin
 import importlib.util
 from pathlib import Path
 
+# Este arquivo só chama classify(), que é pura, e a família pytest já isola
+# a telemetria pelo conftest.py. O pedido explícito está aqui porque
+# tests/test_telemetria_isolada.py exige que TODO teste que cite um hook
+# emissor isole por conta própria: citar e executar distam um commit.
+from _telemetria_isolada import isola
+
+isola()
+
 spec = importlib.util.spec_from_file_location(
     "capture_build_result", Path(__file__).resolve().parents[1] / "common" / "hooks" / "capture-build-result.py")
 cbr = importlib.util.module_from_spec(spec)
