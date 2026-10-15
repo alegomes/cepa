@@ -171,6 +171,23 @@ with tempfile.TemporaryDirectory() as tmp:
     check("git -C B status segue isento", r.returncode == 0,
           f"exit={r.returncode} stderr={r.stderr[:200]}")
 
+    print("\n# dois cd na mesma linha — vale o ÚLTIMO")
+    a, b = novo_par(tmp, "c11")
+    c = make_repo(tmp / "c11" / "C")
+    vermelho(a)
+    vermelho(c)
+    sem_build(b)
+    r = gate(f"cd {c} && cd {b} && git push origin main", a)
+    check("último cd (B, no-build) vence o primeiro (C, vermelho)", r.returncode == 0,
+          f"exit={r.returncode} stderr={r.stderr[:200]}")
+    a, b = novo_par(tmp, "c12")
+    c = make_repo(tmp / "c12" / "C")
+    sem_build(c)
+    vermelho(b)
+    r = gate(f"cd {c} && cd {b} && git commit -m x", a)
+    check("último cd (B, vermelho) vence o primeiro (C, no-build)", r.returncode == 2,
+          f"exit={r.returncode} stderr={r.stderr[:200]}")
+
     print("\n# fail-open — problema de parse nunca derruba o hook")
     a, _b = novo_par(tmp, "c9")
     vermelho(a)
@@ -200,6 +217,8 @@ sys.path.insert(0, str(HOOKS))
 import _shellscan as S  # noqa: E402
 
 print("\n# segment_dirs — resolução de cd e -C")
+d = S.segment_dirs("cd /c && cd /b && git push", "/a")
+check("dois cd: o último vence", d and d[0][1] == "/b" and d[0][2], d)
 try:
     d = S.segment_dirs("cd 'B && git commit -m x", "/a")
     check("aspas abertas: segment_dirs não levanta", isinstance(d, list), d)
