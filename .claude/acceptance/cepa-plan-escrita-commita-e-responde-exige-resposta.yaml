@@ -1,0 +1,31 @@
+key: cepa-plan-escrita-commita-e-responde-exige-resposta
+status: complete
+criteria:
+  - id: AC1
+    text: "Toda escrita do cepa-plan (responde, add, start, finish) commita a fila no mesmo passo ou diz na saida que falta commitar; aviso de outras mudancas"
+    altitude: cli
+    surface: "common/bin/cepa-plan via subprocess em repo git real"
+    test: "tests/test_cepa_plan_escrita_commita.py (add_commita_e_no_commit_avisa, responde_commita_so_a_fila..., responde_no_commit..., start_e_finish_avisam..., commit_que_falha_vira_aviso...)"
+    layer: cli-integration
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_escrita_commita.py -> all green (todos os checks ok, N>0)"
+    verdict: complete
+  - id: AC2
+    text: "responde imprime a pergunta da rota e recusa texto que nao a responde; --forca; respostas sim:/nao: do decidir continuam"
+    altitude: cli
+    surface: "cepa-plan responde (exit 6) e cepa-until decidir via pty"
+    test: "test_responde_recusa_texto_que_nao_responde_a_rota, test_responde_forca_grava_o_texto_recusado, test_resposta_do_decidir_passa_mesmo_citando_a_pergunta; tests/test_cepa_until_decidir.py"
+    layer: cli-integration
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_escrita_commita.py -> all green; python3 tests/test_cepa_until_decidir.py -> tudo verde"
+    verdict: complete
+  - id: AC3
+    text: "responde em repo limpo deixa git status limpo; responde 'nao entendi' sai com codigo de recusa"
+    altitude: cli
+    surface: "cepa-plan responde"
+    test: "test_responde_em_repo_limpo_deixa_git_status_limpo; test_responde_recusa... ('eu nao entendi a pergunta' exit 6)"
+    layer: cli-integration
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_escrita_commita.py -> all green"
+    verdict: complete
+gaps: []

@@ -2036,7 +2036,7 @@ PEDE_ESCLARECIMENTO = re.compile(
     r"sei\s+(o\s+que|do\s+que|qual|a\s+que)|sei\s+responder)\b"
     r"|\bcomo\s+assim\b|\bque\s+pergunta\s+[eé]\s+ess|"
     r"\b(o\s+que|oq)\s+(isso\s+|ela\s+)?(quer\s+dizer|significa)\b|"
-    r"\b(repete|refaz|explica)\s+(a\s+)?pergunta\b", re.I)
+    r"\b(repet\w*|refa\w+|explic\w+)\s+(a\s+)?pergunta\b", re.I)
 RESPOSTA_DO_DECIDIR = re.compile(r"^(sim|n[aã]o)\s*:", re.I)
 
 

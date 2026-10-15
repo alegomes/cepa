@@ -157,6 +157,8 @@ def test_responde_forca_grava_o_texto_recusado():
         check("--forca grava", rc == 0, out)
         check("...com o texto na evidência",
               "não entendi, mas pode seguir?" in itens_de(raiz)["a1"]["evidence"])
+        check("...e commitado como qualquer resposta", status(raiz) == "",
+              status(raiz))
 
 
 def test_resposta_do_decidir_passa_mesmo_citando_a_pergunta():
@@ -180,6 +182,39 @@ def test_resposta_do_decidir_passa_mesmo_citando_a_pergunta():
                        "a1", "segue")[0] == 0)
 
 
+def test_entradas_adversariais_no_filtro_de_resposta():
+    """Nível adversarial: o `nao_responde` interpreta texto digitado. Casos de
+    borda que não podem recusar o que responde nem aceitar o que não."""
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp)
+        casos_aceitos = [
+            ("pode? segue assim", "'?' no meio da frase não é pergunta"),
+            ("não liguei", "'não' sem pedido de esclarecimento"),
+            ("não sei se vale, mas pode seguir", "'não sei se' não é 'não sei o que'"),
+            ("SIM: fecha", "prefixo do decidir em maiúsculas"),
+            ("não :  mantém?", "prefixo do decidir com espaço antes dos dois pontos"),
+            ("\u00e9 isso a\u00ed", "acentos não derrubam a checagem de palavra"),
+        ]
+        for i, (texto, motivo) in enumerate(casos_aceitos):
+            raiz = monta_repo(str(base / f"ok{i}"), [item("a1", status="blocked")])
+            rc, out = responde(raiz, "a1", texto)
+            check(f"aceita {texto!r} ({motivo})", rc == 0, (rc, out))
+        casos_recusados = [
+            ("...", "só pontuação"),
+            ("¿?", "só pontuação unicode"),
+            ("segue?", "pergunta curta"),
+            ("sim? não entendi", "'sim' sem os dois pontos não é o decidir"),
+            ("NÃO ENTENDI", "maiúsculas não escapam da regex"),
+            ("pode repetir a pergunta", "pedido de repetição"),
+        ]
+        for i, (texto, motivo) in enumerate(casos_recusados):
+            raiz = monta_repo(str(base / f"nao{i}"), [item("a1", status="blocked")])
+            rc, out = responde(raiz, "a1", texto)
+            check(f"recusa {texto!r} ({motivo})", rc == 6, (rc, out))
+            check("...e não grava", itens_de(raiz)["a1"]["status"] == "blocked")
+            check("...e a árvore fica limpa", status(raiz) == "", status(raiz))
+
+
 def test_add_commita_e_no_commit_avisa():
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1")])
@@ -192,6 +227,8 @@ def test_add_commita_e_no_commit_avisa():
         check("add --no-commit sai 0", p.returncode == 0, p.stderr)
         check("...grava sem commit", "plan.yaml" in status(raiz), status(raiz))
         check("...e diz que falta commitar", "Falta commitar" in p.stdout, p.stdout)
+        check("...sem commit novo", ultimo_commit(raiz) == "fila fila: add novo",
+              ultimo_commit(raiz))
 
 
 def test_start_e_finish_avisam_que_falta_commitar_e_commit_commita():
