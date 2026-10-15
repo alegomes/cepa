@@ -1,0 +1,42 @@
+schema_version: 2
+card: gate-advance-repo-do-push
+verdict: proven
+reviewed_at: 2026-10-15T19:00:00-03:00
+base_commit: 7bf271d
+head_commit: a4fa8d7
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/gate-advance.py (main, target_dir, GIT_C)", module: common/hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_shellscan.py (_git_dash_c, segment_dirs)", module: common/hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: "Python stdlib repo (no Maven/PIT). Surface = real hook subprocess, exit code 0/2; no doubles. Third pass at a4fa8d7 (after a0a3f2e: isdir fallback in target_dir + cases for m1/m6/m7)."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN a4fa8d7: python3 tests/test_gate_advance_repo_alvo.py -> 'todos os casos verdes', exit 0, 32 ok, 0 FAIL"
+        - "RED isdir: gate-advance.py:188 'return d if explicit and os.path.isdir(d) else None' -> 'return d if explicit else None' : 5 FAIL (cd inexistente, cd $VAR, cd -, cd inexistente;, cd inexistente/xyz; all exit 0 instead of 2)"
+        - "RED m1: gate-advance.py:99 LOCAL pattern without GIT_C : 1 FAIL ('git -C B commit BARRADO' exit=0). Survived at a0a3f2e; now killed"
+        - "RED m7: _shellscan.py:423 expanduser removed from `-C X` : 1 FAIL ('git -C ~/B expande o HOME e BARRA'). Survived at a0a3f2e; now killed"
+        - "RED m6: _shellscan.py:429 `-c k=v` skip 'i += 2' -> 'i += 1' : 1 FAIL ('-c k=v não desalinha o -C', direct segment_dirs assertion). ALTITUDE: this is an inner (unit-seam) kill, NOT a hook-level kill. The path is unobservable from the hook: classify() does not accept `-c k=v` before the subcommand (GIT_C only knows -C), so `git -c k=v -C B push` is 'unrelated' and exits 0 at base and at head, and the `-c` branch can only run on segments that never reach target_dir's gated set. I count the direct assertion as the correct altitude for a line with no externally observable behavior today; if classify() later learns `-c`, an end-to-end case must be added then"
+        - "RED a: main alvo=sessao : 13 FAIL; c: GIT_C=\"\" : 4 FAIL; d: first cd wins : 3 FAIL; e: segment_dirs raises : 13 FAIL (hook never exit 1); f: e + no fail-open catch : 25 FAIL; b2/m2/m4/m5/m8/m9/m11/m12/m13/m14 killed at a0a3f2e on lines unchanged since"
+        - "SURVIVED, EQUIVALENT (not counted): b1 target_dir 'return d' (not explicit => d == sessao, and now guarded by isdir); m3 EXEMPT pattern without GIT_C (exempt-only and unrelated both exit 0); m7b _shellscan.py:426 expanduser on attached `-C~/x` (git itself rejects the attached form: 'unknown option: -C~/nonexistent-zz', checked with git -C~/x status), so that form has no real behavior"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "no coverage tool in this Python repo; precedent vigia-conta-so-monitor-real applies: every changed executable line is hit by a distinct perturbation that turned the suite RED (main alvo/session_root: a, m13; target_dir body + isdir: b2, m14, isdir, f; GIT_C in LOCAL: m1, SHARING: c/m2, EXEMPT: equivalent m3; _git_dash_c: m4, m5(attached append), m6 (inner), m7, m8, m9; segment_dirs: d, e, m11, m12). Lines not reached: none behavioral. Caveat: m6 is reached at the unit seam only"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "tests/l4_adv.py (throwaway, not committed): 20 command strings fed to the hook subprocess, cwd = temp repo A with FAILURE baseline + pom.xml. Exit codes @a4fa8d7: aspas abertas 2; aspas duplas abertas 2; cd \"a b\" 2; cd $VAR 2; cd ~ 0; git -C \"/x y\" push 0; -C repetido 0; -C repetido (1o inexistente) 0; -C sem argumento 0; heredoc com `cd /tmp && git push` como dado 2; heredoc + commit 2; 50 KB commit 2; 50 KB de `cd /tmp &&` 0; cd fora de repo 0; cd inexistente 2; cd inexistente; 2; cd vazio 2; cd - 2; surrogate solto 2. No Traceback and no exit 1 from the new path. Mis-route found at a0a3f2e (cd $VAR / cd - / cd /x; git push allowed) is closed: now 2. Remaining exit 0 are correct by the rule (target is an existing non-repo dir, or no-build repo). Pre-existing, not new, not counted: (1) stdin with non-UTF8 byte -> exit 1 UnicodeDecodeError in sys.stdin.read(), identical at base 7bf271d; (2) `git -C \"/x y\" push` escapes classify because of the `\\S+` pattern (base `git\\s+push` did not match it either); (3) `git -c k=v ... push` is not classified (base same)."
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "worktree @7bf271d + new test copied in (first pass): python3 tests/test_gate_advance_repo_alvo.py -> 7 FAIL (session repo state judged instead of target's), then AttributeError: _shellscan has no segment_dirs (expected at base). Green at a4fa8d7: 32 ok."
+routing_reason: "Computed mechanically: regression RED at base; every non-equivalent mutant killed at a4fa8d7 (isdir, m1, m6, m7, a, c, d, e, f); L2 reached on all changed lines; L4 adversarial run found no crash or mis-route in the new path. m6 is killed only at the segment_dirs unit seam because the hook cannot observe it until classify() learns `-c`; encoded as stated in perturbation.results, a judgment for the human to overrule."

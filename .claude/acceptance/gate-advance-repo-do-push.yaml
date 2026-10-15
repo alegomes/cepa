@@ -1,0 +1,55 @@
+key: gate-advance-repo-do-push
+status: complete
+diff_range: 7bf271d..a4fa8d7
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      common/hooks/gate-advance.py como subprocesso (JSON no stdin, exit
+      0/2), comando `cd B && git commit`, sessao em A com baseline vermelho,
+      B com .claude/no-build, repos git temporarios reais.
+    test: tests/test_gate_advance_repo_alvo.py ("cd B && git commit", "cd para subdiretorio de B", "cd relativo", "separador ;")
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_gate_advance_repo_alvo.py -> 32 checks ok, 0 FAIL, exit 0"
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: >
+      Mesmo subprocesso, comando `git -C B push` / `git -C<B> push` / -C relativo;
+      inclui classify() reconhecer a forma -C (e `git -C B status` seguir isento).
+    test: tests/test_gate_advance_repo_alvo.py ("git -C B push", "git -C<B> colado BARRADO", "-C relativo", "git -C B status segue isento")
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_gate_advance_repo_alvo.py -> 32 checks ok, 0 FAIL, exit 0"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: >
+      Sessao A com no-build, alvo B vermelho: `cd B && git push` e
+      `git -C B push` precisam sair com exit 2.
+    test: tests/test_gate_advance_repo_alvo.py ("push em B vermelho BARRADO", "git -C B push (B vermelho, A no-build) BARRADO")
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_gate_advance_repo_alvo.py -> 32 checks ok, 0 FAIL, exit 0"
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: >
+      Sem cd / -C, o hook julga a raiz da sessao (_wtlib.session_root).
+    test: tests/test_gate_advance_repo_alvo.py ("push no repo da sessao vermelho BARRADO"); suite pre-existente de gate-advance nao foi rodada por mim (restricao do supervisor)
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_gate_advance_repo_alvo.py -> 32 checks ok, 0 FAIL, exit 0"
+    status: complete
+  - id: AC5
+    altitude: cli
+    surface: >
+      gate-advance.py como subprocesso nao derruba a sessao (sem Traceback,
+      exit 0 ou 2) com aspas nao fechadas, `cd` para alvo nao resolvivel (inexistente, $VAR, `-`) e
+      `git -C` pendurado; segment_dirs nao levanta em entrada malformada.
+    test: tests/test_gate_advance_repo_alvo.py (secao "fail-open" e "aspas abertas: segment_dirs nao levanta")
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_gate_advance_repo_alvo.py -> 32 checks ok, 0 FAIL, exit 0 (aspas abertas exit=2; cd inexistente/$VAR/- /inexistente-xyz exit=2 caindo no estado vermelho da sessao; -C pendurado exit=0; nenhum Traceback; alvo que nao e diretorio existente cai no repo da sessao via os.path.isdir em target_dir)"
+    status: complete
