@@ -588,6 +588,25 @@ def leituras_de_cota(texto):
     return leituras
 
 
+def custos_das_rodadas(custos, texto):
+    """Soma ao dict `custos` ({chave: US$}) cada bloco `result` de `texto`:
+    um custo por `session_id`, e vale o ÚLTIMO bloco da sessão (o
+    `total_cost_usd` é cumulativo na sessão; retomar a mesma sessão numa
+    rodada seguinte também fica certo). A ordem é a da primeira aparição.
+    Bloco sem `session_id` não dá para deduplicar: conta cada um.
+    Motivo (2026-10-13, leitura-de-guias-fase-0-c1): um único `claude -p`
+    emitiu 11 blocos `result` da mesma sessão e somar todos deu US$ 334,94
+    em vez de 50,25."""
+    for r in _objetos_json(texto, "result"):
+        v = r.get("total_cost_usd")
+        if not _numero(v):
+            continue
+        sid = r.get("session_id")
+        chave = sid if isinstance(sid, str) and sid else ("", len(custos))
+        custos[chave] = float(v)
+    return custos
+
+
 def horario_do_reset(texto, agora):
     """O reset anunciado em texto ("resets 3:20am (America/Sao_Paulo)") como
     datetime local ingênuo, na próxima ocorrência. None se não dá para saber."""
@@ -2672,7 +2691,8 @@ def main(argv=None):
     desfechos = {}
     # O `total_cost_usd` de cada rodada do `claude`: o custo só aparecia na
     # análise do modelo (A6), e a análise pode não rodar.
-    custos = []
+    # Um custo por sessão (`custos_das_rodadas`), não por bloco `result`.
+    custos = {}
 
     def desfecho(ident, tipo, texto):
         desfechos[ident] = (tipo, texto)
@@ -2854,10 +2874,7 @@ def main(argv=None):
                          or n_commits > 0)
 
         leituras = leituras_de_cota(saida)
-        for r in _objetos_json(saida, "result"):
-            v = r.get("total_cost_usd")
-            if _numero(v):
-                custos.append(float(v))
+        custos_das_rodadas(custos, saida)
         if leituras:
             inicios.append(leituras[0])
             ultima_leitura = leituras[-1]
@@ -3325,7 +3342,7 @@ def main(argv=None):
             print(f"     - durante o {ident}: sem rede das "
                   f"{caiu.strftime('%H:%M')} às {voltou.strftime('%H:%M')}, "
                   "depois retomei o item")
-    custo = round(sum(custos), 2)
+    custo = round(sum(custos.values()), 2)
     # A lista de ações é fechada (R2): depois da Revisão 3 sobra só
     # `aterrissar`. O que nenhum comando executa vai para "fica com você".
     acoes = []
@@ -3383,7 +3400,7 @@ def main(argv=None):
     if custos:
         br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
         print(f"\n   custo: US$ {br(custo)} (soma do `total_cost_usd` de "
-              f"{len(custos)} rodada(s): {' + '.join(br(v) for v in custos)})")
+              f"{len(custos)} rodada(s): {' + '.join(br(v) for v in custos.values())})")
     print(f"\n   registro: {curto(ledger, repo)}")
     print(f"   saída do claude: {curto(log, repo)}")
 

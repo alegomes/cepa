@@ -4029,9 +4029,16 @@ comando nem caminho. Validar com o dono em três relatórios reais antes de fech
 
 **Plano:** nenhum ainda
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (coleta de
-`total_cost_usd`, linha ~2634) · **Origem:** feedback `fb-20261013-2` (2026-10-13,
-`wego-guias-backend`).
+**Status:** feito nesta branch (2026-10-15) · **Lar:** `common/bin/cepa-until`
+(`custos_das_rodadas`, um custo por `session_id`, vale o último bloco) · **Teste:**
+`tests/test_cepa_until_aterrissar.py` (`test_5_custo_conta_uma_vez_por_sessao_nao_por_bloco_result`)
+· **Origem:** feedback `fb-20261013-2` (2026-10-13, `wego-guias-backend`).
+
+Conferido no `.log` real do run (linhas 5207-5217): os 11 blocos têm o mesmo `session_id` e
+o mesmo `total_cost_usd` (28,47, cumulativo da sessão). A parte do esboço sobre a pausa de
+cota não se aplicava: `pausa_de_cota` projeta a partir da utilização da janela de 5h lida do
+`rate_limit_event` (`custo_de_item`), nunca do `total_cost_usd`, então o número inflado só
+chegava ao resumo e ao `estado.json`, não à decisão de parar.
 
 > O cepa-until somou o bloco result repetido no .log: o S5 aparece 11 vezes e o estado do run
 > diz US$ 334,94 quando a conta real e US$ 50,25 (21,78 + 28,47). Run
