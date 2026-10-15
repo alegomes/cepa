@@ -4122,3 +4122,28 @@ próprio `atlassian-expert`, não texto do dono.
 Conserto pequeno: o comentário do template mostra os dois formatos (`"<uuid>"` para Team,
 `{id: ...}` para o campo vizinho) e diz qual erro 400 cada formato errado devolve. Sem teste
 mecânico; o `jira-create-fields-gate` poderia recusar `customfield_10001` como objeto.
+
+## `test_telemetria_isolada.py` falha na `main`: o build completo nunca passa inteiro
+
+Registrado em 2026-10-15, ao rodar `tests/run-all.sh` na `main` (23b7b15) e numa
+branch filha: o único teste vermelho é sempre o mesmo, antes e depois de qualquer
+mudança.
+
+### Problema
+
+`tests/test_telemetria_isolada.py` exige que todo teste que executa um hook
+emissor de telemetria isole o ledger (`~/.claude/cepa-telemetry/`). Ele acusa
+`tests/test_capture_build_result_pytest.py` como "sem isolamento". Enquanto isso
+não for consertado, `tests/run-all.sh` termina sempre com "com falha: 1", e uma
+falha nova se esconde atrás da conhecida.
+
+### Esboço de solução
+
+Fazer `test_capture_build_result_pytest.py` rodar o hook com o mesmo isolamento
+que os outros testes usam (a variável ou fixture que `test_telemetria_isolada.py`
+procura), ou, se ele não emite telemetria de verdade, tirar o nome dele da
+lista que o teste de isolamento varre.
+
+### Critério de pronto
+
+`tests/run-all.sh` na `main` termina sem "com falha".
