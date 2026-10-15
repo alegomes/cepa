@@ -7,14 +7,15 @@
 # Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
 # fecha — agente nenhum troca o texto por null por conta própria.
 #
-# Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor) + itens de 2026-09-24 + desvios.md (2026-09-29)
-# Escrito em: 2026-09-29
+# Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor) + itens de 2026-09-24 + desvios.md (2026-09-29) + seções do BACKLOG sem plano em 2026-10-15 (feedbacks triados)
+# Escrito em: 2026-10-15
 
 schema_version: 2
 mode: single-track
 program: cepa
 source: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor)
-  + itens de 2026-09-24 + desvios.md (2026-09-29)
+  + itens de 2026-09-24 + desvios.md (2026-09-29) + seções do BACKLOG sem plano
+  em 2026-10-15 (feedbacks triados)
 items:
 - id: common-plan-etapa1
   title: /common:plan <nome> — escreve a fila single-track a partir de uma spec
@@ -1745,16 +1746,128 @@ items:
   why: 'ainda não priorizado: entrou no fim da fila. Reproduzido em 2026-10-10:
     sessão aberta em ~/coding/al2.digital/kodez.cool (sem build nenhum, mas com
     last-build.json STALE por uma edição de 92 dias antes) rodou `cd ~/coding/cepa
-    && git commit` e o hook barrou duas vezes lendo o estado de kodez.cool, não o
-    do cepa. O hook classifica o comando pelo texto (classify) e ancora o estado
+    && git commit` e o hook barrou duas vezes lendo o estado de kodez.cool, não
+    o do cepa. O hook classifica o comando pelo texto (classify) e ancora o estado
     em session_root(cwd do payload), que é a raiz da sessão, não a do repo em que
-    o git vai rodar; `cd <outro repo> && git ...` e `git -C <outro repo> ...`
-    caem no repo errado. Saída usada no dia: criar .claude/no-build em
-    kodez.cool, que é honesta ali mas não resolve o caso de sessão em repo A
-    commitando em repo B com build. Esboço: extrair do comando o diretório alvo
-    (`cd X &&`, `git -C X`) e avaliar last-build.json/no-build desse repo; se não
-    houver alvo explícito, manter session_root.'
+    o git vai rodar; `cd <outro repo> && git ...` e `git -C <outro repo> ...` caem
+    no repo errado. Saída usada no dia: criar .claude/no-build em kodez.cool, que
+    é honesta ali mas não resolve o caso de sessão em repo A commitando em repo
+    B com build. Esboço: extrair do comando o diretório alvo (`cd X &&`, `git -C
+    X`) e avaliar last-build.json/no-build desse repo; se não houver alvo explícito,
+    manter session_root.'
+  status: done
+  blocked_by: []
+  human_pending: null
+  evidence: 'Volta 2: a lateral until/2026-10-15-1513-vermelho-gate-advance-repo-do-push
+    (5 commits, 9006852..c18008b) foi mesclada por fast-forward na branch da noite;
+    o código do item não mudou. O vermelho da volta 1 não era do item: era o único
+    teste que já falhava na main, tests/test_telemetria_isolada.py acusando tests/test_capture_build_result_pytest.py
+    por citar capture-build-result sem isolar (BACKLOG 2026-10-15). Conserto num
+    commit à parte, fora do escopo do item mas pré-requisito do build verde: o arquivo
+    passa a chamar isola(). Verdes locais: test_gate_advance_repo_alvo.py, test_telemetria_isolada.py,
+    pytest test_capture_build_result_pytest.py. Gates da volta 1 mantidos: completion-auditor
+    COMPLETE (.claude/acceptance/gate-advance-repo-do-push.yaml), proof-reviewer
+    PROVEN (docs/proof/gate-advance-repo-do-push.yaml), diff idêntico. Build completo
+    (tests/run-all.sh) é do supervisor. Fora: --git-dir e -c k=v não mudam o alvo;
+    sem cd/-C vale o repo da sessão.'
+- id: perguntas-finais-nao-dizem-o-que-fazer
+  title: As perguntas finais do relatório e do until-review dizem o passo a passo,
+    não a categoria
+  why: 'herdado do BACKLOG.md § ''As perguntas finais do relatório e do until-review
+    não dizem o que fazer'' (fb-20261006-1, fb-20261014-1, fb-20261015-2). Primeiro
+    porque é o único incômodo registrado três vezes em dez dias e porque o dono
+    diz que em 99% das vezes não sabe o que responder: cada run noturno termina
+    nele.'
   status: pending
   blocked_by: []
   human_pending: null
-  evidence: null
+- id: cepa-plan-escrita-commita-e-responde-exige-resposta
+  title: Toda escrita do cepa-plan (responde, add, marca) commita o plan.yaml ou
+    avisa, e responde recusa texto que não responde à rota
+  why: herdado do BACKLOG.md § 'cepa-plan responde deixa o plan.yaml sujo e aceita
+    qualquer frase como resposta à rota' (fb-20261014-4, fb-20261015-1). Segundo
+    porque o plan.yaml sujo trava a rodada noturna (o cepa-until recusa árvore suja)
+    e já custou um commit corretivo.
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: dispensa-vira-proposta-em-run-autonomo
+  title: Em run autônomo a dispensa (waiver) é gravada como proposta pendente, e
+    só o cepa-plan responde do dono a converte em waiver
+  why: 'herdado do BACKLOG.md § ''Dispensa (waiver) gravada em nome do dono durante
+    run autônomo'' (fb-20261014-3). Terceiro porque é a decisão que o modo autônomo
+    menos pode tomar sozinho: afirma que o dono aceitou prova nenhuma.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: until-custo-deduplica-bloco-result
+  title: cepa-until conta um bloco result por rodada e a pausa de cota usa o custo
+    deduplicado
+  why: herdado do BACKLOG.md § 'cepa-until soma o bloco result repetido do .log
+    e infla o custo do run' (fb-20261013-2). Quarto porque o custo inflado 6,7 vezes
+    (334,94 contra 50,25) alimenta a pausa de cota, que decide quando o run noturno
+    para.
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: capture-build-result-grep-verify-e-mvnw-q
+  title: capture-build-result classifica build só com strings mascaradas e invocador
+    mvnw, e registra ./mvnw -q ... > log pelo código de saída
+  why: herdado do BACKLOG.md § 'gate-advance classifica grep com a palavra verify
+    como build Maven, e não registra ./mvnw -q ... > log' (fb-20261008-1). Quinto
+    porque um falso vermelho barrou um commit de plan.yaml por horas; mesma família
+    do item seguinte, e o _shellscan já tem a máscara.
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: capture-build-result-apos-estouro-de-contexto
+  title: task_dirs() acha a pasta tasks/ da sessão original quando a sessão foi
+    continuada após estouro de contexto
+  why: herdado do BACKLOG.md § 'capture-build-result fica cego quando a sessão é
+    continuada após estouro de contexto' (fb-20261005-1). Sexto porque o gate-advance
+    bloqueia o push com build verde; o esboço (varrer as pastas irmãs pelo task_id)
+    já está escrito e é pequeno.
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: build-segundo-plano-morre-aos-30-min
+  title: Medir a parada do build em segundo plano aos 30 min e gravar FAILURE com
+    o motivo em vez de silêncio
+  why: herdado do BACKLOG.md § 'Build em segundo plano morre aos 30 min sem resultado'
+    (sessão fix_build_timeout, 2026-10-02). Sétimo porque ainda não foi medido (o
+    ./mvnw verify do wego leva ~25 min e ainda cabe); começa pela medição, não pelo
+    conserto.
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: qa-engineer-prova-red-sem-worktree
+  title: qa-engineer prova RED pelo mecanismo do proof-reviewer, sem git worktree
+    add, e o resumo do cepa-until lista worktrees abertas fora do proof-reviewer
+  why: herdado do BACKLOG.md § 'Worker de QA abre worktree descartável no run noturno,
+    e o hook só vê o filho direto' (fb-20261013-3). Oitavo porque a metade de visibilidade
+    já saiu (item digest-mostra-worktree-e-build-alheio-do-qa, done); resta a prosa
+    do qa-engineer, que hoje é a única barreira.
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: from-triage-grava-ordem-aprovada
+  title: cepa-plan write --from-triage preserva done/dropped ausentes sem --on-missing
+    e aplica a ordem da triagem aos itens abertos que ela menciona
+  why: herdado do BACKLOG.md § 'cepa-plan write --from-triage não consegue gravar
+    a ordem aprovada na triagem' (fb-20261002-1). Nono porque é defeito de desenho
+    (a fila existe para guardar a ordem e o escritor não grava ordem nova), mas
+    só dói na triagem do WEGO, que roda esporadicamente; conferir antes se o subcomando
+    ordena já cobre parte.
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: board-flow-yaml-comentario-campo-team
+  title: Comentário do campo Team (customfield_10001) no template do board-flow.yaml
+    mostra os dois formatos e o erro 400 de cada um
+  why: herdado do BACKLOG.md § 'Comentário do campo Team (customfield_10001) no
+    board-flow.yaml não mostra o formato que falha' (fb-20260902-1). Último porque
+    é conserto de comentário sem teste mecânico e o atlassian-expert já sabe o formato
+    certo.
+  status: pending
+  blocked_by: []
+  human_pending: null

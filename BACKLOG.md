@@ -4125,6 +4125,8 @@ mecânico; o `jira-create-fields-gate` poderia recusar `customfield_10001` como 
 
 ## `test_telemetria_isolada.py` falha na `main`: o build completo nunca passa inteiro
 
+**Status:** feito em 2026-10-15 (commit 2851a74, aterrissado em 050b0c2): `test_capture_build_result_pytest.py` passou a chamar `isola()`; `tests/run-all.sh` na `main` saiu 117 de 117 verde.
+
 Registrado em 2026-10-15, ao rodar `tests/run-all.sh` na `main` (23b7b15) e numa
 branch filha: o único teste vermelho é sempre o mesmo, antes e depois de qualquer
 mudança.
@@ -4147,3 +4149,27 @@ lista que o teste de isolamento varre.
 ### Critério de pronto
 
 `tests/run-all.sh` na `main` termina sem "com falha".
+
+## `cepa-until` soma o custo do run repetindo o mesmo resultado várias vezes
+
+Registrado em 2026-10-15, no run `cepa/2026-10-15-1513`.
+
+### Problema
+
+O estado do run (`.claude/programs/cepa/until/<run>.estado.json`) gravou
+`custo_usd: 85.6`. O custo real foi US$ 8,29 (6,44 da volta 1 + 1,85 da volta 2,
+somando o `total_cost_usd` de cada resultado). O `.log` traz o objeto de resultado
+da volta 1 repetido 13 vezes (linhas 584 a 596, todas com o mesmo `duration_api_ms`),
+e o `cepa-until` soma cada cópia: 13 × 6,44 + 1,85 = 85,60. O `cepa-until-digest`
+já deduplica; o `cepa-until` não.
+
+### Esboço de solução
+
+Antes de somar, deduplicar os objetos de resultado pela chave que o digest já usa
+(`session_id` ou o par `duration_api_ms` + `total_cost_usd`), ou ler o custo do
+mesmo lugar que o digest lê.
+
+### Critério de pronto
+
+Um run cujo `.log` repita o objeto de resultado grava em `custo_usd` o mesmo valor
+que o `cepa-until-digest` calcula.
