@@ -1804,10 +1804,11 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
         elif r in ("s", "n"):
             devolve = r == "s"
             base = texto_pergunta or rota or "destravar o item"
-            extra = ""
-            if r == "n" or not texto_pergunta:
-                extra = str(pergunta("       Quer acrescentar algo, numa "
-                                     "linha? [Enter pula] ")).strip()
+            # Sempre há espaço para um comentário, também no `s` com
+            # pergunta redigida: o dono quis dizer algo além de sim/não e
+            # o próximo run lê o que ele escreveu (15/10).
+            extra = str(pergunta("       Quer acrescentar algo, numa "
+                                 "linha? [Enter pula] ")).strip()
             texto = (("sim" if devolve else "não") + f": {base}"
                      + (f". {extra}" if extra else ""))
         if texto:

@@ -295,7 +295,7 @@ def test_decide_s_e_n_respondem_a_pergunta_redigida():
          "question": None, "human_pending": None, "evidence": "sem produção"},
     ]
     analise = {"itens": {"W-1": {"recomendo": "sim", "porque": "só após merge"}}}
-    respostas = iter(["sim", "n", "por enquanto não", "s", "ligue a flag"])
+    respostas = iter(["sim", "", "n", "por enquanto não", "s", "ligue a flag"])
     tela, respondidos, perguntas = [], [], []
 
     def pergunta(p_):
@@ -697,11 +697,13 @@ def test_decidir_s_e_n_no_terminal_chegam_ao_plano():
         check("...com 'sim: <rota>. <acréscimo>' na evidência",
               "sim: valide o login real. vi ok" in a2["evidence"], a2)
         rc, out = em_tty(cmd, str(raiz), entradas=[
-            ("[t] escrevo a resposta", "s")])
+            ("[t] escrevo a resposta", "s"),
+            ("Quer acrescentar algo", "mas só depois do deploy")])
         a1 = itens_de(raiz)["a1"]
-        check("s no blocked com pergunta: volta para pending sem pedir linha",
+        check("s no blocked com pergunta: volta para pending, com o comentário",
               rc == 0 and a1["status"] == "pending"
-              and "sim: Fecho o card?" in a1["evidence"], (a1, out[-800:]))
+              and "sim: Fecho o card?. mas só depois do deploy" in a1["evidence"],
+              (a1, out[-800:]))
 
 
 def test_byte_invalido_no_terminal_nao_derruba_o_decidir():
