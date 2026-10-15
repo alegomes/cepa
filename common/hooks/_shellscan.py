@@ -405,6 +405,63 @@ def _cd_target(segment: str):
     return None
 
 
+def _git_dash_c(segment: str):
+    """Os argumentos de `-C` de um segmento `git [-C X]... subcomando`, em ordem.
+
+    Lista vazia se o segmento não é git ou não tem `-C`. `-c chave=valor` é
+    pulado (não muda de diretório).
+    """
+    try:
+        argv = shlex.split(segment, posix=True)
+    except ValueError:
+        return []
+    if not argv or os.path.basename(argv[0]) != "git":
+        return []
+    out, i = [], 1
+    while i < len(argv) and argv[i].startswith("-"):
+        if argv[i] == "-C" and i + 1 < len(argv):
+            out.append(os.path.expanduser(argv[i + 1]))
+            i += 2
+        elif argv[i].startswith("-C") and len(argv[i]) > 2:
+            out.append(os.path.expanduser(argv[i][2:]))
+            i += 1
+        elif argv[i] == "-c":
+            i += 2
+        else:
+            i += 1
+    return out
+
+
+def segment_dirs(command: str, cwd: str) -> list:
+    """`[(segmento, diretório, explícito)]` para cada segmento que NÃO é `cd`.
+
+    O diretório é onde o segmento roda: o do último `cd` que o antecede na
+    linha (relativo ao `cwd`; `~` expandido) e, num `git -C X ...`, o `X`
+    resolvido a partir daí. `explícito` é False quando nem `cd` nem `-C`
+    mexeram no diretório (o segmento roda no `cwd` do payload). É a mesma
+    resolução do `edited_paths`, exposta para quem precisa saber ONDE um
+    comando age (ex.: `gate-advance`, que avalia o repo que recebe o commit).
+    """
+    base = os.path.abspath(cwd)
+    explicit = False
+    out = []
+    for seg in _split_segments(command):
+        seg = seg.strip()
+        if not seg:
+            continue
+        destino = _cd_target(seg)
+        if destino is not None:
+            base = os.path.normpath(os.path.join(base, destino))
+            explicit = True
+            continue
+        d, exp = base, explicit
+        for c in _git_dash_c(seg):
+            d = os.path.normpath(os.path.join(d, c))
+            exp = True
+        out.append((seg, d, exp))
+    return out
+
+
 def edited_paths(payload: dict) -> list:
     """Caminhos absolutos que esta chamada de ferramenta escreveu.
 

@@ -43,6 +43,13 @@ What does NOT get gated:
     browser-extension repo that has no build at all). The warning still
     asks for the `.claude/no-build` marker to make the opt-out explicit.
 
+Which repo is judged: the one that RECEIVES the commit/push, not the one the
+session runs in. `cd X && git commit` / `git -C X push` read `.claude/no-build`,
+`last-build.json` and the build manifest at X's repo root. Seen 2026-10-10: a
+session in kodez.cool (STALE baseline) ran `cd ~/coding/cepa && git commit` and
+was blocked by kodez.cool's state. No cd / -C: the session's repo, as before.
+Any failure resolving the target falls back to the session's repo (fail-open).
+
 UNKNOWN status (state file present but unrecognized) is treated as
 FAILURE (something's off; don't proceed).
 """
@@ -56,6 +63,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _wtlib as L  # noqa: E402
+import _shellscan as S  # noqa: E402
 
 
 def harvest_background(session_id):
@@ -80,17 +88,22 @@ except Exception:  # telemetry must never break the gate
             pass
 
 
+# Optional `-C <dir>` (or attached `-C<dir>`) between `git` and the subcommand:
+# `git -C other-repo push` is the same operation as `cd other-repo && git push`
+# and must not slip past the gate. Nothing else is widened (no --git-dir, -c k=v).
+GIT_C = r"(?:\s+-C\s*\S+)*"
+
 # Local operations: commit. Recoverable with git reset; missing baseline
 # falls open with a loud warning (H1).
 LOCAL_PATTERNS = [
-    re.compile(r"(?:^|\s|&&\s|;\s)git\s+commit\b"),
+    re.compile(r"(?:^|\s|&&\s|;\s)git" + GIT_C + r"\s+commit\b"),
 ]
 
 # Sharing operations: push code to others / deploy. Missing baseline
 # fails CLOSED (H2). Once your work crosses the boundary out of your
 # machine, it's unrecoverable — the gate forces a baseline first.
 SHARING_PATTERNS = [
-    re.compile(r"(?:^|\s|&&\s|;\s)git\s+push\b"),
+    re.compile(r"(?:^|\s|&&\s|;\s)git" + GIT_C + r"\s+push\b"),
     re.compile(r"(?:^|\s|&&\s|;\s)gh\s+pr\s+(?:create|merge|review\s+--approve)\b"),
     re.compile(r"(?:^|\s|&&\s|;\s)gh\s+release\b"),
     re.compile(r"(?:^|\s|&&\s|;\s)kubectl\s+apply\b"),
@@ -111,7 +124,7 @@ EXEMPT_PATTERNS = [
     re.compile(r"(?:^|\s|&&\s|;\s)cargo\s+(?:test|build|check)\b"),
     re.compile(r"(?:^|\s|&&\s|;\s)go\s+test\b"),
     # Allow git operations that don't push state out
-    re.compile(r"(?:^|\s|&&\s|;\s)git\s+(?:status|log|diff|show|stash|checkout|restore|reset|add|rm|mv|fetch|pull|merge|rebase|branch|tag|worktree|config|remote)\b"),
+    re.compile(r"(?:^|\s|&&\s|;\s)git" + GIT_C + r"\s+(?:status|log|diff|show|stash|checkout|restore|reset|add|rm|mv|fetch|pull|merge|rebase|branch|tag|worktree|config|remote)\b"),
 ]
 
 
@@ -161,6 +174,23 @@ def classify(command: str) -> str:
     return "unrelated"
 
 
+def target_dir(command: str, cwd: str):
+    """Directory the gated segment of `command` acts in, or None if not explicit.
+
+    Never raises: any parse problem means "no explicit target" (today's anchor).
+    """
+    try:
+        for seg, d, explicit in S.segment_dirs(command, cwd):
+            if classify(seg) in ("local", "sharing"):
+                # Alvo que não resolve (`cd $VAR`, `cd -`, caminho inexistente)
+                # é falha de resolução, não um repo sem build: volta ao repo
+                # da sessão.
+                return d if explicit and os.path.isdir(d) else None
+    except Exception:
+        pass
+    return None
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -188,7 +218,11 @@ def main():
     # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
     # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
     # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
-    cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
+    # Mas se o comando age em OUTRO repo (`cd X && git commit`, `git -C X ...`),
+    # é a baseline do repo que recebe o commit que vale (2026-10-10).
+    sessao = payload.get("cwd") or os.getcwd()
+    alvo = target_dir(command, sessao) or sessao
+    cwd = Path(L.session_root(alvo)).resolve()
 
     # Explicit opt-out. A project with no build to verify declares it by
     # creating `.claude/no-build`. The gate has nothing to baseline here,
