@@ -1,0 +1,71 @@
+schema_version: 1
+card: cepa-until-questions
+status: complete
+audited_at: 2026-10-15T16:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Menu por item: [s] sim, [n] não, [t] escrevo a resposta, [Enter] depois, [q] encerra (e [e] com evidência); [r]/[f]/[m] sumiram"
+    altitude: cli
+    surface: "prompt de opções de decide()"
+    demonstrated_by:
+      test: "test_decide_s_e_n_respondem_a_pergunta_redigida (assert do menu completo e da ausência de [r]/[f]/[m])"
+      layer: decide() com strings reais
+      evidence: verified
+      run: "python3 tests/test_cepa_until_decidir.py -> exit 0, 110 linhas 'ok', 0 falhas, '✓ tudo verde' (18s)"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "s chama responde sem --mantem com 'sim: <pergunta>'; n com --mantem e 'não: <pergunta>'; t pede a linha e depois 'Devolvo o item para a fila...? [s/N]'"
+    altitude: cli
+    surface: "cepa-until decidir -> cepa-plan responde (plan.yaml)"
+    demonstrated_by:
+      test: "test_decidir_s_e_n_no_terminal_chegam_ao_plano (pty, cepa-plan real) + test_decide_s_e_n_respondem_a_pergunta_redigida"
+      layer: pty real + decide() mockado
+      evidence: verified
+      run: "python3 tests/test_cepa_until_decidir.py -> exit 0, 110 linhas 'ok', 0 falhas, '✓ tudo verde' (18s)"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Sem pergunta redigida, mostra a padrão (blocked: 'destravo o item e devolvo para a fila?'; human_pending: 'já fez?')"
+    altitude: cli
+    surface: "saída de decide()"
+    demonstrated_by:
+      test: "test_decide_s_e_n_respondem_a_pergunta_redigida (W-3 blocked; W-9 human_pending com question=None)"
+      layer: decide()
+      evidence: verified
+      run: "python3 tests/test_cepa_until_decidir.py -> exit 0, 110 linhas 'ok', 0 falhas, '✓ tudo verde' (18s)"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "Recomendação marca a letra '(recomendado)'; legenda fixa do que sim/não fazem"
+    altitude: cli
+    surface: "prompt e saída de decide()"
+    demonstrated_by:
+      test: "test_decide_s_e_n_respondem_a_pergunta_redigida"
+      layer: decide() com strings reais
+      evidence: verified
+      run: "python3 tests/test_cepa_until_decidir.py -> exit 0, 110 linhas 'ok', 0 falhas, '✓ tudo verde' (18s)"
+    verdict: complete
+    gap: 'Menor, não bloqueia: só a letra s recomendada é testada, não a n.'
+  - id: AC5
+    text: "Título cortado em 60 caracteres"
+    altitude: cli
+    surface: "saída de decide()"
+    demonstrated_by:
+      test: "test_decide_s_e_n_respondem_a_pergunta_redigida (90 chars -> 59 + '…')"
+      layer: decide()
+      evidence: verified
+      run: "python3 tests/test_cepa_until_decidir.py -> exit 0, 110 linhas 'ok', 0 falhas, '✓ tudo verde' (18s)"
+    verdict: complete
+    gap: null
+  - id: AC6
+    text: "Instruções dos redatores: máx. 25 palavras, sem nome de branch/classe/arquivo, 'sim' = volta para a fila"
+    altitude: cli
+    surface: "common/commands/until-review.md, drain-plan.md e `cepa-plan finish --help`"
+    demonstrated_by:
+      test: "test_instrucoes_dos_agentes_pedem_a_pergunta (3 asserts x 3 textos, help executado de verdade)"
+      layer: leitura de texto + execução do help
+      evidence: verified
+      run: "python3 tests/test_cepa_until_decidir.py -> exit 0, 110 linhas 'ok', 0 falhas, '✓ tudo verde' (18s)"
+    verdict: complete
+    gap: null
