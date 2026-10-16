@@ -1,0 +1,44 @@
+schema_version: 2
+card: next-nome-do-programa-nao-e-project-key
+verdict: proven
+reviewed_at: 2026-10-16T00:00:00-03:00
+base_commit: 43cd40c
+head_commit: 8d0d5a3
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/commands/next.md:1. Locate the plan", module: commands, external_observable: true, substituted_by_double: null }
+    - { class: "docs/execution-plan.md:What the file is called", module: docs, external_observable: false, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan:cmd_status/filas_single_track (regra espelhada, nao alterada no diff)", module: bin, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/markdown sem pitest; PIT nao se aplica"
+    perturbation:
+      status: pass
+      results:
+        - "rodada 1 (head 9dbab3c), worktree /tmp/proof-next-naming-a1: baseline python3 tests/test_plan_program_naming.py -> all green"
+        - "P1 (regra 2 antiga de volta, git show 43cd40c:common/commands/next.md): 6 falhas, rc=1 -> RED"
+        - "P2 ('**Never pick' -> '**Always pick' em next.md): 1 falha, rc=1 -> RED"
+        - "P3 (titulo '### What the file is called' -> '### Naming' no doc): 1 falha, rc=1 -> RED"
+        - "P4 (cmd_status: 'if len(nomes) > 1:' -> 'if False:'): 4 falhas no cenario 2 (resolveu WEGO em silencio), rc=1 -> RED"
+        - "P5 (filas_single_track devolve ['WEGO'] se a pasta existir): 4 falhas no cenario 2, rc=1 -> RED"
+        - "vizinhos no HEAD sem perturbacao: test_plan_anchor_root.py, test_common_next.py, test_fio_condutor.py -> all green, exit 0"
+        - "rodada 2 (head 8d0d5a3), worktree /tmp/proof-next-naming-b7: baseline python3 tests/test_plan_program_naming.py -> all green rc=0"
+        - "P6 ('whatever its folder is called' -> 'under its project key' em next.md): 1 falha, 'next: a fila unica vale com qualquer nome de pasta', rc=1 -> RED"
+        - "P7 ('item counts by' -> 'totals per' em next.md): 1 falha, 'next: com varias, a lista mostra nome, source e contagens', rc=1 -> RED"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "commit 8d0d5a3 acrescentou as duas checagens em half_a; P6 e P7 acertam, cada uma, exatamente uma das duas frases antes sem trava e ficam RED isoladas; as demais linhas alteradas sao atingidas por P1-P5"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera so prosa de comando, uma secao de doc e um teste; nao abre superficie de entrada externa e nao toca modulo input-bearing (nao ha api-rest neste repo)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Sete perturbacoes (prosa de next.md, secao do doc, regra da ferramenta nas duas direcoes, e as duas frases secundarias travadas em 8d0d5a3) ficaram todas RED no teste que deveria acusar; baseline e vizinhos verdes; nenhum double no caminho; nada assumed/skipped. PROVEN."
