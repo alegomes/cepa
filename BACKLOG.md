@@ -4368,7 +4368,7 @@ uma única chamada ao lead por rodada, sem mensagem de retomada do orquestrador.
 
 ## `planning-lead` do `build-hex` chama os workers sem o prefixo do plugin, e as três chamadas falham
 
-**Plano:** nenhum ainda
+**Plano:** fila cepa, item `planning-lead-workers-sem-prefixo`
 
 **Status:** pendente · **Lar provável:** `build-hex/agents/planning-lead.md` (seção
 "Workflow", passo 2) e, pela mesma regra, `engineering-lead.md` e `validation-lead.md`, que
@@ -4399,7 +4399,7 @@ delegação exista em `<plugin>/agents/` e venha com o prefixo `<plugin>:`.
 
 ## Depois do `wrap-up`, o relatório seguinte reabre uma frente nova
 
-**Plano:** nenhum ainda
+**Plano:** fila cepa, item `relatorio-pos-wrap-up-abre-frente-nova`
 
 **Status:** pendente · **Lar provável:** `common/commands/metrics.md` (passo 3, "destaque a
 UMA ação de maior retorno e ofereça executá-la"), `common/skills/plain-report/SKILL.md`
