@@ -117,6 +117,7 @@ form (`/plan-build-validate`) returns "Unknown command".
 ### "I want a second opinion on a decision before closing it"
 
 - `/common:advisors <artifact>`. Isolated review lenses, then a synthesis that names the disagreements.
+- `/common:gauntlet <target>`. Blind design competition: bar first, isolated builders, blind judges with Borda count, revised winner.
 
 ### "I want to open or merge a pull request through the gates"
 
@@ -168,6 +169,7 @@ topology is wired.
 | `/common:until-review` | `[<run>.jsonl \| latest] [--fila NOME]` | Reads a finished `cepa-until` run (the `.jsonl` record and the subprocess `.log`) and says what the owner must do next, as closed questions with a recommendation. Runs by itself at the end of every run (written to `<run>.review.md`) and by hand for an old run or one stopped by quota. Reads the mechanical digest from `cepa-until-digest`, never the whole `.log`. Ends with a `json cepa-decisoes` block (question + recommendation for landing and for every deferred item) that `cepa-until` shows when it asks the owner; the block only words the question, the actions stay a closed list. Read-only: no merge, no queue change, no Jira. |
 | `/common:modos` | `[mode-name]` | Shows the table of working modes (what each asks to enter, what it produces, what must be true to close) and marks the current session's mode. Read-only. |
 | `/common:advisors` | `<artifact> [--area=…] [--lentes=a,b,c]` | Advisor panel on a decision artifact (design doc, ADR, plan, PR): isolated parallel review lenses, then a synthesis that **names** the disagreements instead of averaging them. Runs before the decision is closed. |
+| `/common:gauntlet` | `<alvo> [--builders=3] [--angulos=a,b,c] [--slug=<slug>]` | Blind design competition for an OPEN design decision: quality bar written first, N isolated builders with distinct angles, 3 blind judges ranked by Borda count, winner revised and checked; writes `docs/internals/gauntlet-<slug>.md`. Opt-in (~600k tokens); refuses provable code. |
 | `/common:prove-ui` | `[flow \| --all \| --draft]` | Proves the UI/extension surface through the mechanical gate: brings the app up, runs the flows declared in `docs/ui-proof.yaml` via Playwright and requires a verifiable backend effect. Returns PROVEN / UNPROVEN / NEEDS-HUMAN. `--draft` proposes a manifest skeleton. |
 | `/common:consolidate` | `[agent \| --all]` | Periodic consolidation of the agents' expertise files: merges redundant entries and retires the ones current code contradicts (always verified against the repo). Shows a before/after diff and writes only after your approval. |
 

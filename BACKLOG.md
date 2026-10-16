@@ -1862,7 +1862,7 @@ argumento do `sed`.
 
 **Plano:** `cepa/comando-gauntlet` (descartado)
 
-**Status:** pendente (aprovado para cristalizar em 2026-08-15, após 2 pilotos) ·
+**Status:** entregue em 2026-10-16 (item gauntlet-comando da fila cepa; comando em common/commands/gauntlet.md) ·
 **Lar provável:** `common` · **Origem:** pergunta do dono "how can we add Gauntlet Loop
 abilities into Cepa?" (2026-08-14) + 2 pilotos rodados via tool Workflow em 2026-08-15.
 
