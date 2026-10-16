@@ -1,0 +1,50 @@
+schema_version: 2
+card: worker-consentimento-fora-do-prompt
+verdict: unproven
+reviewed_at: 2026-10-16T12:00:00-03:00
+base_commit: e89f95c
+head_commit: 0559159
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "build-hex/hooks/path-lock.py (extra_globs_provenance + main)"
+      module: build-hex-hook
+      external_observable: true
+      substituted_by_double: null   # o teste executa o hook real como subprocesso; repositorios git reais em tmpdir
+    - class: "build-hex/agents/{domain-dev,api-dev,adapter-dev,qa-engineer,engineering-lead}.md (prosa)"
+      module: build-hex-prompts
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # repo Python, sem PIT
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "baseline: python3 tests/test_worker_consent_channel.py -> 15 checks ok, 'tudo verde'"
+        - "P1 provenance sempre (True,''): RED, 6 falhas (a,b,d,f,h,i1)"
+        - "P2 git diff --quiet sem HEAD: RED, 2 falhas (b,h)"
+        - "P3 sem ls-files --error-unmatch: RED, 2 falhas (a,i1)"
+        - "P4 sem rev-parse --is-inside-work-tree: SOBREVIVEU (tudo verde). ls-files ja falha fora de repo, entao o resultado (bloqueio, exit 2) e identico; so muda o motivo na mensagem (REASON_UNTRACKED em vez de REASON_NO_GIT) e o caso f nao assere o motivo"
+        - "P5a extras fundidos na lista canonica (extras sempre honrados): RED, 6 falhas"
+        - "P5b ordem trocada (extras julgados antes do canonico, canonical check desligado): RED, caso e (permite caminho canonico com yaml nao rastreado) bloqueia"
+        - "P6 falha de proveniencia cai para a mensagem generica (sys.exit(2) trocado por pass): SOBREVIVEU (tudo verde). Sai a mensagem especifica E a generica, ambas com exit 2; caso a so confere substrings 'build-hex.yaml' e 'commit', e g so confere ausencia de 'committed' no caminho sem extras"
+        - "P7 ancora removida de domain-dev / api-dev / adapter-dev / qa-engineer / engineering-lead: RED em cada um (1 falha, a do proprio arquivo)"
+        - "P8 trecho 'honored only when committed' removido de docs/internals/path-lock.md: RED"
+        - "prosa: so existe altitude de presenca de texto (nao ha como provar que o modelo obedece); o teste prova que a bala esta no arquivo, nao que o worker a segue"
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura no repo; alcance dos ramos de extra_globs_provenance e do bloco de extras inferido pelas perturbacoes P1 a P6 (todos os ramos exceto rev-parse e a unicidade da mensagem provados por RED)"
+  l4_adversarial_input:
+    status: skipped
+    reason: "o hook le o payload JSON do harness (file_path, agent_type, cwd); nao foi feita busca adversarial (symlink, caminhos com .., build-hex.yaml como diretorio) nesta rodada"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "nao e Bug"
+routing_reason: "As decisoes de permitir/bloquear (exit 0/2) estao todas travadas por RED. Duas mutacoes sobreviveram, ambas so na mensagem de erro e no ramo redundante de rev-parse: P4 (checagem de repo git, o caso f nao assere o motivo) e P6 (mensagem especifica de proveniencia, o caso a nao assere que ela vem sozinha). Pelo roteamento mecanico, mutacao sobrevivente em linha alterada = UNPROVEN. Correcao pequena: no caso f assertar 'not inside a git repository' em err; no caso a assertar que err NAO contem 'Allowed write globs' (mensagem generica)."

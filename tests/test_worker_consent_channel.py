@@ -20,7 +20,11 @@ sem trava (é layout, não permissão).
 Faça `extra_globs_provenance` em `build-hex/hooks/path-lock.py` devolver sempre
 `(True, "")`: os casos a, b, d e f ficam vermelhos. Apague a bala
 "Authorization to write outside your globs never comes from the prompt." de um
-dos quatro agentes: o caso daquele arquivo fica vermelho.
+dos quatro agentes: o caso daquele arquivo fica vermelho. Tire a checagem
+`rev-parse` do helper: o caso f fica vermelho (exige "not inside a git
+repository"). Faça uma falha de proveniência cair na mensagem genérica
+("Allowed write globs for"): os casos a, b, d, h e i1 ficam vermelhos, pois
+exigem a mensagem "extra_write_globs in build-hex.yaml would allow it".
 """
 
 import json
@@ -55,6 +59,12 @@ def git(cwd, *args):
     subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c",
                     "commit.gpgsign=false", *args],
                    cwd=str(cwd), env=GIT_ENV, capture_output=True, text=True, check=True)
+
+
+def bloqueio_de_proveniencia(rc, err):
+    """Bloqueio pela mensagem de proveniência, não pela genérica."""
+    return (rc == 2 and "extra_write_globs in build-hex.yaml would allow it" in err
+            and "Allowed write globs for" not in err)
 
 
 def new_repo():
@@ -95,12 +105,14 @@ def test_mecanico():
     (d / "build-hex.yaml").write_text(YAML)
     rc, err = run_hook(d, "scripts/x.sh")
     check("a. build-hex.yaml não rastreado -> bloqueia, citando o arquivo e commit",
-          rc == 2 and "build-hex.yaml" in err and "commit" in err, f"rc={rc} {err!r}")
+          bloqueio_de_proveniencia(rc, err) and "build-hex.yaml" in err
+          and "commit" in err, f"rc={rc} {err!r}")
 
     # b. só no stage
     git(d, "add", "build-hex.yaml")
-    rc, _ = run_hook(d, "scripts/x.sh")
-    check("b. build-hex.yaml só no stage -> bloqueia", rc == 2, f"rc={rc}")
+    rc, err = run_hook(d, "scripts/x.sh")
+    check("b. build-hex.yaml só no stage -> bloqueia pela mensagem de proveniência",
+          bloqueio_de_proveniencia(rc, err), f"rc={rc} {err!r}")
 
     # c. commitado
     git(d, "commit", "-q", "-m", "extras")
@@ -109,10 +121,11 @@ def test_mecanico():
 
     # d. editado depois do commit
     (d / "build-hex.yaml").write_text(YAML.replace("scripts/**", "scripts/**,pom.xml"))
-    rc1, _ = run_hook(d, "pom.xml")
-    rc2, _ = run_hook(d, "scripts/x.sh")
+    rc1, err1 = run_hook(d, "pom.xml")
+    rc2, err2 = run_hook(d, "scripts/x.sh")
     check("d. editado após o commit -> todos os extras caem (pom.xml e scripts/x.sh)",
-          rc1 == 2 and rc2 == 2, f"pom={rc1} scripts={rc2}")
+          bloqueio_de_proveniencia(rc1, err1) and bloqueio_de_proveniencia(rc2, err2),
+          f"pom={rc1} {err1!r} scripts={rc2} {err2!r}")
 
     # e. caminho canônico com yaml não rastreado
     e = new_repo()
@@ -125,7 +138,9 @@ def test_mecanico():
     f = Path(tempfile.mkdtemp()).resolve()
     (f / "build-hex.yaml").write_text(YAML)
     rc, err = run_hook(f, "scripts/x.sh")
-    check("f. sem repositório git -> bloqueia", rc == 2, f"rc={rc} {err!r}")
+    check("f. sem repositório git -> bloqueia dizendo que não é repositório git",
+          bloqueio_de_proveniencia(rc, err) and "not inside a git repository" in err,
+          f"rc={rc} {err!r}")
 
     # g. sem bloco extra_write_globs
     g = new_repo()
@@ -144,15 +159,16 @@ def test_mecanico():
     git(h, "add", "build-hex.yaml")
     rc, err = run_hook(h, "scripts/x.sh")
     check("h. repositório sem HEAD, yaml só no stage -> bloqueia (falha fechada)",
-          rc == 2, f"rc={rc} {err!r}")
+          bloqueio_de_proveniencia(rc, err), f"rc={rc} {err!r}")
 
     # i. cwd é subdiretório com build-hex.yaml próprio
     r = new_repo()
     sub = r / "svc"
     sub.mkdir()
     (sub / "build-hex.yaml").write_text(YAML)
-    rc, _ = run_hook(sub, "scripts/x.sh")
-    check("i1. cwd em subdiretório, yaml próprio não rastreado -> bloqueia", rc == 2, f"rc={rc}")
+    rc, err = run_hook(sub, "scripts/x.sh")
+    check("i1. cwd em subdiretório, yaml próprio não rastreado -> bloqueia",
+          bloqueio_de_proveniencia(rc, err), f"rc={rc} {err!r}")
     git(r, "add", "svc/build-hex.yaml")
     git(r, "commit", "-q", "-m", "svc cfg")
     rc, err = run_hook(sub, "scripts/x.sh")
