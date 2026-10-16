@@ -26,7 +26,10 @@ tiver algo, não uma vez por semana.
 - Não inventa motivo. Card que não casa com nenhum dos sete **para o comando**,
   com o card nomeado. Ver "A lista é fechada" em
   [docs/needs-human-motivos.md](../../docs/needs-human-motivos.md).
-- Não escreve nada no Jira antes de você responder.
+- Não escreve nada no Jira antes de você responder — fora o que o
+  `common/autonomy.yaml` põe na faixa `executa_e_reporta` (passo 5b: re-rodar
+  prova, card de infra agregado, comentário), que é feito e reportado.
+  Avançar card é sempre pergunta.
 
 ## Variables
 
@@ -87,10 +90,13 @@ Os `nao-rodou` não viram pergunta. Para eles:
   commit-base sumido, trava do harness).
 - Re-rode `/board-flow:prove` nos cards cuja causa é transitória (Docker,
   build) — não proponha: é a ação `rerodar-prove` da faixa `executa_e_reporta`
-  do `common/autonomy.yaml` (passo 5b), e vira linha de informação no relatório.
+  do `common/autonomy.yaml`, e vira linha de informação no relatório. A regra
+  geral de consulta é o passo 5b; aqui a classificação já é conhecida
+  (`cepa-autonomy classificar --id rerodar-prove` confirma).
 - Para causa persistente (ferramenta que não está instalada no projeto), crie
   **um** card de infra agregando todos — nunca um card por card travado. Também
-  faixa automática (`card-infra-agregado`). No levantamento de 03/08/2026 eram
+  faixa automática (`card-infra-agregado`: card com label `infra`, informe
+  `--cond label=infra` na consulta). No levantamento de 03/08/2026 eram
   11 cards com a mesma causa (`wego-assinatura-backend` sem quarkus-jacoco/PIT),
   que viraram o WEGO-2004.
 - Com `--dry-run`, as duas voltam a ser proposta: nada é executado.
@@ -124,6 +130,7 @@ arquivo versionado que diz, por ação, se o agente **faz e reporta** ou
 
 ```
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-autonomy" classificar --mcp <ferramenta>   # ou --bash "<comando>", --path <arquivo>, --slash </comando>, --id <acao>
+#   --cond chave=valor para condição do detect que você já conferiu (label=infra, branch_atual=main)
 ```
 
 (`${CLAUDE_PLUGIN_ROOT}/bin/cepa-autonomy` é um atalho para o
@@ -142,6 +149,8 @@ O que a resposta muda:
   trouxer `precondicao`, confira-a antes de agir (ex.: apagar branch só se
   `git merge-base --is-ancestor` disser que está contida); falhou, a ação é
   `descartar-trabalho` e cai na faixa de pergunta.
+  `git branch -D` sem essa conferência é proibido: na Fase 1 quem roda a
+  precondição é você, porque o hook que a roda sozinho é da Fase 2.
 - **`sempre_pergunta`** (irreversível ou de fora: push, merge em integração,
   descartar trabalho, transição terminal no board, segredo, terceiros) → entra
   no lote do passo 6, como sempre. Avançar card para Done é

@@ -10,15 +10,19 @@
 #
 # Cada ação carrega `detect:` — a impressão digital da ação, para que CÓDIGO
 # (não o julgamento do agente no turno) reconheça o tool-call:
-#   bash:  regex casada contra cada segmento do comando de terminal (`&&`, `;`)
+#   bash:  regex casada contra CADA segmento do comando (`&&`, `;`, `|`, `||`, `&`,
+#          prefixo VAR=valor e `$(` removidos). O comando inteiro só é automático
+#          se TODOS os segmentos forem; um segmento de pergunta ou não listado
+#          puxa o comando inteiro para a pergunta.
 #   mcp:   regex casada contra o nome da ferramenta MCP
 #   path:  regex casada contra o caminho tocado (+ `op:` delete|any, default any)
 #   slash: regex casada contra o comando /plugin:nome invocado
 # `precondicao` é a condição que torna a ação reversível; quem a confere é o
 # hook (Fase 2, autonomy-gate.py), rodando o comando — nunca presumida. Chaves
 # extras no detect (branch_atual, destino_terminal, label) são condições que o
-# mesmo hook resolve; a leitura da Fase 1 as devolve como `condicoes` e deixa
-# a ação na faixa mais segura quando não consegue conferir.
+# mesmo hook resolve. Na Fase 1 quem consulta pode passá-las (`--cond label=infra`);
+# condição não informada NÃO libera ação automática (o item não casa) e NÃO
+# impede ação de pergunta (casa, e a condição volta em `condicoes`).
 #
 # Override por repo em `.claude/autonomy.yaml`: só pode MOVER uma ação para
 # `sempre_pergunta` (ou acrescentar ações a ela). Endurecer é local; afrouxar
@@ -32,9 +36,13 @@ versao: 2
 
 executa_e_reporta:
   - id: rodar-build
-    detect: {bash: '(^|\s)(mvn|\./mvnw|npm (test|run build)|pytest|gradle|\./gradlew)(\s|$)'}
+  # ancorada no início do segmento; flags (com um valor) antes do goal; e NUNCA com
+  # deploy/publish/release/upload no comando — esses publicam para fora (revisão 2026-10-16)
+    detect: {bash: '^(?!.*\b(deploy|publish|release|upload)\b)((mvn|\./mvnw|gradle|\./gradlew)\s+(-\S+(\s+[^-\s]\S*)?\s+)*(clean|compile|test|verify|package|install|build|check)(\s|$)|npm (test|run (build|test))(\s|$)|pytest(\s|$)|python3? -m pytest(\s|$))'}
   - id: commit-local
     detect: {bash: '^git commit(\s|$)'}
+  - id: card-infra-agregado     # o padrão WEGO-2004 do decide.md passo 4; antes de criar-card porque exige a condição label
+    detect: {mcp: '(createJiraIssue|jira_create_issue)$', label: 'infra'}
   - id: criar-card              # card não-terminal (dívida, infra, follow-up) — fechável, logo reversível
     detect: {mcp: '(createJiraIssue|jira_create_issue)$'}
   - id: comentar-card
@@ -51,8 +59,6 @@ executa_e_reporta:
     detect: {path: '\.claude/programs/.*/plan\.yaml$'}
   - id: rerodar-prove           # decide.md passo 4 propunha; passa a fazer
     detect: {slash: '^/board-flow:prove(-drain)?(\s|$)'}
-  - id: card-infra-agregado     # o padrão WEGO-2004 do decide.md passo 4
-    detect: {mcp: '(createJiraIssue|jira_create_issue)$', label: 'infra'}
 
 sempre_pergunta:
   - id: push-remoto

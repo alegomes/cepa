@@ -100,6 +100,26 @@ def test_casamento_mecanico_dos_tool_calls():
         (dict(path="/Users/a/.zsecrets", op="edit"), "sempre_pergunta", "segredo"),
         (dict(path="apps/web/.env.local", op="edit"), "sempre_pergunta", "segredo"),
         (dict(slash="/board-flow:prove-drain --max 5"), "executa_e_reporta", "rerodar-prove"),
+        # revisão do par (2026-10-16): regex solta de build e comando composto lavado
+        (dict(bash="mvn deploy"), "sempre_pergunta", None),
+        (dict(bash="gradle publish"), "sempre_pergunta", None),
+        (dict(bash="mvn verify deploy"), "sempre_pergunta", None),
+        (dict(bash="./mvnw -Dskip=1 deploy"), "sempre_pergunta", None),
+        (dict(bash="rm -rf data pytest"), "sempre_pergunta", None),
+        (dict(bash="comando-desconhecido && pytest"), "sempre_pergunta", None),
+        (dict(bash="pytest; rm -rf x"), "sempre_pergunta", None),
+        (dict(bash="FOO=1 pytest -k x"), "executa_e_reporta", "rodar-build"),
+        (dict(bash="python3 -m pytest tests/x.py"), "executa_e_reporta", "rodar-build"),
+        (dict(bash="cd a && ./mvnw -q -pl api verify && git commit -m x"), "executa_e_reporta", "rodar-build"),
+        (dict(bash="echo ok | git push"), "sempre_pergunta", "push-remoto"),
+        (dict(bash="$(git push origin x)"), "sempre_pergunta", "push-remoto"),
+        (dict(bash="(git push)"), "sempre_pergunta", "push-remoto"),
+        (dict(bash="pytest && echo fim && git push"), "sempre_pergunta", "push-remoto"),
+        (dict(bash="git commit -m 'fix (x)'"), "executa_e_reporta", "commit-local"),
+        (dict(bash="git merge x", cond={"branch_atual": "main"}), "sempre_pergunta", "merge-integracao"),
+        (dict(bash="git merge x", cond={"branch_atual": "feature/y"}), "sempre_pergunta", None),
+        (dict(mcp="mcp__Atlassian__createJiraIssue"), "executa_e_reporta", "criar-card"),
+        (dict(mcp="mcp__Atlassian__createJiraIssue", cond={"label": "infra"}), "executa_e_reporta", "card-infra-agregado"),
     ]
     for entrada, faixa, ident in casos:
         r = aut.casar(cfg, **entrada)
@@ -163,12 +183,13 @@ def test_plugin_yaml_malformado_cai_tudo_em_pergunta(tmp):
         "executa_e_reporta:\n"
         "  - {id: sem-detect}\n"
         "  - {id: regex-ruim, detect: {bash: '('}}\n"
+        "  - {id: dois-padroes, detect: {bash: '^x', mcp: 'y'}}\n"
         "sempre_pergunta: []\n",
         encoding="utf-8",
     )
     cfg = aut.carregar(None, plugin_yaml=ruim)
-    check(cfg["executa_e_reporta"] == [], "item sem detect e item com regex inválida são descartados")
-    check(len(cfg["avisos"]) == 2, f"um aviso por item descartado: {cfg['avisos']}")
+    check(cfg["executa_e_reporta"] == [], "item sem detect, regex inválida e dois padrões num detect são descartados")
+    check(len(cfg["avisos"]) == 3, f"um aviso por item descartado: {cfg['avisos']}")
     check(aut.casar(cfg, bash="git commit")["faixa"] == "sempre_pergunta",
           "sem lista válida, tudo cai em pergunta (o lado seguro)")
     cfg2 = aut.carregar(None, plugin_yaml=Path(tmp) / "inexistente.yaml")
@@ -192,6 +213,10 @@ def test_cli_classificar_e_listar():
                        capture_output=True, text=True, env=env, cwd=REPO)
     check("não listado" in r.stdout and "common/autonomy.yaml" in r.stdout,
           "não listado: manda perguntar e propor o id no arquivo")
+
+    r = subprocess.run([sys.executable, str(CLI), "classificar", "--mcp", "mcp__Atlassian__createJiraIssue",
+                        "--cond", "label=infra", "--json"], capture_output=True, text=True, env=env, cwd=REPO)
+    check(json.loads(r.stdout)["id"] == "card-infra-agregado", "cli --cond chave=valor libera a condição do detect")
 
     r = subprocess.run([sys.executable, str(CLI), "classificar", "--id", "transicao-terminal"],
                        capture_output=True, text=True, env=env, cwd=REPO)
@@ -232,6 +257,10 @@ def test_decide_le_a_lista():
     check("Re-rode `/board-flow:prove`" in s and "crie\n  **um** card de infra" in s,
           "passo 4 passou de propor para fazer (rerodar-prove e card-infra-agregado)")
     check("--dry-run" in s and "nem executa" in s, "--dry-run continua sem executar nada")
+    check("fora o que o" in s and "`executa_e_reporta` (passo 5b" in s,
+          "o bloco 'O que ele NÃO faz' declara a exceção da faixa automática (não contradiz as Constraints)")
+    check("`git branch -D` sem essa conferência é proibido" in s,
+          "apagar branch sem rodar a precondição é proibido na Fase 1")
 
 
 def main():

@@ -62,7 +62,15 @@ def cmd_classificar(args, lib):
             item = next(i for i in cfg[faixa] if i["id"] == args.id)
             res["precondicao"] = item.get("precondicao")
     else:
-        res = lib.casar(cfg, bash=args.bash, mcp=args.mcp, path=args.path, op=args.op, slash=args.slash)
+        cond = {}
+        for c in args.cond:
+            if "=" not in c:
+                print(f"--cond espera CHAVE=VALOR, veio {c!r}", file=sys.stderr)
+                return 2
+            k, v = c.split("=", 1)
+            cond[k.strip()] = v.strip()
+        res = lib.casar(cfg, bash=args.bash, mcp=args.mcp, path=args.path, op=args.op,
+                        slash=args.slash, cond=cond)
     res["avisos"] = cfg["avisos"]
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
@@ -73,7 +81,8 @@ def cmd_classificar(args, lib):
     elif res["faixa"] == lib.FAIXA_AUTOMATICA:
         print(f"executa e reporta ({res['id']}): faça e reporte como linha de informação, não como pergunta")
         if res.get("precondicao"):
-            print(f"  precondição a conferir antes: {res['precondicao']}")
+            print(f"  SÓ depois de conferir a precondição: {res['precondicao']} — "
+                  f"falhou, a ação é descartar-trabalho e vira pergunta")
     else:
         print(f"sempre pergunta ({res['id']}): entra no lote de perguntas do dono")
     if res.get("condicoes"):
@@ -99,6 +108,9 @@ def main(argv=None):
             g.add_argument("--slash")
             g.add_argument("--id")
             p.add_argument("--op", help="com --path: delete|edit|any")
+            p.add_argument("--cond", action="append", default=[], metavar="CHAVE=VALOR",
+                           help="condição do detect já conferida por você (ex.: label=infra, "
+                                "branch_atual=main, destino_terminal=true); repetível")
     args = ap.parse_args(argv)
     lib = _lib()
     return cmd_listar(args, lib) if args.cmd == "listar" else cmd_classificar(args, lib)

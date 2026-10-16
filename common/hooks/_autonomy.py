@@ -44,7 +44,13 @@ OVERRIDE_REL = os.path.join(".claude", "autonomy.yaml")
 
 # Separadores de segmento num comando de terminal: `cd x && git commit` tem
 # que casar `^git commit`, senão toda ação encadeada escapa da lista.
-_SEGMENTOS = re.compile(r"\s*(?:&&|\|\||;|\n)\s*")
+_SEGMENTOS = re.compile(r"\s*(?:&&|\|\||;|\||&|\n)\s*")
+# Prefixos que não mudam a ação: `FOO=1 pytest`, `$(git push)`, `(git push)`.
+# Segmentos que não realizam ação nenhuma e por isso não contam: `cd x &&
+# git commit` é um commit, não "um cd desconhecido mais um commit". Lista
+# curta de propósito — crescer aqui é afrouxar.
+_NEUTROS = re.compile(r"^(cd|echo|printf|true|set -[a-zA-Z]+|export [A-Za-z_][A-Za-z0-9_]*=)(\s|$)")
+_PREFIXO = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:\$\(|\()?\s*")
 
 
 def yaml_do_plugin() -> Path:
@@ -72,6 +78,12 @@ def _item_valido(item, faixa: str, origem: str, avisos: list) -> dict | None:
     if not isinstance(det, dict) or not any(k in det for k in CHAVES_DETECT):
         avisos.append(
             f"{origem}: `{item['id']}` sem `detect:` ({'/'.join(CHAVES_DETECT)}) descartado"
+        )
+        return None
+    if sum(k in det for k in CHAVES_DETECT) > 1:
+        avisos.append(
+            f"{origem}: `{item['id']}` com mais de um padrão em detect: "
+            f"({', '.join(k for k in CHAVES_DETECT if k in det)}) descartado — um item, uma impressão digital"
         )
         return None
     for k in CHAVES_DETECT:
@@ -181,13 +193,39 @@ def faixa_de(cfg: dict, ident: str) -> str | None:
     return None
 
 
-def _casa_item(item: dict, bash, mcp, path, op, slash) -> bool:
+def _segmentos(bash: str) -> list[str]:
+    segs = []
+    for seg in _SEGMENTOS.split(bash.strip()):
+        seg = _PREFIXO.sub("", seg).rstrip(") ").strip()
+        if seg:
+            segs.append(seg)
+    return segs
+
+
+def _condicoes_ok(item: dict, cond: dict | None) -> bool | None:
+    """True: toda condição do detect bate com `cond`. False: alguma não bate.
+    None: alguma não foi informada (não dá para saber)."""
+    cond = cond or {}
+    resultado = True
+    for k, v in item["detect"].items():
+        if k not in CHAVES_CONDICAO or k == "op":
+            continue
+        if k not in cond:
+            resultado = None
+            continue
+        dado = cond[k]
+        if isinstance(v, bool):
+            if str(dado).lower() in ("true", "1", "sim", "yes") != v:
+                return False
+        elif re.search(str(v), str(dado)) is None:
+            return False
+    return resultado
+
+
+def _casa_padrao(item: dict, bash, mcp, path, op, slash) -> bool:
     det = item["detect"]
     if "bash" in det:
-        if not bash:
-            return False
-        rx = re.compile(str(det["bash"]))
-        return any(rx.search(seg) for seg in _SEGMENTOS.split(bash.strip()) if seg)
+        return bool(bash) and re.search(str(det["bash"]), bash) is not None
     if "mcp" in det:
         return bool(mcp) and re.search(str(det["mcp"]), mcp) is not None
     if "path" in det:
@@ -200,29 +238,72 @@ def _casa_item(item: dict, bash, mcp, path, op, slash) -> bool:
     return False
 
 
+def _casa_item(item: dict, bash, mcp, path, op, slash, cond) -> bool:
+    """Casa padrão E condições. Ação automática com condição não informada
+    NÃO casa (não se libera o que não dá para conferir); ação de pergunta
+    casa mesmo assim (o lado seguro), e a condição volta em `condicoes`."""
+    if not _casa_padrao(item, bash, mcp, path, op, slash):
+        return False
+    ok = _condicoes_ok(item, cond)
+    if ok is False:
+        return False
+    if ok is None and item["faixa"] == FAIXA_AUTOMATICA:
+        return False
+    return True
+
+
+def _resultado(item: dict | None, cfg: dict) -> dict:
+    if item is None:
+        return {
+            "faixa": FAIXA_PERGUNTA if cfg.get("default_nao_listado", DEFAULT_NAO_LISTADO) == DEFAULT_NAO_LISTADO else FAIXA_AUTOMATICA,
+            "id": None, "precondicao": None, "condicoes": {}, "listado": False,
+        }
+    return {
+        "faixa": item["faixa"],
+        "id": item["id"],
+        "precondicao": item.get("precondicao"),
+        "condicoes": {k: v for k, v in item["detect"].items() if k in CHAVES_CONDICAO and k != "op"},
+        "listado": True,
+    }
+
+
+def _casar_um(cfg: dict, bash, mcp, path, op, slash, cond) -> dict | None:
+    for faixa in (FAIXA_PERGUNTA, FAIXA_AUTOMATICA):
+        for item in cfg.get(faixa) or []:
+            if _casa_item(item, bash, mcp, path, op, slash, cond):
+                return item
+    return None
+
+
 def casar(cfg: dict, bash: str | None = None, mcp: str | None = None,
-          path: str | None = None, op: str | None = None, slash: str | None = None) -> dict:
+          path: str | None = None, op: str | None = None, slash: str | None = None,
+          cond: dict | None = None) -> dict:
     """A ação que este tool-call realiza, e a faixa dela.
 
     Devolve {"faixa", "id", "precondicao", "condicoes", "listado"}. Casou as
     duas faixas → `sempre_pergunta` (o lado seguro). Não casou nada → faixa do
     default, `id` None, `listado` False.
+
+    Comando de terminal é julgado segmento a segmento (`&&`, `;`, `|`, `&`),
+    ignorando os neutros (`cd`, `echo`...): um segmento de pergunta decide
+    pelo comando inteiro, em qualquer posição; senão um segmento não listado
+    decide (default); só é automático o comando em que TODOS os segmentos
+    são automáticos. Sem isso `rm -rf x && pytest` seria "rodar
+    build" — uma parte conhecida não pode lavar a parte desconhecida.
+    `cond` são as condições do detect que o chamador já conferiu
+    (ex.: {"label": "infra"}).
     """
-    for faixa in (FAIXA_PERGUNTA, FAIXA_AUTOMATICA):
-        for item in cfg.get(faixa) or []:
-            if _casa_item(item, bash, mcp, path, op, slash):
-                condicoes = {k: v for k, v in item["detect"].items() if k in CHAVES_CONDICAO and k != "op"}
-                return {
-                    "faixa": faixa,
-                    "id": item["id"],
-                    "precondicao": item.get("precondicao"),
-                    "condicoes": condicoes,
-                    "listado": True,
-                }
-    return {
-        "faixa": FAIXA_PERGUNTA if cfg.get("default_nao_listado", DEFAULT_NAO_LISTADO) == DEFAULT_NAO_LISTADO else FAIXA_AUTOMATICA,
-        "id": None,
-        "precondicao": None,
-        "condicoes": {},
-        "listado": False,
-    }
+    if bash:
+        automatico = None   # o primeiro item automático, se todos os segmentos forem
+        nao_listado = False
+        segs = [s for s in _segmentos(bash) if not _NEUTROS.match(s)]
+        for seg in segs or [bash]:
+            item = _casar_um(cfg, seg, None, None, None, None, cond)
+            if item is None:
+                nao_listado = True
+            elif item["faixa"] == FAIXA_PERGUNTA:
+                return _resultado(item, cfg)   # pergunta vence em qualquer posição
+            else:
+                automatico = automatico or item
+        return _resultado(None if nao_listado else automatico, cfg)
+    return _resultado(_casar_um(cfg, None, mcp, path, op, slash, cond), cfg)
