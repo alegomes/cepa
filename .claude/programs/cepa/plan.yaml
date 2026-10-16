@@ -1247,29 +1247,22 @@ items:
   why: 'pedido do dono em 26/09/2026 depois do WEGO-2334, travado pelo teto de 10
     min. Detalhe na seção de mesmo título do BACKLOG.md. (ainda não priorizado:
     entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-10-15: sim: Aceito a evidência deste run no
-    lugar de um run do WEGO e devolvo o item à fila para ser fechado? Instrução:
-    não reimplementar nada; fechar o item como done citando o run cepa/2026-10-15-1513:
-    três eventos verify no .jsonl com 645 s, 649 s e 616 s, exit lido pelo supervisor,
-    item gate-advance-repo-do-push done, nenhuma trava do no-background-build no
-    .log; atualizar .claude/acceptance/until-build-longo-sem-trava.yaml de INCOMPLETE
-    para COMPLETE com essa colheita. Rota humana fechada pelo dono: No proximo cepa-until
-    do WEGO (primeiro com o codigo de 2026-09-28): conferir no .jsonl e no .log
-    que um item com build de mais de 10 min saiu done com o resultado colhido (EXIT=
-    lido), sem trava do no-background-build; entao devolver este item para done..
-    O item voltou de `blocked` para `pending`. Evidência anterior: Codigo aterrissado
-    na main em 2026-09-28 (4be85b9, push 62b7217) e plugin reinstalado; cache igual
-    ao clone em no-background-build.py, capture-build-result.py e cepa-until. Antes:
-    codigo e29eb08, 5f0ff71, 85848ad, d52162a; e2e com claude -p real colheu make
-    verify de 700s; proof-reviewer PROVEN (docs/proof/until-build-longo-sem-trava.yaml);
-    completion-auditor INCOMPLETE (.claude/acceptance/until-build-longo-sem-trava.yaml):
-    falta a colheita passando pelo cepa-until real. Decisao do dono em 2026-09-28:
-    nao montar run so para isso; o proximo cepa-until do WEGO serve de teste, porque
-    o ./mvnw clean verify do wego-acessos-backend leva 979 a 1150 s (8 eventos verify
-    dos runs 2026-09-27-0832 e 1632, ambos ainda com os hooks antigos).'
+  evidence: 'Fechado em 2026-10-15 na branch until/2026-10-15-1853 por instrução
+    do dono (resposta ''sim'' de 2026-10-15), sem reimplementar nada. Conferido
+    no disco: run cepa/2026-10-15-1513 tem tres eventos verify de 645 s, 649 s e
+    616 s (exit lido: saiu 1, saiu 1, verde), item gate-advance-repo-do-push done
+    (item_end exit 0 nas duas tentativas, run_end entregues=1 travados=0), e as
+    13 ocorrencias de block/deny no .log de 1,7 MB sao prosa sobre o gate-advance,
+    nenhuma recusa do no-background-build. Commit b5e831c: .claude/acceptance/until-build-longo-sem-trava.yaml
+    de incomplete para complete (AC2 complete pela colheita real; AC1 segue incomplete
+    por design, sem gap; AC3/AC4 ja complete). proof-reviewer PROVEN anterior mantido
+    (docs/proof/until-build-longo-sem-trava.yaml). Regressao: tests/test_no_background_build.py
+    verde; test_cepa_until.py (~580 s) nao rodado aqui, fica para o build completo
+    do supervisor. Fora: teste automatizado que combine cepa-until real + build
+    longo, aceito pelo dono como fora do item.'
 - id: maven-reactor-guard-libera-o-inocente
   title: maven-reactor-guard libera goals que nao compilam, -pl sem -am apos install
     da raiz posterior a ultima edicao, e quarkus:*
@@ -1795,9 +1788,31 @@ items:
     porque é o único incômodo registrado três vezes em dez dias e porque o dono
     diz que em 99% das vezes não sabe o que responder: cada run noturno termina
     nele.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: 'Validar com o dono em tres relatorios reais: os proximos tres
+    relatorios de fim de sessao (ou .review.md do cepa-until) que tiverem tarefa
+    sua trazem Onde / Comando / Pronto quando e o dono consegue agir sem perguntar;
+    e aceitar (ou nao) a ressalva do proof-reviewer (cobertura por linha nao medida,
+    entrada adversaria nao rodada).'
+  evidence: 'Commit 609d294 na branch until/2026-10-15-1853 (build-solo: pair-dev,
+    pair-reviewer OK apos 1 NEEDS-FIX corrigido). Skill plain-report: tarefa do
+    dono vira item numerado com Onde / Comando (ou arquivo) / Pronto quando; ''Nada
+    pendente.'' so quando o Pra voce diz nada; relatorio reprovado de 14/10 e a
+    forma certa na skill. Hook report-style-lint.py: desvios novos pra-voce-sem-lista
+    e tarefa-sem-passo, itens_da_lista respeita bloco cercado. until-review.md:
+    bloco Fica com voce com as tres linhas e cepa-plan responde colavel; contexto
+    de tarefa diz onde/o que/pronto quando. Testes: tests/test_report_style_lint.py
+    (116 ok) e tests/test_common_until_review.py verdes; run-all.sh e do supervisor.
+    Gates: completion-auditor COMPLETE (.claude/acceptance/perguntas-finais-nao-dizem-o-que-fazer.yaml);
+    proof-reviewer NEEDS-HUMAN (docs/proof/perguntas-finais-nao-dizem-o-que-fazer.yaml):
+    7 de 7 perturbacoes RED (P1, P2a, P2b, P3, P4, P5a, P5b), l2 assumed por falta
+    de ferramenta de cobertura e l4 skipped (hook so le texto de relatorio), mesmo
+    caso do precedente reconcile-nao-rebaixa-done; nao gravei dispensa em nome do
+    dono. Fora de escopo de proposito: cepa-until decidir, glossario, memorias.'
+  owner_question: 'Os proximos tres relatorios com tarefa sua ja vieram com onde,
+    comando e pronto quando, e deu para agir sem perguntar? Recomendo sim: o lint
+    agora barra o formato antigo'
 - id: cepa-plan-escrita-commita-e-responde-exige-resposta
   title: Toda escrita do cepa-plan (responde, add, marca) commita o plan.yaml ou
     avisa, e responde recusa texto que não responde à rota
@@ -1805,18 +1820,52 @@ items:
     qualquer frase como resposta à rota' (fb-20261014-4, fb-20261015-1). Segundo
     porque o plan.yaml sujo trava a rodada noturna (o cepa-until recusa árvore suja)
     e já custou um commit corretivo.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Branch da noite until/2026-10-15-1853, commits e25f556 (fecha_escrita:
+    responde/add commitam só o plan.yaml, --no-commit avisa; start/finish avisam
+    que falta commitar, --commit liga, dentro de run CEPA_UNTIL_RUN diz que o clone
+    fica assim de propósito; responde mostra a pergunta da rota e recusa exit 6
+    pedido de esclarecimento/pergunta, --forca grava, ''sim:/não:'' do decidir passa),
+    62952d9 e 573ec8e (regex alargada para ''repetir a pergunta''; 14 entradas adversariais;
+    testes em tests/test_cepa_plan_escrita_commita.py), docs em execution-plan.md,
+    cepa-until.md e BACKLOG.md. Gates: pair-reviewer APPROVE (ressalvas baixas:
+    falsos positivos raros do filtro, furáveis com --forca), completion-auditor
+    COMPLETE, proof-reviewer PROVEN na 3a passada (12 perturbações RED). Fora: write/promote/reconcile
+    não ganharam o aviso (escopo do item era responde/add/marca); cepa-feedback
+    triar passa a commitar o plan.yaml separado do BACKLOG.md. Build completo é
+    do supervisor.'
 - id: dispensa-vira-proposta-em-run-autonomo
   title: Em run autônomo a dispensa (waiver) é gravada como proposta pendente, e
     só o cepa-plan responde do dono a converte em waiver
   why: 'herdado do BACKLOG.md § ''Dispensa (waiver) gravada em nome do dono durante
     run autônomo'' (fb-20261014-3). Terceiro porque é a decisão que o modo autônomo
     menos pode tomar sozinho: afirma que o dono aceitou prova nenhuma.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Branch until/2026-10-15-1853, commits 150e674 (implementação), d23ebb1
+    (carregar ignora YAML corrompido, achado L4), 4f3ad02 (teste do digest para
+    proposta só no clone principal), mais o commit dos artefatos. board-flow/bin/waivers.py:
+    em run autônomo (CEPA_UNTIL_RUN/CLAUDE_AUTONOMOUS_RUN_ID) gravar() escreve status:
+    proposta com autor null, sem parâmetro que force dispensa real; carregar ignora
+    proposta/recusada; propor/propostas/converter/recusar, converter e recusar recusam
+    dentro de run; propor não sobrescreve dispensa válida nem recusada. cepa-plan
+    responde (só TTY): ''sim'' converte as propostas do item em dispensa assinada
+    por --autor/git user.name/USER, ''não'' marca recusada, --mantem ou outro texto
+    deixa proposta; arquivos entram no commit quando o git aceita. proof-verdict-guard
+    bloqueia proven com waiver_proposto/dispensa_proposta/waiver/dispensa. cepa-until-digest
+    lista propostas pendentes (clone principal e árvore do run). Prosa: decide.md,
+    proof-reviewer.md, autonomous-mode, drain-plan, proof-gate.md, BACKLOG. Gates:
+    pair-reviewer OK após 1 fix; completion-auditor COMPLETE (.claude/acceptance/dispensa-vira-proposta-em-run-autonomo.yaml);
+    proof-reviewer PROVEN em 4f3ad02 (docs/proof/dispensa-vira-proposta-em-run-autonomo.yaml).
+    Testes filtrados verdes (14 arquivos, 78 pytest), com CEPA_UNTIL_RUN=1 no ambiente.
+    Build completo é do supervisor. Fora do escopo: ''sim, mas ...'' converte incondicionalmente
+    (todo o texto fica em resposta_do_dono); guard sem PyYAML bloqueia waiver_proposto
+    vazio e com PyYAML deixa passar (erra para o lado seguro); a dispensa já existente
+    neste repo (.claude/waivers/nada-a-provar--common-hooks-capture-build-result-py.yaml,
+    autor alegomes 2026-10-02, gravada em run) não foi tocada.'
 - id: until-custo-deduplica-bloco-result
   title: cepa-until conta um bloco result por rodada e a pausa de cota usa o custo
     deduplicado
@@ -1824,9 +1873,22 @@ items:
     e infla o custo do run' (fb-20261013-2). Quarto porque o custo inflado 6,7 vezes
     (334,94 contra 50,25) alimenta a pausa de cota, que decide quando o run noturno
     para.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch da noite until/2026-10-15-1853: ef7f506 (fix + teste)
+    e 1d3829f (artefatos dos gates). cepa-until: custos_das_rodadas conta um total_cost_usd
+    por session_id (vale o ultimo bloco); bloco sem session_id segue contando cada
+    um. Teste tests/test_cepa_until_aterrissar.py::test_5_custo_conta_uma_vez_por_sessao_nao_por_bloco_result
+    (vermelho na base 2ddbb7f, verde no HEAD, vermelho com a correcao quebrada).
+    Gates: pair-reviewer OK-WITH-NOTES (sem fix), completion-auditor COMPLETE (.claude/acceptance/until-custo-deduplica-bloco-result.yaml),
+    proof-reviewer PROVEN (docs/proof/until-custo-deduplica-bloco-result.yaml).
+    Ficou de fora, por premissa errada do esboco: a pausa de cota nunca usou total_cost_usd
+    (pausa_de_cota le a utilizacao da janela de 5h do rate_limit_event via custo_de_item),
+    entao nada a mudar nela; registrado no BACKLOG.md. Nao testado: retomada da
+    mesma sessao em rodada seguinte (ultimo bloco sobrescreve, correto se o custo
+    e cumulativo). Build completo e do supervisor (nao rodado aqui); rodados so
+    tests/test_cepa_until_aterrissar.py e tests/test_cepa_until_cota.py, ambos verdes.'
 - id: capture-build-result-grep-verify-e-mvnw-q
   title: capture-build-result classifica build só com strings mascaradas e invocador
     mvnw, e registra ./mvnw -q ... > log pelo código de saída
@@ -1834,9 +1896,21 @@ items:
     como build Maven, e não registra ./mvnw -q ... > log' (fb-20261008-1). Quinto
     porque um falso vermelho barrou um commit de plan.yaml por horas; mesma família
     do item seguinte, e o _shellscan já tem a máscara.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 6a07300 (hook), 5d1140a (testes discriminantes), 6444633 (artefatos)
+    na branch until/2026-10-15-1853. capture-build-result.py: padroes casam na visao
+    sem aspas/heredoc (_shellscan._unquoted_view); Maven exige invocador real (_mvnscan.maven_args)
+    com verify|test|package|install; extract_exit_code le ''Error: Exit code N''
+    da resposta em string; redirected_output anexa a cauda (64 KiB) do arquivo de
+    ''>''/''>>''/''&>''; Maven com -q sem marcador de falha, sem exit code e nao
+    interrompido grava SUCCESS. pair-reviewer OK-WITH-NOTES (nota aplicada: _is_quiet
+    nao aceita -Pquality). completion-auditor COMPLETE; proof-reviewer PROVEN (perturbacoes
+    a-f vermelhas; 12 de 19 testes novos vermelhos no base 1d3829f). Ficou de fora:
+    ''| tee log'' nao e lido (saida ja chega ao hook); ''./mvnw -q verify || true''
+    grava SUCCESS (limitacao documentada). Build completo e do supervisor; so rodei
+    os testes do hook (23 passed + root_install + background verdes).'
 - id: capture-build-result-apos-estouro-de-contexto
   title: task_dirs() acha a pasta tasks/ da sessão original quando a sessão foi
     continuada após estouro de contexto
@@ -1844,9 +1918,18 @@ items:
     continuada após estouro de contexto' (fb-20261005-1). Sexto porque o gate-advance
     bloqueia o push com build verde; o esboço (varrer as pastas irmãs pelo task_id)
     já está escrito e é pequeno.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits na branch until/2026-10-15-1853: 9f76e64 (fix: find_task_output()
+    no lancamento acha o .output nas pastas irmas de sessao pelo task_id; _sibling_pendings()
+    na colheita pega pendentes de qualquer pasta de sessao com o mesmo cwd; gate-advance
+    repassa a raiz da sessao) e b2d9979 (artefatos dos gates). Testes novos em tests/test_capture_build_background.py
+    (11 checks, casos ''continuada'', ''lancado sob A antes do estouro'', ''pendente
+    de OUTRA arvore''). pair-reviewer OK-WITH-NOTES (sem fix). completion-auditor
+    COMPLETE (.claude/acceptance/...yaml). proof-reviewer PROVEN (docs/proof/...yaml:
+    4 perturbacoes RED, regressao RED em 6444633). Build completo e do supervisor.
+    Ficou de fora: nada; o codigo esta na branch da noite, sem merge e sem push.'
 - id: build-segundo-plano-morre-aos-30-min
   title: Medir a parada do build em segundo plano aos 30 min e gravar FAILURE com
     o motivo em vez de silêncio
@@ -1854,9 +1937,26 @@ items:
     (sessão fix_build_timeout, 2026-10-02). Sétimo porque ainda não foi medido (o
     ./mvnw verify do wego leva ~25 min e ainda cabe); começa pela medição, não pelo
     conserto.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Medido no claude 2.1.301: tarefa em segundo plano parada no teto (sleep
+    400 com timeout 60000, morta aos 61 s) deixa o .output terminando em [killed],
+    nao em [exited with code N]; notificacao com status killed. Limites lidos do
+    binario: 30 min para comando auto-backgrounded (BASH_DEFAULT_TIMEOUT_MS), ate
+    2 h para run_in_background explicito (BASH_MAX_TIMEOUT_MS). Conserto: capture-build-result
+    grava FAILURE com reason e stopped_by=claude-code quando a ultima linha e [killed];
+    gate-advance imprime o motivo e sugere timeout que caiba. Commits na branch
+    da noite until/2026-10-15-1853: 28e785d (hook+gate+backlog), 38332d7, 7073c61,
+    13548c5 (testes apertados pelo proof-reviewer: motivo na linha do bloqueio,
+    [killed] so em linha propria, arquivo so com [killed]), e o commit dos artefatos.
+    Gates: pair-reviewer APPROVE, completion-auditor COMPLETE (.claude/acceptance/build-segundo-plano-morre-aos-30-min.yaml),
+    proof-reviewer PROVEN (docs/proof/build-segundo-plano-morre-aos-30-min.yaml)
+    apos duas rodadas UNPROVEN/NEEDS-HUMAN. Suite: test_capture_build_background.py
+    57 casos ok; run-all.sh capture gate build no_background 20/20 verde. Build
+    completo fica com o supervisor do cepa-until. Ficou de fora: o build real de
+    31 min do aceite nao foi reproduzido (mesmo mecanismo medido em 60 s); BACKLOG.md
+    marcado feito.'
 - id: qa-engineer-prova-red-sem-worktree
   title: qa-engineer prova RED pelo mecanismo do proof-reviewer, sem git worktree
     add, e o resumo do cepa-until lista worktrees abertas fora do proof-reviewer
@@ -1864,9 +1964,27 @@ items:
     e o hook só vê o filho direto' (fb-20261013-3). Oitavo porque a metade de visibilidade
     já saiu (item digest-mostra-worktree-e-build-alheio-do-qa, done); resta a prosa
     do qa-engineer, que hoje é a única barreira.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Na branch da noite until/2026-10-15-1853 (sem merge, sem push): feat
+    bdb449e, gates e9c5dd5 (aceite e prova versionados). Causa de fb-20261013-3
+    fechada: qa-engineer (build-hex e build-team) ganhou a regra ''RED vem da ordem
+    (teste antes do fix) ou do proof-reviewer, nunca de worktree sua'' (sem git
+    worktree add, copia do repo, git stash ou reversao de arquivo de producao);
+    o bash-path-lock (molde common/hooks/_templates/bash-path-lock.py.tmpl + 6 copias
+    geradas por bin/gen-locks.py) so mostra a receita de worktree descartavel ao
+    proof-reviewer, nos dois pontos (_mensagem e deny de git worktree add dentro
+    da raiz); drain-plan restringe a worktree descartavel da noite ao proof-reviewer;
+    BACKLOG secao marcada feita; bump patch de 7 plugins (build-hex 1.4.1, build-team
+    0.5.1, common 2.26.6, design 0.3.1, discovery 0.4.1, docs-topology 0.3.1, marketing
+    0.1.1), plugins ainda nao reinstalados. A metade de visibilidade (digest lista
+    worktree de quem nao e proof-reviewer) ja estava feita em 2caf850. Testes: test_bash_path_lock_exec.py::test_mensagem_nomeia_balde_e_saida
+    (4 checks novos x 6 copias) verde no HEAD, 15 FAIL no base 4086675; test_lock_copies_drift.py
+    verde; gen-locks --check limpo. pair-reviewer OK-WITH-NOTES (notas aplicadas),
+    completion-auditor COMPLETE, proof-reviewer PROVEN com 4 perturbacoes RED. Fora:
+    a docstring de _script_rule (balde 3) ainda descreve a worktree de perturbacao
+    em termos gerais, e so comentario. Build completo fica com o supervisor.'
 - id: from-triage-grava-ordem-aprovada
   title: cepa-plan write --from-triage preserva done/dropped ausentes sem --on-missing
     e aplica a ordem da triagem aos itens abertos que ela menciona
