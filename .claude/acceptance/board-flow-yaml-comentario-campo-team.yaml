@@ -1,0 +1,50 @@
+schema_version: 1
+card: board-flow-yaml-comentario-campo-team
+status: complete
+audited_at: 2026-10-16T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "O comentário do template board-flow.yaml mostra os dois formatos lado a lado: Teams = UUID puro; select = { id: \"<optionId>\" }."
+    altitude: document
+    surface: "discovery/board-flow.example.yaml (defaults.required_fields) e espelho em docs/board-flow.md"
+    demonstrated_by:
+      test: "tests/test_board_flow_example_team_format.py (comentário traz o formato do select; doc traz os dois formatos; exemplo YAML válido)"
+      layer: asserção de prosa/spec sobre o arquivo (padrão de test_atlassian_expert_spec.py); sem camada de runtime, pois o artefato é um documento
+      evidence: verified
+      run: "python3 tests/test_board_flow_example_team_format.py -> 10 checagens ok, 'all green'. Diff a6a64bd lido: ambos os exemplos (customfield_10001 UUID; customfield_10414 { id }) aparecem em example.yaml e docs/board-flow.md."
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "O comentário diz qual HTTP 400 cada formato errado devolve (texto verbatim só do Team; select só 'HTTP 400', sem mensagem inventada)."
+    altitude: document
+    surface: "discovery/board-flow.example.yaml e docs/board-flow.md"
+    demonstrated_by:
+      test: "tests/test_board_flow_example_team_format.py (comentário traz o 400 do Team; doc traz os dois formatos)"
+      layer: asserção de prosa; ausência de mensagem inventada para o select conferida por leitura do diff ('the label string -> HTTP 400', nada mais)
+      evidence: verified
+      run: "python3 tests/test_board_flow_example_team_format.py -> 'ok  comentário traz o 400 do Team', 'all green'"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Nenhum exemplo de Team no template usa NOME de time como value."
+    altitude: document
+    surface: "discovery/board-flow.example.yaml (topologies.*.required_fields) e docs/board-flow.md"
+    demonstrated_by:
+      test: "tests/test_board_flow_example_team_format.py (nenhum Team usa nome como value; value nunca é Engineering/Product/Platform) parseando o YAML"
+      layer: asserção estrutural sobre o YAML parseado
+      evidence: verified
+      run: "python3 tests/test_board_flow_example_team_format.py -> 'ok  nenhum Team usa nome como value' + 3x 'ok  value nunca é o nome ...', 'all green'. grep por value: \"Engineering|Product|Platform\" em *.yaml/*.md fora do BACKLOG: sem resultados."
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "atlassian-expert.md afirma a regra em uma frase e continua <= 17280 bytes."
+    altitude: document
+    surface: "board-flow/agents/atlassian-expert.md"
+    demonstrated_by:
+      test: "tests/test_atlassian_expert_spec.py (orçamento em bytes + 25 regras preservadas) e tests/test_board_flow_example_team_format.py (frase do Team presente)"
+      layer: asserção de tamanho e de prosa
+      evidence: verified
+      run: "python3 tests/test_atlassian_expert_spec.py -> 'ok  spec cabe em 17280 bytes (17279)', all green; wc -c = 17279 (folga de 1 byte); test_board_flow_example_team_format.py -> 'ok  atlassian-expert traz a frase do Team'."
+    verdict: complete
+    gap: null
+notes: "Folga de 1 byte no teto do atlassian-expert: qualquer acréscimo futuro estoura o teste. Fora de escopo por decisão: common/hooks/jira-create-fields-gate.py."

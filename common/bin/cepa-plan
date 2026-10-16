@@ -161,6 +161,10 @@ Subcomandos:
       `--on-missing keep` põe esses itens no fim; com `--from-triage` é a
       triagem parcial, e é o contrário: a fila do disco fica na ordem dela e
       os cards novos entram depois.
+      Com `--from-triage` não há exit 4: os `done`/`dropped` ausentes são
+      preservados (em bloco, no começo), os itens da triagem entram na ordem
+      dela e os abertos ausentes vão depois (avisado); `--on-missing drop`
+      marca só esses abertos como `dropped`.
 
 Checagens de item — cada uma existe porque a falha correspondente já custou
 alguma coisa a alguém:
@@ -218,6 +222,7 @@ except ImportError:
 MODE = "single-track"
 SCHEMA_VERSION = 2
 STATUSES = ("pending", "in_progress", "done", "blocked", "dropped")
+FECHADOS = ("done", "dropped")
 TETO_PADRAO = 3
 
 
@@ -2882,25 +2887,48 @@ def cmd_write(raiz, a):
         novos_ids = {str(i.get("id")) for i in itens}
         sumidos = [str(x.get("id")) for x in antigos
                    if isinstance(x, dict) and str(x.get("id")) not in novos_ids]
-        if sumidos and a.on_missing == "refuse":
+        # Com --from-triage não há recusa: `done`/`dropped` fora da lista são
+        # preservados em silêncio (não são executáveis, a posição deles não
+        # mexe na fila) e os abertos ausentes vão depois da ordem da triagem.
+        if sumidos and a.on_missing == "refuse" and not a.from_triage:
             print(f"a fila que está no disco tem {len(sumidos)} item(ns) que a "
                   f"lista nova não menciona: {', '.join(sumidos)}.\n"
                   "Sumir com eles em silêncio apaga posição e `why` que alguém "
                   "decidiu. Inclua-os na lista, ou diga explicitamente o que "
                   "fazer: --on-missing keep (mantém no fim, sem posição "
-                  "escolhida; com --from-triage, mantém a fila do disco na "
-                  "ordem dela e acrescenta os cards novos depois) ou "
-                  "--on-missing drop (marca status: dropped).",
+                  "escolhida) ou --on-missing drop (marca status: dropped). "
+                  "Só --from-triage dispensa a escolha: `done`/`dropped` "
+                  "ausentes são preservados, e os abertos ausentes vão para "
+                  "depois da ordem da triagem.",
                   file=sys.stderr)
             return 4
 
     fundidos, reaproveitados = funde(itens, antigos)
-    acrescentados = []
+    acrescentados, empurrados = [], []
     if antigos:
         novos_ids = {str(i["id"]) for i in fundidos}
         sobras = [x for x in antigos
                   if isinstance(x, dict) and str(x.get("id")) not in novos_ids]
-        if a.on_missing == "keep" and a.from_triage and sobras:
+        sem_why = "sem `why` registrado na fila anterior"
+        if a.from_triage and a.on_missing != "keep" and sobras:
+            # Ordem aprovada na triagem (fb-20261002-1): os fechados ausentes
+            # ficam em bloco, na ordem antiga, antes de tudo (não são
+            # executáveis, então a posição não mexe na fila); os itens da
+            # triagem vêm na ordem dela; os abertos que ela não citou vão
+            # depois, na ordem antiga (refuse) ou viram `dropped` (drop).
+            fechados = [normaliza({**s, "why": s.get("why") or sem_why})
+                        for s in sobras if s.get("status") in FECHADOS]
+            abertos = [s for s in sobras if s.get("status") not in FECHADOS]
+            depois = []
+            for s in abertos:
+                d = normaliza({**s, "why": s.get("why") or sem_why})
+                if a.on_missing == "drop":
+                    d["status"] = "dropped"
+                else:
+                    empurrados.append(str(s.get("id")))
+                depois.append(d)
+            fundidos = fechados + fundidos + depois
+        elif a.on_missing == "keep" and a.from_triage and sobras:
             # Triagem PARCIAL: o repasse cobre um pedaço da coluna, então a
             # ordem que ele propõe vale entre os cards que ele leu, não contra
             # a fila que o dono já priorizou. Achado em quadro real
@@ -2931,6 +2959,11 @@ def cmd_write(raiz, a):
                                "sem `why` registrado na fila anterior"})
                 d["status"] = "dropped"
                 fundidos.append(d)
+
+    if empurrados:
+        print(f"aviso: {len(empurrados)} item(ns) aberto(s) da fila do disco "
+              f"não estão na triagem e ficaram depois da ordem dela: "
+              f"{', '.join(empurrados)}", file=sys.stderr)
 
     fonte = a.source or (
         f"{a.from_spec} ({len(itens)} critérios de sucesso; ordem herdada do texto)"
@@ -2965,6 +2998,10 @@ def cmd_write(raiz, a):
         print(f"  triagem parcial: a ordem da fila do disco foi mantida; "
               f"{len(acrescentados)} card(s) novo(s) entraram depois dela: "
               f"{', '.join(acrescentados)}")
+    if empurrados:
+        print(f"  ordem da triagem aplicada: {len(empurrados)} item(ns) "
+              f"aberto(s) fora da triagem ficaram DEPOIS dela, na ordem "
+              f"antiga: {', '.join(empurrados)}")
     if backup:
         print(f"  cópia do anterior em {backup} — comentários escritos à mão "
               f"não sobrevivem à reescrita, estão lá")

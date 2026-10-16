@@ -74,8 +74,17 @@ defaults:
     bug: "Bug"
     epic: "Epic"
     task: "Task"
-  required_fields: []                   # custom fields with project-mandated defaults, e.g.:
-                                        # - { id: customfield_10010, name: "Team", value: "Engineering" }
+  required_fields: []                   # custom fields with project-mandated defaults. The value
+                                        # shape depends on the field type; two look-alike examples:
+                                        #   # Atlassian Teams field: bare UUID string, no envelope.
+                                        #   - { id: customfield_10001, name: "Team", value: "<team-uuid>" }
+                                        #     Wrong: a team name, or { id: "<uuid>" } -> HTTP 400
+                                        #     `Team id ... is not valid`.
+                                        #   # Single-select option field: the option object.
+                                        #   - { id: customfield_10414, name: "Module", value: { id: "<optionId>" } }
+                                        #     Wrong: the label string -> HTTP 400.
+                                        # The two neighbours look alike but take opposite shapes; don't
+                                        # copy one's shape onto the other.
 
   # --- Scope: narrow WHICH cards the auto-selecting commands act on ---
   #
@@ -138,17 +147,20 @@ default_topology: discovery
 # per-command override or CLI flag (see the scope notes in `defaults`).
 topologies:
   discovery:
-    # Product team owns discovery cards.
+    # Product team owns discovery cards. Team is an Atlassian Teams field:
+    # value is the bare UUID string of the Product team, not its name and not
+    # { id: "<uuid>" } (HTTP 400 `Team id ... is not valid`). A single-select
+    # option field would take { id: "<optionId>" } instead; don't mix the shapes.
     required_fields:
-      - { id: customfield_10010, name: "Team", value: "Product" }
+      - { id: customfield_10001, name: "Team", value: "<uuid-of-product-team>" }
     # If discovery uses a different Jira project, override here:
     # project_key: DISC
 
   build-hex:
-    # Engineering team owns code Stories. If matching `defaults`,
-    # this block is optional.
+    # Engineering team owns code Stories (value: its team UUID, same shape as
+    # above). If matching `defaults`, this block is optional.
     required_fields:
-      - { id: customfield_10010, name: "Team", value: "Engineering" }
+      - { id: customfield_10001, name: "Team", value: "<uuid-of-engineering-team>" }
     # When build-hex is the active topology, scope the drains to backend
     # work only. Replaces defaults.scope (unless a per-command override or a
     # --scope/--no-scope flag is in play). Drop the block to inherit defaults.
@@ -157,7 +169,7 @@ topologies:
 
   build-team:
     required_fields:
-      - { id: customfield_10010, name: "Team", value: "Platform" }
+      - { id: customfield_10001, name: "Team", value: "<uuid-of-platform-team>" }
 
 # --- 4. Lifecycles for /board-flow:advance ---
 lifecycles:
