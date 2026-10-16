@@ -708,9 +708,24 @@ def test_triagem_parcial_preserva_a_ordem_da_fila(base):
                     "why": "triagem: c", "blocked_by": ["W-1438"]},
                ]}
     rp = repasse(d, parcial, "parcial.json")
+    arq = d / ".claude" / "programs" / "WEGO" / "plan.yaml"
+    original = arq.read_text(encoding="utf-8")
     r = run(d, "write", "WEGO", "--from-triage", str(rp), "--repo", ".")
-    check("sem --on-missing, a triagem parcial segue recusada",
-          r.returncode == 4, r.stderr)
+    check("sem --on-missing, a triagem parcial grava (fb-20261002-1)",
+          r.returncode == 0, r.stderr)
+    its = plano_de(d, "WEGO")["items"]
+    check("a ordem da triagem vale para os abertos que ela cita; os que ela "
+          "não citou ficam depois, na ordem antiga",
+          [i["id"] for i in its] == ["W-900", "W-1438", "W-1600", "W-1439",
+                                     "W-1440", "W-1437", "W-1500", "W-1700",
+                                     "W-1800"], str([i["id"] for i in its]))
+    check("o aviso nomeia os abertos empurrados para depois",
+          all(x in r.stderr and x in r.stdout
+              for x in ("W-1437", "W-1500", "W-1700", "W-1800")),
+          r.stderr + r.stdout)
+    check("item relido segue `pending`",
+          {i["id"]: i for i in its}["W-1600"]["status"] == "pending")
+    arq.write_text(original, encoding="utf-8")  # o ramo keep parte da fila original
 
     r = run(d, "write", "WEGO", "--from-triage", str(rp), "--repo", ".",
             "--on-missing", "keep")
@@ -742,6 +757,70 @@ def test_triagem_parcial_preserva_a_ordem_da_fila(base):
     check("triagem sem item sumido ainda reordena a fila",
           [i["id"] for i in plano_de(d2, "WEGO")["items"]]
           == ["WEGO-1236", "WEGO-1240", "WEGO-1235"], r.stderr)
+
+
+def test_from_triage_preserva_done_ausente_e_aplica_a_ordem(base):
+    """Triagem grava a ordem aprovada sem pedir --on-missing para os `done`.
+
+    Achado em quadro real (fb-20261002-1, 2026-10-02): o dono aprovou uma ordem
+    com cards novos na frente de itens já na fila, mas `write --from-triage`
+    recusou (exit 4) por 236 `done` fora da lista; `keep` mantinha a ordem do
+    disco e `drop` marcaria os `done` como dropped. A ordem aprovada se perdia.
+    """
+    def monta(nome):
+        d = repo_git(base, nome)
+        fila = [{"id": f"D-{n}", "title": f"feito {n}", "why": "x",
+                 "status": "done", "human_pending": None} for n in (1, 2, 3)]
+        fila += [{"id": f"O-{n}", "title": f"aberto {n}", "why": f"posição {n}",
+                  "human_pending": None} for n in (1, 2, 3, 4)]
+        # O-3 a triagem cita: o que é execução no disco tem que sobreviver
+        fila[5]["status"] = "in_progress"
+        fila[5]["human_pending"] = "conferir no admin"
+        r = run(d, "write", "WEGO", "--items", str(escreve_itens(d, fila)),
+                "--repo", ".")
+        check("grava a fila de partida", r.returncode == 0, r.stderr)
+        tri = {"project_key": "WEGO", "source_column": "To Do",
+               "triaged_on": "2026-10-02", "remaining_in_column": 9,
+               "cards": [
+                   {"key": "N-1", "title": "novo", "bucket": "ready",
+                    "why": "triagem: novo"},
+                   {"key": "O-3", "title": "aberto 3", "bucket": "ready",
+                    "why": "triagem: 3"},
+                   {"key": "O-1", "title": "aberto 1", "bucket": "ready",
+                    "why": "triagem: 1"},
+               ]}
+        return d, repasse(d, tri, "tri.json")
+
+    d, rp = monta("ft-padrao")
+    r = run(d, "write", "WEGO", "--from-triage", str(rp), "--repo", ".")
+    check("sem --on-missing, não recusa por causa dos done", r.returncode == 0,
+          r.stderr)
+    its = plano_de(d, "WEGO")["items"]
+    check("done preservados, depois novo, os 2 na ordem da triagem, e os "
+          "abertos não citados na ordem antiga",
+          [i["id"] for i in its] == ["D-1", "D-2", "D-3", "N-1", "O-3", "O-1",
+                                     "O-2", "O-4"], str([i["id"] for i in its]))
+    st = {i["id"]: i["status"] for i in its}
+    check("os 3 done continuam done",
+          all(st[k] == "done" for k in ("D-1", "D-2", "D-3")), str(st))
+    check("o aviso nomeia os abertos empurrados para depois",
+          "O-2" in r.stderr and "O-4" in r.stderr and "O-2" in r.stdout, r.stderr)
+    o3 = {i["id"]: i for i in its}["O-3"]
+    check("item citado pela triagem mantém o `status` do disco",
+          o3["status"] == "in_progress", str(o3))
+    check("e a dívida humana aberta do disco",
+          o3["human_pending"] == "conferir no admin", str(o3))
+
+    d, rp = monta("ft-drop")
+    r = run(d, "write", "WEGO", "--from-triage", str(rp), "--repo", ".",
+            "--on-missing", "drop")
+    check("--on-missing drop grava", r.returncode == 0, r.stderr)
+    st = {i["id"]: i["status"] for i in plano_de(d, "WEGO")["items"]}
+    check("drop marca só os 2 abertos não citados",
+          st["O-2"] == "dropped" and st["O-4"] == "dropped"
+          and st["O-1"] == "pending" and st["O-3"] == "in_progress", str(st))
+    check("e deixa os 3 done como done",
+          all(st[k] == "done" for k in ("D-1", "D-2", "D-3")), str(st))
 
 
 def test_contrato_do_triage(_base):
@@ -793,6 +872,7 @@ def main():
                    test_from_triage_dependencia_para_fora_da_fila,
                    test_write_from_triage_grava_e_diz_que_e_parcial,
                    test_triagem_parcial_preserva_a_ordem_da_fila,
+                   test_from_triage_preserva_done_ausente_e_aplica_a_ordem,
                    test_contrato_do_comando, test_contrato_do_triage):
             print(f"\n{fn.__name__}")
             fn(base)

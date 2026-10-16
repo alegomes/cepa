@@ -3972,10 +3972,11 @@ caso raro. Teste que falta: `responde` em repo limpo deixa `git status` limpo; `
 
 ## `cepa-plan write --from-triage` não consegue gravar a ordem aprovada na triagem
 
-**Plano:** nenhum ainda
+**Plano:** fila cepa, item `from-triage-grava-ordem-aprovada`
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-plan` (`write --from-triage`,
-`--on-missing`) · **Origem:** feedback `fb-20261002-1` (2026-10-02, `wego-acessos-backend`).
+**Status:** feito nesta branch (2026-10-16) · **Lar:** `common/bin/cepa-plan` (`cmd_write`,
+`write --from-triage` e `--on-missing`) · **Teste:** `tests/test_common_plan.py`
+(`test_from_triage_preserva_done_ausente_e_aplica_a_ordem`) · **Origem:** feedback `fb-20261002-1` (2026-10-02, `wego-acessos-backend`).
 
 > Na triagem de 02/10/2026 (WEGO, To Do, 37 cards) o dono aprovou uma ordem que punha cards
 > novos (WEGO-2346, 2348, 2343...) à frente de itens que já estavam na fila (WEGO-1919, 2041,

@@ -65,7 +65,12 @@ mesmo diretório e são distinguidos por um campo interno, então este comando
   apaga posição e `why` que alguém decidiu. Com `--from-jira`, `keep` é a
   **triagem parcial**: a fila do disco fica na ordem dela e os cards novos entram
   depois, na ordem da triagem — a triagem leu um pedaço da coluna, e a ordem
-  dela não vale contra pendentes que o dono já priorizou.
+  dela não vale contra pendentes que o dono já priorizou. Sem `--on-missing`, o
+  `--from-jira` não recusa: `done`/`dropped` que a triagem não menciona são
+  preservados em bloco no começo da fila, os itens da triagem entram na ordem
+  aprovada e os abertos que ela não citou vão depois, na ordem antiga (o
+  comando avisa quais). Com `drop`, só esses abertos viram `dropped`; os
+  `done` nunca são tocados.
 
 **`--from-jira` não consulta o Jira por conta própria.** A ordem de uma fila
 vinda de um board sai da CLASSIFICAÇÃO, nunca da coluna: quem lê os cards,
@@ -321,7 +326,9 @@ script:
   comentários escritos à mão (a evidência de cada `done`, por exemplo) não
   sobrevivem à reescrita.
 
-Exit 4 é item do disco que a lista nova não menciona: **não passe
+Exit 4 é item do disco que a lista nova não menciona (o `--from-jira` não
+recusa mais: `done`/`dropped` são preservados e os abertos ausentes vão depois,
+com aviso): **não passe
 `--on-missing drop` por conta própria** — mostre os ids e pergunte.
 
 ### 5. Relatar e apontar para frente
