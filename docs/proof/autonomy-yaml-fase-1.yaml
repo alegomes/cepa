@@ -1,0 +1,52 @@
+schema_version: 2
+card: autonomy-yaml-fase-1
+verdict: proven
+reviewed_at: 2026-10-16T11:00:00-03:00
+base_commit: e462e73
+head_commit: 8772732
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/hooks/_autonomy.py", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/autonomy.yaml", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-autonomy", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "board-flow/bin/cepa-autonomy", module: board-flow, external_observable: true, substituted_by_double: null }
+    - { class: "board-flow/commands/decide.md", module: board-flow, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: ["repo Python/YAML/Markdown, sem PIT"]
+    perturbation:
+      status: pass
+      results:
+        - "a rodar-build sem o lookahead deploy/publish: RED (FAIL {'bash': 'mvn verify deploy'} veio executa_e_reporta/rodar-build)"
+        - "b rodar-build sem a ancora ^: RED (FAIL {'bash': 'rm -rf data pytest'} veio executa_e_reporta/rodar-build)"
+        - "c casar com nao_listado nunca True: RED, 9 checks (ex. 'comando-desconhecido && pytest', 'pytest; rm -rf x', 'sort -o important.py x && pytest')"
+        - "d casar: pergunta so vence se for o ULTIMO segmento (continue nos demais): RED, 3 checks novos de 8772732 ('git push && pytest', 'git push; pytest', 'git reset --hard && git commit -m x && pytest'). Era o sobrevivente da passada anterior; agora travado."
+        - "e _SEGMENTOS sem '|': RED (FAIL {'bash': 'echo ok | git push'})"
+        - "f _PREFIXO sem $(: RED (FAIL {'bash': '$(git push origin x)'})"
+        - "g _casa_item casa automatico com ok None: RED, 3 checks (criar-card no lugar de card-infra-agregado; saida humana)"
+        - "h _item_valido sem rejeicao de multiplos padroes: RED, 2 checks ('item sem detect, regex invalida e dois padroes...', 'um aviso por item descartado')"
+        - "i _NEUTROS casando tudo (^.*): RED, 13 checks (ex. \"cd /x && git commit -m 'docs'\", 'git commit -m x && git push', 'FOO=1 pytest -k x')"
+        - "j sem a checagem _ESCONDIDO no laco: RED, 4 checks ('pytest `git push`', 'pytest $(rm -rf x)', 'mvn test $(git push)', ...)"
+        - "k sem _NEUTRO_QUE_GRAVA: RED, 2 checks ('tail -o x f && pytest', 'grep --output=x f && pytest')"
+        - "l export VAR=.. de volta em _NEUTROS: RED, 2 checks ('export PYTHONPATH=/tmp/evil && pytest', 'export LD_PRELOAD=/tmp/x.so && pytest')"
+        - "m decide.md sem a frase de excecao em 'O que ele NAO faz': RED (FAIL o bloco 'O que ele NAO faz' declara a excecao da faixa automatica)"
+        - "nota de metodo: minha primeira tentativa de (d) deixava o item de pergunta em 'automatico' e era inefetiva (GREEN); (i) com alternativa vazia tambem era inefetiva. Ambas refeitas corretamente (continue; '^(.*|') e ficaram RED. Nenhum sobrevivente real."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; ramo 'pergunta vence em qualquer posicao' exercido por perturbacao (d) RED com a pergunta em posicao inicial e intermediaria"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff le apenas YAML versionado e argumentos de CLI do proprio harness; nenhum modulo api-rest nem entrada externa nao confiavel"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "nao e Bug"
+verificacao_verde:
+  run: "HEAD 8772732 em worktree descartavel /tmp/proof-autonomy-r3: python3 tests/test_autonomy_yaml.py -> 'all green' (118 linhas ok); python3 -m pytest -q tests/test_board_flow_cepa_plan_shim.py -> '8 passed in 0.30s'. Worktree removido com 'git worktree remove --force'; 'git worktree list' confirma; arvore primaria inalterada."
+routing_reason: "13 de 13 perturbacoes derrubam o teste de cobertura (tests/test_autonomy_yaml.py) com o check nomeado; o sobrevivente (d) da passada anterior foi fechado pelo commit 8772732. Verde em HEAD e shim verde. Sem double na classe alterada (a CLI roda por subprocess contra o codigo real)."
