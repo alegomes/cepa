@@ -49,7 +49,14 @@ _SEGMENTOS = re.compile(r"\s*(?:&&|\|\||;|\||&|\n)\s*")
 # Segmentos que não realizam ação nenhuma e por isso não contam: `cd x &&
 # git commit` é um commit, não "um cd desconhecido mais um commit". Lista
 # curta de propósito — crescer aqui é afrouxar.
-_NEUTROS = re.compile(r"^(cd|echo|printf|true|set -[a-zA-Z]+|export [A-Za-z_][A-Za-z0-9_]*=)(\s|$)")
+_NEUTROS = re.compile(
+    r"^(cd|echo|printf|true|ls|cat|head|tail|grep|wc|sort|set -[a-zA-Z]+"
+    r"|export [A-Za-z_][A-Za-z0-9_]*=\S*|git (add|status|diff|log|show|rev-parse|branch --show-current))(\s|$)"
+)
+# Substituição de comando/processo ou redirecionamento: `pytest $(git push)`,
+# `echo x > ~/.bashrc && pytest`. O segmento deixa de ser o que parece — é
+# tratado como NÃO LISTADO (pergunta), e um neutro com isso deixa de ser neutro.
+_ESCONDIDO = re.compile(r"`|\$\(|<\(|>\(|>")
 _PREFIXO = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:\$\(|\()?\s*")
 
 
@@ -285,7 +292,8 @@ def casar(cfg: dict, bash: str | None = None, mcp: str | None = None,
     default, `id` None, `listado` False.
 
     Comando de terminal é julgado segmento a segmento (`&&`, `;`, `|`, `&`),
-    ignorando os neutros (`cd`, `echo`...): um segmento de pergunta decide
+    ignorando os neutros (`cd`, `echo`, `git add`...) sem redirecionamento nem
+    substituição; segmento com `$(`, crase, `<(` ou `>` é não listado: um segmento de pergunta decide
     pelo comando inteiro, em qualquer posição; senão um segmento não listado
     decide (default); só é automático o comando em que TODOS os segmentos
     são automáticos. Sem isso `rm -rf x && pytest` seria "rodar
@@ -296,8 +304,12 @@ def casar(cfg: dict, bash: str | None = None, mcp: str | None = None,
     if bash:
         automatico = None   # o primeiro item automático, se todos os segmentos forem
         nao_listado = False
-        segs = [s for s in _segmentos(bash) if not _NEUTROS.match(s)]
+        segs = [s for s in _segmentos(bash)
+                if not (_NEUTROS.match(s) and not _ESCONDIDO.search(s))]
         for seg in segs or [bash]:
+            if _ESCONDIDO.search(seg):
+                nao_listado = True   # `pytest $(git push)` não é "rodar build"
+                continue
             item = _casar_um(cfg, seg, None, None, None, None, cond)
             if item is None:
                 nao_listado = True

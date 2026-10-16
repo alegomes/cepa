@@ -120,6 +120,20 @@ def test_casamento_mecanico_dos_tool_calls():
         (dict(bash="git merge x", cond={"branch_atual": "feature/y"}), "sempre_pergunta", None),
         (dict(mcp="mcp__Atlassian__createJiraIssue"), "executa_e_reporta", "criar-card"),
         (dict(mcp="mcp__Atlassian__createJiraIssue", cond={"label": "infra"}), "executa_e_reporta", "card-infra-agregado"),
+        # revisão do par, rodada 2: substituição no meio dos argumentos e neutro com redirecionamento
+        (dict(bash="pytest `git push`"), "sempre_pergunta", None),
+        (dict(bash="pytest $(rm -rf x)"), "sempre_pergunta", None),
+        (dict(bash="mvn test $(git push)"), "sempre_pergunta", None),
+        (dict(bash="pytest <(git push)"), "sempre_pergunta", None),
+        (dict(bash="printf x > ~/.bashrc && pytest"), "sempre_pergunta", None),
+        (dict(bash="echo x > important.py && pytest"), "sempre_pergunta", None),
+        (dict(bash="echo x >(git push) && pytest"), "sempre_pergunta", None),
+        # e o que NÃO pode virar pergunta à toa
+        (dict(bash="git add . && git commit -m x"), "executa_e_reporta", "commit-local"),
+        (dict(bash="pytest -q 2>&1 | tail -5"), "sempre_pergunta", None),  # `2>&1` é redirecionamento: fica como está, pergunta
+        (dict(bash="pytest -q | tail -5"), "executa_e_reporta", "rodar-build"),
+        (dict(bash="export X=1 && mvn test"), "executa_e_reporta", "rodar-build"),
+        (dict(bash="git status && git diff --stat && git commit -m x"), "executa_e_reporta", "commit-local"),
     ]
     for entrada, faixa, ident in casos:
         r = aut.casar(cfg, **entrada)

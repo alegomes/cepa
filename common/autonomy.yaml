@@ -10,10 +10,11 @@
 #
 # Cada ação carrega `detect:` — a impressão digital da ação, para que CÓDIGO
 # (não o julgamento do agente no turno) reconheça o tool-call:
-#   bash:  regex casada contra CADA segmento do comando (`&&`, `;`, `|`, `||`, `&`,
-#          prefixo VAR=valor e `$(` removidos). O comando inteiro só é automático
-#          se TODOS os segmentos forem; um segmento de pergunta ou não listado
-#          puxa o comando inteiro para a pergunta.
+#   bash:  regex casada contra CADA segmento do comando (`&&`, `;`, `|`, `||`, `&`;
+#          prefixo VAR=valor e `$(`/`(` do início removidos; `cd`, `echo`, `git add`
+#          etc. ignorados). Segmento com `$(`, crase, `<(` ou `>` no meio conta como
+#          NÃO listado. O comando inteiro só é automático se TODOS os segmentos
+#          forem; um segmento de pergunta ou não listado puxa tudo para a pergunta.
 #   mcp:   regex casada contra o nome da ferramenta MCP
 #   path:  regex casada contra o caminho tocado (+ `op:` delete|any, default any)
 #   slash: regex casada contra o comando /plugin:nome invocado
