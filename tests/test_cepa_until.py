@@ -1271,6 +1271,75 @@ def test_plan_de_outra_fila_sujo_pelo_run_vivo_nao_e_sujeira():
               and "modificado(s)" in p.stderr, p.stderr[:300])
 
 
+def test_run_vivo_recusa_antes_do_guarda_de_sujeira():
+    """A recusa do run vivo vem ANTES do guarda de sujeira: com um run da
+    fila de pé e sujeira real na árvore, a mensagem é a do run vivo, sem
+    `--sujo-ok` e sem a contagem de arquivos modificados."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        (raiz / "lixo.txt").write_text("sujeira real\n", encoding="utf-8")
+        vivo = _processo_cepa_until()
+        try:
+            _supervisor_falso(raiz, "fila", vivo.pid)
+            p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+            check("run vivo + árvore suja: recusa com saída 2, sem disparar",
+                  p.returncode == 2 and not chamadas,
+                  f"saiu {p.returncode}: {p.stderr[:300]}")
+            check("...a mensagem é a do run vivo",
+                  "já há um run desta fila" in p.stderr, p.stderr[:300])
+            check("...e não a da árvore suja",
+                  "--sujo-ok" not in p.stderr
+                  and "modificado(s)" not in p.stderr, p.stderr[:300])
+        finally:
+            vivo.kill()
+            vivo.wait()
+
+
+def test_arvore_suja_continua_estrita_para_os_outros_chamadores():
+    """O filtro do run vivo só vale com `run_vivo_ok=True`; o default
+    (usado pelos demais chamadores de `arvore_suja`) segue listando o
+    `plan.yaml` de outra fila."""
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader("cepa_until_mod",
+                                                  str(CEPA_UNTIL))
+    spec = importlib.util.spec_from_loader("cepa_until_mod", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        outra = raiz / ".claude" / "programs" / "outra" / "plan.yaml"
+        outra.parent.mkdir(parents=True)
+        base = {"schema_version": 2, "mode": "single-track",
+                "program": "outra", "source": "teste",
+                "items": [item("o1"), item("o2")]}
+        outra.write_text(yaml.safe_dump(base, allow_unicode=True),
+                         encoding="utf-8")
+        _commita(raiz, "outra")
+        vivo = _processo_cepa_until()
+        try:
+            _supervisor_falso(raiz, "outra", vivo.pid, itens=["o1"])
+            novo = yaml.safe_load(yaml.safe_dump(base))
+            novo["items"][0].update({"status": "in_progress",
+                                     "claimed_by": {"run": "x"},
+                                     "evidence": "feito"})
+            outra.write_text(yaml.safe_dump(novo, allow_unicode=True),
+                             encoding="utf-8")
+            estrito = mod.arvore_suja(raiz)
+            check("default segue estrito: lista o plan de outra fila",
+                  any(l.startswith(" M ")
+                      and l.endswith(".claude/programs/outra/plan.yaml")
+                      for l in estrito or []), f"{estrito}")
+            frouxo = mod.arvore_suja(raiz, run_vivo_ok=True)
+            check("run_vivo_ok=True filtra o mesmo diff",
+                  frouxo == [], f"{frouxo}")
+        finally:
+            vivo.kill()
+            vivo.wait()
+
+
 def main():
     print("cepa-until — supervisor de janela de tempo\n")
     for nome, fn in sorted(globals().items()):
