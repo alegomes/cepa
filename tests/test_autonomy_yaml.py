@@ -115,6 +115,11 @@ def test_casamento_mecanico_dos_tool_calls():
         (dict(bash="$(git push origin x)"), "sempre_pergunta", "push-remoto"),
         (dict(bash="(git push)"), "sempre_pergunta", "push-remoto"),
         (dict(bash="pytest && echo fim && git push"), "sempre_pergunta", "push-remoto"),
+        # prova (2026-10-16): a pergunta vence em QUALQUER posição, não só na última
+        (dict(bash="git push && pytest"), "sempre_pergunta", "push-remoto"),
+        (dict(bash="git push; pytest"), "sempre_pergunta", "push-remoto"),
+        (dict(bash="pytest && git push && echo x"), "sempre_pergunta", "push-remoto"),
+        (dict(bash="git reset --hard && git commit -m x && pytest"), "sempre_pergunta", "descartar-trabalho"),
         (dict(bash="git commit -m 'fix (x)'"), "executa_e_reporta", "commit-local"),
         (dict(bash="git merge x", cond={"branch_atual": "main"}), "sempre_pergunta", "merge-integracao"),
         (dict(bash="git merge x", cond={"branch_atual": "feature/y"}), "sempre_pergunta", None),
