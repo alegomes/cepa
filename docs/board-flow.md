@@ -47,8 +47,9 @@ defaults:
     task: "Task"
   required_fields:
     # Custom fields with project-mandated defaults. Auto-filled on
-    # every createIssue.
-    - { id: customfield_10010, name: "Team", value: "Engineering" }
+    # every createIssue. Value shape depends on the field type:
+    - { id: customfield_10001, name: "Team", value: "<team-uuid>" }          # Atlassian Teams: bare UUID string
+    - { id: customfield_10414, name: "Module", value: { id: "<optionId>" } } # single-select: option object
   scope:
     # Raw JQL fragment AND-ed into the *-drain column queries. '' = whole
     # column. See "Scoping the *-drain commands" below.
@@ -68,11 +69,11 @@ default_topology: build-hex       # which topology's leads /board-flow:execute d
 topologies:
   discovery:
     required_fields:
-      - { id: customfield_10010, name: "Team", value: "Product" }
+      - { id: customfield_10001, name: "Team", value: "<uuid-of-product-team>" }
     # project_key: DISC          # if discovery uses a different Jira project
   build-hex:
     required_fields:
-      - { id: customfield_10010, name: "Team", value: "Engineering" }
+      - { id: customfield_10001, name: "Team", value: "<uuid-of-engineering-team>" }
     scope: { jql: 'component = backend' }   # drain backend work only when build-hex is active
 
 # --- Lifecycles for /board-flow:advance ---
@@ -135,8 +136,13 @@ lifecycles:
   calls. Standard names usually work; custom Jira setups may differ.
 - **`defaults.required_fields`** — project-mandated custom fields with
   default values, auto-filled on every `createIssue`. Format:
-  `{id, name, value}` objects. Currently only supports static defaults
-  (no per-card overrides via this mechanism).
+  `{id, name, value}` objects. The `value` shape depends on the field
+  type: an Atlassian Teams field (e.g. `customfield_10001`) takes the bare
+  UUID string (a team name or `{ id: "<uuid>" }` is HTTP 400
+  `Team id ... is not valid`), while a single-select option field (e.g.
+  `customfield_10414`) takes `{ id: "<optionId>" }` (the label string is
+  HTTP 400). Don't copy one shape onto the other. Currently only
+  supports static defaults (no per-card overrides via this mechanism).
 - **`defaults.scope`** — a raw JQL fragment (`{ jql: '...' }`) that
   narrows which cards the auto-selecting `*-drain` commands sweep. `''`
   (the default) means whole-column, the original behavior. See
