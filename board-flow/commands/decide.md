@@ -26,7 +26,10 @@ tiver algo, não uma vez por semana.
 - Não inventa motivo. Card que não casa com nenhum dos sete **para o comando**,
   com o card nomeado. Ver "A lista é fechada" em
   [docs/needs-human-motivos.md](../../docs/needs-human-motivos.md).
-- Não escreve nada no Jira antes de você responder.
+- Não escreve nada no Jira antes de você responder — fora o que o
+  `common/autonomy.yaml` põe na faixa `executa_e_reporta` (passo 5b: re-rodar
+  prova, card de infra agregado, comentário), que é feito e reportado.
+  Avançar card é sempre pergunta.
 
 ## Variables
 
@@ -85,12 +88,18 @@ Os `nao-rodou` não viram pergunta. Para eles:
 
 - Reagrupe por causa concreta (ferramenta de cobertura ausente, Docker fora,
   commit-base sumido, trava do harness).
-- Proponha re-rodar `/board-flow:prove` nos cards cuja causa é transitória
-  (Docker, build).
-- Para causa persistente (ferramenta que não está instalada no projeto),
-  proponha **um** card de infra agregando todos — nunca um card por card
-  travado. No levantamento de 03/08/2026 eram 11 cards com a mesma causa
-  (`wego-assinatura-backend` sem quarkus-jacoco/PIT), que viraram o WEGO-2004.
+- Re-rode `/board-flow:prove` nos cards cuja causa é transitória (Docker,
+  build) — não proponha: é a ação `rerodar-prove` da faixa `executa_e_reporta`
+  do `common/autonomy.yaml`, e vira linha de informação no relatório. A regra
+  geral de consulta é o passo 5b; aqui a classificação já é conhecida
+  (`cepa-autonomy classificar --id rerodar-prove` confirma).
+- Para causa persistente (ferramenta que não está instalada no projeto), crie
+  **um** card de infra agregando todos — nunca um card por card travado. Também
+  faixa automática (`card-infra-agregado`: card com label `infra`, informe
+  `--cond label=infra` na consulta). No levantamento de 03/08/2026 eram
+  11 cards com a mesma causa (`wego-assinatura-backend` sem quarkus-jacoco/PIT),
+  que viraram o WEGO-2004.
+- Com `--dry-run`, as duas voltam a ser proposta: nada é executado.
 
 ### 5. Aplique os waivers que você já deu
 
@@ -110,6 +119,50 @@ dispensando por conta própria. Vencido volta a ser pergunta, dizendo que venceu
 
 Waiver malformado (sem autor, razão ou gatilho) é ignorado, não vale como
 dispensa.
+
+### 5b. Confira a faixa de autonomia antes de transformar ação em pergunta
+
+Toda ação que este comando está prestes a propor ao dono (re-rodar a prova,
+criar o card de infra, comentar um card, criar o card do teste que falta,
+avançar um card para Done) passa primeiro pelo `common/autonomy.yaml` — o
+arquivo versionado que diz, por ação, se o agente **faz e reporta** ou
+**pergunta**. Quem lê o arquivo é código, não você:
+
+```
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-autonomy" classificar --mcp <ferramenta>   # ou --bash "<comando>", --path <arquivo>, --slash </comando>, --id <acao>
+#   --cond chave=valor para condição do detect que você já conferiu (label=infra, branch_atual=main)
+```
+
+(`${CLAUDE_PLUGIN_ROOT}/bin/cepa-autonomy` é um atalho para o
+`common/bin/cepa-autonomy` real, como o `cepa-plan`; dentro do repo cepa,
+`python3 common/bin/cepa-autonomy` dá no mesmo.)
+
+O que a resposta muda:
+
+- **`executa_e_reporta`** (reversível: rodar build, commit local, criar card
+  não-terminal, comentar card, re-rodar prova, card de infra agregado) → faça,
+  e o que foi feito vira **linha de informação** no `### Detalhe técnico` do
+  relatório ("Re-rodei a prova de 3 cards com Docker fora; criei o WEGO-2004
+  agregando 11 cards sem PIT"). **Nunca** item numerado de `### Decisões e
+  próximos passos`: na sessão de 2026-08-03 a 08-10, ~10 das ~20 interrupções
+  eram perguntas dessa faixa que o dono só carimbou com "sim". Se a resposta
+  trouxer `precondicao`, confira-a antes de agir (ex.: apagar branch só se
+  `git merge-base --is-ancestor` disser que está contida); falhou, a ação é
+  `descartar-trabalho` e cai na faixa de pergunta.
+  `git branch -D` sem essa conferência é proibido: na Fase 1 quem roda a
+  precondição é você, porque o hook que a roda sozinho é da Fase 2.
+- **`sempre_pergunta`** (irreversível ou de fora: push, merge em integração,
+  descartar trabalho, transição terminal no board, segredo, terceiros) → entra
+  no lote do passo 6, como sempre. Avançar card para Done é
+  `transicao-terminal`: continua sendo pergunta.
+- **não listado** → pergunte (o default é `sempre-pergunta`: perguntar demais
+  custa segundos, agir demais é o worktree-artifact-rescue de novo) e termine
+  a pergunta com "proponho adicionar `<id>` ao `common/autonomy.yaml`". A lista
+  cresce por diff versionado, nunca por julgamento no turno.
+
+O repo pode endurecer a lista em `.claude/autonomy.yaml` (mover ação para
+`sempre_pergunta`); nunca afrouxar. `cepa-autonomy listar` mostra a lista
+mesclada e de onde veio cada item.
 
 ### 6. Agrupe por motivo e pergunte UMA vez por grupo
 
@@ -181,7 +234,14 @@ perguntas sobraram, e ele só significa alguma coisa ao lado do que foi cortado.
 ## Constraints
 
 - **Leitura por default.** Nada é escrito no Jira nem em `.claude/waivers/`
-  antes da resposta do usuário. `--dry-run` nem pergunta.
+  antes da resposta do usuário — com uma exceção declarada: ação da faixa
+  `executa_e_reporta` do `common/autonomy.yaml` (passo 5b: re-rodar prova,
+  card de infra agregado, comentário) é feita e reportada, não perguntada.
+  `--dry-run` nem pergunta nem executa.
+- **A faixa é do arquivo, não sua.** `cepa-autonomy classificar` decide se uma
+  ação é pergunta ou informação; ação não listada é pergunta, e a pergunta
+  propõe o id. Promover ação para a faixa automática é diff em
+  `common/autonomy.yaml`, nunca decisão no turno.
 - **Em run autônomo, nunca grave dispensa:** `waivers.gravar` vira proposta e
   o item ganha rota humana; quem converte é o `cepa-plan responde` do dono.
 - `atlassian-expert` é o único caminho de escrita no Jira.

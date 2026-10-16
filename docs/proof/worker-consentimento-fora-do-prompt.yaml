@@ -1,0 +1,61 @@
+schema_version: 2
+card: worker-consentimento-fora-do-prompt
+verdict: proven
+reviewed_at: 2026-10-16T15:00:00-03:00
+base_commit: e89f95c
+head_commit: 77c8342
+issue_type: Feature
+scope:
+  changed_classes:
+    - class: "build-hex/hooks/path-lock.py (extra_globs_provenance + main)"
+      module: build-hex-hook
+      external_observable: true
+      substituted_by_double: null   # o teste executa o hook real como subprocesso; repositorios git reais em tmpdir
+    - class: "build-hex/agents/{domain-dev,api-dev,adapter-dev,qa-engineer,engineering-lead}.md (prosa)"
+      module: build-hex-prompts
+      external_observable: false
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a               # repo Python, sem PIT
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "worktree descartavel em 77c8342 (removido ao fim). baseline: python3 tests/test_worker_consent_channel.py -> 23 checks ok, 'tudo verde'"
+        - "M1 (l.393) is_symlink -> if False: RED, 1 falha (l)"
+        - "M2 (l.395) sem rev-parse: RED, 1 falha (f)"
+        - "M3 (l.397) sem ls-files: RED, 2 falhas (a, i1)"
+        - "M4 (l.399) diff --quiet sem HEAD: RED, 2 falhas (b, h)"
+        - "M5 provenance sempre (True,''): RED, 8 falhas (a, b, d, f, h, i1, k, l)"
+        - "M6 (l.403) rc==1 devolve True: RED, 2 falhas (b, d)"
+        - "M7 (l.404) fallthrough rc!=0/1 devolve True: RED, 1 falha (h)"
+        - "M8 (l.406) except Exception devolve True: RED, 1 falha (k). Antes sobrevivia"
+        - "M9 (l.481) path_matches(with_extras) -> if True: RED, 1 falha (j). Antes sobrevivia"
+        - "M10 (l.483) if ok -> if False: RED, 2 falhas (c, i2)"
+        - "M11 (l.476) canonico deixa de ser julgado primeiro: RED, 1 falha (e)"
+        - "M12 (l.494) sys.exit(2) -> pass (cai tambem na mensagem generica): RED, 8 falhas"
+        - "equivalente nao contado: l.479 'if extra_write_globs.get(agent)' -> 'if True' (sem extras a lista com extras e igual a canonica, que ja falhou); verificado em 66483c6"
+        - "prosa: ancoras dos 5 agentes e trecho de docs/internals/path-lock.md derrubam o teste quando removidos (RED verificado em 0559159/66483c6; os 5 .md de agentes nao mudaram desde entao, path-lock.md ganhou 2 linhas em 77c8342 sem mexer na frase ancorada). So existe altitude de presenca de texto: prova que a bala esta no arquivo, nao que o worker a obedece"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance determinado pela perturbacao (criterio de docs/proof/worktree-remove-guard-camada-1.yaml). Cada linha alterada de comportamento do hook em 77c8342 cai RED quando quebrada: 393 (M1), 395 (M2), 397 (M3), 399 (M4), 401 return True (M5), 403 (M6), 404 (M7), 406 (M8), 456-457 canonico primeiro/476 (M11), 479 (equivalente, sem efeito observavel), 481 (M9), 483 (M10), 494 (M12). Mensagens REASON_*: travadas por asserts de texto nos casos a, b, f, k, l."
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings:
+      - "a1 scripts -> symlink ../outside: resolve fora da raiz, rc=0 igual ao base (carve-out preexistente). Regression vs base: no"
+      - "a2 scripts -> symlink para pasta in-repo: rc=2 nos dois. Regression vs base: no"
+      - "b scripts/../pom.xml: rc=2 nos dois, sem traceback. Regression vs base: no"
+      - "c build-hex.yaml como diretorio: layout canonico, extras ignorados, sem traceback, rc=2 nos dois. Regression vs base: no"
+      - "d1/d2/d3 build-hex.yaml symlink (commitado; alvo editado depois; alvo fora do repo): em 77c8342 rc=2 citando 'symlink' nos tres (reconfirmado), antes bypass em 66483c6. Base devolvia rc=0 (sem portao). Mudanca intencional e mais estrita; fecha o finding da rodada anterior. Regression vs base: no (menos permissivo)"
+      - "e cwd em subdiretorio com yaml so na raiz: rc=2 nos dois. Regression vs base: no"
+      - "nenhum buraco novo contra o base; todos os findings da rodada anterior fechados ou comportamento preexistente"
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "nao e Bug"
+routing_reason: "PROVEN, calculado pela regra mecanica: 12 perturbacoes de comportamento do hook ficam RED em 77c8342 (incluindo as duas que sobreviviam, M8/M9, e a nova do is_symlink, M1); L2 por alcance de perturbacao sem linha descoberta; L4 sem buraco novo contra o base e o bypass por symlink reconfirmado fechado (exit 2). Limite declarado: a prosa so prova presenca de texto, e o roles: remap nao e travado (layout, nao permissao)."

@@ -1,0 +1,66 @@
+schema_version: 1
+card: autonomy-yaml-fase-1
+status: complete
+audited_at: 2026-10-16
+head: 8772732
+base: e462e73
+criteria:
+  - id: AC1
+    text: "common/autonomy.yaml lista acoes reversiveis (executa e reporta) e irreversiveis (pergunta); nao listada cai em ask."
+    altitude: domain
+    surface: "arquivo common/autonomy.yaml carregado por common/hooks/_autonomy.py e cepa-autonomy classificar"
+    demonstrated_by:
+      test: "tests/test_autonomy_yaml.py (10 automaticas e 6 de pergunta, mecanicas carimbadas e irreversiveis presentes, default sempre-pergunta, classificacao de comandos reais (rodada 2: substituicao `...` / $(...) / <(...) e redirecionamento > tornam o segmento nao listado -> pergunta; pipes e export seguem neutros), incluindo todos os segmentos: 'mvn clean install && git push' -> pergunta; 'mvn deploy' -> nao listado -> pergunta; --cond label=infra)"
+      layer: teste de arquivo + classificador (CLI)
+      evidence: verified
+      run: "python3 tests/test_autonomy_yaml.py -> 118 linhas ok, 0 falhas, 'all green', rc=0"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "Cada acao carrega detect: (fingerprint)."
+    altitude: domain
+    surface: "cada id de ambas as faixas em common/autonomy.yaml"
+    demonstrated_by:
+      test: "tests/test_autonomy_yaml.py (um check 'tem detect:' por id, 16 ids; mais classificacao bash/mcp/path/slash)"
+      layer: teste de arquivo
+      evidence: verified
+      run: "python3 tests/test_autonomy_yaml.py -> all green, rc=0"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "/board-flow:decide (board-flow/commands/decide.md) le a lista."
+    altitude: cli
+    surface: "decide.md passo 5b invoca cepa-autonomy classificar; atalho board-flow/bin/cepa-autonomy executa o do common e repassa argv/exit"
+    demonstrated_by:
+      test: "tests/test_autonomy_yaml.py (decide.md consulta classificar, antes do passo 6, nomeia as faixas, auto nunca vira item numerado, nao listado propoe id, --dry-run; atalho executavel e repassa argv/exit)"
+      layer: teste de conteudo do comando + execucao real do shim. Nota - decide.md e prompt de LLM; nao ha teste que execute o comando de ponta a ponta, so que ele instrui a consulta e que a consulta funciona.
+      evidence: verified
+      run: "python3 tests/test_autonomy_yaml.py -> all green, rc=0"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "Escopo so Fase 1 (ask-audit-gate e attestations fora; ausencia nao e gap)."
+    altitude: domain
+    surface: "diff e462e73..8772732 (8 arquivos; unico arquivo em hooks/ e o helper _autonomy.py)"
+    demonstrated_by:
+      test: "inspecao do diff: apenas autonomy.yaml, _autonomy.py, cepa-autonomy (+shim), decide.md, cepa-plan (shim), BACKLOG, teste; nenhum hook de gate"
+      layer: revisao
+      evidence: verified
+      run: "git diff e462e73..8772732 --stat"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "Teste de aceitacao tests/test_autonomy_yaml.py."
+    altitude: domain
+    surface: "tests/test_autonomy_yaml.py"
+    demonstrated_by:
+      test: "tests/test_autonomy_yaml.py"
+      layer: script python standalone
+      evidence: verified
+      run: "python3 tests/test_autonomy_yaml.py -> 118 ok, 0 falhas, all green, exit 0 (N>0)"
+    verdict: complete
+    gap: null
+# Re-auditoria de HEAD 8772732 (base e462e73), apos 50c7404..8772732 (lista de segmentos neutros encolhida: sort, git diff/log/show e export saem; -o/--output tornam neutro nao neutro).
+# Rodado: python3 tests/test_autonomy_yaml.py -> rc=0, 118 ok, 0 falhas, all green.
+# Verificado com cepa-autonomy classificar --bash: 'pytest -q | tail -5' -> rodar-build; 'git push && pytest' -> push-remoto (pergunta);
+# 'export PYTHONPATH=/x && pytest' e 'sort -o a b && pytest' -> nao listado -> pergunta; 'cd x && git commit -m y' -> commit-local.

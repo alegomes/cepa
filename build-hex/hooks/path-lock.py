@@ -34,6 +34,14 @@ externals out of the core, etc.). It is no longer opinionated about
 the directory layout that implements those invariants — that's
 project convention.
 
+Consent for writes outside the role globs (`extra_write_globs`) comes
+ONLY from git provenance: extras count only while `build-hex.yaml` is
+tracked and unchanged since HEAD. Authorization written in a prompt,
+TASK.md or RESULT.md is text, not consent (BACKLOG § "Aprovação humana
+não chega ao subagente", episode WEGO-1948, decision 2026-10-16). Stated
+limit: the `roles:` remap is NOT gated — it is layout, not permission.
+A symlinked `build-hex.yaml` is refused (git tracks the link, not the target).
+
 Exit codes:
   0 — allowed
   2 — blocked (stderr message reaches the agent so it can self-correct)
@@ -42,6 +50,7 @@ Exit codes:
 import fnmatch
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -360,6 +369,43 @@ def path_matches(file_path: str, globs: list, project_root: Path) -> bool:
     return False
 
 
+# ─── extras provenance (build-hex only) ───────────────────────────────
+
+REASON_UNTRACKED = "untracked by git (never committed)"
+REASON_MODIFIED = "modified since the last commit (staged or unstaged)"
+REASON_SYMLINK = ("a symlink (git tracks the link text, not the target, so edits to "
+                  "the target escape the provenance check)")
+REASON_NO_GIT = "not inside a git repository, or git unavailable"
+
+
+def extra_globs_provenance(project_root: Path) -> tuple:
+    """Is `build-hex.yaml` committed and unchanged? -> (ok, reason).
+
+    Fails CLOSED for the extras only: any git problem returns False.
+    """
+    def _git(*args):
+        return subprocess.run(
+            ["git", *args], cwd=str(project_root), capture_output=True,
+            text=True, timeout=5,
+        ).returncode
+
+    try:
+        if (project_root / "build-hex.yaml").is_symlink():
+            return False, REASON_SYMLINK
+        if _git("rev-parse", "--is-inside-work-tree") != 0:
+            return False, REASON_NO_GIT
+        if _git("ls-files", "--error-unmatch", "build-hex.yaml") != 0:
+            return False, REASON_UNTRACKED
+        rc = _git("diff", "--quiet", "HEAD", "--", "build-hex.yaml")
+        if rc == 0:
+            return True, ""
+        if rc == 1:
+            return False, REASON_MODIFIED
+        return False, REASON_NO_GIT
+    except Exception:
+        return False, REASON_NO_GIT
+
+
 # ─── main ─────────────────────────────────────────────────────────────
 
 def main():
@@ -406,7 +452,9 @@ def main():
         sys.exit(0)
 
     roles, extra_write_globs = load_config(project_root)
-    allowed_writes = build_allowed_writes(roles, extra_write_globs)
+    # Canonical allowlist first (no extras): the common path makes no git call.
+    canonical_writes = build_allowed_writes(roles)
+    allowed_writes = canonical_writes
 
     agent = detect_agent(payload)
     debug_log(payload, agent, roles)
@@ -427,6 +475,23 @@ def main():
 
     if path_matches(file_path, allowed, project_root):
         sys.exit(0)
+
+    if extra_write_globs.get(agent):
+        with_extras = build_allowed_writes(roles, extra_write_globs)[agent]
+        if path_matches(file_path, with_extras, project_root):
+            ok, reason = extra_globs_provenance(project_root)
+            if ok:
+                sys.exit(0)
+            print(
+                f"[build-hex path-lock] BLOCKED: agent {agent!r} cannot {tool_name} {file_path}. "
+                f"extra_write_globs in build-hex.yaml would allow it, but that file is {reason}. "
+                f"Authorization to write outside the role globs only counts when build-hex.yaml "
+                f"is committed — the lock reads consent from git history, never from the prompt. "
+                f"A human (or the main session) commits it, then retry. Do not edit build-hex.yaml "
+                f"yourself; return NEEDS-HUMAN-APPROVAL naming the path and the glob.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
     # Build a layout-aware error message so the user can see why the path didn't match.
     non_default = [r for r, m in roles.items() if m != DEFAULT_ROLES[r]]

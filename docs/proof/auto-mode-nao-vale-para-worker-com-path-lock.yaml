@@ -1,0 +1,45 @@
+schema_version: 2
+card: auto-mode-nao-vale-para-worker-com-path-lock
+verdict: proven
+reviewed_at: 2026-10-16T12:00:00-03:00
+base_commit: 4952cee
+head_commit: 9225fc3
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "build-hex/agents/domain-dev.md", module: build-hex, external_observable: true, substituted_by_double: null }
+    - { class: "build-hex/agents/api-dev.md", module: build-hex, external_observable: true, substituted_by_double: null }
+    - { class: "build-hex/agents/adapter-dev.md", module: build-hex, external_observable: true, substituted_by_double: null }
+    - { class: "build-hex/agents/qa-engineer.md", module: build-hex, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_auto_mode_nao_vale_para_path_lock.py", module: tests, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: ["repo Python/Markdown, sem PIT"]
+    perturbation:
+      status: pass
+      results:
+        - "remover a bala de domain-dev.md (checkout 4952cee): RED, exit 1 (FAIL build-hex/agents/domain-dev.md diz que a preferencia do Auto Mode por Bash nao se aplica)"
+        - "remover a bala de api-dev.md: RED, exit 1, FAIL nomeado para api-dev.md"
+        - "remover a bala de adapter-dev.md: RED, exit 1, FAIL nomeado para adapter-dev.md"
+        - "remover a bala de qa-engineer.md: RED, exit 1, FAIL nomeado para qa-engineer.md"
+        - "nos 4 arquivos de base 'Auto Mode' aparece 0 vezes (grep -c), entao o marcador so existe por causa do diff"
+        - "sobrevivente fraco, trocar 'does not apply to you' por 'applies to you' (bala mantida, 'Auto Mode' ainda presente, grep -c = 1): RED nos 4 arquivos, exit 1, cada um com o FAIL do proprio arquivo"
+        - "cada perturbacao derruba exatamente 1 caso (1 falha(s)); os outros 3 ficam ok"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; o teste le cada um dos 4 arquivos e as perturbacoes por arquivo provam que cada caso e exercido"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff so altera prosa de prompts de agente e um teste que le arquivos locais do repo; nenhuma entrada externa nem modulo api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "nao e Bug"
+verificacao_verde:
+  run: "HEAD 9225fc3 em worktree descartavel /tmp/proof-auto-mode-1: python3 tests/test_auto_mode_nao_vale_para_path_lock.py -> 'tudo verde', exit 0, antes e depois das perturbacoes (git status limpo). Worktree removido com 'git worktree remove --force'; arvore primaria inalterada."
+routing_reason: "As 4 remocoes e as 4 corrupcoes de frase derrubam o teste com o check do arquivo certo; verde restaurado. Sem double. Limite honesto: o teste prova que a frase esta no prompt, nao que o agente a obedece (efeito comportamental nao medido)."

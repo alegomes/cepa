@@ -1,0 +1,72 @@
+schema_version: 1
+card: gauntlet-comando
+status: complete
+audited_at: 2026-10-16T08:30:00-03:00
+criteria:
+  - id: AC1
+    text: "/common:gauntlet roda os 5 passos na ordem: barra antes de qualquer design; N (default 3) builders isolados com ângulos distintos; 3 juízes cegos, ordem rotacionada, vencedor por Borda; revisão do vencedor; checagem final por crítico novo."
+    altitude: workflow
+    surface: "execução do corpo de common/gauntlet/gauntlet.workflow.js (o próprio arquivo, via AsyncFunction) com agent/parallel/phase/log simulados"
+    demonstrated_by:
+      test: "tests/test_gauntlet_workflow.py (ordem das fases; bar-setter antes dos builders; isolamento dos builders; cegueira e rotação ABC/BCA/CAB dos juízes; Borda 8/6/4; desempates; rótulo Z ignorado; <2 designs vira error; args string JSON) + tests/test_gauntlet_command.py"
+      layer: execução real do script com runtime simulado (node); falta só o agente real
+      evidence: verified
+      run: "python3 tests/test_gauntlet_workflow.py -> 40 checks ok, 'tudo ok'; python3 tests/test_gauntlet_command.py -> 54 linhas ok, 'tudo ok'. Harness carrega o arquivo do script (new AsyncFunction sobre o src real), não uma cópia."
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "Script canônico em common/, parametrizado por args, sem path fixo, determinístico (sem Date.now/Math.random, meta literal); o comando manda rodar ESSE script e não reescrever."
+    altitude: document
+    surface: "common/gauntlet/gauntlet.workflow.js e common/commands/gauntlet.md"
+    demonstrated_by:
+      test: "tests/test_gauntlet_command.py (sem Date.now, sem Math.random, sem /Users/, guarda de args string, lê A.goal/A.context/A.reads/.brief, 'não reescreva o script', cita gauntlet/gauntlet.workflow.js)"
+      layer: asserção estática de conteúdo; adequada, pois as propriedades são estáticas
+      evidence: verified
+      run: "python3 tests/test_gauntlet_command.py -> 'tudo ok'. grep manual: único 'meta' é o literal 'export const meta' (l.12); nenhum Date.now/Math.random/path absoluto."
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Saída durável docs/internals/gauntlet-<slug>.md com barra, designs, vereditos, design final e lacunas (estrutura dos pilotos), nunca só o resultado efêmero."
+    altitude: document
+    surface: "instrução do passo 4 do comando (quem grava é o orchestrator seguindo a prosa)"
+    demonstrated_by:
+      test: "tests/test_gauntlet_command.py (passo 4 delimitado; exige caminho, os seis títulos do documento, tabela Borda 'com a conta mostrada', ranking de cada juiz e maiores lacunas)"
+      layer: asserção de prosa restrita ao trecho do passo 4
+      evidence: verified
+      run: "python3 tests/test_gauntlet_command.py -> 'passo 4 nomeia o título ...' x6, 'passo 4 pede a tabela Borda com a conta mostrada', 'tudo ok'"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "Relatório final em pt-BR leigo (plain-report) com recomendação e perguntas fechadas; custo opt-in (~600k) declarado e recusa para código provável / tarefa mecânica."
+    altitude: document
+    surface: "passos 0 e 5 do comando"
+    demonstrated_by:
+      test: "tests/test_gauntlet_command.py ('declara custo opt-in' 600k+9 agentes; 'recusa código provável / tarefa mecânica'; 'relata em plain-report') + tests/test_report_style_lint.py"
+      layer: asserção de prosa sobre o comando
+      evidence: verified
+      run: "python3 tests/test_gauntlet_command.py -> 'tudo ok'; python3 tests/test_report_style_lint.py -> 'all report-style tests passed'"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "Ângulos dos builders declarados pelo usuário (--angulos) ou do registry default (mecanismo-novo / estender-o-que-existe / livre)."
+    altitude: document
+    surface: "common/gauntlet/angulos.md e passo 2 do comando"
+    demonstrated_by:
+      test: "tests/test_gauntlet_command.py ('cita o registry de ângulos'; 3 'ângulo default ...'; argument-hint com --angulos)"
+      layer: asserção de conteúdo; a seleção por key é feita pelo orchestrator seguindo a prosa (key inválida, lista as válidas e para)
+      evidence: verified
+      run: "python3 tests/test_gauntlet_command.py -> 'ok ângulo default mecanismo-novo / estender-o-que-existe / livre', 'tudo ok'"
+    verdict: complete
+    gap: null
+  - id: AC6
+    text: "Consistência de catálogo e marketplace: linha em docs/commands.md, marketplace.json cita /gauntlet, plugin.json com bump MINOR, toda flag em argument-hint e em ## Variables."
+    altitude: document
+    surface: "docs/commands.md, .claude-plugin/marketplace.json, common/.claude-plugin/plugin.json, common/commands/gauntlet.md"
+    demonstrated_by:
+      test: "tests/test_catalogo_comandos.py, tests/test_marketplace_descricao_common.py, tests/test_flags_hint_variables.py, tests/test_pluginver_boot.py"
+      layer: asserção estrutural sobre os arquivos
+      evidence: verified
+      run: "catalogo -> 'tudo ok (67 comandos no catálogo)'; marketplace -> 'tudo ok (30 comandos na descrição)'; flags -> 'tudo ok (67 comandos varridos)'; pluginver_boot -> 'all green'. Diff: plugin.json 2.26.6 -> 2.27.0 (MINOR)."
+    verdict: complete
+    gap: null
+notes: "Reauditoria após ffa4134. O harness prova a lógica do script (ordem, isolamento, cegueira, rotação, Borda, desempate, erros), NÃO a qualidade da saída de agentes reais: isso continua exigindo um run real (~600k tokens), ainda não feito; a decisão de rodá-lo é do humano. AC3 prova que o comando manda gravar a estrutura certa, não que o orchestrator a cumpra em um run. Não rodei tests/run-all.sh, conforme instruído."

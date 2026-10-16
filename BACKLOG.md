@@ -615,7 +615,7 @@ parada, e não com silêncio.
 
 **Plano:** `cepa/aprovacao-humana-nao-chega-ao-subagente` (descartado)
 
-**Status:** pendente · **Lar:** `common/` (canal de aprovação) + `build-hex/hooks/path-lock.py`
+**Status:** feito (2026-10-16) · **Lar:** `common/` (canal de aprovação) + `build-hex/hooks/path-lock.py`
 + prompts dos workers · **Origem:** sessão wego 2026-07-21, card WEGO-1948 — worker recusou
 duas vezes uma escrita legitimamente autorizada, porque não tinha como verificar a
 autorização.
@@ -669,8 +669,18 @@ Nenhuma é obviamente certa; decidir no design.
    `NEEDS-HUMAN-APPROVAL` um retorno de primeira classe e imediato, em vez de o worker
    gastar a delegação inteira para depois recusar. Aqui custou ~4 min por recusa, duas vezes.
 
+### Decisão (2026-10-16)
+
+Fonte exigida = proveniência por git (opção 2), imposta mecanicamente por
+`build-hex/hooks/path-lock.py`: `extra_write_globs` só vale com `build-hex.yaml`
+commitado (rastreado e sem mudança desde o HEAD); o `roles:` segue sem trava (é
+layout, não permissão). As opções 3 (canal atestado pelo harness, precisa de suporte do
+produto) e 4 não foram construídas. A hipótese barata ("worker aceita `build-hex.yaml`
+commitado?") ficou moot: o próprio cadeado responde, o worker não julga mais.
+
 ### Pendências de design
 
+- Follow-up: bash-path-lock negar `git add`/`git commit` (e `-a`) que toque `build-hex.yaml` para agente trancado — fecha o canal para worker com direito de commit.
 - Testar a hipótese barata primeiro: worker aceita `build-hex.yaml` commitado?
 - Se a política virar "permissão só se declara no install", o `doctor` precisa detectar o
   caso "worker sem dono para arquivos de build" **antes** da tarefa esbarrar nele. Hoje
@@ -1555,7 +1565,18 @@ calada quando um worktree é removido); completar o mapa de ferramentas Jira nos
 
 **Implementação da Fase 1 aprovada pelo dono em 2026-08-15** (o `autonomy.yaml` + a
 extensão do `decide`), começando pelo spike de 30 min, para uma próxima sessão de
-build.
+build. **Fase 1 FEITA em 2026-10-16** (item `autonomy-yaml-fase-1` da fila `cepa`, S3
+do lote desmontado `lotes-sweep-verify`): `common/autonomy.yaml` com as duas faixas
+(10 ações `executa_e_reporta`, 6 `sempre_pergunta`, cada uma com `detect:`,
+`default_nao_listado: sempre-pergunta`); leitor em `common/hooks/_autonomy.py`
+(mescla o override `.claude/autonomy.yaml`, que só endurece; descarta item sem
+`detect:`; quando um call casa as duas faixas, pergunta vence) e CLI
+`common/bin/cepa-autonomy listar|classificar` (atalho `board-flow/bin/cepa-autonomy`,
+cópia do shim do `cepa-plan`, que agora resolve o homônimo pelo próprio nome);
+`decide.md` ganhou o passo 5b (re-rodar prova e card de infra agregado passam de
+proposta a ação reportada; avançar para Done segue pergunta). Guarda:
+`tests/test_autonomy_yaml.py`. O spike do hook em AskUserQuestion, o
+`autonomy-gate.py`, o `ask-audit-gate.py` e os atestados ficam para a Fase 2.
 
 ### Episódio anexado — feedback `fb-20261006-2` (2026-10-06)
 
@@ -1579,11 +1600,20 @@ de NOME de programa segue pendente · **Conferido em 2026-09-27** (drain-plan da
 branch `until/2026-09-26-2203`): as camadas 0, 1 e 2 estão no código e a 1 está
 instalada (o `common` 2.25.1 do cache já chama `_wtlib.py rescue` no `worktree-merge`
 e no `worktree-discard`; `tests/test_worktree_artifact_rescue.py` e
-`tests/test_plan_anchor_root.py`, 8 passed). O que sobra, trocar o nome do programa da
-chave do projeto para a fatia de trabalho, contradiz a decisão do dono de 2026-09-25
-na seção da fila única ("Um papel por fonte": uma fila por repo, o `/board-flow:drain`
-lê `<programs>/<project_key>/plan.yaml`). Não foi construído; o item ficou `blocked`
-até o dono dizer se essa metade morre · **Lar provável:** `common`
+`tests/test_plan_anchor_root.py`, 8 passed). A metade do NOME ficou `blocked` até o
+dono dizer se morria, porque parecia contradizer a decisão de 2026-09-25 ("Um papel
+por fonte": uma fila por repo, o `/board-flow:drain` lê
+`<programs>/<project_key>/plan.yaml`) · **Metade 2 FEITA em 2026-10-16** (item
+`next-nome-do-programa-nao-e-project-key` da fila `cepa`, S2 do lote desmontado
+`lotes-sweep-verify`): o `/common:next` perdeu a regra que fazia de
+`<project_key>/plan.yaml` o candidato automático e passou a seguir a mesma regra do
+`cepa-plan status` (uma fila single-track → ela, qualquer nome; várias → lista e
+pergunta). Não contradiz 2026-09-25: nomear a ÚNICA fila com a chave do projeto
+continua válido, o que saiu foi usar a chave como busca. Doc em
+`docs/execution-plan.md` ("What the file is called"); guarda em
+`tests/test_plan_program_naming.py`, que roda o `cepa-plan status` de verdade em repos
+temporários (`wego-todo-agosto` resolve; `WEGO` + `WEGO-in-progress` recusa nomeando
+as duas) · **Lar provável:** `common`
 (`plan-schema.yaml`, `/common:next`)
 + `maestro` (`program-plan`, `run`, `resume`) · **Origem:** sessão de 2026-08-10, a
 partir do relato de uma sessão do WEGO: *"O plano desta sessão morre com o worktree. O
@@ -1862,7 +1892,7 @@ argumento do `sed`.
 
 **Plano:** `cepa/comando-gauntlet` (descartado)
 
-**Status:** pendente (aprovado para cristalizar em 2026-08-15, após 2 pilotos) ·
+**Status:** entregue em 2026-10-16 (item gauntlet-comando da fila cepa; comando em common/commands/gauntlet.md) ·
 **Lar provável:** `common` · **Origem:** pergunta do dono "how can we add Gauntlet Loop
 abilities into Cepa?" (2026-08-14) + 2 pilotos rodados via tool Workflow em 2026-08-15.
 
@@ -2307,7 +2337,7 @@ se apresentar pelo nome. O custo de não ter é medido — uma sessão.
 
 **Plano:** `cepa/bash-vs-path-lock` (descartado)
 
-**Status:** pendente · **Lar provável:** `build-hex` (hook `path-lock`) + a diretiva de
+**Status:** frente 1 feita (2026-10-16, item `cepa/auto-mode-nao-vale-para-worker-com-path-lock`); frentes 2 e 3 pendentes · **Lar provável:** `build-hex` (hook `path-lock`) + a diretiva de
 auto-mode que injeta "faça o trabalho pelo Bash" · **Origem:** drain de 5 cards no
 `wego-acesso-backend` (2026-08-20), onde o conflito apareceu quatro vezes numa sessão só.
 

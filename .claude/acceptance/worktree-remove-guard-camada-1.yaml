@@ -1,0 +1,52 @@
+key: worktree-remove-guard-camada-1
+status: complete
+diff_range: c0431f6..d10153f
+criteria:
+  - id: AC1
+    altitude: event
+    surface: Hook PreToolUse/Bash recebendo payload JSON com `git worktree remove` / `git branch -D|-d`, inclusive encadeado com && e caminho absoluto (forma do incidente).
+    test: tests/test_worktree_remove_guard.py (forma do incidente; encadeado com --force; só o SEGUNDO segmento; git -C; branch -D/-d/--delete --force/-fd; caminho relativo)
+    layer: subprocess real do common/hooks/worktree-remove-guard.py com payload stdin
+    evidence: verified
+    run: "python3 tests/test_worktree_remove_guard.py -> 34 linhas 'ok', 'all green', exit 0 (N=34 > 0)"
+    gap: ""
+  - id: AC2
+    altitude: event
+    surface: Exit 2 quando sessão VIVA detém o worktree/branch, com mensagem apontando /common:worktree-merge e /common:worktree-discard.
+    test: tests/test_worktree_remove_guard.py (worktree remove com dono vivo bloqueia; mensagem cita worktree-discard; mensagem cita worktree-merge e o dono)
+    layer: subprocess real do hook
+    evidence: verified
+    run: "mesma execução: 34 ok, exit 0"
+    gap: ""
+  - id: AC3
+    altitude: event
+    surface: Dono morto/sem dono libera; echo/grep não bloqueiam; payload ilegível/vazio/aspas abertas falham abertos.
+    test: tests/test_worktree_remove_guard.py (dono morto x3, echo, grep, sem dono, payload ilegível, vazio, aspas que não fecham)
+    layer: subprocess real do hook
+    evidence: verified
+    run: "mesma execução: 34 ok, exit 0"
+    gap: ""
+  - id: AC4
+    altitude: event
+    surface: Exclusão do chamador por session_id, nunca por cwd (fb-20261013-1).
+    test: tests/test_worktree_remove_guard.py (a própria sessão libera; outra sessão com o MESMO cwd do chamador ainda bloqueia; sem session_id nada é excluído)
+    layer: subprocess real do hook
+    evidence: verified
+    run: "mesma execução: 34 ok, exit 0"
+    gap: ""
+  - id: AC5
+    altitude: event
+    surface: common/.claude-plugin/plugin.json registra o hook sob o matcher PreToolUse "Bash" (fiação real, não só o arquivo existir).
+    test: tests/test_worktree_remove_guard.py (check_wiring: "plugin.json registra worktree-remove-guard no PreToolUse Bash"; "o arquivo do hook registrado existe em common/hooks/")
+    layer: script python que carrega o plugin.json real e filtra entry.matcher == "Bash" por comando contendo hooks/worktree-remove-guard.py
+    evidence: verified
+    run: "python3 tests/test_worktree_remove_guard.py -> 34 ok (inclui a linha da fiação), 'all green', exit 0. Vermelho não reexecutado (sem stash/edição); lido o check: falha se não houver entry Bash com o comando ou se o arquivo faltar."
+    gap: ""
+  - id: AC6
+    altitude: event
+    surface: Superfície nomeada pelo item, tests/test_worktree_remove_guard.py, existe e roda verde.
+    test: tests/test_worktree_remove_guard.py
+    layer: script python
+    evidence: verified
+    run: "python3 tests/test_worktree_remove_guard.py -> 34 ok, 'all green', exit 0"
+    gap: ""

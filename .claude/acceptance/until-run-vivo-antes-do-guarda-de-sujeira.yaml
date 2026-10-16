@@ -1,0 +1,39 @@
+schema_version: 1
+card: until-run-vivo-antes-do-guarda-de-sujeira
+status: complete
+audited_at: 2026-10-16T09:30:00-03:00
+criteria:
+  - id: AC1
+    text: "Com estado.json rodando e o supervisor vivo na mesma fila, o lancamento de cepa-until <fila> recusa dizendo 'ja ha um run desta fila em andamento (pid, prazo)', sem sugerir --sujo-ok (e --sujo-ok nao contorna)."
+    altitude: cli
+    surface: "common/bin/cepa-until main() + run_vivo_da_fila/supervisor_vivo, rodado como subprocesso (stderr + exit code), antes do guarda de sujeira"
+    demonstrated_by:
+      test: "tests/test_cepa_until.py::test_run_vivo_da_mesma_fila_recusa_a_largada (roda o binario com processo vivo real, com e sem --sujo-ok: exit 2, nada disparado, stderr com 'ja ha um run desta fila' e 'pid N', sem '--sujo-ok'; pid morto e estado esperando-dono nao barram)"
+      layer: integracao de CLI (subprocesso real do cepa-until com claude falso)
+      evidence: verified
+      run: "python3 tests/test_cepa_until.py -> 154 linhas '  ok', 0 falhas, '✓ tudo verde', rc=0; bloco do teste com 8 checks ok"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "plan.yaml modificado so em status/claimed_by/evidence de itens que o .jsonl do run vivo registrou (item_start) nao conta como sujeira para o lancamento de OUTRA fila."
+    altitude: cli
+    surface: "common/bin/cepa-until arvore_suja(run_vivo_ok=True) + plano_so_do_run_vivo, via main() com git status real"
+    demonstrated_by:
+      test: "tests/test_cepa_until.py::test_plan_de_outra_fila_sujo_pelo_run_vivo_nao_e_sujeira (positivo: diff do run vivo nao e sujeira e a fila larga; negativos: title alterado, item nao iniciado e supervisor morto continuam sujeira e nomeiam outra/plan.yaml)"
+      layer: integracao de CLI com repo git temporario
+      evidence: verified
+      run: "python3 tests/test_cepa_until.py -> 5 checks do teste ok, '✓ tudo verde', rc=0"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Testes em tests/test_cepa_until.py."
+    altitude: cli
+    surface: "tests/test_cepa_until.py (2 testes novos) + vizinho tests/test_cepa_until_supervisor_morto.py"
+    demonstrated_by:
+      test: "os dois testes novos acima; vizinho test_cepa_until_supervisor_morto.py"
+      layer: suite script-style
+      evidence: verified
+      run: "python3 tests/test_cepa_until.py -> '✓ tudo verde' (rc=0, 0 falhas); python3 tests/test_cepa_until_supervisor_morto.py -> '✓ tudo verde'"
+    verdict: complete
+    gap: null
+notes: "Limites: (1) os testes assertam o pid na mensagem mas nao o texto do prazo (dd/mm HH:MM); o codigo o imprime. (2) Run de outro host ou sem pid conta como nao vivo por desenho (documentado no codigo), sem teste proprio. (3) Nao rodei tests/run-all.sh, conforme instruido."

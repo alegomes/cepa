@@ -888,7 +888,61 @@ REGISTRO_DO_RUN = re.compile(r"^.. \.claude/programs/[^/]+/until/")
 BAK_DA_FILA = re.compile(r"^\?\? \.claude/programs/[^/]+/plan\.yaml\.bak$")
 
 
-def arvore_suja(repo):
+# O `plan.yaml` modificado no disco. Só o ` M` (não commitado, fora do stage):
+# é como o `cepa-plan start/finish` o deixa.
+PLANO_MODIFICADO = re.compile(
+    r"^ M (\.claude/programs/([^/]+)/plan\.yaml)$")
+# Os campos que o `cepa-plan start/finish` de um run vivo escreve no item.
+CAMPOS_DO_RUN = ("status", "claimed_by", "evidence")
+
+
+def plano_so_do_run_vivo(repo, caminho, fila):
+    """O `plan.yaml` modificado de `fila` é só o que o run VIVO dela escreveu?
+    Em 2026-10-15 19:08 o dono lançou `cepa-until --until 6:00 cepa` com um run
+    da mesma fila rodando (pid 16795), e a recusa por árvore suja culpou o
+    `status`/`claimed_by` que o próprio run gravava (fb-20261015-4). Só vale se
+    a diferença contra o HEAD se limita a `status`, `claimed_by` e `evidence`
+    de itens que o run iniciou (`item_start` no registro dele); qualquer outra
+    diferença, ou YAML ilegível, continua sendo sujeira."""
+    vivo = run_vivo_da_fila(repo, fila)
+    if not vivo:
+        return False
+    codigo, antes = git(["show", f"HEAD:{caminho}"], repo)
+    if codigo != 0:
+        return False
+    try:
+        antes = yaml.safe_load(antes)
+        depois = yaml.safe_load(
+            (Path(repo) / caminho).read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return False
+    if not (isinstance(antes, dict) and isinstance(depois, dict)):
+        return False
+    itens_a, itens_d = antes.get("items"), depois.get("items")
+    if not (isinstance(itens_a, list) and isinstance(itens_d, list)):
+        return False
+    if {k: v for k, v in antes.items() if k != "items"} != \
+            {k: v for k, v in depois.items() if k != "items"}:
+        return False
+    if len(itens_a) != len(itens_d):
+        return False
+    for a, d in zip(itens_a, itens_d):
+        if not (isinstance(a, dict) and isinstance(d, dict)):
+            return False
+        if a.get("id") != d.get("id"):
+            return False
+        if str(a.get("id")) in vivo["iniciados"]:
+            a = {k: v for k, v in a.items() if k not in CAMPOS_DO_RUN}
+            d = {k: v for k, v in d.items() if k not in CAMPOS_DO_RUN}
+        if a != d:
+            return False
+    return True
+
+
+def arvore_suja(repo, run_vivo_ok=False):
+    """As linhas de `git status` que contam como sujeira. Com `run_vivo_ok`,
+    o `plan.yaml` que um run vivo da própria fila está escrevendo não conta
+    (ver `plano_so_do_run_vivo`); os outros chamadores seguem estritos."""
     try:
         p = subprocess.run(["git", "status", "--porcelain"], cwd=str(repo),
                            capture_output=True, text=True, timeout=30)
@@ -896,9 +950,15 @@ def arvore_suja(repo):
         return None
     if p.returncode != 0:
         return None
+
+    def so_o_run(linha):
+        m = PLANO_MODIFICADO.match(linha)
+        return bool(run_vivo_ok and m
+                    and plano_so_do_run_vivo(repo, m.group(1), m.group(2)))
+
     return [l for l in p.stdout.splitlines()
             if l.strip() and not REGISTRO_DO_RUN.match(l)
-            and not BAK_DA_FILA.match(l)]
+            and not BAK_DA_FILA.match(l) and not so_o_run(l)]
 
 
 def tocados_pelo_ultimo_run(repo, fila):
@@ -2296,6 +2356,48 @@ def runs_mortos(repo, agora=None):
     return achados
 
 
+def run_vivo_da_fila(repo, fila):
+    """O run desta fila que está de pé agora, ou None. Estado `rodando`, pid
+    de um `cepa-until` vivo, nesta máquina. Run de outro host não é
+    conferível daqui e conta como não vivo (mesma regra do `runs_mortos`); o
+    run sem pid também, porque sem pid não há como separar vivo de morto.
+    Devolve `{run, pid, prazo, estado_json, iniciados}`, com `iniciados` os
+    ids dos itens com `item_start` no registro do run."""
+    raiz = raiz_principal(repo)
+    host = socket.gethostname()
+    pasta = raiz / ".claude" / "programs" / str(fila) / "until"
+    for caminho in sorted(pasta.glob("*.estado.json")):
+        try:
+            est = json.loads(caminho.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(est, dict) or est.get("estado") != "rodando":
+            continue
+        registro = pasta / (est.get("registro") or caminho.name.replace(
+            ".estado.json", ".jsonl"))
+        eventos = []
+        try:
+            for linha in registro.read_text(encoding="utf-8").splitlines():
+                try:
+                    eventos.append(json.loads(linha))
+                except ValueError:
+                    continue
+        except OSError:
+            pass
+        inicio = next((e for e in eventos if e.get("evento") == "run_start"),
+                      {})
+        pid = est.get("pid") or inicio.get("pid")
+        dono = est.get("host") or inicio.get("host")
+        if not pid or (dono and dono != host) or not supervisor_vivo(pid):
+            continue
+        return {"run": est.get("run"), "pid": pid,
+                "prazo": est.get("prazo") or inicio.get("prazo"),
+                "estado_json": str(caminho),
+                "iniciados": {str(e.get("id")) for e in eventos
+                              if e.get("evento") == "item_start"}}
+    return None
+
+
 def frase_do_morto(m):
     """Uma linha para o run cujo supervisor morreu: o `pendentes` e o
     `cepa-doctor` dizem a mesma coisa."""
@@ -2453,7 +2555,24 @@ def main(argv=None):
               file=sys.stderr)
         return 2
 
-    sujeira = arvore_suja(repo)
+    # Antes do guarda de sujeira, e sem `--sujo-ok` na mensagem nem como
+    # saída: dois supervisores na mesma fila é a falha. Em 2026-10-15 19:08 a
+    # recusa saiu como "árvore suja" (o `plan.yaml` que o run vivo escrevia) e
+    # sugeriu o escape errado (fb-20261015-4).
+    vivo = run_vivo_da_fila(repo, a.fila)
+    if vivo:
+        try:
+            fim = datetime.fromisoformat(str(vivo["prazo"])) \
+                .strftime("%d/%m %H:%M")
+        except ValueError:
+            fim = "?"
+        print(f"cepa-until: já há um run desta fila em andamento "
+              f"(run {vivo['run']}, pid {vivo['pid']}, prazo {fim}). "
+              "Espere ele terminar, ou encerre-o (kill do pid) antes de "
+              "largar outro.", file=sys.stderr)
+        return 2
+
+    sujeira = arvore_suja(repo, run_vivo_ok=True)
     fantasmas = delecoes_fantasma(repo, a.fila) if sujeira else []
     if fantasmas and not a.sujo_ok:
         # Sem `--sujo-ok` na mensagem de propósito: com ele o próximo item roda

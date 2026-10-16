@@ -82,6 +82,8 @@ roles:
 # allowlist for that agent (deduplicated), so the agent keeps its
 # default writes AND gains the extras.
 #
+# Extras only count once this file is committed (tracked, unchanged since HEAD); path-lock reads git.
+#
 # Use sparingly. If you find yourself adding many extras for the same
 # agent, the project probably wants a `roles:` remap or a different
 # topology, not an ever-growing extras block.

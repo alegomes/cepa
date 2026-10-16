@@ -59,11 +59,25 @@ current directory: the plan is repo state, and a session worktree's own
 In order, first hit wins:
 
 1. `--plan NOME` → `<programs>/NOME/plan.yaml`.
-2. `board-flow.yaml` at project root (else legacy
-   `.claude/board-flow.lifecycle.yaml`) → `defaults.project_key` →
-   `<programs>/<project_key>/plan.yaml`, if it exists.
-3. Exactly one `<programs>/*/plan.yaml` with `mode: single-track` → that one.
-4. More than one → list them and ask which; don't pick for the user.
+2. Exactly one `<programs>/*/plan.yaml` with `mode: single-track` → that one,
+   whatever its folder is called. This is the normal case: one queue per repo
+   (owner decision 2026-09-25, "Um papel por fonte" in the BACKLOG). A repo with
+   `board-flow.yaml` whose only queue is `wego-todo-agosto/` resolves here — the
+   project key in the board-flow config plays no part.
+3. More than one → list them (folder name, `source:` line, item counts by
+   status) and ask which; don't pick for the user. **Never pick
+   `<programs>/<project_key>/plan.yaml` automatically because `board-flow.yaml`
+   names that key.** A project key names a project, not a slice of work:
+   `WEGO/` and `WEGO-in-progress/` (wego-acesso-backend, 2026-08-18) are two
+   slices of one project, and a key-based rule picks one of them silently,
+   every time. The folder name is a **work slice** (`wego-todo-agosto`,
+   `wego-review-followups`); naming the only queue after the project key is
+   fine, and is what `/common:plan <project_key> --from-jira` does — but the
+   name is a label, not a lookup key.
+
+This is the same rule `cepa-plan status` / `cepa-plan queue` apply when no name
+is given (one queue → that one; several → `há mais de uma fila; diga qual`), so
+the prose and the tool cannot drift.
 
 **Before declaring absence, look where a lost plan actually is.** A session
 running in a worktree that reads only its own `.claude/` will report a plan dead
