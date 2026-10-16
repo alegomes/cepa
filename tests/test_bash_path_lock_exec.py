@@ -407,7 +407,11 @@ def test_fora_de_escopo_continua_livre():
 
 
 def test_mensagem_nomeia_balde_e_saida():
-    """A mensagem diz qual balde falhou e qual é o caminho legítimo."""
+    """A mensagem diz qual balde falhou e qual é o caminho legítimo.
+
+    A receita de worktree descartável aparece só para o proof-reviewer
+    (fb-20261013-3): os demais agentes são mandados à ordem/proof-reviewer.
+    """
     for hook in HOOKS:
         topo = hook.parent.parent.name
         agent, lane_in, lane_out = LANES[topo]
@@ -416,10 +420,26 @@ def test_mensagem_nomeia_balde_e_saida():
                       WEGO_1936.replace("{OUT}", lane_out), proj)
         check(f"[{topo:13}] deny do interpretador nomeia o balde 4",
               rc == 2 and "balde 4" in err, err[:300])
-        check(f"[{topo:13}] deny aponta o worktree descartável",
-              "git worktree add" in err and "mktemp" in err, err[:600])
+        check(f"[{topo:13}] deny da pista NÃO ensina worktree descartável",
+              "git worktree add" not in err and "mktemp" not in err, err[:600])
+        check(f"[{topo:13}] deny da pista nomeia o proof-reviewer como dono da prova",
+              "proof-reviewer" in err, err[:600])
+        rc_p, err_p = run(hook, f"{plugin_of(hook)}:proof-reviewer",
+                          WEGO_1936.replace("{OUT}", lane_out), proj)
+        check(f"[{topo:13}] deny do proof-reviewer ensina worktree descartável",
+              rc_p == 2 and "git worktree add" in err_p and "mktemp" in err_p,
+              err_p[:600])
         check(f"[{topo:13}] deny aponta Write/Edit", "Write" in err and "Edit" in err,
               err[:600])
+        # git worktree add DENTRO da raiz: o motivo também só ensina a receita ao proof-reviewer
+        cmd_wt = "git worktree add wt-interno HEAD"
+        rc, err = run(hook, f"{plugin_of(hook)}:{agent}", cmd_wt, proj)
+        check(f"[{topo:13}] worktree add dentro da raiz: pista não recebe a receita",
+              rc == 2 and "mktemp" not in err and "proof-reviewer" in err
+              and "ORDEM" in err, err[:600])
+        rc_p, err_p = run(hook, f"{plugin_of(hook)}:proof-reviewer", cmd_wt, proj)
+        check(f"[{topo:13}] worktree add dentro da raiz: proof-reviewer recebe a receita",
+              rc_p == 2 and "mktemp" in err_p and "crie fora" in err_p, err_p[:600])
         rc, err = run(hook, f"{plugin_of(hook)}:{agent}", f"cp x {lane_out}", proj)
         check(f"[{topo:13}] deny de escrita fora da pista nomeia o balde 1",
               rc == 2 and "balde 1" in err and lane_out in err, err[:300])

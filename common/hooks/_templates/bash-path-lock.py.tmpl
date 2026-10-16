@@ -1964,9 +1964,15 @@ def _h_git(ctx, verbo, args, cwds, seg):
                 _deny(4, verbo, f"git worktree add num caminho que não sei avaliar "
                                 f"({dest.raw})", seg)
             if any(_inside(p, ctx.root) for p in _resolve_all(dest.value, cw)):
+                # fb-20261013-3: a receita de worktree descartável é só do proof-reviewer.
+                if (ctx.agent or "").rsplit(":", 1)[-1] == "proof-reviewer":
+                    _deny(4, verbo, "git worktree add DENTRO da raiz duplica o código na "
+                                    "árvore — crie fora: D=$(mktemp -d) && git worktree "
+                                    "add --detach \"$D/red\" HEAD", seg)
                 _deny(4, verbo, "git worktree add DENTRO da raiz duplica o código na "
-                                "árvore — crie fora: D=$(mktemp -d) && git worktree "
-                                "add --detach \"$D/red\" HEAD", seg)
+                                "árvore, e worktree descartável não é sua: a prova por "
+                                "perturbação é do proof-reviewer; teste de regressão fica "
+                                "vermelho pela ORDEM (escrito antes do fix)", seg)
             ctx.events.append(("perturb_worktree_created", {}))
             return
         _deny(4, verbo, f"git worktree {acao}", seg)
@@ -2359,13 +2365,27 @@ def _mensagem(n, agent, command, allowed, dirs_desconhecidos=()):
         f"    - escrever nos SEUS caminhos: use Write/Edit (o path-lock governa). Globs:",
         f"      - {globs}",
         "    - escrever fora da sua pista: delegue ao worker dono do caminho;",
-        "    - provar RED revertendo código: worktree descartável FORA da raiz",
-        "      (lá o cadeado não tem jurisdição, e a reversão nunca vaza para o diff):",
-        "        D=$(mktemp -d) && git worktree add --detach \"$D/red\" HEAD && "
-        "cd \"$D/red\" && <reverta e rode o teste>",
-        "      Nas chamadas SEGUINTES, $D não existe mais: use o caminho literal",
-        "      (cd /tmp/tmp.AbC123/red && ..., ou git -C /tmp/tmp.AbC123/red ...):",
-        "        git worktree remove --force /tmp/tmp.AbC123/red",
+    ]
+    # fb-20261013-3: a receita de worktree descartável é do proof-reviewer (portão de
+    # perturbação). Mostrada a todo agente negado, mandou o qa-engineer abrir worktree
+    # de madrugada. Os demais recebem o apontamento para a ordem/proof-reviewer.
+    if agent.rsplit(":", 1)[-1] == "proof-reviewer":
+        linhas += [
+            "    - provar RED revertendo código: worktree descartável FORA da raiz",
+            "      (lá o cadeado não tem jurisdição, e a reversão nunca vaza para o diff):",
+            "        D=$(mktemp -d) && git worktree add --detach \"$D/red\" HEAD && "
+            "cd \"$D/red\" && <reverta e rode o teste>",
+            "      Nas chamadas SEGUINTES, $D não existe mais: use o caminho literal",
+            "      (cd /tmp/tmp.AbC123/red && ..., ou git -C /tmp/tmp.AbC123/red ...):",
+            "        git worktree remove --force /tmp/tmp.AbC123/red",
+        ]
+    else:
+        linhas += [
+            "    - provar RED revertendo código não é seu: a prova por perturbação (verde→vermelho)",
+            "      é do proof-reviewer, na worktree descartável DELE. Teste de regressão fica",
+            "      vermelho pela ORDEM (escrito antes do fix). Não abra worktree nem cópia do repo.",
+        ]
+    linhas += [
         "    - verbo legítimo que faltou na lista: diga no seu relatório — quem",
         "      decide incluir é o humano, nunca o agente bloqueado.",
         "",

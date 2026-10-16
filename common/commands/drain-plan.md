@@ -286,7 +286,10 @@ Para cada item do lote, na ordem:
     worktree a partir de `origin/main`, nada mesclou, e 20 de 25 rodadas
     travaram porque o card anterior só existia numa branch solta. Worktree
     descartável para perturbação de prova (`git worktree add --detach /tmp/...`)
-    continua valendo;
+    continua valendo SÓ para o `proof-reviewer`; o `qa-engineer` e qualquer outro
+    agente provam RED pela ordem (teste escrito antes do fix) ou deixam a prova
+    para o `proof-reviewer`, e o resumo do `cepa-until` lista toda worktree aberta
+    por outro agente;
   - **commit direto nesta branch**, com a árvore limpa antes do `finish`. O
     supervisor guarda num stash o que sobrar sem commit, e o próximo card não
     vê;

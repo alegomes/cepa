@@ -4082,8 +4082,11 @@ partir do número inflado. Teste que falta: `.log` com o mesmo `result` três ve
 
 **Plano:** nenhum ainda
 
-**Status:** pendente · **Lar provável:** `build-hex/agents/qa-engineer.md`,
-`common/hooks/lead-no-worktree.py` ou um hook novo em `common/hooks` · **Origem:** feedback
+**Status:** feito nesta branch (2026-10-15) · **Lar:** `build-hex/agents/qa-engineer.md`,
+`build-team/agents/qa-engineer.md`, `build-hex/hooks/bash-path-lock.py`,
+`build-team/hooks/bash-path-lock.py` (e as outras 4 cópias, geradas do molde
+`common/hooks/_templates/bash-path-lock.py.tmpl`), `common/commands/drain-plan.md`,
+`common/bin/cepa-until-digest` · **Origem:** feedback
 `fb-20261013-3` (2026-10-13, `wego-guias-backend`).
 
 > No run noturno o qa-engineer abriu worktree descartavel (--detach) no S5 e uma copia fora
@@ -4099,6 +4102,16 @@ diff num `git stash`-livre, ou `git worktree` só se o comando vier do `proof-re
 `cepa-until` lista no resumo os `git worktree add` que aconteceram fora do `proof-reviewer`,
 lendo o `.jsonl`. Teste que falta: run com `qa-engineer` chamando `git worktree add` aparece
 no resumo como desvio.
+
+**Feito:** o `cepa-until-digest` já lista como sinal de processo toda worktree aberta por
+agente que não seja o `proof-reviewer`. Agora a causa: o `qa-engineer` (build-hex e build-team)
+ganhou a regra "RED vem da ordem ou do proof-reviewer, nunca de worktree sua" (sem
+`git worktree add`, cópia do repo, `git stash` ou reversão de arquivo de produção); a mensagem
+de negação do `bash-path-lock` (as seis cópias geradas do molde) só mostra a receita de worktree
+descartável ao `proof-reviewer` e, para os demais, diz que a prova por perturbação não é deles;
+o `drain-plan` restringe a worktree descartável ao `proof-reviewer`. Testes:
+`test_bash_path_lock_exec.py` (`test_mensagem_nomeia_balde_e_saida`: receita ausente para a
+pista, presente para o `proof-reviewer`), `test_lock_copies_drift.py`, `test_cepa_until_digest.py`.
 
 ## Dispensa (waiver) gravada em nome do dono durante run autônomo
 
