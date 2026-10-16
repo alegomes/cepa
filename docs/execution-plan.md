@@ -102,6 +102,31 @@ lose it:
 Anchoring at the main root is "camada 0" of the BACKLOG item on worktree
 artifact loss: the layer that prevents the loss instead of recovering from it.
 
+### What the file is called
+
+The folder name under `<programs>` is a **work slice**, not a project key:
+`wego-todo-agosto`, `wego-review-followups`, or `cepa` for this repo's single
+queue. A key names a project; a queue is one slice of work inside it. On
+2026-08-18 the main clone of wego-acesso-backend held `WEGO/` (To Do, 48 items)
+and `WEGO-in-progress/` side by side — two slices of one project, which a
+key-based lookup cannot tell apart and resolves silently to the first.
+
+Rules every reader follows (`/common:next`, `cepa-plan status`, `cepa-plan queue`
+with no name):
+
+- one single-track queue → that one, whatever the name;
+- several → list them and ask; never pick `<project_key>/plan.yaml`
+  automatically.
+
+Naming the only queue after the project key is fine, and is the default of
+`/common:plan <project_key> --from-jira` and the `/board-flow:*` commands (one
+queue per repo, owner decision 2026-09-25). The key is a label for that queue,
+not a key for finding it.
+
+This is the second half ("metade 2") of the BACKLOG item "O plano de execução
+morre com o worktree, e o nome do programa colide": camada 0 above fixed where
+the file lives, this fixes how it is found.
+
 ## The three moments
 
 The plan answers the question only if something asks it. Three moments do:
