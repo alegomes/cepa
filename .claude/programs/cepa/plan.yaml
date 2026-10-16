@@ -2222,3 +2222,13 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: relatorio-pos-wrap-up-abre-frente-nova
+  title: Depois do wrap-up, o relatório seguinte (metrics passo 3, plain-report)
+    reabre uma frente nova
+  why: 'BACKLOG § Depois do wrap-up, o relatório seguinte reabre uma frente nova
+    (fb-20261016-4): nem metrics nem plain-report sabem que a sessão foi encerrada;
+    o dono se perde na árvore de forks (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
