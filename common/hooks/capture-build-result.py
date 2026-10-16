@@ -752,7 +752,7 @@ PENDING_SUFFIX = ".cepa-build.json"
 _EXIT_LINE = re.compile(r"\[exited with code (-?\d+)\]\s*$")
 # ...and this one when CC stopped the command itself (background time limit
 # reached, or low memory): no exit code, the build never finished.
-_KILLED_LINE = re.compile(r"\[killed\]\s*$")
+_KILLED_LINE = re.compile(r"(?:^|\n)\[killed\]\s*$")  # a line of its own, as CC writes it
 KILLED_REASON = ("stopped by Claude Code before it ended: the background task's "
                  "output ends in [killed] (its background time limit was reached, "
                  "or the machine ran low on memory); the build never finished")

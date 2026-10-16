@@ -419,6 +419,13 @@ def main():
         check("[killed] no meio da saída não conta como fim (só a última linha)",
               s.baseline() is None and s.pendente("bkill003"), str(s.baseline()))
 
+        s = Sessao(base, "killed-colado")
+        s.lanca("./mvnw verify", "bkill005")
+        (s.tasks / "bkill005.output").write_text("[INFO] Building...\nfoo[killed]\n")
+        s.outro_bash()
+        check("`foo[killed]` colado em outro texto não é o trailer do CC (segue pendente)",
+              s.baseline() is None and s.pendente("bkill005"), str(s.baseline()))
+
         s = Sessao(base, "killed-editado")
         s.lanca("./mvnw verify", "bkill004")
         s.grava_baseline({"status": "STALE", "since": iso(+5), "after_edit_to": "src/A.java"})
