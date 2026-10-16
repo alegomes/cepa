@@ -556,10 +556,36 @@ o caso.
 
 ## Build em segundo plano morre aos 30 min sem resultado
 
-**Plano:** nenhum ainda
+**Plano:** `cepa/build-segundo-plano-morre-aos-30-min`
 
-**Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` ·
-**Origem:** sessão `fix_build_timeout` de 2026-10-02, ao medir o conserto da baseline cega.
+**Status:** feito em 2026-10-15 (medido e consertado) · **Lar:**
+`common/hooks/capture-build-result.py` (colheita) + `common/hooks/gate-advance.py`
+(mensagem) · **Origem:** sessão `fix_build_timeout` de 2026-10-02, ao medir o
+conserto da baseline cega.
+
+### Medição (2026-10-15, claude 2.1.301)
+
+1. Um `sleep 400` lançado com `run_in_background` e `timeout: 60000` foi parado
+   61 s depois do início. O `.output` termina em `[killed]` (uma linha própria,
+   não `[exited with code N]`), e a notificação da tarefa chega com status
+   `killed` e "stopped after reaching its background time limit". No binário, o
+   mesmo trailer `[killed]` cobre os dois motivos de parada: teto de tempo e
+   memória baixa.
+2. O hook só reconhecia `[exited with code N]`: o pendente ficava sem fim e era
+   descartado depois de 6 h, em silêncio. Confirmado o diagnóstico do problema.
+3. Os limites, lidos do binário: comando que o CC manda para o segundo plano por
+   conta própria ganha 30 min (`BASH_DEFAULT_TIMEOUT_MS` sobe esse default);
+   `run_in_background` explícito usa o `timeout` da própria chamada, até 2 h
+   (`BASH_MAX_TIMEOUT_MS` sobe o teto). O "30 min" do relato é o primeiro caso.
+   É configurável, portanto, mas por variável de ambiente do CC, não do harness.
+
+### Conserto
+
+`[killed]` como última linha agora é fim: o hook grava `FAILURE` com `reason`
+("stopped by Claude Code before it ended...") e `stopped_by: claude-code`, e o
+`gate-advance` imprime esse motivo e sugere rodar de novo com `timeout` que caiba
+(ou subir o teto pela variável), em vez de "fix the failing tests". Casos em
+`tests/test_capture_build_background.py`.
 
 ### Problema
 

@@ -95,6 +95,23 @@ marker, no exit code and not interrupted is SUCCESS (CC omitted the code = it
 exited 0). Only Maven, only with -q: a quiet-less empty run stays unclassified.
 Known limitation: `./mvnw -q verify || true` is recorded SUCCESS (final exit 0,
 no marker), since the tool reports no error for the pipeline as a whole.
+
+Background build stopped by CC (2026-10-15, item build-segundo-plano-morre-aos-
+30-min): when CC itself stops a background command — it reached its background
+time limit, or the machine ran low on memory — the `.output` does NOT end in
+`[exited with code N]`: CC appends the trailer `[killed]` instead (measured on
+claude 2.1.301 with a `sleep 400` under `timeout: 60000`: killed 61 s after the
+start, `.output` = "start ...\n[killed]\n", task notification status `killed`,
+"stopped after reaching its background time limit"). Before this, the pending
+sat there with no exit line and was silently dropped after PENDING_MAX_AGE_S:
+the baseline stayed blind with no word about why. Now `[killed]` as the last
+line is a terminal state too: the build is recorded FAILURE with `reason` =
+"stopped by Claude Code before it ended..." and `stopped_by: claude-code`, so
+gate-advance can say why it blocks (it prints `reason` for FAILURE). The limits
+on 2.1.301, read from the binary: a command CC moved to the background on its
+own gets 30 min (`BASH_DEFAULT_TIMEOUT_MS` raises it); an explicit
+`run_in_background` takes its own `timeout`, up to 2 h (`BASH_MAX_TIMEOUT_MS`
+raises the ceiling). The "30 min" of the original report is the first case.
 """
 
 import glob
@@ -696,7 +713,8 @@ def record(command, kind, status, text, tests_run, empty_reason,
         new_state["tests_run"] = tests_run
     if empty_reason:
         new_state["reason"] = empty_reason
-        print(f"[capture-build-result] EMPTY, not green: {empty_reason}", file=sys.stderr)
+        if status == "EMPTY":
+            print(f"[capture-build-result] EMPTY, not green: {empty_reason}", file=sys.stderr)
     new_state.update(extra or {})
 
     try:
@@ -732,8 +750,14 @@ def record(command, kind, status, text, tests_run, empty_reason,
 PENDING_SUFFIX = ".cepa-build.json"
 # CC appends this line to the task's .output file when the command ends.
 _EXIT_LINE = re.compile(r"\[exited with code (-?\d+)\]\s*$")
-# A task CC never finished (session killed, task stopped) leaves no exit
-# line; its pending file is dropped after this long instead of piling up.
+# ...and this one when CC stopped the command itself (background time limit
+# reached, or low memory): no exit code, the build never finished.
+_KILLED_LINE = re.compile(r"\[killed\]\s*$")
+KILLED_REASON = ("stopped by Claude Code before it ended: the background task's "
+                 "output ends in [killed] (its background time limit was reached, "
+                 "or the machine ran low on memory); the build never finished")
+# A task CC never finished (session killed) leaves neither line; its pending
+# file is dropped after this long instead of piling up.
 PENDING_MAX_AGE_S = 6 * 3600
 
 
@@ -894,8 +918,10 @@ def _harvest_one(pending: Path, now):
     entry = json.loads(pending.read_text(encoding="utf-8"))
     output = Path(entry["output"])
     started_at = _parse_ts(entry.get("started_at"))
-    m = _EXIT_LINE.search(_read_tail(output)) if output.exists() else None
-    if not m:
+    tail_text = _read_tail(output) if output.exists() else ""
+    m = _EXIT_LINE.search(tail_text)
+    killed = m is None and _KILLED_LINE.search(tail_text) is not None
+    if not m and not killed:
         if started_at is None or (now - started_at).total_seconds() > PENDING_MAX_AGE_S:
             pending.unlink(missing_ok=True)
         return
@@ -910,6 +936,17 @@ def _harvest_one(pending: Path, now):
         return
 
     text = output.read_text(encoding="utf-8", errors="replace")
+    if killed:
+        # No exit code to read: CC stopped the command. Silence here was the
+        # blind baseline of BACKLOG "Build em segundo plano morre aos 30 min".
+        record(command, kind, "FAILURE", text, None, KILLED_REASON, state_path,
+               Path(entry["build_dir"]), Path(entry["marker_root"]), Path(entry["cwd"]),
+               extra={"started_at": entry.get("started_at"),
+                      "background_task": entry["task_id"],
+                      "stopped_by": "claude-code"})
+        print(f"[capture-build-result] background build {entry['task_id']} recorded: "
+              f"FAILURE — {KILLED_REASON}.", file=sys.stderr)
+        return
     exit_code = int(m.group(1))
     if exit_code != 0:
         # The real exit code is the strongest signal there is: fail-closed

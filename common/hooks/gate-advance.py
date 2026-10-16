@@ -341,7 +341,18 @@ def main():
         )
     elif status == "FAILURE":
         reason = f"build is FAILURE since {state.get('at', '<unknown time>')}{age_note} (command: `{state.get('command', '<unknown>')}`)"
+        if state.get("reason"):
+            # capture-build-result explains a FAILURE it did not read from the
+            # build's own output (e.g. CC stopped the background task).
+            reason += f": {state['reason']}"
         suggestion = "Fix the failing tests / build errors, re-run the verify command, and try again. Don't proceed with broken state."
+        if state.get("stopped_by") == "claude-code":
+            suggestion = (
+                "The build did not fail — it was stopped before it ended. Re-run it with a "
+                "`timeout` that fits it (run_in_background takes up to 2 h; BASH_MAX_TIMEOUT_MS "
+                "raises that ceiling, BASH_DEFAULT_TIMEOUT_MS the 30 min of an auto-backgrounded "
+                "command), or narrow it so it fits."
+            )
     else:
         reason = f"build status is {status!r} — unrecognized"
         suggestion = "Run your project's verify command to establish a known-good baseline."

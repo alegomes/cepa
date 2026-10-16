@@ -28,6 +28,13 @@ Guards the contract:
     sob B grava o baseline; o gate-advance sob B libera o commit; um build lançado
     sob A antes do estouro também é colhido sob B (mesmo cwd); pendente de OUTRA
     árvore não é colhido; sem `.output` em lugar nenhum, continua "NOT be recorded".
+  - build parado pelo CC (item build-segundo-plano-morre-aos-30-min, medido no
+    claude 2.1.301 em 2026-10-15): o `.output` termina em `[killed]`, não em
+    `[exited with code N]`. Isso é fim: grava FAILURE com `reason` e
+    `stopped_by: claude-code` em vez de ficar pendente até o descarte de 6 h;
+    o gate-advance barra dizendo o motivo e sugere um `timeout` que caiba;
+    `[killed]` no meio da saída não conta; edição depois do lançamento descarta
+    o resultado como em qualquer outro fim.
 """
 
 import json
@@ -95,6 +102,11 @@ class Sessao:
     def termina(self, task_id, saida, codigo):
         (self.tasks / f"{task_id}.output").write_text(
             f"{saida}\n\n[exited with code {codigo}]\n")
+
+    def mata(self, task_id, saida):
+        # O trailer que o CC escreve quando ELE para a tarefa (teto de tempo do
+        # segundo plano ou memória baixa), medido no 2.1.301.
+        (self.tasks / f"{task_id}.output").write_text(f"{saida}\n\n[killed]\n")
 
     def outro_bash(self, command="ls", stdout="pom.xml", **extra):
         return self._run(CAPTURE, {"tool_name": "Bash", "tool_input": {"command": command},
@@ -349,6 +361,54 @@ def main():
               outra.pendente("boutra01"), res.stderr)
         check("pendente de OUTRA árvore não grava o baseline dela",
               outra.baseline() is None, str(outra.baseline()))
+
+        # ── build parado pelo CC: `[killed]` no fim do .output ──────────────
+        s = Sessao(base, "killed")
+        s.lanca("./mvnw verify", "bkill001")
+        s.mata("bkill001", "[INFO] Building module 3/5...")
+        res = s.outro_bash()
+        b = s.baseline() or {}
+        check("[killed] no fim grava FAILURE (não fica pendente até o descarte de 6 h)",
+              b.get("status") == "FAILURE" and not s.pendente("bkill001"), str(b))
+        check("[killed] grava o motivo e quem parou",
+              "stopped by Claude Code" in b.get("reason", "")
+              and b.get("stopped_by") == "claude-code", str(b))
+        check("[killed] aponta a tarefa e o comando",
+              b.get("background_task") == "bkill001" and b.get("command") == "./mvnw verify",
+              str(b))
+        check("[killed] avisa no stderr que gravou FAILURE com o motivo",
+              "recorded: FAILURE" in res.stderr and "[killed]" in res.stderr, res.stderr)
+        check("[killed] não é EMPTY: a mensagem 'EMPTY, not green' não sai",
+              "EMPTY, not green" not in res.stderr, res.stderr)
+
+        s = Sessao(base, "killed-gate")
+        s.grava_baseline({"status": "STALE", "since": iso(-3600), "after_edit_to": "src/A.java"})
+        s.lanca("./mvnw verify", "bkill002")
+        s.mata("bkill002", "[INFO] Building...")
+        res = s.commit()
+        check("gate-advance barra o commit do build parado pelo CC",
+              res.returncode == 2, f"rc={res.returncode}")
+        check("gate-advance diz POR QUE barra: o CC parou o build",
+              "stopped by Claude Code" in res.stderr, res.stderr[-600:])
+        check("gate-advance sugere um timeout que caiba, não 'fix the failing tests'",
+              "timeout" in res.stderr and "Fix the failing tests" not in res.stderr,
+              res.stderr[-600:])
+
+        s = Sessao(base, "killed-no-meio")
+        s.lanca("./mvnw verify", "bkill003")
+        (s.tasks / "bkill003.output").write_text("[killed]\n[INFO] Building module 2/5...\n")
+        s.outro_bash()
+        check("[killed] no meio da saída não conta como fim (só a última linha)",
+              s.baseline() is None and s.pendente("bkill003"), str(s.baseline()))
+
+        s = Sessao(base, "killed-editado")
+        s.lanca("./mvnw verify", "bkill004")
+        s.grava_baseline({"status": "STALE", "since": iso(+5), "after_edit_to": "src/A.java"})
+        s.mata("bkill004", "[INFO] Building...")
+        s.outro_bash()
+        check("[killed] depois de uma edição mantém STALE (resultado descartado)",
+              (s.baseline() or {}).get("status") == "STALE" and not s.pendente("bkill004"),
+              str(s.baseline()))
 
         s = Sessao(base, "continuada-sem-output", continuada=True)
         res = s.lanca("./mvnw verify", "bcso0001", cria_output=False)
