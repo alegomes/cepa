@@ -1993,9 +1993,21 @@ items:
     (a fila existe para guardar a ordem e o escritor não grava ordem nova), mas
     só dói na triagem do WEGO, que roda esporadicamente; conferir antes se o subcomando
     ordena já cobre parte.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Branch until/2026-10-16-0656, commits 5d3ebbc (feat), 503b764 (testes
+    dos gates), e o commit dos artefatos. write --from-triage: done/dropped ausentes
+    preservados em bloco no começo sem --on-missing; itens da triagem na ordem aprovada
+    (status/human_pending do disco sobrevivem); abertos não citados depois, na ordem
+    antiga, com aviso; --on-missing drop só nos abertos; keep mantém a semântica
+    de 2026-09-25. Gates: pair-reviewer OK-WITH-NOTES (notas aplicadas), completion-auditor
+    COMPLETE, proof-reviewer PROVEN (15 mutantes vermelhos, regressão vermelha na
+    base 4d8f3ef). Testes rodados: test_common_plan, test_fio_condutor e 7 vizinhos
+    do cepa-plan, todos verdes; build completo é do supervisor. Fora: nenhum subcomando
+    ''reorder'' novo (o ''ordena'' existente só lista); o conflito entre a decisão
+    de 2026-09-25 (triagem parcial: disco manda) e a de 2026-10-02 (triagem manda)
+    ficou resolvido como default=triagem manda, keep=disco manda.'
 - id: board-flow-yaml-comentario-campo-team
   title: Comentário do campo Team (customfield_10001) no template do board-flow.yaml
     mostra os dois formatos e o erro 400 de cada um
@@ -2003,6 +2015,15 @@ items:
     board-flow.yaml não mostra o formato que falha' (fb-20260902-1). Último porque
     é conserto de comentário sem teste mecânico e o atlassian-expert já sabe o formato
     certo.
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits a6a64bd (docs/board-flow: comentario do Team com os dois formatos
+    e os 400 em discovery/board-flow.example.yaml, docs/board-flow.md, board-flow/agents/atlassian-expert.md
+    + tests/test_board_flow_example_team_format.py) e o commit do aceite, na branch
+    until/2026-10-16-0656. pair-reviewer OK-WITH-NOTES, notas aplicadas (teto de
+    17280 bytes da spec mantido, 17279). completion-auditor COMPLETE (.claude/acceptance/board-flow-yaml-comentario-campo-team.yaml).
+    proof-reviewer nao aplicado: item muda so comentario/doc/prosa, sem comportamento
+    em runtime. Fora: endurecer o jira-create-fields-gate para recusar Team como
+    {id} (sugestao do BACKLOG; o _norm trata UUID e {id} como iguais e um teste
+    exige isso). Build completo e do supervisor.'
