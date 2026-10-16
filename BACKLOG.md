@@ -4195,6 +4195,21 @@ classificar só sobre o comando com strings mascaradas, e exigir que o invocador
 devolve e, quando não devolve, ler o arquivo do redirecionamento. Testes que faltam: `grep
 -E 'verify' x` não grava nada; `./mvnw -q clean verify > log` com exit 0 grava SUCCESS.
 
+**Episódio 2 — feedback `fb-20261016-3`** (2026-10-16, `wego-digitacao-backend`, run
+`until/2026-10-16-0822`, item `S5-lote-vazio-nao-e-sucesso`):
+
+> gate-advance marcou vermelho o build de perturbacao do proof-reviewer e um cat que ecoou
+> 'BUILD FAILURE', barrando o commit duas vezes
+
+Mesmo classificador, duas entradas novas: (a) o build de perturbação é um vermelho *esperado*
+(o `proof-reviewer` quebra o código de propósito, numa worktree descartável, para provar que o
+teste cobre) e o hook gravou esse resultado como se fosse o estado da árvore principal; (b) um
+`cat` de um log que continha a string `BUILD FAILURE` virou build Maven vermelho porque a
+classificação olha o texto de saída, não quem o produziu. O esboço acima já cobre (b) ao exigir
+invocador `mvnw`/`mvn`; para (a) falta o hook ignorar builds cujo `cwd` não é a raiz do repo
+da sessão (ou que rodam em worktree de perturbação). Teste que falta: `cat log-com-BUILD-FAILURE`
+não grava nada; `./mvnw verify` rodado em `/tmp/perturb-*` não altera `.claude/last-build.json`.
+
 ## Comentário do campo Team (`customfield_10001`) no `board-flow.yaml` não mostra o formato que falha
 
 **Plano:** nenhum ainda
@@ -4348,3 +4363,78 @@ repo do cliente; os números (3 rodadas, US$ 22,54, 41,8%) são do registro do d
 
 Um run sintético do `cepa-until` com um item que delega a um worker de 2 minutos: o `.log` mostra
 uma única chamada ao lead por rodada, sem mensagem de retomada do orquestrador.
+
+---
+
+## `planning-lead` do `build-hex` chama os workers sem o prefixo do plugin, e as três chamadas falham
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `build-hex/agents/planning-lead.md` (seção
+"Workflow", passo 2) e, pela mesma regra, `engineering-lead.md` e `validation-lead.md`, que
+também nomeiam os workers sem prefixo · **Origem:** feedback `fb-20261016-2` (2026-10-16,
+`wego-digitacao-backend`, run `until/2026-10-16-0822`, item
+`S3-clientes-provedor-unificados`, build-hex 1.4.1).
+
+> planning-lead do build-hex 1.4.1 chama epic-author, product-manager e integration-analyst
+> sem o prefixo build-hex:; as 3 chamadas falharam com 'Agent type not found' e foram refeitas
+
+### Problema
+
+O prompt do `planning-lead` manda delegar a `epic-author`, `product-manager` e
+`integration-analyst` pelo nome curto. Instalados como plugin, os agentes se chamam
+`build-hex:epic-author` etc., e o `Task` recusa o nome curto com `Agent type not found`. O
+lead refaz as três chamadas com o prefixo, o que custa um turno inteiro por item e, dentro do
+`cepa-until`, uma rodada. O `build-team` tem `product-manager` com o mesmo nome curto, então
+mesmo quando o nome curto resolve ele pode resolver para o plugin errado.
+
+### Esboço
+
+Nomear os workers com o prefixo do plugin em todos os leads do `build-hex` (tabela
+"Delegates to" e passos do Workflow). Teste que falta: uma varredura em
+`tests/` que lê cada `*-lead.md` e exige que todo nome de worker citado numa instrução de
+delegação exista em `<plugin>/agents/` e venha com o prefixo `<plugin>:`.
+
+---
+
+## Depois do `wrap-up`, o relatório seguinte reabre uma frente nova
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `common/commands/metrics.md` (passo 3, "destaque a
+UMA ação de maior retorno e ofereça executá-la"), `common/skills/plain-report/SKILL.md`
+(bloco "Decisões e próximos passos") e a skill `default-yes` (seção "Guardar o fio da
+sessão", que estaciona assunto lateral até o wrap-up mas não diz o que fazer *depois* dele)
+· **Origem:** feedback `fb-20261016-4` (2026-10-16, cepa, sessão 43368b7c). Relacionado:
+seção "Política default-yes", parte 6.
+
+> Perceba o que está acontecendo neste exato momento e registre isso como um feedback. Esta
+> sessão já fez o que tinha que fazer. O wrap-up foi rodado. Antes de finalizar, você sugeriu
+> a coleta de métricas e eu aceitei. Tudo estava caminhando para o fim... até você propor um
+> novo assunto, uma nova linha de raciocínio, uma tarefa nova, que quebra o fluxo original e
+> abre uma nova frente de trabalho. Isso acontece muito. E é nessas horas que eu me perco em
+> meio à árvore de forks que vai se criando.
+
+Contexto apurado no registro: depois do `/common:wrap-up` (main com push, handoff escrito,
+"Safe to exit"), o agente ofereceu `/common:metrics` no bloco "Decisões e próximos passos", o
+dono aceitou, e o relatório do metrics terminou com uma pergunta fechada nova (abrir seção no
+BACKLOG para 5 artefatos `proven` contraditórios), que o passo 3 do `metrics.md` manda
+oferecer. A telemetria do mesmo relatório mede mediana de 25 turnos do dono entre a última
+rotina e o fim da sessão.
+
+### Problema
+
+Dois mecanismos somados: o `plain-report` exige um bloco "Decisões e próximos passos" em todo
+turno que alterou algo, e o `metrics` manda oferecer uma ação. Nenhum dos dois sabe que a
+sessão já foi encerrada pelo `wrap-up`. O resultado é que o fechamento nunca fecha: cada
+relatório pós-wrap-up oferece a próxima coisa, e o dono, que aceita por default, segue.
+
+### Esboço
+
+Depois do `wrap-up`, a sessão entra em estado "encerrada": (1) o `wrap-up` grava um marcador
+(no handoff ou em `.claude/`), (2) o `plain-report` em sessão encerrada troca "Decisões e
+próximos passos" por "Nada pendente. Próxima sessão começa por X" e não faz pergunta, (3) o
+`metrics` passo 3 em sessão encerrada registra a ação como item de fila ou feedback em vez de
+oferecê-la, (4) o lint `report-style-lint.py` barra pergunta fechada em relatório pós-wrap-up.
+Teste que falta: relatório emitido com o marcador presente e uma pergunta fechada no fim é
+recusado pelo lint. Validar com a métrica "turnos entre o fim da rotina e o wrap-up" caindo.
