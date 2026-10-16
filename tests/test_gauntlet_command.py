@@ -60,6 +60,23 @@ def comando():
           "empate: vence o design que ficou em 1º lugar com mais juízes" in plano
           and "o primeiro na ordem dos designs" in plano
           and "nomeia o empate" in plano)
+    i4 = plano.find("### 4. gravar a saída durável")
+    j4 = plano.find("### 5.", i4)
+    p4 = plano[i4:j4] if i4 != -1 and j4 != -1 else ""
+    check("passo 4 existe e grava o caminho da saída",
+          bool(p4) and "docs/internals/gauntlet-<slug>.md" in p4)
+    for titulo in ("## barra de qualidade (escrita antes de qualquer design)",
+                   "## designs concorrentes e julgamento",
+                   "### design a (<ângulo>) — <título>",
+                   "### vereditos dos n juízes cegos",
+                   "## design final (vencedor x revisado, com enxertos de ...)",
+                   "## checagem final contra a barra"):
+        check(f"passo 4 nomeia o título '{titulo}'", titulo in p4)
+    check("passo 4 pede a tabela Borda com a conta mostrada",
+          "tabela de pontos borda com a conta mostrada" in p4
+          and "(1º = n pontos, 2º = n-1, ...; soma por design)" in p4)
+    check("passo 4 pede ranking de cada juiz e maiores lacunas",
+          "ranking de cada juiz" in p4 and "as maiores lacunas" in p4)
     check("nunca implementa o design vencedor",
           "nunca implementa" in limpo)
     check("relata em plain-report", "plain-report" in f)
