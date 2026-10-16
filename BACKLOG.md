@@ -1579,11 +1579,20 @@ de NOME de programa segue pendente · **Conferido em 2026-09-27** (drain-plan da
 branch `until/2026-09-26-2203`): as camadas 0, 1 e 2 estão no código e a 1 está
 instalada (o `common` 2.25.1 do cache já chama `_wtlib.py rescue` no `worktree-merge`
 e no `worktree-discard`; `tests/test_worktree_artifact_rescue.py` e
-`tests/test_plan_anchor_root.py`, 8 passed). O que sobra, trocar o nome do programa da
-chave do projeto para a fatia de trabalho, contradiz a decisão do dono de 2026-09-25
-na seção da fila única ("Um papel por fonte": uma fila por repo, o `/board-flow:drain`
-lê `<programs>/<project_key>/plan.yaml`). Não foi construído; o item ficou `blocked`
-até o dono dizer se essa metade morre · **Lar provável:** `common`
+`tests/test_plan_anchor_root.py`, 8 passed). A metade do NOME ficou `blocked` até o
+dono dizer se morria, porque parecia contradizer a decisão de 2026-09-25 ("Um papel
+por fonte": uma fila por repo, o `/board-flow:drain` lê
+`<programs>/<project_key>/plan.yaml`) · **Metade 2 FEITA em 2026-10-16** (item
+`next-nome-do-programa-nao-e-project-key` da fila `cepa`, S2 do lote desmontado
+`lotes-sweep-verify`): o `/common:next` perdeu a regra que fazia de
+`<project_key>/plan.yaml` o candidato automático e passou a seguir a mesma regra do
+`cepa-plan status` (uma fila single-track → ela, qualquer nome; várias → lista e
+pergunta). Não contradiz 2026-09-25: nomear a ÚNICA fila com a chave do projeto
+continua válido, o que saiu foi usar a chave como busca. Doc em
+`docs/execution-plan.md` ("What the file is called"); guarda em
+`tests/test_plan_program_naming.py`, que roda o `cepa-plan status` de verdade em repos
+temporários (`wego-todo-agosto` resolve; `WEGO` + `WEGO-in-progress` recusa nomeando
+as duas) · **Lar provável:** `common`
 (`plan-schema.yaml`, `/common:next`)
 + `maestro` (`program-plan`, `run`, `resume`) · **Origem:** sessão de 2026-08-10, a
 partir do relato de uma sessão do WEGO: *"O plano desta sessão morre com o worktree. O
