@@ -1,0 +1,44 @@
+schema_version: 2
+card: from-triage-grava-ordem-aprovada
+verdict: proven
+reviewed_at: 2026-10-16T08:10:00-03:00
+base_commit: 4d8f3ef
+head_commit: 503b764
+issue_type: Story
+scope:
+  changed_classes:
+    - class: "common/bin/cepa-plan (cmd_write)"
+      module: common
+      external_observable: true
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline em 503b764: python3 tests/test_common_plan.py -> all green"
+        - "rodada 1 (HEAD 5d3ebbc): 12 de 15 mutantes RED; M3, M9, M10 sobreviveram; M1 equivalente (filtro redundante, removido depois)"
+        - "rodada 2 (HEAD 503b764) M3 FECHADOS sem dropped: RED, 1 failure(s) ['done preservados, depois novo, ...']"
+        - "M9 sem why padrao nos abertos ausentes: RED (KeyError 'why')"
+        - "M10 sem why padrao nos fechados ausentes: RED (KeyError 'why')"
+        - "M2 refuse nao exclui from_triage: RED (KeyError 'why', saida nao zero)"
+        - "M5 fechados depois da triagem: RED, 2 failure(s)"
+        - "M15 ramo novo tambem para keep: RED, 2 failure(s)"
+        - "M4, M6, M7, M8, M11, M12, M13, M14 da rodada 1 ficaram RED em 5d3ebbc e o ramo novo nao mudou em 503b764 (so o teste e o filtro sumidos)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; ramos novos (fechados, abertos, drop, why padrao, aviso, relatorio) cada um derrubado por mutante RED em perturbacao"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff altera ordenacao da fila gravada por um CLI local a partir de arquivos de repasse do proprio operador, sem superficie de entrada externa nova"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "git checkout 4d8f3ef -- common/bin/cepa-plan em worktree descartavel de 503b764 + python3 tests/test_common_plan.py -> KeyError: 'why' (saida nao zero); em 503b764 -> all green"
+routing_reason: "Os tres mutantes que sobreviveram na rodada 1 agora deixam o teste vermelho, os mutantes mais fortes continuam vermelhos e o teste novo falha na base."

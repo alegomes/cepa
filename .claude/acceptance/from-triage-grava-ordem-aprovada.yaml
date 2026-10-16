@@ -1,0 +1,59 @@
+key: from-triage-grava-ordem-aprovada
+status: complete
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "cepa-plan write --from-triage sem --on-missing (done/dropped ausentes)"
+    test: tests/test_common_plan.py::test_from_triage_preserva_done_ausente_e_aplica_a_ordem
+    layer: subprocess CLI
+    evidence: verified
+    run: "python3 tests/test_common_plan.py (HEAD 503b764) -> 155 ok, 0 FAIL, all green"
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: "ordem da triagem + status/human_pending do disco sobrevivem"
+    test: tests/test_common_plan.py::test_from_triage_preserva_done_ausente_e_aplica_a_ordem
+    layer: subprocess CLI
+    evidence: verified
+    run: "python3 tests/test_common_plan.py (HEAD 503b764) -> 155 ok, 0 FAIL, all green"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: "abertos nao citados depois, ordem antiga, stderr + stdout"
+    test: test_from_triage_preserva_done_ausente_e_aplica_a_ordem; test_triagem_parcial_preserva_a_ordem_da_fila
+    layer: subprocess CLI
+    evidence: verified
+    run: "python3 tests/test_common_plan.py (HEAD 503b764) -> 155 ok, 0 FAIL, all green"
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: "--from-triage --on-missing drop"
+    test: test_from_triage_preserva_done_ausente_e_aplica_a_ordem (ramo ft-drop)
+    layer: subprocess CLI
+    evidence: verified
+    run: "python3 tests/test_common_plan.py (HEAD 503b764) -> 155 ok, 0 FAIL, all green"
+    status: complete
+  - id: AC5
+    altitude: cli
+    surface: "--from-triage --on-missing keep (semantica 2026-09-25)"
+    test: test_triagem_parcial_preserva_a_ordem_da_fila (ramo keep, fila restaurada)
+    layer: subprocess CLI
+    evidence: verified
+    run: "python3 tests/test_common_plan.py (HEAD 503b764) -> 155 ok, 0 FAIL, all green"
+    status: complete
+  - id: AC6
+    altitude: cli
+    surface: "--items, --from-spec, --from-epic seguem com exit 4"
+    test: test_item_sumido_nao_some_calado (--items); test_from_spec_e_from_epic_seguem_recusando_item_sumido (--from-spec, --from-epic, exit 4 e plan.yaml intacto)
+    layer: subprocess CLI
+    evidence: verified
+    run: "python3 tests/test_common_plan.py (HEAD 503b764) -> 155 ok, 0 FAIL, all green; 6 checks do teste novo ok"
+    status: complete
+  - id: AC7
+    altitude: cli
+    surface: "usage do cepa-plan, plan.md, BACKLOG"
+    test: nenhum teste de contrato afirma o texto novo (test_contrato_do_comando nao checa)
+    layer: leitura do diff
+    evidence: "verified (leitura do diff; sem teste de contrato do texto)"
+    status: complete
+    note: "Diff mostra usage, plan.md e BACKLOG (status feito + ponteiro de teste) atualizados. Ressalva: plan.md fala em `--from-jira` onde o flag de CLI e --from-triage (o /common:plan --from-jira repassa para ele); coerente com o resto do arquivo."
