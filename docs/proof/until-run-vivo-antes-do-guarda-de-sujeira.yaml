@@ -1,0 +1,48 @@
+schema_version: 2
+card: until-run-vivo-antes-do-guarda-de-sujeira
+verdict: proven
+reviewed_at: 2026-10-16T00:00:00-03:00
+base_commit: 37841cd
+head_commit: 32927f9
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until:main (recusa de run vivo antes do guarda de sujeira)", module: bin, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until:run_vivo_da_fila", module: bin, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until:plano_so_do_run_vivo / PLANO_MODIFICADO / CAMPOS_DO_RUN", module: bin, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until:arvore_suja(run_vivo_ok)", module: bin, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/markdown sem pitest; PIT nao se aplica"
+    perturbation:
+      status: pass
+      results:
+        - "rodada 1 (head be38da1), baseline python3 tests/test_cepa_until.py -> '✓ tudo verde', rc=0; vizinho tests/test_cepa_until_supervisor_morto.py -> '✓ tudo verde', rc=0"
+        - "P1 (main: 'if vivo:' -> 'if False:'): 4 FAIL, rc=1 -> RED"
+        - "P2 (run_vivo_da_fila devolve None): 5 FAIL, rc=1 -> RED"
+        - "P3 (--sujo-ok contorna a recusa): 2 FAIL, rc=1 -> RED"
+        - "P4 (plano_so_do_run_vivo devolve True sempre): 3 FAIL nos casos negativos, rc=1 -> RED"
+        - "P6 (evidence fora de CAMPOS_DO_RUN): 1 FAIL, rc=1 -> RED"
+        - "P7 (checagem do id em iniciados trocada por True): 2 FAIL, rc=1 -> RED"
+        - "P9 (main chama arvore_suja com run_vivo_ok=False): 1 FAIL, rc=1 -> RED"
+        - "rodada 1: P5 e P8 sobreviveram em be38da1 (verdes, rc=0); o commit 32927f9 acrescentou os dois testes que as travam"
+        - "rodada 2 (head 32927f9), baseline python3 tests/test_cepa_until.py -> '✓ tudo verde', rc=0"
+        - "P8 (recusa depois do guarda: 'vivo = None if arvore_suja(repo, run_vivo_ok=True) else run_vivo_da_fila(...)' em cepa-until:2562): 2 FAIL ('...a mensagem é a do run vivo', '...e não a da árvore suja'), rc=1 -> RED"
+        - "P5 ('bool(run_vivo_ok and m' -> 'bool(m' em cepa-until:956): 1 FAIL ('default segue estrito: lista o plan de outra fila'), rc=1 -> RED"
+        - "nota: o vizinho supervisor_morto nao foi re-rodado em 32927f9; esse commit so toca tests/test_cepa_until.py"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "P5 e P8 eram as unicas linhas alteradas sem teste (verdes em be38da1); em 32927f9 cada uma fica RED isolada por um dos dois testes novos; as demais sao atingidas por P1-P4, P6, P7, P9"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera um CLI de supervisao local que le o estado.json/jsonl do proprio repo e o git status; nao abre superficie de entrada externa e nao toca modulo input-bearing (nao ha api-rest neste repo)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Nove perturbacoes (recusa, run_vivo_da_fila, --sujo-ok, plano_so_do_run_vivo, evidence, id em iniciados, run_vivo_ok em main, ordem antes do guarda, rigor dos outros chamadores) ficaram todas RED no teste que deveria acusar; baseline verde em be38da1 e 32927f9; nenhum double no caminho; nada assumed/skipped. PROVEN."
