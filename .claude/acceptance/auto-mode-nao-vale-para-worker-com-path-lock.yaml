@@ -1,0 +1,16 @@
+key: auto-mode-nao-vale-para-worker-com-path-lock
+status: complete
+diff_range: 4952cee..9225fc3
+criteria:
+  - id: AC1
+    altitude: domain
+    surface: >
+      Conteúdo dos 4 prompts build-hex/agents/{domain-dev,api-dev,adapter-dev,qa-engineer}.md
+      (prosa de prompt; não há comportamento de runtime além do texto). Critério literal:
+      o marcador "Auto Mode" presente nos 4 arquivos, dizendo que a preferência
+      por Bash não se aplica ao worker com path-lock.
+    test: tests/test_auto_mode_nao_vale_para_path_lock.py (test_agentes_trancados_dizem_que_auto_mode_nao_vale)
+    layer: script python sem dependências lendo os 4 arquivos reais
+    evidence: verified
+    run: "python3 tests/test_auto_mode_nao_vale_para_path_lock.py -> 4 linhas 'ok' (uma por agente), 'tudo verde', exit 0 (N=4 checks > 0). Conferência independente: grep -c 'Auto Mode' retorna 1 em cada um dos 4 arquivos."
+    gap: ""
