@@ -1,0 +1,55 @@
+key: capture-build-result-apos-estouro-de-contexto
+status: complete
+diff_range: 9f76e64~1..9f76e64
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      common/hooks/capture-build-result.py invocado como subprocesso com payload
+      PostToolUse (Bash, run_in_background, backgroundTaskId) cujo session_id (B)
+      difere da pasta tasks/ onde o .output existe (A).
+    test: tests/test_capture_build_background.py, blocos "continuada" (pendente fica ao lado do .output da sessão original; avisa pasta de outra sessão; lançamento não grava baseline)
+    layer: cli/subprocess com TMPDIR falso
+    evidence: verified
+    run: "python3 tests/test_capture_build_background.py -> 'ok continuada: pendente fica ao lado do .output da sessão original' ... 'todos ok' (43 checks ok, exit 0)"
+  - id: AC2
+    altitude: cli
+    surface: >
+      PostToolUse sob B grava .claude/last-build.json SUCCESS; gate-advance.py
+      como PreToolUse (git commit) sob B libera com baseline STALE prévio.
+    test: tests/test_capture_build_background.py, "continuada: build terminado grava SUCCESS sob o sid novo", "continuada: gate-advance libera o commit com o build terminado", "continuada: gate-advance gravou o SUCCESS colhido"
+    layer: cli/subprocess (hook + gate-advance)
+    evidence: verified
+    run: "python3 tests/test_capture_build_background.py -> os 3 checks 'ok' -> 'todos ok' (exit 0)"
+  - id: AC3
+    altitude: cli
+    surface: >
+      Build lançado sob A (pendente já na pasta de A), colhido por payload com
+      session_id novo e mesmo cwd.
+    test: tests/test_capture_build_background.py, "build lançado sob A antes do estouro é colhido por payload com sid B"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_capture_build_background.py -> 'ok build lançado sob A antes do estouro é colhido por payload com sid B' -> 'todos ok'"
+  - id: AC4
+    altitude: cli
+    surface: >
+      Pendente de outra árvore em TMPDIR compartilhado não é colhido nem grava
+      o baseline dela.
+    test: tests/test_capture_build_background.py, "pendente de OUTRA árvore não é colhido" e "não grava o baseline dela"
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_capture_build_background.py -> 2 checks 'ok' -> 'todos ok'"
+  - id: AC5
+    altitude: cli
+    surface: >
+      Existência do teste "lançado sob um sid, colhido sob outro" na superfície
+      real (hook e gate-advance como subprocessos com JSON no stdin).
+    test: tests/test_capture_build_background.py (Sessao._run usa subprocess.run com payload JSON; commit() usa hook_event_name PreToolUse)
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 tests/test_capture_build_background.py -> 'todos ok' (exit 0, N=43 checks)"
+    note: >
+      Observação não bloqueante: a colheita de AC3 é exercida via hook de
+      captura, não via gate-advance; o AC3 só exige chamadas posteriores sob B.
+      Não rodei o teste contra o código anterior (mutação) para provar que
+      fica vermelho sem a correção.
