@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""cepa-autonomy — consulta as faixas de autonomia (`common/autonomy.yaml`).
+
+    cepa-autonomy listar [--repo .] [--json]
+    cepa-autonomy classificar (--bash CMD | --mcp TOOL | --path P [--op OP] | --slash S | --id ID) [--repo .] [--json]
+
+Quem decide "pergunto ou faço" é o arquivo, não o agente do turno. Este CLI é
+a forma de um comando (hoje o /board-flow:decide, passo 5b) perguntar ao
+arquivo em que faixa uma ação cai antes de transformá-la em pergunta ao dono:
+
+  executa_e_reporta  → faça, e reporte como linha de informação
+  sempre_pergunta    → entra no lote de perguntas do dono
+  não listado        → pergunta (default), e a pergunta termina propondo o id
+
+Saída humana em pt-BR; `--json` para quem consome por código. Exit 0 sempre
+que a consulta rodou; 2 em argumento inválido.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+
+def _lib():
+    aqui = Path(__file__).resolve().parent.parent / "hooks"
+    if str(aqui) not in sys.path:
+        sys.path.insert(0, str(aqui))
+    import _autonomy
+
+    return _autonomy
+
+
+def cmd_listar(args, lib):
+    cfg = lib.carregar(args.repo)
+    if args.json:
+        print(json.dumps(cfg, ensure_ascii=False, indent=2))
+        return 0
+    print(f"autonomy.yaml (versao {cfg['versao']}) — fontes: {', '.join(cfg['fontes']) or 'nenhuma'}")
+    for faixa, rotulo in ((lib.FAIXA_AUTOMATICA, "executa e reporta (reversível)"),
+                          (lib.FAIXA_PERGUNTA, "sempre pergunta (irreversível ou de fora)")):
+        print(f"\n{rotulo}:")
+        for item in cfg[faixa]:
+            det = ", ".join(f"{k}={v!r}" for k, v in item["detect"].items())
+            extra = f"  [precondição: {item['precondicao']}]" if item.get("precondicao") else ""
+            movido = f"  [movido por {item['movido_por']}]" if item.get("movido_por") else ""
+            print(f"  - {item['id']}: {det}{extra}{movido}")
+    print(f"\nnão listado → {cfg['default_nao_listado']}")
+    for a in cfg["avisos"]:
+        print(f"aviso: {a}", file=sys.stderr)
+    return 0
+
+
+def cmd_classificar(args, lib):
+    cfg = lib.carregar(args.repo)
+    if args.id:
+        faixa = lib.faixa_de(cfg, args.id)
+        res = {"faixa": faixa or lib.FAIXA_PERGUNTA, "id": args.id if faixa else None,
+               "listado": faixa is not None, "precondicao": None, "condicoes": {}}
+        if faixa:
+            item = next(i for i in cfg[faixa] if i["id"] == args.id)
+            res["precondicao"] = item.get("precondicao")
+    else:
+        res = lib.casar(cfg, bash=args.bash, mcp=args.mcp, path=args.path, op=args.op, slash=args.slash)
+    res["avisos"] = cfg["avisos"]
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+        return 0
+    if not res["listado"]:
+        print(f"não listado → {cfg['default_nao_listado']}: pergunte, e termine a pergunta "
+              f"propondo o id a acrescentar em common/autonomy.yaml")
+    elif res["faixa"] == lib.FAIXA_AUTOMATICA:
+        print(f"executa e reporta ({res['id']}): faça e reporte como linha de informação, não como pergunta")
+        if res.get("precondicao"):
+            print(f"  precondição a conferir antes: {res['precondicao']}")
+    else:
+        print(f"sempre pergunta ({res['id']}): entra no lote de perguntas do dono")
+    if res.get("condicoes"):
+        print(f"  condições que o hook resolve (Fase 2): {res['condicoes']}")
+    for a in res["avisos"]:
+        print(f"aviso: {a}", file=sys.stderr)
+    return 0
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="cepa-autonomy", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for nome in ("listar", "classificar"):
+        p = sub.add_parser(nome)
+        p.add_argument("--repo", default=".")
+        p.add_argument("--json", action="store_true")
+        if nome == "classificar":
+            g = p.add_mutually_exclusive_group(required=True)
+            g.add_argument("--bash")
+            g.add_argument("--mcp")
+            g.add_argument("--path")
+            g.add_argument("--slash")
+            g.add_argument("--id")
+            p.add_argument("--op", help="com --path: delete|edit|any")
+    args = ap.parse_args(argv)
+    lib = _lib()
+    return cmd_listar(args, lib) if args.cmd == "listar" else cmd_classificar(args, lib)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

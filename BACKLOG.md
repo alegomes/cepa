@@ -1555,7 +1555,18 @@ calada quando um worktree é removido); completar o mapa de ferramentas Jira nos
 
 **Implementação da Fase 1 aprovada pelo dono em 2026-08-15** (o `autonomy.yaml` + a
 extensão do `decide`), começando pelo spike de 30 min, para uma próxima sessão de
-build.
+build. **Fase 1 FEITA em 2026-10-16** (item `autonomy-yaml-fase-1` da fila `cepa`, S3
+do lote desmontado `lotes-sweep-verify`): `common/autonomy.yaml` com as duas faixas
+(10 ações `executa_e_reporta`, 6 `sempre_pergunta`, cada uma com `detect:`,
+`default_nao_listado: sempre-pergunta`); leitor em `common/hooks/_autonomy.py`
+(mescla o override `.claude/autonomy.yaml`, que só endurece; descarta item sem
+`detect:`; quando um call casa as duas faixas, pergunta vence) e CLI
+`common/bin/cepa-autonomy listar|classificar` (atalho `board-flow/bin/cepa-autonomy`,
+cópia do shim do `cepa-plan`, que agora resolve o homônimo pelo próprio nome);
+`decide.md` ganhou o passo 5b (re-rodar prova e card de infra agregado passam de
+proposta a ação reportada; avançar para Done segue pergunta). Guarda:
+`tests/test_autonomy_yaml.py`. O spike do hook em AskUserQuestion, o
+`autonomy-gate.py`, o `ask-audit-gate.py` e os atestados ficam para a Fase 2.
 
 ### Episódio anexado — feedback `fb-20261006-2` (2026-10-06)
 

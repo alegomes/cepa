@@ -10,6 +10,10 @@ outro projeto o arquivo simplesmente não está lá, o comando falha calado
 (ou nem roda) e o card nasce fora da fila sem nenhum aviso — o bug que este
 shim fecha.
 
+Este mesmo arquivo serve de atalho para outros binários do common: o alvo é o
+PRÓPRIO nome do arquivo (`ALVO`), então `board-flow/bin/cepa-autonomy` é uma
+cópia byte a byte deste (tests/test_autonomy_yaml.py pina a igualdade).
+
 Este arquivo não reimplementa nada do cepa-plan: acha o script real do
 `common` (repo ou cache de plugin) e faz `exec` nele, repassando todo o
 argv e preservando o código de saída — quem lê a saída não percebe que
@@ -47,16 +51,19 @@ def _versao_numerica(nome):
         return (0,)
 
 
+ALVO = Path(__file__).name  # cepa-plan, cepa-autonomy... — o shim resolve o homônimo do common
+
+
 def _candidato_repo(aqui):
-    """aqui = <repo>/board-flow/bin/ -> <repo>/common/bin/cepa-plan.
+    """aqui = <repo>/board-flow/bin/ -> <repo>/common/bin/<ALVO>.
 
     aqui.parent = board-flow, aqui.parent.parent = <repo>.
     """
-    return aqui.parent.parent / "common" / "bin" / "cepa-plan"
+    return aqui.parent.parent / "common" / "bin" / ALVO
 
 
 def _candidato_cache(aqui):
-    """aqui = <mkt>/board-flow/<ver>/bin/ -> <mkt>/common/<ver-mais-alta>/bin/cepa-plan.
+    """aqui = <mkt>/board-flow/<ver>/bin/ -> <mkt>/common/<ver-mais-alta>/bin/<ALVO>.
 
     aqui.parent = <ver>, aqui.parent.parent = board-flow, aqui.parent.parent.parent
     = <mkt> (o cache do marketplace em ~/.claude/plugins/cache/<mkt>/).
@@ -67,13 +74,13 @@ def _candidato_cache(aqui):
         key=lambda d: _versao_numerica(d.name),
     )
     if versoes:
-        return versoes[-1] / "bin" / "cepa-plan"
+        return versoes[-1] / "bin" / ALVO
     return None
 
 
 def _candidato_path(self_arquivo):
-    """`cepa-plan` em algum PATH, pulando este próprio arquivo."""
-    achado = shutil.which("cepa-plan")
+    """`<ALVO>` em algum PATH, pulando este próprio arquivo."""
+    achado = shutil.which(ALVO)
     if achado and Path(achado).resolve() != self_arquivo:
         return Path(achado)
     return None
@@ -97,15 +104,15 @@ def main():
 
         if real is None:
             via_path = _candidato_path(self_arquivo)
-            tentados.append("cepa-plan no PATH")
+            tentados.append(f"{ALVO} no PATH")
             real = via_path
 
     if real is None:
         sys.stderr.write(
-            "cepa-plan (do common) não encontrado. Caminhos tentados:\n"
+            f"{ALVO} (do common) não encontrado. Caminhos tentados:\n"
             + "\n".join(f"  - {t}" for t in tentados)
             + "\n\nComo resolver: instale o plugin `common` do marketplace cepa "
-            "(ele traz o `bin/cepa-plan` real), ou garanta que `cepa-plan` "
+            f"(ele traz o `bin/{ALVO}` real), ou garanta que `{ALVO}` "
             "esteja no PATH.\n"
         )
         sys.exit(127)

@@ -1,0 +1,71 @@
+# common/autonomy.yaml — quem decide "pergunto ou faço" é ESTE arquivo, não o agente.
+#
+# Duas listas. `executa_e_reporta`: ação reversível — o agente faz e ela vira
+# LINHA DE INFORMAÇÃO no relatório (bloco "Detalhe técnico" do plain-report),
+# nunca item numerado de "Decisões e próximos passos". `sempre_pergunta`: ação
+# irreversível ou que sai para fora — espera o lote de perguntas do dono
+# (/board-flow:decide). Ação que não está em lista nenhuma cai em
+# `default_nao_listado`: perguntar demais custa segundos; agir demais é o
+# worktree-artifact-rescue de novo (perda silenciosa que custou dias).
+#
+# Cada ação carrega `detect:` — a impressão digital da ação, para que CÓDIGO
+# (não o julgamento do agente no turno) reconheça o tool-call:
+#   bash:  regex casada contra cada segmento do comando de terminal (`&&`, `;`)
+#   mcp:   regex casada contra o nome da ferramenta MCP
+#   path:  regex casada contra o caminho tocado (+ `op:` delete|any, default any)
+#   slash: regex casada contra o comando /plugin:nome invocado
+# `precondicao` é a condição que torna a ação reversível; quem a confere é o
+# hook (Fase 2, autonomy-gate.py), rodando o comando — nunca presumida. Chaves
+# extras no detect (branch_atual, destino_terminal, label) são condições que o
+# mesmo hook resolve; a leitura da Fase 1 as devolve como `condicoes` e deixa
+# a ação na faixa mais segura quando não consegue conferir.
+#
+# Override por repo em `.claude/autonomy.yaml`: só pode MOVER uma ação para
+# `sempre_pergunta` (ou acrescentar ações a ela). Endurecer é local; afrouxar
+# é diff versionado neste arquivo, revisado no cepa. Promoção para a faixa
+# automática é edição manual, jamais automática.
+#
+# Origem: BACKLOG.md § "Atrito de decisão" (sessão WEGO de 2026-08-03 a 08-10,
+# ~10 das ~20 interrupções eram "Recomendo sim" → "sim") e o design vencedor em
+# docs/internals/gauntlet-pilot-atrito-decisao.md. Fase 1 aprovada em 2026-08-15.
+versao: 2
+
+executa_e_reporta:
+  - id: rodar-build
+    detect: {bash: '(^|\s)(mvn|\./mvnw|npm (test|run build)|pytest|gradle|\./gradlew)(\s|$)'}
+  - id: commit-local
+    detect: {bash: '^git commit(\s|$)'}
+  - id: criar-card              # card não-terminal (dívida, infra, follow-up) — fechável, logo reversível
+    detect: {mcp: '(createJiraIssue|jira_create_issue)$'}
+  - id: comentar-card
+    detect: {mcp: '(addCommentToJiraIssue|jira_add_comment)$'}
+  - id: apagar-branch-contida
+    detect: {bash: '^git branch -[dD]\s+(?P<branch>\S+)'}
+    precondicao: 'git merge-base --is-ancestor <branch> <base>'   # falhou → é descartar-trabalho (sempre_pergunta)
+  - id: apagar-handoff-vencido
+    detect: {path: '\.claude/handoffs/.*\.md$', op: delete}
+    precondicao: 'a branch do handoff não existe mais'
+  - id: mover-arquivo
+    detect: {bash: '^git mv(\s|$)'}
+  - id: atualizar-plano
+    detect: {path: '\.claude/programs/.*/plan\.yaml$'}
+  - id: rerodar-prove           # decide.md passo 4 propunha; passa a fazer
+    detect: {slash: '^/board-flow:prove(-drain)?(\s|$)'}
+  - id: card-infra-agregado     # o padrão WEGO-2004 do decide.md passo 4
+    detect: {mcp: '(createJiraIssue|jira_create_issue)$', label: 'infra'}
+
+sempre_pergunta:
+  - id: push-remoto
+    detect: {bash: '^git push(\s|$)'}
+  - id: merge-integracao
+    detect: {bash: '^git merge(\s|$)', branch_atual: '^(main|master|develop)$'}
+  - id: descartar-trabalho
+    detect: {bash: '(git reset --hard|git clean -f|git checkout \.|git checkout -- |git worktree remove)'}
+  - id: transicao-terminal      # destino terminal = done/wont_do do status_map do board-flow.yaml
+    detect: {mcp: '(transitionJiraIssue|jira_transition_issue)$', destino_terminal: true}
+  - id: segredo
+    detect: {path: '(\.zsecrets|\.env)($|/|\.)', op: any}
+  - id: terceiros
+    detect: {mcp: '(send_dm|send_message|publish_|createConfluence|forward)'}
+
+default_nao_listado: sempre-pergunta
