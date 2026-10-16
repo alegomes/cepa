@@ -2025,9 +2025,26 @@ items:
   why: S1 do lote lotes-sweep-verify, desmontado em 2026-10-16. Pedido do dono em
     2026-08-14, 2 pilotos rodados em 2026-08-15 (docs/internals/gauntlet-pilot-*.md).
     Primeiro dos seis porque os pilotos já deram o desenho e o aceite (tests/test_gauntlet_command.py).
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: Rodar /common:gauntlet uma vez num alvo pequeno para validar o
+    script canonico com agentes reais (~600k tokens)
+  evidence: 'Commits 078dff5 (common/commands/gauntlet.md, common/gauntlet/gauntlet.workflow.js,
+    common/gauntlet/angulos.md, tests/test_gauntlet_command.py, docs/commands.md,
+    marketplace.json, plugin.json 2.26.6->2.27.0, BACKLOG status), ffa4134 (tests/test_gauntlet_workflow.py:
+    script executado em harness node com agentes simulados — fases, isolamento,
+    rotacao, Borda, desempate, rotulo desconhecido, <2 designs, args string; 40
+    checagens) e o commit do aceite, na branch until/2026-10-16-0755. pair-reviewer
+    OK-WITH-NOTES, 4 notas aplicadas. completion-auditor: INCOMPLETE (AC1 sem execucao,
+    AC3 sem trava dos titulos) -> gaps fechados por teste -> COMPLETE (.claude/acceptance/gauntlet-comando.yaml).
+    proof-reviewer nao aplicado: item e comando/prosa + script de Workflow sem runtime
+    no harness; a logica do script e provada pelo harness simulado. Fora: run real
+    do gauntlet (~600k tokens) nao feito — o harness prova a logica, nao a qualidade
+    da saida dos agentes; registry compartilhado com /common:advisors adiado para
+    depois do primeiro uso. Build completo e do supervisor.'
+  owner_question: 'Rodo o gauntlet de verdade uma vez, num alvo pequeno, para validar
+    o script com agentes reais? Recomendo sim: custa menos que descobrir erro no
+    primeiro uso'
 - id: next-nome-do-programa-nao-e-project-key
   title: /common:next acha a fila pela fatia de trabalho nomeada, sem forçar <project_key>/plan.yaml
     como candidato automático
@@ -2035,9 +2052,44 @@ items:
     de execução morre com o worktree, e o nome do programa colide" (colisão WEGO
     vs WEGO-in-progress no wego-acessos-backend). Aceite: tests/test_plan_program_naming.py.
     Superfície: common/commands/next.md, docs/execution-plan.md.'
+  status: done
+  blocked_by: []
+  human_pending: null
+  evidence: 'Branch da noite until/2026-10-16-0755, commits 9dbab3c (next.md regra
+    2 project_key removida + docs/execution-plan.md ''What the file is called''
+    + tests/test_plan_program_naming.py), 5d97ccc (BACKLOG status: metade 2 feita),
+    8d0d5a3 (2 checks de prosa a mais; acceptance COMPLETE), proof commit. Gates:
+    pair-reviewer APPROVE; completion-auditor COMPLETE (.claude/acceptance/next-nome-do-programa-nao-e-project-key.yaml,
+    AC1-AC4); proof-reviewer PROVEN (docs/proof/next-nome-do-programa-nao-e-project-key.yaml,
+    7 perturbacoes RED: regra antiga de volta, Never pick, secao do doc, cmd_status
+    escolhendo nomes[0], filas_single_track preferindo WEGO, e as 2 frases restantes).
+    Testes vizinhos verdes: test_plan_anchor_root, test_common_next, test_fio_condutor,
+    test_common_drain_plan, test_fila_unica_contratos, test_doctor_divergencia_plano,
+    test_common_fila, test_catalogo_comandos. Build completo e do supervisor. Ficou
+    de fora, por escopo: drain-plan.md:39 e doctor.md:50 ainda descrevem a resolucao
+    como ''board-flow.yaml -> project_key'' (prosa desatualizada, nao e lookup);
+    board-flow:* continua lendo <project_key>/plan.yaml por decisao de 2026-09-25
+    (compativel: e rotulo, nao busca).'
+- id: until-run-vivo-antes-do-guarda-de-sujeira
+  title: cepa-until checa run vivo da mesma fila antes do guarda de árvore suja,
+    e não conta como sujeira o plan.yaml que o próprio run escreve
+  why: 'Origem: feedback fb-20261015-4 (2026-10-15), o dono chama de recorrente.
+    Hoje o main() do cepa-until roda arvore_suja() logo depois de consulta_fila()
+    e, com plan.yaml modificado, manda ''commite ou limpe'' mesmo quando quem sujou
+    foi um run vivo da mesma fila (pid 16795, run 2026-10-15-1853, prazo 22:53)
+    gravando status/claimed_by; a checagem supervisor_vivo() só existe no fecha-morto
+    e na varredura de runs mortos, nunca na largada. Entra na frente dos quatro
+    pendentes porque barra a própria largada do run: sem ela, o dono perde a rodada
+    e culpa o guarda errado. Aceite: (1) com estado.json ''rodando'' e supervisor
+    vivo na mesma fila, a largada recusa dizendo ''já há um run desta fila em andamento
+    (pid, prazo)'', sem sugerir --sujo-ok; (2) plan.yaml modificado só por status/claimed_by/evidence
+    de item que o registro .jsonl do run vivo tocou não conta como sujeira para
+    outra fila; (3) testes em tests/test_cepa_until.py. Superfície: common/bin/cepa-until
+    (main, arvore_suja, supervisor_vivo).'
   status: pending
   blocked_by: []
   human_pending: null
+  evidence: null
 - id: autonomy-yaml-fase-1
   title: common/autonomy.yaml lista ações reversíveis (executa e reporta) e irreversíveis
     (pergunta), cada uma com detect:, e board-flow:decide lê a lista
