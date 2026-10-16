@@ -2327,7 +2327,7 @@ se apresentar pelo nome. O custo de não ter é medido — uma sessão.
 
 **Plano:** `cepa/bash-vs-path-lock` (descartado)
 
-**Status:** pendente · **Lar provável:** `build-hex` (hook `path-lock`) + a diretiva de
+**Status:** frente 1 feita (2026-10-16, item `cepa/auto-mode-nao-vale-para-worker-com-path-lock`); frentes 2 e 3 pendentes · **Lar provável:** `build-hex` (hook `path-lock`) + a diretiva de
 auto-mode que injeta "faça o trabalho pelo Bash" · **Origem:** drain de 5 cards no
 `wego-acesso-backend` (2026-08-20), onde o conflito apareceu quatro vezes numa sessão só.
 
