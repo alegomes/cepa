@@ -615,7 +615,7 @@ parada, e não com silêncio.
 
 **Plano:** `cepa/aprovacao-humana-nao-chega-ao-subagente` (descartado)
 
-**Status:** pendente · **Lar:** `common/` (canal de aprovação) + `build-hex/hooks/path-lock.py`
+**Status:** feito (2026-10-16) · **Lar:** `common/` (canal de aprovação) + `build-hex/hooks/path-lock.py`
 + prompts dos workers · **Origem:** sessão wego 2026-07-21, card WEGO-1948 — worker recusou
 duas vezes uma escrita legitimamente autorizada, porque não tinha como verificar a
 autorização.
@@ -668,6 +668,15 @@ Nenhuma é obviamente certa; decidir no design.
 4. **Recusa como saída barata, não como ciclo queimado.** Se 1-3 falharem, ao menos tornar
    `NEEDS-HUMAN-APPROVAL` um retorno de primeira classe e imediato, em vez de o worker
    gastar a delegação inteira para depois recusar. Aqui custou ~4 min por recusa, duas vezes.
+
+### Decisão (2026-10-16)
+
+Fonte exigida = proveniência por git (opção 2), imposta mecanicamente por
+`build-hex/hooks/path-lock.py`: `extra_write_globs` só vale com `build-hex.yaml`
+commitado (rastreado e sem mudança desde o HEAD); o `roles:` segue sem trava (é
+layout, não permissão). As opções 3 (canal atestado pelo harness, precisa de suporte do
+produto) e 4 não foram construídas. A hipótese barata ("worker aceita `build-hex.yaml`
+commitado?") ficou moot: o próprio cadeado responde, o worker não julga mais.
 
 ### Pendências de design
 

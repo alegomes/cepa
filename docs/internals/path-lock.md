@@ -360,6 +360,36 @@ Semantics:
 - **Empty / absent block** → no extras. Allowlist is purely
   role-based.
 
+#### Provenance: honored only when committed
+
+`extra_write_globs` entries are honored only while `build-hex.yaml` is
+**tracked by git and unchanged since HEAD** (staged or unstaged edits
+both count as changed). `path-lock.py` checks this itself with
+`git ls-files --error-unmatch` and `git diff --quiet HEAD`, and only when
+a write misses the canonical allowlist but would match with the extras, so
+the common path makes no git call.
+
+Why: a worker cannot tell "the owner authorized it" written in a prompt
+from an injected claim. Git history is the one trace the orchestrator
+cannot forge in passing, and the lock enforces it mechanically, so the
+worker never judges a claim. Option 3 of the BACKLOG (a harness-attested
+channel) needs product support and is not built.
+
+Failure cases (all block with exit 2 and a message naming the reason, and
+ALL extras are ignored, not just the delta):
+
+- untracked by git (never committed);
+- modified since the last commit (staged or unstaged);
+- not inside a git repository, or git unavailable or timed out (fail
+  closed, for the extras only; canonical writes are unaffected).
+
+Stated limit: the `roles:` remap is NOT gated. It is layout, not
+permission. Not airtight against an agent that may commit; it raises the
+bar and leaves an auditable trace.
+
+Record: BACKLOG § "Aprovação humana não chega ao subagente (canal de
+consentimento)", episode WEGO-1948, decision 2026-10-16.
+
 When to use:
 
 - **Yes:** a Story needs `adapter-dev` to drop a Flyway/Liquibase
