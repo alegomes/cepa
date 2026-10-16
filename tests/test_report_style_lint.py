@@ -19,6 +19,10 @@ Garantias:
     palavras;
   - cada item da lista final é numerado, faz uma pergunta fechada e traz
     "Recomendo sim/não" -> item que só nomeia o assunto é sinalizado;
+  - tudo que o `Pra você:` anuncia aparece como item numerado no fim ("Nada
+    pendente." só vale quando o topo diz "nada"), e todo item de tarefa do dono
+    ("Você ...") traz comando ou arquivo e "Pronto quando" — o relatório de
+    14/10/2026 ("fechar as duas rotas humanas ... Nada pendente.") é barrado;
   - resposta de subagente (sidechain) nunca é confundida com o relatório;
   - o hook NUNCA bloqueia: exit 0 em todos os casos.
 """
@@ -43,8 +47,15 @@ TELEM = TMP / "telemetry"
 # medem OUTRA coisa não devem falhar por falta dela.
 PASSOS = ("\n\n### Decisões e próximos passos\n"
           "*Responda por número: sim, não, ou \"vamos falar\".*\n"
-          "1. **Você roda `bin/install.sh --clean` agora?** Recomendo **sim** — "
-          "sem isso a mudança não vale.\n")
+          "1. **Você roda `bin/install.sh --clean` agora?**\n"
+          "   Onde: raiz do clone do cepa.\n"
+          "   Comando:\n"
+          "   ```\n"
+          "   bin/install.sh --clean\n"
+          "   ```\n"
+          "   Pronto quando: o terminal imprime `instalado` e eu recebo o aviso "
+          "de volta.\n"
+          "   Recomendo **sim** — sem isso a mudança não vale.\n")
 
 
 BOM = ("O verificador de provas aceitava qualquer palavra fora de uma lista de "
@@ -255,7 +266,9 @@ aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
 check("lista do fim escrita em prosa → avisa",
       "itens de lista" in aviso, repr(aviso[:400]))
 
-aviso = ciclo(CORPO + "\n\n### Próximos passos\nNada pendente.\n")
+aviso = ciclo(CORPO.replace("um passo manual — lista no fim.",
+                            "nada pra decidir.")
+              + "\n\n### Próximos passos\nNada pendente.\n")
 check("\"Nada pendente.\" satisfaz a lista", aviso.strip() == "",
       repr(aviso[:300]))
 
@@ -298,6 +311,90 @@ aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
               "2. **Rodo o prove-drain nos dois cards de In Review?** "
               "Recomendo **não** — a triagem roteou por evidência.\n")
 check("item mastigado, com a recomendação na linha seguinte → nenhum aviso",
+      aviso.strip() == "", repr(aviso[:400]))
+
+# ── tarefa do dono vem com o passo a passo (2026-10-15) ───────────────────
+# 14/10/2026: o Pra você dizia "fechar as duas rotas humanas ... e os sete
+# buracos do RIPD" e o fim dizia "Nada pendente." O dono: "O que, afinal, que
+# eu tenho que fazer? Dê-me o passo a passo."
+TOPO_14_10 = ("Resultado dito de forma clara em uma frase.\n\n"
+              "**Pra você:** fechar as duas rotas humanas no `wego-digitacao-backend` "
+              "(o comando do S3-port e a conferência dos 50 documentos) e os sete "
+              "buracos do RIPD. Nada mais pendente comigo nesta sessão.\n\n"
+              "### Detalhe técnico\n" + "detalhe " * 90)
+aviso = ciclo(TOPO_14_10 + "\n\n### Decisões e próximos passos\n\nNada pendente.\n")
+check("14/10: Pra você com categorias + \"Nada pendente.\" → avisa",
+      "Pra você" in aviso and "item numerado" in aviso, repr(aviso[:400]))
+
+aviso = ciclo(CORPO.replace("um passo manual — lista no fim.", "nada pra decidir.")
+              + "\n\n### Decisões e próximos passos\nNada pendente.\n")
+check("Pra você \"nada\" + \"Nada pendente.\" → nenhum aviso",
+      aviso.strip() == "", repr(aviso[:300]))
+
+aviso = ciclo(CORPO.replace("um passo manual — lista no fim.",
+                            "nada pra decidir; um commit ficou na branch.")
+              + "\n\n### Decisões e próximos passos\nNada pendente.\n")
+check("Pra você \"nada ...; um commit\" + \"Nada pendente.\" → nenhum aviso",
+      aviso.strip() == "", repr(aviso[:300]))
+
+CABECA_T = ("Resultado dito de forma clara em uma frase.\n\n"
+            "**Pra você:** uma tarefa sua — lista no fim.\n\n"
+            "### Detalhe técnico\n" + "detalhe " * 90
+            + "\n\n### Decisões e próximos passos\n")
+
+aviso = ciclo(CABECA_T + "1. **Você confere os 50 documentos?** Recomendo **sim** — "
+              "sem ela o S5 não fecha.\n")
+check("tarefa \"Você ...\" sem comando, arquivo nem Pronto quando → avisa",
+      "passo a passo" in aviso, repr(aviso[:400]))
+
+aviso = ciclo(CABECA_T + "1. **Você roda o comando do S3-port?**\n"
+              "   Onde: raiz do clone.\n"
+              "   Comando:\n"
+              "   ```\n"
+              "   bin/ler-lote.sh --porta s3 inob/282243\n"
+              "   ```\n"
+              "   Pronto quando: o terminal imprime 20 lotes lidos.\n"
+              "   Recomendo **sim** — destrava o S5.\n")
+check("tarefa com comando em bloco cercado + Pronto quando → nenhum aviso",
+      aviso.strip() == "", repr(aviso[:400]))
+
+aviso = ciclo(CABECA_T + "1. **Você roda o script com linha em branco?**\n"
+              "   Comando:\n"
+              "   ```\n"
+              "   bin/a.sh\n"
+              "\n"
+              "   bin/b.sh\n"
+              "   ```\n"
+              "   Pronto quando: o terminal imprime ok.\n"
+              "   Recomendo **sim** — destrava o S5.\n")
+check("linha em branco dentro de bloco cercado não fecha o item → nenhum aviso",
+      aviso.strip() == "", repr(aviso[:400]))
+
+aviso = ciclo(CABECA_T + "1. **Você preenche os sete campos do RIPD?**\n"
+              "   Onde: docs/lgpd/ripd.md, seção 9.\n"
+              "   Pronto quando: não sobra campo vazio; me diga \"RIPD pronto\".\n"
+              "   Recomendo **sim** — dois campos só você sabe.\n")
+check("tarefa com caminho de arquivo sem crase + Pronto quando → nenhum aviso",
+      aviso.strip() == "", repr(aviso[:400]))
+
+aviso = ciclo(CABECA_T + "1. **Você confere os 50 documentos da amostra?**\n"
+              "   Pronto quando: as 50 linhas têm a classe real preenchida.\n"
+              "   Recomendo **sim** — sem ela o S5 não fecha.\n")
+check("tarefa sem comando nem arquivo, com Pronto quando → avisa \"comando ou arquivo\"",
+      "comando ou arquivo" in aviso, repr(aviso[:400]))
+
+aviso = ciclo(CABECA_T + "1. **Você roda `bin/x.sh`?** Recomendo **sim** — destrava.\n")
+check("tarefa com comando mas sem Pronto quando → avisa",
+      "Pronto quando" in aviso, repr(aviso[:400]))
+
+aviso = ciclo(CABECA_T + "1. **Mantenho o critério X?** Recomendo **sim** — "
+              "é a sua regra de entrada.\n")
+check("pergunta de mérito sem comando → nenhum aviso (regra só vale p/ \"Você\")",
+      aviso.strip() == "", repr(aviso[:400]))
+
+aviso = ciclo(CABECA_T + "1. **Rodo o prove-drain nos dois cards?** Recomendo "
+              "**não** — a triagem roteou por evidência.\n")
+check("trabalho meu esperando o vai, sem comando → nenhum aviso",
       aviso.strip() == "", repr(aviso[:400]))
 
 # ── resposta de subagente não é o relatório ────────────────────────────────

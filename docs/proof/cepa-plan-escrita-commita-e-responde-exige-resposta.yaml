@@ -1,0 +1,39 @@
+schema_version: 2
+card: cepa-plan-escrita-commita-e-responde-exige-resposta
+verdict: proven
+reviewed_at: 2026-10-15T20:40:00-03:00
+base_commit: e25f556^
+head_commit: 573ec8e
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-plan (fecha_escrita, outras_mudancas, nao_responde, cmd_responde, cmd_add, cmd_start, cmd_finish)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/bash, sem PIT"
+    perturbation:
+      status: pass
+      results:
+        - "baseline em 573ec8e (worktree detached /tmp/proof-cepa-plan-3): python3 tests/test_cepa_plan_escrita_commita.py -> 'all green', exit 0"
+        - "(j1) retirado re.I de RESPOSTA_DO_DECIDIR (linha 2040): RED, exit 1, FAIL \"aceita 'SIM: Fecho o card?'\""
+        - "(k) \\w trocado por [A-Za-z0-9] na checagem so-pontuacao (linha 2046): RED, exit 1, FAIL \"aceita 'é'\""
+        - "(a)-(i), (j2), (l): citadas da segunda passada (todas RED); o unico diff desde entao e o arquivo de teste (573ec8e), sem mudanca em common/bin/cepa-plan"
+        - "cada perturbacao revertida com git checkout (status limpo); worktree removido"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; linhas alteradas alcancadas pelas perturbacoes (a)-(l), todas RED"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "python3 tests/test_cepa_plan_escrita_commita.py -> all green com test_entradas_adversariais_no_filtro_de_resposta (agora com 'SIM: Fecho o card?' e 'é' aceitos)"
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "não é Bug"
+routing_reason: "As duas perturbacoes que sobreviveram na segunda passada (j1, k) agora derrubam o teste; todas as perturbacoes (a)-(l) ficam RED no nivel da CLI. PROVEN."

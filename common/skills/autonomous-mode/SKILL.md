@@ -96,6 +96,10 @@ If Task 3 is blocked on external creds, but Tasks 1, 2, and 4 are independent, f
 
 When the flow finishes (all Tasks APPROVED, integration merged, validation done) — or when you've run as far as you can given blockers — write a final summary as the last entry in your reply to the user. The summary names: what completed, what's blocked and why, where the state file is, and a one-line recommendation ("safe to ship", "needs your input on X", "all blockers documented in state.yaml"). Then stop. Don't loop.
 
+### 7. Never write a waiver.
+
+A dispensa (waiver) asserts "the owner accepted no proof" — the one decision you cannot take for them. In autonomous mode it is a **proposal plus a human route on the queue item**: `waivers.gravar` writes `status: proposta` (autor null) instead of a waiver, and you open `cepa-plan finish ... --human-pending ... --pergunta "Aceito a dispensa de X por Y?"`. Only the owner's `cepa-plan responde ... "sim: ..."` converts it. An agent wrote `autor: alegomes` on its own in an unattended run (fb-20261014-3).
+
 ## What this skill does NOT change
 
 - Path-lock rules still apply (workers can only write where their topology says).

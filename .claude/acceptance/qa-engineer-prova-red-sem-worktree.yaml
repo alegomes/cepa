@@ -1,0 +1,46 @@
+key: qa-engineer-prova-red-sem-worktree
+status: complete
+diff_range: 4086675..bdb449e
+criteria:
+  - id: AC1
+    altitude: document
+    surface: >
+      Prosa de build-hex/agents/qa-engineer.md e build-team/agents/qa-engineer.md
+      (regra "RED comes from the order or from the proof-reviewer"): proíbe
+      git worktree add, cópia do repo, git stash, checkout/apply -R de arquivo de
+      produção; diz que RED vem da ordem ou do portão do proof-reviewer.
+    test: leitura do diff (1 linha adicionada em cada um dos dois arquivos, idêntica)
+    layer: document
+    evidence: verified
+    run: "git diff 4086675..bdb449e -- build-hex/agents/qa-engineer.md build-team/agents/qa-engineer.md -> a regra aparece nos dois; nenhum teste executável aplicável a prosa"
+  - id: AC2
+    altitude: cli
+    surface: >
+      stderr de bash-path-lock.py invocado com payload PreToolUse, nos dois pontos:
+      _mensagem (rodapé do deny genérico) e o deny de `git worktree add` dentro da
+      raiz em _h_git. Receita mktemp/--detach só para proof-reviewer.
+    test: tests/test_bash_path_lock_exec.py::test_mensagem_nomeia_balde_e_saida
+    layer: subprocesso do hook real, 6 cópias, agente de pista vs proof-reviewer
+    evidence: verified
+    run: "python3 tests/test_bash_path_lock_exec.py -> 1418 linhas 'ok', 0 falhas, 'tudo verde em 6 cópias'"
+  - id: AC3
+    altitude: cli
+    surface: as 6 cópias de bash-path-lock.py idênticas ao molde renderizado
+    test: tests/test_lock_copies_drift.py e bin/gen-locks.py --check
+    layer: cli
+    evidence: verified
+    run: "python3 tests/test_lock_copies_drift.py -> 124 'ok', 'all green'; python3 bin/gen-locks.py --check -> '✓ as 6 cópias são exatamente o molde renderizado'"
+  - id: AC4
+    altitude: document
+    surface: common/commands/drain-plan.md, "Na branch da noite": worktree descartável só para o proof-reviewer
+    test: leitura do diff (+4/-1 linhas em drain-plan.md)
+    layer: document
+    evidence: verified
+    run: "git diff 4086675..bdb449e -- common/commands/drain-plan.md -> 'continua valendo SÓ para o proof-reviewer'"
+out_of_scope:
+  - id: AC5
+    note: >
+      Metade de visibilidade (resumo do cepa-until lista worktrees abertas fora do
+      proof-reviewer) já entregue pelo item digest-mostra-worktree-e-build-alheio-do-qa
+      (commit 2caf850, existe; teste tests/test_cepa_until_digest.py::test_sinais_de_processo_worktree_e_build_alheio
+      existe na linha 215). Não faz parte deste diff e não foi reexecutado aqui; não é gap deste commit.

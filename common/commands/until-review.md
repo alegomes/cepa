@@ -133,7 +133,27 @@ mais trabalho vem primeiro.
 ação de `acoes` pelo id, sem numeração própria: a pergunta sobre ela leva o id
 como rótulo (`aterrissar`), diz o efeito com a `frase` do estado e traz a sua
 recomendação. Os itens de `fica_com_voce` aparecem num bloco "Fica com você",
-com o que o dono precisa fazer em cada um. Não invente ação fora da lista: o
+com o que o dono precisa fazer em cada um.
+
+Cada tarefa do "Fica com você" traz **o passo a passo em três linhas** (o dono
+reprovou, em 14/10/2026, um relatório que dizia só a categoria: *"O que,
+afinal, que eu tenho que fazer? Dê-me o passo a passo."*):
+
+- `Onde:` o repo ou diretório, e o arquivo quando há;
+- `Comando:` em bloco de código, ou o arquivo a abrir e o que preencher;
+- `Pronto quando:` o que o dono vê ao terminar, e o que ele me diz.
+
+Para toda rota `human_pending`, escreva também, pronto para colar, o comando
+que o dono roda quando a tarefa estiver feita (`cepa-plan responde` fecha a
+rota ou devolve o item à fila; com `--mantem` só grava a resposta):
+
+```
+python3 common/bin/cepa-plan responde <fila> <id> --resposta "<o que você viu>" --repo <raiz-principal>
+```
+
+O relatório nunca lista uma categoria ("as rotas humanas", "as pendências") no
+lugar das tarefas: uma tarefa por item, com `<fila>`, `<id>` e `<raiz-principal>`
+já preenchidos. Tarefa que você mesmo pode executar não é do dono. Não invente ação fora da lista: o
 que você achar e nenhum comando executa (abrir card para um teste instável,
 corrigir o harness) entra em "Fica com você".
 
@@ -185,7 +205,10 @@ dentro e perguntou "o que diabos isso quer dizer?"):
 - `contexto` é o que o dono precisa saber para responder sem abrir nada, em
   até duas frases leigas: o que o agente fez, o que ficou vermelho ou
   travado, e por quê. Sem nome de branch, classe ou arquivo. O terminal o
-  mostra antes da pergunta, junto com a tarefa que ficou para o dono.
+  mostra antes da pergunta, junto com a tarefa que ficou para o dono. Quando
+  a rota é uma tarefa, o `contexto` diz onde ela se faz, o que fazer e como o
+  dono sabe que terminou (continua em até duas frases; o arquivo vai em
+  `instrucao`).
 - `instrucao` é o que o próximo run deve fazer se o dono disser sim: branch
   de onde retomar, teste ou fixture a consertar, arquivo a ajustar. É técnica
   e vai para o agente: o terminal a mostra como "Se sim, o próximo run

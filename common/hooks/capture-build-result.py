@@ -65,12 +65,60 @@ the baseline — harvests the finished ones with the same markers, plus the
 real exit code. A result is discarded when the baseline changed after the
 launch (a source edit marked STALE, or a newer build ran): it describes code
 that is no longer the code on disk. See harvest_background().
+
+Continued session (2026-10-15, fb-20261005-1): after a context overflow the
+payload's `session_id` changes (B) but CC keeps writing background outputs to
+the ORIGINAL session's folder (A). Two fallbacks, both keyed on what is stable:
+at launch, if `<id>.output` is not under B's `tasks/`, glob the sibling
+`claude-*/*/*/tasks/` folders for it (the task id is unique) and leave the
+pending next to it; at harvest, besides B's folder, pick up every pending in
+any session folder whose `cwd` is this session root, so a build launched under
+A before the overflow is still recorded. Pendings of other trees are left alone.
+
+Command classification on the unquoted view (2026-10-08, fb-20261008-1): the
+patterns used to run on the raw command, so `grep -E 'no-build|verify' cepa-until`
+matched the Maven pattern (the word `verify` inside the quoted grep pattern),
+the failed grep (exit 1) was recorded as FAILURE kind=maven and blocked a
+`git commit` for hours; a `python3 - <<'PY'` heredoc whose body said `swift
+build` was once recorded as SUCCESS swiftpm the same way. Now the patterns run
+on `_shellscan._unquoted_view()` (quoted text and heredoc bodies blanked) and
+the Maven kind additionally needs a segment that is a REAL Maven invocation
+(`_mvnscan.maven_args`) with one of verify|test|package|install.
+
+Quiet and redirected Maven (same feedback): `./mvnw -q clean verify > log` was
+never recorded green — `-q` prints no `BUILD SUCCESS` and `> log` keeps the
+output away from the hook. CC's tool_response carries no exit code on success,
+but on failure the tool result is the string "Error: Exit code N\n<output>",
+which extract_exit_code() now parses. redirected_output() appends the tail of
+the redirected file so its markers count; and a `-q` Maven with no failure
+marker, no exit code and not interrupted is SUCCESS (CC omitted the code = it
+exited 0). Only Maven, only with -q: a quiet-less empty run stays unclassified.
+Known limitation: `./mvnw -q verify || true` is recorded SUCCESS (final exit 0,
+no marker), since the tool reports no error for the pipeline as a whole.
+
+Background build stopped by CC (2026-10-15, item build-segundo-plano-morre-aos-
+30-min): when CC itself stops a background command — it reached its background
+time limit, or the machine ran low on memory — the `.output` does NOT end in
+`[exited with code N]`: CC appends the trailer `[killed]` instead (measured on
+claude 2.1.301 with a `sleep 400` under `timeout: 60000`: killed 61 s after the
+start, `.output` = "start ...\n[killed]\n", task notification status `killed`,
+"stopped after reaching its background time limit"). Before this, the pending
+sat there with no exit line and was silently dropped after PENDING_MAX_AGE_S:
+the baseline stayed blind with no word about why. Now `[killed]` as the last
+line is a terminal state too: the build is recorded FAILURE with `reason` =
+"stopped by Claude Code before it ended..." and `stopped_by: claude-code`, so
+gate-advance can say why it blocks (it prints `reason` for FAILURE). The limits
+on 2.1.301, read from the binary: a command CC moved to the background on its
+own gets 30 min (`BASH_DEFAULT_TIMEOUT_MS` raises it); an explicit
+`run_in_background` takes its own `timeout`, up to 2 h (`BASH_MAX_TIMEOUT_MS`
+raises the ceiling). The "30 min" of the original report is the first case.
 """
 
 import glob
 import json
 import os
 import re
+import shlex
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -254,8 +302,21 @@ def extract_text(tool_response) -> str:
     return ""
 
 
+_ERROR_EXIT_RE = re.compile(r"\s*Error: Exit code (\d+)")
+
+
+def is_interrupted(tool_response) -> bool:
+    return isinstance(tool_response, dict) and tool_response.get("interrupted") is True
+
+
 def extract_exit_code(tool_response):
-    """Find an integer exit code in tool_response, regardless of nesting."""
+    """Find an integer exit code in tool_response, regardless of nesting.
+
+    A failed Bash call arrives as a plain string "Error: Exit code N\n<output>"
+    (CC drops the dict form on non-zero exits); parse N from it."""
+    if isinstance(tool_response, str):
+        m = _ERROR_EXIT_RE.match(tool_response)
+        return int(m.group(1)) if m else None
     if not isinstance(tool_response, dict):
         return None
 
@@ -292,7 +353,30 @@ def _as_list(markers):
     return list(markers)
 
 
-def classify(command: str, response_text: str, exit_code):
+_MAVEN_PHASES = {"verify", "test", "package", "install"}
+
+
+def real_maven_args(command: str):
+    """Args of the first segment that is a real Maven run of a build phase
+    (verify|test|package|install), or None. Text that merely mentions Maven
+    (`echo "./mvnw verify"`, `grep verify`) is not one."""
+    for seg in S._split_segments(command):
+        args = M.maven_args(seg.strip())
+        if args is not None and _MAVEN_PHASES & set(M.goals(args)):
+            return args
+    return None
+
+
+def _is_quiet(args) -> bool:
+    # `-q`, `--quiet` or a cluster of valueless short flags (`-qB`); never an
+    # option that takes a value or a property (`-Pquality`, `-Dquick`, `-pl`).
+    return any(a == "--quiet" or (a.startswith("-") and not a.startswith("--")
+                                  and a[1:2] not in ("P", "D", "T", "f", "s", "p")
+                                  and "q" in a[1:])
+               for a in args)
+
+
+def classify(command: str, response_text: str, exit_code, interrupted: bool = False):
     """Return (status, kind, reason).
 
     status: "SUCCESS" | "FAILURE" | None
@@ -307,8 +391,12 @@ def classify(command: str, response_text: str, exit_code):
     marker-less pattern may stay unclassified (returns None) rather than
     falsely going green.
     """
+    view = S._unquoted_view(command)
+    maven_args = real_maven_args(command)
     for pattern, kind, success_markers, failure_markers in PATTERNS:
-        if not pattern.search(command):
+        if not pattern.search(view):
+            continue
+        if kind == "maven" and maven_args is None:
             continue
 
         for m in _as_list(failure_markers):
@@ -323,6 +411,11 @@ def classify(command: str, response_text: str, exit_code):
             return "SUCCESS", kind, "fallback: exit_code 0"
         if isinstance(exit_code, int) and exit_code != 0:
             return "FAILURE", kind, f"fallback: exit_code {exit_code}"
+
+        if (kind == "maven" and exit_code is None and not interrupted
+                and _is_quiet(maven_args)):
+            # -q prints no BUILD SUCCESS; CC omits the code on exit 0.
+            return "SUCCESS", kind, "quiet maven (-q): no failure marker, tool reported no error"
 
         return None, kind, (
             f"matched pattern {kind!r} but could not classify: "
@@ -505,6 +598,47 @@ def effective_build_dir(command: str, cwd: Path) -> Path:
         rest = rest[m.end():]
 
 
+# ─── redirected output ────────────────────────────────────────────────
+
+_REDIRECT_RE = re.compile(r"&>>?|(?<![0-9&<>])>>?(?!&)")
+REDIRECT_MAX_BYTES = 64 * 1024
+
+
+def _redirect_target(segment: str):
+    view = S._unquoted_view(segment)
+    target = None
+    for m in _REDIRECT_RE.finditer(view):
+        rest = segment[m.end():].lstrip()
+        try:
+            toks = shlex.split(rest, posix=True)
+        except ValueError:
+            toks = rest.split()
+        if toks:
+            target = toks[0]
+    return target
+
+
+def redirected_output(command: str, build_dir: Path) -> str:
+    """Tail (up to 64 KiB) of the file a build segment redirects stdout to
+    (`> f`, `>> f`, `&> f`), resolved against build_dir; "" when there is none.
+    /dev/null, `>&2` and `2>` are ignored. `| tee f` is not handled: with tee
+    the output still reaches the hook."""
+    segs = [s.strip() for s in S._split_segments(command)]
+    ordered = ([s for s in reversed(segs) if M.maven_args(s) is not None]
+               + [s for s in reversed(segs) if M.maven_args(s) is None])
+    for seg in ordered:
+        target = _redirect_target(seg)
+        if not target or target.startswith("/dev/") or target.startswith("&"):
+            continue
+        path = Path(os.path.expanduser(target))
+        path = path if path.is_absolute() else build_dir / path
+        try:
+            return _read_tail(path, REDIRECT_MAX_BYTES)
+        except OSError:
+            return ""
+    return ""
+
+
 # ─── root-install marker ───────────────────────────────────────────────
 
 def runs_root_install(command: str, build_dir: Path, marker_root: Path) -> bool:
@@ -579,7 +713,8 @@ def record(command, kind, status, text, tests_run, empty_reason,
         new_state["tests_run"] = tests_run
     if empty_reason:
         new_state["reason"] = empty_reason
-        print(f"[capture-build-result] EMPTY, not green: {empty_reason}", file=sys.stderr)
+        if status == "EMPTY":
+            print(f"[capture-build-result] EMPTY, not green: {empty_reason}", file=sys.stderr)
     new_state.update(extra or {})
 
     try:
@@ -615,8 +750,14 @@ def record(command, kind, status, text, tests_run, empty_reason,
 PENDING_SUFFIX = ".cepa-build.json"
 # CC appends this line to the task's .output file when the command ends.
 _EXIT_LINE = re.compile(r"\[exited with code (-?\d+)\]\s*$")
-# A task CC never finished (session killed, task stopped) leaves no exit
-# line; its pending file is dropped after this long instead of piling up.
+# ...and this one when CC stopped the command itself (background time limit
+# reached, or low memory): no exit code, the build never finished.
+_KILLED_LINE = re.compile(r"(?:^|\n)\[killed\]\s*$")  # a line of its own, as CC writes it
+KILLED_REASON = ("stopped by Claude Code before it ended: the background task's "
+                 "output ends in [killed] (its background time limit was reached, "
+                 "or the machine ran low on memory); the build never finished")
+# A task CC never finished (session killed) leaves neither line; its pending
+# file is dropped after this long instead of piling up.
 PENDING_MAX_AGE_S = 6 * 3600
 
 
@@ -628,14 +769,36 @@ def background_task_id(tool_response):
     return None
 
 
+def _tmp_roots():
+    roots = [os.environ.get("TMPDIR"), tempfile.gettempdir(), "/tmp", "/private/tmp"]
+    return list(dict.fromkeys(r for r in roots if r))
+
+
+def find_task_output(task_id, session_id):
+    """The `<task_id>.output` file of a background task, or None. Looks in this
+    session's `tasks/` first; after a context overflow CC keeps writing to the
+    ORIGINAL session's folder while the payload carries a new session_id, so it
+    falls back to every sibling session folder. The task id is unique; the
+    session id is not stable."""
+    for d in task_dirs(session_id):
+        output = Path(d) / f"{task_id}.output"
+        if output.exists():
+            return output
+    for root in _tmp_roots():
+        pattern = os.path.join(glob.escape(root), "claude-*", "*", "*", "tasks",
+                               glob.escape(task_id) + ".output")
+        for found in sorted(glob.glob(pattern)):
+            return Path(os.path.realpath(found))
+    return None
+
+
 def task_dirs(session_id):
     """CC's `tasks/` directories for this session. The project segment of the
     path is a slug of the launch dir that we don't rebuild — glob for it."""
     if not session_id:
         return []
     found = []
-    roots = [os.environ.get("TMPDIR"), tempfile.gettempdir(), "/tmp", "/private/tmp"]
-    for root in dict.fromkeys(r for r in roots if r):
+    for root in _tmp_roots():
         pattern = os.path.join(glob.escape(root), "claude-*", "*",
                                glob.escape(session_id), "tasks")
         for d in glob.glob(pattern):
@@ -647,10 +810,9 @@ def task_dirs(session_id):
 
 def register_background(task_id, session_id, command, kind,
                         state_path: Path, build_dir: Path, marker_root: Path, cwd: Path):
-    for d in task_dirs(session_id):
-        output = Path(d) / f"{task_id}.output"
-        if not output.exists():
-            continue
+    output = find_task_output(task_id, session_id)
+    if output is not None:
+        d = output.parent
         entry = {
             "task_id": task_id,
             "output": str(output),
@@ -663,13 +825,18 @@ def register_background(task_id, session_id, command, kind,
             "cwd": str(cwd),
         }
         try:
-            (Path(d) / f"{task_id}{PENDING_SUFFIX}").write_text(
+            (d / f"{task_id}{PENDING_SUFFIX}").write_text(
                 json.dumps(entry, indent=2) + "\n", encoding="utf-8")
         except OSError as e:
             print(f"[capture-build-result] could not register background build: {e}",
                   file=sys.stderr)
             return False
-        print(f"[capture-build-result] build in background ({task_id}); its result "
+        origem = d.parent.name
+        where = ""
+        if origem != session_id:
+            where = (f" (found under session {origem}'s tasks folder: session "
+                     f"continued after a context overflow)")
+        print(f"[capture-build-result] build in background ({task_id}){where}; its result "
               f"will be recorded when it ends.", file=sys.stderr)
         return True
     print(f"[capture-build-result] build went to the background ({task_id}) but its "
@@ -706,12 +873,36 @@ def _read_tail(path: Path, size=4096) -> str:
         return f.read().decode("utf-8", errors="replace")
 
 
-def harvest_background(session_id, now=None):
-    """Record every finished background build of this session. Never raises."""
+def _sibling_pendings(cwd):
+    """Pendings of the tree `cwd` in ANY session folder (a build launched before
+    a context overflow stays in the original session's folder). Pendings of
+    other trees belong to other sessions and are left alone."""
+    want = os.path.realpath(str(cwd))
+    found = []
+    for root in _tmp_roots():
+        pattern = os.path.join(glob.escape(root), "claude-*", "*", "*", "tasks",
+                               "*" + PENDING_SUFFIX)
+        for p in glob.glob(pattern):
+            try:
+                entry = json.loads(Path(p).read_text(encoding="utf-8"))
+                if os.path.realpath(str(entry["cwd"])) == want:
+                    found.append(p)
+            except Exception:
+                continue  # unreadable/corrupt: not ours to judge here
+    return found
+
+
+def harvest_background(session_id, cwd=None, now=None):
+    """Record every finished background build of this session — plus, when `cwd`
+    (the session root) is given, those of the same tree left in another
+    session's folder by a context overflow. Never raises."""
     now = now or datetime.now(timezone.utc)
     try:
         pendings = [p for d in task_dirs(session_id)
                     for p in glob.glob(os.path.join(glob.escape(d), "*" + PENDING_SUFFIX))]
+        if cwd is not None:
+            pendings += _sibling_pendings(cwd)
+        pendings = list(dict.fromkeys(os.path.realpath(p) for p in pendings))
     except Exception as e:  # a harvest bug never breaks the tool call
         print(f"[capture-build-result] background harvest failed: {e}", file=sys.stderr)
         return
@@ -727,8 +918,10 @@ def _harvest_one(pending: Path, now):
     entry = json.loads(pending.read_text(encoding="utf-8"))
     output = Path(entry["output"])
     started_at = _parse_ts(entry.get("started_at"))
-    m = _EXIT_LINE.search(_read_tail(output)) if output.exists() else None
-    if not m:
+    tail_text = _read_tail(output) if output.exists() else ""
+    m = _EXIT_LINE.search(tail_text)
+    killed = m is None and _KILLED_LINE.search(tail_text) is not None
+    if not m and not killed:
         if started_at is None or (now - started_at).total_seconds() > PENDING_MAX_AGE_S:
             pending.unlink(missing_ok=True)
         return
@@ -743,6 +936,17 @@ def _harvest_one(pending: Path, now):
         return
 
     text = output.read_text(encoding="utf-8", errors="replace")
+    if killed:
+        # No exit code to read: CC stopped the command. Silence here was the
+        # blind baseline of BACKLOG "Build em segundo plano morre aos 30 min".
+        record(command, kind, "FAILURE", text, None, KILLED_REASON, state_path,
+               Path(entry["build_dir"]), Path(entry["marker_root"]), Path(entry["cwd"]),
+               extra={"started_at": entry.get("started_at"),
+                      "background_task": entry["task_id"],
+                      "stopped_by": "claude-code"})
+        print(f"[capture-build-result] background build {entry['task_id']} recorded: "
+              f"FAILURE — {KILLED_REASON}.", file=sys.stderr)
+        return
     exit_code = int(m.group(1))
     if exit_code != 0:
         # The real exit code is the strongest signal there is: fail-closed
@@ -774,8 +978,13 @@ def main():
     if payload.get("tool_name") != "Bash":
         sys.exit(0)
 
+    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
+    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
+    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
+    session_root = L.session_root(payload.get("cwd") or os.getcwd())
+
     # Any Bash call is a chance to record a background build that ended.
-    harvest_background(payload.get("session_id"))
+    harvest_background(payload.get("session_id"), session_root)
 
     command = (payload.get("tool_input") or {}).get("command", "")
     if not command:
@@ -784,8 +993,16 @@ def main():
     tool_response = payload.get("tool_response") or {}
     response_text = extract_text(tool_response)
     exit_code = extract_exit_code(tool_response)
+    interrupted = is_interrupted(tool_response)
 
-    status, kind, reason = classify(command, response_text, exit_code)
+    cwd = Path(session_root).resolve()
+    build_dir = effective_build_dir(command, cwd)
+    if ">" in command:  # a redirected build log is part of its output
+        logged = redirected_output(command, build_dir)
+        if logged:
+            response_text = f"{response_text}\n{logged}" if response_text else logged
+
+    status, kind, reason = classify(command, response_text, exit_code, interrupted)
     status, tests_run, empty_reason = refine_empty(command, kind, status, response_text)
     if empty_reason:
         reason = f"{reason}; {empty_reason}"
@@ -796,11 +1013,6 @@ def main():
     if status is None and not (kind and task_id):
         sys.exit(0)  # Not a build command we recognize, or result was ambiguous.
 
-    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
-    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
-    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
-    cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
-    build_dir = effective_build_dir(command, cwd)
     if build_dir != cwd and not build_dir.is_relative_to(cwd):
         # The build ran OUTSIDE the session tree — e.g. a proof worktree
         # producing a deliberate RED for a perturbation proof. Its result

@@ -1,0 +1,84 @@
+key: perguntas-finais-nao-dizem-o-que-fazer
+status: complete
+diff_range: HEAD..working-tree (7 arquivos não commitados)
+nota: >
+  Fora de escopo declarado: `cepa-until decidir`, glossário, memórias, e a
+  validação do dono em três relatórios reais (rota human_pending deixada
+  aberta de propósito; o BACKLOG diz "falta validar com o dono").
+criteria:
+  - id: AC1
+    altitude: domain
+    surface: texto de common/skills/plain-report/SKILL.md (skill lida pelo agente)
+    test: nenhum teste automatizado do texto da skill; conferido por grep e leitura
+    layer: arquivo de texto
+    evidence: verified
+    run: >
+      grep -n "Onde:\|Pronto quando:\|só é válido" common/skills/plain-report/SKILL.md
+      -> template (linhas 43-45), relatório 14/10 reprovado (seção "Tarefa sua vem
+      com o passo a passo"), forma corrigida (linhas 164-178), regra dura 1
+      (linha 188: "Nada pendente." só é válido quando o Pra você diz "nada") e
+      regra 2 (Onde/Comando/Pronto quando). O comportamento que o texto descreve
+      é medido em AC2/AC3.
+    gap: >
+      Sem teste automatizado do texto da skill (nada impede regressão da prosa).
+      Não bloqueia: a superfície do critério é o texto, e o texto está lá.
+  - id: AC2
+    altitude: cli
+    surface: >
+      common/hooks/report-style-lint.py como subprocesso, evento Stop, com
+      transcript JSONL; relatório de 14/10 (Pra você anunciando + "Nada pendente.")
+    test: >
+      tests/test_report_style_lint.py ("14/10: Pra você com categorias + Nada
+      pendente. → avisa") e execução ad hoc por mim com o mesmo helper de subprocesso
+    layer: subprocesso do hook com transcript
+    evidence: verified
+    run: >
+      python3 tests/test_report_style_lint.py -> "all report-style tests passed"
+      (rc=0, inclui ok na linha do 14/10). Ad hoc (/tmp/adhoc_pv.py): relatório
+      reprovado literal -> rc 0, decision=block, motivo "`Pra você:` diz que algo
+      espera pelo usuário (...), e a lista do fim não tem item numerado nenhum".
+      Variante "Nada pendente comigo." também bloqueia. Forma corrigida: sem bloqueio.
+  - id: AC3
+    altitude: cli
+    surface: >
+      mesmo hook/Stop; item numerado "Você ..." sem comando/arquivo ou sem
+      "Pronto quando"; negativos (mérito, trabalho meu, Pra você "nada...",
+      bloco cercado com linha em branco)
+    test: >
+      tests/test_report_style_lint.py (casos "tarefa Você sem comando...",
+      "comando mas sem Pronto quando", "mérito sem comando", "trabalho meu",
+      "Pra você nada ...; um commit", "linha em branco dentro de bloco cercado")
+    layer: subprocesso do hook com transcript
+    evidence: verified
+    run: >
+      python3 tests/test_report_style_lint.py -> rc=0, todos "ok". Ad hoc: item 2
+      sem Pronto quando -> block ("falta a linha 'Pronto quando:'"); item com
+      caminho sem crase + Pronto quando -> passa; bloco cercado com linha em
+      branco + Pronto quando + Recomendo -> passa; itens "Rodo"/"Mantenho" sem
+      comando -> passa; "Pra você: nada, só um commit..." -> passa.
+    nota_residual: >
+      Trecho do Pra você citado na mensagem é cortado em 60 caracteres e sai
+      truncado ("(o)"); cosmético, não afeta o bloqueio.
+  - id: AC4
+    altitude: application
+    surface: texto de common/commands/until-review.md (bloco "Fica com você" e regra do contexto)
+    test: tests/test_common_until_review.py ("tarefa do dono traz 'Pronto quando'", "'Fica com você' manda escrever o cepa-plan responde colável")
+    layer: teste de texto do comando
+    evidence: verified
+    run: >
+      python3 tests/test_common_until_review.py -> 6 "ok", "✓ tudo verde", rc=0.
+      Leitura: linhas 136-156 (Onde/Comando/Pronto quando, comando
+      `cepa-plan responde <fila> <id> --resposta ... --repo ...` por rota
+      human_pending) e regra do contexto para rotas de tarefa (~linha 205);
+      `responde` existe em common/bin/cepa-plan (cmd_responde, --mantem).
+  - id: AC5
+    altitude: domain
+    surface: testes, docs/internals/hooks.md, BACKLOG.md
+    test: tests/test_report_style_lint.py e tests/test_common_until_review.py
+    layer: suíte + docs
+    evidence: verified
+    run: >
+      Ambas as suítes rc=0. git diff: hooks.md ganhou parágrafo com
+      pra-voce-sem-lista e tarefa-sem-passo; BACKLOG: Plano e Status atualizados
+      ("implementado em 2026-10-15 ... falta validar com o dono em três relatórios
+      reais"). tests/run-all.sh não rodado por instrução.

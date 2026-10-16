@@ -1,0 +1,53 @@
+key: until-custo-deduplica-bloco-result
+status: complete
+diff: 2ddbb7f..ef7f506
+criteria:
+  - id: AC1
+    text: >
+      Uma rodada cujo output traz o mesmo bloco result N vezes (mesmo
+      session_id) contribui com o custo uma vez ao custo do resumo no terminal
+      e ao custo_usd do estado JSON.
+    altitude: cli
+    surface: >
+      cepa-until executado de ponta a ponta (subprocess) com claude falso que
+      imprime o mesmo result 3 vezes; asserta stdout e estado.json.
+    test: tests/test_cepa_until_aterrissar.py::test_5_custo_conta_uma_vez_por_sessao_nao_por_bloco_result
+    layer: cli (subprocess, fake claude)
+    evidence: verified
+    run: >
+      python3 tests/test_cepa_until_aterrissar.py -> "ok o custo soma uma vez
+      por sessão, sem os blocos repetidos" (US$ 50,25, "28,47 + 21,78",
+      "2 rodada(s)") e "ok ...e o estado também" (custo_usd == 50.25);
+      "tudo verde". Teste roda sempre (função sem filtro), 2 checks do caso.
+    gap: null
+  - id: AC2
+    text: result sem session_id continua contando cada bloco.
+    altitude: cli
+    surface: cepa-until end-to-end, resumo e estado.json
+    test: tests/test_cepa_until_aterrissar.py::test_5_cabecalho_curto_sem_caminho_absoluto_e_com_custo
+    layer: cli (subprocess, fake claude)
+    evidence: verified
+    run: >
+      mesma execução -> "ok o resumo traz o custo com a conta", "ok ...e o
+      estado também" (custo_usd == 2.5, 1,25 + 1,25). Observação: o teste já
+      existia antes do diff e não foi alterado; ele cobre o caminho sem
+      session_id, agora via chave ("", len(custos)).
+    gap: null
+  - id: AC3
+    text: >
+      A pausa de cota usa o custo deduplicado (esboço do backlog). Verificado
+      que pausa_de_cota/custo_de_item leem a utilização da janela de 5h do
+      rate_limit_event, nunca total_cost_usd; nada a mudar.
+    altitude: application
+    surface: pausa_de_cota / custo_de_item em common/bin/cepa-until
+    test: nenhum necessário (critério satisfeito por verificação)
+    layer: leitura de código
+    evidence: verified
+    run: >
+      grep -n total_cost_usd common/bin/cepa-until -> só custos_das_rodadas
+      (linha 601), comentário (2692) e o texto do resumo (3402). pausa_de_cota
+      (670) recebe (leitura, fresca, custo, agora) com custo vindo de
+      custo_de_item(inicios), calculado sobre leituras_de_cota (uso, reset).
+      Nenhum caminho de total_cost_usd chega à decisão de pausa. Registrado no
+      BACKLOG.md.
+    gap: null

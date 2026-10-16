@@ -1,0 +1,45 @@
+schema_version: 2
+card: dispensa-vira-proposta-em-run-autonomo
+verdict: proven
+reviewed_at: 2026-10-15T20:40:00-03:00
+base_commit: ea325d2
+head_commit: 4f3ad02
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "board-flow/bin/waivers.py (gravar, propor, converter, recusar, carregar)", module: board-flow, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan (cmd_responde, decide_dispensas, fecha_escrita extras)", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "build-hex/hooks/proof-verdict-guard.py (has_waiver, parse_with_lines)", module: build-hex, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until-digest (propostas_de_dispensa)", module: common, external_observable: true, substituted_by_double: null }
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: absent
+      results:
+        - "repo Python/shell, sem PIT/mvn; a prova e por quebra manual em worktree descartavel"
+    perturbation:
+      status: pass
+      results:
+        - "(@4f3ad02) digest, linha 261 (pasta do clone principal) trocada por `pass`: FAIL 'proposta so no clone principal e listada', exit=1 (RED); restaurado: 'tudo verde', exit=0 (GREEN)"
+        - "(@150e674) waivers.gravar sem redirect em_run_autonomo: 10 failed, 15 passed (RED)"
+        - "(@150e674) carregar sem pular status proposta/recusada: 1 failed (RED); converter sem PermissionError: 2 failed (RED); recusar sem PermissionError: 2 failed (RED); propor sobrescrevendo dispensa valida/recusada: 3 failed (RED)"
+        - "(@150e674) cepa-plan decide_dispensas no-op: 14 falhas (RED); ramo ^sim tambem para 'nao': falhas de recusa (RED); fecha_escrita sem extras: FAIL 'o arquivo da dispensa entrou no commit' (RED); extra aceito mesmo com git add recusado: FAIL 'o plan.yaml foi commitado' (RED)"
+        - "(@150e674) guard has_waiver -> False: 5 failures (RED); regex do parse_with_lines desligada: 1 failure (RED)"
+        - "(@150e674) digest sem a pasta da arvore do registro: 2 FAIL (RED)"
+        - "(@d23ebb1) ramo 'nao' desligado em decide_dispensas: 3 FAIL (RED)"
+        - "d23ebb1..4f3ad02 so acrescenta teste em tests/test_cepa_until_digest.py (git diff --stat: 32 insertions); codigo de producao, waivers, cepa-plan e guard identicos ao verificado em d23ebb1; baseline @d23ebb1: test_waivers 26 passed, test_cepa_plan_responde_dispensa all green"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; toda linha alterada listada acima ficou RED sob o teste que a guarda, inclusive cepa-until-digest:261 (python3 tests/test_cepa_until_digest.py -> FAIL exit=1 com a linha trocada por pass)"
+  l4_adversarial_input:
+    status: clean
+    reason: ""
+    findings: []
+    run: "@d23ebb1: carregar `except (yaml.YAMLError, OSError)` trocado por `except ZeroDivisionError` -> test_waivers.py 1 failed, 25 passed (RED); cepa-plan:2091 idem -> FAIL 'com um YAML quebrado ao lado o responde sai 0' (RED); digest `except OSError` -> 4 FAIL (RED). Restaurado: 26 passed / all green / tudo verde. waiver_proposto null e '' no guard (caminho YAML) passam; '' bloqueia so no caminho por linhas, lado seguro."
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "nao e card de bug"
+routing_reason: "Todo comportamento alterado ficou RED quando quebrado e GREEN no head, sem double; a ultima brecha (pasta do clone principal no digest) foi fechada pelo teste de 4f3ad02 e confirmada vermelha ao quebrar a linha 261. Entrada com YAML quebrado nao derruba carregar, responde nem digest. PIT inexistente neste repo; a perturbacao cobre cada comportamento."

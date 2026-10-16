@@ -1,0 +1,54 @@
+key: build-segundo-plano-morre-aos-30-min
+status: complete
+diff_range: b2d9979..28e785d
+criteria:
+  - id: AC1
+    altitude: domain
+    surface: >
+      Medicao do que o CC escreve no .output ao parar tarefa em segundo plano,
+      registrada em BACKLOG.md e no docstring de common/hooks/capture-build-result.py.
+    test: tests/test_capture_build_background.py (o trailer medido, [killed], e o
+      que os casos reproduzem); registro verificado por diff em BACKLOG.md e docstring
+    layer: documentacao + fixture fiel ao trailer medido
+    evidence: verified
+    run: "O trailer e as variaveis foram reconfirmados no binario (claude 2.1.301):
+      strings do binario contem '[killed]', BASH_DEFAULT_TIMEOUT_MS e BASH_MAX_TIMEOUT_MS
+      (default 120000/teto 600000 no modulo de timeout). A medicao de 61 s (sleep 400,
+      timeout 60000) NAO foi refeita por este auditor; vem do coordenador e esta
+      registrada no BACKLOG."
+  - id: AC2
+    altitude: event
+    surface: >
+      Hook PostToolUse capture-build-result.py (subprocesso, com .output real em
+      disco terminando em [killed]) grava last-build.json FAILURE com reason e
+      stopped_by; gate-advance.py (subprocesso, commit) barra imprimindo o motivo.
+    test: tests/test_capture_build_background.py (casos "[killed] no fim grava FAILURE",
+      "grava o motivo e quem parou", "gate-advance diz POR QUE barra",
+      "sugere um timeout que caiba", "[killed] no meio nao conta", "[killed] depois de
+      edicao mantem STALE")
+    layer: subprocess dos hooks reais sobre arquivos reais
+    evidence: verified
+    run: "python3 tests/test_capture_build_background.py -> 53 linhas 'ok', 'todos ok';
+      SKIP_PYTEST=1 tests/run-all.sh capture gate -> 'arquivos rodados: 19 de 19, tudo verde'"
+  - id: AC3
+    altitude: domain
+    surface: Resposta no BACKLOG sobre configurabilidade por variavel de ambiente.
+    test: BACKLOG.md secao "Medicao" item 3 e docstring do hook
+    layer: documentacao
+    evidence: verified
+    run: "git diff b2d9979..28e785d -- BACKLOG.md cita BASH_DEFAULT_TIMEOUT_MS e
+      BASH_MAX_TIMEOUT_MS; nomes presentes no binario 2.1.301 (strings)."
+  - id: AC4
+    altitude: event
+    surface: >
+      Aceite: build em segundo plano que termina parado pelo CC gera last-build.json
+      explicando a parada, nao silencio. Fixture sintetica = .output terminando em
+      [killed]; a corrida real de 31 min nao e reproduzida (declarado).
+    test: tests/test_capture_build_background.py "[killed] grava o motivo e quem parou"
+      e "gate-advance diz POR QUE barra"
+    layer: subprocesso dos hooks, fixture sintetica fiel ao trailer medido
+    evidence: verified
+    run: "python3 tests/test_capture_build_background.py -> todos ok (53 ok)"
+    note: >
+      Substituicao do build de 31 min pela fixture e escolha declarada do item;
+      o humano pode revisar no review.

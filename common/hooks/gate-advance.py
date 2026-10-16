@@ -66,7 +66,7 @@ import _wtlib as L  # noqa: E402
 import _shellscan as S  # noqa: E402
 
 
-def harvest_background(session_id):
+def harvest_background(session_id, cwd=None):
     """capture-build-result's harvest, loaded by path (hyphenated file name).
     Never raises: a harvest failure must not decide the gate."""
     try:
@@ -75,7 +75,7 @@ def harvest_background(session_id):
             "capture_build_result", Path(__file__).resolve().parent / "capture-build-result.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        mod.harvest_background(session_id)
+        mod.harvest_background(session_id, cwd)
     except Exception as e:
         print(f"[gate-advance] background build harvest failed: {e}", file=sys.stderr)
 
@@ -213,7 +213,8 @@ def main():
     # A build that ran in the background may have ended since the last Bash
     # call; record it before judging the baseline (capture-build-result's
     # docstring, "Background builds").
-    harvest_background(payload.get("session_id"))
+    harvest_background(payload.get("session_id"),
+                       L.session_root(payload.get("cwd") or os.getcwd()))
 
     # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
     # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
@@ -340,7 +341,18 @@ def main():
         )
     elif status == "FAILURE":
         reason = f"build is FAILURE since {state.get('at', '<unknown time>')}{age_note} (command: `{state.get('command', '<unknown>')}`)"
+        if state.get("reason"):
+            # capture-build-result explains a FAILURE it did not read from the
+            # build's own output (e.g. CC stopped the background task).
+            reason += f": {state['reason']}"
         suggestion = "Fix the failing tests / build errors, re-run the verify command, and try again. Don't proceed with broken state."
+        if state.get("stopped_by") == "claude-code":
+            suggestion = (
+                "The build did not fail — it was stopped before it ended. Re-run it with a "
+                "`timeout` that fits it (run_in_background takes up to 2 h; BASH_MAX_TIMEOUT_MS "
+                "raises that ceiling, BASH_DEFAULT_TIMEOUT_MS the 30 min of an auto-backgrounded "
+                "command), or narrow it so it fits."
+            )
     else:
         reason = f"build status is {status!r} — unrecognized"
         suggestion = "Run your project's verify command to establish a known-good baseline."

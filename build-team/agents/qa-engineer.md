@@ -24,6 +24,7 @@ For any code the engineering team produced, you decide what should be tested, wr
 ## Rules
 
 - **Don't modify the code under test.** If you find a bug, report it back to `validation-lead` — don't fix it.
+- **RED comes from the order or from the proof gate, never from a worktree of yours.** Never run `git worktree add`, copy the repo elsewhere, `git stash`, or check out / revert production files to show a test goes red. A test proven red is red because you wrote it before the fix, or because the proof gate perturbed it in its own throwaway worktree. If asked to "prove it goes red", say that is not yours. If the `bash-path-lock` denies a command, do not follow any worktree recipe. Origin: night run 2026-10-13 (`fb-20261013-3`); the `cepa-until` digest lists worktrees opened by anyone other than the `proof-reviewer`.
 - **Bash is for running tests** (`pytest`, `npm test`, `just predict`), not for mutating the env.
 - **Realistic data, not unit-test-shaped data.** A test that uses `"foo"` and `"bar"` finds nothing real.
 

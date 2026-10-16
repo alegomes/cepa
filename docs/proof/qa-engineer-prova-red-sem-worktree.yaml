@@ -1,0 +1,58 @@
+schema_version: 2
+card: qa-engineer-prova-red-sem-worktree
+verdict: proven
+reviewed_at: 2026-10-15T00:00:00-03:00
+base_commit: 4086675
+head_commit: bdb449e
+issue_type: Feature
+repo_kind: harness            # não é Quarkus/Maven: hooks Python; superfície = stderr (exit 2) do hook para um payload PreToolUse com agent_type "<plugin>:<agente>"
+build: delegated-to-supervisor   # suíte completa (tests/run-all.sh) não rodada por mim; supervisor builda depois
+scope:
+  changed_classes:
+    - class: "common/hooks/_templates/bash-path-lock.py.tmpl + 6 cópias */hooks/bash-path-lock.py (_mensagem: bullet da receita de worktree só para proof-reviewer, demais recebem apontamento para ORDEM/proof-reviewer)"
+      module: hook
+      external_observable: true
+      substituted_by_double: null     # o hook real roda como subprocesso no teste
+    - class: "common/hooks/_templates/bash-path-lock.py.tmpl + 6 cópias (_h_git: deny de `git worktree add` dentro da raiz mantém 'crie fora: D=$(mktemp -d)...' só para proof-reviewer)"
+      module: hook
+      external_observable: true
+      substituted_by_double: null
+    - class: "build-hex/agents/qa-engineer.md, build-team/agents/qa-engineer.md, common/commands/drain-plan.md, BACKLOG.md, 7 plugin.json (patch bump)"
+      module: prose
+      external_observable: false      # só prosa/versão, sem superfície executável
+      substituted_by_double: null
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/markdown, sem pitest; perturbação manual em worktree descartável."
+    perturbation:
+      status: pass
+      results:
+        - "GREEN em HEAD bdb449e: python3 tests/test_bash_path_lock_exec.py -> exit 0, 1418 linhas ok, 0 FAIL, 'tudo verde em 6 cópias'."
+        - "RED-na-base: template e 6 cópias (e demais arquivos de plugin) revertidos para 4086675 mantendo o teste novo de HEAD -> exit 1, 15 FAIL (3 por cópia: 'deny da pista NÃO ensina worktree descartável', 'nomeia o proof-reviewer como dono da prova', 'worktree add dentro da raiz: pista não recebe a receita'). O teste novo amarra no comportamento novo."
+        - "Perturbação (a) _mensagem: condição do proof-reviewer trocada por `if True:` (receita sempre) + gen-locks.py --write -> exit 1, 18 FAIL (ex.: 'deny da pista NÃO ensina worktree descartável')."
+        - "Perturbação (b) _mensagem: condição trocada por `if False:` (nunca receita) -> exit 1, FAIL em 'deny do proof-reviewer ensina worktree descartável' nas cópias (build-hex, build-team, design, ...)."
+        - "Perturbação (c1) _h_git: condição trocada por `if True:` -> exit 1, FAIL em 'worktree add dentro da raiz: pista não recebe a receita' nas cópias."
+        - "Perturbação (c2) _h_git: condição trocada por `if False:` -> exit 1, FAIL em 'worktree add dentro da raiz: proof-reviewer recebe a receita' nas cópias."
+      run: >-
+        git worktree add --detach /tmp/proof-qa-engineer-prova-red-sem-worktree bdb449e;
+        `python3 tests/test_bash_path_lock_exec.py` GREEN exit 0; cada perturbação aplicada com
+        sed no template, `python3 bin/gen-locks.py --write`, teste -> exit 1 em todas as cinco
+        (a, b, c1, c2, base); restaurado com `git checkout -- .` entre elas; worktree removida
+        com `git worktree remove --force` ao final (git worktree list sem /tmp/proof-*).
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Sem ferramenta de cobertura neste repo. Os dois ramos de cada hunk (proof-reviewer / outros) foram exercitados: inverter cada condição nos dois sentidos (if True / if False) fez o teste ir a RED, o que prova que ambos os ramos são alcançados pelo teste."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff só troca o texto de duas mensagens de bloqueio e escolhe o texto pelo nome do agente; o parsing de comandos e payloads do hook não mudou, e nenhum módulo de entrada externa (api-rest) foi tocado."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: "não é Bug; RED-na-base do teste novo registrado em l3_load_bearing."
+routing_reason: "Os dois trechos de comportamento (receita de worktree na mensagem geral e no deny de `git worktree add` dentro da raiz) provaram-se load-bearing: GREEN em HEAD, RED em ambas as inversões de cada condição e RED contra a base. O resto do diff é prosa/versão, sem superfície executável. Suíte completa fica com o supervisor."

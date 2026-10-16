@@ -1,5 +1,5 @@
 key: until-build-longo-sem-trava
-status: incomplete
+status: complete
 diff_range: 3454663..85848ad
 reauditoria: >-
   Segunda passada. Desde a rodada anterior (INCOMPLETE só em AC2) entraram os
@@ -14,6 +14,22 @@ reauditoria: >-
   automatizados e inspecionei os artefatos do experimento F em
   /tmp/exp-bg-longo/F e o transcript em
   ~/.claude/projects/-private-tmp-exp-bg-longo-F/*.jsonl.
+colheita_real: >-
+  Terceira passada (2026-10-15, drain-plan na branch until/2026-10-15-1853,
+  por instrução do dono registrada na evidência do item). O gap de AC2 era a
+  falta de uma colheita passando pelo cepa-until REAL. Ela aconteceu no run
+  cepa/2026-10-15-1513 (.claude/programs/cepa/until/2026-10-15-1513.jsonl e
+  .log, no clone principal), com os hooks de 2026-09-28 instalados: o
+  supervisor rodou tests/run-all.sh três vezes para o item
+  gate-advance-repo-do-push, com eventos `verify` de 645 s (saiu 1), 649 s
+  (saiu 1, repetição 2) e 616 s (verde) — os três acima do teto de 600 s
+  de um comando do agente, todos com o exit lido pelo supervisor e
+  registrado no .jsonl. O item terminou `done` (item_end exit_code 0 nas
+  tentativas 1 e 2; run_end entregues=1, travados=0). No .log de 1,7 MB, as
+  13 ocorrências de "block"/"deny" são prosa sobre o gate-advance (assunto
+  do item), e nenhuma é recusa do no-background-build. Decisão do dono em
+  2026-10-15: aceitar esta evidência no lugar de um run do WEGO e fechar o
+  item sem reimplementar nada.
 criteria:
   - id: AC1
     descricao: >-
@@ -83,9 +99,11 @@ criteria:
       (17:16:55) e retomada no turno seguinte até ler `EXIT=0` (17:19:39);
       resultado.txt escrito e confirmado às 17:19:50 — do disparo do build
       real ao resultado colhido, ~12 min.
-    status: incomplete
-    gap: >-
-      O gap continua sendo exatamente o apontado na rodada anterior, e o
+    status: complete
+    gap_fechado_em_2026_10_15: >-
+      Fechado pela colheita real descrita em `colheita_real` (run
+      cepa/2026-10-15-1513), por decisão do dono. O texto abaixo é o gap tal
+      como estava na segunda passada. O gap continua sendo exatamente o apontado na rodada anterior, e o
       commit novo NÃO o fecha: falta um teste — automatizado ou, na falta
       disso, o próprio experimento manual rodando de verdade — em que
       `common/bin/cepa-until` (não um script solto com settings.json
@@ -181,3 +199,12 @@ julgamento_do_objetivo: >-
   duas metades cobertas separadamente" — o card de regras da auditoria chama
   isso, textualmente, de incompleto, não de rodapé. status permanece
   incomplete.
+julgamento_final_2026_10_15: >-
+  AC2 passa a complete pela colheita real do run cepa/2026-10-15-1513 (ver
+  `colheita_real`): o cepa-until de verdade, com monta_comando e
+  /common:drain-plan, levou um item a `done` com três builds de mais de
+  10 min colhidos pelo supervisor, sem trava do no-background-build. AC1
+  segue incomplete por design (passo refutado e substituído, sem gap). AC3 e
+  AC4 já estavam complete. Status geral: complete. A lacuna que sobra é de
+  teste automatizado (nenhum teste do repo combina as duas metades), aceita
+  pelo dono como fora deste item.

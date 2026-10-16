@@ -1,0 +1,40 @@
+schema_version: 1
+card: capture-build-result-grep-verify-e-mvnw-q
+status: complete
+audited_at: 2026-10-15T21:50:00-03:00
+criteria:
+  - id: AC1
+    text: "capture-build-result.py classifica so o comando com strings entre aspas mascaradas (grep -E 'no-build|verify' x nao grava nada)."
+    altitude: cli
+    surface: "hook PostToolUse(Bash) como subprocesso: stdin JSON -> .claude/last-build.json ausente"
+    demonstrated_by:
+      test: "tests/test_capture_build_result_classify.py::test_grep_with_quoted_mvnw_verify_leaves_no_state (+ unitario test_grep_with_verify_in_quoted_pattern_is_not_a_build)"
+      layer: subprocesso (_run_hook), afirma que .claude/last-build.json nao existe; comando grep -E 'no-build| mvnw verify' cepa-until com resposta 'Error: Exit code 1'
+      evidence: verified
+      run: "python3 -m pytest tests/test_capture_build_result_classify.py tests/test_capture_build_result_pytest.py -q -> 23 passed (HEAD 5d1140a)"
+    verdict: complete
+    gap: null
+
+  - id: AC2
+    text: "Para Maven exige invoker mvnw/mvn (echo \"./mvnw verify\" nao grava nada)."
+    altitude: cli
+    surface: "hook PostToolUse(Bash) como subprocesso -> .claude/last-build.json ausente"
+    demonstrated_by:
+      test: "tests/test_capture_build_result_classify.py::test_echo_of_quoted_mvnw_verify_leaves_no_state (+ unitario test_echo_of_mvnw_is_not_a_build)"
+      layer: subprocesso (_run_hook), afirma que .claude/last-build.json nao existe
+      evidence: verified
+      run: "23 passed (mesmo comando acima, HEAD 5d1140a)"
+    verdict: complete
+    gap: null
+
+  - id: AC3
+    text: "./mvnw -q clean verify > log com exit 0 grava SUCCESS; execucao quieta que falha (tool_response string 'Error: Exit code N' / BUILD FAILURE no log) grava FAILURE."
+    altitude: cli
+    surface: "hook como subprocesso -> last-build.json status"
+    demonstrated_by:
+      test: "tests/test_capture_build_result_classify.py::test_quiet_redirected_empty_log_is_success, ::test_error_string_response_for_quiet_maven_is_failure, ::test_redirected_log_with_build_failure_is_failure"
+      layer: subprocesso (_run_hook) lendo last-build.json
+      evidence: verified
+      run: "python3 -m pytest tests/test_capture_build_result_classify.py tests/test_capture_build_result_pytest.py -q -> 23 passed; python3 tests/test_capture_build_result_root_install.py -> all green; python3 tests/test_capture_build_background.py -> todos ok"
+    verdict: complete
+    gap: null

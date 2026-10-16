@@ -1,0 +1,38 @@
+schema_version: 2
+card: until-custo-deduplica-bloco-result
+verdict: proven
+reviewed_at: 2026-10-15T19:30:00-03:00
+base_commit: 2ddbb7f
+head_commit: ef7f506
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (custos_das_rodadas, main)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  note: "Python CLI, sem Quarkus/PIT. O teste roda o cepa-until real; so o binario `claude` e falso (fronteira distante), nao a funcao alterada."
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python, sem pitest"
+    perturbation:
+      status: pass
+      results:
+        - "HEAD verde: python3 tests/test_cepa_until_aterrissar.py -> '✓ tudo verde'"
+        - "perturbado (chave = ('', len(custos)) incondicional, em worktree descartavel): '✗ 2 falha(s): o custo soma uma vez por sessao, sem os blocos repetidos, ...e o estado tambem'"
+        - "restaurado (git checkout ef7f506 -- common/bin/cepa-until): '✓ tudo verde'"
+      run: "python3 tests/test_cepa_until_aterrissar.py (3 execucoes em /tmp/proof-head)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "o teste novo exercita o caminho com session_id (3x s-x + s-y) e o teste existente test_5_cabecalho_curto... exercita o caminho sem session_id (1,25 + 1,25); a perturbacao no ramo com session_id ficou vermelha"
+  l4_adversarial_input:
+    status: n/a
+    reason: "a mudanca so reagrupa o total_cost_usd ja lido da saida do claude local; nao abre superficie de entrada externa nova e nenhum modulo api-rest foi tocado"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base 2ddbb7f + teste de ef7f506: '✗ 2 falha(s): o custo soma uma vez por sessao, sem os blocos repetidos, ...e o estado tambem'; HEAD ef7f506: '✓ tudo verde'"
+routing_reason: "Regressao vermelha no base, verde no HEAD, e a quebra da deduplicacao por sessao no HEAD deixa o teste vermelho. Nenhum nivel assumed/skipped."

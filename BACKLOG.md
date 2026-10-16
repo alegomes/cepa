@@ -556,10 +556,36 @@ o caso.
 
 ## Build em segundo plano morre aos 30 min sem resultado
 
-**Plano:** nenhum ainda
+**Plano:** `cepa/build-segundo-plano-morre-aos-30-min`
 
-**Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` ·
-**Origem:** sessão `fix_build_timeout` de 2026-10-02, ao medir o conserto da baseline cega.
+**Status:** feito em 2026-10-15 (medido e consertado) · **Lar:**
+`common/hooks/capture-build-result.py` (colheita) + `common/hooks/gate-advance.py`
+(mensagem) · **Origem:** sessão `fix_build_timeout` de 2026-10-02, ao medir o
+conserto da baseline cega.
+
+### Medição (2026-10-15, claude 2.1.301)
+
+1. Um `sleep 400` lançado com `run_in_background` e `timeout: 60000` foi parado
+   61 s depois do início. O `.output` termina em `[killed]` (uma linha própria,
+   não `[exited with code N]`), e a notificação da tarefa chega com status
+   `killed` e "stopped after reaching its background time limit". No binário, o
+   mesmo trailer `[killed]` cobre os dois motivos de parada: teto de tempo e
+   memória baixa.
+2. O hook só reconhecia `[exited with code N]`: o pendente ficava sem fim e era
+   descartado depois de 6 h, em silêncio. Confirmado o diagnóstico do problema.
+3. Os limites, lidos do binário: comando que o CC manda para o segundo plano por
+   conta própria ganha 30 min (`BASH_DEFAULT_TIMEOUT_MS` sobe esse default);
+   `run_in_background` explícito usa o `timeout` da própria chamada, até 2 h
+   (`BASH_MAX_TIMEOUT_MS` sobe o teto). O "30 min" do relato é o primeiro caso.
+   É configurável, portanto, mas por variável de ambiente do CC, não do harness.
+
+### Conserto
+
+`[killed]` como última linha agora é fim: o hook grava `FAILURE` com `reason`
+("stopped by Claude Code before it ended...") e `stopped_by: claude-code`, e o
+`gate-advance` imprime esse motivo e sugere rodar de novo com `timeout` que caiba
+(ou subir o teto pela variável), em vez de "fix the failing tests". Casos em
+`tests/test_capture_build_background.py`.
 
 ### Problema
 
@@ -3911,7 +3937,11 @@ Itens abertos pelo `/common:feedback --triar` em 2026-10-15, a partir do ledger 
 
 **Plano:** nenhum ainda
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-plan` (`responde`, `add`, `marca`)
+**Status:** feito em 2026-10-15 (`fecha_escrita` no `cepa-plan`: `responde`/`add` commitam só o
+`plan.yaml` no mesmo passo, `--no-commit` desliga; `start`/`finish` avisam que falta commitar e
+`--commit` liga, dentro de um run do `cepa-until` o aviso diz que o clone fica assim de propósito;
+`responde` recusa com exit 6 texto que pede esclarecimento ou é pergunta, mostra a pergunta da rota,
+`--forca` grava; teste em `tests/test_cepa_plan_escrita_commita.py`) · **Lar:** `common/bin/cepa-plan` (`responde`, `add`, `start`, `finish`)
 · **Origem:** feedback `fb-20261015-1` (2026-10-15, `wego-digitacao-backend`) e
 `fb-20261014-4` (2026-10-14, `wego-product`).
 
@@ -3968,10 +3998,12 @@ ordem da triagem → os 2 não mencionados.
 
 ## `capture-build-result` fica cego quando a sessão é continuada após estouro de contexto
 
-**Plano:** nenhum ainda
+**Plano:** fila cepa, item `capture-build-result-apos-estouro-de-contexto`
 
-**Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` (`task_dirs()`)
-e `gate-advance.py` · **Origem:** feedback `fb-20261005-1` (2026-10-05, `wego-acessos-backend`,
+**Status:** feito nesta branch (2026-10-15) · **Lar:** `common/hooks/capture-build-result.py`
+(`find_task_output()` no lançamento, `_sibling_pendings()` na colheita) e `gate-advance.py`
+(repassa a raiz da sessão à colheita) · **Teste:** `tests/test_capture_build_background.py`
+(casos "continuada" e "lançado sob A antes do estouro") · **Origem:** feedback `fb-20261005-1` (2026-10-05, `wego-acessos-backend`,
 branch `session/smoke_tests`).
 
 > O capture-build-result não registrou nenhum dos 3 builds em segundo plano desta sessão
@@ -3990,9 +4022,9 @@ não é estável). Teste que falta: build lançado sob um session_id, colhido so
 
 ## As perguntas finais do relatório e do `until-review` não dizem o que fazer
 
-**Plano:** nenhum ainda
+**Plano:** fila cepa, item `perguntas-finais-nao-dizem-o-que-fazer`
 
-**Status:** pendente · **Lar provável:** `common/skills/plain-report/SKILL.md`,
+**Status:** implementado em 2026-10-15 na branch until/2026-10-15-1853 (skill, lint e until-review); falta validar com o dono em três relatórios reais · **Lar provável:** `common/skills/plain-report/SKILL.md`,
 `common/commands/until-review.md`, `common/hooks/report-style-lint.py` · **Origem:**
 feedback `fb-20261006-1` (2026-10-06), `fb-20261014-1` (2026-10-14, `wego-product`) e
 `fb-20261015-2` (2026-10-15, cepa). Memória do dono relacionada:
@@ -4025,9 +4057,16 @@ comando nem caminho. Validar com o dono em três relatórios reais antes de fech
 
 **Plano:** nenhum ainda
 
-**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (coleta de
-`total_cost_usd`, linha ~2634) · **Origem:** feedback `fb-20261013-2` (2026-10-13,
-`wego-guias-backend`).
+**Status:** feito nesta branch (2026-10-15) · **Lar:** `common/bin/cepa-until`
+(`custos_das_rodadas`, um custo por `session_id`, vale o último bloco) · **Teste:**
+`tests/test_cepa_until_aterrissar.py` (`test_5_custo_conta_uma_vez_por_sessao_nao_por_bloco_result`)
+· **Origem:** feedback `fb-20261013-2` (2026-10-13, `wego-guias-backend`).
+
+Conferido no `.log` real do run (linhas 5207-5217): os 11 blocos têm o mesmo `session_id` e
+o mesmo `total_cost_usd` (28,47, cumulativo da sessão). A parte do esboço sobre a pausa de
+cota não se aplicava: `pausa_de_cota` projeta a partir da utilização da janela de 5h lida do
+`rate_limit_event` (`custo_de_item`), nunca do `total_cost_usd`, então o número inflado só
+chegava ao resumo e ao `estado.json`, não à decisão de parar.
 
 > O cepa-until somou o bloco result repetido no .log: o S5 aparece 11 vezes e o estado do run
 > diz US$ 334,94 quando a conta real e US$ 50,25 (21,78 + 28,47). Run
@@ -4043,8 +4082,11 @@ partir do número inflado. Teste que falta: `.log` com o mesmo `result` três ve
 
 **Plano:** nenhum ainda
 
-**Status:** pendente · **Lar provável:** `build-hex/agents/qa-engineer.md`,
-`common/hooks/lead-no-worktree.py` ou um hook novo em `common/hooks` · **Origem:** feedback
+**Status:** feito nesta branch (2026-10-15) · **Lar:** `build-hex/agents/qa-engineer.md`,
+`build-team/agents/qa-engineer.md`, `build-hex/hooks/bash-path-lock.py`,
+`build-team/hooks/bash-path-lock.py` (e as outras 4 cópias, geradas do molde
+`common/hooks/_templates/bash-path-lock.py.tmpl`), `common/commands/drain-plan.md`,
+`common/bin/cepa-until-digest` · **Origem:** feedback
 `fb-20261013-3` (2026-10-13, `wego-guias-backend`).
 
 > No run noturno o qa-engineer abriu worktree descartavel (--detach) no S5 e uma copia fora
@@ -4061,12 +4103,23 @@ diff num `git stash`-livre, ou `git worktree` só se o comando vier do `proof-re
 lendo o `.jsonl`. Teste que falta: run com `qa-engineer` chamando `git worktree add` aparece
 no resumo como desvio.
 
+**Feito:** o `cepa-until-digest` já lista como sinal de processo toda worktree aberta por
+agente que não seja o `proof-reviewer`. Agora a causa: o `qa-engineer` (build-hex e build-team)
+ganhou a regra "RED vem da ordem ou do proof-reviewer, nunca de worktree sua" (sem
+`git worktree add`, cópia do repo, `git stash` ou reversão de arquivo de produção); a mensagem
+de negação do `bash-path-lock` (as seis cópias geradas do molde) só mostra a receita de worktree
+descartável ao `proof-reviewer` e, para os demais, diz que a prova por perturbação não é deles;
+o `drain-plan` restringe a worktree descartável ao `proof-reviewer`. Testes:
+`test_bash_path_lock_exec.py` (`test_mensagem_nomeia_balde_e_saida`: receita ausente para a
+pista, presente para o `proof-reviewer`), `test_lock_copies_drift.py`, `test_cepa_until_digest.py`.
+
 ## Dispensa (waiver) gravada em nome do dono durante run autônomo
 
 **Plano:** nenhum ainda
 
-**Status:** pendente · **Lar provável:** `build-hex/agents/proof-reviewer.md`,
-`common/bin/cepa-until` (resumo) e `common/skills/autonomous-mode` · **Origem:** feedback
+**Status:** feito nesta branch (2026-10-15) · **Lar:** `board-flow/bin/waivers.py`,
+`common/bin/cepa-plan` (`responde`), `build-hex/hooks/proof-verdict-guard.py`,
+`common/bin/cepa-until-digest` e `common/skills/autonomous-mode` · **Origem:** feedback
 `fb-20261014-3` (2026-10-14, `wego-digitacao-backend`).
 
 > Me incomoda o agente gravar uma dispensa (waiver) em meu nome durante um run autonomo;
@@ -4079,6 +4132,13 @@ gravada como `proposta` (autor: agente, pendente), o item fica `human_pending` c
 "Aceito a dispensa de X por Y?", e só o `cepa-plan responde` do dono a converte em
 `waiver`. O `proof-verdict-guard` trata dispensa proposta como não-PROVEN. Teste que falta:
 proof-reviewer em modo autônomo grava `waiver_proposto`, e o `until-review` lista a pergunta.
+
+**Feito:** `waivers.gravar` em run autônomo (`CEPA_UNTIL_RUN`/`CLAUDE_AUTONOMOUS_RUN_ID`)
+grava `status: proposta` com `autor: null` (`propor`/`propostas`/`converter`/`recusar`); o
+`cepa-plan responde` converte a proposta do item (`sim`) ou a recusa (`não`); o
+`proof-verdict-guard` barra `proven` ao lado de `waiver_proposto`; o `cepa-until-digest` lista
+as propostas sem resposta. Testes: `test_waivers.py`, `test_cepa_plan_responde_dispensa.py`,
+`test_proof_waiver_proposto.py`, `test_cepa_until_digest.py`.
 
 ## `gate-advance` classifica `grep` com a palavra `verify` como build Maven, e não registra `./mvnw -q ... > log`
 

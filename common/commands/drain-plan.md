@@ -286,7 +286,10 @@ Para cada item do lote, na ordem:
     worktree a partir de `origin/main`, nada mesclou, e 20 de 25 rodadas
     travaram porque o card anterior só existia numa branch solta. Worktree
     descartável para perturbação de prova (`git worktree add --detach /tmp/...`)
-    continua valendo;
+    continua valendo SÓ para o `proof-reviewer`; o `qa-engineer` e qualquer outro
+    agente provam RED pela ordem (teste escrito antes do fix) ou deixam a prova
+    para o `proof-reviewer`, e o resumo do `cepa-until` lista toda worktree aberta
+    por outro agente;
   - **commit direto nesta branch**, com a árvore limpa antes do `finish`. O
     supervisor guarda num stash o que sobrar sem commit, e o próximo card não
     vê;
@@ -362,6 +365,14 @@ Para cada item do lote, na ordem:
      segredo), abra-a com `--human-pending "<a rota, verbatim>"` — é assim que
      ela sobrevive à sessão. **Nunca feche uma rota**: só quem rodou sabe se
      ela passou, e o comando recusa.
+
+     **Dispensa produzida no item é proposta, não waiver.** Se durante o item
+     saiu uma dispensa (`waivers.gravar` em run autônomo grava
+     `status: proposta`, com `fila=`/`item=`), abra-a como `--human-pending
+     "Aceitar ou recusar a dispensa de <escopo> (<motivo>)"` com `--pergunta
+     "Aceito a dispensa de <escopo> por <razão>? Recomendo <sim/não>: <porquê>"`.
+     O `cepa-plan responde ... "sim: ..."` do dono converte a proposta em
+     dispensa (fb-20261014-3); o agente nunca grava uma dispensa em nome dele.
 
      **Atualizar o Jira (grava no quadro).** Se o `id` é chave de card e o repo tem quadro (e não veio
      `--offline`), transicione o card logo depois, delegando ao

@@ -242,6 +242,55 @@ def itens_do_plano(caminho_plano):
             if isinstance(it, dict)}
 
 
+def propostas_de_dispensa(caminho_plano, ledger=None):
+    """Dispensas que o agente PROPÔS e o dono ainda não respondeu
+    (`.claude/waivers/*.yaml` com `status: proposta`).
+
+    Procura em duas pastas: a do clone principal (ao lado da fila) e a da árvore
+    do registro (`<raiz>/.claude/programs/<fila>/until/<run>.jsonl`). O run grava
+    a proposta na árvore onde roda, que numa worktree do `cepa-until` fica fora
+    do clone principal, e nos repos hospedeiros `.claude/` é ignorado pelo git,
+    então ela nunca chega lá por commit. A união não repete o mesmo arquivo.
+
+    Fail-safe: pasta ausente ou arquivo ilegível não listam nada e não quebram
+    o resumo."""
+    if yaml is None:
+        return []
+    pastas = []
+    try:
+        pastas.append(Path(caminho_plano).parents[3] / ".claude" / "waivers")
+    except IndexError:
+        pass
+    if ledger is not None:
+        try:
+            pastas.append(Path(ledger).resolve().parents[4] / ".claude" / "waivers")
+        except IndexError:
+            pass
+    achadas, vistos = [], set()
+    for pasta in pastas:
+        try:
+            arquivos = sorted(pasta.glob("*.yaml"))
+        except OSError:
+            continue
+        for f in arquivos:
+            try:
+                chave = f.resolve()
+                if chave in vistos:
+                    continue
+                d = yaml.safe_load(f.read_text(encoding="utf-8"))
+            except (OSError, yaml.YAMLError):
+                continue
+            vistos.add(chave)
+            if isinstance(d, dict) and d.get("status") == "proposta":
+                achadas.append(d)
+    return achadas
+
+
+def _linha_de_proposta(d):
+    return (f"{d.get('motivo')} em {d.get('escopo')} — pergunta: "
+            f"{' '.join(str(d.get('pergunta') or '(sem pergunta gravada)').split())}")
+
+
 def plano_da_fila(ledger, fila):
     """O plan.yaml de verdade: o do clone PRINCIPAL, não o da árvore de onde o
     `cepa-until` largou.
@@ -377,6 +426,7 @@ def monta(ledger, result_max):
             tocados.append(st.get("id"))
     out.append("## Estado ATUAL na fila dos itens tocados")
     out.append(f"(lido agora de `{caminho_plano}`, não do momento do run)")
+    propostas = propostas_de_dispensa(caminho_plano, ledger)
     for ident in tocados:
         it = plano.get(str(ident))
         if not it:
@@ -389,6 +439,18 @@ def monta(ledger, result_max):
                       if it.get("human_pending") else ""))
         if it.get("evidence"):
             out.append(f"  - evidence: {' '.join(str(it['evidence']).split())}")
+        for d in propostas:
+            if str(d.get("item")) == str(ident):
+                out.append("  - dispensa proposta pelo agente: "
+                           + _linha_de_proposta(d))
+    out.append("")
+    out.append("## Dispensas propostas pelo agente, sem resposta do dono")
+    if propostas:
+        for d in propostas:
+            out.append(f"- {_linha_de_proposta(d)} · item: "
+                       f"{d.get('item') or 'sem item'}")
+    else:
+        out.append("nenhuma")
     out.append("")
     out.append(f"Custo somado das rodadas: US$ {custo_total:.2f} (soma do "
                "`total_cost_usd` de cada `result`).")

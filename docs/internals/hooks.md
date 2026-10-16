@@ -673,6 +673,11 @@ Owner: `common/hooks/`. Measures the turn's final report against the
 `plain-report` skill's format (2 plain-language sentences, explicit
 default recommendation, technical detail last), added after the user
 reported having to read reports more than once to understand them.
+Since 2026-10-15 it also blocks a report whose `Pra você:` announces
+something pending while the final list is "Nada pendente." or has no numbered
+item (`pra-voce-sem-lista`), and a "Você ..." list item that carries no command,
+file path or "Pronto quando" line (`tarefa-sem-passo`), after the owner's
+"O que, afinal, que eu tenho que fazer?" feedback of 2026-10-14.
 
 ### proof-verdict-guard.py (PreToolUse, matcher `Edit\|Write\|MultiEdit\|NotebookEdit`)
 

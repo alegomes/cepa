@@ -1,0 +1,40 @@
+schema_version: 2
+card: capture-build-result-grep-verify-e-mvnw-q
+verdict: proven
+reviewed_at: 2026-10-15T19:30:00-03:00
+base_commit: 1d3829f
+head_commit: 5d1140a
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/capture-build-result.py", module: common/hooks, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "a. pattern.search(view) -> pattern.search(command): RED, 3 failed, 16 passed (heredoc_swift_build, echo_of_pytest, echo_of_npm_test)"
+        - "b. drop 'kind == maven and maven_args is None' guard: RED, 1 failed, 18 passed (test_maven_words_without_a_real_invoker_are_not_a_build)"
+        - "a+b: RED, 7 failed, 12 passed (inclui test_grep_with_quoted_mvnw_verify_leaves_no_state, que roda o hook como subprocesso via _run_hook)"
+        - "c. drop quiet-maven SUCCESS rule: RED, 2 failed, 17 passed"
+        - "d. extract_exit_code sem parse de 'Error: Exit code N': RED, 1 failed, 18 passed"
+        - "e. redirected_output sempre vazio: RED, 2 failed, 17 passed"
+        - "f. _is_quiet versao larga: RED, 1 failed, 18 passed"
+        - "baseline em HEAD 5d1140a: 23 passed (classify + pytest)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; cada hunk alterado foi perturbado individualmente (a a f) e ficou vermelho, o que mostra que o teste o alcanca"
+  l4_adversarial_input:
+    status: n/a
+    reason: "hook de desenvolvimento: a unica entrada e o texto do comando Bash que o proprio agente emitiu e o payload do harness; nao ha usuario externo nem modulo api-rest. Nao rodei entradas adversariais; o arquivo de log redirecionado e lido so no final, limitado a 64 KiB"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base 1d3829f + tests/test_capture_build_result_classify.py de 5d1140a: 12 failed, 7 passed. Vermelhos: grep_with_mvnw_verify, echo_of_mvnw, heredoc_swift_build, echo_of_pytest, echo_of_npm_test, maven_words_without_real_invoker, error_string_exit_code, quiet_maven_sem_saida, quiet_maven_interrupted, redirected_log_success, redirected_log_failure, quiet_redirected_empty_log"
+routing_reason: "Todas as seis perturbacoes (a a f) e a combinacao a+b ficam vermelhas; o teste novo falha 12 vezes no commit base. Nada alterado sobrevive."

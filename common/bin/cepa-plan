@@ -203,6 +203,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -1715,6 +1716,85 @@ def grava_corpo(alvo, plan, itens):
     tmp.replace(alvo)
 
 
+# ── depois de gravar: commit ou aviso ───────────────────────────────────────
+#
+# Toda escrita deixava o plan.yaml modificado e calada. Em 2026-10-15 o dono
+# rodou `responde` três vezes e cada vez a fila ficou sem commit: um agente
+# commitou depois, uma das respostas entrou num commit alheio com mensagem
+# errada, e o `cepa-until`, que recusa árvore suja, não subiu (fb-20261015-1).
+# Regra: a porta do dono (`responde`, `add`) commita a fila no mesmo passo,
+# só ela (`git commit -- <caminho>`), e `--no-commit` desliga; a marcação de
+# um lote (`start`, `finish`) avisa que falta commitar e `--commit` liga —
+# dentro de um run do `cepa-until` o clone fica modificado de propósito até o
+# dono voltar, e um commit a cada item seria um commit por item na branch que
+# o dono tem aberta no clone. O exit nunca muda por isso: a escrita aconteceu.
+
+def _git(raiz, *args):
+    try:
+        p = subprocess.run(["git", "-C", str(raiz), *args],
+                           capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 1, "", str(e)
+    return p.returncode, p.stdout, p.stderr
+
+
+def _rel_da_fila(raiz, alvo):
+    try:
+        return str(Path(alvo).resolve().relative_to(Path(raiz).resolve()))
+    except ValueError:
+        return str(alvo)
+
+
+def outras_mudancas(raiz, rel):
+    """As linhas do `git status` que NÃO são a fila (None se o git falhou)."""
+    rc, out, _ = _git(raiz, "status", "--porcelain", "--untracked-files=no")
+    if rc != 0:
+        return None
+    return [l for l in out.splitlines() if l.strip() and rel not in l]
+
+
+def fecha_escrita(raiz, alvo, mensagem, commit, dentro_de_run=None, extras=()):
+    """Chamado depois de `grava_corpo`: commita só a fila, ou diz que falta.
+
+    `extras`: outros caminhos que a mesma escrita tocou (as dispensas do
+    `responde`). Entram no commit só se o `git add` os aceita; `.claude/` é
+    ignorado nos repos hospedeiros e o `add` recusa — aí o arquivo fica de fora,
+    sem falhar a escrita."""
+    rel = _rel_da_fila(raiz, alvo)
+    comando = f"git -C {shlex.quote(str(raiz))} commit -m {shlex.quote(mensagem)} -- {rel}"
+    if commit:
+        rc, _, err = _git(raiz, "add", "--", rel)
+        incluidos = [rel]
+        if rc == 0:
+            for extra in extras:
+                if _git(raiz, "add", "--", _rel_da_fila(raiz, extra))[0] == 0:
+                    incluidos.append(_rel_da_fila(raiz, extra))
+            rc, _, err = _git(raiz, "commit", "-q", "-m", mensagem, "--", *incluidos)
+        if rc == 0:
+            _, sha, _ = _git(raiz, "rev-parse", "--short", "HEAD")
+            print(f"  commit {sha.strip()}: {mensagem} ({rel})")
+            outras = outras_mudancas(raiz, rel)
+            if outras:
+                print(f"  aviso: o clone tem {len(outras)} outra(s) mudança(s) "
+                      "sem commit; o commit levou só a fila")
+            return True
+        motivo = [l for l in (err or "").strip().splitlines() if l.strip()]
+        print(f"  aviso: a fila foi gravada mas NÃO commitada "
+              f"({motivo[-1] if motivo else 'o git falhou'}). Falta commitar: "
+              f"{comando}")
+        return False
+    if dentro_de_run is None:
+        dentro_de_run = bool(os.environ.get("CEPA_UNTIL_RUN"))
+    if dentro_de_run:
+        print(f"  fila gravada sem commit ({rel}): dentro de um run do "
+              "cepa-until o clone fica assim de propósito; o dono commita "
+              "a fila depois do run")
+    else:
+        print(f"  fila gravada sem commit ({rel}). Falta commitar: {comando} "
+              "— ou passe --commit para gravar e commitar no mesmo passo")
+    return False
+
+
 def abre_plano_para_marcar(raiz, nome):
     """(alvo, plan, item_por_id, erro_exit) — a leitura comum de start/finish."""
     alvo = caminho_do_plano(raiz, nome)
@@ -1732,7 +1812,7 @@ def abre_plano_para_marcar(raiz, nome):
                         if isinstance(i, dict)}, 0
 
 
-def cmd_start(raiz, nome, ident, cwd="."):
+def cmd_start(raiz, nome, ident, cwd=".", commit=False):
     alvo, plan, por_id, rc = abre_plano_para_marcar(raiz, nome)
     if rc:
         return rc
@@ -1782,6 +1862,7 @@ def cmd_start(raiz, nome, ident, cwd="."):
         print("  evidence anterior (leia antes de começar):")
         for linha in anterior.splitlines():
             print(f"    {linha}")
+    fecha_escrita(raiz, alvo, f"fila {nome}: start {ident}", commit)
     return 0
 
 
@@ -1880,7 +1961,7 @@ def validacao_faltando(repo, ident):
 
 
 def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo=".",
-               pergunta=None):
+               pergunta=None, commit=False):
     if status == "done":
         falta = validacao_faltando(repo, ident)
         if falta is not None:
@@ -1934,6 +2015,7 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo=".",
     print(f"{ident} → `{status}` em {alvo}")
     if human_pending:
         print(f"  rota aberta para você: {human_pending}")
+    fecha_escrita(raiz, alvo, f"fila {nome}: {ident} -> {status}", commit)
     return 0
 
 
@@ -1950,7 +2032,121 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo=".",
 # WEGO-2337 e "não liguei" ao WEGO-1933, e os dois voltaram para `pending`,
 # prontos para o próximo run executar o que o dono mandou segurar.
 
-def cmd_responde(raiz, nome, ident, resposta, mantem=False):
+# O que NÃO é resposta. Em 2026-10-14 (fb-20261014-4) um "eu nao entendi a
+# pergunta" dito no chat sobre OUTRA coisa foi parar na evidência do
+# S5-nivel-atendimento como "Resposta do dono", e precisou de commit
+# corretivo: o `responde` gravava o que recebia. Agora ele mostra a pergunta
+# da rota e recusa (exit 6) o texto que pede esclarecimento ou que é ele
+# mesmo uma pergunta. A resposta montada pelo `cepa-until decidir` começa com
+# "sim: " / "não: " seguido da pergunta redigida, e por isso passa direto:
+# a pergunta ali é citação, não dúvida. `--forca` grava mesmo assim.
+PEDE_ESCLARECIMENTO = re.compile(
+    r"\b(n[aã]o|nem|nunca)\s+(entendi|compreendi|captei|ficou\s+claro|"
+    r"sei\s+(o\s+que|do\s+que|qual|a\s+que)|sei\s+responder)\b"
+    r"|\bcomo\s+assim\b|\bque\s+pergunta\s+[eé]\s+ess|"
+    r"\b(o\s+que|oq)\s+(isso\s+|ela\s+)?(quer\s+dizer|significa)\b|"
+    r"\b(repet\w*|refa\w+|explic\w+)\s+(a\s+)?pergunta\b", re.I)
+RESPOSTA_DO_DECIDIR = re.compile(r"^(sim|n[aã]o)\s*:", re.I)
+
+
+def nao_responde(texto):
+    """O motivo pelo qual `texto` não responde a uma rota, ou None."""
+    limpo = str(texto or "").strip()
+    if not re.search(r"\w", limpo):
+        return "só pontuação, sem palavra nenhuma"
+    if RESPOSTA_DO_DECIDIR.match(limpo):
+        return None
+    if PEDE_ESCLARECIMENTO.search(limpo):
+        return "o texto pede esclarecimento em vez de responder"
+    if limpo.endswith("?"):
+        return "o texto é uma pergunta, não uma resposta"
+    return None
+
+
+# ── responde × dispensa proposta ─────────────────────────────────────────────
+#
+# Em run autônomo o agente NÃO grava dispensa (waiver): grava uma PROPOSTA em
+# `.claude/waivers/*.yaml` (`status: proposta`, `autor: null`, `fila`, `item`) e
+# abre a rota humana no item. Quem converte em dispensa é o `responde` do dono,
+# num terminal (fb-20261014-3). A leitura/escrita abaixo é o GÊMEO INLINE de
+# `converter`/`recusar` em board-flow/bin/waivers.py — não importo aquele módulo
+# porque import entre plugins quebra com os diretórios de cache versionados; o
+# teste tests/test_cepa_plan_responde_dispensa.py confere que os dois concordam.
+
+def _pastas_de_dispensa(raiz, repo):
+    pastas = [Path(raiz) / ".claude" / "waivers"]
+    local = Path(repo).resolve() / ".claude" / "waivers"
+    if local != pastas[0].resolve() and local.is_dir():
+        pastas.append(local)
+    return pastas
+
+
+def propostas_do_item(raiz, repo, nome, ident):
+    """[(path, dict)] das propostas pendentes amarradas a este item da fila."""
+    achadas = []
+    for pasta in _pastas_de_dispensa(raiz, repo):
+        for path in sorted(pasta.glob("*.yaml")):
+            try:
+                d = yaml.safe_load(path.read_text(encoding="utf-8"))
+            except (yaml.YAMLError, OSError):
+                continue
+            if (isinstance(d, dict) and d.get("status") == "proposta"
+                    and str(d.get("item")) == str(ident)
+                    and (not d.get("fila") or d.get("fila") == nome)):
+                achadas.append((path, d))
+    return achadas
+
+
+def autor_do_dono(raiz, autor=None):
+    if autor and autor.strip():
+        return autor.strip()
+    rc, out, _ = _git(raiz, "config", "user.name")
+    if rc == 0 and out.strip():
+        return out.strip()
+    return os.environ.get("USER", "").strip()
+
+
+def decide_dispensas(propostas, resposta, mantem, hoje, autor):
+    """Aplica a resposta às propostas e devolve (linhas_de_saida, frases)."""
+    saida, frases = [], []
+    if not propostas:
+        return saida, frases
+    if mantem:
+        saida.append(f"  {len(propostas)} dispensa(s) proposta(s) seguem "
+                     "pendente(s): --mantem não decide dispensa")
+        return saida, [f"Dispensa {d.get('motivo')} em {d.get('escopo')}: "
+                       "segue proposta." for _, d in propostas]
+    if re.match(r"^sim\b", resposta, re.IGNORECASE):
+        for path, d in propostas:
+            novo = {k: v for k, v in d.items() if k not in ("status", "autor")}
+            novo["autor"] = autor
+            novo["criado_em"] = hoje
+            novo["resposta_do_dono"] = resposta
+            path.write_text(yaml.safe_dump(novo, allow_unicode=True,
+                                           sort_keys=False), encoding="utf-8")
+            saida.append(f"  dispensa aceita pelo dono: {path}")
+            frases.append(f"Dispensa {d.get('motivo')} em {d.get('escopo')}: "
+                          "aceita pelo dono.")
+    elif re.match(r"^n(ã|a)o\b", resposta, re.IGNORECASE):
+        for path, d in propostas:
+            d.update(status="recusada", recusada_em=hoje,
+                     resposta_do_dono=resposta)
+            path.write_text(yaml.safe_dump(d, allow_unicode=True,
+                                           sort_keys=False), encoding="utf-8")
+            saida.append(f"  dispensa recusada: {path}")
+            frases.append(f"Dispensa {d.get('motivo')} em {d.get('escopo')}: "
+                          "recusada pelo dono.")
+    else:
+        saida.append(f"  {len(propostas)} dispensa(s) proposta(s) seguem "
+                     "pendente(s): só uma resposta que começa com \"sim\" ou "
+                     "\"não\" decide dispensa")
+        frases = [f"Dispensa {d.get('motivo')} em {d.get('escopo')}: segue "
+                  "proposta." for _, d in propostas]
+    return saida, frases
+
+
+def cmd_responde(raiz, nome, ident, resposta, mantem=False, forca=False,
+                 commit=True, repo=".", autor=None):
     if not sys.stdin.isatty():
         print("`responde` é a resposta do dono e só roda num terminal: sem "
               "TTY, quem chama é um agente, e só o humano fecha uma rota "
@@ -1974,9 +2170,26 @@ def cmd_responde(raiz, nome, ident, resposta, mantem=False):
         print(f"{ident} está `{st}` e sem rota humana aberta: não há o que "
               "responder.", file=sys.stderr)
         return 2
+    pergunta_da_rota = it.get("owner_question") or rota
+    if not forca:
+        motivo = nao_responde(resposta)
+        if motivo:
+            print(f"resposta recusada para {ident}: {motivo}; nada foi gravado.",
+                  file=sys.stderr)
+            if pergunta_da_rota:
+                print(f"  a rota pergunta: {pergunta_da_rota}", file=sys.stderr)
+            print("  responda a essa pergunta (sim/não e o porquê, numa "
+                  "linha). Se o texto é mesmo a sua resposta, repita com "
+                  "--forca.", file=sys.stderr)
+            return 6
     hoje = datetime.now().strftime("%Y-%m-%d")
     anterior = " ".join(str(it.get("evidence") or "").split())
     partes = [f"Resposta do dono em {hoje}: {resposta}."]
+    propostas = propostas_do_item(raiz, repo, nome, ident)
+    linhas_dispensa, frases_dispensa = decide_dispensas(
+        propostas, resposta, mantem, hoje,
+        autor_do_dono(raiz, autor) if propostas else None)
+    partes.extend(frases_dispensa)
     if mantem:
         partes.append(f"O dono manteve o item como estava (`{st}`"
                       + (", rota humana aberta" if rota is not None else "")
@@ -2005,6 +2218,11 @@ def cmd_responde(raiz, nome, ident, resposta, mantem=False):
     else:
         print(f"{ident} → `{status_de(it)}` em {alvo}"
               + (" · rota humana fechada" if rota is not None else ""))
+    for linha in linhas_dispensa:
+        print(linha)
+    fecha_escrita(raiz, alvo, f"fila {nome}: resposta do dono a {ident} "
+                  f"({status_de(it)})", commit,
+                  extras=[p for p, _ in propostas])
     return 0
 
 
@@ -2082,6 +2300,8 @@ def cmd_add(raiz, nome, ident, a):
 
     grava_corpo(alvo, plan, novos_itens)
     print(f"{ident} inserido na posição {pos + 1} de {len(novos_itens)} em {alvo}")
+    fecha_escrita(raiz, alvo, f"fila {nome}: add {ident}",
+                  not getattr(a, "no_commit", False))
     return 0
 
 
@@ -2820,6 +3040,9 @@ def main(argv=None):
                              "assina a reserva com a sessão dona")
     st.add_argument("nome")
     st.add_argument("id")
+    st.add_argument("--commit", action="store_true",
+                    help="commita a fila (só ela) no mesmo passo; sem isso a "
+                         "saída diz que falta commitar")
     st.add_argument("--repo", default=".")
 
     fi = sub.add_parser("finish",
@@ -2844,6 +3067,9 @@ def main(argv=None):
                          "fixo: sim = o item volta para a fila com esta "
                          "resposta, não = fica como está. Use com `blocked` "
                          "e com `--human-pending`")
+    fi.add_argument("--commit", action="store_true",
+                    help="commita a fila (só ela) no mesmo passo; sem isso a "
+                         "saída diz que falta commitar")
     fi.add_argument("--repo", default=".")
 
     rs = sub.add_parser("responde",
@@ -2858,6 +3084,15 @@ def main(argv=None):
     rs.add_argument("--mantem", action="store_true",
                     help="grava a resposta e deixa o item como está: o "
                          "`blocked` segue travado e a rota segue aberta")
+    rs.add_argument("--forca", action="store_true",
+                    help="grava mesmo um texto que parece não responder à "
+                         "rota (pedido de esclarecimento, pergunta)")
+    rs.add_argument("--autor", default=None,
+                    help="quem assina a dispensa que a resposta \"sim\" aceita "
+                         "(default: `git config user.name`, depois $USER)")
+    rs.add_argument("--no-commit", action="store_true", dest="no_commit",
+                    help="grava a fila sem commitar (por default o `responde` "
+                         "commita só o plan.yaml no mesmo passo)")
     rs.add_argument("--repo", default=".")
 
     rc = sub.add_parser("reconcile",
@@ -2889,6 +3124,9 @@ def main(argv=None):
                     help="insere imediatamente antes deste id (exige --why)")
     ad.add_argument("--blocked-by", dest="blocked_by", metavar="ID,ID",
                     help="ids desta MESMA fila que bloqueiam o item novo")
+    ad.add_argument("--no-commit", action="store_true", dest="no_commit",
+                    help="grava a fila sem commitar (por default o `add` "
+                         "commita só o plan.yaml no mesmo passo)")
     ad.add_argument("--repo", default=".")
 
     od = sub.add_parser("ordena",
@@ -2983,12 +3221,13 @@ def main(argv=None):
         return cmd_reconcile(raiz, a.nome, a.board, a.config, a.aplicar,
                              a.como_json)
     if a.cmd == "start":
-        return cmd_start(raiz, a.nome, a.id, a.repo)
+        return cmd_start(raiz, a.nome, a.id, a.repo, a.commit)
     if a.cmd == "finish":
         return cmd_finish(raiz, a.nome, a.id, a.status, a.evidence,
-                          a.human_pending, a.repo, a.pergunta)
+                          a.human_pending, a.repo, a.pergunta, a.commit)
     if a.cmd == "responde":
-        return cmd_responde(raiz, a.nome, a.id, a.resposta, a.mantem)
+        return cmd_responde(raiz, a.nome, a.id, a.resposta, a.mantem,
+                            a.forca, not a.no_commit, a.repo, a.autor)
     return cmd_write(raiz, a)
 
 

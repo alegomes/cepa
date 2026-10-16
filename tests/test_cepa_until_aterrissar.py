@@ -296,6 +296,26 @@ def test_5_cabecalho_curto_sem_caminho_absoluto_e_com_custo():
               estado(raiz).get("custo_usd") == 2.5, str(estado(raiz)))
 
 
+def test_5_custo_conta_uma_vez_por_sessao_nao_por_bloco_result():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        # Um processo que imprime o mesmo `result` 3 vezes (a sessão é a
+        # mesma, o custo é cumulativo); o outro item é outra sessão.
+        corpo = TRABALHA + (
+            "sid, custo = ('s-x', 28.47) if ident == 'a1' else ('s-y', 21.78)\n"
+            "for _ in range(3 if sid == 's-x' else 1):\n"
+            "    print(json.dumps({'type': 'result', 'result': 'ok',"
+            " 'session_id': sid, 'total_cost_usd': custo}))\n")
+        binv = fake_claude(tmp, corpo)
+        p, _ = roda(raiz, binv, plano_de(raiz),
+                    ["--for", "2h", "--verify", VERIFY])
+        check("o custo soma uma vez por sessão, sem os blocos repetidos",
+              "US$ 50,25" in p.stdout and "28,47 + 21,78" in p.stdout
+              and "2 rodada(s)" in p.stdout, p.stdout[-900:])
+        check("...e o estado também",
+              estado(raiz).get("custo_usd") == 50.25, str(estado(raiz)))
+
+
 def main():
     print("cepa-until aterrissar\n")
     for nome, fn in sorted(globals().items()):
