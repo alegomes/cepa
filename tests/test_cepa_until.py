@@ -26,6 +26,7 @@ uma noite de calendário, e só o primeiro run real diz.
 
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -1140,6 +1141,134 @@ def test_registro_grava_um_evento_por_item():
                   for f in fins), str(fins))
         check("o registro fecha com run_end",
               ev[-1]["evento"] == "run_end", str(ev[-1:]))
+
+
+def _supervisor_falso(raiz, fila, pid, estado="rodando", itens=()):
+    """Grava o estado.json e o .jsonl de um run da fila `fila`, como o
+    `cepa-until` de verdade deixa."""
+    d = Path(raiz) / ".claude" / "programs" / fila / "until"
+    d.mkdir(parents=True, exist_ok=True)
+    prazo = (datetime.now() + timedelta(hours=3)).isoformat()
+    run = "2026-10-15-1853"
+    est = {"run": run, "fila": fila, "estado": estado, "branch": "until/x",
+           "registro": f"{run}.jsonl", "pid": pid,
+           "host": socket.gethostname(), "prazo": prazo}
+    (d / f"{run}.estado.json").write_text(json.dumps(est), encoding="utf-8")
+    evs = [{"evento": "run_start", "fila": fila, "prazo": prazo, "pid": pid}]
+    evs += [{"evento": "item_start", "id": i} for i in itens]
+    (d / f"{run}.jsonl").write_text(
+        "\n".join(json.dumps(e) for e in evs) + "\n", encoding="utf-8")
+
+
+def _processo_cepa_until():
+    return subprocess.Popen([sys.executable, "-c",
+                             "import time; time.sleep(60)", "cepa-until"])
+
+
+def test_run_vivo_da_mesma_fila_recusa_a_largada():
+    """fb-20261015-4: lançar `cepa-until` com um run da mesma fila de pé
+    recusava como "árvore suja" e sugeria `--sujo-ok`. Dois supervisores na
+    mesma fila é a falha: recusa antes do guarda de sujeira, sem escape."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+        vivo = _processo_cepa_until()
+        try:
+            _supervisor_falso(raiz, "fila", vivo.pid)
+            for extra in ([], ["--sujo-ok"]):
+                p, chamadas = roda(raiz, binv, plano, ["--for", "2h"] + extra)
+                check(f"run vivo recusa a largada {extra}",
+                      p.returncode == 2 and not chamadas,
+                      f"saiu {p.returncode}: {p.stderr[:300]}")
+                check("...a mensagem diz que já há um run, com o pid",
+                      "já há um run desta fila" in p.stderr
+                      and f"pid {vivo.pid}" in p.stderr, p.stderr[:300])
+                check("...e não oferece --sujo-ok",
+                      "--sujo-ok" not in p.stderr, p.stderr[:300])
+            # pid morto: o mesmo estado.json deixa de barrar
+            vivo.kill()
+            vivo.wait()
+            p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+            check("pid morto não barra: o run larga",
+                  len(chamadas) == 1, f"saiu {p.returncode}: {p.stderr[:300]}")
+        finally:
+            vivo.kill()
+            vivo.wait()
+        # estado que não é `rodando` também não barra
+        (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+        subprocess.run(["git", "checkout", "-q", "--", str(plano)], cwd=raiz,
+                       check=True)
+        vivo = _processo_cepa_until()
+        try:
+            _supervisor_falso(raiz, "fila", vivo.pid, estado="esperando-dono")
+            p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
+            check("estado esperando-dono não barra",
+                  len(chamadas) == 1, f"saiu {p.returncode}: {p.stderr[:300]}")
+        finally:
+            vivo.kill()
+            vivo.wait()
+
+
+def test_plan_de_outra_fila_sujo_pelo_run_vivo_nao_e_sujeira():
+    """O `plan.yaml` de OUTRA fila, que um run vivo dela escreve via
+    `cepa-plan start/finish`, não é sujeira; qualquer outra diferença é."""
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1")])
+        outra = raiz / ".claude" / "programs" / "outra" / "plan.yaml"
+        outra.parent.mkdir(parents=True)
+        base = {"schema_version": 2, "mode": "single-track",
+                "program": "outra", "source": "teste",
+                "items": [item("o1"), item("o2")]}
+        outra.write_text(yaml.safe_dump(base, allow_unicode=True),
+                         encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+        subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                        "commit", "-qm", "outra"], cwd=raiz, check=True)
+        binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
+        plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+
+        def muda(alvo, campos_o1=None, campos_o2=None):
+            p = yaml.safe_load(yaml.safe_dump(base))
+            p["items"][0].update(campos_o1 or {})
+            p["items"][1].update(campos_o2 or {})
+            alvo.write_text(yaml.safe_dump(p, allow_unicode=True),
+                            encoding="utf-8")
+
+        do_run = {"status": "in_progress", "claimed_by": {"run": "x"},
+                  "evidence": "feito"}
+
+        def tenta(pid_vivo, **mud):
+            subprocess.run(["git", "checkout", "-q", "--", str(plano),
+                            str(outra)], cwd=raiz, check=True)
+            (Path(tmp) / "chamadas.jsonl").unlink(missing_ok=True)
+            _supervisor_falso(raiz, "outra", pid_vivo, itens=["o1"])
+            muda(outra, **mud)
+            return roda(raiz, binv, plano, ["--for", "2h"])
+
+        vivo = _processo_cepa_until()
+        try:
+            p, chamadas = tenta(vivo.pid, campos_o1=do_run)
+            check("plan de outra fila escrito pelo run vivo não é sujeira",
+                  "modificado(s)" not in p.stderr and len(chamadas) == 1,
+                  f"saiu {p.returncode}: {p.stderr[:300]}")
+            p, chamadas = tenta(vivo.pid, campos_o1=dict(do_run, title="x"))
+            check("...mudar também o title do item ainda é sujeira",
+                  p.returncode == 2 and not chamadas
+                  and "modificado(s)" in p.stderr, p.stderr[:300])
+            p, chamadas = tenta(vivo.pid, campos_o2=do_run)
+            check("...mudar item que o run não iniciou ainda é sujeira",
+                  p.returncode == 2 and not chamadas
+                  and "modificado(s)" in p.stderr, p.stderr[:300])
+            check("...e a lista nomeia o plano sujo",
+                  "outra/plan.yaml" in p.stderr, p.stderr[:300])
+        finally:
+            vivo.kill()
+            vivo.wait()
+        p, chamadas = tenta(vivo.pid, campos_o1=do_run)
+        check("...com o supervisor morto o mesmo diff é sujeira",
+              p.returncode == 2 and not chamadas
+              and "modificado(s)" in p.stderr, p.stderr[:300])
 
 
 def main():
