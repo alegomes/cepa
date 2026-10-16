@@ -92,7 +92,23 @@ def clear_entries(main):
         f.unlink()
 
 
+def check_wiring():
+    """O hook só vale se o plugin o registra no matcher Bash do PreToolUse."""
+    manifest = REPO / "common" / ".claude-plugin" / "plugin.json"
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    cmds = [
+        h.get("command", "")
+        for entry in data.get("hooks", {}).get("PreToolUse", [])
+        if entry.get("matcher") == "Bash"
+        for h in entry.get("hooks", [])
+    ]
+    check("plugin.json registra worktree-remove-guard no PreToolUse Bash",
+          any("hooks/worktree-remove-guard.py" in c for c in cmds))
+    check("o arquivo do hook registrado existe em common/hooks/", HOOK.is_file())
+
+
 def main():
+    check_wiring()
     with tempfile.TemporaryDirectory() as td:
         td = Path(td).resolve()
         mainrepo = td / "main"
