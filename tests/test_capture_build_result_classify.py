@@ -22,19 +22,34 @@ spec.loader.exec_module(cbr)
 ERR1 = "Error: Exit code 1\n"
 
 
-def test_grep_with_verify_in_quoted_pattern_is_not_a_build():
-    status, kind, _ = cbr.classify("grep -E 'no-build|verify' cepa-until", ERR1, 1)
+# Os comandos abaixo CASAM o regex no comando cru (há espaço antes do token, dentro
+# das aspas) e NÃO casam na visão sem texto citado: sem a visão, viram build.
+def test_grep_with_mvnw_verify_in_quoted_pattern_is_not_a_build():
+    status, kind, _ = cbr.classify("grep -E 'no-build| mvnw verify' common/bin/cepa-until", ERR1, 1)
     assert (status, kind) == (None, None)
 
 
 def test_echo_of_mvnw_is_not_a_build():
-    status, kind, _ = cbr.classify('echo "./mvnw verify"', ERR1, 1)
+    status, kind, _ = cbr.classify('echo " ./mvnw verify"', ERR1, 1)
     assert (status, kind) == (None, None)
 
 
 def test_heredoc_body_mentioning_swift_build_is_not_a_build():
-    status, kind, _ = cbr.classify('python3 - <<\'PY\'\nprint("swift build")\nPY', "swift build\n", None)
+    status, kind, _ = cbr.classify('python3 - <<\'PY\'\nprint(" swift build")\nPY', " swift build\n", None)
     assert (status, kind) == (None, None)
+
+
+def test_echo_of_pytest_is_not_a_build():
+    assert cbr.classify('echo " pytest x"', " 1 passed", None)[:2] == (None, None)
+
+
+def test_echo_of_npm_test_is_not_a_build():
+    assert cbr.classify('echo " npm test"', "Done in 1s", None)[:2] == (None, None)
+
+
+def test_maven_words_without_a_real_invoker_are_not_a_build():
+    # casa o regex Maven na visão (`mvnw verify` solto), mas `ls` não é Maven
+    assert cbr.classify("ls ./mvnw verify", "BUILD SUCCESS", None)[:2] == (None, None)
 
 
 def test_real_maven_with_success_marker_still_works():
@@ -113,3 +128,13 @@ def test_error_string_response_for_quiet_maven_is_failure(tmp_path):
     st = _run_hook(tmp_path, "./mvnw -q clean verify", None,
                    response="Error: Exit code 1\n[ERROR] ...\nBUILD FAILURE")
     assert st and (st["status"], st["kind"]) == ("FAILURE", "maven")
+
+
+def test_grep_with_quoted_mvnw_verify_leaves_no_state(tmp_path):
+    st = _run_hook(tmp_path, "grep -E 'no-build| mvnw verify' cepa-until", None,
+                   response="Error: Exit code 1\n")
+    assert st is None
+
+
+def test_echo_of_quoted_mvnw_verify_leaves_no_state(tmp_path):
+    assert _run_hook(tmp_path, 'echo " ./mvnw verify"', None) is None
