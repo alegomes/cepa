@@ -65,12 +65,34 @@ the baseline — harvests the finished ones with the same markers, plus the
 real exit code. A result is discarded when the baseline changed after the
 launch (a source edit marked STALE, or a newer build ran): it describes code
 that is no longer the code on disk. See harvest_background().
+
+Command classification on the unquoted view (2026-10-08, fb-20261008-1): the
+patterns used to run on the raw command, so `grep -E 'no-build|verify' cepa-until`
+matched the Maven pattern (the word `verify` inside the quoted grep pattern),
+the failed grep (exit 1) was recorded as FAILURE kind=maven and blocked a
+`git commit` for hours; a `python3 - <<'PY'` heredoc whose body said `swift
+build` was once recorded as SUCCESS swiftpm the same way. Now the patterns run
+on `_shellscan._unquoted_view()` (quoted text and heredoc bodies blanked) and
+the Maven kind additionally needs a segment that is a REAL Maven invocation
+(`_mvnscan.maven_args`) with one of verify|test|package|install.
+
+Quiet and redirected Maven (same feedback): `./mvnw -q clean verify > log` was
+never recorded green — `-q` prints no `BUILD SUCCESS` and `> log` keeps the
+output away from the hook. CC's tool_response carries no exit code on success,
+but on failure the tool result is the string "Error: Exit code N\n<output>",
+which extract_exit_code() now parses. redirected_output() appends the tail of
+the redirected file so its markers count; and a `-q` Maven with no failure
+marker, no exit code and not interrupted is SUCCESS (CC omitted the code = it
+exited 0). Only Maven, only with -q: a quiet-less empty run stays unclassified.
+Known limitation: `./mvnw -q verify || true` is recorded SUCCESS (final exit 0,
+no marker), since the tool reports no error for the pipeline as a whole.
 """
 
 import glob
 import json
 import os
 import re
+import shlex
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -254,8 +276,21 @@ def extract_text(tool_response) -> str:
     return ""
 
 
+_ERROR_EXIT_RE = re.compile(r"\s*Error: Exit code (\d+)")
+
+
+def is_interrupted(tool_response) -> bool:
+    return isinstance(tool_response, dict) and tool_response.get("interrupted") is True
+
+
 def extract_exit_code(tool_response):
-    """Find an integer exit code in tool_response, regardless of nesting."""
+    """Find an integer exit code in tool_response, regardless of nesting.
+
+    A failed Bash call arrives as a plain string "Error: Exit code N\n<output>"
+    (CC drops the dict form on non-zero exits); parse N from it."""
+    if isinstance(tool_response, str):
+        m = _ERROR_EXIT_RE.match(tool_response)
+        return int(m.group(1)) if m else None
     if not isinstance(tool_response, dict):
         return None
 
@@ -292,7 +327,30 @@ def _as_list(markers):
     return list(markers)
 
 
-def classify(command: str, response_text: str, exit_code):
+_MAVEN_PHASES = {"verify", "test", "package", "install"}
+
+
+def real_maven_args(command: str):
+    """Args of the first segment that is a real Maven run of a build phase
+    (verify|test|package|install), or None. Text that merely mentions Maven
+    (`echo "./mvnw verify"`, `grep verify`) is not one."""
+    for seg in S._split_segments(command):
+        args = M.maven_args(seg.strip())
+        if args is not None and _MAVEN_PHASES & set(M.goals(args)):
+            return args
+    return None
+
+
+def _is_quiet(args) -> bool:
+    # `-q`, `--quiet` or a cluster of valueless short flags (`-qB`); never an
+    # option that takes a value or a property (`-Pquality`, `-Dquick`, `-pl`).
+    return any(a == "--quiet" or (a.startswith("-") and not a.startswith("--")
+                                  and a[1:2] not in ("P", "D", "T", "f", "s", "p")
+                                  and "q" in a[1:])
+               for a in args)
+
+
+def classify(command: str, response_text: str, exit_code, interrupted: bool = False):
     """Return (status, kind, reason).
 
     status: "SUCCESS" | "FAILURE" | None
@@ -307,8 +365,12 @@ def classify(command: str, response_text: str, exit_code):
     marker-less pattern may stay unclassified (returns None) rather than
     falsely going green.
     """
+    view = S._unquoted_view(command)
+    maven_args = real_maven_args(command)
     for pattern, kind, success_markers, failure_markers in PATTERNS:
-        if not pattern.search(command):
+        if not pattern.search(view):
+            continue
+        if kind == "maven" and maven_args is None:
             continue
 
         for m in _as_list(failure_markers):
@@ -323,6 +385,11 @@ def classify(command: str, response_text: str, exit_code):
             return "SUCCESS", kind, "fallback: exit_code 0"
         if isinstance(exit_code, int) and exit_code != 0:
             return "FAILURE", kind, f"fallback: exit_code {exit_code}"
+
+        if (kind == "maven" and exit_code is None and not interrupted
+                and _is_quiet(maven_args)):
+            # -q prints no BUILD SUCCESS; CC omits the code on exit 0.
+            return "SUCCESS", kind, "quiet maven (-q): no failure marker, tool reported no error"
 
         return None, kind, (
             f"matched pattern {kind!r} but could not classify: "
@@ -503,6 +570,47 @@ def effective_build_dir(command: str, cwd: Path) -> Path:
         target = os.path.expanduser(m.group("dq") or m.group("sq") or m.group("bare"))
         where = Path(target).resolve() if os.path.isabs(target) else (where / target).resolve()
         rest = rest[m.end():]
+
+
+# ─── redirected output ────────────────────────────────────────────────
+
+_REDIRECT_RE = re.compile(r"&>>?|(?<![0-9&<>])>>?(?!&)")
+REDIRECT_MAX_BYTES = 64 * 1024
+
+
+def _redirect_target(segment: str):
+    view = S._unquoted_view(segment)
+    target = None
+    for m in _REDIRECT_RE.finditer(view):
+        rest = segment[m.end():].lstrip()
+        try:
+            toks = shlex.split(rest, posix=True)
+        except ValueError:
+            toks = rest.split()
+        if toks:
+            target = toks[0]
+    return target
+
+
+def redirected_output(command: str, build_dir: Path) -> str:
+    """Tail (up to 64 KiB) of the file a build segment redirects stdout to
+    (`> f`, `>> f`, `&> f`), resolved against build_dir; "" when there is none.
+    /dev/null, `>&2` and `2>` are ignored. `| tee f` is not handled: with tee
+    the output still reaches the hook."""
+    segs = [s.strip() for s in S._split_segments(command)]
+    ordered = ([s for s in reversed(segs) if M.maven_args(s) is not None]
+               + [s for s in reversed(segs) if M.maven_args(s) is None])
+    for seg in ordered:
+        target = _redirect_target(seg)
+        if not target or target.startswith("/dev/") or target.startswith("&"):
+            continue
+        path = Path(os.path.expanduser(target))
+        path = path if path.is_absolute() else build_dir / path
+        try:
+            return _read_tail(path, REDIRECT_MAX_BYTES)
+        except OSError:
+            return ""
+    return ""
 
 
 # ─── root-install marker ───────────────────────────────────────────────
@@ -784,8 +892,19 @@ def main():
     tool_response = payload.get("tool_response") or {}
     response_text = extract_text(tool_response)
     exit_code = extract_exit_code(tool_response)
+    interrupted = is_interrupted(tool_response)
 
-    status, kind, reason = classify(command, response_text, exit_code)
+    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
+    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
+    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
+    cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
+    build_dir = effective_build_dir(command, cwd)
+    if ">" in command:  # a redirected build log is part of its output
+        logged = redirected_output(command, build_dir)
+        if logged:
+            response_text = f"{response_text}\n{logged}" if response_text else logged
+
+    status, kind, reason = classify(command, response_text, exit_code, interrupted)
     status, tests_run, empty_reason = refine_empty(command, kind, status, response_text)
     if empty_reason:
         reason = f"{reason}; {empty_reason}"
@@ -796,11 +915,6 @@ def main():
     if status is None and not (kind and task_id):
         sys.exit(0)  # Not a build command we recognize, or result was ambiguous.
 
-    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
-    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
-    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
-    cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
-    build_dir = effective_build_dir(command, cwd)
     if build_dir != cwd and not build_dir.is_relative_to(cwd):
         # The build ran OUTSIDE the session tree — e.g. a proof worktree
         # producing a deliberate RED for a perturbation proof. Its result
