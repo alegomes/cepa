@@ -66,6 +66,15 @@ real exit code. A result is discarded when the baseline changed after the
 launch (a source edit marked STALE, or a newer build ran): it describes code
 that is no longer the code on disk. See harvest_background().
 
+Continued session (2026-10-15, fb-20261005-1): after a context overflow the
+payload's `session_id` changes (B) but CC keeps writing background outputs to
+the ORIGINAL session's folder (A). Two fallbacks, both keyed on what is stable:
+at launch, if `<id>.output` is not under B's `tasks/`, glob the sibling
+`claude-*/*/*/tasks/` folders for it (the task id is unique) and leave the
+pending next to it; at harvest, besides B's folder, pick up every pending in
+any session folder whose `cwd` is this session root, so a build launched under
+A before the overflow is still recorded. Pendings of other trees are left alone.
+
 Command classification on the unquoted view (2026-10-08, fb-20261008-1): the
 patterns used to run on the raw command, so `grep -E 'no-build|verify' cepa-until`
 matched the Maven pattern (the word `verify` inside the quoted grep pattern),
@@ -736,14 +745,36 @@ def background_task_id(tool_response):
     return None
 
 
+def _tmp_roots():
+    roots = [os.environ.get("TMPDIR"), tempfile.gettempdir(), "/tmp", "/private/tmp"]
+    return list(dict.fromkeys(r for r in roots if r))
+
+
+def find_task_output(task_id, session_id):
+    """The `<task_id>.output` file of a background task, or None. Looks in this
+    session's `tasks/` first; after a context overflow CC keeps writing to the
+    ORIGINAL session's folder while the payload carries a new session_id, so it
+    falls back to every sibling session folder. The task id is unique; the
+    session id is not stable."""
+    for d in task_dirs(session_id):
+        output = Path(d) / f"{task_id}.output"
+        if output.exists():
+            return output
+    for root in _tmp_roots():
+        pattern = os.path.join(glob.escape(root), "claude-*", "*", "*", "tasks",
+                               glob.escape(task_id) + ".output")
+        for found in sorted(glob.glob(pattern)):
+            return Path(os.path.realpath(found))
+    return None
+
+
 def task_dirs(session_id):
     """CC's `tasks/` directories for this session. The project segment of the
     path is a slug of the launch dir that we don't rebuild — glob for it."""
     if not session_id:
         return []
     found = []
-    roots = [os.environ.get("TMPDIR"), tempfile.gettempdir(), "/tmp", "/private/tmp"]
-    for root in dict.fromkeys(r for r in roots if r):
+    for root in _tmp_roots():
         pattern = os.path.join(glob.escape(root), "claude-*", "*",
                                glob.escape(session_id), "tasks")
         for d in glob.glob(pattern):
@@ -755,10 +786,9 @@ def task_dirs(session_id):
 
 def register_background(task_id, session_id, command, kind,
                         state_path: Path, build_dir: Path, marker_root: Path, cwd: Path):
-    for d in task_dirs(session_id):
-        output = Path(d) / f"{task_id}.output"
-        if not output.exists():
-            continue
+    output = find_task_output(task_id, session_id)
+    if output is not None:
+        d = output.parent
         entry = {
             "task_id": task_id,
             "output": str(output),
@@ -771,13 +801,18 @@ def register_background(task_id, session_id, command, kind,
             "cwd": str(cwd),
         }
         try:
-            (Path(d) / f"{task_id}{PENDING_SUFFIX}").write_text(
+            (d / f"{task_id}{PENDING_SUFFIX}").write_text(
                 json.dumps(entry, indent=2) + "\n", encoding="utf-8")
         except OSError as e:
             print(f"[capture-build-result] could not register background build: {e}",
                   file=sys.stderr)
             return False
-        print(f"[capture-build-result] build in background ({task_id}); its result "
+        origem = d.parent.name
+        where = ""
+        if origem != session_id:
+            where = (f" (found under session {origem}'s tasks folder: session "
+                     f"continued after a context overflow)")
+        print(f"[capture-build-result] build in background ({task_id}){where}; its result "
               f"will be recorded when it ends.", file=sys.stderr)
         return True
     print(f"[capture-build-result] build went to the background ({task_id}) but its "
@@ -814,12 +849,36 @@ def _read_tail(path: Path, size=4096) -> str:
         return f.read().decode("utf-8", errors="replace")
 
 
-def harvest_background(session_id, now=None):
-    """Record every finished background build of this session. Never raises."""
+def _sibling_pendings(cwd):
+    """Pendings of the tree `cwd` in ANY session folder (a build launched before
+    a context overflow stays in the original session's folder). Pendings of
+    other trees belong to other sessions and are left alone."""
+    want = os.path.realpath(str(cwd))
+    found = []
+    for root in _tmp_roots():
+        pattern = os.path.join(glob.escape(root), "claude-*", "*", "*", "tasks",
+                               "*" + PENDING_SUFFIX)
+        for p in glob.glob(pattern):
+            try:
+                entry = json.loads(Path(p).read_text(encoding="utf-8"))
+                if os.path.realpath(str(entry["cwd"])) == want:
+                    found.append(p)
+            except Exception:
+                continue  # unreadable/corrupt: not ours to judge here
+    return found
+
+
+def harvest_background(session_id, cwd=None, now=None):
+    """Record every finished background build of this session — plus, when `cwd`
+    (the session root) is given, those of the same tree left in another
+    session's folder by a context overflow. Never raises."""
     now = now or datetime.now(timezone.utc)
     try:
         pendings = [p for d in task_dirs(session_id)
                     for p in glob.glob(os.path.join(glob.escape(d), "*" + PENDING_SUFFIX))]
+        if cwd is not None:
+            pendings += _sibling_pendings(cwd)
+        pendings = list(dict.fromkeys(os.path.realpath(p) for p in pendings))
     except Exception as e:  # a harvest bug never breaks the tool call
         print(f"[capture-build-result] background harvest failed: {e}", file=sys.stderr)
         return
@@ -882,8 +941,13 @@ def main():
     if payload.get("tool_name") != "Bash":
         sys.exit(0)
 
+    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
+    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
+    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
+    session_root = L.session_root(payload.get("cwd") or os.getcwd())
+
     # Any Bash call is a chance to record a background build that ended.
-    harvest_background(payload.get("session_id"))
+    harvest_background(payload.get("session_id"), session_root)
 
     command = (payload.get("tool_input") or {}).get("command", "")
     if not command:
@@ -894,10 +958,7 @@ def main():
     exit_code = extract_exit_code(tool_response)
     interrupted = is_interrupted(tool_response)
 
-    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
-    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
-    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
-    cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
+    cwd = Path(session_root).resolve()
     build_dir = effective_build_dir(command, cwd)
     if ">" in command:  # a redirected build log is part of its output
         logged = redirected_output(command, build_dir)

@@ -66,7 +66,7 @@ import _wtlib as L  # noqa: E402
 import _shellscan as S  # noqa: E402
 
 
-def harvest_background(session_id):
+def harvest_background(session_id, cwd=None):
     """capture-build-result's harvest, loaded by path (hyphenated file name).
     Never raises: a harvest failure must not decide the gate."""
     try:
@@ -75,7 +75,7 @@ def harvest_background(session_id):
             "capture_build_result", Path(__file__).resolve().parent / "capture-build-result.py")
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
-        mod.harvest_background(session_id)
+        mod.harvest_background(session_id, cwd)
     except Exception as e:
         print(f"[gate-advance] background build harvest failed: {e}", file=sys.stderr)
 
@@ -213,7 +213,8 @@ def main():
     # A build that ran in the background may have ended since the last Bash
     # call; record it before judging the baseline (capture-build-result's
     # docstring, "Background builds").
-    harvest_background(payload.get("session_id"))
+    harvest_background(payload.get("session_id"),
+                       L.session_root(payload.get("cwd") or os.getcwd()))
 
     # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
     # entre chamadas, e um `cd subdir` desviaria o estado desta sessão

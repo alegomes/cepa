@@ -3972,10 +3972,12 @@ ordem da triagem → os 2 não mencionados.
 
 ## `capture-build-result` fica cego quando a sessão é continuada após estouro de contexto
 
-**Plano:** nenhum ainda
+**Plano:** fila cepa, item `capture-build-result-apos-estouro-de-contexto`
 
-**Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` (`task_dirs()`)
-e `gate-advance.py` · **Origem:** feedback `fb-20261005-1` (2026-10-05, `wego-acessos-backend`,
+**Status:** feito nesta branch (2026-10-15) · **Lar:** `common/hooks/capture-build-result.py`
+(`find_task_output()` no lançamento, `_sibling_pendings()` na colheita) e `gate-advance.py`
+(repassa a raiz da sessão à colheita) · **Teste:** `tests/test_capture_build_background.py`
+(casos "continuada" e "lançado sob A antes do estouro") · **Origem:** feedback `fb-20261005-1` (2026-10-05, `wego-acessos-backend`,
 branch `session/smoke_tests`).
 
 > O capture-build-result não registrou nenhum dos 3 builds em segundo plano desta sessão

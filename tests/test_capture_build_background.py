@@ -21,7 +21,13 @@ Guards the contract:
   - filtro de teste sem teste executado vira EMPTY, como em primeiro plano;
   - edição de código depois do lançamento descarta o resultado (STALE fica);
   - o `gate-advance` colhe antes de julgar: o commit passa sem outro Bash no meio;
-  - comando que não é build em segundo plano não deixa registro.
+  - comando que não é build em segundo plano não deixa registro;
+  - sessão continuada após estouro de contexto (fb-20261005-1): o payload traz
+    um session_id novo (B) mas o CC segue escrevendo no `tasks/` do original (A).
+    O lançamento acha o `.output` na pasta de A e deixa o pendente ali; a colheita
+    sob B grava o baseline; o gate-advance sob B libera o commit; um build lançado
+    sob A antes do estouro também é colhido sob B (mesmo cwd); pendente de OUTRA
+    árvore não é colhido; sem `.output` em lugar nenhum, continua "NOT be recorded".
 """
 
 import json
@@ -56,10 +62,14 @@ def check(name, cond, detail=""):
 class Sessao:
     """Uma sessão falsa: projeto com pom.xml e o `tasks/` do CC sob um TMPDIR."""
 
-    def __init__(self, base: Path, nome: str):
-        self.sid = str(uuid.uuid4())
-        self.tmp = base / f"tmp-{nome}"
-        self.tasks = self.tmp / "claude-501" / "-proj" / self.sid / "tasks"
+    def __init__(self, base: Path, nome: str, continuada=False, tmp_de=None):
+        # continuada: o `tasks/` fica sob o sid ORIGINAL (A) mas os payloads
+        # carregam um sid NOVO (B), como após um estouro de contexto.
+        # tmp_de: outra Sessao cujo TMPDIR esta compartilha (varredura de irmãs).
+        self.sid_original = str(uuid.uuid4())
+        self.sid = str(uuid.uuid4()) if continuada else self.sid_original
+        self.tmp = tmp_de.tmp if tmp_de else base / f"tmp-{nome}"
+        self.tasks = self.tmp / "claude-501" / "-proj" / self.sid_original / "tasks"
         self.tasks.mkdir(parents=True)
         self.root = base / nome
         self.root.mkdir()
@@ -297,6 +307,54 @@ def main():
               (s.baseline() or {}).get("status") == "SUCCESS", str(s.baseline()))
         check("install de submódulo em segundo plano NÃO marca a raiz como instalada",
               not (s.root / ".claude" / "last-root-install.json").exists())
+
+        # ── sessão continuada após estouro de contexto (fb-20261005-1) ──────
+        s = Sessao(base, "continuada", continuada=True)
+        res = s.lanca("./mvnw verify", "bcont001")
+        check("continuada: pendente fica ao lado do .output da sessão original",
+              s.pendente("bcont001"), res.stderr)
+        check("continuada: avisa que achou na pasta de outra sessão",
+              s.sid_original in res.stderr and "context overflow" in res.stderr, res.stderr)
+        check("continuada: lançamento não grava baseline", s.baseline() is None, str(s.baseline()))
+        s.termina("bcont001", MVN_OK, 0)
+        s.outro_bash()
+        b = s.baseline() or {}
+        check("continuada: build terminado grava SUCCESS sob o sid novo",
+              b.get("status") == "SUCCESS" and b.get("background_task") == "bcont001", str(b))
+
+        s = Sessao(base, "continuada-gate", continuada=True)
+        s.grava_baseline({"status": "STALE", "since": iso(-3600), "after_edit_to": "src/A.java"})
+        s.lanca("./mvnw verify", "bcgt0001")
+        s.termina("bcgt0001", MVN_OK, 0)
+        res = s.commit()
+        check("continuada: gate-advance libera o commit com o build terminado",
+              res.returncode == 0, res.stderr[-400:])
+        check("continuada: gate-advance gravou o SUCCESS colhido",
+              (s.baseline() or {}).get("status") == "SUCCESS", str(s.baseline()))
+
+        s = Sessao(base, "lancado-antes")
+        s.lanca("./mvnw verify", "bpre0001")
+        s.termina("bpre0001", MVN_OK, 0)
+        s.outro_bash(session_id=str(uuid.uuid4()))
+        b = s.baseline() or {}
+        check("build lançado sob A antes do estouro é colhido por payload com sid B",
+              b.get("status") == "SUCCESS" and b.get("background_task") == "bpre0001", str(b))
+
+        outra = Sessao(base, "outra-arvore")
+        outra.lanca("./mvnw verify", "boutra01")
+        outra.termina("boutra01", MVN_OK, 0)
+        s = Sessao(base, "esta-arvore", tmp_de=outra)
+        res = s.outro_bash(session_id=str(uuid.uuid4()))
+        check("pendente de OUTRA árvore não é colhido (fica o registro)",
+              outra.pendente("boutra01"), res.stderr)
+        check("pendente de OUTRA árvore não grava o baseline dela",
+              outra.baseline() is None, str(outra.baseline()))
+
+        s = Sessao(base, "continuada-sem-output", continuada=True)
+        res = s.lanca("./mvnw verify", "bcso0001", cria_output=False)
+        check("continuada sem .output em lugar nenhum: avisa que não vai gravar",
+              "will NOT be recorded" in res.stderr, res.stderr)
+        check("continuada sem .output em lugar nenhum: sem registro", not s.pendente("bcso0001"))
 
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s)")
