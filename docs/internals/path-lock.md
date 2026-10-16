@@ -383,9 +383,18 @@ ALL extras are ignored, not just the delta):
 - not inside a git repository, or git unavailable or timed out (fail
   closed, for the extras only; canonical writes are unaffected).
 
-Stated limit: the `roles:` remap is NOT gated. It is layout, not
-permission. Not airtight against an agent that may commit; it raises the
-bar and leaves an auditable trace.
+Stated limits (it raises the bar and leaves an auditable trace; it is not
+airtight):
+
+- (a) The `roles:` remap is NOT gated. It is layout, not permission.
+- (b) A worker with commit rights can commit the file itself. The prompt
+  forbids it and git history records who did it, but no hook denies it yet.
+  The mechanical close would be `bash-path-lock` denying `git add` /
+  `git commit` whose pathspec (or `-a`) touches `build-hex.yaml` for locked
+  agents. Not built here.
+- (c) `git update-index --skip-worktree` / `--assume-unchanged` on the file
+  make `git diff` report "unchanged" and would let a locally edited file
+  pass. Only reachable from a shell; same mitigation as (b).
 
 Record: BACKLOG § "Aprovação humana não chega ao subagente (canal de
 consentimento)", episode WEGO-1948, decision 2026-10-16.

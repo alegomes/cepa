@@ -1,0 +1,53 @@
+key: worker-consentimento-fora-do-prompt
+status: complete
+diff_range: e89f95c..f769840
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: >
+      build-hex/hooks/path-lock.py invocado como subprocesso com payload
+      JSON de PreToolUse (Write fora do glob do papel), em repositórios git
+      reais temporários. Fonte aceita = build-hex.yaml commitado e sem mudança
+      desde o HEAD; texto de prompt nunca conta.
+    test: tests/test_worker_consent_channel.py (casos a a g, subprocesso)
+    layer: cli/subprocess sobre git real (parte mecânica); presença de texto (parte prosa)
+    evidence: verified
+    run: "python3 tests/test_worker_consent_channel.py -> 13 linhas 'ok',
+      'tudo verde', rc=0. a: yaml não rastreado bloqueia; b: só no stage
+      bloqueia; c: commitado permite; d: editado após commit derruba todos os
+      extras; e: caminho canônico intocado; f: sem git bloqueia; g: sem
+      extras = bloqueio comum. Regressão: test_auto_mode_nao_vale_para_path_lock,
+      test_bash_path_lock_exec, test_bash_path_lock_redir,
+      test_path_lock_out_of_root, test_path_lock_validation_lead, todos rc=0."
+    caveat: >
+      A parte mecânica (o cadeado só aceita proveniência por git, nunca a
+      alegação) está provada na superfície externa (subprocesso do hook, a
+      mesma que o harness aciona). A parte comportamental do worker (não pesar
+      "o dono autorizou" escrito no prompt, devolver NEEDS-HUMAN-APPROVAL) só
+      está fixada por presença de texto nos 5 prompts (domain-dev, api-dev,
+      adapter-dev, qa-engineer, engineering-lead); não há teste que rode um
+      LLM. O desenho torna esse julgamento irrelevante, porque o hook decide
+      sozinho. Limite declarado no doc: o roles: remap não é travado, e um
+      agente que pode commitar contorna a regra (deixa rastro auditável).
+      Fonte "canal atestado pelo harness" não construída (alternativa do
+      critério, não exigida).
+  - id: AC2
+    altitude: domain
+    surface: >
+      Registro da decisão em BACKLOG.md (seção "Aprovação humana não chega ao
+      subagente", subseção "Decisão (2026-10-16)") e em
+      docs/internals/path-lock.md (seção "Provenance: honored only when committed").
+    test: tests/test_worker_consent_channel.py (verifica que path-lock.md documenta a regra só-commitado); BACKLOG conferido por leitura do diff
+    layer: documento
+    evidence: verified
+    run: "git show f769840 -- BACKLOG.md docs/internals/path-lock.md mostra
+      ambos os registros; teste de doc 'ok docs/internals/path-lock.md
+      documenta a regra só-commitado'. Registro e build estão no mesmo commit;
+      a ordem 'antes do build' não é demonstrável em um commit único."
+  - id: AC3
+    altitude: cli
+    surface: "python3 tests/test_worker_consent_channel.py"
+    test: tests/test_worker_consent_channel.py
+    layer: cli
+    evidence: verified
+    run: "python3 tests/test_worker_consent_channel.py -> rc=0, 13 checks ok, 'tudo verde'"

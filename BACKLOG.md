@@ -680,6 +680,7 @@ commitado?") ficou moot: o próprio cadeado responde, o worker não julga mais.
 
 ### Pendências de design
 
+- Follow-up: bash-path-lock negar `git add`/`git commit` (e `-a`) que toque `build-hex.yaml` para agente trancado — fecha o canal para worker com direito de commit.
 - Testar a hipótese barata primeiro: worker aceita `build-hex.yaml` commitado?
 - Se a política virar "permissão só se declara no install", o `doctor` precisa detectar o
   caso "worker sem dono para arquivos de build" **antes** da tarefa esbarrar nele. Hoje

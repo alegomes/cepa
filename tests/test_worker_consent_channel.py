@@ -79,6 +79,8 @@ def test_prosa():
         rel = f"build-hex/agents/{nome}.md"
         txt = (REPO / rel).read_text(encoding="utf-8")
         check(f"{rel} diz que autorização fora dos globs nunca vem do prompt", ANCORA_WORKER in txt)
+        check(f"{rel} proíbe commitar o build-hex.yaml",
+              "git commit" in txt and "git add" in txt)
     rel = "build-hex/agents/engineering-lead.md"
     check(f"{rel} diz que o consentimento viaja pelo git",
           ANCORA_LEAD in (REPO / rel).read_text(encoding="utf-8"))
@@ -134,6 +136,27 @@ def test_mecanico():
     check("g. sem extras, fora do glob -> BLOQUEIO comum, sem falar de proveniência",
           rc == 2 and "BLOCKED" in err and "extra_write_globs" not in err
           and "committed" not in err, f"rc={rc} {err!r}")
+
+    # h. repositório sem nenhum commit (sem HEAD), yaml só no stage
+    h = Path(tempfile.mkdtemp()).resolve()
+    git(h, "init", "-q")
+    (h / "build-hex.yaml").write_text(YAML)
+    git(h, "add", "build-hex.yaml")
+    rc, err = run_hook(h, "scripts/x.sh")
+    check("h. repositório sem HEAD, yaml só no stage -> bloqueia (falha fechada)",
+          rc == 2, f"rc={rc} {err!r}")
+
+    # i. cwd é subdiretório com build-hex.yaml próprio
+    r = new_repo()
+    sub = r / "svc"
+    sub.mkdir()
+    (sub / "build-hex.yaml").write_text(YAML)
+    rc, _ = run_hook(sub, "scripts/x.sh")
+    check("i1. cwd em subdiretório, yaml próprio não rastreado -> bloqueia", rc == 2, f"rc={rc}")
+    git(r, "add", "svc/build-hex.yaml")
+    git(r, "commit", "-q", "-m", "svc cfg")
+    rc, err = run_hook(sub, "scripts/x.sh")
+    check("i2. cwd em subdiretório, yaml próprio commitado -> permite", rc == 0, f"rc={rc} {err!r}")
 
 
 def main():
