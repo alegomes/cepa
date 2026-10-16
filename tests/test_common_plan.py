@@ -281,6 +281,59 @@ def test_item_sumido_nao_some_calado(base):
           por_id["B"]["status"] == "dropped")
 
 
+def test_from_spec_e_from_epic_seguem_recusando_item_sumido(base):
+    """Só `--from-triage` deixou de recusar: spec e epic seguem com exit 4.
+
+    O item do disco que a lista nova não menciona carrega posição e `why` que
+    alguém decidiu; fora da triagem não há ordem aprovada que justifique
+    sumir com ele.
+    """
+    epic = """# Epic: Fixture
+
+**Status:** pronta · **Aberto em:** 2026-10-08 · **Origem:** teste
+
+## Intenção
+
+Um Epic.
+
+## Invariantes (nunca regridem)
+
+- nada regride
+
+## Escada de valor
+
+| Ciclo | Roteiro de demonstração (o que o dono vê) | Efeito em tela | Efeito em backend | O que atravessa | Quando |
+|---|---|---|---|---|---|
+| 1. Ler | O operador carrega o PDF e vê 3 respostas. | a lista | registro `contrato_lido` | O leitor de PDF extrai o texto. | já |
+
+## Decidido sem perguntar (vete aqui)
+
+- nada
+
+## Perguntas em aberto
+
+- [x] alguma? não
+"""
+    for nome, fonte_args, texto in (
+            ("spec", ("--from-spec", "spec.md"), SPEC_FIXTURE),
+            ("epic", ("--from-epic", "epic.md", "--ciclo", "1"), epic)):
+        d = repo_git(base, f"sumido-{nome}")
+        (d / fonte_args[1]).write_text(texto, encoding="utf-8")
+        fila = [{"id": "VELHO", "title": "já na fila", "why": "decidido antes",
+                 "human_pending": None}]
+        r = run(d, "write", "fila", "--items", str(escreve_itens(d, fila)),
+                "--repo", ".")
+        check(f"{nome}: grava a fila de partida", r.returncode == 0, r.stderr)
+        arq = d / ".claude" / "programs" / "fila" / "plan.yaml"
+        antes = arq.read_text(encoding="utf-8")
+        r = run(d, "write", "fila", *fonte_args, "--repo", ".")
+        check(f"{nome}: sem --on-missing, item do disco não mencionado é exit 4",
+              r.returncode == 4 and "VELHO" in r.stderr,
+              f"{r.returncode} {r.stderr}")
+        check(f"{nome}: o arquivo do disco fica intacto",
+              arq.read_text(encoding="utf-8") == antes)
+
+
 def test_raiz_e_a_do_clone_principal(base):
     """Chamado de dentro de uma worktree ligada, grava no CLONE PRINCIPAL.
 
@@ -773,12 +826,24 @@ def test_from_triage_preserva_done_ausente_e_aplica_a_ordem(base):
                  "status": "done", "human_pending": None} for n in (1, 2, 3)]
         fila += [{"id": f"O-{n}", "title": f"aberto {n}", "why": f"posição {n}",
                   "human_pending": None} for n in (1, 2, 3, 4)]
+        fila.insert(3, {"id": "X-1", "title": "abandonado", "why": "x",
+                        "status": "dropped", "human_pending": None})
         # O-3 a triagem cita: o que é execução no disco tem que sobreviver
-        fila[5]["status"] = "in_progress"
-        fila[5]["human_pending"] = "conferir no admin"
+        o3 = next(i for i in fila if i["id"] == "O-3")
+        o3["status"] = "in_progress"
+        o3["human_pending"] = "conferir no admin"
         r = run(d, "write", "WEGO", "--items", str(escreve_itens(d, fila)),
                 "--repo", ".")
         check("grava a fila de partida", r.returncode == 0, r.stderr)
+        # `write --items` recusa item sem `why`; a fila antiga sem ele (escrita
+        # à mão ou por versão velha) só se monta direto no YAML.
+        arq = d / ".claude" / "programs" / "WEGO" / "plan.yaml"
+        plano = yaml.safe_load(arq.read_text(encoding="utf-8"))
+        for i in plano["items"]:
+            if i["id"] in ("O-2", "D-2"):
+                del i["why"]
+        arq.write_text(yaml.dump(plano, allow_unicode=True, sort_keys=False),
+                       encoding="utf-8")
         tri = {"project_key": "WEGO", "source_column": "To Do",
                "triaged_on": "2026-10-02", "remaining_in_column": 9,
                "cards": [
@@ -798,11 +863,19 @@ def test_from_triage_preserva_done_ausente_e_aplica_a_ordem(base):
     its = plano_de(d, "WEGO")["items"]
     check("done preservados, depois novo, os 2 na ordem da triagem, e os "
           "abertos não citados na ordem antiga",
-          [i["id"] for i in its] == ["D-1", "D-2", "D-3", "N-1", "O-3", "O-1",
-                                     "O-2", "O-4"], str([i["id"] for i in its]))
+          [i["id"] for i in its] == ["D-1", "D-2", "D-3", "X-1", "N-1", "O-3",
+                                     "O-1", "O-2", "O-4"],
+          str([i["id"] for i in its]))
     st = {i["id"]: i["status"] for i in its}
     check("os 3 done continuam done",
           all(st[k] == "done" for k in ("D-1", "D-2", "D-3")), str(st))
+    check("o dropped ausente fica no bloco fechado e continua dropped",
+          st["X-1"] == "dropped", str(st))
+    por = {i["id"]: i for i in its}
+    padrao = "sem `why` registrado na fila anterior"
+    check("aberto e done ausentes, sem `why` no disco, recebem o `why` padrão",
+          por["O-2"]["why"] == padrao and por["D-2"]["why"] == padrao,
+          f"{por['O-2'].get('why')!r} / {por['D-2'].get('why')!r}")
     check("o aviso nomeia os abertos empurrados para depois",
           "O-2" in r.stderr and "O-4" in r.stderr and "O-2" in r.stdout, r.stderr)
     o3 = {i["id"]: i for i in its}["O-3"]
@@ -873,6 +946,7 @@ def main():
                    test_write_from_triage_grava_e_diz_que_e_parcial,
                    test_triagem_parcial_preserva_a_ordem_da_fila,
                    test_from_triage_preserva_done_ausente_e_aplica_a_ordem,
+                   test_from_spec_e_from_epic_seguem_recusando_item_sumido,
                    test_contrato_do_comando, test_contrato_do_triage):
             print(f"\n{fn.__name__}")
             fn(base)

@@ -2886,11 +2886,10 @@ def cmd_write(raiz, a):
 
         novos_ids = {str(i.get("id")) for i in itens}
         sumidos = [str(x.get("id")) for x in antigos
-                   if isinstance(x, dict) and str(x.get("id")) not in novos_ids
-                   # Com --from-triage, `done`/`dropped` fora da lista são
-                   # preservados em silêncio (não são executáveis, a posição
-                   # deles não mexe na fila), então não contam como sumidos.
-                   and not (a.from_triage and x.get("status") in FECHADOS)]
+                   if isinstance(x, dict) and str(x.get("id")) not in novos_ids]
+        # Com --from-triage não há recusa: `done`/`dropped` fora da lista são
+        # preservados em silêncio (não são executáveis, a posição deles não
+        # mexe na fila) e os abertos ausentes vão depois da ordem da triagem.
         if sumidos and a.on_missing == "refuse" and not a.from_triage:
             print(f"a fila que está no disco tem {len(sumidos)} item(ns) que a "
                   f"lista nova não menciona: {', '.join(sumidos)}.\n"
