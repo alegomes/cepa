@@ -1,0 +1,44 @@
+schema_version: 2
+card: worktree-remove-guard-camada-1
+verdict: proven
+reviewed_at: 2026-10-16T09:30:00-03:00
+base_commit: c0431f6
+head_commit: d10153f
+issue_type: Story
+scope:
+  changed_classes:
+    - { class: "common/hooks/worktree-remove-guard.py", module: harness, external_observable: true, substituted_by_double: null }
+    - { class: "common/.claude-plugin/plugin.json (registro do hook + versao 2.27.0 -> 2.28.0)", module: harness, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python (hooks + testes de script); nao ha PIT. Mecanismo universal de perturbacao usado abaixo."
+    perturbation:
+      status: pass
+      results:
+        - "worktree descartavel /tmp/proof-worktree-remove-guard (git worktree add --detach). As 7 perturbacoes de comportamento foram feitas em 50e4a49; o d10153f seguinte so acrescentou check_wiring() ao teste. Base verde: `python3 tests/test_worktree_remove_guard.py` -> all green."
+        - "1 bloqueio: sys.exit(2)->sys.exit(0) (hook l.230) -> RED, 13 FAILURE(S) (worktree remove com dono vivo bloqueia, remove && branch -D, --force, git -C, branch -D/-d/--delete/-fd, ...)."
+        - "2 encadeamento &&: S.segment_dirs(command, cwd) -> list(...)[:1] (l.162) -> RED, 1 FAILURE: 'so o SEGUNDO segmento ofende (git status && branch -D) bloqueia'."
+        - "3 deteccao de branch: args[0] == \"branch\" -> \"branch-off\" (l.106) -> RED, 5 FAILURE(S): git status && branch -D, branch -D, branch -d, branch --delete --force, branch -fd."
+        - "4 vivacidade: entry_is_live devolve True sempre (common/hooks/_wtlib.py l.80; a funcao vive no _wtlib, fora do diff; o hook novo a usa via live_sessions_in/branch_owners) -> RED, 3 FAILURE(S): worktree remove / branch -D / branch -d com dono morto libera."
+        - "5 exclusao por chave, nao por cwd: (5a) comparar e.get(cwd) com os.getcwd() (l.134) -> RED em 2 testes, sem pegar fb-20261013-1; (5b, perturbacao fiel: excluir pelo cwd do payload) -> RED, 3 FAILURE(S) incluindo 'outra sessao com o MESMO cwd do chamador ainda bloqueia (fb-20261013-1)'."
+        - "6 nome nu: `if \"/\" not in name:` -> `if False:` (l.123) -> RED, 1 FAILURE: 'cd <main> && worktree remove <nome do slice> bloqueia'."
+        - "7 caminho relativo: os.path.join(seg_dir, expanduser(name)) -> expanduser(name) (l.119) -> RED, 1 FAILURE: 'caminho relativo ../wt-prove bloqueia'."
+        - "8 registro: em novo worktree detached em d10153f, base `python3 tests/test_worktree_remove_guard.py` -> all green; removidas as 4 linhas (41-44) de common/.claude-plugin/plugin.json (JSON segue valido, grep worktree-remove-guard = 0) -> RED, '1 FAILURE(S): plugin.json registra worktree-remove-guard no PreToolUse Bash'; restaurado com git checkout -> all green."
+        - "Todas as reversoes restauradas com git checkout; git status limpo nos worktrees descartaveis."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance determinado pela perturbacao: toda linha alterada de comportamento (bloqueio, &&, branch, exclusao por session_id, nome nu, caminho relativo) e a linha de registro em plugin.json derrubam o teste quando quebradas (perturbacoes 1-3, 5-8 acima; vivacidade em _wtlib, perturbacao 4)."
+  l4_adversarial_input:
+    status: n/a
+    reason: "o hook le o comando Bash do payload do proprio harness e falha aberto em payload ilegivel/aspas abertas (casos ja cobertos no teste); nao ha modulo de entrada externa (api-rest) no diff e nenhum parser de dado de terceiros novo."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+    run: ""
+routing_reason: "Todas as 8 perturbacoes (bloqueio, &&, branch, vivacidade, exclusao por session_id vs cwd/fb-20261013-1, nome nu, caminho relativo, registro em plugin.json) deixaram test_worktree_remove_guard.py vermelho e a base e verde. A lacuna do registro foi fechada em d10153f por check_wiring(). Nenhum nivel assumed/skipped/gap: PROVEN."
