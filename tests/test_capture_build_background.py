@@ -388,10 +388,28 @@ def main():
         res = s.commit()
         check("gate-advance barra o commit do build parado pelo CC",
               res.returncode == 2, f"rc={res.returncode}")
-        check("gate-advance diz POR QUE barra: o CC parou o build",
-              "stopped by Claude Code" in res.stderr, res.stderr[-600:])
+        # O capture imprime o mesmo motivo ao colher; o que se cobra aqui é a
+        # LINHA do bloqueio do gate (proof-reviewer 2026-10-15: sem isto, apagar
+        # o acréscimo do motivo no gate-advance não deixava nenhum teste vermelho).
+        linha_bloqueio = next((l for l in res.stderr.splitlines()
+                               if "build is FAILURE" in l), "")
+        check("gate-advance diz POR QUE barra, na própria linha do bloqueio",
+              "stopped by Claude Code" in linha_bloqueio, res.stderr[-600:])
         check("gate-advance sugere um timeout que caiba, não 'fix the failing tests'",
               "timeout" in res.stderr and "Fix the failing tests" not in res.stderr,
+              res.stderr[-600:])
+
+        s = Sessao(base, "failure-comum-com-reason")
+        s.grava_baseline({"status": "FAILURE", "at": iso(-60), "command": "./mvnw verify",
+                          "reason": "surefire: 2 tests failed"})
+        res = s.commit()
+        linha_bloqueio = next((l for l in res.stderr.splitlines()
+                               if "build is FAILURE" in l), "")
+        check("FAILURE comum com reason: o motivo entra na linha do bloqueio",
+              res.returncode == 2 and "surefire: 2 tests failed" in linha_bloqueio,
+              res.stderr[-600:])
+        check("FAILURE comum (sem stopped_by) mantém a sugestão 'Fix the failing tests'",
+              "Fix the failing tests" in res.stderr and "BASH_MAX_TIMEOUT_MS" not in res.stderr,
               res.stderr[-600:])
 
         s = Sessao(base, "killed-no-meio")
