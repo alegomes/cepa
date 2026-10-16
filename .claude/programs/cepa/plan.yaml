@@ -7,15 +7,16 @@
 # Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
 # fecha — agente nenhum troca o texto por null por conta própria.
 #
-# Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor) + itens de 2026-09-24 + desvios.md (2026-09-29) + seções do BACKLOG sem plano em 2026-10-15 (feedbacks triados)
-# Escrito em: 2026-10-15
+# Fonte das demandas: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor) + itens de 2026-09-24 + desvios.md (2026-09-29) + seções do BACKLOG sem plano em 2026-10-15 (feedbacks triados) + fatias dos lotes lotes-sweep-verify e lotes-2026-08-23 desmontadas em 2026-10-16 (decisão do dono)
+# Escrito em: 2026-10-16
 
 schema_version: 2
 mode: single-track
 program: cepa
 source: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor)
   + itens de 2026-09-24 + desvios.md (2026-09-29) + seções do BACKLOG sem plano
-  em 2026-10-15 (feedbacks triados)
+  em 2026-10-15 (feedbacks triados) + fatias dos lotes lotes-sweep-verify e lotes-2026-08-23
+  desmontadas em 2026-10-16 (decisão do dono)
 items:
 - id: common-plan-etapa1
   title: /common:plan <nome> — escreve a fila single-track a partir de uma spec
@@ -436,15 +437,13 @@ items:
   why: pedidos em 23/07 e 27/07, mas o que ficou entendido não foi registrado em
     lugar nenhum — este item existe para a dúvida não se perder de novo. Antes de
     retomar, confirmar com o dono onde parou, em vez de repetir.
-  status: blocked
+  status: dropped
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-10-15: não: Já sabe onde o onboarding parou
-    e quer que o próximo run retome de lá?. O dono manteve o item como estava (`blocked`).
-    Evidência anterior: Condicao de fora: o proprio why exige confirmar com o dono
-    onde o onboarding parou antes de retomar. Lote desatendido (drain-plan 2026-09-25,
-    politica b). Quem resolve: o dono, numa sessao interativa dizendo onde parou
-    nos blocos 1-3.'
+  evidence: 'Descartado pelo dono em 2026-10-16: nada a retomar. Os blocos 1-3 são
+    os passos 1-3 da ordem de construção do Maestro, feitos em 2026-07-15 e descritos
+    em docs/maestro.md; o passo 4 (uma onda inteira sem ajuda) fica para o ciclo
+    2 do Epic cepa-em-espiral.'
 - id: bash-path-lock-camada-1
   title: Construir o deny-by-default de 4 baldes no bash-path-lock (5 cópias + testes)
   why: 'fecha o furo real do WEGO-1936 (agente contornou o cadeado com python3 -c)
@@ -477,18 +476,13 @@ items:
     e julgado nos pilotos. NAO roda hoje: o /maestro:run exige o herdr de pe e a
     instalacao nova, que nao foi feita. Enquanto isso, os quatro slices podem ser
     feitos um a um numa sessao so.'
-  status: blocked
+  status: dropped
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-10-15: não: Libero essa onda para rodar num
-    run desatendido?. O dono manteve o item como estava (`blocked`). Evidência anterior:
-    Condicao de fora: /maestro:run exige o herdr rodando (binario em /opt/homebrew/bin/herdr,
-    processo fora do ar em 2026-09-25). Dono decidiu no drain-plan de 2026-09-25
-    nao subir o herdr num lote desatendido (4 worktrees por onda, caro, sem acompanhamento).
-    Quem resolve: o dono, numa sessao acompanhada com herdr de pe. Atualizado em
-    2026-09-28: o herdr esta de pe (processos 2085 e 2094, sessao do dono rodando
-    dentro dele); a condicao que sobra e so a decisao de 2026-09-25, rodar a onda
-    acompanhado e nao num lote desatendido.'
+  evidence: 'Descartado pelo dono em 2026-10-16: o lote foi desmontado em itens
+    single-track desta fila (gauntlet-comando, next-nome-do-programa-nao-e-project-key,
+    autonomy-yaml-fase-1, worker-consentimento-fora-do-prompt). O Maestro volta
+    como ciclo 2 do Epic cepa-em-espiral, com uma onda de verdade.'
 - id: rodar-onda-lotes-2026-08-23
   title: Rodar a onda 1 do plano de ondas lotes-2026-08-23 (4 slices)
   why: 'mesma costura do item anterior, para o segundo plano de ondas pendente:
@@ -497,16 +491,14 @@ items:
     a resolver antes: o P5 (cascata multi-repo) esta done no plano melhorias-2026-07
     e reaparece como slice pendente aqui. Um dos dois esta mentindo, e rodar a onda
     sem saber qual refaz trabalho ou pula trabalho.'
-  status: blocked
+  status: dropped
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-10-15: não: Libero essa onda para rodar num
-    run desatendido?. O dono manteve o item como estava (`blocked`). Evidência anterior:
-    Condicao de fora: mesma do rodar-onda-lotes-sweep-verify (em 2026-09-25 o herdr
-    estava fora do ar; em 2026-09-28 esta de pe, e sobra a decisao do dono de nao
-    rodar a onda num lote desatendido). Alem disso segue aberta a contradicao do
-    why: P5 (cascata multi-repo) done em melhorias-2026-07 e pendente aqui; resolver
-    antes de rodar. Quem resolve: o dono.'
+  evidence: 'Descartado pelo dono em 2026-10-16: o lote foi desmontado. S1 (cascata
+    multi-repo) já está feita (melhorias-2026-07 P5, seção "Cascata multi-repo"
+    do atlassian-expert.md), S3 (baseline cega) feita em 2026-10-02 (BACKLOG). S2
+    e S4 viraram itens desta fila (auto-mode-nao-vale-para-worker-com-path-lock,
+    worktree-remove-guard-camada-1).'
 - id: atrito-decisao-fase-1
   title: 'Spike do hook em AskUserQuestion (30 min) + autonomy.yaml com detect:
     + extensão do decide'
@@ -2027,3 +2019,66 @@ items:
     em runtime. Fora: endurecer o jira-create-fields-gate para recusar Team como
     {id} (sugestao do BACKLOG; o _norm trata UUID e {id} como iguais e um teste
     exige isso). Build completo e do supervisor.'
+- id: gauntlet-comando
+  title: /common:gauntlet roda os 5 passos do Gauntlet Loop (barra, 3 builders isolados,
+    3 juízes cegos com Borda, revisão, checagem) e grava docs/internals/gauntlet-<slug>.md
+  why: S1 do lote lotes-sweep-verify, desmontado em 2026-10-16. Pedido do dono em
+    2026-08-14, 2 pilotos rodados em 2026-08-15 (docs/internals/gauntlet-pilot-*.md).
+    Primeiro dos seis porque os pilotos já deram o desenho e o aceite (tests/test_gauntlet_command.py).
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: next-nome-do-programa-nao-e-project-key
+  title: /common:next acha a fila pela fatia de trabalho nomeada, sem forçar <project_key>/plan.yaml
+    como candidato automático
+  why: 'S2 do lote lotes-sweep-verify, desmontado em 2026-10-16. BACKLOG § "O plano
+    de execução morre com o worktree, e o nome do programa colide" (colisão WEGO
+    vs WEGO-in-progress no wego-acessos-backend). Aceite: tests/test_plan_program_naming.py.
+    Superfície: common/commands/next.md, docs/execution-plan.md.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: autonomy-yaml-fase-1
+  title: common/autonomy.yaml lista ações reversíveis (executa e reporta) e irreversíveis
+    (pergunta), cada uma com detect:, e board-flow:decide lê a lista
+  why: 'S3 do lote lotes-sweep-verify, desmontado em 2026-10-16. Fase 1 aprovada
+    pelo dono em 2026-08-15 (BACKLOG § "Atrito de decisão"). Só a Fase 1: a lista
+    e a leitura dela pelo decide.md; ask-audit-gate e attestation ficam fora. Aceite:
+    tests/test_autonomy_yaml.py.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: auto-mode-nao-vale-para-worker-com-path-lock
+  title: Os 4 prompts de worker do build-hex com path-lock (domain-dev, api-dev,
+    adapter-dev, qa-engineer) dizem que a preferência por Bash do Auto Mode não
+    se aplica a eles
+  why: 'S2 do lote lotes-2026-08-23, desmontado em 2026-10-16. Frente 1 (a mais
+    barata) do BACKLOG § "A instrução de trabalhe por Bash colide com as travas
+    de caminho dos papéis". Aceite: o marcador "Auto Mode" presente nos 4 arquivos.
+    Quarto porque é só prosa de prompt.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: worktree-remove-guard-camada-1
+  title: PreToolUse em Bash casa git worktree remove e git branch -D/-d, extrai
+    o alvo e bloqueia quando há sessão viva nele, apontando worktree-merge ou worktree-discard
+  why: 'S4 do lote lotes-2026-08-23, desmontado em 2026-10-16. BACKLOG § "O guard
+    de dono único mora no comando e git worktree remove cru passa por fora". O lote
+    exigia sessão supervisionada por escrever em common/hooks/ (zona de enforcement);
+    o cepa-until já constrói hooks com proof-reviewer, então entra como item comum.
+    Aceite: tests/test_worktree_remove_guard.py. Superfície: common/hooks/worktree-remove-guard.py.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: worker-consentimento-fora-do-prompt
+  title: Worker com path-lock só aceita autorização de escrita fora do glob vinda
+    de fonte que não é o texto do prompt (git commitado ou canal atestado), nunca
+    a alegação isolada
+  why: 'S4 do lote lotes-sweep-verify, desmontado em 2026-10-16. BACKLOG § "Aprovação
+    humana não chega ao subagente, canal de consentimento". Último porque a fonte
+    exigida (proveniência por git ou canal atestado) ainda precisa ser escolhida
+    e registrada no item antes do build; a hipótese barata do BACKLOG vai primeiro.
+    Aceite: tests/test_worker_consent_channel.py.'
+  status: pending
+  blocked_by: []
+  human_pending: null
