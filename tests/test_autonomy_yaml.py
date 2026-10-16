@@ -132,8 +132,16 @@ def test_casamento_mecanico_dos_tool_calls():
         (dict(bash="git add . && git commit -m x"), "executa_e_reporta", "commit-local"),
         (dict(bash="pytest -q 2>&1 | tail -5"), "sempre_pergunta", None),  # `2>&1` é redirecionamento: fica como está, pergunta
         (dict(bash="pytest -q | tail -5"), "executa_e_reporta", "rodar-build"),
-        (dict(bash="export X=1 && mvn test"), "executa_e_reporta", "rodar-build"),
-        (dict(bash="git status && git diff --stat && git commit -m x"), "executa_e_reporta", "commit-local"),
+        (dict(bash="X=1 mvn test"), "executa_e_reporta", "rodar-build"),
+        (dict(bash="git status && git add -A && git commit -m x"), "executa_e_reporta", "commit-local"),
+        # rodada 3: neutro que grava sem `>` e export que muda o que o pytest executa
+        (dict(bash="sort -o important.py x && pytest"), "sempre_pergunta", None),
+        (dict(bash="git diff --output=important.py && pytest"), "sempre_pergunta", None),
+        (dict(bash="git log --output=a.py && pytest"), "sempre_pergunta", None),
+        (dict(bash="export PYTHONPATH=/tmp/evil && pytest"), "sempre_pergunta", None),
+        (dict(bash="export LD_PRELOAD=/tmp/x.so && pytest"), "sempre_pergunta", None),
+        (dict(bash="tail -o x f && pytest"), "sempre_pergunta", None),
+        (dict(bash="grep --output=x f && pytest"), "sempre_pergunta", None),
     ]
     for entrada, faixa, ident in casos:
         r = aut.casar(cfg, **entrada)
