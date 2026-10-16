@@ -4234,3 +4234,87 @@ mesmo lugar que o digest lê.
 
 Um run cujo `.log` repita o objeto de resultado grava em `custo_usd` o mesmo valor
 que o `cepa-until-digest` calcula.
+
+## `cepa-until` culpa a árvore suja quando quem sujou o `plan.yaml` foi um run vivo da mesma fila
+
+**Plano:** `cepa/until-run-vivo-antes-do-guarda-de-sujeira` (item na fila `cepa`, inserido em 2026-10-16 à frente dos pendentes)
+
+**Status:** pendente · **Lar provável:** `common/bin/cepa-until` (`main`, `arvore_suja`,
+`supervisor_vivo`) · **Origem:** feedback `fb-20261015-4` (2026-10-15, repo `cepa`, branch
+`session/dirt-worktree`). O dono diz que é recorrente e que já tinha reportado; no ledger de
+feedback não há registro anterior com este mecanismo (o mais próximo é `fb-20261015-1`, sobre o
+`cepa-plan responde` deixar o `plan.yaml` sem commit, já feito).
+
+> Este problema tem sido recorrente e eu ja reportei isso num feedback. Por que ainda nao foi
+> resolvido? — contexto apurado: em 2026-10-15 19:08 o dono rodou 'cepa-until --until 6:00 cepa'
+> e o guarda recusou por plan.yaml modificado; mas havia um run vivo da mesma fila (pid 16795,
+> 'cepa-until cepa --for 4h', iniciado 18:53, prazo 22:53) escrevendo status/claimed_by no
+> plan.yaml da raiz. O guarda de arvore suja (cepa-until:2461) roda sem antes checar run vivo na
+> mesma fila, entao a mensagem manda 'commite ou limpe' quando o certo era 'ja ha um run desta
+> fila em andamento (pid, prazo)'. Pedido: checar supervisor_vivo da fila antes do guarda de
+> sujeira e ignorar o plan.yaml quando a sujeira e do proprio run
+
+### Problema
+
+Conferido no código em 2026-10-16: o `main()` do `cepa-until` chama `consulta_fila()` e logo em
+seguida `arvore_suja()`; com arquivo modificado e sem `--sujo-ok`, imprime "Commite ou limpe
+antes" e sai com 2. A função `supervisor_vivo()` existe, mas só é consultada no `fecha-morto` e na
+varredura de runs mortos, nunca na largada. O `estado.json` do run `2026-10-15-1853` confirma o
+pid 16795 que o dono cita. Resultado: o run vivo grava `status`/`claimed_by` no `plan.yaml` da
+raiz (é o desenho), a segunda largada vê isso como sujeira e a mensagem manda o dono commitar ou
+limpar um arquivo que outro processo está escrevendo.
+
+### Esboço de solução
+
+1. Antes do guarda de sujeira, ler os `estado.json` da fila pedida; se algum está `rodando` com
+   `supervisor_vivo(pid)` verdadeiro no mesmo host, recusar com "já há um run desta fila em
+   andamento (pid N, prazo HH:MM)", sem mencionar `--sujo-ok`.
+2. Ao calcular a sujeira para uma fila diferente, descontar o `plan.yaml` de uma fila cujo run
+   vivo é o único a tê-lo tocado (os itens do registro `.jsonl` do run dão a lista).
+3. Mensagem do guarda, quando sobrar sujeira de verdade, continua a de hoje.
+
+### Teste que falta
+
+Em `tests/test_cepa_until.py`: (a) `estado.json` `rodando` com pid vivo na mesma fila e
+`plan.yaml` modificado: a saída fala de run em andamento com pid e prazo, e não de commit;
+(b) mesmo cenário com a largada em outra fila: o `plan.yaml` da fila viva não conta como sujeira.
+
+## Leads do `build-hex` encerram o turno à espera de worker, e dentro do `claude -p` ninguém os acorda
+
+**Plano:** nenhum ainda
+
+**Status:** pendente · **Lar provável:** `build-hex/agents/engineering-lead.md` e
+`build-hex/agents/validation-lead.md` (seção "Delegação é assíncrona"), e o orquestrador do
+`/common:drain-plan` que roda dentro do `cepa-until` · **Origem:** feedback `fb-20261016-1`
+(2026-10-16, `wego-digitacao-backend`, run `until/2026-10-15-1946`).
+
+> engineering-lead e validation-lead encerram o turno a espera de worker em segundo plano (3
+> rodadas no run until/2026-10-15-1946 do wego-digitacao-backend); o orquestrador precisou
+> retoma-los a mao, inflando turnos e custo (S3-fio-openai custou US$ 22,54, 41,8% do run)
+
+### Problema
+
+Os dois prompts mandam exatamente isso: "Delegou tudo o que esta rodada permite? Encerre o
+turno. A notificação te traz de volta com o resultado na mão." A regra foi escrita em 2026-08-26
+contra a sondagem de disco (15 horas perdidas em cinco runs) e vale numa sessão interativa. Dentro
+do `claude -p` do `cepa-until` o comportamento relatado é outro: o lead encerra, a notificação não
+o reinvoca, e quem o retoma é o orquestrador do item, gastando um turno a mais por rodada. É a
+mesma família do item "Build longo dentro do `cepa-until` vira trava para o dono", onde o
+`claude -p` mata o segundo plano no fim do turno. Não conferido aqui: o `.log` do run fica no
+repo do cliente; os números (3 rodadas, US$ 22,54, 41,8%) são do registro do dono.
+
+### Esboço de solução
+
+1. Medir no `.log` do run `until/2026-10-15-1946` quantas vezes o orquestrador reenviou mensagem
+   ao lead depois de "Async agent launched" sem notificação no meio.
+2. Se confirmado: dentro de run não interativo (`CLAUDE_AUTONOMOUS_RUN_ID` ou `CEPA_UNTIL_RUN`
+   presente), o lead não encerra o turno após delegar; espera a notificação no próprio turno (o
+   `no-background-build` já ensina o padrão `# espera-ok` para builds). Fora de run, a regra de
+   hoje continua.
+3. Alternativa mais barata: o orquestrador do `drain-plan` chama o lead com instrução explícita
+   de aguardar os workers no mesmo turno.
+
+### Teste que falta
+
+Um run sintético do `cepa-until` com um item que delega a um worker de 2 minutos: o `.log` mostra
+uma única chamada ao lead por rodada, sem mensagem de retomada do orquestrador.
