@@ -1,0 +1,50 @@
+schema_version: 1
+card: next-nome-do-programa-nao-e-project-key
+status: complete
+audited_at: 2026-10-16T09:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Dado repo com board-flow.yaml e plan.yaml cujo nome NAO e o project_key (wego-todo-agosto vs WEGO), quando /common:next resolve o plano, a regra 2 nao forca mais <project_key>/plan.yaml; procura a fatia de trabalho, evitando a colisao WEGO vs WEGO-in-progress."
+    altitude: document
+    surface: "prosa de common/commands/next.md § '1. Locate the plan' (o /common:next e um prompt, nao codigo) + cepa-plan status como o comportamento real que a prosa espelha"
+    demonstrated_by:
+      test: "tests/test_plan_program_naming.py (meia A: 8 checks sobre next.md; meia B: cenarios 1-3 rodando o cepa-plan status real em repos temporarios com board-flow.yaml project_key WEGO)"
+      layer: asserção de prosa + execução real da ferramenta. Nao existe teste que ponha um LLM executando /common:next; esse e o teto do que o comando permite
+      evidence: verified
+      run: "python3 tests/test_plan_program_naming.py -> 'all green' (rc=0). Contra o next.md ANTIGO (git show 43cd40c:common/commands/next.md em /tmp/next-old.md, teste copiado apontando para ele): 6 failures (Never pick, work slice, WEGO-in-progress, nao resolve por <programs>/<project_key>/plan.yaml, nao le defaults.project_key, liga a cepa-plan status). Verificado por mim, nao por confianca."
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "A prosa de resolucao do /common:next bate com cepa-plan cmd_status/filas_single_track (uma fila single-track -> ela; varias -> stderr 'há mais de uma fila; diga qual', exit 2; nunca le project_key)."
+    altitude: document
+    surface: "next.md regras 2-3 e o paragrafo final vs common/bin/cepa-plan l.1336-1365"
+    demonstrated_by:
+      test: "tests/test_plan_program_naming.py meia B (cenario 1 exit 0 nomeando wego-todo-agosto; cenario 2 exit 2, stderr 'há mais de uma fila' com WEGO e WEGO-in-progress, sem escolher WEGO; cenario 3 'nenhuma fila' exit 2) + meia A (cita cepa-plan status)"
+      layer: execução real da ferramenta + prosa. Leitura manual do codigo: filas_single_track filtra por modo single-track e ordena; cmd_status nao toca board-flow.yaml; a prosa diz o mesmo
+      evidence: verified
+      run: "python3 tests/test_plan_program_naming.py -> 'all green'"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "docs/execution-plan.md afirma a regra de nome (fatia, nao chave), a colisao, e que nomear a unica fila com o project_key segue valido (decisao 2026-09-25), sem contradize-la."
+    altitude: document
+    surface: "docs/execution-plan.md § 'What the file is called'"
+    demonstrated_by:
+      test: "tests/test_plan_program_naming.py meia A (doc: secao, 'work slice', WEGO-in-progress, 'never pick' + <project_key>, 2026-09-25)"
+      layer: asserção de conteudo; 'sem contradizer' verificado por leitura: o texto diz 'one queue per repo, owner decision 2026-09-25' e mantem /board-flow:* e /common:plan --from-jira nomeando pela chave
+      evidence: verified
+      run: "python3 tests/test_plan_program_naming.py -> 'all green'"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "Guardas existentes continuam verdes: test_plan_anchor_root, test_common_next, test_fio_condutor."
+    altitude: document
+    surface: "os tres arquivos de teste"
+    demonstrated_by:
+      test: "tests/test_plan_anchor_root.py, tests/test_common_next.py, tests/test_fio_condutor.py"
+      layer: asserção de prosa/estrutura (mesmos de antes)
+      evidence: verified
+      run: "os tres rodados individualmente, cada um terminando em 'all green' (rc=0)"
+    verdict: complete
+    gap: null
+notes: "Limites honestos: (1) /common:next e prosa para um LLM; nenhum teste prova que um orchestrator real a segue, so que a prosa diz a regra certa e que a ferramenta que ela espelha se comporta assim. (2) A regra 2 continua sem checar o modo ao listar na regra 3 (a prosa lista 'mais de um single-track', igual a ferramenta). (3) BACKLOG.md nao foi atualizado no commit: o item 'O plano de execucao morre com o worktree...' ainda diz que a metade do nome esta pendente/blocked; vale card ou ajuste de status pelo orchestrator, nao e criterio desta auditoria. (4) /board-flow:drain ainda le <programs>/<project_key>/plan.yaml (por decisao de 2026-09-25); o doc admite isso, mas essa leitura nao foi tocada nem auditada aqui. Nao rodei tests/run-all.sh."

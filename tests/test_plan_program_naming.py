@@ -96,6 +96,10 @@ def half_a():
     check("next: regra negativa 'Never pick' + <project_key>",
           "Never pick" in nxt and "<project_key>" in nxt)
     check("next: chama a pasta de 'work slice'", "work slice" in nxt)
+    check("next: a fila única vale com qualquer nome de pasta",
+          "whatever its folder is called" in nxt)
+    check("next: com várias, a lista mostra nome, source e contagens",
+          "item counts by status" in nxt and "`source:` line" in nxt)
     check("next: cita o caso WEGO-in-progress", "WEGO-in-progress" in nxt)
     check("next: não resolve por <programs>/<project_key>/plan.yaml",
           "<programs>/<project_key>/plan.yaml" not in nxt.replace(
