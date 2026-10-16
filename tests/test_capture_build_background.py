@@ -426,6 +426,14 @@ def main():
         check("`foo[killed]` colado em outro texto não é o trailer do CC (segue pendente)",
               s.baseline() is None and s.pendente("bkill005"), str(s.baseline()))
 
+        s = Sessao(base, "killed-so")
+        s.lanca("./mvnw verify", "bkill006")
+        (s.tasks / "bkill006.output").write_text("[killed]\n")
+        s.outro_bash()
+        check("arquivo só com `[killed]` (primeira linha) grava FAILURE",
+              (s.baseline() or {}).get("status") == "FAILURE" and not s.pendente("bkill006"),
+              str(s.baseline()))
+
         s = Sessao(base, "killed-editado")
         s.lanca("./mvnw verify", "bkill004")
         s.grava_baseline({"status": "STALE", "since": iso(+5), "after_edit_to": "src/A.java"})
