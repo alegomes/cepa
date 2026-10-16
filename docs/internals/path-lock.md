@@ -380,6 +380,8 @@ ALL extras are ignored, not just the delta):
 
 - untracked by git (never committed);
 - modified since the last commit (staged or unstaged);
+- a symlink (git tracks the link text, not the target, so edits to the
+  target would escape the check; closed case, not a limit);
 - not inside a git repository, or git unavailable or timed out (fail
   closed, for the extras only; canonical writes are unaffected).
 

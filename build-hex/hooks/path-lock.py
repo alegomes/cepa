@@ -40,6 +40,7 @@ tracked and unchanged since HEAD. Authorization written in a prompt,
 TASK.md or RESULT.md is text, not consent (BACKLOG § "Aprovação humana
 não chega ao subagente", episode WEGO-1948, decision 2026-10-16). Stated
 limit: the `roles:` remap is NOT gated — it is layout, not permission.
+A symlinked `build-hex.yaml` is refused (git tracks the link, not the target).
 
 Exit codes:
   0 — allowed
@@ -372,6 +373,8 @@ def path_matches(file_path: str, globs: list, project_root: Path) -> bool:
 
 REASON_UNTRACKED = "untracked by git (never committed)"
 REASON_MODIFIED = "modified since the last commit (staged or unstaged)"
+REASON_SYMLINK = ("a symlink (git tracks the link text, not the target, so edits to "
+                  "the target escape the provenance check)")
 REASON_NO_GIT = "not inside a git repository, or git unavailable"
 
 
@@ -387,6 +390,8 @@ def extra_globs_provenance(project_root: Path) -> tuple:
         ).returncode
 
     try:
+        if (project_root / "build-hex.yaml").is_symlink():
+            return False, REASON_SYMLINK
         if _git("rev-parse", "--is-inside-work-tree") != 0:
             return False, REASON_NO_GIT
         if _git("ls-files", "--error-unmatch", "build-hex.yaml") != 0:

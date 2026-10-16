@@ -1,9 +1,9 @@
 schema_version: 2
 card: worker-consentimento-fora-do-prompt
 verdict: unproven
-reviewed_at: 2026-10-16T12:00:00-03:00
+reviewed_at: 2026-10-16T14:00:00-03:00
 base_commit: e89f95c
-head_commit: 0559159
+head_commit: 66483c6
 issue_type: Feature
 scope:
   changed_classes:
@@ -25,26 +25,36 @@ levels:
     perturbation:
       status: survived
       results:
-        - "baseline: python3 tests/test_worker_consent_channel.py -> 15 checks ok, 'tudo verde'"
-        - "P1 provenance sempre (True,''): RED, 6 falhas (a,b,d,f,h,i1)"
-        - "P2 git diff --quiet sem HEAD: RED, 2 falhas (b,h)"
-        - "P3 sem ls-files --error-unmatch: RED, 2 falhas (a,i1)"
-        - "P4 sem rev-parse --is-inside-work-tree: SOBREVIVEU (tudo verde). ls-files ja falha fora de repo, entao o resultado (bloqueio, exit 2) e identico; so muda o motivo na mensagem (REASON_UNTRACKED em vez de REASON_NO_GIT) e o caso f nao assere o motivo"
-        - "P5a extras fundidos na lista canonica (extras sempre honrados): RED, 6 falhas"
-        - "P5b ordem trocada (extras julgados antes do canonico, canonical check desligado): RED, caso e (permite caminho canonico com yaml nao rastreado) bloqueia"
-        - "P6 falha de proveniencia cai para a mensagem generica (sys.exit(2) trocado por pass): SOBREVIVEU (tudo verde). Sai a mensagem especifica E a generica, ambas com exit 2; caso a so confere substrings 'build-hex.yaml' e 'commit', e g so confere ausencia de 'committed' no caminho sem extras"
-        - "P7 ancora removida de domain-dev / api-dev / adapter-dev / qa-engineer / engineering-lead: RED em cada um (1 falha, a do proprio arquivo)"
-        - "P8 trecho 'honored only when committed' removido de docs/internals/path-lock.md: RED"
-        - "prosa: so existe altitude de presenca de texto (nao ha como provar que o modelo obedece); o teste prova que a bala esta no arquivo, nao que o worker a segue"
+        - "baseline em 66483c6: python3 tests/test_worker_consent_channel.py -> 20 checks ok, 'tudo verde'"
+        - "P1 provenance sempre (True,''): RED, 6 falhas"
+        - "P2 git diff --quiet sem HEAD: RED, 2 falhas (b, h)"
+        - "P3 sem ls-files --error-unmatch: RED, 2 falhas (a, i1)"
+        - "P4 sem rev-parse: RED, 1 falha (f). P5b canonico deixa de ser julgado primeiro: RED (e). P6 cai tambem na mensagem generica: RED, 6 falhas"
+        - "P7 ancoras dos 5 agentes e trecho de docs/internals/path-lock.md: RED em cada um (prosa: so altitude de presenca de texto)"
+        - "P8 (l.399) fallthrough rc!=0/1 devolve (True,''): RED, 1 falha (h)"
+        - "P9 (l.398) rc==1 devolve (True,''): RED, 2 falhas (b, d)"
+        - "P10 (l.478) 'if ok:' -> 'if False:': RED, 2 falhas (c, i2)"
+        - "P11 (l.476) 'if path_matches(file_path, with_extras, project_root):' -> 'if True:': SOBREVIVEU (tudo verde). Confirmado fora do teste: com build-hex.yaml commitado (adapter-dev: scripts/**) o hook mutado devolve rc=0 para pom.xml (base/hook correto: rc=2). Ou seja, a unica coisa que impede o worker de escrever QUALQUER caminho quando ha extras commitados e esse predicado; nenhum caso escreve um caminho fora do glob com extras commitados"
+        - "P12 (l.401) except Exception -> (True,''): SOBREVIVEU (tudo verde). Ramo git ausente/timeout nao e exercitado por nenhum caso"
+        - "P13 (l.474) 'if extra_write_globs.get(agent):' -> 'if True:': sobreviveu, mutante equivalente (sem extras, with_extras == canonico, que ja falhou), nao conta"
   l2_coverage:
-    status: assumed
-    uncovered_lines: []
-    run: "sem ferramenta de cobertura no repo; alcance dos ramos de extra_globs_provenance e do bloco de extras inferido pelas perturbacoes P1 a P6 (todos os ramos exceto rev-parse e a unicidade da mensagem provados por RED)"
+    status: gap
+    uncovered_lines:
+      - "path-lock.py:476 predicado 'path_matches(file_path, with_extras, ...)': executada mas o predicado nao e travado (P11 sobrevive)"
+      - "path-lock.py:400-401 'except Exception: return False, REASON_NO_GIT' (git ausente ou timeout): nenhum caso alcanca"
+    run: "sem ferramenta de cobertura; alcance determinado pela perturbacao (criterio de docs/proof/worktree-remove-guard-camada-1.yaml). Linhas alteradas com perturbacao que as derruba: extra_globs_provenance rev-parse (P4), ls-files (P3), diff HEAD (P2), return True (P1), rc==1 (P9), fallthrough (P8); main(): canonico primeiro (P5b), 'if ok' (P10), mensagem especifica (P6). Sem perturbacao que derrube: 476 e 401, acima."
   l4_adversarial_input:
-    status: skipped
-    reason: "o hook le o payload JSON do harness (file_path, agent_type, cwd); nao foi feita busca adversarial (symlink, caminhos com .., build-hex.yaml como diretorio) nesta rodada"
-    findings: []
+    status: findings
+    reason: ""
+    findings:
+      - "a1 scripts -> symlink ../outside (fora do projeto), write scripts/x.sh: resolve() vai para <top>/outside/x.sh, fora da raiz, cai na saida 'fora da raiz' (jurisdicao do lock): rc=0 em 66483c6 e em e89f95c. Regression vs base: no (comportamento preexistente, coberto por tests/test_path_lock_out_of_root.py)"
+      - "a2 scripts -> symlink para secret/ dentro do repo: resolve para secret/x.sh, nao casa scripts/** nem canonico: rc=2 nos dois. Regression vs base: no. Bom: o symlink nao ampliou a permissao"
+      - "b scripts/../pom.xml com extras commitados: resolve normaliza, nao casa: rc=2 nos dois, sem traceback. Regression vs base: no"
+      - "c build-hex.yaml como DIRETORIO: load_config cai no layout canonico ('could not read ... Is a directory'), extras ignorados, sem traceback; write scripts/x.sh rc=2 nos dois. Regression vs base: no"
+      - "d1 build-hex.yaml como symlink commitado para arquivo rastreado: extras honrados, rc=0 nos dois (comportamento igual ao base). Regression vs base: no"
+      - "d2/d3 BYPASS DO PORTAO NOVO via symlink: com build-hex.yaml sendo symlink commitado, editar o ALVO depois do commit (alvo rastreado dentro do repo, ou arquivo fora do repo) nao e visto por 'git diff --quiet HEAD -- build-hex.yaml' (compara so o texto do link, rc=0); o hook le o conteudo novo e honra extras acrescentados (write pom.xml rc=0). Base tambem devolvia rc=0 (nao havia portao). Regression vs base: no, mas o portao novo nao cobre esse layout. Exige que um humano tenha commitado antes o symlink; o alvo dentro de scripts/** seria escrevivel pelo proprio adapter-dev"
+      - "e payload cwd em subdiretorio, yaml com extras commitado so na raiz: o hook le cwd/build-hex.yaml, nao ve os extras, bloqueia (rc=2) nos dois. Regression vs base: no"
   bugfix_regression_red_at_base:
     status: n/a
     run: "nao e Bug"
-routing_reason: "As decisoes de permitir/bloquear (exit 0/2) estao todas travadas por RED. Duas mutacoes sobreviveram, ambas so na mensagem de erro e no ramo redundante de rev-parse: P4 (checagem de repo git, o caso f nao assere o motivo) e P6 (mensagem especifica de proveniencia, o caso a nao assere que ela vem sozinha). Pelo roteamento mecanico, mutacao sobrevivente em linha alterada = UNPROVEN. Correcao pequena: no caso f assertar 'not inside a git repository' em err; no caso a assertar que err NAO contem 'Allowed write globs' (mensagem generica)."
+routing_reason: "UNPROVEN, calculado pela regra mecanica: duas perturbacoes sobreviveram em linhas alteradas (P11, que deixa o worker escrever qualquer caminho quando ha extras commitados, e P12, ramo git ausente). L2 em gap pelos mesmos dois pontos. L4 rodou: nenhum buraco novo contra o base, mas ha um bypass do portao novo via symlink (d2/d3). Para fechar: (1) caso novo no teste: yaml commitado com 'scripts/**', escrever pom.xml -> rc=2 com mensagem generica 'Allowed write globs for'; (2) caso novo com PATH sem git (ou git quebrado) -> rc=2 'not inside a git repository'; (3) decidir se build-hex.yaml symlink deve ser recusado em extra_globs_provenance (os.path.islink -> False)."

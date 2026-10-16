@@ -25,6 +25,10 @@ dos quatro agentes: o caso daquele arquivo fica vermelho. Tire a checagem
 repository"). Faça uma falha de proveniência cair na mensagem genérica
 ("Allowed write globs for"): os casos a, b, d, h e i1 ficam vermelhos, pois
 exigem a mensagem "extra_write_globs in build-hex.yaml would allow it".
+Troque `if path_matches(file_path, with_extras, ...)` por `if True` no hook: o
+caso j fica vermelho (escrita fora dos extras deve cair na mensagem genérica).
+Tire o `except Exception` do helper: o caso k fica vermelho (git ausente).
+Tire a checagem `is_symlink`: o caso l fica vermelho.
 """
 
 import json
@@ -76,11 +80,11 @@ def new_repo():
     return d
 
 
-def run_hook(proj, rel):
+def run_hook(proj, rel, env=None):
     payload = {"tool_name": "Write", "tool_input": {"file_path": str(proj / rel)},
                "agent_type": "build-hex:adapter-dev", "cwd": str(proj)}
     p = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
-                       capture_output=True, text=True, env=GIT_ENV)
+                       capture_output=True, text=True, env=env or GIT_ENV)
     return p.returncode, p.stderr
 
 
@@ -173,6 +177,34 @@ def test_mecanico():
     git(r, "commit", "-q", "-m", "svc cfg")
     rc, err = run_hook(sub, "scripts/x.sh")
     check("i2. cwd em subdiretório, yaml próprio commitado -> permite", rc == 0, f"rc={rc} {err!r}")
+
+    # j. yaml commitado, mas a escrita está fora do canônico E fora dos extras
+    j = new_repo()
+    (j / "build-hex.yaml").write_text(YAML)
+    git(j, "add", "build-hex.yaml")
+    git(j, "commit", "-q", "-m", "extras")
+    rc, err = run_hook(j, "pom.xml")
+    check("j. commitado, escrita fora dos extras -> mensagem genérica, sem proveniência",
+          rc == 2 and "Allowed write globs for" in err
+          and "extra_write_globs in build-hex.yaml would allow it" not in err,
+          f"rc={rc} {err!r}")
+
+    # k. git indisponível (PATH vazio; o hook roda pelo python absoluto)
+    rc, err = run_hook(j, "scripts/x.sh", env=dict(GIT_ENV, PATH="/nonexistent"))
+    check("k. git indisponível -> bloqueia dizendo que não é repositório git",
+          bloqueio_de_proveniencia(rc, err) and "not inside a git repository" in err,
+          f"rc={rc} {err!r}")
+
+    # l. build-hex.yaml é symlink commitado para arquivo rastreado
+    l = new_repo()
+    (l / "cfg").mkdir()
+    (l / "cfg" / "real.yaml").write_text(YAML)
+    os.symlink("cfg/real.yaml", l / "build-hex.yaml")
+    git(l, "add", "cfg/real.yaml", "build-hex.yaml")
+    git(l, "commit", "-q", "-m", "symlinked cfg")
+    rc, err = run_hook(l, "scripts/x.sh")
+    check("l. build-hex.yaml symlink commitado -> bloqueia citando symlink",
+          bloqueio_de_proveniencia(rc, err) and "symlink" in err, f"rc={rc} {err!r}")
 
 
 def main():
