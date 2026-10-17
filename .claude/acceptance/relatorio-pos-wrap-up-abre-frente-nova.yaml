@@ -1,0 +1,59 @@
+key: relatorio-pos-wrap-up-abre-frente-nova
+status: complete
+diff: 2ddf786..53202ff
+criteria:
+  - id: AC1
+    text: Hook sabe que a sessão foi encerrada pelo wrap-up (invocação + "Safe to exit" posterior, só cadeia principal) sem arquivo-marcador.
+    altitude: event
+    surface: report-style-lint.py Stop, lendo transcript_path (sessao_encerrada)
+    test: tests/test_report_style_lint.py casos (a), (e), (f)
+    layer: cli (subprocess com payload Stop + transcript)
+    evidence: verified
+    run: python3 tests/test_report_style_lint.py -> 138 ok, 0 FAIL, rc=0, "all report-style tests passed"
+    gap: null
+  - id: AC2
+    text: Em sessão encerrada, item numerado com pergunta ou Pra você anunciando algo é barrado (pergunta-pos-wrap-up), inclusive turno só-leitura (metrics) e o relatório do próprio wrap-up.
+    altitude: event
+    surface: report-style-lint.py Stop -> decision=block
+    test: tests/test_report_style_lint.py (a), (d), (f)
+    layer: cli
+    evidence: verified
+    run: mesma execução (138 ok, 0 FAIL). Cobre pergunta numerada no metrics sem Edit (a), no relatório do wrap-up com commit (d), invocação por Skill (f).
+    gap: null
+    reaudit: 9a55d7d adicionou (h) Pra você anunciando + lista Nada pendente -> bloqueia com wrap-up; (h2) fechado -> não bloqueia. Rodado, 138 ok.
+  - id: AC3
+    text: Formato fechado não é barrado; wrap-up travado antes do "Safe to exit" não encerra; sidechain nunca encerra.
+    altitude: event
+    surface: report-style-lint.py Stop
+    test: tests/test_report_style_lint.py (b), (c), (e)
+    layer: cli
+    evidence: verified
+    run: mesma execução (138 ok, 0 FAIL)
+    gap: null
+  - id: AC4
+    text: Mensagens de bloqueio e aviso dizem o formato de sessão encerrada, não "uma pergunta fechada por item".
+    altitude: event
+    surface: stdout JSON do Stop (motivo) e do UserPromptSubmit (aviso)
+    test: tests/test_report_style_lint.py (a), (a2)
+    layer: cli
+    evidence: verified
+    run: mesma execução (138 ok, 0 FAIL)
+    gap: null
+  - id: AC5
+    text: Prosa em metrics.md passo 3, wrap-up.md L8/descarte, plain-report "Depois do wrap-up", default-yes "Guardar o fio".
+    altitude: spec-files
+    surface: os quatro arquivos Markdown
+    test: tests/test_report_style_lint.py cinco checks "spec:" (plain-report, metrics.md, wrap-up.md, default-yes)
+    layer: cli (lê os Markdown no disco)
+    evidence: verified
+    run: python3 tests/test_report_style_lint.py -> 138 ok, 0 FAIL, rc=0; os cinco checks spec: passaram.
+    gap: null
+  - id: AC6
+    text: Teste em tests/test_report_style_lint.py demonstrando 2, 3 e 4 na superfície real do hook.
+    altitude: event
+    surface: subprocess com payload Stop + arquivo de transcript
+    test: tests/test_report_style_lint.py
+    layer: cli
+    evidence: verified
+    run: python3 tests/test_report_style_lint.py -> 138 ok, 0 FAIL, rc=0
+    gap: null
