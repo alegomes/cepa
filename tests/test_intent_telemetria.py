@@ -135,6 +135,8 @@ check("evento leva passo, passos e session",
 cli(repo, "--passo", "4")
 cli(repo, "encerrar")
 check("plano cumprido (4 de 3): emite", len(finais()) == 2, str(finais()))
+check("plano cumprido: o evento guarda passo == 4 (não M)",
+      finais()[-1].get("passo") == 4 and finais()[-1].get("passos") == 3, str(finais()[-1]))
 r = cli(repo, "encerrar", sid="outra-sessao-zzz")
 check("intenção de outra sessão: não emite", len(finais()) == 2 and r.returncode == 0, r.stdout)
 r = cli(repo, "encerrar", "--passo", "1")
@@ -204,6 +206,57 @@ for i in range(4):
 o = metrics(tel5).stdout
 check("10 sessões, 6 sem avançar: C2 entra", "C2 entra." in o and "NUNCA avançado: 6 de 10" in o, o[-700:])
 
+# ── 4b. fronteiras e sobreviventes ──────────────────────────────────────────
+def ledger_de(nome, sessoes_gravadas, sessoes_avancadas, extra=()):
+    """Ledger sintético: `sessoes_gravadas` sessões com intent.written, as
+    primeiras `sessoes_avancadas` delas com cursor_advanced; `extra` são
+    eventos já prontos (dicts sem ts/repo)."""
+    d = TMP / nome
+    d.mkdir()
+    ev = []
+    for i in range(sessoes_gravadas):
+        ev.append({"event": "intent.written", "session": f"{nome[:3]}{i}", "acao": "gravar", "passos": 2})
+    for i in range(sessoes_avancadas):
+        ev.append({"event": "intent.cursor_advanced", "session": f"{nome[:3]}{i}", "de": 1, "para": 2, "passos": 2})
+    ev += list(extra)
+    ev = [{"ts": agora, "repo": "x", **e} for e in ev]
+    (d / f"events-{agora[:7]}.jsonl").write_text("\n".join(json.dumps(e) for e in ev) + "\n")
+    return metrics(d).stdout
+
+
+o = ledger_de("fronteira5", 10, 5)
+check("5 de 10 nunca avançaram (exatamente metade): C2 NÃO entra",
+      "NUNCA avançado: 5 de 10" in o and "C2 entra." not in o, o[-600:])
+o = ledger_de("fronteira10", 10, 0)
+check("10 de 10 nunca avançaram: C2 entra", "NUNCA avançado: 10 de 10" in o and "C2 entra." in o, o[-600:])
+o = ledger_de("nove", 9, 0)
+check("9 sessões, todas sem avançar: ainda faltam 1 e C2 não entra",
+      "faltam 1 sessão(ões)" in o and "C2 entra." not in o, o[-600:])
+
+# cursor_advanced / finished_at_last_step numa sessão SEM intent.written não contam
+o = ledger_de("orfas", 2, 1, extra=[
+    {"event": "intent.cursor_advanced", "session": "orfa", "de": 1, "para": 2, "passos": 2},
+    {"event": "intent.finished_at_last_step", "session": "orfa", "passo": 2, "passos": 2}])
+check("sessão sem intent.written não entra em 'avançou'",
+      "avançado ao menos uma vez: 1 de 2 (1 ÷ 2 × 100 = 50.0%)" in o, o)
+check("sessão sem intent.written não entra em 'último passo'", "cursor em M ou M+1): 0 de 2" in o, o)
+
+# evento intent.* sem session: fora das contagens, com o aviso e o N certo
+o = ledger_de("semsess", 2, 1, extra=[
+    {"event": "intent.written", "acao": "gravar", "passos": 2},
+    {"event": "intent.cursor_advanced", "session": "", "de": 1, "para": 2, "passos": 2},
+    {"event": "intent.finished_at_last_step", "passo": 2, "passos": 2}])
+check("sem session: aviso com N=3", "(3 evento(s) intent.* sem session, fora das contagens por sessão)" in o, o)
+check("sem session: não infla as sessões gravadas", "sessões com intenção gravada: 2" in o, o)
+check("sem session: não infla 'último passo'", "cursor em M ou M+1): 0 de 2" in o, o)
+
+# `encerrar` é palavra reservada: item de plano com esse nome é recusado
+# (o subcomando consome o argumento; ver a guarda no topo de main()).
+rr = novo_repo("r-reservada")
+r = cli(rr, "gravar", "--proposito", "p", "--para-quando", "q", "--plano", "levantar", "encerrar")
+check("item de plano `encerrar` é recusado (sai 2, nada escrito)",
+      r.returncode == 2 and not (rr / ".claude" / "session-intent").exists(), r.stdout + r.stderr)
+
 # ── 5. contrato do wrap-up.md: a prosa que chama o comando ──────────────────
 WRAP = (REPO / "common" / "commands" / "wrap-up.md").read_text(encoding="utf-8")
 check("wrap-up.md manda rodar `cepa-intencao` `encerrar`",
@@ -212,6 +265,12 @@ check("wrap-up.md nomeia o evento intent.finished_at_last_step",
       "intent.finished_at_last_step" in WRAP)
 check("wrap-up.md pula o encerrar no --discard",
       "Skip it on the `--discard` path" in WRAP)
+
+check("wrap-up.md: só leitura e nunca bloqueia",
+      "read-only, never blocks" in WRAP and "ignore the output" in WRAP)
+METRICS_MD = (REPO / "common" / "commands" / "metrics.md").read_text(encoding="utf-8")
+check("metrics.md descreve a seção Intenção da sessão",
+      "**Intenção da sessão**" in METRICS_MD and "intent.*" in METRICS_MD)
 
 print()
 if FAILURES:
