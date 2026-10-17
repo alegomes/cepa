@@ -1,0 +1,82 @@
+# plan.yaml — fila `single-track`, escrita por /common:plan.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: docs/estrategia-intencao-da-sessao.md, seção 'Ordem de implementação (ciclo 1)', decisões do dono de 2026-10-16; fila ditada à mão porque o doc não é spec do /common:spec
+# Escrito em: 2026-10-16
+
+schema_version: 2
+mode: single-track
+program: intencao-c1
+source: docs/estrategia-intencao-da-sessao.md, seção 'Ordem de implementação (ciclo
+  1)', decisões do dono de 2026-10-16; fila ditada à mão porque o doc não é spec
+  do /common:spec
+items:
+- id: C1-1
+  title: Formato e parser compartilhado do `.claude/session-intent`, nome em `RESCUE`,
+    teste
+  why: 'Passo 1 da ''Ordem de implementação (ciclo 1)'' de docs/estrategia-intencao-da-sessao.md.
+    Ordem herdada da seção, decidida pelo dono em 2026-10-16 junto com D1-D5; ninguém
+    priorizou os passos entre si além disso. Superfície: parser em `_modos.py`/`_wtlib.py`
+    lido por hook e comando (proposta consolidada 1).'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: C1-2
+  title: '`cepa-intencao`: gravar, `--passo N`, `--proposito` com motivo, `--plano`,
+    render do `resumo`, teste'
+  why: 'Passo 2 da mesma ordem. Único escritor do arquivo; o agente nunca edita
+    o YAML à mão (D2 e proposta consolidada 3). Superfície: CLI, evento observável
+    na telemetria.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: C1-3
+  title: '`session-mode.py`: estado vazio (três primeiros prompts), intenção de
+    outra sessão, injeção normal de duas linhas; `tests/test_cepa_modo.py` acompanha'
+  why: 'Passo 3 da mesma ordem. É o que o dono vê a cada turno (D1 sobre sessão
+    diferente, C4 como estado vazio, teto de duas linhas). Superfície: contexto
+    injetado pelo hook UserPromptSubmit.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: C1-4
+  title: '`cepa` grava o brief do `next.json` como propósito; `/common:session`
+    grava a partir das perguntas de largada'
+  why: 'Passo 4 da mesma ordem. Estados ''next.json'' e ''aberto por /common:session''
+    da proposta consolidada 4: a rotina grava, sem segundo ritual. Superfície: arquivo
+    `.claude/session-intent` após o launcher e após a largada da sessão.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: C1-5
+  title: '`whereami.md` com os quatro estados; fallback no `/common:next`; linha
+    de abertura no `/common:recap`'
+  why: 'Passo 5 da mesma ordem. D4: nome único `whereami`, sem alias; `/common:next`
+    responde em sessão sem programa; `/common:recap` abre com ''propósito / passo
+    N de M''. Superfície: saída dos três comandos.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: C1-6
+  title: Eventos de telemetria `intent.*` e linha no `/common:metrics`
+  why: 'Passo 6 da mesma ordem. Sem os eventos não há como medir o critério que
+    decide se o ciclo 2 entra (seção ''Telemetria e critério de sucesso''). Superfície:
+    ledger em ~/.claude/cepa-telemetry/ e relatório do /common:metrics.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: C1-7
+  title: Spike da statusline (duas linhas renderizam?) e, se renderizar, a linha
+    2
+  why: 'Passo 7 da mesma ordem. D5: conveniência local fora das garantias do harness,
+    lendo o campo `resumo:`; o spike de 5 minutos decide se a linha 2 existe. Superfície:
+    statusline do Claude Code.'
+  status: pending
+  blocked_by: []
+  human_pending: null
