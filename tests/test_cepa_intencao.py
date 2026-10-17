@@ -221,6 +221,48 @@ check("stdout igual ao resumo gravado (quebra de linha normalizada)",
       p.stdout.strip() == M.read_intent(r8)["resumo"] and "\n" not in p.stdout.strip(),
       (p.stdout, M.read_intent(r8)["resumo"]))
 
+# --- recusas que nada mais cobria (cada uma: rc=2 e arquivo byte a byte igual) ----
+import hashlib  # noqa: E402
+
+
+def md5(repo):
+    a = arquivo(repo)
+    return hashlib.md5((a or "").encode()).hexdigest()
+
+
+r9 = novo_repo("r9")
+gravar(r9)
+
+
+def recusa2(nome, *args):
+    antes = md5(r9)
+    p = cepa(r9, *args)
+    check(f"{nome}: rc=2 e arquivo intacto",
+          p.returncode == 2 and md5(r9) == antes, (p.returncode, p.stderr))
+
+
+recusa2("item de plano vazio (--plano \"\")", "--plano", "a", "")
+recusa2("item de plano só espaços (--plano \"  \")", "--plano", "a", "  ")
+recusa2("gravar com item vazio", "gravar", "--proposito", "x", "--para-quando", "y",
+        "--plano", "a", "", "--motivo", "m")
+recusa2("gravar --passo N", "gravar", "--passo", "2", "--proposito", "x",
+        "--para-quando", "y", "--plano", "a", "--motivo", "m")
+recusa2("gravar sem --proposito", "gravar", "--para-quando", "y", "--plano", "a",
+        "--motivo", "m")
+recusa2("gravar sem --para-quando", "gravar", "--proposito", "x", "--plano", "a",
+        "--motivo", "m")
+recusa2("gravar sem --plano", "gravar", "--proposito", "x", "--para-quando", "y",
+        "--motivo", "m")
+recusa2("--passo junto com --proposito", "--passo", "2", "--proposito", "x", "--motivo", "m")
+recusa2("--passo junto com --plano", "--passo", "2", "--plano", "a", "b")
+
+r10 = novo_repo("r10")
+p = gravar(r10, proposito="a\nb")
+d = M.read_intent(r10)
+check("propósito 'a\\nb' relido do arquivo é 'a b'",
+      p.returncode == 0 and d["proposito"] == "a b", d.get("proposito"))
+check("resumo do propósito 'a\\nb' termina em '· a b'", d["resumo"].endswith("· a b"), d["resumo"])
+
 # --- fora de git ------------------------------------------------------------
 fora = TMP / "fora"
 fora.mkdir()
