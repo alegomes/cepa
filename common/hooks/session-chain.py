@@ -8,7 +8,8 @@ sair deixou o próximo passo gravado em
     {"repo": "/abs/path", "modo": "descoberta", "brief": "<texto>"}
 
 este script apaga o arquivo, entra em `repo` e substitui o próprio processo
-pelo `cepa` de novo, com `--modo <modo>` e o brief como prompt inicial. A
+pelo `cepa` de novo, com `--modo <modo>`, `--proposito <brief>` (o cepa grava o
+brief como propósito da sessão) e o brief como prompt inicial. A
 sessão seguinte abre no repo e no modo certos sem o dono digitar nada. Sem o
 arquivo, sai com o código que recebeu e nada acontece.
 
@@ -99,7 +100,7 @@ def main() -> int:
     print(f"↻ cepa: próxima sessão em {repo} (modo {modo}) — CEPA_ENCADEAR=off desliga",
           file=sys.stderr)
     os.chdir(repo)
-    os.execv(cepa, [cepa, "--modo", modo, brief])
+    os.execv(cepa, [cepa, "--modo", modo, "--proposito", brief, brief])
     return rc  # unreachable
 
 

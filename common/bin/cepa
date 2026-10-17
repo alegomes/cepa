@@ -44,6 +44,13 @@
 # `--modo <modo>` e o brief como prompt inicial. Sem o arquivo, sai como antes.
 # Desligue com CEPA_ENCADEAR=off. Detalhe em common/hooks/session-chain.py.
 #
+#   cepa --proposito "<texto>"   # grava o texto como propósito da sessão
+#
+# `--proposito` é o que o encadeamento usa para registrar o brief como propósito
+# da sessão seguinte, antes do primeiro turno (via cepa-intencao, o único
+# escritor de .claude/session-intent). O ponto de parada e o plano gravados
+# falam da sessão anterior. O valor não vai para o claude. Falha ao gravar avisa e a sessão abre do mesmo jeito.
+#
 # Toda sessão nasce em bypassPermissions, porque o modo `auto` do Claude Code
 # interrompe uma rotina longa: ele consulta um classificador a cada comando e,
 # depois de 3 bloqueios seguidos, passa a perguntar tudo. Os hooks do harness
@@ -77,6 +84,7 @@ CHAIN_PY="$SCRIPT_DIR/../hooks/session-chain.py"
 CEPA_SELF="$SCRIPT_DIR/$(basename "$SELF")"
 DOCTOR="$SCRIPT_DIR/cepa-doctor"
 MODOS_BIN="$SCRIPT_DIR/cepa-modos"
+INTENCAO_BIN="$SCRIPT_DIR/cepa-intencao"
 
 # Preflight: deixa o harness pronto ANTES da sessão começar, em vez de o
 # usuário descobrir no meio da tarefa que o plugin instalado não é o do repo.
@@ -213,6 +221,7 @@ prompt_erro() {
 # no diretório onde a sessão vai de fato rodar (raiz OU worktree isolada).
 launch_here() {
   write_modo "$PWD"
+  write_intencao "$PWD"
   run_claude "$@"
 }
 
@@ -257,6 +266,31 @@ write_modo() {
     printf 'aberto_em: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } > "$1/.claude/session-mode" 2>/dev/null || return 0
   printf '◆ modo: %s\n' "$MODO" >&2
+  return 0
+}
+
+# Grava o propósito da sessão (--proposito) no diretório onde ela de fato roda,
+# pelo cepa-intencao, o único escritor do .claude/session-intent. Independe do
+# CEPA_MODO: intenção não é modo. O --motivo faz sobrescrever uma intenção
+# deixada por sessão anterior nesta árvore (ela vai para o histórico; sem
+# intenção anterior o --motivo é ignorado). Falha NUNCA impede a sessão de abrir.
+write_intencao() {
+  [ -n "$PROPOSITO" ] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+  [ -f "$INTENCAO_BIN" ] || return 0
+  _ierr=$(mktemp 2>/dev/null) || _ierr=/dev/null
+  if _ires=$(cd "$1" && python3 "$INTENCAO_BIN" gravar \
+      --proposito "$PROPOSITO" \
+      --para-quando "o próximo passo deixado pela sessão anterior cumprido" \
+      --plano "cumprir o próximo passo deixado pela sessão anterior" \
+      --motivo "sessão aberta pelo encadeamento; o brief da sessão anterior é o propósito" \
+      2>"$_ierr"); then
+    printf '◆ intenção: %s\n' "$_ires" >&2
+  else
+    printf '⚠ cepa: não gravei a intenção da sessão (%s)\n' \
+      "$(tr '\n' ' ' < "$_ierr" 2>/dev/null)" >&2
+  fi
+  [ "$_ierr" = /dev/null ] || rm -f "$_ierr"
   return 0
 }
 
@@ -309,6 +343,7 @@ SLICE=""
 PICK=0
 MODO="${CEPA_MODO_DEFAULT:-}"
 ORCAMENTO=""
+PROPOSITO=""
 PROMPT_REF="${CEPA_PROMPT:-}"
 PROMPT_MODO="${CEPA_PROMPT_MODO:-append}"
 while [ $# -gt 0 ]; do
@@ -321,6 +356,10 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { printf '✗ cepa: --orcamento exige um valor\n' >&2; exit 2; }
       ORCAMENTO="$2"; shift 2 ;;
     --orcamento=*) ORCAMENTO="${1#--orcamento=}"; shift ;;
+    --proposito)
+      [ $# -ge 2 ] || { printf '✗ cepa: --proposito exige um valor\n' >&2; exit 2; }
+      PROPOSITO="$2"; shift 2 ;;
+    --proposito=*) PROPOSITO="${1#--proposito=}"; shift ;;
     --prompt)
       [ $# -ge 2 ] || { printf '✗ cepa: --prompt exige um valor\n' >&2; exit 2; }
       PROMPT_REF="$2"; PROMPT_MODO="append"; shift 2 ;;
@@ -453,6 +492,7 @@ if [ "$DIR" != "$ROOT" ]; then
 fi
 
 write_modo "$PWD"
+write_intencao "$PWD"
 CLAUDE_WT_CLAIM="$CLAIM"
 export CLAUDE_WT_CLAIM
 run_claude "$@"

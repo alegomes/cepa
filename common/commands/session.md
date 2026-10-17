@@ -131,6 +131,28 @@ Regras da rodada:
 - Ofereça, como uma das perguntas, a **política de parada**: "seguir até o fim
   aplicando as recomendações" (default) ou "parar e me chamar se aparecer X".
 
+### 3b. Gravar a intenção da sessão (a rotina grava, sem segundo ritual)
+
+Logo depois das respostas da largada (ou depois de anunciar os defaults, quando
+não havia o que perguntar), e **nunca no caminho `--help`**, grave a intenção:
+
+```
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" gravar --proposito "<a rotina e o que ela vai entregar, com os parâmetros decididos na largada>" --para-quando "relatório único entregue e wrap-up oferecido" --plano "executar a rotina com os parâmetros da largada" "entregar o relatório único" "oferecer o wrap-up"
+```
+
+- Item do plano não pode conter `:` (o escritor recusa). Por isso o nome da
+  rotina (ex.: `board-flow:prove-drain`) vai no propósito, nunca no plano.
+- Saída 4 significa que já existe uma intenção nesta árvore (o encadeamento
+  gravou o brief, ou foi outra sessão): rode o mesmo comando acrescentando
+  `--motivo "aberta por /common:session <rotina>"`.
+- Avance o cursor com
+  `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" --passo 2` antes de montar
+  o relatório e com `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" --passo 3` ao oferecer
+  o wrap-up.
+- Isto substitui o "proponha em três linhas" que o hook `session-mode` pede
+  quando não há intenção: não proponha à parte, seria o segundo ritual.
+- Falha do escritor não para a rotina: anote no relatório e siga.
+
 ### 4. Execução — sem interrupções
 
 Rode a rotina com os parâmetros já decididos. Durante ela:

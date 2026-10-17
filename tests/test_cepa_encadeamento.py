@@ -19,6 +19,9 @@ Contratos guardados aqui:
   - sem o arquivo: o stub roda uma vez só e o código de saída dele é o do cepa;
   - CEPA_ENCADEAR=off: uma vez só, o arquivo fica;
   - arquivo inválido (repo inexistente): uma vez só, o arquivo fica, e o cepa diz;
+  - a sessão seguinte nasce com o brief gravado como propósito (`--proposito`,
+    via cepa-intencao), plano de 1 item e passo 1; intenção anterior vai para o
+    histórico; falha ao gravar avisa e a sessão abre; sem `--proposito`, nada;
   - o `.next.json` não é lido como sessão pelo registro (`read_entries`);
   - sem o SessionEnd, o registro da sessão que saiu não faz a seguinte se
     isolar numa worktree.
@@ -42,6 +45,7 @@ CEPA = REPO / "common" / "bin" / "cepa"
 REGISTRY = REPO / "common" / "hooks" / "session-registry.py"
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _wtlib as L  # noqa: E402
+import _modos  # noqa: E402
 
 BRIEF = 'Abra o /common:epic contratos-e-regras.\nLeia o handoff "anterior" antes.'
 
@@ -55,8 +59,12 @@ mode = ""
 p = Path(".claude/session-mode")
 if p.exists():
     mode = p.read_text()
+intent = ""
+pi = Path(".claude/session-intent")
+if pi.is_file():
+    intent = pi.read_text()
 with open(os.environ["STUB_LOG"], "a") as f:
-    f.write(json.dumps({"args": sys.argv[1:], "cwd": os.getcwd(), "mode": mode,
+    f.write(json.dumps({"args": sys.argv[1:], "cwd": os.getcwd(), "mode": mode, "intent": intent,
                         "launch_id": os.environ.get("CEPA_LAUNCH_ID", "")}) + "\n")
 state = Path(os.environ["STUB_STATE"])
 if state.exists():
@@ -178,11 +186,77 @@ def t_encadeia():
             check("cada abertura tem o próprio CEPA_LAUNCH_ID",
                   c[0]["launch_id"] and c[1]["launch_id"]
                   and c[0]["launch_id"] != c[1]["launch_id"], repr(c))
+            check("a primeira abertura não tem intenção", c[0]["intent"] == "", repr(c[0]["intent"]))
+            it = _modos.parse_intent(c[1]["intent"])
+            check("a intenção da segunda é o brief (espaços colapsados)",
+                  it.get("proposito") == " ".join(BRIEF.split()), repr(it.get("proposito")))
+            check("o plano tem exatamente 1 item", len(it.get("plano") or []) == 1, repr(it.get("plano")))
+            check("o passo é 1", it.get("passo") == 1, repr(it.get("passo")))
+            check("--proposito não vaza para o claude", "--proposito" not in c[1]["args"],
+                  repr(c[1]["args"]))
         check("o .next.json foi apagado", not (w.sessions / "sess-1.next.json").exists())
+        check("o cepa diz a intenção gravada", "◆ intenção:" in r.stderr, r.stderr)
         check("a anotação do launch foi apagada", not list(w.sessions.glob("*.launch")))
         check("o cepa diz que encadeou", "próxima sessão em" in r.stderr, r.stderr)
         check("a sessão seguinte não foi isolada numa worktree",
               not w.wt_home.exists() or not any(w.wt_home.iterdir()))
+        check("sai 0", r.returncode == 0, f"rc={r.returncode}")
+
+
+def t_intencao_anterior_vai_para_historico():
+    print("repo de destino já tinha intenção: o brief a substitui e a antiga vai ao histórico")
+    with World() as w:
+        antiga = {"proposito": "antigo", "para_quando": "x", "plano": ["a"], "passo": 1,
+                  "passo_desde": "2026-01-01T00:00:00Z", "session_id": "", "branch": "master",
+                  "aberto_em": "2026-01-01T00:00:00Z", "resumo": "passo 1/1 · a · antigo",
+                  "historico": []}
+        (w.b / ".claude").mkdir()
+        (w.b / ".claude" / "session-intent").write_text(_modos.render_intent(antiga))
+        w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF})
+        c = w.calls()
+        check("o stub rodou duas vezes", len(c) == 2, f"{len(c)}")
+        if len(c) == 2:
+            it = _modos.parse_intent(c[1]["intent"])
+            check("o propósito agora é o brief", it.get("proposito") == " ".join(BRIEF.split()),
+                  repr(it.get("proposito")))
+            hist = it.get("historico") or []
+            check("o histórico guarda o propósito antigo",
+                  any(h.get("proposito") == "antigo" for h in hist), repr(hist))
+
+
+def t_proposito_direto_na_worktree():
+    print("cepa --proposito dentro da worktree isolada: a intenção mora lá, não na raiz")
+    with World() as w:
+        r = w.run(args=["-s", "fatia", "--proposito", "x y"])
+        c = w.calls()
+        check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
+        if c:
+            check("rodou numa worktree", Path(c[0]["cwd"]).resolve().is_relative_to(w.wt_home.resolve()),
+                  c[0]["cwd"])
+            it = _modos.parse_intent(c[0]["intent"])
+            check("a intenção na worktree é 'x y'", it.get("proposito") == "x y", repr(it))
+            check("--proposito não vaza para o claude", "--proposito" not in c[0]["args"],
+                  repr(c[0]["args"]))
+        check("a raiz não ganhou intenção", not (w.a / ".claude" / "session-intent").exists())
+
+
+def t_sem_proposito_sem_intencao():
+    print("cepa sem --proposito não grava intenção")
+    with World() as w:
+        r = w.run()
+        c = w.calls()
+        check("o stub rodou uma vez", len(c) == 1, f"{len(c)}")
+        check("sem intenção na raiz", not (w.a / ".claude" / "session-intent").exists())
+        check("não fala de intenção", "intenção" not in r.stderr, r.stderr)
+
+
+def t_falha_do_escritor_nao_impede():
+    print("cepa-intencao recusa: a sessão abre mesmo assim e o cepa avisa")
+    with World() as w:
+        (w.a / ".claude" / "session-intent").mkdir(parents=True)
+        r = w.run(args=["--proposito", "x y"])
+        check("o stub rodou (sessão abriu)", len(w.calls()) == 1, f"{len(w.calls())}; {r.stderr!r}")
+        check("o cepa avisa que não gravou", "não gravei a intenção" in r.stderr, r.stderr)
         check("sai 0", r.returncode == 0, f"rc={r.returncode}")
 
 
@@ -290,6 +364,10 @@ def t_registro_ignora_next():
 
 if __name__ == "__main__":
     t_encadeia()
+    t_intencao_anterior_vai_para_historico()
+    t_proposito_direto_na_worktree()
+    t_sem_proposito_sem_intencao()
+    t_falha_do_escritor_nao_impede()
     t_sem_arquivo()
     t_desligado()
     t_invalido()

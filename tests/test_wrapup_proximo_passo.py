@@ -175,7 +175,7 @@ with World() as w:
     got = json.loads(log.read_text()) if log.exists() else {}
     check("cepa reaberto", bool(got), p.stderr)
     check("cwd = repo", got.get("cwd") == str(w.alvo), got)
-    check("--modo descoberta + brief", got.get("args") == ["--modo", "descoberta", BRIEF], got)
+    check("--modo descoberta + brief", got.get("args") == ["--modo", "descoberta", "--proposito", BRIEF, BRIEF], got)
     check("arquivo consumido", not w.nxt.exists())
 
 print("o wrap-up e o handoff conhecem a linha")
