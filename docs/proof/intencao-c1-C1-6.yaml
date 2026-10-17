@@ -1,0 +1,53 @@
+schema_version: 2
+card: intencao-c1-C1-6
+verdict: proven
+reviewed_at: 2026-10-17T20:00:00-03:00
+base_commit: 63d5371
+head_commit: 2e266a8
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-intencao (subcomando encerrar, emite com session=)", module: common-bin, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-metrics (intencao_linhas, known events)", module: common-bin, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/session-log.py (pergunta_onde_estamos, intent.asked)", module: common-hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/wrap-up.md (passo de telemetria)", module: common-commands, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/metrics.md (paragrafo da secao)", module: common-commands, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python/markdown, sem Maven/PIT. Os testes executam o cepa-intencao, o
+    cepa-metrics e o hook reais, com CEPA_TELEMETRY_DIR isolado; nenhum duplo no
+    lugar da classe alterada. Rodada 2: worktree descartavel --detach
+    /tmp/proof-c16b (2e266a8), restaurada com git checkout entre perturbacoes e
+    removida ao final; arvore principal intocada. 2e266a8 so altera
+    tests/test_intent_telemetria.py (+59 linhas); producao identica a ac6e8ed.
+    Nao rodei run-all.sh.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 2e266a8: test_intent_telemetria 'all intent telemetria tests passed'; test_cepa_intencao 'tudo ok'; test_cepa_metrics_scorecard 'ok'; test_telemetria_isolada 'all telemetria-isolada tests passed'"
+        - "rodada 2, sobreviventes da rodada 1 agora RED em test_intent_telemetria (1 FAIL cada): avancou sem intersecao com gravou; ultimo sem intersecao; C2 '*2 > n'->'>='; C2 '*3 > n'; C2 minimo 10->9; plano deixa de recusar item 'encerrar'; evento do plano cumprido com passo=m; nota de eventos sem session removida; sem_sessao nao conta; wrap-up.md 'ignore the output' trocado; wrap-up.md 'read-only, never blocks' trocado; metrics.md titulo '**Intenção da sessão**' trocado"
+        - "sanidade das mortas da rodada 1 seguem RED: encerrar passo>=m->>m (4 FAIL); sessao alheia ignorada (1); emite sem session= (3); nunca=gravou (3); asked+=2 (1); secao sempre aparece (1); hook nao emite intent.asked (1); limite 80->10 (19); wrap-up comando encerrar->mostrar (1)"
+        - "RESIDUAL (cosmetico, nao conta): metrics.md trocar a abertura 'Desde 17/10/2026 inclui a seção' por 'Nada' continua verde; e uma frase de introducao com data, sem contrato; o titulo e 'intent.*', que carregam o contrato, estao guardados. Sinalizado ao humano, nao dispensado por mim."
+        - "equivalentes da rodada 1 (nao contam): hook '<= 80'->'<= 400'; regex sem ancora de inicio (re.match ja ancora)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as lacunas da rodada 1 (intersecoes com gravou, fronteiras 5/10, 10/10 e 9 sessoes, recusa de 'encerrar' no plano, passo do plano cumprido, eventos sem session) agora sao alcancadas: cada quebra derruba python3 tests/test_intent_telemetria.py"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera um comando local do harness, um agregador de telemetria, um hook que so le o prompt do proprio dono e docs de comando; sem endpoint nem entrada externa nao confiavel; nenhum modulo api-rest alterado."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+history:
+  - round: 1
+    head_commit: ac6e8ed
+    verdict: unproven
+    summary: "6 sobreviventes: intersecao com sessoes gravadas (avancou/ultimo), fronteiras do criterio C2, recusa de 'encerrar' como item de plano, campo passo no plano cumprido, contagem de eventos sem session, prosa de wrap-up.md/metrics.md. Demais 30+ ficaram RED."
+routing_reason: "PROVEN: os 6 grupos de sobreviventes da rodada 1 viram vermelho com os testes de 2e266a8; sanidade das mortas segue vermelha; baseline dos 4 testes verde; nenhum duplo; L4 n/a justificado. Unico residual: frase de abertura com data em metrics.md, sem contrato."

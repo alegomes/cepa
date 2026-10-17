@@ -1,0 +1,29 @@
+schema_version: 1
+card: intencao-c1-C1-6
+status: complete
+audited_at: 2026-10-17
+head: ac6e8ed
+base: 63d5371
+criteria:
+  - id: AC1
+    text: "Eventos intent.written, intent.cursor_advanced, intent.asked (prompt do dono casa com 'o que estamos fazendo / onde estamos / próximo passo') e intent.finished_at_last_step (wrap-up com cursor no último passo) gravados no ledger de telemetria"
+    altitude: event
+    surface: "ledger em cepa-telemetry (CEPA_TELEMETRY apontado para tmp): hook common/hooks/session-log.py (intent.asked) e `cepa-intencao` (written, cursor_advanced, encerrar)"
+    demonstrated_by:
+      test: "tests/test_intent_telemetria.py: hook real via subprocess (casa/nao casa, 1 intent.asked, session de 8 chars, sem texto do prompt, evento prompt preservado); cepa-intencao real em repos git temporarios (written/cursor_advanced com session; encerrar emite so em passo >= M, nao emite em 1 de 3 e 2 de 3, nem sem intencao nem de outra sessao; recusa opcoes de escrita)"
+      layer: subprocess do hook e do CLI reais lendo o ledger
+      evidence: verified
+      run: "python3 tests/test_intent_telemetria.py -> todos 'ok', 0 FAIL, 'all intent telemetria tests passed' (HEAD ac6e8ed)"
+    verdict: complete
+    gap: "Residuo: a emissao de intent.finished_at_last_step no wrap-up depende do agente seguir o passo em prosa de wrap-up.md (`cepa-intencao encerrar`); o teste fixa o contrato por assercao de texto (manda rodar, nomeia o evento, pula no --discard), nao executa o /common:wrap-up. Nao e lacuna de teste automatizavel; vale conferencia manual unica."
+  - id: AC2
+    text: "Linha nova no /common:metrics, que permita o criterio do C2 (apos 10 sessoes com intencao, fracao que nunca avancou o cursor > metade)"
+    altitude: cli
+    surface: "saida de `cepa-metrics` (secao 'Intencao da sessao') + metrics.md"
+    demonstrated_by:
+      test: "tests/test_intent_telemetria.py: cepa-metrics real sobre ledger sintetico: secao aparece, contagem por sessoes distintas (4 gravadas, 2 de 4 avancaram, nunca avancou 2 de 4, ultimo passo 2 de 4, perguntas 3) com a conta, falta de amostra (6 para o minimo), memoria de calculo, sem eventos a secao some, eventos intent nao vazam para 'Eventos custom'; 10 sessoes com 6 sem avancar -> 'C2 entra.'"
+      layer: subprocess do agregador real
+      evidence: verified
+      run: "python3 tests/test_intent_telemetria.py -> 0 FAIL, 'all intent telemetria tests passed'"
+    verdict: complete
+    gap: "Residuos declarados, fora do criterio literal: 'turnos depois da rotina' e apontado, nao calculado; --json nao tem o bloco de intencao. Se o dono quiser o JSON ou a metrica de turnos, vira card proprio."
