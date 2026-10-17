@@ -190,7 +190,7 @@ check("mostrar imprime o resumo", p.returncode == 0 and "plano cumprido 4/4" in 
 
 # --- subcomando depois de --plano --------------------------------------------
 r6 = novo_repo("r6")
-for sub in ("gravar", "mostrar"):
+for sub in ("gravar", "mostrar", "continuar"):
     for pre in (False, True):
         if pre and arquivo(r6) is None:
             gravar(r6)
@@ -262,6 +262,38 @@ d = M.read_intent(r10)
 check("propósito 'a\\nb' relido do arquivo é 'a b'",
       p.returncode == 0 and d["proposito"] == "a b", d.get("proposito"))
 check("resumo do propósito 'a\\nb' termina em '· a b'", d["resumo"].endswith("· a b"), d["resumo"])
+
+# --- continuar: adota nesta sessão a intenção de outra (D1) ---------------------
+r11 = novo_repo("r11")
+p = subprocess.run([sys.executable, str(BIN), "continuar"], cwd=r11,
+                   env={**ENV, "CLAUDE_CODE_SESSION_ID": "sess-2"}, capture_output=True, text=True)
+check("continuar sem intenção recusa (3) e não cria arquivo",
+      p.returncode == 3 and arquivo(r11) is None, (p.returncode, p.stderr))
+gravar(r11)
+cepa(r11, "--passo", "2")
+antes = M.read_intent(r11)
+p = subprocess.run([sys.executable, str(BIN), "continuar"], cwd=r11,
+                   env={**ENV, "CLAUDE_CODE_SESSION_ID": "sess-2"}, capture_output=True, text=True)
+depois = M.read_intent(r11)
+check("continuar troca o session_id pelo da sessão atual",
+      p.returncode == 0 and depois["session_id"] == "sess-2", (p.stderr, depois))
+check("continuar preserva propósito, plano, passo e passo_desde",
+      all(depois[k] == antes[k] for k in ("proposito", "plano", "passo", "passo_desde",
+                                          "aberto_em", "historico")), (antes, depois))
+check("continuar imprime o resumo", p.stdout.strip() == depois["resumo"], p.stdout)
+for extra in (["--passo", "3"], ["--motivo", "m"], ["--proposito", "x"]):
+    antes_txt = arquivo(r11)
+    p = cepa(r11, "continuar", *extra)
+    check(f"continuar {' '.join(extra)} recusa rc=2, intacto",
+          p.returncode == 2 and arquivo(r11) == antes_txt, (p.returncode, p.stderr))
+
+antes_txt = arquivo(r11)
+p = subprocess.run([sys.executable, str(BIN), "continuar"], cwd=r11,
+                   env={k: v for k, v in ENV.items()
+                        if k not in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_SESSION_ID")},
+                   capture_output=True, text=True)
+check("continuar sem id de sessão no ambiente recusa rc=2, intacto",
+      p.returncode == 2 and arquivo(r11) == antes_txt, (p.returncode, p.stderr))
 
 # --- fora de git ------------------------------------------------------------
 fora = TMP / "fora"

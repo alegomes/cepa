@@ -26,6 +26,7 @@ Uso:
     # com `gravar`, o subcomando vem SEMPRE antes de `--plano` (que consome tudo
     # até a próxima opção): `--plano a b gravar` seria o item "gravar".
     cepa-intencao [mostrar]          # imprime a intenção atual
+    cepa-intencao continuar          # adota nesta sessão a intenção de outra
 
 Regras:
   - `passo` é o passo EM ANDAMENTO (1-based). `--passo N` aceita 1..M, e M+1,
@@ -37,6 +38,10 @@ Regras:
     plano anterior no histórico (`plano_anterior`, itens separados por " | ").
   - Itens do plano não contêm ':'; plano tem 1 a PLANO_MAX itens (mais que isso
     é programa: `plan.yaml` / `/common:plan`). Recusa = nada é escrito.
+  - `continuar` é a resposta "continuo" à pergunta que o hook `session-mode.py`
+    faz quando a intenção foi gravada por outra sessão (decisão D1): troca só
+    `session_id` e `branch` pelos atuais. Propósito, plano, cursor e a idade
+    do cursor (`passo_desde`) ficam como estavam.
   - Escrita atômica (tmp + os.replace); cria `.claude/` se faltar.
   - Telemetria (fail-silent, sem texto do propósito): `intent.written`
     (acao=gravar|proposito|plano, passos=M) e `intent.cursor_advanced`
@@ -128,6 +133,16 @@ def emite(root, evento, **campos):
         T.emit(evento, cwd=str(root), **campos)
 
 
+def sessao_atual():
+    return (os.environ.get("CLAUDE_CODE_SESSION_ID")
+            or os.environ.get("CLAUDE_SESSION_ID") or "")
+
+
+def branch_atual(root):
+    return (git(["rev-parse", "--abbrev-ref", "HEAD"], root)
+            or git(["symbolic-ref", "--short", "HEAD"], root))  # repo sem commit
+
+
 def mostrar(d):
     print(d.get("resumo") or "(sem resumo)")
     print(f"propósito: {d.get('proposito', '')}")
@@ -140,7 +155,7 @@ def mostrar(d):
 
 def main():
     ap = argparse.ArgumentParser(prog="cepa-intencao", description=__doc__.split("\n")[0])
-    ap.add_argument("acao", nargs="?", choices=("gravar", "mostrar"))
+    ap.add_argument("acao", nargs="?", choices=("gravar", "mostrar", "continuar"))
     ap.add_argument("--proposito")
     ap.add_argument("--para-quando", dest="para_quando")
     ap.add_argument("--plano", nargs="+")
@@ -148,8 +163,8 @@ def main():
     ap.add_argument("--motivo")
     a = ap.parse_args()
 
-    if a.plano and any(i.strip() in ("gravar", "mostrar") for i in a.plano):
-        recusa("um item do plano é exatamente 'gravar'/'mostrar': o subcomando "
+    if a.plano and any(i.strip() in ("gravar", "mostrar", "continuar") for i in a.plano):
+        recusa("um item do plano é exatamente um subcomando: o subcomando "
                "vai ANTES de --plano (`cepa-intencao gravar --plano a b ...`).")
     root = git(["rev-parse", "--show-toplevel"], os.getcwd())
     if not root:
@@ -175,13 +190,24 @@ def main():
         t = agora()
         d = {"proposito": a.proposito.strip(), "para_quando": a.para_quando.strip(),
              "plano": plano, "passo": 1, "passo_desde": t,
-             "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID")
-             or os.environ.get("CLAUDE_SESSION_ID") or "",
-             "branch": git(["rev-parse", "--abbrev-ref", "HEAD"], root)
-             or git(["symbolic-ref", "--short", "HEAD"], root),  # repo sem commit
+             "session_id": sessao_atual(), "branch": branch_atual(root),
              "aberto_em": t, "historico": hist}
         escreve(root, d)
         emite(root, "intent.written", acao="gravar", passos=len(plano))
+        print(d["resumo"])
+        return
+
+    if a.acao == "continuar":
+        if not existe:
+            recusa("não há intenção gravada nesta worktree para continuar.", 3)
+        if a.passo is not None or a.proposito or a.plano or a.para_quando or a.motivo:
+            recusa("continuar não aceita outras opções; para mudar algo, rode depois.")
+        if not sessao_atual():
+            recusa("não sei o id desta sessão (CLAUDE_CODE_SESSION_ID vazio); "
+                   "sem ele não há o que adotar.")
+        d = dict(atual)
+        d["session_id"], d["branch"] = sessao_atual(), branch_atual(root)
+        escreve(root, d)
         print(d["resumo"])
         return
 

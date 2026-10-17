@@ -660,6 +660,17 @@ Owner: `common/hooks/`. Injects the active work mode (set via `cepa
 a session-long STATE, distinct from a routine (a task that ends). Full
 design: `docs/modos-de-trabalho.md`.
 
+It also injects the session intent (`.claude/session-intent`, written only by
+`cepa-intencao`), capped at two lines, in one of three states: no intent yet
+(only when a mode is set, i.e. the session came from `cepa`): the session's
+first three prompts plus the request to propose and record one; intent recorded
+by ANOTHER session: the date and "continuo ou abro nova?" instead of showing it
+as current (answered by `cepa-intencao continuar` or `gravar --motivo`); and
+the normal state: purpose, step N/M, how many turns the cursor has sat there,
+and the next step. Silent about intent inside a `cepa-until` round
+(`CEPA_UNTIL_RUN`), where the intent is the `plan.yaml` item. Design:
+`docs/estrategia-intencao-da-sessao.md`.
+
 ### session-routine-guard.py (UserPromptSubmit)
 
 Owner: `common/hooks/`. Refuses, at the start, a conversational routine
