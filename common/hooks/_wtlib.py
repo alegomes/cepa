@@ -471,6 +471,9 @@ RESCUE_SKIP = (
     "session-mode",       # modo da sessão que está acabando; resgatado, só
                           # disparava o aviso de "plans, proof and acceptance"
                           # no SessionStart seguinte (alarme falso, 26/09/2026)
+    "session-intent",     # intenção da sessão que está acabando (propósito,
+                          # plano, passo); vale para quem a gravou. Resgatada,
+                          # a árvore nova leria um passo que não é dela.
     "settings.local.json",
     "__pycache__/",
 )

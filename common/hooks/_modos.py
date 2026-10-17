@@ -27,6 +27,9 @@ rodada por decisão do dono (é o único que depende de infra externa). Quando
 entrar, entra aqui primeiro.
 """
 
+import os
+import re
+
 # ordem = a ordem do ciclo de trabalho, não alfabética
 MODOS = {
     "exploracao": {
@@ -100,3 +103,116 @@ MODOS = {
 
 # O que `session-mode.py` injeta a cada turno — só a condição de saída.
 SAIDA = {nome: d["saida"] for nome, d in MODOS.items()}
+
+
+# ---------------------------------------------------------------------------
+# A intenção da sessão: `.claude/session-intent`
+# ---------------------------------------------------------------------------
+#
+# Formato e leitor ficam AQUI, num lugar só, pelo mesmo motivo da tabela acima.
+# O `session-mode` é lido linha a linha por seis leitores (`grep`/`sed` e hooks)
+# que não entendem lista, e o `write_modo` do `cepa` o reescreve inteiro com `>`:
+# pôr o plano e o histórico lá dentro seria perdê-los na primeira troca de modo.
+# Por isso a intenção é um arquivo próprio, e quem o lê (hook, `whereami`,
+# statusline, `cepa-intencao`) importa `read_intent` em vez de copiar um parser.
+#
+# O formato, documentado em `docs/estrategia-intencao-da-sessao.md`:
+#
+#   proposito, para_quando, passo_desde, session_id, branch, aberto_em, resumo
+#                 escalares (entre aspas "..." ou nus)
+#   plano         lista de 1 a PLANO_MAX textos (`- item`)
+#   passo         inteiro, 1-based: o passo EM ANDAMENTO, não o último concluído
+#   historico     lista de mapas (`- em: ...` e chaves recuadas abaixo)
+#
+# Sem pyyaml: os hooks deste repo não dependem dele (ver `_wtlib.py`). O leitor é
+# tolerante de propósito — um hook que quebra por causa de um arquivo meio escrito
+# derruba o turno inteiro. Ele devolve o que conseguiu ler, mantém chaves
+# desconhecidas e nunca levanta. NÃO impõe as regras do escritor (item de plano
+# sem dois-pontos, por exemplo): isso é do `cepa-intencao`.
+
+INTENT_FILE = ".claude/session-intent"
+
+# Plano de 1 a 6 passos; mais que isso é programa (`plan.yaml`).
+PLANO_MAX = 6
+
+# Chaves cujo valor é uma lista de mapas; qualquer outra lista é de textos.
+_INTENT_LISTAS_DE_MAPAS = ("historico",)
+
+_KV = re.compile(r"^([A-Za-z_][\w-]*)\s*:(?:\s+(.*)|\s*)$")
+
+
+def _intent_valor(bruto):
+    """Um escalar do arquivo: "entre aspas" (com \\" e \\\\) ou nu sem `# nota`."""
+    s = (bruto or "").strip()
+    if s[:1] in ('"', "'"):
+        q, out, i = s[0], [], 1
+        while i < len(s):
+            c = s[i]
+            if c == "\\" and q == '"' and i + 1 < len(s):
+                out.append(s[i + 1])
+                i += 2
+                continue
+            if c == q:
+                return "".join(out)
+            out.append(c)
+            i += 1
+        return "".join(out)  # aspas sem fechar: devolve o que havia
+    m = re.search(r"\s#", s)
+    return (s[:m.start()] if m else s).strip()
+
+
+def parse_intent(text):
+    """Texto do `session-intent` -> dict. Tolerante: nunca levanta."""
+    dados, chave, ultimo_mapa = {}, None, None
+    try:
+        for linha in (text or "").splitlines():
+            if not linha.strip() or linha.lstrip().startswith("#"):
+                continue
+            if not linha[0].isspace():
+                ultimo_mapa = None
+                m = _KV.match(linha.rstrip())
+                if not m:
+                    chave = None
+                    continue
+                chave, resto = m.group(1), m.group(2)
+                if resto is None or resto.lstrip().startswith("#"):
+                    dados[chave] = []  # abre um bloco; sem itens vira lista vazia
+                else:
+                    dados[chave] = _intent_valor(resto)
+                continue
+            if chave is None or not isinstance(dados.get(chave), list):
+                continue
+            corpo = linha.strip()
+            mapas = chave in _INTENT_LISTAS_DE_MAPAS
+            if corpo.startswith("-"):
+                item = corpo[1:].strip()
+                if mapas:
+                    ultimo_mapa = {}
+                    dados[chave].append(ultimo_mapa)
+                    m = _KV.match(item)
+                    if m:
+                        ultimo_mapa[m.group(1)] = _intent_valor(m.group(2))
+                else:
+                    dados[chave].append(_intent_valor(item))
+            elif mapas and ultimo_mapa is not None:
+                m = _KV.match(corpo)
+                if m:
+                    ultimo_mapa[m.group(1)] = _intent_valor(m.group(2))
+        if "passo" in dados:
+            try:
+                dados["passo"] = int(str(dados["passo"]).strip())
+            except (ValueError, TypeError):
+                pass  # fica como veio; quem lê decide
+    except Exception:
+        pass  # devolve o que já tinha lido
+    return dados
+
+
+def read_intent(root):
+    """`<root>/.claude/session-intent` -> dict, ou None se o arquivo não existe."""
+    try:
+        with open(os.path.join(str(root), INTENT_FILE), encoding="utf-8",
+                  errors="replace") as f:
+            return parse_intent(f.read())
+    except OSError:
+        return None
