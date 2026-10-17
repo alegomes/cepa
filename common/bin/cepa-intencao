@@ -28,6 +28,7 @@ Uso:
     cepa-intencao [mostrar]          # imprime a intenção atual
     cepa-intencao continuar          # adota nesta sessão a intenção de outra
     cepa-intencao estado             # só leitura: classifica e imprime (whereami)
+    cepa-intencao encerrar           # o /common:wrap-up roda: telemetria de fim de sessão
 
 Regras:
   - `passo` é o passo EM ANDAMENTO (1-based). `--passo N` aceita 1..M, e M+1,
@@ -45,8 +46,19 @@ Regras:
     do cursor (`passo_desde`) ficam como estavam.
   - Escrita atômica (tmp + os.replace); cria `.claude/` se faltar.
   - Telemetria (fail-silent, sem texto do propósito): `intent.written`
-    (acao=gravar|proposito|plano, passos=M) e `intent.cursor_advanced`
-    (de=, para=, passos=).
+    (acao=gravar|proposito|plano, passos=M), `intent.cursor_advanced`
+    (de=, para=, passos=) e `intent.finished_at_last_step` (passo=, passos=;
+    ver `encerrar`). Todos levam `session=` (8 primeiros caracteres do id da
+    sessão, como o evento `prompt`), para o /common:metrics contar SESSÕES e
+    não eventos. `intent.asked` nasce no hook `session-log.py`, não aqui.
+  - `encerrar` é o que o /common:wrap-up roda (passo 0): só lê e sai 0 sempre.
+    Emite `intent.finished_at_last_step` se a intenção é desta sessão e o
+    cursor está no último passo em andamento (passo == M) OU com o plano
+    cumprido (passo == M+1): nos dois casos nada sobrou a fazer além do
+    fechamento. Cursor antes do último passo, intenção de outra sessão ou
+    ausente: não emite. Não há evento "terminou sem avançar": o /common:metrics
+    deriva isso de `intent.written` sem nenhum `intent.cursor_advanced` na
+    mesma sessão.
 
   - `estado` é a leitura que o /common:whereami, o /common:next (fallback) e o
     /common:recap (linha de abertura) rodam. Nunca escreve e sai 0 em todos os
@@ -140,7 +152,7 @@ def escreve(root, d):
 
 def emite(root, evento, **campos):
     if T is not None:
-        T.emit(evento, cwd=str(root), **campos)
+        T.emit(evento, cwd=str(root), session=sessao_atual()[:8], **campos)
 
 
 def sessao_atual():
@@ -219,9 +231,29 @@ def estado(root, atual):
           f"(desde {atual.get('passo_desde', '?')})")
 
 
+def encerrar(root, atual):
+    """Telemetria do fim da sessão. Só lê; nunca falha o wrap-up."""
+    plano = (atual or {}).get("plano")
+    if not (atual and atual.get("proposito") and isinstance(plano, list) and plano):
+        print("encerrar: sem intenção gravada.")
+        return
+    if not M.mesma_sessao(atual.get("session_id"), sessao_atual()):
+        print("encerrar: a intenção é de outra sessão; nada a registrar.")
+        return
+    m, passo = len(plano), atual.get("passo")
+    if isinstance(passo, int) and passo >= m:
+        try:
+            emite(root, "intent.finished_at_last_step", passo=passo, passos=m)
+        except Exception:  # noqa: BLE001 — telemetria nunca falha o wrap-up
+            pass
+        print(f"encerrar: cursor no último passo ({min(passo, m)}/{m}); registrado.")
+    else:
+        print(f"encerrar: cursor no passo {passo} de {m}; fora do último, nada registrado.")
+
+
 def main():
     ap = argparse.ArgumentParser(prog="cepa-intencao", description=__doc__.split("\n")[0])
-    ap.add_argument("acao", nargs="?", choices=("gravar", "mostrar", "continuar", "estado"))
+    ap.add_argument("acao", nargs="?", choices=("gravar", "mostrar", "continuar", "estado", "encerrar"))
     ap.add_argument("--proposito")
     ap.add_argument("--para-quando", dest="para_quando")
     ap.add_argument("--plano", nargs="+")
@@ -229,7 +261,7 @@ def main():
     ap.add_argument("--motivo")
     a = ap.parse_args()
 
-    if a.plano and any(i.strip() in ("gravar", "mostrar", "continuar", "estado") for i in a.plano):
+    if a.plano and any(i.strip() in ("gravar", "mostrar", "continuar", "estado", "encerrar") for i in a.plano):
         recusa("um item do plano é exatamente um subcomando: o subcomando "
                "vai ANTES de --plano (`cepa-intencao gravar --plano a b ...`).")
     root = git(["rev-parse", "--show-toplevel"], os.getcwd())
@@ -243,6 +275,12 @@ def main():
         if a.passo is not None or a.proposito or a.plano or a.para_quando or a.motivo:
             recusa("estado só lê; não aceita outras opções.")
         estado(root, atual)
+        return
+
+    if a.acao == "encerrar":
+        if a.passo is not None or a.proposito or a.plano or a.para_quando or a.motivo:
+            recusa("encerrar só lê; não aceita outras opções.")
+        encerrar(root, atual)
         return
 
     if a.acao == "gravar":

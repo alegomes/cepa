@@ -67,6 +67,37 @@ def classify(prompt: str):
     return "comando", cmd
 
 
+# "Onde estamos / o que estamos fazendo / qual o próximo passo": as perguntas
+# pelas quais o dono re-orienta a sessão. Cada ocorrência é um sinal de que a
+# intenção gravada não estava à vista (telemetria `intent.asked`). Estrito de
+# propósito: casa a pergunta curta e típica, não qualquer prosa que contenha
+# "próximo passo" no meio de outro assunto.
+_PERGUNTA_ONDE_ESTAMOS = re.compile(
+    r"""^\s*(?:
+        /common:whereami
+      | (?:e\s+)?(?:ent[aã]o[,\s]+)?
+        (?: o\s+que\s+(?:a\s+gente\s+)?(?:estamos|estou|vamos|v[ao]mos)\s+(?:fazendo|fazer)
+          | (?:onde|em\s+que\s+passo|em\s+qual\s+passo)\s+(?:a\s+gente\s+)?(?:estamos|paramos|estou|est[aá])
+          | (?:qual|quais)\s+(?:[eé]\s+)?(?:o\s+|a\s+)?(?:pr[oó]ximo\s+passo|pr[oó]xima\s+etapa)
+          | e\s+(?:o\s+)?pr[oó]ximo\s+passo
+          | pr[oó]ximo\s+passo
+          | where\s+are\s+we
+          | what\s+are\s+we\s+(?:doing|working\s+on)
+          | what(?:'?s|\s+is)\s+(?:the\s+)?next(?:\s+step)?
+          | what\s+(?:was|were)\s+we\s+doing
+        )
+    )[\s?!.]*$""",
+    re.I | re.X)
+
+
+def pergunta_onde_estamos(prompt: str) -> bool:
+    """O prompt é uma pergunta curta de "onde estamos / próximo passo"?
+    Frase inteira (até 80 caracteres), não trecho: "o próximo passo do deploy
+    exige X" é outra coisa."""
+    p = (prompt or "").strip()
+    return 0 < len(p) <= 80 and bool(_PERGUNTA_ONDE_ESTAMOS.match(p))
+
+
 def now() -> tuple[str, str]:
     """Return (date_header, time_header) in UTC."""
     n = datetime.now(timezone.utc)
@@ -138,6 +169,9 @@ def main():
             kind, cmd = classify(prompt)
             T.emit("prompt", cwd=str(cwd), kind=kind, cmd=cmd or "",
                    session=str(payload.get("session_id") or "")[:8])
+            if pergunta_onde_estamos(prompt):
+                T.emit("intent.asked", cwd=str(cwd),
+                       session=str(payload.get("session_id") or "")[:8])
         except Exception:  # noqa: BLE001 — telemetria nunca quebra o hook
             pass
 

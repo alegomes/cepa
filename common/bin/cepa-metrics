@@ -105,6 +105,60 @@ def _sessoes_no_cepa(events):
     return sum(1 for r in rs if r == SCORECARD_REPO), len(rs)
 
 
+def intencao_linhas(events):
+    """Linhas do bloco "Intenção da sessão", com a conta (ciclo 1 de
+    docs/estrategia-intencao-da-sessao.md). Sessão = campo `session` (8
+    caracteres); evento sem ele não forma sessão e fica fora das contagens
+    por sessão. Devolve [] se não houver nenhum evento intent.*."""
+    por_ev = defaultdict(set)
+    asked, sem_sessao = 0, 0
+    for e in events:
+        ev = e.get("event", "")
+        if not ev.startswith("intent."):
+            continue
+        if ev == "intent.asked":
+            asked += 1
+        if e.get("session"):
+            por_ev[ev].add(e["session"])
+        else:
+            sem_sessao += 1
+    if not (por_ev or asked or sem_sessao):
+        return []
+    gravou = por_ev["intent.written"]
+    avancou = gravou & por_ev["intent.cursor_advanced"]
+    nunca = gravou - avancou
+    ultimo = gravou & por_ev["intent.finished_at_last_step"]
+    n = len(gravou)
+
+    def pct(x):
+        return f"{100 * x / n:.1f}%" if n else "sem dados"
+
+    L = [f"    sessões com intenção gravada: {n}",
+         f"    com cursor avançado ao menos uma vez: {len(avancou)} de {n} "
+         f"({len(avancou)} ÷ {n} × 100 = {pct(len(avancou))})",
+         f"    com cursor NUNCA avançado: {len(nunca)} de {n} "
+         f"({len(nunca)} ÷ {n} × 100 = {pct(len(nunca))})",
+         f"    terminaram no último passo (wrap-up com cursor em M ou M+1): "
+         f"{len(ultimo)} de {n} ({len(ultimo)} ÷ {n} × 100 = {pct(len(ultimo))})",
+         f"    perguntas \"onde estamos / próximo passo\" (intent.asked): {asked}"]
+    if n >= 10 and len(nunca) * 2 > n:
+        L.append("    ⚠ critério do ciclo 2: com 10+ sessões, mais da metade nunca "
+                 "avançou o cursor — C2 entra.")
+    elif n < 10:
+        L.append(f"    critério do ciclo 2: faltam {10 - n} sessão(ões) com intenção "
+                 "gravada para avaliar (mínimo 10).")
+    L += ["    memória de cálculo: conta-se SESSÕES distintas (campo session), não eventos;",
+          "      gravada = ao menos um intent.written; avançou = a mesma sessão tem",
+          "      intent.cursor_advanced; nunca avançou = gravada − avançou;",
+          "      último passo = intent.finished_at_last_step (emitido pelo wrap-up);",
+          "      perguntas = total de intent.asked (eventos, não sessões).",
+          "      C2 entra se, com 10+ sessões gravadas, nunca-avançou > metade, ou se os",
+          "      turnos DEPOIS da rotina (seção Atrito das pontas) não caírem."]
+    if sem_sessao:
+        L.append(f"    ({sem_sessao} evento(s) intent.* sem session, fora das contagens por sessão)")
+    return L
+
+
 def _linha(nome, num, den, pct, unid):
     if not den:
         return f"    {nome}: sem dados ({unid[1]} = 0)"
@@ -302,7 +356,9 @@ def main():
             tok_chars[nome] += c or 0
 
     known = {"session_start", "session_end", "build_result", "gate_block", "gate_warn",
-             "proof_verdict", "proof_block", "report_style", "prompt", "token_usage"}
+             "proof_verdict", "proof_block", "report_style", "prompt", "token_usage",
+             "intent.written", "intent.cursor_advanced", "intent.asked",
+             "intent.finished_at_last_step"}
     custom = Counter(e.get("event") for e in events if e.get("event") not in known)
 
     if args.as_json:
@@ -373,6 +429,11 @@ def main():
         print("      DEPOIS = quantos vieram após o último, até o /wrap-up ou /handoff")
         print("      (o próprio fechamento não conta). Mediana = valor do meio da lista.")
         print("    Zero nos dois é o alvo: abrir, rodar, receber o relatório, encerrar.")
+
+    il = intencao_linhas(events)
+    if il:
+        print("\n## Intenção da sessão")
+        print("\n".join(il))
 
     print("\n## Proof gate — vereditos escritos (repo · veredito)")
     print(fmt_counter(Counter({f"{r} · {v}": n for (r, v), n in proof_verdicts.items()})))

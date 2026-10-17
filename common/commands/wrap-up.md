@@ -77,6 +77,11 @@ git constraints follow, and the whole command is built around them:
   leave alone** (untracked `.claude/` session state, build output, caches). You
   show the first list in the plan and stage exactly it in L2 — see L2 for the
   rule. If anything is ambiguous, mark it for the user to decide at confirmation.
+- **Intent telemetry (read-only, never blocks):** run
+  `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" encerrar`. It emits
+  `intent.finished_at_last_step` when this session's intent cursor is on the
+  last step (or the plan is fulfilled) and prints one line; ignore the output,
+  and ignore a failure. Skip it on the `--discard` path.
 - **Decide the path.** Default **land**. Switch to **discard** if `--discard`
   was passed, OR if there are 0 commits ahead of base AND nothing worth
   committing (an empty branch — landing it would be a no-op merge). If you flip

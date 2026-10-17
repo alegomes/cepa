@@ -22,6 +22,12 @@ separa (06/10/2026) a primeira escrita, que o bloqueio devolve, do que
 persistiu após a reescrita e chegou ao usuário. O segundo é o número que
 importa.
 
+Desde 17/10/2026 inclui a seção **Intenção da sessão** (eventos `intent.*`):
+quantas sessões gravaram intenção, em quantas o cursor avançou, quantas
+terminaram no último passo e quantas vezes você perguntou "onde estamos /
+próximo passo", cada linha com a conta. É a leitura do critério que decide se o
+ciclo 2 da intenção entra (docs/estrategia-intencao-da-sessao.md).
+
 ## Steps
 
 1. Rode o agregador, repassando os argumentos do usuário verbatim:
