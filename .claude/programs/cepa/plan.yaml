@@ -669,13 +669,15 @@ items:
   status: blocked
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-10-15: não: Mando calibrar o porteiro agora,
-    antes de qualquer onda rodar?. O dono manteve o item como estava (`blocked`).
-    Evidência anterior: Condicao de fora nao cumprida: o BACKLOG.md (secao ''Calibrar
-    as regras do porteiro'', decisao do dono 2026-08-24) adia o que falta (liberar
-    escrita por shell cujo alvo cai dentro da superficie da slice) ate a 0.4.3 do
-    porteiro rodar pelo menos uma onda de verdade. Conferido em 2026-09-27: o unico
-    ledger de porteiro no disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
+  evidence: 'Resposta do dono em 2026-10-17: não: Devolvo a calibragem do porteiro
+    à fila agora, antes de qualquer onda rodar?. O dono manteve o item como estava
+    (`blocked`). Evidência anterior: Resposta do dono em 2026-10-15: não: Mando
+    calibrar o porteiro agora, antes de qualquer onda rodar?. O dono manteve o item
+    como estava (`blocked`). Evidência anterior: Condicao de fora nao cumprida:
+    o BACKLOG.md (secao ''Calibrar as regras do porteiro'', decisao do dono 2026-08-24)
+    adia o que falta (liberar escrita por shell cujo alvo cai dentro da superficie
+    da slice) ate a 0.4.3 do porteiro rodar pelo menos uma onda de verdade. Conferido
+    em 2026-09-27: o unico ledger de porteiro no disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
     166 linhas) e de 2026-08-24 10:12, anterior ao commit 9b9846e da 0.4.3 (10:13);
     nenhuma onda rodou depois. As duas ondas da fila (rodar-onda-lotes-*) estao
     blocked por herdr fora do ar. Nada implementado, nenhum commit. Quem resolve:
@@ -2218,17 +2220,43 @@ items:
     custa um turno por item e uma rodada dentro do cepa-until; engineering-lead
     e validation-lead têm o mesmo padrão (ainda não priorizado: entrou no fim da
     fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Branch until/2026-10-16-2101, commits d0b13b7 (build-hex 1.4.2: prefixo
+    build-hex:/common: em todo worker citado nos 3 leads + tests/test_leads_prefixam_workers.py
+    + BACKLOG feito), e98ced3 (prosa de delegacao do engineering-lead tambem prefixada;
+    teste reprova nome curto em linha com verbo de delegacao), 2ddf786 (artefatos).
+    Gates: pair-reviewer OK-WITH-NOTES (nota aplicada: plugin errado agora falha),
+    completion-auditor COMPLETE (.claude/acceptance/planning-lead-workers-sem-prefixo.yaml,
+    apos 1 rodada INCOMPLETE pela prosa), proof-reviewer PROVEN (docs/proof/planning-lead-workers-sem-prefixo.yaml;
+    38 FAIL na base 5ddce2c, verde no HEAD, perturbacoes vermelhas). Build completo
+    nao rodado aqui: fica com o supervisor do cepa-until. Fora de proposito: build-hex/commands/*.md
+    (25 nomes curtos) e os leads das outras topologias seguem sem prefixo; sem secao
+    no BACKLOG ainda.'
 - id: relatorio-pos-wrap-up-abre-frente-nova
   title: Depois do wrap-up, o relatório seguinte (metrics passo 3, plain-report)
     reabre uma frente nova
   why: 'BACKLOG § Depois do wrap-up, o relatório seguinte reabre uma frente nova
     (fb-20261016-4): nem metrics nem plain-report sabem que a sessão foi encerrada;
     o dono se perde na árvore de forks (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Branch until/2026-10-16-2101, commits 2c2d525 (feature: report-style-lint
+    2.29.0 le do transcript se o wrap-up terminou com ''Safe to exit'' e barra,
+    categoria pergunta-pos-wrap-up, relatorio seguinte com pergunta numerada ou
+    Pra voce anunciando, inclusive o turno so-leitura do metrics; mensagens de bloqueio/aviso
+    pedem ''Nada pendente. Proxima sessao comeca por X''; prosa em wrap-up.md L8/discard,
+    metrics.md passo 3 registra em vez de oferecer, plain-report secao ''Depois
+    do wrap-up'', default-yes terceira obrigacao do fio; BACKLOG secao marcada feita),
+    9a55d7d e 53202ff (testes: casos a-h3 + 5 checks de prosa), bad49d0 (artefatos).
+    pair-reviewer OK-WITH-NOTES (travessao corrigido). completion-auditor COMPLETE
+    (.claude/acceptance/relatorio-pos-wrap-up-abre-frente-nova.yaml, diff 2ddf786..53202ff,
+    6/6 verified). proof-reviewer PROVEN (docs/proof/relatorio-pos-wrap-up-abre-frente-nova.yaml:
+    12 perturbacoes vermelhas, teste vermelho na base com 14 FAIL). Rodado so tests/test_report_style_lint.py
+    (138 ok) e tests/test_wrapup_proximo_passo.py; build completo e do supervisor.
+    Decisao tomada sem perguntar: sessao encerrada nao e reaberta nem quando o dono
+    pede trabalho novo depois do ''Safe to exit'' na mesma conversa; o relatorio
+    registra em vez de perguntar (o anti-loop do hook impede travar a sessao). Nenhum
+    merge, nenhum push.'
