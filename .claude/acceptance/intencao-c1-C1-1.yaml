@@ -1,0 +1,51 @@
+schema_version: 1
+card: intencao-c1-C1-1
+status: complete
+audited_at: 2026-10-17
+head: dc3c392
+base: bbcf97b
+criteria:
+  - id: AC1
+    text: "Parser compartilhado de .claude/session-intent em _modos.py ou _wtlib.py, importavel por hooks e comandos, lendo todos os campos do formato (proposito, para_quando, plano, passo, passo_desde, session_id, branch, aberto_em, resumo, historico)."
+    altitude: domain
+    surface: "common/hooks/_modos.py: parse_intent(text) e read_intent(root); sem pyyaml; nunca levanta"
+    demonstrated_by:
+      test: "tests/test_session_intent.py (test_exemplo_do_doc, test_arquivo_ausente_e_lido_do_disco, test_tolerancia, test_aspas_preservam_dois_pontos_e_cerquilha)"
+      layer: teste de funcao importada como os hooks a importam (sys.path em common/hooks)
+      evidence: verified
+      run: "python3 tests/test_session_intent.py -> 40 linhas 'ok', 0 FAIL, 'ok - session-intent'"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "O exemplo literal do doc parseia corretamente."
+    altitude: domain
+    surface: "parse_intent sobre o YAML de docs/estrategia-intencao-da-sessao.md"
+    demonstrated_by:
+      test: "tests/test_session_intent.py::test_exemplo_do_doc (EXEMPLO copiado do doc; conferi por conta propria que o bloco do doc, extraido do arquivo, da o mesmo dict)"
+      layer: teste de funcao
+      evidence: verified
+      run: "python3 tests/test_session_intent.py -> 0 FAIL; parse direto do bloco do doc devolve os 10 campos, passo=3 (int), plano com 4 itens, historico com 1 mapa de 3 chaves"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "session-intent em RESCUE de _wtlib.py para o resgate nao arrastar o arquivo (doomed_artifacts o exclui)."
+    altitude: persistence
+    surface: "common/hooks/_wtlib.py RESCUE_SKIP + doomed_artifacts(worktree)"
+    demonstrated_by:
+      test: "tests/test_session_intent.py::test_resgate_nao_arrasta_a_intencao (arquivo real em tmp; controle positivo com outro artefato resgatado)"
+      layer: teste com arquivos reais no disco
+      evidence: verified
+      run: "python3 tests/test_session_intent.py -> 'session-intent fora do resgate' ok e controle ok; tests/test_worktree_artifact_rescue.py -> all green"
+    verdict: complete
+    gap: "Nota: a lista chama-se RESCUE_SKIP, nao RESCUE; o comportamento pedido esta demonstrado."
+  - id: AC4
+    text: "Um teste cobre o acima."
+    altitude: domain
+    surface: "tests/test_session_intent.py"
+    demonstrated_by:
+      test: "tests/test_session_intent.py"
+      layer: script standalone, rc 0
+      evidence: verified
+      run: "python3 tests/test_session_intent.py -> 40 ok, 0 falhas; vizinhos: test_modos_fonte_unica 'ok - 7 modos', test_cepa_modo 'tudo verde', test_worktree_artifact_rescue 'all green'. Suite completa NAO rodada (a cargo do supervisor)."
+    verdict: complete
+    gap: null

@@ -1,0 +1,48 @@
+schema_version: 2
+card: intencao-c1-C1-1
+verdict: proven
+reviewed_at: 2026-10-17T08:00:00-03:00
+base_commit: bbcf97b
+head_commit: dc3c392
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/hooks/_modos.py (parse_intent, read_intent, _intent_valor, INTENT_FILE, PLANO_MAX)", module: common-hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_wtlib.py (RESCUE_SKIP += session-intent, consumido por doomed_artifacts)", module: common-hooks, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_session_intent.py (novo)", module: tests, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python (harness cepa), sem Maven/PIT/Quarkus. A superficie externa e a
+    funcao de modulo que hooks/comandos importam (_modos.parse_intent/read_intent)
+    e _wtlib.doomed_artifacts; o teste as chama diretamente, sem doubles.
+    Perturbacoes em worktree descartavel --detach em /tmp/proof-c11 (removido ao
+    final); arvore principal intocada.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline HEAD dc3c392: python3 tests/test_session_intent.py -> 'ok — session-intent', exit 0; test_worktree_artifact_rescue 'all green'; test_modos_fonte_unica 'ok'; test_cepa_modo 'tudo verde'"
+        - "RED: removido \"session-intent\" de RESCUE_SKIP -> FAIL 'session-intent fora do resgate'"
+        - "RED: desligado o corte de comentario em valor nu (m = None) -> FAIL em 'passo e int 3, sem o comentario', 'nu: corta # comentario', 'presente -> dict'"
+        - "RED: historico lido como lista de textos (_INTENT_LISTAS_DE_MAPAS = ()) -> FAIL 'historico: 1 entrada com 3 chaves', 'bloco com comentario: historico'"
+        - "RED: passo deixa de ser coagido a int (if False) -> FAIL 'passo e int 3, sem o comentario', 'presente -> dict'"
+        - "RED: parse descarta chaves desconhecidas (filtro no return) -> teste quebra com KeyError: 'passo_desde' (exit != 0)"
+        - "RED: read_intent levanta em arquivo ausente (except OSError -> ZeroDivisionError) -> FileNotFoundError no teste de arquivo ausente"
+        - "RED: bloco 'plano: # nota' deixa de abrir lista (removida a condicao startswith('#')) -> FAIL 'bloco com comentario: plano', 'bloco com comentario: historico'"
+        - "worktree /tmp/proof-c11 limpo apos cada perturbacao (git checkout) e removido; git status da arvore principal sem mudancas alem do artefato de acceptance preexistente"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "cobertura estrutural: cada ramo alterado (RESCUE_SKIP, aspas/nu, lista de mapas, int do passo, chaves desconhecidas, arquivo ausente, bloco com comentario) tem perturbacao que o teste detecta (ver l3); sem ferramenta de cobertura no repo"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff adiciona um parser tolerante de arquivo local do proprio harness e uma entrada de lista de skip; nao ha endpoint nem entrada externa nao confiavel, e nenhum modulo api-rest foi alterado"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Todas as 7 perturbacoes dos comportamentos alterados deixam o teste vermelho; baseline verde nos 4 testes (N>0 checks, saida 'ok'). Nenhum double substitui as funcoes alteradas."
