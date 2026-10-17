@@ -1,0 +1,45 @@
+schema_version: 2
+card: intencao-c1-C1-2
+verdict: proven
+reviewed_at: 2026-10-17T10:50:00-03:00
+base_commit: 992423f
+head_commit: 87646e7
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-intencao (novo)", module: common-bin, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_modos.py (render_intent, _intent_aspas, _INTENT_ORDEM)", module: common-hooks, external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_cepa_intencao.py (novo)", module: tests, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python (harness cepa), sem Maven/PIT/Quarkus. Superficie externa: o bin
+    rodando como subprocesso em repo git temporario + ledger events-*.jsonl sob
+    CEPA_TELEMETRY_DIR. Sem doubles. Rodada 1 (HEAD 2bc3da7) deu UNPROVEN: 5
+    recusas sem guarda. Rodada 2 (HEAD 87646e7, so o teste mudou) refez as 5 e
+    amostrou 15 das 32 anteriores, em worktree descartavel --detach
+    /tmp/proof-c1-2-y9m, removido ao final; arvore principal intocada.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline HEAD 87646e7: CEPA_TELEMETRY_DIR=<tmp> python3 tests/test_cepa_intencao.py -> 'tudo ok', rc=0"
+        - "RED (antes sobreviventes): item de plano vazio aceito -> 3 FAIL; gravar+--passo aceito -> FAIL 'gravar --passo N: rc=2'; gravar sem campos obrigatorios aceito -> 3 FAIL; --passo+--proposito/--plano aceito -> 2 FAIL; quebra de linha em _intent_aspas nao normalizada -> FAIL \"propósito 'a\\nb' relido do arquivo é 'a b'\""
+        - "RED (amostra de 15 das 32 da rodada 1, todas rc=1): recusa ':'; PLANO_MAX; gravar sem motivo; --proposito sem motivo; historico --plano; passo M+1; passo 0; formato do resumo; escape de aspas; telemetria vazando propósito; cursor_advanced removido; recusa de item gravar/mostrar; --plano nao zera cursor; fora de git; os.replace removido (esta ultima por Traceback, rc=1)"
+        - "Rodada 1 (2bc3da7): as outras 17 das 32 tambem ficaram RED; o teste anterior e o atual so diferem por 42 linhas acrescentadas, entao nao ha como regredir cobertura"
+        - "Equivalentes sem teste necessario: plano vazio via 0<=len (argparse nargs='+' barra); passo gravado entre aspas (parser converte para int). Atomicidade tmp+os.replace vs escrita direta nao e observavel externamente."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; cada ramo alterado tem perturbacao que o teste detecta (ver l3); as 5 lacunas da rodada 1 agora ficam RED"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff adiciona um CLI local do proprio harness que escreve arquivo do worktree; nao ha endpoint nem entrada externa nao confiavel, e nenhum modulo api-rest foi alterado"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "As 5 perturbacoes que sobreviviam na rodada 1 agora deixam o teste RED em 87646e7, e a amostra de 15 perturbacoes anteriores segue RED. Nenhum double substitui as classes alteradas. PROVEN."

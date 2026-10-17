@@ -1,0 +1,84 @@
+schema_version: 1
+card: intencao-c1-C1-2
+status: complete
+audited_at: 2026-10-17
+head: 2bc3da7
+base: 992423f
+criteria:
+  - id: AC1
+    text: "cepa-intencao gravar (proposito, para_quando, plano) como unico escritor do .claude/session-intent"
+    altitude: cli
+    surface: "subprocess de common/bin/cepa-intencao gravar em repo git temporario; arquivo lido de volta"
+    demonstrated_by:
+      test: "tests/test_cepa_intencao.py (gravar sai 0, round-trip, passo=1, session_id, branch, UTC Z, regravar exige --motivo rc=4 sem escrever, historico)"
+      layer: subprocess do bin (CLI), arquivo real no disco
+      evidence: verified
+      run: "CEPA_TELEMETRY_DIR=<tmp> python3 tests/test_cepa_intencao.py -> 48 linhas 'ok', 0 FAIL, 'tudo ok', rc=0"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "--passo N move o cursor, re-renderiza o resumo, aceita M+1 (plano cumprido), recusa fora da faixa"
+    altitude: cli
+    surface: "cepa-intencao --passo N via subprocess"
+    demonstrated_by:
+      test: "tests/test_cepa_intencao.py (--passo 3, re-renderiza resumo, len+1, recusa 0/6/-1 com arquivo intacto)"
+      layer: subprocess do bin
+      evidence: verified
+      run: "mesma execucao: 0 FAIL, rc=0"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "--proposito exige --motivo e empurra o anterior ao historico com hora"
+    altitude: cli
+    surface: "cepa-intencao --proposito/--motivo via subprocess"
+    demonstrated_by:
+      test: "tests/test_cepa_intencao.py (sem --motivo recusa rc=2 e arquivo intacto; com motivo troca, preserva cursor, historico com em/proposito/motivo_da_troca)"
+      layer: subprocess do bin
+      evidence: verified
+      run: "mesma execucao: 0 FAIL, rc=0"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "--plano substitui, zera o cursor e preserva o plano anterior no historico; item com ':' recusado; plano > PLANO_MAX recusado"
+    altitude: cli
+    surface: "cepa-intencao --plano e gravar --plano via subprocess"
+    demonstrated_by:
+      test: "tests/test_cepa_intencao.py (--plano substitui e zera; plano_anterior no historico; ':' recusado em gravar e em --plano, nada escrito; PLANO_MAX+1 recusado apontando plan.yaml; PLANO_MAX aceito)"
+      layer: subprocess do bin
+      evidence: verified
+      run: "mesma execucao: 0 FAIL, rc=0"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "render do resumo (uma linha, ordem passo/nome/proposito) gravado no arquivo e impresso"
+    altitude: cli
+    surface: "campo resumo do arquivo e stdout do bin"
+    demonstrated_by:
+      test: "tests/test_cepa_intencao.py (resumo na ordem do corte, re-render em --passo/--proposito, 'plano cumprido 4/4', stdout == resumo gravado com quebra normalizada)"
+      layer: subprocess do bin
+      evidence: verified
+      run: "mesma execucao: 0 FAIL, rc=0"
+    verdict: complete
+    gap: null
+  - id: AC6
+    text: "Evento observavel na telemetria: intent.written e intent.cursor_advanced"
+    altitude: event
+    surface: "ledger events-*.jsonl sob CEPA_TELEMETRY_DIR, escrito pelo subprocess do bin"
+    demonstrated_by:
+      test: "tests/test_cepa_intencao.py (intent.written acao=gravar passos=4; intent.cursor_advanced de=1 para=3 passos=4; acoes proposito e plano; sem texto do proposito no ledger)"
+      layer: arquivo de ledger real lido apos o subprocess
+      evidence: verified
+      run: "mesma execucao: 0 FAIL, rc=0"
+    verdict: complete
+    gap: "Nota: _telemetry.emit e generico, nao ha registro de nomes de evento a atualizar. intent.asked/finished_at_last_step e a linha do /common:metrics sao C1-6, fora deste item."
+  - id: AC7
+    text: "Teste cobre o acima"
+    altitude: cli
+    surface: "tests/test_cepa_intencao.py"
+    demonstrated_by:
+      test: "tests/test_cepa_intencao.py"
+      layer: script standalone; bin com modo 100755 no git
+      evidence: verified
+      run: "python3 tests/test_cepa_intencao.py -> 'tudo ok', rc=0. Suite completa NAO rodada (a cargo do supervisor)."
+    verdict: complete
+    gap: null
