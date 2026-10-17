@@ -51,6 +51,11 @@ def main():
     check("avança o cursor com --passo 2", "--passo 2" in sec)
     check("avança o cursor com --passo 3", "--passo 3" in sec)
     check("diz que não roda no --help", "--help" in sec and "nunca" in sec)
+    plano = " ".join(sec.split())
+    check("diz que substitui o pedido do hook (sem segundo ritual)",
+          "não proponha à parte" in plano and "segundo ritual" in plano)
+    check("diz que falha do escritor não para a rotina",
+          "Falha do escritor não para a rotina" in plano)
 
     linha = next((l for l in sec.splitlines() if 'cepa-intencao" gravar' in l), "")
     check("achou a linha do comando documentado", bool(linha))
