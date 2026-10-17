@@ -32,6 +32,11 @@ REPO = Path(__file__).resolve().parent.parent
 # prefixá-los é um follow-up, e entram aqui quando forem consertados.
 PLUGINS_COBERTOS = ["build-hex"]
 
+# Verbo de delegação: na linha que o tem, nome de agente em prosa (sem crases) também
+# é instrução e precisa de prefixo. Referências em outras linhas ficam livres.
+VERBO_DELEGACAO = re.compile(
+    r"delegat|route (to|back)|hand(s)? (off|to)|proceed to", re.I)
+
 TOKEN = re.compile(r"`([a-z][a-z0-9-]*(?::[a-z][a-z0-9-]*)?)`")
 
 
@@ -93,6 +98,13 @@ def verificar(repo: Path, plugins: list) -> list:
                         erros.append(f"{rel}:{n}: `{tok}` sem prefixo e existe em "
                                      f"vários plugins ({opcoes}); o lead deve "
                                      f"escolher o dono")
+            if VERBO_DELEGACAO.search(linha):
+                sem_crases = re.sub(r"`[^`]*`", " ", linha)
+                for m in re.finditer(r"(?<![:\w-])([a-z][a-z0-9-]*)(?![:\w-])",
+                                     sem_crases):
+                    if m.group(1) in mapa and not linha.startswith("description:"):
+                        erros.append(f"{rel}:{n}: nome curto em prosa de delegação "
+                                     f"(`{m.group(1)}`); use `<plugin>:<nome>`")
             # frontmatter `description:` — texto que o orquestrador lê ao escolher
             if re.match(r"description:", linha):
                 m = re.search(r"Delegates to (.*)", linha)
@@ -143,6 +155,14 @@ def autoteste() -> list:
                         encoding="utf-8")
         if verificar(t, ["x"]):
             falhas.append("autoteste: `common:bar` / `file:line` foram reprovados")
+
+        lead.write_text("---\nname: y-lead\n---\nDelegate to foo now.\n", encoding="utf-8")
+        if not any("prosa de delegação" in e for e in verificar(t, ["x"])):
+            falhas.append("autoteste: nome curto em prosa de delegação não detectado")
+
+        lead.write_text("---\nname: y-lead\n---\nfoo reads TASK.md.\n", encoding="utf-8")
+        if verificar(t, ["x"]):
+            falhas.append("autoteste: referência `foo reads TASK.md` foi reprovada")
 
         lead.write_text("---\ndescription: Delegates to foo, bar\n---\n", encoding="utf-8")
         if not verificar(t, ["x"]):
