@@ -99,7 +99,23 @@ often a partial run (on 2026-08-18 the rescued copy held 14 items and the live
 one 47, and overwriting would have been the real loss). Merging is the user's
 call, and `/common:next` doesn't do it silently.
 
-**No plan file anywhere, including those two places.** Don't manufacture an
+**No plan file, but this session has a recorded intent.** Before declaring
+absence, run (read-only):
+
+```
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" estado
+```
+
+The first line is `estado: <vazio|normal|cumprido|outra-sessao>`; the command
+classifies, not your eye. `normal` → answer from it: the next step is the
+current step of the session plan (passo atual, with its name) and the one after
+it; `cumprido` → the next step is `/common:wrap-up`; `outra-sessao` → show the
+question the output carries and wait, don't treat that intent as this session's;
+`vazio` → carry on below. Say that the answer comes from the session intent, not
+from an execution plan (no queue, no reconciliation). Never run this fallback
+when a plan was found above: a plan answers first.
+
+**No plan file anywhere, including those two places, and the intent is `vazio`.** Don't manufacture an
 order — an order nobody chose is worse than an admitted absence, because it reads as a decision. Say there is no
 execution plan, then name the cheapest way to get one **for this repo**:
 

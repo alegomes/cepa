@@ -257,3 +257,39 @@ def render_intent(dados):
         else:
             out.append(f"{k}: {_intent_aspas(v)}")
     return "\n".join(out) + "\n"
+
+
+def iso_utc(stamp):
+    """`2026-10-16T21:40:00Z` (ou com offset) -> datetime UTC; None se não der."""
+    from datetime import datetime, timezone
+    try:
+        d = datetime.fromisoformat(str(stamp).strip().replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return None
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def mesma_sessao(gravada, atual):
+    """A intenção é desta sessão? O arquivo pode guardar o id cortado (8
+    caracteres); prefixo basta. Sem como comparar, não acusa outra sessão.
+
+    Regra única: o hook `session-mode.py` e o `cepa-intencao estado` (que o
+    /common:whereami roda) perguntam a mesma coisa e não podem divergir."""
+    g, a = str(gravada or "").strip(), str(atual or "").strip()
+    if not g or not a:
+        return True
+    return g.startswith(a) or a.startswith(g)
+
+
+def pergunta_outra_sessao(intent, prop):
+    """As duas frases da decisão D1 (intenção gravada por OUTRA sessão): a data
+    e a pergunta "continuo ou abro nova?". `prop` já vem cortado por quem chama
+    (o hook paga pedágio por turno; o whereami mostra por extenso)."""
+    quando = iso_utc(intent.get("aberto_em", ""))
+    data = quando.strftime("%Y-%m-%d %H:%M UTC") if quando else "data desconhecida"
+    return [
+        f"[intenção] Intenção de {data}, gravada em outra sessão: \"{prop}\". "
+        "Não a trate como a desta sessão.",
+        "Pergunte ao dono: continuo ou abro nova? Continuar = `cepa-intencao "
+        "continuar`; abrir nova = `cepa-intencao gravar ... --motivo \"...\"`.",
+    ]

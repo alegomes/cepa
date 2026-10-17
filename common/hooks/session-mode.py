@@ -49,7 +49,7 @@ try:
 except Exception:  # noqa: BLE001 — o hook roda todo turno; nunca pode quebrar
     SAIDA = {}
 try:
-    from _modos import read_intent
+    from _modos import read_intent, mesma_sessao, pergunta_outra_sessao
 except Exception:  # noqa: BLE001
     read_intent = None
 
@@ -187,14 +187,6 @@ def turnos_desde(root, stamp):
     return sum(1 for q, _ in log_prompts(root) if q >= desde)
 
 
-def mesma_sessao(gravada, atual):
-    """O arquivo pode guardar o id cortado (8 caracteres); prefixo basta."""
-    g, a = str(gravada or "").strip(), str(atual or "").strip()
-    if not g or not a:
-        return True  # sem como comparar, não acusa outra sessão
-    return g.startswith(a) or a.startswith(g)
-
-
 def linhas_intencao(root, payload, tem_modo):
     """As até duas linhas de intenção deste turno, ou [] (silêncio)."""
     if read_intent is None:
@@ -219,14 +211,7 @@ def linhas_intencao(root, payload, tem_modo):
 
     prop = corta(intent["proposito"], CORTE_PROPOSITO)
     if not mesma_sessao(intent.get("session_id"), payload.get("session_id")):
-        quando = _iso(intent.get("aberto_em", ""))
-        data = quando.strftime("%Y-%m-%d %H:%M UTC") if quando else "data desconhecida"
-        return [
-            f"[intenção] Intenção de {data}, gravada em outra sessão: \"{prop}\". "
-            "Não a trate como a desta sessão.",
-            "Pergunte ao dono: continuo ou abro nova? Continuar = `cepa-intencao "
-            "continuar`; abrir nova = `cepa-intencao gravar ... --motivo \"...\"`.",
-        ]
+        return pergunta_outra_sessao(intent, prop)
 
     m = len(plano)
     passo = intent.get("passo")

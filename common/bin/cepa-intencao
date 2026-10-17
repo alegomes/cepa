@@ -27,6 +27,7 @@ Uso:
     # até a próxima opção): `--plano a b gravar` seria o item "gravar".
     cepa-intencao [mostrar]          # imprime a intenção atual
     cepa-intencao continuar          # adota nesta sessão a intenção de outra
+    cepa-intencao estado             # só leitura: classifica e imprime (whereami)
 
 Regras:
   - `passo` é o passo EM ANDAMENTO (1-based). `--passo N` aceita 1..M, e M+1,
@@ -46,6 +47,15 @@ Regras:
   - Telemetria (fail-silent, sem texto do propósito): `intent.written`
     (acao=gravar|proposito|plano, passos=M) e `intent.cursor_advanced`
     (de=, para=, passos=).
+
+  - `estado` é a leitura que o /common:whereami, o /common:next (fallback) e o
+    /common:recap (linha de abertura) rodam. Nunca escreve e sai 0 em todos os
+    estados. A primeira linha é `estado: vazio|normal|cumprido|outra-sessao`;
+    a regra de "outra sessão" é a do hook (`_modos.mesma_sessao`). Numa rodada
+    do `cepa-until` (`CEPA_UNTIL_RUN`) o estado é sempre `vazio` com a linha
+    `delegar: /common:next`: ali a intenção é o item do plan.yaml. A segunda
+    linha, `abertura:`, é a do recap ("propósito / passo N de M"), ausente nos
+    estados vazio e outra-sessao.
 
 Saídas: 0 ok · 2 uso inválido ou regra do escritor recusada · 3 sem intenção
 gravada (para --passo/--proposito/--plano/mostrar) · 4 já há intenção e falta
@@ -153,9 +163,65 @@ def mostrar(d):
     print(f"passo desde {d.get('passo_desde', '?')} · aberto em {d.get('aberto_em', '?')}")
 
 
+ENV_JANELA = "CEPA_UNTIL_RUN"  # a marca que o cepa-until exporta em cada rodada
+
+
+def idade(stamp):
+    """`passo_desde` -> "2h05" / "12 min" / "agora"; "?" se não der para ler."""
+    d = M.iso_utc(stamp)
+    if d is None:
+        return "?"
+    mins = max(0, int((datetime.now(timezone.utc) - d).total_seconds() // 60))
+    if mins < 1:
+        return "agora"
+    return f"{mins} min" if mins < 60 else f"{mins // 60}h{mins % 60:02d}"
+
+
+def estado(root, atual):
+    """Classifica a intenção e imprime a resposta pronta. Só leitura."""
+    plano = (atual or {}).get("plano")
+    if os.environ.get(ENV_JANELA):
+        print("estado: vazio")
+        print("delegar: /common:next")
+        print("Rodada do cepa-until: a intenção é o item do plan.yaml; "
+              "rode /common:next.")
+        return
+    if not (atual and atual.get("proposito") and isinstance(plano, list) and plano):
+        print("estado: vazio")
+        print("Esta sessão não tem intenção gravada. Diga o propósito e eu "
+              "proponho o plano.")
+        return
+    prop = " ".join(atual["proposito"].split())
+    if not M.mesma_sessao(atual.get("session_id"), sessao_atual()):
+        print("estado: outra-sessao")
+        print("\n".join(M.pergunta_outra_sessao(atual, prop)))
+        return
+    m = len(plano)
+    passo = atual.get("passo")
+    if not isinstance(passo, int) or not 1 <= passo <= m + 1:
+        passo = 1
+    para = " ".join(str(atual.get("para_quando") or "").split())
+    if passo > m:
+        print("estado: cumprido")
+        print(f"abertura: {prop} / plano cumprido {m}/{m}")
+        print(f"Os {m} passos estão feitos. Ponto de parada: {para}. "
+              "Próximo: `/common:wrap-up`.")
+        return
+    print("estado: normal")
+    print(f"abertura: {prop} / passo {passo} de {m}")
+    print(f"propósito: {prop}")
+    print(f"para quando: {para}")
+    print("plano:")
+    for n, item in enumerate(plano, 1):
+        marca = ">" if n == passo else " "
+        print(f"  {marca} {n}. {' '.join(item.split())}")
+    print(f"passo atual: {passo} de {m}, há {idade(atual.get('passo_desde'))} "
+          f"(desde {atual.get('passo_desde', '?')})")
+
+
 def main():
     ap = argparse.ArgumentParser(prog="cepa-intencao", description=__doc__.split("\n")[0])
-    ap.add_argument("acao", nargs="?", choices=("gravar", "mostrar", "continuar"))
+    ap.add_argument("acao", nargs="?", choices=("gravar", "mostrar", "continuar", "estado"))
     ap.add_argument("--proposito")
     ap.add_argument("--para-quando", dest="para_quando")
     ap.add_argument("--plano", nargs="+")
@@ -163,7 +229,7 @@ def main():
     ap.add_argument("--motivo")
     a = ap.parse_args()
 
-    if a.plano and any(i.strip() in ("gravar", "mostrar", "continuar") for i in a.plano):
+    if a.plano and any(i.strip() in ("gravar", "mostrar", "continuar", "estado") for i in a.plano):
         recusa("um item do plano é exatamente um subcomando: o subcomando "
                "vai ANTES de --plano (`cepa-intencao gravar --plano a b ...`).")
     root = git(["rev-parse", "--show-toplevel"], os.getcwd())
@@ -172,6 +238,12 @@ def main():
     atual = M.read_intent(root)
     existe = bool(atual) and bool(atual.get("proposito")) and bool(atual.get("plano"))
     edita = a.passo is not None or (a.acao is None and (a.proposito or a.plano))
+
+    if a.acao == "estado":
+        if a.passo is not None or a.proposito or a.plano or a.para_quando or a.motivo:
+            recusa("estado só lê; não aceita outras opções.")
+        estado(root, atual)
+        return
 
     if a.acao == "gravar":
         if a.passo is not None:

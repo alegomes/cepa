@@ -22,6 +22,20 @@ If the session-log file doesn't exist, reply: "No session log at `.claude/sessio
 
 ## Workflow
 
+### 0. Opening line (only when an intent is recorded)
+
+Run (read-only):
+
+```
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" estado
+```
+
+If its output has an `abertura:` line (states `normal` and `cumprido`), open the recap with that line
+verbatim, as `**<text after "abertura: ">**`, right under the `## Recap` heading:
+"<propósito> / passo N de M", or "<propósito> / plano cumprido M/M" when every step is done. With no `abertura:` line (state `vazio` or
+`outra-sessao`, or the command fails) print **no line at all**: no placeholder, no
+"sem intenção". Never read or edit `.claude/session-intent` by hand.
+
 ### 1. Load the intent log
 
 Read `.claude/session-log.md`. Parse it into a list of `{ timestamp, prompt }` entries (the file uses date headers `## YYYY-MM-DD` and time headers `### HH:MM:SS UTC` followed by the prompt body).
@@ -48,6 +62,8 @@ Output a structured table (or list, whichever is more readable for the count). R
 
 ```markdown
 ## Recap — <date range>
+
+**<propósito> / passo 2 de 3**   (or **<propósito> / plano cumprido 3/3**; only when step 0 gave an `abertura:` line)
 
 | Time | Asked | Status | Delivered |
 |---|---|---|---|
