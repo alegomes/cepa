@@ -33,7 +33,15 @@ from pathlib import Path
 for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO"):
     os.environ.pop(_k, None)
 
-REPO = Path(__file__).resolve().parent.parent
+# Os casos de intenção escrevem o .claude/session-log.md que o session-mode lê,
+# e a varredura de tests/test_telemetria_isolada.py trata quem cita hook
+# emissor como emissor. Isolar aqui custa nada e mantém o ledger real limpo.
+# Ver tests/_telemetria_isolada.py.
+from _telemetria_isolada import isola  # noqa: E402
+
+isola()
+
+REPO =Path(__file__).resolve().parent.parent
 CEPA = REPO / "common" / "bin" / "cepa"
 
 FAKE_CLAUDE = '#!/bin/sh\nprintf "CLAUDE_ARGS:%s\\n" "$*"\n'
