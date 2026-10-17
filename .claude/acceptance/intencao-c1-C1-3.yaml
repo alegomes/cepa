@@ -1,0 +1,62 @@
+schema_version: 1
+card: intencao-c1-C1-3
+status: complete
+audited_at: 2026-10-17
+head: 9d17899
+base: 387abfb
+criteria:
+  - id: AC1
+    text: "Sem intencao gravada: hook injeta os tres primeiros prompts do log, o pedido de propor/gravar com cepa-intencao terminando na mencao a /common:whereami, e o aviso de nao propor em prompt trivial"
+    altitude: event
+    surface: "additionalContext do UserPromptSubmit emitido por common/hooks/session-mode.py, lido do stdout do subprocesso"
+    demonstrated_by:
+      test: "tests/test_cepa_modo.py::test_intencao_vazia_traz_os_primeiros_prompts (e _primeiro_turno_usa_o_prompt_atual, _sem_registro_cai_para_hoje, _sem_modo_e_silenciosa)"
+      layer: subprocess do hook com payload JSON em repo git temporario, log e registro de sessao reais
+      evidence: verified
+      run: "python3 tests/test_cepa_modo.py -> 81 linhas 'ok', 0 FAIL, 'tudo verde'"
+    verdict: complete
+    gap: "Nota: o texto diz 'feche com: a qualquer momento /common:whereami mostra onde estamos' (instrucao ao agente), nao uma frase terminal literal; teste afirma presenca de /common:whereami, 'cepa-intencao gravar', 'trivial' e teto de duas linhas."
+  - id: AC2
+    text: "Intencao de outra sessao (session_id difere): injeta 'intencao de <data>, gravada em outra sessao: continuo ou abro nova?' em vez de exibi-la como atual"
+    altitude: event
+    surface: "additionalContext do hook com session_id diferente do gravado"
+    demonstrated_by:
+      test: "tests/test_cepa_modo.py::test_intencao_de_outra_sessao_vira_pergunta + test_intencao_continuar_resolve_a_pergunta (cepa-intencao continuar faz o hook voltar a exibir como atual)"
+      layer: subprocess do hook + subprocess do bin cepa-intencao continuar
+      evidence: verified
+      run: "python3 tests/test_cepa_modo.py -> 0 FAIL, tudo verde; python3 tests/test_cepa_intencao.py -> 69 'ok', 0 FAIL, 'tudo ok' (continuar: recusas rc=2/3, preserva plano/passo, troca session_id)"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Intencao desta sessao: '[intencao] <proposito>. Passo N/M: <nome> (ha k turnos). Proximo: ...', no maximo duas linhas; plano inteiro nao injetado"
+    altitude: event
+    surface: "additionalContext do hook com session_id igual ao gravado"
+    demonstrated_by:
+      test: "tests/test_cepa_modo.py::test_intencao_normal_passo_idade_proximo, _um_turno_no_singular, _corta_proposito_e_passo_longos, _ultimo_passo_aponta_wrap_up, _plano_cumprido"
+      layer: subprocess do hook
+      evidence: verified
+      run: "mesma execucao: 0 FAIL (passo N/M, ha k turnos, proximo, 'nao despeja o plano inteiro', 'teto de duas linhas', ultimo passo -> wrap-up)"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "O hook nunca quebra o turno"
+    altitude: event
+    surface: "returncode e stdout do subprocesso do hook"
+    demonstrated_by:
+      test: "tests/test_cepa_modo.py::test_hook_nunca_quebra_o_turno, test_intencao_corrompida_nao_quebra (rc=0, tratada como vazia; passo/passo_desde invalidos), test_intencao_respeita_kill_switch, test_intencao_calada_no_cepa_until"
+      layer: subprocess do hook
+      evidence: verified
+      run: "mesma execucao: 0 FAIL, rc=0 em todos os casos corrompidos"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "tests/test_cepa_modo.py acompanha"
+    altitude: event
+    surface: "tests/test_cepa_modo.py"
+    demonstrated_by:
+      test: "tests/test_cepa_modo.py (+268 linhas no diff)"
+      layer: script standalone
+      evidence: verified
+      run: "python3 tests/test_cepa_modo.py -> 81 ok, 0 FAIL, tudo verde. Suite completa NAO rodada (a cargo do supervisor)."
+    verdict: complete
+    gap: null

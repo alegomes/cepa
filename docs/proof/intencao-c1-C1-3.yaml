@@ -1,0 +1,50 @@
+schema_version: 2
+card: intencao-c1-C1-3
+verdict: proven
+reviewed_at: 2026-10-17T13:00:00-03:00
+base_commit: 387abfb
+head_commit: 3aaa343
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/hooks/session-mode.py (linhas_intencao, primeiros_prompts, log_prompts, inicio_da_sessao, turnos_desde, mesma_sessao, corta, main)", module: common-hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-intencao (continuar, sessao_atual, branch_atual)", module: common-bin, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python, sem Maven/PIT. Hook e CLI rodados como subprocesso pelos
+    testes, sem doubles. 3a rodada: o codigo de producao em 3aaa343 e
+    identico ao de ff48eae (git diff ff48eae HEAD toca so tests/); as 4 linhas
+    removidas dos testes foram reescritas com asserts mais fortes, nenhuma
+    afirmacao enfraquecida. Portanto as 108 perturbacoes da 2a rodada so
+    podem ter perdido sobreviventes; as 5 reais foram reaplicadas uma a uma
+    em worktree descartavel --detach /tmp/proof-c13c (restaurada com git
+    checkout entre cada uma; removida ao final); arvore principal intocada.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 3aaa343: python3 tests/test_cepa_modo.py -> 'tudo verde'; python3 tests/test_cepa_intencao.py -> 'tudo ok'"
+        - "LACUNA 1 reaplicada (inicio_da_sessao: L.main_root(root) -> root): test_cepa_modo.py RED '1 falha(s): worktree ligada: acha o início no registro do clone principal'"
+        - "LACUNA 2 reaplicada (passo < m -> passo < m - 1): test_cepa_modo.py RED '1 falha(s): penúltimo passo: próximo é o último passo, não o wrap-up'"
+        - "LACUNA 3 reaplicada (continuar zerando d['historico']): test_cepa_intencao.py RED \"1 falha(s): ['continuar preserva o histórico']\""
+        - "LACUNA 4 reaplicada ('Ao concluir o passo, rode' -> 'Rode'): test_cepa_modo.py RED '1 falha(s): intenção normal: ensina a avançar o cursor'"
+        - "LACUNA 5 reaplicada (fecha(): 'quando is not None and t' -> 'quando is not None'): test_cepa_modo.py RED '1 falha(s): entrada vazia do log não conta como turno'"
+        - "Restantes da 2a rodada: 95 RED + 8 equivalentes/inalcancaveis ja classificados (read_intent is None, not proposito, not plano, if not session_id, replace Z, if dia else None, reset quando, rev-parse; except Exception sem entrada que o exercite, fuzz de 3000 arquivos malformados com 0 excecoes). Mantidos como estao a pedido."
+        - "Varredura do diff: nenhum codigo de producao novo desde ff48eae, logo nenhum sobrevivente novo possivel no diff 387abfb..HEAD."
+        - "OBSERVACAO fora do diff (nao gate): common/bin/cepa-intencao:227 `d['historico'] = list(atual.get('historico', []))` e linha ja existente em 387abfb (linha 201 la); trocada por `[]` a suite fica verde, ou seja o caminho de editar --proposito/--plano nao testa que o historico ANTERIOR sobrevive (so olha o ultimo item). Codigo herdado, nao tocado por este card."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as 5 lacunas antes sem cobertura agora ficam RED sob perturbacao (ver l3)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera um hook e um CLI locais do proprio harness, lendo arquivos da worktree do dono; nao ha endpoint nem entrada externa nao confiavel, e nenhum modulo api-rest foi alterado. O fuzz da 2a rodada de arquivos malformados nao achou excecao."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "As 5 lacunas reais da 2a rodada agora deixam o teste RED quando o codigo e quebrado de proposito. O codigo de producao nao mudou desde a 2a rodada (so testes), entao nada novo pode sobreviver. Os 8 equivalentes seguem classificados. PROVEN."
