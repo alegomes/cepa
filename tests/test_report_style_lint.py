@@ -552,6 +552,23 @@ r = run("Stop", multi_turno("comando", FIM_WRAP, FECHADO), session="s-wrap-h2")
 check("(h2) pós-wrap-up com Pra você nada e \"Próxima sessão começa por X.\" → não bloqueia",
       motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:300]))
 
+# (h3) turno final ALTEROU algo (Edit): a regra pra-voce-sem-lista fica
+# suprimida pós-wrap-up; só a mensagem de sessão encerrada aparece.
+rows_h3 = [msg("user", CMD_WRAP, mtype="user"),
+           msg("assistant", [{"type": "tool_use", "name": "Bash",
+                              "input": {"command": "git commit -m x"}}]),
+           texto(FIM_WRAP),
+           msg("user", [{"type": "text", "text": "sim"}], mtype="user"),
+           msg("assistant", [{"type": "tool_use", "name": "Edit",
+                              "input": {"file_path": "x.py"}}]),
+           texto(ANUNCIA)]
+r = run("Stop", transcript(*rows_h3), session="s-wrap-h3")
+mot_h3 = motivo_do_bloqueio(r.stdout)
+check("(h3) pós-wrap-up com Edit, Pra você anunciando e \"Nada pendente.\" → "
+      "bloqueia citando wrap-up, sem pra-voce-sem-lista",
+      "wrap-up" in mot_h3 and "item numerado nenhum" not in mot_h3
+      and "pra-voce-sem-lista" not in mot_h3, repr(r.stdout[:400]))
+
 # ── a prosa que sustenta a regra diz o que o hook cobra ────────────────────
 def ler(rel):
     return (REPO / rel).read_text(encoding="utf-8")
