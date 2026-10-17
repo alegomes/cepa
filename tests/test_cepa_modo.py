@@ -355,7 +355,8 @@ def test_intencao_normal_passo_idade_proximo():
         check("intenção normal: há quantos turnos o cursor está parado",
               "(há 2 turnos)" in c, c)
         check("intenção normal: próximo passo", "Próximo: rodar advisors." in c, c)
-        check("intenção normal: ensina a avançar o cursor", "cepa-intencao --passo 3" in c, c)
+        check("intenção normal: ensina a avançar o cursor",
+              "Ao concluir o passo, rode `cepa-intencao --passo 3`." in c, c)
         check("intenção normal: não despeja o plano inteiro",
               "levantar o que existe" not in c and "decidir" not in c, c)
         check("intenção normal: teto de duas linhas", len(il) == 2, il)
@@ -430,9 +431,11 @@ def test_intencao_vazia_registro_no_clone_principal():
         (wt / ".claude" / "session-log.md").write_text(
             "# Session log\n\n## 2026-10-15\n\n### 10:00:00 UTC\n\nvelho\n\n"
             "## 2026-10-16\n\n### 18:01:00 UTC\n\nda sessão\n\n")
-        c = ctx(run_hook(wt, session_id=SID, prompt="da sessão"))
+        # o prompt do turno é OUTRO: se o registro não for achado, o fallback
+        # (prompts de hoje) não vê nada do log, e só o prompt do turno sobra
+        c = ctx(run_hook(wt, session_id=SID, prompt="o do turno"))
         check("worktree ligada: acha o início no registro do clone principal",
-              '"da sessão"' in c and "velho" not in c, c)
+              '"da sessão" | "o do turno"' in c and "velho" not in c, c)
 
 
 def test_intencao_mesma_sessao_tolerante():
@@ -515,6 +518,24 @@ def test_intencao_plano_cumprido_ponto_de_parada():
         c = ctx(run_hook(r.path, session_id=SID))
         check("plano cumprido sem ponto de parada: sem o rótulo",
               "ponto de parada" not in c and "Plano cumprido (4/4). Próximo" in c, c)
+
+
+def test_intencao_penultimo_passo_aponta_o_ultimo():
+    with Repo() as r:
+        write_intent(r, passo=3)
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("penúltimo passo: próximo é o último passo, não o wrap-up",
+              "Passo 3/4: rodar advisors" in c and "Próximo: decidir." in c
+              and "wrap-up" not in c, c)
+
+
+def test_intencao_idade_ignora_entrada_vazia_do_log():
+    with Repo() as r:
+        write_intent(r, passo_desde="2026-10-16T21:40:00Z")
+        write_log(r, [("2026-10-16", "21:41:00", "   "),
+                      ("2026-10-16", "21:42:00", "de verdade")])
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("entrada vazia do log não conta como turno", "(há 1 turno)" in c, c)
 
 
 def test_intencao_ultimo_passo_aponta_wrap_up():
@@ -717,6 +738,8 @@ def main():
                test_intencao_mesma_sessao_tolerante, test_intencao_outra_sessao_detalhes,
                test_intencao_passo_fora_do_plano_cai_no_1, test_intencao_idade_bordas,
                test_intencao_plano_cumprido_ponto_de_parada,
+               test_intencao_penultimo_passo_aponta_o_ultimo,
+               test_intencao_idade_ignora_entrada_vazia_do_log,
                test_intencao_ultimo_passo_aponta_wrap_up, test_intencao_plano_cumprido,
                test_intencao_sem_modo_ainda_e_injetada,
                test_intencao_de_outra_sessao_vira_pergunta,

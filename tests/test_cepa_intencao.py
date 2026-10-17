@@ -299,7 +299,9 @@ r12 = novo_repo("r12")
 (r12 / ".claude" / "session-intent").write_text(M.render_intent({
     "proposito": "p", "para_quando": "q", "plano": ["a", "b"], "passo": 2,
     "passo_desde": "2020-01-01T00:00:00Z", "session_id": "velha", "branch": "outro",
-    "aberto_em": "2020-01-01T00:00:00Z", "resumo": "passo 2/2 · b · p"}))
+    "aberto_em": "2020-01-01T00:00:00Z", "resumo": "passo 2/2 · b · p",
+    "historico": [{"em": "2019-12-31T00:00:00Z", "proposito": "antigo",
+                   "motivo_da_troca": "o dono reformulou"}]}))
 p = subprocess.run([sys.executable, str(BIN), "continuar"], cwd=r12,
                    env={**{k: v for k, v in ENV.items() if k != "CLAUDE_CODE_SESSION_ID"},
                         "CLAUDE_SESSION_ID": "sess-3"}, capture_output=True, text=True)
@@ -307,6 +309,9 @@ d = M.read_intent(r12)
 check("continuar troca o branch pelo atual", p.returncode == 0 and d["branch"] == "main",
       (p.stderr, d))
 check("continuar mantém passo_desde antigo", d["passo_desde"] == "2020-01-01T00:00:00Z", d)
+check("continuar preserva o histórico",
+      d.get("historico") == [{"em": "2019-12-31T00:00:00Z", "proposito": "antigo",
+                              "motivo_da_troca": "o dono reformulou"}], d)
 check("continuar usa CLAUDE_SESSION_ID quando CLAUDE_CODE_SESSION_ID falta",
       d["session_id"] == "sess-3", d)
 
