@@ -1,0 +1,47 @@
+key: planning-lead-workers-sem-prefixo
+status: complete
+diff: 5ddce2c..e98ced3
+criteria:
+  - id: AC1
+    text: >
+      Nomear os workers com o prefixo do plugin em todos os leads do build-hex
+      (tabela "Delegates to" e passos do Workflow).
+    altitude: spec-files
+    surface: >
+      build-hex/agents/{planning,engineering,validation}-lead.md: tabela
+      Delegates to e passos do Workflow; completion-auditor com common:.
+    test: tests/test_leads_prefixam_workers.py
+    layer: cli (script python varrendo os specs no disco)
+    evidence: verified
+    run: >
+      python3 tests/test_leads_prefixam_workers.py -> "ok   autoteste" e
+      "ok   3 leads de build-hex: workers todos com prefixo do plugin dono",
+      EXIT 0 (3 leads varridos, N>0). Diff confere: tabelas e passos 2/3/4
+      do Workflow prefixados; completion-auditor virou common:completion-auditor.
+    gap: null
+  - id: AC2
+    text: >
+      Teste que falta: varredura em tests/ que le cada *-lead.md e exige que
+      todo nome de worker citado numa instrucao de delegacao exista em
+      <plugin>/agents/ e venha com o prefixo <plugin>:.
+    altitude: cli
+    surface: python3 tests/test_leads_prefixam_workers.py (exit code + stderr)
+    test: tests/test_leads_prefixam_workers.py
+    layer: cli
+    evidence: verified
+    run: >
+      python3 tests/test_leads_prefixam_workers.py -> EXIT 0; o autoteste
+      prova que o detector fica vermelho (nome curto, typo, plugin errado,
+      description) e verde. Rodado tambem tests/test_delegacao_assincrona_specs.py
+      -> "ok - 11 agentes que delegam", EXIT 0.
+    gap: null
+    reaudit: >
+      e98ced3 estendeu verificar() com VERBO_DELEGACAO (nome curto sem crases em
+      linha com verbo de delegacao e erro) + autoteste RED ("Delegate to foo now.")
+      e verde ("foo reads TASK.md."); engineering-lead.md:23, 59, 68 prefixados.
+      Re-run: python3 tests/test_leads_prefixam_workers.py -> "ok autoteste" e
+      "ok 3 leads de build-hex", EXIT 0; test_delegacao_assincrona_specs.py EXIT 0.
+      grep por linha com verbo de delegacao + nome curto sem crases/prefixo nos 3
+      leads -> 0 ocorrencias. Residual aceito (referencia, nao delegacao): nomes
+      curtos em engineering-lead.md:3 (description, nome do loop), :61, :115 e
+      validation-lead.md:66, :70, :101.

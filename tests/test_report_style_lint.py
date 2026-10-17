@@ -433,6 +433,88 @@ aviso = run("UserPromptSubmit", session="s-loop").stdout
 check("…e cai no caminho de aviso, no turno seguinte",
       "plain-report" in aviso, repr(aviso[:200]))
 
+# ── sessão encerrada pelo wrap-up (2026-10-16, fb-20261016-4) ──────────────
+CMD_WRAP = ("<command-message>wrap-up</command-message>\n"
+            "<command-name>/common:wrap-up</command-name>")
+FIM_WRAP = ("Tudo integrado e enviado; o handoff está escrito.\n\n"
+            "Safe to `exit`.")
+SEM_PERGUNTA = BOM.replace(PASSOS, "\n\n### Decisões e próximos passos\n"
+                           "Nada pendente. Próxima sessão começa por X.\n")
+assert SEM_PERGUNTA != BOM
+
+
+def texto(t, sidechain=False):
+    return msg("assistant", [{"type": "text", "text": t}], sidechain=sidechain)
+
+
+def multi_turno(abertura, fim_wrap, relatorio, alterou_final=False,
+                sidechain_wrap=False):
+    """wrap-up -> relatório de fecho -> "sim" -> relatório do turno final."""
+    rows = [msg("user", [{"type": "text", "text": "wrap up"}], mtype="user")]
+    if abertura == "comando":
+        rows[0] = msg("user", CMD_WRAP, mtype="user")
+    elif abertura == "skill":
+        rows.append(msg("assistant", [{"type": "tool_use", "name": "Skill",
+                                       "input": {"skill": "common:wrap-up"}}]))
+    rows.append(msg("assistant", [{"type": "tool_use", "name": "Bash",
+                                   "input": {"command": "git commit -m x"}}]))
+    if fim_wrap:
+        rows.append(texto(fim_wrap, sidechain=sidechain_wrap))
+    rows.append(msg("user", [{"type": "text", "text": "sim"}], mtype="user"))
+    if alterou_final:
+        rows.append(msg("assistant", [{"type": "tool_use", "name": "Bash",
+                                       "input": {"command": "git commit -m y"}}]))
+    rows.append(texto(relatorio))
+    return transcript(*rows)
+
+
+r = run("Stop", multi_turno("comando", FIM_WRAP, BOM), session="s-wrap-a")
+check("(a) wrap-up + Safe to exit + metrics sem Edit com pergunta → bloqueia "
+      "citando o wrap-up", "wrap-up" in motivo_do_bloqueio(r.stdout),
+      repr(r.stdout[:300]))
+motivo_a = motivo_do_bloqueio(r.stdout)
+check("(a) o bloqueio pós-wrap-up manda \"Nada pendente\", sem pedir pergunta",
+      "Nada pendente" in motivo_a
+      and "uma pergunta fechada por item" not in motivo_a, repr(motivo_a[-300:]))
+
+r = run("Stop", multi_turno("comando", FIM_WRAP, BOM), session="s-wrap-aw",
+        stop_hook_active=True)
+check("(a2) Stop com stop_hook_active em sessão encerrada → não bloqueia",
+      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:300]))
+r2 = run("UserPromptSubmit", session="s-wrap-aw")
+check("(a2) aviso do turno seguinte usa o formato de sessão encerrada",
+      "Nada pendente" in r2.stdout
+      and "uma pergunta fechada por item" not in r2.stdout, repr(r2.stdout[:400]))
+
+r = run("Stop", multi_turno("comando", FIM_WRAP, SEM_PERGUNTA), session="s-wrap-b")
+check("(b) mesma sequência com \"Nada pendente.\" e Pra você nada → não bloqueia",
+      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:300]))
+
+r = run("Stop", multi_turno("comando", "Parei: conflito de merge em x.py.", BOM),
+        session="s-wrap-c")
+check("(c) wrap-up sem Safe to exit (travou) → pergunta NÃO é barrada como pós-wrap-up",
+      "wrap-up" not in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+
+fim_com_pergunta = FIM_WRAP + "\n\n" + BOM
+r = run("Stop", multi_turno("comando", None, fim_com_pergunta, alterou_final=True),
+        session="s-wrap-d")
+check("(d) o relatório do próprio wrap-up (Safe to exit + pergunta, com commit) → bloqueia",
+      "wrap-up" in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+
+rows_e = [msg("user", [{"type": "text", "text": "faça"}], mtype="user"),
+          msg("user", CMD_WRAP, mtype="user", sidechain=True),
+          texto(FIM_WRAP, sidechain=True),
+          msg("assistant", [{"type": "tool_use", "name": "Edit",
+                             "input": {"file_path": "x.py"}}]),
+          texto(BOM)]
+r = run("Stop", transcript(*rows_e), session="s-wrap-e")
+check("(e) wrap-up e Safe to exit só em sidechain → não encerra",
+      "wrap-up" not in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+
+r = run("Stop", multi_turno("skill", FIM_WRAP, BOM), session="s-wrap-f")
+check("(f) invocação por tool_use Skill common:wrap-up → encerrada, bloqueia",
+      "wrap-up" in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+
 # ── telemetria ─────────────────────────────────────────────────────────────
 eventos = []
 for f in TELEM.glob("events-*.jsonl"):
@@ -446,6 +528,70 @@ check("…e o evento diz se aquela medição bloqueou",
           for e in eventos) and
       any(e.get("event") == "report_style" and e.get("bloqueou") is False
           for e in eventos), str([e.get("bloqueou") for e in eventos][:6]))
+
+check("(g) telemetria carrega pos_wrap_up=true no caso (a)",
+      any(e.get("event") == "report_style" and e.get("pos_wrap_up") is True
+          and e.get("tipos") == ["pergunta-pos-wrap-up"] for e in eventos),
+      str([(e.get("pos_wrap_up"), e.get("tipos")) for e in eventos][-6:]))
+check("…e false nas medições comuns",
+      any(e.get("event") == "report_style" and e.get("pos_wrap_up") is False
+          for e in eventos))
+
+# (h) Pra você anuncia algo e a lista diz "Nada pendente." (sem pergunta)
+ANUNCIA = BOM.replace("nada pra decidir agora; precisa reinstalar pra valer.",
+                      "uma decisão sua, lista no fim.").replace(
+    PASSOS, "\n\n### Decisões e próximos passos\nNada pendente.\n")
+assert ANUNCIA != BOM and "uma decisão sua" in ANUNCIA
+r = run("Stop", multi_turno("comando", FIM_WRAP, ANUNCIA), session="s-wrap-h")
+check("(h) pós-wrap-up com Pra você anunciando algo e \"Nada pendente.\" → bloqueia",
+      "wrap-up" in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+
+FECHADO = BOM.replace(PASSOS, "\n\n### Decisões e próximos passos\n"
+                      "Nada pendente. Próxima sessão começa por X.\n")
+r = run("Stop", multi_turno("comando", FIM_WRAP, FECHADO), session="s-wrap-h2")
+check("(h2) pós-wrap-up com Pra você nada e \"Próxima sessão começa por X.\" → não bloqueia",
+      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:300]))
+
+# (h3) turno final ALTEROU algo (Edit): a regra pra-voce-sem-lista fica
+# suprimida pós-wrap-up; só a mensagem de sessão encerrada aparece.
+rows_h3 = [msg("user", CMD_WRAP, mtype="user"),
+           msg("assistant", [{"type": "tool_use", "name": "Bash",
+                              "input": {"command": "git commit -m x"}}]),
+           texto(FIM_WRAP),
+           msg("user", [{"type": "text", "text": "sim"}], mtype="user"),
+           msg("assistant", [{"type": "tool_use", "name": "Edit",
+                              "input": {"file_path": "x.py"}}]),
+           texto(ANUNCIA)]
+r = run("Stop", transcript(*rows_h3), session="s-wrap-h3")
+mot_h3 = motivo_do_bloqueio(r.stdout)
+check("(h3) pós-wrap-up com Edit, Pra você anunciando e \"Nada pendente.\" → "
+      "bloqueia citando wrap-up, sem pra-voce-sem-lista",
+      "wrap-up" in mot_h3 and "item numerado nenhum" not in mot_h3
+      and "pra-voce-sem-lista" not in mot_h3, repr(r.stdout[:400]))
+
+# ── a prosa que sustenta a regra diz o que o hook cobra ────────────────────
+def ler(rel):
+    return (REPO / rel).read_text(encoding="utf-8")
+
+pr = ler("common/skills/plain-report/SKILL.md")
+check("spec: plain-report tem o título \"Depois do wrap-up\"",
+      any(l.startswith("#") and "Depois do wrap-up" in l for l in pr.splitlines()))
+check("spec: plain-report manda \"Nada pendente. Próxima sessão começa por\"",
+      "Nada pendente. Próxima sessão começa por" in pr)
+
+mt = ler("common/commands/metrics.md")
+check("spec: metrics.md trata \"sessão já encerrada\" e cita pergunta-pos-wrap-up",
+      "sessão já encerrada" in mt and "Safe to exit" in mt
+      and "pergunta-pos-wrap-up" in mt)
+
+wu = ler("common/commands/wrap-up.md")
+check("spec: wrap-up.md cita pergunta-pos-wrap-up e \"Próxima sessão começa por\"",
+      "pergunta-pos-wrap-up" in wu and "Próxima sessão começa por" in wu)
+
+dy = ler("common/skills/default-yes/SKILL.md")
+sec = dy.split("## Guardar o fio da sessão", 1)[-1].split("\n## ", 1)[0]
+check("spec: default-yes, seção \"Guardar o fio da sessão\" tem \"Depois do wrap-up\"",
+      "## Guardar o fio da sessão" in dy and "Depois do wrap-up" in sec)
 
 # ── entrada corrompida não derruba o turno ─────────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))

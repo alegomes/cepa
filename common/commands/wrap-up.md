@@ -254,6 +254,16 @@ printed in L7, verbatim (gravado, or não gravado and why). Close with: **"Safe 
 session for you — that last keystroke is yours, but everything is already landed,
 so it's a no-op safety-wise.)
 
+This report is the session's last. Its `plain-report` shape is fixed:
+`**Pra você:** nada`, and the final list is exactly "Nada pendente. Próxima
+sessão começa por <the Próximo passo line, or 'o que o handoff diz'>". It offers
+NOTHING: no `/common:metrics`, no new front, no closed question. Anything parked
+during the session (the default-yes "assunto lateral") goes INTO the handoff
+NOTE, the BACKLOG or `cepa-feedback add` during L3, never into a question after
+the landing. `report-style-lint.py` enforces it: after "Safe to `exit`" a closed
+question in the final list (or a `Pra você:` that announces something) is blocked
+(category `pergunta-pos-wrap-up`), and so is the same in any report that follows.
+
 ---
 
 ## Discard path (on confirmation)
@@ -281,6 +291,11 @@ Mirror `/common:worktree-discard`:
    (no merge check — the user chose to throw it away). Locating `<base-worktree>`
    needs the same `git worktree list` lookup the land path uses in L4.
 4. Report what *will* be removed on `exit`. Close with **"Safe to `exit`."**
+   This report is the session's last, same as L8: `**Pra você:** nada`, final list
+   "Nada pendente. Próxima sessão começa por <o que o handoff diz>", and it
+   offers nothing (no `/common:metrics`, no closed question). The
+   `report-style-lint.py` blocks a closed question after "Safe to `exit`"
+   (category `pergunta-pos-wrap-up`).
 
 ## Constraints
 

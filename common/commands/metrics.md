@@ -37,6 +37,15 @@ importa.
    merece `.claude/no-build`, loop de verify lento), destaque a UMA ação de
    maior retorno e ofereça executá-la. Não execute sem confirmação.
 
+   **Exceção: sessão já encerrada.** Se o `/common:wrap-up` já rodou nesta
+   mesma conversa ("Safe to exit" já foi dito), NÃO ofereça a ação: registre-a
+   (seção no `BACKLOG.md` quando o repo é o cepa; nos outros, `python3
+   "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" add --origem comando --alvo metrics
+   "<a ação e o motivo>"`) e diga no relatório onde ficou registrada. A lista
+   do fim diz "Nada pendente." e `**Pra você:**` diz "nada". O
+   `report-style-lint.py` bloqueia pergunta fechada ali (categoria
+   `pergunta-pos-wrap-up`).
+
 4. Se não houver eventos ainda, explique que a telemetria começou a acumular
    nesta versão dos plugins e sugira rodar de novo após alguns dias de uso.
 

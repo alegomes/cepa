@@ -1,0 +1,53 @@
+schema_version: 2
+card: relatorio-pos-wrap-up-abre-frente-nova
+verdict: proven
+reviewed_at: 2026-10-16T23:40:00-03:00
+base_commit: 2ddf786
+head_commit: 53202ff
+issue_type: Task
+scope:
+  stack_note: "repo Python/Markdown (harness cepa); sem Maven/PIT/JaCoCo; testes sao scripts python3"
+  changed_classes:
+    - { class: "common/hooks/report-style-lint.py", module: common, external_observable: false, substituted_by_double: null }
+    - { class: "tests/test_report_style_lint.py", module: tests, external_observable: false, substituted_by_double: null }
+    - { class: "common/skills/plain-report/SKILL.md", module: common, external_observable: false, substituted_by_double: null }
+    - { class: "common/commands/metrics.md", module: common, external_observable: false, substituted_by_double: null }
+    - { class: "common/commands/wrap-up.md", module: common, external_observable: false, substituted_by_double: null }
+    - { class: "common/skills/default-yes/SKILL.md", module: common, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/Markdown, sem PIT"
+    perturbation:
+      status: pass
+      results:
+        - "verde em 53202ff (worktree detached): python3 tests/test_report_style_lint.py -> rc=0, 138 ok, 0 FAIL, 'all report-style tests passed'"
+        - "P1 sessao_encerrada sem o skip de isSidechain: rc=1, FAIL (e) wrap-up e Safe to exit so em sidechain -> nao encerra (rodada em 9a55d7d)"
+        - "P2 sessao_encerrada sem exigir SAFE_TO_EXIT: rc=1, FAIL (c) wrap-up sem Safe to exit (travou) (9a55d7d)"
+        - "P3 on_stop volta a 'if not alterou: return None': rc=1, 5 FAIL ((a), (a) Nada pendente, (a2), (f), ...) (9a55d7d)"
+        - "P4 deteccao por tool_use Skill desligada: rc=1, FAIL (f) (9a55d7d)"
+        - "P5 desvio_pos_wrap_up sem o ramo Pra voce: rc=1, FAIL (h) (9a55d7d)"
+        - "P6 motivo_bloqueio sem o ramo encerrada: rc=1, FAIL (a) o bloqueio pos-wrap-up manda Nada pendente (9a55d7d)"
+        - "P7a pendencia gravada com encerrada=False: rc=1, FAIL (a2) (9a55d7d)"
+        - "P7b on_prompt sem FORMATO_ENCERRADA: rc=1, FAIL (a2) (9a55d7d)"
+        - "P8 titulo '## Depois do wrap-up' removido de plain-report/SKILL.md: rc=1, FAIL spec: plain-report tem o titulo (9a55d7d)"
+        - "P10 telemetria pos_wrap_up=False fixo: rc=1, FAIL (g) (9a55d7d)"
+        - "P11 medir() sem chamar desvio_pos_wrap_up quando encerrada: rc=1, FAIL (d) (9a55d7d)"
+        - "limite declarado: P1-P8, P10, P11 foram rodadas em 9a55d7d; 53202ff so acrescenta o caso (h3) ao arquivo de teste (git diff 9a55d7d..53202ff: 1 arquivo, 17 insercoes, nenhuma linha de producao), entao o conjunto de casos que as derrubou segue presente"
+        - "P9 (antes sobrevivia em 9a55d7d: rc=0, 136 ok, 0 FAIL) rodada em 53202ff, remocao de 'and not encerrada' da supressao de pra-voce-sem-lista em medir(): rc=1, 136 ok, 1 FAIL, FAIL (h3) pos-wrap-up com Edit, Pra voce anunciando e 'Nada pendente.' -> bloqueia citando wrap-up, sem pra-voce-sem-lista"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "cada ramo novo (sessao_encerrada: sidechain, Safe to exit, invocacao por tag/Skill; desvio_pos_wrap_up: pergunta e Pra voce; on_stop estreito; supressao de pra-voce-sem-lista; motivo_bloqueio; pendencia; telemetria) tem caso proprio em (a)-(h3) e ficou vermelho ao ser quebrado"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff altera um hook de estilo de relatorio e prosa Markdown; nao abre superficie de entrada externa nem toca modulo api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "worktree detached 2ddf786 + tests/test_report_style_lint.py de 53202ff: rc=1, 124 ok, 14 FAIL (inclui (h3), (a), (a2), (d), (f), (g), (h) e as 4 checagens de spec); em 53202ff rc=0, 138 ok, 0 FAIL"
+routing_reason: "O teste fica verde em 53202ff, vermelho na base (14 falhas) e vermelho nas 12 perturbacoes. O sobrevivente anterior (P9, supressao de pra-voce-sem-lista) agora e pego pelo caso (h3). P1-P8, P10 e P11 foram medidas em 9a55d7d; o commit 53202ff so acrescenta teste. PROVEN."

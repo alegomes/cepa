@@ -4370,7 +4370,7 @@ uma única chamada ao lead por rodada, sem mensagem de retomada do orquestrador.
 
 **Plano:** fila cepa, item `planning-lead-workers-sem-prefixo`
 
-**Status:** pendente · **Lar provável:** `build-hex/agents/planning-lead.md` (seção
+**Status:** feito (2026-10-16, build-hex 1.4.2) · **Lar provável:** `build-hex/agents/planning-lead.md` (seção
 "Workflow", passo 2) e, pela mesma regra, `engineering-lead.md` e `validation-lead.md`, que
 também nomeiam os workers sem prefixo · **Origem:** feedback `fb-20261016-2` (2026-10-16,
 `wego-digitacao-backend`, run `until/2026-10-16-0822`, item
@@ -4401,7 +4401,7 @@ delegação exista em `<plugin>/agents/` e venha com o prefixo `<plugin>:`.
 
 **Plano:** fila cepa, item `relatorio-pos-wrap-up-abre-frente-nova`
 
-**Status:** pendente · **Lar provável:** `common/commands/metrics.md` (passo 3, "destaque a
+**Status:** feito nesta branch (2026-10-16) · **Lar provável:** `common/commands/metrics.md` (passo 3, "destaque a
 UMA ação de maior retorno e ofereça executá-la"), `common/skills/plain-report/SKILL.md`
 (bloco "Decisões e próximos passos") e a skill `default-yes` (seção "Guardar o fio da
 sessão", que estaciona assunto lateral até o wrap-up mas não diz o que fazer *depois* dele)
@@ -4438,3 +4438,14 @@ próximos passos" por "Nada pendente. Próxima sessão começa por X" e não faz
 oferecê-la, (4) o lint `report-style-lint.py` barra pergunta fechada em relatório pós-wrap-up.
 Teste que falta: relatório emitido com o marcador presente e uma pergunta fechada no fim é
 recusado pelo lint. Validar com a métrica "turnos entre o fim da rotina e o wrap-up" caindo.
+
+### Onde mora
+
+Sem marcador em arquivo: o `common/hooks/report-style-lint.py` lê a sessão encerrada do
+transcript (`sessao_encerrada`: `/common:wrap-up` invocado e depois "Safe to exit" em texto do
+assistente), porque marcador no handoff vazaria para a próxima sessão na mesma branch. A
+categoria de desvio é `pergunta-pos-wrap-up` (o evento `report_style` ganhou `pos_wrap_up`).
+Regra escrita em `common/commands/wrap-up.md` (L8 e Discard), `common/commands/metrics.md`
+(passo 3), `common/skills/plain-report/SKILL.md` ("Depois do wrap-up") e
+`common/skills/default-yes/SKILL.md`. Testes em `tests/test_report_style_lint.py`. Plugin
+`common` na 2.29.0.

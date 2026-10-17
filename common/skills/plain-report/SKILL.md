@@ -286,6 +286,15 @@ A mesma coisa dentro do formato:
 >    isso a correção não vale na sessão de amanhã. Se **não**: o verificador
 >    segue aceitando erro de digitação como aprovação."
 
+## Depois do wrap-up
+
+Depois que o `/common:wrap-up` disse "Safe to exit", a sessão está fechada. A
+lista do fim de qualquer relatório seguinte (o do `/common:metrics`, por
+exemplo) não pergunta nada: diz "Nada pendente. Próxima sessão começa por X.", e
+o `Pra você:` diz "nada". O que sobrou é registrado (seção no BACKLOG.md, item
+de fila, `cepa-feedback add`), não oferecido. O dono, em 2026-10-16: "é nessas
+horas que eu me perco em meio à árvore de forks que vai se criando."
+
 ## Relação com as outras skills
 
 `conversational-response` continua valendo para a resposta que sobe a cadeia de
@@ -304,6 +313,8 @@ O hook também bloqueia quando o `Pra você:` anuncia algo e a lista do fim diz
 traz comando, caminho de arquivo nem a linha "Pronto quando". Ele confere a
 forma do item, não se o comando está certo: isso é meu. A linha `Onde:` o hook
 não mede (só confere comando ou arquivo e "Pronto quando"); mantê-la é comigo.
+Depois do "Safe to exit" do wrap-up, o hook também bloqueia pergunta fechada na
+lista do fim e `Pra você:` que anuncia algo (categoria `pergunta-pos-wrap-up`).
 
 O que ele consegue medir do "e daí?" é só a parte literal: as frases de higiene
 da lista do glossário, e apenas na abertura e no `Pra você:`. Distinguir

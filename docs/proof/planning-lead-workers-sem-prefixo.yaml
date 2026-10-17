@@ -1,0 +1,49 @@
+schema_version: 2
+card: planning-lead-workers-sem-prefixo
+verdict: proven
+reviewed_at: 2026-10-16T22:30:00-03:00
+base_commit: 5ddce2c
+head_commit: e98ced3
+issue_type: Task
+scope:
+  stack_note: "repo Python/Markdown (harness cepa); sem Maven/PIT/JaCoCo; testes sao scripts python3"
+  changed_classes:
+    - { class: "build-hex/agents/planning-lead.md", module: build-hex, external_observable: false, substituted_by_double: null }
+    - { class: "build-hex/agents/engineering-lead.md", module: build-hex, external_observable: false, substituted_by_double: null }
+    - { class: "build-hex/agents/validation-lead.md", module: build-hex, external_observable: false, substituted_by_double: null }
+    - { class: "tests/test_leads_prefixam_workers.py", module: tests, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "repo Python/Markdown, sem PIT"
+    perturbation:
+      status: pass
+      results:
+        - "verde em d0b13b7: python3 tests/test_leads_prefixam_workers.py -> 'ok autoteste' + 'ok 3 leads...' rc=0"
+        - "P1 planning-lead.md:65 build-hex:epic-author -> epic-author: rc=1, FAIL build-hex/agents/planning-lead.md:65 `epic-author` sem prefixo"
+        - "P2 engineering-lead.md:94 build-hex:qa-engineer -> qa-engineer: rc=1, FAIL build-hex/agents/engineering-lead.md:94 sem prefixo e existe em varios plugins"
+        - "P3 validation-lead.md:72 build-hex:security-reviewer -> security-reviewer: rc=1, FAIL build-hex/agents/validation-lead.md:72 sem prefixo e existe em varios plugins"
+        - "P4 engineering-lead.md:94 build-hex:qa-engineer -> build-team:qa-engineer: rc=1, FAIL ...:94 plugin errado; o dono aqui e build-hex:qa-engineer"
+        - "P5 planning-lead.md:66 build-hex:product-manager -> build-hex:no-such-agent: rc=1, FAIL ...:66 aponta para build-hex/agents/no-such-agent.md, que nao existe"
+        - "autoteste capaz de falhar: ramo de nome curto desligado no detector -> 'FAIL autoteste: nome curto `foo` nao foi detectado'"
+        - "limite declarado: validation-lead.md:74 (common:completion-auditor sem prefixo) nao foi perturbada; usa o mesmo ramo de codigo exercitado em P1-P5"
+        - "EXTENSAO e98ced3 (regra de prosa): verde em e98ced3, rc=0 (ok autoteste + ok 3 leads), git status limpo"
+        - "P6 engineering-lead.md:23 `build-hex:qa-engineer` -> qa-engineer sem crases: rc=1, FAIL build-hex/agents/engineering-lead.md:23: nome curto em prosa de delegacao (`qa-engineer`)"
+        - "autoteste da prosa capaz de falhar: ramo VERBO_DELEGACAO desligado -> rc=1, FAIL autoteste: nome curto em prosa de delegacao nao detectado"
+        - "limite declarado: linhas 59 e 68 de engineering-lead.md nao foram perturbadas uma a uma; 68 aparece vermelha na base, 59 nao apareceu no grep da base (nao investigado); 23 prova a regra"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "o teste varre todas as linhas de todos os */agents/*-lead.md de build-hex; em 5ddce2c o teste de d0b13b7 acusou 31 FAIL e o de e98ced3 acusou 38 FAIL (incluindo engineering-lead.md:23 e :68 em prosa)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "diff so reescreve nomes em Markdown de agentes e adiciona um teste; nao le nada vindo de fora e nao toca modulo api-rest"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "worktree detached 5ddce2c + teste copiado de e98ced3: rc=1, 38 FAIL (ex.: engineering-lead.md:23 `qa-engineer` em prosa); em e98ced3 -> rc=0. Teste de d0b13b7 em 5ddce2c: rc=1, 31 FAIL"
+routing_reason: "O teste fica verde em e98ced3, vermelho na base (38 acusacoes), e vermelho com arquivo:linha nas perturbacoes por lead, plugin errado, agente inexistente e prosa sem prefixo. Os dois autotestes (nome curto e prosa) conseguem falhar. PROVEN."
