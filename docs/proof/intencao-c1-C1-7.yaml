@@ -1,0 +1,48 @@
+schema_version: 2
+card: intencao-c1-C1-7
+verdict: proven
+reviewed_at: 2026-10-17T21:00:00-03:00
+base_commit: a467dd3
+head_commit: dc764b1
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "~/.claude/statusline-command.sh (linhas 82-102: linha 2 da intencao) -- FORA do repo, decisao D5", module: statusline-local, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    A mudanca de comportamento vive fora do repo (D5 de docs/estrategia-intencao-da-sessao.md:
+    conveniencia local, fora das garantias e testes do harness). No repo, a467dd3..dc764b1 so
+    altera docs/estrategia-intencao-da-sessao.md (+2 linhas, doc). O diff provado e
+    `diff -u ~/.claude/statusline-command.sh.bak-2026-10-17 ~/.claude/statusline-command.sh`
+    (+21 linhas). NAO EXISTE teste no repo para isso, de proposito (D5): a prova abaixo e
+    VERIFICACAO AD HOC, feita por mim, com roteiro de shell descartavel que NAO foi
+    versionado (apagado com o /tmp, como pedido). Isso significa que nenhuma regressao futura
+    desta linha sera pega por suite; so repetindo a verificacao. O script real
+    (cepa-intencao) gravou a intencao num repo git temporario em /tmp; o script original
+    ~/.claude/statusline-command.sh nunca foi editado (so copias em /tmp, dentro de worktree
+    descartavel /tmp/proof-c17, removida ao fim). Nenhum session-intent gravado na worktree
+    do repo. Suite do repo nao rodada.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline (original): roteiro 1 'fails=0' com 10 verificacoes PASS (sem arquivo=1 linha; com gravar=2 linhas; resumo sem aspas/escapes '🧭 passo 1/2 · a · Ver \"aspas\" e \\barra'; resumo longo acentuado 79-80 colunas contando prefixo, termina em '…', NFC, sem U+FFFD; curto acentuado intacto; resumo vazio, null, 'null' entre aspas e sem valor = 1 linha; sem campo resumo = 1 linha); roteiro 2 'fails=0' (espacos internos normalizados; linha 2 termina em newline)"
+        - "RED (copia perturbada, 1 sed por vez): arquivo session-intent->session-intentX (4 FAIL); campo resumo->resumoX (4); guarda [ -n resumo ] removida (3: vazio, null, 'null'); nao desfaz aspas (4); aspa final nao removida s[1:] (4); escapes \\\" e \\\\ nao desfeitos (1); tratamento de 'null' removido (2); n 77->200 (1); n 77->40 (1); corte sem reticencias (1); corte +1 coluna (1); corte por byte em vez de caractere (1); prefixo emoji removido (3); decode ascii/ignore em vez de utf-8/replace (2); normalizacao de espacos removida (1); strip+normalizacao juntos (1); printf sem newline final (1)"
+        - "EQUIVALENTES (sobrevivem, nao contam): `.strip()` isolado (redundante com o `\" \".join(s.split())` seguinte; removidos juntos ficam RED); guarda externa `[ -n \"$resumo_raw\" ]` trocada por `true` (com campo ausente o python imprime vazio e a guarda interna `[ -n \"$resumo\" ]` ja silencia a linha)"
+        - "RESIDUAL: fronteira exata `len(s) <= n` vs `< n` (resumo de exatamente 77 caracteres) nao foi exercitada; efeito de uma coluna so, cosmetico. `head -1` e cor DIM nao verificados (nao observaveis sem ANSI ou com um unico campo resumo)."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura em shell; as 21 linhas novas foram alcancadas pelas 12 verificacoes (arquivo ausente, campo ausente, vazio, null, normal, longo, curto, espacos); cada ramo (guarda, unquote, unescape, null, corte, prefixo, newline) tem perturbacao RED acima"
+  l4_adversarial_input:
+    status: n/a
+    reason: "a linha le apenas o .claude/session-intent gravado pelo proprio dono via cepa-intencao e o JSON que o proprio Claude Code passa ao script; sem endpoint nem entrada externa nao confiavel; nenhum modulo api-rest alterado."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "PROVEN dentro do que e possivel nesta superficie: baseline verde, 17 das 19 perturbacoes ficam RED, as 2 sobreviventes sao equivalentes (redundancia com outro trecho). Ressalva honesta: nao ha teste versionado; a prova e ad hoc, por decisao D5, e o roteiro foi descartado. Residual cosmetico: fronteira de exatamente 77 caracteres."
