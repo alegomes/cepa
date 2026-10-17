@@ -216,3 +216,44 @@ def read_intent(root):
             return parse_intent(f.read())
     except OSError:
         return None
+
+
+# Ordem em que o escritor emite as chaves conhecidas; as desconhecidas (que o
+# leitor preserva) vão depois, para uma versão futura do formato não ser apagada
+# por um `cepa-intencao` antigo.
+_INTENT_ORDEM = ("proposito", "para_quando", "plano", "passo", "passo_desde",
+                 "session_id", "branch", "aberto_em", "resumo", "historico")
+
+
+def _intent_aspas(valor):
+    """Escalar -> `"..."` com \\ e \" escapados; quebra de linha vira espaço."""
+    s = " ".join(str(valor).split("\n")).replace("\r", " ")
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def render_intent(dados):
+    """dict -> texto do `session-intent`; `parse_intent` o lê de volta igual.
+
+    Mora ao lado do parser para o par ficar testado junto: o escritor
+    (`cepa-intencao`) é o único que chama, mas o formato é um só. Escalares
+    saem sempre entre aspas (o `passo` sai nu, é inteiro e o parser o converte).
+    """
+    chaves = [k for k in _INTENT_ORDEM if k in dados]
+    chaves += [k for k in dados if k not in _INTENT_ORDEM]
+    out = []
+    for k in chaves:
+        v = dados[k]
+        if k == "passo":
+            out.append(f"{k}: {int(v)}")
+        elif k == "historico":
+            out.append(f"{k}:")
+            for mapa in v or []:
+                pares = list(mapa.items())
+                for i, (mk, mv) in enumerate(pares):
+                    out.append(("  - " if i == 0 else "    ") + f"{mk}: {_intent_aspas(mv)}")
+        elif isinstance(v, list):
+            out.append(f"{k}:")
+            out += [f"  - {_intent_aspas(i)}" for i in v]
+        else:
+            out.append(f"{k}: {_intent_aspas(v)}")
+    return "\n".join(out) + "\n"

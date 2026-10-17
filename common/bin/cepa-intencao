@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+"""cepa-intencao — o único escritor do `.claude/session-intent`.
+
+O problema que ele resolve: a sessão deriva. Duas horas depois ninguém (nem o
+dono, nem o agente) diz com precisão o que se queria, em que passo se está e
+quando parar. A intenção da sessão (propósito, ponto de parada, plano, cursor)
+vive num arquivo por worktree; este comando é a única mão que o escreve.
+
+Por que um escritor só, e não o agente editando o YAML:
+  - o `resumo:` (uma linha pronta para statusline e hook) precisa ser
+    re-renderizado a cada escrita, e o agente esqueceria;
+  - as regras (plano de 1 a 6 itens, item sem dois-pontos) só valem se há um
+    portão; o leitor em `common/hooks/_modos.py` é tolerante de propósito e
+    não as impõe;
+  - o histórico (propósito e plano anteriores, com hora e motivo) só é
+    confiável se ninguém o reescreve à mão.
+Formato, leitor e serializador moram em `_modos.py`; aqui não há segundo parser.
+
+Uso:
+    cepa-intencao gravar --proposito "..." --para-quando "..." \
+                         --plano "levantar" "escrever" "decidir"
+    cepa-intencao --passo 2          # concluí o 1, o 2 está em andamento
+    cepa-intencao --passo 4          # com plano de 3 itens: plano cumprido
+    cepa-intencao --proposito "novo" --motivo "o dono reformulou"
+    cepa-intencao --plano "a" "b" [--motivo "..."]
+    # com `gravar`, o subcomando vem SEMPRE antes de `--plano` (que consome tudo
+    # até a próxima opção): `--plano a b gravar` seria o item "gravar".
+    cepa-intencao [mostrar]          # imprime a intenção atual
+
+Regras:
+  - `passo` é o passo EM ANDAMENTO (1-based). `--passo N` aceita 1..M, e M+1,
+    que significa "plano cumprido" (nenhum passo em andamento): o `resumo`
+    passa a "plano cumprido M/M · ..." e o hook sugere /common:wrap-up.
+  - `gravar` sobre intenção existente exige `--motivo`; o propósito e o plano
+    anteriores vão para o `historico` (hora da troca em `em:`).
+  - `--proposito` exige `--motivo`. `--plano` zera o cursor (passo 1) e guarda o
+    plano anterior no histórico (`plano_anterior`, itens separados por " | ").
+  - Itens do plano não contêm ':'; plano tem 1 a PLANO_MAX itens (mais que isso
+    é programa: `plan.yaml` / `/common:plan`). Recusa = nada é escrito.
+  - Escrita atômica (tmp + os.replace); cria `.claude/` se faltar.
+  - Telemetria (fail-silent, sem texto do propósito): `intent.written`
+    (acao=gravar|proposito|plano, passos=M) e `intent.cursor_advanced`
+    (de=, para=, passos=).
+
+Saídas: 0 ok · 2 uso inválido ou regra do escritor recusada · 3 sem intenção
+gravada (para --passo/--proposito/--plano/mostrar) · 4 já há intenção e falta
+--motivo para regravar.
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _modos as M  # noqa: E402
+
+try:
+    import _telemetry as T
+except Exception:  # noqa: BLE001 — telemetria nunca decide se a escrita acontece
+    T = None
+
+
+def agora():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def git(args, cwd):
+    try:
+        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True,
+                           text=True, timeout=10)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def recusa(msg, codigo=2):
+    print(f"cepa-intencao: {msg}", file=sys.stderr)
+    sys.exit(codigo)
+
+
+def valida_plano(itens):
+    itens = [i.strip() for i in itens]
+    if not 1 <= len(itens) <= M.PLANO_MAX:
+        recusa(f"o plano tem {len(itens)} itens; aceito de 1 a {M.PLANO_MAX}. "
+               "Mais que isso é programa: use plan.yaml (/common:plan).")
+    for i in itens:
+        if not i:
+            recusa("item de plano vazio.")
+        if ":" in i:
+            recusa(f"item de plano com ':' ({i!r}); reescreva sem dois-pontos.")
+    return itens
+
+
+def resumo(d):
+    """Uma linha só: espaços em branco (inclui quebra de linha) viram um espaço,
+    para o que se imprime ser idêntico ao que o arquivo guarda."""
+    plano, passo = d["plano"], d["passo"]
+    m = len(plano)
+    prop = " ".join(d["proposito"].split())
+    if passo > m:
+        return f"plano cumprido {m}/{m} · {prop}"
+    return f"passo {passo}/{m} · {' '.join(plano[passo - 1].split())} · {prop}"
+
+
+def escreve(root, d):
+    d["resumo"] = resumo(d)
+    alvo = Path(root) / M.INTENT_FILE
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=alvo.parent, prefix=".session-intent.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(M.render_intent(d))
+        os.replace(tmp, alvo)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def emite(root, evento, **campos):
+    if T is not None:
+        T.emit(evento, cwd=str(root), **campos)
+
+
+def mostrar(d):
+    print(d.get("resumo") or "(sem resumo)")
+    print(f"propósito: {d.get('proposito', '')}")
+    print(f"para quando: {d.get('para_quando', '')}")
+    for n, item in enumerate(d.get("plano", []), 1):
+        marca = ">" if n == d.get("passo") else " "
+        print(f"  {marca} {n}. {item}")
+    print(f"passo desde {d.get('passo_desde', '?')} · aberto em {d.get('aberto_em', '?')}")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="cepa-intencao", description=__doc__.split("\n")[0])
+    ap.add_argument("acao", nargs="?", choices=("gravar", "mostrar"))
+    ap.add_argument("--proposito")
+    ap.add_argument("--para-quando", dest="para_quando")
+    ap.add_argument("--plano", nargs="+")
+    ap.add_argument("--passo", type=int)
+    ap.add_argument("--motivo")
+    a = ap.parse_args()
+
+    if a.plano and any(i.strip() in ("gravar", "mostrar") for i in a.plano):
+        recusa("um item do plano é exatamente 'gravar'/'mostrar': o subcomando "
+               "vai ANTES de --plano (`cepa-intencao gravar --plano a b ...`).")
+    root = git(["rev-parse", "--show-toplevel"], os.getcwd())
+    if not root:
+        recusa("não estou num repositório git; a intenção vive em <repo>/.claude/.")
+    atual = M.read_intent(root)
+    existe = bool(atual) and bool(atual.get("proposito")) and bool(atual.get("plano"))
+    edita = a.passo is not None or (a.acao is None and (a.proposito or a.plano))
+
+    if a.acao == "gravar":
+        if a.passo is not None:
+            recusa("--passo não combina com gravar.")
+        if not (a.proposito and a.para_quando and a.plano):
+            recusa("gravar exige --proposito, --para-quando e --plano.")
+        plano = valida_plano(a.plano)
+        hist = list((atual or {}).get("historico") or [])  # preserva mesmo em arquivo parcial
+        if existe:
+            if not a.motivo:
+                recusa("já há uma intenção gravada; para regravar diga o porquê com "
+                       "--motivo (o anterior vai para o histórico).", 4)
+            hist.append({"em": agora(), "proposito": atual["proposito"],
+                         "plano_anterior": " | ".join(atual["plano"]),
+                         "motivo_da_troca": a.motivo})
+        t = agora()
+        d = {"proposito": a.proposito.strip(), "para_quando": a.para_quando.strip(),
+             "plano": plano, "passo": 1, "passo_desde": t,
+             "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID")
+             or os.environ.get("CLAUDE_SESSION_ID") or "",
+             "branch": git(["rev-parse", "--abbrev-ref", "HEAD"], root)
+             or git(["symbolic-ref", "--short", "HEAD"], root),  # repo sem commit
+             "aberto_em": t, "historico": hist}
+        escreve(root, d)
+        emite(root, "intent.written", acao="gravar", passos=len(plano))
+        print(d["resumo"])
+        return
+
+    if a.acao == "mostrar" or not edita:
+        if not existe:
+            recusa("não há intenção gravada nesta worktree.", 3)
+        mostrar(atual)
+        return
+
+    if not existe:
+        recusa("não há intenção gravada nesta worktree; comece com "
+               "`cepa-intencao gravar --proposito ... --para-quando ... --plano ...`.", 3)
+    if a.passo is not None and (a.proposito or a.plano):
+        recusa("--passo não combina com --proposito/--plano; rode em dois comandos.")
+
+    d = dict(atual)
+    d["historico"] = list(atual.get("historico", []))
+    m = len(d["plano"])
+
+    if a.passo is not None:
+        if not 1 <= a.passo <= m + 1:
+            recusa(f"passo {a.passo} fora do plano; aceito de 1 a {m} "
+                   f"({m + 1} = plano cumprido).")
+        de = d.get("passo")
+        d["passo"], d["passo_desde"] = a.passo, agora()
+        escreve(root, d)
+        emite(root, "intent.cursor_advanced", de=de, para=a.passo, passos=m)
+        print(d["resumo"])
+        return
+
+    if a.proposito:
+        if not a.motivo:
+            recusa("--proposito exige --motivo (o propósito anterior vai para o histórico).")
+        d["historico"].append({"em": agora(), "proposito": atual["proposito"],
+                               "motivo_da_troca": a.motivo})
+        d["proposito"] = a.proposito.strip()
+    if a.plano:
+        plano = valida_plano(a.plano)
+        d["historico"].append({"em": agora(), "plano_anterior": " | ".join(atual["plano"]),
+                               "motivo_da_troca": a.motivo or "plano substituído"})
+        d["plano"], d["passo"], d["passo_desde"] = plano, 1, agora()
+    escreve(root, d)
+    if a.proposito:
+        emite(root, "intent.written", acao="proposito", passos=len(d["plano"]))
+    if a.plano:
+        emite(root, "intent.written", acao="plano", passos=len(d["plano"]))
+    print(d["resumo"])
+
+
+if __name__ == "__main__":
+    main()
