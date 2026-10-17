@@ -172,6 +172,8 @@ O agente mostra as três linhas e segue trabalhando no mesmo turno. "sim" ou sil
 
 Linha 2 = `sed -n 's/^resumo: //p' .claude/session-intent`, cortada a 80 colunas. O `resumo:` já vem na ordem de corte certa: passo, nome do passo, propósito. Não repete o modo, que está na linha 1. Se o spike mostrar que duas linhas não renderizam, a linha 1 perde o segmento de tokens e ganha o passo; isso é decisão do dono.
 
+Spike (2026-10-17, C1-7, Claude Code 2.1.302): duas linhas renderizam. A prova é documental, não visual (o run desatendido não tem terminal): a página oficial da statusline (code.claude.com/docs/en/statusline) diz que "each `echo` or `print` statement displays as a separate row" e traz um exemplo de duas linhas. A linha 2 entrou em `~/.claude/statusline-command.sh` (backup em `statusline-command.sh.bak-2026-10-17`): prefixo `🧭`, texto esmaecido, some sem `resumo:`, tira as aspas e os escapes do serializador de `_modos.py`, e corta por caractere (python3; o `cut -c` do macOS corta por byte e partiria o `·`) em 80 colunas contando o prefixo, com `…` quando corta.
+
 ### Telemetria e critério de sucesso
 
 Eventos no `_telemetry.py`: `intent.written`, `intent.cursor_advanced`, `intent.asked` (prompt do dono casa com "o que estamos fazendo / onde estamos / próximo passo"), `intent.finished_at_last_step` (wrap-up com cursor no último passo). Linha nova no `/common:metrics`.
