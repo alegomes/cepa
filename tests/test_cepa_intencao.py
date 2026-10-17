@@ -287,6 +287,29 @@ for extra in (["--passo", "3"], ["--motivo", "m"], ["--proposito", "x"]):
     check(f"continuar {' '.join(extra)} recusa rc=2, intacto",
           p.returncode == 2 and arquivo(r11) == antes_txt, (p.returncode, p.stderr))
 
+for extra in (["--plano", "a"], ["--para-quando", "y"]):
+    antes_txt = arquivo(r11)
+    p = cepa(r11, "continuar", *extra)
+    check(f"continuar {' '.join(extra)} recusa rc=2, intacto",
+          p.returncode == 2 and arquivo(r11) == antes_txt, (p.returncode, p.stderr))
+
+# continuar troca o branch e NÃO mexe na idade do cursor (passo_desde antigo)
+r12 = novo_repo("r12")
+(r12 / ".claude").mkdir()
+(r12 / ".claude" / "session-intent").write_text(M.render_intent({
+    "proposito": "p", "para_quando": "q", "plano": ["a", "b"], "passo": 2,
+    "passo_desde": "2020-01-01T00:00:00Z", "session_id": "velha", "branch": "outro",
+    "aberto_em": "2020-01-01T00:00:00Z", "resumo": "passo 2/2 · b · p"}))
+p = subprocess.run([sys.executable, str(BIN), "continuar"], cwd=r12,
+                   env={**{k: v for k, v in ENV.items() if k != "CLAUDE_CODE_SESSION_ID"},
+                        "CLAUDE_SESSION_ID": "sess-3"}, capture_output=True, text=True)
+d = M.read_intent(r12)
+check("continuar troca o branch pelo atual", p.returncode == 0 and d["branch"] == "main",
+      (p.stderr, d))
+check("continuar mantém passo_desde antigo", d["passo_desde"] == "2020-01-01T00:00:00Z", d)
+check("continuar usa CLAUDE_SESSION_ID quando CLAUDE_CODE_SESSION_ID falta",
+      d["session_id"] == "sess-3", d)
+
 antes_txt = arquivo(r11)
 p = subprocess.run([sys.executable, str(BIN), "continuar"], cwd=r11,
                    env={k: v for k, v in ENV.items()

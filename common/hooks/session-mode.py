@@ -135,8 +135,9 @@ def log_prompts(root):
             fecha()
             quando, corpo = _iso(f"{dia}T{m.group(1)}Z") if dia else None, []
             continue
-        if not linha.startswith("# "):
-            corpo.append(linha)
+        # o `# Session log` do topo cai aqui antes do 1º `###` e é descartado
+        # pelo `fecha()`; dentro de um prompt, `# título` é texto do dono
+        corpo.append(linha)
     fecha()
     return out
 

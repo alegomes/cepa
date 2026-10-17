@@ -379,6 +379,144 @@ def test_intencao_corta_proposito_e_passo_longos():
         check("nome de passo longo é cortado no hook", "a" * 80 not in c and "a" * 70 in c, c)
 
 
+def test_intencao_vazia_prompt_do_turno_e_log_parcial():
+    with Repo() as r:
+        write_mode(r, "modo: exploracao\n")
+        register(r, SID, "2026-10-16T18:00:00+00:00")
+        write_log(r, [("2026-10-16", "18:01:00", "primeiro do log")])
+        c = ctx(run_hook(r.path, session_id=SID, prompt="segundo, o do turno"))
+        check("log com 1 prompt + prompt do turno diferente: entram os dois, em ordem",
+              '"primeiro do log" | "segundo, o do turno"' in c, c)
+        c = ctx(run_hook(r.path, session_id=SID, prompt="primeiro do log"))
+        check("prompt do turno já no log: não duplica",
+              c.count("primeiro do log") == 1, c)
+    with Repo() as r:
+        write_mode(r, "modo: exploracao\n")
+        c = ctx(run_hook(r.path, session_id=SID, prompt=""))
+        check("log vazio e prompt vazio: 'nenhum ainda'", "Primeiros prompts: nenhum ainda." in c, c)
+
+
+def test_intencao_vazia_corte_em_120():
+    with Repo() as r:
+        write_mode(r, "modo: exploracao\n")
+        longo = "".join(chr(97 + i % 26) for i in range(125))
+        c = ctx(run_hook(r.path, session_id=SID, prompt=longo))
+        check("prompt cortado em 120 caracteres (119 + …)",
+              f'"{longo[:119]}…"' in c, c)
+        curto = "y" * 120
+        c = ctx(run_hook(r.path, session_id=SID, prompt=curto))
+        check("prompt de exatos 120 caracteres não é cortado", f'"{curto}"' in c, c)
+
+
+def test_intencao_vazia_log_multilinha_e_titulo():
+    with Repo() as r:
+        write_mode(r, "modo: exploracao\n")
+        register(r, SID, "2026-10-16T18:00:00+00:00")
+        write_log(r, [("2026-10-16", "18:01:00", "linha um\n# meu título\nlinha dois")])
+        c = ctx(run_hook(r.path, session_id=SID, prompt="linha um # meu título linha dois"))
+        check("prompt de várias linhas vira uma, título markdown preservado",
+              '"linha um # meu título linha dois"' in c and c.count("linha um") == 1, c)
+
+
+def test_intencao_vazia_registro_no_clone_principal():
+    """Numa worktree ligada, o log é da worktree e o registro é do clone principal."""
+    with Repo() as r:
+        wt = Path(r.tmp.name) / "wt"
+        subprocess.run(["git", "worktree", "add", "-q", "--detach", str(wt)],
+                       cwd=r.path, check=True)
+        (wt / ".claude").mkdir()
+        (wt / ".claude" / "session-mode").write_text("modo: exploracao\n")
+        register(r, SID, "2026-10-16T18:00:00+00:00")  # no clone principal
+        (wt / ".claude" / "session-log.md").write_text(
+            "# Session log\n\n## 2026-10-15\n\n### 10:00:00 UTC\n\nvelho\n\n"
+            "## 2026-10-16\n\n### 18:01:00 UTC\n\nda sessão\n\n")
+        c = ctx(run_hook(wt, session_id=SID, prompt="da sessão"))
+        check("worktree ligada: acha o início no registro do clone principal",
+              '"da sessão"' in c and "velho" not in c, c)
+
+
+def test_intencao_mesma_sessao_tolerante():
+    with Repo() as r:
+        write_intent(r)
+        c = ctx(run_hook(r.path))  # payload sem session_id
+        check("payload sem session_id: não acusa outra sessão",
+              "Passo 2/4" in c and "outra sessão" not in c, c)
+    with Repo() as r:
+        write_intent(r, session_id="")
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("arquivo sem session_id: não acusa outra sessão",
+              "Passo 2/4" in c and "outra sessão" not in c, c)
+    with Repo() as r:
+        write_intent(r, session_id=SID)
+        c = ctx(run_hook(r.path, session_id=SID[:8]))
+        check("id gravado mais longo que o atual: mesma sessão por prefixo",
+              "Passo 2/4" in c and "outra sessão" not in c, c)
+
+
+def test_intencao_outra_sessao_detalhes():
+    with Repo() as r:
+        write_intent(r, session_id="aaaaaaaa")
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("outra sessão: data com hora (aberto_em)", "2026-10-16 18:30 UTC" in c, c)
+        check("outra sessão: manda não tratar como atual", "Não a trate como a desta sessão" in c, c)
+        check("outra sessão: mostra o propósito gravado",
+              '"institucionalizar as quatro perguntas"' in c, c)
+    with Repo() as r:
+        write_intent(r, session_id="aaaaaaaa", aberto_em="")
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("outra sessão sem aberto_em: 'data desconhecida'", "data desconhecida" in c, c)
+
+
+def test_intencao_passo_fora_do_plano_cai_no_1():
+    for valor in ("0", "6"):
+        with Repo() as r:
+            write_intent(r)
+            f = r.path / ".claude" / "session-intent"
+            f.write_text(f.read_text().replace("passo: 2", f"passo: {valor}"))
+            c = ctx(run_hook(r.path, session_id=SID))
+            check(f"passo {valor} com plano de 4: cai no passo 1", "Passo 1/4" in c, c)
+    with Repo() as r:
+        write_intent(r)
+        f = r.path / ".claude" / "session-intent"
+        f.write_text(f.read_text().replace("passo: 2", "passo: 5"))
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("passo M+1 (5 com plano de 4) é plano cumprido, não passo 1",
+              "Plano cumprido (4/4)" in c, c)
+
+
+def test_intencao_idade_bordas():
+    with Repo() as r:
+        write_intent(r, passo_desde="2026-10-16T21:40:00Z")
+        write_log(r, [("2026-10-16", "21:39:59", "antes"),
+                      ("2026-10-16", "21:40:00", "no mesmo segundo")])
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("prompt no mesmo segundo do passo_desde conta", "(há 1 turno)" in c, c)
+    with Repo() as r:
+        write_intent(r, passo_desde="2026-10-16T21:40:00Z")
+        write_log(r, [("2026-10-16", "21:39:00", "antes")])
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("nenhum prompt depois do cursor: '(há 0 turnos)'", "(há 0 turnos)" in c, c)
+    with Repo() as r:
+        write_intent(r, passo_desde="2026-10-16T21:40:00")  # sem fuso: lido como UTC
+        write_log(r, [("2026-10-16", "21:41:00", "depois")])
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("passo_desde sem fuso é lido como UTC", "(há 1 turno)" in c, c)
+
+
+def test_intencao_plano_cumprido_ponto_de_parada():
+    with Repo() as r:
+        write_intent(r, passo=5, para_quando="q" * 400)
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("plano cumprido: rótulo 'ponto de parada:'", "; ponto de parada: q" in c, c)
+        check("plano cumprido: ponto de parada cortado em 160",
+              "q" * 160 not in c and "q" * 159 + "…" in c, c)
+    with Repo() as r:
+        write_intent(r, passo=5, para_quando="")
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("plano cumprido sem ponto de parada: sem o rótulo",
+              "ponto de parada" not in c and "Plano cumprido (4/4). Próximo" in c, c)
+
+
 def test_intencao_ultimo_passo_aponta_wrap_up():
     with Repo() as r:
         write_intent(r, passo=4)
@@ -573,6 +711,12 @@ def main():
                test_intencao_normal_passo_idade_proximo,
                test_intencao_normal_um_turno_no_singular,
                test_intencao_corta_proposito_e_passo_longos,
+               test_intencao_vazia_prompt_do_turno_e_log_parcial,
+               test_intencao_vazia_corte_em_120, test_intencao_vazia_log_multilinha_e_titulo,
+               test_intencao_vazia_registro_no_clone_principal,
+               test_intencao_mesma_sessao_tolerante, test_intencao_outra_sessao_detalhes,
+               test_intencao_passo_fora_do_plano_cai_no_1, test_intencao_idade_bordas,
+               test_intencao_plano_cumprido_ponto_de_parada,
                test_intencao_ultimo_passo_aponta_wrap_up, test_intencao_plano_cumprido,
                test_intencao_sem_modo_ainda_e_injetada,
                test_intencao_de_outra_sessao_vira_pergunta,
