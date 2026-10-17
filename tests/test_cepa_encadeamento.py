@@ -240,6 +240,40 @@ def t_proposito_direto_na_worktree():
         check("a raiz não ganhou intenção", not (w.a / ".claude" / "session-intent").exists())
 
 
+def t_proposito_em_branch_session():
+    print("já numa branch session/* (caminho launch_here): a intenção é gravada ali")
+    with World() as w:
+        subprocess.run(["git", "checkout", "-q", "-b", "session/ja-isolada"], cwd=w.a, check=True)
+        r = w.run(args=["--proposito", "x y"])
+        c = w.calls()
+        check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
+        if c:
+            check("rodou no próprio repo, sem nova worktree", same(c[0]["cwd"], w.a), c[0]["cwd"])
+            it = _modos.parse_intent(c[0]["intent"])
+            check("a intenção existe antes do 1o turno, com 'x y'",
+                  it.get("proposito") == "x y", repr(it))
+            check("--proposito não vaza para o claude", "--proposito" not in c[0]["args"],
+                  repr(c[0]["args"]))
+
+
+def t_proposito_forma_com_igual():
+    print("--proposito=<texto> vale como --proposito <texto>; sem valor é erro")
+    with World() as w:
+        r = w.run(args=["--proposito=a b"])
+        c = w.calls()
+        check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
+        if c:
+            it = _modos.parse_intent(c[0]["intent"])
+            check("a intenção é 'a b'", it.get("proposito") == "a b", repr(it))
+            check("a forma com = não vaza para o claude",
+                  not any(x.startswith("--proposito") for x in c[0]["args"]), repr(c[0]["args"]))
+    with World() as w:
+        r = w.run(args=["--proposito"])
+        check("sem valor: o claude não abre", len(w.calls()) == 0, f"{len(w.calls())}")
+        check("sem valor: sai 2 e diz", r.returncode == 2 and "--proposito exige um valor" in r.stderr,
+              f"rc={r.returncode} {r.stderr!r}")
+
+
 def t_sem_proposito_sem_intencao():
     print("cepa sem --proposito não grava intenção")
     with World() as w:
@@ -366,6 +400,8 @@ if __name__ == "__main__":
     t_encadeia()
     t_intencao_anterior_vai_para_historico()
     t_proposito_direto_na_worktree()
+    t_proposito_em_branch_session()
+    t_proposito_forma_com_igual()
     t_sem_proposito_sem_intencao()
     t_falha_do_escritor_nao_impede()
     t_sem_arquivo()
