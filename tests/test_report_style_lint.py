@@ -537,6 +537,45 @@ check("…e false nas medições comuns",
       any(e.get("event") == "report_style" and e.get("pos_wrap_up") is False
           for e in eventos))
 
+# (h) Pra você anuncia algo e a lista diz "Nada pendente." (sem pergunta)
+ANUNCIA = BOM.replace("nada pra decidir agora; precisa reinstalar pra valer.",
+                      "uma decisão sua, lista no fim.").replace(
+    PASSOS, "\n\n### Decisões e próximos passos\nNada pendente.\n")
+assert ANUNCIA != BOM and "uma decisão sua" in ANUNCIA
+r = run("Stop", multi_turno("comando", FIM_WRAP, ANUNCIA), session="s-wrap-h")
+check("(h) pós-wrap-up com Pra você anunciando algo e \"Nada pendente.\" → bloqueia",
+      "wrap-up" in motivo_do_bloqueio(r.stdout), repr(r.stdout[:300]))
+
+FECHADO = BOM.replace(PASSOS, "\n\n### Decisões e próximos passos\n"
+                      "Nada pendente. Próxima sessão começa por X.\n")
+r = run("Stop", multi_turno("comando", FIM_WRAP, FECHADO), session="s-wrap-h2")
+check("(h2) pós-wrap-up com Pra você nada e \"Próxima sessão começa por X.\" → não bloqueia",
+      motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:300]))
+
+# ── a prosa que sustenta a regra diz o que o hook cobra ────────────────────
+def ler(rel):
+    return (REPO / rel).read_text(encoding="utf-8")
+
+pr = ler("common/skills/plain-report/SKILL.md")
+check("spec: plain-report tem o título \"Depois do wrap-up\"",
+      any(l.startswith("#") and "Depois do wrap-up" in l for l in pr.splitlines()))
+check("spec: plain-report manda \"Nada pendente. Próxima sessão começa por\"",
+      "Nada pendente. Próxima sessão começa por" in pr)
+
+mt = ler("common/commands/metrics.md")
+check("spec: metrics.md trata \"sessão já encerrada\" e cita pergunta-pos-wrap-up",
+      "sessão já encerrada" in mt and "Safe to exit" in mt
+      and "pergunta-pos-wrap-up" in mt)
+
+wu = ler("common/commands/wrap-up.md")
+check("spec: wrap-up.md cita pergunta-pos-wrap-up e \"Próxima sessão começa por\"",
+      "pergunta-pos-wrap-up" in wu and "Próxima sessão começa por" in wu)
+
+dy = ler("common/skills/default-yes/SKILL.md")
+sec = dy.split("## Guardar o fio da sessão", 1)[-1].split("\n## ", 1)[0]
+check("spec: default-yes, seção \"Guardar o fio da sessão\" tem \"Depois do wrap-up\"",
+      "## Guardar o fio da sessão" in dy and "Depois do wrap-up" in sec)
+
 # ── entrada corrompida não derruba o turno ─────────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))
 check("transcript ausente → rc=0", r.returncode == 0, f"rc={r.returncode}")
