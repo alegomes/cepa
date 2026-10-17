@@ -1,0 +1,29 @@
+schema_version: 1
+card: intencao-c1-C1-7
+status: complete
+audited_at: 2026-10-17
+head: dc764b1
+base: a467dd3
+criteria:
+  - id: AC1
+    text: "Spike da statusline: duas linhas renderizam?"
+    altitude: ui
+    surface: "statusline do Claude Code (varias linhas na saida do script)"
+    demonstrated_by:
+      test: "prova documental: https://code.claude.com/docs/en/statusline (buscada por mim com curl) traz 'each echo or print statement displays as a separate row' e a secao 'Display multiple lines'. Registrado em docs/estrategia-intencao-da-sessao.md (commit dc764b1)."
+      layer: documentacao oficial do fornecedor (contrato publicado); o script emite 2 linhas (wc -l = 2 na demonstracao de AC2)
+      evidence: verified
+      run: "curl -sL https://code.claude.com/docs/en/statusline -> 'Display multiple lines' presente e 'echo or print statement ... separate row' presente"
+    verdict: complete
+    gap: "Residuo: a prova VISUAL (ver as duas linhas na tela de um terminal real) nao existe; o run e desatendido. Nao impede COMPLETE: o item pede a decisao do spike, e o contrato publicado do fornecedor decide; D5 ja classifica a statusline como conveniencia fora das garantias do harness. Vale uma olhada unica do dono na proxima sessao interativa com intencao gravada; se nao renderizar, a linha 1 perde tokens (decisao do dono, conforme o doc)."
+  - id: AC2
+    text: "Linha 2 = resumo: do .claude/session-intent, cortada a 80 colunas, sem repetir o modo; some sem intencao"
+    altitude: ui
+    surface: "saida de ~/.claude/statusline-command.sh dado o JSON da statusline no stdin (fora do repo por D5, sem teste no repo de proposito)"
+    demonstrated_by:
+      test: "execucao real do script em repos git temporarios em /tmp (apagados), intencao gravada pelo cepa-intencao real"
+      layer: subprocess do script real (sh) com stdin JSON
+      evidence: verified
+      run: "sem session-intent: 1 linha (wc -l = 1). Com `cepa-intencao gravar` (proposito com aspas e barra): 2 linhas; linha 2 = '🧭 passo 1/2 · a · Entregar a statusline com \"aspas\" e barra \\ do dono' (aspas/escape do serializador removidos, 69 chars). Resumo longo com '·' multibyte: 2 linhas, linha 2 com 79 chars + emoji largo = 80 colunas, termina em '…', sem byte partido. Worktree limpa, sem session-intent nela."
+    verdict: complete
+    gap: "Residuos declarados: (1) o script vive em ~/.claude, fora do git e sem teste; sua regressao nao e detectada pelo harness (decisao D5; backup em ~/.claude/statusline-command.sh.bak-2026-10-17). (2) Largura: emoji contado como 2 colunas por convencao; terminais que o desenham diferente podem variar 1 coluna. (3) Modo nao repetido: confirmado por leitura, linha 2 so imprime o resumo."
