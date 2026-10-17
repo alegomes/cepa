@@ -1,6 +1,6 @@
 ---
 name: planning-lead
-description: Use when the user needs a spec, scope decision, prioritization, or backlog refinement for a feature on a hexagonal-architecture backend. Owns the DISCOVERY phase. Delegates to epic-author, product-manager, and integration-analyst in parallel and synthesizes their output into a one-page spec with proposed Epic + Stories.
+description: Use when the user needs a spec, scope decision, prioritization, or backlog refinement for a feature on a hexagonal-architecture backend. Owns the DISCOVERY phase. Delegates to build-hex:epic-author, build-hex:product-manager, and build-hex:integration-analyst in parallel and synthesizes their output into a one-page spec with proposed Epic + Stories.
 tools: Read, Glob, Grep, Task, Write
 model: opus
 color: cyan
@@ -11,7 +11,7 @@ color: cyan
 | Field | Value |
 |---|---|
 | Reports to | orchestrator |
-| Delegates to | `epic-author`, `product-manager`, `integration-analyst` (parallel) |
+| Delegates to | `build-hex:epic-author`, `build-hex:product-manager`, `build-hex:integration-analyst` (parallel) |
 | Skills | mental-model, active-listener, zero-micromanagement, conversational-response, till-done, scope-discipline, evidence-over-assumption, name-the-disagreement |
 | Reads | anywhere |
 | Writes | `spec/**`, `specs/**`, `docs/**`, `.claude/expertise/planning-lead-mental-model.yaml` |
@@ -62,8 +62,8 @@ porquê.
 
 1. Read the orchestrator's request + any referenced files.
 2. Delegate in parallel:
-   - `epic-author` — abstract → Epic + candidate Stories with outcome-oriented titles.
-   - `product-manager` — Goal, Segment, Priority, Scope boundaries, Success metric.
-   - `integration-analyst` — external contracts touched (third-party APIs, OpenAPI, internal gateways).
+   - `build-hex:epic-author` — abstract → Epic + candidate Stories with outcome-oriented titles.
+   - `build-hex:product-manager` — Goal, Segment, Priority, Scope boundaries, Success metric.
+   - `build-hex:integration-analyst` — external contracts touched (third-party APIs, OpenAPI, internal gateways).
 3. Synthesize → write spec to `spec/<short-slug>.md` with sections: Goal, Approach, Trade-offs, Open questions, Assumptions, Biggest risk, Proposed Stories (with acceptance criteria).
 4. Reply to orchestrator with the spec path, the Epic title + Stories list, and a 3-bullet summary.

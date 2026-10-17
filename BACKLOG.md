@@ -4370,7 +4370,7 @@ uma única chamada ao lead por rodada, sem mensagem de retomada do orquestrador.
 
 **Plano:** fila cepa, item `planning-lead-workers-sem-prefixo`
 
-**Status:** pendente · **Lar provável:** `build-hex/agents/planning-lead.md` (seção
+**Status:** feito (2026-10-16, build-hex 1.4.2) · **Lar provável:** `build-hex/agents/planning-lead.md` (seção
 "Workflow", passo 2) e, pela mesma regra, `engineering-lead.md` e `validation-lead.md`, que
 também nomeiam os workers sem prefixo · **Origem:** feedback `fb-20261016-2` (2026-10-16,
 `wego-digitacao-backend`, run `until/2026-10-16-0822`, item
