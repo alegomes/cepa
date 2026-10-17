@@ -1,0 +1,55 @@
+schema_version: 2
+card: intencao-c1-C1-5
+verdict: proven
+reviewed_at: 2026-10-17T18:00:00-03:00
+base_commit: 24e9f51
+head_commit: e30484a
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-intencao (subcomando estado, idade, estado())", module: common-bin, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/_modos.py (iso_utc, mesma_sessao, pergunta_outra_sessao movidos)", module: common-hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/session-mode.py (import e uso dos helpers movidos)", module: common-hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/whereami.md (novo)", module: common-commands, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/next.md (fallback)", module: common-commands, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/recap.md (linha de abertura)", module: common-commands, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python/markdown, sem Maven/PIT. Os testes executam o cepa-intencao real
+    em repos temporarios e o hook real; nenhum duplo no lugar da classe alterada.
+    Rodada 2: perturbacoes em worktree descartavel --detach /tmp/proof-c15r2-1
+    (e30484a), restaurada com git checkout entre perturbacoes e removida ao final;
+    arvore principal intocada. Rodei so test_whereami_intencao, test_cepa_modo,
+    test_cepa_intencao, test_common_next (nao rodei run-all.sh). Commit e30484a
+    so altera tests/test_whereami_intencao.py; codigo de producao identico a 4ad312c.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline e30484a: test_whereami_intencao 'OK'; test_cepa_modo 'tudo verde'; test_cepa_intencao 'tudo ok'; test_common_next 'all green'"
+        - "rodada 2, os 11 sobreviventes da rodada 1 agora ficam RED em test_whereami_intencao: cepa-intencao 'passo > m'->'>= m' (5 FAIL); normalizacao de passo invalido -> if False (4 FAIL); formato da idade -> '?' (5 FAIL); item de plano 'estado' deixa de ser recusado (2 FAIL); _modos.iso_utc sem UTC para timestamp sem fuso (2 FAIL em whereami; test_cepa_modo 0)"
+        - "rodada 2, prosa: next.md '`normal` -> answer from it'->'ignore it' (2 FAIL); next.md 'Say that the answer comes from the session intent' trocado (2 FAIL); next.md 'outra-sessao -> show the'->'hide the' (2 FAIL); recap.md 'open the recap with that line'->'ignore that line' (2 FAIL); recap.md 'Never read or edit .claude/session-intent by hand' trocado (2 FAIL); whereami.md 'Nao trate a intencao...' trocado (2 FAIL); whereami.md 'Nunca reclassifica o estado de olho' trocado (2 FAIL)"
+        - "spot-check de mortos da rodada 1 seguem RED: CEPA_UNTIL_RUN->if False (3 FAIL); mesma_sessao no estado->if False (5 FAIL); marca '>' em todo passo (3 FAIL); linha 'para quando' removida (2 FAIL)"
+        - "equivalentes da rodada 1 (nao contam): mesma_sessao 'if not g or not a' removido; replace('Z','+00:00'); prop sem normalizar espacos"
+        - "obs: test_common_next nao mata as 3 perturbacoes de next.md (0 FAIL); quem as mata e test_whereami_intencao, suficiente"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as linhas apontadas na rodada 1 (fronteira passo==M, passo invalido, idade em min/h, iso_utc sem fuso, prosa de next/recap/whereami) agora sao alcancadas: cada quebra por sed acima derruba python3 tests/test_whereami_intencao.py"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera um comando local do harness (leitura de .claude/session-intent), um hook e docs de comando; sem endpoint nem entrada externa nao confiavel; nenhum modulo api-rest alterado."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+history:
+  - round: 1
+    head_commit: 4ad312c
+    verdict: unproven
+    summary: "11 perturbacoes sobreviveram: fronteira do ultimo passo (passo==M), normalizacao de passo invalido, formato da idade (min/h), recusa do item de plano 'estado', iso_utc sem fuso, e a prosa de next.md (3), recap.md (2) e whereami.md (2). Demais (12+) ficaram RED."
+routing_reason: "PROVEN: os 11 sobreviventes da rodada 1 viram vermelho com os testes de e30484a (test_whereami_intencao), spot-check de 4 perturbacoes ja mortas segue vermelho, baseline dos 4 testes verde, nenhum duplo no lugar de classe alterada, L4 n/a justificado."

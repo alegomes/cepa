@@ -1,0 +1,51 @@
+schema_version: 1
+card: intencao-c1-C1-5
+status: complete
+audited_at: 2026-10-17
+head: 4ad312c
+base: 24e9f51
+criteria:
+  - id: AC1
+    text: "`whereami.md` existe como nome único, sem alias"
+    altitude: cli
+    surface: "common/commands/whereami.md (comando de plugin); ausência de alias"
+    demonstrated_by:
+      test: "tests/test_whereami_intencao.py: 'whereami: nome único, sem alias' (frontmatter sem alias); o arquivo existe e é o único com esse nome em common/"
+      layer: leitura do .md real + execução do comando documentado
+      evidence: verified
+      run: "python3 tests/test_whereami_intencao.py -> 45 'ok', 0 FAIL, 'OK' (HEAD 4ad312c)"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "Quatro estados: vazio (frase do desenho; na rodada do cepa-until delega a /common:next), normal (quatro respostas, plano com cursor, idade, conferência com o log propondo 'Avanço?' sem avançar sozinho), cumprido (frase com para_quando e /common:wrap-up), outra sessão (data e pergunta)"
+    altitude: cli
+    surface: "saída de `cepa-intencao estado` (comando extraído do próprio whereami.md e executado em repos git temporários) + texto do passo 2 do comando"
+    demonstrated_by:
+      test: "tests/test_whereami_intencao.py: vazio (1ª linha, frase exata, sem delegar fora do cepa-until, não cria arquivo, delega /common:next com CEPA_UNTIL_RUN); normal (propósito, para quando, '>' só no passo 2, 'passo atual: 2 de 4, há ... (desde ...)', somente leitura, recusa opções de escrita, cepa-until ignora intenção herdada); cumprido ('Os 4 passos estão feitos. Ponto de parada: ...', abertura 'plano cumprido', sem cursor); outra-sessao (data, pergunta igual à do hook, sem abertura, 'continuar' volta a normal); whereami confronta o log, 'Avanço?', 'Você propõe; o dono decide', avança só por --passo N"
+      layer: subprocess do cepa-intencao real, comando tirado do .md; passos em prosa conferidos por asserção de texto
+      evidence: verified
+      run: "python3 tests/test_whereami_intencao.py -> 45 'ok', 0 FAIL, 'OK'; vizinhos: test_cepa_modo 106 ok/0 FAIL 'tudo verde'; test_cepa_intencao 75 ok/0 FAIL 'tudo ok'"
+    verdict: complete
+    gap: "Julgamento de altitude: adequado. /common:whereami é prompt em markdown; a parte determinística (classificação, frases, cursor, idade) roda de verdade. Resíduo não automatizável: o modelo fazer a conferência contra o session-log e propor 'Avanço?' sem avançar em sessão viva (passo 2 só tem teste de texto). Vale uma conferência manual única; não é lacuna de teste."
+  - id: AC3
+    text: "`/common:next` tem fallback para sessão sem plano de programa, respondendo pela intenção; plano encontrado responde primeiro"
+    altitude: cli
+    surface: "next.md (fallback após buscar o plano, antes de declarar ausência) + `cepa-intencao estado`"
+    demonstrated_by:
+      test: "tests/test_whereami_intencao.py: 'next: o fallback vem depois de procurar o plano e antes de declarar ausência'; 'next: cumprido aponta /common:wrap-up e plano achado responde primeiro'; 'next: sem intenção mantém o comportamento'. Regressão: tests/test_common_next.py"
+      layer: texto do .md real + comando documentado executado
+      evidence: verified
+      run: "test_whereami_intencao 45 ok/0 FAIL; python3 tests/test_common_next.py -> 13 ok, 0 FAIL, 'all green'"
+    verdict: complete
+    gap: "Mesmo resíduo de altitude: a ordem 'plano primeiro, depois intenção' é instrução em prosa verificada por texto, não por execução do modelo."
+  - id: AC4
+    text: "`/common:recap` abre com 'propósito / passo N de M' quando há intenção"
+    altitude: cli
+    surface: "linha `abertura:` de `cepa-intencao estado` + passo 0 de recap.md"
+    demonstrated_by:
+      test: "tests/test_whereami_intencao.py: 'normal: linha de abertura do recap' (exato '... / passo 2 de 4'), 'cumprido: abertura diz plano cumprido', 'outra-sessao: sem abertura', 'recap: a linha de abertura vem antes de carregar o log', 'recap: abre com abertura e sem intenção não imprime nada', 'o contrato cobre as duas saídas'"
+      layer: subprocess do escritor real + texto do .md
+      evidence: verified
+      run: "python3 tests/test_whereami_intencao.py -> 45 'ok', 0 FAIL, 'OK'"
+    verdict: complete
+    gap: null
