@@ -1,0 +1,40 @@
+schema_version: 1
+card: intencao-c1-C1-4
+status: complete
+audited_at: 2026-10-17
+head: bf9ca35
+base: a5a552b
+criteria:
+  - id: AC1
+    text: "`cepa` grava o brief do next.json como propósito (arquivo .claude/session-intent após o launcher, antes do primeiro turno)"
+    altitude: cli
+    surface: "cadeia real SessionEnd -> session-chain.py -> common/bin/cepa --proposito -> cepa-intencao; o stub de claude lê .claude/session-intent no cwd no instante em que é lançado (antes de qualquer turno)"
+    demonstrated_by:
+      test: "tests/test_cepa_encadeamento.py::t_encadeia (propósito = brief com espaços colapsados, plano de 1 item, passo 1, 1a abertura sem intenção, --proposito não vaza para o claude, 'intenção:' no stderr), t_intencao_anterior_vai_para_historico, t_proposito_direto_na_worktree (a intenção mora na worktree, não na raiz), t_sem_proposito_sem_intencao, t_falha_do_escritor_nao_impede (aviso e a sessão abre)"
+      layer: subprocess do cepa real + hook de chain real + cepa-intencao real, com claude stub em repos git temporários
+      evidence: verified
+      run: "python3 tests/test_cepa_encadeamento.py -> 64 'ok', 0 FAIL, 'OK' (HEAD bf9ca35)"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "`/common:session` grava a intenção a partir das perguntas de largada, sem segundo ritual (arquivo .claude/session-intent após a largada)"
+    altitude: cli
+    surface: "passo 3b de common/commands/session.md: o comando documentado, executado literalmente contra o cepa-intencao real"
+    demonstrated_by:
+      test: "tests/test_session_intencao_contrato.py (3b entre o 3 e o 4; não roda no --help; executa a linha documentada num repo temporário: 1a gravação rc 0 com propósito e plano de 3 passos; regravar sem --motivo rc 4; com o --motivo documentado rc 0 e a anterior vai ao histórico; os dois --passo rc 0 e cursor termina no 3; nenhum item do plano tem ':')"
+      layer: texto do comando extraído do markdown e executado por shell contra o escritor real
+      evidence: verified
+      run: "python3 tests/test_session_intencao_contrato.py -> 21 'ok', 0 FAIL, 'OK'"
+    verdict: complete
+    gap: "Julgamento de altitude: adequado. /common:session é um prompt em markdown, sem superfície executável própria; o ponto mais externo automatizável é o comando que ele manda rodar, e o teste o extrai do próprio .md (não uma cópia) e roda. Resíduo não automatizável: um modelo seguir a instrução do 3b em sessão viva. Isso só se vê numa execução real de /common:session, e vale uma conferência manual de uma vez, mas não é lacuna de teste."
+  - id: AC3
+    text: "Regressão: wrap-up/próximo passo e o escritor cepa-intencao seguem verdes com a mudança"
+    altitude: cli
+    surface: "tests/test_wrapup_proximo_passo.py e tests/test_cepa_intencao.py"
+    demonstrated_by:
+      test: "tests/test_wrapup_proximo_passo.py; tests/test_cepa_intencao.py"
+      layer: subprocess
+      evidence: verified
+      run: "wrapup: 49 'ok', 0 FAIL, 'todos ok'; cepa_intencao: 75 'ok', 0 FAIL, 'tudo ok'"
+    verdict: complete
+    gap: null

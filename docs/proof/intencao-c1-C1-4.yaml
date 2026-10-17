@@ -1,0 +1,65 @@
+schema_version: 2
+card: intencao-c1-C1-4
+verdict: proven
+reviewed_at: 2026-10-17T16:00:00-03:00
+base_commit: a5a552b
+head_commit: 0ce2e4d
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa (--proposito parsing, write_intencao, chamadas em launch_here e no caminho principal)", module: common-bin, external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/session-chain.py (execv com --proposito)", module: common-hooks, external_observable: true, substituted_by_double: null }
+    - { class: "common/commands/session.md (passo 3b)", module: common-commands, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python/sh, sem Maven/PIT. Os testes usam stub no lugar do claude
+    (fronteira distante, correto); cepa, cepa-intencao e launch.py rodam de verdade.
+    Rodada 3: worktree descartavel --detach /tmp/proof-c1-4c (0ce2e4d), restaurada
+    com git checkout entre perturbacoes e removida ao final; arvore principal intocada.
+    0ce2e4d vs 376a322 so altera tests/test_session_intencao_contrato.py (+5 linhas);
+    common/ e identico desde bf9ca35, entao as vermelhas das rodadas 1 e 2 seguem validas.
+history:
+  round_1:
+    head_commit: bf9ca35
+    verdict: unproven
+    survivors:
+      - "cepa:224 write_intencao em launch_here() trocado por ':' -> suite OK"
+      - "cepa:362 forma --proposito=<texto> renomeada -> suite OK"
+      - "cepa:360 checagem '--proposito exige um valor' removida -> suite OK"
+      - "session.md: frases 'Isto substitui o proponha em tres linhas' e 'Falha do escritor nao para a rotina' apagadas -> contrato OK"
+    reds_round_1:
+      - "cepa: ramo --proposito renomeado; cepa:495 write_intencao do caminho principal removido; cepa:278 guarda [ -n $PROPOSITO ] removida; return 0 de write_intencao; aviso 'nao gravei a intencao' esvaziado; cepa:286 --motivo esvaziado; cepa:361 shift 2 -> break; session-chain.py:103 execv sem --proposito; session.md '--passo 3'->9, '--motivo'->'--motivoX', item de plano com ':', 'nunca no caminho --help', '--para-quando', 'Saida 4'->7 -> todos RED"
+  round_2:
+    head_commit: 376a322
+    verdict: unproven
+    closed:
+      - "cepa:224 -> test_cepa_encadeamento RED (1 FAIL 'a intencao existe antes do 1o turno')"
+      - "cepa:362 -> RED (2 FAIL)"
+      - "cepa:360 -> RED (1 FAIL 'sem valor: sai 2 e diz')"
+    survivors:
+      - "session.md:152-153 frase 'Isto substitui o proponha...' apagada -> contrato OK"
+      - "session.md:154 'Falha do escritor nao para a rotina' apagada -> contrato OK"
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 0ce2e4d: test_cepa_encadeamento 'OK', test_session_intencao_contrato 'OK', test_wrapup_proximo_passo 'todos ok'"
+        - "session.md:152-153 apagadas (sed -i '' '152,153d') -> test_session_intencao_contrato RED (1 FAIL: 'diz que substitui o pedido do hook (sem segundo ritual)')"
+        - "session.md:154 apagada (sed -i '' '154d') -> test_session_intencao_contrato RED (1 FAIL: 'diz que falha do escritor nao para a rotina')"
+        - "cepa:224, cepa:360, cepa:362 e demais perturbacoes das rodadas 1 e 2: RED (codigo de common/ inalterado desde entao)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; linhas antes descobertas quebradas por sed derrubam os testes: cepa:224 -> 1 FAIL; cepa:362 -> 2 FAIL; cepa:360 -> 1 FAIL; session.md:152-153 e 154 -> 1 FAIL cada (python3 tests/test_*.py)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff altera um launcher shell, um hook e uma doc de comando locais do harness, sem endpoint nem entrada externa nao confiavel; nenhum modulo api-rest alterado."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "Todos os sobreviventes das rodadas 1 e 2 estao fechados: cada perturbacao em codigo e nas duas frases de prosa do passo 3b agora deixa o teste vermelho, e os tres testes ficam verdes sem perturbacao. Nenhum duplo substitui a classe alterada. PROVEN."
