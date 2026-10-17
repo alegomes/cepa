@@ -53,7 +53,7 @@ força o usuário a recarregar o contexto inteiro para responder.
 
 ## Guardar o fio da sessão
 
-Autonomia sem memória vira outra forma de ruído. Duas obrigações:
+Autonomia sem memória vira outra forma de ruído. Três obrigações:
 
 - **Proposta em aberto não some.** Se você propôs algo e o usuário ainda não
   respondeu (muitas vezes porque estava trazendo mais informação, não porque
@@ -64,6 +64,10 @@ Autonomia sem memória vira outra forma de ruído. Duas obrigações:
   módulo) **não viram pergunta no meio de outro assunto**. Anote e traga no
   fechamento da sessão. A exceção é o que bloqueia o assunto atual — aí é
   parte do assunto, não desvio.
+- **Depois do wrap-up, nada novo abre.** O estacionamento é esvaziado no
+  próprio wrap-up, dentro do handoff, do BACKLOG ou do `cepa-feedback add`. Um
+  relatório depois do "Safe to exit" nunca propõe a próxima coisa: diz onde o
+  assunto ficou registrado e termina.
 
 ## Rede de segurança
 

@@ -52,6 +52,25 @@ você:` anuncia algo pendente e a lista do fim não tem item numerado nenhum) e
 "Pronto quando"). A primeira só olha se o que o topo anuncia aparece no fim; a
 segunda só olha a forma do item, não se o comando está certo.
 
+Sessão já encerrada pelo wrap-up (2026-10-16, feedback fb-20261016-4). Depois
+de `/common:wrap-up` terminar com "Safe to `exit`", o agente ofereceu
+`/common:metrics` na lista do fim, o dono aceitou, e o relatório do metrics
+terminou com uma pergunta fechada nova: a sessão fechada abriu uma frente
+nova, e o dono se perdeu na árvore de forks. Medição nova, categoria
+`pergunta-pos-wrap-up`: se o wrap-up foi invocado e DEPOIS algum texto do
+assistente diz "Safe to exit", todo relatório seguinte que traga item numerado
+com `?` na lista do fim, ou um `Pra você:` que anuncia algo, é barrado. A
+sessão encerrada é lida do TRANSCRIPT, não de um arquivo-marcador, de
+propósito: um marcador no handoff vazaria para a próxima sessão na mesma
+branch, e um marcador em `.claude/` dependeria de o modelo lembrar de
+escrevê-lo. O transcript tem o escopo da sessão e é mecânico. Um wrap-up
+invocado que parou numa trava (conflito de merge, por exemplo) nunca disse
+"Safe to exit" e NÃO encerra a sessão: ali o relatório pode mesmo pedir que o
+usuário resolva algo. O turno do metrics só lê, então a regra de escopo acima
+(turno que alterou algo) deixaria o incidente sem medição; por isso, com a
+sessão encerrada, o hook lê o relatório mesmo sem alteração e mede só esta
+categoria.
+
 Saída: exit 0 sempre. O bloqueio viaja no JSON de stdout, não no código de
 saída — o hook nunca derruba o turno por erro próprio.
 """
@@ -249,6 +268,56 @@ def turno_alterou_algo(rows) -> bool:
     return False
 
 
+SAFE_TO_EXIT = re.compile(r"safe\s+to\s+`?exit`?", re.I)
+INVOCA_WRAP_UP = re.compile(
+    r"<command-name>\s*/?(?:common:)?wrap-up\s*</command-name>", re.I)
+
+
+def _texto_do_usuario(row) -> str:
+    content = (row.get("message") or {}).get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(b.get("text", "") for b in content
+                         if isinstance(b, dict) and b.get("type") == "text")
+    return ""
+
+
+def sessao_encerrada(rows) -> bool:
+    """O `/common:wrap-up` foi invocado e DEPOIS disse "Safe to exit"?
+
+    Só a conversa principal conta (nunca `isSidechain`). Invocação: a linha do
+    usuário com `<command-name>/common:wrap-up</command-name>` (é assim que um
+    slash command cai no transcript) ou começando por `/common:wrap-up` ou
+    `/wrap-up`; ou um `tool_use` de `Skill` cujo `input.skill` termina em
+    `wrap-up`. "Safe to exit" vale na mesma linha da invocação ou em qualquer
+    texto de assistente posterior, inclusive o último relatório. Só texto de
+    assistente conta: o corpo do comando, injetado como linha de usuário,
+    também cita a frase."""
+    invocado = False
+    for row in rows:
+        if row.get("isSidechain"):
+            continue
+        tipo = row.get("type")
+        if tipo == "user":
+            texto = _texto_do_usuario(row)
+            if INVOCA_WRAP_UP.search(texto) or re.match(
+                    r"\s*/(?:common:)?wrap-up\b", texto):
+                invocado = True
+        elif tipo == "assistant":
+            for bloco in (row.get("message") or {}).get("content") or []:
+                if not isinstance(bloco, dict):
+                    continue
+                if bloco.get("type") == "tool_use" and bloco.get("name") == "Skill":
+                    skill = str((bloco.get("input") or {}).get("skill", ""))
+                    if skill.endswith("wrap-up"):
+                        invocado = True
+                elif (bloco.get("type") == "text" and invocado
+                      and SAFE_TO_EXIT.search(bloco.get("text", ""))):
+                    return True
+    return False
+
+
 DOC_DE_ENTREVISTA = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
 
 
@@ -427,8 +496,29 @@ def pra_voce_anuncia(texto: str) -> bool:
     return not limpo.lower().startswith("nada")
 
 
+def desvio_pos_wrap_up(relatorio: str):
+    """A sessão já foi encerrada: o relatório abre frente nova?
+
+    Devolve (categoria, mensagem) ou None. Frente nova = item numerado com `?`
+    na lista do fim, ou `Pra você:` que anuncia algo."""
+    mp = MARCADOR_PASSOS.search(relatorio)
+    cortes = [x.start() for x in (MARCADOR_TECNICO.search(relatorio), mp) if x]
+    cabeca = relatorio[:min(cortes)] if cortes else relatorio
+    pergunta = bool(mp) and any(
+        "?" in i for i in itens_da_lista(relatorio[mp.end():]))
+    if not (pergunta or pra_voce_anuncia(texto_do_pra_voce(cabeca))):
+        return None
+    return ("pergunta-pos-wrap-up",
+            "a sessão já foi encerrada pelo wrap-up (\"Safe to exit\"): o "
+            "relatório não abre frente nova: nenhuma pergunta fechada na "
+            "lista do fim, e `Pra você:` diz \"nada\"; o que sobrou você "
+            "registra (seção no BACKLOG.md, item de fila ou `cepa-feedback "
+            "add`) e a lista diz \"Nada pendente. Próxima sessão começa por "
+            "<o Próximo do handoff>.\"")
+
+
 def medir(relatorio: str, jargao: list, abstracoes: list = (),
-          higiene: list = ()) -> list:
+          higiene: list = (), encerrada: bool = False) -> list:
     """Devolve os desvios como (categoria, mensagem). Categoria é rótulo
     estável para a telemetria; mensagem é o que o modelo lê. Lista vazia =
     relatório dentro do formato."""
@@ -480,7 +570,8 @@ def medir(relatorio: str, jargao: list, abstracoes: list = (),
                             "uma linha começando por verbo, não em prosa"))
         desvios += medir_itens(cauda)
         topo = texto_do_pra_voce(cabeca)
-        if pra_voce_anuncia(topo) and not ITEM_NUMERADO.search(cauda):
+        if (pra_voce_anuncia(topo) and not ITEM_NUMERADO.search(cauda)
+                and not encerrada):
             desvios.append(("pra-voce-sem-lista",
                             f"`Pra você:` diz que algo espera pelo usuário "
                             f"({topo[:60].strip()}), e a lista do fim não tem "
@@ -488,6 +579,11 @@ def medir(relatorio: str, jargao: list, abstracoes: list = (),
                             f"numerado com Onde, Comando (ou arquivo) e Pronto "
                             f"quando; só quando o Pra você diz \"nada\" a lista "
                             f"pode dizer \"Nada pendente.\""))
+
+    if encerrada:
+        d = desvio_pos_wrap_up(relatorio)
+        if d:
+            desvios.append(d)
 
     palavras = conta_palavras(cabeca)
     if palavras > MAX_PALAVRAS_ANTES_DO_TECNICO:
@@ -539,7 +635,14 @@ def pendencia_path(session_id: str) -> Path:
 def on_stop(payload):
     """Devolve o motivo do bloqueio, ou None para deixar a parada seguir."""
     rows = read_rows(payload.get("transcript_path", ""))
-    if not rows or not turno_alterou_algo(rows):
+    if not rows:
+        return None
+    alterou = turno_alterou_algo(rows)
+    encerrada = sessao_encerrada(rows)
+    # Escopo: relatório de trabalho feito. Exceção estreita: sessão encerrada
+    # pelo wrap-up, onde mesmo o turno que só lê (metrics) é medido, mas só
+    # pela categoria `pergunta-pos-wrap-up`.
+    if not alterou and not encerrada:
         return None
 
     relatorio = ultimo_relatorio(rows)
@@ -548,7 +651,12 @@ def on_stop(payload):
     if turno_de_entrevista(rows, relatorio):
         return None
 
-    desvios = medir(relatorio, load_jargao(), load_abstracoes(), load_higiene())
+    if alterou:
+        desvios = medir(relatorio, load_jargao(), load_abstracoes(),
+                        load_higiene(), encerrada=encerrada)
+    else:
+        d = desvio_pos_wrap_up(relatorio)
+        desvios = [d] if d else []
     cwd = payload.get("cwd") or os.getcwd()
 
     # Trava anti-loop: esta parada já é consequência de um bloqueio deste hook.
@@ -561,7 +669,8 @@ def on_stop(payload):
             desvios=len(desvios),
             tipos=[cat for cat, _ in desvios],
             bloqueou=vai_bloquear,
-            reincidente=reincidente)
+            reincidente=reincidente,
+            pos_wrap_up=encerrada)
 
     p = pendencia_path(payload.get("session_id", ""))
     if not desvios:
@@ -572,29 +681,43 @@ def on_stop(payload):
         # O relatório é reescrito AGORA, no mesmo turno: nada de pendência para
         # o turno seguinte, senão o usuário leva o aviso de um texto já corrigido.
         p.unlink(missing_ok=True)
-        return motivo_bloqueio([m for _, m in desvios])
+        return motivo_bloqueio([m for _, m in desvios], encerrada)
 
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"desvios": [m for _, m in desvios]},
-                                ensure_ascii=False),
+        p.write_text(json.dumps({"desvios": [m for _, m in desvios],
+                                "encerrada": encerrada},
+                               ensure_ascii=False),
                      encoding="utf-8")
     except Exception:
         pass
     return None
 
 
-def motivo_bloqueio(desvios) -> str:
+FORMATO_ENCERRADA = (
+    "abertura de até 3 frases sem jargão → **Pra você:** nada → "
+    "### Detalhe técnico → ### Decisões e próximos passos contendo só "
+    "\"Nada pendente. Próxima sessão começa por <o Próximo do handoff>.\", "
+    "sem item numerado e sem pergunta. O que sobrou vai para registro "
+    "(BACKLOG.md, item de fila ou `cepa-feedback add`) e o relatório diz onde.")
+
+
+def motivo_bloqueio(desvios, encerrada: bool = False) -> str:
+    if encerrada:
+        fim = ("Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
+               "turno: " + FORMATO_ENCERRADA + " ")
+    else:
+        fim = ("Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
+               "turno: abertura de até 3 frases sem jargão → **Pra você:** → "
+               "### Detalhe técnico → ### Decisões e próximos passos (lista "
+               "numerada, uma pergunta fechada por item, cada uma com "
+               "\"Recomendo sim/não\" e o porquê em uma linha; tarefa sua com "
+               "Onde, Comando (ou arquivo) e Pronto quando; \"Nada pendente.\" "
+               "só se o Pra você disser nada). ")
     return ("Seu relatório final saiu do formato `plain-report`:\n" +
-            "".join(f"  - {d}\n" for d in desvios) +
-            "Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
-            "turno: abertura de até 3 frases sem jargão → **Pra você:** → "
-            "### Detalhe técnico → ### Decisões e próximos passos (lista "
-            "numerada, uma pergunta fechada por item, cada uma com "
-            "\"Recomendo sim/não\" e o porquê em uma linha; tarefa sua com Onde, "
-            "Comando (ou arquivo) e Pronto quando; \"Nada pendente.\" só se o "
-            "Pra você disser nada). Não peça desculpa e não explique a "
-            "reescrita — entregue o relatório corrigido e nada mais.")
+            "".join(f"  - {d}\n" for d in desvios) + fim +
+            "Não peça desculpa e não explique a reescrita \u2014 entregue o "
+            "relatório corrigido e nada mais.")
 
 
 def on_prompt(payload) -> None:
@@ -602,19 +725,22 @@ def on_prompt(payload) -> None:
     if not p.is_file():
         return
     try:
-        desvios = json.loads(p.read_text(encoding="utf-8")).get("desvios") or []
+        dado = json.loads(p.read_text(encoding="utf-8"))
+        desvios = dado.get("desvios") or []
+        encerrada = bool(dado.get("encerrada"))
     except Exception:
-        desvios = []
+        desvios, encerrada = [], False
     p.unlink(missing_ok=True)
     if not desvios:
         return
     print("[cepa report-style] Seu relatório anterior saiu do formato "
           "`plain-report`:\n" +
           "".join(f"  - {d}\n" for d in desvios) +
-          "  Formato: abertura de até 3 frases sem jargão → **Pra você:** → "
+          "  Formato: " + (FORMATO_ENCERRADA + " " if encerrada else
+          "abertura de até 3 frases sem jargão → **Pra você:** → "
           "### Detalhe técnico → ### Decisões e próximos passos (numerada, uma "
           "pergunta fechada por item, cada uma com \"Recomendo sim/não\"; tarefa "
-          "sua com Onde, Comando e Pronto quando). "
+          "sua com Onde, Comando e Pronto quando). ") +
           "Este é o caminho de aviso — o relatório anterior já tinha sido "
           "bloqueado uma vez e a reescrita ainda desviou. Aplique no próximo "
           "relatório em vez de reescrever o anterior.")
