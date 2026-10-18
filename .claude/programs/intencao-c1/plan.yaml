@@ -24,59 +24,179 @@ items:
     Ordem herdada da seção, decidida pelo dono em 2026-10-16 junto com D1-D5; ninguém
     priorizou os passos entre si além disso. Superfície: parser em `_modos.py`/`_wtlib.py`
     lido por hook e comando (proposta consolidada 1).'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits dc3c392 (parse_intent/read_intent em common/hooks/_modos.py,
+    INTENT_FILE, PLANO_MAX=6; session-intent no RESCUE_SKIP de _wtlib.py; tests/test_session_intent.py)
+    e 992423f (artefatos dos gates) na branch until/2026-10-17-0711. pair-reviewer
+    OK-WITH-NOTES, as duas notas corrigidas (bloco ''plano: # nota'' e frase sem
+    base no comentário do RESCUE_SKIP). completion-auditor COMPLETE (.claude/acceptance/intencao-c1-C1-1.yaml);
+    proof-reviewer PROVEN, 7/7 perturbações RED (docs/proof/intencao-c1-C1-1.yaml).
+    Testes tocados verdes: test_session_intent, test_worktree_artifact_rescue, test_modos_fonte_unica,
+    test_cepa_modo. Suíte completa delegada ao supervisor. Fora do escopo: escritor
+    cepa-intencao (C1-2), hook (C1-3). Nota: a lista em _wtlib se chama RESCUE_SKIP,
+    não RESCUE como no doc.'
 - id: C1-2
   title: '`cepa-intencao`: gravar, `--passo N`, `--proposito` com motivo, `--plano`,
     render do `resumo`, teste'
   why: 'Passo 2 da mesma ordem. Único escritor do arquivo; o agente nunca edita
     o YAML à mão (D2 e proposta consolidada 3). Superfície: CLI, evento observável
     na telemetria.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 2bc3da7 (common/bin/cepa-intencao, render_intent/_intent_aspas
+    em common/hooks/_modos.py, tests/test_cepa_intencao.py), 87646e7 (5 casos de
+    teste pedidos pelo proof-reviewer) e 387abfb (artefatos dos gates) na branch
+    until/2026-10-17-0711. pair-reviewer NEEDS-FIX na 1a rodada (--plano a b gravar
+    engolia o subcomando; gravar sobre arquivo parcial zerava historico; stdout
+    do resumo diferente do gravado), corrigido, 2a rodada OK. completion-auditor
+    COMPLETE (.claude/acceptance/intencao-c1-C1-2.yaml). proof-reviewer UNPROVEN
+    na 1a rodada (5 regras sem teste), PROVEN em 87646e7 (docs/proof/intencao-c1-C1-2.yaml).
+    Testes tocados verdes: test_cepa_intencao (59 checks), test_session_intent,
+    test_cepa_modo, test_worktree_artifact_rescue, test_modos_fonte_unica. Suite
+    completa delegada ao supervisor. Decisoes: passo M+1 = plano cumprido (resumo
+    ''plano cumprido M/M''); regravar exige --motivo (rc=4); --plano zera o passo
+    para 1; plano anterior fica no historico como texto unico separado por '' |
+    ''. Fora do escopo: hook (C1-3), whereami (C1-5), linha do /common:metrics e
+    eventos intent.asked/finished_at_last_step (C1-6).'
 - id: C1-3
   title: '`session-mode.py`: estado vazio (três primeiros prompts), intenção de
     outra sessão, injeção normal de duas linhas; `tests/test_cepa_modo.py` acompanha'
   why: 'Passo 3 da mesma ordem. É o que o dono vê a cada turno (D1 sobre sessão
     diferente, C4 como estado vazio, teto de duas linhas). Superfície: contexto
     injetado pelo hook UserPromptSubmit.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Volta 2: aproveitada a lateral until/2026-10-17-0711-vermelho-C1-3
+    por fast-forward (9d17899 feat session-mode em três estados; ff48eae e 3aaa343
+    testes pedidos pelo proof-reviewer; bea18fd artefatos dos gates) + a5a552b,
+    que conserta o único vermelho do build do supervisor: test_telemetria_isolada
+    (varredura estática) acusava test_cepa_modo.py de citar hook emissor (session-log)
+    sem chamar isola(); agora chama. Nenhum teste desabilitado. completion-auditor
+    COMPLETE (.claude/acceptance/intencao-c1-C1-3.yaml, head 9d17899); proof-reviewer
+    PROVEN (docs/proof/intencao-c1-C1-3.yaml, head 3aaa343); a5a552b só muda o ambiente
+    do teste, não comportamento nem asserção, por isso os gates não foram refeitos.
+    Testes tocados verdes nesta volta: test_telemetria_isolada, test_cepa_modo,
+    test_cepa_intencao, test_session_intent, test_modos_fonte_unica, test_worktree_artifact_rescue.
+    Suíte completa (tests/run-all.sh) delegada ao supervisor. Código na branch da
+    noite until/2026-10-17-0711, sem merge nem push.'
 - id: C1-4
   title: '`cepa` grava o brief do `next.json` como propósito; `/common:session`
     grava a partir das perguntas de largada'
   why: 'Passo 4 da mesma ordem. Estados ''next.json'' e ''aberto por /common:session''
     da proposta consolidada 4: a rotina grava, sem segundo ritual. Superfície: arquivo
     `.claude/session-intent` após o launcher e após a largada da sessão.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits bf9ca35 (cepa --proposito + write_intencao nos dois caminhos
+    de abertura; session-chain.py passa o brief em --proposito; /common:session
+    passo 3b grava a intenção na largada via cepa-intencao; tests/test_session_intencao_contrato.py
+    executa o comando documentado contra o escritor real), 376a322 e 0ce2e4d (testes
+    pedidos pelo proof-reviewer: caminho launch_here em branch session/*, forma
+    --proposito=, erro sem valor, duas frases do 3b), 23bb7d2-seguinte (artefatos)
+    na branch until/2026-10-17-0711. pair-reviewer OK-WITH-NOTES (nota 2, teste
+    só textual, fechada executando o comando; nota do --passo 3 não executável corrigida
+    no session.md). completion-auditor COMPLETE em bf9ca35 (.claude/acceptance/intencao-c1-C1-4.yaml);
+    commits seguintes só acrescentam testes. proof-reviewer UNPROVEN r1 (launch_here
+    sem teste), UNPROVEN r2 (2 frases do 3b), PROVEN r3 em 0ce2e4d (docs/proof/intencao-c1-C1-4.yaml).
+    Testes tocados verdes: test_cepa_encadeamento, test_session_intencao_contrato,
+    test_wrapup_proximo_passo, test_cepa_intencao, test_cepa_prompt, test_cepa_modo,
+    test_telemetria_isolada, test_flags_hint_variables. Suíte completa delegada
+    ao supervisor. Decisões: o brief sobrescreve intenção anterior da árvore com
+    --motivo fixo (a antiga vai ao histórico); plano gravado pelo launcher é de
+    1 passo genérico. Limitação conhecida: a intenção gravada pelo launcher sai
+    com session_id vazio (o id não existe antes do claude abrir), então o hook não
+    acusa ''outra sessão'' para ela; fora do escopo. Sem merge nem push.'
 - id: C1-5
   title: '`whereami.md` com os quatro estados; fallback no `/common:next`; linha
     de abertura no `/common:recap`'
   why: 'Passo 5 da mesma ordem. D4: nome único `whereami`, sem alias; `/common:next`
     responde em sessão sem programa; `/common:recap` abre com ''propósito / passo
     N de M''. Superfície: saída dos três comandos.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits 4ad312c (cepa-intencao estado: subcomando de leitura que classifica
+    vazio/normal/cumprido/outra-sessao, CEPA_UNTIL_RUN delega ao /common:next, linha
+    abertura para o recap; mesma_sessao/pergunta_outra_sessao/iso_utc movidos do
+    hook session-mode.py para _modos.py sem mudar o texto injetado; common/commands/whereami.md
+    novo, sem alias; fallback no next.md antes de declarar ausência de fila, plano
+    achado responde primeiro; passo 0 no recap.md; registro em docs/commands.md,
+    marketplace.json, plugin.json), e30484a (testes pedidos pelo proof-reviewer:
+    borda passo==M, idade do cursor, frases de contrato dos três .md, passo inválido,
+    item ''estado'' recusado, iso_utc sem fuso) e 63d5371 (artefatos) na branch
+    until/2026-10-17-0711. pair-reviewer OK-WITH-NOTES (exemplo do recap sem a variante
+    ''plano cumprido'', corrigido; duplicação de _iso no hook mantida de propósito,
+    o hook precisa funcionar se o import de _modos falhar). completion-auditor COMPLETE
+    em 4ad312c (.claude/acceptance/intencao-c1-C1-5.yaml); e30484a só acrescenta
+    testes. proof-reviewer UNPROVEN r1 (11 perturbações sobreviventes), PROVEN r2
+    em e30484a (docs/proof/intencao-c1-C1-5.yaml). Testes tocados verdes: test_whereami_intencao,
+    test_cepa_modo, test_cepa_intencao, test_common_next, test_session_intencao_contrato,
+    test_telemetria_isolada, test_catalogo_comandos, test_marketplace_descricao_common,
+    test_modos_fonte_unica. Suíte completa delegada ao supervisor. Decisões: idade
+    do cursor em tempo (há 2h05), não em turnos (contagem de turnos fica no hook);
+    em run do cepa-until o estado é sempre vazio mesmo com intenção herdada; versão
+    do plugin não subida, como no C1-4. Resíduo: a conferência do cursor contra
+    o session-log é prosa, testada só por asserção de texto. Fora do escopo: C1-6
+    (eventos intent.*), C1-7 (statusline). Sem merge nem push.'
 - id: C1-6
   title: Eventos de telemetria `intent.*` e linha no `/common:metrics`
   why: 'Passo 6 da mesma ordem. Sem os eventos não há como medir o critério que
     decide se o ciclo 2 entra (seção ''Telemetria e critério de sucesso''). Superfície:
     ledger em ~/.claude/cepa-telemetry/ e relatório do /common:metrics.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Commits ac6e8ed (session-log.py emite intent.asked com casador estrito
+    pergunta_onde_estamos, sem texto do prompt; cepa-intencao: eventos intent.*
+    com session de 8 chars e subcomando encerrar, só leitura, que emite intent.finished_at_last_step
+    com passo >= M; wrap-up.md roda cepa-intencao encerrar no passo 0, pulado no
+    --discard; cepa-metrics ganha a seção ''Intenção da sessão'' contando sessões
+    distintas, com memória de cálculo e o critério do ciclo 2; metrics.md documenta;
+    tests/test_intent_telemetria.py), 2e266a8 (testes pedidos pelo proof-reviewer:
+    sessão sem intent.written não conta, fronteiras 5/10, 10/10 e 9 sessões do critério
+    C2, encerrar recusado como item de plano, passo==4 no plano cumprido, eventos
+    sem session, frases de contrato do wrap-up e do metrics) e a467dd3 (artefatos)
+    na branch until/2026-10-17-0711. pair-reviewer OK-WITH-NOTES (pediu teste de
+    contrato do bullet do wrap-up, feito). completion-auditor COMPLETE em ac6e8ed
+    (.claude/acceptance/intencao-c1-C1-6.yaml); 2e266a8 só acrescenta testes. proof-reviewer
+    UNPROVEN r1 (6 grupos sobreviventes), PROVEN r2 em 2e266a8 (docs/proof/intencao-c1-C1-6.yaml);
+    resíduo cosmético: a frase de abertura com data no metrics.md não é lida por
+    teste. Testes tocados verdes: test_intent_telemetria, test_cepa_intencao, test_cepa_metrics_scorecard,
+    test_telemetria_isolada, test_wrapup_proximo_passo, test_whereami_intencao,
+    test_session_anchor_root, test_session_intencao_contrato. Suíte completa delegada
+    ao supervisor. Decisões: ''último passo'' inclui plano cumprido (passo M e M+1);
+    ''cursor nunca avançado'' é calculado (sessões com written sem cursor_advanced),
+    sem evento próprio; plano de 1 passo cai em ''nunca avançou'' e pode inflar
+    o critério do C2. Fora do escopo: ''turnos depois da rotina'' só é apontado
+    na seção, não calculado; --json do cepa-metrics sem bloco de intenção; o evento
+    do wrap-up depende do agente seguir o passo em prosa (fixado por teste de contrato,
+    não executado). Sem merge nem push.'
 - id: C1-7
   title: Spike da statusline (duas linhas renderizam?) e, se renderizar, a linha
     2
   why: 'Passo 7 da mesma ordem. D5: conveniência local fora das garantias do harness,
     lendo o campo `resumo:`; o spike de 5 minutos decide se a linha 2 existe. Superfície:
     statusline do Claude Code.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Spike: duas linhas renderizam, por prova documental (code.claude.com/docs/en/statusline:
+    ''each echo or print statement displays as a separate row'', seção Display multiple
+    lines); prova visual não feita, o run é desatendido. Linha 2 em ~/.claude/statusline-command.sh,
+    fora do repo por D5 (backup em ~/.claude/statusline-command.sh.bak-2026-10-17):
+    prefixo 🧭 esmaecido com o resumo: de <raiz>/.claude/session-intent, sem aspas
+    nem escapes do serializador de _modos.py, corte por caractere via python3 em
+    80 colunas contando o prefixo, com ''…''; some sem arquivo, campo, vazio ou
+    null. Commits na branch until/2026-10-17-0711: dc764b1 (nota do spike no docs/estrategia-intencao-da-sessao.md),
+    4386ef4 (aceite), f754fd6 (prova). pair-reviewer OK-WITH-NOTES (python3 custa
+    ~11 ms por refresh só com intenção; corte conta caractere, não coluna, para
+    CJK/emoji). completion-auditor COMPLETE (.claude/acceptance/intencao-c1-C1-7.yaml).
+    proof-reviewer PROVEN (docs/proof/intencao-c1-C1-7.yaml): 17 de 19 perturbações
+    vermelhas, 2 sobreviventes equivalentes; verificação ad hoc, sem teste versionado,
+    de propósito (D5). Fora do escopo: teste no repo para o script; resumo de exatamente
+    77 caracteres não exercitado. Sem merge nem push.'
