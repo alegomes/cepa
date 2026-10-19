@@ -6,6 +6,8 @@ import { aberta, COLUNAS, contaFila } from './filas'
 import { idade, parseIntent } from './intent'
 import { COR, linhaBuild, parseBuild } from './build'
 import { contaDesvios, leSaidas, parseModo } from './modo'
+import { leBloqueio, leGuarda } from './gate'
+import type { Barrada } from './gate'
 import { avisoDe, contagem, hora, parseRun, rotuloDoFim, tempoDoItem, tempoDoRun } from './until'
 import type { Run } from './until'
 
@@ -13,6 +15,7 @@ import type { Run } from './until'
 // 1. filas do repo e um resumo dos itens; 2. intenção, plano e passo da sessão;
 // 3. modo da sessão, a condição de saída dele, o estado do build e os desvios registrados;
 // 4. o run mais recente do cepa-until: item atual, tempo, contagem e como acabou.
+// O cartão Modo mostra também o último gate que barrou uma ação, em uma frase leiga.
 const PANE = 'compass'
 const ABRE = { id: PANE, title: 'Compass', columns: 48 }
 const ARQUIVO = '.claude/session-intent'
@@ -27,6 +30,7 @@ const desvios = atom({ plugin: 'compass', key: 'desvios' } as const, null)
 const build = atom({ plugin: 'compass', key: 'build' } as const, null)
 const saidas = atom({ plugin: 'compass', key: 'saidas' } as const, {})
 const until = atom({ plugin: 'compass', key: 'until' } as const, null)
+const gate = atom({ plugin: 'compass', key: 'gate' } as const, null)
 const SOM_DO_FIM = 'sons/fim.wav'
 
 let passoAnterior = 0
@@ -83,6 +87,24 @@ async function releiaRun($: EngineInterface) {
     }
   }
   runAnterior = r
+}
+
+// Só observa o resultado da chamada: o gate que barrou já respondeu, e a resposta
+// volta igual. Nada aqui reescreve a chamada nem o motivo.
+async function observaGate($: EngineInterface, comando: string, r: { isError?: true; text?: string; result?: unknown }) {
+  let b = null
+  if (r.isError === true && typeof r.text === 'string') b = leBloqueio(r.text)
+  else if (comando !== '' && r.isError === undefined) {
+    const saida = r.result as { stdout?: unknown } | null | undefined
+    const stdout = typeof saida?.stdout === 'string' ? saida.stdout : typeof r.text === 'string' ? r.text : ''
+    b = leGuarda(comando, stdout)
+  }
+  if (b === null) return
+  const quando = new Date(await $.clock.now()).toISOString()
+  const anterior = await read($, gate)
+  const nova: Barrada = { ...b, quando, vezes: (anterior?.vezes ?? 0) + 1 }
+  await update($, gate, () => nova)
+  $.ui.toast(b.frase, { timeoutMs: 8000 })
 }
 
 // A tabela dos modos não muda durante a sessão; lida uma vez.
@@ -148,6 +170,17 @@ export const register: Register = on => {
     return next(e)
   })
 
+  on('tool.call', async ($, e, next) => {
+    const r = await next(e)
+    try {
+      await observaGate($, e.tool === 'Bash' ? e.command : '', r)
+    } catch {
+      // o aviso nunca atrapalha a chamada: o resultado volta igual
+    }
+
+    return r
+  })
+
   on('command.run', { command: 'compass' }, async $ => {
     await $.ui.open(ABRE)
 
@@ -170,6 +203,7 @@ export const register: Register = on => {
     const momento = await read($, agora)
     const bruto4 = await read($, until)
     const r = bruto4 === null ? null : parseRun(bruto4.texto, bruto4.fila, bruto4.id)
+    const g = await read($, gate)
 
     const cartao = (titulo: string, direita: string, corpo: RenderChildren) => (
       <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
@@ -233,6 +267,14 @@ export const register: Register = on => {
           )}
           {d.resolvidos > 0 && <Text dimColor>{` · ${d.resolvidos} ${d.resolvidos === 1 ? 'resolvido' : 'resolvidos'}`}</Text>}
         </Box>
+        {g !== null && (
+          <Box flexDirection="column" marginTop={1}>
+            <Text color="yellow" wrap="wrap">{g.frase}</Text>
+            <Text dimColor>
+              {`${g.gate} ${idade(g.quando, momento)}` + (g.vezes > 1 ? ` · ${g.vezes}º bloqueio da sessão` : '')}
+            </Text>
+          </Box>
+        )}
       </Box>,
     )
 

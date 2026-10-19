@@ -134,7 +134,7 @@
     {
       "name": "compass",
       "source": "./compass",
-      "description": "Mod do Claude Code (API de mods, early access): painel à direita que mantém a direção da sessão em níveis. Nível 1, tabela das filas single-track com a contagem de itens por estado. Nível 2, intenção da sessão com plano e passo atual. Nível 3, modo da sessão com a condição de saída, o build (verde, vermelho, vazio ou desatualizado, com a idade) e a contagem dos desvios, com aviso quando entra um novo. Nível 4, o run mais recente do cepa-until: item atual com tempo e tentativa, tempo do run, contagem de entregues, vermelhos e travados, e aviso com som no fim do run ou na parada pela cota. /compass reabre o painel.",
+      "description": "Mod do Claude Code (API de mods, early access): painel à direita que mantém a direção da sessão em níveis. Nível 1, tabela das filas single-track com a contagem de itens por estado. Nível 2, intenção da sessão com plano e passo atual. Nível 3, modo da sessão com a condição de saída, o build (verde, vermelho, vazio ou desatualizado, com a idade) e a contagem dos desvios, com aviso quando entra um novo. Nível 4, o run mais recente do cepa-until: item atual com tempo e tentativa, tempo do run, contagem de entregues, vermelhos e travados, e aviso com som no fim do run ou na parada pela cota. Quando gate-advance, acceptance-gate ou worktree-guard barram uma ação, toast com o motivo em uma frase leiga e a mesma frase no cartão Modo, com a idade e a contagem de bloqueios; o mod só lê o resultado da chamada, nunca a reescreve. /compass reabre o painel.",
       "tags": [
         "mod",
         "painel",

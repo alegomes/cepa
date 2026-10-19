@@ -22,6 +22,7 @@ declare module 'claude-code' {
       build: string | null
       saidas: Record<string, string>
       until: { fila: string; id: string; texto: string } | null
+      gate: { gate: 'gate-advance' | 'acceptance-gate' | 'worktree-guard'; frase: string; quando: string; vezes: number } | null
     }
   }
 }

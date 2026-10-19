@@ -4,6 +4,7 @@ import { linhaBuild, parseBuild } from './build'
 import { idade, parseIntent } from './intent'
 import { contaDesvios, leSaidas, parseModo } from './modo'
 import { avisoDe, contagem, duracao, hora, parseRun, rotuloDoFim, tempoDoRun } from './until'
+import { leBloqueio, leGuarda } from './gate'
 
 const ARQUIVO = `proposito: "Construir o M1, painel da intenção"
 para_quando: "painel aparece no terminal"
@@ -791,4 +792,196 @@ test('parseRun aguenta registro malformado: linha null, run_start sem fila, item
   expect(parseRun(semFila, 'mods', 'x')!.fila).toBe('mods')
   const orfao = ev({ evento: 'item_end', id: 'CS-9', status: 'done', quando: '2026-10-19T09:05:00' })
   expect(parseRun(RUN_START + orfao, 'cepa', 'x')!.item).toBe(null)
+})
+
+// ─── Aviso de gate ───────────────────────────────────────────────────────────
+
+const GA_BASELINE = `[gate-advance] BLOCKED: sharing operation requires a build baseline.
+  Command: git push
+  No .claude/last-build.json found — no build has been verified at
+  this project yet.`
+const GA_STALE = `[gate-advance] BLOCKED: cannot run advancement command — build is STALE since edit to src/a.py at 2026-10-19T10:00:00 (0 day(s) ago).
+  Command: git commit -m x
+  Suggestion: Run your project's verify command.`
+const GA_EMPTY = `[gate-advance] BLOCKED: cannot run advancement command — build is EMPTY since 2026-10-19T10:00:00: the test filter in \`pytest -k nada\` matched zero tests — it exited green, but no test ran, so it proves nothing.`
+const GA_FAIL = `[gate-advance] BLOCKED: cannot run advancement command — build is FAILURE since 2026-10-19T10:00:00 (command: \`pytest\`).
+  Suggestion: Fix the failing tests / build errors, re-run the verify command, and try again.`
+const GA_PARADO = `[gate-advance] BLOCKED: cannot run advancement command — build is FAILURE since 2026-10-19T10:00:00 (command: \`pytest\`): stopped by claude-code.
+  Suggestion: The build did not fail — it was stopped before it ended. Re-run it with a \`timeout\` that fits it.`
+const GA_OUTRO = `[gate-advance] BLOCKED: cannot run advancement command — build status is 'X' — unrecognized.`
+const AG_DONE = `[acceptance-gate] BLOCKED: cannot move WEGO-1891 to done — no acceptance audit found
+  Searched:
+    - /repo/.claude/acceptance/WEGO-1891.yaml`
+const AG_REVIEW = `[acceptance-gate] BLOCKED: cannot move WEGO-2202 to review — acceptance audit is 'incomplete', not 'complete'.
+  Artifact: /repo/.claude/acceptance/WEGO-2202.yaml`
+const AG_EMPTY = `[acceptance-gate] BLOCKED: cannot move WEGO-2218 to done — the last real build is EMPTY: the test filter in \`pytest -k x\` matched zero tests (recorded 2026-10-19 in /repo/.claude/last-build.json).`
+const WG_SRC = `BLOCK: 1
+  source \`session/oncoto\` is held by a LIVE session — mac:/repo (active 2 min ago)
+    its history may be rewritten under you; ask it to land or close first.`
+const WG_AMBOS = `BLOCK: 2
+  source \`session/oncoto\` is held by a LIVE session — mac:/repo (active 2 min ago)
+  destination \`main\` is held by a LIVE session — mac:/repo2 (active 1 min ago)`
+
+test('leBloqueio traduz cada motivo do gate-advance em uma frase leiga', async () => {
+  expect(leBloqueio(GA_BASELINE)).toEqual({
+    gate: 'gate-advance',
+    frase: 'Compartilhar barrado: nenhum build foi verificado neste projeto ainda. Rode o verify do projeto antes.',
+  })
+  expect(leBloqueio(GA_STALE)?.frase).toBe('Barrado: o código mudou depois do último build (src/a.py). Rode o verify de novo.')
+  expect(leBloqueio(GA_EMPTY)?.frase).toBe('Barrado: o último build passou sem rodar teste nenhum. Corrija o filtro de testes e rode de novo.')
+  expect(leBloqueio(GA_FAIL)?.frase).toBe('Barrado: o último build falhou. Conserte e rode o verify de novo.')
+  expect(leBloqueio(GA_PARADO)?.frase).toBe('Barrado: o último build foi interrompido antes de acabar. Rode de novo com tempo suficiente.')
+  expect(leBloqueio(GA_OUTRO)?.frase).toBe('Barrado pelo gate-advance: o build não está verde.')
+})
+
+test('leBloqueio traduz o acceptance-gate com a chave do card', async () => {
+  expect(leBloqueio(AG_DONE)).toEqual({
+    gate: 'acceptance-gate',
+    frase: 'WEGO-1891 barrado: não vai para Done sem a auditoria do completion-auditor.',
+  })
+  expect(leBloqueio(AG_REVIEW)?.frase).toBe(
+    "WEGO-2202 barrado: a auditoria de aceite está 'incomplete', não completa. Feche as lacunas e rode o completion-auditor de novo.",
+  )
+  expect(leBloqueio(AG_EMPTY)?.frase).toBe('WEGO-2218 barrado: o último build não rodou teste nenhum, então não prova nada.')
+  expect(leBloqueio('[acceptance-gate] BLOCKED: algo novo')?.frase).toBe('O card barrado pelo acceptance-gate.')
+})
+
+test('leBloqueio ignora erro que não é gate; o aviso de commit sem baseline não é bloqueio', async () => {
+  expect(leBloqueio('Error: command not found: foo')).toBe(null)
+  expect(leBloqueio('⚠  COMMIT WITHOUT BUILD VERIFICATION ⚠ ... will be BLOCKED until')).toBe(null)
+  expect(leBloqueio('')).toBe(null)
+})
+
+test('leGuarda só lê stdout de Bash que chamou o worktree-guard e começa com BLOCK:', async () => {
+  const cmd = 'python3 "/x/hooks/worktree-guard.py" session/oncoto'
+  expect(leGuarda(cmd, WG_SRC)).toEqual({
+    gate: 'worktree-guard',
+    frase: 'Merge barrado: a branch session/oncoto está em uso por outra sessão viva. Peça para ela fechar ou aterrissar antes.',
+  })
+  expect(leGuarda(cmd, WG_AMBOS)?.frase).toBe(
+    'Merge barrado: as branches session/oncoto e main estão em uso por outra sessão viva. Peça para ela fechar ou aterrissar antes.',
+  )
+  expect(leGuarda(cmd, 'BLOCK: 1\n  (detalhe fora do formato)')?.frase).toBe(
+    'Merge barrado: outra sessão viva está na branch. Peça para ela fechar ou aterrissar antes.',
+  )
+  expect(leGuarda(cmd, 'OK\nNo other live session')).toBe(null)
+  expect(leGuarda('cat registro.txt', WG_SRC)).toBe(null)
+  expect(leGuarda(cmd, 'aviso: BLOCK: 1')).toBe(null)
+})
+
+// O deny do hook Python chega ao tool.call do mod como resultado com erro e o motivo em text.
+const barraComoPython = (on: any, motivo: string) => {
+  on('classic.PreToolUse', async () => ({ deny: motivo }))
+}
+
+test('gate-advance barra o push: toast com a frase leiga e linha no cartão Modo', async ($, on) => {
+  const avisos: any[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e)
+    return { value: undefined }
+  })
+  barraComoPython(on, GA_BASELINE)
+  await prepara($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': MODO })
+  const r: any = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(r.isError).toBe(true)
+  expect(r.text).toBe(GA_BASELINE)
+  expect(avisos.map(a => a.text)).toEqual([
+    'Compartilhar barrado: nenhum build foi verificado neste projeto ainda. Rode o verify do projeto antes.',
+  ])
+  expect(avisos[0].timeoutMs).toBe(8000)
+  const ui = await monta($)
+  const frase = await ui.find({ type: 'Text', text: 'Compartilhar barrado: nenhum build foi verificado neste projeto ainda. Rode o verify do projeto antes.' })
+  expect(frase?.props?.color).toBe('yellow')
+  expect(await ui.find({ type: 'Text', text: 'gate-advance há 0 min' })).toBeTruthy()
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  expect(textos.indexOf('Modo') < textos.indexOf('gate-advance há 0 min')).toBe(true)
+  expect(textos.indexOf('gate-advance há 0 min') < textos.indexOf('Run')).toBe(true)
+})
+
+test('acceptance-gate barra a transição no Jira (MCP): toast com a chave do card', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  barraComoPython(on, AG_REVIEW)
+  await prepara($, on, 'sessao-a', ARQUIVO)
+  const r: any = await $.tool.call({
+    tool: 'mcp__Atlassian__transitionJiraIssue',
+    cloudId: 'c', issueIdOrKey: 'WEGO-2202', transition: { id: '31' },
+  } as any)
+  expect(r.isError).toBe(true)
+  expect(avisos).toEqual([
+    "WEGO-2202 barrado: a auditoria de aceite está 'incomplete', não completa. Feche as lacunas e rode o completion-auditor de novo.",
+  ])
+})
+
+test('worktree-guard imprime BLOCK: no stdout de um Bash que saiu com 0: toast, e o resultado volta igual', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  const resposta = { result: { stdout: WG_SRC, stderr: '', interrupted: false } }
+  on('tool.call', { tool: 'Bash' }, async () => resposta)
+  await prepara($, on, 'sessao-a', ARQUIVO)
+  const r: any = await $.tool.call({ tool: 'Bash', command: 'python3 "/x/hooks/worktree-guard.py" session/oncoto' })
+  expect(r.result).toEqual(resposta.result)
+  expect(r.deny).toBe(undefined)
+  expect(avisos).toEqual([
+    'Merge barrado: a branch session/oncoto está em uso por outra sessão viva. Peça para ela fechar ou aterrissar antes.',
+  ])
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: 'worktree-guard há 0 min' })).toBeTruthy()
+})
+
+test('worktree-guard com OK, Bash comum e erro que não é gate: nem toast nem linha no cartão', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  let proibe = false
+  on('classic.PreToolUse', async () => (proibe ? { deny: 'Error: this command is forbidden by another plugin' } : {}))
+  on('tool.call', { tool: 'Bash' }, async ($: any, e: any) =>
+    e.command.includes('worktree-guard')
+      ? { result: { stdout: 'OK\nNo other live session is on `session/x` — safe to merge.', stderr: '', interrupted: false } }
+      : { result: { stdout: 'BLOCK: 1\nisto é só a saída de um cat', stderr: '', interrupted: false } })
+  await prepara($, on, 'sessao-a', ARQUIVO)
+  await $.tool.call({ tool: 'Bash', command: 'python3 "/x/hooks/worktree-guard.py" session/x' })
+  await $.tool.call({ tool: 'Bash', command: 'cat registro.txt' })
+  proibe = true
+  const r: any = await $.tool.call({ tool: 'Bash', command: 'rm -rf x' })
+  expect(r.isError).toBe(true)
+  expect(avisos).toEqual([])
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: /bloqueio|barrad/ })).toBeFalsy()
+})
+
+test('segundo bloqueio substitui o primeiro no cartão e conta as vezes; a idade cresce com o relógio', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  let motivo = GA_STALE
+  on('classic.PreToolUse', async () => ({ deny: motivo }))
+  const { relogio } = await prepara($, on, 'sessao-a', ARQUIVO)
+  await $.tool.call({ tool: 'Bash', command: 'git commit -m x' })
+  motivo = AG_DONE
+  await $.tool.call({ tool: 'mcp__Atlassian__transitionJiraIssue', transition: { id: '41' } } as any)
+  expect(avisos).toEqual([
+    'Barrado: o código mudou depois do último build (src/a.py). Rode o verify de novo.',
+    'WEGO-1891 barrado: não vai para Done sem a auditoria do completion-auditor.',
+  ])
+  await relogio.advance(3 * 60000)
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: 'WEGO-1891 barrado: não vai para Done sem a auditoria do completion-auditor.' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /o código mudou/ })).toBeFalsy()
+  expect(await ui.find({ type: 'Text', text: 'acceptance-gate há 3 min · 2º bloqueio da sessão' })).toBeTruthy()
+})
+
+test('sem bloqueio na sessão, o cartão Modo não tem a linha do gate', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': MODO })
+  expect(await ui.find({ type: 'Text', text: /bloqueio|barrad/ })).toBeFalsy()
 })
