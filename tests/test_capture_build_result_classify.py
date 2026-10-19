@@ -171,6 +171,14 @@ def test_cat_of_a_log_with_build_failure_is_not_a_build():
     assert (status, kind) == (None, None)
 
 
+def test_cat_of_a_log_with_build_failure_leaves_no_state(tmp_path):
+    # the hook, not classify(): a `cat` whose output is a real Maven failure line
+    # must not write .claude/last-build.json (fb-20261016-3, 2026-10-16)
+    st = _run_hook(tmp_path, "cat build.log", None,
+                   response={"stdout": "[INFO] BUILD FAILURE\n", "stderr": "", "interrupted": False})
+    assert st is None
+
+
 def test_ansi_colored_build_success_is_success():
     out = "[\x1b[1;34mINFO\x1b[m] \x1b[1;32mBUILD SUCCESS\x1b[m\n"
     assert cbr.classify("./mvnw verify", out, None)[:2] == ("SUCCESS", "maven")

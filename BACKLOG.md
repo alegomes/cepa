@@ -4175,9 +4175,14 @@ as propostas sem resposta. Testes: `test_waivers.py`, `test_cepa_plan_responde_d
 
 **Plano:** `fb-2026-10/build-result-mascara-grep-e-aceita-mvn-q` (fila `fb-2026-10`, gravada em 2026-10-19)
 
-**Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` (classify),
-`common/hooks/_buildsource.py` · **Origem:** feedback `fb-20261008-1` (2026-10-08,
-`wego-recebiveis-backend`).
+**Status:** feito. Episódio 1 em 2026-10-15 (commit 6a07300: classificação só sobre o
+comando sem texto citado, invocador `mvnw`/`mvn` obrigatório, `-q` e `> log` registrados).
+Episódio 2 em 2026-10-19 (commit 2ab3945, branch `until/2026-10-19-1958`): o diretório do
+build é o do segmento que invoca o Maven, seguindo todo `cd` antes dele na linha e `git -C`
+(`_shellscan.segment_dirs`), e os marcadores `BUILD SUCCESS`/`BUILD FAILURE` só valem no
+início de uma linha, como o Maven imprime, com códigos ANSI removidos antes. Testes em
+`tests/test_capture_build_result_classify.py`. · **Lar:** `common/hooks/capture-build-result.py`
+· **Origem:** feedback `fb-20261008-1` (2026-10-08, `wego-recebiveis-backend`).
 
 > gate-advance gravou FAILURE kind=maven em .claude/last-build.json (2026-10-08T10:21Z) para
 > um comando que era só grep -E 'no-build|verify' sobre o script cepa-until; o falso vermelho
