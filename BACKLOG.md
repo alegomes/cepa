@@ -4333,7 +4333,7 @@ Em `tests/test_cepa_until.py`: (a) `estado.json` `rodando` com pid vivo na mesma
 
 **Plano:** `fb-2026-10/leads-build-hex-nao-encerram-turno-dentro-do-claude-p` (fila `fb-2026-10`, gravada em 2026-10-19)
 
-**Status:** pendente · **Lar provável:** `build-hex/agents/engineering-lead.md` e
+**Status:** feito nesta branch (2026-10-19) · **Lar provável:** `build-hex/agents/engineering-lead.md` e
 `build-hex/agents/validation-lead.md` (seção "Delegação é assíncrona"), e o orquestrador do
 `/common:drain-plan` que roda dentro do `cepa-until` · **Origem:** feedback `fb-20261016-1`
 (2026-10-16, `wego-digitacao-backend`, run `until/2026-10-15-1946`).
@@ -4368,6 +4368,38 @@ repo do cliente; os números (3 rodadas, US$ 22,54, 41,8%) são do registro do d
 
 Um run sintético do `cepa-until` com um item que delega a um worker de 2 minutos: o `.log` mostra
 uma única chamada ao lead por rodada, sem mensagem de retomada do orquestrador.
+
+### Onde mora
+
+**Medição.** Contei, nas transcrições do run `until/2026-10-15-1946`
+(`~/.claude/projects/-Users-alegomes-cepa-worktrees-wego-digitacao-backend-until-2026-10-15-1946/*.jsonl`),
+as mensagens `SendMessage` do orquestrador para cada lead: 10 retomadas à mão em 5 das 7
+rodadas (o feedback dizia 3 rodadas). 6 no `engineering-lead` (as 3 chamadas dele, 2 mensagens
+cada: "Do not end your turn waiting for a notification" e depois o resultado do adapter-dev) e
+4 no `validation-lead` (4 das 6 chamadas). O S3-fio-openai custou US$ 22,54 = 41,8% do run
+(22,54 ÷ 53,91).
+
+**Mecanismo.** O lead é subagente do orquestrador do `drain-plan`: ao encerrar o turno, o que
+volta ao orquestrador é o item pela metade, com o worker rodando, e a notificação do worker cai
+no orquestrador, que reenvia o resultado. No mesmo run, `qa-engineer`, `refactor-advisor` e
+`code-reviewer` chamados com `run_in_background: false` voltaram no mesmo turno, sem retomada.
+
+**O que foi escrito e onde.**
+
+- O parágrafo "Exceção: run desatendido" na seção "Delegação é assíncrona" dos 11 agentes que
+  delegam (os 3 leads do `build-hex`, os 3 do `build-team`, `design-lead`, `epic-briefer`,
+  `discovery-lead`, `content-lead`, `docs-lead`).
+- A quarta marca (`run_in_background: false`) em `tests/test_delegacao_assincrona_specs.py`,
+  para a exceção não se perder numa cópia.
+- O bullet "quem delega espera o worker no mesmo turno" no passo 3.b de
+  `common/commands/drain-plan.md`, que manda o orquestrador dizer isso a todo lead.
+- A exceção na mensagem do `common/hooks/no-busy-wait.py` (só texto, o comportamento do hook
+  não mudou).
+- Versões (PATCH, prosa sem mudança de contrato): `build-hex` 1.4.3, `build-team` 0.5.2,
+  `design` 0.3.2, `discovery` 0.4.2, `marketing` 0.1.2, `docs-topology` 0.3.2, `common` 2.30.2.
+
+**Não feito.** O run sintético do `cepa-until` de "Teste que falta" não foi rodado; o que existe
+é o teste-radar sobre os prompts, que prova que a exceção está escrita, não que o lead a segue.
 
 ---
 

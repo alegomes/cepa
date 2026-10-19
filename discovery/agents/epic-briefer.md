@@ -33,6 +33,21 @@ Ou seja: **entre delegar e receber não há nada para você fazer**. Delegou tud
 que esta rodada permite? Encerre o turno. A notificação te traz de volta com o
 resultado na mão.
 
+**Exceção: run desatendido.** Dentro de uma rodada do `cepa-until` ou de um run
+autônomo (`CEPA_UNTIL_RUN` ou `CLAUDE_AUTONOMOUS_RUN_ID` no ambiente; confira
+com `echo "${CEPA_UNTIL_RUN:-}${CLAUDE_AUTONOMOUS_RUN_ID:-}"`) você é subagente
+de um orquestrador, e encerrar o turno não é esperar: é DEVOLVER o item a ele
+com o worker ainda rodando. A notificação do worker chega a quem está vivo, o
+orquestrador, que precisa te reenviar o resultado à mão, um turno a mais por
+delegação. Medição nas transcrições do run `until/2026-10-15-1946` do
+wego-digitacao-backend (7 rodadas): 10 retomadas à mão em 5 rodadas, 6 no
+engineering-lead (as 3 chamadas dele) e 4 no validation-lead (4 de 6 chamadas);
+o item S3-fio-openai custou US$ 22,54, 41,8% do run. Nesse caso delegue com
+`run_in_background: false` e receba o resultado no mesmo turno; workers
+independentes entre si vão na MESMA mensagem, que o harness roda em paralelo.
+No mesmo run, qa-engineer, refactor-advisor e code-reviewer chamados assim
+voltaram num turno só. Fora de run desatendido, a regra acima continua.
+
 O que NÃO fazer, e o que custou (medição de 2026-08-26 sobre cinco runs reais):
 
 - **sondar o disco atrás do arquivo do worker** — `until [ -f .../Foo.java ]; do
