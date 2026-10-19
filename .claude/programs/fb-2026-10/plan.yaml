@@ -1,0 +1,59 @@
+# plan.yaml — fila `single-track`, escrita por /common:plan.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: BACKLOG.md, as três seções abertas vindas do ledger de feedback (fb-20261008-1, fb-20261016-1, fb-20260902-1) sem item de fila em 2026-10-19
+# Escrito em: 2026-10-19
+
+schema_version: 2
+mode: single-track
+program: fb-2026-10
+source: BACKLOG.md, as três seções abertas vindas do ledger de feedback (fb-20261008-1,
+  fb-20261016-1, fb-20260902-1) sem item de fila em 2026-10-19
+items:
+- id: build-result-mascara-grep-e-aceita-mvn-q
+  title: capture-build-result não lê `grep ... verify` como build Maven, e registra
+    verde o `./mvnw -q ... > log` com exit 0
+  why: 'Primeiro porque é o único dos três que barra trabalho em repo de cliente:
+    o falso FAILURE gravado por um grep barrou um `git commit` do plan.yaml horas
+    depois e só destravou com um `./mvnw clean verify` inteiro (feedback fb-20261008-1,
+    wego-recebiveis-backend, 2026-10-08; BACKLOG.md, seção "`gate-advance` classifica
+    `grep` com a palavra `verify` como build Maven"). Esboço já escrito na seção:
+    classificar sobre o comando com strings mascaradas (a máscara do `_shellscan`
+    que o maven-reactor-guard usa desde 023c7f2), exigir invocador mvnw/mvn, e com
+    -q ou saída redirecionada usar o código de saída. Ordem proposta pelo agente
+    em 2026-10-19 e confirmada pelo dono.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: leads-build-hex-nao-encerram-turno-dentro-do-claude-p
+  title: Leads do build-hex só encerram o turno à espera de worker em sessão interativa;
+    dentro do `claude -p` do cepa-until esperam o resultado
+  why: 'Segundo porque custa dinheiro em todo run noturno do build-hex, mas o primeiro
+    passo é medir, não codar: o item S3-fio-openai custou US$ 22,54, 41,8% do run
+    until/2026-10-15-1946 do wego-digitacao-backend (feedback fb-20261016-1; BACKLOG.md,
+    seção "Leads do `build-hex` encerram o turno à espera de worker"). A regra de
+    encerrar o turno é de 2026-08-26 contra sondagem de disco e vale em sessão interativa;
+    a seção manda conferir no .log do run quantos turnos foram retomada antes de
+    condicionar a regra a run não interativo. Em 2026-10-16 o dono deixou só como
+    seção do BACKLOG; entra na fila agora por decisão do dono em 2026-10-19.'
+  status: pending
+  blocked_by: []
+  human_pending: null
+- id: board-flow-yaml-comentario-team-dois-formatos
+  title: Comentário do campo Team (customfield_10001) no template do board-flow.yaml
+    mostra o formato certo e o errado lado a lado, com o 400 de cada um
+  why: 'Último porque é o menor e não barra ninguém: conserto de comentário no template
+    (board-flow/commands/configure.md e board-flow/agents/atlassian-expert.md),
+    sem teste. Origem: observação do próprio atlassian-expert em 2026-09-02 (feedback
+    fb-20260902-1, wego-acesso-backend-capture-openapi; BACKLOG.md, seção "Comentário
+    do campo Team"). Ordem proposta pelo agente em 2026-10-19 e confirmada pelo
+    dono.'
+  status: pending
+  blocked_by: []
+  human_pending: null

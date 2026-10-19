@@ -4173,7 +4173,7 @@ as propostas sem resposta. Testes: `test_waivers.py`, `test_cepa_plan_responde_d
 
 ## `gate-advance` classifica `grep` com a palavra `verify` como build Maven, e não registra `./mvnw -q ... > log`
 
-**Plano:** nenhum ainda
+**Plano:** `fb-2026-10/build-result-mascara-grep-e-aceita-mvn-q` (fila `fb-2026-10`, gravada em 2026-10-19)
 
 **Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` (classify),
 `common/hooks/_buildsource.py` · **Origem:** feedback `fb-20261008-1` (2026-10-08,
@@ -4212,7 +4212,7 @@ não grava nada; `./mvnw verify` rodado em `/tmp/perturb-*` não altera `.claude
 
 ## Comentário do campo Team (`customfield_10001`) no `board-flow.yaml` não mostra o formato que falha
 
-**Plano:** nenhum ainda
+**Plano:** `fb-2026-10/board-flow-yaml-comentario-team-dois-formatos` (fila `fb-2026-10`, gravada em 2026-10-19)
 
 **Status:** pendente · **Lar provável:** template do `board-flow.yaml` em
 `board-flow/commands/configure.md` e `board-flow/agents/atlassian-expert.md` · **Origem:**
@@ -4326,7 +4326,7 @@ Em `tests/test_cepa_until.py`: (a) `estado.json` `rodando` com pid vivo na mesma
 
 ## Leads do `build-hex` encerram o turno à espera de worker, e dentro do `claude -p` ninguém os acorda
 
-**Plano:** nenhum ainda
+**Plano:** `fb-2026-10/leads-build-hex-nao-encerram-turno-dentro-do-claude-p` (fila `fb-2026-10`, gravada em 2026-10-19)
 
 **Status:** pendente · **Lar provável:** `build-hex/agents/engineering-lead.md` e
 `build-hex/agents/validation-lead.md` (seção "Delegação é assíncrona"), e o orquestrador do
