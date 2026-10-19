@@ -1,9 +1,9 @@
 schema_version: 2
 card: mods-M2
-verdict: unproven
-reviewed_at: 2026-10-19T14:00:00-03:00
+verdict: needs-human
+reviewed_at: 2026-10-19T15:00:00-03:00
 base_commit: 7917f34
-head_commit: a60c75e
+head_commit: 6cb0fca
 issue_type: Task
 scope:
   changed_classes:
@@ -16,7 +16,9 @@ scope:
     (`claude plugin test compass`). Superficie externa = Pane montado pelo engine + ui.toast.
     Dubles: o teste estuba apenas o evento process.run (fronteira distante: o binario cepa-modos
     e o git), e o fs/clock do engine; modo.ts e register.tsx reais rodam, por isso substituted_by_double e null.
-    Prova numa worktree descartavel (/tmp/proof-mods-M2, removida ao fim; arvore principal intocada).
+    Re-prova do diff 7917f34..6cb0fca em worktree descartavel (/tmp/proof-mods-M2, removida ao fim;
+    arvore principal intocada, so este arquivo reescrito). O commit 6cb0fca so mexeu em
+    compass/hooks/compass.test.tsx (testes novos), sem alterar modo.ts nem register.tsx.
     plugin.json e marketplace.json mudaram so em versao/descricao (nao perturbados).
 levels:
   l3_load_bearing:
@@ -25,26 +27,25 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "baseline a60c75e: `claude plugin test compass` -> 20 pass, 0 fail"
-        - "44 perturbacoes P1-P44 (uma por vez, git checkout apos cada), 34 RED e 10 verdes (sobreviventes)"
-        - "RED: parseModo (P1,P3,P4,P5,P6), contaDesvios (P7,P8,P10,P11,P12), leSaidas catch (P14), toast (P15 sem guarda da abertura, P16 >=, P17 sem toast, P18 reset, P19 texto), leitura/ligacao (P22 releiaSaidas, P23 releia no session.start, P24 releiaModo, P25/P26 caminhos, P28 saida, P29 'fecha quando', P30 orcamento, P32 'nenhum desvio', P35 resolvidos, P37/P38 nivelModo nos dois ramos, P39 'sem modo', P40/P41 atoms, P42 rotulo, P43 parseModo, P44 titulo)"
-        - "SOBREVIVENTE REAL P31: register.tsx `{m === null && <Text>Esta sessão não declarou modo.</Text>}` -> `{false && ...}`; 20 pass. A mensagem de ausencia de modo (criterio) nao e afirmada por nenhum teste; so o titulo 'sem modo' e."
-        - "SOBREVIVENTE REAL P27: register.tsx `['cepa-modos','--json']` -> `['cepa-modos']`; 20 pass. O stub de process.run aceita qualquer argv[0]=='cepa-modos' (compass.test.tsx:77), entao esquecer --json (o cepa-modos real imprime texto, leSaidas devolve {} calado) some com a condicao de saida sem teste acusar."
-        - "SOBREVIVENTE REAL P20: register.tsx `total = d.abertos + d.resolvidos` -> `d.abertos`; 20 pass. Desvio novo ja nascido resolvido ([x]) nao geraria aviso e ninguem notaria."
-        - "SOBREVIVENTE REAL P9: modo.ts regex `( |x|X)` -> `( |x)`; 20 pass. Desvio marcado `[X]` maiusculo deixaria de ser contado."
-        - "SOBREVIVENTES cosmeticas: P33 (cor amarela quando ha aberto), P34 ('1 desvio aberto' singular), P36 ('1 resolvido' singular); 20 pass cada."
-        - "SOBREVIVENTES equivalentes/quase: P2 (`v !== ''` removido; `!campos.modo` ja barra vazio), P13 (`if (d.saida)` removido; so exibe se saida !== ''), P21 (`exitCode === 0` -> true; JSON invalido ja cai no catch de leSaidas)"
-    caveats: "toast exercitado pelo engine (ui.toast), painel pelo Pane; sem ferramenta de cobertura."
+        - "baseline 6cb0fca: `claude plugin test compass` -> 22 pass, 0 fail"
+        - "44 perturbacoes P1-P44 (mesma lista da prova anterior, uma por vez em modo.ts/register.tsx, git checkout apos cada), 41 RED e 3 verdes; os 3 verdes sao equivalentes (abaixo). Ao final `git status` limpo."
+        - "As 4 lacunas reais da prova anterior agora ficam RED: P31 (mensagem 'Esta sessão não declarou modo.') -> 21 pass 1 fail 'sem modo e sem desvios, o nível 3 diz isso (com intenção)'; P27 (--json do cepa-modos) -> 20 pass 2 fail 'nível 3: modo, condição de saída...' e 'orçamento da reforma'; P20 (total = abertos) -> 21 pass 1 fail 'desvio novo que já nasce resolvido também gera aviso'; P9 (regex sem X) -> 21 pass 1 fail 'conta desvios abertos e resolvidos...'"
+        - "As 3 cosmeticas agora ficam RED: P33 (cor amarela) -> 21 pass 1 fail 'nível 3: modo, condição de saída...'; P34 ('1 desvio aberto') -> 21 pass 1 fail 'singular para um desvio aberto e um resolvido'; P36 ('1 resolvido') -> 21 pass 1 fail, mesmo teste"
+        - "Demais RED (todas com >=1 fail): parseModo P1,P3,P4,P5,P6; contaDesvios P7,P8,P10,P11,P12; leSaidas P14; toast P15,P16,P17,P18,P19; leitura/ligacao P22,P23,P24,P25,P26,P28,P29,P30; painel P32,P35,P37,P38,P39,P40,P41,P42,P43,P44"
+        - "EQUIVALENTE P2 (modo.ts `v !== ''` removido): valor vazio entra em campos como '', e `!campos.modo` ja devolve null para modo vazio; para orcamento/aberto_em, '' ?? '' e ausente dao o mesmo '' no Modo. Nenhuma saida observavel muda. 22 pass."
+        - "EQUIVALENTE P13 (modo.ts `if (d.saida)` removido): saida ausente/vazia passa a gravar undefined/'' no mapa, mas register.tsx le `?? ''` e so exibe 'fecha quando' se saida !== ''; o painel e identico. 22 pass."
+        - "EQUIVALENTE na pratica P21 (register.tsx `exitCode === 0` -> true): so diverge se cepa-modos sair com codigo != 0 imprimindo JSON valido; o binario (common/bin/cepa-modos:32) sai 2 so em erro de uso, sem JSON no stdout, e JSON.parse de vazio cai no catch de leSaidas devolvendo {} (o mesmo valor inicial do atom). 22 pass."
+    caveats: "toast exercitado pelo engine (ui.toast), painel pelo Pane; sem ferramenta de cobertura. P21 e equivalente por leitura do binario, nao por teste."
   l2_coverage:
-    status: assumed
+    status: pass
     uncovered_lines: []
-    run: "sem ferramenta de cobertura; alcance inferido pelas perturbacoes: 34 de 44 derrubaram teste (linhas alcancadas); P31/P27/P20/P9 sobreviventes indicam linhas alcancadas mas nao afirmadas"
+    run: "sem ferramenta de cobertura; 41 de 44 perturbacoes derrubaram teste (linhas alcancadas e afirmadas), as 3 restantes sao equivalentes (nada a cobrir); as linhas antes sobreviventes (P9, P20, P27, P31, P33, P34, P36) agora ficam RED em `claude plugin test compass`"
   l4_adversarial_input:
     status: skipped
     reason: ""
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-routing_reason: "UNPROVEN: 4 sobreviventes reais em comportamento visivel no painel/toast. A mais grave (P31) e um criterio explicito: a mensagem de ausencia de modo pode sumir sem teste acusar. P27 (argumento --json do cepa-modos) deixa a condicao de saida sumir calada. P20 (aviso de desvio ja resolvido) e P9 ([X] maiusculo) sao lacunas menores. Alem disso L4 nao rodado (sem fuzz no repo; arquivos session-mode/desvios.md/JSON sao entrada de texto livre). Fechar: (a) afirmar o texto 'Esta sessão não declarou modo.' no teste de ausencia; (b) o stub de process.run exigir argv == ['cepa-modos','--json']; (c) caso de desvio novo `- [x]` gerando toast; (d) caso `[X]` em contaDesvios."
+routing_reason: "NEEDS-HUMAN so pelo L4 (entrada adversarial nao rodada; o repo nao tem fuzz). L3 limpo: as 4 lacunas reais e as 3 cosmeticas da prova anterior agora derrubam teste (41 de 44 RED), os 3 verdes (P2, P13, P21) sao equivalentes, suite 22 pass 0 fail. Sugestao ao humano: aceitar o L4 como nao aplicavel, igual ao precedente docs/proof/mods-intencao-encadeada.yaml (o dono ja indicou essa aceitacao ao pedir a re-prova); o guard impede o proof-reviewer de gravar proven com L4 skipped, entao a virada para proven e o commit do dono."
