@@ -3,7 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import { linhaBuild, parseBuild } from './build'
 import { idade, parseIntent } from './intent'
 import { contaDesvios, leSaidas, parseModo } from './modo'
-import { avisoDe, contagem, duracao, parseRun, tempoDoRun } from './until'
+import { avisoDe, contagem, duracao, hora, parseRun, rotuloDoFim, tempoDoRun } from './until'
 
 const ARQUIVO = `proposito: "Construir o M1, painel da intenção"
 para_quando: "painel aparece no terminal"
@@ -72,13 +72,20 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null, ex
     value: acha(e.path) !== undefined || e.path === '/repo/.claude/programs' || dentro(e.path).length > 0,
   }))
   on('fs.read', async ($: any, e: any) => ({ value: acha(e.path) }))
-  on('fs.list', async ($: any, e: any) => ({
-    value: e.path.endsWith('/until')
-      ? dentro(e.path).map(k => ({ name: k.slice(e.path.length + 1), kind: 'file', size: 0, mtimeMs: 0, isLink: false }))
-      : ['zerada', 'cepa', 'velha', 'mods', 'maestro'].map(name => ({
-        name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false,
-      })),
-  }))
+  on('fs.list', async ($: any, e: any) => {
+    if (!e.path.endsWith('/until')) {
+      return {
+        value: ['zerada', 'cepa', 'velha', 'mods', 'maestro'].map(name => ({
+          name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false,
+        })),
+      }
+    }
+    // Como o fs real: listar pasta que não existe é erro, não lista vazia.
+    if (dentro(e.path).length === 0) throw new Error(`ENOENT: ${e.path}`)
+    return {
+      value: dentro(e.path).map(k => ({ name: k.slice(e.path.length + 1), kind: 'file', size: 0, mtimeMs: 0, isLink: false })),
+    }
+  })
   on('process.run', async ($: any, e: any) => ({
     value: e.argv[0] === 'cepa-modos'
       ? { exitCode: 0, stdout: e.argv.join(' ') === 'cepa-modos --json' ? MODOS_JSON : 'tabela em texto', stderr: '' }
@@ -570,4 +577,195 @@ test('abrir a sessão com um run já encerrado não avisa, nem no relógio de 5 
   expect(sons).toEqual([])
   const ui = await monta($)
   expect(await ui.find({ type: 'Text', text: 'fila acabou há 12 min' })).toBeTruthy()
+})
+
+// ── nível 4: perturbações sobreviventes da 1ª rodada do proof-reviewer ───────
+
+const exato = async (ui: any, texto: string) => {
+  const n = await ui.find({ type: 'Text', text: texto })
+  return n && n.text === texto ? n : undefined
+}
+
+test('parseRun: item bloqueado ou devolvido sai da tela; verify vermelho não conta entrega', async () => {
+  const bloqueado = ev({ evento: 'item_end', id: 'CS-1', status: 'blocked', quando: '2026-10-19T09:05:00' })
+  const r = parseRun(RUN_START + CS1_START + bloqueado, 'cepa', 'x')!
+  expect(r.fase).toBe('rodando')
+  expect(r.item).toBe(null)
+  expect(r.travados).toBe(1)
+  const devolvido = ev({ evento: 'item_end', id: 'CS-1', status: 'pending', quando: '2026-10-19T09:05:00' })
+  expect(parseRun(RUN_START + CS1_START + devolvido, 'cepa', 'x')!.item).toBe(null)
+  const vermelho = ev({ evento: 'verify', id: 'CS-1', verde: false, motivo: 'saiu 1', quando: '2026-10-19T09:15:00' })
+  const r2 = parseRun(RUN_START + CS1_START + CS1_END + vermelho, 'cepa', 'x')!
+  expect(r2.entregues).toBe(0)
+  expect(r2.item?.etapa).toBe('build')
+  const r3 = parseRun(RUN_START + CS1_START + CS1_END + CS1_VERDE, 'cepa', 'x')!
+  expect(r3.item).toBe(null)
+  const separado = ev({ evento: 'verify_vermelho', id: 'CS-1', quando: '2026-10-19T09:20:00' })
+  const r4 = parseRun(RUN_START + CS1_START + CS1_END + vermelho + separado, 'cepa', 'x')!
+  expect(r4.item).toBe(null)
+  expect(r4.vermelhos).toBe(1)
+})
+
+test('parseRun: limite de uso sem espera não é pausa; interrupção guarda o sinal', async () => {
+  const limite = ev({ evento: 'limite_de_uso', id: 'CS-1', reset_em: '2026-10-19T15:00:00', espera: false, quando: '2026-10-19T10:40:00' })
+  const r = parseRun(RUN_START + CS1_START + limite, 'cepa', 'x')!
+  expect(r.fase).toBe('rodando')
+  expect(r.cota).toBe(null)
+  expect(r.item?.id).toBe('CS-1')
+  const sinal = ev({ evento: 'run_interrompido', sinal: 'SIGTERM', id: 'CS-1', quando: '2026-10-19T10:50:00' })
+  const r2 = parseRun(RUN_START + CS1_START + sinal, 'cepa', 'x')!
+  expect(r2.fim).toEqual({ motivo: 'interrompido', detalhe: 'sinal SIGTERM', quando: '2026-10-19T10:50:00' })
+})
+
+test('duracao arredonda para baixo, não fica negativa e completa os minutos com zero', async () => {
+  expect(duracao(0, 59 * 1000)).toBe('0min')
+  expect(duracao(0, 59_500)).toBe('0min')
+  expect(duracao(0, 3_599_900)).toBe('59min')
+  expect(duracao(0, 3599 * 1000)).toBe('59min')
+  expect(duracao(0, 3600 * 1000)).toBe('1h00')
+  expect(duracao(0, 3661 * 1000)).toBe('1h01')
+  expect(duracao(0, (2 * 3600 + 59 * 60 + 59) * 1000)).toBe('2h59')
+  expect(duracao(10_000, 0)).toBe('0min')
+  expect(duracao(0, NaN)).toBe('')
+})
+
+test('hora completa com zero e devolve vazio para texto que não é data', async () => {
+  expect(hora('2026-10-19T09:05:00')).toBe('09:05')
+  expect(hora('2026-10-19T23:59:30')).toBe('23:59')
+  expect(hora('')).toBe('')
+  expect(hora('ontem')).toBe('')
+})
+
+test('rotuloDoFim traduz o que conhece e repete o resto', async () => {
+  expect(rotuloDoFim('fim-da-fila')).toBe('fila acabou')
+  expect(rotuloDoFim('limite-de-uso')).toBe('parou pela cota')
+  expect(rotuloDoFim('prazo')).toBe('prazo chegou')
+  expect(rotuloDoFim('xpto')).toBe('xpto')
+})
+
+test('avisoDe: run diferente em fase diferente não avisa; cota sem hora avisa sem a hora', async () => {
+  const rodando = parseRun(RUN_START + CS1_START, 'cepa', 'r1')!
+  const fimOutro = parseRun(RUN_START + ev({ evento: 'run_end', motivo: 'prazo', detalhe: 'x', quando: '2026-10-19T11:00:00' }), 'cepa', 'r2')!
+  expect(avisoDe(rodando, fimOutro)).toBe(null)
+  const cotaSemHora = parseRun(RUN_START + ev({ evento: 'pausa_de_cota', quando: '2026-10-19T10:31:00' }), 'cepa', 'r1')!
+  expect(avisoDe(rodando, cotaSemHora)).toBe('cepa-until parado pela cota')
+  const semEntrega = parseRun(RUN_START + ev({ evento: 'run_end', motivo: 'disjuntor', detalhe: 'x', quando: '2026-10-19T11:00:00' }), 'cepa', 'r1')!
+  expect(avisoDe(rodando, semEntrega)).toBe('cepa-until cepa: disjuntor')
+})
+
+test('nível 4: item travado sai da tela, conta como travado e o run segue entre itens', async ($, on) => {
+  const bloqueado = ev({ evento: 'item_end', id: 'CS-1', status: 'blocked', quando: LOCAL(-9) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + bloqueado))
+  expect(await ui.find({ type: 'Text', text: 'entre itens' })).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toEqual([])
+  expect(await exato(ui, '1 travado · prazo 18:00')).toBeTruthy()
+})
+
+test('nível 4: depois do build verde o item sai da tela e a entrega conta', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + CS1_END + CS1_VERDE))
+  expect(await ui.find({ type: 'Text', text: 'entre itens' })).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toEqual([])
+  expect(await exato(ui, '1 entregue · prazo 18:00')).toBeTruthy()
+})
+
+test('nível 4: build vermelho não conta entrega, e o item ainda está no build até o verify_vermelho', async ($, on) => {
+  const vermelho = ev({ evento: 'verify', id: 'CS-1', verde: false, motivo: 'saiu 1', quando: LOCAL(-3) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + CS1_END + vermelho))
+  expect(await ui.find({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toBeTruthy()
+  expect(await exato(ui, 'nada entregue ainda · prazo 18:00')).toBeTruthy()
+})
+
+test('nível 4: depois do verify_vermelho o item sai da tela e conta como vermelho', async ($, on) => {
+  const vermelho = ev({ evento: 'verify', id: 'CS-1', verde: false, motivo: 'saiu 1', quando: LOCAL(-3) })
+  const separado = ev({ evento: 'verify_vermelho', id: 'CS-1', quando: LOCAL(-3) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + CS1_END + vermelho + separado))
+  expect(await ui.find({ type: 'Text', text: 'entre itens' })).toBeTruthy()
+  expect(await exato(ui, '1 vermelho · prazo 18:00')).toBeTruthy()
+})
+
+test('nível 4: parado pela cota não mostra o item; cota sem hora fica só "parado pela cota"', async ($, on) => {
+  const pausa = ev({ evento: 'pausa_de_cota', acorda: LOCAL(263), quando: LOCAL(-7) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + pausa))
+  expect(await ui.findAll({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toEqual([])
+  expect(await ui.findAll({ type: 'Text', text: 'entre itens' })).toEqual([])
+})
+
+test('nível 4: cota sem hora de retomar fica só "parado pela cota"', async ($, on) => {
+  const semHora = ev({ evento: 'pausa_de_cota', quando: LOCAL(-7) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + semHora))
+  expect(await exato(ui, 'parado pela cota')).toBeTruthy()
+})
+
+test('nível 4: limite de uso sem espera não vira pausa', async ($, on) => {
+  const limite = ev({ evento: 'limite_de_uso', id: 'CS-1', reset_em: LOCAL(300), espera: false, quando: LOCAL(-5) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + limite))
+  expect(await ui.find({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: 'parado pela cota' })).toEqual([])
+})
+
+test('nível 4: run encerrado não mostra "entre itens" nem o prazo; motivo desconhecido sai em vermelho', async ($, on) => {
+  const fim = ev({ evento: 'run_end', motivo: 'xpto', detalhe: 'coisa nova', quando: LOCAL(-12) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + CS1_END + CS1_VERDE + fim))
+  const motivo = await ui.find({ type: 'Text', text: 'xpto há 12 min' })
+  expect(motivo).toBeTruthy()
+  expect(motivo.props.color).toBe('red')
+  expect(await ui.findAll({ type: 'Text', text: 'entre itens' })).toEqual([])
+  expect(await exato(ui, '1 entregue')).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: 'prazo 18:00' })).toEqual([])
+})
+
+test('nível 4: run interrompido mostra o sinal e o tempo congela no fim', async ($, on) => {
+  const inicio = ev({ evento: 'run_start', fila: 'cepa', prazo: LOCAL(8 * 60), quando: LOCAL(-72) })
+  const sinal = ev({ evento: 'run_interrompido', sinal: 'SIGTERM', id: 'CS-1', quando: LOCAL(-12) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(inicio + CS1_START + sinal))
+  expect(await ui.find({ type: 'Text', text: 'interrompido há 12 min' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'sinal SIGTERM' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'cepa · 1h00' })).toBeTruthy()
+})
+
+test('nível 4: run sem prazo não mostra "prazo"', async ($, on) => {
+  const inicio = ev({ evento: 'run_start', fila: 'cepa', prazo: '', quando: LOCAL(-72) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(inicio + CS1_START))
+  expect(await exato(ui, 'nada entregue ainda')).toBeTruthy()
+})
+
+test('só .jsonl conta como run, e o mais novo vence mesmo listado primeiro', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, {
+    '/repo/.claude/programs/cepa/until/2026-10-19-1100.jsonl': ev({ evento: 'run_start', fila: 'cepa', prazo: '', quando: LOCAL(-2) }),
+    '/repo/.claude/programs/cepa/until/2026-10-19-1100.log': 'log do run',
+    '/repo/.claude/programs/cepa/until/2026-10-19-1200.review.md': RUN_START + CS1_START,
+    ...UNTIL(RUN_START + CS1_START),
+  })
+  expect(await ui.find({ type: 'Text', text: 'entre itens' })).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toEqual([])
+})
+
+test('um run novo que começa e acaba entre duas varreduras não avisa', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START))
+  await relogio.advance(5000)
+  arquivos['/repo/.claude/programs/mods/until/2026-10-19-1200.jsonl'] =
+    ev({ evento: 'run_start', fila: 'mods', prazo: '', quando: LOCAL(-2) })
+    + ev({ evento: 'run_end', motivo: 'fim-da-fila', detalhe: 'x', quando: LOCAL(-1) })
+  await relogio.advance(30000)
+  expect(avisos).toEqual([])
+})
+
+test('o run é relido a cada 5 s e as filas a cada 30 s, não antes', async ($, on) => {
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START))
+  const ui = await monta($)
+  arquivos['/repo/.claude/programs/cepa/until/2026-10-19-0900.jsonl'] += CS1_END + CS1_VERDE
+  await relogio.advance(4000)
+  expect(await ui.find({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toBeTruthy()
+  await relogio.advance(1000)
+  expect(await ui.find({ type: 'Text', text: 'entre itens' })).toBeTruthy()
+  arquivos['/repo/.claude/programs/mods/until/2026-10-19-1200.jsonl'] = ev({ evento: 'run_start', fila: 'mods', prazo: '', quando: LOCAL(-2) })
+  await relogio.advance(24000)
+  expect(await ui.findAll({ type: 'Text', text: 'mods · 2min' })).toEqual([])
+  await relogio.advance(1000)
+  expect(await ui.find({ type: 'Text', text: 'mods · 2min' })).toBeTruthy()
 })
