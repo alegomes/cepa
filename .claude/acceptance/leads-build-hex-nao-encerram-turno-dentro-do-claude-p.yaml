@@ -1,6 +1,6 @@
 key: leads-build-hex-nao-encerram-turno-dentro-do-claude-p
-status: incomplete
-diff_range: 2226535..3635ef0
+status: complete
+diff_range: 2226535..26667f9
 criteria:
   - id: AC1
     altitude: domain
@@ -21,44 +21,42 @@ criteria:
   - id: AC2
     altitude: cli
     surface: >
-      Lead dentro de um claude -p (CEPA_UNTIL_RUN / CLAUDE_AUTONOMOUS_RUN_ID)
-      não encerra o turno após delegar e espera o worker no mesmo turno; fora
-      de run, "Encerre o turno" continua. Texto nos 11 agentes com Task.
-    test: tests/test_delegacao_assincrona_specs.py (4a marca run_in_background:
-      false em todos os agentes com Task)
-    layer: leitura estática dos prompts (presença de texto)
+      Lead dentro de um claude -p com CEPA_UNTIL_RUN não encerra o turno após
+      delegar e espera o worker no mesmo turno; fora de run, "Encerre o turno"
+      continua. Texto nos 11 agentes com Task.
+    test: run sintético claude -p (sessão d51a89d3-4f50-473a-b53d-c586a960db24)
+      + tests/test_delegacao_assincrona_specs.py (4a marca)
+    layer: cli (claude -p real, CEPA_UNTIL_RUN=sintetico-2026-10-19) + radar estático
     evidence: verified
-    run: "python3 tests/test_delegacao_assincrona_specs.py -> 'ok — 11 agentes
-      que delegam, todos com a seção completa' (exit 0). grep -L confirma os 11
-      arquivos com 'run_in_background: false'."
-    gap: >
-      O critério descreve comportamento (o lead espera no mesmo turno dentro do
-      run). Só a presença da regra no texto é demonstrada; nenhum teste ou run
-      mostra o lead seguindo a exceção. O próprio BACKLOG admite isso e adia o
-      run sintético do cepa-until. Adiamento nomeado fica incomplete. Follow-up:
-      run sintético do cepa-until com item que delega a worker de ~2 min, cujo
-      .log mostre uma única chamada ao lead por rodada, sem SendMessage de
-      retomada.
-    status: incomplete
+    run: "Transcrição relida pelo auditor: orquestrador com 1 Agent
+      (build-hex:engineering-lead), 0 SendMessage, 0 task-notification; o lead
+      rodou echo de CEPA_UNTIL_RUN (=sintetico-2026-10-19), chamou Agent
+      build-hex:domain-dev com run_in_background: false, o worker rodou wc -l
+      README.md (448) e o resultado voltou inline. python3
+      tests/test_delegacao_assincrona_specs.py -> 'ok — 11 agentes que delegam,
+      todos com a seção completa'."
+    note: >
+      Ressalvas declaradas: n=1; o pedido ao lead já dizia "Unattended run"
+      (como o bullet do drain-plan manda), então o lead sem essa frase não foi
+      medido; a contagem num run real do cepa-until de repo build-hex ainda não
+      existe. A metade "fora de run continua Encerre o turno" é só texto (o
+      trecho antigo permanece), sem run que a exercite.
+    status: complete
   - id: AC3
     altitude: application
     surface: >
       common/commands/drain-plan.md, passo 3.b, bullet "quem delega espera o
-      worker no mesmo turno", mandando o orquestrador instruir todo lead.
-    test: nenhum. test_common_drain_plan.py passa (all green) mas não menciona
-      o bullet novo (grep por "no mesmo turno"/"quem delega espera" em tests/
-      sem resultado).
-    layer: —
-    evidence: missing
-    run: "python3 tests/test_common_drain_plan.py -> 'all green' (não cobre o
-      bullet novo)"
-    gap: >
-      O bullet existe no diff, mas nada impede que suma numa edição futura.
-      Falta uma asserção em tests/test_common_drain_plan.py de que drain-plan.md
-      contém a instrução de delegar com run_in_background: false e devolver só
-      com o resultado do worker (cobrindo engineering-lead, validation-lead,
-      planning-lead).
-    status: incomplete
+      worker no mesmo turno", instruindo os três leads.
+    test: >
+      tests/test_common_drain_plan.py::test_na_branch_da_noite (3 checks
+      novos: presença; run_in_background false + "mesmo turno"; os três leads
+      dentro do parágrafo do bullet)
+    layer: teste estático sobre o comando
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 'all green' (exit 0). A
+      prova vermelho/verde com remoção do bullet é relato do pair-dev, não
+      reexecutada por mim."
+    status: complete
   - id: AC4
     altitude: application
     surface: >
