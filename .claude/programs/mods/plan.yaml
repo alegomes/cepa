@@ -70,11 +70,14 @@ items:
   title: 'Acompanhamento do cepa-until: item atual e tempo do run lendo o .jsonl;
     aviso com som no fim ou na parada por cota'
   why: 'Quinto: exige relógio do mod ($.clock) e som; mais peças novas que os anteriores.'
-  status: pending
+  status: done
   blocked_by:
   - M1
-  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
-    o certo
+  human_pending: dono ver o cartão Run no próprio terminal (compass 0.7.0, depois
+    de reiniciar a sessão) e ouvir o aviso no fim de um run ou na parada por cota
+  evidence: compass 0.7.0 (9283095; testes ae45542, 47842f0 e 90f5d0a); completion-auditor
+    COMPLETE em .claude/acceptance/M4.yaml; proof PROVEN em docs/proof/mods-M4.yaml
+    (3 rodadas, 170 de 203 perturbações RED, L4 n/a).
 - id: M5
   title: 'Aviso de gate: quando gate-advance, acceptance-gate ou worktree-guard
     barram, aviso com o motivo em uma frase leiga'

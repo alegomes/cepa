@@ -1,0 +1,74 @@
+schema_version: 1
+card: M4
+status: complete
+audited_at: 2026-10-19T14:30:00-03:00
+criteria:
+  - id: AC1
+    text: "Cartão Run (nível 4, depois do Modo) mostra item atual do run mais recente (id e título), etapa (item ou build), tempo na etapa e tentativa quando > 1, lendo o .jsonl em .claude/programs/<fila>/until/"
+    altitude: ui
+    surface: "Pane do compass montado por ui.mount, cartão Run, lendo o .jsonl via $.fs"
+    demonstrated_by:
+      test: "compass/hooks/compass.test.tsx: nível 4: item atual com tempo e tentativa... (item há 12min · tentativa 2); nível 4: depois do done o item fica na etapa de build, sem tentativa quando é a primeira (texto exato \'build há 9min\' na tela montada, sem sufixo de tentativa)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "cd compass && claude plugin test . -> 46 pass, 0 fail (Ran 46 tests across 1 file), head ae45542"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "Cartão mostra o tempo do run (desde run_start até agora enquanto roda, ou até run_end) e a contagem entregues/vermelhos/travados, mais o prazo enquanto roda"
+    altitude: ui
+    surface: "Pane do compass, cabeçalho do cartão Run e linha de contagem"
+    demonstrated_by:
+      test: "nível 4: item atual... ('cepa · 1h12', '1 entregue · prazo HH:MM'); nível 4: run encerrado... ('1 entregue' sem prazo); unit parseRun/tempoDoRun ('2h00' até run_end)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 46 pass, 0 fail (ae45542)"
+    verdict: complete
+    gap: null
+    note: "Vermelhos e travados são afirmados só em parseRun/contagem (unit), não na tela; o ramo de render é o mesmo texto de contagem(). Tempo congelado no run_end é afirmado só em unit (tempoDoRun), não no cabeçalho montado."
+  - id: AC3
+    text: "Parada pela cota (pausa_de_cota ou limite_de_uso com espera) aparece em amarelo com a hora de retomar"
+    altitude: ui
+    surface: "Pane do compass, cartão Run"
+    demonstrated_by:
+      test: "nível 4: parado pela cota em amarelo, com a hora de retomar (pausa_de_cota, color yellow); parseRun cobre limite_de_uso com espera"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 46 pass, 0 fail (ae45542)"
+    verdict: complete
+    gap: null
+    note: "limite_de_uso com espera é montado só em parseRun, não na tela; o render lê run.cota, igual aos dois eventos."
+  - id: AC4
+    text: "Run encerrado mostra o motivo traduzido (fim-da-fila -> 'fila acabou', em verde) com idade e detalhe"
+    altitude: ui
+    surface: "Pane do compass, cartão Run"
+    demonstrated_by:
+      test: "nível 4: run encerrado mostra o motivo em verde, a idade e a contagem sem prazo ('fila acabou há 12 min', color green, detalhe 'a fila acabou')"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 46 pass, 0 fail (ae45542)"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "No fim do run (qualquer motivo) e na parada pela cota: toast e $.audio.play({asset:'sons/fim.wav'}), uma vez; abertura da sessão com run já encerrado não avisa; retomada após a cota não avisa"
+    altitude: event
+    surface: "$.ui.toast e $.audio.play interceptado por on('audio.play'), disparados por releiaRun no ciclo de 5 s"
+    demonstrated_by:
+      test: "o fim do run avisa com toast e som, uma vez...; a pausa pela cota avisa com som; a retomada não; abrir a sessão com um run já encerrado não avisa, nem no relógio de 5 s, nem no de 30 s (toast e som vazios); unit avisoDe"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 46 pass, 0 fail (ae45542)"
+    verdict: complete
+    gap: null
+    note: "A troca de sessão com runAnterior de módulo não tem teste próprio; cada teste monta engine novo e a abertura com run encerrado passa limpa."
+  - id: AC6
+    text: "Relido a cada 5 s via $.clock ($.clock.now para o tempo); run mais recente entre todas as filas (nome do .jsonl); run novo aparece na varredura de 30 s; sem run o cartão diz 'nenhum run do cepa-until', com e sem intenção"
+    altitude: ui
+    surface: "$.clock.every(5000) e $.clock.every(30000) em register.tsx, Pane montado"
+    demonstrated_by:
+      test: "o run mais recente vence entre as filas; um run novo que começa depois da abertura é lido na próxima varredura das filas (advance 30000); sem run, o nível 4 diz isso; sem intenção, o nível 4 continua lá; os testes de aviso avançam o relógio em 5000"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 46 pass, 0 fail (ae45542)"
+    verdict: complete
+    gap: null

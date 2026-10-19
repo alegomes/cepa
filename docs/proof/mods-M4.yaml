@@ -1,0 +1,54 @@
+schema_version: 2
+card: mods-M4
+verdict: proven
+reviewed_at: 2026-10-19T21:00:00-03:00
+base_commit: 5a59f1e
+head_commit: 90f5d0a
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "compass/hooks/until.ts", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/hooks/register.tsx", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/types/index.d.ts", module: compass, external_observable: false, substituted_by_double: null }
+    - { class: "compass/sons/fim.wav", module: compass, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo nao e Quarkus: mod TypeScript do Claude Code, testado pelo engine real
+    (`claude plugin test .` dentro de compass/). Superficie externa = Pane montado pelo engine.
+    O teste so fornece o conteudo dos .jsonl, o relogio do engine e o fs/audio/toast (fronteira distante);
+    until.ts e register.tsx reais rodam, por isso substituted_by_double e null.
+    Tres rodadas: 9283095 (44 pass, 203 perturbacoes), 47842f0 (65 pass, as 76 sobreviventes reexecutadas),
+    90f5d0a (67 pass, as 5 reais restantes reexecutadas). Entre 9283095 e 90f5d0a so compass/hooks/compass.test.tsx
+    mudou (git diff --stat 9283095 90f5d0a -- compass); until.ts e register.tsx sao identicos, entao as 203
+    perturbacoes seguem validas. Worktrees descartaveis /tmp/proof-mods-M4, M4b e M4c, todas removidas
+    (git worktree list limpo); arvore principal intocada. index.d.ts so tipa o atom `until` (nao executavel);
+    fim.wav e asset: o teste exige asset 'sons/fim.wav' em audio.play (trocar por .mp3 ou 'x' da RED),
+    o conteudo do .wav nao e verificado (nao e comportamento de codigo).
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 90f5d0a: `claude plugin test .` (em compass/) -> 67 pass, 0 fail"
+        - "Rodada 1 (9283095, 44 pass): 203 perturbacoes uma por vez; 127 RED, 76 GREEN."
+        - "Rodada 2 (47842f0, 65 pass): das 76, 38 viraram RED (R1, R2, R4, R5, R6, R7, R8, R9, R11, R12, R13) e 38 seguiram GREEN: 5 reais (S1 a S5) e 33 equivalentes ou cosmeticas."
+        - "Rodada 3 (90f5d0a, 67 pass), as 5 reais agora RED: S1 until.ts avisoDe `if (agora.fim !== null)` -> `true` -> 66 pass 1 fail (a pausa agora tem 2a pausa apos a retomada e exige o 2o toast e som); S2 register.tsx `tentativa > 1` -> `>= 1` -> 65 pass 2 fail (assercao exata 'item ha 12min' e 'build ha 9min' sem sufixo); S3 parseRun guarda `e === null || typeof e !== 'object'` removida -> 66 pass 1 fail; S4 `texto(e.fila) || fila` -> `texto(e.fila)` -> 66 pass 1 fail; S5 item_end `status === 'done'` sem `run.item` -> 66 pass 1 fail. git status limpo apos cada."
+        - "R10 (register.tsx `if (r !== null)` -> `true`) 67 pass 0 fail: EQUIVALENTE observavel. Com o arquivo sumido avisoDe(antes, null) lanca TypeError, mas o painel ja mostra 'nenhum run' (o update de `until` vem antes) e runAnterior fica no valor anterior (conservador). Aceito com o coordenador."
+        - "EQUIVALENTES (sem diferenca observavel, nao gating): linha em branco do jsonl (JSON.parse('') cai no catch); `Number.isNaN(t)?NaN:t` (Date.parse ja da NaN); `Number(e.tentativa)||1` (NaN tambem nao passa em `> 1`); `run.cota = null` em item_start e run_end, `run.item = null` em limite_de_uso/run_interrompido/run_end (UI so le cota na fase cota e item na fase rodando); `fila` 'x' repassada ao parseRun do atom e `id` 'x' no atom (so rotulo/fallback; dir == fila gravada e o id real vem do registroDoRun); `id = arq.name` e `slice(0,-4)` (o id so ordena e rotula); `entrada.kind !== 'dir'` (exists ja descarta arquivos soltos); R10."
+        - "COSMETICOS (estilo ou ordem, nao gating, seguem verdes): cor cyan do item; `bold` do motivo; cor amarela do interrompido; linha de detalhe vazia; 6 rotulos de MOTIVOS (fila-travada, item-preso, verify-vermelho, sem-rede, git-quebrado, branch-mudou); 'cepa-until' no cabecalho sem run; `arq.kind !== 'file'`; ordem Modo/Run na tela sem intencao; ordem de releia/releiaFilas no turn.complete (atraso <= 5 s) e releiaFilas no turn.complete (coberto pelo intervalo de 30 s). O dono pode pedir teste se quiser fixar o visual."
+    caveats: "sem ferramenta de cobertura; painel exercitado pelo Pane do engine. Os 6 rotulos de MOTIVOS sem teste sao texto fixo de tabela. Pendencia humana do plano (dono ver o mod no terminal) fica fora desta prova."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as linhas de comportamento sao alcancadas e afirmadas: 127 perturbacoes RED na rodada 1, 38 na 2 e 5 na 3 (total 170 de 203); as 33 restantes sao equivalentes ou estilo; suite 67 pass 0 fail em 90f5d0a"
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff nao abre superficie de entrada externa: until.ts so le um .jsonl local escrito pelo proprio cepa-until (common/bin/cepa-until); nao ha rede, argumento de usuario nem modulo api-rest. Segue o precedente docs/proof/mods-M2.yaml e mods-M6.yaml. A entrada `null` e outras linhas malformadas agora tem teste (S3 a S5)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "PROVEN: as 170 perturbacoes reais (127 + 38 + 5) derrubam teste em 90f5d0a (67 pass baseline). Restam 33 sobreviventes, todas equivalentes (inclui R10) ou cosmeticas, declaradas. Pendencia humana do plano (dono ver o mod no terminal) continua fora desta prova."
