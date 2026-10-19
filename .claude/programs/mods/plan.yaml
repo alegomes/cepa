@@ -30,10 +30,12 @@ items:
   human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
     o certo
 - id: M2
-  title: 'Faixa do modo: modo e condição de saída do session-mode acima do prompt;
-    aviso quando o off-mode-capture registra desvio'
-  why: 'Segundo: mesma mecânica de leitura do M1, superfície diferente (faixa acima
-    do prompt), sem risco.'
+  title: 'Nível 3 do compass: modo da sessão e condição de saída lidos de .claude/session-mode;
+    contagem dos desvios registrados pelo off-mode-capture em .claude/desvios.md,
+    com aviso quando entra um novo'
+  why: 'Segundo: mesma mecânica de leitura do M1. Em 2026-10-19 o dono trocou a faixa
+    acima do prompt por um nível a mais do compass, coerente com a recusa da faixa
+    no M1.'
   status: pending
   blocked_by:
   - M1
@@ -51,9 +53,9 @@ items:
     o certo
   evidence: Coberto pelo nível 1 do mod cepa-rumo (~/.claude/dev-mods/<sessão>/cepa-rumo).
 - id: M6
-  title: 'Build na faixa: verde/vermelho/desatualizado e idade, lendo o que capture-build-result.py
+  title: 'Build no compass: verde/vermelho/desatualizado e idade, lendo o que capture-build-result.py
     e mark-build-stale.py gravam'
-  why: 'Quarto: só leitura, cabe na faixa do M2.'
+  why: 'Quarto: só leitura, cabe no nível 3 do compass junto com o M2.'
   status: pending
   blocked_by:
   - M2
