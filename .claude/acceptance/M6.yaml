@@ -1,0 +1,61 @@
+schema_version: 1
+card: M6
+status: complete
+audited_at: 2026-10-19T13:30:00-03:00
+criteria:
+  - id: AC1
+    text: "Linha de build no cartão Modo com estado traduzido (SUCCESS=verde, FAILURE=vermelho, EMPTY=vazio) e idade a partir de `at`"
+    altitude: ui
+    surface: "Pane do compass montado pelo engine (ui.mount), cartão Modo, lendo .claude/last-build.json"
+    demonstrated_by:
+      test: "compass/hooks/compass.test.tsx: nível 3: build verde com a idade, em verde; build vermelho ...; build vazio ...; parseBuild traduz os quatro status"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "cd compass && claude plugin test . -> 29 pass, 0 fail (Ran 29 tests across 1 file)"
+    verdict: complete
+    gap: null
+    note: "Fixtures são JSON escrito à mão no formato dos campos de capture-build-result.py (status, at); o escritor real não é executado no teste."
+  - id: AC2
+    text: "STALE (mark-build-stale.py) aparece como desatualizado com idade de `since` e estado anterior (last_known_status/last_known_at)"
+    altitude: ui
+    surface: "Pane do compass, linha de build"
+    demonstrated_by:
+      test: "nível 3: build desatualizado mostra o que era antes ('desatualizado há 3 min · era vermelho há 2 h'); parseBuild guarda o anterior do STALE"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 29 pass, 0 fail. Campos since/last_known_status/last_known_at conferidos em common/hooks/mark-build-stale.py:105-110."
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Sem .claude/last-build.json, o cartão diz que não há build registrado"
+    altitude: ui
+    surface: "Pane do compass, linha de build"
+    demonstrated_by:
+      test: "sem last-build.json, o nível 3 diz que não há build registrado (texto 'nenhum registrado' após 'build: ')"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 29 pass, 0 fail"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "Cores: verde green, vermelho red (negrito), vazio/desatualizado yellow"
+    altitude: ui
+    surface: "props.color/bold do Text da linha de build no Pane"
+    demonstrated_by:
+      test: "build verde (green, sem bold); build vermelho (red, bold true); build vazio (yellow); build desatualizado (yellow)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 29 pass, 0 fail"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "Relido a cada 5 s e em cada turno (mesma mecânica do modo/desvios), sem novo turno"
+    altitude: ui
+    surface: "$.clock.every(5000) e on('turn.complete') chamando releia -> releiaModo -> BUILD"
+    demonstrated_by:
+      test: "o build é relido a cada 5 s: o verde vira desatualizado sem novo turno; o build é relido no fim de cada turno, sem esperar o relógio (commit 08a2d2d, $.turn.complete sem avançar o relógio)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "cd compass && claude plugin test . -> 30 pass, 0 fail (Ran 30 tests across 1 file); ambos os testes de AC5 aparecem como (pass)"
+    verdict: complete
+    gap: null

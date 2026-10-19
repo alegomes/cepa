@@ -59,11 +59,13 @@ items:
   title: 'Build no compass: verde/vermelho/desatualizado e idade, lendo o que capture-build-result.py
     e mark-build-stale.py gravam'
   why: 'Quarto: só leitura, cabe no nível 3 do compass junto com o M2.'
-  status: pending
+  status: done
   blocked_by:
   - M2
-  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
-    o certo
+  human_pending: null
+  evidence: compass 0.6.0 (9d9427a, testes 08a2d2d e 3168198); completion-auditor COMPLETE
+    em .claude/acceptance/M6.yaml; proof PROVEN em docs/proof/mods-M6.yaml com L4
+    n/a; dono confere o painel no terminal depois de reiniciar.
 - id: M4
   title: 'Acompanhamento do cepa-until: item atual e tempo do run lendo o .jsonl;
     aviso com som no fim ou na parada por cota'

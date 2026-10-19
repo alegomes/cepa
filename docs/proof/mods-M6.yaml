@@ -1,0 +1,49 @@
+schema_version: 2
+card: mods-M6
+verdict: proven
+reviewed_at: 2026-10-19T17:00:00-03:00
+base_commit: 8589cc8
+head_commit: 3168198
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "compass/hooks/build.ts", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/hooks/register.tsx", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/types/index.d.ts", module: compass, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo nao e Quarkus: mod TypeScript do Claude Code, testado pelo engine real
+    (`claude plugin test .` dentro de compass/). Superficie externa = Pane montado pelo engine.
+    O teste so fornece o conteudo de .claude/last-build.json e o relogio do engine (fronteira distante);
+    build.ts e register.tsx reais rodam, por isso substituted_by_double e null.
+    Duas rodadas em worktrees descartaveis (/tmp/proof-mods-M6 sobre 9d9427a e /tmp/proof-mods-M6b sobre 3168198),
+    ambas removidas; arvore principal intocada. Entre 9d9427a e 3168198 so compass.test.tsx mudou (+19 linhas:
+    teste de turn.complete e os 3 testes que fecham os sobreviventes); build.ts e register.tsx sao identicos,
+    logo as perturbacoes da 1a rodada continuam validas.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 3168198: `claude plugin test .` (em compass/) -> 31 pass, 0 fail"
+        - "Rodada 1 (9d9427a, 29 pass): 46 perturbacoes uma por vez, 33 RED, 13 verdes: 3 reais, 3 cosmeticas, 7 equivalentes (abaixo)."
+        - "Rodada 2 (3168198), as 3 reais agora RED: build.ts:25 `dados === null ||` removido -> 30 pass 1 fail 'parseBuild traduz os quatro status...'; mesma guarda trocada por `false` -> 30 pass 1 fail, mesmo teste; build.ts:42 `desconhecido: undefined` -> 'red' -> 30 pass 1 fail 'status desconhecido sai sem cor, e o rotulo \"build:\" fica ao lado do estado'; register.tsx rotulo `build: ` removido -> 30 pass 1 fail, mesmo teste; rotulo trocado por 'compilacao: ' -> 30 pass 1 fail, mesmo teste. git status limpo apos cada."
+        - "Demais RED da rodada 1 (>=1 fail cada): mapa de status P1-P4, maiusculas P5, default P6, texto() P8, ramo STALE P11-P15,P17, cores P18-P21, idade P23-P25,P30,P31, separador ' · era ' (rerun com perl -Mutf8) e P28, leitura no painel P32,P33,P35,P36,P38,P40-P43."
+        - "NAO GATING (cosmeticas, nao rerodadas; seguem verdes): P39 'nenhum registrado' sem dimColor, P44 marginTop do bloco build 1->0, P45 marginTop 1 na linha de desvios. Estilo puro (atenuacao e margem), nenhum teste olha; o dono pode pedir teste se quiser fixar o visual."
+        - "EQUIVALENTE P7 build.ts:14 `String(status ?? '')`: undefined vira 'UNDEFINED', cai em desconhecido como ''. EQUIVALENTE P34 register.tsx `parseBuild(textoBuild ?? '')`: JSON.parse('') lanca e devolve null. EQUIVALENTE P26 e P27 build.ts:53: guardas redundantes, parseBuild so produz anterior nao-nulo quando estado e desatualizado. EQUIVALENTE na pratica P16 build.ts:32: mark-build-stale.py:93-110 nunca grava STALE em last_known_status."
+    caveats: "sem ferramenta de cobertura; painel exercitado pelo Pane do engine. As 3 cosmeticas (P39, P44, P45) ficam sem teste por decisao de classificar como estilo puro."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as linhas de comportamento sao alcancadas e afirmadas: rodada 2 derrubou teste nas 3 antes sobreviventes e rodada 1 em 33 outras; resto equivalente ou estilo"
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff nao abre superficie de entrada externa: build.ts so le um arquivo local escrito por dois hooks do proprio repo (capture-build-result.py, mark-build-stale.py); nao ha rede, argumento de usuario nem modulo api-rest. Segue o precedente docs/proof/mods-M2.yaml. A entrada `null`, antes sem teste, agora e coberta por parseBuild('null')."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "PROVEN: as 3 perturbacoes reais da 1a rodada (JSON null, cor do desconhecido, rotulo build:) agora derrubam teste em 3168198 (31 pass baseline; 30 pass 1 fail em cada). Restam 3 cosmeticas de estilo e 4 equivalentes, declaradas. Pendencia humana do plano (dono ver o mod no terminal) continua fora desta prova."
