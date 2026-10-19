@@ -13,6 +13,6 @@ export type Fila = {
 
 declare module 'claude-code' {
   interface PluginState {
-    rumo: { texto: string | null; agora: number; filas: Fila[] }
+    compass: { texto: string | null; agora: number; filas: Fila[] }
   }
 }

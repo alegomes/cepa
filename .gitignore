@@ -40,4 +40,4 @@ common/expertise/expertise
 tests/eval/results/
 
 # Tipos que o Claude Code gera ao carregar o mod (versão do engine, não código nosso).
-rumo/.claude-plugin/types/
+compass/.claude-plugin/types/

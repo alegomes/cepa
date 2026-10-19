@@ -71,7 +71,7 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null) =>
   }))
   on('process.run', async () => ({ value: { exitCode: 0, stdout: '/repo/.git\n', stderr: '' } }))
   on('session.id', async () => ({ value: sessao }))
-  on('command.register', async () => ({ value: { command: 'rumo' } }))
+  on('command.register', async () => ({ value: { command: 'compass' } }))
   on('ui.open', async () => ({ value: { isPlaced: true } }))
   on('session.start', async () => ({ cwd: '/repo' }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', source: 'startup' })
@@ -80,11 +80,11 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null) =>
 const sobe = async ($: any, on: any, sessao: string, texto: string | null) => {
   await prepara($, on, sessao, texto)
   return $.ui.mount({
-    plugin: 'rumo',
+    plugin: 'compass',
     surface: 'terminal',
     component: 'Pane',
-    requestId: 'rumo',
-    props: { title: 'Rumo', isFocused: false, bodyColumns: 60, placement: 'dock' },
+    requestId: 'compass',
+    props: { title: 'Compass', isFocused: false, bodyColumns: 60, placement: 'dock' },
   })
 }
 

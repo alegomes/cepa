@@ -7,12 +7,12 @@ import { idade, parseIntent } from './intent'
 
 // Painel de orientação em níveis, do mais alto ao mais baixo:
 // 1. filas do repo e um resumo dos itens; 2. intenção, plano e passo da sessão.
-const PANE = 'rumo'
-const ABRE = { id: PANE, title: 'Rumo', columns: 48 }
+const PANE = 'compass'
+const ABRE = { id: PANE, title: 'Compass', columns: 48 }
 const ARQUIVO = '.claude/session-intent'
-const texto = atom({ plugin: 'rumo', key: 'texto' } as const, null)
-const agora = atom({ plugin: 'rumo', key: 'agora' } as const, 0)
-const filas = atom({ plugin: 'rumo', key: 'filas' } as const, [])
+const texto = atom({ plugin: 'compass', key: 'texto' } as const, null)
+const agora = atom({ plugin: 'compass', key: 'agora' } as const, 0)
+const filas = atom({ plugin: 'compass', key: 'filas' } as const, [])
 
 let passoAnterior = 0
 
@@ -51,7 +51,7 @@ async function releiaFilas($: EngineInterface) {
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
-      name: 'rumo',
+      name: 'compass',
       description: 'Abre o painel de orientação: filas e intenção da sessão',
     })
     await releia($)
@@ -70,7 +70,7 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('command.run', { command: 'rumo' }, async $ => {
+  on('command.run', { command: 'compass' }, async $ => {
     await $.ui.open(ABRE)
 
     return { text: 'Painel de orientação aberto.' }
