@@ -1,23 +1,23 @@
 schema_version: 2
 card: mods-intencao-encadeada
-verdict: unproven
-reviewed_at: 2026-10-19T12:00:00-03:00
+verdict: needs-human
+reviewed_at: 2026-10-19T13:00:00-03:00
 base_commit: 89a8762
-head_commit: 51ae790
+head_commit: 82d64b7
 issue_type: Task
 scope:
   changed_classes:
     - { class: "common/hooks/session-next.py", module: common-hooks, external_observable: true, substituted_by_double: null }
-    - { class: "common/hooks/session-chain.py", module: common-hooks, external_observable: true, substituted_by_double: "test_cepa_encadeamento.py troca o binario `claude` por um stub (fronteira distante, correto); session-chain.py e cepa reais rodam" }
+    - { class: "common/hooks/session-chain.py", module: common-hooks, external_observable: true, substituted_by_double: null }
     - { class: "common/bin/cepa", module: common-bin, external_observable: true, substituted_by_double: null }
   base_commit_resolved: true
   notes: >
     Repo nao e Quarkus: testes sao scripts `python3 tests/<arquivo>.py` (exit 0 = verde).
-    Perturbacao feita com sed em duas worktrees descartaveis (/tmp/proof-mie, /tmp/proof-mie2),
-    restauradas com git checkout e removidas ao fim. Arvore principal intocada.
-    Testes de cobertura: tests/test_wrapup_proximo_passo.py (session-next) e
-    tests/test_cepa_encadeamento.py (session-chain e cepa). Em todas as perturbacoes os dois
-    foram rodados no session-next; so o de encadeamento nas de session-chain e cepa.
+    Re-prova em 82d64b7 numa worktree descartavel (/tmp/proof-mie), removida ao fim; arvore
+    principal intocada. Perturbacoes por sed, desfeitas com git checkout apos cada uma.
+    Dublê: test_cepa_encadeamento.py troca apenas o binario `claude` por um stub (fronteira
+    distante do fornecedor); session-chain.py e cepa reais rodam, por isso as tres classes
+    constam sem dublê no lugar delas.
 levels:
   l3_load_bearing:
     technique: perturbation
@@ -25,25 +25,22 @@ levels:
       status: n/a
       results: []
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "baseline em 51ae790: test_wrapup_proximo_passo.py, test_cepa_encadeamento.py, test_cepa_intencao.py, test_session_intencao_contrato.py e test_cepa_modo.py todos verdes (exit 0 / 'todos ok', 'OK', 'tudo ok', 'tudo verde')"
-        - "RED (morreram): session-next rotulos Intencao/Meta/Plano (3, cada um 1 teste RED), split do plano por '|' trocado por ',', brief sem remover as linhas da intencao, recusa de intencao parcial desligada, chave `intencao` gravada sempre, mensagem 'sem intencao'; session-chain: `--plano` unido por espaco em vez de newline, aviso 'intencao invalida' sem o texto, brief de volta em --proposito, `--para-quando` fora do execv, validacao de texto vazio removida; cepa: `--para-quando X` e `--plano X` (forma com espaco) zerados, plano sem split por newline, PARA_QUANDO nao usado"
-        - "SOBREVIVERAM, relevantes (verde com o codigo quebrado): (1) common/bin/cepa:379 `--para-quando=*` trocado por PARA_QUANDO=\"\" -> encadeamento verde; (2) common/bin/cepa:383 `--plano=*` trocado por PLANO=\"\" -> verde; nenhum teste usa as formas com `=` do launcher cepa; (3) common/bin/cepa:287 `set -f` (impede expandir `*` do plano) trocado por `:` -> verde; (4) common/hooks/session-chain.py:117 `and plano` removido (plano lista vazia passa a gerar `--plano ''`) -> verde; (5) session-chain.py:118 `and \"\\n\" not in i` removido (passo com quebra de linha seria partido em dois no cepa) -> verde; o unico caso invalido testado (test_cepa_encadeamento.py:231) e para_quando vazio; (6) session-next.py `if m and m.group(1).strip()` -> `if m` (INTENCAO_RE, ~linha 93: linha `**Meta:**` vazia deixa de ser ignorada) -> test_wrapup_proximo_passo.py e test_cepa_encadeamento.py verdes; (7) session-next.py `if i.strip()` removido do split do plano (passo vazio 'a | | b') -> verdes; (8) session-chain.py:112 `if it is None: return []` trocado por `if False:` -> verde; sem `intencao` o chain passa a imprimir o aviso 'intencao invalida' toda vez e nenhum teste checa a ausencia do aviso (test_cepa_encadeamento.py:195 so checa que 'intencao:' nao aparece)"
-        - "SOBREVIVERAM, cosmeticos/equivalentes: session-next mensagem 'com a intencao \"...\"' trocada (nenhum teste le o texto de saida com intencao); session-next colapso de 3+ quebras de linha no brief (`\\n{3,}`); cepa --motivo gravado ('sessao aberta pelo cepa...') trocado por 'X'; session-chain.py:117 `len(textos) == 2` removido (equivalente: textos tem sempre 2 numa dict, e vazio num nao-dict cai em plano None)"
-    caveats: "perturbacao amostrou 12 hunks de session-next, 11 de session-chain, 8+ de cepa; nao foi perturbado cada ramo de `--para-quando`/`--plano` sem valor (exit 2). Nao ha fronteira Quarkus aqui; `external_observable: true` significa que e o launcher/hook real que o dono aciona."
+        - "baseline 82d64b7: test_wrapup_proximo_passo.py 'todos ok', test_cepa_encadeamento.py 'OK', test_cepa_intencao.py 'tudo ok', test_session_intencao_contrato.py 'OK', test_cepa_modo.py 'tudo verde' (todos exit 0)"
+        - "RED (exit 1) em test_cepa_encadeamento.py: P1 cepa:379 `--para-quando=*` -> PARA_QUANDO=\"\"; P2 cepa:383 `--plano=*` -> PLANO=\"\"; P3 cepa:287 `set -f` -> `:`; P4 session-chain.py:117 `and plano` removido; P5 session-chain.py:118 `and \"\\n\" not in i` removido; P8 session-chain.py:112 `if it is None` -> `if False`"
+        - "RED (exit 1) em test_wrapup_proximo_passo.py: P6 session-next.py:90 `m and m.group(1).strip()` -> `m`; P7 session-next.py:93 `if i.strip()` removido do split do plano; P9 regex (session-next.py:45) com `[ \\t]*` final trocado de volta por `\\s*` (1 FAIL). P6/P7/P9 seguem verdes em test_cepa_encadeamento.py (guardados pelo teste do wrapup)"
+        - "restaurado: apos P9, git checkout e as duas suites voltaram a exit 0"
+        - "cosmeticos/equivalentes (nao re-rodados, aceitos): texto da mensagem 'com a intencao', colapso de 3+ quebras de linha no brief, texto do --motivo do cepa, `len(textos) == 2` (equivalente)"
+    caveats: "amostragem de hunks das rodadas anteriores segue valendo (12 session-next, 11 session-chain, 8+ cepa). Sem fronteira Quarkus: external_observable significa o launcher/hook real que o dono aciona."
   l2_coverage:
-    status: gap
-    uncovered_lines:
-      - "common/bin/cepa:379 e :383 (formas --para-quando=* e --plano=*)"
-      - "common/bin/cepa:287 (set -f)"
-      - "common/hooks/session-chain.py:117-118 (plano vazio, passo com quebra de linha)"
-      - "common/hooks/session-next.py (linha Meta/Plano/Intencao com valor vazio; passo vazio no plano)"
-    run: "sem ferramenta de cobertura no repo; lacunas deduzidas das perturbacoes que ficaram verdes (nenhum teste alcanca ou afirma sobre elas)"
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as linhas antes descobertas (cepa:287/379/383, session-chain:112/117/118, session-next:90/93) agora derrubam o teste quando quebradas (P1-P9 RED), o que prova que sao alcancadas"
   l4_adversarial_input:
     status: skipped
     reason: ""
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
-routing_reason: "UNPROVEN: 8 perturbacoes relevantes ficam verdes (formas `=` do cepa, `set -f`, validacao de plano vazio e de passo com newline, linha de intencao vazia no handoff, aviso espurio sem intencao). Os caminhos principais (rotulos, split por '|', retirada do brief, recusa parcial, newline no --plano, brief fora do --proposito) estao provados RED. L4 nao rodada (entrada do handoff e escrita pelo proprio agente; nao ha fuzz no repo). Para fechar: testes para essas oito."
+routing_reason: "NEEDS-HUMAN so pelo L4 (entrada adversarial nao rodada; nao ha fuzz no repo). Todas as perturbacoes relevantes (P1-P9, incluindo a volta do `\\s*`) ficam RED e as 5 suites de regressao ficam verdes. Sugestao ao humano: aceitar o L4 como nao aplicavel, ja que as novas entradas adversariais (set -f, newline no passo, linha vazia) viraram testes."
