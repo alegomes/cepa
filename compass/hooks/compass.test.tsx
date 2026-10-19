@@ -337,3 +337,13 @@ test('o build é relido a cada 5 s: o verde vira desatualizado sem novo turno', 
   expect(await ui.find({ type: 'Text', text: 'desatualizado há 3 min · era vermelho há 2 h' })).toBeTruthy()
   expect(await ui.findAll({ type: 'Text', text: 'verde há 12 min' })).toEqual([])
 })
+
+test('o build é relido no fim de cada turno, sem esperar o relógio', async ($, on) => {
+  on('turn.complete', async () => ({ text: 'x' }))
+  const { arquivos } = await prepara($, on, 'sessao-a', ARQUIVO, { '.claude/last-build.json': BUILD('SUCCESS', '2026-10-19T10:00:00Z') })
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: 'verde há 12 min' })).toBeTruthy()
+  arquivos['.claude/last-build.json'] = BUILD_STALE
+  await $.turn.complete({ answer: 'x', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  expect(await ui.find({ type: 'Text', text: 'desatualizado há 3 min · era vermelho há 2 h' })).toBeTruthy()
+})
