@@ -985,3 +985,57 @@ test('sem bloqueio na sessão, o cartão Modo não tem a linha do gate', async (
   const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': MODO })
   expect(await ui.find({ type: 'Text', text: /bloqueio|barrad/ })).toBeFalsy()
 })
+
+// ─── Sobreviventes da 1ª rodada do proof-reviewer ────────────────────────────
+
+test('toast que lança não atrapalha a chamada: o resultado do gate volta intacto', async ($, on) => {
+  on('ui.toast', async () => {
+    throw new Error('sem tela')
+  })
+  barraComoPython(on, GA_BASELINE)
+  await prepara($, on, 'sessao-a', ARQUIVO)
+  const r: any = await $.tool.call({ tool: 'Bash', command: 'git push' })
+  expect(r.isError).toBe(true)
+  expect(r.text).toBe(GA_BASELINE)
+})
+
+test('STALE sem o arquivo da edição sai sem parênteses', async () => {
+  expect(leBloqueio('[gate-advance] BLOCKED: cannot run advancement command — build is STALE.')?.frase)
+    .toBe('Barrado: o código mudou depois do último build. Rode o verify de novo.')
+})
+
+test('leGuarda: linha em branco antes do BLOCK: conta; BLOCK: sem número ou sem espaço não conta', async () => {
+  const cmd = 'python3 "/x/hooks/worktree-guard.py" session/x'
+  expect(leGuarda(cmd, '\n\n' + WG_SRC)?.gate).toBe('worktree-guard')
+  expect(leGuarda(cmd, 'BLOCK: abc\n  source `session/x` is held by a LIVE session')).toBe(null)
+  expect(leGuarda(cmd, 'BLOCK:1\n  source `session/x` is held by a LIVE session')).toBe(null)
+})
+
+test('stdout com BLOCK: de uma ferramenta que não é Bash não é o worktree-guard', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  on('tool.call', { tool: 'mcp__x__run' }, async () => ({ result: { stdout: WG_SRC, stderr: '' } }))
+  await prepara($, on, 'sessao-a', ARQUIVO)
+  await $.tool.call({ tool: 'mcp__x__run', command: 'python3 worktree-guard.py session/x' } as any)
+  expect(avisos).toEqual([])
+})
+
+test('resultado sem erro cujo texto cita o gate-advance não é bloqueio', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  on('tool.call', { tool: 'Bash' }, async () => ({
+    result: { stdout: GA_BASELINE, stderr: '', interrupted: false },
+    text: GA_BASELINE,
+  }))
+  await prepara($, on, 'sessao-a', ARQUIVO)
+  await $.tool.call({ tool: 'Bash', command: 'cat registro-do-gate.txt' })
+  expect(avisos).toEqual([])
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: /barrad/ })).toBeFalsy()
+})
