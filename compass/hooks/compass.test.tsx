@@ -443,6 +443,12 @@ test('avisoDe: só na mudança de fase do mesmo run; fim e cota avisam', async (
 
 const UNTIL = (texto: string) => ({ '/repo/.claude/programs/cepa/until/2026-10-19-0900.jsonl': texto })
 
+// `find` casa por trecho; `exato` exige o texto inteiro.
+const exato = async (ui: any, texto: string) => {
+  const n = await ui.find({ type: 'Text', text: texto })
+  return n && n.text === texto ? n : undefined
+}
+
 test('nível 4: item atual com tempo e tentativa, contagem e prazo, depois do nível 3', async ($, on) => {
   const inicio = ev({ evento: 'run_start', fila: 'cepa', prazo: LOCAL(8 * 60), quando: LOCAL(-72) })
   const item = ev({ evento: 'item_start', id: 'CS-2', title: 'segundo item', tentativa: 2, quando: LOCAL(-12) })
@@ -538,6 +544,14 @@ test('a pausa pela cota avisa com som; a retomada não', async ($, on) => {
   await relogio.advance(5000)
   expect(avisos.length).toBe(1)
   expect(sons.length).toBe(1)
+  // Uma segunda pausa, depois da retomada, avisa de novo: o estado não ficou preso na cota.
+  arquivos[caminho] += ev({ evento: 'pausa_de_cota', acorda: LOCAL(400), quando: LOCAL(0) })
+  await relogio.advance(5000)
+  expect(avisos).toEqual([
+    `cepa-until parado pela cota · retoma às ${HM(263)}`,
+    `cepa-until parado pela cota · retoma às ${HM(400)}`,
+  ])
+  expect(sons.length).toBe(2)
 })
 
 test('um run novo que começa depois da abertura é lido na próxima varredura das filas', async ($, on) => {
@@ -554,7 +568,7 @@ test('nível 4: depois do done o item fica na etapa de build, sem tentativa quan
   const fim = ev({ evento: 'item_end', id: 'CS-1', status: 'done', quando: LOCAL(-9) })
   const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + item + fim))
   expect(await ui.find({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: 'build há 9min' })).toBeTruthy()
+  expect(await exato(ui, 'build há 9min')).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'nada entregue ainda · prazo 18:00' })).toBeTruthy()
 })
 
@@ -580,11 +594,6 @@ test('abrir a sessão com um run já encerrado não avisa, nem no relógio de 5 
 })
 
 // ── nível 4: perturbações sobreviventes da 1ª rodada do proof-reviewer ───────
-
-const exato = async (ui: any, texto: string) => {
-  const n = await ui.find({ type: 'Text', text: texto })
-  return n && n.text === texto ? n : undefined
-}
 
 test('parseRun: item bloqueado ou devolvido sai da tela; verify vermelho não conta entrega', async () => {
   const bloqueado = ev({ evento: 'item_end', id: 'CS-1', status: 'blocked', quando: '2026-10-19T09:05:00' })
@@ -768,4 +777,18 @@ test('o run é relido a cada 5 s e as filas a cada 30 s, não antes', async ($, 
   expect(await ui.findAll({ type: 'Text', text: 'mods · 2min' })).toEqual([])
   await relogio.advance(1000)
   expect(await ui.find({ type: 'Text', text: 'mods · 2min' })).toBeTruthy()
+})
+
+test('nível 4: item na primeira tentativa não mostra "tentativa"', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + ev({ evento: 'item_start', id: 'CS-1', title: 'primeiro item da fila', tentativa: 1, quando: LOCAL(-12) })))
+  expect(await exato(ui, 'item há 12min')).toBeTruthy()
+})
+
+test('parseRun aguenta registro malformado: linha null, run_start sem fila, item_end sem item_start', async () => {
+  const r = parseRun(RUN_START + 'null\n' + CS1_START, 'cepa', 'x')!
+  expect(r.item?.id).toBe('CS-1')
+  const semFila = ev({ evento: 'run_start', prazo: '', quando: '2026-10-19T09:00:00' })
+  expect(parseRun(semFila, 'mods', 'x')!.fila).toBe('mods')
+  const orfao = ev({ evento: 'item_end', id: 'CS-9', status: 'done', quando: '2026-10-19T09:05:00' })
+  expect(parseRun(RUN_START + orfao, 'cepa', 'x')!.item).toBe(null)
 })
