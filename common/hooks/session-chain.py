@@ -8,8 +8,10 @@ sair deixou o próximo passo gravado em
     {"repo": "/abs/path", "modo": "descoberta", "brief": "<texto>"}
 
 este script apaga o arquivo, entra em `repo` e substitui o próprio processo
-pelo `cepa` de novo, com `--modo <modo>`, `--proposito <brief>` (o cepa grava o
-brief como propósito da sessão) e o brief como prompt inicial. A
+pelo `cepa` de novo, com `--modo <modo>` e o brief como prompt inicial. Se o
+arquivo traz `intencao` ({proposito, para_quando, plano}), vão também
+`--proposito`, `--para-quando` e `--plano` (o cepa grava a intenção da sessão);
+sem ela, a sessão seguinte nasce sem intenção, nunca com o brief no lugar. A
 sessão seguinte abre no repo e no modo certos sem o dono digitar nada. Sem o
 arquivo, sai com o código que recebeu e nada acontece.
 
@@ -100,8 +102,24 @@ def main() -> int:
     print(f"↻ cepa: próxima sessão em {repo} (modo {modo}) — CEPA_ENCADEAR=off desliga",
           file=sys.stderr)
     os.chdir(repo)
-    os.execv(cepa, [cepa, "--modo", modo, "--proposito", brief, brief])
+    os.execv(cepa, [cepa, "--modo", modo, *intencao_args(spec.get("intencao"), nxt), brief])
     return rc  # unreachable
+
+
+def intencao_args(it, nxt) -> list:
+    """Flags do `cepa` que gravam a intenção da sessão seguinte. Só com as três
+    partes escritas para ela; o brief fala da sessão que saiu e não vira propósito."""
+    if it is None:
+        return []
+    plano = it.get("plano") if isinstance(it, dict) else None
+    textos = [it.get(k) for k in ("proposito", "para_quando")] if isinstance(it, dict) else []
+    if not (len(textos) == 2 and all(isinstance(t, str) and t.strip() for t in textos)
+            and isinstance(plano, list) and plano
+            and all(isinstance(i, str) and i.strip() and "\n" not in i for i in plano)):
+        print(f"⚠ cepa: intenção inválida em {nxt}; a sessão seguinte abre sem ela",
+              file=sys.stderr)
+        return []
+    return ["--proposito", textos[0], "--para-quando", textos[1], "--plano", "\n".join(plano)]
 
 
 if __name__ == "__main__":

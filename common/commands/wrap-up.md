@@ -240,8 +240,9 @@ a one-shot marker the SessionEnd hook consumes after your final turn:
   ```
   Ele lê a zona NOTE do handoff escrito no L3 e, se achar a linha
   `**Próximo:** repo=<caminho> modo=<modo> comando=<comando>`, escreve
-  `<root>/.claude/sessions/<session_id>.next.json` com esses três campos e o
-  brief igual ao parágrafo `## Próximo passo`. É esse arquivo que o launcher
+  `<root>/.claude/sessions/<session_id>.next.json` com esses três campos, o
+  brief igual ao parágrafo `## Próximo passo` e, quando o handoff traz
+  `**Intenção:**`, `**Meta:**` e `**Plano:**`, a intenção da sessão seguinte. É esse arquivo que o launcher
   `cepa` lê quando você dá `exit`, para abrir a sessão seguinte no repo e no
   modo certos sem você digitar (CS-3). Sem a linha, ele não escreve nada, e
   isso não é erro: o handoff sem `Próximo:` continua válido. A primeira linha

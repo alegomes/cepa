@@ -11,6 +11,13 @@ Achou: escreve `<raiz-principal>/.claude/sessions/<session_id>.next.json` com
 `## Próximo passo` da mesma zona. É o arquivo que o launcher `cepa` lê quando
 a sessão sai (`session-chain.py`, CS-3) para abrir a seguinte sem o dono digitar.
 
+A intenção da sessão seguinte vem de três linhas opcionais da mesma seção,
+escritas na voz dela: `**Intenção:**`, `**Meta:**` e `**Plano:** a | b | c`.
+Com as três, o arquivo ganha `intencao` ({proposito, para_quando, plano}) e o
+`cepa` a grava antes do primeiro turno. Sem nenhuma, a sessão seguinte nasce sem
+intenção: o brief fala da sessão que saiu e não serve de propósito para a outra.
+Só parte delas é linha inutilizável.
+
 Sem a linha, não escreve nada e diz isso: handoff sem `Próximo:` continua
 válido, a sessão só não encadeia. Linha presente mas inutilizável (repo que não
 existe, modo desconhecido, brief vazio) também não escreve, e diz o motivo: um
@@ -35,6 +42,9 @@ NOTE_RE = re.compile(r"<!-- HANDOFF:NOTE -->(.*?)<!-- /HANDOFF:NOTE -->", re.S)
 LINHA_RE = re.compile(r"^\s*\*\*Próximo:\*\*\s*(.*)$", re.M)
 CHAVE_RE = re.compile(r"(?:^|\s)(repo|modo|comando)=")
 SECAO_RE = re.compile(r"^##\s+Próximo passo\s*$", re.M)
+INTENCAO_RE = {campo: re.compile(rf"^\s*\*\*{rotulo}:\*\*\s*(.*)$", re.M)
+               for campo, rotulo in (("proposito", "Intenção"), ("para_quando", "Meta"),
+                                     ("plano", "Plano"))}
 
 
 def note_zone(texto: str) -> str:
@@ -53,17 +63,35 @@ def parse_linha(resto: str) -> dict:
     return campos
 
 
-def brief_da_secao(note: str) -> str:
-    """O parágrafo de `## Próximo passo`, sem a linha `**Próximo:**`."""
+def secao(note: str) -> str:
+    """O corpo de `## Próximo passo`, até a próxima seção."""
     m = SECAO_RE.search(note)
     if not m:
         return ""
     corpo = note[m.end():]
     prox = re.search(r"^##\s", corpo, re.M)
-    if prox:
-        corpo = corpo[:prox.start()]
-    corpo = LINHA_RE.sub("", corpo)
-    return corpo.strip()
+    return corpo[:prox.start()] if prox else corpo
+
+
+def brief_da_secao(note: str) -> str:
+    """O parágrafo de `## Próximo passo`, sem a linha `**Próximo:**` nem as da intenção."""
+    corpo = LINHA_RE.sub("", secao(note))
+    for r in INTENCAO_RE.values():
+        corpo = r.sub("", corpo)
+    return re.sub(r"\n{3,}", "\n\n", corpo).strip()
+
+
+def intencao_da_secao(note: str) -> dict:
+    """As linhas da intenção da sessão seguinte que estão presentes e não vazias."""
+    corpo = secao(note)
+    achados = {}
+    for campo, r in INTENCAO_RE.items():
+        m = r.search(corpo)
+        if m and m.group(1).strip():
+            achados[campo] = m.group(1).strip()
+    if "plano" in achados:
+        achados["plano"] = [i.strip() for i in achados["plano"].split("|") if i.strip()]
+    return achados
 
 
 def main() -> int:
@@ -88,6 +116,9 @@ def main() -> int:
     campos = parse_linha(m.group(1))
     repo, modo, comando = campos.get("repo", ""), campos.get("modo", ""), campos.get("comando", "")
     brief = brief_da_secao(note)
+    intencao = intencao_da_secao(note)
+    faltam_intencao = [r for c, r in (("proposito", "Intenção"), ("para_quando", "Meta"),
+                                      ("plano", "Plano")) if not intencao.get(c)]
     faltas = [k for k, v in (("repo", repo), ("modo", modo), ("comando", comando)) if not v]
     if faltas:
         motivo = f"a linha `**Próximo:**` não traz {', '.join(faltas)}"
@@ -99,6 +130,9 @@ def main() -> int:
         motivo = "modo reforma exige --orcamento, que o encadeamento não passa"
     elif not brief:
         motivo = "a seção `## Próximo passo` está vazia ou não existe"
+    elif intencao and faltam_intencao:
+        motivo = ("a intenção da sessão seguinte está pela metade: falta "
+                  + ", ".join(f"`**{r}:**`" for r in faltam_intencao))
     else:
         motivo = ""
     if motivo:
@@ -112,11 +146,14 @@ def main() -> int:
     d = L.sessions_dir(root)
     d.mkdir(parents=True, exist_ok=True)
     alvo = d / f"{a.session_id}.next.json"
-    alvo.write_text(json.dumps({"repo": repo, "modo": modo, "comando": comando,
-                                "brief": brief}, ensure_ascii=False, indent=2) + "\n",
-                    encoding="utf-8")
+    spec = {"repo": repo, "modo": modo, "comando": comando, "brief": brief}
+    if intencao:
+        spec["intencao"] = intencao
+    alvo.write_text(json.dumps(spec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    sobre = (f"com a intenção \"{intencao['proposito']}\"" if intencao
+             else "sem intenção (o handoff não tem `**Intenção:**`)")
     print(f"próximo passo gravado em {alvo}: ao sair, o cepa abre {repo} "
-          f"no modo {modo} ({comando})")
+          f"no modo {modo} ({comando}), {sobre}")
     return 0
 
 

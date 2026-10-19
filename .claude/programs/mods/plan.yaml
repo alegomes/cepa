@@ -25,10 +25,11 @@ items:
     o dono redefiniu o propósito: um mod só, que mantém a direção certa em vários
     níveis de orientação; recusou a faixa acima do prompt e a separação em dois
     mods.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
-    o certo
+  human_pending: null
+  evidence: Dono confirmou em 2026-10-19 no próprio terminal (compass 0.4.0 instalado);
+    painel Sessão mostra texto errado, ver item seguinte.
 - id: M2
   title: 'Nível 3 do compass: modo da sessão e condição de saída lidos de .claude/session-mode;
     contagem dos desvios registrados pelo off-mode-capture em .claude/desvios.md,

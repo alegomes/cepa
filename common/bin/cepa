@@ -45,11 +45,15 @@
 # Desligue com CEPA_ENCADEAR=off. Detalhe em common/hooks/session-chain.py.
 #
 #   cepa --proposito "<texto>"   # grava o texto como propósito da sessão
+#   cepa --proposito "<p>" --para-quando "<meta>" --plano "<passo 1>
+#   <passo 2>"                   # grava a intenção inteira (um passo por linha)
 #
-# `--proposito` é o que o encadeamento usa para registrar o brief como propósito
-# da sessão seguinte, antes do primeiro turno (via cepa-intencao, o único
-# escritor de .claude/session-intent). O ponto de parada e o plano gravados
-# falam da sessão anterior. O valor não vai para o claude. Falha ao gravar avisa e a sessão abre do mesmo jeito.
+# O encadeamento passa as três quando o handoff da sessão anterior escreveu a
+# intenção da seguinte (linhas `**Intenção:**`, `**Meta:**` e `**Plano:**`), e
+# nenhuma quando não escreveu: o brief fala da sessão que saiu e não vira
+# propósito. A gravação é antes do primeiro turno, via cepa-intencao, o único
+# escritor de .claude/session-intent. Só `--proposito` grava ponto de parada e
+# plano genéricos. Os valores não vão para o claude. Falha ao gravar avisa e a sessão abre do mesmo jeito.
 #
 # Toda sessão nasce em bypassPermissions, porque o modo `auto` do Claude Code
 # interrompe uma rotina longa: ele consulta um classificador a cada comando e,
@@ -278,12 +282,19 @@ write_intencao() {
   [ -n "$PROPOSITO" ] || return 0
   command -v python3 >/dev/null 2>&1 || return 0
   [ -f "$INTENCAO_BIN" ] || return 0
+  _idir=$1
+  # Um passo do plano por linha vira um argumento de --plano; sem glob.
+  set -f
+  _ifs=$IFS; IFS='
+'
+  set -- ${PLANO:-cumprir o próximo passo deixado pela sessão anterior}
+  IFS=$_ifs; set +f
   _ierr=$(mktemp 2>/dev/null) || _ierr=/dev/null
-  if _ires=$(cd "$1" && python3 "$INTENCAO_BIN" gravar \
+  if _ires=$(cd "$_idir" && python3 "$INTENCAO_BIN" gravar \
       --proposito "$PROPOSITO" \
-      --para-quando "o próximo passo deixado pela sessão anterior cumprido" \
-      --plano "cumprir o próximo passo deixado pela sessão anterior" \
-      --motivo "sessão aberta pelo encadeamento; o brief da sessão anterior é o propósito" \
+      --para-quando "${PARA_QUANDO:-o próximo passo deixado pela sessão anterior cumprido}" \
+      --motivo "sessão aberta pelo cepa com a intenção na linha de comando" \
+      --plano "$@" \
       2>"$_ierr"); then
     printf '◆ intenção: %s\n' "$_ires" >&2
   else
@@ -344,6 +355,8 @@ PICK=0
 MODO="${CEPA_MODO_DEFAULT:-}"
 ORCAMENTO=""
 PROPOSITO=""
+PARA_QUANDO=""
+PLANO=""
 PROMPT_REF="${CEPA_PROMPT:-}"
 PROMPT_MODO="${CEPA_PROMPT_MODO:-append}"
 while [ $# -gt 0 ]; do
@@ -360,6 +373,14 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { printf '✗ cepa: --proposito exige um valor\n' >&2; exit 2; }
       PROPOSITO="$2"; shift 2 ;;
     --proposito=*) PROPOSITO="${1#--proposito=}"; shift ;;
+    --para-quando)
+      [ $# -ge 2 ] || { printf '✗ cepa: --para-quando exige um valor\n' >&2; exit 2; }
+      PARA_QUANDO="$2"; shift 2 ;;
+    --para-quando=*) PARA_QUANDO="${1#--para-quando=}"; shift ;;
+    --plano)
+      [ $# -ge 2 ] || { printf '✗ cepa: --plano exige um valor\n' >&2; exit 2; }
+      PLANO="$2"; shift 2 ;;
+    --plano=*) PLANO="${1#--plano=}"; shift ;;
     --prompt)
       [ $# -ge 2 ] || { printf '✗ cepa: --prompt exige um valor\n' >&2; exit 2; }
       PROMPT_REF="$2"; PROMPT_MODO="append"; shift 2 ;;

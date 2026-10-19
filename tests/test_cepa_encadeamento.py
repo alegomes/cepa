@@ -19,8 +19,10 @@ Contratos guardados aqui:
   - sem o arquivo: o stub roda uma vez só e o código de saída dele é o do cepa;
   - CEPA_ENCADEAR=off: uma vez só, o arquivo fica;
   - arquivo inválido (repo inexistente): uma vez só, o arquivo fica, e o cepa diz;
-  - a sessão seguinte nasce com o brief gravado como propósito (`--proposito`,
-    via cepa-intencao), plano de 1 item e passo 1; intenção anterior vai para o
+  - com `intencao` no arquivo, a sessão seguinte nasce com ela (propósito,
+    meta e plano escritos para ela, passo 1, via cepa-intencao); sem `intencao`,
+    nasce sem intenção, porque o brief fala da sessão que saiu; `intencao`
+    inválida avisa e a sessão abre sem ela; intenção anterior vai para o
     histórico; falha ao gravar avisa e a sessão abre; sem `--proposito`, nada;
   - o `.next.json` não é lido como sessão pelo registro (`read_entries`);
   - sem o SessionEnd, o registro da sessão que saiu não faz a seguinte se
@@ -187,15 +189,10 @@ def t_encadeia():
                   c[0]["launch_id"] and c[1]["launch_id"]
                   and c[0]["launch_id"] != c[1]["launch_id"], repr(c))
             check("a primeira abertura não tem intenção", c[0]["intent"] == "", repr(c[0]["intent"]))
-            it = _modos.parse_intent(c[1]["intent"])
-            check("a intenção da segunda é o brief (espaços colapsados)",
-                  it.get("proposito") == " ".join(BRIEF.split()), repr(it.get("proposito")))
-            check("o plano tem exatamente 1 item", len(it.get("plano") or []) == 1, repr(it.get("plano")))
-            check("o passo é 1", it.get("passo") == 1, repr(it.get("passo")))
-            check("--proposito não vaza para o claude", "--proposito" not in c[1]["args"],
-                  repr(c[1]["args"]))
+            check("sem `intencao` no arquivo, a segunda nasce sem intenção (o brief não vira propósito)",
+                  c[1]["intent"] == "", repr(c[1]["intent"]))
         check("o .next.json foi apagado", not (w.sessions / "sess-1.next.json").exists())
-        check("o cepa diz a intenção gravada", "◆ intenção:" in r.stderr, r.stderr)
+        check("o cepa não diz intenção gravada", "◆ intenção:" not in r.stderr, r.stderr)
         check("a anotação do launch foi apagada", not list(w.sessions.glob("*.launch")))
         check("o cepa diz que encadeou", "próxima sessão em" in r.stderr, r.stderr)
         check("a sessão seguinte não foi isolada numa worktree",
@@ -203,8 +200,46 @@ def t_encadeia():
         check("sai 0", r.returncode == 0, f"rc={r.returncode}")
 
 
+INTENCAO = {"proposito": "Grelhar o dono no epic contratos-e-regras",
+            "para_quando": "cada ciclo com roteiro em tela e em backend",
+            "plano": ["abrir o epic", "grelhar ciclo a ciclo"]}
+
+
+def t_encadeia_com_intencao():
+    print("com `intencao` no arquivo, a sessão seguinte nasce com ela, não com o brief")
+    with World() as w:
+        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF, "intencao": INTENCAO})
+        c = w.calls()
+        check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
+        if len(c) == 2:
+            it = _modos.parse_intent(c[1]["intent"])
+            check("o propósito é o da intenção", it.get("proposito") == INTENCAO["proposito"],
+                  repr(it.get("proposito")))
+            check("a meta é a da intenção", it.get("para_quando") == INTENCAO["para_quando"],
+                  repr(it.get("para_quando")))
+            check("o plano tem os dois passos, em ordem", it.get("plano") == INTENCAO["plano"],
+                  repr(it.get("plano")))
+            check("o passo é 1", it.get("passo") == 1, repr(it.get("passo")))
+            check("o brief continua o prompt inicial", c[1]["args"][-1:] == [BRIEF], repr(c[1]["args"]))
+            check("as flags da intenção não vazam para o claude",
+                  not {"--proposito", "--para-quando", "--plano"} & set(c[1]["args"]), repr(c[1]["args"]))
+        check("o cepa diz a intenção gravada", "◆ intenção:" in r.stderr, r.stderr)
+
+
+def t_intencao_invalida_abre_sem():
+    print("`intencao` inválida: avisa e a sessão seguinte abre sem intenção")
+    with World() as w:
+        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF,
+                       "intencao": {"proposito": "x", "para_quando": "", "plano": ["a"]}})
+        c = w.calls()
+        check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
+        if len(c) == 2:
+            check("a segunda nasce sem intenção", c[1]["intent"] == "", repr(c[1]["intent"]))
+        check("o cepa avisa", "intenção inválida" in r.stderr, r.stderr)
+
+
 def t_intencao_anterior_vai_para_historico():
-    print("repo de destino já tinha intenção: o brief a substitui e a antiga vai ao histórico")
+    print("repo de destino já tinha intenção: a nova a substitui e a antiga vai ao histórico")
     with World() as w:
         antiga = {"proposito": "antigo", "para_quando": "x", "plano": ["a"], "passo": 1,
                   "passo_desde": "2026-01-01T00:00:00Z", "session_id": "", "branch": "master",
@@ -212,12 +247,12 @@ def t_intencao_anterior_vai_para_historico():
                   "historico": []}
         (w.b / ".claude").mkdir()
         (w.b / ".claude" / "session-intent").write_text(_modos.render_intent(antiga))
-        w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF})
+        w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF, "intencao": INTENCAO})
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"{len(c)}")
         if len(c) == 2:
             it = _modos.parse_intent(c[1]["intent"])
-            check("o propósito agora é o brief", it.get("proposito") == " ".join(BRIEF.split()),
+            check("o propósito agora é o da intenção", it.get("proposito") == INTENCAO["proposito"],
                   repr(it.get("proposito")))
             hist = it.get("historico") or []
             check("o histórico guarda o propósito antigo",
@@ -398,6 +433,8 @@ def t_registro_ignora_next():
 
 if __name__ == "__main__":
     t_encadeia()
+    t_encadeia_com_intencao()
+    t_intencao_invalida_abre_sem()
     t_intencao_anterior_vai_para_historico()
     t_proposito_direto_na_worktree()
     t_proposito_em_branch_session()

@@ -58,6 +58,9 @@ Write tight, scannable Markdown — a handoff, not a transcript. Structure:
 ## Próximo passo
 <a ÚNICA coisa mais importante a fazer a seguir — concreta, acionável>
 **Próximo:** repo=<caminho absoluto> modo=<modo> comando=<comando e argumentos>   ← opcional
+**Intenção:** <propósito da sessão seguinte, na voz dela>   ← opcional, com Meta e Plano
+**Meta:** <quando a sessão seguinte pode parar>
+**Plano:** <passo 1> | <passo 2> | …
 
 ## ⚠ Cuidados / pendências
 - <armadilhas, "não-live até reinstall", coisas a não esquecer>
@@ -73,6 +76,12 @@ Rules:
   modo=descoberta comando=/common:epic contratos-e-regras`). O `/common:wrap-up`
   a transforma no `.next.json` que o launcher `cepa` lê no `exit`, e o parágrafo
   de `## Próximo passo` vira o brief dessa sessão. Sem a linha, nada encadeia.
+- **`**Intenção:**`, `**Meta:**` e `**Plano:**` viram a intenção da sessão
+  encadeada** (o `.claude/session-intent` que o painel compass mostra). Escreva
+  as três, ou nenhuma, na voz da sessão SEGUINTE: "Redesenhar o M2 como nível 3
+  do compass", nunca "Painel instalado ao fim desta sessão", que fala desta. O
+  plano separa passos com ` | `. Sem as três, a sessão seguinte nasce sem
+  intenção e grava a sua; o parágrafo do brief nunca vira propósito.
 - **Concrete over vague.** "Fix the bug" is useless; "rodar `bin/install.sh
   --clean` + restart para os hooks novos valerem" is useful. Cite commits /
   `file:line` where it helps.
