@@ -86,8 +86,10 @@ items:
   status: done
   blocked_by:
   - M1
-  human_pending: dono ver o aviso de gate no próprio terminal (compass 0.8.0, depois
-    de reiniciar a sessão) e confirmar que mostra o certo
-  evidence: 'dono viu o aviso do worktree-guard no cartão Modo do compass 0.8.0
-    em 2026-10-19 (print: ''Merge barrado: a branch main está em uso por outra sessão
-    viva'', 2º bloqueio da sessão) e confirmou que mostra o certo'
+  human_pending: null
+  evidence: 'Resposta do dono em 2026-10-19: Deu certo. Rota humana fechada pelo
+    dono: dono ver o aviso de gate no próprio terminal (compass 0.8.0, depois de
+    reiniciar a sessão) e confirmar que mostra o certo. Evidência anterior: dono
+    viu o aviso do worktree-guard no cartão Modo do compass 0.8.0 em 2026-10-19
+    (print: ''Merge barrado: a branch main está em uso por outra sessão viva'',
+    2º bloqueio da sessão) e confirmou que mostra o certo'
