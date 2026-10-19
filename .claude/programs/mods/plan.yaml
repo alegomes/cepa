@@ -1,0 +1,80 @@
+# plan.yaml — fila `single-track`, escrita por /common:plan.
+#
+# ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
+# critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
+# perde o motivo. Schema anotado: common/plan-schema.yaml.
+#
+# Quem lê: /common:next (nomeia UM próximo passo). `human_pending` só o humano
+# fecha — agente nenhum troca o texto por null por conta própria.
+#
+# Fonte das demandas: Propostas de aplicação de mods do Claude Code, conversa de 2026-10-18/19 na sessão session/oncoto; dono aprovou M1 primeiro e pediu que M2-M6 não se percam; em 2026-10-19 redefiniu o M1 como o mod cepa-rumo de orientação em níveis
+# Escrito em: 2026-10-19
+
+schema_version: 2
+mode: single-track
+program: mods
+source: Propostas de aplicação de mods do Claude Code, conversa de 2026-10-18/19
+  na sessão session/oncoto; dono aprovou M1 primeiro e pediu que M2-M6 não se percam;
+  em 2026-10-19 redefiniu o M1 como o mod cepa-rumo de orientação em níveis
+items:
+- id: M1
+  title: 'Mod cepa-rumo: painel à direita que orienta em níveis. Nível 1: filas
+    single-track com contagem, próximo item e item travado. Nível 2: intenção, plano
+    e passo da sessão. A granularidade cresce com o tempo'
+  why: 'Primeiro teste de mod, escolhido pelo dono em 2026-10-19. Em 2026-10-19
+    o dono redefiniu o propósito: um mod só, que mantém a direção certa em vários
+    níveis de orientação; recusou a faixa acima do prompt e a separação em dois
+    mods.'
+  status: pending
+  blocked_by: []
+  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
+    o certo
+- id: M2
+  title: 'Faixa do modo: modo e condição de saída do session-mode acima do prompt;
+    aviso quando o off-mode-capture registra desvio'
+  why: 'Segundo: mesma mecânica de leitura do M1, superfície diferente (faixa acima
+    do prompt), sem risco.'
+  status: pending
+  blocked_by:
+  - M1
+  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
+    o certo
+- id: M3
+  title: 'Painel da fila: próximo item, porquê e contagem de prontos de .claude/programs/<nome>/plan.yaml'
+  why: 'Absorvido pelo M1 em 2026-10-19: o nível 1 do cepa-rumo já mostra as filas,
+    a contagem e o próximo item. Falta só o porquê do próximo item, que entra como
+    granularidade nova do M1.'
+  status: dropped
+  blocked_by:
+  - M1
+  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
+    o certo
+  evidence: Coberto pelo nível 1 do mod cepa-rumo (~/.claude/dev-mods/<sessão>/cepa-rumo).
+- id: M6
+  title: 'Build na faixa: verde/vermelho/desatualizado e idade, lendo o que capture-build-result.py
+    e mark-build-stale.py gravam'
+  why: 'Quarto: só leitura, cabe na faixa do M2.'
+  status: pending
+  blocked_by:
+  - M2
+  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
+    o certo
+- id: M4
+  title: 'Acompanhamento do cepa-until: item atual e tempo do run lendo o .jsonl;
+    aviso com som no fim ou na parada por cota'
+  why: 'Quinto: exige relógio do mod ($.clock) e som; mais peças novas que os anteriores.'
+  status: pending
+  blocked_by:
+  - M1
+  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
+    o certo
+- id: M5
+  title: 'Aviso de gate: quando gate-advance, acceptance-gate ou worktree-guard
+    barram, aviso com o motivo em uma frase leiga'
+  why: 'Último: o único que escuta o resultado de chamada de ferramenta; maior risco
+    de interferir no fluxo. Não reescreve os gates Python, só lê a saída deles.'
+  status: pending
+  blocked_by:
+  - M1
+  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
+    o certo
