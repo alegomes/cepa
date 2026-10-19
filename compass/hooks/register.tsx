@@ -4,21 +4,24 @@ import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 import type { Fila } from '../types'
 import { aberta, COLUNAS, contaFila } from './filas'
 import { idade, parseIntent } from './intent'
+import { COR, linhaBuild, parseBuild } from './build'
 import { contaDesvios, leSaidas, parseModo } from './modo'
 
 // Painel de orientação em níveis, do mais alto ao mais baixo:
 // 1. filas do repo e um resumo dos itens; 2. intenção, plano e passo da sessão;
-// 3. modo da sessão, a condição de saída dele e os desvios registrados.
+// 3. modo da sessão, a condição de saída dele, o estado do build e os desvios registrados.
 const PANE = 'compass'
 const ABRE = { id: PANE, title: 'Compass', columns: 48 }
 const ARQUIVO = '.claude/session-intent'
 const MODO = '.claude/session-mode'
 const DESVIOS = '.claude/desvios.md'
+const BUILD = '.claude/last-build.json'
 const texto = atom({ plugin: 'compass', key: 'texto' } as const, null)
 const agora = atom({ plugin: 'compass', key: 'agora' } as const, 0)
 const filas = atom({ plugin: 'compass', key: 'filas' } as const, [])
 const modo = atom({ plugin: 'compass', key: 'modo' } as const, null)
 const desvios = atom({ plugin: 'compass', key: 'desvios' } as const, null)
+const build = atom({ plugin: 'compass', key: 'build' } as const, null)
 const saidas = atom({ plugin: 'compass', key: 'saidas' } as const, {})
 
 let passoAnterior = 0
@@ -47,6 +50,8 @@ async function releiaModo($: EngineInterface) {
   await update($, modo, () => textoModo)
   const textoDesvios = await leSe($, DESVIOS)
   await update($, desvios, () => textoDesvios)
+  const textoBuild = await leSe($, BUILD)
+  await update($, build, () => textoBuild)
   const d = contaDesvios(textoDesvios ?? '')
   const total = d.abertos + d.resolvidos
   if (desviosAnteriores >= 0 && total > desviosAnteriores) $.ui.toast(`Desvio registrado: ${d.ultimo}`)
@@ -85,7 +90,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'compass',
-      description: 'Abre o painel de orientação: filas, intenção, modo e desvios da sessão',
+      description: 'Abre o painel de orientação: filas, intenção, modo, build e desvios da sessão',
     })
     await releiaSaidas($)
     await releia($)
@@ -121,6 +126,9 @@ export const register: Register = on => {
     const saida = m ? (await read($, saidas))[m.nome] ?? '' : ''
     const textoDesvios = await read($, desvios)
     const d = contaDesvios(textoDesvios ?? '')
+    const textoBuild = await read($, build)
+    const b = textoBuild === null ? null : parseBuild(textoBuild)
+    const momento = await read($, agora)
 
     const cartao = (titulo: string, direita: string, corpo: RenderChildren) => (
       <Box flexDirection="column" borderStyle="round" borderDimColor paddingX={1}>
@@ -170,7 +178,12 @@ export const register: Register = on => {
         {m === null && <Text dimColor>Esta sessão não declarou modo.</Text>}
         {m !== null && saida !== '' && <Text>fecha quando: {saida}</Text>}
         {m !== null && m.orcamento !== '' && <Text dimColor>orçamento: {m.orcamento}</Text>}
-        <Box flexDirection="row" marginTop={m === null ? 0 : 1}>
+        <Box flexDirection="row" marginTop={1}>
+          <Text dimColor>build: </Text>
+          {b === null && <Text dimColor>nenhum registrado</Text>}
+          {b !== null && <Text color={COR[b.estado]} bold={b.estado === 'vermelho'}>{linhaBuild(b, momento)}</Text>}
+        </Box>
+        <Box flexDirection="row">
           {d.abertos + d.resolvidos === 0 && <Text dimColor>nenhum desvio registrado</Text>}
           {d.abertos + d.resolvidos > 0 && (
             <Text color={d.abertos > 0 ? 'yellow' : undefined} dimColor={d.abertos === 0}>

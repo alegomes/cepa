@@ -1,5 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
+import { linhaBuild, parseBuild } from './build'
 import { idade, parseIntent } from './intent'
 import { contaDesvios, leSaidas, parseModo } from './modo'
 
@@ -273,4 +274,66 @@ test('colunas de número não encolhem quando o nome da fila é longo', async ($
   // cabeçalho + 3 filas single-track, 5 colunas cada
   expect(caixas.length).toBe(20)
   expect(caixas.every((b: any) => b.props.flexShrink === 0)).toBe(true)
+})
+
+const BUILD = (status: string, at: string, extra = '') => `{"status": "${status}", "at": "${at}", "command": "x", "kind": "pytest"${extra}}`
+
+const BUILD_STALE = `{"status": "STALE", "since": "2026-10-19T10:09:00Z", "after_edit_to": "compass/hooks/register.tsx",
+  "last_known_status": "FAILURE", "last_known_at": "2026-10-19T08:12:00Z", "last_known_command": "pytest"}`
+
+test('parseBuild traduz os quatro status e guarda o anterior do STALE', async () => {
+  const t = Date.parse('2026-10-19T10:12:00Z')
+  expect(parseBuild(BUILD('SUCCESS', '2026-10-19T10:00:00Z'))).toEqual({ estado: 'verde', em: '2026-10-19T10:00:00Z', anterior: null, anteriorEm: '' })
+  expect(parseBuild(BUILD('failure', '2026-10-19T10:00:00Z'))?.estado).toBe('vermelho')
+  expect(parseBuild(BUILD('EMPTY', '2026-10-19T10:00:00Z', ', "tests_run": 0'))?.estado).toBe('vazio')
+  expect(parseBuild(BUILD_STALE)).toEqual({ estado: 'desatualizado', em: '2026-10-19T10:09:00Z', anterior: 'vermelho', anteriorEm: '2026-10-19T08:12:00Z' })
+  expect(parseBuild('{"status": "ALGO"}')?.estado).toBe('desconhecido')
+  expect(parseBuild('{"status": "STALE"}')).toEqual({ estado: 'desatualizado', em: '', anterior: 'desconhecido', anteriorEm: '' })
+  expect(parseBuild('não é json')).toBe(null)
+  expect(parseBuild('[1]')?.estado).toBe('desconhecido')
+  expect(linhaBuild(parseBuild(BUILD('SUCCESS', '2026-10-19T10:00:00Z'))!, t)).toBe('verde há 12 min')
+  expect(linhaBuild(parseBuild(BUILD_STALE)!, t)).toBe('desatualizado há 3 min · era vermelho há 2 h')
+  expect(linhaBuild(parseBuild('{"status": "STALE"}')!, t)).toBe('desatualizado')
+  expect(linhaBuild(parseBuild('{"status": "SUCCESS"}')!, t)).toBe('verde')
+})
+
+test('nível 3: build verde com a idade, em verde', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': MODO, '.claude/last-build.json': BUILD('SUCCESS', '2026-10-19T10:00:00Z') })
+  const linha = await ui.find({ type: 'Text', text: 'verde há 12 min' })
+  expect(linha?.props?.color).toBe('green')
+  expect(linha?.props?.bold).toBeFalsy()
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  expect(textos.indexOf('Modo') < textos.indexOf('verde há 12 min')).toBe(true)
+})
+
+test('nível 3: build vermelho em vermelho e negrito', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/last-build.json': BUILD('FAILURE', '2026-10-19T08:12:00Z') })
+  const linha = await ui.find({ type: 'Text', text: 'vermelho há 2 h' })
+  expect(linha?.props?.color).toBe('red')
+  expect(linha?.props?.bold).toBe(true)
+})
+
+test('nível 3: build vazio em amarelo', async ($, on) => {
+  const vazio = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/last-build.json': BUILD('EMPTY', '2026-10-19T10:00:00Z') })
+  expect((await vazio.find({ type: 'Text', text: 'vazio há 12 min' }))?.props?.color).toBe('yellow')
+})
+
+test('nível 3: build desatualizado mostra o que era antes', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', null, { '.claude/last-build.json': BUILD_STALE })
+  expect((await ui.find({ type: 'Text', text: 'desatualizado há 3 min · era vermelho há 2 h' }))?.props?.color).toBe('yellow')
+})
+
+test('sem last-build.json, o nível 3 diz que não há build registrado', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO)
+  expect(await ui.find({ type: 'Text', text: 'nenhum registrado' })).toBeTruthy()
+})
+
+test('o build é relido a cada 5 s: o verde vira desatualizado sem novo turno', async ($, on) => {
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, { '.claude/last-build.json': BUILD('SUCCESS', '2026-10-19T10:00:00Z') })
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: 'verde há 12 min' })).toBeTruthy()
+  arquivos['.claude/last-build.json'] = BUILD_STALE
+  await relogio.advance(5000)
+  expect(await ui.find({ type: 'Text', text: 'desatualizado há 3 min · era vermelho há 2 h' })).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: 'verde há 12 min' })).toEqual([])
 })

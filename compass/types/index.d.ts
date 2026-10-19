@@ -19,6 +19,7 @@ declare module 'claude-code' {
       filas: Fila[]
       modo: string | null
       desvios: string | null
+      build: string | null
       saidas: Record<string, string>
     }
   }
