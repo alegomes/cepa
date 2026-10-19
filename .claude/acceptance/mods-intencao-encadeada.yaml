@@ -1,0 +1,73 @@
+schema_version: 1
+card: mods-intencao-encadeada
+status: complete
+audited_at: 2026-10-19
+head: 51ae790
+base: 89a8762
+criteria:
+  - id: AC1
+    text: "Handoff com Intenção/Meta/Plano: session-next.py grava intencao no .next.json e as 3 linhas saem do brief"
+    altitude: cli
+    surface: "common/hooks/session-next.py executado como subprocesso sobre um handoff, lendo o .next.json escrito"
+    demonstrated_by:
+      test: "tests/test_wrapup_proximo_passo.py, bloco 'com as três linhas: grava a intenção e tira as linhas do brief'"
+      layer: subprocess do script real, handoff em arquivo, .next.json lido do disco
+      evidence: verified
+      run: "python3 tests/test_wrapup_proximo_passo.py -> ok intencao; ok brief sem as linhas da intenção; ok saída cita a intenção; fecha com 'todos ok'"
+    verdict: complete
+    gap: ""
+  - id: AC2
+    text: "So parte das 3 linhas: nada escrito, exit 2, motivo diz o que falta"
+    altitude: cli
+    surface: "session-next.py (exit code, arquivo ausente, saída)"
+    demonstrated_by:
+      test: "tests/test_wrapup_proximo_passo.py, bloco 'intenção pela metade' (Intenção+Plano sem Meta)"
+      layer: subprocess do script real
+      evidence: verified
+      run: "python3 tests/test_wrapup_proximo_passo.py -> ok exit 2; ok nada escrito; ok motivo cita a Meta; 'todos ok'"
+    verdict: complete
+    gap: "Residuo: so a combinacao sem Meta e testada; as outras combinacoes parciais passam pelo mesmo ramo mas nao tem caso proprio. Nao impede COMPLETE."
+  - id: AC3
+    text: "Nenhuma das 3 linhas: .next.json sem intencao; a sessao encadeada abre SEM session-intent vindo do brief"
+    altitude: cli
+    surface: "launcher real common/bin/cepa + session-chain.py com claude stub; session-intent visto pelo stub na 2a abertura"
+    demonstrated_by:
+      test: "tests/test_wrapup_proximo_passo.py (sem as linhas: 'sem as linhas da intenção, nada de intencao', 'saída diz que vai sem intenção', e encadeamento so com --modo + brief) e tests/test_cepa_encadeamento.py::t_encadeia ('sem intencao no arquivo, a segunda nasce sem intenção (o brief não vira propósito)')"
+      layer: end to end no launcher (cepa real, stub claude, 2 aberturas)
+      evidence: verified
+      run: "python3 tests/test_cepa_encadeamento.py -> 'OK' (t_encadeia passou); python3 tests/test_wrapup_proximo_passo.py -> 'todos ok'"
+    verdict: complete
+    gap: ""
+  - id: AC4
+    text: "Com intencao: sessao encadeada tem session-intent com proposito/para_quando/plano em ordem/passo 1; flags nao vazam; brief segue como prompt inicial"
+    altitude: cli
+    surface: "launcher real cepa com claude stub; session-intent parseado na 2a abertura; args do claude"
+    demonstrated_by:
+      test: "tests/test_cepa_encadeamento.py::t_encadeia_com_intencao (+ t_intencao_anterior_vai_para_historico); elo session-chain->cepa em tests/test_wrapup_proximo_passo.py ('flags da intenção + brief')"
+      layer: end to end no launcher
+      evidence: verified
+      run: "python3 tests/test_cepa_encadeamento.py -> 'OK'; python3 tests/test_wrapup_proximo_passo.py -> 'todos ok'"
+    verdict: complete
+    gap: ""
+  - id: AC5
+    text: "intencao invalida no .next.json: cepa avisa e a proxima sessao abre sem intencao"
+    altitude: cli
+    surface: "launcher real cepa, stderr e session-intent da 2a abertura"
+    demonstrated_by:
+      test: "tests/test_cepa_encadeamento.py::t_intencao_invalida_abre_sem"
+      layer: end to end no launcher
+      evidence: verified
+      run: "python3 tests/test_cepa_encadeamento.py -> 'OK' (stub rodou 2x, intent vazio, stderr contem 'intenção inválida')"
+    verdict: complete
+    gap: "Residuo: so um tipo de invalidez (para_quando vazio) e exercitado."
+  - id: AC6
+    text: "handoff.md e wrap-up.md documentam as 3 linhas, na voz da sessao seguinte"
+    altitude: domain
+    surface: "texto dos comandos common/commands/handoff.md e wrap-up.md"
+    demonstrated_by:
+      test: "leitura do diff 89a8762..51ae790 + grep; tests/test_wrapup_proximo_passo.py checa as 3 marcas em handoff.md"
+      layer: documentacao (prompt do comando); nao ha altitude mais externa testavel
+      evidence: verified
+      run: "grep -c das 3 marcas em handoff.md e wrap-up.md > 0; teste automatizado 'handoff.md documenta a intenção da sessão seguinte' ok. handoff.md tem a regra de voz ('na voz da sessão SEGUINTE', com exemplo certo e errado)."
+    verdict: complete
+    gap: "Residuo: wrap-up.md apenas cita a intencao no .next.json (sem repetir a regra de voz, que mora no handoff.md) e nao tem teste automatizado; so leitura."

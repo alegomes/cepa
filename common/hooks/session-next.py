@@ -42,7 +42,7 @@ NOTE_RE = re.compile(r"<!-- HANDOFF:NOTE -->(.*?)<!-- /HANDOFF:NOTE -->", re.S)
 LINHA_RE = re.compile(r"^\s*\*\*Próximo:\*\*\s*(.*)$", re.M)
 CHAVE_RE = re.compile(r"(?:^|\s)(repo|modo|comando)=")
 SECAO_RE = re.compile(r"^##\s+Próximo passo\s*$", re.M)
-INTENCAO_RE = {campo: re.compile(rf"^\s*\*\*{rotulo}:\*\*\s*(.*)$", re.M)
+INTENCAO_RE = {campo: re.compile(rf"^[ \t]*\*\*{rotulo}:\*\*[ \t]*(.*)$", re.M)
                for campo, rotulo in (("proposito", "Intenção"), ("para_quando", "Meta"),
                                      ("plano", "Plano"))}
 

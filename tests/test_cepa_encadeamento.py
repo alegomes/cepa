@@ -193,6 +193,7 @@ def t_encadeia():
                   c[1]["intent"] == "", repr(c[1]["intent"]))
         check("o .next.json foi apagado", not (w.sessions / "sess-1.next.json").exists())
         check("o cepa não diz intenção gravada", "◆ intenção:" not in r.stderr, r.stderr)
+        check("sem `intencao`, nenhum aviso de intenção inválida", "intenção inválida" not in r.stderr, r.stderr)
         check("a anotação do launch foi apagada", not list(w.sessions.glob("*.launch")))
         check("o cepa diz que encadeou", "próxima sessão em" in r.stderr, r.stderr)
         check("a sessão seguinte não foi isolada numa worktree",
@@ -227,15 +228,18 @@ def t_encadeia_com_intencao():
 
 
 def t_intencao_invalida_abre_sem():
-    print("`intencao` inválida: avisa e a sessão seguinte abre sem intenção")
-    with World() as w:
-        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF,
-                       "intencao": {"proposito": "x", "para_quando": "", "plano": ["a"]}})
-        c = w.calls()
-        check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
-        if len(c) == 2:
-            check("a segunda nasce sem intenção", c[1]["intent"] == "", repr(c[1]["intent"]))
-        check("o cepa avisa", "intenção inválida" in r.stderr, r.stderr)
+    casos = [("meta vazia", {"proposito": "x", "para_quando": "", "plano": ["a"]}),
+             ("plano vazio", {"proposito": "x", "para_quando": "m", "plano": []}),
+             ("passo com quebra de linha", {"proposito": "x", "para_quando": "m", "plano": ["a\nb"]})]
+    for nome, it in casos:
+        print(f"`intencao` inválida ({nome}): avisa e a sessão seguinte abre sem intenção")
+        with World() as w:
+            r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF, "intencao": it})
+            c = w.calls()
+            check(f"{nome}: o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
+            if len(c) == 2:
+                check(f"{nome}: a segunda nasce sem intenção", c[1]["intent"] == "", repr(c[1]["intent"]))
+            check(f"{nome}: o cepa avisa", "intenção inválida" in r.stderr, r.stderr)
 
 
 def t_intencao_anterior_vai_para_historico():
@@ -257,6 +261,23 @@ def t_intencao_anterior_vai_para_historico():
             hist = it.get("historico") or []
             check("o histórico guarda o propósito antigo",
                   any(h.get("proposito") == "antigo" for h in hist), repr(hist))
+
+
+def t_intencao_inteira_na_linha_de_comando():
+    print("--para-quando=/--plano= valem como a forma com espaço; passo com * fica literal")
+    with World() as w:
+        (w.a / "LEIAME").write_text("x")
+        r = w.run(args=["--proposito=p", "--para-quando=meta m", "--plano=*\nsegundo passo"])
+        c = w.calls()
+        check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
+        if c:
+            it = _modos.parse_intent(c[0]["intent"])
+            check("a meta veio do --para-quando=", it.get("para_quando") == "meta m", repr(it))
+            check("o plano veio do --plano=, um passo por linha, * sem virar nome de arquivo",
+                  it.get("plano") == ["*", "segundo passo"], repr(it.get("plano")))
+            check("as formas com = não vazam para o claude",
+                  not any(x.startswith(("--para-quando", "--plano")) for x in c[0]["args"]),
+                  repr(c[0]["args"]))
 
 
 def t_proposito_direto_na_worktree():
@@ -436,6 +457,7 @@ if __name__ == "__main__":
     t_encadeia_com_intencao()
     t_intencao_invalida_abre_sem()
     t_intencao_anterior_vai_para_historico()
+    t_intencao_inteira_na_linha_de_comando()
     t_proposito_direto_na_worktree()
     t_proposito_em_branch_session()
     t_proposito_forma_com_igual()

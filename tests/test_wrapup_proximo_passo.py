@@ -123,6 +123,19 @@ with World() as w:
     check("brief sem as linhas da intenção", d.get("brief") == BRIEF, repr(d.get("brief")))
     check("saída cita a intenção", "Grelhar o dono" in out, out)
 
+print("passo vazio entre barras é descartado")
+with World() as w:
+    rc, out = w.run(handoff(linha(w), brief=f"{BRIEF}\n\n**Intenção:** p\n**Meta:** m\n**Plano:** a | | b\n"))
+    d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
+    check("plano sem o passo vazio", (d.get("intencao") or {}).get("plano") == ["a", "b"], d)
+
+print("as três linhas sem texto contam como ausentes")
+with World() as w:
+    rc, out = w.run(handoff(linha(w), brief=f"{BRIEF}\n\n**Intenção:**\n**Meta:**   \n**Plano:**\n"))
+    check("exit 0", rc == 0, f"rc={rc} {out}")
+    d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
+    check("arquivo sem `intencao`", w.nxt.exists() and "intencao" not in d, d)
+
 print("intenção pela metade: não escreve e diz o que falta")
 with World() as w:
     rc, out = w.run(handoff(linha(w), brief=f"{BRIEF}\n\n**Intenção:** algo\n**Plano:** a\n"))
