@@ -83,8 +83,12 @@ items:
     barram, aviso com o motivo em uma frase leiga'
   why: 'Último: o único que escuta o resultado de chamada de ferramenta; maior risco
     de interferir no fluxo. Não reescreve os gates Python, só lê a saída deles.'
-  status: pending
+  status: in_progress
   blocked_by:
   - M1
-  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
-    o certo
+  human_pending: 'dono aceitar os dois avisos falsos do L4 (erro de Bash que cita o
+    gate; comando que só menciona worktree-guard) para o proof virar PROVEN, e ver
+    o aviso no próprio terminal (compass 0.8.0, depois de reiniciar a sessão)'
+  evidence: compass 0.8.0 (f0f4946; testes 3e6d42c); completion-auditor COMPLETE
+    em .claude/acceptance/M5.yaml; proof NEEDS-HUMAN em docs/proof/mods-M5.yaml
+    (2 rodadas, 130 perturbações, R1 e R7 equivalentes, falta só o aceite do L4).

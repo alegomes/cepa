@@ -1,0 +1,57 @@
+schema_version: 2
+card: mods-M5
+verdict: needs-human
+reviewed_at: 2026-10-19T23:00:00-03:00
+base_commit: 6c75569
+head_commit: 3e6d42c
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "compass/hooks/gate.ts", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/hooks/register.tsx", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/types/index.d.ts", module: compass, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo nao e Quarkus: mod TypeScript do Claude Code, testado pelo engine real
+    (`claude plugin test .` dentro de compass/). Superficie externa = Pane montado pelo engine ($.ui.mount)
+    e $.tool.call. O teste so fornece a fronteira distante: o deny que o classic.PreToolUse devolveria
+    (equivale a um hook Python com exit 2), a resposta do Bash e o toast; gate.ts e register.tsx reais
+    rodam, por isso substituted_by_double e null. index.d.ts so tipa o atom `gate` (nao executavel).
+    plugin.json e marketplace.json so mudam descricao/versao (fora da prova).
+    Duas rodadas. Rodada 1 em f0f4946 (77 pass, 130 perturbacoes, worktree /tmp/proof-mods-M5).
+    Rodada 2 em 3e6d42c (82 pass): `git diff --stat f0f4946 3e6d42c -- compass` mostra so
+    compass/hooks/compass.test.tsx (+54), entao gate.ts e register.tsx sao identicos e as 130 perturbacoes
+    seguem validas; reexecutei so os sobreviventes em worktree nova. Ambas removidas (git worktree list limpo);
+    arvore principal intocada.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 3e6d42c: `claude plugin test .` (em compass/) -> 82 pass, 0 fail"
+        - "Rodada 1 (f0f4946, 77 pass): 130 perturbacoes uma por vez; 99 RED, 31 GREEN (7 grupos reais R1 a R7, 15 equivalentes, 4 cosmeticas, 5 de condicao redundante)."
+        - "Rodada 2 (3e6d42c, 82 pass), reais agora RED (81 pass 1 fail cada): R2 gate.ts STALE sem arquivo `' (x)'` (#10); R3 leGuarda sem `trimStart()` (#68); R4 `\\d+` removido (#69) e `: ` -> `:` (#70); R5 register.tsx `e.command` sem checar tool (#101, #105) e constante 'worktree-guard' (#102); R6 sem `r.isError === true` (#72, #73). git status limpo apos cada."
+        - "R1 (register.tsx try/catch -> catch relanca, #100): GREEN, 82 pass 0 fail. EQUIVALENTE observavel, evidencia minha: relancar o erro nao muda nenhum resultado porque o engine pula o hook que lanca e mantem o ultimo resultado do `next` (a sonda D da rodada 1 ja mostrou o resultado do gate intacto com o toast lancando). A unica diferenca seria a linha dim de 'hook pulado' no transcript, que o teste nao enxerga. O try/catch fica para nao gerar essa linha. Classificacao conforme o coordenador, confirmada pela execucao."
+        - "R7 (gate.ts acceptance `'([^']*)'` -> `'([^']+)'`, #32): GREEN, 82 pass. EQUIVALENTE: com status vazio as duas formas deixam `status === ''` e caem na mesma frase generica ('O card barrado pelo acceptance-gate.' ou o ramo build is EMPTY), pois `entre` devolve '' nos dois casos."
+        - "Tambem GREEN e equivalentes: #7 `(\\S+)`->`(\\S*)` em 'since edit to' (vazio e omitido pelo ternario); #74 `r.isError === true && true` (typeof r.text e redundante pelo tipo)."
+        - "EQUIVALENTES da rodada 1 (sem diferenca observavel): `.trim()` do `entre` (#0); `(\\S*)` e variantes de 'cannot move' (#23 a #25); `audit is` (#33); `[^`]*` nas branches (#44); `comando !== ''` e `isError === undefined` do else-if (#76 a #78); fallback `r.text` do stdout e `typeof saida?.stdout` (#80, #83, #85)."
+        - "COSMETICOS (nao gating): `wrap=\"wrap\"` (#111); `marginTop={1}` (#116); `dimColor` da idade (#126); cast `as any` (#108); linha noop (#128); key do atom (#129)."
+    caveats: "sem ferramenta de cobertura. R1 e R7 sao aceitos como equivalentes com a evidencia acima; o dono pode pedir um teste do transcript se quiser fixar a linha de 'hook pulado'."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; 99 perturbacoes RED na rodada 1 e 11 reais na rodada 2 (#10, #68 a #70, #72, #73, #101, #102, #105); as GREEN restantes sao equivalentes ou cosmeticas; suite 82 pass 0 fail em 3e6d42c"
+  l4_adversarial_input:
+    status: findings
+    reason: ""
+    findings:
+      - "A (seguro, agora com teste na rodada 2): resultado sem erro cujo text cita [gate-advance] BLOCKED: nao gera aviso (leBloqueio so roda com isError true)."
+      - "B (falso positivo, SEM teste, risco aceito pelo coordenador na rodada 2): um Bash que FALHA (isError) e cujo erro contem `[gate-advance] BLOCKED:` (ex.: grep em log do gate) gera toast e linha amarela falsos. O resultado da chamada volta igual."
+      - "C (falso positivo, SEM teste, risco aceito pelo coordenador na rodada 2): stdout `BLOCK: <n>` de um Bash cujo comando apenas MENCIONA `worktree-guard` (ex.: `echo \"BLOCK: 1\" # worktree-guard`) gera aviso de merge barrado falso."
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "NEEDS-HUMAN: a prova de carga esta fechada (todos os sobreviventes reais da rodada 1 agora derrubam teste em 3e6d42c; R1 e R7 sao equivalentes com evidencia). Resta so a camada de entrada adversarial: B e C geram avisos falsos que nenhum teste cobre. O coordenador os aceitou como risco, mas aceitar e decisao humana e eu nao registro waiver; o nivel fica `findings`, que por regra impede PROVEN. Decisao sugerida ao dono: aceitar B e C (so um toast e uma linha amarela a mais, sem alterar o resultado da chamada). Com essa aceitacao, o card passa a PROVEN sem novo codigo."

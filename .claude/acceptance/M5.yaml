@@ -1,0 +1,65 @@
+schema_version: 1
+card: M5
+status: complete
+audited_at: 2026-10-19T16:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Quando o gate-advance barra um Bash (push, commit), o compass dispara ui.toast com UMA frase leiga específica ao motivo (sem baseline; STALE com o arquivo; EMPTY; FAILURE; FAILURE por build interrompido; desconhecido), timeoutMs 8000"
+    altitude: event
+    surface: "$.tool.call(Bash) com classic.PreToolUse negando com o texto do gate-advance; $.ui.toast interceptado por on('ui.toast')"
+    demonstrated_by:
+      test: "compass/hooks/compass.test.tsx: gate-advance barra o push: toast com a frase leiga e linha no cartão Modo (avisos igual a uma frase, timeoutMs 8000); segundo bloqueio... (STALE via git commit no engine); leBloqueio traduz cada motivo do gate-advance (as 6 frases, unit)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "cd compass && claude plugin test . -> 77 pass, 0 fail (Ran 77 tests across 1 file), head f0f4946"
+    verdict: complete
+    gap: null
+    note: "No engine só 'sem baseline' (push) e STALE (commit) disparam o toast; EMPTY, FAILURE, FAILURE interrompido e desconhecido são afirmados só em leBloqueio (unit). O ramo de disparo é o mesmo. Os textos dos fixtures conferem com as strings de common/hooks/gate-advance.py (linhas 288, 328, 332, 351)."
+  - id: AC2
+    text: "Quando o acceptance-gate barra transição de Jira (mcp__*transitionJiraIssue), o toast traz a chave do card e o motivo (sem auditoria para Done; auditoria 'X' não completa para Review; build EMPTY)"
+    altitude: event
+    surface: "$.tool.call(mcp__Atlassian__transitionJiraIssue) com deny do acceptance-gate; $.ui.toast"
+    demonstrated_by:
+      test: "acceptance-gate barra a transição no Jira (MCP): toast com a chave do card (Review, WEGO-2202); segundo bloqueio... (Done, WEGO-1891, no engine); leBloqueio traduz o acceptance-gate com a chave do card (EMPTY e motivo desconhecido, unit)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 77 pass, 0 fail (f0f4946)"
+    verdict: complete
+    gap: null
+    note: "Build EMPTY do acceptance-gate é afirmado só em unit."
+  - id: AC3
+    text: "Bash que chama worktree-guard.py e imprime BLOCK: na primeira linha: toast com a(s) branch(es) presa(s); resultado devolvido exatamente igual (sem deny). Nos denies de AC1/AC2 o resultado também volta igual"
+    altitude: event
+    surface: "$.tool.call(Bash 'python3 .../worktree-guard.py') respondido por on('tool.call',{tool:'Bash'}); resultado lido pelo chamador"
+    demonstrated_by:
+      test: "worktree-guard imprime BLOCK: no stdout de um Bash que saiu com 0: toast, e o resultado volta igual (r.result toEqual, r.deny undefined, toast com a branch); gate-advance barra o push (r.isError true, r.text igual ao motivo); leGuarda (uma e duas branches, unit)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 77 pass, 0 fail (f0f4946)"
+    verdict: complete
+    gap: null
+    note: "No deny do acceptance-gate (AC2) o teste afirma isError true mas não compara r.text; a igualdade do text é afirmada só no deny do gate-advance. O código é o mesmo (return r). Duas branches presas só em unit. Diff não toca common/ (0 arquivos), os gates Python estão intactos."
+  - id: AC4
+    text: "Cartão Modo mostra a frase do último bloqueio em amarelo, linha dim com gate, idade (há N min, cresce com o relógio) e, a partir do segundo, Nº bloqueio da sessão; bloqueio novo substitui o anterior; linha entre Modo e Run; sem bloqueio não existe"
+    altitude: ui
+    surface: "Pane do compass montado por ui.mount, cartão Modo"
+    demonstrated_by:
+      test: "gate-advance barra o push (color yellow, 'gate-advance há 0 min', ordem Modo < linha < Run); segundo bloqueio substitui o primeiro... (relogio.advance 3 min -> 'acceptance-gate há 3 min · 2º bloqueio da sessão', frase antiga ausente); sem bloqueio na sessão, o cartão Modo não tem a linha do gate"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 77 pass, 0 fail (f0f4946)"
+    verdict: complete
+    gap: null
+    note: "A cor da dim line (dimColor) não é afirmada, só o texto."
+  - id: AC5
+    text: "Erro que não é gate, worktree-guard com OK, Bash comum com BLOCK: no stdout e o aviso COMMIT WITHOUT BUILD VERIFICATION não geram toast nem linha no cartão"
+    altitude: event
+    surface: "$.tool.call com resultados negativos; on('ui.toast') vazio; cartão Modo sem linha"
+    demonstrated_by:
+      test: "worktree-guard com OK, Bash comum e erro que não é gate: nem toast nem linha no cartão (avisos [], sem /bloqueio|barrad/ na tela); leBloqueio ignora erro que não é gate; o aviso de commit sem baseline não é bloqueio (unit); leGuarda ('aviso: BLOCK: 1' e cat -> null)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 77 pass, 0 fail (f0f4946)"
+    verdict: complete
+    gap: null
+    note: "O aviso de COMMIT WITHOUT BUILD VERIFICATION é afirmado só em unit (leBloqueio devolve null), não montado no engine; ele não chega como deny, então o ramo do engine é o mesmo do erro comum."
