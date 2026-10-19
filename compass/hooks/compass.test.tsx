@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import { idade, parseIntent } from './intent'
+import { contaDesvios, leSaidas, parseModo } from './modo'
 
 const ARQUIVO = `proposito: "Construir o M1, painel da intenção"
 para_quando: "painel aparece no terminal"
@@ -54,12 +55,16 @@ const ARQUIVOS: Record<string, string> = {
   '/repo/.claude/programs/zerada/plan.yaml': FILA('single-track', ['done']),
 }
 
-const prepara = async ($: any, on: any, sessao: string, texto: string | null) => {
-  mock.clock(on, { now: Date.parse('2026-10-19T10:12:00Z') })
-  const arquivos: Record<string, string> = { ...ARQUIVOS }
+const prepara = async ($: any, on: any, sessao: string, texto: string | null, extras: Record<string, string> = {}) => {
+  const relogio = mock.clock(on, { now: Date.parse('2026-10-19T10:12:00Z') })
+  const arquivos: Record<string, string> = { ...ARQUIVOS, ...extras }
   if (texto !== null) arquivos['.claude/session-intent'] = texto
   // O engine entrega o caminho relativo já resolvido contra o diretório da sessão.
-  const acha = (path: string) => arquivos[path] ?? (path.endsWith('/.claude/session-intent') ? arquivos['.claude/session-intent'] : undefined)
+  const acha = (path: string) => {
+    if (arquivos[path] !== undefined) return arquivos[path]
+    const rel = Object.keys(arquivos).find(k => k.startsWith('.claude/') && path.endsWith(`/${k}`))
+    return rel === undefined ? undefined : arquivos[rel]
+  }
   on('fs.exists', async ($: any, e: any) => ({
     value: acha(e.path) !== undefined || e.path === '/repo/.claude/programs',
   }))
@@ -69,16 +74,30 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null) =>
       name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false,
     })),
   }))
-  on('process.run', async () => ({ value: { exitCode: 0, stdout: '/repo/.git\n', stderr: '' } }))
+  on('process.run', async ($: any, e: any) => ({
+    value: e.argv[0] === 'cepa-modos'
+      ? { exitCode: 0, stdout: MODOS_JSON, stderr: '' }
+      : { exitCode: 0, stdout: '/repo/.git\n', stderr: '' },
+  }))
   on('session.id', async () => ({ value: sessao }))
   on('command.register', async () => ({ value: { command: 'compass' } }))
   on('ui.open', async () => ({ value: { isPlaced: true } }))
   on('session.start', async () => ({ cwd: '/repo' }))
   await $.session.start({ cwd: '/repo', surface: 'terminal', source: 'startup' })
+  return { arquivos, relogio }
 }
 
-const sobe = async ($: any, on: any, sessao: string, texto: string | null) => {
-  await prepara($, on, sessao, texto)
+const monta = ($: any) =>
+  $.ui.mount({
+    plugin: 'compass',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'compass',
+    props: { title: 'Compass', isFocused: false, bodyColumns: 60, placement: 'dock' },
+  })
+
+const sobe = async ($: any, on: any, sessao: string, texto: string | null, extras: Record<string, string> = {}) => {
+  await prepara($, on, sessao, texto, extras)
   return $.ui.mount({
     plugin: 'compass',
     surface: 'terminal',
@@ -87,6 +106,85 @@ const sobe = async ($: any, on: any, sessao: string, texto: string | null) => {
     props: { title: 'Compass', isFocused: false, bodyColumns: 60, placement: 'dock' },
   })
 }
+
+const MODOS_JSON = JSON.stringify({
+  construcao: { saida: 'completion-auditor COMPLETE e proof-reviewer PROVEN', gate: 'x' },
+  reforma: { saida: 'o orçamento declarado exaurido' },
+})
+
+const MODO = 'modo: construcao\nrotina: null\norcamento: null\naberto_em: 2026-10-19T13:46:36Z\n'
+
+const DESVIOS = `# Desvios capturados
+
+Texto de abertura com - [ ] no meio da linha, que não conta.
+
+- [x] 2026-08-18 · modo: construcao · RESOLVIDO em 0.16.0
+- [ ] 2026-08-23 · modo: descoberta · gate só enxerga new_string
+  continuação da linha anterior
+- [ ] 2026-09-27 · modo: exploracao · bash-path-lock lê sed -i errado
+`
+
+test('lê o modo e trata null como ausência', async () => {
+  expect(parseModo(MODO)).toEqual({ nome: 'construcao', orcamento: '', abertoEm: '2026-10-19T13:46:36Z' })
+  expect(parseModo('modo: reforma\norcamento: "só o filas.ts"\n')?.orcamento).toBe('só o filas.ts')
+  expect(parseModo('modo: null\n')).toBe(null)
+})
+
+test('conta desvios abertos e resolvidos e guarda o quê do último', async () => {
+  expect(contaDesvios(DESVIOS)).toEqual({ abertos: 2, resolvidos: 1, ultimo: 'bash-path-lock lê sed -i errado' })
+  expect(contaDesvios('')).toEqual({ abertos: 0, resolvidos: 0, ultimo: '' })
+})
+
+test('saídas vêm do cepa-modos --json; json quebrado não derruba', async () => {
+  expect(leSaidas(MODOS_JSON).construcao).toBe('completion-auditor COMPLETE e proof-reviewer PROVEN')
+  expect(leSaidas('não é json')).toEqual({})
+})
+
+test('nível 3: modo, condição de saída e desvios, depois do nível 2', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': MODO, '.claude/desvios.md': DESVIOS })
+  expect(await ui.find({ type: 'Text', text: 'construcao' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'fecha quando: completion-auditor COMPLETE e proof-reviewer PROVEN' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '2 desvios abertos' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: ' · 1 resolvido' })).toBeTruthy()
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  expect(textos.indexOf('Sessão') < textos.indexOf('Modo')).toBe(true)
+})
+
+test('nível 3 mostra o orçamento da reforma', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': 'modo: reforma\norcamento: "só o filas.ts"\n' })
+  expect(await ui.find({ type: 'Text', text: 'fecha quando: o orçamento declarado exaurido' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'orçamento: só o filas.ts' })).toBeTruthy()
+})
+
+test('sem modo e sem desvios, o nível 3 diz isso (com intenção)', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO)
+  expect(await ui.find({ type: 'Text', text: 'sem modo' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'nenhum desvio registrado' })).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: /fecha quando/ })).toEqual([])
+})
+
+test('sem modo e sem desvios, o nível 3 diz isso (sem intenção)', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', null)
+  expect(await ui.find({ type: 'Text', text: 'sem modo' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'nenhum desvio registrado' })).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: /fecha quando/ })).toEqual([])
+})
+
+test('desvio novo gera aviso; os que já existiam na abertura, não', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, { '.claude/desvios.md': DESVIOS })
+  await relogio.advance(5000)
+  expect(avisos).toEqual([])
+  arquivos['.claude/desvios.md'] = `${DESVIOS}- [ ] 2026-10-19 · modo: construcao · o mod não lê o build\n`
+  await relogio.advance(5000)
+  expect(avisos).toEqual(['Desvio registrado: o mod não lê o build'])
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: '3 desvios abertos' })).toBeTruthy()
+})
 
 test('nível 1: tabela com uma linha por fila e uma coluna por estado', async ($, on) => {
   const ui = await sobe($, on, 'sessao-a', ARQUIVO)

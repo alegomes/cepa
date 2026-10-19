@@ -1,1 +1,1 @@
-{ "name": "compass", "version": "0.4.0", "description": "Painel de orientação da Cepa em níveis: tabela das filas por estado; intenção, plano e passo da sessão", "types": "./types/index.d.ts" }
+{ "name": "compass", "version": "0.5.0", "description": "Painel de orientação da Cepa em níveis: tabela das filas por estado; intenção, plano e passo da sessão; modo, condição de saída e desvios", "types": "./types/index.d.ts" }
