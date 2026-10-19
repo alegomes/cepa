@@ -3,6 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import { linhaBuild, parseBuild } from './build'
 import { idade, parseIntent } from './intent'
 import { contaDesvios, leSaidas, parseModo } from './modo'
+import { avisoDe, contagem, duracao, parseRun, tempoDoRun } from './until'
 
 const ARQUIVO = `proposito: "Construir o M1, painel da intenção"
 para_quando: "painel aparece no terminal"
@@ -66,14 +67,17 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null, ex
     const rel = Object.keys(arquivos).find(k => k.startsWith('.claude/') && path.endsWith(`/${k}`))
     return rel === undefined ? undefined : arquivos[rel]
   }
+  const dentro = (dir: string) => Object.keys(arquivos).filter(k => k.startsWith(`${dir}/`))
   on('fs.exists', async ($: any, e: any) => ({
-    value: acha(e.path) !== undefined || e.path === '/repo/.claude/programs',
+    value: acha(e.path) !== undefined || e.path === '/repo/.claude/programs' || dentro(e.path).length > 0,
   }))
   on('fs.read', async ($: any, e: any) => ({ value: acha(e.path) }))
-  on('fs.list', async () => ({
-    value: ['zerada', 'cepa', 'velha', 'mods', 'maestro'].map(name => ({
-      name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false,
-    })),
+  on('fs.list', async ($: any, e: any) => ({
+    value: e.path.endsWith('/until')
+      ? dentro(e.path).map(k => ({ name: k.slice(e.path.length + 1), kind: 'file', size: 0, mtimeMs: 0, isLink: false }))
+      : ['zerada', 'cepa', 'velha', 'mods', 'maestro'].map(name => ({
+        name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false,
+      })),
   }))
   on('process.run', async ($: any, e: any) => ({
     value: e.argv[0] === 'cepa-modos'
@@ -355,4 +359,185 @@ test('status desconhecido sai sem cor, e o rótulo "build:" fica ao lado do esta
   expect(linha?.props?.color).toBe(undefined)
   const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
   expect(textos.indexOf('build: ') + 1).toBe(textos.indexOf('desconhecido há 12 min'))
+})
+
+// ── nível 4: o run do cepa-until ─────────────────────────────────────────────
+
+const ev = (e: Record<string, unknown>) => JSON.stringify(e) + '\n'
+const RUN_START = ev({ evento: 'run_start', fila: 'cepa', prazo: '2026-10-19T18:00:00', quando: '2026-10-19T09:00:00' })
+const CS1_START = ev({ evento: 'item_start', id: 'CS-1', title: 'primeiro item da fila', tentativa: 1, quando: '2026-10-19T09:00:05' })
+const CS1_END = ev({ evento: 'item_end', id: 'CS-1', status: 'done', segundos: 300, quando: '2026-10-19T09:05:00' })
+const CS1_VERDE = ev({ evento: 'verify', id: 'CS-1', verde: true, quando: '2026-10-19T09:15:00' })
+const CS2_START = ev({ evento: 'item_start', id: 'CS-2', title: 'segundo item', tentativa: 2, quando: '2026-10-19T10:00:00' })
+// O `quando` do cepa-until é hora local sem fuso. Os testes de render escrevem o
+// instante relativo ao relógio dos testes (10:12Z) no fuso da máquina, e leem a hora
+// esperada com a mesma conta, para não depender do fuso de quem roda a suíte.
+const AGORA = Date.parse('2026-10-19T10:12:00Z')
+const dois = (n: number) => String(n).padStart(2, '0')
+const LOCAL = (minutosDepois: number) => {
+  const d = new Date(AGORA + minutosDepois * 60000)
+  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}T${dois(d.getHours())}:${dois(d.getMinutes())}:${dois(d.getSeconds())}`
+}
+const HM = (minutosDepois: number) => LOCAL(minutosDepois).slice(11, 16)
+
+test('parseRun: item atual, etapa de build, contagem e fim', async () => {
+  const r = parseRun(RUN_START + CS1_START + CS1_END, 'cepa', '2026-10-19-0900')!
+  expect(r.fase).toBe('rodando')
+  expect(r.item).toEqual({ id: 'CS-1', titulo: 'primeiro item da fila', desde: '2026-10-19T09:05:00', tentativa: 1, etapa: 'build' })
+  const r2 = parseRun(RUN_START + CS1_START + CS1_END + CS1_VERDE + CS2_START, 'cepa', 'x')!
+  expect(r2.entregues).toBe(1)
+  expect(r2.item?.id).toBe('CS-2')
+  expect(r2.item?.tentativa).toBe(2)
+  const fim = ev({ evento: 'run_end', motivo: 'fim-da-fila', detalhe: 'a fila acabou', quando: '2026-10-19T11:00:00' })
+  const r3 = parseRun(RUN_START + CS1_START + CS1_END + CS1_VERDE + fim, 'cepa', 'x')!
+  expect(r3.fase).toBe('encerrado')
+  expect(r3.item).toBe(null)
+  expect(r3.fim).toEqual({ motivo: 'fim-da-fila', detalhe: 'a fila acabou', quando: '2026-10-19T11:00:00' })
+  expect(tempoDoRun(r3, 0)).toBe('2h00')
+})
+
+test('parseRun: vermelho, travado, pausa de cota e interrupção', async () => {
+  const vermelho = ev({ evento: 'verify_vermelho', id: 'CS-1', quando: '2026-10-19T09:20:00' })
+  const bloqueado = ev({ evento: 'item_end', id: 'CS-2', status: 'blocked', quando: '2026-10-19T10:30:00' })
+  const pausa = ev({ evento: 'pausa_de_cota', uso: 0.9, acorda: '2026-10-19T14:35:00', quando: '2026-10-19T10:31:00' })
+  const r = parseRun(RUN_START + CS1_START + CS1_END + vermelho + CS2_START + bloqueado + pausa, 'cepa', 'x')!
+  expect(r.vermelhos).toBe(1)
+  expect(r.travados).toBe(1)
+  expect(r.fase).toBe('cota')
+  expect(r.cota).toEqual({ retoma: '2026-10-19T14:35:00' })
+  expect(contagem(r)).toBe('1 vermelho · 1 travado')
+  const limite = ev({ evento: 'limite_de_uso', id: 'CS-2', reset_em: '2026-10-19T15:00:00', espera: true, quando: '2026-10-19T10:40:00' })
+  const r2 = parseRun(RUN_START + CS2_START + limite, 'cepa', 'x')!
+  expect(r2.fase).toBe('cota')
+  expect(r2.cota).toEqual({ retoma: '2026-10-19T15:00:00' })
+  const sinal = ev({ evento: 'run_interrompido', sinal: 'SIGTERM', id: 'CS-2', quando: '2026-10-19T10:50:00' })
+  const r3 = parseRun(RUN_START + CS2_START + sinal, 'cepa', 'x')!
+  expect(r3.fase).toBe('interrompido')
+  expect(r3.fim?.motivo).toBe('interrompido')
+  expect(parseRun('lixo\n' + CS2_START, 'cepa', 'x')).toBe(null)
+})
+
+test('duracao no formato do cepa-until', async () => {
+  expect(duracao(0, 12 * 60000)).toBe('12min')
+  expect(duracao(0, 83 * 60000)).toBe('1h23')
+  expect(duracao(NaN, 1)).toBe('')
+})
+
+test('avisoDe: só na mudança de fase do mesmo run; fim e cota avisam', async () => {
+  const rodando = parseRun(RUN_START + CS1_START, 'cepa', 'r1')!
+  const fim = parseRun(RUN_START + CS1_START + CS1_END + CS1_VERDE + ev({ evento: 'run_end', motivo: 'prazo', detalhe: 'x', quando: '2026-10-19T11:00:00' }), 'cepa', 'r1')!
+  const cota = parseRun(RUN_START + ev({ evento: 'pausa_de_cota', acorda: '2026-10-19T14:35:00', quando: '2026-10-19T10:31:00' }), 'cepa', 'r1')!
+  expect(avisoDe(null, fim)).toBe(null)
+  expect(avisoDe(rodando, rodando)).toBe(null)
+  expect(avisoDe(fim, { ...fim, id: 'r2' })).toBe(null)
+  expect(avisoDe(rodando, fim)).toBe('cepa-until cepa: prazo chegou · 1 entregue')
+  expect(avisoDe(rodando, cota)).toBe('cepa-until parado pela cota · retoma às 14:35')
+})
+
+const UNTIL = (texto: string) => ({ '/repo/.claude/programs/cepa/until/2026-10-19-0900.jsonl': texto })
+
+test('nível 4: item atual com tempo e tentativa, contagem e prazo, depois do nível 3', async ($, on) => {
+  const inicio = ev({ evento: 'run_start', fila: 'cepa', prazo: LOCAL(8 * 60), quando: LOCAL(-72) })
+  const item = ev({ evento: 'item_start', id: 'CS-2', title: 'segundo item', tentativa: 2, quando: LOCAL(-12) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(inicio + CS1_START + CS1_END + CS1_VERDE + item))
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  expect(textos.indexOf('Modo')).toBeLessThan(textos.indexOf('Run'))
+  expect(await ui.find({ type: 'Text', text: 'cepa · 1h12' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '▶ CS-2 · segundo item' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'item há 12min · tentativa 2' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: `1 entregue · prazo ${HM(8 * 60)}` })).toBeTruthy()
+})
+
+test('nível 4: run encerrado mostra o motivo em verde, a idade e a contagem sem prazo', async ($, on) => {
+  const fim = ev({ evento: 'run_end', motivo: 'fim-da-fila', detalhe: 'a fila acabou', quando: LOCAL(-12) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + CS1_END + CS1_VERDE + fim))
+  const texto = await ui.find({ type: 'Text', text: 'fila acabou há 12 min' })
+  expect(texto).toBeTruthy()
+  expect(texto.props.color).toBe('green')
+  expect(await ui.find({ type: 'Text', text: 'a fila acabou' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: '1 entregue' })).toBeTruthy()
+})
+
+test('nível 4: parado pela cota em amarelo, com a hora de retomar', async ($, on) => {
+  const pausa = ev({ evento: 'pausa_de_cota', acorda: LOCAL(263), quando: LOCAL(-7) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + CS1_END + CS1_VERDE + pausa))
+  const texto = await ui.find({ type: 'Text', text: `parado pela cota · retoma às ${HM(263)}` })
+  expect(texto).toBeTruthy()
+  expect(texto.props.color).toBe('yellow')
+})
+
+test('sem run, o nível 4 diz isso (com e sem intenção)', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO)
+  expect(await ui.find({ type: 'Text', text: 'nenhum run do cepa-until' })).toBeTruthy()
+})
+
+test('sem intenção, o nível 4 continua lá', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', null)
+  expect(await ui.find({ type: 'Text', text: 'nenhum run do cepa-until' })).toBeTruthy()
+})
+
+test('o run mais recente vence entre as filas', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, {
+    ...UNTIL(RUN_START + CS1_START),
+    '/repo/.claude/programs/mods/until/2026-10-19-1100.jsonl': ev({ evento: 'run_start', fila: 'mods', prazo: '', quando: LOCAL(-2) }),
+  })
+  expect(await ui.find({ type: 'Text', text: 'entre itens' })).toBeTruthy()
+  expect(await ui.findAll({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toEqual([])
+})
+
+test('o fim do run avisa com toast e som, uma vez; a abertura com run já encerrado não avisa', async ($, on) => {
+  const avisos: string[] = []
+  const sons: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  on('audio.play', async ($: any, e: any) => {
+    sons.push(e.clip.asset)
+    return { value: undefined }
+  })
+  const caminho = '/repo/.claude/programs/cepa/until/2026-10-19-0900.jsonl'
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + CS1_END))
+  await relogio.advance(5000)
+  expect(avisos).toEqual([])
+  arquivos[caminho] += CS1_VERDE + ev({ evento: 'run_end', motivo: 'limite-de-uso', detalhe: 'x', quando: LOCAL(-1) })
+  await relogio.advance(5000)
+  expect(avisos).toEqual(['cepa-until cepa: parou pela cota · 1 entregue'])
+  expect(sons).toEqual(['sons/fim.wav'])
+  await relogio.advance(5000)
+  expect(sons).toEqual(['sons/fim.wav'])
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: 'parou pela cota há 1 min' })).toBeTruthy()
+})
+
+test('a pausa pela cota avisa com som; a retomada não', async ($, on) => {
+  const avisos: string[] = []
+  const sons: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  on('audio.play', async ($: any, e: any) => {
+    sons.push(e.clip.asset)
+    return { value: undefined }
+  })
+  const caminho = '/repo/.claude/programs/cepa/until/2026-10-19-0900.jsonl'
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + CS1_END + CS1_VERDE))
+  arquivos[caminho] += ev({ evento: 'pausa_de_cota', acorda: LOCAL(263), quando: LOCAL(-1) })
+  await relogio.advance(5000)
+  expect(avisos).toEqual([`cepa-until parado pela cota · retoma às ${HM(263)}`])
+  expect(sons.length).toBe(1)
+  arquivos[caminho] += CS2_START
+  await relogio.advance(5000)
+  expect(avisos.length).toBe(1)
+  expect(sons.length).toBe(1)
+})
+
+test('um run novo que começa depois da abertura é lido na próxima varredura das filas', async ($, on) => {
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO)
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: 'nenhum run do cepa-until' })).toBeTruthy()
+  Object.assign(arquivos, UNTIL(RUN_START + CS1_START))
+  await relogio.advance(30000)
+  expect(await ui.find({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toBeTruthy()
 })

@@ -1,1 +1,1 @@
-{ "name": "compass", "version": "0.6.0", "description": "Painel de orientação da Cepa em níveis: tabela das filas por estado; intenção, plano e passo da sessão; modo, condição de saída, estado do build e desvios", "types": "./types/index.d.ts" }
+{ "name": "compass", "version": "0.7.0", "description": "Painel de orientação da Cepa em níveis: tabela das filas por estado; intenção, plano e passo da sessão; modo, condição de saída, estado do build e desvios; run do cepa-until com item atual, tempo e aviso com som no fim ou na parada por cota", "types": "./types/index.d.ts" }

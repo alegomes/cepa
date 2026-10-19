@@ -21,6 +21,7 @@ declare module 'claude-code' {
       desvios: string | null
       build: string | null
       saidas: Record<string, string>
+      until: { fila: string; id: string; texto: string } | null
     }
   }
 }
