@@ -4219,8 +4219,11 @@ não grava nada; `./mvnw verify` rodado em `/tmp/perturb-*` não altera `.claude
 
 **Plano:** `fb-2026-10/board-flow-yaml-comentario-team-dois-formatos` (fila `fb-2026-10`, gravada em 2026-10-19)
 
-**Status:** pendente · **Lar provável:** template do `board-flow.yaml` em
-`board-flow/commands/configure.md` e `board-flow/agents/atlassian-expert.md` · **Origem:**
+**Status:** feito em 2026-10-16 (commit a6a64bd, na `main`): comentário com os dois formatos e o 400 de cada um em
+`discovery/board-flow.example.yaml`, `docs/board-flow.md` e `board-flow/agents/atlassian-expert.md`, com
+`tests/test_board_flow_example_team_format.py`; fila `cepa`, item `board-flow-yaml-comentario-campo-team`.
+O item da `fb-2026-10` foi montado em 2026-10-19 a partir desta seção ainda marcada "pendente" e fechado
+como duplicata em 2026-10-19 · **Lar:** os três arquivos acima (não o `configure.md`) · **Origem:**
 feedback `fb-20260902-1` (2026-09-02, `wego-acesso-backend-capture-openapi`). Observação do
 próprio `atlassian-expert`, não texto do dono.
 
