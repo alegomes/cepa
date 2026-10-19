@@ -1,6 +1,6 @@
 schema_version: 2
 card: mods-M5
-verdict: needs-human
+verdict: proven
 reviewed_at: 2026-10-19T23:00:00-03:00
 base_commit: 6c75569
 head_commit: 3e6d42c
@@ -46,12 +46,12 @@ levels:
     uncovered_lines: []
     run: "sem ferramenta de cobertura; 99 perturbacoes RED na rodada 1 e 11 reais na rodada 2 (#10, #68 a #70, #72, #73, #101, #102, #105); as GREEN restantes sao equivalentes ou cosmeticas; suite 82 pass 0 fail em 3e6d42c"
   l4_adversarial_input:
-    status: findings
-    reason: ""
+    status: accepted
+    reason: "Dono aceitou B e C como risco conhecido em 2026-10-19 (resposta '1. sim'): o resultado da chamada volta igual, o efeito e um toast e uma linha amarela a mais."
     findings:
       - "A (seguro, agora com teste na rodada 2): resultado sem erro cujo text cita [gate-advance] BLOCKED: nao gera aviso (leBloqueio so roda com isError true)."
-      - "B (falso positivo, SEM teste, risco aceito pelo coordenador na rodada 2): um Bash que FALHA (isError) e cujo erro contem `[gate-advance] BLOCKED:` (ex.: grep em log do gate) gera toast e linha amarela falsos. O resultado da chamada volta igual."
-      - "C (falso positivo, SEM teste, risco aceito pelo coordenador na rodada 2): stdout `BLOCK: <n>` de um Bash cujo comando apenas MENCIONA `worktree-guard` (ex.: `echo \"BLOCK: 1\" # worktree-guard`) gera aviso de merge barrado falso."
+      - "B (falso positivo, SEM teste, risco aceito pelo dono em 2026-10-19): um Bash que FALHA (isError) e cujo erro contem `[gate-advance] BLOCKED:` (ex.: grep em log do gate) gera toast e linha amarela falsos. O resultado da chamada volta igual."
+      - "C (falso positivo, SEM teste, risco aceito pelo dono em 2026-10-19): stdout `BLOCK: <n>` de um Bash cujo comando apenas MENCIONA `worktree-guard` (ex.: `echo \"BLOCK: 1\" # worktree-guard`) gera aviso de merge barrado falso."
   bugfix_regression_red_at_base:
     status: n/a
-routing_reason: "NEEDS-HUMAN: a prova de carga esta fechada (todos os sobreviventes reais da rodada 1 agora derrubam teste em 3e6d42c; R1 e R7 sao equivalentes com evidencia). Resta so a camada de entrada adversarial: B e C geram avisos falsos que nenhum teste cobre. O coordenador os aceitou como risco, mas aceitar e decisao humana e eu nao registro waiver; o nivel fica `findings`, que por regra impede PROVEN. Decisao sugerida ao dono: aceitar B e C (so um toast e uma linha amarela a mais, sem alterar o resultado da chamada). Com essa aceitacao, o card passa a PROVEN sem novo codigo."
+routing_reason: "PROVEN: a prova de carga esta fechada (todos os sobreviventes reais da rodada 1 derrubam teste em 3e6d42c; R1 e R7 equivalentes com evidencia). O L4 tinha dois avisos falsos (B e C) que o dono aceitou como risco conhecido em 2026-10-19; registro do aceite acima. Pendencia humana restante: ver o aviso no proprio terminal (compass 0.8.0)."
