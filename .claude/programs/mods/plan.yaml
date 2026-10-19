@@ -34,9 +34,9 @@ items:
   title: 'Nível 3 do compass: modo da sessão e condição de saída lidos de .claude/session-mode;
     contagem dos desvios registrados pelo off-mode-capture em .claude/desvios.md,
     com aviso quando entra um novo'
-  why: 'Segundo: mesma mecânica de leitura do M1. Em 2026-10-19 o dono trocou a faixa
-    acima do prompt por um nível a mais do compass, coerente com a recusa da faixa
-    no M1.'
+  why: 'Segundo: mesma mecânica de leitura do M1. Em 2026-10-19 o dono trocou a
+    faixa acima do prompt por um nível a mais do compass, coerente com a recusa
+    da faixa no M1.'
   status: done
   blocked_by:
   - M1
@@ -63,9 +63,9 @@ items:
   blocked_by:
   - M2
   human_pending: null
-  evidence: compass 0.6.0 (9d9427a, testes 08a2d2d e 3168198); completion-auditor COMPLETE
-    em .claude/acceptance/M6.yaml; proof PROVEN em docs/proof/mods-M6.yaml com L4
-    n/a; dono confere o painel no terminal depois de reiniciar.
+  evidence: compass 0.6.0 (9d9427a, testes 08a2d2d e 3168198); completion-auditor
+    COMPLETE em .claude/acceptance/M6.yaml; proof PROVEN em docs/proof/mods-M6.yaml
+    com L4 n/a; dono confere o painel no terminal depois de reiniciar.
 - id: M4
   title: 'Acompanhamento do cepa-until: item atual e tempo do run lendo o .jsonl;
     aviso com som no fim ou na parada por cota'
@@ -83,12 +83,11 @@ items:
     barram, aviso com o motivo em uma frase leiga'
   why: 'Último: o único que escuta o resultado de chamada de ferramenta; maior risco
     de interferir no fluxo. Não reescreve os gates Python, só lê a saída deles.'
-  status: in_progress
+  status: done
   blocked_by:
   - M1
   human_pending: dono ver o aviso de gate no próprio terminal (compass 0.8.0, depois
     de reiniciar a sessão) e confirmar que mostra o certo
-  evidence: compass 0.8.0 (f0f4946; testes 3e6d42c); completion-auditor COMPLETE
-    em .claude/acceptance/M5.yaml; proof PROVEN em docs/proof/mods-M5.yaml (2 rodadas,
-    130 perturbações, R1 e R7 equivalentes; L4 com os avisos falsos B e C aceitos
-    pelo dono em 2026-10-19).
+  evidence: 'dono viu o aviso do worktree-guard no cartão Modo do compass 0.8.0
+    em 2026-10-19 (print: ''Merge barrado: a branch main está em uso por outra sessão
+    viva'', 2º bloqueio da sessão) e confirmou que mostra o certo'
