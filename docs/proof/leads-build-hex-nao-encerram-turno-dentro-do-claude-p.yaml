@@ -1,0 +1,41 @@
+schema_version: 2
+card: leads-build-hex-nao-encerram-turno-dentro-do-claude-p
+verdict: proven
+reviewed_at: 2026-10-19T20:30:00-03:00
+base_commit: 2226535
+head_commit: 3635ef0
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  changed_classes:
+    - { class: "tests/test_delegacao_assincrona_specs.py", module: harness-tests, external_observable: false, substituted_by_double: null }
+    - { class: "common/hooks/no-busy-wait.py", module: harness-hooks, external_observable: false, substituted_by_double: null }
+  prose_only:
+    - "paragrafo '**Exceção: run desatendido.**' em 11 agentes (build-hex x3, build-team x3, design-lead, discovery-lead, epic-briefer, docs-lead, content-lead); 11 copias byte-identicas (md5 744e6840dd44f7481f595b1f618b9c70 x11)"
+    - "bullet novo em common/commands/drain-plan.md"
+    - "BACKLOG.md"
+    - "7 bumps PATCH de plugin.json"
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "GREEN em HEAD: python3 tests/test_delegacao_assincrona_specs.py -> 'ok — 11 agentes que delegam, todos com a seção completa'"
+        - "perturbacao 1 (worktree descartavel em 3635ef0): git checkout 2226535 -- build-team/agents/validation-lead.md (remove o paragrafo, -15 linhas) -> RED rc=1: 'FAIL: build-team/agents/validation-lead.md: tem a seção mas perdeu a exceção do run desatendido (run_in_background:\\s*false)'; '1 falha(s) em 11'; restaurado -> GREEN"
+        - "perturbacao 2 (worktree descartavel em 2226535 com o teste novo copiado de 3635ef0): 11 FAIL em 11 agentes, rc=1"
+        - "no-busy-wait.py: git diff 2226535 3635ef0 = +5 linhas, todas literais de string da mensagem stderr (opcao 1, EXCEÇÃO); python3 tests/test_no_busy_wait.py em HEAD -> 'ok — 8 bloqueios e 9 liberações conferidos'"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "Codigo executavel alterado: so o teste (exercitado nas duas perturbacoes acima) e literais de string do hook (exercitados por test_no_busy_wait.py, 17 casos ok). Sem ferramenta de cobertura no repo."
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff nao abre superficie de entrada: um teste que le arquivos .md do proprio repo, texto de mensagem de erro de um hook e prosa. Nada parseia dado externo."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "O teste novo e carga-portante (RED sem o paragrafo em 1 agente e em todos os 11 no base, GREEN com ele). O hook mudou so em texto de mensagem e seu teste segue verde. O resto e prosa, listada como tal. Worktrees descartaveis removidos."

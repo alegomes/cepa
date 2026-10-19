@@ -808,7 +808,10 @@ def test_reconcile_nao_lista_dropped_igual_dos_dois_lados(base):
 def test_na_branch_da_noite(base):
     """O `cepa-until` passa `--na-branch`. Sem o comando declarar o que isso
     muda, o agente volta a abrir worktree própria a partir de `origin/main`,
-    que foi o que deixou 20 de 25 rodadas travadas em 2026-09-23."""
+    que foi o que deixou 20 de 25 rodadas travadas em 2026-09-23.
+    Run until/2026-10-15-1946: 10 retomadas à mão em 5 de 7 rodadas, porque os
+    leads encerravam o turno esperando os workers. O comando precisa mandar
+    todo lead delegar com `run_in_background: false` e esperar no mesmo turno."""
     f = CMD.read_text(encoding="utf-8")
     limpo = f.replace("`", "").lower()
     check("declara --na-branch nos argumentos",
@@ -831,6 +834,16 @@ def test_na_branch_da_noite(base):
           "10 minutos" in regra and "-dtest" in regra, regra[:300])
     check("...e passa a regra aos agentes que delega",
           "qa-engineer" in regra and "validation-lead" in regra, regra[:300])
+    i = limpo.find("quem delega espera o worker no mesmo turno")
+    espera = limpo[i:].split("\n\n")[0] if i != -1 else ""
+    check("...quem delega espera o worker no mesmo turno",
+          bool(espera), "bullet ausente")
+    check("...com run_in_background: false e 'mesmo turno'",
+          "run_in_background: false" in espera and "mesmo turno" in espera,
+          espera[:300])
+    check("...e manda a regra aos três leads",
+          all(l in espera for l in ("engineering-lead", "validation-lead",
+                                    "planning-lead")), espera[:600])
 
 
 def test_rotulos_do_quadro_dizem_a_direcao_da_escrita(base):

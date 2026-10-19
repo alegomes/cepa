@@ -4393,13 +4393,25 @@ no orquestrador, que reenvia o resultado. No mesmo run, `qa-engineer`, `refactor
   para a exceção não se perder numa cópia.
 - O bullet "quem delega espera o worker no mesmo turno" no passo 3.b de
   `common/commands/drain-plan.md`, que manda o orquestrador dizer isso a todo lead.
+- Três checks em `test_na_branch_da_noite` de `tests/test_common_drain_plan.py`, para o bullet
+  não sumir numa edição.
 - A exceção na mensagem do `common/hooks/no-busy-wait.py` (só texto, o comportamento do hook
   não mudou).
 - Versões (PATCH, prosa sem mudança de contrato): `build-hex` 1.4.3, `build-team` 0.5.2,
   `design` 0.3.2, `discovery` 0.4.2, `marketing` 0.1.2, `docs-topology` 0.3.2, `common` 2.30.2.
 
-**Não feito.** O run sintético do `cepa-until` de "Teste que falta" não foi rodado; o que existe
-é o teste-radar sobre os prompts, que prova que a exceção está escrita, não que o lead a segue.
+**Teste feito (2026-10-19).** O run sintético de "Teste que falta" rodou na própria rodada:
+`CEPA_UNTIL_RUN=sintetico-2026-10-19 claude -p` pedindo ao `build-hex:engineering-lead` que
+delegasse ao `build-hex:domain-dev` um `wc -l README.md`. Na transcrição (sessão
+`d51a89d3-4f50-473a-b53d-c586a960db24` em
+`~/.claude/projects/-Users-alegomes-cepa-worktrees-cepa-until-2026-10-19-1958/`, com a pasta
+`subagents/`): o lead conferiu a variável com `echo`, chamou o worker com
+`run_in_background: false`, recebeu o resultado no mesmo turno e devolveu; o orquestrador fez
+uma chamada ao lead, zero `SendMessage`, zero notificação. 2 turnos, 20 segundos, US$ 0,86
+(`total_cost_usd` do `--output-format json`). Ressalva: o pedido ao lead já dizia "Unattended
+run", como o bullet novo do `drain-plan` manda; o lead sem essa frase não foi medido. O que
+ainda não existe é a contagem num run real do `cepa-until` de um repo `build-hex`: o próximo
+run diz, pelo número de `SendMessage` do orquestrador a leads (zero esperado).
 
 ---
 
