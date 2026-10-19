@@ -290,6 +290,7 @@ test('parseBuild traduz os quatro status e guarda o anterior do STALE', async ()
   expect(parseBuild('{"status": "ALGO"}')?.estado).toBe('desconhecido')
   expect(parseBuild('{"status": "STALE"}')).toEqual({ estado: 'desatualizado', em: '', anterior: 'desconhecido', anteriorEm: '' })
   expect(parseBuild('não é json')).toBe(null)
+  expect(parseBuild('null')).toBe(null)
   expect(parseBuild('[1]')?.estado).toBe('desconhecido')
   expect(linhaBuild(parseBuild(BUILD('SUCCESS', '2026-10-19T10:00:00Z'))!, t)).toBe('verde há 12 min')
   expect(linhaBuild(parseBuild(BUILD_STALE)!, t)).toBe('desatualizado há 3 min · era vermelho há 2 h')
@@ -346,4 +347,12 @@ test('o build é relido no fim de cada turno, sem esperar o relógio', async ($,
   arquivos['.claude/last-build.json'] = BUILD_STALE
   await $.turn.complete({ answer: 'x', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
   expect(await ui.find({ type: 'Text', text: 'desatualizado há 3 min · era vermelho há 2 h' })).toBeTruthy()
+})
+
+test('status desconhecido sai sem cor, e o rótulo "build:" fica ao lado do estado', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/last-build.json': '{"status": "ALGO", "at": "2026-10-19T10:00:00Z"}' })
+  const linha = await ui.find({ type: 'Text', text: 'desconhecido há 12 min' })
+  expect(linha?.props?.color).toBe(undefined)
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  expect(textos.indexOf('build: ') + 1).toBe(textos.indexOf('desconhecido há 12 min'))
 })
