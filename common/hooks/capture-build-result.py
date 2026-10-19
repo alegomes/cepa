@@ -153,15 +153,27 @@ _JS_FAILURE = [
 ]
 
 # (regex on command, kind, success-markers, failure-markers)
-# Markers may be None, a single string, or a list of substrings. Failure
+# Markers may be None, a single string, or a list of substrings or compiled
+# regexes (Maven: line-anchored, see _maven_marker). Failure
 # markers are checked first (fail-closed). When no marker is defined OR
 # matched, we fall back to exit_code — but note CC's Bash tool_response
 # omits the exit code on success in current versions, so marker-less
 # patterns (pytest/cargo/go-test below) effectively can't classify a green
 # build yet. Prefer text markers. See classify().
+def _maven_marker(word: str):
+    """Maven prints `[INFO] BUILD SUCCESS` / `[INFO] BUILD FAILURE` on a line
+    of its own. As a bare substring it also matched JSON-escaped echoes: on
+    2026-10-16 a `cat .claude/last-build.json` printed the previous record
+    (`"tail": "...\\n[INFO] BUILD FAILURE"`, one line) after a green build and
+    flipped it to FAILURE. Anchored at line start; tolerates `grep -n` (`12:`),
+    indentation, an `[INFO]`/`[ERROR]` prefix, or no prefix at all."""
+    return re.compile(
+        r"(?m)^[ \t]*(?:\d+:)?(?:\[(?:INFO|ERROR)\][ \t]*)?BUILD " + word + r"\b")
+
+
 PATTERNS = [
     (re.compile(r"(?:^|\s)(?:\./)?mvnw?\b.*\b(?:verify|test|package|install)\b"),
-     "maven", ["BUILD SUCCESS"], ["BUILD FAILURE"]),
+     "maven", [_maven_marker("SUCCESS")], [_maven_marker("FAILURE")]),
     (re.compile(r"(?:^|\s)(?:\./)?gradlew?\b.*\b(?:build|test|check|verify)\b"),
      "gradle", ["BUILD SUCCESSFUL"], ["BUILD FAILED"]),
     (re.compile(r"(?:^|\s)npm\b.*\b(?:test|run\s+test|run\s+build)\b"),
@@ -345,15 +357,42 @@ def tail(text: str, lines: int = 12) -> str:
 
 
 def _as_list(markers):
-    """Normalize a marker spec (None | str | list) to a list of substrings."""
+    """Normalize a marker spec (None | str | Pattern | list) to a list."""
     if markers is None:
         return []
-    if isinstance(markers, str):
+    if isinstance(markers, (str, re.Pattern)):
         return [markers]
     return list(markers)
 
 
 _MAVEN_PHASES = {"verify", "test", "package", "install"}
+
+
+def _marker_hit(marker, text: str) -> bool:
+    if isinstance(marker, re.Pattern):
+        return marker.search(text) is not None
+    return marker in text
+
+
+def _marker_name(marker) -> str:
+    return marker.pattern if isinstance(marker, re.Pattern) else marker
+
+
+def _is_build_segment(seg: str) -> bool:
+    """True when one segment is a real build invocation: a PATTERNS entry
+    matches its unquoted view and, for Maven, it is a real mvn run of a build
+    phase (same rule as real_maven_args)."""
+    seg = seg.strip()
+    view = S._unquoted_view(seg)
+    for pattern, kind, _s, _f in PATTERNS:
+        if not pattern.search(view):
+            continue
+        if kind == "maven":
+            args = M.maven_args(seg)
+            if args is None or not (_MAVEN_PHASES & set(M.goals(args))):
+                continue
+        return True
+    return False
 
 
 def real_maven_args(command: str):
@@ -384,7 +423,7 @@ def classify(command: str, response_text: str, exit_code, interrupted: bool = Fa
     reason: one-line diagnostic string for debug log
 
     Markers (success/failure) may be None, a single string, or a list of
-    substrings. Failure markers win over success markers (fail-closed: a
+    substrings or compiled regexes (Maven only: line-anchored). Failure markers win over success markers (fail-closed: a
     build gate should bias to FAILURE on ambiguous output). When no marker
     is defined or matched, fall back to exit_code — but CC's Bash
     tool_response omits the exit code on success in current versions, so a
@@ -393,6 +432,9 @@ def classify(command: str, response_text: str, exit_code, interrupted: bool = Fa
     """
     view = S._unquoted_view(command)
     maven_args = real_maven_args(command)
+    # Strip ANSI colors (Maven: `[\x1b[1;34mINFO\x1b[m] \x1b[1;32mBUILD SUCCESS`)
+    # so line-anchored markers see what a terminal shows.
+    response_text = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", response_text)
     for pattern, kind, success_markers, failure_markers in PATTERNS:
         if not pattern.search(view):
             continue
@@ -400,11 +442,11 @@ def classify(command: str, response_text: str, exit_code, interrupted: bool = Fa
             continue
 
         for m in _as_list(failure_markers):
-            if m in response_text:
-                return "FAILURE", kind, f"matched failure marker {m!r}"
+            if _marker_hit(m, response_text):
+                return "FAILURE", kind, f"matched failure marker {_marker_name(m)!r}"
         for m in _as_list(success_markers):
-            if m in response_text:
-                return "SUCCESS", kind, f"matched success marker {m!r}"
+            if _marker_hit(m, response_text):
+                return "SUCCESS", kind, f"matched success marker {_marker_name(m)!r}"
 
         # Marker-less or marker-missing — fall back to exit code if available.
         if exit_code == 0:
@@ -577,25 +619,17 @@ def debug_log(payload, response_text, exit_code, status, kind, reason):
 
 # ─── effective build dir ──────────────────────────────────────────────
 
-# Leading `cd <target> &&` / `;` prefix — the idiom throwaway proof worktrees
-# use to run a build outside the session tree ("cd /tmp/wt && ./mvnw verify").
-# Quoted and unquoted targets; repeated leading cds compose.
-_CD_PREFIX_RE = re.compile(
-    r"""^\s*cd\s+(?:"(?P<dq>[^"]+)"|'(?P<sq>[^']+)'|(?P<bare>[^\s;&|]+))\s*(?:&&|;)\s*"""
-)
-
-
 def effective_build_dir(command: str, cwd: Path) -> Path:
-    """Where the build actually ran: follow leading `cd X &&` prefixes."""
-    where = cwd
-    rest = command
-    while True:
-        m = _CD_PREFIX_RE.match(rest)
-        if not m:
-            return where
-        target = os.path.expanduser(m.group("dq") or m.group("sq") or m.group("bare"))
-        where = Path(target).resolve() if os.path.isabs(target) else (where / target).resolve()
-        rest = rest[m.end():]
+    """Where the build actually ran: the directory of the FIRST segment that is
+    a real build invocation, following every `cd` before it on the line and
+    `git -C` (S.segment_dirs). The old leading-`cd` regex missed
+    `git -C wt checkout ...; cd wt && sed ... && ./mvnw test` (2026-10-16): a
+    deliberate-RED proof build was recorded on the session tree and blocked the
+    next commit. Falls back to cwd when no segment is a build."""
+    for seg, d, _explicit in S.segment_dirs(command, str(cwd)):
+        if _is_build_segment(seg):
+            return Path(d).resolve()
+    return cwd
 
 
 # ─── redirected output ────────────────────────────────────────────────

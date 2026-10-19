@@ -81,9 +81,10 @@ with tempfile.TemporaryDirectory() as tmp:
     for d in (main_repo, worktree):
         d.mkdir()
 
+    # Maven markers are matched as Maven prints them (line start) since the 2026-10-16 incident.
     # ── capture-build-result: out-of-root RED must not poison main ─────────
     r = run_hook(CAPTURE, bash_payload(
-        main_repo, f"cd {worktree} && ./mvnw verify", "... BUILD FAILURE ..."))
+        main_repo, f"cd {worktree} && ./mvnw verify", "[INFO] BUILD FAILURE"))
     check("out-of-root RED: hook exits 0", r.returncode == 0, r.stderr)
     check("out-of-root RED: main baseline untouched", read_state(main_repo) is None)
     wt_state = read_state(worktree)
@@ -96,7 +97,7 @@ with tempfile.TemporaryDirectory() as tmp:
     quoted = Path(tmp) / "wt with spaces"
     quoted.mkdir()
     r = run_hook(CAPTURE, bash_payload(
-        main_repo, f'cd "{quoted}"; ./mvnw verify', "... BUILD SUCCESS ..."))
+        main_repo, f'cd "{quoted}"; ./mvnw verify', "[INFO] BUILD SUCCESS"))
     check("quoted path + ';': main untouched", read_state(main_repo) is None)
     q_state = read_state(quoted)
     check("quoted path + ';': recorded in the worktree",
@@ -104,7 +105,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # ── unchanged behavior: no cd → main baseline written ──────────────────
     r = run_hook(CAPTURE, bash_payload(
-        main_repo, "./mvnw verify", "... BUILD SUCCESS ..."))
+        main_repo, "./mvnw verify", "[INFO] BUILD SUCCESS"))
     m_state = read_state(main_repo)
     check("no-cd build writes main baseline",
           m_state is not None and m_state["status"] == "SUCCESS", str(m_state))
@@ -113,7 +114,7 @@ with tempfile.TemporaryDirectory() as tmp:
     sub = main_repo / "backend"
     sub.mkdir()
     r = run_hook(CAPTURE, bash_payload(
-        main_repo, "cd backend && ./mvnw verify", "... BUILD FAILURE ..."))
+        main_repo, "cd backend && ./mvnw verify", "[INFO] BUILD FAILURE"))
     m_state = read_state(main_repo)
     check("in-root `cd subdir` still writes main baseline",
           m_state is not None and m_state["status"] == "FAILURE", str(m_state))
