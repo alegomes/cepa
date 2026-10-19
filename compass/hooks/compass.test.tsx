@@ -541,3 +541,33 @@ test('um run novo que começa depois da abertura é lido na próxima varredura d
   await relogio.advance(30000)
   expect(await ui.find({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toBeTruthy()
 })
+
+test('nível 4: depois do done o item fica na etapa de build, sem tentativa quando é a primeira', async ($, on) => {
+  const item = ev({ evento: 'item_start', id: 'CS-1', title: 'primeiro item da fila', tentativa: 1, quando: LOCAL(-20) })
+  const fim = ev({ evento: 'item_end', id: 'CS-1', status: 'done', quando: LOCAL(-9) })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + item + fim))
+  expect(await ui.find({ type: 'Text', text: '▶ CS-1 · primeiro item da fila' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'build há 9min' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'nada entregue ainda · prazo 18:00' })).toBeTruthy()
+})
+
+test('abrir a sessão com um run já encerrado não avisa, nem no relógio de 5 s, nem no de 30 s', async ($, on) => {
+  const avisos: string[] = []
+  const sons: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  on('audio.play', async ($: any, e: any) => {
+    sons.push(e.clip.asset)
+    return { value: undefined }
+  })
+  const fim = ev({ evento: 'run_end', motivo: 'fim-da-fila', detalhe: 'a fila acabou', quando: LOCAL(-12) })
+  const { relogio } = await prepara($, on, 'sessao-a', ARQUIVO, UNTIL(RUN_START + CS1_START + CS1_END + CS1_VERDE + fim))
+  await relogio.advance(5000)
+  await relogio.advance(30000)
+  expect(avisos).toEqual([])
+  expect(sons).toEqual([])
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: 'fila acabou há 12 min' })).toBeTruthy()
+})
