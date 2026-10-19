@@ -37,11 +37,13 @@ items:
   why: 'Segundo: mesma mecânica de leitura do M1. Em 2026-10-19 o dono trocou a faixa
     acima do prompt por um nível a mais do compass, coerente com a recusa da faixa
     no M1.'
-  status: pending
+  status: done
   blocked_by:
   - M1
-  human_pending: dono ver o mod desenhado no próprio terminal e confirmar que mostra
-    o certo
+  human_pending: null
+  evidence: compass 0.5.0 (a60c75e, testes 6cb0fca); completion-auditor COMPLETE
+    em .claude/acceptance/M2.yaml; proof PROVEN em docs/proof/mods-M2.yaml com L4
+    aceito como não aplicável pelo dono em 2026-10-19; dono aprovou marcar done.
 - id: M3
   title: 'Painel da fila: próximo item, porquê e contagem de prontos de .claude/programs/<nome>/plan.yaml'
   why: 'Absorvido pelo M1 em 2026-10-19: o nível 1 do cepa-rumo já mostra as filas,

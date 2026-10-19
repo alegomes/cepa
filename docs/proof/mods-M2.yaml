@@ -1,6 +1,7 @@
 schema_version: 2
 card: mods-M2
-verdict: needs-human
+verdict: proven
+human_decision: "2026-10-19, dono: aceito o L4 como nao aplicavel (sem fuzz no repo; entradas realistas de session-mode e desvios.md viraram testes RED em 6cb0fca). Veredito needs-human -> proven por decisao do dono."
 reviewed_at: 2026-10-19T15:00:00-03:00
 base_commit: 7917f34
 head_commit: 6cb0fca
