@@ -7,12 +7,12 @@ import { idade, parseIntent } from './intent'
 
 // Painel de orientação em níveis, do mais alto ao mais baixo:
 // 1. filas do repo e um resumo dos itens; 2. intenção, plano e passo da sessão.
-const PANE = 'cepa-rumo'
+const PANE = 'rumo'
 const ABRE = { id: PANE, title: 'Rumo', columns: 48 }
 const ARQUIVO = '.claude/session-intent'
-const texto = atom({ plugin: 'cepa-rumo', key: 'texto' } as const, null)
-const agora = atom({ plugin: 'cepa-rumo', key: 'agora' } as const, 0)
-const filas = atom({ plugin: 'cepa-rumo', key: 'filas' } as const, [])
+const texto = atom({ plugin: 'rumo', key: 'texto' } as const, null)
+const agora = atom({ plugin: 'rumo', key: 'agora' } as const, 0)
+const filas = atom({ plugin: 'rumo', key: 'filas' } as const, [])
 
 let passoAnterior = 0
 
@@ -101,19 +101,19 @@ export const register: Register = on => {
         {lista.length === 0 && <Text dimColor>nenhuma fila single-track</Text>}
         {lista.length > 0 && (
           <Box flexDirection="row">
-            <Box flexGrow={1}><Text dimColor>fila</Text></Box>
+            <Box flexGrow={1} flexShrink={1} minWidth={0}><Text dimColor>fila</Text></Box>
             {COLUNAS.map(c => (
-              <Box width={LARGURA} justifyContent="flex-end"><Text dimColor>{c.rotulo}</Text></Box>
+              <Box width={LARGURA} flexShrink={0} justifyContent="flex-end"><Text dimColor>{c.rotulo}</Text></Box>
             ))}
           </Box>
         )}
         {lista.map(f => (
           <Box flexDirection="row">
-            <Box flexGrow={1}>
+            <Box flexGrow={1} flexShrink={1} minWidth={0}>
               <Text bold={aberta(f)} dimColor={!aberta(f)} wrap="truncate-end">{f.nome}</Text>
             </Box>
             {COLUNAS.map(c => (
-              <Box width={LARGURA} justifyContent="flex-end">
+              <Box width={LARGURA} flexShrink={0} justifyContent="flex-end">
                 {f[c.campo] === 0
                   ? <Text dimColor>·</Text>
                   : <Text color={c.cor} dimColor={!aberta(f)}>{String(f[c.campo])}</Text>}

@@ -80,10 +80,10 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null) =>
 const sobe = async ($: any, on: any, sessao: string, texto: string | null) => {
   await prepara($, on, sessao, texto)
   return $.ui.mount({
-    plugin: 'cepa-rumo',
+    plugin: 'rumo',
     surface: 'terminal',
     component: 'Pane',
-    requestId: 'cepa-rumo',
+    requestId: 'rumo',
     props: { title: 'Rumo', isFocused: false, bodyColumns: 60, placement: 'dock' },
   })
 }
@@ -146,4 +146,12 @@ test('plano cumprido aponta o wrap-up', async ($, on) => {
 test('no último passo o plano ainda não está cumprido', async ($, on) => {
   const ui = await sobe($, on, 'sessao-a', ARQUIVO.replace('passo: 2', 'passo: 3'))
   expect(await ui.findAll({ type: 'Text', text: /Plano cumprido/ })).toEqual([])
+})
+
+test('colunas de número não encolhem quando o nome da fila é longo', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO)
+  const caixas = (await ui.findAll({ type: 'Box' })).filter((b: any) => b.props?.width === 6)
+  // cabeçalho + 3 filas single-track, 5 colunas cada
+  expect(caixas.length).toBe(20)
+  expect(caixas.every((b: any) => b.props.flexShrink === 0)).toBe(true)
 })

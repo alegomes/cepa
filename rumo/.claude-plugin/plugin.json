@@ -1,1 +1,1 @@
-{ "name": "cepa-rumo", "version": "0.2.0", "description": "Painel de orientação da Cepa em níveis: filas e seus itens; intenção, plano e passo da sessão", "types": "./types/index.d.ts" }
+{ "name": "rumo", "version": "0.3.0", "description": "Painel de orientação da Cepa em níveis: filas e seus itens; intenção, plano e passo da sessão", "types": "./types/index.d.ts" }

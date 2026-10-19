@@ -13,6 +13,6 @@ export type Fila = {
 
 declare module 'claude-code' {
   interface PluginState {
-    'cepa-rumo': { texto: string | null; agora: number; filas: Fila[] }
+    rumo: { texto: string | null; agora: number; filas: Fila[] }
   }
 }
