@@ -23,6 +23,7 @@ common/expertise/expertise
 .claude/last-build.json
 .claude/loop-state.json
 .claude/session-mode
+.claude/session-intent
 # Marcador do hook feedback-nudge (id da última sessão avisada). Reescrito a
 # cada sessão; versionado, deu conflito no merge 3f4fe2e.
 .claude/feedback-nudge
