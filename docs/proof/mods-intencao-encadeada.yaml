@@ -1,6 +1,6 @@
 schema_version: 2
 card: mods-intencao-encadeada
-verdict: needs-human
+verdict: proven
 reviewed_at: 2026-10-19T13:00:00-03:00
 base_commit: 89a8762
 head_commit: 82d64b7
@@ -44,3 +44,4 @@ levels:
   bugfix_regression_red_at_base:
     status: n/a
 routing_reason: "NEEDS-HUMAN so pelo L4 (entrada adversarial nao rodada; nao ha fuzz no repo). Todas as perturbacoes relevantes (P1-P9, incluindo a volta do `\\s*`) ficam RED e as 5 suites de regressao ficam verdes. Sugestao ao humano: aceitar o L4 como nao aplicavel, ja que as novas entradas adversariais (set -f, newline no passo, linha vazia) viraram testes."
+human_decision: "2026-10-19, dono: aceito o L4 como nao aplicavel (sem fuzz no repo; entradas adversariais realistas viraram testes RED em 82d64b7). Veredito needs-human -> proven por decisao do dono."
