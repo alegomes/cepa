@@ -76,7 +76,7 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null, ex
   }))
   on('process.run', async ($: any, e: any) => ({
     value: e.argv[0] === 'cepa-modos'
-      ? { exitCode: 0, stdout: MODOS_JSON, stderr: '' }
+      ? { exitCode: 0, stdout: e.argv.join(' ') === 'cepa-modos --json' ? MODOS_JSON : 'tabela em texto', stderr: '' }
       : { exitCode: 0, stdout: '/repo/.git\n', stderr: '' },
   }))
   on('session.id', async () => ({ value: sessao }))
@@ -133,6 +133,7 @@ test('lê o modo e trata null como ausência', async () => {
 test('conta desvios abertos e resolvidos e guarda o quê do último', async () => {
   expect(contaDesvios(DESVIOS)).toEqual({ abertos: 2, resolvidos: 1, ultimo: 'bash-path-lock lê sed -i errado' })
   expect(contaDesvios('')).toEqual({ abertos: 0, resolvidos: 0, ultimo: '' })
+  expect(contaDesvios('- [X] 2026-10-19 · modo: reforma · marcado em maiúscula\n').resolvidos).toBe(1)
 })
 
 test('saídas vêm do cepa-modos --json; json quebrado não derruba', async () => {
@@ -144,7 +145,7 @@ test('nível 3: modo, condição de saída e desvios, depois do nível 2', async
   const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': MODO, '.claude/desvios.md': DESVIOS })
   expect(await ui.find({ type: 'Text', text: 'construcao' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'fecha quando: completion-auditor COMPLETE e proof-reviewer PROVEN' })).toBeTruthy()
-  expect(await ui.find({ type: 'Text', text: '2 desvios abertos' })).toBeTruthy()
+  expect((await ui.find({ type: 'Text', text: '2 desvios abertos' }))?.props?.color).toBe('yellow')
   expect(await ui.find({ type: 'Text', text: ' · 1 resolvido' })).toBeTruthy()
   const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
   expect(textos.indexOf('Sessão') < textos.indexOf('Modo')).toBe(true)
@@ -159,6 +160,7 @@ test('nível 3 mostra o orçamento da reforma', async ($, on) => {
 test('sem modo e sem desvios, o nível 3 diz isso (com intenção)', async ($, on) => {
   const ui = await sobe($, on, 'sessao-a', ARQUIVO)
   expect(await ui.find({ type: 'Text', text: 'sem modo' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'Esta sessão não declarou modo.' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'nenhum desvio registrado' })).toBeTruthy()
   expect(await ui.findAll({ type: 'Text', text: /fecha quando/ })).toEqual([])
 })
@@ -168,6 +170,25 @@ test('sem modo e sem desvios, o nível 3 diz isso (sem intenção)', async ($, o
   expect(await ui.find({ type: 'Text', text: 'sem modo' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'nenhum desvio registrado' })).toBeTruthy()
   expect(await ui.findAll({ type: 'Text', text: /fecha quando/ })).toEqual([])
+})
+
+test('singular para um desvio aberto e um resolvido', async ($, on) => {
+  const um = '- [x] 2026-08-18 · modo: construcao · a\n- [ ] 2026-08-19 · modo: construcao · b\n'
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/desvios.md': um })
+  expect(await ui.find({ type: 'Text', text: /^1 desvio aberto$/ })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: /^ · 1 resolvido$/ })).toBeTruthy()
+})
+
+test('desvio novo que já nasce resolvido também gera aviso', async ($, on) => {
+  const avisos: string[] = []
+  on('ui.toast', async ($: any, e: any) => {
+    avisos.push(e.text)
+    return { value: undefined }
+  })
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, { '.claude/desvios.md': DESVIOS })
+  arquivos['.claude/desvios.md'] = `${DESVIOS}- [x] 2026-10-19 · modo: construcao · resolvido na hora\n`
+  await relogio.advance(5000)
+  expect(avisos).toEqual(['Desvio registrado: resolvido na hora'])
 })
 
 test('desvio novo gera aviso; os que já existiam na abertura, não', async ($, on) => {

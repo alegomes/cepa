@@ -1,0 +1,50 @@
+schema_version: 2
+card: mods-M2
+verdict: unproven
+reviewed_at: 2026-10-19T14:00:00-03:00
+base_commit: 7917f34
+head_commit: a60c75e
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "compass/hooks/modo.ts", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/hooks/register.tsx", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/types/index.d.ts", module: compass, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo nao e Quarkus: mod TypeScript do Claude Code, testado pelo engine real
+    (`claude plugin test compass`). Superficie externa = Pane montado pelo engine + ui.toast.
+    Dubles: o teste estuba apenas o evento process.run (fronteira distante: o binario cepa-modos
+    e o git), e o fs/clock do engine; modo.ts e register.tsx reais rodam, por isso substituted_by_double e null.
+    Prova numa worktree descartavel (/tmp/proof-mods-M2, removida ao fim; arvore principal intocada).
+    plugin.json e marketplace.json mudaram so em versao/descricao (nao perturbados).
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: survived
+      results:
+        - "baseline a60c75e: `claude plugin test compass` -> 20 pass, 0 fail"
+        - "44 perturbacoes P1-P44 (uma por vez, git checkout apos cada), 34 RED e 10 verdes (sobreviventes)"
+        - "RED: parseModo (P1,P3,P4,P5,P6), contaDesvios (P7,P8,P10,P11,P12), leSaidas catch (P14), toast (P15 sem guarda da abertura, P16 >=, P17 sem toast, P18 reset, P19 texto), leitura/ligacao (P22 releiaSaidas, P23 releia no session.start, P24 releiaModo, P25/P26 caminhos, P28 saida, P29 'fecha quando', P30 orcamento, P32 'nenhum desvio', P35 resolvidos, P37/P38 nivelModo nos dois ramos, P39 'sem modo', P40/P41 atoms, P42 rotulo, P43 parseModo, P44 titulo)"
+        - "SOBREVIVENTE REAL P31: register.tsx `{m === null && <Text>Esta sessão não declarou modo.</Text>}` -> `{false && ...}`; 20 pass. A mensagem de ausencia de modo (criterio) nao e afirmada por nenhum teste; so o titulo 'sem modo' e."
+        - "SOBREVIVENTE REAL P27: register.tsx `['cepa-modos','--json']` -> `['cepa-modos']`; 20 pass. O stub de process.run aceita qualquer argv[0]=='cepa-modos' (compass.test.tsx:77), entao esquecer --json (o cepa-modos real imprime texto, leSaidas devolve {} calado) some com a condicao de saida sem teste acusar."
+        - "SOBREVIVENTE REAL P20: register.tsx `total = d.abertos + d.resolvidos` -> `d.abertos`; 20 pass. Desvio novo ja nascido resolvido ([x]) nao geraria aviso e ninguem notaria."
+        - "SOBREVIVENTE REAL P9: modo.ts regex `( |x|X)` -> `( |x)`; 20 pass. Desvio marcado `[X]` maiusculo deixaria de ser contado."
+        - "SOBREVIVENTES cosmeticas: P33 (cor amarela quando ha aberto), P34 ('1 desvio aberto' singular), P36 ('1 resolvido' singular); 20 pass cada."
+        - "SOBREVIVENTES equivalentes/quase: P2 (`v !== ''` removido; `!campos.modo` ja barra vazio), P13 (`if (d.saida)` removido; so exibe se saida !== ''), P21 (`exitCode === 0` -> true; JSON invalido ja cai no catch de leSaidas)"
+    caveats: "toast exercitado pelo engine (ui.toast), painel pelo Pane; sem ferramenta de cobertura."
+  l2_coverage:
+    status: assumed
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance inferido pelas perturbacoes: 34 de 44 derrubaram teste (linhas alcancadas); P31/P27/P20/P9 sobreviventes indicam linhas alcancadas mas nao afirmadas"
+  l4_adversarial_input:
+    status: skipped
+    reason: ""
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "UNPROVEN: 4 sobreviventes reais em comportamento visivel no painel/toast. A mais grave (P31) e um criterio explicito: a mensagem de ausencia de modo pode sumir sem teste acusar. P27 (argumento --json do cepa-modos) deixa a condicao de saida sumir calada. P20 (aviso de desvio ja resolvido) e P9 ([X] maiusculo) sao lacunas menores. Alem disso L4 nao rodado (sem fuzz no repo; arquivos session-mode/desvios.md/JSON sao entrada de texto livre). Fechar: (a) afirmar o texto 'Esta sessão não declarou modo.' no teste de ausencia; (b) o stub de process.run exigir argv == ['cepa-modos','--json']; (c) caso de desvio novo `- [x]` gerando toast; (d) caso `[X]` em contaDesvios."

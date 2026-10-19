@@ -1,0 +1,61 @@
+schema_version: 1
+card: M2
+status: complete
+audited_at: 2026-10-19T12:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Cartão Modo (nível 3, depois do nível 2 Sessão) com o nome do modo lido de .claude/session-mode"
+    altitude: ui
+    surface: "Pane do compass montado pelo engine (ui.mount), cartão Modo"
+    demonstrated_by:
+      test: "compass/hooks/compass.test.tsx: nível 3: modo, condição de saída e desvios, depois do nível 2"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "cd compass && claude plugin test . -> '(pass) nível 3: modo, condição de saída e desvios, depois do nível 2'; 20 pass, 0 fail; python3 tests/test_compass_mod.py -> ok"
+    verdict: complete
+    gap: null
+  - id: AC2
+    text: "Cartão mostra 'fecha quando: ...' vindo de cepa-modos --json (fonte única _modos.py)"
+    altitude: ui
+    surface: "Pane do compass; process.run ['cepa-modos','--json']"
+    demonstrated_by:
+      test: "mesmo teste do AC1 + nível 3 mostra o orçamento da reforma + saídas vêm do cepa-modos --json"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 20 pass, 0 fail. Conferido à parte: cepa-modos --json real devolve 'saida' por modo (construcao = 'completion-auditor COMPLETE e proof-reviewer PROVEN'). Observação: o teste usa o JSON como mock de process.run; o formato bate com o real, mas a chamada real não é exercida no teste."
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Contagem de desvios abertos (- [ ]) e resolvidos (- [x]) de .claude/desvios.md"
+    altitude: ui
+    surface: "Pane do compass, linha de desvios do cartão Modo"
+    demonstrated_by:
+      test: "nível 3 (textos '2 desvios abertos' e ' · 1 resolvido'; fixture com '- [ ]' no meio da linha que não conta) + conta desvios abertos e resolvidos"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 20 pass, 0 fail"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "Desvio novo depois da abertura gera toast; os que já existiam na abertura não"
+    altitude: event
+    surface: "ui.toast disparado pelo ciclo de releitura (clock.every 5000) do engine"
+    demonstrated_by:
+      test: "desvio novo gera aviso; os que já existiam na abertura, não"
+      layer: engine-real com relógio simulado (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> '(pass) desvio novo gera aviso; os que já existiam na abertura, não'; 20 pass, 0 fail. Asserta avisos==[] após 5 s com 3 desvios preexistentes e avisos==['Desvio registrado: o mod não lê o build'] após acrescentar um."
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "Sem modo e sem desvios, o cartão diz isso"
+    altitude: ui
+    surface: "Pane do compass, cartão Modo vazio (com e sem intenção)"
+    demonstrated_by:
+      test: "sem modo e sem desvios, o nível 3 diz isso (com intenção) e (sem intenção)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 20 pass, 0 fail; asserta 'sem modo', 'nenhum desvio registrado' e ausência de 'fecha quando'"
+    verdict: complete
+    gap: null
+notes: "Confirmação visual no terminal do dono é human_pending do item, fora deste escopo. O wrapper tests/test_compass_mod.py não imprime a contagem de testes; a contagem (20 pass) veio de rodar claude plugin test diretamente."
