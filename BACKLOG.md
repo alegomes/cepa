@@ -4501,3 +4501,38 @@ Regra escrita em `common/commands/wrap-up.md` (L8 e Discard), `common/commands/m
 (passo 3), `common/skills/plain-report/SKILL.md` ("Depois do wrap-up") e
 `common/skills/default-yes/SKILL.md`. Testes em `tests/test_report_style_lint.py`. Plugin
 `common` na 2.29.0.
+
+## `/common:plan` aceita item de feedback sem conferir se o `BACKLOG.md` já o dá como feito
+
+**Plano:** sem item ainda (abrir na fila `cepa` quando entrar na rodada)
+
+**Status:** pendente · **Lar provável:** `common/commands/plan.md` (seção "Sem flag — a fila
+ditada à mão", passo 1 "quais demandas entram") e `common/bin/cepa-plan` (validação na gravação)
+· **Origem:** review do run `until/2026-10-19-1958` (fila `fb-2026-10`), decisão 3, aceita pelo
+dono em 2026-10-20.
+
+### Problema
+
+O item `board-flow-yaml-comentario-team-dois-formatos` entrou na fila `fb-2026-10` em 2026-10-19
+porque a seção "Comentário do campo Team" do `BACKLOG.md` ainda dizia "pendente", mas o trabalho
+estava feito desde 2026-10-16 (commit `a6a64bd` na `main`). A rodada custou US$ 1,67 e 85 s
+(`total_cost_usd` e `segundos` do `item_end` no registro `2026-10-19-1958.jsonl`) só para o agente
+descobrir isso e corrigir a seção. O `plan.md` manda ler o `BACKLOG.md` para propor a lista de
+demandas, mas não manda conferir, para cada candidato, se o git já tem o que a seção pede. Uma
+seção com `**Status:** pendente` desatualizada vira item de fila sem resistência.
+
+### Esboço de solução
+
+1. Em `plan.md`, passo 1 da fila ditada à mão: para cada candidato vindo do `BACKLOG.md`, conferir
+   no git (`git log --grep` pelo título da seção e pelo `Lar provável`) se já há commit que fecha a
+   seção; candidato com commit é apresentado ao dono como "parece feito em <sha>, confirma que
+   entra?" em vez de entrar calado.
+2. Quando o dono confirma que estava feito, o comando corrige a linha `**Status:**` da seção na
+   mesma rodada, para a próxima fila não tropeçar de novo.
+3. `cepa-plan` não muda: a conferência é do comando que lê a fonte, não do gravador.
+
+### Teste que falta
+
+Em `tests/` do `common`: fixture de `BACKLOG.md` com uma seção "pendente" cujo título aparece em
+um commit do repositório de teste; o roteiro do `plan.md` (ou o helper que ele chamar) marca o
+candidato como "parece feito" e não o grava sem confirmação.
