@@ -2306,3 +2306,14 @@ items:
   - comandos-em-ingles
   human_pending: null
   evidence: null
+- id: readme-estrutura-de-trabalho
+  title: 'README: seção How work is organised (Epic, cycle, queue, item, session,
+    inbox) e aviso do maestro congelado'
+  why: 'Pedido do dono em 2026-10-20. Texto pronto em .claude/rascunhos/readme-how-work-is-organised.md;
+    colar e conferir os links. Exige sessão em modo documentacao, porque o modo-escrita-gate
+    barra README.md em descoberta. Depois desta sessão de descoberta fechar. (ainda
+    não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
