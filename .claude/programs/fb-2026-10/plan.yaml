@@ -60,18 +60,23 @@ items:
   blocked_by: []
   human_pending: No próximo run do cepa-until de um repo build-hex, contar SendMessage
     do orquestrador a leads nas transcrições (zero esperado)
-  evidence: 'Commits 3635ef0, 26667f9 e 7df0752 na branch until/2026-10-19-1958.
-    Medição nas transcrições do run until/2026-10-15-1946: 10 retomadas à mão em
-    5 de 7 rodadas (6 engineering-lead, 4 validation-lead). Conserto: parágrafo
-    ''Exceção: run desatendido'' nos 11 agentes com Task (delegar com run_in_background:
-    false quando CEPA_UNTIL_RUN/CLAUDE_AUTONOMOUS_RUN_ID), 4a marca em tests/test_delegacao_assincrona_specs.py,
-    bullet no passo 3.b do drain-plan + 3 checks em test_common_drain_plan.py, exceção
-    na mensagem do no-busy-wait, PATCH em 7 plugins (build-hex 1.4.3, common 2.30.2...).
-    Run sintético: CEPA_UNTIL_RUN claude -p, lead delegou com run_in_background:
-    false e devolveu no mesmo turno, zero SendMessage (sessão d51a89d3, US$ 0,86).
-    Gates: pair-reviewer OK-WITH-NOTES, completion-auditor COMPLETE, proof-reviewer
-    PROVEN. Fora: contagem num run real do cepa-until de repo build-hex (próximo
-    run); lead sem a frase ''Unattended run'' no pedido não foi medido.'
+  evidence: 'Resposta do dono em 2026-10-20: run until/2026-10-20-0750 do wego-digitacao-backend:
+    zero SendMessage de retomada a leads; os 3 SendMessage do log sao rodadas novas
+    por commit novo (proof round 2, acceptance refresh, validation refresh em e422421).
+    No run 2026-10-16-0822, antes do conserto, eram 6.. O dono manteve o item como
+    estava (`done`, rota humana aberta). Evidência anterior: Commits 3635ef0, 26667f9
+    e 7df0752 na branch until/2026-10-19-1958. Medição nas transcrições do run until/2026-10-15-1946:
+    10 retomadas à mão em 5 de 7 rodadas (6 engineering-lead, 4 validation-lead).
+    Conserto: parágrafo ''Exceção: run desatendido'' nos 11 agentes com Task (delegar
+    com run_in_background: false quando CEPA_UNTIL_RUN/CLAUDE_AUTONOMOUS_RUN_ID),
+    4a marca em tests/test_delegacao_assincrona_specs.py, bullet no passo 3.b do
+    drain-plan + 3 checks em test_common_drain_plan.py, exceção na mensagem do no-busy-wait,
+    PATCH em 7 plugins (build-hex 1.4.3, common 2.30.2...). Run sintético: CEPA_UNTIL_RUN
+    claude -p, lead delegou com run_in_background: false e devolveu no mesmo turno,
+    zero SendMessage (sessão d51a89d3, US$ 0,86). Gates: pair-reviewer OK-WITH-NOTES,
+    completion-auditor COMPLETE, proof-reviewer PROVEN. Fora: contagem num run real
+    do cepa-until de repo build-hex (próximo run); lead sem a frase ''Unattended
+    run'' no pedido não foi medido.'
   owner_question: 'Conto as retomadas de lead no próximo run do cepa-until de um
     repo build-hex? Recomendo sim: é a única prova em run real'
 - id: board-flow-yaml-comentario-team-dois-formatos
