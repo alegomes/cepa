@@ -6,6 +6,8 @@ topologies run *one* agent team in *one* session, Maestro runs *N real
 sessions* in parallel — each on its own worktree, each mediated by a permission
 gatekeeper — and integrates their results with a verified merge train.
 
+> **Congelado desde 2026-10-08.** O fork de sessões e o merge train serão absorvidos pelo condutor do `cepa-until` (decisão 1 de [estrategia-cepa-proximo-nivel.md](estrategia-cepa-proximo-nivel.md)). Não use em trabalho novo; as filas `parallel-waves` que sobraram estão em `.claude/programs/archive/`.
+>
 > **Status (2026-09-19, maestro 0.5.0): experimental, not yet proven end to end.**
 > Construction steps 1–3 are done and tested (the design, the intake gate, the
 > deterministic run cores, and the `run`/`resume` commands). Step 4 ran once on
