@@ -85,7 +85,7 @@ def main():
           "git rev-parse --git-common-dir" in doc)
     check("a seção nomeia os DOIS jeitos de perder o plano",
           "Writing it under the current worktree" in doc
-          and "Copying a plan per worktree" in doc,
+          and "Copying a queue per worktree" in doc,
           "sem os dois, o leitor conserta um e reintroduz o outro")
     check("a seção liga o conserto ao item do BACKLOG",
           "camada 0" in doc)

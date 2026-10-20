@@ -1,6 +1,6 @@
 ---
-description: Responde "e agora, o que eu faço?" a qualquer momento — lê o plano de execução single-track (.claude/programs/<nome>/plan.yaml) e nomeia UM próximo passo com o porquê registrado na priorização. Distingue os dois tipos de próximo que se confundem em silêncio: ação humana pendente (validar à mão, aprovar PR, rotacionar segredo) e próximo item. Não exige Jira — com board-flow.yaml presente, reconcilia contra o board vivo; sem, responde do plano e diz que o status é auto-declarado. Read-only por default; --sync grava a reconciliação.
-argument-hint: [--plan NOME] [--offline] [--sync]
+description: Answers "and now, what do I do?" at any moment: reads the `single-track` queue (.claude/programs/<name>/plan.yaml) and names ONE next step with the why recorded at prioritisation. Tells apart the two kinds of next that blur in silence: a pending human action (validate by hand, approve a PR, rotate a secret) and the next item. Needs no Jira: with board-flow.yaml present it reconciles against the live board; without it, answers from the queue and says the statuses are self-reported. Read-only by default; --sync records the reconciliation.
+argument-hint: [--plan NAME] [--offline] [--sync]
 interaction: routine
 ---
 

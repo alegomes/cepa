@@ -2,10 +2,15 @@
 
 One page, five pictures. Each of the other documents explains one part of Cepa in depth;
 this one shows how the parts connect, from the terminal you type in to the model that
-answers, and from a card in the queue to a proven merge. Read it first if you have never
+answers, and from an item in the queue to a proven merge. Read it first if you have never
 seen Cepa run, or when you need to explain it to someone else.
 
 ## Vocabulary
+
+The work has four heights. An **Epic** is cut into **cycles**; each cycle becomes a **queue**
+of **items**. A **session** is one Claude Code open on the repo: it has a **mode** (what kind
+of work fits in it) and an **intent** (what this session will do, in **steps**, and when to
+stop). Inboxes feed the queue; nothing runs from an inbox.
 
 | Word | What it is |
 |---|---|
@@ -13,11 +18,19 @@ seen Cepa run, or when you need to explain it to someone else.
 | **plugin** | A folder of text files and small scripts that Claude Code loads: agents, slash commands, hooks and skills. |
 | **marketplace** | A repository that lists plugins to install from. Cepa is one marketplace with eleven plugins; each project picks the ones it needs. |
 | **hook** | A script Claude Code runs before or after an action, which can refuse it. The lock. The model cannot argue with a hook. |
-| **mode** | What a session is for (exploration, discovery, construction, refactor, ...). It decides where the agent may write and what must be true before the session can close. See [modos-de-trabalho.md](modos-de-trabalho.md). |
+| **Epic** | A package of work worth a demonstration, written as `docs/epics/<name>.md` by `/common:epic`. It lists invariants that never regress and a ladder of cycles. |
+| **cycle** | One rung of an Epic's ladder. It closes when its demonstration script runs on screen and in the backend. Weeks long; crosses many sessions. `/common:plan --from-epic --ciclo N` turns it into a queue. |
+| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Stored as `.claude/programs/<name>/plan.yaml`; written only by `/common:plan`; read by `/common:next`, `/common:fila`, `/common:drain-plan` and `cepa-until`. See [execution-plan.md](execution-plan.md). |
+| **item** | One line of a queue: `id`, `title`, `why`, `status`, `blocked_by`, `human_pending`, `evidence`. |
+| **card** | An item's mirror on the Jira board, in repos that have `board-flow.yaml`. The board keeps the status; it keeps neither the order nor the why. |
+| **session** | One Claude Code open on the repo. Interactive (`claude` or `cepa`) or unattended (`cepa-until`). It may work zero, one or several items, or write an Epic, or only investigate. |
+| **mode** | What kind of session it is (exploration, discovery, construction, refactor, ...). It decides where the agent may write and what must be true before the session can close. Every intent lives inside a mode. See [modos-de-trabalho.md](modos-de-trabalho.md). |
+| **intent** | What this session will do inside its mode and when to stop: a purpose, a stopping point and one to six steps. Stored in `.claude/session-intent`, written only by `cepa-intencao`, shown by `/common:whereami`. An unattended session has no intent file: its intent is the next item of the queue. |
+| **step** | One line of the intent. The cursor says which step is in progress. Hours long; one session only. |
+| **inbox** | Where demands wait before they are ordered: `BACKLOG.md`, the feedback ledger (`cepa-feedback`), `.claude/desvios.md`, the GitHub issues and, in repos with Jira, the backlog column. Nothing runs from an inbox; `/common:plan` turns it into items. |
 | **worktree** | A separate folder of the same repository on its own branch. Two sessions in two worktrees never step on each other. |
-| **plan.yaml** | The work queue: the order of the items and the reason each one sits where it sits. See [execution-plan.md](execution-plan.md). |
 | **cepa-until** | The command that runs the queue item by item until a clock time. The thing that works overnight. See [cepa-until.md](cepa-until.md). |
-| **proof** | An independent reviewer deliberately breaks each change and re-runs the tests. If nothing goes red, the change is unprotected and the card bounces. See [proof-gate.md](proof-gate.md). |
+| **proof** | An independent reviewer deliberately breaks each change and re-runs the tests. If nothing goes red, the change is unprotected and the item bounces. See [proof-gate.md](proof-gate.md). |
 
 ## 1. The layers, from you to the model
 
@@ -82,7 +95,7 @@ hook), and no agent can edit the hooks that lock it. The picture shows `build-te
 other topologies have the same shape with different counts (`build-solo` has two agents,
 `build-hex` has fourteen). See [topologies.md](topologies.md).
 
-## 3. The path of a card
+## 3. The path of an item
 
 ```mermaid
 flowchart LR
@@ -103,7 +116,7 @@ flowchart LR
     style prove fill:#e9d8e4,stroke:#6b2d5c,color:#27231f
 ```
 
-On one real project, 269 cards went through this. One in five was bounced by the proof gate
+On one real project, 269 items went through this. One in five was bounced by the proof gate
 after being built, reviewed and declared done on a green build; on one in seven the
 reviewing agent itself wrote "proven" and the hook refused the file. The numbers and their
 source are in the [README](../README.md#what-the-gates-caught-on-a-real-project). This is
@@ -157,7 +170,7 @@ The question to ask of every file: is this about this project, or about the way 
 - **In Cepa (valid in every project):** the agents and their hierarchy, the slash commands,
   the locks, the report format, the session modes, the overnight loop.
 - **In the project:** that repository's instruction file, the board configuration (which
-  tracker, which columns), that project's queue, and the specs and proof records of each card.
+  tracker, which columns), that project's queue, and the specs and proof records of each item.
 
 Cepa is one point of arrival, not the path. It grew out of months of "what can be better
 today than yesterday", one piece per real annoyance. A harness grown from someone else's

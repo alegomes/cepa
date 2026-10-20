@@ -8,7 +8,7 @@ notes at the top of that script, which remain the source of truth.
 ```sh
 cepa-until my-queue --for 12h
 cepa-until my-queue --until 07:00
-cepa-until my-queue --for 3h --dry-run     # prints the plan of the run, executes nothing
+cepa-until my-queue --for 3h --dry-run     # prints the schedule of the run, executes nothing
 ```
 
 `my-queue` is the name of a queue written by `/common:plan`, stored at
@@ -140,7 +140,7 @@ the same list and the command to come back: `cepa-until decidir <fila>/<run>`.
   files show as deleted and you did not delete them, find out why before overriding.
 - **Permissions are off by default** (decision 4 above). The gates still apply inside each
   subprocess: red build blocks commit, cards need acceptance evidence, verdicts are computed.
-- **Use `--dry-run` first.** It prints the plan of the run and exits.
+- **Use `--dry-run` first.** It prints the schedule of the run and exits.
 - **On a terminal the output is decorated**: colour, one block per item with a bar of the
   window spent so far, a line that redraws every 30 s while the `claude` subprocess runs, and
   the item title cut to the terminal width (`--titulo-inteiro` keeps it whole; the `.jsonl`
