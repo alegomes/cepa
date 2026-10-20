@@ -669,15 +669,18 @@ items:
   status: blocked
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-10-17: não: Devolvo a calibragem do porteiro
-    à fila agora, antes de qualquer onda rodar?. O dono manteve o item como estava
-    (`blocked`). Evidência anterior: Resposta do dono em 2026-10-15: não: Mando
-    calibrar o porteiro agora, antes de qualquer onda rodar?. O dono manteve o item
-    como estava (`blocked`). Evidência anterior: Condicao de fora nao cumprida:
-    o BACKLOG.md (secao ''Calibrar as regras do porteiro'', decisao do dono 2026-08-24)
-    adia o que falta (liberar escrita por shell cujo alvo cai dentro da superficie
-    da slice) ate a 0.4.3 do porteiro rodar pelo menos uma onda de verdade. Conferido
-    em 2026-09-27: o unico ledger de porteiro no disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
+  evidence: 'Resposta do dono em 2026-10-20: não: Devolvo a calibragem do porteiro
+    à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve o item como
+    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-17: não:
+    Devolvo a calibragem do porteiro à fila agora, antes de qualquer onda rodar?.
+    O dono manteve o item como estava (`blocked`). Evidência anterior: Resposta
+    do dono em 2026-10-15: não: Mando calibrar o porteiro agora, antes de qualquer
+    onda rodar?. O dono manteve o item como estava (`blocked`). Evidência anterior:
+    Condicao de fora nao cumprida: o BACKLOG.md (secao ''Calibrar as regras do porteiro'',
+    decisao do dono 2026-08-24) adia o que falta (liberar escrita por shell cujo
+    alvo cai dentro da superficie da slice) ate a 0.4.3 do porteiro rodar pelo menos
+    uma onda de verdade. Conferido em 2026-09-27: o unico ledger de porteiro no
+    disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
     166 linhas) e de 2026-08-24 10:12, anterior ao commit 9b9846e da 0.4.3 (10:13);
     nenhuma onda rodou depois. As duas ondas da fila (rodar-onda-lotes-*) estao
     blocked por herdr fora do ar. Nada implementado, nenhum commit. Quem resolve:
@@ -2270,10 +2273,25 @@ items:
     Não inclui renomear plan.yaml, .claude/programs/ nem a chave program: do YAML,
     que quebrariam cepa-plan, cepa-until, hooks e as filas já gravadas nos repos
     de cliente (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits 20f6d8b, 3f6428d, 54214db na branch until/2026-10-20-1641 (sem
+    merge; build completo fica com o supervisor). Os 68 comandos (*/commands/*.md)
+    com description, argument-hint e corpo em inglês, vocabulário de docs/how-it-fits.md;
+    linhas com português nos comandos: 2087 antes, 120 depois, todas contrato citado
+    (strings que cepa-plan/cepa-intencao/cepa-until/session-next.py/report-style-lint
+    leem ou imprimem, comentários de claim do Jira, cabeçalhos de template de Epic/spec,
+    rótulos plain-report e saída pt-BR ao dono). 24 testes re-ancorados na frase
+    inglesa com a mesma regra, nenhuma checagem removida; test_cepa_plan_from_epic,
+    vermelho desde 2e33efb, voltou a verde. Guarda nova tests/test_commands_english.py
+    (acusa 1443 linhas em 3569aaa, zero agora, vermelha com frase pt injetada em
+    next.md). 44 testes focados verdes. Gates: completion-auditor COMPLETE (.claude/acceptance/comandos-em-ingles.yaml);
+    proof-reviewer não aplicável (nenhum código em bin/ ou hooks/ mudou). Fora:
+    renomear plan.yaml/.claude/programs/program: (item renomear-para-queue); textos
+    de prompt em pt dentro do JavaScript do advisors.md mantidos (mudariam o idioma
+    da resposta das lentes); contradição pré-existente em board-flow/commands/triage.md
+    sobre confirmar Won''t Do card a card, traduzida como estava.'
 - id: renomear-para-queue
   title: 'Renomear plan.yaml, .claude/programs/ e a chave program: para o termo
     queue, com migração das filas existentes nos repos de cliente'
