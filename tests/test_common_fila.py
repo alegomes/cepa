@@ -184,8 +184,8 @@ def test_contrato_do_comando(_base):
     t = CMD.read_text(encoding="utf-8")
     check("o comando chama o `cepa-plan status`",
           'bin/cepa-plan" status $ARGUMENTS' in t)
-    check("manda mostrar a saída na íntegra", "na íntegra" in t)
-    check("declara que só lê", "Só leitura" in t)
+    check("manda mostrar a saída na íntegra", "**in full**" in t)
+    check("declara que só lê", "**Read-only.**" in t)
 
 
 def main():

@@ -520,20 +520,20 @@ def test_contrato_do_comando(_base):
     check("manda a gravação passar pelo cepa-plan",
           "common/bin/cepa-plan" in f or "bin/cepa-plan" in f)
     check("proíbe escrever o YAML à mão",
-          "Nunca escreve o YAML à mão" in f,
+          "Never writes the YAML by hand" in f,
           "por fora do script nenhuma das recusas acontece")
     check("proíbe inventar ordem e `why`",
-          "Nunca inventa ordem nem `why`" in f)
+          "Never invents order or `why`" in f)
     check("manda a leitura da spec passar pelo `from-spec` (não pelos seus olhos)",
           "cepa-plan from-spec" in f,
           "leitura no olho não deixa evidência: só provaria que o comando promete")
     check("manda dizer quando a ordem foi HERDADA do texto da spec",
-          "herdou" in f and "herdad" in f.lower(),
+          "say that it inherited it" in f and "what was inherited" in f,
           "a preferência registrada no desenho: herdar e dizer que herdou")
     check("recusa gravar por cima de um plano de ondas",
-          "Nunca grava por cima de um plano de ondas" in f)
+          "Never writes over a wave plan" in f)
     check("não fecha `human_pending` de ninguém",
-          "Não fecha `human_pending` de ninguém" in f,
+          "Never closes anyone's `human_pending`" in f,
           "lista que se fecha sozinha é decoração")
     # Etapa 2: a flag existe. A guarda que importa deixou de ser "diga que não
     # existe" e passou a ser "não consulte o Jira por conta própria" — o risco é
@@ -542,18 +542,18 @@ def test_contrato_do_comando(_base):
           "cepa-plan from-triage" in f,
           "leitura no olho não deixa evidência: só provaria que o comando promete")
     check("proíbe montar a fila de uma consulta crua ao Jira",
-          "Nunca consulta o Jira direto" in f and "/board-flow:triage" in f,
+          "Never queries Jira directly" in f and "/board-flow:triage" in f,
           "a ordem de uma fila vinda de board sai da CLASSIFICAÇÃO, não da "
           "coluna — o rank do quadro é justamente a ordem que este documento "
           "existe para substituir")
     check("diz o que fazer quando falta board-flow ou board-flow.yaml",
-          "board-flow.yaml" in f and "não improvise" in f,
+          "board-flow.yaml" in f and "do not improvise a Jira query" in f,
           "sem saída nomeada o agente inventa uma consulta ao Jira")
     check("diz que só card `ready` vira item da fila",
-          "só card `ready` vira item `pending`" in f,
+          "only a `ready` card becomes a `pending` item" in f,
           "In Review pertence à fila de prova, não à de construção")
     check("aponta o consumidor da fila", "/common:next" in f)
-    check("declara que não executa nada", "Não executa" in f)
+    check("declara que não executa nada", "Does not execute anything" in f)
 
     # o catálogo é o único lugar onde um comando é encontrável por quem não o
     # escreveu — 8 comandos já sumiram dele sem nenhum teste piscar

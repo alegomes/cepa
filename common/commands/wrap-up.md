@@ -233,22 +233,22 @@ a one-shot marker the SessionEnd hook consumes after your final turn:
   dead cwd. (Backstop: if the session crashes before SessionEnd, `auto_clean` on
   the next session start reaps the now-merged, clean, not-alive worktree anyway.)
 
-- **Grave o próximo passo, se o handoff tiver um.** Depois do marker, rode:
+- **Record the next step, if the handoff has one.** After the marker, run:
   ```
   python3 "${CLAUDE_PLUGIN_ROOT}/hooks/session-next.py" \
       --handoff <root>/.claude/handoffs/<branch-slug>.md --session-id <session_id>
   ```
-  Ele lê a zona NOTE do handoff escrito no L3 e, se achar a linha
-  `**Próximo:** repo=<caminho> modo=<modo> comando=<comando>`, escreve
-  `<root>/.claude/sessions/<session_id>.next.json` com esses três campos, o
-  brief igual ao parágrafo `## Próximo passo` e, quando o handoff traz
-  `**Intenção:**`, `**Meta:**` e `**Plano:**`, a intenção da sessão seguinte. É esse arquivo que o launcher
-  `cepa` lê quando você dá `exit`, para abrir a sessão seguinte no repo e no
-  modo certos sem você digitar (CS-3). Sem a linha, ele não escreve nada, e
-  isso não é erro: o handoff sem `Próximo:` continua válido. A primeira linha
-  da saída vai, como está, para o relatório do L8. Nunca escreva o
-  `.next.json` à mão: o script recusa repo inexistente, modo desconhecido e
-  brief vazio, que o launcher recusaria depois apagando o próximo passo.
+  It reads the NOTE zone of the handoff written in L3 and, if it finds the line
+  `**Próximo:** repo=<caminho> modo=<modo> comando=<comando>`, writes
+  `<root>/.claude/sessions/<session_id>.next.json` with those three fields, the
+  brief equal to the `## Próximo passo` paragraph and, when the handoff carries
+  `**Intenção:**`, `**Meta:**` and `**Plano:**`, the next session's intent. That file is what the launcher
+  `cepa` reads when you type `exit`, to open the next session in the right repo
+  and mode without you typing anything (CS-3). Without the line it writes nothing, and
+  that is not an error: a handoff without `Próximo:` is still valid. The first line
+  of the output goes, as is, into the L8 report. Never write the
+  `.next.json` by hand: the script refuses a nonexistent repo, an unknown mode and
+  an empty brief, which the launcher would refuse later by dropping the next step.
 
 ### L8. Report
 
@@ -256,13 +256,15 @@ One block: landed `session/<slice>` → `<base>`; pushed (or local-only); handof
 at `<path>`; **the worktree + branch will be removed automatically when you
 `exit`** (or run `/common:worktree-discard <slice>` from the base window to drop
 it now); and the **Próximo passo** line — the first line `session-next.py`
-printed in L7, verbatim (gravado, or não gravado and why). Close with: **"Safe to `exit`."** (A slash command can't close the
+printed in L7, verbatim (`gravado` — recorded, or `não gravado` — not recorded, and why). Close with: **"Safe to `exit`."** (A slash command can't close the
 session for you — that last keystroke is yours, but everything is already landed,
 so it's a no-op safety-wise.)
 
 This report is the session's last. Its `plain-report` shape is fixed:
 `**Pra você:** nada`, and the final list is exactly "Nada pendente. Próxima
-sessão começa por <the Próximo passo line, or 'o que o handoff diz'>". It offers
+sessão começa por <the Próximo passo line, or 'o que o handoff diz'>" (pt-BR:
+"Nothing pending. The next session starts with <...>", where 'o que o handoff
+diz' means "what the handoff says"). It offers
 NOTHING: no `/common:metrics`, no new front, no closed question. Anything parked
 during the session (the default-yes "assunto lateral") goes INTO the handoff
 NOTE, the BACKLOG or `cepa-feedback add` during L3, never into a question after

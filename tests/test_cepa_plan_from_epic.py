@@ -301,7 +301,7 @@ def test_contrato_de_prosa():
     check("plan.md manda a leitura do Epic passar pelo `from-epic`",
           "cepa-plan from-epic" in f)
     check("plan.md declara --from-epic e --ciclo no argument-hint",
-          "--from-epic docs/epics/<nome>.md --ciclo N" in f.split("\n---", 1)[0])
+          "--from-epic docs/epics/<name>.md --ciclo N" in f.split("\n---", 1)[0])
 
 
 def main():

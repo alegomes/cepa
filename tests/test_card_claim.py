@@ -56,8 +56,8 @@ def run_hook(hook, body):
 def test_estrutura():
     for nome in ("drain.md", "prove-drain.md"):
         txt = (CMDS / nome).read_text(encoding="utf-8")
-        check(f"{nome}: seção de reserva", "## Reserva do card" in txt)
-        check(f"{nome}: claim id por run", "Claim id do run" in txt)
+        check(f"{nome}: seção de reserva", "## Card reservation" in txt)
+        check(f"{nome}: claim id por run", "The run's claim id" in txt)
         check(f"{nome}: marcador de reserva", "🔒 claim:" in txt)
         check(f"{nome}: liberação explícita", "🔓 claim" in txt)
         check(f"{nome}: janela de expiração", "90 minutos" in txt)
@@ -70,7 +70,7 @@ def test_estrutura():
         )
         check(
             f"{nome}: reserva é o primeiro passo do laço",
-            primeira.startswith("a. **Reserve o card primeiro**"),
+            primeira.startswith("a. **Reserve the card first**"),
             f"achei: {primeira[:60]!r}",
         )
 

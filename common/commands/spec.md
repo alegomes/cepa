@@ -1,6 +1,6 @@
 ---
-description: Conduz um interrogatório até uma ideia de alto nível virar especificação construível — e para ali, sem escrever uma linha de código. Você descreve o que quer em prosa; o comando pergunta em rodadas, registra cada resposta num markdown versionado no repo, e só declara a especificação pronta quando todo critério de sucesso tem uma superfície observável (http/cli/ui/event/domain/application) e um teste vermelho declarado nela. Não exige Jira nem quadro configurado — ao fechar, oferece registrar Epic + Stories se board-flow estiver instalado. Retomável: rodar de novo sobre a mesma especificação continua de onde parou.
-argument-hint: <a ideia em prosa> | --continuar <slug> | --fechar <slug> | --lista
+description: Runs an interrogation until a high-level idea becomes a buildable specification — and stops there, without writing a line of code. You describe what you want in prose; the command asks in rounds, records each answer in a markdown file versioned in the repo, and only declares the specification ready when every success criterion has an observable surface (http/cli/ui/event/domain/application) and a red test declared on it. Needs neither Jira nor a configured board — on closing, it offers to register Epic + Stories if board-flow is installed. Resumable: running it again on the same specification continues where it stopped.
+argument-hint: <the idea in prose> | --continuar <slug> | --fechar <slug> | --lista
 interaction: conversational
 ---
 
@@ -8,209 +8,232 @@ interaction: conversational
 
 ## Purpose
 
-Cobrir a fase que o harness não tinha: **de uma ideia de alto nível até uma
-especificação rica o bastante para ser construída depois**, sem que nada seja
-construído agora.
+Cover the phase the harness did not have: **from a high-level idea to a
+specification rich enough to be built later**, without anything being built
+now.
 
-O que existia antes deste comando, e por que não servia:
+What existed before this command, and why it did not serve:
 
-- `/board-flow:plan-track-build-validate` aceita prosa e quebra em Stories, mas
-  não tem parada: registra Epic e Stories nos passos 1 a 3 e no passo 4 já
-  escolhe uma Story para implementar. A parada só existia como promessa do
-  agente em prosa — dependia de ele lembrar de parar.
-- `/board-flow:capture` para de verdade, mas é deliberadamente burro: um card,
-  sem quebra e sem especificação.
-- A topologia `discovery` tem seis agentes e um comando (`/discovery:capture`).
-  O resto anda por `/board-flow:advance`, que exige card no Jira, exige quadro
-  de descoberta configurado, e move uma coluna por invocação. Nenhum agente dela
-  sustenta conversa: o contrato do `discovery-lead` diz, com essas palavras,
-  "uma mensagem concisa por invocação".
+- `/board-flow:plan-track-build-validate` accepts prose and breaks it into
+  Stories, but has no stop: it registers Epic and Stories in steps 1 to 3 and
+  in step 4 it already picks a Story to implement. The stop only existed as a
+  promise of the agent in prose — it depended on the agent remembering to stop.
+- `/board-flow:capture` really stops, but it is deliberately dumb: one card,
+  no breakdown and no specification.
+- The `discovery` topology has six agents and one command
+  (`/discovery:capture`). The rest moves through `/board-flow:advance`, which
+  requires a card in Jira, requires a configured discovery board, and moves one
+  column per invocation. None of its agents sustains a conversation: the
+  `discovery-lead` contract says, in these words, "uma mensagem concisa por
+  invocação" (one concise message per invocation).
 
-Nenhum deles **pergunta**. E é disso que a especificação vive: a informação que
-falta não está em lugar nenhum que se possa ler — está na cabeça do dono e não
-foi escrita ainda.
+None of them **asks**. And that is what the specification lives on: the
+missing information is nowhere that can be read — it is in the owner's head
+and has not been written yet.
 
-**Isto não é o `discovery` em miniatura.** A topologia de descoberta responde
-"vale a pena resolver isto?" com evidência de usuário. Este comando assume que
-já vale, e responde "o que exatamente vamos construir?". Se a pergunta em aberto
-ainda é se o problema é real, o lugar é `/discovery:capture` e a topologia de
-descoberta, não aqui.
+**This is not `discovery` in miniature.** The discovery topology answers "is
+this worth solving?" with user evidence. This command assumes it already is,
+and answers "what exactly are we going to build?". If the open question is
+still whether the problem is real, the place is `/discovery:capture` and the
+discovery topology, not here.
 
 ## Variables
 
-- `$ARGUMENTS` — a ideia em prosa, do jeito que você contaria para uma pessoa.
-  Não precisa ser organizada; organizá-la é o trabalho do comando.
-- `--continuar <slug>` — retomar uma especificação existente de onde parou.
-- `--fechar <slug>` — rodar só o crivo de encerramento sobre uma existente e,
-  se passar, oferecer o registro no tracker.
-- `--lista` — listar as especificações do repo com o status de cada uma.
+- `$ARGUMENTS` — the idea in prose, the way you would tell a person. It does
+  not need to be organized; organizing it is the command's job.
+- `--continuar <slug>` — resume an existing specification from where it
+  stopped.
+- `--fechar <slug>` — run only the closing sieve over an existing one and, if
+  it passes, offer the registration in the tracker.
+- `--lista` — list the repo's specifications with the status of each.
 
 ## Instructions
 
-Você é o entrevistador, não o planejador. Carregue a skill
-`guided-interrogation` e opere sob ela do primeiro turno ao último: dentro deste
-frame, `active-listener`, `zero-micromanagement` e `default-yes` estão
-suspensas — perguntar é o trabalho, não o último recurso. Fora do frame, no
-turno seguinte a este comando fechar, as três voltam a valer.
+You are the interviewer, not the planner. Load the `guided-interrogation`
+skill and operate under it from the first turn to the last: inside this frame,
+`active-listener`, `zero-micromanagement` and `default-yes` are suspended —
+asking is the job, not the last resort. Outside the frame, on the turn after
+this command closes, the three apply again.
 
-**Não implemente nada.** Nem um arquivo de código, nem um teste, nem um
-esqueleto "só para ilustrar". O único arquivo que este comando escreve é a
-própria especificação. Se você se pegar querendo escrever código para descobrir
-a resposta de uma pergunta, a pergunta é para o dono.
+Conduct the interrogation with the owner in Brazilian Portuguese (pt-BR), and
+write the specification in pt-BR.
 
-**Não delegue a subagente.** O interrogatório é entre você e o dono; um
-subagente não tem como conversar com ele, e a rodada de perguntas voltaria como
-suposição. Ler o código para se preparar, sim — `Explore` serve. Conduzir, não.
+**Do not implement anything.** Not a code file, not a test, not a skeleton
+"just to illustrate". The only file this command writes is the specification
+itself. If you catch yourself wanting to write code to discover the answer to
+a question, the question is for the owner.
+
+**Do not delegate to a subagent.** The interrogation is between you and the
+owner; a subagent has no way to talk to him, and the round of questions would
+come back as assumptions. Reading the code to prepare, yes — `Explore` serves.
+Conducting, no.
 
 ## Workflow
 
-### 1. Localizar ou abrir a especificação
+### 1. Locate or open the specification
 
-O diretório é `docs/spec/` na raiz do repo (crie se não existir). O arquivo é
-`docs/spec/<slug>.md`, com `<slug>` derivado do assunto em kebab-case.
+The directory is `docs/spec/` at the repo root (create it if it does not
+exist). The file is `docs/spec/<slug>.md`, with `<slug>` derived from the
+subject in kebab-case.
 
-- Com `--lista`: leia o campo `Status` de cada `docs/spec/*.md` e devolva a
-  tabela (slug · status · nº de critérios · nº de perguntas em aberto). Pare.
-- Com `--continuar <slug>` ou `--fechar <slug>`: leia o arquivo e vá para o
-  passo 4 (continuar) ou 5 (fechar).
-- Sem flag: se já existe `docs/spec/<slug>.md` para um assunto claramente igual,
-  **não crie um segundo** — diga que existe e pergunte se é para continuar
-  aquela. Duas especificações do mesmo assunto divergindo em silêncio é pior do
-  que nenhuma.
+- With `--lista`: read the `Status` field of each `docs/spec/*.md` and return
+  the table (slug · status · no. of criteria · no. of open questions). Stop.
+- With `--continuar <slug>` or `--fechar <slug>`: read the file and go to step
+  4 (continue) or 5 (close).
+- Without a flag: if `docs/spec/<slug>.md` already exists for a clearly
+  identical subject, **do not create a second one** — say that it exists and
+  ask whether to continue that one. Two specifications of the same subject
+  diverging silently is worse than none.
 
-Escreva o esqueleto com `**Status:** rascunho` (o formato está no passo 6). O
-gate `spec-readiness-gate` nunca incomoda enquanto o status for `rascunho`.
+Write the skeleton with `**Status:** rascunho` (draft) (the format is in step
+6). The `spec-readiness-gate` gate never bothers you while the status is
+`rascunho`.
 
-### 2. Ler antes de perguntar
+### 2. Read before asking
 
-Antes da primeira rodada, gaste um passo lendo o que já responde parte das
-perguntas: o código da área que o assunto toca, os documentos em `docs/`, o
-`BACKLOG.md`, e — se `board-flow.yaml` existir — os cards abertos do assunto via
-`atlassian-expert` (leitura, sem escrever nada).
+Before the first round, spend a step reading what already answers part of the
+questions: the code of the area the subject touches, the documents in
+`docs/`, `BACKLOG.md`, and — if `board-flow.yaml` exists — the open cards on
+the subject via `atlassian-expert` (read-only, writing nothing).
 
-Pergunta cuja resposta estava no repo queima a paciência do dono e ensina que o
-interrogatório é burocracia. A pergunta boa é a que sobra depois de ler.
+A question whose answer was in the repo burns the owner's patience and teaches
+that the interrogation is bureaucracy. The good question is the one left over
+after reading.
 
-### 3. Interrogar, em rodadas
+### 3. Interrogate, in rounds
 
-**No máximo quatro perguntas por turno**, com recomendação em cada uma
-(`Recomendo X, porque Y`), ordenadas por custo de errar: fronteira de escopo e
-contrato antes de caso de borda. Use `AskUserQuestion` quando as respostas forem
-escolhas fechadas; prosa quando for aberta.
+**At most four questions per turn**, with a recommendation on each
+(`Recomendo X, porque Y` — I recommend X, because Y), ordered by the cost of
+getting it wrong: scope boundary and contract before edge case. Use
+`AskUserQuestion` when the answers are closed choices; prose when it is open.
 
-O teste para saber se algo vira pergunta: **duas respostas diferentes aqui
-produzem código diferente?** Se não, decida sozinho e registre a decisão na
-seção "Decidido sem perguntar" — o dono veta lá se quiser.
+The test for whether something becomes a question: **do two different answers
+here produce different code?** If not, decide alone and record the decision
+in the "Decidido sem perguntar" (decided without asking) section — the owner
+vetoes there if he wants.
 
-Cubra, ao longo das rodadas, o que sempre falta e sempre custa caro:
+Cover, over the rounds, what is always missing and always costs a lot:
 
-- **Fronteira de escopo** — o que explicitamente NÃO entra. A lista do que fica
-  de fora vale mais que a do que entra, porque é a que ninguém escreve.
-- **Contrato e formato** — o que entra e o que sai, em termos observáveis.
-- **Estado e migração** — o que muda no que já existe, e o que acontece com o
-  dado que já está lá. (Este é o buraco que motivou o comando: é aqui que o
-  modelo de dados aparece, como consequência do escopo, não como assunto
-  separado.)
-- **Casos de borda e erro** — o que acontece quando dá errado, e quem vê.
-- **Critérios de sucesso** — a frase observável que diz que funcionou.
+- **Scope boundary** — what explicitly does NOT go in. The list of what stays
+  out is worth more than the list of what goes in, because it is the one
+  nobody writes.
+- **Contract and format** — what goes in and what comes out, in observable
+  terms.
+- **State and migration** — what changes in what already exists, and what
+  happens to the data that is already there. (This is the hole that motivated
+  the command: it is here that the data model shows up, as a consequence of
+  the scope, not as a separate subject.)
+- **Edge and error cases** — what happens when it goes wrong, and who sees it.
+- **Success criteria** — the observable sentence that says it worked.
 
-### 4. Registrar cada resposta no mesmo turno
+### 4. Record each answer in the same turn
 
-Depois de cada rodada, escreva o que foi respondido no arquivo **antes** de
-fazer a próxima pergunta. Resposta que só existe no histórico da conversa se
-perde no primeiro compactar de contexto, e o dono responde tudo de novo.
+After each round, write what was answered to the file **before** asking the
+next question. An answer that exists only in the conversation history is lost
+at the first context compaction, and the owner answers everything again.
 
-Uma pergunta feita vira `- [ ]` na seção "Perguntas em aberto"; respondida, vira
-`- [x]` com a resposta na mesma linha. É assim que `--continuar` sabe onde parou.
+A question asked becomes `- [ ]` in the "Perguntas em aberto" (open questions)
+section; answered, it becomes `- [x]` with the answer on the same line. That
+is how `--continuar` knows where it stopped.
 
-### 5. Fechar pelo crivo, nunca por cansaço
+### 5. Close by the sieve, never by fatigue
 
-A especificação vira `**Status:** pronta-para-construir` quando, e só quando:
+The specification becomes `**Status:** pronta-para-construir` (ready to build)
+when, and only when:
 
-- todo critério tem `**Superfície:**` do vocabulário fechado — `http`, `cli`,
-  `ui`, `event`, `domain`, `application` — a camada mais externa onde o critério
-  é observável;
-- todo critério tem `**Teste vermelho:**`: a frase do teste que **hoje**
-  falharia naquela superfície e passará quando a coisa existir;
-- nenhuma `- [ ]` sobrou.
+- every criterion has `**Superfície:**` (surface) from the closed vocabulary —
+  `http`, `cli`, `ui`, `event`, `domain`, `application` — the outermost layer
+  where the criterion is observable;
+- every criterion has `**Teste vermelho:**` (red test): the sentence of the
+  test that **today** would fail on that surface and will pass when the thing
+  exists;
+- no `- [ ]` is left.
 
-É a mesma régua da skill `acceptance-completeness`, que do outro lado do muro
-decide se um card pode ir a revisão. Usar a mesma nas duas pontas é o ponto: a
-especificação nasce medida pelo gate que a julgaria no fim.
+It is the same yardstick as the `acceptance-completeness` skill, which on the
+other side of the wall decides whether a card can go to review. Using the same
+one at both ends is the point: the specification is born measured by the gate
+that would judge it at the end.
 
-O hook `spec-readiness-gate` bloqueia a escrita do `Status: pronta-para-construir`
-enquanto faltar qualquer um. Se ele bloquear, **a resposta certa é voltar a
-perguntar**, nunca amaciar o campo até passar.
+The `spec-readiness-gate` hook blocks writing `Status: pronta-para-construir`
+while any of them is missing. If it blocks, **the right response is to go back
+to asking**, never to soften the field until it passes.
 
-O campo se chama **Superfície** e não *Altitude* de propósito: `Altitude` já é
-um campo de bloco de decisão, com outro vocabulário fechado
-(`strategic`/`tactical`/`implementation`) e gate próprio na escrita. Dois campos
-homônimos com vocabulários diferentes é como se aprende a ignorar os dois.
+The field is called **Superfície** and not *Altitude* on purpose: `Altitude`
+is already a field of the decision block, with another closed vocabulary
+(`strategic`/`tactical`/`implementation`) and its own gate on write. Two
+homonymous fields with different vocabularies is how one learns to ignore
+both.
 
-### 6. O formato do arquivo
+### 6. The file format
+
+The document is written in pt-BR. Keep the headings and the `**Status:**`,
+`**Aberta em:**`, `**Fechada em:**`, `### CS-<n>:`, `**Superfície:**` and
+`**Teste vermelho:**` labels verbatim: `spec-readiness-gate` and
+`cepa-plan --from-spec` parse them. Only the placeholders below are in English.
 
 ```markdown
-# Especificação: <assunto>
+# Especificação: <subject>
 
 **Status:** rascunho
-**Aberta em:** <data>            **Fechada em:** <data ou ->
+**Aberta em:** <date>            **Fechada em:** <date or ->
 
 ## Problema
-<o que dói hoje, em duas ou três frases, na voz do dono>
+<what hurts today, in two or three sentences, in the owner's voice>
 
 ## Escopo
 ### Entra
 - ...
 ### Não entra
-- ...  (com o porquê, em meia linha)
+- ...  (with the why, in half a line)
 
 ## Estado e migração
-<o que muda no que já existe; o que acontece com o dado que já está lá; "nada"
-é resposta válida e explícita>
+<what changes in what already exists; what happens to the data already there;
+"nada" (nothing) is a valid and explicit answer>
 
 ## Critérios de sucesso
 
-### CS-1: <o critério em termos observáveis>
+### CS-1: <the criterion in observable terms>
 **Superfície:** http
-**Teste vermelho:** <a frase do teste que hoje falharia>
+**Teste vermelho:** <the sentence of the test that would fail today>
 
 ## Perguntas em aberto
-- [x] <pergunta> — <resposta do dono>
-- [ ] <pergunta ainda sem resposta>
+- [x] <question> — <owner's answer>
+- [ ] <question still without an answer>
 
 ## Decidido sem perguntar
-- <decisão> — <porquê>. Vete aqui se discordar.
+- <decision> — <why>. Vete aqui se discordar.
 
 ## Riscos e o que ficou de fora desta especificação
 - ...
 ```
 
-### 7. Oferecer o tracker, nunca impor
+### 7. Offer the tracker, never impose it
 
-Fechada a especificação, se `board-flow.yaml` existir no repo, ofereça **uma**
-pergunta fechada: registrar Epic + Stories no Jira a partir dos critérios, ou
-deixar só o arquivo. Recomende registrar — o arquivo não aparece na fila de
-ninguém.
+Once the specification is closed, if `board-flow.yaml` exists in the repo,
+offer **one** closed question: register Epic + Stories in Jira from the
+criteria, or leave only the file. Recommend registering — the file does not
+show up in anyone's queue.
 
-Se o dono aceitar, delegue a `atlassian-expert` (único caminho de escrita no
-Jira): um Epic com o Problema e o Escopo, uma Story por critério de sucesso,
-cada uma carregando sua Superfície e seu Teste vermelho no corpo, e o caminho do
-arquivo no Epic. Grave as chaves de volta no arquivo, numa seção `## Registrado
-em`. Sem `board-flow.yaml`, não pergunte: diga que ficou só o arquivo e qual é o
-caminho.
+If the owner accepts, delegate to `atlassian-expert` (the only write path to
+Jira): one Epic with the Problema and the Escopo, one Story per success
+criterion, each carrying its Superfície and its Teste vermelho in the body, and
+the file path in the Epic. Write the keys back into the file, in a
+`## Registrado em` section. Without `board-flow.yaml`, do not ask: say that
+only the file remains and what its path is.
 
-**Nem aqui você implementa.** O comando termina com Stories escritas e nenhuma
-linha de código.
+**Not even here do you implement.** The command ends with Stories written and
+no line of code.
 
 ## Constraints
 
-- **Nunca escreve código, teste ou migração.** Só `docs/spec/<slug>.md` (e as
-  chaves do tracker, se o dono pedir).
-- **Nunca declara pronta uma especificação que o crivo recusa.** Se o gate
-  bloquear, volte a perguntar.
-- **No máximo quatro perguntas por turno.** Quinze de uma vez transfere ao dono
-  o trabalho de ordenar, que é seu.
-- **Toda pergunta traz recomendação.** Pergunta sem recomendação devolve o
-  trabalho inteiro.
-- **Uma especificação por assunto.** Ao encontrar uma existente, continue-a.
-- **Não delega o interrogatório.** Ler para se preparar, sim; conduzir, não.
+- **Never writes code, test or migration.** Only `docs/spec/<slug>.md` (and
+  the tracker keys, if the owner asks).
+- **Never declares ready a specification the sieve refuses.** If the gate
+  blocks, go back to asking.
+- **At most four questions per turn.** Fifteen at once transfers to the owner
+  the work of ordering, which is yours.
+- **Every question carries a recommendation.** A question without a
+  recommendation hands back the whole job.
+- **One specification per subject.** On finding an existing one, continue it.
+- **Does not delegate the interrogation.** Reading to prepare, yes;
+  conducting, no.

@@ -33,14 +33,14 @@ COMMANDS = {
     # o ESCRITOR da fila: se ele resolver a raiz errada, o plano nasce dentro da
     # worktree e morre com ela — a perda que a camada 0 existe para impedir,
     # agora no lado da escrita e não só no da leitura.
-    REPO / "common" / "commands" / "plan.md": "<raiz-principal>",
+    REPO / "common" / "commands" / "plan.md": "<main-root>",
     REPO / "board-flow" / "commands" / "triage.md": "<main-root>",
     REPO / "board-flow" / "commands" / "fix.md": "<main-root>",
     REPO / "board-flow" / "commands" / "prove.md": "<main-root>",
     REPO / "board-flow" / "commands" / "execute.md": "<main-root>",
-    REPO / "maestro" / "commands" / "run.md": "<raiz-principal>",
-    REPO / "maestro" / "commands" / "program-plan.md": "<raiz-principal>",
-    REPO / "maestro" / "commands" / "resume.md": "<raiz-principal>",
+    REPO / "maestro" / "commands" / "run.md": "<main-root>",
+    REPO / "maestro" / "commands" / "program-plan.md": "<main-root>",
+    REPO / "maestro" / "commands" / "resume.md": "<main-root>",
 }
 
 FAILURES = []

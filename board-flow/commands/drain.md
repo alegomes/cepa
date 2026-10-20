@@ -32,7 +32,7 @@ You are the orchestrator. Iterate through pending cards. Stop on first BLOCKED. 
 
 - Column name: `$ARGUMENTS` minus any flag (`--max N`, `--scope "..."`, `--no-scope`). If empty, read `defaults.status_map.to_do` from `board-flow.yaml`; if config missing entirely, fallback to literal `"To Do"`.
 - Max cards: parse `--max N` from `$ARGUMENTS`. Default: 5.
-- **Claim id do run:** gere um, agora, como descrito em **Reserva do card**. Ele identifica ESTE run em todos os cards que ele tocar.
+- **The run's claim id**: generate one, now, as described in **Card reservation**. It identifies THIS run on every card it touches.
 - Scope flags: detect `--no-scope` and `--scope "<jql>"`. They are mutually exclusive; if both appear, abort with "pass either --scope or --no-scope, not both." Build the **scope directive** to hand to `atlassian-expert`: `--no-scope` → `Scope: none`; `--scope "<jql>"` → `Scope: <jql>`; neither → omit the line (atlassian-expert resolves the effective scope from config).
 
 ### 2. List pending cards
@@ -91,44 +91,47 @@ Show the user (order = the queue's, when step 2b found one; Jira's otherwise):
 ```
 Found N cards in <column> (scope: <effective scope, or "none — whole column">)<, queue: <project_key> — if a plan.yaml drove the order>:
   WEGO-1234 (P1) — <summary>
-  WEGO-1235 (P2) — <summary>  (fora do plano — só entra na fila com /common:plan <project_key> --from-jira ou cepa-plan add)
+  WEGO-1235 (P2) — <summary>  (out of the queue — only enters it with /common:plan <project_key> --from-jira or cepa-plan add)
   ...
 
 Drain these? Each card runs the full execute flow (planning audit + build + validate + Jira transitions).
 
-E se um card travar (BLOCKED — condição fora do card, que só você resolve):
-  (a) paro o run ali e te chamo                        ← default
-  (b) pulo o card, registro o motivo e sigo com os demais
+And if a card gets stuck (BLOCKED — a condition outside the card that only you can clear):
+  (a) I stop the run there and call you                ← default
+  (b) I skip the card, record the reason and go on with the rest
 
-Reply yes / no / first-N (e.g., "first-2") to drain only a subset, e (a) ou (b)
-para o card travado. Só "sim" vale como sim + (a).
+Reply yes / no / first-N (e.g., "first-2") to drain only a subset, and (a) or (b)
+for the stuck card. A bare "yes" counts as yes + (a).
 ```
 
-Wait for user confirmation before proceeding. **Esta é a única parada
-planejada do run** — aplique `default-yes`.
+Render this screen to the owner in Brazilian Portuguese (pt-BR); a bare "sim"
+is the "yes" above.
 
-**A alternativa (a)/(b) tem que estar ESCRITA na tela acima, não implícita.**
-Um "posso ir?" que só mostra a contagem de cards não colhe resposta nenhuma
-sobre o card travado: no card 3 de 5 o run para para perguntar, e aí o usuário
-já perdeu o contexto da lista — que é exatamente o custo que a parada única
-existe para evitar. Perguntar na largada custa duas linhas de tela.
+Wait for user confirmation before proceeding. **This is the only planned stop
+of the run** — apply `default-yes`.
 
-Se o run veio de `/common:session`, essas respostas já foram colhidas — siga
-sem perguntar.
+**The (a)/(b) alternative has to be WRITTEN on the screen above, not implied.**
+A "can I go?" that only shows the card count collects no answer at all about
+the stuck card: at card 3 of 5 the run stops to ask, and by then the user has
+already lost the context of the list — which is exactly the cost the single stop
+exists to avoid. Asking at the start costs two lines of screen.
+
+If the run came from `/common:session`, these answers were already collected —
+go on without asking.
 
 ### 4. Iterate
 
 For each card the user confirmed:
 
-  a. **Reserve o card primeiro** — releia status + comentários e publique o claim, conforme **Reserva do card** abaixo. Se o card foi pulado (saiu da coluna ou está reservado por outra sessão), registre `SKIPPED` e vá para o próximo card SEM rodar nada.
+  a. **Reserve the card first** — re-read status + comments and publish the claim, per **Card reservation** below. If the card was skipped (it left the column or is reserved by another session), record `SKIPPED` and go to the next card WITHOUT running anything.
   b. Run the equivalent of `/board-flow:execute <card-key>` (full detail audit + build + validate + transitions).
   c. Capture the verdict.
-  d. **If verdict is BLOCKED:** siga a política escolhida na confirmação do
-     passo 3 — parar (default) ou pular o card e continuar. Em ambos os casos:
-     - Se o card parou sem receber comentário de veredito, publique a liberação do claim (`🔓`) antes de seguir.
-     - Registre o card e o motivo para o relatório final; **não pergunte nada
-       agora** — o usuário já respondeu essa pergunta na largada.
-     - Parando: vá para o passo 5 (relatório final). Pulando: próximo card.
+  d. **If verdict is BLOCKED:** follow the policy chosen in the step 3
+     confirmation — stop (default) or skip the card and continue. In both cases:
+     - If the card stopped without getting a verdict comment, publish the claim release (`🔓`) before moving on.
+     - Record the card and the reason for the final report; **ask nothing
+       now** — the user already answered that question at the start.
+     - Stopping: go to step 5 (final report). Skipping: next card.
   e. **If READY-TO-SHIP or READY-WITH-CAVEATS:**
      - Continue to the next card.
   f. Record that card's **outcome terminal** before moving on (see below). A card
@@ -147,7 +150,7 @@ outcome. Every card you touched ends in exactly one of:
 | `DEFERRED` | deliberately postponed — name what must be true to pick it up |
 | `DROPPED` | will not be done — name why |
 | `ERROR` | the run itself failed (infra, permissions) — name the failure |
-| `SKIPPED` | outra sessão já tinha o card (reserva ativa) ou ele saiu da coluna — nomeie qual das duas |
+| `SKIPPED` | another session already had the card (active reservation) or it left the column — name which of the two |
 
 "In progress", "partially done", "needs attention" and silence are **not**
 outcomes. They are the absence of a decision wearing a status label, and they are
@@ -168,62 +171,70 @@ A single summary message:
 - **Cards attempted:** N — each with its outcome terminal (`SHIPPED` / `BLOCKED` / `DEFERRED` / `DROPPED` / `ERROR`). The count of attempted cards MUST equal the count of named outcomes; if it doesn't, the drain is not finished.
 - **Moved to In Review:** M (list keys + verdicts)
 - **Blocked:** 0 or 1 (key + reason)
-- **Skipped:** count (keys + reserva de qual sessão, ou para qual status o card já tinha ido)
+- **Skipped:** count (keys + which session's reservation, or which status the card had already moved to)
 - **Remaining in column (not attempted this run):** count
 - **Approximate cost:** sum of per-card durations (informational)
 - **Next step suggestion:** if any blocked, surface the block; if all drained, suggest re-running for the next batch if more remain.
 
-## Reserva do card — a fila é o recurso disputado
+## Card reservation — the queue is the contested resource
 
-A lista montada no passo 2 é uma **foto**, não uma reserva. Entre a listagem e o
-momento em que este run chega ao card N, outra sessão (outra worktree, outra
-máquina, o mesmo usuário em duas janelas) pode ter pegado o mesmo card — e o
-custo não é um conflito de arquivo, é o trabalho inteiro refeito. O recurso
-compartilhado é a coluna do board, então a reserva é feita no board.
+The list built in step 2 is a **snapshot**, not a reservation. Between the
+listing and the moment this run reaches card N, another session (another
+worktree, another machine, the same user in two windows) may have taken the same
+card — and the cost isn't a file conflict, it's the whole job redone. The shared
+resource is the board column, so the reservation is made on the board.
 
-**Claim id.** Gere UM por run, no passo 1, e use o mesmo para todos os cards:
+**Claim id.** Generate ONE per run, in step 1, and use the same one for every card:
 
 ```bash
 echo "$(basename "$PWD")-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:8])')"
 ```
 
-**Antes de tocar em cada card** (é o primeiro passo do 4, antes de qualquer
-build, worktree ou delegação), delegue a `atlassian-expert`:
+**Before touching each card** (it's the first step of 4, before any build,
+worktree or delegation), delegate to `atlassian-expert`:
 
-> Leia o card `<KEY>`: status atual, responsável, e os comentários das últimas
-> 90 minutos. Devolva sem alterar nada.
+> Read card `<KEY>`: current status, assignee, and the comments from the last
+> 90 minutes. Return it without changing anything.
 
-E decida, mecanicamente:
+And decide, mechanically:
 
-- **Status ≠ `<coluna do run>`** → o card saiu da fila desde a listagem. **Pule**,
-  registre `SKIPPED (saiu da coluna: agora em <status>)` e siga para o próximo.
-- **Existe um comentário de claim de OUTRO claim id, com menos de 90 minutos e
-  sem o `🔓` de liberação** → outra sessão está nele agora. **Pule**, registre
-  `SKIPPED (reservado por <claim-id> às <hh:mm>)` e siga.
-- **Caso contrário** → reserve, publicando o comentário via `atlassian-expert`:
+- **Status ≠ `<the run's column>`** → the card left the queue since the listing.
+  **Skip** it, record `SKIPPED (left the column: now in <status>)` and move on to
+  the next.
+- **There is a claim comment from ANOTHER claim id, less than 90 minutes old and
+  without the `🔓` release** → another session is on it right now. **Skip** it,
+  record `SKIPPED (reserved by <claim-id> at <hh:mm>)` and move on.
+- **Otherwise** → reserve it, publishing the comment via `atlassian-expert`. The
+  comment body is posted verbatim, in pt-BR (`atlassian-expert` looks for the
+  `🔒 claim:` / `🔓 claim` prefixes):
 
   > `🔒 claim: <claim-id> — <nome do comando> em andamento desde <timestamp>.`
   > `Outra sessão deve pular este card. A reserva expira em 90 minutos.`
 
-  Só depois desse comentário existir o card pode ser trabalhado.
+  ("claim: <claim-id> — <command name> in progress since <timestamp>. Another
+  session must skip this card. The reservation expires in 90 minutes.")
 
-**Liberação.** O veredito do card encerra a reserva — o comentário de resultado
-(resumo de implementação, bounce com `**Reason:**`) já é o sinal de que a reserva
-acabou. Quando o card termina SEM veredito (`ERROR`, `BLOCKED` sem comentário,
-interrupção do run), publique a liberação explícita, senão o card fica intocável
-por 90 minutos:
+  Only after that comment exists may the card be worked.
+
+**Release.** The card's verdict ends the reservation — the result comment
+(implementation summary, bounce with `**Reason:**`) is already the signal that
+the reservation is over. When the card ends WITHOUT a verdict (`ERROR`, `BLOCKED`
+without a comment, run interruption), publish the explicit release (verbatim,
+pt-BR), otherwise the card stays untouchable for 90 minutes:
 
 > `🔓 claim <claim-id> liberado — <motivo>.`
 
-**Por que 90 minutos e não um lock permanente:** uma sessão que morre no meio não
-pode congelar a fila. A janela é maior que o tempo de um card e menor que um
-turno de trabalho, então uma reserva órfã se resolve sozinha sem ninguém precisar
-destravar nada à mão.
+("claim <claim-id> released — <reason>.")
 
-**Cards pulados não consomem `--max`** — nenhum trabalho rodou neles. Eles
-aparecem no relatório final com o motivo, porque "sumiu da lista sem explicação"
-é exatamente o buraco que este mecanismo existe para fechar. Um `SKIPPED` também
-**não** para o drain: só `BLOCKED` para.
+**Why 90 minutes and not a permanent lock:** a session that dies midway must not
+freeze the queue. The window is longer than one card's time and shorter than a
+work shift, so an orphaned reservation resolves itself without anyone having to
+unlock anything by hand.
+
+**Skipped cards don't consume `--max`** — no work ran on them. They show up in
+the final report with the reason, because "vanished from the list without
+explanation" is exactly the hole this mechanism exists to close. A `SKIPPED` also
+does **not** stop the drain: only `BLOCKED` stops it.
 
 ## Constraints
 
@@ -232,5 +243,5 @@ aparecem no relatório final com o motivo, porque "sumiu da lista sem explicaç�
 - Each card's per-Task loop is FULL — don't shortcut to "save time" across cards. The whole point of the topology is per-Task quality.
 - If `atlassian-expert` can't list cards (permissions issue, malformed column name, or a rejected scope JQL fragment), abort with a clear error — surface a rejected scope fragment as a config/flag problem, not an empty column.
 - **Scope narrows, never widens.** The effective scope only ever subtracts cards from the column; `--no-scope` is the way back to the full sweep. Always show the effective scope on the confirmation screen so the user sees what's being excluded.
-- **Reserve antes de executar, card a card.** A listagem é uma foto; a reserva no board é o que impede duas sessões de construírem o mesmo card. Sem o claim publicado, o card não é trabalhado.
+- **Reserve before executing, card by card.** The listing is a snapshot; the reservation on the board is what keeps two sessions from building the same card. Without the claim published, the card is not worked.
 - Always confirm with the user before starting the drain. Don't auto-execute on N cards without buy-in.

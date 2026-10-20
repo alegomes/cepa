@@ -581,7 +581,7 @@ check("spec: plain-report manda \"Nada pendente. Próxima sessão começa por\""
 
 mt = ler("common/commands/metrics.md")
 check("spec: metrics.md trata \"sessão já encerrada\" e cita pergunta-pos-wrap-up",
-      "sessão já encerrada" in mt and "Safe to exit" in mt
+      "session already closed" in mt and "Safe to exit" in mt
       and "pergunta-pos-wrap-up" in mt)
 
 wu = ler("common/commands/wrap-up.md")

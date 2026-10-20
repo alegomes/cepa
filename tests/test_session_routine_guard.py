@@ -179,7 +179,7 @@ def test_apelidos_nao_divergem_do_session_md():
     do_hook = dict(re.findall(r'"([^"]+)":\s*"([^"]+)"', bloco))
 
     md = (REPO / "common" / "commands" / "session.md").read_text(encoding="utf-8")
-    passo1 = md.split("### 1. Resolver a rotina", 1)[1].split("###", 1)[0]
+    passo1 = md.split("### 1. Resolve the routine", 1)[1].split("###", 1)[0]
     do_md = dict(re.findall(r'`([a-z-]+)` →\s*`/([a-z-]+:[a-z-]+)`', passo1))
 
     for apelido, alvo in do_hook.items():

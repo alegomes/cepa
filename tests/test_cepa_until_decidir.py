@@ -576,7 +576,7 @@ def test_instrucoes_dos_agentes_pedem_a_pergunta():
     check("...cobrindo todos os adiados da fila, pelo queue",
           "deferred" in review and "cepa-plan queue" in review, "")
     check("...e diz que as ações vêm da lista fechada",
-          "lista fechada" in review, "")
+          "closed list" in review, "")
     check("drain-plan manda gravar --pergunta ao travar",
           "--pergunta" in drain, "")
     p = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-plan"),
@@ -586,16 +586,25 @@ def test_instrucoes_dos_agentes_pedem_a_pergunta():
     for nome, texto in (("until-review", review), ("drain-plan", drain),
                         ("cepa-plan finish --help", ajuda)):
         texto = " ".join(texto.replace("**", "").split())
+        # Os comandos foram traduzidos para inglês; a ajuda do cepa-plan não.
+        frases = {
+            "drain-plan": ("Up to 25 words", "without a branch name",
+                           "the item goes back to the queue"),
+            # o menu do terminal é impresso em pt-BR pelo cepa-until e o
+            # comando o cita literalmente.
+            "until-review": ("Up to 25 words", "no branch name",
+                             "volta para a fila"),
+        }.get(nome, ("25 palavras", "sem nome de branch", "volta para a fila"))
         check(f"{nome}: pergunta de até 25 palavras",
-              "25 palavras" in texto, texto[-600:])
+              frases[0] in texto, texto[-600:])
         check(f"{nome}: sem nome de branch, classe ou arquivo",
-              "sem nome de branch" in texto, texto[-600:])
+              frases[1] in texto, texto[-600:])
         check(f"{nome}: sim = o item volta para a fila",
-              "volta para a fila" in texto, texto[-600:])
+              frases[2] in texto, texto[-600:])
     r = " ".join(review.replace("`", "").split())
     check("until-review: o bloco tem contexto (leigo) e instrucao (técnica)",
           '"contexto"' in r and '"instrucao"' in r
-          and "contexto é" in r and "instrucao é" in r, r[-1500:])
+          and "contexto is" in r and "instrucao is" in r, r[-1500:])
 
 
 REVIEW_COM_BLOCO = (

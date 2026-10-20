@@ -1,6 +1,6 @@
 ---
-description: Registra, a qualquer momento da sessão, um feedback sobre a própria Cepa — o comando que perguntou demais, o gate que barrou o que não devia, o relatório ilegível, o agente que fez o que não foi pedido. O registro é GLOBAL (~/.claude/cepa-feedback/), porque o incômodo acontece no repo do cliente e o alvo é o harness; repo, branch e modo da sessão entram sozinhos. Sem argumento, lista o que está aberto. Com --triar, e só dentro do repo da Cepa, converte os abertos em itens do BACKLOG.md e marca cada um com o destino. Não conserta nada e não interrompe o trabalho do turno.
-argument-hint: [<texto do feedback>] | [--alvo X] | [--listar [--todos]] | [--triar]
+description: Records, at any point in the session, feedback about Cepa itself — the command that asked too much, the gate that blocked what it shouldn't, the unreadable report, the agent that did what nobody asked. The record is GLOBAL (~/.claude/cepa-feedback/), because the annoyance happens in the client's repo and the target is the harness; the session's repo, branch and mode are filled in automatically. With no argument, lists what is open. With --triar, and only inside the Cepa repo, turns the open ones into BACKLOG.md items and marks each with its destination. Fixes nothing and does not interrupt the turn's work.
+argument-hint: [<feedback text>] | [--alvo X] | [--listar [--todos]] | [--triar]
 interaction: routine
 ---
 
@@ -8,121 +8,127 @@ interaction: routine
 
 ## Purpose
 
-Dar destino ao incômodo no instante em que ele aparece.
+Give the annoyance a destination the moment it shows up.
 
-O feedback sobre o harness nasce no meio de outra tarefa, num repo que quase
-nunca é o da Cepa. As duas saídas que existiam eram largar a tarefa para abrir o
-`BACKLOG.md` de outro repositório, ou seguir e esquecer — e seguir e esquecer
-sempre ganha. O resultado media-se em anedota: "o harness pergunta demais" é
-verdadeiro e não é acionável, porque o episódio que o provaria não foi guardado.
+Feedback about the harness is born in the middle of another task, in a repo that
+is almost never Cepa's. The two ways out that existed were to drop the task and
+open another repository's `BACKLOG.md`, or to carry on and forget — and carrying
+on and forgetting always wins. The result was measured in anecdote: "the harness
+asks too much" is true and not actionable, because the episode that would prove
+it was never kept.
 
-Este comando guarda o episódio: o texto do dono verbatim, mais o contexto que o
-torna reconstruível meses depois (repo, branch, modo da sessão, alvo).
+This command keeps the episode: the owner's text verbatim, plus the context that
+makes it reconstructible months later (repo, branch, session mode, target).
 
 ## Variables
 
-- `$ARGUMENTS` — uma das quatro formas:
-  - **texto** → registra o feedback (forma default).
-  - **vazio** ou `--listar` → lista os feedbacks abertos (`--todos` inclui os já triados).
-  - `--alvo <x>` → acompanha o texto; nomeia o comando/hook/agente responsável.
-  - `--triar` → converte os abertos em itens de `BACKLOG.md`. Só faz sentido no repo da Cepa.
+- `$ARGUMENTS` — one of four forms:
+  - **text** → records the feedback (default form).
+  - **empty** or `--listar` → lists the open feedback (`--todos` includes the already triaged ones).
+  - `--alvo <x>` → goes with the text; names the responsible command/hook/agent.
+  - `--triar` → turns the open ones into `BACKLOG.md` items. Only makes sense in the Cepa repo.
 
-## Onde mora o registro
+## Where the record lives
 
-`~/.claude/cepa-feedback/feedback-AAAA-MM.jsonl` — global e append-only
-(`CEPA_FEEDBACK_DIR` sobrescreve). Global e não por repo porque o alvo é a Cepa e
-o incômodo acontece no repo do cliente: um arquivo por projeto espalharia a mesma
-queixa por cinco lugares que ninguém relê. Append-only porque a triagem é outra
-linha citando o `id`, nunca uma reescrita do que o dono disse.
+`~/.claude/cepa-feedback/feedback-AAAA-MM.jsonl` — global and append-only
+(`CEPA_FEEDBACK_DIR` overrides it). Global and not per repo because the target is
+Cepa and the annoyance happens in the client's repo: one file per project would
+scatter the same complaint across five places nobody rereads. Append-only because
+triage is another line citing the `id`, never a rewrite of what the owner said.
 
-O escritor é o `cepa-feedback` (o bin do plugin), nunca o seu editor de texto:
-ele é quem recusa registro vazio ou de uma palavra, gera o `id`, captura
-repo/branch/modo e replica o estado `aberto`/`triado` do ledger.
+The writer is `cepa-feedback` (the plugin's bin), never your text editor: it is
+what refuses an empty or one-word record, generates the `id`, captures
+repo/branch/mode and replays the ledger's `aberto`/`triado` state.
 
 ## Workflow
 
-### 1. Registrar (forma default)
+### 1. Record (default form)
 
-Quando `$ARGUMENTS` traz texto:
+When `$ARGUMENTS` carries text:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" add \
-  "<texto do dono, verbatim>" --alvo <alvo se houver> --origem comando
+  "<owner's text, verbatim>" --alvo <target if any> --origem comando
 ```
 
-**Verbatim.** Não resuma, não reescreva, não "melhore" a redação do dono. Se ele
-escreveu quatro linhas de irritação, as quatro linhas entram. O resumo troca a
-queixa pela sua leitura dela — e é a sua leitura que costuma ser o problema.
+**Verbatim.** Do not summarize, do not rewrite, do not "improve" the owner's
+wording. If they wrote four lines of irritation, the four lines go in. A summary
+swaps the complaint for your reading of it — and your reading is usually the
+problem.
 
-O `--alvo` você preenche do contexto do turno quando ele for claro (o comando que
-acabou de rodar, o hook que acabou de barrar, o agente que acabou de devolver o
-relatório). Não invente: sem alvo evidente, grave sem ele.
+You fill `--alvo` from the turn's context when it is clear (the command that just
+ran, the hook that just blocked, the agent that just returned the report). Do not
+invent: with no evident target, record without it.
 
-Saída ao dono: **uma linha** com o id e o alvo. Depois disso, volte ao que ele
-estava pedindo. O turno pertence à tarefa, não à queixa.
+Output to the owner: **one line** with the id and the target. After that, go
+back to what they were asking for. The turn belongs to the task, not to the
+complaint.
 
-Se o bin recusar (texto curto demais, vazio), repasse a recusa em uma linha e
-peça a frase completa — sem transformar isso em interrogatório.
+If the bin refuses (text too short, empty), pass the refusal on in one line and
+ask for the full sentence — without turning it into an interrogation.
 
-### 2. Listar
+### 2. List
 
-Sem argumento, ou com `--listar`:
+With no argument, or with `--listar`:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --sem-cor
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --status todos --sem-cor   # com --todos
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --status todos --sem-cor   # with --todos
 ```
 
-Repasse a lista como veio, agrupada por alvo quando houver mais de cinco itens.
-Não classifique, não priorize, não proponha correção: aqui você é vitrine.
+Pass the list on as it came, grouped by target when there are more than five
+items. Do not classify, do not prioritize, do not propose a fix: here you are a
+shop window.
 
-### 3. Triar (`--triar`) — só no repo da Cepa
+### 3. Triage (`--triar`) — only in the Cepa repo
 
-Triar é o que impede o ledger de virar arquivo morto: cada feedback aberto sai
-dali com um destino nomeado.
+Triage is what keeps the ledger from becoming a dead archive: each open feedback
+leaves it with a named destination.
 
-1. **Confira que este é o repo da Cepa** — existe `BACKLOG.md` na raiz e o
-   `common/.claude-plugin/plugin.json`. Se não for, pare e diga em uma linha que
-   a triagem roda no repo do harness (o registro é global; a conversão em card,
-   não).
-2. Leia os abertos com `list --status aberto --json`.
-3. Para cada um, decida entre três destinos — e **decida você**, com
-   recomendação registrada, sem perguntar item a item (`default-yes`):
-   - **Item novo no `BACKLOG.md`** — o incômodo não está descrito em nenhuma
-     seção existente. Escreva a seção no formato do arquivo (título, `**Status:**
+1. **Check that this is the Cepa repo** — there is a `BACKLOG.md` at the root and
+   `common/.claude-plugin/plugin.json`. If it is not, stop and say in one line
+   that triage runs in the harness repo (the record is global; turning it into a
+   card is not).
+2. Read the open ones with `list --status aberto --json`.
+3. For each one, choose among three destinations — and **you decide**, with the
+   recommendation recorded, without asking item by item (`default-yes`):
+   - **New item in `BACKLOG.md`** — the annoyance is not described in any
+     existing section. Write the section in the file's format (title, `**Status:**
      pendente · **Lar provável:** <plugin> · **Origem:** feedback `<id>`,
-     `<data>`), com o texto do dono citado e o contexto do registro.
-   - **Anexo a um item existente** — já existe seção sobre aquele incômodo.
-     Acrescente o episódio ali, com o id, em vez de abrir uma seção rival.
-   - **Já resolvido** — o comportamento reclamado não existe mais. O destino é o
-     commit ou a versão que o resolveu, e você só marca a triagem.
-4. Marque cada um:
+     `<date>`), with the owner's text quoted and the record's context.
+   - **Attached to an existing item** — there is already a section about that
+     annoyance. Add the episode there, with the id, instead of opening a rival
+     section.
+   - **Already solved** — the behavior complained about no longer exists. The
+     destination is the commit or version that solved it, and you only mark the
+     triage.
+4. Mark each one:
    ```bash
    python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" triar <id> \
-     --destino "BACKLOG.md § <título>" --nota "<uma linha, se ajudar>"
+     --destino "BACKLOG.md § <title>" --nota "<one line, if it helps>"
    ```
-   O bin recusa destino vazio, id inexistente e re-triagem — a segunda triagem
-   apagaria a primeira decisão em silêncio.
-5. Relate no formato `plain-report`: quantos vieram, quantos viraram item novo,
-   quantos foram anexados, quantos já estavam resolvidos.
+   The bin refuses an empty destination, a nonexistent id and re-triage — a
+   second triage would silently erase the first decision.
+5. Report in the `plain-report` format (in pt-BR): how many came in, how many
+   became a new item, how many were attached, how many were already solved.
 
-## Limites
+## Limits
 
-- **Não conserta.** Nem o incômodo trivial, nem no repo da Cepa. Registrar e
-  consertar no mesmo turno é exatamente o desvio que o modo de trabalho existe
-  para barrar; o conserto entra pela fila, como qualquer item.
-- **Não julga.** "O gate estava certo" pode ser verdade e não é assunto do
-  registro. O ledger guarda o episódio; a triagem confere os fatos.
-- **Não é card de projeto.** Bug no código do cliente, API de terceiro, build
-  quebrado → `/board-flow:capture` ou `.claude/desvios.md`. O teste é uma
-  pergunta: reinstalar a Cepa em outra máquina levaria o incômodo junto?
+- **Does not fix.** Not even the trivial annoyance, not even in the Cepa repo.
+  Recording and fixing in the same turn is exactly the detour the work mode
+  exists to block; the fix comes in through the queue, like any item.
+- **Does not judge.** "The gate was right" may be true and is not the record's
+  business. The ledger keeps the episode; triage checks the facts.
+- **Is not a project card.** A bug in the client's code, a third-party API, a
+  broken build → `/board-flow:capture` or `.claude/desvios.md`. The test is one
+  question: would reinstalling Cepa on another machine bring the annoyance along?
 
-## Relação com o resto
+## Relation to the rest
 
-- O skill `common:feedback-capture` faz o mesmo registro **sem você digitar
-  comando nenhum** — basta reclamar em prosa. O hook `feedback-nudge`
-  (UserPromptSubmit) é quem garante que a hora de gravar seja notada, uma vez por
-  sessão.
-- O `/common:metrics` mede o harness pelo lado mecânico (bloqueios, vereditos,
-  atrito das pontas). Este comando é o lado que só o dono enxerga: o que
-  incomodou, com as palavras dele.
+- The `common:feedback-capture` skill makes the same record **without you typing
+  any command** — complaining in prose is enough. The `feedback-nudge` hook
+  (UserPromptSubmit) is what makes sure the moment to record is noticed, once per
+  session.
+- `/common:metrics` measures the harness from the mechanical side (blocks,
+  verdicts, friction at the session's ends). This command is the side only the
+  owner sees: what bothered them, in their own words.

@@ -439,18 +439,18 @@ def test_contrato_do_comando(base):
     check("reserva o item antes de executar", "cepa-plan start" in f)
     check("registra o desfecho de cada item", "cepa-plan finish" in f)
     check("proíbe escrever o YAML à mão",
-          "edite o plan.yaml à mão" in limpo,
+          "never edit plan.yaml by hand" in limpo,
           "sem a proibição, um Write no arquivo contorna TODAS as recusas do "
           "cepa-plan e nenhuma delas dispara")
     check("declara que rota humana ADIA o item em vez de parar o lote",
-          "human_pending" in f and "adia o item" in limpo,
+          "human_pending" in f and "defers the item" in limpo,
           "sem isso a prosa volta a mandar parar, e um lote de 3 vira um de 1")
     check("declara a cascata do adiamento",
-          "cascata" in limpo,
+          "cascade" in limpo,
           "adiar B sem adiar quem depende de B faz o dependente parar o lote, "
           "e o adiamento não serve para nada")
     check("declara que adiar NÃO reescreve a ordem gravada",
-          "adiar é execução" in limpo or "não reescreve a ordem" in limpo,
+          "deferring is execution" in limpo or "never rewrites the order" in limpo,
           "um executor que reordena o documento é o que a fila existe para "
           "impedir")
     check("declara o teto e o default",
@@ -487,7 +487,7 @@ def test_contrato_do_comando(base):
           "sem a transição, cada lote drenado PRODUZ a divergência que a "
           "reconciliação seguinte teria que consertar")
     check("mas a ordem continua vindo da fila, nunca do rank do quadro",
-          "a ordem nunca vem do quadro" in limpo,
+          "the order never comes from the board" in limpo,
           "tirar a ordem do board é o /board-flow:drain, que é o que este "
           "comando existe para substituir")
     check("e o Jira é sempre falado pelo agente que tem as ferramentas",
@@ -503,7 +503,7 @@ def test_contrato_do_comando(base):
     # nas duas, item `in_progress` sem desfecho. Sob `claude -p` (que é como o
     # `cepa-until` roda cada item) não existe o turno seguinte que ia colher.
     check("proíbe encerrar o turno com build em segundo plano",
-          "segundo plano" in limpo and "não há turno seguinte" in limpo,
+          "build in the background" in limpo and "there is no next turn" in limpo,
           "sem a proibição escrita, o agente segue o conselho do no-busy-wait "
           "(mandar para o segundo plano), que só vale em sessão interativa")
     check("e diz o que fazer no lugar: nomear o desfecho antes de parar",
@@ -511,7 +511,7 @@ def test_contrato_do_comando(base):
           "proibir sem dar a saída faz o agente escolher outra forma de "
           "silêncio")
     check("e 'esperando o build' não passa como desfecho",
-          "esperando o build" in limpo,
+          "waiting for the build" in limpo,
           "a tabela de desfechos terminais é o que impede status vestido de "
           "decisão")
     # A prosa é a instrução; o hook é a rede. Só a prosa erode sem nenhum teste
@@ -565,7 +565,7 @@ def test_start_imprime_a_evidence_anterior(base):
           "evidence anterior" not in r.stdout, r.stdout)
     texto = CMD.read_text(encoding="utf-8")
     check("o drain-plan manda levar a evidence anterior ao flow",
-          "evidence anterior" in texto and "lateral" in texto)
+          "evidence anterior" in texto and "side branch" in texto)
 
 
 def test_start_recupera_reserva_orfa_e_recusa_a_viva(base):
@@ -816,30 +816,30 @@ def test_na_branch_da_noite(base):
     limpo = f.replace("`", "").lower()
     check("declara --na-branch nos argumentos",
           "--na-branch" in f.split("## Instructions")[0])
-    i = limpo.find("na branch da noite (--na-branch")
+    i = limpo.find("on the overnight branch (--na-branch")
     trecho = limpo[i:i + 2500] if i != -1 else ""
     check("o passo 3 diz o que muda na branch da noite", bool(trecho))
     check("...não criar worktree nem branch para o item",
-          "não crie worktree nem branch" in trecho, trecho[:300])
+          "do not create a worktree or branch" in trecho, trecho[:300])
     check("...não partir de origin/main", "origin/main" in trecho)
-    check("...commit direto na branch", "commit direto nesta branch" in trecho)
-    check("...sem merge, sem push", "sem merge, sem push" in trecho)
+    check("...commit direto na branch", "commit directly on this branch" in trecho)
+    check("...sem merge, sem push", "no merge, no push" in trecho)
     check("...e confere a branch antes de começar",
           "rev-parse --abbrev-ref head" in trecho)
-    i = limpo.find("não rode o build completo")
+    i = limpo.find("do not run the full build")
     regra = limpo[i:i + 1500] if i != -1 else ""
     check("...não roda o build completo, que é do supervisor",
           bool(regra) and "supervisor" in regra, regra[:200])
     check("...roda só os testes focados, dentro do teto de 10 minutos",
-          "10 minutos" in regra and "-dtest" in regra, regra[:300])
+          "10 minutes" in regra and "-dtest" in regra, regra[:300])
     check("...e passa a regra aos agentes que delega",
           "qa-engineer" in regra and "validation-lead" in regra, regra[:300])
-    i = limpo.find("quem delega espera o worker no mesmo turno")
+    i = limpo.find("whoever delegates waits for the worker in the same turn")
     espera = limpo[i:].split("\n\n")[0] if i != -1 else ""
     check("...quem delega espera o worker no mesmo turno",
           bool(espera), "bullet ausente")
     check("...com run_in_background: false e 'mesmo turno'",
-          "run_in_background: false" in espera and "mesmo turno" in espera,
+          "run_in_background: false" in espera and "same turn" in espera,
           espera[:300])
     check("...e manda a regra aos três leads",
           all(l in espera for l in ("engineering-lead", "validation-lead",
@@ -965,7 +965,7 @@ def test_topologias_com_validacao_batem_com_os_agentes(base):
               and ".claude/validation" not in spec
               and "Write" in spec.split("\n", 5)[3], f)
     limpo = CMD.read_text(encoding="utf-8").replace("`", "")
-    i = limpo.find("c. **Passe pelos dois gates**")
+    i = limpo.find("c. **Go through both gates**")
     passo = limpo[i:i + 2000] if i != -1 else ""
     check("drain-plan 3.c exige o validation-lead na topologia que o tem",
           "validation-lead" in passo and "docs/validation/<id>.yaml" in passo
@@ -987,39 +987,39 @@ def test_card_anda_no_quadro_em_todo_desfecho(base):
     check("a reserva move o card para in_progress antes de qualquer trabalho",
           "status_map.in_progress" in reserva
           and "atlassian-expert" in reserva
-          and "antes de qualquer trabalho" in reserva,
+          and "before any work" in reserva,
           "sem isso o card fica em To Do enquanto o item é trabalhado")
     i_e = passo3.find("  e. ")
     fecha = passo3[i_e:passo3.find("  f. ")] if i_e != -1 else ""
     check("o done leva o card para in_review com o Implementation Summary",
           "status_map.in_review" in fecha
           and "Implementation Summary" in fecha)
-    i_f = passo3.find("no travamento.**")
+    i_f = passo3.find("on block.**")
     trava = passo3[i_f:] if i_f != -1 else ""
     check("o item travado comenta o motivo no card",
-          "atlassian-expert" in trava and "comentário" in trava,
+          "atlassian-expert" in trava and "comment on the card" in trava,
           "sem isso o card travado não diz no quadro por que parou")
     check("e vai para a coluna de bloqueados quando o quadro a declara",
           "status_map.blocked" in trava)
     check("o travamento cobre também o item que volta para pending",
           "pending" in trava and "status_map.blocked" in trava)
     check("e proíbe deixar o card em to_do",
-          "Nunca o deixe em `to_do`" in trava)
+          "Never leave it in `to_do`" in trava)
     i2 = f.find("### 2.")
     tela = f[i2:i3] if -1 not in (i2, i3) else ""
     check("a tela da largada nomeia as três pontas do quadro",
-          all(s in tela for s in ("<in_progress>", "<in_review>", "ao travar")),
+          all(s in tela for s in ("<in_progress>", "<in_review>", "when it gets stuck")),
           "o dono aprova o lote lendo esta tela")
     i5 = f.find("### 5.")
     rel = " ".join((f[i5:f.find("## Constraints")] if i5 != -1 else "").split())
     check("o relatório lista as três pontas do quadro",
           all(s in rel for s in ("In Progress", "In Review",
-                                 "travados comentados")))
+                                 "stuck ones commented")))
     ii, iw = f.find("## Instructions"), f.find("## Workflow")
     intro = " ".join((f[ii:iw] if -1 not in (ii, iw) else "").split())
-    k = intro.find("durante")
+    k = intro.find("during")
     check("a transição é declarada obrigatória nas Instructions",
-          k != -1 and "é **obrigatório**, não opcional" in intro[k:k + 300],
+          k != -1 and "is **mandatory**, not optional" in intro[k:k + 300],
           "a palavra solta já existia no arquivo (`--evidence` é obrigatório)")
     fim = f[f.find("## Constraints"):]
     check("as Constraints não dizem mais que o comando não fala com tracker",
@@ -1028,7 +1028,7 @@ def test_card_anda_no_quadro_em_todo_desfecho(base):
     i0, i1 = f.find("### 0."), f.find("### 1.")
     passo0 = f[i0:i1] if -1 not in (i0, i1) else ""
     check("o 'Do not transition' do passo 0 é marcado como só da leitura",
-          "Do not transition" in passo0 and "só para ESTE pedido" in passo0,
+          "Do not transition" in passo0 and "applies only to THIS request" in passo0,
           "a frase foi lida como política do lote no relatório do WEGO-2349")
 
 

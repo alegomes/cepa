@@ -104,7 +104,7 @@ def test_captura_antes_do_intake():
     fr = flat(run)
     check("run.md explica por que captura no início, não no fork "
           "(minutos passam / foco muda)",
-          "minutos" in fr and "foco" in fr)
+          "minutes go by" in fr and "the focus changes" in fr)
     check("run.md cita a evidência WEGO-paralelo (largura caindo pela metade)",
           "2026-08-24" in fr and ("pela metade" in fr or "173" in fr))
     check("captura sem herdr → aba nova previsível (`herdr tab create ... "
@@ -126,9 +126,9 @@ def test_spawn_usa_split_por_pane_lar():
           "--workspace/comando (motivo da mudança de receita)",
           "0.9" in fr and "agent start" in fr)
     check("prosa proíbe dividir o pane em foco / omitir o id do pane-lar",
-          "nunca" in fr and "pane que estiver em foco" in fr)
+          "Never split the pane that is in focus" in fr)
     check("prosa nomeia que `--no-focus` não escolhe onde o pane nasce",
-          "não escolhe onde" in fr)
+          "it does not choose where" in fr)
     # o wrapper normativo (pipefail + PIPESTATUS + MAESTRO-EXIT) tem de
     # sobreviver à troca de receita — é o que os outros testes pinam.
     check("o wrapper normativo continua presente (pipefail)",
@@ -191,7 +191,7 @@ def test_maestro_exit_nao_expande_no_shell_do_maestro():
     check("...e `$MAESTRO_LINGER` literal",
           "$MAESTRO_LINGER" in out, out)
     check("run.md explica por que o `\\$` está ali (não é sujeira de escape)",
-          "proposital" in flat(run) and "sujeira" in flat(run))
+          "deliberate" in flat(run) and "not escaping debris" in flat(run))
 
 
 def test_fallback_pane_lar_morto():

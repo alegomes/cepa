@@ -32,9 +32,9 @@ python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" estado
 
 If its output has an `abertura:` line (states `normal` and `cumprido`), open the recap with that line
 verbatim, as `**<text after "abertura: ">**`, right under the `## Recap` heading:
-"<propósito> / passo N de M", or "<propósito> / plano cumprido M/M" when every step is done. With no `abertura:` line (state `vazio` or
+"<propósito> / passo N de M" (purpose / step N of M), or "<propósito> / plano cumprido M/M" (plan fulfilled) when every step is done. With no `abertura:` line (state `vazio` or
 `outra-sessao`, or the command fails) print **no line at all**: no placeholder, no
-"sem intenção". Never read or edit `.claude/session-intent` by hand.
+"sem intenção" (no intent). Never read or edit `.claude/session-intent` by hand.
 
 ### 1. Load the intent log
 

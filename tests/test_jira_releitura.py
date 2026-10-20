@@ -50,7 +50,7 @@ def main():
 
     drain = ler("commands/prove-drain.md")
     check("claim do prove-drain lê também o que a prova precisa",
-          "Implementation Summary mais recente" in drain)
+          "full text of the latest Implementation Summary" in drain)
     check("prove-drain entrega o conteúdo à prova sem buscar de novo",
           "skip\n     prove's step 1 fetch" in drain or "skip prove's step 1 fetch" in drain)
 

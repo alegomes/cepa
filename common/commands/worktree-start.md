@@ -88,29 +88,29 @@ branch back into your integration branch and pruning the worktree.
    state, not on code. Run these checks and include the findings in the
    hand-off (each is best-effort — a failed check is reported, never blocks):
 
-   - **Drift do fork point:** `git fetch origin --quiet` then
+   - **Fork-point drift:** `git fetch origin --quiet` then
      `git rev-list --count HEAD..origin/<default-branch>`. If the fork point
      is behind, say by how many commits and recommend rebasing the new branch
      before starting work — scripts and entities that evolved on main are the
-     top cause of "worktree quebrado na largada".
-   - **Trabalho paralelo em voo:** `git worktree list` + branches `session/*` —
+     top cause of a worktree broken from the start.
+   - **Parallel work in flight:** `git worktree list` + branches `session/*` —
      name the other live slices so the new session knows what it may collide
      with (migrations, shared entities, `dev-portais-reais.sh`-style scripts).
-   - **Migrations colidentes** (repos with Flyway/Liquibase): list migration
+   - **Colliding migrations** (repos with Flyway/Liquibase): list migration
      files added on other `session/*` branches vs the default branch
      (`git diff --name-only <default-branch>...session/<other> -- '*migration*'`)
      and warn when two branches add versions for the same day — renumber early,
      not at merge time.
-   - **Portas de dev ocupadas** (when the repo has a dev server — Quarkus,
+   - **Busy dev ports** (when the repo has a dev server — Quarkus,
      Next.js, etc.): if the repo has a `docs/env.yaml` environment manifest
      (see `docs/env-manifest.md`), the ports to check come **from its `ports:`
      list** — that's the mechanical source, not a guess:
      `lsof -nP -iTCP:<port1>,<port2>,… -sTCP:LISTEN`. Only when there is no
      manifest, fall back to the classic guess `8080,8083,3000`. Either way,
      report who holds each busy port, so the new session picks a free port
-     instead of killing a sibling's dev server (`lsof kill` de porta já matou
-     o quarkus:dev de outra worktree).
-   - **Repositório Maven compartilhado** (repos with `pom.xml`): remind that
+     instead of killing a sibling's dev server (`lsof kill` on a port has already killed
+     another worktree's quarkus:dev).
+   - **Shared Maven repository** (repos with `pom.xml`): remind that
      `~/.m2` is shared across worktrees — a sibling session installing a
      SNAPSHOT can serve stale artifacts here; on weird compile errors,
      re-install the local dependency before debugging.

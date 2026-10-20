@@ -32,13 +32,14 @@ card's acceptance criterion **at the altitude it was written at** — if the
 criterion names an HTTP surface, "the failing test" is an HTTP test, not a
 mocked use-case test).
 
-Apply `default-yes`: este comando roda quase sempre DENTRO de um run maior
-(`/board-flow:drain`, `/board-flow:prove-drain`, `/common:session`), e uma
-pergunta feita aqui chega ao usuário no meio da fila — o ponto mais caro para
-interromper, porque responder exige recarregar o contexto inteiro da lista.
-Achado reversível, ou que só registra algo, com recomendação clara: execute e
-registre para o relatório de quem te chamou. Pergunta só para o irreversível, e
-ela sobe para o relatório final do run, nunca para o meio dele.
+Apply `default-yes`: this command almost always runs INSIDE a bigger run
+(`/board-flow:drain`, `/board-flow:prove-drain`, `/common:session`), and a
+question asked here reaches the user in the middle of the queue — the most
+expensive point to interrupt, because answering means reloading the whole
+context of the list. A reversible finding, or one that only records something,
+with a clear recommendation: do it and record it for the report of whoever
+called you. Ask only about the irreversible, and that question goes up to the
+run's final report, never into the middle of it.
 
 ## Worktree policy
 

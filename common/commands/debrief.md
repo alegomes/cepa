@@ -135,12 +135,13 @@ For each decision (filtered by altitude per step 4; formal blocks first, then in
 > **Chosen:** <which option>
 > **Rationale:** <verbatim>
 >
-> **Em uma frase:** <tradução leiga da decisão e do que muda na prática para o
-> produto/usuário — sem jargão; se a decisão envolve um termo técnico
-> inevitável, defina-o aqui em meia frase>
-> **Minha leitura:** <keep ou overrule, com meia frase de porquê — a
-> recomendação default de quem leu os artefatos, para o usuário não ter que
-> decidir às cegas>
+> **Em uma frase:** <("in one sentence", written in pt-BR) a lay translation of the
+> decision and of what it changes in practice for the product/user — no jargon;
+> if the decision involves an unavoidable technical term, define it here in half
+> a sentence>
+> **Minha leitura:** <("my reading", written in pt-BR) keep or overrule, with half
+> a sentence of why — the default recommendation of whoever read the artifacts,
+> so the user doesn't have to decide blind>
 >
 > Verdict — or talk it through first?
 > - `keep` — the call was right.

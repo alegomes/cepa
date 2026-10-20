@@ -38,8 +38,9 @@ deliberate difference from `/board-flow:drain`).
 
 - Max cards: parse `--max N`. Default 5.
 - Scope flags: detect `--no-scope` and `--scope "<jql>"` (mutually exclusive; if both appear, abort with "pass either --scope or --no-scope, not both"). Build the **scope directive**: `--no-scope` → `Scope: none`; `--scope "<jql>"` → `Scope: <jql>`; neither → omit the line (atlassian-expert resolves the effective scope from config).
-- **Claim id do run:** gere um, agora, como descrito em **Reserva do card**. Ele
-  identifica ESTE run em todos os cards que ele tocar.
+- **The run's claim id**: generate one, now, as described in
+  **Card reservation**. It identifies THIS run on every card
+  it touches.
 - Read `default_topology` and `defaults.status_map.in_review` from
   `board-flow.yaml`. Confirm the topology ships `proof-reviewer` (else abort as in
   `/board-flow:prove`).
@@ -72,38 +73,41 @@ diff-scoped mutation + adversarial input, in a throwaway worktree).
   · UNPROVEN   → returned to In Progress with the gap (drain CONTINUES)
   · NEEDS-HUMAN→ stays in Review for you
 
-E, no fim, os que pararem em NEEDS-HUMAN (nem provados, nem devolvidos —
-os que dependem de uma decisão sua):
-  (a) aplico a recomendação de cada motivo e só te conto o que fiz   ← default
-  (b) seguro todos e te pergunto um por um no relatório
+And, at the end, the ones that stop at NEEDS-HUMAN (neither proven nor
+returned — the ones that depend on a decision of yours):
+  (a) I apply each reason's recommendation and just tell you what I did   ← default
+  (b) I hold them all and ask you one by one in the report
 
-Reply yes / no / first-N to prove a subset, e (a) ou (b) para os NEEDS-HUMAN.
-Só "sim" vale como sim + (a).
+Reply yes / no / first-N to prove a subset, and (a) or (b) for the NEEDS-HUMAN.
+A bare "yes" counts as yes + (a).
 ```
 
-Wait for confirmation. **Esta é a ÚNICA parada do run** — aplique `default-yes`:
-junte a esta confirmação tudo que você perguntaria depois. Uma pergunta no meio
-do drain custa ao usuário recarregar o contexto inteiro para responder.
+Render this screen to the owner in Brazilian Portuguese (pt-BR); a bare "sim"
+is the "yes" above.
 
-**A alternativa (a)/(b) tem que estar ESCRITA na tela acima, não implícita.**
-O passo 6 só dispensa a segunda rodada de perguntas "se o usuário já respondeu
-essa política na confirmação do passo 3" — e uma tela que mostra a contagem de
-cards e pergunta "posso ir?" não colhe resposta nenhuma sobre NEEDS-HUMAN. Um
-"sim" a ela não fecha aquela condicional, o passo 6 pergunta tudo de novo no
-fim, e o run que se anunciou como parada ÚNICA cobra duas. Foi assim até
-22/08/2026. Um "sim" seco continua valendo: é (a), o default.
+Wait for confirmation. **This is the ONLY stop of the run** — apply `default-yes`:
+fold into this confirmation everything you would ask later. A question in the
+middle of the drain costs the user reloading the whole context to answer it.
 
-Se o run veio de `/common:session`, essas respostas já foram colhidas na largada
-— não pergunte de novo.
+**The (a)/(b) alternative has to be WRITTEN on the screen above, not implied.**
+Step 6 only skips the second round of questions "if the user already answered
+that policy in the step 3 confirmation" — and a screen that shows the card count
+and asks "can I go?" collects no answer at all about NEEDS-HUMAN. A "yes" to it
+doesn't close that conditional, step 6 asks everything again at the end, and the
+run that announced itself as the ONLY stop charges two. That's how it was until
+22/08/2026. A dry "yes" still counts: it's (a), the default.
+
+If the run came from `/common:session`, these answers were already collected at
+the start — don't ask again.
 
 ### 4. Iterate
 
 For each confirmed card, in priority order:
 
-  a. **Reserve o card primeiro** — releia status + comentários e publique o claim,
-     conforme **Reserva do card** abaixo. Se o card foi pulado (saiu da coluna ou
-     está reservado por outra sessão), registre `SKIPPED` e vá para o próximo
-     card SEM rodar prova nenhuma.
+  a. **Reserve the card first** — re-read status +
+     comments and publish the claim, per **Card reservation** below. If the card
+     was skipped (it left the column or is reserved by another session), record
+     `SKIPPED` and go to the next card WITHOUT running any proof.
   b. Run the equivalent of `/board-flow:prove <card-key>` (proof + verdict-driven
      transition), reusing the card content from the claim read in (a) — skip
      prove's step 1 fetch.
@@ -119,9 +123,9 @@ For each confirmed card, in priority order:
      "Attention" is not a state.
   e. If `proof-reviewer` returns a hard environmental failure for a card (can't
      create a worktree, build infra down), record it as `ERROR` for that card
-     and continue to the next — one broken card shouldn't sink the batch. Um
-     card que termina em `ERROR` não recebeu veredito, então **publique a
-     liberação do claim** (`🔓`) antes de seguir.
+     and continue to the next — one broken card shouldn't sink the batch. A
+     card that ends in `ERROR` got no verdict, so **publish the claim
+     release** (`🔓`) before moving on.
   f. Before recording any card's outcome, apply **Coupled closure** below. The
      batch is a scheduling convenience; it is never the unit of evidence.
 
@@ -133,7 +137,7 @@ Proved from Review (max <N>, scope: <effective scope, or "none">):
   UNPROVEN → returned:  <count>   (keys + one-line gap each)
   NEEDS-HUMAN → held:   <count>   (keys + what to look at)
   ERROR:                <count>   (keys + reason)
-  SKIPPED (reservado/movido): <count>   (keys + qual sessão ou qual status)
+  SKIPPED (reserved/moved): <count>   (keys + which session or which status)
 
 Remaining in Review (not attempted this run): <count>
 ```
@@ -148,83 +152,91 @@ every option description — never a bare `L4` / `waiver` / `altitude` in a labe
 Suggest re-running for the next batch if cards remain, and point the user at the
 NEEDS-HUMAN set as their actual review queue.
 
-**Quando a contagem de NEEDS-HUMAN for 1 ou mais, NÃO mande o usuário rodar
-outro comando — faça o agrupamento aqui, no mesmo relatório.** Aplique a lógica
-de `/board-flow:decide` sobre o conjunto que ESTE run acabou de produzir:
-classifique cada card nos sete motivos de `docs/needs-human-motivos.md`, tire da
-frente o que não é decisão de ninguém (Docker fora, ferramenta ausente — resolva
-ou registre, não pergunte), agrupe o resto por motivo e faça **uma pergunta
-fechada por grupo, com recomendação**, aceitando resposta em lote ("1 sim, 2
-não").
+**When the NEEDS-HUMAN count is 1 or more, do NOT send the user to run another
+command — do the grouping here, in the same report.** Apply the logic of
+`/board-flow:decide` to the set THIS run just produced: classify each card into
+the seven reasons of `docs/needs-human-motivos.md`, take off the plate what is
+nobody's decision (Docker down, missing tool — resolve or record it, don't ask),
+group the rest by reason and ask **one closed question per group, with a
+recommendation**, accepting a batch answer ("1 yes, 2 no"; in pt-BR, "1 sim,
+2 não").
 
-**Se o usuário respondeu (a) no passo 3 — ou respondeu só "sim", que é (a) —
-não pergunte nada aqui.** Aplique a recomendação de cada motivo e relate o que
-foi feito, card por card, com o motivo ao lado. As perguntas fechadas por grupo
-acima são o caminho (b), e só ele.
+**If the user answered (a) in step 3 — or answered just "yes", which is (a) —
+don't ask anything here.** Apply each reason's recommendation and report what
+was done, card by card, with the reason alongside. The closed per-group
+questions above are path (b), and only that.
 
-Por que aqui e não em outro comando: o run que produziu os cards é o run que
-sabe quais são e por quê. Encerrar dizendo "agora rode `/board-flow:decide`"
-devolve ao usuário um segundo ciclo de leitura e decisão sobre o mesmo material
-— o custo que o `decide` existia para remover, reintroduzido no ponto de
-entrega. `/board-flow:decide` continua existindo para quando a coluna Review
-acumulou fora de um drain (cards de outras sessões, de outro dia).
+Why here and not in another command: the run that produced the cards is the run
+that knows which they are and why. Ending with "now run `/board-flow:decide`"
+hands the user a second cycle of reading and deciding over the same material
+— the cost `decide` existed to remove, reintroduced at the point of delivery.
+`/board-flow:decide` still exists for when the Review column piled up outside a
+drain (cards from other sessions, from another day).
 
-## Reserva do card — a fila é o recurso disputado
+## Card reservation — the queue is the contested resource
 
-A lista montada no passo 2 é uma **foto**, não uma reserva. Entre a listagem e o
-momento em que este run chega ao card N, outra sessão (outra worktree, outra
-máquina, o mesmo usuário em duas janelas) pode ter pegado o mesmo card — e o
-custo não é um conflito de arquivo, é o trabalho inteiro refeito. O recurso
-compartilhado é a coluna do board, então a reserva é feita no board.
+The list built in step 2 is a **snapshot**, not a reservation. Between the
+listing and the moment this run reaches card N, another session (another
+worktree, another machine, the same user in two windows) may have taken the same
+card — and the cost isn't a file conflict, it's the whole job redone. The shared
+resource is the board column, so the reservation is made on the board.
 
-**Claim id.** Gere UM por run, no passo 1, e use o mesmo para todos os cards:
+**Claim id.** Generate ONE per run, in step 1, and use the same one for every card:
 
 ```bash
 echo "$(basename "$PWD")-$(python3 -c 'import uuid;print(uuid.uuid4().hex[:8])')"
 ```
 
-**Antes de tocar em cada card** (é o primeiro passo do 4, antes de qualquer
-build, worktree ou delegação), delegue a `atlassian-expert`:
+**Before touching each card** (it's the first step of 4, before any build,
+worktree or delegation), delegate to `atlassian-expert`:
 
-> Leia o card `<KEY>`: status atual, responsável, os comentários das últimas
-> 90 minutos, e também summary, description, acceptance criteria, **issue type**
-> e o **texto completo do Implementation Summary mais recente**. Devolva sem
-> alterar nada.
+> Read card `<KEY>`: current status, assignee, the comments from the last
+> 90 minutes, and also summary, description, acceptance criteria, **issue type**
+> and the **full text of the latest Implementation Summary**. Return it without changing anything.
 
-Essa leitura já traz tudo o que o passo 1 do `/board-flow:prove` pediria. No 4b,
-entregue esse conteúdo à prova em vez de buscar o card de novo: medido em
-13/09/2026, reler um card que a sessão acabou de ler era a origem de parte das
-277 releituras dispensáveis.
+That read already brings everything step 1 of `/board-flow:prove` would ask for.
+In 4b, hand that content to the proof instead of fetching the card again:
+measured on 13/09/2026, re-reading a card the session had just read was the
+source of part of the 277 avoidable re-reads.
 
-E decida, mecanicamente:
+And decide, mechanically:
 
-- **Status ≠ `<coluna do run>`** → o card saiu da fila desde a listagem. **Pule**,
-  registre `SKIPPED (saiu da coluna: agora em <status>)` e siga para o próximo.
-- **Existe um comentário de claim de OUTRO claim id, com menos de 90 minutos e
-  sem o `🔓` de liberação** → outra sessão está nele agora. **Pule**, registre
-  `SKIPPED (reservado por <claim-id> às <hh:mm>)` e siga.
-- **Caso contrário** → reserve, publicando o comentário via `atlassian-expert`:
+- **Status ≠ `<the run's column>`** → the card left the queue since the listing.
+  **Skip** it, record `SKIPPED (left the column: now in <status>)` and move on to
+  the next.
+- **There is a claim comment from ANOTHER claim id, less than 90 minutes old and
+  without the `🔓` release** → another session is on it right now. **Skip** it,
+  record `SKIPPED (reserved by <claim-id> at <hh:mm>)` and move on.
+- **Otherwise** → reserve it, publishing the comment via `atlassian-expert`. The
+  comment body is posted verbatim, in pt-BR (`atlassian-expert` looks for the
+  `🔒 claim:` / `🔓 claim` prefixes):
 
   > `🔒 claim: <claim-id> — <nome do comando> em andamento desde <timestamp>.`
   > `Outra sessão deve pular este card. A reserva expira em 90 minutos.`
 
-  Só depois desse comentário existir o card pode ser trabalhado.
+  ("claim: <claim-id> — <command name> in progress since <timestamp>. Another
+  session must skip this card. The reservation expires in 90 minutes.")
 
-**Liberação.** O veredito do card encerra a reserva — o comentário de resultado
-(prova, bounce com `**Reason:**`, resumo de implementação) já é o sinal de que a
-reserva acabou. Quando o card termina SEM veredito (`ERROR`, interrupção, aborto
-do run), publique a liberação explícita, senão o card fica intocável por 90 min:
+  Only after that comment exists may the card be worked.
+
+**Release.** The card's verdict ends the reservation — the result comment
+(proof, bounce with `**Reason:**`, implementation summary) is already the signal
+that the reservation is over. When the card ends WITHOUT a verdict (`ERROR`,
+interruption, run abort), publish the explicit release (verbatim, pt-BR),
+otherwise the card stays untouchable for 90 min:
 
 > `🔓 claim <claim-id> liberado — <motivo>.`
 
-**Por que 90 minutos e não um lock permanente:** uma sessão que morre no meio
-não pode congelar a fila. A janela é maior que o tempo de um card (a prova leva
-de 9 a 12 minutos) e menor que um turno de trabalho, então uma reserva órfã se
-resolve sozinha sem ninguém precisar destravar nada à mão.
+("claim <claim-id> released — <reason>.")
 
-**Cards pulados não consomem `--max`** — nenhum trabalho rodou neles. Eles
-aparecem no relatório final com o motivo, porque "sumiu da lista sem explicação"
-é exatamente o buraco que este mecanismo existe para fechar.
+**Why 90 minutes and not a permanent lock:** a session that dies midway must not
+freeze the queue. The window is longer than one card's time (the proof takes
+9 to 12 minutes) and shorter than a work shift, so an orphaned reservation
+resolves itself without anyone having to unlock anything by hand.
+
+**Skipped cards don't consume `--max`** — no work ran on them. They show up in
+the final report with the reason, because "vanished from the list without
+explanation" is exactly the hole this mechanism exists to close.
 
 ## Coupled closure — the batch is not the unit of evidence
 
@@ -270,12 +282,12 @@ once the failure is observed.
 - **No stop-on-failure.** UNPROVEN and NEEDS-HUMAN are normal outcomes; the drain
   processes the whole confirmed batch. (Contrast `/board-flow:drain`, which stops
   on BLOCKED.)
-- **Reserve antes de provar, card a card.** A listagem é uma foto; a reserva no
-  board é o que impede duas sessões de provarem o mesmo card. Sem o claim
-  publicado, o card não é trabalhado.
-- Always confirm before starting. Don't prove N cards without buy-in. Mas
-  confirme **uma vez só**: a confirmação do passo 3 carrega também a política
-  para o que parar em NEEDS-HUMAN (`default-yes`).
+- **Reserve before proving, card by card.** The listing is a snapshot; the
+  reservation on the board is what keeps two sessions from proving the same card.
+  Without the claim published, the card is not worked.
+- Always confirm before starting. Don't prove N cards without buy-in. But
+  confirm **only once**: the step 3 confirmation also carries the policy for
+  whatever stops at NEEDS-HUMAN (`default-yes`).
 - Per-card proof is FULL — don't shortcut to save time across cards.
 - **Scope narrows, never widens.** It only subtracts cards from Review; `--no-scope` returns the full sweep. Show the effective scope on the confirmation screen, and surface a rejected scope JQL fragment as a config/flag error — not an empty Review queue.
 - `atlassian-expert` is the only Jira write path.

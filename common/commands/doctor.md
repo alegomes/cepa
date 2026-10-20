@@ -1,5 +1,5 @@
 ---
-description: Valida a instalação do harness contra a realidade em 30 segundos — plugins habilitados e na versão instalada, hooks compilando, board-flow.yaml estrutural, baseline de build (status + idade), worktrees stale/órfãs (inclusive a worktree de agente esquecida dentro do repo, que duplica o código-fonte), handoffs vencidos e a fila single-track (plan.yaml) divergindo do BACKLOG.md. Com --live, também confere o board-flow.yaml e a fila contra o Jira vivo via atlassian-expert. Rode no início do dia ou quando algo do harness parecer errado — cada check existe porque a falha correspondente já custou uma tarefa.
+description: Validates the harness installation against reality in 30 seconds — plugins enabled and at the installed version, hooks compiling, board-flow.yaml structure, build baseline (status + age), stale/orphan worktrees (including the forgotten agent worktree inside the repo, which duplicates the source code), expired handoffs and the single-track queue (plan.yaml) diverging from BACKLOG.md. With --live, also checks board-flow.yaml and the queue against live Jira via atlassian-expert. Run it at the start of the day or when something in the harness looks wrong — each check exists because the matching failure has already cost a task.
 argument-hint: [--live] [--no-fix] [--projeto]
 interaction: routine
 ---
@@ -8,109 +8,121 @@ interaction: routine
 
 ## Purpose
 
-Quase toda falha de infraestrutura do harness era descoberta no meio de uma
-tarefa: plugin não carregado gerando cards sem custom fields, board-flow.yaml
-de outro módulo, baseline FAILURE de semanas bloqueando push, worktree órfã,
-handoff stale alimentando afirmações falsas. Este comando antecipa tudo isso
-para um momento em que consertar é barato.
+Almost every harness infrastructure failure used to be discovered in the middle
+of a task: a plugin not loaded producing cards without custom fields, a
+board-flow.yaml from another module, a weeks-old FAILURE baseline blocking
+push, an orphan worktree, a stale handoff feeding false claims. This command
+brings all of that forward to a moment when fixing is cheap.
 
 ## Steps
 
-1. Rode o diagnóstico **já corrigindo o que é mecânico** (default; use
-   `--no-fix` para só diagnosticar):
+1. Run the diagnosis **already fixing what is mechanical** (default; use
+   `--no-fix` to only diagnose):
 
    ```
    python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-doctor" --fix
    ```
 
-   `--projeto` corta os checks globais (settings, plugins, hooks, telemetria) e
-   olha só este projeto — útil quando a pergunta é "este repo está são?" e não
-   "esta máquina está sã?".
+   `--projeto` cuts the global checks (settings, plugins, hooks, telemetry) and
+   looks only at this project — useful when the question is "is this repo
+   sound?" and not "is this machine sound?".
 
-   `--fix` aplica, em lote e sem perguntar, só o que é mecânico E reversível
-   (reinstalar plugins quando o cache diverge do repo, arquivar handoff vencido
-   — move, não apaga —, limpar registro de worktree cujo diretório sumiu, remover worktree de agente esquecida que já está contida na branch de integração e não guarda arquivo nenhum), e
-   re-roda o diagnóstico até parar de mudar. Isso existe porque a alternativa
-   era um achado por vez, cada um custando uma confirmação: a preparação
-   consumia mais atenção que a tarefa da sessão.
+   `--fix` applies, in a batch and without asking, only what is mechanical AND
+   reversible (reinstall plugins when the cache diverges from the repo, archive
+   an expired handoff — moves, does not delete —, clear the registration of a
+   worktree whose directory is gone, remove a forgotten agent worktree that is
+   already contained in the integration branch and holds no file), and re-runs
+   the diagnosis until it stops changing. This exists because the alternative
+   was one finding at a time, each costing a confirmation: the preparation used
+   up more attention than the session's task.
 
-   A reinstalação é a única correção que sai do projeto e mexe na instalação da
-   máquina, então ela tem duas travas: `CEPA_DOCTOR_INSTALL=off` desliga, e o
-   doctor chamado de dentro de um diretório temporário nunca reinstala (é de lá
-   que as suítes rodam — em 2026-08-19 a suíte do próprio doctor trocou a
-   instalação viva do dono no meio de um `python3 tests/...`).
+   Reinstalling is the only fix that leaves the project and touches the
+   machine's installation, so it has two locks: `CEPA_DOCTOR_INSTALL=off` turns
+   it off, and the doctor called from inside a temporary directory never
+   reinstalls (that is where the suites run — on 2026-08-19 the doctor's own
+   suite swapped the owner's live installation in the middle of a
+   `python3 tests/...`).
 
-2. Mostre a saída ao usuário na íntegra (✓/⚠/✗ por área, já em pt-BR),
-   incluindo os blocos finais **Corrigido automaticamente** e **Precisa de você**.
+2. Show the output to the user in full (✓/⚠/✗ per area, already in pt-BR),
+   including the final blocks **Corrigido automaticamente** (fixed
+   automatically) and **Precisa de você** (needs you).
 
-   A área `plano` (quando aparece) é a fila single-track (`.claude/programs/<fila>/plan.yaml`)
-   comparada com o `BACKLOG.md` do projeto — o `cepa-plan divergencia` que o script
-   já rodou sozinho: seções do BACKLOG.md sem `**Plano:**` e `**Plano:**` citando
-   um id que não existe naquela fila. Só aparece quando o repo tem `BACKLOG.md` E
-   uma fila resolvível sem ambiguidade (via `board-flow.yaml` → `defaults.project_key`,
-   ou exatamente uma fila `single-track` em `.claude/programs/*/plan.yaml`); com
-   mais de uma fila possível o script fica calado — não adivinha qual o dono quer
-   ver. É relatório, nunca correção: nenhum `--fix` mexe aqui.
+   The `plano` area (when it shows up) is the single-track queue
+   (`.claude/programs/<fila>/plan.yaml`) compared with the project's
+   `BACKLOG.md` — the `cepa-plan divergencia` the script already ran on its
+   own: BACKLOG.md sections without `**Plano:**` and a `**Plano:**` citing an id
+   that does not exist in that queue. It only shows up when the repo has
+   `BACKLOG.md` AND a queue that resolves without ambiguity (via
+   `board-flow.yaml` → `defaults.project_key`, or exactly one `single-track`
+   queue in `.claude/programs/*/plan.yaml`); with more than one possible queue
+   the script stays quiet — it does not guess which one the owner wants to see.
+   It is a report, never a fix: no `--fix` touches it.
 
-   A área `maestro` (quando aparece) é uma onda do Maestro que terminou e ninguém
-   aterrissou: slice `DONE` no `wave-state.yaml` que não está `LANDED`. O merge
-   train só roda com a sessão do `/maestro:run` viva; quando ela morre antes, as
-   branches prontas ficam paradas sem nada no disco dizer que esperam (onda 1 do
-   WEGO-paralelo, 2026-08-24). A rota é `/maestro:resume <programa>`, que vai
-   direto ao merge train. Também só relatório.
+   The `maestro` area (when it shows up) is a Maestro wave that finished and
+   nobody landed: a `DONE` slice in `wave-state.yaml` that is not `LANDED`. The
+   merge train only runs while the `/maestro:run` session is alive; when it dies
+   first, the ready branches sit idle with nothing on disk saying they are
+   waiting (wave 1 of WEGO-paralelo, 2026-08-24). The route is
+   `/maestro:resume <programa>`, which goes straight to the merge train. Also
+   report only.
 
-3. **Se `--live` foi passado** e existe `board-flow.yaml` no projeto: delegue ao
-   `board-flow:atlassian-expert` (se o plugin board-flow estiver instalado):
+3. **If `--live` was passed** and there is a `board-flow.yaml` in the project:
+   delegate to `board-flow:atlassian-expert` (if the board-flow plugin is
+   installed):
 
-   > Sanity-check do board-flow.yaml contra o Jira vivo (sem mutação):
-   > confirme que o project_key é visível, que cada valor de status_map
-   > existe como status real do projeto, e que cada required_field existe no
-   > metadata do issue type. Responda OK ou a lista de divergências.
+   > Sanity-check board-flow.yaml against live Jira (no mutation):
+   > confirm that the project_key is visible, that each status_map value
+   > exists as a real status of the project, and that each required_field
+   > exists in the issue type's metadata. Answer OK or the list of divergences.
 
-   Anexe o resultado ao relatório.
+   Attach the result to the report.
 
-   Se a mesma fila resolvida no passo 2 (`plano`) existir, peça também ao
-   `atlassian-expert` a lista de cards do projeto (`key` + `status`), salve num
-   arquivo temporário e rode:
+   If the same queue resolved in step 2 (`plano`) exists, also ask
+   `atlassian-expert` for the project's list of cards (`key` + `status`), save
+   it to a temporary file and run:
 
    ```
    python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" divergencia <fila> \
      --board <arquivo-temporário> --backlog BACKLOG.md --repo . --json
    ```
 
-   Isso completa o relatório do passo 1 (que só compara fila × BACKLOG.md) com a
-   metade que depende do Jira: `cards_sem_item` (cards abertos no quadro sem item
-   na fila) e `itens_com_card_done` (itens não fechados cujo card o Jira já dá
-   como done). Anexe ao relatório da mesma forma — leitura, nunca correção.
+   This completes the step 1 report (which only compares queue × BACKLOG.md)
+   with the half that depends on Jira: `cards_sem_item` (open cards on the
+   board with no item in the queue) and `itens_com_card_done` (unclosed items
+   whose card Jira already shows as done). Attach it to the report the same
+   way: read, never fix.
 
-4. O que sobrou no bloco **Precisa de você** são as correções que envolvem uma
-   escolha (descartar worktree com trabalho dentro — inclusive a worktree de agente que ainda tem commit ou arquivo não rastreado —, editar `board-flow.yaml`,
-   rodar o verify do projeto, criar `.claude/no-build`). Aplique o skill
-   `default-yes`: junte TODAS numa lista só, com sua recomendação por item, e
-   peça **uma** confirmação em lote no fim — nunca uma pergunta por achado, e
-   nunca uma cascata em que a resposta de um gera a próxima pergunta.
+4. What is left in the **Precisa de você** block are the fixes that involve a
+   choice (discard a worktree with work inside — including the agent worktree
+   that still has a commit or an untracked file —, edit `board-flow.yaml`, run
+   the project's verify, create `.claude/no-build`). Apply the `default-yes`
+   skill: gather ALL of them into a single list, with your recommendation per
+   item, and ask for **one** batch confirmation at the end — never one question
+   per finding, and never a cascade where one answer produces the next
+   question. The list and the question are in pt-BR.
 
-   **Área `ops` — trate com prioridade sobre as demais.** Ela responde "o
-   harness que está rodando é o que eu acho que está?", e um ✗ aí contamina
-   todo o resto do relatório: se o último install não terminou, os hooks live
-   não são os do repo, e qualquer outro check pode estar medindo a coisa
-   errada. Traduza sem jargão — "a última instalação morreu no meio, então o
-   que está valendo agora não é nem o antigo nem o novo" — e ofereça as duas
-   saídas explícitas: refazer (`bin/install.sh --clean`) ou voltar
-   (`bin/install.sh --rollback`). Ver `docs/harness-ops.md`.
+   **`ops` area — treat it with priority over the others.** It answers "is the
+   harness that is running the one I think it is?", and a ✗ there contaminates
+   the whole rest of the report: if the last install did not finish, the live
+   hooks are not the repo's, and any other check may be measuring the wrong
+   thing. Translate it without jargon — in pt-BR, along the lines of "the last
+   installation died midway, so what is in effect now is neither the old one
+   nor the new one" — and offer the two explicit ways out: redo
+   (`bin/install.sh --clean`) or go back (`bin/install.sh --rollback`). See
+   `docs/harness-ops.md`.
 
-5. Exit code do script: 0 = saudável, 1 = só avisos, 2 = falhas. Se 2, sugira
-   resolver antes de começar trabalho novo.
+5. The script's exit code: 0 = healthy, 1 = warnings only, 2 = failures. If 2,
+   suggest resolving them before starting new work.
 
 ## Notes
 
-- Sem `--fix` o script é 100% leitura (o probe de telemetria cria e apaga um
-  arquivo próprio) e lista, no fim, quais achados teriam correção mecânica.
-  Com `--fix` ele muta **apenas** os três tipos acima; todo o resto continua
-  passando pelo passo 4.
-- Checks de projeto rodam sobre o cwd; rode o comando de dentro do repo que
-  quer diagnosticar.
-- O check `ops` é a exceção: ele lê `~/.claude/ops/last-install.json`, que é
-  **global** — descreve o cache de plugins da máquina, não deste repositório.
-  Por isso ele vale igual em qualquer cwd, e por isso guarda `repo_dir` (de
-  qual clone veio o que está instalado).
+- Without `--fix` the script is 100% read-only (the telemetry probe creates and
+  deletes a file of its own) and lists, at the end, which findings would have a
+  mechanical fix. With `--fix` it mutates **only** the three kinds above;
+  everything else still goes through step 4.
+- Project checks run on the cwd; run the command from inside the repo you want
+  to diagnose.
+- The `ops` check is the exception: it reads `~/.claude/ops/last-install.json`,
+  which is **global** — it describes the machine's plugin cache, not this
+  repository. That is why it applies the same in any cwd, and why it keeps
+  `repo_dir` (which clone what is installed came from).

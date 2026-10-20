@@ -31,36 +31,36 @@ def comando():
         return
     f = CMD.read_text(encoding="utf-8")
     limpo = f.replace("`", "").lower()
-    for passo in ("barra", "builders isolados", "juízes cegos", "borda",
-                  "revisão", "checagem"):
+    for passo in ("bar", "isolated builders", "blind judges", "borda",
+                  "revision", "final check"):
         check(f"nomeia o passo '{passo}'", passo in limpo)
     check("argument-hint com as flags",
-          "argument-hint: <alvo> [--builders=3] [--angulos=a,b,c] [--slug=<slug>]" in f)
+          "argument-hint: <target> [--builders=3] [--angulos=a,b,c] [--slug=<slug>]" in f)
     check("declara custo opt-in", "opt-in" in limpo and "600k" in limpo
-          and "9 agentes" in limpo)
+          and "9 agents" in limpo)
     check("recusa código provável / tarefa mecânica",
-          "recuse" in limpo and "provável" in limpo and "mecânic" in limpo)
+          "refuse" in limpo and "provable" in limpo and "mechanical task" in limpo)
     check("declara o caminho de saída",
           "docs/internals/gauntlet-<slug>.md" in f)
     check("cita o script canônico",
           "gauntlet/gauntlet.workflow.js" in f and "CLAUDE_PLUGIN_ROOT" in f)
-    check("manda não reescrever o script", "não reescreva o script" in limpo)
+    check("manda não reescrever o script", "do not rewrite the script" in limpo)
     check("cita o registry de ângulos", "gauntlet/angulos.md" in f)
     plano = " ".join(limpo.split())  # frases quebradas em linhas
     check("builders isolados e sem ver uns aos outros",
-          "builders nunca veem uns aos outros" in plano
-          and "nenhum vê a saída de outro" in plano)
+          "builders never see each other" in plano
+          and "none sees another's output" in plano)
     check("juízes cegos veem só objetivo + barra + designs anonimizados",
-          "juízes só veem objetivo + barra + designs anonimizados" in plano)
+          "judges see only goal + bar + anonymized designs" in plano)
     check("ordem rotacionada por juiz",
-          "em ordem rotacionada por juiz" in plano)
+          "in an order rotated per judge" in plano)
     check("fórmula Borda: 1º lugar = N pontos",
-          "(1º lugar = n pontos, onde n é o número de designs)" in plano)
+          "(1st place = n points, where n is the number of designs)" in plano)
     check("desempate: mais 1º lugares, depois ordem dos designs, nomeado",
-          "empate: vence o design que ficou em 1º lugar com mais juízes" in plano
-          and "o primeiro na ordem dos designs" in plano
-          and "nomeia o empate" in plano)
-    i4 = plano.find("### 4. gravar a saída durável")
+          "tie: the design ranked 1st by the most judges wins" in plano
+          and "the first in the order of the designs" in plano
+          and "names the tie" in plano)
+    i4 = plano.find("### 4. write the durable output")
     j4 = plano.find("### 5.", i4)
     p4 = plano[i4:j4] if i4 != -1 and j4 != -1 else ""
     check("passo 4 existe e grava o caminho da saída",
@@ -73,17 +73,17 @@ def comando():
                    "## checagem final contra a barra"):
         check(f"passo 4 nomeia o título '{titulo}'", titulo in p4)
     check("passo 4 pede a tabela Borda com a conta mostrada",
-          "tabela de pontos borda com a conta mostrada" in p4
-          and "(1º = n pontos, 2º = n-1, ...; soma por design)" in p4)
+          "a borda points table with the arithmetic shown" in p4
+          and "(1st = n points, 2nd = n-1, ...; sum per design)" in p4)
     check("passo 4 pede ranking de cada juiz e maiores lacunas",
-          "ranking de cada juiz" in p4 and "as maiores lacunas" in p4)
+          "each judge's ranking" in p4 and "the biggest gaps" in p4)
     check("nunca implementa o design vencedor",
-          "nunca implementa" in limpo)
+          "never implements" in limpo)
     check("relata em plain-report", "plain-report" in f)
     check("emite telemetria gauntlet_run", "emit gauntlet_run" in f)
     check("compara com /common:advisors", "/common:advisors" in f)
     check("degrada sem a Workflow tool", "workflow tool" in limpo
-          and "não estiver disponível" in limpo)
+          and "is not available" in limpo)
 
 
 def script():

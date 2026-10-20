@@ -1,5 +1,5 @@
 ---
-description: Save a rich session handoff so a new session can pick up seamlessly. Writes the narrative (decisions, current state, next concrete step, caveats, open threads) into this branch's handoff file at .claude/handoffs/<branch-slug>.md, on top of the mechanical skeleton the checkpoint hook maintains. Replaces typing "salve a memória de handoff" by hand. The next session's SessionStart surfaces it automatically.
+description: Save a rich session handoff so a new session can pick up seamlessly. Writes the narrative (decisions, current state, next concrete step, caveats, open threads) into this branch's handoff file at .claude/handoffs/<branch-slug>.md, on top of the mechanical skeleton the checkpoint hook maintains. Replaces typing "salve a memória de handoff" ("save the handoff memory") by hand. The next session's SessionStart surfaces it automatically.
 argument-hint: (none) — captures the current session
 interaction: routine
 ---
@@ -45,52 +45,58 @@ next step. A fresh session reads it automatically at startup and just continues.
 
 ### 3. Compose the NOTE zone
 
-Write tight, scannable Markdown — a handoff, not a transcript. Structure:
+Write tight, scannable Markdown — a handoff, not a transcript. The note is
+written in Brazilian Portuguese (pt-BR) and keeps the headings and bold labels
+below literally (`session-next.py` parses `## Próximo passo`, `**Próximo:**`,
+`**Intenção:**`, `**Meta:**` and `**Plano:**`). Structure:
 
 ```markdown
 ## Onde estamos
-<1–3 frases: o estado atual de verdade>
+<1–3 sentences: the true current state>
 
 ## Decisões desta sessão
-- **<decisão>** — <por quê, em uma linha>
-- …  (só as que importam para retomar — escolhas de escopo, contrato, design)
+- **<decision>** — <why, in one line>
+- …  (only the ones that matter for resuming — choices of scope, contract, design)
 
 ## Próximo passo
-<a ÚNICA coisa mais importante a fazer a seguir — concreta, acionável>
-**Próximo:** repo=<caminho absoluto> modo=<modo> comando=<comando e argumentos>   ← opcional
-**Intenção:** <propósito da sessão seguinte, na voz dela>   ← opcional, com Meta e Plano
-**Meta:** <quando a sessão seguinte pode parar>
-**Plano:** <passo 1> | <passo 2> | …
+<the SINGLE most important thing to do next — concrete, actionable>
+**Próximo:** repo=<absolute path> modo=<mode> comando=<command and arguments>   ← optional
+**Intenção:** <purpose of the next session, in its voice>   ← optional, with Meta and Plano
+**Meta:** <when the next session may stop>
+**Plano:** <step 1> | <step 2> | …
 
 ## ⚠ Cuidados / pendências
-- <armadilhas, "não-live até reinstall", coisas a não esquecer>
+- <traps, "not live until reinstall", things not to forget>
 
 ## Threads abertas
-- <o que foi começado e não terminou, se houver>
+- <what was started and not finished, if any>
 ```
 
 Rules:
-- **A linha `**Próximo:**` é opcional e é o que encadeia a sessão seguinte.**
-  Escreva-a só quando o próximo passo é uma sessão nova com repo, modo e
-  comando conhecidos (ex.: `**Próximo:** repo=/Users/alegomes/coding/wego/wego-product
-  modo=descoberta comando=/common:epic contratos-e-regras`). O `/common:wrap-up`
-  a transforma no `.next.json` que o launcher `cepa` lê no `exit`, e o parágrafo
-  de `## Próximo passo` vira o brief dessa sessão. Sem a linha, nada encadeia.
-- **`**Intenção:**`, `**Meta:**` e `**Plano:**` viram a intenção da sessão
-  encadeada** (o `.claude/session-intent` que o painel compass mostra). Escreva
-  as três, ou nenhuma, na voz da sessão SEGUINTE: "Redesenhar o M2 como nível 3
-  do compass", nunca "Painel instalado ao fim desta sessão", que fala desta. O
-  plano separa passos com ` | `. Sem as três, a sessão seguinte nasce sem
-  intenção e grava a sua; o parágrafo do brief nunca vira propósito.
-- **Concrete over vague.** "Fix the bug" is useless; "rodar `bin/install.sh
-  --clean` + restart para os hooks novos valerem" is useful. Cite commits /
+- **The `**Próximo:**` line is optional and is what chains the next session.**
+  Write it only when the next step is a new session with a known repo, mode and
+  command (e.g. `**Próximo:** repo=/Users/alegomes/coding/wego/wego-product
+  modo=descoberta comando=/common:epic contratos-e-regras`). `/common:wrap-up`
+  turns it into the `.next.json` that the `cepa` launcher reads on `exit`, and
+  the `## Próximo passo` paragraph becomes that session's brief. Without the
+  line, nothing chains.
+- **`**Intenção:**`, `**Meta:**` and `**Plano:**` become the chained session's
+  intent** (the `.claude/session-intent` that the compass panel shows). Write
+  all three, or none, in the voice of the NEXT session: "Redesenhar o M2 como
+  nível 3 do compass" ("Redesign M2 as compass level 3"), never "Painel instalado
+  ao fim desta sessão" ("Panel installed at the end of this session"), which
+  speaks of this one. The plan separates steps with ` | `. Without all three, the
+  next session is born without an intent and records its own; the brief
+  paragraph never becomes a purpose.
+- **Concrete over vague.** "Fix the bug" is useless; "run `bin/install.sh
+  --clean` + restart so the new hooks take effect" is useful. Cite commits /
   `file:line` where it helps.
-- **Convert relative dates to absolute** ("amanhã" → the actual date).
+- **Convert relative dates to absolute** ("amanhã"/"tomorrow" → the actual date).
 - **Don't fabricate.** If a thread's state is unclear, say so rather than guess.
 - **Mark perishable facts.** Anything the next session could state as fact but
   that another session/person can change in the meantime — remotes, sibling
-  repos existing or not, branch positions, build state, "X ainda não foi
-  implementado" — gets a `(verificar)` suffix. The reader re-checks before
+  repos existing or not, branch positions, build state, "X is not implemented
+  yet" — gets a `(verificar)` ("to verify") suffix. The reader re-checks before
   repeating it; a handoff fact repeated without verification is the top-1
   user-reported failure of this system.
 - If there's genuinely nothing strategic to record (a trivial session), write a
@@ -118,11 +124,11 @@ turns: ?
 
 <!-- HANDOFF:AUTO -->
 ## Onde paramos (checkpoint automático)
-<commits desta sessão + git status, montados por você>
+<this session's commits + git status, assembled by you>
 <!-- /HANDOFF:AUTO -->
 
 <!-- HANDOFF:NOTE -->
-<a narrativa do passo 3>
+<the narrative from step 3>
 <!-- /HANDOFF:NOTE -->
 ```
 

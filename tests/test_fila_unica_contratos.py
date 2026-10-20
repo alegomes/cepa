@@ -93,7 +93,7 @@ def test_doctor_live():
           "sem nomear os dois campos, o passo --live não diz o que a fila "
           "compara contra o Jira")
     check("declara que o passo é leitura, nunca correção",
-          "leitura, nunca correção" in f,
+          "read, never fix" in f,
           "sem a frase, um agente lendo a prosa pode achar que deve corrigir "
           "a divergência sozinho")
 

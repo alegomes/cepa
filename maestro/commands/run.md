@@ -1,6 +1,6 @@
 ---
-description: "[congelado desde 2026-10-08: o condutor do cepa-until vai absorver fork e merge train (decisão 1 de docs/estrategia-cepa-proximo-nivel.md); não use em trabalho novo] Executa a onda corrente de um plano do Maestro com uma ação — gc de órfãos, intake gate (cepa-dor), sobe o porteiro (shadow-mode no 1º programa), forka cada slice num worktree herdr com settings geradas + wrapper normativo, roda o event loop por arquivo, aterrissa a onda pelo merge train (reusa os guards do worktree-merge com verify pós-cada-merge) e relata. Morte da sessão é recuperável por /maestro:resume. Lê EXCLUSIVAMENTE o plan.yaml (invariante de costura). ⚠ Precisa do herdr rodando e do plugin instalado (bin/install.sh --clean)."
-argument-hint: [nome-do-programa] [--wave N] [--shadow] [--port P] · sem argumento, lista o que dá para rodar
+description: "[frozen since 2026-10-08: the cepa-until conductor will absorb fork and merge train (decision 1 of docs/estrategia-cepa-proximo-nivel.md); do not use for new work] Runs the current wave of a Maestro plan in one action — gc of orphans, intake gate (cepa-dor), brings up the gatekeeper (shadow-mode on the 1st program), forks each slice into a herdr worktree with generated settings + normative wrapper, runs the file-based event loop, lands the wave through the merge train (reuses the worktree-merge guards with verify after each merge) and reports. Session death is recoverable with /maestro:resume. Reads EXCLUSIVELY the plan.yaml (seam invariant). ⚠ Needs herdr running and the plugin installed (bin/install.sh --clean)."
+argument-hint: [program-name] [--wave N] [--shadow] [--port P] · with no argument, lists what can run
 interaction: routine
 ---
 
@@ -8,310 +8,312 @@ interaction: routine
 
 ## Purpose
 
-A ação única do Maestro: sair de um `plan.yaml` aprovado para N sessões reais
-criadas, geridas e integradas. Este comando NÃO planeja (isso é
-`/maestro:program-plan`) e NÃO interpreta o BACKLOG — lê só
+Maestro's single action: go from an approved `plan.yaml` to N real sessions
+created, managed and integrated. This command does NOT plan (that is
+`/maestro:program-plan`) and does NOT interpret the BACKLOG — it reads only
 `PROGDIR/plan.yaml`.
 
-**`PROGDIR` = `<raiz-principal>/.claude/programs/<nome>`**, e `<raiz-principal>`
-é o pai de `git rev-parse --git-common-dir` sem o `/.git` final — em worktree
-ligada isso aponta para o CLONE PRINCIPAL, não para a árvore atual; fora dela é o
-mesmo que `git rev-parse --show-toplevel`. O plano é estado do repo, não da
-sessão: escrito dentro de worktree de sessão, morre com ela (e num repo cujo
-`.gitignore` cobre `.claude/` inteiro, nenhuma guarda do caminho de remoção
-enxerga o arquivo). Vale para ler e para escrever. Ver
+**`PROGDIR` = `<main-root>/.claude/programs/<name>`**, and `<main-root>`
+is the parent of `git rev-parse --git-common-dir` without the
+trailing `/.git` — in a linked worktree this points to the MAIN CLONE, not to the
+current tree; outside one it is the same as `git rev-parse --show-toplevel`. The plan
+is repo state, not session state: written inside a session worktree, it dies with
+it (and in a repo whose `.gitignore` covers all of `.claude/`, no guard on the
+removal path sees the file). This holds for reading and for writing. See
 `docs/execution-plan.md`, "Where the file lives".
 
-**Pré-condições** (pare e diga ao usuário se faltar): herdr rodando
-(`herdr agent list` responde); plugin instalado após `bin/install.sh --clean`;
-plano existe e passa no intake. Repo `.claude/no-build`: cada slice traz
-`acceptance_cmd`. **O modo listagem (Passo 0) não exige nada disso** — só lê
-arquivos, e é justamente o que responde antes de o usuário ter um nome na mão.
+**Preconditions** (stop and tell the user if any is missing): herdr running
+(`herdr agent list` answers); plugin installed after `bin/install.sh --clean`;
+plan exists and passes intake. `.claude/no-build` repo: each slice carries an
+`acceptance_cmd`. **Listing mode (Step 0) requires none of this** — it only reads
+files, and it is exactly what answers before the user has a name in hand.
 
 ## Variables
 
-- `PROG` = `$1` (nome do programa). **Ausente = modo listagem, ver Passo 0** —
-  o comando não roda nada e imprime as opções. · `PROGDIR` =
-  `<raiz-principal>/.claude/programs/$PROG`
-- `--wave N` (default: primeira onda `status: pending`)
-- `--shadow` — força shadow-mode do porteiro (default: shadow SE for o 1º
-  programa executado, senão deny ativo — ver Passo 3)
-- `--port` (default 8765) — porta do porteiro
+- `PROG` = `$1` (program name). **Absent = listing mode, see Step 0** —
+  the command runs nothing and prints the options. · `PROGDIR` =
+  `<main-root>/.claude/programs/$PROG`
+- `--wave N` (default: first wave with `status: pending`)
+- `--shadow` — forces the gatekeeper's shadow-mode (default: shadow IF this is the
+  1st program executed, otherwise active deny — see Step 3)
+- `--port` (default 8765) — gatekeeper port
 
 ## Steps
 
-0. **Sem `$1`: listar e parar.** Descobrir as opções custava dois comandos de
-   shell e o conhecimento de dois campos que um `ls` não mostra — `mode` (um
-   plano `single-track` não roda aqui) e o `status` das ondas (qual é a próxima
-   pendente). Rode:
+0. **No `$1`: list and stop.** Discovering the options used to cost two shell
+   commands and knowledge of two fields that an `ls` does not show — `mode` (a
+   `single-track` plan does not run here) and the waves' `status` (which is the
+   next pending one). Run:
    ```
    python3 maestro/bin/maestro-programs .
    ```
-   Ele lê a MESMA raiz que os passos abaixo (o clone principal), imprime por
-   programa o modo, a próxima onda pendente e o veredito `RODA` / `não roda:
-   <motivo>` — com a linha de comando pronta para copiar — e sinaliza restos de
-   execução anterior (`wave-state.yaml`, porteiro órfão). Mostre a saída ao
-   usuário e **pare aqui**: sem nome de programa não há onda a forkar. Não
-   escolha um programa por conta própria.
+   It reads the SAME root as the steps below (the main clone), prints per
+   program the mode, the next pending wave and the verdict `RODA` (runs) / `não roda:
+   <motivo>` (does not run: <reason>) — with the command line ready to copy — and
+   flags leftovers from a previous execution (`wave-state.yaml`, orphan gatekeeper).
+   Show the output to the user and **stop here**: without a program name there is
+   no wave to fork. Do not pick a program on your own.
 
-1. **Carregar e validar o plano.** Leia `PROGDIR/plan.yaml`. Aceite
-   `schema_version` 1 (legado, só ondas) e 2 (`mode` explícito); recuse
-   qualquer outra. Confira `mode`: ausente (só em v1) ou `parallel-waves` segue o
-   fluxo; **`single-track` não é executável aqui** — pare e diga que aquele
-   plano é de um item por vez (`/common:next` responde qual é o próximo),
-   e que promovê-lo a onda exige declarar superfície e aceite por item, com
-   `/maestro:program-plan`. Qualquer outro valor é erro (ver
-   `common/plan-schema.yaml`). Selecione a onda alvo (`--wave` ou a primeira
-   pending).
+1. **Load and validate the plan.** Read `PROGDIR/plan.yaml`. Accept
+   `schema_version` 1 (legacy, waves only) and 2 (explicit `mode`); refuse
+   any other. Check `mode`: absent (only in v1) or `parallel-waves` follows the
+   flow; **`single-track` is not executable here** — stop and say that this
+   plan is one item at a time (`/common:next` answers which one is next),
+   and that promoting it to waves requires declaring surface and acceptance per item,
+   with `/maestro:program-plan`. Any other value is an error (see
+   `common/plan-schema.yaml`). Select the target wave (`--wave` or the first
+   pending one).
 
-   **Capturar o pane-lar da onda, AGORA — não na hora do fork.** Rode
-   `herdr pane current` e guarde `pane_id`, `tab_id` e `workspace_id` (essa é
-   a aba/Space que vai receber TODAS as filhas desta onda). O motivo de
-   capturar aqui, antes até do intake gate, e não no passo 6 (spawn): entre
-   este ponto e o primeiro fork se passam minutos (gc de órfãos, intake gate,
-   subida do porteiro), e o foco muda nesse intervalo por qualquer clique do
-   dono — o foco na hora do spawn é exatamente o valor errado. Na onda
-   WEGO-paralelo (2026-08-24) o spawn não recebia `--tab`/`--workspace`
-   nenhum e forkava a aba que estivesse em foco no momento; a evidência no
-   `herdr-server.log` foi cinco `pane.spawn.start` sucessivos com a largura
-   caindo pela metade a cada um (173 → 87 → 44 → 22 → 11 colunas) — a
-   assinatura de cinco divisões da MESMA aba, que não era a do `/maestro:run`.
-   Se `herdr pane current` falhar (sessão fora do herdr), o pane-lar não é "a
-   aba que tiver foco quando alguém notar": abra uma aba nova e previsível,
-   `herdr tab create --label <PROG> --no-focus`, e use o `root_pane` dela.
-   Este pane-lar é persistido no passo 5 (`maestro-wave-state set-home`) e é
-   contra ele — nunca contra o foco corrente — que o passo 6c divide.
+   **Capture the wave's home pane NOW — not at fork time.** Run
+   `herdr pane current` and keep `pane_id`, `tab_id` and `workspace_id` (this is
+   the tab/Space that will receive ALL the children of this wave). The reason to
+   capture it here, before even the intake gate, and not in step 6 (spawn):
+   minutes go by between this point and the first fork (gc of orphans, intake gate,
+   gatekeeper startup), and the focus changes in that interval with any click by the
+   owner — the focus at spawn time is exactly the wrong value. In the
+   WEGO-paralelo wave (2026-08-24) the spawn received no `--tab`/`--workspace`
+   at all and forked whatever tab was in focus at the moment; the evidence in
+   `herdr-server.log` was five successive `pane.spawn.start` with the width
+   halving each time (173 → 87 → 44 → 22 → 11 columns) — the
+   signature of five splits of the SAME tab, which was not the `/maestro:run` one.
+   If `herdr pane current` fails (session outside herdr), the home pane is not "the
+   tab that has focus when someone notices": open a new, predictable tab,
+   `herdr tab create --label <PROG> --no-focus`, and use its `root_pane`.
+   This home pane is persisted in step 5 (`maestro-wave-state set-home`) and it is
+   against it — never against the current focus — that step 6c splits.
 
-2. **gc de órfãos** (o análogo do que o cepa-doctor faz para cepa-worktrees —
-   restos de programas anteriores custam a próxima onda):
-   - `herdr worktree list --cwd <raiz-principal> --json` → worktrees de programas
-     já concluídos (o `--cwd` é obrigatório: sem ele o herdr 0.9.1 lista o repo
-     do Space em FOCO, não o do diretório corrente);
-   - porteiro órfão: `PROGDIR/gatekeeper/gatekeeper.pid` de PID morto;
-   - panes zumbis (`herdr agent list` sem processo vivo);
-   - escalações expiradas (`estado: pending`, `ttl` vencido).
-   Liste o que achou e ofereça limpar. Só remova o que o usuário confirmar
-   (exceto restos claramente do MESMO programa nesta reexecução). Worktree de
-   programa concluído com `open_workspace_id` nessa lista:
-   remova com `herdr worktree remove --workspace <open_workspace_id>` — é isso
-   que derruba o Space junto (um `git worktree remove` puro tira a worktree do
-   git e deixa o Space fantasma na barra lateral do herdr). Só sem
-   `open_workspace_id` (o dono já fechou o Space à mão) use `git worktree
-   remove` puro.
+2. **gc of orphans** (the analogue of what cepa-doctor does for cepa-worktrees —
+   leftovers from previous programs cost the next wave):
+   - `herdr worktree list --cwd <main-root> --json` → worktrees of programs
+     already finished (`--cwd` is mandatory: without it herdr 0.9.1 lists the repo
+     of the Space in FOCUS, not that of the current directory);
+   - orphan gatekeeper: `PROGDIR/gatekeeper/gatekeeper.pid` with a dead PID;
+   - zombie panes (`herdr agent list` with no live process);
+   - expired escalations (`estado: pending`, `ttl` expired).
+   List what you found and offer to clean up. Only remove what the user confirms
+   (except leftovers clearly from the SAME program in this re-run). A worktree of a
+   finished program with an `open_workspace_id` in that list:
+   remove it with `herdr worktree remove --workspace <open_workspace_id>` — that is
+   what takes the Space down with it (a plain `git worktree remove` takes the worktree
+   out of git and leaves a ghost Space in the herdr sidebar). Only without an
+   `open_workspace_id` (the owner already closed the Space by hand) use a plain
+   `git worktree remove`.
 
-3. **Intake gate.** Rode
+3. **Intake gate.** Run
    `python3 common/bin/cepa-dor PROGDIR/plan.yaml --wave N --repo .`.
-   Qualquer NOT-READY **barra a onda** — mostre as lacunas nomeadas e pare;
-   o conserto é no `/maestro:program-plan`, não aqui. Avisos ⚠ passam.
+   Any NOT-READY **blocks the wave** — show the named gaps and stop;
+   the fix is in `/maestro:program-plan`, not here. ⚠ warnings pass.
 
-4. **Subir o porteiro.** Decida o modo: **shadow-mode** se este é o 1º programa
-   do Maestro (não há `~/.claude/cepa-telemetry` com `program_done` anterior)
-   OU `--shadow` foi passado; senão deny ativo. Suba:
+4. **Bring up the gatekeeper.** Decide the mode: **shadow-mode** if this is Maestro's
+   1st program (there is no `~/.claude/cepa-telemetry` with a previous `program_done`)
+   OR `--shadow` was passed; otherwise active deny. Start it:
    ```
    python3 maestro/bin/maestro-gatekeeper --state-dir PROGDIR/gatekeeper \
      --port <P> [--shadow] &
    ```
-   Confirme `GET http://127.0.0.1:<P>/health` = 200. Registre:
+   Confirm `GET http://127.0.0.1:<P>/health` = 200. Record:
    `maestro-wave-state set-gk PROGDIR --pid <PID> --url http://127.0.0.1:<P>/mcp`.
 
-5. **Inicializar o estado da onda.**
+5. **Initialize the wave state.**
    `python3 maestro/bin/maestro-wave-state init PROGDIR --plan PROGDIR/plan.yaml --wave N`.
-   Logo em seguida, persista o pane-lar capturado no passo 1:
+   Right after, persist the home pane captured in step 1:
    `python3 maestro/bin/maestro-wave-state set-home PROGDIR --pane <pane_id> --tab <tab_id> --workspace <workspace_id>`.
-   É esse registro em disco — não uma variável da sessão — que o passo 6c e o
-   `/maestro:resume` consultam para saber onde nascem as filhas.
+   It is this record on disk — not a session variable — that step 6c and
+   `/maestro:resume` consult to know where the children are born.
 
-6. **Fork por slice** (respeitando `max_concurrent_slices`):
-   Para cada slice READY da onda:
-   a. **Worktree herdr**, herdando o modelo do launcher `cepa` (single-owner guard + seed):
+6. **Fork per slice** (respecting `max_concurrent_slices`):
+   For each READY slice of the wave:
+   a. **Worktree herdr** (herdr worktree), inheriting the model of the `cepa` launcher (single-owner guard + seed):
       `herdr worktree create --base <fork_point> --branch session/<PROG>-<slice> --json`.
 
-      **Confirme pelo git antes de seguir — o `--json` de sucesso não basta.**
-      Com o `path` devolvido pelo comando, rode no clone principal
-      (`<raiz-principal>`, o pai de `git rev-parse --git-common-dir` sem o `/.git`):
+      **Confirm through git before moving on — the success `--json` is not enough.**
+      With the `path` returned by the command, run in the main clone
+      (`<main-root>`, the parent of `git rev-parse --git-common-dir` without the `/.git`):
       ```
-      git -C <raiz-principal> worktree list --porcelain | grep -qx "worktree <path>"
+      git -C <main-root> worktree list --porcelain | grep -qx "worktree <path>"
       ```
-      Só passe adiante (seed, settings, spawn) se essa linha existir.
-      Por que a checagem existe: em 4 de 5 chamadas da onda WEGO-paralelo
-      (2026-08-24, herdr 0.7.3), o `herdr worktree create` devolveu JSON de
-      sucesso COMPLETO — com `path`, `branch`, `workspace_id` e
-      `"is_prunable": false` — e o git não registrou worktree nenhuma; os
-      diretórios também não existiam. O `herdr worktree list` seguia mostrando
-      as fantasmas, porque ele mantém registro próprio. O gatilho não foi
-      reproduzido e está fora do nosso alcance; o conserto daqui é não aceitar
-      a palavra de ferramenta externa sobre um efeito que o git confere em um
-      comando — mesmo padrão do marcador `MAESTRO-EXIT`, que sincroniza por
-      ARQUIVO e não pelo pane. Sem a conferência, o seed, as settings e o
-      `herdr agent start` rodam contra caminho inexistente e a onda inteira
-      nasce morta falhando como se fosse problema das filhas.
+      Only go on (seed, settings, spawn) if that line exists.
+      Why the check exists: in 4 of 5 calls of the WEGO-paralelo wave
+      (2026-08-24, herdr 0.7.3), `herdr worktree create` returned a COMPLETE
+      success JSON — with `path`, `branch`, `workspace_id` and
+      `"is_prunable": false` — and git registered no worktree at all; the
+      directories did not exist either. `herdr worktree list` kept showing
+      the ghosts, because it keeps its own registry. The trigger was not
+      reproduced and is out of our reach; the fix from here is not to accept
+      an external tool's word about an effect that git checks in one
+      command — the same pattern as the `MAESTRO-EXIT` marker, which syncs by
+      FILE and not by the pane. Without the check, the seed, the settings and
+      `herdr agent start` run against a nonexistent path and the whole wave
+      is born dead, failing as if it were the children's problem.
 
-      Se a linha não existir: remova o registro fantasma —
-      `herdr worktree remove --workspace <workspace_id devolvido pelo create>
-      --trust-repository`, tolerando erro (a forma posicional com o caminho
-      direto NÃO existe no herdr 0.9.1 instalado: "unknown option: <path>",
-      só `--workspace ID` identifica o alvo) — e tente **uma** vez mais.
-      Persistindo, a slice é **FAIL** com detalhe nomeado —
-      `maestro-wave-state set-slice PROGDIR <slice> fail --detail "worktree create reportou sucesso mas <path> não aparece em git worktree list (2 tentativas)"`
-      — e as demais slices da onda **não** forkam em silêncio: pare o fork,
-      mostre ao dono quais slices ficaram de fora e por quê.
+      If the line does not exist: remove the ghost record —
+      `herdr worktree remove --workspace <workspace_id returned by create>
+      --trust-repository`, tolerating errors (the positional form with the path
+      directly does NOT exist in the installed herdr 0.9.1: "unknown option: <path>",
+      only `--workspace ID` identifies the target) — and try **once** more.
+      If it persists, the slice is **FAIL** with a named detail —
+      `maestro-wave-state set-slice PROGDIR <slice> fail --detail "worktree create reported success but <path> does not appear in git worktree list (2 attempts)"`
+      — and the other slices of the wave do **not** fork silently: stop forking,
+      show the owner which slices were left out and why.
 
-      Rode o seed (`.env` etc.) copiando do main — NÃO symlink (recopla ao tree
-      sincronizado). Dívida nomeada: o worktree do herdr fica em `~/.herdr/...`,
-      não `~/cepa-worktrees` — herda o guard e o seed; o que não herdar é exceção.
-   b. **Settings geradas** (camada 1) — o gerador grava o PAR de arquivos:
+      Run the seed (`.env` etc.) copying from main — NOT a symlink (it re-couples to
+      the synced tree). Named debt: the herdr worktree lives in `~/.herdr/...`,
+      not `~/cepa-worktrees` — it inherits the guard and the seed; whatever does not
+      inherit is an exception.
+   b. **Generated settings** (layer 1) — the generator writes the PAIR of files:
       `python3 maestro/bin/maestro-fork-settings PROGDIR/plan.yaml <slice> --port <P> --out-dir <worktree>`
-      → `<worktree>/.claude/settings.json` (permissões) **e** `<worktree>/.mcp.json`
-      (endereço do porteiro). Os dois são obrigatórios: sem as regras `ask` o
-      porteiro nunca é consultado (achado do spike), e sem o `.mcp.json` a filha
-      não enxerga a ferramenta do porteiro e morre na largada (achado da onda
-      WEGO-paralelo, 2026-08-24 — `mcpServers` em settings.json é ignorado).
-   c. **Spawn contra o pane-lar, com o wrapper normativo** (pipefail +
-      PIPESTATUS, senão toda filha que falha reporta sucesso — bug real da
-      rev1). O `herdr agent start` da versão instalada (0.9.1) não aceita mais
-      `--cwd`, `--env`, `--tab`, `--workspace` nem um comando após `--`
-      ("Start a supported interactive agent in an existing pane" — ele só
-      inicia um agente numa pane que já existe); por isso o spawn é
-      split-e-run contra o pane-lar registrado no passo 5
-      (`maestro-wave-state get PROGDIR`, campo `home.pane`), NUNCA contra o
-      pane que estiver em foco:
+      → `<worktree>/.claude/settings.json` (permissions) **and** `<worktree>/.mcp.json`
+      (gatekeeper address). Both are mandatory: without the `ask` rules the
+      gatekeeper is never consulted (spike finding), and without `.mcp.json` the child
+      does not see the gatekeeper tool and dies at the start (finding from the
+      WEGO-paralelo wave, 2026-08-24 — `mcpServers` in settings.json is ignored).
+   c. **Spawn against the home pane, with the normative wrapper** (pipefail +
+      PIPESTATUS, otherwise every child that fails reports success — a real bug of
+      rev1). The `herdr agent start` of the installed version (0.9.1) no longer accepts
+      `--cwd`, `--env`, `--tab`, `--workspace` or a command after `--`
+      ("Start a supported interactive agent in an existing pane" — it only
+      starts an agent in a pane that already exists); that is why the spawn is
+      split-and-run against the home pane recorded in step 5
+      (`maestro-wave-state get PROGDIR`, field `home.pane`), NEVER against the
+      pane that is in focus:
       ```
       herdr pane split <home.pane> --direction right --cwd <worktree> \
         --env MAESTRO_LINGER=600 --no-focus
-      # → devolve o novo pane_id
+      # → returns the new pane_id
       herdr pane rename <novo-pane> <PROG>-<slice>
-      herdr pane run <novo-pane> "bash -c 'set -o pipefail; claude -p \"<prompt-do-slice>\" \
+      herdr pane run <novo-pane> "bash -c 'set -o pipefail; claude -p \"<slice-prompt>\" \
         --mcp-config .mcp.json --strict-mcp-config \
         --permission-prompt-tool mcp__gatekeeper__permission_prompt \
         2>&1 | tee resultado.txt; ec=\${PIPESTATUS[0]}; \
         echo \"MAESTRO-EXIT:\$ec\" | tee -a resultado.txt; \
         sleep \"\$MAESTRO_LINGER\"'"
       ```
-      **O `\$` antes de `{PIPESTATUS[0]}`, `ec` e `MAESTRO_LINGER` é
-      proposital, não sujeira de escape.** O `herdr pane run` acima roda no
-      shell duplo-aspeado da PRÓPRIA sessão do maestro (quem está montando o
-      comando), não no shell da filha. Sem o `\`, essas três variáveis
-      expandem AQUI — vazias, porque não existem neste shell — antes do texto
-      chegar à pane filha: o resultado seria `ec=`, `MAESTRO-EXIT:` sem
-      código e `sleep ""`, quebrando silenciosamente a sincronização por
-      arquivo que o `maestro-poll` depende (confirmado ao vivo: rodar a
-      receita sem o `\` produz exatamente isso). Nunca "limpe" essas barras
-      achando que sobraram por engano.
-      **Nunca divida o pane que estiver em foco e nunca omita o id do
-      pane-lar** — `--no-focus` só impede que o pane novo ROUBE o foco depois
-      de criado, ele não escolhe onde o pane nasce (quem escolhe é o primeiro
-      argumento de `herdr pane split`). `herdr pane split` cria o pane novo NA
-      ABA do pane que você apontar, sem olhar qual aba está em foco no
-      momento — é essa propriedade que resolve o item (probado ao vivo: uma
-      aba sem foco recebeu o split e ficou com o pane novo; a aba com foco não
-      mudou).
-      `--mcp-config .mcp.json --strict-mcp-config` NÃO é opcional: sem ele a
-      filha sobe sem o porteiro, `--permission-prompt-tool` aponta para ferramenta
-      inexistente e o processo aborta com
-      `MCP tool mcp__gatekeeper__permission_prompt not found` / exit 1 — a onda
-      inteira nasce morta (aconteceu em WEGO-paralelo, 2026-08-24). O
-      `--strict-mcp-config` ainda impede que os MCPs pessoais do dono vazem para
-      a filha headless.
-      O `tee -a` do marcador é o que deixa o `MAESTRO-EXIT:` no `resultado.txt`,
-      não só no painel — é por arquivo que o `maestro-poll` sincroniza.
-      O `<prompt-do-slice>` traz a demanda, a superfície, o `acceptance`/
-      `acceptance_cmd`, o `context` e a disciplina autonomous-mode.
+      **The `\$` before `{PIPESTATUS[0]}`, `ec` and `MAESTRO_LINGER` is
+      deliberate, not escaping debris.** The `herdr pane run` above runs in the
+      double-quoted shell of the maestro session ITSELF (the one assembling the
+      command), not in the child's shell. Without the `\`, these three variables
+      expand HERE — empty, because they do not exist in this shell — before the text
+      reaches the child pane: the result would be `ec=`, `MAESTRO-EXIT:` with no
+      code and `sleep ""`, silently breaking the file-based synchronization that
+      `maestro-poll` depends on (confirmed live: running the
+      recipe without the `\` produces exactly that). Never "clean up" those backslashes
+      thinking they were left by mistake.
+      **Never split the pane that is in focus and never omit the home pane
+      id** — `--no-focus` only prevents the new pane from STEALING focus after
+      it is created, it does not choose where the pane is born (what chooses is the first
+      argument of `herdr pane split`). `herdr pane split` creates the new pane IN THE
+      TAB of the pane you point at, regardless of which tab is in focus at the
+      moment — it is this property that solves the item (proven live: a
+      tab without focus received the split and got the new pane; the tab with focus did
+      not change).
+      `--mcp-config .mcp.json --strict-mcp-config` is NOT optional: without it the
+      child comes up without the gatekeeper, `--permission-prompt-tool` points to a
+      nonexistent tool and the process aborts with
+      `MCP tool mcp__gatekeeper__permission_prompt not found` / exit 1 — the whole wave
+      is born dead (it happened in WEGO-paralelo, 2026-08-24). The
+      `--strict-mcp-config` also keeps the owner's personal MCPs from leaking into
+      the headless child.
+      The marker's `tee -a` is what leaves `MAESTRO-EXIT:` in `resultado.txt`,
+      not only in the panel — it is by file that `maestro-poll` syncs.
+      The `<slice-prompt>` carries the demand, the surface, the `acceptance`/
+      `acceptance_cmd`, the `context` and the autonomous-mode discipline.
       `maestro-wave-state set-slice PROGDIR <slice> running --pane <novo-pane> --worktree <path>`.
 
-      **Fallback: pane-lar morto.** Se o `herdr pane split` devolver
-      `pane_not_found` (a aba do pane-lar foi fechada), não caia de volta no
-      foco corrente — abra uma aba nova e previsível no mesmo Space:
+      **Fallback: dead home pane.** If `herdr pane split` returns
+      `pane_not_found` (the home pane's tab was closed), do not fall back to the
+      current focus — open a new, predictable tab in the same Space:
       `herdr tab create --workspace <home.workspace> --label <PROG> --cwd <worktree> --env MAESTRO_LINGER=600 --no-focus`,
-      use o `root_pane` devolvido como o pane desta slice (rename + run como
-      acima) e **atualize o pane-lar** com
-      `maestro-wave-state set-home PROGDIR --pane <root_pane> --tab <tab-da-nova-aba> --workspace <home.workspace>`
-      para que as próximas slices desta onda também nasçam ali, em vez de cada
-      uma abrir sua própria aba nova.
+      use the returned `root_pane` as this slice's pane (rename + run as
+      above) and **update the home pane** with
+      `maestro-wave-state set-home PROGDIR --pane <root_pane> --tab <tab-of-the-new-tab> --workspace <home.workspace>`
+      so that the next slices of this wave are also born there, instead of each
+      one opening its own new tab.
 
-7. **Event loop da onda** (obrigatório — sem ele há deadlock). Em rodízio, até a
-   onda terminar:
-   - `python3 maestro/bin/maestro-poll PROGDIR` (sincroniza por ARQUIVO, não
-     pelo pane). Para cada transição, `set-slice` o estado terminal
-     (DONE/FAIL/TIMEOUT/ESCALATED); em TIMEOUT, mate a filha via herdr.
-   - **Escalações**: para cada uma pending, apresente ao humano (ação, slice,
-     contexto, opções). Grave a decisão no próprio `escalations/<id>.yaml`
-     (`estado: answered`) e **re-spawne a filha** injetando "decisão do dono
-     sobre <id>: ..." no prompt — ela continua do worktree onde parou. O
-     re-spawn usa a MESMA receita do passo 6c (`herdr pane split` contra o
-     pane-lar de `maestro-wave-state get PROGDIR` → `home.pane`, rename, `herdr
-     pane run`) — nunca o foco corrente do momento.
-   - **Retentativa com nome novo** (`S-2067R` nascendo de `S-2067`): forka pela
-     mesma receita do passo 6c contra o pane-lar registrado, e registre-a
-     no mesmo instante em que forka,
+7. **Wave event loop** (mandatory — without it there is deadlock). In rotation, until the
+   wave finishes:
+   - `python3 maestro/bin/maestro-poll PROGDIR` (syncs by FILE, not
+     by the pane). For each transition, `set-slice` the terminal state
+     (DONE/FAIL/TIMEOUT/ESCALATED); on TIMEOUT, kill the child via herdr.
+   - **Escalations**: for each pending one, present it to the human (action, slice,
+     context, options). Record the decision in the `escalations/<id>.yaml` itself
+     (`estado: answered`) and **re-spawn the child** injecting "owner's decision
+     on <id>: ..." into the prompt — it continues from the worktree where it stopped. The
+     re-spawn uses the SAME recipe as step 6c (`herdr pane split` against the
+     home pane from `maestro-wave-state get PROGDIR` → `home.pane`, rename, `herdr
+     pane run`) — never the focus of the moment.
+   - **Retry under a new name** (`S-2067R` born from `S-2067`): fork it with the
+     same step 6c recipe against the recorded home pane, and record it
+     at the same instant you fork it,
      `maestro-wave-state set-slice PROGDIR <slice>R running --pane <id> --worktree <path>
-     --detail "retentativa de <slice>"`. Na onda 1 do WEGO-paralelo as
-     retentativas só entraram no wave-state na onda seguinte, e duas sessões
-     acharam que eram donas delas.
-   - **Saúde do porteiro**: se `poll` reportar `gatekeeper.alive:false`,
-     ressuba-o (mesma porta/state) e siga — filha sem porteiro recebe deny e
-     escala (fail-mode declarado).
-   - Aguarde entre iterações (o `poll` é barato; não faça busy-loop apertado).
+     --detail "retry of <slice>"`. In wave 1 of WEGO-paralelo the
+     retries only entered the wave-state in the following wave, and two sessions
+     thought they owned them.
+   - **Gatekeeper health**: if `poll` reports `gatekeeper.alive:false`,
+     bring it back up (same port/state) and carry on — a child without the gatekeeper gets deny and
+     escalates (declared fail-mode).
+   - Wait between iterations (`poll` is cheap; do not do a tight busy-loop).
 
-8. **Fronteira de término** (antes do merge train — mecânica, não impressão de
-   quem estava conduzindo):
+8. **Termination boundary** (before the merge train — mechanical, not the impression of
+   whoever was driving):
 
    ```
    python3 maestro/bin/maestro-wave-state check-terminal PROGDIR
    ```
 
-   Exit 0 = toda slice em estado terminal (`DONE|LANDED|FAIL|TIMEOUT|ESCALATED`).
-   Exit 2 = ainda há slice pendurada, e o comando nomeia quais. **Com exit 2 não
-   siga para o merge train nem para o relatório**: volte ao event loop, ou force
-   o estado terminal honesto (`set-slice PROGDIR <slice> ESCALATED --detail "<o
-   que ficou sem resposta>"`). `pending`/`running` não são resultados — são a
-   ausência de um, e a onda que aterrissa com slice ali dentro faz essa slice
-   sumir do radar sem ninguém ter decidido nada sobre ela.
+   Exit 0 = every slice in a terminal state (`DONE|LANDED|FAIL|TIMEOUT|ESCALATED`).
+   Exit 2 = there is still a hanging slice, and the command names which ones. **With exit 2 do not
+   go on to the merge train or to the report**: go back to the event loop, or force
+   the honest terminal state (`set-slice PROGDIR <slice> ESCALATED --detail "<what
+   was left unanswered>"`). `pending`/`running` are not results — they are the
+   absence of one, and a wave that lands with a slice in there makes that slice
+   vanish from the radar without anyone having decided anything about it.
 
-9. **Merge train** (pós-onda — REUSA os guards do `/common:worktree-merge`,
-   nunca reimplementa):
-   - só slices DONE entram; FAIL/TIMEOUT/ESCALATED re-forkam na onda seguinte a
-     partir do main novo (a onda NÃO trava);
-   - ordem determinística (ordem do plano); para cada: green-gate + single-owner
-     + `git merge --no-ff`; **verify no main integrado após CADA merge** (não só
-     o verify do slice — conflito semântico entre superfícies disjuntas só
-     aparece aqui). Vermelho pós-merge → revert do merge, slice vira FAIL;
-   - conflito → PARE e mostre (não auto-resolva);
-   - `maestro-wave-state landed PROGDIR <slice>` a cada merge (a slice passa de
-     `DONE` para `LANDED`). É isso que deixa `aguardando-merge` responder, depois
-     de uma sessão morta, o que ficou para aterrissar: `DONE` sem `LANDED` é o
-     que o `/common:next` e o doctor cobram como ação sua;
-   - **prune só ao fim da onda inteira** (worktree é barato; evidência não
-     volta): `python3 maestro/bin/maestro-prune PROGDIR --repo <raiz-principal>`.
-     Cada slice é um Space na barra lateral do herdr (`herdr worktree create`
-     cria worktree **e** Space); sem prune uma onda de 5 slices deixa 5 Spaces
-     — em 2026-08-24 havia 11 sobrando de duas ondas. O `maestro-prune` remove
-     Space + worktree só das slices LANDED (`herdr worktree remove --workspace`
-     derruba os dois numa tacada, e o resultado é confirmado pelo git — não
-     pela palavra do herdr, mesmo princípio do passo 6a); mantém as demais
-     (DONE-não-aterrissada, FAIL/TIMEOUT/ESCALATED, pending, running) porque a
-     evidência delas ainda pode servir; e nunca força uma worktree suja — reporta
-     e deixa o dono decidir. Mostre a saída dele no relatório do passo 10.
+9. **Merge train** (post-wave — REUSES the `/common:worktree-merge` guards,
+   never reimplements them):
+   - only DONE slices go in; FAIL/TIMEOUT/ESCALATED re-fork in the next wave
+     from the new main (the wave does NOT stall);
+   - deterministic order (plan order); for each: green-gate + single-owner
+     + `git merge --no-ff`; **verify on the integrated main after EACH merge** (not only
+     the slice's verify — a semantic conflict between disjoint surfaces only
+     shows up here). Red after merge → revert the merge, the slice becomes FAIL;
+   - conflict → STOP and show it (do not auto-resolve);
+   - `maestro-wave-state landed PROGDIR <slice>` at each merge (the slice goes from
+     `DONE` to `LANDED`). This is what lets `aguardando-merge` answer, after
+     a dead session, what was left to land: `DONE` without `LANDED` is what
+     `/common:next` and the doctor flag as your action;
+   - **prune only at the end of the whole wave** (a worktree is cheap; evidence does not
+     come back): `python3 maestro/bin/maestro-prune PROGDIR --repo <main-root>`.
+     Each slice is a Space in the herdr sidebar (`herdr worktree create`
+     creates worktree **and** Space); without prune a wave of 5 slices leaves 5 Spaces
+     — on 2026-08-24 there were 11 left over from two waves. `maestro-prune` removes
+     Space + worktree only for LANDED slices (`herdr worktree remove --workspace`
+     takes both down in one go, and the result is confirmed by git — not
+     by herdr's word, the same principle as step 6a); it keeps the others
+     (DONE-not-landed, FAIL/TIMEOUT/ESCALATED, pending, running) because their
+     evidence may still be useful; and it never forces a dirty worktree — it reports
+     and lets the owner decide. Show its output in the step 10 report.
 
-10. **Relatório + debrief.** Só depois do passo 8 verde. Resuma: veredito de
-   intake por slice, estados terminais, escalações e como foram decididas,
-   merges aterrissados, o que re-forka. Liste as decisões de zona-cinza/escalada do porteiro (elas entram
-   no debrief default independente da altitude). Emita a telemetria
-   (`program_start/wave_done/...`) e diga o próximo passo (onda seguinte ou fim).
+10. **Report + debrief.** Only after step 8 is green. Write the report to the user in
+   Brazilian Portuguese (pt-BR). Summarize: intake verdict
+   per slice, terminal states, escalations and how they were decided,
+   merges landed, what re-forks. List the gatekeeper's gray-zone/escalated decisions (they go into
+   the default debrief regardless of altitude). Emit the telemetry
+   (`program_start/wave_done/...`) and state the next step (next wave or end).
 
 ## Notes
 
-- **Invariante de costura:** este comando lê só o plan.yaml. Fontes futuras
-  (Jira/board-flow, discovery) entram escrevendo um plan.yaml válido.
-- **Recuperação:** o wave-state é escrito a cada transição; se a sessão morrer,
-  `/maestro:resume <PROG>` reconstrói a onda de onde parou.
-- **Shadow-mode** (1º programa): o porteiro aprova tudo e loga o que TERIA
-  negado/escalado — mede se o intake consegue zerar escalações, em vez de exigir
-  plantar uma. Deny ativo a partir do 2º, com regras calibradas pelo log.
-- **Escopo de aprovação (porteiro e escalações):** cada aprovação libera SÓ o
-  comando/pedido apresentado, nunca a filha nem a onda. Uma escalação decidida
-  pelo humano vale para aquela instância; a mesma classe de pedido volta ao
-  porteiro na próxima ocorrência. "Aprovei uma vez" não vira allowlist implícita
-  — allowlist é mudança de regra, feita nas settings geradas, com intenção.
-- Sincronização é por arquivo (resultado.txt + wave-state); o pane do herdr é
-  observabilidade. O contrato dos marcadores `MAESTRO-EXIT:*` é string-match
-  versionado com o plugin — smoke-teste a cada upgrade do herdr E do Claude Code.
+- **Seam invariant:** this command reads only the plan.yaml. Future sources
+  (Jira/board-flow, discovery) come in by writing a valid plan.yaml.
+- **Recovery:** the wave-state is written at every transition; if the session dies,
+  `/maestro:resume <PROG>` rebuilds the wave from where it stopped.
+- **Shadow-mode** (1st program): the gatekeeper approves everything and logs what it WOULD have
+  denied/escalated — it measures whether intake can bring escalations to zero, instead of
+  requiring one to be planted. Active deny from the 2nd on, with rules calibrated by the log.
+- **Approval scope (gatekeeper and escalations):** each approval releases ONLY the
+  command/request presented, never the child or the wave. An escalation decided
+  by the human holds for that instance; the same class of request goes back to the
+  gatekeeper on its next occurrence. "I approved it once" does not become an implicit allowlist
+  — an allowlist is a rule change, made in the generated settings, with intent.
+- Synchronization is by file (resultado.txt + wave-state); the herdr pane is
+  observability. The contract of the `MAESTRO-EXIT:*` markers is a string-match
+  versioned with the plugin — smoke-test it at every upgrade of herdr AND of Claude Code.

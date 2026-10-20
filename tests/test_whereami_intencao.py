@@ -239,12 +239,12 @@ def main():
     for est in ("vazio", "normal", "cumprido", "outra-sessao"):
         check(f"whereami trata o estado {est}", f"**`{est}`**" in w)
     check("whereami delega ao /common:next na rodada do cepa-until",
-          "delegar: /common:next" in w and "execute o `/common:next`" in w)
+          "delegar: /common:next" in w and "run `/common:next`" in w)
     check("whereami confronta o log e só propõe",
-          "Avanço?" in w and "Você propõe; o dono decide" in w
-          and "Nunca avança o cursor por conta própria" in w)
+          "Avanço?" in w and "You propose; the owner decides" in w
+          and "Never advances the cursor on its own" in w)
     check("whereami avança só por `cepa-intencao --passo N`", '--passo N' in w)
-    check("whereami proíbe editar o YAML à mão", "Nunca edite" in w)
+    check("whereami proíbe editar o YAML à mão", "Never edit `.claude/session-intent` by hand" in w)
 
     nxt = cmds["next.md"][1]
     i_cmd, i_vazio = nxt.find("cepa-intencao\" estado"), nxt.find("and the intent is `vazio`")
@@ -276,8 +276,8 @@ def main():
           "open the recap with that line" in rn
           and "Never read or edit `.claude/session-intent` by hand" in rn)
     check("whereami: outra-sessao não é tratada como desta sessão; nunca reclassifica",
-          "Não trate a intenção como a desta sessão e não faça a conferência do passo 2" in w
-          and "Nunca reclassifica o estado de olho" in w)
+          "Do not treat the intent as this session's and do not do the step 2 check" in w
+          and "Never reclassifies the state by eye" in w)
 
     check("recap: o contrato cobre as duas saídas de `abertura:`",
           "passo N de M" in rn and "plano cumprido M/M" in rn

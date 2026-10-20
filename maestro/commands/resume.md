@@ -1,6 +1,6 @@
 ---
-description: "[congelado desde 2026-10-08: o condutor do cepa-until vai absorver fork e merge train (decisão 1 de docs/estrategia-cepa-proximo-nivel.md); não use em trabalho novo] Recupera uma onda do Maestro interrompida — reconstrói o estado a partir de .claude/programs/<nome>/wave-state.yaml (filhas vivas, estado por slice, porteiro, escalações pendentes, merges já aterrissados) e continua o event loop / merge train de onde parou. Nos moldes do /common:autonomous-resume. Use após morte da sessão, crash ou token-limit no meio de um /maestro:run."
-argument-hint: <nome-do-programa>
+description: "[frozen since 2026-10-08: the cepa-until conductor will absorb fork and merge train (decision 1 of docs/estrategia-cepa-proximo-nivel.md); do not use for new work] Recovers an interrupted Maestro wave — rebuilds the state from .claude/programs/<name>/wave-state.yaml (live children, per-slice state, gatekeeper, pending escalations, merges already landed) and continues the event loop / merge train from where it stopped. Modeled on /common:autonomous-resume. Use after the session died, crashed or hit the token limit in the middle of a /maestro:run."
+argument-hint: <program-name>
 interaction: routine
 ---
 
@@ -8,60 +8,63 @@ interaction: routine
 
 ## Purpose
 
-Morte da sessão maestro é o modo de falha mais provável de uma sessão longa. O
-`/maestro:run` escreve `wave-state.yaml` a cada transição justamente para que
-esta retomada seja possível sem re-forkar o que já roda nem re-mergear o que já
-aterrissou. Reusa o padrão do `/common:autonomous-resume` — não inventa outro.
+The death of the maestro session is the most likely failure mode of a long
+session. `/maestro:run` writes `wave-state.yaml` at every transition precisely so
+that this resume is possible without re-forking what is already running or
+re-merging what has already landed. It reuses the `/common:autonomous-resume`
+pattern — it does not invent another one.
 
 ## Steps
 
-1. **Ler o estado.**
-   `python3 maestro/bin/maestro-wave-state get <raiz-principal>/.claude/programs/$1 --json`
-   — `<raiz-principal>` é o pai de `git rev-parse --git-common-dir` sem o `/.git`
-   final (o clone principal, quando você está numa worktree ligada); o estado do
-   programa é do repo, não desta árvore.
-   Se não existir, pare: não há onda em andamento para este programa (talvez
-   queira `/maestro:run $1`).
+1. **Read the state.**
+   `python3 maestro/bin/maestro-wave-state get <main-root>/.claude/programs/$1 --json`
+   — `<main-root>` is the parent of `git rev-parse --git-common-dir`
+   without the trailing `/.git` (the main clone, when you are in a linked
+   worktree); the program's state belongs to the repo, not to this tree.
+   If it does not exist, stop: there is no wave in progress for this program
+   (maybe you want `/maestro:run $1`).
 
-2. **Reconciliar contra a realidade** (o wave-state descreve o passado — CLAUDE.md
-   manda verificar antes de afirmar):
-   - **porteiro**: `GET /health` na URL registrada. Morto → ressuba
-     (`maestro-gatekeeper --state-dir .../gatekeeper --port <P>` no mesmo modo)
-     e atualize o pid via `set-gk`.
-   - **filhas `running`**: confira se o pane ainda vive com
-     `herdr pane get <pane>` (o id gravado em `slices.<slice>.pane`; a
-     liveness NÃO é mais por agente — o herdr 0.9 já não tem esse comando de
-     agente para isto) E se o `resultado.txt` já
-     tem `MAESTRO-EXIT`. Filha morta sem marcador → trate como a próxima
-     iteração do poll decidirá (TIMEOUT se estourou o prazo); filha viva →
-     segue no loop. Qualquer re-spawn (filha morta, escalação respondida)
-     usa o pane-lar gravado no wave-state
+2. **Reconcile against reality** (the wave-state describes the past — CLAUDE.md
+   says to verify before asserting):
+   - **gatekeeper**: `GET /health` on the recorded URL. Dead → bring it back up
+     (`maestro-gatekeeper --state-dir .../gatekeeper --port <P>` in the same mode)
+     and update the pid via `set-gk`.
+   - **`running` children**: check whether the pane is still alive with
+     `herdr pane get <pane>` (the id recorded in `slices.<slice>.pane`; liveness
+     is NO longer checked per agent — herdr 0.9 no longer has that agent
+     command for this) AND whether `resultado.txt` already
+     has `MAESTRO-EXIT`. Dead child without the marker → treat it as the next
+     poll iteration will decide (TIMEOUT if it blew the deadline); live child →
+     stays in the loop. Any re-spawn (dead child, answered escalation)
+     uses the home pane recorded in the wave-state
      (`maestro-wave-state get <PROGDIR> --json` → `home.pane`/`home.tab`/
-     `home.workspace`), com a mesma receita `herdr pane split` + rename +
-     `herdr pane run` do `/maestro:run` (passo 6c) — nunca o foco corrente
-     desta sessão de resume, que pode nem ser a mesma aba da onda original.
-   - **merges**: slice `LANDED` (ou, em wave-state antigo, nome na lista
-     `landed:`) já entrou no main; não re-mergeie.
+     `home.workspace`), with the same `herdr pane split` + rename +
+     `herdr pane run` recipe as `/maestro:run` (step 6c) — never the current
+     focus of this resume session, which may not even be the same tab as the
+     original wave.
+   - **merges**: a `LANDED` slice (or, in an old wave-state, a name in the
+     `landed:` list) is already in main; do not re-merge it.
 
-3. **Onda terminada sem merge vai direto ao merge train.** Se
-   `maestro-wave-state check-terminal` sai 0 e
-   `maestro-wave-state aguardando-merge` lista slices, a onda não está "sem nada
-   rodando": está esperando você. Pule o event loop e retome o `/maestro:run` no
-   Passo 9 (merge train) com essas slices. Concluir "não há nada rodando" e parar
-   é o que deixou cinco branches prontas paradas na onda 1 do WEGO-paralelo.
+3. **A wave that finished without merging goes straight to the merge train.** If
+   `maestro-wave-state check-terminal` exits 0 and
+   `maestro-wave-state aguardando-merge` lists slices, the wave is not "with nothing
+   running": it is waiting for you. Skip the event loop and resume `/maestro:run` at
+   Step 9 (merge train) with those slices. Concluding "nothing is running" and
+   stopping is what left five ready branches parked in wave 1 of WEGO-paralelo.
 
-4. **Continuar.** Nos outros casos, retome o `/maestro:run` a partir do Passo 7 (event loop):
-   `maestro-poll` em rodízio → transições → escalações → merge train dos DONE
-   ainda não em `landed`. Slices FAIL/TIMEOUT/ESCALATED da onda re-forkam na
-   próxima onda, como no fluxo normal.
+4. **Continue.** In the other cases, resume `/maestro:run` from Step 7 (event loop):
+   `maestro-poll` in rotation → transitions → escalations → merge train of the DONE
+   slices not yet in `landed`. FAIL/TIMEOUT/ESCALATED slices of the wave re-fork in
+   the next wave, as in the normal flow.
 
-5. **Relatar** o que foi reconstruído (porteiro ressuscitado? filhas ainda
-   vivas? merges já feitos?) antes de prosseguir, para o usuário ver o estado
-   herdado — não afirme "retomado" sem mostrar a reconciliação.
+5. **Report** what was rebuilt (gatekeeper resurrected? children still
+   alive? merges already done?) before proceeding, so the user sees the
+   inherited state — do not claim "resumed" without showing the reconciliation.
+   Write this report to the user in Brazilian Portuguese (pt-BR).
 
 ## Notes
 
-- Idempotente por desenho: reprocessar um `resultado.txt` já lido só reafirma o
-  mesmo estado terminal; re-tentar um merge já em `landed` é pulado.
-- Se o plano em si mudou desde a interrupção, PARE e avise — resume assume o
-  mesmo plan.yaml da onda registrada.
+- Idempotent by design: reprocessing a `resultado.txt` that was already read only
+  reaffirms the same terminal state; retrying a merge already in `landed` is skipped.
+- If the plan itself changed since the interruption, STOP and warn — resume assumes
+  the same plan.yaml as the recorded wave.
