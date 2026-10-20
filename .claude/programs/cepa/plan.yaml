@@ -2274,3 +2274,17 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: renomear-para-queue
+  title: 'Renomear plan.yaml, .claude/programs/ e a chave program: para o termo
+    queue, com migração das filas existentes nos repos de cliente'
+  why: 'Decisão do dono em 2026-10-20: sem o rename os três nomes viram dívida técnica
+    contra o vocabulário de docs/how-it-fits.md. Consumidores a mudar: cepa-plan,
+    cepa-until, cepa-doctor, hooks (_wtlib.py, _modos.py), testes e docs; filas
+    gravadas em wego-acessos-backend, wego-digitacao-backend, wego-product e no
+    próprio cepa. Precisa ler os dois nomes durante a transição e migrar as filas
+    num comando só (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by:
+  - comandos-em-ingles
+  human_pending: null
+  evidence: null
