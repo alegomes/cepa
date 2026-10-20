@@ -28,9 +28,23 @@ items:
     que o maven-reactor-guard usa desde 023c7f2), exigir invocador mvnw/mvn, e com
     -q ou saída redirecionada usar o código de saída. Ordem proposta pelo agente
     em 2026-10-19 e confirmada pelo dono.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Episódio 1 já estava em 6a07300 (2026-10-15). Episódio 2 nesta rodada:
+    commits 2ab3945 e 2226535 na branch until/2026-10-19-1958. Causa medida no transcrito
+    do run until/2026-10-16-0822: (A) build de perturbação com ''git -C wt ...;
+    cd wt && sed && ./mvnw'' gravou FAILURE na árvore principal porque effective_build_dir
+    só seguia cd no início da linha; agora usa _shellscan.segment_dirs e grava no
+    diretório do segmento Maven. (B) ''./mvnw ... | grep BUILD; cat .claude/last-build.json''
+    virou FAILURE porque o JSON ecoado trazia BUILD FAILURE dentro do campo tail;
+    marcadores Maven agora ancorados no início da linha, ANSI removido. Gates: pair-reviewer
+    OK-WITH-NOTES (cosmético), completion-auditor COMPLETE (.claude/acceptance/build-result-mascara-grep-e-aceita-mvn-q.yaml),
+    proof-reviewer PROVEN (docs/proof/build-result-mascara-grep-e-aceita-mvn-q.yaml:
+    4 perturbações, cada uma derruba teste; 4 testes vermelhos na base 4bdd311).
+    Testes: 10 arquivos-alvo verdes e 29 passed no classify; build completo é do
+    supervisor. Fora do escopo: gradle segue com marcador substring (mesmo risco
+    do cat, não pedido).'
 - id: leads-build-hex-nao-encerram-turno-dentro-do-claude-p
   title: Leads do build-hex só encerram o turno à espera de worker em sessão interativa;
     dentro do `claude -p` do cepa-until esperam o resultado
@@ -42,9 +56,24 @@ items:
     a seção manda conferir no .log do run quantos turnos foram retomada antes de
     condicionar a regra a run não interativo. Em 2026-10-16 o dono deixou só como
     seção do BACKLOG; entra na fila agora por decisão do dono em 2026-10-19.'
-  status: pending
+  status: done
   blocked_by: []
-  human_pending: null
+  human_pending: No próximo run do cepa-until de um repo build-hex, contar SendMessage
+    do orquestrador a leads nas transcrições (zero esperado)
+  evidence: 'Commits 3635ef0, 26667f9 e 7df0752 na branch until/2026-10-19-1958.
+    Medição nas transcrições do run until/2026-10-15-1946: 10 retomadas à mão em
+    5 de 7 rodadas (6 engineering-lead, 4 validation-lead). Conserto: parágrafo
+    ''Exceção: run desatendido'' nos 11 agentes com Task (delegar com run_in_background:
+    false quando CEPA_UNTIL_RUN/CLAUDE_AUTONOMOUS_RUN_ID), 4a marca em tests/test_delegacao_assincrona_specs.py,
+    bullet no passo 3.b do drain-plan + 3 checks em test_common_drain_plan.py, exceção
+    na mensagem do no-busy-wait, PATCH em 7 plugins (build-hex 1.4.3, common 2.30.2...).
+    Run sintético: CEPA_UNTIL_RUN claude -p, lead delegou com run_in_background:
+    false e devolveu no mesmo turno, zero SendMessage (sessão d51a89d3, US$ 0,86).
+    Gates: pair-reviewer OK-WITH-NOTES, completion-auditor COMPLETE, proof-reviewer
+    PROVEN. Fora: contagem num run real do cepa-until de repo build-hex (próximo
+    run); lead sem a frase ''Unattended run'' no pedido não foi medido.'
+  owner_question: 'Conto as retomadas de lead no próximo run do cepa-until de um
+    repo build-hex? Recomendo sim: é a única prova em run real'
 - id: board-flow-yaml-comentario-team-dois-formatos
   title: Comentário do campo Team (customfield_10001) no template do board-flow.yaml
     mostra o formato certo e o errado lado a lado, com o 400 de cada um
@@ -54,6 +83,18 @@ items:
     fb-20260902-1, wego-acesso-backend-capture-openapi; BACKLOG.md, seção "Comentário
     do campo Team"). Ordem proposta pelo agente em 2026-10-19 e confirmada pelo
     dono.'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
+  evidence: 'Duplicata de cepa/board-flow-yaml-comentario-campo-team, fechado done
+    em 2026-10-16: commit a6a64bd (na main) ja mostra os dois formatos (Team = UUID
+    puro; select = {id}) e o 400 de cada um em discovery/board-flow.example.yaml,
+    docs/board-flow.md e board-flow/agents/atlassian-expert.md, coberto por tests/test_board_flow_example_team_format.py
+    (10 checagens verdes em 2026-10-19 nesta branch) e test_atlassian_expert_spec.py
+    (verde). Aceite existente .claude/acceptance/board-flow-yaml-comentario-campo-team.yaml
+    COMPLETE sobre os mesmos criterios; nenhum codigo novo, logo nenhum gate re-rodado.
+    Nesta rodada: commit 7e5a934 em until/2026-10-19-1958 marca a secao do BACKLOG.md
+    como feita (ela dizia pendente e gerou a duplicata). Fora: configure.md nao
+    tem o template (o why apontava para ele por engano); endurecer jira-create-fields-gate
+    contra Team como {id} continua fora, como no fechamento original. Build completo
+    e do supervisor.'
