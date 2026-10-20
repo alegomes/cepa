@@ -1,6 +1,6 @@
 ---
-description: Lê um run encerrado do `cepa-until` (o registro `.jsonl` e a saída dos subprocessos `.log`) e diz o que o dono precisa fazer a partir dele, em perguntas fechadas com recomendação. Roda sozinho no fim de cada run (o `cepa-until` grava o resultado em `<run>.review.md`) e à mão para um run antigo ou para um que parou pela cota. Não lê o `.log` inteiro, que passa de 10 MB: lê o resumo mecânico do `cepa-until-digest` e confere no git o que for afirmar. Só lê: não mescla, não mexe na fila, não fala com o Jira.
-argument-hint: [<run>.jsonl | latest] [--fila NOME]
+description: Reads a finished `cepa-until` run (the `.jsonl` record and the `.log` output of the subprocesses) and says what the owner has to do from it, as closed questions with a recommendation. Runs by itself at the end of each run (`cepa-until` writes the result to `<run>.review.md`) and by hand for an old run or one the usage cap stopped. Does not read the whole `.log`, which passes 10 MB: reads the mechanical digest of `cepa-until-digest` and checks in git whatever it states. Read-only: does not merge, touch the queue or talk to Jira.
+argument-hint: [<run>.jsonl | latest] [--fila NAME]
 interaction: routine
 ---
 

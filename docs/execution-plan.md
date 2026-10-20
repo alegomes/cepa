@@ -1,4 +1,4 @@
-# The execution plan
+# The execution queue
 
 *What do I do next?* — the question a long session dissolves, and what the
 harness does to keep it answerable.
@@ -71,7 +71,7 @@ blocks the comment without it) and was simply never aggregated anywhere.
 
 **A tracker is optional.** An item's `id` is a card key *or* an anchor in
 whatever source the work comes from. A repo whose demands live in `BACKLOG.md` —
-the `cepa` repo itself, which keeps its own plan at
+the `cepa` repo itself, which keeps its own queue at
 `.claude/programs/cepa/plan.yaml` — gets the order, the `why` and the human debt
 all the same. What it doesn't get is reconciliation, and the tooling says so
 rather than implying a verification that never happened.
@@ -82,21 +82,21 @@ rather than implying a verification that never happened.
 of `git rev-parse --git-common-dir` with the trailing `/.git` removed. Inside a
 linked worktree that resolves to the MAIN clone, not to the current tree;
 anywhere else it is the same thing as `git rev-parse --show-toplevel`. Every
-command that touches a plan resolves the path this way — on read and on write
+command that touches a queue resolves the path this way — on read and on write
 alike.
 
-The plan is repo state, not session state, and the two obvious shortcuts each
+The queue is repo state, not session state, and the two obvious shortcuts each
 lose it:
 
-- **Writing it under the current worktree** hides the plan from every other
+- **Writing it under the current worktree** hides the queue from every other
   session and destroys it when the worktree goes. Where `.gitignore` covers
   `.claude/` wholesale the file is invisible to git, so no guard on the removal
   path even sees it — that is what the rescue net in `_wtlib.py` exists to catch
   (BACKLOG, "camada 1"), and a net is worse than not needing one.
-- **Copying a plan per worktree** (adding it to the seeding list of
+- **Copying a queue per worktree** (adding it to the seeding list of
   `seed_worktree`) trades a loud failure for a silent one: N copies, each
   written by its own session, none of them wrong-looking. On 2026-08-18 two
-  copies of the same WEGO plan read 14 items and 47 items and both looked
+  copies of the same WEGO queue read 14 items and 47 items and both looked
   authoritative.
 
 Anchoring at the main root is "camada 0" of the BACKLOG item on worktree
@@ -129,7 +129,7 @@ the file lives, this fixes how it is found.
 
 ## The three moments
 
-The plan answers the question only if something asks it. Three moments do:
+The queue answers the question only if something asks it. Three moments do:
 
 | When | What answers | What it does |
 |---|---|---|
@@ -150,10 +150,10 @@ of writing the file itself.
 An order you merely approved still beats one that was never written down.
 
 Re-running the writer **merges** rather than overwrites: `done` items keep their
-`human_pending`, cancelled cards become `dropped` (kept, so the plan still
+`human_pending`, cancelled cards become `dropped` (kept, so the queue still
 explains why they left). Under `--max`, the queue holds only the cards actually
 classified, and the `source` line carries a `PARCIAL` note saying so — a
-truncated plan must never read as the whole board.
+truncated queue must never read as the whole board.
 
 Why the writer moved out of the tracker plugin: while `/board-flow:triage` was
 the only command able to write the file, a repo with no Jira had no queue at
@@ -165,25 +165,25 @@ grill that never finished, buried inside a queue that reads as decided).
 
 ### Reading it: `/common:next`
 
-It lives in `common`, not `board-flow`, because a plan doesn't require a tracker.
+It lives in `common`, not `board-flow`, because a queue doesn't require a tracker.
 
 It ends with **one** recommendation and its `why` — never a menu, since a list of
 equally-weighted options is precisely the state you're stuck in when you run it.
-Before answering it reconciles the plan against the tracker, because **the plan
+Before answering it reconciles the queue against the tracker, because **the queue
 is a hypothesis, not a contract**: it records what was true when it was written.
 
 Every divergence is *named*, never absorbed — each one means something happened
-outside the plan, and a plan that silently absorbs reality is a plan that lies:
+outside the queue, and a queue that silently absorbs reality is a queue that lies:
 
-| Plan says | Tracker says | Reading |
+| Queue says | Tracker says | Reading |
 |---|---|---|
 | `pending` | done | finished elsewhere → ask what its human validation route was, or that debt is lost |
 | `pending` | in progress | a live session may be on it → warn before starting it too |
 | `done` | in progress / to do | it bounced back → `pending` again, and probably the real next step |
 | item present | card gone / Won't Do | → `dropped`, with the reason |
-| — | in To Do, absent from plan | the plan is stale or truncated → **name these**; never fold them in as if prioritised |
+| — | in To Do, absent from the queue | the queue is stale or truncated → **name these**; never fold them in as if prioritised |
 
-Cards on the board but absent from the plan are never appended: they were given
+Cards on the board but absent from the queue are never appended: they were given
 no position and no rationale, and inventing one would forge exactly the decision
 this mechanism exists to preserve.
 
@@ -211,7 +211,9 @@ Both read the same schema; neither plugin depends on the other.
 | Floor | none | ≥4 demands (D7) |
 | Reader | `/common:next` | `/maestro:run` |
 
-Point a single-track plan at `/maestro:run` or `cepa-dor` and it refuses by
+The `parallel-waves` side is frozen since 2026-10-08: the conductor of `cepa-until` will absorb the fork and the merge train (decision 1 of [estrategia-cepa-proximo-nivel.md](estrategia-cepa-proximo-nivel.md); status in [maestro.md](maestro.md)). What follows about waves is kept as the record of what was built.
+
+Point a single-track queue at `/maestro:run` or `cepa-dor` and it refuses by
 **naming the right command**, instead of failing downstream with "no pending
 wave" — an error that says what went wrong but not what to do.
 
@@ -228,12 +230,12 @@ into a wave.
 ### Schema versions
 
 **v2** made `mode` explicit and required. **v1** (waves only, no `mode`) is still
-read by every consumer, so plans already on disk need no migration; `mode:
-single-track` in a v1 plan is refused with an instruction to raise the version.
+read by every consumer, so queues already on disk need no migration; `mode:
+single-track` in a v1 file is refused with an instruction to raise the version.
 
 The version exists because `mode` changes what the document *means*: a
-single-track plan has no `waves`. Without the number, a wave-only consumer can't
-say "I don't know how to read this" — it reads a missing `waves` as an empty plan
+single-track queue has no `waves`. Without the number, a wave-only consumer can't
+say "I don't know how to read this" — it reads a missing `waves` as an empty queue
 and carries on.
 
 ## Status
@@ -255,9 +257,9 @@ So the tests lock the contract, and one of the two consumers has now met a real
 board. `--sync` against a live tracker remains unexercised.
 
 One question is still deliberately open, to be decided with use rather than
-guessed: whether the plan should surface at `SessionStart` alongside the handoff.
+guessed: whether the queue should surface at `SessionStart` alongside the handoff.
 
-The other one — **who writes the plan in a repo with no tracker** — was answered
+The other one — **who writes the queue in a repo with no tracker** — was answered
 on 2026-08-24: a new `/common:plan <name>`, the single writer of the
 `single-track` file, fed by `--from-spec`, by `--from-jira` (where
 `/board-flow:triage` classifies and hands back the order instead of writing the
@@ -353,7 +355,7 @@ four: with two items blocking each other nothing is ever a candidate, so
 `/common:next` reports the queue as finished rather than as stuck.
 
 It is also the mirror of `maestro-programs --check-name`. Both planners write
-into the same directory and the program name is the caller's free choice, so
+into the same directory and the queue name is the caller's free choice, so
 each side refuses to overwrite the other's document: waves never overwrite a
 queue, and a queue never overwrites waves.
 
@@ -370,4 +372,4 @@ erase the debt at the exact moment someone is re-reading the queue.
 - [commands.md](commands.md) — `/common:plan` (the writer), `/common:next`, `/board-flow:triage`
 - [board-flow.md](board-flow.md) — the tracker half: config, Implementation Summary contract
 - [maestro.md](maestro.md) — the `parallel-waves` sibling
-- [handoff.md](handoff.md) — resuming *this* line of work (the plan handles the queue *around* it)
+- [handoff.md](handoff.md) — resuming *this* line of work (the queue holds the work *around* it)

@@ -1,6 +1,6 @@
 ---
-description: Lista a fila single-track do repo inteira, agrupada por status (em andamento, pendentes, bloqueados, concluídos, descartados), na ordem gravada, com o motivo de cada bloqueio e as ações humanas abertas. Responde "como está a fila agora?" sem abrir o plan.yaml. Só lê — não reserva, não executa e não reconcilia com o Jira.
-argument-hint: [nome-da-fila] [--status pending|in_progress|blocked|done|dropped]
+description: Lists the repo's whole `single-track` queue, grouped by status (in progress, pending, blocked, done, dropped), in the recorded order, with the reason of each block and the open human actions. Answers "how is the queue right now?" without opening plan.yaml. Read-only: does not reserve, execute or reconcile with Jira.
+argument-hint: [queue-name] [--status pending|in_progress|blocked|done|dropped]
 interaction: conversational
 ---
 
