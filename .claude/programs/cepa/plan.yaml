@@ -2260,3 +2260,17 @@ items:
     pede trabalho novo depois do ''Safe to exit'' na mesma conversa; o relatorio
     registra em vez de perguntar (o anti-loop do hook impede travar a sessao). Nenhum
     merge, nenhum push.'
+- id: comandos-em-ingles
+  title: 'Todos os comandos dos plugins (descrição, argument-hint e corpo) em inglês,
+    com o vocabulário de docs/how-it-fits.md: Epic, cycle, queue, item, card, session,
+    mode, intent, step, inbox'
+  why: 'Decisão do dono em 2026-10-20: padronizar tudo em inglês. Os 5 comandos
+    da fila (plan, next, fila, drain-plan, until-review) já têm descrição em inglês
+    (commit 2e33efb); os corpos deles e os outros 25 comandos seguem em português.
+    Não inclui renomear plan.yaml, .claude/programs/ nem a chave program: do YAML,
+    que quebrariam cepa-plan, cepa-until, hooks e as filas já gravadas nos repos
+    de cliente (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
