@@ -1,0 +1,49 @@
+schema_version: 1
+card: comandos-em-ingles
+status: complete
+audited_at: 2026-10-20T00:00:00-03:00
+criteria:
+  - id: AC1
+    text: "Every */commands/*.md (68 files) has description, argument-hint and body in English."
+    altitude: domain
+    surface: "all */commands/*.md, frontmatter included"
+    demonstrated_by:
+      test: "tests/test_commands_english.py"
+      layer: "file-content test over every command file; strips code, backticks, double-quoted strings, bold labels, flags Portuguese-only words in the rest; self-checks the stripper"
+      evidence: verified
+      run: |
+        python3 tests/test_commands_english.py  -> 'tudo ok' (one 'ok' line per command file)
+        mutation: appended 'Depois disso, rode o comando de novo quando o lote acabar.' to common/commands/next.md
+        -> 'FAIL common/commands/next.md sem prosa em portugues ... 1 falha(s)'; restored via git checkout, re-run 'tudo ok'
+    verdict: complete
+  - id: AC2
+    text: "docs/how-it-fits.md vocabulary used (queue, item, card, Epic, cycle, session, mode, intent, step, inbox)."
+    altitude: domain
+    surface: "command prose"
+    demonstrated_by:
+      test: "tests/test_commands_english.py (negative: Portuguese vocabulary words cannot survive in prose)"
+      layer: "file-content test"
+      evidence: verified
+      run: "same run as AC1, tudo ok. Positive use of each English term is not asserted by a test; only Portuguese synonyms are blocked."
+    verdict: complete
+    note: "'slice' rechecked: common/commands/plan.md:39,131 refer to Maestro wave-plan slices (mode parallel-waves), same word in 3569aaa, out of scope. Other hits: <slice> is the session worktree/branch argument name (a CLI contract), next.md:147-153 quotes a script's pt-BR output. No queue item called 'slice' found."
+  - id: AC3
+    text: "Nothing a script/hook/agent consumes was broken."
+    altitude: application
+    surface: "contract strings consumed by bin/hooks/gates"
+    demonstrated_by:
+      test: "43 tests reading command files"
+      layer: "python test scripts"
+      evidence: verified
+      run: "43 files run on 20f6d8b, 0 failures (e.g. test_catalogo_comandos: 68 comandos). Second commit only adds a test file; no bin/hooks touched."
+    verdict: complete
+  - id: AC4
+    text: "Tests re-pinned without removing/loosening checks."
+    altitude: domain
+    surface: "tests/*.py diff"
+    demonstrated_by:
+      test: "git diff 3569aaa..HEAD -- tests"
+      layer: "diff"
+      evidence: verified
+      run: "assert/check lines removed 21, added 21; all green."
+    verdict: complete
