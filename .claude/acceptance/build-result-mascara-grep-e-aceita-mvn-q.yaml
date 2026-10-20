@@ -1,0 +1,46 @@
+key: build-result-mascara-grep-e-aceita-mvn-q
+status: complete
+diff_range: 4bdd311..2ab3945
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: hook capture-build-result.py via payload stdin; `grep -E 'verify' x` grava nada em .claude/last-build.json
+    test: tests/test_capture_build_result_classify.py::test_grep_with_quoted_mvnw_verify_leaves_no_state (variante citada, episodio 1); literal sem mvn confirmado ad hoc via _run_hook -> None
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 -m pytest -q tests/test_capture_build_result_classify.py -> 29 passed"
+  - id: AC2
+    altitude: cli
+    surface: hook via payload; `./mvnw -q clean verify > log` exit 0 grava SUCCESS
+    test: tests/test_capture_build_result_classify.py::test_quiet_redirected_empty_log_is_success
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 -m pytest -q tests/test_capture_build_result_classify.py -> 29 passed"
+  - id: AC3
+    altitude: cli
+    surface: hook via payload; `cat <log com BUILD FAILURE>` nao grava estado
+    test: tests/test_capture_build_result_classify.py::test_cat_of_a_log_with_build_failure_leaves_no_state (hook em subprocesso, stdout "[INFO] BUILD FAILURE", assert sem last-build.json; nao commitado, no working tree) + test_cat_of_a_log_with_build_failure_is_not_a_build (classify)
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 -m pytest -q tests/test_capture_build_result_classify.py -> 29 passed"
+  - id: AC4
+    altitude: cli
+    surface: hook via payload com cwd da sessao; build em worktree via `git -C wt ...; cd wt && sed ... && ./mvnw ... test` nao altera last-build.json da sessao
+    test: tests/test_capture_build_result_classify.py::test_perturbation_build_after_git_dash_c_does_not_touch_main_state (+ test_effective_build_dir_follows_cd_after_git_dash_c; tests/test_baseline_worktree_poisoning.py)
+    layer: cli/subprocess
+    evidence: verified
+    run: "pytest 29 passed; tests/run-all.sh capture baseline verde anchor root_install background loop_budget -> 10 de 10, tudo verde"
+  - id: AC5
+    altitude: cli
+    surface: hook via payload; saida com cat do JSON (BUILD FAILURE escapado em uma linha) apos `[INFO] BUILD SUCCESS` real grava SUCCESS
+    test: tests/test_capture_build_result_classify.py::test_cat_of_last_build_json_end_to_end_stays_success
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 -m pytest -q tests/test_capture_build_result_classify.py -> 29 passed"
+  - id: AC6
+    altitude: cli
+    surface: FAILURE real prevalece sobre SUCCESS; outros kinds inalterados
+    test: test_real_build_failure_line_after_success_line_still_wins (classify) + tests/test_baseline_worktree_poisoning.py e root_install (hook, FAILURE gravado) + tests/test_capture_build_result_pytest.py; gradle conferido ad hoc (FAILURE/SUCCESS corretos)
+    layer: cli/subprocess + application
+    evidence: verified
+    run: "tests/run-all.sh ... -> 10 de 10, tudo verde"

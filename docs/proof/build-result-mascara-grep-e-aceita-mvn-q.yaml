@@ -1,0 +1,47 @@
+schema_version: 2
+card: build-result-mascara-grep-e-aceita-mvn-q
+verdict: proven
+reviewed_at: 2026-10-19T20:30:00-03:00
+base_commit: 4bdd311
+head_commit: 2ab3945
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/hooks/capture-build-result.py (effective_build_dir + _is_build_segment: diretório do primeiro segmento de build via S.segment_dirs, segue cd em qualquer ponto e git -C)", module: "common-hooks", external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/capture-build-result.py (_maven_marker, _marker_hit, _marker_name, _as_list: marcadores Maven ancorados em início de linha)", module: "common-hooks", external_observable: true, substituted_by_double: null }
+    - { class: "common/hooks/capture-build-result.py (classify: remoção de ANSI e ordem falha-primeiro)", module: "common-hooks", external_observable: true, substituted_by_double: null }
+    - { class: "tests/test_capture_build_result_classify.py, tests/test_baseline_worktree_poisoning.py, tests/test_capture_build_result_root_install.py (somente testes)", module: "tests", external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo Python de hooks do Claude Code, sem Maven/PIT/Quarkus. Superfície
+    externa = processo do hook capture-build-result.py lido via payload JSON
+    no stdin e observado pelo .claude/last-build.json. Os testes de ponta a
+    ponta (test_cat_of_last_build_json_end_to_end_stays_success,
+    test_perturbation_build_after_git_dash_c_does_not_touch_main_state)
+    rodam o hook como subprocesso real, sem double na classe alterada.
+    Técnica: perturbação em worktree descartável /tmp/proof-bres (--detach
+    em 2ab3945), removido ao final. Árvore principal intocada.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    perturbation:
+      status: pass
+      results:
+        - "baseline verde em 2ab3945: python3 -m pytest -q tests/test_capture_build_result_classify.py -> 28 passed; bash tests/run-all.sh capture baseline verde anchor root_install background loop_budget -> arquivos rodados: 10 de 10, tudo verde"
+        - "(a) effective_build_dir sem seguir cd/git -C (laço sobre lista vazia, devolve cwd): 3 failed, 25 passed. RED: test_effective_build_dir_follows_cd_after_git_dash_c, test_effective_build_dir_without_cd_is_cwd_and_in_root_cd_is_subdir, test_perturbation_build_after_git_dash_c_does_not_touch_main_state"
+        - "(b) marcador Maven volta a substring simples (sem ^ nem (?m)): 2 failed, 26 passed. RED: test_cat_of_last_build_json_does_not_flip_green_to_failure, test_cat_of_last_build_json_end_to_end_stays_success"
+        - "(c) sem remoção de ANSI: 1 failed, 27 passed. RED: test_ansi_colored_build_success_is_success"
+        - "(d) ordem trocada, sucesso checado antes da falha: 1 failed, 27 passed. RED: test_real_build_failure_line_after_success_line_still_wins"
+        - "cada perturbação foi restaurada com git checkout antes da seguinte"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; alcance medido por perturbação: cada um dos 4 trechos alterados (diretório efetivo, âncora, ANSI, ordem) fez ao menos um teste ir a RED (ver l3), logo todos são alcançados pelos testes. Ramo Pattern de _as_list é exercido, senão list(Pattern) quebraria todo o classify"
+  l4_adversarial_input:
+    status: n/a
+    reason: "O hook só consome o payload PostToolUse produzido pelo próprio harness (comando Bash + saída do build) e grava um JSON local; não há módulo api-rest nem entrada de usuário externo. Os formatos hostis conhecidos (eco de JSON com BUILD FAILURE, ANSI, grep -n, git -C antes de cd) estão fixados como testes."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "hook de 4bdd311 + testes de 2ab3945: python3 -m pytest -q tests/test_capture_build_result_classify.py -> 4 failed, 24 passed. RED: test_cat_of_last_build_json_does_not_flip_green_to_failure (FAILURE em vez de SUCCESS), test_cat_of_last_build_json_end_to_end_stays_success, test_effective_build_dir_follows_cd_after_git_dash_c, test_perturbation_build_after_git_dash_c_does_not_touch_main_state"
+routing_reason: "As duas formas do incidente ficam vermelhas na base e verdes no HEAD. As 4 perturbações (diretório, âncora, ANSI, ordem falha-primeiro) derrubaram teste cada uma, inclusive o fail-closed. Sem double na classe alterada."

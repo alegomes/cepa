@@ -138,3 +138,95 @@ def test_grep_with_quoted_mvnw_verify_leaves_no_state(tmp_path):
 
 def test_echo_of_quoted_mvnw_verify_leaves_no_state(tmp_path):
     assert _run_hook(tmp_path, 'echo " ./mvnw verify"', None) is None
+
+
+# ── 2026-10-16: marcadores Maven ancorados em início de linha + build_dir real ──
+
+LAST_BUILD_CMD = (
+    "./mvnw -o -pl infrastructure,bootstrap -am test -Dtest='LerLoteTest' "
+    "-Dsurefire.failIfNoSpecifiedTests=false 2>&1 | grep -E \"Tests run:.*Fail|BUILD|ERROR\" "
+    "| tail -15; cat .claude/last-build.json"
+)
+# O JSON do registro anterior vem em UMA linha, com \n literal dentro da string.
+CAT_JSON_OUT = (
+    "[INFO] Tests run: 74, Failures: 0, Errors: 0, Skipped: 0\n[INFO] BUILD SUCCESS\n"
+    "{\n  \"status\": \"FAILURE\",\n"
+    "  \"tail\": \"[ERROR] Tests run: 61, Failures: 1 <<< FAILURE!\\n[INFO] BUILD FAILURE\"\n}\n"
+)
+
+
+def test_cat_of_last_build_json_does_not_flip_green_to_failure():
+    status, kind, _ = cbr.classify(LAST_BUILD_CMD, CAT_JSON_OUT, None)
+    assert (status, kind) == ("SUCCESS", "maven")
+
+
+def test_cat_of_last_build_json_end_to_end_stays_success(tmp_path):
+    st = _run_hook(tmp_path, LAST_BUILD_CMD, None,
+                   response={"stdout": CAT_JSON_OUT, "stderr": "", "interrupted": False})
+    assert st and st["status"] == "SUCCESS"
+
+
+def test_cat_of_a_log_with_build_failure_is_not_a_build():
+    status, kind, _ = cbr.classify("cat build.log", "[INFO] BUILD FAILURE\n", None)
+    assert (status, kind) == (None, None)
+
+
+def test_cat_of_a_log_with_build_failure_leaves_no_state(tmp_path):
+    # the hook, not classify(): a `cat` whose output is a real Maven failure line
+    # must not write .claude/last-build.json (fb-20261016-3, 2026-10-16)
+    st = _run_hook(tmp_path, "cat build.log", None,
+                   response={"stdout": "[INFO] BUILD FAILURE\n", "stderr": "", "interrupted": False})
+    assert st is None
+
+
+def test_ansi_colored_build_success_is_success():
+    out = "[\x1b[1;34mINFO\x1b[m] \x1b[1;32mBUILD SUCCESS\x1b[m\n"
+    assert cbr.classify("./mvnw verify", out, None)[:2] == ("SUCCESS", "maven")
+
+
+def test_grep_n_prefixed_build_success_is_success():
+    assert cbr.classify("./mvnw verify 2>&1 | grep -n BUILD", "12:[INFO] BUILD SUCCESS\n",
+                        None)[:2] == ("SUCCESS", "maven")
+
+
+def test_real_build_failure_line_after_success_line_still_wins():
+    out = "[INFO] BUILD SUCCESS\n[INFO] BUILD FAILURE\n"
+    assert cbr.classify("./mvnw verify", out, None)[:2] == ("FAILURE", "maven")
+
+
+def test_effective_build_dir_follows_cd_after_git_dash_c(tmp_path):
+    wt = (tmp_path / "wt").resolve()
+    wt.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    cmd = (f"git -C {wt} checkout -- f; cd {wt} && sed -i.bak 's/a/b/' f "
+           f"&& ./mvnw -o -pl x test -Dtest=T")
+    assert cbr.effective_build_dir(cmd, repo) == wt
+
+
+def test_effective_build_dir_without_cd_is_cwd_and_in_root_cd_is_subdir(tmp_path):
+    repo = tmp_path / "repo"
+    (repo / "backend").mkdir(parents=True)
+    assert cbr.effective_build_dir("./mvnw verify", repo) == repo
+    assert cbr.effective_build_dir("cd backend && ./mvnw verify", repo) == (repo / "backend").resolve()
+
+
+def test_perturbation_build_after_git_dash_c_does_not_touch_main_state(tmp_path):
+    wt = (tmp_path / "wt").resolve()
+    wt.mkdir()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    tmp = tmp_path / "tmp"
+    tmp.mkdir()
+    cmd = (f"git -C {wt} checkout -- f; cd {wt} && sed -i.bak 's/a/b/' f "
+           f"&& ./mvnw -o -pl x test -Dtest=T")
+    payload = {"cwd": str(proj), "session_id": "s-pert", "tool_name": "Bash",
+               "tool_input": {"command": cmd},
+               "tool_response": {"stdout": "[INFO] BUILD FAILURE\n", "stderr": "",
+                                 "interrupted": False}}
+    subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload), text=True,
+                   capture_output=True, cwd=proj, env={**os.environ, "TMPDIR": str(tmp)})
+    assert not (proj / ".claude" / "last-build.json").exists()
+    st = json.loads((wt / ".claude" / "last-build.json").read_text())
+    assert st["status"] == "FAILURE"

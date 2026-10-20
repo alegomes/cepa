@@ -1,0 +1,83 @@
+key: leads-build-hex-nao-encerram-turno-dentro-do-claude-p
+status: complete
+diff_range: 2226535..26667f9
+criteria:
+  - id: AC1
+    altitude: domain
+    surface: >
+      Medição nas transcrições do run until/2026-10-15-1946 do
+      wego-digitacao-backend: SendMessage do orquestrador a leads, registrada
+      no BACKLOG ("Onde mora", Medição).
+    test: contagem refeita pelo auditor sobre os .jsonl (tool_use SendMessage
+      deduplicado por id, destino mapeado por subagents/*.meta.json)
+    layer: medição sobre transcrições reais
+    evidence: verified
+    run: "script python3 -I próprio -> 13 SendMessage únicos; engineering-lead 6,
+      validation-lead 4 (total 10 a leads), em 5 sessões/rodadas distintas
+      (220c4958, 539070ae, 9a8e765d, 9c8507a0, afe153f0). Bate com o BACKLOG
+      (10 retomadas, 5 rodadas, 6+4). O 'de 7 rodadas' não foi reconferido
+      (há 8 transcrições de topo)."
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: >
+      Lead dentro de um claude -p com CEPA_UNTIL_RUN não encerra o turno após
+      delegar e espera o worker no mesmo turno; fora de run, "Encerre o turno"
+      continua. Texto nos 11 agentes com Task.
+    test: run sintético claude -p (sessão d51a89d3-4f50-473a-b53d-c586a960db24)
+      + tests/test_delegacao_assincrona_specs.py (4a marca)
+    layer: cli (claude -p real, CEPA_UNTIL_RUN=sintetico-2026-10-19) + radar estático
+    evidence: verified
+    run: "Transcrição relida pelo auditor: orquestrador com 1 Agent
+      (build-hex:engineering-lead), 0 SendMessage, 0 task-notification; o lead
+      rodou echo de CEPA_UNTIL_RUN (=sintetico-2026-10-19), chamou Agent
+      build-hex:domain-dev com run_in_background: false, o worker rodou wc -l
+      README.md (448) e o resultado voltou inline. python3
+      tests/test_delegacao_assincrona_specs.py -> 'ok — 11 agentes que delegam,
+      todos com a seção completa'."
+    note: >
+      Ressalvas declaradas: n=1; o pedido ao lead já dizia "Unattended run"
+      (como o bullet do drain-plan manda), então o lead sem essa frase não foi
+      medido; a contagem num run real do cepa-until de repo build-hex ainda não
+      existe. A metade "fora de run continua Encerre o turno" é só texto (o
+      trecho antigo permanece), sem run que a exercite.
+    status: complete
+  - id: AC3
+    altitude: application
+    surface: >
+      common/commands/drain-plan.md, passo 3.b, bullet "quem delega espera o
+      worker no mesmo turno", instruindo os três leads.
+    test: >
+      tests/test_common_drain_plan.py::test_na_branch_da_noite (3 checks
+      novos: presença; run_in_background false + "mesmo turno"; os três leads
+      dentro do parágrafo do bullet)
+    layer: teste estático sobre o comando
+    evidence: verified
+    run: "python3 tests/test_common_drain_plan.py -> 'all green' (exit 0). A
+      prova vermelho/verde com remoção do bullet é relato do pair-dev, não
+      reexecutada por mim."
+    status: complete
+  - id: AC4
+    altitude: application
+    surface: >
+      Teste-radar que falha se um agente com Task perde a exceção.
+    test: tests/test_delegacao_assincrona_specs.py, MARCAS 4a entrada
+    layer: teste estático derivado do frontmatter
+    evidence: verified
+    run: "python3 tests/test_delegacao_assincrona_specs.py -> 'ok — 11 agentes
+      que delegam, todos com a seção completa' (exit 0). Adicional: python3
+      tests/test_no_busy_wait.py -> 'ok — 8 bloqueios e 9 liberações
+      conferidos'; python3 tests/test_leads_prefixam_workers.py -> ok."
+    note: a mutação (remover a marca de uma cópia e ver o teste falhar) não foi
+      executada pelo auditor, por não poder alterar a árvore.
+    status: complete
+  - id: AC5
+    altitude: domain
+    surface: BACKLOG.md, "Onde mora", parágrafo "Não feito".
+    test: leitura do BACKLOG
+    layer: documentação
+    evidence: verified
+    run: "git diff mostra 'Não feito. O run sintético do cepa-until de \"Teste
+      que falta\" não foi rodado; ... prova que a exceção está escrita, não que o
+      lead a segue.'"
+    status: complete

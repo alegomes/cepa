@@ -21,6 +21,14 @@ cópias, cópia N+1 nasce sem ele.
 Este teste é o radar. A regra é mecânica e derivada do frontmatter, não de uma lista fixa:
 **se o agente tem `Task` nas ferramentas, ele delega; se delega, precisa da seção.** Uma
 lista fixa envelheceria exatamente como as 10 specs envelheceram.
+
+## A exceção do run desatendido
+
+Em 2026-10-19 a seção ganhou a exceção para run desatendido (`cepa-until`, `claude -p`): ali o
+lead é subagente do orquestrador, e encerrar o turno não espera a notificação, devolve o item
+ao orquestrador com o worker ainda rodando. Medição no run `until/2026-10-15-1946`: 10
+retomadas à mão em 5 de 7 rodadas. A quarta marca (`run_in_background: false`) impede que a
+exceção se perca numa cópia.
 """
 
 import re
@@ -38,6 +46,7 @@ MARCAS = [
     ("o retorno real da chamada", re.compile(r"Async\s+agent\s+launched\s+successfully")),
     ("o que fazer no lugar", re.compile(r"[Ee]ncerre\s+o\s+turno")),
     ("o antipadrão medido", re.compile(r"until\s+\[\s+-f")),
+    ("a exceção do run desatendido", re.compile(r"run_in_background:\s*false")),
 ]
 
 

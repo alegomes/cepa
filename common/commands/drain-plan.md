@@ -310,6 +310,16 @@ Para cada item do lote, na ordem:
     para o segundo plano, e a rodada terminou em "Continuo aguardando" depois
     de 85 minutos e US$ 14,15, com o item `in_progress`.
 
+  - **quem delega espera o worker no mesmo turno, e diga isso a todo lead.**
+    Aqui cada rodada é um `claude -p` e o lead é seu subagente: se ele encerrar
+    o turno "à espera da notificação", o que volta para você é o item pela
+    metade, com o worker ainda rodando, e você gasta um turno reenviando o
+    resultado. Escreva no pedido de todo lead (`engineering-lead`,
+    `validation-lead`, `planning-lead`) que ele delega com
+    `run_in_background: false` e só devolve com o resultado do worker na mão.
+    No run de 2026-10-15-1946 do wego-digitacao-backend foram 10 retomadas à
+    mão em 5 das 7 rodadas, e o S3-fio-openai custou US$ 22,54, 41,8% do run.
+
   Um item que depende de outro da mesma fila que já está `done` na branch da
   noite **não** está travado por "o antecessor não está na main": o código dele
   está aqui.

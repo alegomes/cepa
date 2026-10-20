@@ -1,6 +1,6 @@
 {
   "name": "marketing",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Content-production topology — content-lead + 4 workers (content-strategist, copywriter, brand-style-critic, fact-checker) that turn a brief into grounded, on-brand commercial prose (sales-enablement, copy, proposals). Path-lock keyed to docs/marketing/**; produces artifacts, never code. copywriter is parallelizable, one piece per invocation. Two gates run in parallel: brand-style-critic (style/terminology/anonymization/honesty) and fact-checker (every number traces to the brief). One command: /marketing:brief-write-review. Requires common@cepa.",
   "author": {
     "name": "alegomes"

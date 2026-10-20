@@ -72,8 +72,8 @@ def read_marker(root):
     return json.loads(p.read_text())
 
 
-BUILD_SUCCESS = "... [INFO] BUILD SUCCESS ..."
-BUILD_FAILURE = "... [INFO] BUILD FAILURE ..."
+BUILD_SUCCESS = "[INFO] BUILD SUCCESS"
+BUILD_FAILURE = "[INFO] BUILD FAILURE"
 
 
 def main():

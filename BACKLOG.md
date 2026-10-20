@@ -4175,9 +4175,14 @@ as propostas sem resposta. Testes: `test_waivers.py`, `test_cepa_plan_responde_d
 
 **Plano:** `fb-2026-10/build-result-mascara-grep-e-aceita-mvn-q` (fila `fb-2026-10`, gravada em 2026-10-19)
 
-**Status:** pendente · **Lar provável:** `common/hooks/capture-build-result.py` (classify),
-`common/hooks/_buildsource.py` · **Origem:** feedback `fb-20261008-1` (2026-10-08,
-`wego-recebiveis-backend`).
+**Status:** feito. Episódio 1 em 2026-10-15 (commit 6a07300: classificação só sobre o
+comando sem texto citado, invocador `mvnw`/`mvn` obrigatório, `-q` e `> log` registrados).
+Episódio 2 em 2026-10-19 (commit 2ab3945, branch `until/2026-10-19-1958`): o diretório do
+build é o do segmento que invoca o Maven, seguindo todo `cd` antes dele na linha e `git -C`
+(`_shellscan.segment_dirs`), e os marcadores `BUILD SUCCESS`/`BUILD FAILURE` só valem no
+início de uma linha, como o Maven imprime, com códigos ANSI removidos antes. Testes em
+`tests/test_capture_build_result_classify.py`. · **Lar:** `common/hooks/capture-build-result.py`
+· **Origem:** feedback `fb-20261008-1` (2026-10-08, `wego-recebiveis-backend`).
 
 > gate-advance gravou FAILURE kind=maven em .claude/last-build.json (2026-10-08T10:21Z) para
 > um comando que era só grep -E 'no-build|verify' sobre o script cepa-until; o falso vermelho
@@ -4214,8 +4219,11 @@ não grava nada; `./mvnw verify` rodado em `/tmp/perturb-*` não altera `.claude
 
 **Plano:** `fb-2026-10/board-flow-yaml-comentario-team-dois-formatos` (fila `fb-2026-10`, gravada em 2026-10-19)
 
-**Status:** pendente · **Lar provável:** template do `board-flow.yaml` em
-`board-flow/commands/configure.md` e `board-flow/agents/atlassian-expert.md` · **Origem:**
+**Status:** feito em 2026-10-16 (commit a6a64bd, na `main`): comentário com os dois formatos e o 400 de cada um em
+`discovery/board-flow.example.yaml`, `docs/board-flow.md` e `board-flow/agents/atlassian-expert.md`, com
+`tests/test_board_flow_example_team_format.py`; fila `cepa`, item `board-flow-yaml-comentario-campo-team`.
+O item da `fb-2026-10` foi montado em 2026-10-19 a partir desta seção ainda marcada "pendente" e fechado
+como duplicata em 2026-10-19 · **Lar:** os três arquivos acima (não o `configure.md`) · **Origem:**
 feedback `fb-20260902-1` (2026-09-02, `wego-acesso-backend-capture-openapi`). Observação do
 próprio `atlassian-expert`, não texto do dono.
 
@@ -4328,7 +4336,7 @@ Em `tests/test_cepa_until.py`: (a) `estado.json` `rodando` com pid vivo na mesma
 
 **Plano:** `fb-2026-10/leads-build-hex-nao-encerram-turno-dentro-do-claude-p` (fila `fb-2026-10`, gravada em 2026-10-19)
 
-**Status:** pendente · **Lar provável:** `build-hex/agents/engineering-lead.md` e
+**Status:** feito nesta branch (2026-10-19) · **Lar provável:** `build-hex/agents/engineering-lead.md` e
 `build-hex/agents/validation-lead.md` (seção "Delegação é assíncrona"), e o orquestrador do
 `/common:drain-plan` que roda dentro do `cepa-until` · **Origem:** feedback `fb-20261016-1`
 (2026-10-16, `wego-digitacao-backend`, run `until/2026-10-15-1946`).
@@ -4363,6 +4371,50 @@ repo do cliente; os números (3 rodadas, US$ 22,54, 41,8%) são do registro do d
 
 Um run sintético do `cepa-until` com um item que delega a um worker de 2 minutos: o `.log` mostra
 uma única chamada ao lead por rodada, sem mensagem de retomada do orquestrador.
+
+### Onde mora
+
+**Medição.** Contei, nas transcrições do run `until/2026-10-15-1946`
+(`~/.claude/projects/-Users-alegomes-cepa-worktrees-wego-digitacao-backend-until-2026-10-15-1946/*.jsonl`),
+as mensagens `SendMessage` do orquestrador para cada lead: 10 retomadas à mão em 5 das 7
+rodadas (o feedback dizia 3 rodadas). 6 no `engineering-lead` (as 3 chamadas dele, 2 mensagens
+cada: "Do not end your turn waiting for a notification" e depois o resultado do adapter-dev) e
+4 no `validation-lead` (4 das 6 chamadas). O S3-fio-openai custou US$ 22,54 = 41,8% do run
+(22,54 ÷ 53,91).
+
+**Mecanismo.** O lead é subagente do orquestrador do `drain-plan`: ao encerrar o turno, o que
+volta ao orquestrador é o item pela metade, com o worker rodando, e a notificação do worker cai
+no orquestrador, que reenvia o resultado. No mesmo run, `qa-engineer`, `refactor-advisor` e
+`code-reviewer` chamados com `run_in_background: false` voltaram no mesmo turno, sem retomada.
+
+**O que foi escrito e onde.**
+
+- O parágrafo "Exceção: run desatendido" na seção "Delegação é assíncrona" dos 11 agentes que
+  delegam (os 3 leads do `build-hex`, os 3 do `build-team`, `design-lead`, `epic-briefer`,
+  `discovery-lead`, `content-lead`, `docs-lead`).
+- A quarta marca (`run_in_background: false`) em `tests/test_delegacao_assincrona_specs.py`,
+  para a exceção não se perder numa cópia.
+- O bullet "quem delega espera o worker no mesmo turno" no passo 3.b de
+  `common/commands/drain-plan.md`, que manda o orquestrador dizer isso a todo lead.
+- Três checks em `test_na_branch_da_noite` de `tests/test_common_drain_plan.py`, para o bullet
+  não sumir numa edição.
+- A exceção na mensagem do `common/hooks/no-busy-wait.py` (só texto, o comportamento do hook
+  não mudou).
+- Versões (PATCH, prosa sem mudança de contrato): `build-hex` 1.4.3, `build-team` 0.5.2,
+  `design` 0.3.2, `discovery` 0.4.2, `marketing` 0.1.2, `docs-topology` 0.3.2, `common` 2.30.2.
+
+**Teste feito (2026-10-19).** O run sintético de "Teste que falta" rodou na própria rodada:
+`CEPA_UNTIL_RUN=sintetico-2026-10-19 claude -p` pedindo ao `build-hex:engineering-lead` que
+delegasse ao `build-hex:domain-dev` um `wc -l README.md`. Na transcrição (sessão
+`d51a89d3-4f50-473a-b53d-c586a960db24` em
+`~/.claude/projects/-Users-alegomes-cepa-worktrees-cepa-until-2026-10-19-1958/`, com a pasta
+`subagents/`): o lead conferiu a variável com `echo`, chamou o worker com
+`run_in_background: false`, recebeu o resultado no mesmo turno e devolveu; o orquestrador fez
+uma chamada ao lead, zero `SendMessage`, zero notificação. 2 turnos, 20 segundos, US$ 0,86
+(`total_cost_usd` do `--output-format json`). Ressalva: o pedido ao lead já dizia "Unattended
+run", como o bullet novo do `drain-plan` manda; o lead sem essa frase não foi medido. O que
+ainda não existe é a contagem num run real do `cepa-until` de um repo `build-hex`: o próximo
+run diz, pelo número de `SendMessage` do orquestrador a leads (zero esperado).
 
 ---
 
