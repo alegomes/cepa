@@ -1,6 +1,6 @@
 ---
-description: Painel de advisors sobre um artefato de decisão (doc de design, ADR, plano, PR) — fan-out paralelo e ISOLADO de lentes de revisão (5 fixas + até 2 especialistas da área), seguido de síntese que NOMEIA as discordâncias entre lentes em vez de mediar. Prospectivo — roda ANTES de fechar a decisão. Para revisar decisões passadas de um run use /common:debrief; para caçar bugs no diff use /code-review.
-argument-hint: <artefato> [--area=seguranca|api-contrato|dados|ux|arquitetura] [--lentes=a,b,c]
+description: Panel of advisors over a decision artifact (design doc, ADR, plan, PR) — a parallel and ISOLATED fan-out of review lenses (5 fixed + up to 2 domain specialists), followed by a synthesis that NAMES the disagreements between lenses instead of mediating. Prospective — runs BEFORE the decision is closed. To review past decisions of a run use /common:debrief; to hunt bugs in the diff use /code-review.
+argument-hint: <artifact> [--area=seguranca|api-contrato|dados|ux|arquitetura] [--lentes=a,b,c]
 interaction: routine
 ---
 
@@ -8,77 +8,82 @@ interaction: routine
 
 ## Purpose
 
-Um olhar só tem ponto cego. Dado um artefato de decisão, este comando spawna um
-painel de revisores em **paralelo e isolados** — cada um com uma lente fixa, sem
-ver a saída dos outros (isolamento é o que evita convergência prematura) — e
-depois sintetiza **nomeando as discordâncias** entre as lentes, nunca mediando
-nem escolhendo em silêncio. O achado mais valioso de um painel costuma ser
-exatamente onde duas lentes discordam.
+A single look has a blind spot. Given a decision artifact, this command spawns
+a panel of reviewers **in parallel and isolated** — each one with a fixed lens,
+without seeing the others' output (isolation is what prevents premature
+convergence) — and then synthesizes by **naming the disagreements** between the
+lenses, never mediating nor choosing silently. A panel's most valuable finding
+is usually exactly where two lenses disagree.
 
 ## Variables
 
-- `$ARGUMENTS` — `<artefato>` (path ou referência de PR; obrigatório),
-  `--area=<x>` (declara a área e pula a confirmação de inferência),
-  `--lentes=a,b,c` (monta o painel à mão; sobrepõe default E especialistas).
+- `$ARGUMENTS` — `<artifact>` (path or PR reference; required),
+  `--area=<x>` (declares the area and skips the inference confirmation),
+  `--lentes=a,b,c` (assembles the panel by hand; overrides default AND
+  specialists).
 
 ## Instructions
 
-Você é o orchestrator. Você monta o painel, dispara o workflow e **sintetiza
-pessoalmente** — a síntese não é delegada a um agente. Aplique o skill
-`name-the-disagreement` na síntese. O registry de lentes vive em
-`common/advisors/lenses.md` (via plugin: `${CLAUDE_PLUGIN_ROOT}/advisors/lenses.md`).
+You are the orchestrator. You assemble the panel, launch the workflow and
+**synthesize personally** — the synthesis is not delegated to an agent. Apply
+the `name-the-disagreement` skill in the synthesis. The lens registry lives in
+`common/advisors/lenses.md` (via the plugin: `${CLAUDE_PLUGIN_ROOT}/advisors/lenses.md`).
 
 ## Workflow
 
-### 0. Piso de uso
+### 0. Usage floor
 
-Antes de qualquer coisa, avalie: a decisão do artefato é **trivial ou
-facilmente reversível**? (rename local, escolha de lib utilitária, ajuste que um
-`git revert` desfaz sem dor). Se sim, **não convoque o painel** — diga isso ao
-usuário ("essa decisão é reversível a custo baixo; um painel de 5+ agentes custa
-mais do que errar e corrigir") e sugira seguir sem. Só prossiga se o usuário
-insistir.
+Before anything else, assess: is the artifact's decision **trivial or easily
+reversible**? (a local rename, a choice of utility library, a tweak a
+`git revert` undoes painlessly). If so, **do not convene the panel** — tell the
+user so (in pt-BR, along the lines of "this decision is reversible at low cost;
+a panel of 5+ agents costs more than getting it wrong and fixing it") and
+suggest going ahead without it. Only proceed if the user insists.
 
-### 1. Ler o artefato
+### 1. Read the artifact
 
-Leia o artefato inteiro. Se for referência de PR, leia o diff + descrição. Se o
-path não existir, pare e diga.
+Read the whole artifact. If it is a PR reference, read the diff + description.
+If the path does not exist, stop and say so.
 
-### 2. Inferir a área + confirmar
+### 2. Infer the area + confirm
 
-Se `--area` foi passada: valide contra as áreas do registry (`seguranca`,
-`api-contrato`, `dados`, `ux`, `arquitetura`) e **pule a confirmação**. Área
-inválida → liste as válidas e pare.
+If `--area` was passed: validate it against the registry's areas (`seguranca`,
+`api-contrato`, `dados`, `ux`, `arquitetura`) and **skip the confirmation**.
+Invalid area → list the valid ones and stop.
 
-Senão, **infira a área** do conteúdo do artefato (contratos e endpoints →
-api-contrato; auth/segredos/superfície de ataque → seguranca; schema/volume/
-retenção → dados; telas/fluxos de usuário → ux; componentes/deploy/acoplamento →
-arquitetura; nada dominante → nenhuma área, painel só com as 5 default). Então
-**confirme com o usuário antes do fan-out**:
+Otherwise, **infer the area** from the artifact's content (contracts and
+endpoints → api-contrato; auth/secrets/attack surface → seguranca;
+schema/volume/retention → dados; user screens/flows → ux;
+components/deploy/coupling → arquitetura; nothing dominant → no area, panel
+with only the 5 defaults). Then **confirm with the user before the fan-out**.
+The rendered confirmation is in Brazilian Portuguese (pt-BR):
 
-> Parece decisão de **api-contrato** — painel: 5 default + consumidor-externo +
-> versionamento-breaking-change (7 lentes). Ok? (ou me diga outra área / `--lentes=...`)
+> Looks like an **api-contrato** decision — panel: 5 default + consumidor-externo +
+> versionamento-breaking-change (7 lenses). Ok? (or tell me another area / `--lentes=...`)
 
-Aguarde a resposta. O usuário pode aceitar, trocar a área ou ditar as lentes.
+Wait for the answer. The user may accept, change the area or dictate the
+lenses.
 
-### 3. Montar o painel
+### 3. Assemble the panel
 
-Leia `common/advisors/lenses.md` e monte a lista de lentes:
+Read `common/advisors/lenses.md` and build the list of lenses:
 
-- **Default:** as 5 fixas (contrarian, fundamentalista, expansionista, outsider,
-  executor) + **até 2** especialistas da área confirmada. **Teto absoluto: 7.**
-- **`--lentes=a,b,c`:** sobrepõe tudo — use exatamente essas lentes (qualquer
-  combinação de nomes do registry), ainda sob o teto de 7. Nome fora do registry
-  → liste os válidos e pare.
+- **Default:** the 5 fixed ones (contrarian, fundamentalista, expansionista,
+  outsider, executor) + **up to 2** specialists from the confirmed area.
+  **Absolute ceiling: 7.**
+- **`--lentes=a,b,c`:** overrides everything — use exactly those lenses (any
+  combination of names from the registry), still under the ceiling of 7. A name
+  outside the registry → list the valid ones and stop.
 
-Para cada lente, extraia do registry o `system-prompt-fragment` — ele é o perfil
-do agente daquela lente.
+For each lens, extract its `system-prompt-fragment` from the registry — it is
+the profile of that lens's agent.
 
-### 4. Executar o fan-out (Workflow tool)
+### 4. Run the fan-out (Workflow tool)
 
-Grave o script abaixo em um arquivo temporário no scratchpad e passe-o à
-**Workflow tool**, com o input montado no passo 3. Cada `agent()` roda isolado:
-recebe o artefato, o perfil da própria lente e NADA das outras.
+Write the script below to a temporary file in the scratchpad and pass it to the
+**Workflow tool**, with the input built in step 3. Each `agent()` runs
+isolated: it receives the artifact, its own lens's profile and NOTHING from the
+others.
 
 ```javascript
 export const meta = {
@@ -87,20 +92,20 @@ export const meta = {
   phases: [{ title: "Pareceres" }],
 };
 
-// A Workflow tool entrega o input no global `args` — e pode entregá-lo como
-// STRING JSON (observado no primeiro uso real). A guarda é obrigatória.
+// The Workflow tool delivers the input in the global `args` — and may deliver
+// it as a JSON STRING (observed on the first real use). The guard is mandatory.
 const A = typeof args === "string" ? JSON.parse(args) : args;
-// A.artifact_path: path do artefato; A.artifact_content: conteúdo integral
-// (ou diff+descrição, para PR); A.lenses: [{ name, profile }] — máx. 7,
-// profile copiado verbatim do registry.
+// A.artifact_path: the artifact's path; A.artifact_content: full content
+// (or diff+description, for a PR); A.lenses: [{ name, profile }] — max. 7,
+// profile copied verbatim from the registry.
 
 const lensOutputSchema = {
   type: "object",
   additionalProperties: false,
   required: ["lente", "achados", "veredito_da_lente", "premissas_que_desafio"],
   properties: {
-    // a lente se identifica DENTRO do schema — enriquecer depois via .then()
-    // não aparece no journal por agente e dificulta o debug
+    // the lens identifies itself INSIDE the schema — enriching it later via
+    // .then() does not show up in the per-agent journal and makes debugging harder
     lente: { type: "string" },
     achados: {
       type: "array",
@@ -141,80 +146,90 @@ const reports = await parallel(A.lenses.map((lens) => () =>
 return reports.filter(Boolean);
 ```
 
-Notas de execução:
+Execution notes:
 
-- Invoque a Workflow tool com este script no campo `script` e o input no campo
-  `args` como objeto JSON: `{artifact_path, artifact_content, lenses: [{name,
-  profile}]}` — `artifact_content` integral, `profile` copiado verbatim do
-  registry (passo 3).
-- O script é determinístico de propósito: sem `Date.now`, sem `Math.random`,
-  `meta` como literal puro. Não o "melhore" com nada disso. O `return` top-level
-  é válido no dialeto da Workflow tool (corpo roda em contexto async) — um
-  `node --check` acusa "Illegal return statement" e isso NÃO é um erro real.
-- Lições do primeiro uso real (2026-07-11, painel do P6): `args` pode chegar
-  como string JSON (daí a guarda no topo); e a identidade da lente vai DENTRO
-  do schema de saída, porque enriquecimento via `.then()` não aparece no
-  journal por agente.
-- Se a Workflow tool não estiver disponível nesta sessão, degrade para o
-  equivalente manual: um `Task` por lente, **todos no mesmo bloco** (paralelo),
-  cada um com o mesmo prompt do `agent()` acima. O isolamento e o schema JSON
-  continuam obrigatórios.
+- Invoke the Workflow tool with this script in the `script` field and the input
+  in the `args` field as a JSON object: `{artifact_path, artifact_content,
+  lenses: [{name, profile}]}` — `artifact_content` in full, `profile` copied
+  verbatim from the registry (step 3).
+- The script is deterministic on purpose: no `Date.now`, no `Math.random`,
+  `meta` as a pure literal. Do not "improve" it with any of that. The top-level
+  `return` is valid in the Workflow tool's dialect (the body runs in an async
+  context) — a `node --check` reports "Illegal return statement" and that is
+  NOT a real error.
+- Lessons from the first real use (2026-07-11, the P6 panel): `args` may arrive
+  as a JSON string (hence the guard at the top); and the lens's identity goes
+  INSIDE the output schema, because enrichment via `.then()` does not show up
+  in the per-agent journal.
+- If the Workflow tool is not available in this session, degrade to the manual
+  equivalent: one `Task` per lens, **all in the same block** (parallel), each
+  with the same prompt as the `agent()` above. Isolation and the JSON schema
+  remain mandatory.
 
-### 5. Sintetizar (você, orchestrator — skill `name-the-disagreement`)
+### 5. Synthesize (you, the orchestrator — `name-the-disagreement` skill)
 
-Com os N JSONs em mãos, produza a síntese. **Nunca medie, nunca escolha em
-silêncio, nunca "todas têm razão".** Estrutura obrigatória:
+With the N JSONs in hand, produce the synthesis. **Never mediate, never choose
+silently, never "they are all right".** Mandatory structure — the rendered
+synthesis is in Brazilian Portuguese (pt-BR), and the section labels below
+(`Painel de advisors`, `Vereditos por lente`, `Convergências`,
+`DISCORDÂNCIAS NOMEADAS`, `O que decide entre elas`, `Propostas consolidadas
+priorizadas`) stay verbatim:
 
-> ## Painel de advisors — `<artefato>` (área: `<area>`, N lentes)
+> ## Painel de advisors — `<artifact>` (area: `<area>`, N lenses)
 >
-> **Vereditos por lente** — uma linha cada: `contrarian: "<veredito>"`, ...
+> **Vereditos por lente** (verdicts per lens) — one line each: `contrarian: "<verdict>"`, ...
 >
 > ### Convergências
 >
-> Achados que 2+ lentes apontaram de forma independente (isolamento torna a
-> convergência um sinal forte). Cada um com as lentes que convergiram e o trecho
-> do artefato.
+> (Convergences.) Findings that 2+ lenses pointed out independently (isolation
+> makes convergence a strong signal). Each with the lenses that converged and
+> the artifact snippet.
 >
 > ### DISCORDÂNCIAS NOMEADAS
 >
-> Para cada conflito real entre lentes (vereditos opostos, premissas
-> incompatíveis, mesmo trecho avaliado em direções contrárias):
+> (Named disagreements.) For each real conflict between lenses (opposite
+> verdicts, incompatible premises, the same snippet assessed in opposite
+> directions):
 >
-> - **Lente A diz X** (cite o argumento dela) **vs. lente B diz Y** (idem).
-> - **O que decide entre elas:** o critério ou informação que resolveria — e a
->   sua recomendação de sintetizador, se os inputs bastam para tê-la. Se não
->   bastam, diga exatamente o que falta. "Ambas têm um ponto" não é resolução.
+> - **Lens A says X** (cite its argument) **vs. lens B says Y** (same).
+> - **O que decide entre elas:** (what decides between them) the criterion or
+>   information that would settle it — and your recommendation as synthesizer,
+>   if the inputs are enough to have one. If they are not, say exactly what is
+>   missing. "Both have a point" is not a resolution.
 >
 > ### Propostas consolidadas priorizadas
 >
-> Lista ordenada (severidade × convergência) de mudanças concretas no artefato.
-> Cada proposta rastreia às lentes que a motivaram. Propostas que dependem de
-> uma discordância ainda aberta são marcadas como condicionais.
+> (Consolidated, prioritized proposals.) An ordered list (severity ×
+> convergence) of concrete changes to the artifact. Each proposal traces back
+> to the lenses that motivated it. Proposals that depend on a still-open
+> disagreement are marked as conditional.
 
-Achados de severidade `critica`/`alta` de uma lente só (sem convergência) ainda
-entram nas propostas — convergência prioriza, não filtra.
+Findings of severity `critica`/`alta` from a single lens (no convergence) still
+go into the proposals — convergence prioritizes, it does not filter.
 
-### 6. Telemetria
+### 6. Telemetry
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_telemetry.py" emit advisors_run \
   area=<area> lenses=<n-lentes> findings=<n-achados-total>
 ```
 
-(`area=none` quando o painel rodou só com as default. Se `${CLAUDE_PLUGIN_ROOT}`
-não estiver no ambiente, use o path absoluto de `common/hooks/_telemetry.py`.)
+(`area=none` when the panel ran with only the defaults. If `${CLAUDE_PLUGIN_ROOT}`
+is not in the environment, use the absolute path of `common/hooks/_telemetry.py`.)
 
 ## Notes
 
-- **Piso de uso (repetindo porque importa):** decisão trivial/reversível não
-  merece painel. O comando aponta isso e sugere seguir sem (passo 0).
-- **Isolamento é inegociável.** Não passe a saída de uma lente para outra, não
-  rode as lentes em sequência "aproveitando contexto". A convergência
-  independente é o que dá valor estatístico ao painel.
-- **A síntese é do orchestrator**, não de um agente dedicado — para manter
-  `name-the-disagreement` no nível de quem responde ao usuário.
-- A saída é um **relatório com propostas** — o comando não edita o artefato.
-  Aplicar as propostas é um passo seguinte, com aprovação do usuário.
-- Prospectivo vs. retrospectivo: para decisões já tomadas num run autônomo, o
-  ritual é `/common:debrief`. Para qualidade de código em diff, `/code-review`.
-  Comparação completa em `docs/advisors.md`.
+- **Usage floor (repeating because it matters):** a trivial/reversible decision
+  does not deserve a panel. The command points this out and suggests going
+  ahead without it (step 0).
+- **Isolation is non-negotiable.** Do not pass one lens's output to another, do
+  not run the lenses in sequence "reusing context". Independent convergence is
+  what gives the panel its statistical value.
+- **The synthesis belongs to the orchestrator**, not to a dedicated agent — to
+  keep `name-the-disagreement` at the level of whoever answers the user.
+- The output is a **report with proposals** — the command does not edit the
+  artifact. Applying the proposals is a following step, with the user's
+  approval.
+- Prospective vs. retrospective: for decisions already taken in an autonomous
+  run, the ritual is `/common:debrief`. For code quality in a diff,
+  `/code-review`. Full comparison in `docs/advisors.md`.

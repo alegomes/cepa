@@ -286,23 +286,23 @@ def testes_de_prosa():
     check("[from-plan:source] a fonte é a fila, lida pelo cepa-plan promote",
           "cepa-plan promote" in texto)
     check("[from-plan:source] o piso D7 é o exit 4, e a saída é o /common:drain-plan",
-          "exit 4 = pare" in texto and "/common:drain-plan" in texto)
+          "**exit 4 = stop**" in texto and "/common:drain-plan" in texto)
     check("[from-plan:source] mostra ao usuário o que ficou de fora",
           "excluded[]" in texto)
     check("[from-plan:carry-why] o `why` da fila é copiado, nunca reescrito",
-          "COPIADO, nunca reescrito" in texto)
+          "COPIED, never rewritten" in texto)
     check("[from-plan:human-gate] rota humana aberta é decidida agora ou fica fora da onda",
-          "human_gate" in texto and "fica fora da onda" in texto)
+          "human_gate" in texto and "the slice stays out of the wave" in texto)
     check("[from-plan:deps-to-waves] onda_minima é piso, não sugestão",
-          "onda_minima" in texto and "PISO, não sugestão" in texto)
+          "onda_minima" in texto and "a FLOOR, not a suggestion" in texto)
     check("[from-plan:deps-to-waves] onda N forka depois da N-1",
           'fork_after: "wave-<N-1>"' in texto)
     check("[from-plan:other-name] o plano de ondas precisa de nome próprio, escolhido pelo usuário",
-          "nome PRÓPRIO" in texto and "não invente um sufixo" in texto)
+          "OF ITS OWN" in texto and "do not invent a suffix on your own" in texto)
     check("[from-plan:traceable-source] o `source` do plano vem do promote",
-          "nasce órfão" in texto)
+          "is born orphaned" in texto)
     check("[from-plan:queue-untouched] promover não mexe na fila, e o dobro de executores é dito",
-          "continuam `pending`" in texto and "constrói duas vezes" in texto)
+          "the items remain `pending`" in texto and "builds it twice" in texto)
 
 
 def main():

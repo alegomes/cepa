@@ -52,19 +52,19 @@ def main():
 
     check("--sweep está no argument-hint", "--sweep" in text.splitlines()[2])
     check("[sweep:full-source] varre a fonte inteira (não só --demandas)",
-          "Leia a fonte INTEIRA" in text)
+          "Read the ENTIRE source" in text)
     check("[sweep:full-source] para nas próximas 2-3 ondas",
-          "**2-3 ondas**" in text)
+          "**2-3 waves**" in text)
     check("[sweep:full-source] nomeia a zona de enforcement como não-candidata a fork autônomo",
-          "não é candidata a fork autônomo" in text)
+          "is not a candidate for autonomous fork" in text)
     check("[sweep:solo-wave] demanda indeterminável entra sozinha na própria onda",
-          "sozinha para sua própria onda" in text)
+          "**alone into its own wave**" in text)
     check("[sweep:wave-cap] sugere o teto de slices em vez de fixar 3",
-          "não é fixo em 3" in text and "sugira" in text.lower())
+          "not fixed at 3" in text and "**suggest** the ceiling" in text.lower())
     check("[sweep:cartorios] invoca cepa-hotspots para popular cartorios",
           "cepa-hotspots" in text and "cartorios:" in text)
     check("[sweep:cartorios] aponta o campo cartorios como opcional e no topo do plano",
-          "campo novo e\n   opcional" in text or "campo novo e opcional" in text)
+          "the new and\n   optional field" in text or "the new and optional field" in text)
 
     print()
     if FAILURES:

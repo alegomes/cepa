@@ -8,378 +8,408 @@ interaction: conversational
 
 ## Purpose
 
-Dar um autor à fila `single-track` em repo que não tem tracker.
+Give the `single-track` queue an author in a repo that has no tracker.
 
-O documento existe desde 2026-07-28 e resolve uma dor real: o Jira guarda a
-FILA (a coluna To Do) e não guarda a ORDEM nem o PORQUÊ dela, então a
-priorização decidida numa sessão virava prosa no handoff e evaporava. Só que o
-único comando capaz de escrever esse arquivo era o `/board-flow:triage`, que
-exige Jira. O resultado é o buraco que este comando fecha:
+The document has existed since 2026-07-28 and solves a real pain: Jira keeps
+the QUEUE (the To Do column) and keeps neither its ORDER nor its WHY, so the
+prioritization decided in a session became prose in the handoff and
+evaporated. But the only command able to write that file was
+`/board-flow:triage`, which requires Jira. The result is the hole this command
+closes:
 
-- **repo sem tracker não tinha fila** — e sem fila o `/common:next` não tem o
-  que ler, então a pergunta "e agora, o que eu faço?" volta a não ter resposta
-  escrita em lugar nenhum;
-- **o `/common:spec` não tinha saída** — ele foi feito de propósito para não
-  exigir quadro configurado, e mesmo assim o que ele produz (uma especificação
-  fechada, com critérios de sucesso já medidos) só continuava andando com um.
+- **a repo without a tracker had no queue** — and without a queue
+  `/common:next` has nothing to read, so the question "and now, what do I do?"
+  is once again answered nowhere in writing;
+- **`/common:spec` had no way out** — it was built on purpose not to require a
+  configured board, and still what it produces (a closed specification, with
+  success criteria already measured) only kept moving with one.
 
-É a etapa 1 do desenho "um escritor, três fontes" (`BACKLOG.md`, "Cinco portas
-de planejamento", aprovado pelo dono em 2026-08-24): uma fila, um autor, várias
-fontes. As outras etapas consomem o arquivo que este comando passa a escrever.
+It is stage 1 of the "one writer, three sources" design (`BACKLOG.md`, "Cinco
+portas de planejamento", approved by the owner on 2026-08-24): one queue, one
+author, several sources. The other stages consume the file this command now
+writes.
 
-A etapa 2 fechou o outro lado: o `/board-flow:triage` **parou de escrever** o
-`plan.yaml` e passou a entregar a classificação para cá. Desde então "um
-escritor" é literal — a fila tem um autor só, e a fonte Jira é uma das três em
-vez de o pré-requisito.
+Stage 2 closed the other side: `/board-flow:triage` **stopped writing**
+`plan.yaml` and started handing its classification over to this command. Since
+then "one writer" is literal — the queue has a single author, and the Jira
+source is one of the three instead of the prerequisite.
 
-**Isto não planeja ondas.** `mode: parallel-waves` é outro documento, com outro
-autor (`/maestro:program-plan`) e outro executor (`/maestro:run`): tem
-superfície disjunta, fork point e aceite executável por slice. Os dois moram no
-mesmo diretório e são distinguidos por um campo interno, então este comando
-**recusa** gravar num nome que já é plano de ondas, em vez de apagá-lo.
+**This does not plan waves.** `mode: parallel-waves` is another document, with
+another author (`/maestro:program-plan`) and another executor (`/maestro:run`):
+it has a disjoint surface, a fork point and an executable acceptance per slice.
+Both live in the same directory and are told apart by an internal field, so
+this command **refuses** to write to a name that is already a wave plan,
+instead of erasing it.
 
 ## Variables
 
-- `<nome>` — o nome do programa, que vira
-  `<raiz-principal>/.claude/programs/<nome>/plan.yaml`. Num repo com tracker, o
-  costume é usar a chave do projeto (`WEGO`); sem tracker, o nome do repo ou da
-  leva.
-- `--from-spec docs/spec/<slug>.md` — cada critério de sucesso da especificação
-  vira um item da fila.
-- `--from-epic docs/epics/<nome>.md` — a fila sai de UM ciclo da escada de
-  valor de um Epic do `/common:epic`: cada frase da coluna "O que atravessa"
-  vira um item, e o roteiro de demonstração do ciclo vira o `demonstra:` do
-  cabeçalho. Sempre com `--ciclo`.
-- `--ciclo N` — qual ciclo da escada vira fila (o número da coluna "Ciclo").
-  Um Epic tem vários ciclos e uma fila é de um só; o costume é o nome da fila
-  terminar em `-c<N>`.
-- `--from-jira [coluna|repasse.json]` — a fila sai da classificação de uma
-  triagem. Com um arquivo, grava um repasse que uma triagem já produziu; com um
-  nome de coluna (ou nada, que é `Backlog`), roda o `/board-flow:triage` antes e
-  grava o repasse dele.
-- `--source "texto"` — de onde as demandas vieram, para rastreio. Sem a flag, o
-  comando preenche a partir da fonte que usou.
-- `--dry-run` — mostra o arquivo que seria gravado e não grava.
-- `--on-missing refuse|keep|drop` — o que fazer com item que já está na fila do
-  disco e a lista nova não menciona. Default `refuse`: sumir com ele em silêncio
-  apaga posição e `why` que alguém decidiu. Com `--from-jira`, `keep` é a
-  **triagem parcial**: a fila do disco fica na ordem dela e os cards novos entram
-  depois, na ordem da triagem — a triagem leu um pedaço da coluna, e a ordem
-  dela não vale contra pendentes que o dono já priorizou. Sem `--on-missing`, o
-  `--from-jira` não recusa: `done`/`dropped` que a triagem não menciona são
-  preservados em bloco no começo da fila, os itens da triagem entram na ordem
-  aprovada e os abertos que ela não citou vão depois, na ordem antiga (o
-  comando avisa quais). Com `drop`, só esses abertos viram `dropped`; os
-  `done` nunca são tocados.
+- `<name>` — the program name, which becomes
+  `<main-root>/.claude/programs/<name>/plan.yaml`. In a repo with a
+  tracker, the custom is to use the project key (`WEGO`); without a tracker,
+  the repo name or the name of the batch of work.
+- `--from-spec docs/spec/<slug>.md` — each success criterion of the
+  specification becomes an item of the queue.
+- `--from-epic docs/epics/<name>.md` — the queue comes from ONE cycle of the
+  value ladder of a `/common:epic` Epic: each sentence of the "O que atravessa"
+  column becomes an item, and the cycle's demonstration script becomes the
+  header's `demonstra:`. Always with `--ciclo`.
+- `--ciclo N` — which cycle of the ladder becomes a queue (the number in the
+  "Ciclo" column). An Epic has several cycles and a queue belongs to only one;
+  the custom is for the queue name to end in `-c<N>`.
+- `--from-jira [column|handoff.json]` — the queue comes from the
+  classification of a triage. With a file, it records a handoff a triage has
+  already produced; with a column name (or nothing, which is `Backlog`), it
+  runs `/board-flow:triage` first and records its handoff.
+- `--source "text"` — where the demands came from, for traceability. Without
+  the flag, the command fills it in from the source it used.
+- `--dry-run` — shows the file that would be written and does not write it.
+- `--on-missing refuse|keep|drop` — what to do with an item that is already in
+  the queue on disk and that the new list does not mention. Default `refuse`:
+  making it vanish silently erases a position and a `why` someone decided. With
+  `--from-jira`, `keep` is the **partial triage**: the queue on disk stays in
+  its own order and the new cards come after it, in the triage's order — the
+  triage read a piece of the column, and its order does not stand against
+  pending items the owner already prioritized. Without `--on-missing`,
+  `--from-jira` does not refuse: `done`/`dropped` items the triage does not
+  mention are preserved as a block at the start of the queue, the triage's
+  items come in the approved order, and the open ones it did not cite come
+  after, in the old order (the command warns which). With `drop`, only those
+  open ones become `dropped`; `done` items are never touched.
 
-**`--from-jira` não consulta o Jira por conta própria.** A ordem de uma fila
-vinda de um board sai da CLASSIFICAÇÃO, nunca da coluna: quem lê os cards,
-procura evidência no código e roteia os quatro baldes é o `/board-flow:triage`.
-Este comando grava o que ele classificou. Montar a fila aqui a partir de uma
-consulta crua ao Jira devolveria a ordem do rank do quadro — que é exatamente a
-ordem que este documento existe para substituir.
+**`--from-jira` does not query Jira on its own.** The order of a queue that
+comes from a board comes from the CLASSIFICATION, never from the column: the one
+who reads the cards, hunts for evidence in the code and routes the four buckets
+is `/board-flow:triage`. This command records what it classified. Building the
+queue here from a raw Jira query would give back the board's rank order — which
+is exactly the order this document exists to replace.
 
 ## Instructions
 
-**A ordem e o `why` são do dono, nunca seus.** Este comando escreve o documento
-que registra uma decisão de priorização — inventar um `why` plausível é pior do
-que não ter nenhum, porque o texto inventado se lê, meses depois, como critério
-que alguém escolheu. Onde o `why` já está escrito (numa spec, num card, no
-`BACKLOG.md`), herde e diga de onde veio. Onde não está, pergunte.
+**The order and the `why` belong to the owner, never to you.** This command
+writes the document that records a prioritization decision — inventing a
+plausible `why` is worse than having none, because the invented text reads,
+months later, as a criterion someone chose. Where the `why` is already written
+(in a spec, a card, `BACKLOG.md`), inherit it and say where it came from. Where
+it is not, ask.
 
-Por isso este comando é `conversational`: a política `default-yes` não é
-injetada aqui, e a skill `guided-interrogation` vale enquanto a fila estiver
-sendo ditada à mão. Perguntar a ordem é o trabalho, não o último recurso.
+That is why this command is `conversational`: the `default-yes` policy is not
+injected here, and the `guided-interrogation` skill applies while the queue is
+being dictated by hand. Asking for the order is the job, not the last resort.
 
-**Não execute nada.** O comando escreve um arquivo. Quem aponta o próximo passo
-é o `/common:next`; quem executa em lote é o `/common:drain-plan` (etapa 3,
-construída em 2026-08-25), na ordem que esta fila guardar.
+**Does not execute anything.** The command writes a file. The
+one who names the next step is `/common:next`; the one who executes in batch is
+`/common:drain-plan` (stage 3, built on 2026-08-25), in the order this queue
+keeps.
 
-**A gravação é mecânica.** Quem valida, funde e grava é
-`common/bin/cepa-plan` — não escreva o YAML na mão com `Write`. O script recusa
-`why` vazio, `id` repetido, `blocked_by` apontando para item inexistente, ciclo
-de bloqueio e `human_pending` sem a chave; se você escrever o arquivo por fora,
-nenhuma dessas recusas acontece.
+**The write is mechanical.** The one who validates, merges and writes is
+`common/bin/cepa-plan` — do not write the YAML by hand with `Write`. The script
+refuses an empty `why`, a repeated `id`, a `blocked_by` pointing to a
+nonexistent item, a blocking cycle and a `human_pending` without the key; if you
+write the file from outside, none of those refusals happens.
 
 ## Workflow
 
-### 1. Resolver a raiz e conferir o nome
+### 1. Resolve the root and check the name
 
-A fila mora no **clone principal**: `<raiz-principal>/.claude/programs/<nome>/`,
-onde `<raiz-principal>` é o pai de `git rev-parse --git-common-dir` sem o
-`/.git` final — dentro de uma worktree ligada isso é o clone PRINCIPAL, não esta
-árvore. Gravar contra o diretório corrente é a perda de 2026-08-18: num repo
-cujo `.gitignore` cobre `.claude/`, o plano fica invisível ao git e morre junto
-com a worktree, sem uma palavra (`docs/execution-plan.md`, "Where the file
-lives").
+The queue lives in the **main clone**: `<main-root>/.claude/programs/<name>/`,
+where `<main-root>` is the parent of
+`git rev-parse --git-common-dir` without the trailing `/.git` — inside a linked
+worktree that is the MAIN clone, not this tree. Writing against the current
+directory is the loss of 2026-08-18: in a repo whose `.gitignore` covers
+`.claude/`, the queue is invisible to git and dies with the worktree, without a
+word (`docs/execution-plan.md`, "Where the file lives").
 
-Você não precisa resolver isso à mão — o `cepa-plan` resolve pela mesma regra —
-mas precisa saber, porque é o caminho que vai no relatório.
+You do not need to resolve this by hand — `cepa-plan` resolves it by the same
+rule — but you need to know it, because it is the path that goes in the report.
 
 ```
-python3 common/bin/cepa-plan check-name <nome> --repo .
+python3 common/bin/cepa-plan check-name <name> --repo .
 ```
 
-Exit 3 é **colisão com um plano de ondas**: pare e diga o nome do programa que
-está lá. Não sugira `--force`, não existe: apagar as ondas é perder a superfície
-e o aceite de cada slice. Peça outro nome.
+Exit 3 is a **collision with a wave plan**: stop and say the name of the
+program that is there. Do not suggest `--force`, it does not exist: erasing the
+waves means losing the surface and the acceptance of each slice. Ask for
+another name.
 
-Exit 0 com a nota "nome ocupado por uma fila" é reescrita, o fluxo normal de
-repriorizar — siga, sabendo que a fila de lá vai ser fundida no passo 4.
+Exit 0 with the note "nome ocupado por uma fila" (name taken by a queue) is a
+rewrite, the normal reprioritization flow — go on, knowing the queue there will
+be merged in step 4.
 
-### 2. Juntar os itens
+### 2. Gather the items
 
-#### Com `--from-spec`
+#### With `--from-spec`
 
-**A leitura da spec é mecânica**, não sua:
+**Reading the spec is mechanical**, not yours:
 
 ```
 python3 common/bin/cepa-plan from-spec docs/spec/<slug>.md
 ```
 
-Ele devolve a lista de itens em JSON — **um item por critério de sucesso**
-(`### CS-N`), na ordem em que aparecem no texto — e avisa no stderr quando a
-spec ainda está em rascunho, quando sobrou pergunta `- [ ]` ou quando algum
-critério não declara **Teste vermelho:**. Não é enfeite que isso seja código: a
-frase que registra a herança da ordem precisa aparecer no arquivo gravado, e
-uma instrução em prosa só prova que o comando PROMETE escrevê-la.
+It returns the list of items as JSON — **one item per success criterion**
+(`### CS-N`), in the order they appear in the text — and warns on stderr when
+the spec is still a draft, when a `- [ ]` question is left over or when some
+criterion does not declare **Teste vermelho:** (red test). It is not decoration
+that this is code: the sentence that records the inherited order must appear in
+the written file, and a prose instruction only proves the command PROMISES to
+write it.
 
-O que sai de lá é rascunho para você revisar com o dono, não resultado final:
+What comes out of there is a draft for you to review with the owner, not the
+final result:
 
-- `id` — `CS-1`, `CS-2`… ou o slug do critério; o que importa é ser estável, é
-  por ele que o `blocked_by` aponta.
-- `title` — o critério em termos observáveis, a linha do próprio `### CS-N`.
-- `why` — o script monta com o que a especificação já escreveu: a
-  **Superfície** onde o critério é observável, o **Teste vermelho** declarado, e
-  a frase que registra a herança — **"herdado da ordem do texto da
-  especificação; ninguém priorizou os critérios entre si"**. Onde a seção
-  Problema/Escopo disser por que aquele critério vem antes dos outros, troque a
-  frase de herança por esse motivo, que é melhor. O relatório repete em voz alta
-  o que ficou herdado.
-- `blocked_by` — o script preenche com o que a própria spec declara em prosa
-  ("Depois do CS-1", "após o CS-2 e CS-3"). Até 2026-09-24 ele devolvia sempre
-  vazio e a regra era você acrescentar à mão; no WEGO ninguém acrescentou. Não
-  deduza dependência além disso, como dois critérios tocarem o mesmo arquivo.
-- `human_pending` — `null`. Na hora de planejar ainda não existe rota a cobrar;
-  o campo é preenchido depois, quando o item fecha e o Implementation Summary
-  diz qual é a rota de validação humana.
+- `id` — `CS-1`, `CS-2`… or the criterion's slug; what matters is that it is
+  stable, since `blocked_by` points by it.
+- `title` — the criterion in observable terms, the line of the `### CS-N`
+  itself.
+- `why` — the script builds it from what the specification already wrote: the
+  **Superfície** (surface) where the criterion is observable, the declared
+  **Teste vermelho**, and the sentence that records the inheritance —
+  **"herdado da ordem do texto da especificação; ninguém priorizou os critérios
+  entre si"** (inherited from the order of the specification's text; nobody
+  prioritized the criteria among themselves). Where the Problema/Escopo section
+  says why that criterion comes before the others, replace the inheritance
+  sentence with that reason, which is better. The report says out loud what was
+  inherited.
+- `blocked_by` — the script fills it with what the spec itself declares in
+  prose ("Depois do CS-1", "após o CS-2 e CS-3"). Until 2026-09-24 it always
+  returned empty and the rule was for you to add it by hand; in WEGO nobody
+  did. Do not deduce dependency beyond that, such as two criteria touching the
+  same file.
+- `human_pending` — `null`. At planning time there is no route to collect on
+  yet; the field is filled in later, when the item closes and the
+  Implementation Summary says what the human validation route is.
 
-**Ordem herdada, e dito.** Os critérios de uma spec não vêm priorizados entre
-si. A preferência registrada no desenho é herdar a ordem do texto e **dizer que
-herdou** — não perguntar item a item, que transfere ao dono um trabalho que ele
-já fez uma vez. Ofereça reordenar em UMA pergunta fechada no fim, com a fila
-inteira à vista.
+**Order inherited, and said so.** The criteria of a spec do not come
+prioritized among themselves. The preference recorded in the design is to
+inherit the order of the text and **say that it inherited it** — not to ask item by item, which hands the owner a job they already did
+once. Offer to reorder in ONE closed question at the end, with the whole queue
+in view.
 
-**Spec ainda em rascunho.** Se o `**Status:**` não for `pronta-para-construir`,
-diga quantas perguntas `- [ ]` ainda estão abertas e faça UMA pergunta fechada:
-fechar a especificação antes (`/common:spec --fechar <slug>`) ou escrever a fila
-assim mesmo. Recomende fechar antes — um critério sem superfície observável vira
-um item de fila que ninguém sabe quando terminou.
+**Spec still a draft.** If `**Status:**` is not `pronta-para-construir`, say
+how many `- [ ]` questions are still open and ask ONE closed question: close
+the specification first (`/common:spec --fechar <slug>`) or write the queue
+anyway. Recommend closing first — a criterion without an observable surface
+becomes a queue item nobody knows when finished.
 
-#### Com `--from-epic` e `--ciclo`
+#### With `--from-epic` and `--ciclo`
 
-A fonte aqui é um ciclo da escada de valor de um Epic (`docs/epics/<nome>.md`,
-escrito pelo `/common:epic`). **A leitura é mecânica**, não sua:
-
-```
-python3 common/bin/cepa-plan from-epic docs/epics/<nome>.md --ciclo N
-```
-
-Ele devolve um JSON com o `demonstra` e os `items` do ciclo, e aplica as regras
-que antes não tinham dono:
-
-- **o `demonstra:` da fila é o roteiro do ciclo**, verbatim. É o que o Epic
-  declara como aceite, e é o que o `cepa-plan show` imprime depois;
-- **um item por frase de "O que atravessa"**, na ordem do texto, com id
-  `C<N>-<k>`. Frase é o trecho terminado em `.` ou `;` fora de crase: o
-  `/common:epic` escreve uma frase por peça, e o Epic escrito à mão antes dele
-  separa as peças com `;`. Abreviação com ponto ("etc.", "p. ex.")
-  também parte a frase: no Epic, ela vai entre crases;
-- **o `why` de cada item diz** de que ciclo e de que Epic a peça veio, que a
-  ordem foi herdada do texto (ninguém priorizou as peças entre si), o
-  **critério de aceite** (o roteiro do ciclo) e a **superfície onde se
-  observa** (as colunas "Efeito em tela" e "Efeito em backend"). Peça nenhuma
-  ganha critério próprio inventado: o Epic não o escreveu;
-- **Epic sem as colunas de efeito não é recusado**, e é dito: cada item nasce
-  com a superfície "não declarada" e um aviso. Recomende ao dono preencher o
-  ciclo pelo `/common:epic` antes de drenar a fila;
-- **Epic em `rascunho`, ou com pergunta `- [ ]`, é aviso**, como na spec.
-  Faça a mesma pergunta fechada: fechar o Epic antes ou escrever a fila assim
-  mesmo. Recomende fechar antes;
-- **ciclo que não existe, sem roteiro ou com "O que atravessa" vazio é
-  recusa**, com exit 2 e o motivo. Não preencha a lacuna por conta própria.
-
-Quando nada mudou no que o `from-epic` devolveu, grave direto com
-`--from-epic <arquivo> --ciclo N` no lugar do `--items`: é o único caminho que
-leva o `demonstra:` ao cabeçalho, porque a lista de itens não o carrega.
-
-#### Com `--from-jira`
-
-A fonte aqui é a **classificação** de uma triagem, não a coluna do quadro.
-
-**Se veio um arquivo** (`--from-jira <repasse.json>`), uma triagem já rodou e o
-repasse dela está no disco — normalmente em
-`<raiz-principal>/.claude/programs/<nome>/triagem-<YYYY-MM-DD>.json`, onde o
-`/board-flow:triage` o deixa. Pule para o passo 3.
-
-**Se veio um nome de coluna** (ou nada, que é `Backlog`), a triagem ainda não
-rodou. Exija as duas coisas de que ela depende, e pare nomeando a que faltar:
-
-- o plugin `board-flow` instalado — sem ele não há quem fale com o Jira
-  (`atlassian-expert` é o único caminho de escrita do harness);
-- um `board-flow.yaml` na raiz do projeto (ou o legado
-  `.claude/board-flow.lifecycle.yaml`), de onde sai o `defaults.project_key` e
-  o `status_map`.
-
-Faltando qualquer uma, **não improvise uma consulta ao Jira**: diga que a fila
-por board precisa da triagem, e ofereça as duas saídas que existem sem ela —
-`--from-spec`, se houver especificação fechada, ou a fila ditada à mão.
-
-Com as duas presentes, rode o `/board-flow:triage <coluna>` e siga o workflow
-dele até o passo 9, que é onde ele grava o repasse. O que volta de lá é a
-classificação nos quatro baldes com a ordem de execução **que o dono confirmou
-no passo 7** — a ordem é dele e da evidência que a triagem juntou, não sua.
-
-**A leitura do repasse é mecânica**, não sua:
+The source here is a cycle of the value ladder of an Epic
+(`docs/epics/<name>.md`, written by `/common:epic`). **The reading is
+mechanical**, not yours:
 
 ```
-python3 common/bin/cepa-plan from-triage <repasse.json>
+python3 common/bin/cepa-plan from-epic docs/epics/<name>.md --ciclo N
 ```
 
-Pelo mesmo motivo do `from-spec`: as regras abaixo moravam na prosa do
-`triage.md`, e prosa de comando erode sem nenhum teste ficar vermelho. O script
-aplica, e recusa quando não dá:
+It returns a JSON with the cycle's `demonstra` and `items`, and applies the
+rules that previously had no owner:
 
-- **só card `ready` vira item `pending`.** Card `implemented` foi para In
-  Review e pertence à fila de PROVA (`/board-flow:prove-drain`); card
-  `needs-refinement` fica no backlog. Os dois saem da fila e o script DIZ
-  quais, com a contagem — repita isso no relatório.
-- **card `obsolete` entra como `dropped`, com o motivo.** O card sai da fila e
-  o documento continua explicando por quê; apagá-lo faz a próxima varredura
-  propor a mesma demanda de novo.
-- **card READY sem `why` é recusa**, não item com `why` inventado. O `why` de
-  cada posição já foi dito no passo 7 da triagem — se sumiu no caminho,
-  pergunte, não preencha.
-- **card ainda em `needs-decision` é recusa.** A grelha do passo 6 não
-  terminou, e gravar assim esconderia uma pergunta em aberto dentro de uma fila
-  que se lê como decidida.
-- **dependência para fora da fila sai do `blocked_by`, e é dita.** Um card
-  READY que dependia de um card que foi para In Review perde o `blocked_by`
-  (o `/common:next` só sabe esperar por item da própria fila) e o aviso nomeia
-  os dois — a partir daí a dependência é do dono, para vigiar.
-- **`--max` nunca é silencioso.** O `remaining_in_column` do repasse vira uma
-  nota `PARCIAL` na linha `source` do plano, e é o que impede uma fila de 15
-  cards de 27 de ser lida, meses depois, como o quadro inteiro.
+- **the queue's `demonstra:` is the cycle's script**, verbatim. It is what the
+  Epic declares as acceptance, and it is what `cepa-plan show` prints later;
+- **one item per sentence of "O que atravessa"**, in the order of the text,
+  with id `C<N>-<k>`. A sentence is the stretch ending in `.` or `;` outside
+  backticks: `/common:epic` writes one sentence per piece, and an Epic written
+  by hand before it separates the pieces with `;`. An abbreviation with a
+  period ("etc.", "p. ex.") also splits the sentence: in the Epic, it goes
+  inside backticks;
+- **the `why` of each item says** which cycle and which Epic the piece came
+  from, that the order was inherited from the text (nobody prioritized the
+  pieces among themselves), the **acceptance criterion** (the cycle's script)
+  and the **surface where it is observed** (the "Efeito em tela" and "Efeito em
+  backend" columns). No piece gets an invented criterion of its own: the Epic
+  did not write one;
+- **an Epic without the effect columns is not refused**, and that is said:
+  each item is born with the surface "não declarada" (not declared) and a
+  warning. Recommend that the owner fill in the cycle through `/common:epic`
+  before draining the queue;
+- **an Epic in `rascunho` (draft), or with a `- [ ]` question, is a warning**,
+  as with the spec. Ask the same closed question: close the Epic first or
+  write the queue anyway. Recommend closing first;
+- **a cycle that does not exist, has no script or has an empty "O que
+  atravessa" is a refusal**, with exit 2 and the reason. Do not fill the gap on
+  your own.
 
-Quando nada mudou no que o `from-triage` devolveu, `--from-triage <arquivo>` faz
-a leitura e a gravação de uma vez, no lugar do `--items`. A linha `source` sai
-do próprio repasse (projeto, coluna, escopo, data, e a nota de parcialidade).
+When nothing changed in what `from-epic` returned, write directly with
+`--from-epic <file> --ciclo N` in place of `--items`: it is the only path
+that brings `demonstra:` into the header, because the item list does not carry
+it.
 
-#### Sem flag — a fila ditada à mão
+#### With `--from-jira`
 
-O caso do repo sem tracker e sem spec (este repo é um). Antes de perguntar
-qualquer coisa, **leia a fonte de demandas que o repo já tem**: `BACKLOG.md`, os
-documentos em `docs/`, os handoffs em `<raiz-principal>/.claude/handoffs/`.
-Pergunta cuja resposta estava no repo queima a paciência do dono.
+The source here is the **classification** of a triage, not the board column.
 
-Depois, em rodadas de no máximo quatro perguntas:
+**If a file came** (`--from-jira <handoff.json>`), a triage has already run and
+its handoff is on disk — usually at
+`<main-root>/.claude/programs/<name>/triagem-<YYYY-MM-DD>.json`, where
+`/board-flow:triage` leaves it. Skip to step 3.
 
-1. **quais demandas entram** — proponha a lista que você leu, com a âncora de
-   cada uma na fonte (`"P9 do BACKLOG"`, um ADR, um número de issue), e deixe o
-   dono cortar;
-2. **em que ordem** — proponha uma, com o motivo de cada posição, e deixe o dono
-   corrigir. Proposta com motivo é bem mais barata de responder que uma pergunta
-   aberta;
-3. **o `why` de cada posição** — o que você não conseguiu tirar da fonte,
-   pergunte. Um item sem `why` não é gravável, e o `cepa-plan` recusa a fila
-   inteira por causa dele.
+**If a column name came** (or nothing, which is `Backlog`), the triage has not
+run yet. Require the two things it depends on, and stop naming whichever is
+missing:
 
-### 3. Mostrar a fila antes de gravar
+- the `board-flow` plugin installed — without it there is no one to talk to
+  Jira (`atlassian-expert` is the harness's only write path);
+- a `board-flow.yaml` at the project root (or the legacy
+  `.claude/board-flow.lifecycle.yaml`), where `defaults.project_key` and the
+  `status_map` come from.
 
-Sempre. Rode com `--dry-run` e mostre a fila em três colunas — posição, item,
-`why` em uma linha — mais o que a fila do disco já tinha, se for reescrita.
-**Uma pergunta fechada** ("grava assim?"), não uma revisão item a item.
+If either is missing, **do not improvise a Jira query**: say that a queue from a board needs the triage, and offer
+the two ways out that exist without it — `--from-spec`, if there is a closed
+specification, or the queue dictated by hand.
 
-### 4. Gravar
+With both present, run `/board-flow:triage <column>` and follow its workflow up
+to step 9, which is where it records the handoff. What comes back is the
+classification in the four buckets with the execution order **that the owner
+confirmed in step 7** — the order is theirs and the evidence the triage
+gathered, not yours.
+
+**Reading the handoff is mechanical**, not yours:
 
 ```
-python3 common/bin/cepa-plan write <nome> \
-  --items <arquivo.json> --source "<de onde veio>" --quando <YYYY-MM-DD> --repo .
+python3 common/bin/cepa-plan from-triage <handoff.json>
 ```
 
-Quando nada mudou no que o `from-spec` (ou o `from-triage`, ou o
-`from-epic`) devolveu, `--from-spec <arquivo>` / `--from-triage <arquivo>` /
-`--from-epic <arquivo> --ciclo N` faz as duas coisas de uma vez, no lugar do
+For the same reason as `from-spec`: the rules below lived in the prose of
+`triage.md`, and command prose erodes without any test going red. The script
+applies them, and refuses when it cannot:
+
+- **only a `ready` card becomes a `pending` item.** An `implemented` card went
+  to In Review and belongs to the PROOF queue (`/board-flow:prove-drain`); a
+  `needs-refinement` card stays in the backlog. Both leave the queue and the
+  script SAYS which, with the count — repeat that in the report.
+- **an `obsolete` card comes in as `dropped`, with the reason.** The card
+  leaves the queue and the document keeps explaining why; deleting it makes the
+  next sweep propose the same demand again.
+- **a READY card without a `why` is a refusal**, not an item with an invented
+  `why`. The `why` of each position was already said in step 7 of the triage —
+  if it got lost on the way, ask, do not fill it in.
+- **a card still in `needs-decision` is a refusal.** The grilling of step 6 is
+  not finished, and writing like that would hide an open question inside a
+  queue that reads as decided.
+- **a dependency pointing outside the queue leaves `blocked_by`, and that is
+  said.** A READY card that depended on a card that went to In Review loses its
+  `blocked_by` (`/common:next` only knows how to wait for an item of its own
+  queue) and the warning names both — from then on the dependency is the
+  owner's to watch.
+- **`--max` is never silent.** The handoff's `remaining_in_column` becomes a
+  `PARCIAL` note on the plan's `source` line, and that is what keeps a queue of
+  15 cards out of 27 from being read, months later, as the whole board.
+
+When nothing changed in what `from-triage` returned, `--from-triage <file>`
+does the reading and the writing at once, in place of `--items`. The `source`
+line comes from the handoff itself (project, column, scope, date, and the
+partiality note).
+
+#### No flag — the queue dictated by hand
+
+The case of the repo with no tracker and no spec (this repo is one). Before
+asking anything, **read the source of demands the repo already has**:
+`BACKLOG.md`, the documents in `docs/`, the handoffs in
+`<main-root>/.claude/handoffs/`. A question whose answer was in the repo
+burns the owner's patience.
+
+Then, in rounds of at most four questions:
+
+1. **which demands come in** — propose the list you read, with each one's
+   anchor in the source (`"P9 do BACKLOG"`, an ADR, an issue number), and let
+   the owner cut;
+2. **in what order** — propose one, with the reason for each position, and let
+   the owner correct it. A proposal with a reason is much cheaper to answer
+   than an open question;
+3. **the `why` of each position** — whatever you could not get from the
+   source, ask. An item without a `why` cannot be written, and `cepa-plan`
+   refuses the whole queue because of it.
+
+### 3. Show the queue before writing
+
+Always. Run with `--dry-run` and show the queue in three columns — position,
+item, `why` on one line — plus what the queue on disk already had, if it is a
+rewrite. **One closed question** ("write it like this?"), not an item-by-item
+review. Ask it in Brazilian Portuguese (pt-BR).
+
+### 4. Write
+
+```
+python3 common/bin/cepa-plan write <name> \
+  --items <file.json> --source "<where it came from>" --quando <YYYY-MM-DD> --repo .
+```
+
+When nothing changed in what `from-spec` (or `from-triage`, or `from-epic`)
+returned, `--from-spec <file>` / `--from-triage <file>` /
+`--from-epic <file> --ciclo N` does both things at once, in place of
 `--items`.
 
-Escreva os itens num arquivo JSON temporário (ou mande por stdin com `-`). O
-script:
+Write the items into a temporary JSON file (or send them via stdin with `-`).
+The script:
 
-- valida tudo e **não grava nada** se qualquer item tiver lacuna — a fila é um
-  documento só, meia fila gravada é pior que nenhuma;
-- funde com o que já está no disco: a lista nova manda na ordem, no `title` e no
-  `why`, que são decisão de planejamento; o disco manda no `status` e no
-  `human_pending`, que vieram da execução. **Isso não é detalhe**: só o humano
-  fecha um `human_pending`, então uma reescrita que os zerasse apagaria dívida
-  que ninguém pagou;
-- copia o arquivo anterior para `plan.yaml.bak` antes de sobrescrever, porque os
-  comentários escritos à mão (a evidência de cada `done`, por exemplo) não
-  sobrevivem à reescrita.
+- validates everything and **writes nothing** if any item has a gap — the
+  queue is one document, half a queue written is worse than none;
+- merges with what is already on disk: the new list rules the order, the
+  `title` and the `why`, which are planning decisions; the disk rules the
+  `status` and the `human_pending`, which came from execution. **This is not a
+  detail**: only the human closes a `human_pending`, so a rewrite that zeroed
+  them would erase debt nobody paid;
+- copies the previous file to `plan.yaml.bak` before overwriting, because
+  comments written by hand (the evidence of each `done`, for example) do not
+  survive the rewrite.
 
-Exit 4 é item do disco que a lista nova não menciona (o `--from-jira` não
-recusa mais: `done`/`dropped` são preservados e os abertos ausentes vão depois,
-com aviso): **não passe
-`--on-missing drop` por conta própria** — mostre os ids e pergunte.
+Exit 4 is an item on disk that the new list does not mention (`--from-jira`
+no longer refuses: `done`/`dropped` are preserved and the absent open ones go
+after, with a warning): **do not pass
+`--on-missing drop` on your own** — show the ids and ask.
 
-### 5. Relatar e apontar para frente
+### 5. Report and point forward
 
-Diga onde gravou, quantos itens, de que fonte, e o que **não** foi decidido
-aqui. Termine nomeando quem lê o arquivo agora: `/common:next`.
+Say where it was written, how many items, from what source, and what was
+**not** decided here. End by naming who reads the file now: `/common:next`.
 
 ## Report
 
+The report is written in Brazilian Portuguese (pt-BR); the template below is
+its English rendering:
+
 ```
-Fila gravada: <raiz-principal>/.claude/programs/cepa/plan.yaml
-  7 itens · fonte: docs/spec/planejador-de-lotes.md (7 critérios de sucesso)
+Queue written: <main-root>/.claude/programs/cepa/plan.yaml
+  7 items · source: docs/spec/planejador-de-lotes.md (7 success criteria)
 
-Ordem herdada do texto da especificação. Ninguém priorizou os critérios entre
-si — se a ordem importa, é a hora de dizer.
+Order inherited from the specification's text. Nobody prioritized the criteria
+among themselves — if the order matters, now is the time to say so.
 
-  1. CS-1 — planejador aceita uma fonte que não é o BACKLOG
-     porque: é o único critério que os outros seis pressupõem
+  1. CS-1 — planner accepts a source that is not the BACKLOG
+     because: it is the only criterion the other six presuppose
   2. CS-2 — ...
 
-Nada pendente com você: nenhum item nasceu com rota de validação humana; esse
-campo se preenche quando o item fecha.
+Nothing pending with you: no item was born with a human validation route; that
+field gets filled in when the item closes.
 
-Próximo passo: /common:next (nomeia UM item e o porquê dele).
+Next step: /common:next (names ONE item and the why of it).
 ```
 
 ## Constraints
 
-- **Nunca inventa ordem nem `why`.** Herda de uma fonte escrita e diz de onde,
-  ou pergunta. Um `why` plausível escrito por você se lê depois como critério
-  que alguém escolheu, e é exatamente a mentira que a fila existe para não
-  contar.
-- **Nunca grava por cima de um plano de ondas.** Colisão é recusa nomeada, sem
-  escape.
-- **Nunca consulta o Jira direto.** Com `--from-jira`, quem lê os cards e
-  classifica é o `/board-flow:triage`; este comando grava o que ele classificou.
-  Uma fila montada de uma consulta crua à coluna herda a ordem do rank do
-  quadro, que é a ordem que este documento existe para substituir.
-- **Nunca escreve o YAML à mão.** A gravação passa por `common/bin/cepa-plan`,
-  que é onde as recusas moram.
-- **Não fecha `human_pending` de ninguém.** Item que vem do disco com pendência
-  aberta continua com ela. Quem fecha é o dono, no `/common:next --sync`.
-- **Não executa e não mexe no tracker.** O único arquivo que este comando
-  escreve é o plano (mais o `.bak` da versão anterior).
-- **Uma fila por nome.** Ao encontrar uma existente, funde; não cria
-  `<nome>-2`.
+- **Never invents order or `why`.** It inherits
+  from a written source and says where from, or asks. A plausible `why` written
+  by you reads later as a criterion someone chose, and that is exactly the lie
+  the queue exists not to tell.
+- **Never writes over a wave plan.** A collision is a named refusal, with no escape.
+- **Never queries Jira directly.** With
+  `--from-jira`, the one who reads the cards and classifies is
+  `/board-flow:triage`; this command records what it classified. A queue built
+  from a raw query to the column inherits the board's rank order, which is the
+  order this document exists to replace.
+- **Never writes the YAML by hand.** The write
+  goes through `common/bin/cepa-plan`, which is where the refusals live.
+- **Never closes anyone's `human_pending`.**
+  An item that comes from disk with an open pending action keeps it. The one
+  who closes it is the owner, in `/common:next --sync`.
+- **Does not execute and does not touch the tracker.** The only file this command writes is the queue (plus the `.bak`
+  of the previous version).
+- **One queue per name.** On finding an existing one, merge; do not create
+  `<name>-2`.
 
 ## See also
 
-- [`docs/execution-plan.md`](../../docs/execution-plan.md) — o mecanismo inteiro e por que o arquivo mora no clone principal
-- [`common/plan-schema.yaml`](../plan-schema.yaml) — o schema anotado, os dois modos
-- `/common:next` — o consumidor da fila
-- `/common:spec` — a fonte que `--from-spec` lê
-- `/board-flow:triage` — a fonte que `--from-jira` lê: ele classifica os cards e entrega a ordem; desde a etapa 2 ele não escreve mais o `plan.yaml`
+- [`docs/execution-plan.md`](../../docs/execution-plan.md) — the whole mechanism and why the file lives in the main clone
+- [`common/plan-schema.yaml`](../plan-schema.yaml) — the annotated schema, the two modes
+- `/common:next` — the queue's consumer
+- `/common:spec` — the source `--from-spec` reads
+- `/board-flow:triage` — the source `--from-jira` reads: it classifies the cards and hands over the order; since stage 2 it no longer writes `plan.yaml`

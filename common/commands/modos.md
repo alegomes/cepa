@@ -1,6 +1,6 @@
 ---
-description: Mostra a tabela dos modos de trabalho — o que cada modo pede para entrar, o que ele produz, e o que precisa ser verdade para fechar. Responde "em que modo eu estou mesmo, e qual era o propósito dele?" sem abrir o documento de 307 linhas. Marca o modo da sessão atual. Read-only, não muda modo nenhum.
-argument-hint: [nome-do-modo]
+description: Shows the table of work modes — what each mode asks for to enter, what it produces, and what must be true to close it. Answers "what mode am I in again, and what was it for?" without opening the 307-line document. Marks the current session's mode. Read-only, changes no mode.
+argument-hint: [mode-name]
 interaction: conversational
 ---
 
@@ -8,39 +8,41 @@ interaction: conversational
 
 ## Purpose
 
-Toda sessão declara um modo, e o modo é um **estado que dura** até a condição de
-saída ser satisfeita — não um rótulo. Só que a definição de cada um mora em
-`docs/modos-de-trabalho.md`, com 307 linhas, e ninguém abre isso no meio do
-trabalho. O que acontece no lugar é chutar o propósito do modo em que se está.
+Every session declares a mode, and the mode is a **state that lasts** until its
+exit condition is met — not a label. But the definition of each one lives in
+`docs/modos-de-trabalho.md`, 307 lines long, and nobody opens that in the middle
+of the work. What happens instead is guessing the purpose of the mode you are in.
 
-Este comando é a tabela e nada além dela.
+This command is the table and nothing more.
 
-**Não troca de modo.** Trocar exige nova sessão (`cepa --modo <x>`), de
-propósito: se desse para trocar no meio, o modo voltaria a ser rótulo.
+**It does not switch modes.** Switching takes a new session (`cepa --modo <x>`),
+on purpose: if you could switch midway, the mode would go back to being a label.
 
 ## Steps
 
-1. Rode, repassando o argumento verbatim:
+1. Run, passing the argument through verbatim:
 
    ```
    python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-modos" $ARGUMENTS
    ```
 
-2. Mostre a saída **na íntegra**. Ela já sai em pt-BR e formatada — não resuma,
-   não reordene, não escolha "os mais relevantes". A tabela inteira é o produto:
-   quem pediu esqueceu qual era qual, e um resumo devolve o mesmo problema.
+2. Show the output **in full**. It already comes out in Brazilian Portuguese
+   (pt-BR) and formatted — do not summarize, do not reorder, do not pick "the
+   most relevant". The whole table is the product: whoever asked forgot which
+   was which, and a summary brings back the same problem.
 
-3. Se o usuário nomeou um modo (`/common:modos reforma`), o script já filtra —
-   você não filtra nada por conta própria.
+3. If the user named a mode (`/common:modos reforma`), the script already
+   filters — you do not filter anything on your own.
 
 ## Notes
 
-- A fonte é `common/hooks/_modos.py`, o mesmo arquivo que o `session-mode.py` lê
-  para injetar a condição de saída a cada turno. Uma tabela, dois leitores; o
-  `tests/test_modos_fonte_unica.py` reprova se a lista de nomes válidos do
-  `cepa` divergir dela.
-- São 7 modos. O 8º do documento, `deploy`, está fora da rodada por decisão do
-  dono — é o único que depende de infra externa (ambiente, credencial,
-  pipeline) e travaria os outros se entrasse junto.
-- Para saber só em que modo você está, sem a tabela: a statusline mostra
-  `🎯 <modo>`.
+- The source is `common/hooks/_modos.py`, the same file `session-mode.py` reads
+  to inject the exit condition on every turn. One table, two readers;
+  `tests/test_modos_fonte_unica.py` fails if the list of valid names in `cepa`
+  diverges from it.
+- There are 7 modes. The document's 8th, `deploy`, is out of this round by the
+  owner's decision — it is the only one that depends on external infra
+  (environment, credential, pipeline) and would block the others if it came in
+  together.
+- To know only which mode you are in, without the table: the statusline shows
+  `🎯 <mode>`.

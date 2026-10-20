@@ -1,6 +1,6 @@
 ---
-description: Entrevista o dono no estilo "grill me" até um pacote de trabalho virar Epic demonstrável por ciclos, e escreve `docs/epics/<nome>.md`. Uma pergunta por turno, em prosa, sem lista de opções; o agente propõe a resposta, o dono corrige, e cada resposta é desafiada uma vez ("quem vê isso e onde?", "o que quebra se faltar?") antes de ser aceita e gravada no mesmo turno. Só declara `Status: pronta` quando cada ciclo da escada tem roteiro com efeito observável em tela e em backend, há pelo menos um invariante e a seção "Decidido sem perguntar" existe; o `spec-readiness-gate` barra o resto. Não escreve código. Retomável: rodar de novo sobre o mesmo nome continua de onde parou.
-argument-hint: <nome> [a intenção em prosa]
+description: Interviews the owner "grill me" style until a package of work becomes an Epic demonstrable in cycles, and writes `docs/epics/<name>.md`. One question per turn, in prose, with no list of options; the agent proposes the answer, the owner corrects it, and each answer is challenged once ("quem vê isso e onde?" — who sees this and where?; "o que quebra se faltar?" — what breaks if it is missing?) before being accepted and written down in the same turn. Only declares `Status: pronta` when every cycle of the ladder has a script with an observable effect on screen and in the backend, there is at least one invariant and the "Decidido sem perguntar" section exists; the `spec-readiness-gate` blocks the rest. Writes no code. Resumable: running it again on the same name continues where it stopped.
+argument-hint: <name> [the intent in prose]
 interaction: conversational
 ---
 
@@ -8,223 +8,246 @@ interaction: conversational
 
 ## Purpose
 
-Escrever o documento que diz **o que alguém vê funcionando no fim de cada
-ciclo** de um pacote de trabalho grande, antes de qualquer fila existir.
+Write the document that says **what someone sees working at the end of each
+cycle** of a large package of work, before any queue exists.
 
-O `/common:spec` fecha uma especificação por critérios: cada um com superfície e
-teste vermelho. Isso serve para um pedaço que cabe numa fila. Não serve para um
-pacote que leva várias filas, em que a pergunta que importa é outra: em que
-ordem o valor aparece, e como o dono confere que apareceu. Essa é a escada de
-valor do formato `docs/epics/<nome>.md`, que nasceu à mão em
-`docs/epics/cepa-em-espiral.md` (decisão 1 da estratégia em
-`docs/estrategia-cepa-proximo-nivel.md`).
+`/common:spec` closes a specification by criteria: each one with a surface and
+a red test. That serves a piece that fits in one queue. It does not serve a
+package that takes several queues, where the question that matters is a
+different one: in what order the value shows up, and how the owner checks that
+it showed up. That is the value ladder of the `docs/epics/<name>.md` format,
+which was born by hand in `docs/epics/cepa-em-espiral.md` (decision 1 of the
+strategy in `docs/estrategia-cepa-proximo-nivel.md`).
 
-Por isso é um comando à parte e não uma flag do spec: o spec fecha com
-critérios, o epic fecha com roteiros. Depois dele, o `/common:plan --from-epic
-docs/epics/<nome>.md --ciclo N` transforma um ciclo em fila.
+That is why it is a command of its own and not a flag of spec: spec closes
+with criteria, epic closes with scripts. After it, `/common:plan --from-epic
+docs/epics/<name>.md --ciclo N` turns one cycle into a queue.
 
-**Grill me** é o pedido do dono para este comando (2026-10-08), e quer dizer
-cinco coisas, que estão abaixo como regra: uma pergunta por turno, em prosa,
-sem menu; o agente propõe a resposta e o dono corrige; a resposta é desafiada
-uma vez antes de ser aceita; a resposta aceita é gravada no mesmo turno; e o
-documento fecha pelo crivo, não por cansaço.
+**Grill me** is the owner's request for this command (2026-10-08), and it
+means five things, which are below as rules: one question per turn, in prose,
+with no menu; the agent proposes the answer and the owner corrects it; the
+answer is challenged once before being accepted; the accepted answer is
+written down in the same turn; and the document closes by the sieve, not by
+fatigue.
 
 ## Variables
 
-- `<nome>` — o Epic em kebab-case. O arquivo é `docs/epics/<nome>.md` na raiz do
-  repo onde a sessão está.
-- `[a intenção em prosa]` — opcional: o que o dono quer, do jeito que contaria a
-  uma pessoa. Sem ela, a primeira pergunta é a intenção.
+- `<name>` — the Epic in kebab-case. The file is `docs/epics/<name>.md` at the
+  root of the repo the session is in.
+- `[the intent in prose]` — optional: what the owner wants, the way they would
+  tell a person. Without it, the first question is the intent.
 
 ## Instructions
 
-Você é o entrevistador. Carregue a skill `guided-interrogation` e opere sob ela
-do primeiro turno ao último: dentro deste frame, `active-listener`,
-`zero-micromanagement` e `default-yes` estão suspensas. Este comando é **mais
-estreito** que a skill num ponto: a skill admite até quatro perguntas por
-rodada; aqui é **uma pergunta por turno**.
+You are the interviewer. Load the `guided-interrogation` skill and operate
+under it from the first turn to the last: inside this frame,
+`active-listener`, `zero-micromanagement` and `default-yes` are suspended. This
+command is **narrower** than the skill on one point: the skill allows up to
+four questions per round; here it is **one question per turn**.
 
-**Não implemente nada.** O único arquivo que este comando escreve é
-`docs/epics/<nome>.md`. Se você se pegar querendo ler código para responder uma
-pergunta de produto, a pergunta é para o dono; ler código para não perguntar o
-que o repo já responde, sim.
+Conduct the interview with the owner in Brazilian Portuguese (pt-BR), and
+write the document in pt-BR.
 
-**Não delegue a subagente.** Um subagente não conversa com o dono, e a pergunta
-voltaria como suposição.
+**Do not implement anything.** The only file this command writes is
+`docs/epics/<name>.md`. If you catch yourself wanting to read code to answer a
+product question, the question is for the owner; reading code so as not to ask
+what the repo already answers, yes.
 
-**Rode na sessão em modo `descoberta`.** É o modo que produz este documento: o
-`modo-escrita-gate` libera `docs/epics/**` nele. O `/common:session` recusa este
-comando (o `session-routine-guard` lê o `interaction: conversational` acima),
-porque cada resposta decide a pergunta seguinte e nada disso é antecipável.
+**Do not delegate to a subagent.** A subagent does not talk to the owner, and
+the question would come back as an assumption.
+
+**Run in a session in `descoberta` mode.** It is the mode that produces this
+document: `modo-escrita-gate` allows `docs/epics/**` in it. `/common:session`
+refuses this command (`session-routine-guard` reads the
+`interaction: conversational` above), because each answer decides the next
+question and none of that can be anticipated.
 
 ## Workflow
 
-### 1. Abrir ou retomar o documento
+### 1. Open or resume the document
 
-Se `docs/epics/<nome>.md` existe, leia-o inteiro e retome da primeira lacuna
-(passo 3 diz a ordem): não recomece, e não faça de novo uma pergunta que já tem
-`- [x]`. Se não existe, crie com o esqueleto do passo 6 e `**Status:**
-rascunho` antes da primeira pergunta. O gate nunca incomoda enquanto o status
-for `rascunho`.
+If `docs/epics/<name>.md` exists, read it whole and resume from the first gap
+(step 3 gives the order): do not start over, and do not ask again a question
+that already has `- [x]`. If it does not exist, create it with the skeleton of
+step 6 and `**Status:** rascunho` (draft) before the first question. The gate
+never bothers you while the status is `rascunho`.
 
-### 2. Ler antes de perguntar
+### 2. Read before asking
 
-Antes da primeira pergunta, leia o que já responde parte delas: `docs/` (a
-estratégia, as especificações, os ADRs), o `BACKLOG.md`, os outros
-`docs/epics/*.md`, e o código da área que a intenção nomeia. A pergunta boa é a
-que sobra depois de ler. Uma pergunta cuja resposta estava no repo ensina ao
-dono que a entrevista é burocracia.
+Before the first question, read what already answers part of them: `docs/`
+(the strategy, the specifications, the ADRs), `BACKLOG.md`, the other
+`docs/epics/*.md`, and the code of the area the intent names. The good question
+is the one left over after reading. A question whose answer was in the repo
+teaches the owner that the interview is bureaucracy.
 
-### 3. Perguntar, uma por turno, na ordem do custo de errar
+### 3. Ask, one per turn, in order of the cost of getting it wrong
 
-A ordem das lacunas:
+The order of the gaps:
 
-1. **Intenção**, em dois turnos: primeiro o que o dono quer, em duas ou três
-   frases na voz dele; no turno seguinte, o que hoje dói. São duas perguntas,
-   e juntá-las é a pergunta dupla do primeiro turno. Se a intenção veio no
-   argumento, grave-a e pergunte só o que o operador (ou quem sofre) faz hoje;
-   o que dói nesse caminho é a pergunta do turno seguinte.
-2. **Invariantes** — o que nunca pode regredir enquanto os ciclos andam.
-3. **A escada** — quantos ciclos e o nome de cada um; depois, ciclo a ciclo:
-   **Roteiro** (o que o dono vê funcionando no fim do ciclo), **Efeito em tela**
-   (onde, na tela, alguém vê que aconteceu), **Efeito em backend** (o registro,
-   endpoint ou evento que prova que aconteceu de verdade, não só na tela), **O
-   que atravessa** (as peças que mudam, uma frase por peça) e **Quando**.
-4. **Perguntas em aberto** que a própria conversa levantou.
+1. **Intent**, in two turns: first what the owner
+   wants, in two or three sentences in their voice; in the next turn, what
+   hurts today. Those are two questions, and joining them is the double
+   question of the first turn.
+   If the intent came in the argument, record it and ask only what the
+   operator (or whoever suffers) does today; what hurts along that path is
+   the question of the following turn.
+2. **Invariants** — what must never regress while the cycles move.
+3. **The ladder** — how many cycles and the name of each; then, cycle by cycle:
+   **Roteiro** (script: what the owner sees working at the end of the cycle),
+   **Efeito em tela** (screen effect: where, on screen, someone sees that it
+   happened), **Efeito em backend** (backend effect: the record, endpoint or
+   event that proves it really happened, not only on screen), **O que
+   atravessa** (what cuts across: the pieces that change, one sentence per
+   piece) and **Quando** (when).
+4. **Open questions** that the conversation itself raised.
 
-Cada turno tem exatamente **uma pergunta**, escrita em **prosa**, terminando
-com `?`, e é o único `?` do turno: "isso, e também aquilo?" são duas. **Nunca
-uma lista de opções**: nada de "a) … b) … c)", nada de bullets de
-alternativas, nada de `AskUserQuestion`, e nada de alternativas enumeradas
-dentro da frase ("dói mais achar o contrato, achar a cláusula ou entender a
-cláusula?"), que é o mesmo menu escrito em linha. Menu faz o dono escolher
-entre as respostas que o agente imaginou, e o grill me existe para sair do que
-o agente imaginou. A alternativa que você acha mais provável vai na proposta,
-não na pergunta.
+Each turn has exactly **one question**, written in **prose**, ending with `?`,
+and it is the only `?` of the turn: "this, and also that?" is two.
+**Never a list of options**: no "a) … b) …
+c)", no bullets of alternatives, no `AskUserQuestion`, and no alternatives
+enumerated inside the sentence ("does it hurt more to find the contract, find
+the clause or understand the clause?"), which is the same
+menu written inline. A menu makes the owner choose among the answers the
+agent imagined, and grill me exists to get out of what the agent imagined. The
+alternative you think most likely goes in the proposal, not in the question.
 
-**Antes de encerrar o turno, releia a pergunta.** Se ela tem um "e" ou uma
-vírgula ligando dois pedidos ("onde ele vê isso, e o que precisa enxergar
-ali?"), corte o segundo: ele é a pergunta do próximo turno. O primeiro turno é
-onde isso mais escapa, porque tudo parece urgente na largada; as transcrições
-de 2026-10-08 mostraram a pergunta dupla no turno 1 de duas rodadas seguidas.
+**Before ending the turn, reread the question.** If it has
+an "and" or a comma linking two requests ("where does he see this, and what
+does he need to see there?"), cut the second one: it is the
+question of the next turn. The first turn is where this slips most, because
+everything looks urgent at the start; the transcripts of 2026-10-08 showed the
+double question in turn 1 of two consecutive rounds.
 
-**Turno de entrevista é conversa, não relatório de trabalho.** Gravar no
-arquivo a cada turno não transforma o turno em relatório: não use o formato
-`plain-report` aqui (nada de `**Pra você:**`, de "Detalhe técnico", de lista
-numerada de decisões com "Recomendo sim"). O turno tem, no máximo, uma linha
-dizendo o que foi gravado, e termina na pergunta. Pergunta fechada numerada é
-menu com outra roupa. O relatório no formato `plain-report` vem uma vez, no
-fechamento (passo 5).
+**An interview turn is conversation, not a work report.** Writing to the file every turn does not turn the turn into a
+report: do not use the `plain-report` format here (no `**Pra você:**`, no
+"Detalhe técnico", no numbered list of decisions with "Recomendo sim"). The
+turn has, at most, one line saying what was written, and ends on the question.
+A numbered closed question is a menu in other clothes. The report in the
+`plain-report` format comes once, at closing (step 5).
 
-**Proponha a resposta junto com a pergunta**, em uma frase, com o porquê, e
-ponha a proposta **antes** da pergunta, para o turno terminar nela: "Minha
-proposta é que o operador veja as três respostas na tela de upload, porque é a
-primeira tela que ele já usa. Onde ele deveria ver as respostas?" O dono
-corrige mais rápido do que escreve do zero, e a proposta mostra o que o agente
-entendeu.
+**Propose the answer along with the question**, in one sentence, with the
+why, and put the proposal **before** the question, so
+the turn ends on it. Example (the actual turn is in pt-BR): "My proposal is
+that the operator sees the three answers on the upload screen, because it is
+the first screen he already uses. Where should he see the answers?" The owner
+corrects faster than he writes from scratch, and the proposal shows what the
+agent understood.
 
-O teste para saber se algo vira pergunta continua o da skill: **duas respostas
-diferentes aqui mudam o que vai ser construído ou como vai ser demonstrado?**
-Se não, decida e registre em "Decidido sem perguntar".
+The test for whether something becomes a question is still the skill's: **do
+two different answers here change what will be built or how it will be
+demonstrated?** If not, decide and record it in "Decidido sem perguntar"
+(decided without asking).
 
-### 4. Desafiar uma vez, aceitar, gravar no mesmo turno
+### 4. Challenge once, accept, write down in the same turn
 
-Quando o dono responde, **não aceite de primeira**. Desafie a resposta **uma
-vez**, com uma pergunta só, apontada para o buraco mais caro dela. Os dois
-desafios-modelo:
+When the owner answers, **do not accept it at first**. Challenge the answer
+**once**, with a single question, aimed at its most expensive hole. The two
+model challenges (asked in pt-BR, as written):
 
-- "quem vê isso e onde?" — para roteiro e efeito: se ninguém vê, ou se só se vê
-  no log, não é demonstração;
-- "o que quebra se faltar?" — para invariante, ciclo e peça que atravessa: se
-  nada quebra, não é invariante, e talvez o ciclo não precise existir.
+- "quem vê isso e onde?" (who sees this and where?) — for script and effect: if
+  nobody sees it, or if it is only seen in the log, it is not a demonstration;
+- "o que quebra se faltar?" (what breaks if it is missing?) — for invariant,
+  cycle and cross-cutting piece: if nothing breaks, it is not an invariant, and
+  maybe the cycle does not need to exist.
 
-No turno do desafio, registre a pergunta como `- [ ]` em "Perguntas em aberto",
-com a resposta provisória do dono na mesma linha. O desafio é **um só**: a
-resposta que o dono dá a ele é aceita como está, mesmo que você ainda
-discorde. Discordância que sobra vai, nomeada, para "Riscos"; não vira segundo
-desafio, porque desafio que não acaba é cansar o dono até ele ceder.
+In the challenge turn, record the question as `- [ ]` in "Perguntas em aberto"
+(open questions), with the owner's provisional answer on the same line. The
+challenge is **only one**: the answer the owner gives to it is accepted as is,
+even if you still disagree. Leftover disagreement goes, named, to "Riscos"
+(risks); it does not become a second challenge, because a challenge that never
+ends is wearing the owner down until he gives in.
 
-No turno em que a resposta é aceita, **antes da próxima pergunta**, grave-a no
-arquivo: na seção a que pertence (a célula da escada, o item de invariante, o
-parágrafo da intenção) e marque a linha de "Perguntas em aberto" como `- [x]`
-com a resposta aceita. Só então faça a próxima pergunta. Resposta que só existe
-na conversa se perde no primeiro compactar de contexto, e o dono responde tudo
-de novo.
+In the turn in which the answer is accepted, **before the next question**,
+write it to the file: in the section it belongs to (the ladder cell, the
+invariant item, the intent paragraph) and mark the line in "Perguntas em
+aberto" as `- [x]` with the accepted answer. Only then ask the next question.
+An answer that exists only in the conversation is lost at the first context
+compaction, and the owner answers everything again. That is what "in the
+same turn" means throughout this command.
 
-### 5. Fechar pelo crivo, nunca por cansaço
+### 5. Close by the sieve, never by fatigue
 
-O Epic vira `**Status:** pronta` quando, e só quando:
+The Epic becomes `**Status:** pronta` (ready) when, and only when:
 
-- a tabela de `## Escada de valor` tem pelo menos um ciclo, e cada ciclo
-  preenche **Roteiro**, **Efeito em tela** e **Efeito em backend**;
-- `## Invariantes` tem pelo menos um item;
-- a seção `## Decidido sem perguntar` existe (vazia de decisões é aceitável;
-  ausente, não);
-- nenhuma `- [ ]` sobrou em "Perguntas em aberto".
+- the `## Escada de valor` table has at least one cycle, and each cycle fills
+  in **Roteiro**, **Efeito em tela** and **Efeito em backend**;
+- `## Invariantes` has at least one item;
+- the `## Decidido sem perguntar` section exists (empty of decisions is
+  acceptable; missing, no);
+- no `- [ ]` is left in "Perguntas em aberto".
 
-O hook `spec-readiness-gate` aplica esse crivo a todo arquivo em
-`docs/epics/*.md` e a todo documento que abre com `# Epic:`, e barra a escrita
-do `Status: pronta` enquanto faltar qualquer item, dizendo qual ciclo e qual
-coluna. Se ele barrar, **a resposta certa é voltar a perguntar**, nunca encher a
-célula até passar.
+The `spec-readiness-gate` hook applies this sieve to every file in
+`docs/epics/*.md` and to every document that opens with `# Epic:`, and blocks
+writing `Status: pronta` while any item is missing, saying which cycle and
+which column. If it blocks, **the right response is to go back to asking**,
+never to fill the cell until it passes.
 
-**Quando o dono pede `pronta` antes do crivo passar, recuse em voz alta.** Diga
-em uma frase o que ainda falta (qual ciclo, qual coluna, qual seção) e faça a
-pergunta dessa lacuna. Não marcar e não dizer nada deixa o dono achando que
-foi atendido. Fora isso, quando a última lacuna fecha, o crivo passa e você
-grava `pronta` no mesmo turno, sem esperar o dono pedir.
+**When the owner asks for `pronta` before the sieve passes,
+refuse out loud.** Say in one sentence what is still missing (which cycle,
+which column, which section) and ask that gap's question. Not marking it and
+saying nothing leaves the owner thinking he was served. Other than that, when
+the last gap closes, the sieve passes and you write `pronta` in the same turn,
+without waiting for the owner to ask.
 
-Ao fechar, diga ao dono o caminho do arquivo e o próximo passo: `/common:plan
-<nome>-c1 --from-epic docs/epics/<nome>.md --ciclo 1` deriva a fila do primeiro
-ciclo.
+On closing, tell the owner the file path and the next step: `/common:plan
+<name>-c1 --from-epic docs/epics/<name>.md --ciclo 1` derives the queue of the
+first cycle.
 
-### 6. O formato do arquivo
+### 6. The file format
+
+The document is written in pt-BR. Keep the headings, the `**Status:**`,
+`**Aberto em:**` and `**Origem:**` labels and the ladder column names verbatim:
+`spec-readiness-gate` and `cepa-plan --from-epic` parse them. Only the
+placeholders below are in English.
 
 ```markdown
-# Epic: <assunto>
+# Epic: <subject>
 
-**Status:** rascunho · **Aberto em:** <data> · **Origem:** <de onde veio o pedido>
+**Status:** rascunho · **Aberto em:** <date> · **Origem:** <where the request came from>
 
 ## Intenção
 
-<o que o dono quer e o que hoje dói, na voz dele>
+<what the owner wants and what hurts today, in their voice>
 
 ## Invariantes (nunca regridem)
 
-- <o que nunca pode regredir enquanto os ciclos andam>
+- <what must never regress while the cycles move>
 
 ## Escada de valor
 
 | Ciclo | Roteiro de demonstração (o que o dono vê) | Efeito em tela | Efeito em backend | O que atravessa | Quando |
 |---|---|---|---|---|---|
-| 1. <nome> | <o que o dono vê funcionando> | <onde, na tela> | <registro, endpoint ou evento> | <uma frase por peça que muda.> | <quando> |
+| 1. <name> | <what the owner sees working> | <where, on screen> | <record, endpoint or event> | <one sentence per piece that changes.> | <when> |
 
 ## Decidido sem perguntar (vete aqui)
 
-- <decisão> — <porquê>.
+- <decision> — <why>.
 
 ## Perguntas em aberto
 
-- [x] <pergunta> <resposta aceita>
-- [ ] <pergunta desafiada> (provisória: <resposta do dono>)
+- [x] <question> <accepted answer>
+- [ ] <challenged question> (provisória: <owner's answer>)
 
 ## Riscos
 
-- <discordância que sobrou de um desafio, ou risco que a conversa levantou>
+- <disagreement left over from a challenge, or a risk the conversation raised>
 ```
 
-O `Status` aceita `rascunho | pronta`. A coluna "O que atravessa" é escrita em
-frases curtas terminadas em ponto, uma por peça, porque o `--from-epic` do
-`/common:plan` faz de cada frase um item da fila daquele ciclo.
+`Status` accepts `rascunho | pronta`. The "O que atravessa" column is written
+in short sentences ending in a period, one per piece, because `/common:plan`'s
+`--from-epic` turns each sentence into an item of that cycle's queue.
 
 ## Constraints
 
-- **Uma pergunta por turno, em prosa, com proposta.** Nunca lista de opções,
-  nunca `AskUserQuestion`, nunca o formato `plain-report` no meio da entrevista.
-- **Cada resposta é desafiada exatamente uma vez** antes de ser aceita.
-- **A resposta aceita é gravada no mesmo turno**, antes da próxima pergunta.
-- **Nunca declara `pronta` o que o crivo recusa.** Se o gate barrar, volte a
-  perguntar.
-- **Só escreve `docs/epics/<nome>.md`.** Nem código, nem fila: a fila é do
-  `/common:plan --from-epic`.
-- **Não delega a entrevista**, e não roda dentro do `/common:session`.
+- **One question per turn, in prose, with a proposal.** Never a list of
+  options, never `AskUserQuestion`, never the `plain-report` format in the
+  middle of the interview.
+- **Each answer is challenged exactly once** before being accepted.
+- **The accepted answer is written down in the same turn**, before the next
+  question.
+- **Never declares `pronta` what the sieve refuses.** If the gate blocks, go
+  back to asking.
+- **Only writes `docs/epics/<name>.md`.** Neither code nor queue: the queue
+  belongs to `/common:plan --from-epic`.
+- **Does not delegate the interview**, and does not run inside
+  `/common:session`.

@@ -76,7 +76,7 @@ In order, first hit wins:
    name is a label, not a lookup key.
 
 This is the same rule `cepa-plan status` / `cepa-plan queue` apply when no name
-is given (one queue → that one; several → `há mais de uma fila; diga qual`), so
+is given (one queue → that one; several → `há mais de uma fila; diga qual`, i.e. "there is more than one queue; say which"), so
 the prose and the tool cannot drift.
 
 **Before declaring absence, look where a lost plan actually is.** A session
@@ -149,7 +149,8 @@ Collect, in plan order:
   while the `/maestro:run` session is alive, and when it dies the branches sit
   there with nothing on disk saying so (WEGO-paralelo wave 1, 2026-08-24: five
   ready branches, merged by hand hours later). List each line verbatim under
-  "Pendente com você" — "5 slices terminadas esperando merge" — with
+  "Pendente com você" (pending with you) — "5 slices terminadas esperando merge"
+  (5 finished slices waiting for merge) — with
   `/maestro:resume <programa>` as the route. Empty output means nothing waits;
 - **`cepa-until` runs waiting to land** — run
   `python3 common/bin/cepa-until pendentes --repo .` (same main-clone root).
@@ -270,35 +271,39 @@ Plain language first, protocol second — apply `conversational-response`'s
 "translate jargon at the human boundary". Short; this command is read in the
 middle of a session, when attention is already spent.
 
+The rendered report is in Brazilian Portuguese (pt-BR), with the section labels
+"Próximo passo", "porque", "Pendente com você", "Fila depois dele" and
+"Bloqueado"; the template below is shown in English:
+
 ```
-Próximo passo: WEGO-1240 — "Agregar rota de validação humana"
-  porque: depende do hook estabilizado em 1958, que fechou ontem
+Next step: WEGO-1240 — "Add the human validation route"
+  because: depends on the hook stabilized in 1958, which closed yesterday
 
-Pendente com você (2):
-  • WEGO-1958 — abrir /admin/devolucoes e confirmar que o comentário sem razão
-    é recusado. Falha se salvar.
-  • WEGO-1235 — nada a validar à mão (substrato interno)
+Pending with you (2):
+  • WEGO-1958 — open /admin/devolucoes and confirm that a comment without a
+    reason is refused. Fails if it saves.
+  • WEGO-1235 — nothing to validate by hand (internal substrate)
 
-Fila depois dele: WEGO-1237 (maior, por último)
-Bloqueado: nenhum
-⚠ 2 cards em To Do fora do plano: WEGO-1962, WEGO-1963 — sem posição nem
-  porquê. /common:plan WEGO --from-jira é quem os coloca (via triagem).
+Queue after it: WEGO-1237 (bigger, last)
+Blocked: none
+⚠ 2 cards in To Do outside the queue: WEGO-1962, WEGO-1963 — no position and
+  no why. /common:plan WEGO --from-jira is what places them (via triage).
 ```
 
 Without a tracker the shape is the same, minus the divergence block, plus one
 honest line about what wasn't checked:
 
 ```
-Próximo passo: P12 — "produtor de plano sem tracker"
-  porque: sem ele, um repo como este só ganha plano se alguém pedir na mão
+Next step: P12 — "queue producer without a tracker"
+  because: without it, a repo like this one only gets a queue if someone asks by hand
 
-Pendente com você (1):
-  • P9 — rodar bin/install.sh --clean e reiniciar; nada está live até isso
+Pending with you (1):
+  • P9 — run bin/install.sh --clean and restart; nothing is live until then
 
-Fila depois dele: P14 (depende de uso, não de código)
-Bloqueado: nenhum
-ℹ Sem tracker neste repo — os status acima são os do plano, auto-declarados.
-  Ninguém conferiu.
+Queue after it: P14 (depends on usage, not on code)
+Blocked: none
+ℹ No tracker in this repo — the statuses above are the queue's, self-reported.
+  Nobody checked them.
 ```
 
 Rules for the report:

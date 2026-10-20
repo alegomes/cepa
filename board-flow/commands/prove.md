@@ -36,13 +36,14 @@ the verdict. Apply `defense-in-depth`, `evidence-over-assumption`,
 `scope-discipline`. You do NOT decide the verdict — `proof-reviewer` does, from
 evidence. You only route the Jira transition off its verdict.
 
-Apply `default-yes`: este comando roda quase sempre DENTRO de um run maior
-(`/board-flow:drain`, `/board-flow:prove-drain`, `/common:session`), e uma
-pergunta feita aqui chega ao usuário no meio da fila — o ponto mais caro para
-interromper, porque responder exige recarregar o contexto inteiro da lista.
-Achado reversível, ou que só registra algo, com recomendação clara: execute e
-registre para o relatório de quem te chamou. Pergunta só para o irreversível, e
-ela sobe para o relatório final do run, nunca para o meio dele.
+Apply `default-yes`: this command almost always runs INSIDE a bigger run
+(`/board-flow:drain`, `/board-flow:prove-drain`, `/common:session`), and a
+question asked here reaches the user in the middle of the queue — the most
+expensive point to interrupt, because answering means reloading the whole
+context of the list. A reversible finding, or one that only records something,
+with a clear recommendation: do it and record it for the report of whoever
+called you. Ask only about the irreversible, and that question goes up to the
+run's final report, never into the middle of it.
 
 ## Workflow
 
@@ -104,8 +105,8 @@ Delegate to `<default_topology>:proof-reviewer`:
 > (adversarial input on the touched endpoints), and — if this is a Bug — the
 > regression-red-at-base check. Operate ONLY in a throwaway git worktree; never
 > touch the primary working tree or edit any code. Write
-> `docs/proof/$ARGUMENTS.yaml` (versionado; `.claude/` é gitignored e some
-> com a worktree) and return your verdict with evidence.
+> `docs/proof/$ARGUMENTS.yaml` (versioned; `.claude/` is gitignored and goes
+> away with the worktree) and return your verdict with evidence.
 
 Wait for the verdict. Then read `docs/proof/$ARGUMENTS.yaml` yourself and
 **cross-check it — do not trust the `verdict` field blindly.** Re-derive the

@@ -26,30 +26,30 @@ def main():
         return 1
     f = CMD.read_text(encoding="utf-8")
     limpo = f.replace("`", "").lower()
-    i = limpo.find("**só leitura.**")
-    trecho = limpo[i:i + 600] if i != -1 else ""
+    i = limpo.find("**read-only.**")
+    trecho = " ".join(limpo[i:i + 600].split()) if i != -1 else ""
     check("declara só leitura nas instruções", bool(trecho))
-    for proibido in ("git merge", "cepa-plan finish", "transição de card",
-                     "build", "push", "edição de arquivo"):
+    for proibido in ("git merge", "cepa-plan finish", "card transition",
+                     "build", "push", "file edit"):
         check(f"...e proíbe {proibido}", proibido in trecho, trecho[:200])
     check("proíbe executar providência mesmo reversível",
-          "nunca execute uma providência, mesmo reversível" in limpo)
+          "never execute a course of action, even a reversible one" in limpo)
     check("lê o resumo do cepa-until-digest, não o .log inteiro",
-          "cepa-until-digest" in f and "leia o resumo, não o .log" in limpo)
+          "cepa-until-digest" in f and "read the digest, not the .log" in limpo)
     check("manda conferir no git antes de afirmar",
-          "confira antes de afirmar" in limpo)
+          "check before you state" in limpo)
     check("relata em plain-report", "plain-report" in f)
     check("lê o estado do run e comenta cada ação pelo id",
-          ".estado.json" in f and "pelo id" in limpo)
+          ".estado.json" in f and "by its id" in limpo)
     check("não numera as ações por conta própria",
-          "sem numeração própria" in limpo)
+          "with no numbering of your own" in limpo)
     check("repete o bloco 'fica com você'", "fica com você" in limpo)
     check("tarefa do dono traz 'Pronto quando'", "pronto quando" in limpo)
     j = limpo.find("fica com você")
     check("'Fica com você' manda escrever o cepa-plan responde colável",
           "cepa-plan responde" in limpo[j:j + 2500], limpo[j:j + 200])
     check("fecha com perguntas fechadas com recomendação",
-          "perguntas" in limpo and "recomendo sim/não" in limpo)
+          "closed questions" in limpo and "recomendo sim/não" in limpo)
     print()
     if FAILURES:
         print(f"✗ {len(FAILURES)} falha(s): {', '.join(FAILURES)}")

@@ -1,6 +1,6 @@
 ---
-description: "[congelado desde 2026-10-08: o condutor do cepa-until vai absorver fork e merge train (decisão 1 de docs/estrategia-cepa-proximo-nivel.md); não use em trabalho novo] Planeja um programa do Maestro — conversa sobre um universo de demandas (default BACKLOG.md), propõe ondas de slices com superfícies disjuntas e fork points, escreve .claude/programs/<nome>/plan.yaml (schema v2, canônico em common/plan-schema.yaml; v1 segue lida sem migração) e roda o intake gate (cepa-dor) até cada slice sair READY ou ter a lacuna nomeada. Não executa nada — /maestro:run (passo 3 da construção) é quem forka. Piso de uso: ≥4 demandas (D7); com menos, /board-flow:drain ou sessão única ganham. Com --sweep, varre a fonte INTEIRA em vez de uma lista de demandas escolhida a dedo e propõe as próximas 2-3 ondas sozinho. Com --from-plan NOME, a fonte é a fila `single-track` do repo (.claude/programs/NOME/plan.yaml) em vez de um arquivo de prosa — é a promoção fila → ondas, e a resposta a \"como uso o program-plan num projeto com Jira\", já que a fila aceita o Jira como fonte e o --source não."
-argument-hint: [nome-do-programa] [--source ARQUIVO] [--demandas "P9,P10,..."] [--sweep] [--from-plan NOME]
+description: "[frozen since 2026-10-08: the cepa-until conductor will absorb fork and merge train (decision 1 of docs/estrategia-cepa-proximo-nivel.md); do not use for new work] Plans a Maestro program — talks through a universe of demands (default BACKLOG.md), proposes waves of slices with disjoint surfaces and fork points, writes .claude/programs/<name>/plan.yaml (schema v2, canonical in common/plan-schema.yaml; v1 is still read without migration) and runs the intake gate (cepa-dor) until every slice comes out READY or has its gap named. Executes nothing — /maestro:run (step 3 of the build order) is what forks. Usage floor: ≥4 demands (D7); with fewer, /board-flow:drain or a single session wins. With --sweep, it scans the ENTIRE source instead of a hand-picked list of demands and proposes the next 2-3 waves by itself. With --from-plan NAME, the source is the repo's `single-track` queue (.claude/programs/NAME/plan.yaml) instead of a prose file — it is the queue → waves promotion, and the answer to \"how do I use program-plan in a project with Jira\", since the queue accepts Jira as a source and --source does not."
+argument-hint: [program-name] [--source FILE] [--demandas "P9,P10,..."] [--sweep] [--from-plan NAME]
 interaction: conversational
 ---
 
@@ -8,223 +8,226 @@ interaction: conversational
 
 ## Purpose
 
-Transformar "quero tocar estas N demandas em paralelo" num plan.yaml que o
-motor consegue executar sem mediação improvisada. O v0 (melhorias-2026-07)
-provou o formato e pagou uma lição: dois slices tocaram o mesmo arquivo porque
-a superfície não era declarada nem checada — 1 conflito real de merge. Este
-comando existe para que TODO plano nasça com superfícies declaradas, disjuntas
-e verificadas mecanicamente antes de qualquer fork.
+Turn "I want to run these N demands in parallel" into a plan.yaml that the
+engine can execute without improvised mediation. v0 (melhorias-2026-07)
+proved the format and paid for a lesson: two slices touched the same file because
+the surface was neither declared nor checked — 1 real merge conflict. This
+command exists so that EVERY plan is born with surfaces declared, disjoint
+and mechanically verified before any fork.
 
-**Invariante de costura:** `/maestro:run` lê exclusivamente o plan.yaml. Este
-comando é o único lugar onde BACKLOG.md (ou outra fonte) é interpretado.
+Talk to the user in Brazilian Portuguese (pt-BR): the questions, the wave proposal
+table and the closing summary are all rendered in pt-BR.
 
-**Modo `--sweep`:** em vez de uma lista de demandas escolhida a dedo, varre a
-fonte inteira e PROPÕE quais entram nas próximas ondas — ninguém hoje lê os
-109 títulos do backlog inteiro e devolve "isto dá para rodar em paralelo sem
-se atropelar" (docs/spec/planejador-de-lotes-paralelos.md, CS-1). Ainda é
-proposta, igual ao modo normal: entra na conversa do passo 3, nunca grava o
-plano sozinho. As diferenças ficam marcadas nos passos abaixo com o rótulo
-`sweep` mais um identificador em negrito e colchetes — o identificador é usado
-por `common/bin/cepa-promptcov` para cruzar contra a trava de regressão
-(`tests/test_program_plan_sweep.py`) e apontar peça sem cobertura; ver
+**Seam invariant:** `/maestro:run` reads exclusively the plan.yaml. This
+command is the only place where BACKLOG.md (or another source) is interpreted.
+
+**`--sweep` mode:** instead of a hand-picked list of demands, it scans the
+entire source and PROPOSES which ones go into the next waves — nobody today reads the
+109 titles of the whole backlog and comes back with "this can run in parallel without
+tripping over itself" (docs/spec/planejador-de-lotes-paralelos.md, CS-1). It is still a
+proposal, just like the normal mode: it goes into the step 3 conversation, it never writes the
+plan by itself. The differences are marked in the steps below with the label
+`sweep` plus an identifier in bold and brackets — the identifier is used
+by `common/bin/cepa-promptcov` to cross-check against the regression lock
+(`tests/test_program_plan_sweep.py`) and point out any piece without coverage; see
 docs/promptcov.md.
 
-**Modo `--from-plan NOME`:** a fonte é a fila `single-track` que já existe no
-repo (`<raiz-principal>/.claude/programs/NOME/plan.yaml`), escrita pelo
-`/common:plan` a partir de uma spec, de uma triagem de Jira ou ditada à mão.
-É a etapa 4 do desenho "um escritor, três fontes" (BACKLOG.md, "Cinco portas
-de planejamento") e a única promoção que faltava: fila → ondas era declarada
-manual em `docs/execution-plan.md` por não haver caminho. Também é a resposta a
-*"como uso o program-plan num projeto com Jira"* — o `--source` só aceita
-arquivo, e a fila aceita o board como fonte.
+**`--from-plan NAME` mode:** the source is the `single-track` queue that already exists in the
+repo (`<main-root>/.claude/programs/NAME/plan.yaml`), written by
+`/common:plan` from a spec, from a Jira triage or dictated by hand.
+It is stage 4 of the "one writer, three sources" design (BACKLOG.md, "Cinco portas
+de planejamento") and the only promotion that was missing: queue → waves was declared
+manual in `docs/execution-plan.md` because there was no path. It is also the answer to
+*"how do I use program-plan in a project with Jira"* — `--source` only accepts a
+file, and the queue accepts the board as a source.
 
-Quem lê a fila é `common/bin/cepa-plan promote`, não esta prosa. A regra de
-quem pode virar slice mora no código pelo mesmo motivo das etapas 1 e 2: um
-parágrafo que manda "promova só os `pending`" só pode ser provado por um grep
-nele mesmo, que mostra a PROMESSA e nunca a execução. Os blocos anotados com a
-família `from-plan` abaixo dizem o que fazer com o que o script devolve — a
-mesma convenção do `--sweep`, medida pelo `cepa-promptcov`.
+What reads the queue is `common/bin/cepa-plan promote`, not this prose. The rule of
+what may become a slice lives in the code for the same reason as stages 1 and 2: a
+paragraph that says "promote only the `pending` ones" can only be proven by a grep on
+itself, which shows the PROMISE and never the execution. The blocks annotated with the
+`from-plan` family below say what to do with what the script returns — the
+same convention as `--sweep`, measured by `cepa-promptcov`.
 
 ## Steps
 
-1. **Fonte e universo.** Leia a fonte (`--source`, default `BACKLOG.md`) e
-   identifique as demandas candidatas (as passadas em `--demandas`, ou as que
-   o usuário descrever). Menos de 4 demandas → pare e diga que o piso (D7) não
-   foi atingido; recomende /board-flow:drain ou sessão única.
+1. **Source and universe.** Read the source (`--source`, default `BACKLOG.md`) and
+   identify the candidate demands (the ones passed in `--demandas`, or the ones
+   the user describes). Fewer than 4 demands → stop and say the floor (D7) was not
+   reached; recommend /board-flow:drain or a single session.
 
-   **[sweep:full-source]** Leia a fonte INTEIRA, do início ao fim — não só o trecho que o
-   usuário apontou. Descarte o que já tem `Status: FEITO/CONSTRUÍDO/✅` ou já
-   pertence a um plano existente (um `plan.yaml` em
-   `<raiz-principal>/.claude/programs/*/`); entre o resto, pare nas próximas
-   **2-3 ondas** (não tente particionar o backlog inteiro de uma vez — é
-   hipótese, revalidada por sessão). Prefira demandas
-   cuja superfície fica FORA da zona de enforcement do cepa-dor (`.claude/
-   settings*`, `.claude-plugin/*`, `*/hooks/*`, `*/plugins/*`) — o intake veta
-   essa zona incondicionalmente, então uma demanda cujo trabalho real é editar
-   um hook não é candidata a fork autônomo; nomeie isso ao usuário e sugira
-   sessão supervisionada em vez de forçar a onda.
+   **[sweep:full-source]** Read the ENTIRE source, from start to end — not only the part the
+   user pointed at. Discard what already has `Status: FEITO/CONSTRUÍDO/✅` or already
+   belongs to an existing plan (a `plan.yaml` in
+   `<main-root>/.claude/programs/*/`); among the rest, stop at the next
+   **2-3 waves** (do not try to partition the whole backlog at once — it is a
+   hypothesis, revalidated per session). Prefer demands
+   whose surface lies OUTSIDE cepa-dor's enforcement zone (`.claude/
+   settings*`, `.claude-plugin/*`, `*/hooks/*`, `*/plugins/*`) — intake vetoes
+   that zone unconditionally, so a demand whose real work is editing
+   a hook is not a candidate for autonomous fork; name that to the user and suggest a
+   supervised session instead of forcing the wave.
 
-   **[from-plan:source]** Com `--from-plan NOME`, não leia `BACKLOG.md`: rode
-
-   ```
-   python3 common/bin/cepa-plan promote <NOME> --repo . --json
-   ```
-
-   e trate `demands[]` como o universo — na ORDEM em que vêm, que é a ordem da
-   fila. O que ficou de fora vem em `excluded[]` com o motivo por item
-   (`done`/`dropped` já saíram da fila, `in_progress` está reservado por outra
-   sessão, `blocked` travou num run anterior); **mostre essa lista ao usuário**
-   em vez de calar — um item que ele espera ver na onda e não aparece é a
-   pergunta que ele vai fazer, e a resposta já está no JSON. O piso D7 é
-   mecânico aqui: **exit 4 = pare** e recomende `/common:drain-plan <NOME>`,
-   que executa a mesma fila em série, sem worktree nenhuma. Exit 3 = o nome
-   aponta para um plano de ondas, não para uma fila.
-
-2. **Análise por demanda** (leitura do repo, sem escrever nada):
-   - **superfície**: quais arquivos/globs a demanda realisticamente toca —
-     derive do texto da demanda + grep/glob no código; na dúvida, declare o
-     glob mais largo e honesto;
-   - **dependências** entre demandas (uma cria o que a outra consome → ondas
-     diferentes, `fork_after`);
-   - **gate humano**: existe decisão estratégica em aberto (escopo, contrato,
-     naming user-facing, breaking change)? Ela precisa ser tomada AGORA, na
-     conversa, e registrada no `human_gate` — ou a demanda fica fora da onda;
-   - **critério de aceite executável** (`acceptance` + `acceptance_cmd` — o
-     repo é `.claude/no-build`, então `acceptance_cmd` é obrigatório);
-   - **forma do aceite** (`acceptance_form`): se a demanda só nomeia passos
-     privados de implementação — nenhum Given/When/Then observável em alguma
-     superfície — ela não é US. Ou o `acceptance` ganha a tripla observável
-     (`acceptance_form: bdd`), ou o slice **assume** que é substrato
-     (`acceptance_form: substrate`). Sem uma das duas, o intake reprova.
-
-   **[from-plan:carry-why]** O `why` de cada demanda vem pronto da fila e é
-   COPIADO, nunca reescrito: ele é o critério que colocou aquele item naquela
-   posição, e reescrevê-lo aqui apaga a priorização que a fila existe para
-   guardar. Ele vai para o `context:` do slice (ou para o `demanda:`, junto do
-   `id`); o que esta conversa acrescenta é o que a fila não tem — superfície,
-   aceite e gate humano.
-
-   **[from-plan:human-gate]** Demanda que chega com `human_gate` diferente de
-   `none` traz uma rota que só o humano fecha (`human_pending` da fila). Ou a
-   decisão é tomada AGORA, na conversa, e o `human_gate` do slice registra o
-   que foi decidido — ou o slice fica fora da onda. Não copie o `open:` para o
-   plano esperando resolver depois: o `cepa-dor` reprova, e com razão, porque
-   forkar uma filha em cima de uma coisa que ninguém validou é construir no
-   escuro.
-
-   **[sweep:solo-wave]** Demanda cuja superfície não dá para derivar com confiança
-   (prosa vaga demais, ou toca área grande demais para um glob honesto) NÃO
-   entra dividindo onda com outras — vai **sozinha para sua própria onda**,
-   tratada como se tocasse o repo inteiro. É um custo aceito conscientemente:
-   cada demanda assim consome uma onda inteira; se o varrimento produzir muitas
-   ondas de uma slice só, esse é o sintoma a reportar ao usuário, não a
-   esconder forçando um glob dúbio.
-
-3. **Proposta de ondas.** Agrupe slices de superfícies disjuntas na mesma onda
-   (teto `max_concurrent_slices`, default 3); dependências e decisões pesadas
-   empurram para ondas posteriores. Apresente a proposta ao usuário em tabela
-   (onda · slice · demanda · superfície · gate humano · aceite) e discuta.
-
-   **[from-plan:deps-to-waves]** Com `--from-plan`, o `onda_minima` de cada
-   demanda é PISO, não sugestão: ele sai do `blocked_by` da fila, e dois itens
-   em que um depende do outro não podem forkar na mesma onda mesmo que as
-   superfícies sejam disjuntas — a filha de baixo forkaria antes de existir o
-   que ela consome. Agrupe por superfície DENTRO do piso, nunca por cima dele,
-   e use `fork_after: "wave-<N-1>"` na onda N. Um item pode subir de onda
-   (superfície colidiu, teto cheio); descer, nunca.
-
-   **[sweep:wave-cap]** O teto de slices por onda não é fixo em 3 — **sugira** o teto
-   observando os arquivos-cartório medidos (passo 4): quanto mais concentrados
-   os conflitos em poucos arquivos, menor o teto seguro; repo sem cartório
-   claro sustenta onda maior. Proponha o número ao usuário com o porquê, não
-   grave sem revisão.
-
-4. **Escrever o plano.** Antes de gravar qualquer byte, confira que o nome
-   está livre:
-   ```
-   python3 maestro/bin/maestro-programs . --check-name <nome>
-   ```
-   **Exit 3 = pare.** Aquele caminho já guarda a fila `single-track` de um board
-   (é o `/board-flow:triage` que a escreve, um plano por board) e gravar ondas
-   por cima apaga a ordem dos itens e o `why` de cada um — o dado que o plano
-   existe para guardar, e que o Jira não tem. Mostre a mensagem ao usuário e
-   peça outro nome; não invente um sufixo por conta própria. Exit 0 com aviso de
-   "nome ocupado por um plano parallel-waves" é o caso normal de replanejar as
-   ondas do mesmo programa: siga.
-
-   **[from-plan:other-name]** Com `--from-plan NOME`, o `--check-name <NOME>`
-   dá exit 3 SEMPRE — `NOME` é a fila, e é dela que as demandas vieram. Isso é
-   o mecanismo funcionando, não um erro a contornar: gravar as ondas ali
-   apagaria a fila que acabou de ser promovida. O plano de ondas precisa de um
-   nome PRÓPRIO, e quem escolhe é o usuário — não invente um sufixo por conta
-   própria (`NOME-ondas` parece inofensivo e vira um segundo documento que
-   ninguém sabe de onde veio). Peça, e rode o `--check-name` de novo com o nome
-   escolhido.
-
-   **[from-plan:traceable-source]** Grave em `source:` a linha que o
-   `cepa-plan promote` devolve em `source` — ela diz de qual fila, de qual
-   caminho e quantos itens dos quantos vieram, e é a outra ponta do fio que o
-   `demanda:` de cada slice (o `id` do item) começa. Sem ela o plano de ondas
-   nasce órfão: meses depois ninguém sabe de que fila aquele slice saiu, nem em
-   que estado ela estava quando foi promovida.
-
-   Com o desenho acordado e o nome liberado, escreva
-   `<raiz-principal>/.claude/programs/<nome>/plan.yaml` seguindo
-   `common/plan-schema.yaml` (`schema_version: 2`, `mode: parallel-waves`). Um
-   slice por demanda, salvo demanda grande que o usuário concorde em fatiar. O `mode` é explícito porque
-   o mesmo schema também serve o `single-track` do board-flow — é o campo que
-   diz a quem lê qual dos dois este plano é. Planos v1 no disco (sem `mode`)
-   continuam válidos e **não precisam ser migrados**.
-
-   **`<raiz-principal>`** é o pai de `git rev-parse --git-common-dir` sem o
-   `/.git` final — em worktree ligada isso aponta para o CLONE PRINCIPAL, não
-   para a árvore atual; fora dela é o mesmo que `git rev-parse --show-toplevel`.
-   O plano é estado do repo, não da sessão: escrito dentro de worktree de
-   sessão, morre com ela, e num repo cujo `.gitignore` cobre `.claude/` inteiro
-   nenhuma guarda do caminho de remoção enxerga o arquivo. Vale para ler e para
-   escrever. Ver `docs/execution-plan.md`, "Where the file lives".
-
-   **[sweep:cartorios]** Antes de escrever, rode `python3 common/bin/cepa-hotspots
-   <raiz-principal> --json` e grave a lista `hotspots[].path` no campo novo e
-   opcional `cartorios:` no TOPO do plano (irmão de `schema_version`/`mode`,
-   documentado em `common/plan-schema.yaml`) — é o dado que o `cepa-dor` usa
-   para vetar só a interseção que cai num arquivo-cartório de verdade, em vez
-   de qualquer cruzamento. Histórico insuficiente → o script diz isso
-   explicitamente; deixe `cartorios:` ausente, não invente a lista.
-
-5. **Intake gate.** Rode:
+   **[from-plan:source]** With `--from-plan NAME`, do not read `BACKLOG.md`: run
 
    ```
-   python3 common/bin/cepa-dor <raiz-principal>/.claude/programs/<nome>/plan.yaml --wave 1 --repo .
+   python3 common/bin/cepa-plan promote <NAME> --repo . --json
    ```
 
-   Para cada NOT-READY, corrija COM o usuário (ajustar globs, registrar a
-   decisão do human_gate, escrever acceptance_cmd) e rode de novo, até a onda 1
-   sair READY (avisos ⚠ são aceitáveis e ficam anotados no plano). Repita para
-   as demais ondas se o usuário quiser antecipar.
+   and treat `demands[]` as the universe — in the ORDER they come in, which is the
+   queue's order. What was left out comes in `excluded[]` with the reason per item
+   (`done`/`dropped` have already left the queue, `in_progress` is reserved by another
+   session, `blocked` got stuck in a previous run); **show that list to the user**
+   instead of keeping quiet — an item they expect to see in the wave and that does not appear is the
+   question they will ask, and the answer is already in the JSON. The D7 floor is
+   mechanical here: **exit 4 = stop** and recommend `/common:drain-plan <NAME>`,
+   which runs the same queue serially, with no worktree at all. Exit 3 = the name
+   points to a waves plan, not to a queue.
 
-6. **Encerramento.** Mostre o veredito final do cepa-dor e o caminho do plano.
-   Diga explicitamente: a execução é `/maestro:run` (ainda não construído —
-   passo 3 da ordem de construção; até lá, o plano serve para as ondas manuais
-   com worktrees, como no v0).
+2. **Analysis per demand** (reading the repo, writing nothing):
+   - **surface**: which files/globs the demand realistically touches —
+     derive it from the demand text + grep/glob in the code; when in doubt, declare the
+     widest honest glob;
+   - **dependencies** between demands (one creates what the other consumes → different
+     waves, `fork_after`);
+   - **human gate**: is there an open strategic decision (scope, contract,
+     user-facing naming, breaking change)? It has to be made NOW, in the
+     conversation, and recorded in `human_gate` — or the demand stays out of the wave;
+   - **executable acceptance criterion** (`acceptance` + `acceptance_cmd` — the
+     repo is `.claude/no-build`, so `acceptance_cmd` is mandatory);
+   - **acceptance shape** (`acceptance_form`): if the demand only names private
+     implementation steps — no observable Given/When/Then on any
+     surface — it is not a US. Either the `acceptance` gains the observable triple
+     (`acceptance_form: bdd`), or the slice **admits** it is substrate
+     (`acceptance_form: substrate`). Without one of the two, intake fails it.
+
+   **[from-plan:carry-why]** Each demand's `why` comes ready from the queue and is
+   COPIED, never rewritten: it is the criterion that put that item in that
+   position, and rewriting it here erases the prioritization the queue exists to
+   keep. It goes into the slice's `context:` (or into `demanda:`, next to the
+   `id`); what this conversation adds is what the queue does not have — surface,
+   acceptance and human gate.
+
+   **[from-plan:human-gate]** A demand that arrives with `human_gate` other than
+   `none` carries a route only the human closes (the queue's `human_pending`). Either the
+   decision is made NOW, in the conversation, and the slice's `human_gate` records what
+   was decided — or the slice stays out of the wave. Do not copy the `open:` into the
+   plan hoping to resolve it later: `cepa-dor` fails it, and rightly so, because
+   forking a child on top of something nobody validated is building in the
+   dark.
+
+   **[sweep:solo-wave]** A demand whose surface cannot be derived with confidence
+   (prose too vague, or it touches too large an area for an honest glob) does NOT
+   share a wave with others — it goes **alone into its own wave**,
+   treated as if it touched the whole repo. It is a consciously accepted cost:
+   each such demand consumes an entire wave; if the sweep produces many
+   one-slice waves, that is the symptom to report to the user, not to
+   hide by forcing a dubious glob.
+
+3. **Wave proposal.** Group slices with disjoint surfaces into the same wave
+   (ceiling `max_concurrent_slices`, default 3); dependencies and heavy decisions
+   push to later waves. Present the proposal to the user as a table
+   (wave · slice · demand · surface · human gate · acceptance) and discuss it.
+
+   **[from-plan:deps-to-waves]** With `--from-plan`, each demand's `onda_minima`
+   is a FLOOR, not a suggestion: it comes from the queue's `blocked_by`, and two items
+   where one depends on the other cannot fork in the same wave even if the
+   surfaces are disjoint — the lower child would fork before what it
+   consumes exists. Group by surface WITHIN the floor, never above it,
+   and use `fork_after: "wave-<N-1>"` in wave N. An item may move up a wave
+   (surface collided, ceiling full); down, never.
+
+   **[sweep:wave-cap]** The ceiling of slices per wave is not fixed at 3 — **suggest** the ceiling
+   by looking at the measured notary files (step 4): the more concentrated
+   the conflicts are in few files, the lower the safe ceiling; a repo without a clear
+   notary file supports a larger wave. Propose the number to the user with the why, do not
+   write it without review.
+
+4. **Write the plan.** Before writing any byte, check that the name
+   is free:
+   ```
+   python3 maestro/bin/maestro-programs . --check-name <name>
+   ```
+   **Exit 3 = stop.** That path already holds the `single-track` queue of a board
+   (it is `/board-flow:triage` that writes it, one plan per board) and writing waves
+   over it erases the order of the items and the `why` of each one — the data the plan
+   exists to keep, and that Jira does not have. Show the message to the user and
+   ask for another name; do not invent a suffix on your own. Exit 0 with a warning of
+   "name taken by a parallel-waves plan" is the normal case of replanning the
+   waves of the same program: go on.
+
+   **[from-plan:other-name]** With `--from-plan NAME`, `--check-name <NAME>`
+   ALWAYS exits 3 — `NAME` is the queue, and it is where the demands came from. This is
+   the mechanism working, not an error to work around: writing the waves there
+   would erase the queue that was just promoted. The waves plan needs a name
+   OF ITS OWN, and the one who chooses it is the user — do not invent a suffix on your own
+   (`NAME-ondas` looks harmless and becomes a second document that
+   nobody knows where it came from). Ask, and run `--check-name` again with the
+   chosen name.
+
+   **[from-plan:traceable-source]** Write into `source:` the line that
+   `cepa-plan promote` returns in `source` — it says which queue, which
+   path and how many items out of how many came, and it is the other end of the thread that
+   each slice's `demanda:` (the item's `id`) starts. Without it the waves plan
+   is born orphaned: months later nobody knows which queue that slice came from, nor in
+   what state it was when it was promoted.
+
+   With the design agreed and the name cleared, write the plan to
+   `<main-root>/.claude/programs/<name>/plan.yaml`, following
+   `common/plan-schema.yaml` (`schema_version: 2`, `mode: parallel-waves`). One
+   slice per demand, unless a large demand the user agrees to slice. `mode` is explicit because
+   the same schema also serves board-flow's `single-track` — it is the field that
+   tells whoever reads it which of the two this plan is. v1 plans on disk (without `mode`)
+   remain valid and **do not need to be migrated**.
+
+   **`<main-root>`** is the parent of `git rev-parse --git-common-dir` without the
+   trailing `/.git` — in a linked worktree this points to the MAIN CLONE, not
+   to the current tree; outside one it is the same as `git rev-parse --show-toplevel`.
+   The plan is repo state, not session state: written inside a session
+   worktree, it dies with it, and in a repo whose `.gitignore` covers all of `.claude/`
+   no guard on the removal path sees the file. This holds for reading and for
+   writing. See `docs/execution-plan.md`, "Where the file lives".
+
+   **[sweep:cartorios]** Before writing, run `python3 common/bin/cepa-hotspots
+   <main-root> --json` and write the `hotspots[].path` list into the new and
+   optional field `cartorios:` at the TOP of the plan (sibling of `schema_version`/`mode`,
+   documented in `common/plan-schema.yaml`) — it is the data `cepa-dor` uses
+   to veto only the intersection that falls on a real notary file, instead
+   of any crossing. Insufficient history → the script says so
+   explicitly; leave `cartorios:` absent, do not invent the list.
+
+5. **Intake gate.** Run:
+
+   ```
+   python3 common/bin/cepa-dor <main-root>/.claude/programs/<name>/plan.yaml --wave 1 --repo .
+   ```
+
+   For each NOT-READY, fix it WITH the user (adjust globs, record the
+   human_gate decision, write acceptance_cmd) and run again, until wave 1
+   comes out READY (⚠ warnings are acceptable and get noted in the plan). Repeat for
+   the other waves if the user wants to get ahead.
+
+6. **Closing.** Show cepa-dor's final verdict and the plan's path.
+   Say explicitly: execution is `/maestro:run` (not built yet —
+   step 3 of the build order; until then, the plan serves for manual waves
+   with worktrees, as in v0).
 
 ## Notes
 
-- Este comando NÃO executa demandas, não cria worktrees, não sobe porteiro.
-- **[from-plan:queue-untouched]** Promover não mexe na fila: `cepa-plan promote`
-  só lê, e os itens continuam `pending` lá. A fila segue sendo o documento da
-  ORDEM; o plano de ondas é uma hipótese sobre um recorte dela. O risco que
-  sobra é humano e vale dizer em voz alta ao usuário no encerramento: o mesmo
-  item agora tem dois executores possíveis (`/common:drain-plan` e a onda), e
-  rodar os dois constrói duas vezes.
-- Superfície é promessa de escrita, não de leitura — a filha pode ler o repo
-  inteiro; só escreve dentro dos globs (camada 1 das settings geradas).
-- A zona de enforcement (plugins/, hooks/, .claude/settings*, plugin-cache) é
-  veto incondicional do cepa-dor: nenhum glob de slice pode incluí-la.
-- Arquivos de alto atrito não declarados (lockfiles, migrations, index/barrel)
-  viram aviso, não veto — o verify pós-merge do merge train é quem pega
-  conflito incidental.
-- `acceptance_form: substrate` não é escape hatch: é uma **declaração**. Um
-  slice de substrato aceita ser verificado por critério técnico porque ninguém
-  finge que ele tem superfície observável. Marcar `substrate` numa demanda que
-  o usuário enxerga é mentir para o gate — e o gate acredita.
+- This command does NOT execute demands, does not create worktrees, does not bring up the gatekeeper.
+- **[from-plan:queue-untouched]** Promoting does not touch the queue: `cepa-plan promote`
+  only reads, and the items remain `pending` there. The queue remains the document of the
+  ORDER; the waves plan is a hypothesis about a slice of it. The risk that
+  remains is human and is worth saying out loud to the user at the close: the same
+  item now has two possible executors (`/common:drain-plan` and the wave), and
+  running both builds it twice.
+- Surface is a promise about writing, not reading — the child may read the whole
+  repo; it only writes inside the globs (layer 1 of the generated settings).
+- The enforcement zone (plugins/, hooks/, .claude/settings*, plugin-cache) is an
+  unconditional veto of cepa-dor: no slice glob may include it.
+- Undeclared high-friction files (lockfiles, migrations, index/barrel)
+  become a warning, not a veto — the post-merge verify of the merge train is what catches
+  incidental conflicts.
+- `acceptance_form: substrate` is not an escape hatch: it is a **declaration**. A
+  substrate slice accepts being verified by a technical criterion because nobody
+  pretends it has an observable surface. Marking `substrate` on a demand that
+  the user can see is lying to the gate — and the gate believes it.

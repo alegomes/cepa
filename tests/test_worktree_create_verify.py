@@ -71,18 +71,18 @@ def main():
           "git worktree list" in fb,
           "sem esta conferência o fork confia no exit code do herdr")
     check("6a: confere no CLONE PRINCIPAL, não na árvore corrente",
-          "git -C <raiz-principal> worktree list" in fb)
+          "git -C <main-root> worktree list" in fb)
     check("6a: diz explicitamente que o JSON de sucesso não basta",
-          "não basta" in fb or "não implica" in fb,
+          "the success `--json` is not enough" in fb,
           "a prosa tem de nomear o motivo, senão alguém 'simplifica' de volta")
     check("6a: registra a evidência que originou a checagem",
           "2026-08-24" in fb and "is_prunable" in fb)
     check("6a: manda tentar de novo UMA vez",
-          "uma** vez mais" in fb or "uma vez mais" in fb)
+          "try **once** more" in fb)
     check("6a: marca a slice como FAIL com detalhe nomeado quando persiste",
           "set-slice" in fb and "fail" in fb and "--detail" in fb)
     check("6a: proíbe forkar as demais slices em silêncio",
-          "em silêncio" in fb)
+          "do **not** fork silently" in fb)
 
     # resume.md hoje NÃO cria worktree (só reconcilia e retoma o event loop).
     # Se um dia passar a criar, a mesma conferência tem de vir junto — este é o

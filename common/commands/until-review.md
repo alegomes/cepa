@@ -8,222 +8,238 @@ interaction: routine
 
 ## Purpose
 
-O resumo que o `cepa-until` imprime no fim só conta: tantos entregues, tantos
-travados, tantas esperas de cota. O que o dono precisa decidir está em outro
-lugar, no relatório final de cada subprocesso e na `evidence` de cada item da
-fila: o card que travou pelo mesmo motivo que outros 19, o build que rodou
-antes do último refactor, a migration que precisa entrar antes das outras.
-Em 2026-09-24 essa leitura foi feita à mão, numa sessão aberta depois do run,
-e achou tudo isso. Este comando faz essa leitura de propósito, no fim de todo
-run.
+The summary `cepa-until` prints at the end only counts: so many delivered, so
+many stuck, so many usage-cap waits. What the owner needs to decide is
+somewhere else, in each subprocess's final report and in the `evidence` of
+each queue item: the card that got stuck for the same reason as 19 others, the
+build that ran before the last refactor, the migration that has to land before
+the others. On 2026-09-24 that reading was done by hand, in a session opened
+after the run, and it found all of that. This command does that reading on
+purpose, at the end of every run.
 
 ## Variables
 
-- `<run>.jsonl` — o registro do run. `latest` (default) é o `.jsonl` mais
-  recente em `<raiz-principal>/.claude/programs/<fila>/until/`.
-- `--fila NOME` — de qual fila, quando o repo tem mais de uma e o argumento é
-  `latest`.
+- `<run>.jsonl` — the run record. `latest` (default) is the most recent
+  `.jsonl` in `<raiz-principal>/.claude/programs/<fila>/until/` (main root,
+  queue name).
+- `--fila NAME` — which queue, when the repo has more than one and the
+  argument is `latest`.
 
 ## Instructions
 
-**Só leitura.** Nada de `git merge`, `cepa-plan finish`, transição de card,
-build, push ou edição de arquivo. Cada providência vira uma pergunta para o
-dono. Quem roda você no fim do run é um `claude -p` sem ninguém olhando, e uma
-providência irreversível executada às 4h da manhã é pior do que uma pergunta
-esperando às 8h.
+**Read-only.** No `git merge`, no `cepa-plan finish`, no card
+transition, no build, no push, no file edit. Every course of action becomes
+a question for the owner. Whoever runs you at the end of the run is a `claude -p` with nobody watching, and an
+irreversible action executed at 4 a.m. is worse than a question waiting at
+8 a.m.
 
-**Leia o resumo, não o `.log`.** O `.log` do run de 2026-09-23 tinha 10,6 MB,
-cerca de 2,6 milhões de tokens (10.617.662 bytes ÷ ~4 bytes por token). Uma
-leitura por grep cobre o que o grep achou, e o que ficou de fora some calado. O
-`cepa-until-digest` escolhe o que ler de forma mecânica e diz o que escolheu.
-Abra um trecho do `.log` só para conferir algo que o resumo aponta, e diga que
-abriu.
+**Read the digest, not the `.log`.** The `.log`
+of the 2026-09-23 run was 10.6 MB, about 2.6 million tokens (10,617,662 bytes ÷
+~4 bytes per token). A grep-driven reading covers what the grep found, and
+what was left out disappears silently. `cepa-until-digest` picks what to read
+mechanically and says what it picked. Open a stretch of the `.log` only to
+check something the digest points to, and say that you opened it.
 
-**Confira antes de afirmar.** O resumo e a `evidence` descrevem o momento do
-run. Antes de dizer "a branch X não foi mesclada" ou "a worktree Y ainda
-existe", rode o comando barato que confirma (`git branch --merged`, `git
-worktree list`, `git rev-list --count A..B`) e diga o resultado.
+**Check before you state.** The digest and the
+`evidence` describe the moment of the run. Before saying "branch X was not
+merged" or "worktree Y still exists", run the cheap command that confirms it
+(`git branch --merged`, `git worktree list`, `git rev-list --count A..B`) and
+say the result.
 
 ## Workflow
 
-### 1. Resolver o run e gerar o resumo
+### 1. Resolve the run and generate the digest
 
 ```
 python3 common/bin/cepa-until-digest <run>.jsonl
 ```
 
-Se o `.jsonl` não existir, pare dizendo qual caminho você procurou.
+If the `.jsonl` does not exist, stop and say which path you looked for.
 
-Leia também o estado do run, `<run>.estado.json`, ao lado do `.jsonl` (mesmo
-nome, outro sufixo). O `cepa-until` grava esse arquivo antes de chamar você:
-`estado` (`esperando-dono` ou `encerrado`), `itens` (uma linha por item),
-`acoes` (a lista fechada do que um comando executa; hoje só `aterrissar`) e
-`fica_com_voce` (o que nenhum comando executa). Run anterior a 2026-09-28 não
-tem o arquivo: diga isso e siga só com o resumo.
+Also read the run state, `<run>.estado.json`, next to the `.jsonl` (same name,
+different suffix). `cepa-until` writes that file before calling you:
+`estado` (`esperando-dono` or `encerrado`), `itens` (one line per item),
+`acoes` (the closed list of what a command executes; today only `aterrissar`)
+and `fica_com_voce` (what no command executes). A run older than 2026-09-28
+does not have the file: say so and continue with the digest alone.
 
-**Supervisor morto ou interrompido.** Dois estados dizem que o run não chegou
-ao fim:
+**Dead or interrupted supervisor.** Two states say the run did not reach the
+end:
 
-- `interrompido`: o supervisor recebeu SIGTERM ou Ctrl+C e gravou o evento
-  `run_interrompido` no `.jsonl`, com o `sinal` e o item em voo (`id`, `fase`
-  e o `pid_filho`, o `claude` ou o build que roda em sessão própria e pode ter
-  seguido sozinho).
-- `rodando` sem `run_end` no `.jsonl`: ou o run ainda roda, ou o supervisor
-  morreu calado (o run WEGO 2026-09-28-2003 parou em `item_start`, o card
-  fechou `done` sozinho e o build completo nunca rodou). Não chute: rode
-  `python3 common/bin/cepa-until pendentes --json` e veja a lista `mortos`,
-  que confere o `pid` e o `host` gravados no estado (run sem pid conta como
-  morto 3h depois do prazo; run `interrompido` também entra na lista). Se o
-  run estiver lá, a primeira pergunta do relatório é fechá-lo com o comando
-  do campo `fechar` (`cepa-until fecha-morto <fila>/<run> --sim`): ele roda o
-  build completo que faltou na worktree da noite e, verde, grava o `run_end`
-  e deixa o run `esperando-dono` com a ação `aterrissar`. O item em voo com
-  status `done` está na fila sem esse build. Se não estiver na lista, o run
-  ainda roda: diga isso e pare.
+- `interrompido`: the supervisor received SIGTERM or Ctrl+C and wrote the
+  `run_interrompido` event to the `.jsonl`, with the `sinal` and the item in
+  flight (`id`, `fase` and the `pid_filho`, the `claude` or the build that runs
+  in its own session and may have carried on by itself).
+- `rodando` with no `run_end` in the `.jsonl`: either the run is still
+  running, or the supervisor died silently (the WEGO run 2026-09-28-2003
+  stopped at `item_start`, the card closed `done` by itself and the full build
+  never ran). Do not guess: run
+  `python3 common/bin/cepa-until pendentes --json` and look at the `mortos`
+  list (dead runs), which checks the `pid` and the `host` recorded in the state
+  (a run with no pid counts as dead 3h after the deadline; an `interrompido`
+  run is also on the list). If the run is there, the first question of the
+  report is to close it with the command in the `fechar` field
+  (`cepa-until fecha-morto <fila>/<run> --sim`): it runs the missing full build
+  in the night worktree and, if green, writes the `run_end` and leaves the run
+  `esperando-dono` with the `aterrissar` action. The in-flight item with status
+  `done` is in the queue without that build. If it is not on the list, the run
+  is still running: say so and stop.
 
-### 2. Ler procurando estas perguntas
+### 2. Read looking for these questions
 
-1. **O que ficou pronto e onde está.** Itens `done`, commits na branch da
-   noite (`until/<run>`) ou, em run anterior a 2026-09-24, em branches
-   `session/*` soltas. Estão mesclados? (confira no git)
-2. **Por que o resto não andou.** Agrupe os travados por causa. Várias rodadas
-   travadas pela MESMA causa é o achado principal do run: diga quantas, quanto
-   custaram (tempo e US$, com a conta) e o que destrava todas de uma vez.
-3. **Build.** O build completo do supervisor ficou verde depois de cada item
-   `done`? Algum relatório diz que o build rodou antes da última mudança, em
-   partes, ou não rodou?
-4. **Gates.** Pela contagem de agentes de cada rodada entregue: rodaram
-   completion-auditor e proof-reviewer? E o validation-lead e o
-   security-reviewer, quando a topologia tem?
-5. **Ordem do merge.** Migrations com número de versão, arquivos alterados por
-   mais de um item, enum que dois itens estendem. O que precisa entrar antes do
-   quê?
-6. **A fila mente?** Item `blocked` cujo código já está na main, item `done`
-   cuja branch não mesclou, `blocked_by` vazio onde a `evidence` diz que há
-   dependência.
-7. **O próprio laço.** Esperas de cota, quedas de rede, `done_sem_commit`,
-   sobras guardadas em stash, disjuntor. Algo aqui é defeito do `cepa-until` e
-   não do item? Se for, diga que é do harness.
-8. **Sinais de processo.** Cada rodada traz a linha `sinais de processo`:
-   worktree aberta (por Bash, `EnterWorktree` ou `Agent` com
-   `isolation=worktree`) e relato de gate de build contornado com o verde de
-   outro módulo, cada um com QUEM. A do `proof-reviewer` com `--detach` é a
-   permitida, e vem anotada; qualquer outra fere a regra da noite. Um agente
-   que não é filho direto (o `qa-engineer` chamado pelo `engineering-lead`)
-   não tem as chamadas no `.log`: o sinal dele vem do relatório devolvido e do
-   RESULT.md, e é por isso que o resumo varre esses textos. No run
-   2026-09-27-1632 o `qa-engineer` abriu worktree em 2 de 4 itens e no
-   WEGO-2329 apresentou o build verde de outro módulo para passar pelo hook
-   de build vermelho, e nada disso aparecia no resumo.
+1. **What got done and where it is.** `done` items, commits on the night
+   branch (`until/<run>`) or, in a run older than 2026-09-24, on loose
+   `session/*` branches. Are they merged? (check in git)
+2. **Why the rest did not move.** Group the stuck ones by cause. Several rounds
+   stuck by the SAME cause is the main finding of the run: say how many, what
+   they cost (time and US$, with the arithmetic) and what unblocks all of them
+   at once.
+3. **Build.** Did the supervisor's full build stay green after each `done`
+   item? Does any report say the build ran before the last change, in parts,
+   or did not run?
+4. **Gates.** From the agent count of each delivered round: did
+   completion-auditor and proof-reviewer run? And validation-lead and
+   security-reviewer, when the topology has them?
+5. **Merge order.** Migrations with a version number, files changed by more
+   than one item, an enum that two items extend. What has to land before what?
+6. **Is the queue lying?** A `blocked` item whose code is already on main, a
+   `done` item whose branch did not merge, an empty `blocked_by` where the
+   `evidence` says there is a dependency.
+7. **The loop itself.** Usage-cap waits, network drops, `done_sem_commit`,
+   leftovers saved in a stash, circuit breaker. Is any of this a defect of
+   `cepa-until` and not of the item? If so, say it belongs to the harness.
+8. **Process signals.** Each round carries the `sinais de processo` line
+   (process signals): a worktree opened (via Bash, `EnterWorktree` or `Agent`
+   with `isolation=worktree`) and a report of a build gate bypassed with another
+   module's green, each with WHO. The `proof-reviewer` one with `--detach` is
+   the allowed one, and comes annotated; any other breaks the night rule. An
+   agent that is not a direct child (the `qa-engineer` called by the
+   `engineering-lead`) does not have its calls in the `.log`: its signal comes
+   from the report it returned and from RESULT.md, which is why the digest
+   scans those texts. In run 2026-09-27-1632 the `qa-engineer` opened a
+   worktree in 2 of 4 items and in WEGO-2329 presented another module's green
+   build to get past the red-build hook, and none of that showed up in the
+   digest.
 
-Pergunta sem achado não entra no relatório.
+A question with no finding does not go into the report.
 
-### 3. Relatório
+### 3. Report
 
-No formato `plain-report`, em pt-BR: abertura de até 3 frases sem jargão,
-`**Pra você:**` com a contagem de decisões, `### Detalhe técnico` e, por
-último, `### Decisões e próximos passos` como lista numerada de perguntas
-fechadas, cada uma com `Recomendo sim/não` e o porquê em uma linha. Todo número
-vem com a conta. Todo termo aparece explicado na primeira menção.
+In the `plain-report` format, written in Brazilian Portuguese (pt-BR): an
+opening of up to 3 sentences without jargon, `**Pra você:**` with the count of
+decisions, `### Detalhe técnico` and, last, `### Decisões e próximos passos` as
+a numbered list of closed questions, each with `Recomendo sim/não`
+and the why in one line. Every number comes with its arithmetic. Every term is
+explained on first mention.
 
-A ordem das perguntas é a ordem em que o dono deve responder: o que destrava
-mais trabalho vem primeiro.
+The order of the questions is the order in which the owner should answer:
+whatever unblocks the most work comes first.
 
-**Uma lista só** (C7 de `docs/estrategia-fim-do-cepa-until.md`). Comente cada
-ação de `acoes` pelo id, sem numeração própria: a pergunta sobre ela leva o id
-como rótulo (`aterrissar`), diz o efeito com a `frase` do estado e traz a sua
-recomendação. Os itens de `fica_com_voce` aparecem num bloco "Fica com você",
-com o que o dono precisa fazer em cada um.
+**One list only** (C7 of `docs/estrategia-fim-do-cepa-until.md`). Comment on
+each action in `acoes` by its id, with no numbering of your own: the question about it carries the id as its label
+(`aterrissar`), states the effect with the `frase` from the state and brings
+your recommendation. The items of `fica_com_voce` appear in a "Fica com você"
+block (stays with you), with what the owner needs to do in each one.
 
-Cada tarefa do "Fica com você" traz **o passo a passo em três linhas** (o dono
-reprovou, em 14/10/2026, um relatório que dizia só a categoria: *"O que,
-afinal, que eu tenho que fazer? Dê-me o passo a passo."*):
+Each "Fica com você" task carries **the step by step in three lines** (on
+14/10/2026 the owner rejected a report that only named the category: *"O que,
+afinal, que eu tenho que fazer? Dê-me o passo a passo."* — "So what exactly do
+I have to do? Give me the step by step."). Keep these three labels verbatim in
+pt-BR:
 
-- `Onde:` o repo ou diretório, e o arquivo quando há;
-- `Comando:` em bloco de código, ou o arquivo a abrir e o que preencher;
-- `Pronto quando:` o que o dono vê ao terminar, e o que ele me diz.
+- `Onde:` (where) the repo or directory, and the file when there is one;
+- `Comando:` (command) in a code block, or the file to open and what to fill in;
+- `Pronto quando:` (done when) what the owner sees on finishing, and what they
+  tell me.
 
-Para toda rota `human_pending`, escreva também, pronto para colar, o comando
-que o dono roda quando a tarefa estiver feita (`cepa-plan responde` fecha a
-rota ou devolve o item à fila; com `--mantem` só grava a resposta):
+For every `human_pending` route, also write, ready to paste, the command the
+owner runs when the task is done (`cepa-plan responde` closes the route or
+returns the item to the queue; with `--mantem` it only records the answer):
 
 ```
-python3 common/bin/cepa-plan responde <fila> <id> --resposta "<o que você viu>" --repo <raiz-principal>
+python3 common/bin/cepa-plan responde <fila> <id> --resposta "<what you saw>" --repo <raiz-principal>
 ```
 
-O relatório nunca lista uma categoria ("as rotas humanas", "as pendências") no
-lugar das tarefas: uma tarefa por item, com `<fila>`, `<id>` e `<raiz-principal>`
-já preenchidos. Tarefa que você mesmo pode executar não é do dono. Não invente ação fora da lista: o
-que você achar e nenhum comando executa (abrir card para um teste instável,
-corrigir o harness) entra em "Fica com você".
+The report never lists a category ("the human routes", "the pending items") in
+place of the tasks: one task per item, with `<fila>`, `<id>` and
+`<raiz-principal>` already filled in. A task you can execute yourself is not
+the owner's. Do not invent an action outside the list: whatever you find that
+no command executes (opening a card for a flaky test, fixing the harness) goes
+into "Fica com você".
 
-### 4. Bloco de decisões para o terminal
+### 4. Decision block for the terminal
 
-Depois do relatório, e só no fim do arquivo, grave um bloco cercado
-```` ```json cepa-decisoes ```` que o `cepa-until` lê para perguntar ao dono,
-uma por vez, no terminal (o `cepa-until decidir`). O bloco NÃO decide o que é
-executado: as ações vêm de uma lista fechada do `cepa-until` (aterrissar, e o
-`cepa-plan responde`, que devolve um item `blocked` para a fila ou fecha a
-rota humana com a resposta do dono, ou, com `--mantem`, só grava a resposta
-e deixa o item travado). Ele só dá a redação da pergunta e a sua
-recomendação.
+After the report, and only at the end of the file, write a fenced block
+```` ```json cepa-decisoes ```` that `cepa-until` reads to ask the owner, one at
+a time, in the terminal (`cepa-until decidir`). The block does NOT decide what
+gets executed: the actions come from a closed list in
+`cepa-until` (aterrissar, and `cepa-plan responde`, which returns a `blocked`
+item to the queue or closes the human route with the owner's answer, or, with
+`--mantem`, only records the answer and leaves the item stuck). It only
+provides the wording of the question and your recommendation.
 
-Cubra **todos os itens adiados da fila**, não só os deste run: rode
-`python3 common/bin/cepa-plan queue <fila> --max 1 --json --repo <raiz>` e
-pegue a lista `deferred`. Entram os de motivo `bloqueado-antes` e
-`human_pending`; `reservado` e `depende-de-adiado` não são do dono e ficam de
-fora. Item que já tem `question` (a pergunta que o agente gravou com
-`finish --pergunta`) não precisa de linha, a menos que você recomende outra
-coisa.
+Cover **all deferred items of the queue**, not only this run's: run
+`python3 common/bin/cepa-plan queue <fila> --max 1 --json --repo <raiz>` and
+take the `deferred` list. Those with reason `bloqueado-antes` and
+`human_pending` go in; `reservado` and `depende-de-adiado` are not the owner's
+and stay out. An item that already has a `question` (the question the agent
+recorded with `finish --pergunta`) needs no line, unless you recommend
+something else.
+
+The string values of the block are shown to the owner and are written in
+Brazilian Portuguese (pt-BR); the example below is in English for reference:
 
 ```json cepa-decisoes
-{"aterrissar": {"recomendo": "sim", "porque": "uma linha"},
+{"aterrissar": {"recomendo": "sim", "porque": "one line"},
  "itens": [
    {"id": "WEGO-2336",
-    "contexto": "O código está pronto numa branch lateral e só um teste de fixture ficou vermelho. A rodada nos 20 lotes é a tarefa que ficou com você, e ela só é possível depois do merge.",
-    "pergunta": "Deixo a rodada dos 20 lotes para depois do merge e devolvo o item à fila?",
-    "instrucao": "retomar de until/2026-10-15-1128-vermelho-WEGO-2336 e dar tinta acima do corte à fixture sem texto de PipelineMultimodalSemVazamentoNoLogTest, como nas outras 4",
+    "contexto": "The code is ready on a side branch and only one fixture test stayed red. The round over the 20 batches is the task that stayed with you, and it is only possible after the merge.",
+    "pergunta": "Do I leave the 20-batch round for after the merge and return the item to the queue?",
+    "instrucao": "resume from until/2026-10-15-1128-vermelho-WEGO-2336 and give ink above the cut to the textless fixture of PipelineMultimodalSemVazamentoNoLogTest, like the other 4",
     "recomendo": "sim",
-    "porque": "a rodada só é possível depois do merge, e o teste vermelho é uma fixture que o agente previu e sabe consertar"}
+    "porque": "the round is only possible after the merge, and the red test is a fixture the agent foresaw and knows how to fix"}
  ]}
 ```
 
-Regras do bloco (o terminal mostra cada campo com o seu rótulo, em linhas
-separadas; o que estiver fora do campo certo chega ao dono misturado, e em
-15/10 ele leu uma pergunta de 71 palavras com branch e classe de teste
-dentro e perguntou "o que diabos isso quer dizer?"):
+Rules of the block (the terminal shows each field with its label, on separate
+lines; whatever is outside the right field reaches the owner mixed up, and on
+15/10 he read a 71-word question with a branch and a test class inside and
+asked "o que diabos isso quer dizer?" — "what the hell does that mean?"):
 
-- `pergunta` é fechada, respondível sem abrir o card, na voz de quem pergunta
-  ao dono. O terminal a mostra com um menu fixo, em que **sim = o item volta
-  para a fila com esta resposta** e **não = fica como está**; escreva a
-  pergunta de modo que "sim" signifique isso, e não escreva a alternativa
-  entre parênteses: ela é sempre "não".
-- Até 25 palavras, nas palavras do dono: sem nome de branch, de classe de
-  teste, de fixture ou de arquivo. O terminal confere e avisa o dono quando a
-  pergunta passa disso. Esse detalhe vai em `instrucao`, e o que não é
-  instrução fica na evidência do item, que o terminal mostra com `[e]`.
-- `contexto` é o que o dono precisa saber para responder sem abrir nada, em
-  até duas frases leigas: o que o agente fez, o que ficou vermelho ou
-  travado, e por quê. Sem nome de branch, classe ou arquivo. O terminal o
-  mostra antes da pergunta, junto com a tarefa que ficou para o dono. Quando
-  a rota é uma tarefa, o `contexto` diz onde ela se faz, o que fazer e como o
-  dono sabe que terminou (continua em até duas frases; o arquivo vai em
+- `pergunta` is closed, answerable without opening the card, in the voice of
+  whoever is asking the owner. The terminal shows it with a fixed menu, in
+  which **sim = o item volta para a fila com esta resposta** (yes = the item
+  returns to the queue with this answer) and **não = fica como está** (no =
+  stays as it is); write the question so that "sim" means that, and do not
+  write the alternative in parentheses: it is always "não".
+- Up to 25 words, in the owner's words: no branch name, test class, fixture
+  or file name. The terminal checks it and warns the owner when the question
+  goes over that. That detail goes in `instrucao`, and whatever is not an
+  instruction stays in the item's evidence, which the terminal shows with
+  `[e]`.
+- `contexto` is what the owner needs to know to answer without opening
+  anything, in up to two lay sentences: what the agent did, what stayed red or
+  stuck, and why. No branch, class or file name. The terminal shows it before
+  the question, together with the task that stayed with the owner. When the
+  route is a task, the `contexto` says where it is done, what to do and how
+  the owner knows it is finished (still within two sentences; the file goes in
   `instrucao`).
-- `instrucao` é o que o próximo run deve fazer se o dono disser sim: branch
-  de onde retomar, teste ou fixture a consertar, arquivo a ajustar. É técnica
-  e vai para o agente: o terminal a mostra como "Se sim, o próximo run
-  recebe:" e a grava junto com o sim na evidência do item. Só quando houver
-  algo a mandar; sem ela, o sim grava só a pergunta.
-- `recomendo` é `sim` ou `não`; `porque` cabe numa linha.
-- Rota `human_pending` que é tarefa (validar à mão, rodar um login real):
-  pergunte se ela já foi feita e o que se viu, e diga o que o dono precisa
-  ter à mão.
-- JSON válido. Se não houver nada, grave `{"itens": []}`.
+- `instrucao` is what the next run should do if the owner says yes: branch
+  to resume from, test or fixture to fix, file to adjust. It is technical and
+  goes to the agent: the terminal shows it as "Se sim, o próximo run recebe:"
+  (if yes, the next run receives:) and records it together with the yes in the
+  item's evidence. Only when there is something to send; without it, the yes
+  records only the question.
+- `recomendo` is `sim` or `não`; `porque` fits in one line.
+- A `human_pending` route that is a task (validate by hand, run a real login):
+  ask whether it has already been done and what was seen, and say what the
+  owner needs to have at hand.
+- Valid JSON. If there is nothing, write `{"itens": []}`.
 
 ## Constraints
 
-- Nunca execute uma providência, mesmo reversível. Este comando responde "o
-  que fazer", e quem faz é o dono ou a sessão que ele abrir.
-- Nunca afirme estado do git sem ter conferido nesta execução.
-- O resultado precisa caber numa leitura de 5 minutos. Detalhe que não muda
-  nenhuma decisão fica de fora.
+- Never execute a course of action, even a reversible one. This command answers "what to do", and
+  whoever does it is the owner or the session they open.
+- Never state git state without having checked it in this execution.
+- The result has to fit in a 5-minute read. Detail that changes no decision
+  stays out.

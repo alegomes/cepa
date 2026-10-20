@@ -223,9 +223,9 @@ def test_program_plan_chama_a_checagem_antes_de_gravar(tmp):
     checagem ANTES da escrita. Sem isto o script existe e ninguém o chama."""
     cmd = (REPO / "maestro" / "commands" / "program-plan.md").read_text()
     check("o passo 4 chama --check-name", "--check-name" in cmd)
-    check("e trata o exit 3 como parada", "Exit 3" in cmd and "pare" in cmd.lower())
+    check("e trata o exit 3 como parada", "Exit 3 = stop" in cmd)
     i_check = cmd.find("--check-name")
-    i_write = cmd.find("escreva\n   `<raiz-principal>/.claude/programs/")
+    i_write = cmd.find("write the plan to\n   `<main-root>/.claude/programs/")
     check("a checagem vem antes da escrita",
           i_check != -1 and i_write != -1 and i_check < i_write,
           f"check={i_check} write={i_write}")

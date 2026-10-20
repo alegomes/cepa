@@ -36,7 +36,7 @@ You are the orchestrator. You classify and route; you do not implement. Hard rul
 - **`atlassian-expert` is the only Jira write path.** Never call Atlassian MCP tools directly. If it isn't installed, abort.
 - **Evidence before verdict.** A card is `ALREADY-IMPLEMENTED` only with concrete code evidence (`file:line` + the commit that introduced it). "There's a comment saying it's done" is not evidence — it's a hint to go look. Apply `evidence-over-assumption` and `acceptance-completeness`: the evidence must demonstrate the card's acceptance criteria at the surface they're written at, not just that *some* related code exists.
 - **Triage ≠ proof.** Moving a card to In Review here means "looks done, queue it for proof," never "proven." Always end by pointing the freshly-moved cards at `/board-flow:prove-drain`. Don't let triage's confidence leak into a done claim.
-- **Nothing destructive without a yes — mas UM yes, no lote.** Won't Do entra na rodada única do passo 6/7 como qualquer outra decisão, listando cada card com o motivo e o card canônico. O usuário responde em lote ("os dedups sim, o 1236 não"). **Não** peça confirmação card a card: Won't Do é reversível no Jira, e a confirmação individual custava mais atenção que o próprio risco — numa fila com K obsoletos eram K interrupções, contradizendo o `default-yes` que o passo 6 deste mesmo arquivo manda aplicar. Evidência: a sessão de triagem de 2026-08-18 começou 20:25 e às 21:45 ainda não tinha chegado ao plano de execução.
+- **Nothing destructive without a yes — but ONE yes, for the batch.** Won't Do goes into the single round of step 6/7 like any other decision, listing each card with its reason and the canonical card. The user answers in a batch ("the dedups yes, 1236 no"). Do **not** ask for confirmation card by card: Won't Do is reversible in Jira, and the individual confirmation cost more attention than the risk itself — in a queue with K obsolete cards it meant K interruptions, contradicting the `default-yes` that step 6 of this same file says to apply. Evidence: the triage session of 2026-08-18 started at 20:25 and by 21:45 had still not reached the execution plan.
 - **Apply `scope-discipline`** across the sweep (never exceed `--max`) and `name-the-disagreement` when the evidence is mixed (e.g. partially implemented).
 
 ## Workflow
@@ -79,7 +79,7 @@ Then assign the bucket by this **precedence**:
 2. **ALREADY-IMPLEMENTED** — every *verbatim* acceptance criterion came back IMPLEMENTED with `file:line` + commit, AND the cited code targets the AC at the surface it's written at. (Mixed/PARTIAL does **not** qualify — name the gap and fall through; a partially-done card is usually READY or NEEDS-DECISION, not done.) For each Bucket-1 card also record two attributes, carried into steps 5–8 so the proof gate isn't blindsided:
    - **proof-strategy hint** — how the proof gate should later attack it, inferred from the card's type: **Bug** → the regression test must go RED at `base_commit` (highest false-positive risk — "code looks fixed + a test exists" is the classic false-green); **AC at an external surface (REST endpoint / outbound payload) but only a unit test covers it** → altitude gap, expect `completion-auditor` INCOMPLETE / an E2E is needed; **already has contract + E2E** → load-bearing proof should be cheap and pass; **boot/config behavior** → perturbation (force the bad config, e.g. the feature flag off in prod, require fail-fast abort).
    - **not-perturbable flag** — set it for cards whose "done" can't be shown by breaking prod code and re-running a test (seed / reference data, pure configuration). Their confidence comes from inspection/query, not proof — flag them so `/board-flow:prove-drain` treats them as inspect-not-prove instead of bouncing them UNPROVEN.
-3. **OBSOLETE** — superseded, a **duplicate of another card (dedup)**, or targets code/an area that no longer exists. A dedup card is **not** "done" even if the behavior exists — bucket it OBSOLETE, not In Review, and before proposing Won't Do confirm the **canonical** card's real state (it may itself be unfinished). Always cite the canonical key in the reason. O cancelamento entra na rodada única — cite a chave canônica ali, para o usuário decidir o lote com a evidência à vista.
+3. **OBSOLETE** — superseded, a **duplicate of another card (dedup)**, or targets code/an area that no longer exists. A dedup card is **not** "done" even if the behavior exists — bucket it OBSOLETE, not In Review, and before proposing Won't Do confirm the **canonical** card's real state (it may itself be unfinished). Always cite the canonical key in the reason. The cancellation goes into the single round — cite the canonical key there, so the user decides the batch with the evidence in view.
 4. **READY** — clear outcome, acceptance criteria present, bounded scope; nothing blocks a developer from starting. Apply the same **BDD-or-substrate** test the maestro's intake gate applies (`cepa-dor`): if the card's acceptance criteria only name private implementation steps — no Given/When/Then observable at *some* surface — it is not READY unless the card explicitly declares itself substrate (technical work whose legitimate acceptance is technical). Otherwise it falls to NEEDS-REFINEMENT with that named as the gap. A card nobody can verify from outside is a card whose "done" will be argued about later.
 5. **NEEDS-REFINEMENT (stays in backlog)** — none of the above; too thin to start, not obsolete, not done.
 
@@ -131,18 +131,18 @@ For IMPLEMENTED rows, show the specific `file:line` + commit in EVIDENCE, and th
 
 ### 6. Grill the NEEDS-DECISION bucket
 
-**Não abra uma rodada de perguntas por card.** Aplique `default-yes`: junte
-TODAS as decisões deste balde numa única rodada, e junte a ela a confirmação do
-passo 7 e os Won't Do — o usuário responde uma vez só, em lote ("1 sim, 2
-admins, 3 não"). Uma pergunta por card, em turnos separados, é o que fazia o
-groom de um backlog consumir a sessão inteira antes de escrever qualquer coisa.
+**Do not open one round of questions per card.** Apply `default-yes`: gather
+ALL the decisions of this bucket into a single round, and add to it the
+confirmation of step 7 and the Won't Do cards — the user answers only once, in a
+batch ("1 yes, 2 admins, 3 no"). One question per card, in separate turns, is what
+made grooming a backlog eat the whole session before anything got written.
 
-Cada decisão vem com **sua recomendação explícita** e o porquê em uma linha;
-se a evidência já aponta um caminho claro, recomende-o em vez de devolver a
-escolha crua. Onde a resposta não muda o roteamento (só muda um comentário no
-card), **não pergunte** — decida e registre no relatório.
+Each decision comes with **your explicit recommendation** and the why in one line;
+if the evidence already points to a clear path, recommend it instead of handing
+back the raw choice. Where the answer does not change the routing (it only changes
+a comment on the card), **do not ask** — decide and record it in the report.
 
-Para cada card NEEDS-DECISION, formule a pergunta (use `AskUserQuestion` quando as escolhas são discretas; prosa quando aberto). The question, every option label, and every option description are last-hop user-facing text — apply `conversational-response`'s "translate jargon at the human boundary" (plain headline, protocol code in parens; never a bare `L4` / `altitude` / `waiver` / `AC binário` in a label). Frame the actual decision and what each answer implies for routing — e.g.:
+For each NEEDS-DECISION card, phrase the question (use `AskUserQuestion` when the choices are discrete; prose when open-ended). The question, every option label, and every option description are last-hop user-facing text — apply `conversational-response`'s "translate jargon at the human boundary" (plain headline, protocol code in parens; never a bare `L4` / `altitude` / `waiver` / `AC binário` in a label). Frame the actual decision and what each answer implies for routing — e.g.:
 
 > WEGO-1237 — criteria conflict: criterion 2 says "any authenticated user", criterion 4 says "admins only". Which holds?
 > • Any authenticated user → card becomes READY (→ To Do)
@@ -162,7 +162,7 @@ Proposed transitions:
       1. WEGO-1235  — unblocks 1237 and 1240, which touch the same hook
       2. WEGO-1240  — needs the hook stabilised by 1235
       3. WEGO-1237  — independent; last because it is the largest
-  → Won't Do (K):  WEGO-1236  (dedup de WEGO-1240)   ← reversível no Jira
+  → Won't Do (K):  WEGO-1236  (dedup of WEGO-1240)   ← reversible in Jira
   No change (J):   WEGO-1238 (needs-refinement)
 
 Apply? yes / no / pick (e.g. "only the To Do moves").
@@ -176,11 +176,11 @@ is the moment the execution order exists; step 9 is what makes it survive the
 session. A list without `why` records the order but not the criterion, so the
 first "does this still make sense?" forces a re-priorisation from scratch.
 
-Wait for confirmation. Os Won't Do continuam exigindo um **sim explícito por
-card** — cancelar card é irreversível na prática, e essa é exatamente a
-fronteira que `default-yes` não cruza. Mas peça os K de uma vez, nomeando cada
-um com o motivo, e aceite a resposta em lote ("1 e 3 sim, 2 não"): o que estava
-errado era o vaivém de um turno por card, não a exigência do sim.
+Wait for confirmation. The Won't Do cards still require an **explicit yes per
+card** — cancelling a card is irreversible in practice, and that is exactly the
+boundary `default-yes` does not cross. But ask for the K at once, naming each
+one with its reason, and accept the answer in a batch ("1 and 3 yes, 2 no"): what was
+wrong was the back-and-forth of one turn per card, not the requirement of the yes.
 
 ### 8. Execute transitions (via atlassian-expert only)
 
@@ -208,9 +208,9 @@ Group the work; every write delegation starts with `Topology: <default_topology>
 
 - **→ To Do.** Delegate: `Transition Jira issue <KEY> to status \`<defaults.status_map.to_do>\`.`
 
-- **→ Won't Do** (os que o usuário aprovou na rodada única — não os que ele tirou do lote). Delegate the transition to the discard status, and first post a short comment with the obsolescence reason so the cancellation is auditable.
+- **→ Won't Do** (the ones the user approved in the single round — not the ones they took out of the batch). Delegate the transition to the discard status, and first post a short comment with the obsolescence reason so the cancellation is auditable.
 
-- **No change.** For NEEDS-REFINEMENT cards, **post** a comment naming what's missing (acceptance criteria, scope) so the next grooming pass is cheaper. Não pergunte se pode comentar: um comentário é registro, não mutação de estado — é o caso canônico de `default-yes`, e a alternativa (perguntar) custa um turno para uma resposta que é sempre sim. Diga no relatório quantos cards foram anotados.
+- **No change.** For NEEDS-REFINEMENT cards, **post** a comment naming what's missing (acceptance criteria, scope) so the next grooming pass is cheaper. Do not ask whether you may comment: a comment is a record, not a state mutation — it is the canonical case of `default-yes`, and the alternative (asking) costs a turn for an answer that is always yes. Say in the report how many cards were annotated.
 
 ### 9. Hand the order to `/common:plan`
 
@@ -219,7 +219,7 @@ in the chat: Jira stores the *queue* (To Do), never the *order* nor the *why*.
 Write them down — but **this command no longer writes `plan.yaml` itself.**
 
 There is exactly one writer of the `single-track` queue, and it is
-`/common:plan` (etapa 2 of "um escritor, três fontes", `BACKLOG.md`). Triage
+`/common:plan` (stage 2 of "um escritor, três fontes" — "one writer, three sources" — in `BACKLOG.md`). Triage
 keeps doing what only it can do — read the cards, hunt evidence in the code,
 route the four buckets, propose the order — and hands that result over. What
 disappears is the duplicated writer, not the order: before this step, the same

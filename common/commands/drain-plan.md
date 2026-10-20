@@ -8,506 +8,530 @@ interaction: routine
 
 ## Purpose
 
-Executar a fila na ordem dela.
+Run the queue in its own order.
 
-O `mode: single-track` do `plan.yaml` existe para guardar as duas coisas que o
-tracker perde: a **ordem** de execução e o **`why`** de cada item estar naquela
-posição. Até aqui nenhum comando executava essa fila em lote:
+The `mode: single-track` of `plan.yaml` exists to keep the two things the
+tracker loses: the execution **order** and the **`why`** of each item sitting
+in that position. Until now no command ran that queue in batch:
 
-- o `/common:next` lê o plano e nomeia UM item, e é read-only por contrato;
-- o `/board-flow:drain` executa em lote, mas a fonte dele é a coluna do Jira,
-  ordenada pelo `priority and rank` do board — a ordem que o plano existe para
-  substituir. Ele nunca abre o `plan.yaml`;
-- num repo sem tracker (a fila `cepa` deste repo, cujos ids não são cards) não
-  havia nem essa saída: sobrava encadear `/common:next` + execução à mão, um
-  item por vez.
+- `/common:next` reads the queue and names ONE item, and is read-only by contract;
+- `/board-flow:drain` runs in batch, but its source is the Jira column,
+  sorted by the board's `priority and rank` — the order the queue exists to
+  replace. It never opens `plan.yaml`;
+- in a repo with no tracker (this repo's `cepa` queue, whose ids are not cards)
+  there wasn't even that way out: all that was left was chaining
+  `/common:next` + execution by hand, one item at a time.
 
-Ou seja: o dono escrevia a ordem no plano, e a única forma de executá-la em
-lote era uma que ignorava essa ordem. Este comando fecha o ciclo — escrever
-(`/common:plan`) → apontar (`/common:next`) → executar (aqui) — sem tracker
-nenhum no caminho.
+In other words: the owner wrote the order into the queue, and the only way to
+run it in batch was one that ignored that order. This command closes the loop —
+write (`/common:plan`) → point (`/common:next`) → run (here) — with no tracker
+at all in the path.
 
-**Isto não executa ondas.** `mode: parallel-waves` é outro documento, com outro
-autor (`/maestro:program-plan`) e outro executor (`/maestro:run`), que forka
-worktrees em paralelo. Este comando **recusa** um plano de ondas em vez de
-tentar linearizá-lo.
+**This does not run waves.** `mode: parallel-waves` is another document, with
+another author (`/maestro:program-plan`) and another runner (`/maestro:run`),
+which forks worktrees in parallel. This command **refuses** a waves plan instead
+of trying to linearize it.
 
 ## Variables
 
-- `<nome>` — o programa cuja fila será executada, isto é
-  `<raiz-principal>/.claude/programs/<nome>/plan.yaml`. Sem o argumento, a
-  resolução é a mesma do `/common:next`: `board-flow.yaml` → `project_key`, ou
-  a única fila `single-track` que existir; mais de uma, o comando lista e
-  pergunta em vez de escolher por você.
-- `--max N` — teto de itens neste lote. Default **3**. É mais baixo que o do
-  `/board-flow:drain` (5) porque um item de fila costuma ser maior que um card:
-  cada um roda o flow inteiro da topologia mais os dois gates (aceite e prova).
-- `--dry-run` — mostra o lote que rodaria, com a parada e o porquê de cada
-  item, e não executa nem marca nada.
-- `--offline` — não lê o quadro no passo 0 nem transiciona card nenhum. Use
-  quando o Jira está fora do ar ou você quer rodar sem rede; o relatório diz
-  que o status da fila é auto-declarado.
-- `--na-branch <branch>` — quem passa é o `cepa-until`. Diz que o diretório
-  em que você acordou já é a worktree da branch da noite, e muda três coisas
-  (ver "Na branch da noite", no passo 3).
+- `<nome>` — the program whose queue will be run, that is
+  `<raiz-principal>/.claude/programs/<nome>/plan.yaml`. Without the argument,
+  resolution is the same as `/common:next`: `board-flow.yaml` → `project_key`, or
+  the only `single-track` queue that exists; if there is more than one, the
+  command lists them and asks instead of choosing for you.
+- `--max N` — ceiling of items in this batch. Default **3**. It is lower than
+  `/board-flow:drain`'s (5) because a queue item tends to be bigger than a card:
+  each one runs the topology's whole flow plus the two gates (acceptance and proof).
+- `--dry-run` — shows the batch that would run, with the stop and the why of
+  each item, and neither runs nor marks anything.
+- `--offline` — does not read the board in step 0 and does not transition any
+  card. Use it when Jira is down or you want to run without network; the report
+  says the queue's status is self-reported.
+- `--na-branch <branch>` — passed by `cepa-until`. It says the directory you
+  woke up in is already the worktree of the overnight branch, and it changes
+  three things (see "On the overnight branch", in step 3).
 
 ## Instructions
 
-**A ordem é o dado.** Não escolha itens, não pule um item travado para alcançar
-o de baixo, não reordene por "esse é mais rápido". Pular é reordenar a fila em
-silêncio — e uma fila reordenada em silêncio é a mesma coisa que não ter fila,
-que é o estado que este documento existe para tirar.
+**The order is the data.** Do not pick items, do not skip a stuck item to reach
+the one below, do not reorder because "this one is faster". Skipping is
+reordering the queue in silence — and a queue reordered in silence is the same
+as having no queue, which is the state this document exists to get rid of.
 
-**Quem monta o lote é o `cepa-plan`, não o seu olho.** Enquanto as regras de
-"o que dá para executar agora" viviam na prosa de um comando, o único teste
-possível era grepar a prosa — que prova que o comando PROMETE respeitar a
-ordem, nunca que uma execução respeitou. Rode `cepa-plan queue` e execute o
-que ele devolveu.
+**The batch is built by `cepa-plan`, not by your eye.** While the rules for
+"what can run now" lived in a command's prose, the only possible test was to
+grep the prose — which proves the command PROMISES to respect the order, never
+that a run did. Run `cepa-plan queue` and execute what it returned.
 
-**Nunca edite o `plan.yaml` à mão** — nem com `Write`, nem com `sed`. A
-marcação passa por `cepa-plan start` / `cepa-plan finish`, que recusam desfecho
-sem evidência, recusam reserva dupla e recusam fechar uma rota humana. Escrito
-por fora, nenhuma dessas recusas acontece.
+**Never edit `plan.yaml` by hand** — not with `Write`, not with `sed`. Marking
+goes through `cepa-plan start` / `cepa-plan finish`, which refuse an outcome
+without evidence, refuse a double reservation and refuse to close a human route.
+Written from outside, none of those refusals happen.
 
-**A fila manda na ORDEM; o quadro, quando existe, é espelhado.** Este comando
-nunca tira a ordem do Jira — é exatamente o que o `/board-flow:drain` faz e o
-que o plano existe para substituir. Mas ele deixou de ignorar o quadro:
+**The queue rules the ORDER; the board, when there is one, is mirrored.** This
+command never takes the order from Jira — that is exactly what
+`/board-flow:drain` does and what the queue exists to replace. But it no longer
+ignores the board (the two directions keep their pt-BR labels, which the owner
+reads: "Trazer status do Jira (grava no plano)" = pull status from Jira, writes
+to the queue; "Atualizar o Jira (grava no quadro)" = update Jira, writes to the
+board):
 
-- **antes** de montar o lote, **Trazer status do Jira (grava no plano)** (passo 0): lê o Jira e escreve na
-  fila — sem isso o lote executa um item que alguém já fechou em outro lugar;
-- **durante** o lote, todo item cujo `id` é chave de card passa pelo
-  **Atualizar o Jira (grava no quadro)**, e isso é **obrigatório**, não opcional: ao reservar
-  (passo 3.a) o card vai para `defaults.status_map.in_progress`; ao fechar
-  `done` (passo 3.e) vai para `defaults.status_map.in_review` com o
-  Implementation Summary; ao travar ou voltar para `pending` (passo 3.f)
-  recebe um comentário com o motivo, e vai para `defaults.status_map.blocked`
-  quando o quadro declara essa coluna. É o mesmo ciclo do
-  `/board-flow:execute`. Sem isso, cada lote drenado PRODUZ a divergência que
-  a reconciliação seguinte teria que consertar, e o dono vê no quadro um card
-  em To Do que já tem código pronto numa branch (WEGO-2349, run
+- **before** building the batch, **Trazer status do Jira (grava no plano)** (step 0): reads Jira and writes to the
+  queue — without it the batch runs an item someone already closed elsewhere;
+- **during** the batch, every item whose `id` is a card key goes through
+  **Atualizar o Jira (grava no quadro)**, and that is **mandatory**, not optional: on reserve
+  (step 3.a) the card goes to `defaults.status_map.in_progress`; on closing
+  `done` (step 3.e) it goes to `defaults.status_map.in_review` with the
+  Implementation Summary; on getting stuck or going back to `pending` (step 3.f)
+  it gets a comment with the reason, and goes to `defaults.status_map.blocked`
+  when the board declares that column. It is the same cycle as
+  `/board-flow:execute`. Without it, every drained batch PRODUCES the divergence
+  the next reconciliation would have to fix, and the owner sees on the board a
+  card in To Do that already has finished code on a branch (WEGO-2349, run
   2026-10-02-0838).
 
-Quem fala com o Jira é sempre o `atlassian-expert` — este comando não chama
-ferramenta de Atlassian direta, e a comparação plano × quadro é do
-`cepa-plan reconcile`, não do seu olho. Repo sem `board-flow.yaml`: nada disso
-acontece, e a fila é a única verdade.
+Jira is always spoken to by `atlassian-expert` — this command does not call any
+Atlassian tool directly, and the queue × board comparison belongs to
+`cepa-plan reconcile`, not your eye. Repo without `board-flow.yaml`: none of this
+happens, and the queue is the only truth.
 
 ## Workflow
 
-### 0. Trazer status do Jira (grava no plano) — só quando há quadro
+### 0. Trazer status do Jira (grava no plano) — only when there is a board
 
-O nome diz a direção: este passo LÊ o Jira e ESCREVE no `plan.yaml`. Não
-toca o quadro. (O contrário, escrever no quadro, é o "Atualizar o Jira (grava no quadro)" do
-passo 3.e.) "Reconciliar" e "sync" eram os nomes antigos e não diziam qual
-dos dois lados mudava; o dono precisou perguntar (desvios.md, 2026-08-29).
+The name says the direction: this step READS Jira and WRITES to `plan.yaml`. It
+does not touch the board. (The opposite, writing to the board, is the
+"Atualizar o Jira (grava no quadro)" of step 3.e.) "Reconciliar" (reconcile) and
+"sync" were the old names and did not say which of the two sides changed; the
+owner had to ask (desvios.md, 2026-08-29).
 
-Pule este passo inteiro se não existir `board-flow.yaml` (nem
-`.claude/board-flow.lifecycle.yaml`), ou com `--offline`. Sem quadro não há o
-que reconciliar: a fila é a única verdade e o relatório diz isso.
+Skip this whole step if there is no `board-flow.yaml` (nor
+`.claude/board-flow.lifecycle.yaml`), or with `--offline`. Without a board there
+is nothing to reconcile: the queue is the only truth and the report says so.
 
-Com quadro, delegue a leitura ao `atlassian-expert` — ele é o único que fala
-com o Jira — pedindo o status atual de **cada `id` da fila que seja chave de
-card**, e quais dessas chaves o Jira diz não existir:
+With a board, delegate the reading to `atlassian-expert` — the only one who
+speaks to Jira — asking for the current status of **each queue `id` that is a
+card key**, and which of those keys Jira says do not exist:
 
-> Read the current status of these Jira issues: `<ids da fila>`. Return JSON:
+> Read the current status of these Jira issues: `<queue ids>`. Return JSON:
 > `{"cards": [{"key": ..., "status": "<the literal Jira status name>"}],
 > "missing": ["<keys Jira reports as nonexistent>"]}`. Do not transition
 > anything.
 
-O "Do not transition anything" vale só para ESTE pedido, que é de leitura.
-Não é a política do lote sobre o quadro: as transições do passo 3 são
-obrigatórias.
+The "Do not transition anything" applies only to THIS request, which is a read.
+It is not the batch's policy toward the board: the transitions of step 3 are
+mandatory.
 
-Salve a resposta e passe ao comparador:
+Save the response and hand it to the comparer:
 
 ```
 python3 common/bin/cepa-plan reconcile <nome> --board <arquivo.json> --apply --repo .
 ```
 
-A comparação é dele, não sua: ele lê o `defaults.status_map` do
-`board-flow.yaml` (os nomes de status variam por time — "Doing", "Code Review")
-e devolve as divergências já classificadas. O que ele **não** faz, e você
-também não: fechar um `human_pending` (só o humano fecha) e anexar à fila um
-card que o quadro tem e o plano não — posição sem `why` é justamente a decisão
-que a fila guarda. Cards nessa situação saem em `missing_from_plan`: **nomeie-os
-no relatório** e diga que quem os coloca é o `/common:plan <nome> --from-jira`.
+The comparison is its job, not yours: it reads the `defaults.status_map` from
+`board-flow.yaml` (status names vary by team — "Doing", "Code Review") and
+returns the divergences already classified. What it does **not** do, and neither
+do you: close a `human_pending` (only the human closes it) and append to the
+queue a card the board has and the queue does not — a position without a `why`
+is precisely the decision the queue keeps. Cards in that situation come out in
+`missing_from_plan`: **name them in the report** and say that the one who puts
+them in is `/common:plan <nome> --from-jira`.
 
-Status que o `status_map` não descreve não é reconciliado, e vem como aviso.
-Repasse o aviso em vez de adivinhar o papel dele.
+A status the `status_map` does not describe is not reconciled, and comes back as
+a warning. Pass the warning on instead of guessing its role.
 
-### 1. Resolver a fila e montar o lote
+### 1. Resolve the queue and build the batch
 
-A fila mora no **clone principal**: `<raiz-principal>/.claude/programs/<nome>/`,
-onde `<raiz-principal>` é o pai de `git rev-parse --git-common-dir` sem o
-`/.git` final — dentro de uma worktree ligada isso é o clone PRINCIPAL, não
-esta árvore. Você não resolve isso à mão (o `cepa-plan` resolve pela mesma
-regra), mas precisa saber, porque é o caminho que vai no relatório.
+The queue lives in the **main clone**: `<raiz-principal>/.claude/programs/<nome>/`,
+where `<raiz-principal>` is the parent of `git rev-parse --git-common-dir` without
+the trailing `/.git` — inside a linked worktree that is the MAIN clone, not this
+tree. You don't resolve this by hand (`cepa-plan` resolves it by the same rule),
+but you need to know, because it is the path that goes in the report.
 
 ```
 python3 common/bin/cepa-plan queue <nome> --max N --repo . --json
 ```
 
-O que volta: `batch` (os itens executáveis agora, na ordem da fila, cada um com
-o `why` que o colocou naquela posição), `stop` (por que o lote termina onde
-termina), `warnings` e `totals`.
+What comes back: `batch` (the items runnable now, in queue order, each with the
+`why` that put it in that position), `stop` (why the batch ends where it ends),
+`warnings` and `totals`.
 
-Exit 3 é **plano de ondas**: pare e diga que quem executa aquele documento é o
-`/maestro:run`. Exit 2 sem fila: diga que não há fila e que quem escreve é o
-`/common:plan <nome>` — não invente uma ordem, e não caia no
-`/board-flow:drain` como substituto, porque ele executaria a ordem do quadro.
+Exit 3 is a **waves plan**: stop and say that the runner for that document is
+`/maestro:run`. Exit 2 with no queue: say there is no queue and that the writer
+is `/common:plan <nome>` — do not invent an order, and do not fall back to
+`/board-flow:drain` as a substitute, because it would run the board's order.
 
-Os motivos de parada, e o que cada um quer de você:
+The stop reasons, and what each one wants from you:
 
-| `stop.reason` | o que aconteceu |
+| `stop.reason` | what happened |
 |---|---|
-| `teto` | o `--max` encheu; o item nomeado seria o próximo. Rode de novo depois. |
-| `fim-da-fila` | não sobrou item pendente. Ofereça `/common:plan` para a próxima leva. |
-| `bloqueado` | o item depende de algo que não está feito nem entra neste lote. |
+| `teto` | `--max` filled up; the named item would be the next. Run again later. |
+| `fim-da-fila` | no pending item left. Offer `/common:plan` for the next round. |
+| `bloqueado` | the item depends on something that is neither done nor in this batch. |
 
-E o `queue` devolve também `deferred` — os itens **adiados**, que não rodam
-agora e **não param o lote**. Adiar é decisão de execução: o item sai deste
-lote e volta no próximo `queue`, e a ordem gravada no `plan.yaml` não muda.
-Os quatro motivos:
+And `queue` also returns `deferred` — the **deferred** items, which don't run
+now and **don't stop the batch**. Deferring is an execution decision: the item
+leaves this batch and comes back in the next `queue`, and the order recorded in
+`plan.yaml` does not change. The four reasons:
 
-| motivo do adiamento | o que aconteceu |
+| deferral reason | what happened |
 |---|---|
-| `human_pending` | o item tem uma rota que **só você** fecha. Decisão do dono (2026-08-28, revendo a de 08-25): a rota não barra mais o fluxo — travar a fila até o humano voltar transformava um lote de 3 num lote de 1. A dívida não some: ela é cobrada no relatório do fim. |
-| `reservado` | outra sessão **viva** está no item agora — o adiamento diz qual sessão, em que árvore, desde quando. |
-| `depende-de-adiado` | o item depende (`blocked_by`) de um que ficou de fora. A cascata é o que faz o adiamento valer: sem ela, adiar B faria C parar o lote. |
-| `bloqueado-antes` | o item saiu `blocked` de um run anterior e a condição de fora não mudou. Ele não é re-executado — seria o mesmo travamento — mas desde 2026-08-30 também não trava os seguintes. Decisão do dono, revendo a herança do `/board-flow:drain`: numa janela desatendida (`cepa-until`), um item travado no começo da fila custava a noite inteira. |
+| `human_pending` | the item has a route that **only you** close. Owner decision (2026-08-28, revisiting the one of 08-25): the route no longer blocks the flow — locking the queue until the human came back turned a batch of 3 into a batch of 1. The debt does not vanish: it is collected in the final report. |
+| `reservado` | another **live** session is on the item right now — the deferral says which session, in which tree, since when. |
+| `depende-de-adiado` | the item depends (`blocked_by`) on one that was left out. The cascade is what makes deferral work: without it, deferring B would make C stop the batch. |
+| `bloqueado-antes` | the item came out `blocked` from a previous run and the outside condition did not change. It is not re-run — it would be the same block — but since 2026-08-30 it also does not block the ones after it. Owner decision, revisiting what was inherited from `/board-flow:drain`: in an unattended window (`cepa-until`), an item stuck at the head of the queue cost the whole night. |
 
-Uma quarta situação não é adiamento nem parada: `in_progress` cuja sessão dona
-**não existe mais** (pid morto no mesmo host, ou reserva de outra máquina além
-de 24h) é uma **reserva órfã** — o `queue` a devolve como executável, com
-aviso, e o `start` a reivindica. A alternativa era a fila travar para sempre
-por causa de um run que acabou. Já `in_progress` **sem dono registrado** (fila
-marcada antes deste campo existir) é adiado dizendo que não dá para saber:
-devolvê-lo para `pending` é decisão sua.
+A fourth situation is neither deferral nor stop: an `in_progress` whose owning
+session **no longer exists** (dead pid on the same host, or a reservation from
+another machine older than 24h) is an **orphan reservation** — `queue` returns it
+as runnable, with a warning, and `start` claims it. The alternative was the queue
+locking forever because of a run that ended. An `in_progress` **with no recorded
+owner** (queue marked before this field existed), on the other hand, is deferred
+saying there is no way to know: returning it to `pending` is your decision.
 
-### 2. Confirmar, uma vez só
+### 2. Confirm, only once
 
-Mostre o lote e pergunte **uma vez**, na largada — inclusive a pergunta que só
-apareceria no meio do run:
+Show the batch and ask **once**, at the start — including the question that would
+only come up in the middle of the run. The screen shown to the owner is rendered
+in Brazilian Portuguese (pt-BR); the two board labels stay verbatim:
 
 ```
-Fila <nome> — <caminho>
-Lote de N item(ns), na ordem da fila:
+Queue <nome> — <path>
+Batch of N item(s), in queue order:
   1. <id> — <title>
-     porque: <why>
+     because: <why>
   2. ...
 
-Adiados (não rodam agora, não travam o lote):
-  <id> — <motivo>: <detail>          ← ou "nenhum"
+Deferred (don't run now, don't block the batch):
+  <id> — <reason>: <detail>          ← or "none"
 
-Depois deles o lote para: <stop.reason> — <stop.detail>
-<avisos, se houver>
+After them the batch stops: <stop.reason> — <stop.detail>
+<warnings, if any>
 
-Quadro (só quando há; sem quadro: "sem quadro, status da fila auto-declarado"):
-  Trazer status do Jira (grava no plano): <o que o passo 0 mudou na fila, ou "nada mudou">
-  Atualizar o Jira (grava no quadro): cada item que é card vai para <in_progress> ao ser
-    reservado, para <in_review> ao fechar, e recebe o motivo ao travar
+Board (only when there is one; with no board: "no board, queue status self-reported"):
+  Trazer status do Jira (grava no plano): <what step 0 changed in the queue, or "nothing changed">
+  Atualizar o Jira (grava no quadro): each item that is a card goes to <in_progress> when
+    reserved, to <in_review> on finish, and gets the reason when it gets stuck
 
-Rodo? Cada item roda o flow inteiro da topologia + os gates de aceite e prova.
+Shall I run it? Each item runs the topology's whole flow + the acceptance and proof gates.
 
-E se um item travar (BLOCKED — condição de fora, que só você resolve):
-  (a) paro o lote ali e te chamo                      ← default
-  (b) registro o motivo no item e sigo com os demais
+And if an item gets stuck (BLOCKED — an outside condition only you can resolve):
+  (a) I stop the batch there and call you                ← default
+  (b) I record the reason on the item and go on with the rest
 
-Responda sim / não / "só os N primeiros", e (a) ou (b).
+Answer yes / no / "only the first N", and (a) or (b).
 ```
 
-Esta é a **única parada planejada** do run — aplique `default-yes`. A
-alternativa (a)/(b) tem que estar escrita aí, não implícita: perguntar no item
-3 de 5 chega quando o usuário já perdeu o contexto da lista, e é esse custo que
-a parada única existe para evitar. Se o run veio do `/common:session`, essas
-respostas já foram colhidas — siga sem perguntar.
+This is the run's **only planned stop** — apply `default-yes`. The (a)/(b)
+alternative has to be written there, not implied: asking at item 3 of 5 arrives
+when the user has already lost the context of the list, and that cost is what
+the single stop exists to avoid. If the run came from `/common:session`, these
+answers were already collected — go on without asking.
 
-Com `--dry-run`, imprima essa tela e pare.
+With `--dry-run`, print that screen and stop.
 
-### 3. Executar, item a item
+### 3. Run, item by item
 
-Para cada item do lote, na ordem:
+For each item of the batch, in order:
 
-  a. **Reserve primeiro**, antes de qualquer build, worktree ou delegação:
+  a. **Reserve first**, before any build, worktree or delegation:
 
      ```
      python3 common/bin/cepa-plan start <nome> <id> --repo .
      ```
 
-     Exit 5 significa que o item deixou de ser reservável desde que o lote foi
-     montado (uma sessão viva reservou, ou uma rota humana apareceu). A recusa
-     **nomeia a sessão** — repasse esse nome, não o resuma para "está
-     reservado". Registre `SKIPPED` com o motivo que o comando devolveu e vá
-     para o próximo **sem rodar nada** — item pulado não consome `--max`,
-     porque trabalho nenhum rodou nele.
+     Exit 5 means the item stopped being reservable since the batch was built
+     (a live session reserved it, or a human route appeared). The refusal
+     **names the session** — pass that name on, don't summarize it as "it is
+     reserved". Record `SKIPPED` with the reason the command returned and go to
+     the next one **without running anything** — a skipped item does not consume
+     `--max`, because no work ran on it.
 
-     A reserva é assinada: o `start` grava `claimed_by` (sessão, pid, host,
-     árvore, horário), que é o que responde no próximo `queue` se é sessão viva
-     ou run morto. Se a saída disser que recuperou uma **reserva órfã**, diga
-     isso no relatório — significa que um run anterior morreu no meio daquele
-     item, e o que ele deixou pela metade é seu para conferir.
+     The reservation is signed: `start` records `claimed_by` (session, pid, host,
+     tree, time), which is what answers, in the next `queue`, whether it is a live
+     session or a dead run. If the output says it recovered an **orphan
+     reservation** (it prints "reserva órfã recuperada"), say so in the report —
+     it means a previous run died in the middle of that item, and what it left
+     half-done is yours to check.
 
-     Se a saída trouxer **`evidence anterior`**, o item já passou por aqui e
-     voltou com recado (o `cepa-until` devolve a `pending` o item cujo build
-     ficou vermelho, dizendo qual build falhou, o motivo e a branch lateral com
-     os commits). Leve o recado inteiro para o flow do passo b como parte do
-     pedido: é ele que diz se vale aproveitar a lateral (`git cherry-pick` ou
-     `merge` dentro desta tentativa) ou refazer. Desabilitar ou apagar o teste
-     que ficou vermelho não conta como conserto.
+     If the output carries **`evidence anterior`** (previous evidence), the item
+     has already been through here and came back with a message (`cepa-until`
+     returns to `pending` an item whose build went red, saying which build
+     failed, the reason and the side branch with the commits). Carry the whole
+     message into the flow of step b as part of the request: it is what says
+     whether to reuse the side branch (`git cherry-pick` or `merge` inside this
+     attempt) or redo it. Disabling or deleting the test that went red does not
+     count as a fix.
 
-     **Atualizar o Jira (grava no quadro), na reserva.** Se o `id` é chave de
-     card e o repo tem quadro (e não veio `--offline`), transicione o card
-     para `defaults.status_map.in_progress` logo depois do `start` e antes de
-     qualquer trabalho, delegando ao `atlassian-expert`, como o passo 4 do
-     `/board-flow:execute`. Card que já está em `in_progress` não precisa de
-     transição. Falha na transição não desfaz a reserva nem para o item:
-     registre o card como pendente de transição no relatório.
+     **Atualizar o Jira (grava no quadro), on reserve.** If the `id` is a card
+     key and the repo has a board (and `--offline` was not passed), transition
+     the card to `defaults.status_map.in_progress` right after `start` and before
+     any work, delegating to `atlassian-expert`, like step 4 of
+     `/board-flow:execute`. A card already in `in_progress` needs no transition.
+     A failed transition does not undo the reservation nor stop the item: record
+     the card as pending transition in the report.
 
-     A reserva é o equivalente, sem tracker, ao claim que o `/board-flow:drain`
-     publica no card: a lista do passo 1 é uma foto, e entre a foto e a hora de
-     chegar no item N outra janela pode ter pegado o mesmo item. O custo de não
-     reservar não é conflito de arquivo, é o trabalho inteiro refeito.
+     The reservation is the tracker-less equivalent of the claim
+     `/board-flow:drain` publishes on the card: the list of step 1 is a snapshot,
+     and between the snapshot and the moment you reach item N another window may
+     have taken the same item. The cost of not reserving is not a file conflict,
+     it is the whole work redone.
 
-  b. **Execute o item** pelo flow da topologia do repo (`.claude/topology`),
-     como o `/common:autonomous-start` despacha: item de defeito vai para
-     `reproduce-fix-verify`, o resto para `plan-build-validate`. O `title` e o
-     `why` do item são a descrição; o `why` é contexto de prioridade, não
-     escopo — não amplie o item para "aproveitar que estou aqui"
+  b. **Run the item** through the repo's topology flow (`.claude/topology`),
+     the way `/common:autonomous-start` dispatches: a defect item goes to
+     `reproduce-fix-verify`, the rest to `plan-build-validate`. The item's
+     `title` and `why` are the description; the `why` is priority context, not
+     scope — do not widen the item to "make the most of being here"
      (`scope-discipline`).
 
-  **Na branch da noite (`--na-branch <branch>`).** Confira primeiro que
-  `git rev-parse --abbrev-ref HEAD` devolve exatamente `<branch>`; se não
-  devolver, `finish --status blocked` com a divergência e pare. Depois:
+  **On the overnight branch (`--na-branch <branch>`).**
+  First check that `git rev-parse --abbrev-ref HEAD` returns exactly `<branch>`;
+  if it does not, `finish --status blocked` with the divergence and stop. Then:
 
-  - **trabalhe aqui.** Não crie worktree nem branch para o item (`git worktree
-    add -b`, `git checkout -b`, `/common:worktree-start`), e não parta de
-    `origin/main`. A branch da noite JÁ tem os cards anteriores da noite, e é
-    por isso que ela existe: no run de 2026-09-23 cada item abriu a própria
-    worktree a partir de `origin/main`, nada mesclou, e 20 de 25 rodadas
-    travaram porque o card anterior só existia numa branch solta. Worktree
-    descartável para perturbação de prova (`git worktree add --detach /tmp/...`)
-    continua valendo SÓ para o `proof-reviewer`; o `qa-engineer` e qualquer outro
-    agente provam RED pela ordem (teste escrito antes do fix) ou deixam a prova
-    para o `proof-reviewer`, e o resumo do `cepa-until` lista toda worktree aberta
-    por outro agente;
-  - **commit direto nesta branch**, com a árvore limpa antes do `finish`. O
-    supervisor guarda num stash o que sobrar sem commit, e o próximo card não
-    vê;
-  - **sem merge, sem push, sem Done.** O supervisor roda o build completo
-    depois do seu `finish --status done`; vermelho, ele tira os seus commits da
-    branch e marca o item `blocked`. O card vai para Review como sempre, e a
-    evidência não diz "merge fica com o dono": diz que o código está na branch
-    da noite;
-  - **não rode o build completo, e diga isso a quem você delegar.** Ele é do
-    supervisor, que roda logo depois do seu `finish`. Aqui rode só os testes
-    que o item tocou e os vizinhos (`-Dtest=...` com `-am`, `-k`, o arquivo de
-    teste), num comando que caiba em 10 minutos, o teto de cada comando do
-    agente: passou disso, o próprio Bash manda o comando para o segundo plano
-    e o passo d abaixo vira regra quebrada sem ninguém ter pedido. Passe esta
-    regra por escrito no pedido de todo agente que roda teste (`qa-engineer`,
-    `validation-lead`, `proof-reviewer`). No run de 2026-09-26 o `qa-engineer`
-    do WEGO-2320 rodou a suíte do `bootstrap`, que leva 15 minutos, ela foi
-    para o segundo plano, e a rodada terminou em "Continuo aguardando" depois
-    de 85 minutos e US$ 14,15, com o item `in_progress`.
+  - **work here.** Do not create a worktree or branch for the item (`git worktree
+    add -b`, `git checkout -b`, `/common:worktree-start`), and do not start from
+    `origin/main`. The overnight branch ALREADY has the night's earlier cards,
+    and that is why it exists: in the run of 2026-09-23 each item opened its own
+    worktree from `origin/main`, nothing merged, and 20 of 25 rounds got stuck
+    because the previous card only existed on a loose branch. A throwaway
+    worktree for proof perturbation (`git worktree add --detach /tmp/...`)
+    remains allowed ONLY for `proof-reviewer`; `qa-engineer` and any other agent
+    prove RED by ordering (test written before the fix) or leave the proof to
+    `proof-reviewer`, and the `cepa-until` summary lists every worktree opened
+    by another agent;
+  - **commit directly on this branch**, with a clean tree before `finish`. The
+    supervisor stashes whatever is left uncommitted, and the next card does not
+    see it;
+  - **no merge, no push, no Done.** The supervisor runs the full build after your
+    `finish --status done`; if red, it removes your commits from the branch and
+    marks the item `blocked`. The card goes to Review as always, and the
+    evidence does not say "merge is left to the owner": it says the code is on
+    the overnight branch;
+  - **do not run the full build, and tell whoever you delegate to.** It belongs
+    to the supervisor, which runs it right after your `finish`. Here run only the
+    tests the item touched and their neighbors (`-Dtest=...` with `-am`, `-k`,
+    the test file), in a command that fits in 10 minutes, the ceiling of each of
+    the agent's commands: past that, Bash itself sends the command to the
+    background and step d below becomes a broken rule without anyone having
+    asked for it. Pass this rule in writing in the request of every agent that
+    runs tests (`qa-engineer`, `validation-lead`, `proof-reviewer`). In the run
+    of 2026-09-26 the `qa-engineer` of WEGO-2320 ran the `bootstrap` suite,
+    which takes 15 minutes, it went to the background, and the round ended in
+    "Continuo aguardando" ("Still waiting") after 85 minutes and US$ 14.15, with
+    the item `in_progress`.
 
-  - **quem delega espera o worker no mesmo turno, e diga isso a todo lead.**
-    Aqui cada rodada é um `claude -p` e o lead é seu subagente: se ele encerrar
-    o turno "à espera da notificação", o que volta para você é o item pela
-    metade, com o worker ainda rodando, e você gasta um turno reenviando o
-    resultado. Escreva no pedido de todo lead (`engineering-lead`,
-    `validation-lead`, `planning-lead`) que ele delega com
-    `run_in_background: false` e só devolve com o resultado do worker na mão.
-    No run de 2026-10-15-1946 do wego-digitacao-backend foram 10 retomadas à
-    mão em 5 das 7 rodadas, e o S3-fio-openai custou US$ 22,54, 41,8% do run.
+  - **whoever delegates waits for the worker in the same turn, and tell every
+    lead.** Here each round is a `claude -p` and the lead is your subagent: if it
+    ends its turn "waiting for the notification", what comes back to you is the
+    item half-done, with the worker still running, and you spend a turn
+    resending the result. Write in the request of every lead (`engineering-lead`,
+    `validation-lead`, `planning-lead`) that it delegates with
+    `run_in_background: false` and only returns with the worker's result in hand.
+    In the run of 2026-10-15-1946 of wego-digitacao-backend there were 10 manual
+    resumes in 5 of the 7 rounds, and S3-fio-openai cost US$ 22.54, 41.8% of the
+    run.
 
-  Um item que depende de outro da mesma fila que já está `done` na branch da
-  noite **não** está travado por "o antecessor não está na main": o código dele
-  está aqui.
+  An item that depends on another of the same queue that is already `done` on the
+  overnight branch is **not** stuck on "the predecessor is not on main": its code
+  is here.
 
-  c. **Passe pelos dois gates** antes de chamar o item de fechado — são os
-     mesmos de qualquer construção deste harness, e o lote não os pula por ser
-     lote: `completion-auditor` (COMPLETE) e, quando o item mudou
-     comportamento, `proof-reviewer` (PROVEN). Veredito diferente disso não é
-     `done`; é `blocked` ou volta para `pending`, com o motivo.
+  c. **Go through both gates** before calling the item closed — they are the
+     same as for any build in this harness, and the batch does not skip them for
+     being a batch: `completion-auditor` (COMPLETE) and, when the item changed
+     behavior, `proof-reviewer` (PROVEN). Any other verdict is not `done`; it is
+     `blocked` or back to `pending`, with the reason.
 
-     **Topologia com `validation-lead` (build-hex, build-team): ele também é
-     gate.** O flow dela termina nele, e é ele quem chama o
-     `security-reviewer`. Delegue ao `validation-lead` com o `id` do item como
-     chave; ele grava `docs/validation/<id>.yaml`, e só `READY-TO-SHIP` ou
-     `READY-WITH-CAVEATS` fecha `done`. O `cepa-plan finish --status done`
-     recusa sem esse arquivo, então pular o gate não passa despercebido: no run
-     de 2026-09-23 nenhum dos 5 cards do WEGO passou pelo `validation-lead`, e
-     o WEGO-2318, que faz login no portal com a credencial da operadora,
-     fechou sem revisão de segurança. Na branch da noite, diga no pedido que o
-     build completo é do supervisor: ele grava `build:
-     delegated-to-supervisor` em vez de rodar o `./mvnw verify`.
+     **Topology with `validation-lead` (build-hex, build-team): it is also a
+     gate.** Its flow ends in it, and it is the one that calls
+     `security-reviewer`. Delegate to `validation-lead` with the item's `id` as
+     key; it writes `docs/validation/<id>.yaml`, and only `READY-TO-SHIP` or
+     `READY-WITH-CAVEATS` closes `done`. `cepa-plan finish --status done` refuses
+     without that file, so skipping the gate does not go unnoticed: in the run of
+     2026-09-23 none of the 5 WEGO cards went through `validation-lead`, and
+     WEGO-2318, which logs into the portal with the carrier's credential, closed
+     without a security review. On the overnight branch, say in the request that
+     the full build belongs to the supervisor: it records `build:
+     delegated-to-supervisor` instead of running `./mvnw verify`.
 
-  d. **Não encerre o turno com trabalho seu rodando em segundo plano.** Um
-     build que você disparou (`./mvnw verify`, `npm test`, o gate de prova) tem
-     que ser AGUARDADO e colhido no mesmo turno em que foi disparado. Frases
-     como "aguardo a notificação do build", "quando ficar verde eu faço o push"
-     e "está compilando em segundo plano" descrevem um futuro que não existe:
-     quando este comando roda dentro do `cepa-until`, o processo é um
-     `claude -p` e **não há turno seguinte** — o processo morre no fim deste, o
-     build vira órfão e o item fica `in_progress` sem desfecho.
+  d. **Do not end the turn with your own work running in the background.** A
+     build you started (`./mvnw verify`, `npm test`, the proof gate) has to be
+     AWAITED and collected in the same turn it was started. Phrases like "I'm
+     waiting for the build notification", "when it goes green I'll push" and "it's
+     compiling in the background" describe a future that does not exist: when
+     this command runs inside `cepa-until`, the process is a `claude -p` and
+     **there is no next turn** — the process dies at the end of this one, the
+     build becomes an orphan and the item stays `in_progress` with no outcome.
 
-     Foi a causa medida das duas únicas falhas não-triviais do run de
-     2026-08-30: 34 dos 49 minutos da janela, dois itens parados exatamente
-     assim, exit 0 e nada registrado.
+     It was the measured cause of the only two non-trivial failures of the run of
+     2026-08-30: 34 of the window's 49 minutes, two items stopped exactly like
+     that, exit 0 and nothing recorded.
 
-     Se o build não couber no turno, o desfecho não é silêncio: é
+     If the build does not fit in the turn, the outcome is not silence: it is
      `finish --status blocked --evidence "build disparado e não colhido: <o
-     comando, e onde está o log>"`, ou `--status pending` com a mesma
-     evidência. Um item com desfecho nomeado volta na próxima janela sabendo
-     onde parou; um item sem desfecho volta como reserva órfã e recomeça do
-     zero.
+     comando, e onde está o log>"` (build started and not collected: the command,
+     and where the log is), or `--status pending` with the same evidence. An item
+     with a named outcome comes back in the next window knowing where it stopped;
+     an item with no outcome comes back as an orphan reservation and starts over
+     from scratch.
 
-  e. **Registre o desfecho**, sempre:
+  e. **Record the outcome**, always:
 
      ```
      python3 common/bin/cepa-plan finish <nome> <id> --status done \
-         --evidence "commits, vereditos, o que ficou de fora" --repo .
+         --evidence "commits, verdicts, what was left out" --repo .
      ```
 
-     `--evidence` é obrigatório: `done` é uma palavra, e o que a torna
-     auditável meses depois é o que aconteceu. Se a execução produziu uma
-     rota que só o humano fecha (validar na UI, aprovar um PR, rotacionar um
-     segredo), abra-a com `--human-pending "<a rota, verbatim>"` — é assim que
-     ela sobrevive à sessão. **Nunca feche uma rota**: só quem rodou sabe se
-     ela passou, e o comando recusa.
+     `--evidence` is mandatory: `done` is a word, and what makes it auditable
+     months later is what happened. If the run produced a route only the human
+     closes (validate in the UI, approve a PR, rotate a secret), open it with
+     `--human-pending "<the route, verbatim>"` — that is how it survives the
+     session. **Never close a route**: only whoever ran it knows whether it
+     passed, and the command refuses.
 
-     **Dispensa produzida no item é proposta, não waiver.** Se durante o item
-     saiu uma dispensa (`waivers.gravar` em run autônomo grava
-     `status: proposta`, com `fila=`/`item=`), abra-a como `--human-pending
-     "Aceitar ou recusar a dispensa de <escopo> (<motivo>)"` com `--pergunta
-     "Aceito a dispensa de <escopo> por <razão>? Recomendo <sim/não>: <porquê>"`.
-     O `cepa-plan responde ... "sim: ..."` do dono converte a proposta em
-     dispensa (fb-20261014-3); o agente nunca grava uma dispensa em nome dele.
+     **A waiver produced in the item is a proposal, not a waiver.** If a waiver
+     came out during the item (`waivers.gravar` in an autonomous run records
+     `status: proposta`, with `fila=`/`item=`), open it as `--human-pending
+     "Aceitar ou recusar a dispensa de <escopo> (<motivo>)"` with `--pergunta
+     "Aceito a dispensa de <escopo> por <razão>? Recomendo <sim/não>: <porquê>"`
+     (both owner-facing, in pt-BR: "Accept or refuse the waiver of <scope>
+     (<reason>)" / "Do I accept the waiver of <scope> for <reason>? I recommend
+     <yes/no>: <why>"). The owner's `cepa-plan responde ... "sim: ..."` turns
+     the proposal into a waiver (fb-20261014-3); the agent never records a waiver
+     on the owner's behalf.
 
-     **Atualizar o Jira (grava no quadro).** Se o `id` é chave de card e o repo tem quadro (e não veio
-     `--offline`), transicione o card logo depois, delegando ao
-     `atlassian-expert` — o único que fala com o Jira — para
-     `defaults.status_map.in_review` com o Implementation Summary, exatamente
-     como o `/board-flow:execute` faz. Sem isso o lote fecha o item na fila e
-     deixa o card para trás, e a divergência que a próxima reconciliação
-     encontra foi produzida por este comando. Falha na transição **não**
-     desfaz o `finish`: o trabalho aconteceu. Registre o card como pendente de
-     transição no relatório.
+     **Atualizar o Jira (grava no quadro).** If the `id` is a card key and the repo has a board (and
+     `--offline` was not passed), transition the card right after, delegating to
+     `atlassian-expert` — the only one who speaks to Jira — to
+     `defaults.status_map.in_review` with the Implementation Summary, exactly as
+     `/board-flow:execute` does. Without it the batch closes the item in the
+     queue and leaves the card behind, and the divergence the next reconciliation
+     finds was produced by this command. A failed transition does **not** undo
+     the `finish`: the work happened. Record the card as pending transition in
+     the report.
 
-  f. **Item travado:** siga a política escolhida no passo 2 — parar (default)
-     ou seguir. Nos dois casos, `finish --status blocked --evidence "<a
-     condição de fora e quem a resolve>"` antes de seguir, senão o item fica
-     `in_progress` para sempre e trava o lote seguinte. Não pergunte nada
-     agora: o usuário já respondeu isso na largada.
+  f. **Stuck item:** follow the policy chosen in step 2 — stop (default) or go
+     on. In both cases, `finish --status blocked --evidence "<the outside
+     condition and who resolves it>"` before going on, otherwise the item stays
+     `in_progress` forever and blocks the next batch. Don't ask anything now:
+     the user already answered that at the start.
 
-     **Atualizar o Jira (grava no quadro), no travamento.** Item que é card e
-     fechou `blocked`, ou voltou para `pending`, com quadro e sem `--offline`:
-     delegue ao `atlassian-expert` um comentário no card com o motivo da
-     evidência, os vereditos dos gates e a branch onde os commits ficaram. Se
-     `defaults.status_map.blocked` estiver declarado, mova o card para ele;
-     sem a coluna, o card fica em `defaults.status_map.in_progress`, onde a
-     reserva o colocou. Nunca o deixe em `to_do`: o quadro diria que ninguém
-     tocou num card que tem código pronto.
+     **Atualizar o Jira (grava no quadro), on block.** An item that is a card and
+     closed `blocked`, or went back to `pending`, with a board and without
+     `--offline`: delegate to `atlassian-expert` a comment on the card with the
+     reason from the evidence, the gate verdicts and the branch where the commits
+     stayed. If `defaults.status_map.blocked` is declared, move the card to it;
+     without that column, the card stays in `defaults.status_map.in_progress`,
+     where the reservation put it. Never leave it in `to_do`: the board would say
+     no one touched a card that has finished code.
 
-     Junto, grave `--pergunta "<a pergunta fechada que destrava o item, com a
-     sua recomendação>"`, e faça o mesmo ao abrir um `--human-pending`. Ex.:
-     `--pergunta "Fecho o card como 'medir depois do go-live' ou movo a
+     Along with it, record `--pergunta "<the closed question that unblocks the
+     item, with your recommendation>"`, and do the same when opening a
+     `--human-pending`. The question is shown to the owner, so write it in pt-BR.
+     E.g.: `--pergunta "Fecho o card como 'medir depois do go-live' ou movo a
      medição para o checklist do primeiro deploy? Recomendo o checklist: a
-     pergunta sobrevive sem travar a fila"`. É o que o `cepa-until decidir`
-     mostra ao dono no fim da noite, num menu fixo em que **sim = o item
-     volta para a fila com esta resposta** e **não = fica como está**:
-     escreva a pergunta de modo que "sim" signifique isso. Até 25 palavras,
-     sem nome de branch, de classe de teste ou de arquivo (isso fica na
-     evidência, que o dono abre com `[e]`). Sem pergunta, o terminal faz a
-     padrão ("destravo o item e devolvo para a fila?") e o dono decide sem o
-     contexto que só você tem. A resposta dele volta pela evidência
-     do item (`cepa-plan responde`), e o próximo run a lê ali.
+     pergunta sobrevive sem travar a fila"` (Do I close the card as "measure
+     after go-live" or move the measurement to the first-deploy checklist? I
+     recommend the checklist: the question survives without blocking the queue).
+     It is what `cepa-until decidir` shows the owner at the end of the night, in
+     a fixed menu where **yes = the item goes back to the queue with this
+     answer** and **no = it stays as it is**: write the question so that "yes"
+     means that. Up to 25 words, without a branch name, test class name or file
+     name (that stays in the evidence, which the owner opens with `[e]`). Without
+     a question, the terminal asks the default one ("destravo o item e devolvo
+     para a fila?" — do I unblock the item and return it to the queue?) and the
+     owner decides without the context only you have. Their answer comes back
+     through the item's evidence (`cepa-plan responde`), and the next run reads
+     it there.
 
-### 4. Desfecho terminal — nenhum item sai do lote sem nome
+### 4. Terminal outcome — no item leaves the batch without a name
 
-O lote não termina enquanto um item tocado estiver sem desfecho nomeado. Todo
-item que você tocou acaba em exatamente um destes:
+The batch does not end while a touched item has no named outcome. Every item you
+touched ends in exactly one of these:
 
-| Desfecho | Significa |
+| Outcome | Means |
 |---|---|
-| `DONE` | fechou, com os dois gates (mais o `validation-lead`, na topologia que o tem) e a evidência gravada |
-| `BLOCKED` | travou numa condição de fora — nomeie a condição e quem a resolve |
-| `DEFERRED` | adiado de propósito — nomeie o que precisa ser verdade para retomar |
-| `DROPPED` | não vai ser feito — nomeie por quê |
-| `ERROR` | o run em si falhou (infra, permissão) — nomeie a falha |
-| `SKIPPED` | o item deixou de ser reservável desde a montagem do lote — diga qual dos casos |
+| `DONE` | closed, with both gates (plus `validation-lead`, in the topology that has it) and the evidence recorded |
+| `BLOCKED` | stuck on an outside condition — name the condition and who resolves it |
+| `DEFERRED` | deferred on purpose — name what needs to be true to resume |
+| `DROPPED` | will not be done — name why |
+| `ERROR` | the run itself failed (infra, permission) — name the failure |
+| `SKIPPED` | the item stopped being reservable since the batch was built — say which of the cases |
 
-"Em andamento", "quase lá", "esperando o build" e silêncio **não** são
-desfechos. São a ausência de
-uma decisão vestida de status, e é assim que um item volta na semana seguinte
-sem ninguém saber o que houve com ele. Se você não sabe nomear, o desfecho
-honesto é `BLOCKED` com o motivo "desfecho indeterminado: <o que você não
-sabe>".
+"In progress", "almost there", "waiting for the build" and silence are **not**
+outcomes. They are the absence of
+a decision dressed up as status, and that is how an item comes back the next
+week without anyone knowing what happened to it. If you can't name it, the
+honest outcome is `BLOCKED` with the reason "outcome undetermined: <what you
+don't know>".
 
-### 5. Relatório
+### 5. Report
 
-Um relatório só, no formato `plain-report`, e em pt-BR:
+A single report, in the `plain-report` format, written in Brazilian Portuguese
+(pt-BR). Its contents:
 
-- **Fila drenada:** `<nome>` — `<caminho>`
-- **Itens tentados:** N, cada um com o desfecho terminal. A contagem de itens
-  tentados TEM que bater com a de desfechos nomeados; se não bate, o lote não
-  terminou.
-- **Fechados:** lista com o veredito dos gates de cada um.
-- **Travados / pulados:** com o motivo.
-- **Adiados:** todo item que saiu do lote sem rodar, com o motivo (rota humana
-  aberta, sessão viva nele, cascata). Nenhum? Diga "nenhum adiado". Este bloco
-  é o que impede o adiamento de virar esquecimento — o item não parou a fila,
-  então o relatório é o único lugar onde ele aparece.
-- **Pendente com você:** toda rota `human_pending` aberta que este run
-  encontrou ou abriu, verbatim — inclusive as dos itens adiados por causa
-  delas. Nenhuma? Diga "nada a validar à mão" — silêncio aqui é a ambiguidade
-  que o campo existe para matar.
-- **Quadro:** em duas linhas, uma por direção. **Trazer status do Jira (grava no plano)**: o que o
-  passo 0 mudou na fila, e os cards do quadro sem posição nela. **Atualizar o Jira (grava no quadro)**:
-  os cards transicionados por este run (In Progress, In Review e travados
-  comentados), e os que ficaram pendentes de transição. Sem quadro, uma linha dizendo que o status da fila é
-  auto-declarado.
-- **Onde o lote parou e o que sobrou:** o `stop` do próximo `queue` e quantos
-  pendentes ficaram.
-- **E agora:** `/common:next` para o próximo passo, ou este comando de novo se
-  a parada foi `teto`.
+- **Queue drained:** `<nome>` — `<path>`
+- **Items attempted:** N, each with its terminal outcome. The count of items
+  attempted HAS to match the count of named outcomes; if it doesn't, the batch
+  has not ended.
+- **Closed:** list with the gate verdict of each one.
+- **Stuck / skipped:** with the reason.
+- **Deferred:** every item that left the batch without running, with the reason
+  (open human route, live session on it, cascade). None? Say "nenhum adiado"
+  (none deferred). This block is what keeps deferral from turning into
+  forgetting — the item did not stop the queue, so the report is the only place
+  where it shows up.
+- **Pendente com você** (pending with you): every open `human_pending` route this
+  run found or opened, verbatim — including those of the items deferred because
+  of them. None? Say "nada a validar à mão" (nothing to validate by hand) —
+  silence here is the ambiguity the field exists to kill.
+- **Board:** in two lines, one per direction. **Trazer status do Jira (grava no plano)**: what
+  step 0 changed in the queue, and the board's cards with no position in it. **Atualizar o Jira (grava no quadro)**:
+  the cards transitioned by this run (In Progress, In Review and stuck ones
+  commented), and the ones left pending transition. Without a board, one line saying the queue status is
+  self-reported.
+- **Where the batch stopped and what is left:** the `stop` of the next `queue` and
+  how many pending items remain.
+- **What now:** `/common:next` for the next step, or this command again if the
+  stop was `teto`.
 
 ## Constraints
 
-- **Default `--max 3`.** Cada item é o flow inteiro mais dois gates; valores
-  altos arriscam um run caro que ninguém acompanha.
-- **Só uma coisa ainda para o lote: dependência não satisfeita** (`bloqueado`)
-  — não se empurra trabalho que depende do que não fechou.
-- **`human_pending` aberto ADIA o item; não para o lote.** Decisão do dono em
-  2026-08-28, revendo a de 08-25. Quem depende do item adiado é adiado junto,
-  em cascata, e toda rota aberta é cobrada no relatório do fim.
-- **`blocked` de um run anterior ADIA o item; não para o lote.** Decisão do
-  dono em 2026-08-30, pelo mesmo raciocínio um passo adiante: o item travado
-  não é re-executado (seria o mesmo travamento), mas travar a fila atrás dele
-  numa janela desatendida custa a janela inteira. Herança do
-  `/board-flow:drain` revista de propósito — lá a ordem vem do quadro, aqui
-  vem do plano.
-- **Adiar nunca reescreve a ordem do `plan.yaml`.** Adiar é execução;
-  reordenar é do `/common:plan`. Um executor que mexe na ordem é o que a fila
-  existe para impedir.
-- **Reserva órfã é recuperada, reserva viva é respeitada.** A liveness é a do
-  `_wtlib` (pid vivo no mesmo host, horizonte de 24h), a mesma do sistema de
-  worktrees — duas cópias da regra divergem.
-- **Reservar antes de executar, item a item.** Sem o `start`, o item não é
-  trabalhado.
-- **Turno que acaba com build em segundo plano é item sem desfecho.** Dentro
-  do `cepa-until` cada item é um `claude -p` que morre no fim do turno: não
-  existe "quando ficar verde eu volto". Aguarde e colha no mesmo turno, ou
-  nomeie o desfecho antes de parar.
-- **A marcação é mecânica** (`cepa-plan start` / `finish`). Editar o YAML à mão
-  contorna todas as recusas.
-- **A ordem nunca vem do quadro.** Reconciliar é ler o ESTADO de cada item; a
-  posição continua sendo a que o `/common:plan` gravou. Tirar a ordem do rank
-  do board é o `/board-flow:drain`, e é o que este comando existe para
-  substituir.
-- **Recusa plano `parallel-waves`** — quem executa ondas é o `/maestro:run`.
-- **Não escreve a fila.** Item que falta na fila é do `/common:plan`; inventar
-  posição e `why` aqui forjaria exatamente a decisão que o documento guarda.
-- **Não precisa de tracker.** Sem `board-flow.yaml`, a fila é a única
-  verdade. Com quadro, mover o card de todo item que é card é obrigatório
-  (passos 3.a, 3.e e 3.f), sempre pelo `atlassian-expert`.
+- **Default `--max 3`.** Each item is the whole flow plus two gates; high values
+  risk an expensive run nobody follows.
+- **Only one thing still stops the batch: an unmet dependency** (`bloqueado`)
+  — you don't push work that depends on what has not closed.
+- **An open `human_pending` DEFERS the item; it does not stop the batch.** Owner
+  decision on 2026-08-28, revisiting the one of 08-25. Whatever depends on the
+  deferred item is deferred along with it, in cascade, and every open route is
+  collected in the final report.
+- **`blocked` from a previous run DEFERS the item; it does not stop the batch.**
+  Owner decision on 2026-08-30, by the same reasoning one step further: the
+  stuck item is not re-run (it would be the same block), but locking the queue
+  behind it in an unattended window costs the whole window. Inheritance from
+  `/board-flow:drain` deliberately revisited — there the order comes from the
+  board, here it comes from the queue.
+- **Deferring never rewrites the order of `plan.yaml`.** Deferring is execution;
+  reordering belongs to `/common:plan`. A runner that touches the order is what
+  the queue exists to prevent.
+- **An orphan reservation is recovered, a live reservation is respected.**
+  Liveness is the one from `_wtlib` (live pid on the same host, 24h horizon), the
+  same as the worktree system's — two copies of the rule drift apart.
+- **Reserve before running, item by item.** Without `start`, the item is not
+  worked on.
+- **A turn that ends with a build in the background is an item with no outcome.**
+  Inside `cepa-until` each item is a `claude -p` that dies at the end of the turn:
+  there is no "when it goes green I'll come back". Await and collect in the same
+  turn, or name the outcome before stopping.
+- **Marking is mechanical** (`cepa-plan start` / `finish`). Editing the YAML by
+  hand bypasses all the refusals.
+- **The order never comes from the board.** Reconciling is reading each item's
+  STATE; the position remains the one `/common:plan` recorded. Taking the order
+  from the board rank is `/board-flow:drain`, and it is what this command exists
+  to replace.
+- **Refuses a `parallel-waves` plan** — waves are run by `/maestro:run`.
+- **Does not write the queue.** An item missing from the queue belongs to
+  `/common:plan`; inventing a position and a `why` here would forge exactly the
+  decision the document keeps.
+- **Needs no tracker.** Without `board-flow.yaml`, the queue is the only truth.
+  With a board, moving the card of every item that is a card is mandatory
+  (steps 3.a, 3.e and 3.f), always through `atlassian-expert`.

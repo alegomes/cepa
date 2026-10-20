@@ -40,7 +40,7 @@ def check(name, cond, detail=""):
 def main():
     txt = SESSION_MD.read_text(encoding="utf-8")
     i3 = txt.find("### 3. ")
-    i3b = txt.find("### 3b. Gravar a intenção da sessão")
+    i3b = txt.find("### 3b. Record the session intent")
     i4 = txt.find("### 4. ")
     check("os passos 3, 3b e 4 existem", min(i3, i3b, i4) >= 0, f"{i3} {i3b} {i4}")
     check("o 3b fica entre o 3 e o 4", 0 <= i3 < i3b < i4, f"{i3} {i3b} {i4}")
@@ -50,12 +50,12 @@ def main():
     check("trata a saída 4 com --motivo", "--motivo" in sec and "4" in sec)
     check("avança o cursor com --passo 2", "--passo 2" in sec)
     check("avança o cursor com --passo 3", "--passo 3" in sec)
-    check("diz que não roda no --help", "--help" in sec and "nunca" in sec)
+    check("diz que não roda no --help", "--help" in sec and "never on the `--help` path" in sec)
     plano = " ".join(sec.split())
     check("diz que substitui o pedido do hook (sem segundo ritual)",
-          "não proponha à parte" in plano and "segundo ritual" in plano)
+          "do not propose it separately" in plano and "second ritual" in plano)
     check("diz que falha do escritor não para a rotina",
-          "Falha do escritor não para a rotina" in plano)
+          "A writer failure does not stop the routine" in plano)
 
     linha = next((l for l in sec.splitlines() if 'cepa-intencao" gravar' in l), "")
     check("achou a linha do comando documentado", bool(linha))

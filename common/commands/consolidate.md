@@ -1,6 +1,6 @@
 ---
-description: Consolidação periódica dos mental-models (common/expertise/*.yaml) — funde entries redundantes, aposenta os que o código atual contradiz (SEMPRE verificando contra o repo antes) e mantém intocado o que segue válido. Produz um diff antes/depois com a evidência de cada aposentadoria e SÓ grava após aprovação explícita do usuário. Complementa o prune por contagem do expertise-append.py, que evita crescimento mas nunca re-verifica fatos.
-argument-hint: [agente | --all]   (ex.: proof-reviewer, backend-dev; --all varre todos os *-mental-model.yaml)
+description: Periodic consolidation of the mental-models (common/expertise/*.yaml) — merges redundant entries, retires the ones the current code contradicts (ALWAYS checking against the repo first) and leaves untouched what is still valid. Produces a before/after diff with the evidence for each retirement and ONLY writes after explicit approval from the user. Complements expertise-append.py's count-based prune, which prevents growth but never re-checks facts.
+argument-hint: [agent | --all]   (e.g.: proof-reviewer, backend-dev; --all sweeps every *-mental-model.yaml)
 interaction: routine
 ---
 
@@ -8,177 +8,180 @@ interaction: routine
 
 ## Purpose
 
-Entries de expertise acumulam via `common/hooks/expertise-append.py` com prune
-por CONTAGEM (cap 20 no `feedback:`, exceto `tag: principle`) — nunca por
-VALIDADE. Um fato escrito em fevereiro pode estar contradito pelo código de
-julho e continuar sendo lido em todo boot do agente. É o mesmo defeito dos
-handoffs pré-disciplina "handoff é hipótese": memória tratada como fato
-consumado.
+Expertise entries accumulate via `common/hooks/expertise-append.py` with a
+prune by COUNT (cap of 20 in `feedback:`, except `tag: principle`) — never by
+VALIDITY. A fact written in February may be contradicted by July's code and
+still be read on every boot of the agent. It is the same defect as the handoffs
+before the "handoff is a hypothesis" discipline: memory treated as settled fact.
 
-Este comando fecha esse buraco: relê cada entry do(s) mental-model(s) alvo,
-verifica os que citam artefatos concretos contra o estado atual do repo, funde
-redundâncias e propõe um diff revisável. **Nada é gravado sem aprovação
-explícita do usuário** — este é o gate humano do fluxo.
+This command closes that hole: it rereads each entry of the target
+mental-model(s), checks the ones that cite concrete artifacts against the
+current state of the repo, merges redundancies and proposes a reviewable diff.
+**Nothing is written without the user's explicit approval** — this is the
+flow's human gate.
 
 ## Variables
 
 - `$ARGUMENTS`:
-  - `<agente>` — consolida só `common/expertise/<agente>-mental-model.yaml`
-    (aceite também o nome do arquivo ou o path completo).
-  - `--all` — varre todos os `common/expertise/*-mental-model.yaml`.
-  - vazio — liste os arquivos disponíveis com contagem de entries por seção e
-    pergunte qual consolidar (sugira o mais gordo).
+  - `<agent>` — consolidates only `common/expertise/<agent>-mental-model.yaml`
+    (also accept the file name or the full path).
+  - `--all` — sweeps every `common/expertise/*-mental-model.yaml`.
+  - empty — list the available files with the entry count per section and ask
+    which one to consolidate (suggest the fattest).
 
-Os arquivos vivem em `common/expertise/` no repo do plugin; em projetos host,
-`.claude/expertise/` é um symlink para esse mesmo diretório (ver
-`common/skills/mental-model/SKILL.md`). Resolva pelo symlink se estiver num
-host; o arquivo físico é um só.
+The files live in `common/expertise/` in the plugin repo; in host projects,
+`.claude/expertise/` is a symlink to that same directory (see
+`common/skills/mental-model/SKILL.md`). Resolve through the symlink if you are
+in a host; there is only one physical file.
 
 ## Steps
 
-### 1. Ler e inventariar
+### 1. Read and inventory
 
-Para cada arquivo alvo, leia-o na íntegra e inventarie as seções com schema
-(`feedback:`, `heuristics:`, `ecosystem_gotchas:`) e as chaves livres.
-Preserve mentalmente três coisas que a gravação final NÃO pode perder:
+For each target file, read it in full and inventory the sections with a schema
+(`feedback:`, `heuristics:`, `ecosystem_gotchas:`) and the free keys.
+Keep in mind three things the final write must NOT lose:
 
-- o cabeçalho de comentários (`# Mental model — <agente>` etc.) e
+- the comment header (`# Mental model — <agent>` etc.) and
   `last_updated:`;
-- a ordem cronológica dos entries dentro de cada seção (oldest-first — é o que
-  o prune do append assume);
-- a formatação manual (block scalars `|`, linha em branco entre items).
+- the chronological order of the entries within each section (oldest-first —
+  it is what the append's prune assumes);
+- the hand formatting (block scalars `|`, blank line between items).
 
-### 2. Classificar cada entry — com verificação, não com opinião
+### 2. Classify each entry — by verification, not by opinion
 
-Classifique cada entry em exatamente uma categoria:
+Classify each entry into exactly one category:
 
-- **(a) redundante** — diz o mesmo que outro entry (ou um subconjunto dele).
-  Proposta: fundir mantendo o entry mais rico como base e incorporando
-  qualquer detalhe único do(s) absorvido(s); no entry resultante, anote os
-  `run_id`/ids absorvidos (ex.: `merged_from: [<run_id>, ...]` num entry de
-  feedback, ou parêntese no texto de uma heurística curta).
-- **(b) contradito** — o código/estado atual do repo diz o oposto do que o
-  entry afirma. Proposta: aposentar (remover), com evidência.
-- **(c) vencido** — referencia coisa renomeada, removida ou substituída
-  (hook que não existe mais, flag extinta, comando renomeado). Proposta:
-  aposentar OU reescrever apontando para o sucessor, se a regra em si segue
-  valendo.
-- **(d) válido** — segue correto. Manter **intocado**: nem reescrever, nem
-  "melhorar" a redação. Consolidação não é editorial.
+- **(a) redundant** — says the same as another entry (or a subset of it).
+  Proposal: merge, keeping the richest entry as the base and incorporating any
+  unique detail from the absorbed one(s); in the resulting entry, note the
+  absorbed `run_id`s/ids (e.g. `merged_from: [<run_id>, ...]` in a feedback
+  entry, or a parenthesis in the text of a short heuristic).
+- **(b) contradicted** — the repo's current code/state says the opposite of
+  what the entry states. Proposal: retire (remove), with evidence.
+- **(c) stale** — references something renamed, removed or replaced (a hook
+  that no longer exists, an extinct flag, a renamed command). Proposal: retire
+  OR rewrite pointing at the successor, if the rule itself still holds.
+- **(d) valid** — still correct. Keep it **untouched**: do not rewrite it, do
+  not "improve" the wording. Consolidation is not editing.
 
-**Regra de verificação (rigor de proof-reviewer): aposentadoria sem evidência
-citada é violação.** Antes de classificar qualquer entry como (b) ou (c):
+**Verification rule (proof-reviewer rigor): a retirement without cited
+evidence is a violation.** Before classifying any entry as (b) or (c):
 
-- Se o entry cita um **arquivo ou path**, verifique que ele existe (Glob/Read)
-  e — quando o entry descreve comportamento — que o trecho relevante ainda se
-  comporta como descrito (leia o código, não o nome do arquivo).
-- Se cita uma **flag, allowlist, config ou constante**, abra a fonte e cite a
-  linha atual que confirma ou contradiz.
-- Se cita um **comando/CLI**, confirme que existe (`command -v`, `--help`, ou
-  o script no repo); execute só se for read-only e barato.
-- Registre a evidência no formato `evidência: <arquivo:linha ou comando> — <o
-  que foi observado>`. "Parece obsoleto", "provavelmente mudou" ou memória de
-  sessão anterior **não são evidência** — sem verificação mecânica, o entry é
-  (d) por default.
-- **Não-verificável ≠ contradito.** Expertise é agent-global e cross-project:
-  um entry pode citar artefato de OUTRO repo que não está no seu disco. Nesse
-  caso marque `não-verificável neste repo` e mantenha como (d) — no máximo
-  liste-o numa seção "não pude verificar" do relatório para o usuário decidir.
+- If the entry cites a **file or path**, check that it exists (Glob/Read)
+  and — when the entry describes behavior — that the relevant snippet still
+  behaves as described (read the code, not the file name).
+- If it cites a **flag, allowlist, config or constant**, open the source and
+  cite the current line that confirms or contradicts it.
+- If it cites a **command/CLI**, confirm it exists (`command -v`, `--help`, or
+  the script in the repo); run it only if it is read-only and cheap.
+- Record the evidence in the format `evidence: <file:line or command> — <what
+  was observed>`. "Looks obsolete", "probably changed" or memory from a previous
+  session **are not evidence** — without mechanical verification, the entry is
+  (d) by default.
+- **Not verifiable ≠ contradicted.** Expertise is agent-global and
+  cross-project: an entry may cite an artifact from ANOTHER repo that is not on
+  your disk. In that case mark it `not verifiable in this repo` and keep it as
+  (d) — at most list it in a "could not verify" section of the report for the
+  user to decide.
 
-**Entries `tag: principle` nunca entram em (b)/(c) automaticamente.** São a
-memória disciplinar do agente (o append nunca os pruna; este comando também
-não). Se a verificação sugerir que um principle envelheceu, apresente como
-**proposta separada e destacada**, exigindo aprovação individual explícita —
-nunca dentro de um "aprova tudo".
+**`tag: principle` entries never go into (b)/(c) automatically.** They are the
+agent's disciplinary memory (the append never prunes them; this command does
+not either). If verification suggests a principle has aged, present it as a
+**separate, highlighted proposal**, requiring explicit individual approval —
+never inside an "approve all".
 
-### 3. Produzir o diff proposto e apresentar ao usuário
+### 3. Produce the proposed diff and present it to the user
 
-Monte, por arquivo, um relatório antes/depois:
+Build, per file, a before/after report. The rendered report is in Brazilian
+Portuguese (pt-BR):
 
 ```
-## <agente>-mental-model.yaml — proposta de consolidação
+## <agent>-mental-model.yaml — consolidation proposal
 
-Entries: N → M  (fundidos: x · aposentados: y · mantidos: z)
+Entries: N → M  (merged: x · retired: y · kept: z)
 
-### Fusões
-- [feedback] <run_id A> + <run_id B> → mantém A (mais rico), absorve o detalhe
-  "<...>" de B.
-  ANTES: <os dois entries, verbatim>
-  DEPOIS: <entry fundido>
+### Merges
+- [feedback] <run_id A> + <run_id B> → keeps A (richer), absorbs the detail
+  "<...>" from B.
+  BEFORE: <the two entries, verbatim>
+  AFTER: <merged entry>
 
-### Aposentadorias  (cada uma com evidência — obrigatório)
-- [heuristics] "<texto do entry>"
-  motivo: contradito
-  evidência: common/hooks/gate-advance.py:41 — a flag citada foi removida;
-  o gate agora lê `.claude/last-build.json` direto.
+### Retirements  (each with evidence — mandatory)
+- [heuristics] "<entry text>"
+  reason: contradicted
+  evidence: common/hooks/gate-advance.py:41 — the cited flag was removed;
+  the gate now reads `.claude/last-build.json` directly.
 
-### Propostas sobre `tag: principle` (aprovação individual)
-- <se houver>
+### Proposals about `tag: principle` (individual approval)
+- <if any>
 
-### Não pude verificar (mantidos)
-- <entries cross-project ou sem artefato citável>
+### Could not verify (kept)
+- <cross-project entries or ones without a citable artifact>
 
-### Mantidos intocados
-- <lista curta, só identificadores>
+### Kept untouched
+- <short list, identifiers only>
 ```
 
-Apresente e **pare**. Aceite aprovação total, parcial ("aprova as fusões, não
-a aposentadoria 2") ou rejeição. **Nunca grave sem um "sim" explícito do
-usuário nesta sessão** — silêncio, "parece bom continuar analisando" ou
-autonomous-mode NÃO contam; em autonomous-mode este comando para aqui e
-reporta o diff como pendência humana.
+Present and **stop**. Accept full approval, partial approval ("approve the
+merges, not retirement 2") or rejection. **Never write without an explicit
+"yes" from the user in this session** — silence, "looks good, keep analysing"
+or autonomous-mode do NOT count; in autonomous-mode this command stops here and
+reports the diff as a pending human item.
 
-### 4. Gravar (só após aprovação)
+### 4. Write (only after approval)
 
-Aplique exatamente o que foi aprovado, por Edit/Write direto no arquivo
-(consolidação é reescrita de entries existentes — o helper
-`expertise-append.py` só faz append; não serve aqui). Preserve:
+Apply exactly what was approved, by Edit/Write directly on the file
+(consolidation is a rewrite of existing entries — the `expertise-append.py`
+helper only appends; it does not fit here). Preserve:
 
-- o cabeçalho de comentários e todas as chaves livres não tocadas;
-- entries `tag: principle` (intactos, salvo aprovação individual do passo 3);
-- a ordem cronológica dos entries remanescentes (um entry fundido fica na
-  posição do entry-base mantido);
-- a formatação (block scalars `|`, dois espaços de indent, linha em branco
-  entre items de feedback) — não round-trip por `yaml.dump`.
+- the comment header and every free key not touched;
+- `tag: principle` entries (intact, unless individually approved in step 3);
+- the chronological order of the remaining entries (a merged entry stays in the
+  position of the kept base entry);
+- the formatting (block scalars `|`, two-space indent, blank line between
+  feedback items) — no round-trip through `yaml.dump`.
 
-Atualize `last_updated:` para a data de hoje. Atenção à concorrência: o flock
-do helper só protege appends; esta reescrita direta pode colidir com outra
-sessão escrevendo o mesmo arquivo. Consolide com as outras sessões paradas
-(ou avise o usuário do risco).
+Update `last_updated:` to today's date. Mind concurrency: the helper's flock
+only protects appends; this direct rewrite can collide with another session
+writing the same file. Consolidate with the other sessions stopped (or warn the
+user about the risk).
 
-Releia o arquivo gravado e valide que é YAML parseável
-(`python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" <arquivo>`).
-Se não parsear, reverta e reporte.
+Reread the written file and validate that it is parseable YAML
+(`python3 -c "import yaml,sys; yaml.safe_load(open(sys.argv[1]))" <file>`).
+If it does not parse, revert and report.
 
-### 5. Telemetria
+### 5. Telemetry
 
-Ao final, um evento por agente consolidado:
+At the end, one event per consolidated agent:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_telemetry.py" emit mm_consolidation \
-  agent=<nome> merged=<n> retired=<n> kept=<n>
+  agent=<name> merged=<n> retired=<n> kept=<n>
 ```
 
-(`merged` = entries absorvidos em fusões; `retired` = aposentados; `kept` =
-entries no arquivo final. Se o usuário rejeitou tudo, emita mesmo assim com
-`merged=0 retired=0` — a tentativa também é sinal.) Se `${CLAUDE_PLUGIN_ROOT}`
-não estiver no ambiente, use o path absoluto de `common/hooks/_telemetry.py`.
+(`merged` = entries absorbed in merges; `retired` = retired; `kept` =
+entries in the final file. If the user rejected everything, emit anyway with
+`merged=0 retired=0` — the attempt is also a signal.) If `${CLAUDE_PLUGIN_ROOT}`
+is not in the environment, use the absolute path of `common/hooks/_telemetry.py`.
 
-### 6. Relatório final
+### 6. Final report
 
-- Por arquivo: N → M entries, o que foi fundido/aposentado/mantido, e o que
-  ficou pendente (rejeições, principles não aprovados, não-verificáveis).
-- Aparece em `/common:metrics` como evento custom `mm_consolidation`.
+Write it in Brazilian Portuguese (pt-BR):
+
+- Per file: N → M entries, what was merged/retired/kept, and what was left
+  pending (rejections, unapproved principles, unverifiable entries).
+- It shows up in `/common:metrics` as the custom event `mm_consolidation`.
 
 ## Notes
 
-- **Aceite do slice (BACKLOG P4):** rodar no expertise mais gordo reduz
-  entries sem perder nenhuma regra ainda-válida — o diff revisável do passo 3
-  é o que garante isso.
-- `feedback:` é normalmente escrito só por `/common:debrief`
-  (`common/commands/debrief.md`); este comando é a segunda exceção sancionada,
-  e só sob aprovação humana.
-- Consolidação é sobre VALIDADE, não sobre tamanho. Um arquivo com 6 entries
-  todos válidos sai intocado — isso é sucesso, não fracasso do comando.
-- Cadência sugerida: quando um arquivo encostar no cap de 20 do `feedback:`,
-  ou a cada poucas semanas de uso intenso de autonomous-mode + debrief.
+- **Slice acceptance (BACKLOG P4):** running it on the fattest expertise file
+  reduces entries without losing any still-valid rule — the reviewable diff of
+  step 3 is what guarantees that.
+- `feedback:` is normally written only by `/common:debrief`
+  (`common/commands/debrief.md`); this command is the second sanctioned
+  exception, and only under human approval.
+- Consolidation is about VALIDITY, not size. A file with 6 entries, all valid,
+  comes out untouched — that is success, not a failure of the command.
+- Suggested cadence: when a file hits the cap of 20 in `feedback:`, or every
+  few weeks of heavy autonomous-mode + debrief use.

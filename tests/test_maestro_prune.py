@@ -356,7 +356,7 @@ def test_run_md_cita_prune_e_troca_receita_fantasma():
     check("passo 6a usa `herdr worktree remove --workspace`",
           "herdr worktree remove --workspace" in fr)
     check("passo 2 (gc) lista as worktrees com `--cwd`, não pelo Space em foco",
-          "herdr worktree list --cwd <raiz-principal> --json" in fr)
+          "herdr worktree list --cwd <main-root> --json" in fr)
 
 
 def main():

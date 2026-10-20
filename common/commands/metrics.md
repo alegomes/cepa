@@ -1,6 +1,6 @@
 ---
-description: Relatório de telemetria do próprio harness — sessões por repo, taxa de builds vermelhos, bloqueios do gate-advance por motivo, distribuição de vereditos do proof gate, `proven` sobre-declarados barrados pelo guard, e o **atrito das pontas da sessão** (quantos turnos você gasta antes de conseguir disparar a rotina, e quantos gasta depois dela até encerrar). Lê o ledger em ~/.claude/cepa-telemetry/ alimentado automaticamente pelos hooks. Use para decidir com evidência onde o harness atrapalha em vez de ajudar.
-argument-hint: [--days N | --month YYYY-MM] [--repo <nome>]
+description: Telemetry report on the harness itself — sessions per repo, red build rate, gate-advance blocks by reason, proof gate verdict distribution, over-declared `proven` blocked by the guard, and the **friction at the session's ends** (how many turns you spend before you manage to launch the routine, and how many after it until you close). Reads the ledger in ~/.claude/cepa-telemetry/, fed automatically by the hooks. Use it to decide with evidence where the harness gets in the way instead of helping.
+argument-hint: [--days N | --month YYYY-MM] [--repo <name>]
 interaction: routine
 ---
 
@@ -8,84 +8,87 @@ interaction: routine
 
 ## Purpose
 
-O harness audita cards, builds e provas — este comando audita o harness. Os
-hooks (`gate-advance`, `capture-build-result`, `session-registry`,
-`proof-verdict-guard`, `session-log`) emitem eventos fail-silent para
-`~/.claude/cepa-telemetry/events-YYYY-MM.jsonl`; o agregador transforma isso em
-respostas: onde o gate bloqueia demais, qual repo queima mais builds, quantos
-`proven` sobre-declarados o guard barrou.
+The harness audits cards, builds and proofs — this command audits the harness.
+The hooks (`gate-advance`, `capture-build-result`, `session-registry`,
+`proof-verdict-guard`, `session-log`) emit fail-silent events to
+`~/.claude/cepa-telemetry/events-YYYY-MM.jsonl`; the aggregator turns that into
+answers: where the gate blocks too much, which repo burns the most builds, how
+many over-declared `proven` the guard blocked.
 
-Desde 03/08/2026 inclui a seção **Formato de relatório** — quantas respostas de
-trabalho feito saíram do padrão `plain-report` e por qual motivo. Desde
-25/08/2026 o `report-style-lint` bloqueia e o turno reescreve, então a seção
-separa (06/10/2026) a primeira escrita, que o bloqueio devolve, do que
-persistiu após a reescrita e chegou ao usuário. O segundo é o número que
-importa.
+Since 03/08/2026 it includes the **Formato de relatório** section (report format)
+— how many done-work replies left the `plain-report` pattern and for which reason.
+Since 25/08/2026 `report-style-lint` blocks and the turn rewrites, so the section
+separates (06/10/2026) the first write, which the block returns, from what
+persisted after the rewrite and reached the user. The second is the number that
+matters.
 
-Desde 17/10/2026 inclui a seção **Intenção da sessão** (eventos `intent.*`):
-quantas sessões gravaram intenção, em quantas o cursor avançou, quantas
-terminaram no último passo e quantas vezes você perguntou "onde estamos /
-próximo passo", cada linha com a conta. É a leitura do critério que decide se o
-ciclo 2 da intenção entra (docs/estrategia-intencao-da-sessao.md).
+Since 17/10/2026 it includes the **Intenção da sessão** section (session intent;
+`intent.*` events): how many sessions recorded an intent, in how many the cursor
+advanced, how many ended on the last step and how many times you asked "where are
+we / next step", each line with the arithmetic. It is the reading of the
+criterion that decides whether cycle 2 of the intent goes in
+(docs/estrategia-intencao-da-sessao.md).
 
 ## Steps
 
-1. Rode o agregador, repassando os argumentos do usuário verbatim:
+1. Run the aggregator, passing the user's arguments verbatim:
 
    ```
    python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-metrics" $ARGUMENTS
    ```
 
-2. Mostre o relatório ao usuário **na íntegra** (ele já sai em pt-BR e
-   formatado). Não resuma por conta própria — os números são o produto.
+2. Show the report to the user **in full** (it already comes out in pt-BR and
+   formatted). Do not summarize on your own — the numbers are the product.
 
-3. Se a seção "Leituras sugeridas" apontar algo acionável (ex.: repo que
-   merece `.claude/no-build`, loop de verify lento), destaque a UMA ação de
-   maior retorno e ofereça executá-la. Não execute sem confirmação.
+3. If the "Leituras sugeridas" (suggested readings) section points to something
+   actionable (e.g. a repo that deserves `.claude/no-build`, a slow verify loop),
+   highlight the ONE highest-return action and offer to run it. Do not run it
+   without confirmation.
 
-   **Exceção: sessão já encerrada.** Se o `/common:wrap-up` já rodou nesta
-   mesma conversa ("Safe to exit" já foi dito), NÃO ofereça a ação: registre-a
-   (seção no `BACKLOG.md` quando o repo é o cepa; nos outros, `python3
-   "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" add --origem comando --alvo metrics
-   "<a ação e o motivo>"`) e diga no relatório onde ficou registrada. A lista
-   do fim diz "Nada pendente." e `**Pra você:**` diz "nada". O
-   `report-style-lint.py` bloqueia pergunta fechada ali (categoria
+   **Exception: session already closed.** If `/common:wrap-up` has already run in
+   this same conversation ("Safe to exit" has already been said), do NOT offer
+   the action: record it (a section in `BACKLOG.md` when the repo is cepa; in the
+   others, `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" add --origem comando
+   --alvo metrics "<the action and the reason>"`) and say in the report where it
+   was recorded. The list at the end says "Nada pendente." and `**Pra você:**`
+   says "nada". `report-style-lint.py` blocks a closed question there (category
    `pergunta-pos-wrap-up`).
 
-4. Se não houver eventos ainda, explique que a telemetria começou a acumular
-   nesta versão dos plugins e sugira rodar de novo após alguns dias de uso.
+4. If there are no events yet, explain that telemetry started accumulating in
+   this version of the plugins and suggest running it again after a few days of
+   use.
 
 ## Notes
 
-- **Para onde foi o relógio de UMA sessão**, o agregador não serve — ele conta
-  eventos, não mede tempo. Quem mede é o `cepa-clock`, que lê o transcript da
-  sessão (e o de cada subagente) e reparte o relógio em espera ativa, build,
-  bash normal e geração dos agentes:
+- **Where the clock of ONE session went**: the aggregator does not serve — it
+  counts events, it does not measure time. What measures it is `cepa-clock`,
+  which reads the session's transcript (and each subagent's) and splits the clock
+  into active waiting, build, normal bash and agent generation:
 
   ```
-  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-clock"            # a última sessão deste repo
-  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-clock" --emit     # e grava no ledger
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-clock"            # the last session of this repo
+  python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-clock" --emit     # and writes it to the ledger
   ```
 
-  Com `--emit`, a repartição entra aqui como a seção "Relógio medido". Rode-o
-  depois de uma rotina longa que pareceu lenta — foi assim que se descobriu, em
-  2026-08-26, que o gargalo era lead sondando disco (19% a 52% do relógio) e não
-  build (3% a 17%).
+  With `--emit`, the split shows up here as the "Relógio medido" (measured clock)
+  section. Run it after a long routine that felt slow — that is how it was
+  found, on 2026-08-26, that the bottleneck was the lead probing the disk (19% to
+  52% of the clock) and not the build (3% to 17%).
 
-- **Tokens** (desde 12/09/2026): no fim de cada sessão o `session-registry`
-  dispara o `cepa-tokens` em segundo plano, que lê o transcript e grava um
-  evento `token_usage` (contexto novo, cache lido e saída, por tipo de agente,
-  mais o tamanho do que cada ferramenta devolveu). A seção "Tokens" responde
-  onde o gasto está: agente, repo ou leitura de arquivo. Sessões anteriores à
-  instalação entram com uma varredura única:
+- **Tokens** (since 12/09/2026): at the end of each session `session-registry`
+  fires `cepa-tokens` in the background, which reads the transcript and writes a
+  `token_usage` event (fresh context, cache read and output, per agent type,
+  plus the size of what each tool returned). The "Tokens" section answers where
+  the spend is: agent, repo or file reading. Sessions from before the install
+  come in with a one-off sweep:
 
   ```
   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-tokens" --todas --days 30 --emit
   ```
 
-- Comandos e skills podem registrar eventos próprios (aparecem em "Eventos
+- Commands and skills can record their own events (they show up in "Eventos
   custom") via:
-  `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_telemetry.py" emit <evento> chave=valor ...`
-- O ledger não guarda payloads nem comandos completos — só categorias, status
-  e rótulos curtos. Apagar `~/.claude/cepa-telemetry/` zera o histórico sem
-  quebrar nada.
+  `python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_telemetry.py" emit <event> key=value ...`
+- The ledger keeps no payloads or full commands — only categories, statuses and
+  short labels. Deleting `~/.claude/cepa-telemetry/` resets the history without
+  breaking anything.

@@ -1,6 +1,6 @@
 ---
-description: Competição de designs com julgamento cego (Gauntlet Loop) para uma decisão de design ABERTA — escreve a barra de qualidade antes, faz N builders isolados produzirem designs de ângulos distintos, 3 juízes cegos ranqueiam por Borda, o vencedor é revisado e checado contra a barra, e o resultado vai para docs/internals/gauntlet-<slug>.md. Opt-in e caro (~600k tokens). Para julgar UM artefato já escrito por várias lentes use /common:advisors.
-argument-hint: <alvo> [--builders=3] [--angulos=a,b,c] [--slug=<slug>]
+description: Design competition with blind judging (Gauntlet Loop) for an OPEN design decision — writes the quality bar first, has N isolated builders produce designs from distinct angles, 3 blind judges rank them by Borda count, the winner is revised and checked against the bar, and the result goes to docs/internals/gauntlet-<slug>.md. Opt-in and expensive (~600k tokens). To judge ONE already-written artifact through several lenses use /common:advisors.
+argument-hint: <target> [--builders=3] [--angulos=a,b,c] [--slug=<slug>]
 interaction: routine
 ---
 
@@ -8,158 +8,166 @@ interaction: routine
 
 ## Purpose
 
-Uma decisão de design aberta costuma sair com o primeiro desenho que alguém
-pensou. Este comando faz o contrário: escreve **antes** a barra do que seria um
-bom desenho, manda N builders **isolados** produzirem desenhos concorrentes de
-ângulos diferentes, e deixa 3 juízes **cegos** (que só veem objetivo, barra e
-desenhos anonimizados) ranquearem. O vencedor é revisado contra as lacunas que
-os juízes apontaram e checado de novo contra a barra. Sai um documento durável
-com o caminho todo, não só a conclusão.
+An open design decision usually ships with the first design someone thought of.
+This command does the opposite: it writes **first** the bar for what a good
+design would be, sends N **isolated** builders to produce competing designs from
+different angles, and lets 3 **blind** judges (who see only the goal, the bar and
+the anonymized designs) rank them. The winner is revised against the gaps the
+judges pointed out and checked against the bar again. Out comes a durable
+document with the whole path, not just the conclusion.
 
 ## Variables
 
-- `$ARGUMENTS` — `<alvo>` (obrigatório): texto livre descrevendo a decisão, OU o
-  título de uma seção `## ` do `BACKLOG.md` (nesse caso a seção inteira vira o
-  contexto dos agentes).
-- `--builders=N` — número de builders (default 3). Cada um recebe um ângulo;
-  se N passar do número de ângulos, eles ciclam.
-- `--angulos=a,b,c` — escolhe os ângulos por `key` no registry (default:
+- `$ARGUMENTS` — `<target>` (required): free text describing the
+  decision, OR the title of a `## ` section of `BACKLOG.md` (in that case the
+  whole section becomes the agents' context).
+- `--builders=N` — number of builders (default 3). Each one gets an angle; if N
+  exceeds the number of angles, they cycle.
+- `--angulos=a,b,c` — picks the angles by `key` in the registry (default:
   `mecanismo-novo`, `estender-o-que-existe`, `livre`).
-- `--slug=<slug>` — nome do arquivo de saída (default: kebab-case do `<alvo>`).
+- `--slug=<slug>` — output file name (default: kebab-case of `<target>`).
 
 ## Instructions
 
-Você é o orchestrator. Você monta o contexto, dispara o workflow, grava o
-documento e relata — a execução dos 9 agentes é do script. O registry de ângulos
-vive em `common/gauntlet/angulos.md` (via plugin:
-`${CLAUDE_PLUGIN_ROOT}/gauntlet/angulos.md`) e o script canônico em
+You are the orchestrator. You assemble the context, launch the workflow, write
+the document and report — running the 9 agents is the script's job. The angle
+registry lives in `common/gauntlet/angulos.md` (via the plugin:
+`${CLAUDE_PLUGIN_ROOT}/gauntlet/angulos.md`) and the canonical script in
 `${CLAUDE_PLUGIN_ROOT}/gauntlet/gauntlet.workflow.js`.
 
 ## Workflow
 
-### 0. Piso de uso
+### 0. Usage floor
 
-Este comando é **opt-in e caro**: ~600k tokens, ~13 minutos, 9 agentes no default
-(barra 1 + builders 3 + juízes 3 + revisor 1 + checagem 1). Só rode
-se o usuário pediu explicitamente (ou confirma depois de ouvir o custo).
+This command is **opt-in and expensive**: ~600k tokens, ~13 minutes, 9 agents by
+default (bar 1 + builders 3 + judges 3 + reviser 1 + check 1). Only run it if
+the user asked explicitly (or confirms after hearing the cost).
 
-**Recuse** e aponte o caminho certo quando o alvo for:
+**Refuse** and point to the right path when the target is:
 
-- **código de correção provável** (dá para provar com teste, suíte ou build):
-  o juiz certo é o gate de prova, não um painel de opiniões;
-- **tarefa mecânica** (rename, ajuste cuja forma só tem uma resposta);
-- decisão **trivial ou reversível a custo baixo**;
-- decisão que **não dá para julgar em texto** (depende de medir algo no mundo).
+- **code whose correctness is provable** (a test, the suite or the build can
+  prove it): the right judge is the proof gate, not a panel of opinions;
+- a **mechanical task** (rename, an adjustment whose shape has only one answer);
+- a **trivial decision, or one reversible at low cost**;
+- a decision that **cannot be judged in text** (it depends on measuring something
+  in the world).
 
-O Gauntlet serve a decisão de design **aberta**, em que vários desenhos
-plausíveis competem e um leitor atento consegue julgá-los pelo texto.
+The Gauntlet serves the **open** design decision, where several plausible designs
+compete and an attentive reader can judge them from the text.
 
-### 1. Montar o CONTEXT
+### 1. Assemble the CONTEXT
 
-Se o `<alvo>` bate com um título `## ` do `BACKLOG.md`, cole essa seção inteira
-como contexto. Senão, use o texto do alvo e leia o que ele cita. O contexto
-precisa ter: (a) o **objetivo** em poucas frases; (b) **o que já existe e deve
-ser estendido**, não duplicado (com caminhos); (c) a **filosofia do harness**
-relevante (enforcement em profundidade: regra só em prosa decai, gate mecânico
-dura; gates independentes do executor); (d) a lista de **arquivos para ler**
-(`reads`). Incidentes reais que motivam a decisão entram aqui: a barra e os
-builders trabalham em cima deles.
+If `<target>` matches a `## ` title in `BACKLOG.md`, paste that whole section as
+the context. Otherwise, use the target text and read what it cites. The context
+needs: (a) the **goal** in a few sentences; (b) **what already exists and must be
+extended**, not duplicated (with paths); (c) the relevant **harness philosophy**
+(enforcement in depth: a rule only in prose decays, a mechanical gate lasts;
+gates independent of the executor); (d) the list of **files to read** (`reads`).
+Real incidents that motivate the decision go here: the bar and the builders work
+on top of them.
 
-### 2. Escolher os ângulos
+### 2. Choose the angles
 
-Leia `${CLAUDE_PLUGIN_ROOT}/gauntlet/angulos.md`. Sem `--angulos`, use o
-default (`mecanismo-novo`, `estender-o-que-existe`, `livre`). Com `--angulos`,
-selecione por `key` (key fora do registry: liste as válidas e pare). Cada
-builder recebe um ângulo; `--builders` maior que o número de ângulos cicla, menor
-usa os N primeiros. Monte `angles: [{key, brief}]` com o `brief` do registry.
+Read `${CLAUDE_PLUGIN_ROOT}/gauntlet/angulos.md`. Without `--angulos`, use the
+default (`mecanismo-novo`, `estender-o-que-existe`, `livre`). With `--angulos`,
+select by `key` (a key outside the registry: list the valid ones and stop). Each
+builder gets an angle; `--builders` larger than the number of angles cycles,
+smaller uses the first N. Build `angles: [{key, brief}]` with the registry's
+`brief`.
 
-### 3. Executar o workflow
+### 3. Run the workflow
 
-Passe à **Workflow tool** o script
-`${CLAUDE_PLUGIN_ROOT}/gauntlet/gauntlet.workflow.js` (lido do arquivo, sem
-alterar) com `args` = `{repo, goal, context, angles: [{key, brief}], reads: [paths]}`.
-O `repo` é a raiz do repositório atual (`git rev-parse --show-toplevel`).
+Pass the **Workflow tool** the script
+`${CLAUDE_PLUGIN_ROOT}/gauntlet/gauntlet.workflow.js` (read from the file,
+unchanged) with `args` = `{repo, goal, context, angles: [{key, brief}], reads: [paths]}`.
+`repo` is the root of the current repository (`git rev-parse --show-toplevel`).
 
-Não reescreva o script por invocação: ele é a cópia canônica dos dois pilotos
-validados (`docs/internals/gauntlet-pilot-*.workflow.js`). O que varia vai em
-`args`. O `args` pode chegar como string JSON — o script tem a guarda.
+Do not rewrite the script per invocation: it is the canonical copy of the two
+validated pilots (`docs/internals/gauntlet-pilot-*.workflow.js`). Whatever varies
+goes in `args`. `args` may arrive as a JSON string — the script has the guard.
 
-As cinco etapas que o script executa, nesta ordem:
+The five stages the script runs, in this order:
 
-1. **Barra** — um agente escreve 5 a 8 critérios julgáveis (com rubrica) e uma
-   referência ambiciosa, antes de qualquer design existir.
-2. **Builders isolados** — N agentes em paralelo, cada um com um ângulo; nenhum
-   vê a saída de outro.
-3. **Juízes cegos** — 3 juízes recebem só objetivo + barra + designs
-   anonimizados (A, B, C...), **em ordem rotacionada por juiz**, pontuam cada
-   critério de 0 a 10 e ranqueiam.
-4. **Borda e revisão** — soma de pontos (1º lugar = N pontos, onde N é o número
-   de designs); o vencedor é revisado contra as lacunas apontadas, com enxertos
-   de ideias superiores dos rivais.
-5. **Checagem final** — um agente de contexto novo confere se o design revisado
-   cumpre a barra (todo critério >= 7/10) e lista o que sobrou.
+1. **Bar** — one agent writes 5 to 8 judgeable criteria (with a rubric) and an
+   ambitious reference, before any design exists.
+2. **Isolated builders** — N agents in parallel, each with an angle; none sees
+   another's output.
+3. **Blind judges** — 3 judges receive only goal + bar + anonymized designs
+   (A, B, C...), **in an order rotated per judge**, score each criterion from 0
+   to 10 and rank.
+4. **Borda and revision** — sum of points (1st place = N points, where N is the
+   number of designs); the winner is revised against the gaps pointed out, with
+   grafts of superior ideas from the rivals.
+5. **Final check** — an agent with fresh context checks whether the revised
+   design meets the bar (every criterion >= 7/10) and lists what is left.
 
-Se a Workflow tool **não estiver disponível** nesta sessão, degrade: dispare os
-mesmos agentes por chamadas Agent manuais **na mesma mensagem** (builders em
-paralelo, depois juízes em paralelo), com os mesmos prompts do script,
-mantendo o isolamento dos builders e a cegueira dos juízes.
+If the Workflow tool **is not available** in this session, degrade: launch the
+same agents through manual Agent calls **in the same message** (builders in
+parallel, then judges in parallel), with the same prompts as the script, keeping
+the builders isolated and the judges blind.
 
-O script devolve `{bar, designs, full_designs, verdicts, borda_points, winner,
-revised_design, final_check}`; em falha devolve `{error, designs}` (menos de 2
-designs, ou nenhum juiz respondeu): relate a falha e pare, sem inventar vencedor.
+The script returns `{bar, designs, full_designs, verdicts, borda_points, winner,
+revised_design, final_check}`; on failure it returns `{error, designs}` (fewer
+than 2 designs, or no judge answered): report the failure and stop, without
+inventing a winner.
 
-### 4. Gravar a saída durável
+### 4. Write the durable output
 
-Escreva `docs/internals/gauntlet-<slug>.md` (slug = `--slug` ou kebab-case do
-`<alvo>`) com a estrutura dos pilotos:
+Write `docs/internals/gauntlet-<slug>.md` (slug = `--slug` or kebab-case of
+`<target>`) with the pilots' structure. The document is in pt-BR; keep these
+headings literally, as in the pilots:
 
-- cabeçalho: `# Gauntlet — <alvo>`, linha com id do run, data, agentes, tokens e
-  minutos, e uma linha de método;
-- `## Barra de qualidade (escrita antes de qualquer design)` — cada critério e a
-  referência;
-- `## Designs concorrentes e julgamento` com um `### Design A (<ângulo>) — <título>`
-  por design (conteúdo completo) e `### Vereditos dos N juízes cegos`: ranking de
-  cada juiz, **tabela de pontos Borda com a conta mostrada** (1º = N pontos, 2º =
-  N-1, ...; soma por design) e as maiores lacunas;
-- `## Design final (vencedor X revisado, com enxertos de ...)`;
-- `## Checagem final contra a barra` — `bar_met`, lacunas restantes, nota.
+- header: `# Gauntlet — <target>`, a line with the run id, date, agents, tokens and
+  minutes, and a line on the method;
+- `## Barra de qualidade (escrita antes de qualquer design)` (the quality bar,
+  written before any design) — each criterion and the reference;
+- `## Designs concorrentes e julgamento` (competing designs and judging) with one
+  `### Design A (<ângulo>) — <título>` per design (full content) and
+  `### Vereditos dos N juízes cegos` (verdicts of the N blind judges): each
+  judge's ranking, **a Borda points table with the arithmetic shown** (1st = N
+  points, 2nd = N-1, ...; sum per design) and the biggest gaps;
+- `## Design final (vencedor X revisado, com enxertos de ...)` (final design:
+  winner X revised, with grafts from ...);
+- `## Checagem final contra a barra` (final check against the bar) — `bar_met`,
+  remaining gaps, note.
 
-**Vencedor:** maior soma Borda. Empate: vence o design que ficou em 1º lugar com
-mais juízes; persistindo, o primeiro na ordem dos designs — e o relatório
-**nomeia o empate**.
+**Winner:** highest Borda sum. Tie: the design ranked 1st by the most judges
+wins; if still tied, the first in the order of the designs — and the report
+**names the tie**.
 
-### 5. Relatar (pt-BR, formato `plain-report`)
+### 5. Report (pt-BR, `plain-report` format)
 
-Siga o skill `plain-report`: abertura leiga, `**Pra você:**`, detalhe técnico,
-`### Decisões e próximos passos`. Explique em linguagem leiga quem venceu e por
-quê, com a conta Borda, diga se a barra foi cumprida e o que sobrou. Termine com
-perguntas fechadas numeradas, cada uma com `Recomendo sim/não` (ex.: "Abro um
-item de fila para implementar o design vencedor?"). Nunca devolva a decisão
-sem recomendação.
+Follow the `plain-report` skill: plain-language opening, `**Pra você:**`,
+technical detail, `### Decisões e próximos passos`. Explain in plain language who
+won and why, with the Borda arithmetic, say whether the bar was met and what is
+left. End with numbered closed questions, each with `Recomendo sim/não` (e.g.
+"Abro um item de fila para implementar o design vencedor?" — "Do I open a queue
+item to implement the winning design?"). Never hand back the decision without a
+recommendation.
 
-### 6. Telemetria
+### 6. Telemetry
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/hooks/_telemetry.py" emit gauntlet_run \
   builders=<n> judges=3 winner=<angulo> bar_met=<true|false>
 ```
 
-(Se `${CLAUDE_PLUGIN_ROOT}` não estiver no ambiente, use o path absoluto de
+(If `${CLAUDE_PLUGIN_ROOT}` is not in the environment, use the absolute path of
 `common/hooks/_telemetry.py`.)
 
 ## Notes
 
-- **Isolamento é inegociável.** Builders nunca veem uns aos outros; juízes só
-  veem objetivo + barra + designs anonimizados com ordem rotacionada. Não passe a
-  saída de um agente a outro fora do fluxo do script.
-- **O comando nunca implementa o design vencedor.** Ele grava o documento e
-  relata; implementar é outro item, decidido pelo dono.
-- **Piso de uso repetido porque importa:** código provável ou tarefa mecânica
-  não merece Gauntlet (passo 0).
-- **Relação com `/common:advisors`:** o advisors julga **um** artefato que já
-  existe, por N lentes, e sintetiza nomeando as discordâncias. O gauntlet
-  **gera** N artefatos concorrentes e os julga comparativamente, às cegas, com
-  vencedor por Borda. Use o advisors para revisar uma decisão escrita; use o
-  gauntlet para escolher entre desenhos que ainda não existem.
-- O script não usa `Date.now` nem `Math.random`: o run é determinístico no que
-  depende do orchestrator.
+- **Isolation is non-negotiable.** Builders never see each other; judges see
+  only goal + bar + anonymized designs in rotated order. Do not pass one agent's
+  output to another outside the script's flow.
+- **The command never implements the winning design.** It writes the document and
+  reports; implementing is another item, decided by the owner.
+- **Usage floor repeated because it matters:** provable code or a mechanical task
+  does not deserve a Gauntlet (step 0).
+- **Relation to `/common:advisors`:** advisors judges **one** artifact that
+  already exists, through N lenses, and synthesizes by naming the disagreements.
+  The gauntlet **generates** N competing artifacts and judges them comparatively,
+  blind, with a winner by Borda. Use advisors to review a written decision; use
+  the gauntlet to choose among designs that do not exist yet.
+- The script uses neither `Date.now` nor `Math.random`: the run is deterministic
+  in whatever depends on the orchestrator.

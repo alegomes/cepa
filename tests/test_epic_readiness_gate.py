@@ -307,26 +307,26 @@ def test_comando_existe_e_e_grill_me():
     fm = texto.split("---", 2)[1] if texto.startswith("---") else ""
     check("frontmatter declara interaction: conversational",
           re.search(r"^interaction:\s*conversational\s*$", fm, re.M) is not None)
-    check("argumento é <nome>", re.search(r"^argument-hint:.*<nome>", fm, re.M) is not None)
-    check("escreve docs/epics/<nome>.md", "docs/epics/<nome>.md" in texto)
-    check("uma pergunta por turno", "uma pergunta por turno" in texto.lower())
+    check("argumento é <nome>", re.search(r"^argument-hint:.*<name>", fm, re.M) is not None)
+    check("escreve docs/epics/<nome>.md", "docs/epics/<name>.md" in texto)
+    check("uma pergunta por turno", "one question per turn" in texto.lower())
     check("proíbe menu / AskUserQuestion",
-          "AskUserQuestion" in texto and "lista de opções" in texto.lower())
+          "AskUserQuestion" in texto and "list of options" in texto.lower())
     check("um único ? por turno, sem alternativas enumeradas na frase",
-          "único `?` do turno" in texto and "menu escrito em linha" in texto)
+          "only `?` of the turn" in texto and "menu written inline" in texto)
     check("releitura que corta a segunda pergunta ligada por 'e'",
-          "releia a pergunta" in texto and "corte o segundo" in texto)
+          "reread the question" in texto and "cut the second one" in texto)
     check("desafio único com as duas perguntas-modelo",
           "quem vê isso e onde?" in texto and "o que quebra se faltar?" in texto)
-    check("grava no mesmo turno", "mesmo turno" in texto)
+    check("grava no mesmo turno", "same turn" in texto)
     check("proposta antes da pergunta, turno termina nela",
-          "**antes** da pergunta" in texto)
+          "**before** the question" in texto)
     # A transcrição de 2026-10-08 mostrou o desafio saindo como relatório
     # (Pra você + pergunta numerada), puxado pela regra global de plain-report.
     check("turno de entrevista não usa plain-report",
-          "não relatório de trabalho" in texto and "plain-report" in texto)
+          "not a work report" in texto and "plain-report" in texto)
     check("recusa pronta antes do crivo em voz alta",
-          "recuse em voz alta" in texto)
+          "refuse out loud" in texto)
     check("carrega guided-interrogation", "guided-interrogation" in texto)
     check("fecha pelo spec-readiness-gate", "spec-readiness-gate" in texto)
     check("formato traz as colunas de efeito",
@@ -555,13 +555,14 @@ def test_lint_regras_da_excecao():
 def test_prosa_da_intencao_e_do_fechamento():
     texto = CMD.read_text()
     # S15 e S16: as duas regras da prosa que a transcrição exercita.
-    check("intenção em dois turnos", "**Intenção**, em dois turnos" in texto)
+    check("intenção em dois turnos", "**Intent**, in two turns" in texto)
     check("grava pronta no mesmo turno em que a última lacuna fecha",
-          "grava `pronta` no mesmo turno" in texto)
+          "write `pronta` in the same turn" in texto)
     # S17: a linha de e0c7d05, que levou o turno 1 a 10 de 10 na rodada 7.
     check("com a intenção no argumento, turno 1 pergunta só o que se faz hoje",
-          "Se a intenção veio no" in texto and "grave-a e pergunte só" in texto
-          and "o que dói nesse caminho" in texto)
+          "If the intent came in the argument" in texto
+          and "record it and ask only" in texto
+          and "what hurts along that path" in texto)
 
 
 def test_textos_descritivos():

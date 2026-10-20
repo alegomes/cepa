@@ -278,15 +278,15 @@ def test_decide_le_a_lista():
     check("### 5b." in s and s.index("### 5b.") < s.index("### 6."),
           "a consulta vem antes de agrupar e perguntar (passo 5b, antes do 6)")
     check("executa_e_reporta" in s and "sempre_pergunta" in s, "decide.md nomeia as duas faixas")
-    check("Nunca** item numerado" in s or "nunca item numerado" in s.lower(),
+    check("**Never** a numbered item of" in s,
           "ação automática nunca vira item numerado de Decisões e próximos passos")
     check("proponho adicionar" in s, "ação não listada termina propondo o id ao arquivo")
-    check("Re-rode `/board-flow:prove`" in s and "crie\n  **um** card de infra" in s,
+    check("Re-run `/board-flow:prove`" in s and "create\n  **one** infra card" in s,
           "passo 4 passou de propor para fazer (rerodar-prove e card-infra-agregado)")
-    check("--dry-run" in s and "nem executa" in s, "--dry-run continua sem executar nada")
-    check("fora o que o" in s and "`executa_e_reporta` (passo 5b" in s,
+    check("--dry-run" in s and "nor executes" in s, "--dry-run continua sem executar nada")
+    check("before you answer — except what" in s and "`executa_e_reporta` (step 5b" in s,
           "o bloco 'O que ele NÃO faz' declara a exceção da faixa automática (não contradiz as Constraints)")
-    check("`git branch -D` sem essa conferência é proibido" in s,
+    check("`git branch -D` without that check is forbidden" in s,
           "apagar branch sem rodar a precondição é proibido na Fase 1")
 
 
