@@ -479,6 +479,154 @@ def humano(td):
     return f"{h}h{m:02d}" if h else f"{m}min"
 
 
+# ── tela: cor, barra e corte, só quando a saída é um terminal ──────────────
+#
+# A saída do run é um registro que rola por horas: numa aba de terminal, num
+# `nohup` ou num arquivo. A decoração (cor, glifos, barra da janela e a linha
+# que se redesenha enquanto o `claude` roda) existe só no primeiro caso. Fora
+# do terminal, ou com NO_COLOR, a saída é byte a byte a de antes: é o que os
+# testes leem e o que o `.log` de um `nohup` guarda. `CEPA_UNTIL_COR=sempre`
+# e `CEPA_UNTIL_COR=nunca` forçam.
+
+class Tela:
+    CORES = {"verde": "\033[32m", "vermelho": "\033[31m", "amarelo": "\033[33m",
+             "ciano": "\033[36m", "magenta": "\033[35m", "cinza": "\033[2m",
+             "negrito": "\033[1m"}
+    FIM = "\033[0m"
+
+    def __init__(self, fluxo=None):
+        fluxo = sys.stdout if fluxo is None else fluxo
+        modo = os.environ.get("CEPA_UNTIL_COR", "").strip().lower()
+        if modo in ("sempre", "always", "1"):
+            ligada = True
+        elif modo in ("nunca", "never", "0") or os.environ.get("NO_COLOR"):
+            ligada = False
+        else:
+            try:
+                ligada = bool(fluxo.isatty()) and os.environ.get("TERM") != "dumb"
+            except (AttributeError, ValueError):
+                ligada = False
+        self.ligada = ligada
+        self.titulo_inteiro = False
+
+    def largura(self):
+        try:
+            return min(shutil.get_terminal_size((100, 40)).columns, 120)
+        except (OSError, ValueError):
+            return 100
+
+    def c(self, cor, texto):
+        if not self.ligada:
+            return texto
+        return f"{self.CORES[cor]}{texto}{self.FIM}"
+
+    def corta(self, texto, folga=0):
+        """Corta na largura do terminal, com reticências. Fora do terminal,
+        ou com --titulo-inteiro, devolve inteiro."""
+        if not self.ligada or self.titulo_inteiro:
+            return texto
+        n = max(self.largura() - folga, 20)
+        return texto if len(texto) <= n else texto[: n - 1] + "…"
+
+    def barra(self, frac, n=16, cor="ciano"):
+        k = round(max(0.0, min(1.0, frac)) * n)
+        return self.c(cor, "▰" * k) + self.c("cinza", "▱" * (n - k))
+
+    def regua(self, titulo):
+        """`── titulo ─────`. Fora do terminal é só `── titulo`, o texto que
+        os testes e o `digest` procuram."""
+        if not self.ligada:
+            return f"── {titulo}"
+        resto = max(0, self.largura() - len(titulo) - 4)
+        return (self.c("magenta", "── ") + self.c("negrito", titulo) + " "
+                + self.c("magenta", "─" * resto))
+
+    def carimbo(self, quando=None):
+        return self.c("cinza", f"[{(quando or datetime.now()).strftime('%H:%M')}]")
+
+    def apaga_linha(self):
+        if self.ligada:
+            sys.stdout.write("\r\033[2K")
+            sys.stdout.flush()
+
+
+TELA = Tela()
+
+# O que vai na frente de cada passo de um item, pelo que o texto diz. Fora
+# do terminal é sempre o `→` de antes.
+_PASSOS = [
+    (r"^verde na 2ª", "↻", "amarelo"),
+    (r"^(verde|done)\b", "✓", "verde"),
+    (r"^vermelho \(", "↻", "amarelo"),
+    (r"^(VERMELHO|SEM PROGRESSO|SEM REDE|LIMITE DE USO|`done` sem|\d+ tentativa)",
+     "✗", "vermelho"),
+    (r"^(blocked|`blocked`|dropped)", "⊘", "vermelho"),
+    (r"^(sondo|espero)", "⏳", "amarelo"),
+    (r"^o item deixou arquivos", "⚠", "amarelo"),
+    (r"^build completo:", "▸", "cinza"),
+]
+
+
+GLIFOS_DE_DESFECHO = {
+    "entregue": ("✓", "verde"), "rota-humana": ("◐", "amarelo"),
+    "em-andamento": ("…", "amarelo"), "volta-vermelha": ("↻", "amarelo"),
+    "travado": ("✗", "vermelho"), "sem-progresso": ("✗", "vermelho"),
+    "done-sem-commit": ("✗", "vermelho"), "dropped": ("⊘", "vermelho"),
+    "sem-rede": ("⚡", "amarelo"), "limite-de-uso": ("⚡", "amarelo"),
+}
+
+
+def passo(texto):
+    """Uma linha de desfecho dentro do bloco de um item."""
+    if not TELA.ligada:
+        print(f"          → {texto}")
+        return
+    glifo, cor = "→", "cinza"
+    for padrao, g, c in _PASSOS:
+        if re.match(padrao, texto):
+            glifo, cor = g, c
+            break
+    if "rota humana" in texto and cor == "verde":
+        glifo, cor = "◐", "amarelo"
+    cabeca_, _, resto = texto.partition(" (")
+    if resto:
+        resto = TELA.c("cinza", " (" + resto)
+    print("       " + TELA.c(cor, f"{glifo} {cabeca_}") + resto)
+
+
+def espera_o_filho(proc, limite_seg, rotulo):
+    """Espera o subprocesso até `limite_seg`. Devolve True se terminou, False
+    se estourou. No terminal, redesenha a cada 30s uma linha com o tempo
+    gasto: sem ela o supervisor fica mudo por até uma hora dentro do item."""
+    inicio = time.monotonic()
+    limite = max(limite_seg, 1)
+    ultimo = -INTERVALO_DA_LINHA_VIVA
+    while True:
+        gasto = time.monotonic() - inicio
+        if TELA.ligada and gasto - ultimo >= INTERVALO_DA_LINHA_VIVA:
+            ultimo = gasto
+            sys.stdout.write(
+                "\r\033[2K       " + TELA.c("amarelo", f"▶ {rotulo} rodando")
+                + TELA.c("cinza", f"  {int(gasto)}s  " if gasto < 60 else
+                         f"  {humano(timedelta(seconds=gasto))}  ")
+                + TELA.barra(gasto / limite, cor="amarelo")
+                + TELA.c("cinza", f"  teto {humano(timedelta(seconds=limite))}"))
+            sys.stdout.flush()
+        falta = limite - gasto
+        if falta <= 0:
+            TELA.apaga_linha()
+            return False
+        try:
+            proc.wait(timeout=min(falta, 1))
+            TELA.apaga_linha()
+            return True
+        except subprocess.TimeoutExpired:
+            continue
+
+
+INTERVALO_DA_LINHA_VIVA = float(os.environ.get("CEPA_UNTIL_LINHA_VIVA", "30"))
+
+
 # ── leitura da fila ─────────────────────────────────────────────────────────
 
 def consulta_fila(nome, repo):
@@ -793,10 +941,10 @@ def executa_item(nome, arvore, branch, permissoes, limite_seg, log,
             return -2, False, time.monotonic() - inicio, ""
         if ao_lancar:
             ao_lancar(proc.pid)
-        try:
-            codigo = proc.wait(timeout=max(limite_seg, 1))
+        if espera_o_filho(proc, limite_seg, "claude"):
+            codigo = proc.returncode
             matou = False
-        except subprocess.TimeoutExpired:
+        else:
             # Mata o GRUPO: o claude spawna filhos (builds, mvn), e matar só o
             # pai deixa build órfão segurando a árvore.
             matou = True
@@ -1262,9 +1410,9 @@ def roda_verify(comando, arvore, limite_seg, log, ao_lancar=None):
             return False, time.monotonic() - inicio, f"não lançou: {e}"
         if ao_lancar:
             ao_lancar(proc.pid)
-        try:
-            codigo = proc.wait(timeout=max(limite_seg, 1))
-        except subprocess.TimeoutExpired:
+        if espera_o_filho(proc, limite_seg, "build"):
+            codigo = proc.returncode
+        else:
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
             except Exception:
@@ -2518,6 +2666,9 @@ def main(argv=None):
                          "repo sem build")
     ap.add_argument("--sem-analise", action="store_true", dest="sem_analise",
                     help="não roda o /common:until-review no fim do run")
+    ap.add_argument("--titulo-inteiro", action="store_true", dest="titulo_inteiro",
+                    help="no terminal, não corta o título do item na largura "
+                         "da tela (o `.jsonl` sempre guarda o inteiro)")
     ap.add_argument("--dry-run", action="store_true", dest="dry",
                     help="mostra o plano do run e sai sem executar nada")
     a = ap.parse_args(argv)
@@ -2624,28 +2775,38 @@ def main(argv=None):
     # e caminhos absolutos pela pasta do Insync ocupando meia tela.
     prox = (dados.get("batch") or [{}])[0]
     t = dados.get("totals") or {}
-    print(f"cepa-until · fila {dados.get('program')} · {repo.name} · até "
-          f"{prazo.strftime('%d/%m %H:%M')} ({humano(prazo - agora)})")
-    print(f"  noite  : trabalha em `until/{run_id}`, numa worktree fora do "
-          f"clone; `{branch_atual(repo)}` e o origin não mudam")
-    print(f"  build  : " + (f"{verify} depois de cada item done "
-                            f"({origem_verify})" if verify else
-                            f"dispensado ({origem_verify})"))
-    print(f"  paradas: {a.max_falhas} itens seguidos sem avançar (disjuntor) · "
+    TELA.titulo_inteiro = a.titulo_inteiro
+    rot = lambda r: TELA.c("cinza", r)  # noqa: E731
+    print(TELA.c("negrito", "cepa-until") + " · fila "
+          + TELA.c("ciano", str(dados.get("program"))) + f" · {repo.name} · até "
+          + TELA.c("negrito", prazo.strftime('%d/%m %H:%M'))
+          + f" ({humano(prazo - agora)})")
+    if TELA.ligada:
+        print(rot("  janela : ") + f"{agora.strftime('%H:%M')} → "
+              f"{prazo.strftime('%H:%M')}  " + TELA.barra(0.0, 24))
+    print(rot("  noite  : ") + "trabalha em " + TELA.c("ciano", f"`until/{run_id}`")
+          + ", numa worktree fora do clone; "
+          + TELA.c("ciano", f"`{branch_atual(repo)}`") + " e o origin não mudam")
+    print(rot("  build  : ") + (TELA.c("ciano", verify) + " depois de cada item "
+                                f"done ({origem_verify})" if verify else
+                                f"dispensado ({origem_verify})"))
+    print(rot("  paradas: ") + f"{a.max_falhas} itens seguidos sem avançar (disjuntor) · "
           f"{a.max_travados} itens `blocked` seguidos (fila travada) · "
           f"{a.tentativas_item} tentativa(s) por item")
-    print(f"  tempo  : não começa item com menos de {humano(reserva)}; mata "
+    print(rot("  tempo  : ") + f"não começa item com menos de {humano(reserva)}; mata "
           f"item que passar {humano(folga)} do prazo")
-    print(f"  permissões: "
-          + ("PEDE (vai travar sem alguém olhando)" if a.permissoes
-             else "--dangerously-skip-permissions LIGADO"))
-    print(f"  1º item: {prox.get('id', '(nenhum — fila sem item executável)')}"
-          + (f" — {prox.get('title')}" if prox.get("id") else "")
+    print(rot("  permissões: ")
+          + TELA.c("amarelo", "PEDE (vai travar sem alguém olhando)" if a.permissoes
+                   else "--dangerously-skip-permissions LIGADO"))
+    print(rot("  1º item: ")
+          + TELA.c("negrito", prox.get('id', '(nenhum — fila sem item executável)'))
+          + (TELA.c("cinza", TELA.corta(f" — {prox.get('title')}", folga=40))
+             if prox.get("id") else "")
           + f" · fila: {t.get('por_status', {}).get('pending', 0)} "
             f"pendente(s), {t.get('por_status', {}).get('done', 0)} done")
     heranca = heranca_do_run_anterior(repo, a.fila, dados.get("path"))
     for h in heranca:
-        print(f"  herda  : `{h['branch']}` ({h['commits']} commit(s) que o "
+        print(rot("  herda  : ") + f"`{h['branch']}` ({h['commits']} commit(s) que o "
               f"clone não tem) — {', '.join(h['itens'])} ficou pela metade "
               "lá, e a branch da noite nasce com esses commits")
 
@@ -2840,7 +3001,7 @@ def main(argv=None):
         hooks_avisados.extend(novos)
         registra({"evento": "hook_so_apos_reinstalar", "id": origem,
                   "arquivos": novos})
-        print(f"          → {origem} mudou hook de plugin "
+        passo(f"{origem} mudou hook de plugin "
               f"({', '.join(novos)}): só passa a valer depois de aterrissar "
               "a branch da noite e rodar `bin/install.sh`. Até lá as "
               "rodadas desta noite seguem com a versão instalada")
@@ -2877,7 +3038,7 @@ def main(argv=None):
                     "Ninguém trocou de branch; o que está no disco da worktree "
                     "continua lá")
                 break
-            print(f"[{datetime.now().strftime('%H:%M')}] o git não respondia "
+            print(TELA.carimbo() + f" o git não respondia "
                   f"na worktree da noite ({erro_git}); refiz a ligação dela "
                   "com o clone e sigo")
         if agora_branch != branch_largada:
@@ -2918,7 +3079,7 @@ def main(argv=None):
                 # O reset não cabe na janela. Esperar seria parar de vez; o
                 # corte no meio é recuperável (worktree + reserva órfã). Começa
                 # e avisa — meio item vale mais do que janela parada.
-                print(f"[{datetime.now().strftime('%H:%M')}] cota de 5h em "
+                print(TELA.carimbo() + f" cota de 5h em "
                       f"{uso:.0%} e o próximo item talvez não caiba; o reset "
                       f"({reset.strftime('%H:%M')}) não cabe na janela (fecha "
                       f"às {prazo.strftime('%H:%M')}) · começo assim mesmo — "
@@ -2928,7 +3089,7 @@ def main(argv=None):
                           "reset": reset.isoformat(), "id": ident})
                 apertados.append((ident, uso, reset))
             else:
-                print(f"[{datetime.now().strftime('%H:%M')}] cota de 5h em "
+                print(TELA.carimbo() + f" cota de 5h em "
                       f"{uso:.0%}, o próximo item não cabe · espero o reset e "
                       f"retomo às {acorda.strftime('%H:%M')}")
                 registra({"evento": "pausa_de_cota", "uso": uso,
@@ -2944,9 +3105,23 @@ def main(argv=None):
         tentativas[ident] = tentativas.get(ident, 0) + 1
         vez = tentativas[ident]
 
-        print(f"[{datetime.now().strftime('%H:%M')}] {ident} — {item.get('title')} "
-              f"({humano(restante)} restantes"
-              + (f", tentativa {vez}/{a.tentativas_item}" if vez > 1 else "") + ")")
+        if TELA.ligada:
+            # Bloco por item: hora, id, nº da tentativa, quanto da janela
+            # já foi, e o título cortado na largura (inteiro no `.jsonl`).
+            if itens > 1:
+                print()
+            total_janela = max((prazo - agora).total_seconds(), 1)
+            print(TELA.carimbo() + " " + TELA.c("negrito", ident)
+                  + (TELA.c("amarelo", f" tentativa {vez}/{a.tentativas_item}")
+                     if vez > 1 else "")
+                  + TELA.c("cinza", f"   item {itens}   ")
+                  + TELA.barra(1 - restante.total_seconds() / total_janela)
+                  + TELA.c("cinza", f" {humano(restante)} restam"))
+            print(TELA.c("cinza", "       " + TELA.corta(str(item.get('title')), folga=8)))
+        else:
+            print(f"[{datetime.now().strftime('%H:%M')}] {ident} — {item.get('title')} "
+                  f"({humano(restante)} restantes"
+                  + (f", tentativa {vez}/{a.tentativas_item}" if vez > 1 else "") + ")")
         antes = cabeca(arvore)
         primeira.setdefault(ident, (antes, len(entregues)))
         registra({"evento": "item_start", "id": ident, "title": item.get("title"),
@@ -2966,7 +3141,7 @@ def main(argv=None):
             sha, erro_sobra = guarda_sobra(arvore, run_id, ident)
             registra({"evento": "sobra_guardada", "id": ident, "stash": sha,
                       "erro": erro_sobra})
-            print(f"          → o item deixou arquivos sem commit"
+            passo(f"o item deixou arquivos sem commit"
                   + (f"; guardei no stash {sha[:10]}" if sha else
                      f" e NÃO consegui guardá-los: {erro_sobra}"))
 
@@ -3016,10 +3191,10 @@ def main(argv=None):
         if estado == "done" and n_commits == 0:
             sem_commit.append(ident)
             registra({"evento": "done_sem_commit", "id": ident})
-            print("          → `done` sem nenhum commit na branch da noite: o "
+            passo("`done` sem nenhum commit na branch da noite: o "
                   "trabalho, se houve, foi parar em outra branch")
         elif estado == "done" and verify:
-            print(f"          → build completo: {verify}")
+            passo(f"build completo: {verify}")
             restam = (prazo + folga - datetime.now()).total_seconds()
             em_voo["fase"] = "verify"
             verde, seg_verify, motivo_verify = roda_verify(
@@ -3034,7 +3209,7 @@ def main(argv=None):
                 # tentativa faz o resto.
                 restam = (prazo + folga - datetime.now()).total_seconds()
                 if restam >= seg_verify:
-                    print(f"          → vermelho ({motivo_verify}); rodo o "
+                    passo(f"vermelho ({motivo_verify}); rodo o "
                           "build completo de novo, no mesmo código")
                     verde, seg2, motivo2 = roda_verify(verify, arvore, restam,
                                                        log, ao_lancar=lancou)
@@ -3050,11 +3225,11 @@ def main(argv=None):
                     emite_telemetria("build_instavel", repo, card=ident,
                                      run=run_id, fila=a.fila,
                                      motivo=motivo_verify)
-                    print("          → verde na 2ª vez: build instável, "
+                    passo("verde na 2ª vez: build instável, "
                           "registrado na telemetria")
                     instavel = True
             if verde:
-                print(f"          → verde ({humano(timedelta(seconds=seg_verify))})")
+                passo(f"verde ({humano(timedelta(seconds=seg_verify))})")
             else:
                 volta = voltas_vermelhas(ledger_dir, ident) + 1
                 desde, n_antes = primeira[ident]
@@ -3103,7 +3278,7 @@ def main(argv=None):
                               "motivo": motivo_verify, "motivo_2": motivo2,
                               "status": novo_status})
                     volta_agora = True
-                print(f"          → VERMELHO ({motivo_verify}): commits "
+                passo(f"VERMELHO ({motivo_verify}): commits "
                       f"guardados em `{lateral}`, item marcado `{novo_status}`"
                       + (f" (volta {volta}/{VOLTAS_VERMELHAS_MAX})"
                          if lateral else ""))
@@ -3155,7 +3330,7 @@ def main(argv=None):
                         f"noite ({erro_desfaz}); o próximo card começaria em "
                         "cima deles")
                     break
-                print(f"          → `blocked` com commits: guardei em "
+                passo(f"`blocked` com commits: guardei em "
                       f"`{lateral}` e a branch da noite voltou para "
                       f"{desde[:10]}")
         if estado == "done":
@@ -3243,17 +3418,17 @@ def main(argv=None):
             quedas.append(queda)
             desfecho(ident, "sem-rede", "a rede caiu durante o item; não é "
                      "falha dele, e ele continua onde estava")
-            print(f"          → SEM REDE: o `claude` não alcançou a API — não é "
+            passo(f"SEM REDE: o `claude` não alcançou a API — não é "
                   "falha do item")
             if cabe:
-                print(f"          → sondo {SONDA_DE_REDE} até a rede voltar (no "
+                passo(f"sondo {SONDA_DE_REDE} até a rede voltar (no "
                       f"máximo até {ate.strftime('%H:%M')}) e retomo o {ident}")
                 if espera_a_rede(ate):
                     voltou = datetime.now()
                     queda[2] = voltou
                     registra({"evento": "rede_voltou", "id": ident,
                               "segundos": int((voltou - caiu).total_seconds())})
-                    print(f"[{voltou.strftime('%H:%M')}] rede de volta "
+                    print(TELA.carimbo(voltou) + f" rede de volta "
                           f"({humano(voltou - caiu)} sem)")
                     continue
                 motivo_fim = "sem-rede"
@@ -3297,11 +3472,11 @@ def main(argv=None):
                 registra({"evento": "limite_de_uso", "id": ident, "reset": reset,
                           "reset_em": reset_em.isoformat() if reset_em else None,
                           "espera": cabe})
-                print(f"          → LIMITE DE USO DA CONTA"
+                passo(f"LIMITE DE USO DA CONTA"
                       + (f" · reseta {reset}" if reset else "")
                       + " — não é falha do item")
                 if cabe:
-                    print(f"          → espero o reset e retomo o {ident} às "
+                    passo(f"espero o reset e retomo o {ident} às "
                           f"{acorda.strftime('%H:%M')}")
                     esperas.append(("item cortado", ident, reset_em))
                     espera_ate(acorda)
@@ -3334,7 +3509,7 @@ def main(argv=None):
                 marca += " · rota humana em aberto"
             if estado not in TERMINAIS and not pendencia:
                 marca += f" · {n_commits} commit(s) sem fechar"
-            print(f"          → {marca} ({humano(timedelta(seconds=gasto))})")
+            passo(f"{marca} ({humano(timedelta(seconds=gasto))})")
 
             if estado == "blocked":
                 travados_seguidos.append(ident)
@@ -3358,7 +3533,7 @@ def main(argv=None):
                      "o item não saiu do lugar")
             desfecho(ident, "sem-progresso",
                      f"sem progresso ({razao}), status `{estado}`")
-            print(f"          → SEM PROGRESSO: {razao} "
+            passo(f"SEM PROGRESSO: {razao} "
                   f"(status ainda `{estado}`) · {falhas_seguidas}/{a.max_falhas}")
 
             if vez >= a.tentativas_item:
@@ -3402,7 +3577,7 @@ def main(argv=None):
                          + (f"; commits em `{lateral}`" if lateral else ""))
                 registra({"evento": "esgotado", "id": ident, "tentativas": vez,
                           "bloqueado": True, "erro": None})
-                print(f"          → {vez} tentativa(s) sem progresso: marquei "
+                passo(f"{vez} tentativa(s) sem progresso: marquei "
                       "`blocked` e a fila segue no próximo item")
 
             if falhas_seguidas >= a.max_falhas:
@@ -3423,16 +3598,30 @@ def main(argv=None):
               "verify_vermelho": len(vermelhos),
               "done_sem_commit": len(sem_commit)})
 
-    print(f"\n── fim às {datetime.now().strftime('%H:%M')} · {motivo_fim}")
+    print()
+    print(TELA.regua(f"fim às {datetime.now().strftime('%H:%M')} · {motivo_fim}"))
     print(f"   {detalhe_fim}")
-    print(f"   {itens} tentativa(s) · {len(entregues)} entregue(s) · "
-          f"{len(travados)} travado(s) · {len(falhados)} sem progresso"
+    if TELA.ligada:
+        total_janela = max((prazo - agora).total_seconds(), 1)
+        gasto_janela = (datetime.now() - agora).total_seconds() / total_janela
+        print(TELA.c("cinza", "   janela ") + f"{agora.strftime('%H:%M')} → "
+              f"{prazo.strftime('%H:%M')}  " + TELA.barra(gasto_janela, 24)
+              + TELA.c("cinza", f"  {min(gasto_janela, 1):.0%}"))
+    pinta = lambda n, cor: TELA.c(cor, str(n)) if n else str(n)  # noqa: E731
+    print(f"   {itens} tentativa(s) · {pinta(len(entregues), 'verde')} entregue(s) · "
+          f"{pinta(len(travados), 'vermelho')} travado(s) · "
+          f"{pinta(len(falhados), 'vermelho')} sem progresso"
           + (f" · {len(limitados)} interrompida(s) pelo teto de uso da conta"
              if limitados else ""))
     if desfechos:
-        print(f"\n   Itens ({len(desfechos)}):")
-        for ident, (_, texto) in desfechos.items():
-            print(f"     - {ident}: {texto}")
+        print("\n   " + TELA.c("negrito", f"Itens ({len(desfechos)}):"))
+        for ident, (tipo, texto) in desfechos.items():
+            if TELA.ligada:
+                glifo = GLIFOS_DE_DESFECHO.get(tipo, ("·", "cinza"))
+                print("     " + TELA.c(glifo[1], glifo[0]) + " "
+                      + TELA.c("negrito", ident) + TELA.c("cinza", f": {texto}"))
+            else:
+                print(f"     - {ident}: {texto}")
     if limitados:
         print(f"\n   Teto de uso da conta ({len(limitados)}) — não é falha "
               "do item:")
@@ -3471,8 +3660,8 @@ def main(argv=None):
     else:
         c, n = git(["rev-list", "--count", f"{base_da_noite}..HEAD"], arvore)
         n = n if c == 0 else "?"
-        print(f"\n   branch da noite: `{branch_largada}` "
-              f"({n} commit(s) sobre a largada), em {curto(arvore, repo)}")
+        print("\n   branch da noite: " + TELA.c("ciano", f"`{branch_largada}`")
+              + f" ({n} commit(s) sobre a largada), em {curto(arvore, repo)}")
         acoes.append(acao_aterrissar(repo, arvore, a.fila, run_id, n))
         for h in heranca:
             print(f"   ela já contém `{h['branch']}` (herdada na largada): "
@@ -3492,15 +3681,15 @@ def main(argv=None):
             "rodou com eles: os hooks vêm do plugin instalado. Passam a valer "
             "depois do `aterrissar` e de `bin/install.sh`")})
     if acoes:
-        print(f"\n   Ações:")
+        print("\n   " + TELA.c("negrito", "Ações:"))
         for i, acao in enumerate(acoes, 1):
-            print(f"     {i}. {acao['id']}: {acao['frase']}")
-            print(f"        como: {acao['comando']}")
+            print(f"     {i}. " + TELA.c("negrito", acao['id']) + f": {acao['frase']}")
+            print(f"        como: " + TELA.c("ciano", acao['comando']))
     if fica:
         # Os itens já têm linha em "Itens"; aqui só o nome, para o mesmo item
         # não aparecer como dois problemas (A4).
         dos_itens = [f_["id"] for f_ in fica if f_["id"] in desfechos]
-        print(f"\n   Fica com você ({len(fica)}):")
+        print("\n   " + TELA.c("negrito", f"Fica com você ({len(fica)}):"))
         if dos_itens:
             print(f"     {', '.join(dos_itens)} (a pergunta de cada um vem "
                   "no fim, em \"esperam por você\")")
@@ -3520,8 +3709,8 @@ def main(argv=None):
         br = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
         print(f"\n   custo: US$ {br(custo)} (soma do `total_cost_usd` de "
               f"{len(custos)} rodada(s): {' + '.join(br(v) for v in custos.values())})")
-    print(f"\n   registro: {curto(ledger, repo)}")
-    print(f"   saída do claude: {curto(log, repo)}")
+    print(TELA.c("cinza", f"\n   registro: {curto(ledger, repo)}"))
+    print(TELA.c("cinza", f"   saída do claude: {curto(log, repo)}"))
 
     def pergunta_ao_dono(revisao=None):
         # O resumo acima só conta; aqui cada pendência vira pergunta (30/09).

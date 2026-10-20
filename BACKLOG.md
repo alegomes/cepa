@@ -4536,3 +4536,23 @@ seção com `**Status:** pendente` desatualizada vira item de fila sem resistên
 Em `tests/` do `common`: fixture de `BACKLOG.md` com uma seção "pendente" cujo título aparece em
 um commit do repositório de teste; o roteiro do `plan.md` (ou o helper que ele chamar) marca o
 candidato como "parece feito" e não o grava sem confirmação.
+
+## `cepa-until`: mesmo visual de terminal nos subcomandos `aterrissar`, `fecha-morto` e `decidir`
+
+**Status:** pendente · **Lar:** `common` · **Origem:** 2026-10-20, o dono aprovou o novo
+layout do run principal (cor, bloco por item, barra da janela, linha viva) e pediu para
+registrar este item para não esquecer.
+
+### Problema
+
+O `cepa-until <fila> --until` ganhou a classe `Tela` (cor, barra, corte na largura, régua)
+em `common/bin/cepa-until`, mas os três subcomandos seguem imprimindo texto cru: o plano do
+`aterrissar`, o `fecha-morto` e as perguntas do `decidir`.
+
+### Esboço de solução
+
+Reusar `TELA` nos `print` desses subcomandos: cabeçalho com `TELA.regua`, comandos e
+branches em ciano, verde/vermelho do build, pergunta em negrito. Sem mudar o texto, que os
+testes de `tests/test_cepa_until_aterrissar.py` e `tests/test_cepa_until_decidir.py` leem
+sem terminal.
+

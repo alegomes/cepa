@@ -141,6 +141,11 @@ the same list and the command to come back: `cepa-until decidir <fila>/<run>`.
 - **Permissions are off by default** (decision 4 above). The gates still apply inside each
   subprocess: red build blocks commit, cards need acceptance evidence, verdicts are computed.
 - **Use `--dry-run` first.** It prints the plan of the run and exits.
+- **On a terminal the output is decorated**: colour, one block per item with a bar of the
+  window spent so far, a line that redraws every 30 s while the `claude` subprocess runs, and
+  the item title cut to the terminal width (`--titulo-inteiro` keeps it whole; the `.jsonl`
+  always has it). Off a terminal (`nohup`, a file, `NO_COLOR`) the output is byte for byte
+  the plain one; `CEPA_UNTIL_COR=sempre|nunca` forces either way.
 
 Proof of the tool itself: [`docs/proof/cepa-until.yaml`](proof/cepa-until.yaml) and
 [`docs/proof/cepa-until-cota.yaml`](proof/cepa-until-cota.yaml).
