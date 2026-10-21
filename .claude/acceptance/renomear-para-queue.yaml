@@ -1,0 +1,56 @@
+key: renomear-para-queue
+status: incomplete
+diff_range: 76c8413..75c8cff
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "cepa-plan (subprocesso) cria a fila nova em .claude/queues/<n>/queue.yaml com a chave queue:"
+    test: tests/test_queue_rename.py::test_fila_nova_nasce_em_queues
+    layer: cli/subprocess
+    evidence: verified
+    run: "python3 -m pytest -q -p no:cacheprovider tests/test_queue_rename.py -> 16 passed"
+  - id: AC2
+    altitude: cli
+    surface: "cepa-plan, cepa-until, cepa-doctor, cepa-until-digest, maestro-programs e painel compass leem os dois layouts; fila legada continua funcionando sem migrar"
+    test: "test_queue_rename.py (cepa-plan legado+novo, cepa-until filtros/ledger, maestro-programs check-name, doctor); sem teste para cepa-until-digest e compass no layout novo"
+    layer: cli/subprocess (parcial)
+    evidence: verified
+    run: "test_queue_rename.py 16 passed; tests/test_cepa_until_digest.py -> 'tudo verde' (so fixtures legadas, grep 'queues' no arquivo = 0); test_common_fila/next/fila_unica -> all green"
+    gap: >
+      Tres leitores sem teste do layout novo: (a) cepa-until-digest (plano_da_fila,
+      common/bin/cepa-until-digest) so tem teste legado; precisa de teste em
+      tests/test_cepa_until_digest.py com ledger em .claude/queues/<n>/until/ e queue.yaml
+      ao lado, e outro com so plan.yaml legado. (b) compass/hooks/register.tsx
+      (leitor dos dois layouts) sem fixture em compass.test.tsx (gap declarado pelo
+      implementador). (c) maestro-programs: so check-name coberto; a listagem de filas
+      single-track (linha ~154) nao tem teste. Card de seguimento: testes de leitura
+      do layout novo nesses tres.
+    status: incomplete
+  - id: AC3
+    altitude: cli
+    surface: "cepa-plan migrate [<n>|--all]: move, reescreve chave, commita, idempotente; recusas (ondas, destino existente, reserva viva, run vivo do cepa-until, fila nao commitada)"
+    test: tests/test_queue_rename.py::test_migrate_* (6 testes)
+    layer: cli/subprocess em repo git temporario
+    evidence: verified
+    run: "python3 -m pytest -q -p no:cacheprovider tests/test_queue_rename.py -> 16 passed"
+    note: "A forma --all e coberta apenas se algum teste a usa; nao confirmei por teste dedicado."
+  - id: AC4
+    altitude: cli
+    surface: "comando /common:queue existe; /common:plan e alias; docs e prosa usam os nomes novos"
+    test: tests/test_queue_rename.py::test_comando_queue_existe_e_plan_e_alias + tests/test_common_plan.py
+    layer: arquivos de comando (leitura estrutural)
+    evidence: verified
+    run: "test_queue_rename.py 16 passed; python3 tests/test_common_plan.py -> all green. Menções restantes a .claude/programs/ em docs sao de planos de ondas (legitimas) e docs/estrategia-intencao-da-sessao.md ainda cita /common:plan e programs/ (historico)."
+  - id: AC5
+    altitude: cli
+    surface: "migracao das filas reais (cepa, wego-acessos-backend, wego-digitacao-backend, wego-product)"
+    test: nenhum (adiada de proposito)
+    layer: n/a
+    evidence: missing
+    gap: >
+      Adiamento nomeado: migracao real nao executada nesta rodada (run do cepa-until
+      lendo a fila do cepa; repos de cliente fora do branch). Rota human_pending:
+      apos o merge, rodar `cepa-plan migrate --all --repo <repo>` nos quatro repos.
+      Pela regra, adiamento nomeado mantem o criterio incomplete; a divisao e
+      defensavel e razoavel, mas a decisao de aceitar e do dono na revisao.
+    status: incomplete
