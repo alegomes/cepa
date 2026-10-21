@@ -1,13 +1,13 @@
 schema_version: 2
 card: renomear-para-queue
-verdict: unproven
+verdict: proven
 reviewed_at: 2026-10-20T00:00:00-03:00
 base_commit: 76c8413
-head_commit: 75c8cff
+head_commit: 2cffcc0
 issue_type: Task
 scope:
   base_commit_resolved: true
-  note: "Nao e projeto Quarkus: CLIs Python + painel TS. Sem PIT; tecnica unica = perturbacao em worktree descartavel (/tmp/proof-rpq, /tmp/proof-rpq2). Guardiao primario = tests/test_queue_rename.py (16 testes, baseline 16 passed)."
+  note: "Nao e projeto Quarkus: CLIs Python + painel TS. Sem PIT; tecnica unica = perturbacao em worktree descartavel (/tmp/proof-rpq3, detached em HEAD). Guardiao primario = tests/test_queue_rename.py (26 testes, baseline 26 passed) e compass/hooks/compass.test.tsx (83 pass)."
   changed_classes:
     - { class: "common/hooks/_queuepath.py", module: common, external_observable: true, substituted_by_double: null }
     - { class: "common/bin/cepa-plan", module: common, external_observable: true, substituted_by_double: null }
@@ -24,36 +24,23 @@ levels:
       results:
         - "projeto Python/TS, sem pitest"
     perturbation:
-      status: survived
+      status: pass
       results:
-        - "RED (24 de 33 aplicados, todos pegos por tests/test_queue_rename.py, 16 passed no baseline): resolvedor (R1 legado antes do novo, R2 sem fallback legado, R3 fila inexistente nasce no legado, R5 queue_name_of ignora queue:, R6 both_layouts), chave queue: na escrita (W1, W2), migrate (M1 chave, M2 comentarios, M3 commit unico, M4 until/, M5 renomeio, M6 ondas, M7 destino existente, M8 reserva viva, M9/M9b run vivo, M10 arquivo nao commitado, M11 insercao de chave, M12 idempotencia, M13 dry-run), regexes de sujeira do cepa-until (U1 REGISTRO_DO_RUN, U2 BAK_DA_FILA, U3 plano sujo), maestro-programs --check-name (MP1, MP2), cepa-doctor (D1 dois layouts, D2 dica de migrar)"
-        - "SURVIVED (verde com a linha quebrada) R4 common/hooks/_queuepath.py queue_files: trocar a ordem para o legado ganhar do novo. Rodado contra test_queue_rename + test_cepa_plan_escrita_commita + test_common_plan + test_cepa_plan_fila_unica + test_common_fila: tudo exit 0. cepa-plan list/doctor mostrariam a fila antiga quando o nome existe nos dois layouts."
-        - "SURVIVED W3 common/bin/cepa-plan: backup `<arquivo>.bak` (queue.yaml.bak) trocado pelo sufixo antigo `.yaml.bak`: mesmos 5 arquivos de teste, tudo exit 0. Nenhum teste sobrescreve uma fila no layout novo e confere o nome do backup."
-        - "SURVIVED U4 common/bin/cepa-until: fila_do_clone so no layout antigo (a deteccao 'fila do run suja' deixa de ver queues/<n>/queue.yaml). Contra test_queue_rename + test_cepa_until_{decidir,adversarial,branch_da_noite,aterrissar,retomada,supervisor_morto}: tudo exit 0."
-        - "SURVIVED U5 common/bin/cepa-until: estados_dos_runs varre so .claude/programs (run vivo em .claude/queues invisivel): mesmos 6 arquivos, exit 0."
-        - "SURVIVED U6 common/bin/cepa-until: ledger_dir fixo em .claude/programs/<fila>/until em vez de qp.queue_dir: mesmos 6 arquivos, exit 0. O test_cepa_until_resolve_ledger_e_fila_pelo_resolvedor so confere cu.qp.queue_dir, nao o ponto de chamada do main()."
-        - "SURVIVED G1 common/bin/cepa-until: cabecalho usa dados.get('program') em vez de qp.queue_name_of(dados): exit 0 (fila nova tem so queue:)."
-        - "SURVIVED U7 e U8 common/bin/cepa-until-digest: raiz da fila / arquivo vizinho fixos no layout antigo: tests/test_cepa_until_digest.py exit 0 (esse arquivo de teste so usa .claude/programs; nenhum teste do digest em layout novo)."
-        - "SURVIVED D4 common/bin/cepa-doctor: check_layout_da_fila(root) deixa de ser chamada no doctor: test_queue_rename (chama a funcao direto) 16 passed; test_doctor_divergencia_plano, test_doctor_arvore_suja, test_doctor_fix exit 0. A fiacao do aviso no doctor nao e testada."
-        - "SURVIVED D5 common/bin/cepa-doctor: tem_dir_de_planos so olha .claude/programs (queues/ ignorado): test_doctor_divergencia_plano e test_doctor_arvore_suja exit 0."
-        - "RED D3 candidatas_de_fila vazio: test_doctor_divergencia_plano e test_doctor_arvore_suja falham (rc=1)."
-        - "NAO PERTURBADO compass/hooks/register.tsx (leitura dos dois layouts, dedupe por nome): compass/hooks/compass.test.tsx so tem fixtures em /repo/.claude/programs; nenhum caminho .claude/queues. Linha nova sem teste; nao executei bun/vitest. filas.ts e until.ts mudaram so comentarios."
+        - "baseline: PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_queue_rename.py -> 26 passed"
+        - "As 9 que antes sobreviveram, agora todas RED (pytest -x tests/test_queue_rename.py, __pycache__ limpo apos cada uma): R4 queue_files ordem legado-ganha -> 1 failed, 16 passed; W3 .bak com nome antigo -> 1 failed, 18 passed; U4 fila_do_clone so legado -> 1 failed, 21 passed; U5 estados_dos_runs so legado -> 1 failed, 21 passed; U6 ledger_dir fixo em programs -> 1 failed, 19 passed; G1 cabecalho dados.get('program') -> 1 failed, 20 passed; U7 digest raiz fixa em programs/plan.yaml -> 1 failed, 23 passed; U8 digest vizinho fixo no legado -> 1 failed, 22 passed; D4 doctor sem chamar check_layout_da_fila -> 1 failed, 24 passed; D5 tem_dir_de_planos sem queues -> 1 failed, 21 passed"
+        - "Spot-check das 24 antes RED: R1 (queue_files em ordem invertida) -> 1 failed, 16 passed; R5 (queue_name_of ignora queue:) -> 1 failed"
+        - "compass/hooks/register.tsx, `claude plugin test compass`: baseline 83 pass 0 fail. Perturbacao A (so .claude/programs, sem queues) -> 82 pass 1 fail ('nivel 1 le .claude/queues/<n>/queue.yaml; nome nos dois layouts, o novo ganha e aparece uma vez'). Perturbacao B (ordem invertida, legado ganha) -> mesmo teste 1 fail"
   l2_coverage:
-    status: gap
-    uncovered_lines:
-      - "common/bin/cepa-until: ledger_dir, fila_do_clone, estados_dos_runs, cabecalho (qp.queue_name_of) no layout NOVO"
-      - "common/bin/cepa-until-digest: caminho do layout novo (raiz da fila, arquivo vizinho)"
-      - "common/bin/cepa-doctor: chamada de check_layout_da_fila e tem_dir_de_planos com queues/"
-      - "common/bin/cepa-plan: nome do .bak no layout novo; ordem em queue_files com nome nos dois layouts"
-      - "compass/hooks/register.tsx: ramo .claude/queues"
-    run: "sem ferramenta de cobertura; determinado por perturbacao (linhas acima sobreviveram) e grep de fixtures"
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; cobertura dos ramos do layout novo determinada por perturbacao: cada linha alterada que antes sobrevivia agora vai a RED (ver l3)"
   l4_adversarial_input:
-    status: skipped
-    reason: ""
+    status: n/a
+    reason: "o diff move/renomeia o caminho de arquivos de fila entre dois layouts e adiciona testes; nao introduz parsing de entrada externa nem toca modulo com superficie HTTP (api-rest inexistente neste projeto)"
     findings: []
   bugfix_regression_red_at_base:
     status: n/a
 process_notes:
-  - "Um comando (perturb.py U4 U5 U6 G1) estourou o timeout e foi movido para segundo plano pelo harness, sem eu poder mata-lo (kill/pkill negados pelo path-lock). Terminou sozinho em 17m17s, saiu 0 e o worktree descartavel ficou limpo; os 4 resultados (todos verdes sob perturbacao) vem desse run. Nao foi o que a regra pede (primeiro plano); disclosure."
-  - "Dois worktrees descartaveis: /tmp/proof-rpq (perturbacoes em lote) e /tmp/proof-rpq2 (D3/D4/D5). Arvore principal intocada."
-routing_reason: "A migracao e o resolvedor estao provados load-bearing (todas as recusas e o commit unico vao a RED). Mas nove linhas alteradas nos consumidores do layout novo (cepa-until ledger/run vivo/fila suja/cabecalho, cepa-until-digest, fiacao do aviso do cepa-doctor, backup do cepa-plan, ordem de queue_files) sobrevivem a quebra com a suite verde, e register.tsx no layout novo nao tem teste. UNPROVEN."
+  - "Todos os comandos em primeiro plano, cada um abaixo de 1 minuto. Arvore principal intocada; worktree descartavel /tmp/proof-rpq3 removido ao final."
+  - "O script de perturbacao precisou morar dentro do worktree descartavel (o path-lock nega executar script em /tmp fora dele); foi descartado junto com o worktree."
+routing_reason: "As 9 perturbacoes que sobreviviam na rodada anterior e o ramo .claude/queues do compass agora vao todas a RED contra os testes novos; 2 spot-checks das 24 anteriores seguem RED. PROVEN."
