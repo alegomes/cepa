@@ -65,7 +65,7 @@ def escreve_fila(d, itens, nome="fila"):
     r = run(d, "write", nome, "--items", str(p), "--source", "teste",
             "--quando", "2026-09-25", "--repo", ".")
     assert r.returncode == 0, r.stderr
-    return d / ".claude" / "programs" / nome / "plan.yaml"
+    return d / ".claude" / "queues" / nome / "queue.yaml"
 
 
 def plano_de(caminho):
@@ -91,7 +91,7 @@ def test_add_recusa_fila_inexistente(base):
     r = run(d, "add", "fila", "X", "--title", "x", "--repo", ".")
     check("recusa: fila não existe", r.returncode == 2, r.stdout)
     check("a recusa aponta o /common:plan como quem cria a fila",
-          "/common:plan" in r.stderr, r.stderr)
+          "/common:queue" in r.stderr, r.stderr)
 
 
 def test_add_recusa_plano_de_ondas(base):
@@ -203,7 +203,7 @@ def test_add_preserva_cabecalho_escrito_a_mao(base):
     original = alvo.read_text(encoding="utf-8")
     cabecalho_original = original[:original.index("schema_version")]
     check("a fila gravada tem um cabeçalho não-trivial",
-          "plan.yaml" in cabecalho_original, cabecalho_original)
+          "queue.yaml" in cabecalho_original, cabecalho_original)
 
     run(d, "add", "fila", "B", "--title", "b", "--why", "w", "--repo", ".")
     depois = alvo.read_text(encoding="utf-8")

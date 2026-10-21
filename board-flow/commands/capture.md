@@ -63,14 +63,14 @@ A success reply from step 3 already carries the read-back: `atlassian-expert` on
 
 ### 4. Add the card to the queue, if one exists
 
-The single-track queue at `<main-root>/.claude/programs/<project_key>/plan.yaml`
+The single-track queue at `<main-root>/.claude/queues/<project_key>/queue.yaml`
 (`<main-root>` = the parent of the main clone, never the current worktree's own
-`.claude/`) is the convergence point for Jira, `BACKLOG.md` and `plan.yaml` — a
+`.claude/`) is the convergence point for Jira, `BACKLOG.md` and `queue.yaml` — a
 card born outside it starts already out of the queue that drives execution.
 
-- No `plan.yaml` for `<project_key>` → skip this step and say so in the report
+- No `queue.yaml` for `<project_key>` → skip this step and say so in the report
   ("no queue for `<project_key>` yet — card is Jira-only"). Don't create one:
-  that's `/common:plan`'s job, not capture's.
+  that's `/common:queue`'s job, not capture's.
 - Queue exists → run:
 
   ```

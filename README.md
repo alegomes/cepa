@@ -91,7 +91,7 @@ a column, searches the code and git history for evidence, and sorts the cards: a
 built, ready to build, obsolete, needs your decision. Only the last group comes to you, as
 questions.
 
-**3. Put the work in order.** `/common:plan` writes the queue to a file in the repo, with
+**3. Put the work in order.** `/common:queue` writes the queue to a file in the repo, with
 the reason each item sits where it sits. A tracker keeps cards. It does not keep *why this
 one is next*. From here on `/common:next` answers "what now?" with one step, never a menu.
 
@@ -250,7 +250,7 @@ which follows you across projects. Today's answer is one less question tomorrow.
 ```
 
 `cepa-until` is a terminal command, not a slash command (alias it). It runs the queue
-written by `/common:plan` for a **time window**, and it starts **a new Claude Code session
+written by `/common:queue` for a **time window**, and it starts **a new Claude Code session
 for every item**.
 
 That last part is the design, not a detail. A long session degrades before it ends. By the
@@ -359,7 +359,7 @@ only one allowed to touch that system.
 
 The tracker and the git host are adapters. The process is the product. Without `board-flow`
 the same build, acceptance and proof steps exist, driven from a queue file instead of a
-board (`/common:plan`, `/common:drain-plan`).
+board (`/common:queue`, `/common:drain-plan`).
 
 How the pieces sit together:
 

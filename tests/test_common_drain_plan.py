@@ -83,7 +83,7 @@ def escreve_fila(d, itens, nome="fila"):
     r = run(d, "write", nome, "--items", str(p), "--source", "teste",
             "--quando", "2026-08-25", "--repo", ".")
     assert r.returncode == 0, r.stderr
-    return d / ".claude" / "programs" / nome / "plan.yaml"
+    return d / ".claude" / "queues" / nome / "queue.yaml"
 
 
 def queue(d, nome="fila", *extra):
@@ -303,7 +303,7 @@ def test_queue_recusa_ondas_e_fila_inexistente(base):
 
     r, _ = queue(d, "nao-existe")
     check("fila inexistente é exit 2, não estouro", r.returncode == 2, r.stdout)
-    check("diz quem escreve a fila", "/common:plan" in r.stderr, r.stderr)
+    check("diz quem escreve a fila", "/common:queue" in r.stderr, r.stderr)
 
 
 # ── start: a reserva ─────────────────────────────────────────────────────────
@@ -439,7 +439,7 @@ def test_contrato_do_comando(base):
     check("reserva o item antes de executar", "cepa-plan start" in f)
     check("registra o desfecho de cada item", "cepa-plan finish" in f)
     check("proíbe escrever o YAML à mão",
-          "never edit plan.yaml by hand" in limpo,
+          "never edit queue.yaml by hand" in limpo,
           "sem a proibição, um Write no arquivo contorna TODAS as recusas do "
           "cepa-plan e nenhuma delas dispara")
     check("declara que rota humana ADIA o item em vez de parar o lote",

@@ -30,7 +30,7 @@ EXCECOES = {
     ("common/commands/session.md", "--max"):
         "no hint é exemplo de argumento de OUTRA rotina "
         "(`/common:session prove-drain --max 5`), não flag do session",
-    ("common/commands/plan.md", "--source"):
+    ("common/commands/queue.md", "--source"):
         "divergência real, fora do escopo do item parametros-de-comando-pela-metade "
         "(que nomeou três comandos); só em Variables",
     ("common/commands/worktree-label.md", "--branch"):

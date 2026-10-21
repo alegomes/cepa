@@ -34,7 +34,7 @@ docs/promptcov.md.
 
 **`--from-plan NAME` mode:** the source is the `single-track` queue that already exists in the
 repo (`<main-root>/.claude/programs/NAME/plan.yaml`), written by
-`/common:plan` from a spec, from a Jira triage or dictated by hand.
+`/common:queue` from a spec, from a Jira triage or dictated by hand.
 It is stage 4 of the "one writer, three sources" design (BACKLOG.md, "Cinco portas
 de planejamento") and the only promotion that was missing: queue → waves was declared
 manual in `docs/execution-plan.md` because there was no path. It is also the answer to

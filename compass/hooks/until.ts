@@ -1,4 +1,4 @@
-// Lê o registro de um run do `cepa-until` (`.claude/programs/<fila>/until/<run>.jsonl`).
+// Lê o registro de um run do `cepa-until` (`.claude/queues/<fila>/until/<run>.jsonl`, ou `.claude/programs/...` no layout antigo).
 // O escritor é o `registra()` de common/bin/cepa-until: uma linha JSON por evento,
 // cada uma com `evento` e `quando` (ISO local, sem fuso). Os eventos que interessam
 // aqui: `run_start`, `item_start`, `item_end`, `verify`, `verify_vermelho`,

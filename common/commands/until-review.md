@@ -20,7 +20,7 @@ purpose, at the end of every run.
 ## Variables
 
 - `<run>.jsonl` — the run record. `latest` (default) is the most recent
-  `.jsonl` in `<raiz-principal>/.claude/programs/<fila>/until/` (main root,
+  `.jsonl` in `<raiz-principal>/.claude/queues/<fila>/until/` (main root,
   queue name).
 - `--fila NAME` — which queue, when the repo has more than one and the
   argument is `latest`.

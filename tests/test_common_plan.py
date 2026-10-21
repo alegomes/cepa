@@ -9,7 +9,7 @@ script usa). Duas famílias, de propósito:
     gravada por cima de um plano de ondas, `human_pending` zerado numa
     repriorização, ciclo de bloqueio que faz o /common:next dizer que a fila
     acabou quando ela travou.
-  - CONTRATO DE PROSA do `common/commands/plan.md`. O comando é um prompt, então
+  - CONTRATO DE PROSA do `common/commands/queue.md`. O comando é um prompt, então
     a única guarda possível é mecânica: a frase "não invente o `why`" é
     exatamente o tipo de instrução que some numa reescrita bem-intencionada.
 
@@ -31,7 +31,7 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
-CMD = REPO / "common" / "commands" / "plan.md"
+CMD = REPO / "common" / "commands" / "queue.md"
 
 FAILURES = []
 
@@ -64,7 +64,7 @@ def escreve_itens(d, itens):
 
 def plano_de(d, nome="fila"):
     return yaml.safe_load(
-        (d / ".claude" / "programs" / nome / "plan.yaml").read_text(encoding="utf-8"))
+        (d / ".claude" / "queues" / nome / "queue.yaml").read_text(encoding="utf-8"))
 
 
 ITENS_OK = [
@@ -91,7 +91,7 @@ def test_grava_fila_valida(base):
     check("guarda a fonte das demandas", plan["source"] == "BACKLOG.md")
     check("o arquivo gravado passa na própria validação",
           run(d, "validate",
-              str(d / ".claude" / "programs" / "fila" / "plan.yaml")).returncode == 0)
+              str(d / ".claude" / "queues" / "fila" / "queue.yaml")).returncode == 0)
 
 
 def test_recusa_sem_why(base):
@@ -103,7 +103,7 @@ def test_recusa_sem_why(base):
     check("recusa item sem `why`", r.returncode == 2, r.stdout)
     check("a recusa NOMEIA o campo", "`why`" in r.stderr, r.stderr)
     check("nada foi gravado na recusa",
-          not (d / ".claude" / "programs" / "fila").exists())
+          not (d / ".claude" / "queues" / "fila").exists())
 
 
 def test_recusa_human_pending_ausente(base):
@@ -181,7 +181,7 @@ def test_reescrita_preserva_execucao(base):
     """
     d = repo_git(base, "reescrita")
     run(d, "write", "fila", "--items", str(escreve_itens(d, ITENS_OK)), "--repo", ".")
-    alvo = d / ".claude" / "programs" / "fila" / "plan.yaml"
+    alvo = d / ".claude" / "queues" / "fila" / "queue.yaml"
     plan = yaml.safe_load(alvo.read_text())
     plan["items"][0]["status"] = "done"
     alvo.write_text(yaml.dump(plan, allow_unicode=True, sort_keys=False))
@@ -211,7 +211,7 @@ def test_reescrita_preserva_execucao(base):
           por_id["B"]["human_pending"] == ITENS_OK[1]["human_pending"],
           "zerá-lo apagaria dívida que só o humano fecha")
     check("guardou cópia do arquivo anterior",
-          (d / ".claude" / "programs" / "fila" / "plan.yaml.bak").is_file(),
+          (d / ".claude" / "queues" / "fila" / "queue.yaml.bak").is_file(),
           "os comentários escritos à mão não sobrevivem à reescrita")
 
 
@@ -324,7 +324,7 @@ Um Epic.
         r = run(d, "write", "fila", "--items", str(escreve_itens(d, fila)),
                 "--repo", ".")
         check(f"{nome}: grava a fila de partida", r.returncode == 0, r.stderr)
-        arq = d / ".claude" / "programs" / "fila" / "plan.yaml"
+        arq = d / ".claude" / "queues" / "fila" / "queue.yaml"
         antes = arq.read_text(encoding="utf-8")
         r = run(d, "write", "fila", *fonte_args, "--repo", ".")
         check(f"{nome}: sem --on-missing, item do disco não mencionado é exit 4",
@@ -353,9 +353,9 @@ def test_raiz_e_a_do_clone_principal(base):
     r = run(wt, "write", "fila", "--items", str(escreve_itens(wt, ITENS_OK)), "--repo", ".")
     check("grava a partir da worktree", r.returncode == 0, r.stderr)
     check("o arquivo nasceu no clone principal",
-          (d / ".claude" / "programs" / "fila" / "plan.yaml").is_file())
+          (d / ".claude" / "queues" / "fila" / "queue.yaml").is_file())
     check("e NÃO dentro da worktree",
-          not (wt / ".claude" / "programs" / "fila" / "plan.yaml").exists(),
+          not (wt / ".claude" / "queues" / "fila" / "queue.yaml").exists(),
           "plano dentro da worktree morre com ela, sem aviso")
 
 
@@ -366,7 +366,7 @@ def test_dry_run_nao_grava(base):
     check("--dry-run sai 0 e imprime o arquivo",
           r.returncode == 0 and "mode: single-track" in r.stdout)
     check("--dry-run não grava nada",
-          not (d / ".claude" / "programs" / "fila").exists())
+          not (d / ".claude" / "queues" / "fila").exists())
 
 
 def test_validate_recusa_plano_de_ondas(base):
@@ -558,7 +558,7 @@ def test_contrato_do_comando(_base):
     # o catálogo é o único lugar onde um comando é encontrável por quem não o
     # escreveu — 8 comandos já sumiram dele sem nenhum teste piscar
     cat = flat((REPO / "docs" / "commands.md").read_text(encoding="utf-8"))
-    check("está no catálogo docs/commands.md", "`/common:plan`" in cat)
+    check("está no catálogo docs/commands.md", "`/common:queue`" in cat)
     plugin = (REPO / "common" / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8")
     check("está na descrição do plugin common", "/plan" in plugin)
 
@@ -711,11 +711,11 @@ def test_write_from_triage_grava_e_diz_que_e_parcial(base):
           "PARCIAL" in plan["source"] and "12" in plan["source"],
           "uma fila de 15 cards de 27 se lê, meses depois, como o quadro inteiro")
     check("o cabeçalho lido a olho também carrega a parcialidade",
-          "PARCIAL" in (d / ".claude" / "programs" / "WEGO" / "plan.yaml"
+          "PARCIAL" in (d / ".claude" / "queues" / "WEGO" / "queue.yaml"
                         ).read_text(encoding="utf-8"))
 
     # e a re-triagem não pode apagar o que a execução escreveu
-    p = d / ".claude" / "programs" / "WEGO" / "plan.yaml"
+    p = d / ".claude" / "queues" / "WEGO" / "queue.yaml"
     plan["items"][0]["status"] = "done"
     plan["items"][0]["human_pending"] = "abrir /admin/devolucoes e conferir"
     p.write_text(yaml.dump(plan, allow_unicode=True, sort_keys=False),
@@ -761,7 +761,7 @@ def test_triagem_parcial_preserva_a_ordem_da_fila(base):
                     "why": "triagem: c", "blocked_by": ["W-1438"]},
                ]}
     rp = repasse(d, parcial, "parcial.json")
-    arq = d / ".claude" / "programs" / "WEGO" / "plan.yaml"
+    arq = d / ".claude" / "queues" / "WEGO" / "queue.yaml"
     original = arq.read_text(encoding="utf-8")
     r = run(d, "write", "WEGO", "--from-triage", str(rp), "--repo", ".")
     check("sem --on-missing, a triagem parcial grava (fb-20261002-1)",
@@ -837,7 +837,7 @@ def test_from_triage_preserva_done_ausente_e_aplica_a_ordem(base):
         check("grava a fila de partida", r.returncode == 0, r.stderr)
         # `write --items` recusa item sem `why`; a fila antiga sem ele (escrita
         # à mão ou por versão velha) só se monta direto no YAML.
-        arq = d / ".claude" / "programs" / "WEGO" / "plan.yaml"
+        arq = d / ".claude" / "queues" / "WEGO" / "queue.yaml"
         plano = yaml.safe_load(arq.read_text(encoding="utf-8"))
         for i in plano["items"]:
             if i["id"] in ("O-2", "D-2"):
@@ -907,13 +907,13 @@ def test_contrato_do_triage(_base):
 
     check("o comando existe", tri.is_file())
     check("declara que NÃO escreve mais o plan.yaml",
-          "no longer writes `plan.yaml`" in f,
+          "no longer writes `queue.yaml`" in f,
           "enquanto ele escrever também, as regras vivem em dois lugares")
     check("manda a gravação passar pelo cepa-plan --from-triage",
           "cepa-plan write --from-triage" in f or "--from-triage" in f)
     check("nomeia o repasse e onde ele mora",
           "triagem-<YYYY-MM-DD>.json" in f)
-    check("entrega a ordem ao /common:plan", "/common:plan" in f)
+    check("entrega a ordem ao /common:queue", "/common:queue" in f)
     check("manda a raiz ser a do clone principal",
           "git rev-parse --git-common-dir" in f,
           "gravar contra a árvore corrente é a perda de 2026-08-18")
@@ -925,7 +925,7 @@ def test_contrato_do_triage(_base):
           "é o que impede uma fila truncada de se ler como o quadro inteiro")
     check("proíbe escrever o YAML à mão aqui",
           "do not work around it by writing the YAML by hand" in f
-          or "Triage never writes `plan.yaml`" in f)
+          or "Triage never writes `queue.yaml`" in f)
 
 
 def main():

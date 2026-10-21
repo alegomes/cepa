@@ -1,4 +1,4 @@
-// Resume uma fila `single-track` (.claude/programs/<nome>/plan.yaml): contagem
+// Resume uma fila `single-track` (.claude/queues/<nome>/queue.yaml, ou .claude/programs/<nome>/plan.yaml no layout antigo): contagem
 // por status, o primeiro item pendente e o primeiro bloqueado, na ordem da fila.
 // Filas de outro formato (as `parallel-waves` do maestro) ficam de fora: o
 // /common:next não as lê.

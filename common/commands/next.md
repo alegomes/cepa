@@ -1,5 +1,5 @@
 ---
-description: Answers "and now, what do I do?" at any moment: reads the `single-track` queue (.claude/programs/<name>/plan.yaml) and names ONE next step with the why recorded at prioritisation. Tells apart the two kinds of next that blur in silence: a pending human action (validate by hand, approve a PR, rotate a secret) and the next item. Needs no Jira: with board-flow.yaml present it reconciles against the live board; without it, answers from the queue and says the statuses are self-reported. Read-only by default; --sync records the reconciliation.
+description: Answers "and now, what do I do?" at any moment: reads the `single-track` queue (.claude/queues/<name>/queue.yaml) and names ONE next step with the why recorded at prioritisation. Tells apart the two kinds of next that blur in silence: a pending human action (validate by hand, approve a PR, rotate a secret) and the next item. Needs no Jira: with board-flow.yaml present it reconciles against the live board; without it, answers from the queue and says the statuses are self-reported. Read-only by default; --sync records the reconciliation.
 argument-hint: [--plan NAME] [--offline] [--sync]
 interaction: routine
 ---
@@ -11,7 +11,7 @@ interaction: routine
 Answer the literal question — *what do I do next?* — at any moment, not only
 when a card happens to close.
 
-`/common:plan` writes the order down (from a spec, from a `/board-flow:triage`
+`/common:queue` writes the order down (from a spec, from a `/board-flow:triage`
 classification, or dictated by hand) and `execute`/`fix`/`prove` point
 forward when a card ends. Neither helps in the middle of a long session, which
 is where the thread actually dissolves: three rounds of proof gate, four cards
@@ -36,7 +36,7 @@ plan and says plainly that the statuses are self-reported.
 
 ## Variables
 
-- `--plan NOME` — plan to read, i.e. `<programs>/NOME/plan.yaml` (`<programs>`
+- `--plan NOME` — plan to read, i.e. `<queues>/NOME/queue.yaml` (`<queues>`
   defined in step 1 — always the main clone's, never the current worktree's).
 - `--offline` — skip the tracker round-trip even when one is configured. Use for
   an instant answer or with no network. Say in the report that the answer wasn't
@@ -48,7 +48,7 @@ plan and says plainly that the statuses are self-reported.
 
 ### 1. Locate the plan
 
-**`<programs>` = `<main-root>/.claude/programs`**, where `<main-root>` is the
+**`<queues>` = `<main-root>/.claude/queues`**, where `<main-root>` is the
 parent of `git rev-parse --git-common-dir` with the trailing `/.git` removed —
 inside a linked worktree that is the MAIN clone, not this tree; anywhere else it
 equals `git rev-parse --show-toplevel`. Never resolve the plan against the
@@ -58,21 +58,24 @@ current directory: the plan is repo state, and a session worktree's own
 
 In order, first hit wins:
 
-1. `--plan NOME` → `<programs>/NOME/plan.yaml`.
-2. Exactly one `<programs>/*/plan.yaml` with `mode: single-track` → that one,
+1. `--plan NOME` → `<queues>/NOME/queue.yaml`, else (queue not migrated yet)
+   the legacy `<main-root>/.claude/programs/NOME/plan.yaml`.
+2. Exactly one `<queues>/*/queue.yaml` (or legacy
+   `<main-root>/.claude/programs/*/plan.yaml`; the new layout wins when a name
+   exists in both) with `mode: single-track` → that one,
    whatever its folder is called. This is the normal case: one queue per repo
    (owner decision 2026-09-25, "Um papel por fonte" in the BACKLOG). A repo with
    `board-flow.yaml` whose only queue is `wego-todo-agosto/` resolves here — the
    project key in the board-flow config plays no part.
 3. More than one → list them (folder name, `source:` line, item counts by
    status) and ask which; don't pick for the user. **Never pick
-   `<programs>/<project_key>/plan.yaml` automatically because `board-flow.yaml`
+   `<queues>/<project_key>/queue.yaml` automatically because `board-flow.yaml`
    names that key.** A project key names a project, not a slice of work:
    `WEGO/` and `WEGO-in-progress/` (wego-acesso-backend, 2026-08-18) are two
    slices of one project, and a key-based rule picks one of them silently,
    every time. The folder name is a **work slice** (`wego-todo-agosto`,
    `wego-review-followups`); naming the only queue after the project key is
-   fine, and is what `/common:plan <project_key> --from-jira` does — but the
+   fine, and is what `/common:queue <project_key> --from-jira` does — but the
    name is a label, not a lookup key.
 
 This is the same rule `cepa-plan status` / `cepa-plan queue` apply when no name
@@ -84,10 +87,11 @@ running in a worktree that reads only its own `.claude/` will report a plan dead
 that is sitting in the main clone — that happened on 2026-08-18 and cost a
 triage. Two cheap checks, in this order:
 
-1. `ls <main-root>/.claude/programs/*/plan.yaml` — the anchoring above already
+1. `ls <main-root>/.claude/queues/*/queue.yaml <main-root>/.claude/programs/*/plan.yaml`
+   (the new layout and the legacy one, which `cepa-plan migrate --all` moves) — the anchoring above already
    points here, so this is a check that the resolution actually ran against
    `<main-root>` and not against the current tree.
-2. `ls <main-root>/.claude/rescued/*/programs/*/plan.yaml` — artifacts the
+2. `ls <main-root>/.claude/rescued/*/queues/*/queue.yaml <main-root>/.claude/rescued/*/programs/*/plan.yaml` — artifacts the
    rescue net carried out of a removed worktree (`_wtlib.rescue_artifacts`; the
    🛟 SessionStart notice announces the folder). A hit here means a plan was
    written inside a worktree that no longer exists.
@@ -119,12 +123,12 @@ when a plan was found above: a plan answers first.
 order — an order nobody chose is worse than an admitted absence, because it reads as a decision. Say there is no
 execution plan, then name the cheapest way to get one **for this repo**:
 
-- tracker wired (`board-flow.yaml` present) → `/common:plan <project_key>
+- tracker wired (`board-flow.yaml` present) → `/common:queue <project_key>
   --from-jira`, which runs `/board-flow:triage` (it grooms the column, hunts
   code evidence and proposes the order) and writes the queue from what it
   classified. `/board-flow:triage` on its own grooms and hands the order over,
   but no longer writes the file;
-- no tracker → `/common:plan <nome>` is the writer: it builds the queue from a
+- no tracker → `/common:queue <nome>` is the writer: it builds the queue from a
   closed `/common:spec` specification (`--from-spec`, one item per success
   criterion) or from the repo's own source of demands dictated by hand
   (`BACKLOG.md` or whatever the user names), asking for the order and the `why`
@@ -203,7 +207,7 @@ Read its output; don't re-derive it:
 |---|---|---|
 | `pending` | done | someone finished it elsewhere → mark `done`, and **ask what its human validation route was** — that debt is otherwise lost |
 | `pending` | in progress | a live session may be on it → warn before you start it too |
-| `done` | in progress / to do / Won't Do / gone | **stays `done`** (rule R3: status never demotes a `done` item — the old demotion reopened 11 finished cards in wego-acesso-backend) → it comes back as a warning; name it, and reopening it is the user's call, through `/common:plan` |
+| `done` | in progress / to do / Won't Do / gone | **stays `done`** (rule R3: status never demotes a `done` item — the old demotion reopened 11 finished cards in wego-acesso-backend) → it comes back as a warning; name it, and reopening it is the user's call, through `/common:queue` |
 | item present | card gone / Won't Do | → `dropped`, with the reason |
 | — | in `to_do`, absent from plan | the plan is stale or was truncated by `--max` → **name these cards**; never fold them in silently as if they'd been prioritised |
 
@@ -226,7 +230,7 @@ saying the status came from the board rather than from work done here.
 Cards found on the board but absent from the plan are **not** appended — they
 were never given a position or a rationale, and inventing one here would forge
 exactly the decision this whole mechanism exists to preserve. Say they're
-missing and that `/common:plan <key> --from-jira` is what places them — `/board-flow:triage` classifies them and gives them a position, and the writer records it.
+missing and that `/common:queue <key> --from-jira` is what places them — `/board-flow:triage` classifies them and gives them a position, and the writer records it.
 
 **Closing human debt.** `reconcile` never touches `human_pending` — closing one
 is the user's, and this command's, alone. A `human_pending` is cleared by
@@ -250,7 +254,7 @@ Default precedence, to be overridden with a stated reason:
 1. **An item the board says bounced back** (a `reconcile` warning citing R3:
    `done` here, reopened there) — work already paid for that is sliding
    backwards outranks work not yet started. Recommend the user reopen it
-   through `/common:plan`; the reconcile never does it for them.
+   through `/common:queue`; the reconcile never does it for them.
 2. **Human debt that blocks the queue** — a route that must pass before the next
    card is meaningful (e.g. the next card builds on the one awaiting validation).
    A maestro wave waiting to land counts here: finished work that isn't in the
@@ -260,7 +264,7 @@ Default precedence, to be overridden with a stated reason:
    with it.
 
 If everything is `done` and no human debt is open, say the plan is finished and
-name how a next round gets planned (`/common:plan <key> --from-jira` with a
+name how a next round gets planned (`/common:queue <key> --from-jira` with a
 tracker, which grooms the column through `/board-flow:triage` first; otherwise
 offer to write the next plan from the repo's source of demands). Do
 not manufacture a next step from an empty plan.
@@ -287,7 +291,7 @@ Pending with you (2):
 Queue after it: WEGO-1237 (bigger, last)
 Blocked: none
 ⚠ 2 cards in To Do outside the queue: WEGO-1962, WEGO-1963 — no position and
-  no why. /common:plan WEGO --from-jira is what places them (via triage).
+  no why. /common:queue WEGO --from-jira is what places them (via triage).
 ```
 
 Without a tracker the shape is the same, minus the divergence block, plus one

@@ -1,5 +1,5 @@
 ---
-description: Runs the repo's `single-track` queue, `.claude/programs/<name>/plan.yaml`, in batch and IN THE ORDER IT KEEPS. Stage 3 of the "one writer, three sources" design, closing the loop without a tracker: `/common:plan` writes the queue, `/common:next` names ONE step, this command runs several. Needs no Jira and never takes the ORDER from one: the only batch that existed before, `/board-flow:drain`, takes its order from the board rank, exactly the order the queue exists to replace. Keeps what drain got right: stop at the first stuck item and the `--max` ceiling. A route only a human closes DEFERS the item and the batch goes on, listing every route at the end. Reserves each item before touching it, with a recorded owner (to tell a live session from a dead run), and records the outcome of all of them. In a repo with Jira it reconciles against the board before building the batch and always moves the card of every item that is a card: In Progress on reserve, In Review on finish, a comment with the reason on block.
+description: Runs the repo's `single-track` queue, `.claude/queues/<name>/queue.yaml`, in batch and IN THE ORDER IT KEEPS. Stage 3 of the "one writer, three sources" design, closing the loop without a tracker: `/common:queue` writes the queue, `/common:next` names ONE step, this command runs several. Needs no Jira and never takes the ORDER from one: the only batch that existed before, `/board-flow:drain`, takes its order from the board rank, exactly the order the queue exists to replace. Keeps what drain got right: stop at the first stuck item and the `--max` ceiling. A route only a human closes DEFERS the item and the batch goes on, listing every route at the end. Reserves each item before touching it, with a recorded owner (to tell a live session from a dead run), and records the outcome of all of them. In a repo with Jira it reconciles against the board before building the batch and always moves the card of every item that is a card: In Progress on reserve, In Review on finish, a comment with the reason on block.
 argument-hint: <name> [--max N] [--dry-run] [--offline] [--na-branch <branch>]
 interaction: routine
 ---
@@ -10,21 +10,21 @@ interaction: routine
 
 Run the queue in its own order.
 
-The `mode: single-track` of `plan.yaml` exists to keep the two things the
+The `mode: single-track` of `queue.yaml` exists to keep the two things the
 tracker loses: the execution **order** and the **`why`** of each item sitting
 in that position. Until now no command ran that queue in batch:
 
 - `/common:next` reads the queue and names ONE item, and is read-only by contract;
 - `/board-flow:drain` runs in batch, but its source is the Jira column,
   sorted by the board's `priority and rank` — the order the queue exists to
-  replace. It never opens `plan.yaml`;
+  replace. It never opens `queue.yaml`;
 - in a repo with no tracker (this repo's `cepa` queue, whose ids are not cards)
   there wasn't even that way out: all that was left was chaining
   `/common:next` + execution by hand, one item at a time.
 
 In other words: the owner wrote the order into the queue, and the only way to
 run it in batch was one that ignored that order. This command closes the loop —
-write (`/common:plan`) → point (`/common:next`) → run (here) — with no tracker
+write (`/common:queue`) → point (`/common:next`) → run (here) — with no tracker
 at all in the path.
 
 **This does not run waves.** `mode: parallel-waves` is another document, with
@@ -35,7 +35,7 @@ of trying to linearize it.
 ## Variables
 
 - `<nome>` — the program whose queue will be run, that is
-  `<raiz-principal>/.claude/programs/<nome>/plan.yaml`. Without the argument,
+  `<raiz-principal>/.claude/queues/<nome>/queue.yaml`. Without the argument,
   resolution is the same as `/common:next`: `board-flow.yaml` → `project_key`, or
   the only `single-track` queue that exists; if there is more than one, the
   command lists them and asks instead of choosing for you.
@@ -63,7 +63,7 @@ as having no queue, which is the state this document exists to get rid of.
 grep the prose — which proves the command PROMISES to respect the order, never
 that a run did. Run `cepa-plan queue` and execute what it returned.
 
-**Never edit `plan.yaml` by hand** — not with `Write`, not with `sed`. Marking
+**Never edit `queue.yaml` by hand** — not with `Write`, not with `sed`. Marking
 goes through `cepa-plan start` / `cepa-plan finish`, which refuse an outcome
 without evidence, refuse a double reservation and refuse to close a human route.
 Written from outside, none of those refusals happen.
@@ -99,7 +99,7 @@ happens, and the queue is the only truth.
 
 ### 0. Trazer status do Jira (grava no plano) — only when there is a board
 
-The name says the direction: this step READS Jira and WRITES to `plan.yaml`. It
+The name says the direction: this step READS Jira and WRITES to `queue.yaml`. It
 does not touch the board. (The opposite, writing to the board, is the
 "Atualizar o Jira (grava no quadro)" of step 3.e.) "Reconciliar" (reconcile) and
 "sync" were the old names and did not say which of the two sides changed; the
@@ -135,14 +135,14 @@ do you: close a `human_pending` (only the human closes it) and append to the
 queue a card the board has and the queue does not — a position without a `why`
 is precisely the decision the queue keeps. Cards in that situation come out in
 `missing_from_plan`: **name them in the report** and say that the one who puts
-them in is `/common:plan <nome> --from-jira`.
+them in is `/common:queue <nome> --from-jira`.
 
 A status the `status_map` does not describe is not reconciled, and comes back as
 a warning. Pass the warning on instead of guessing its role.
 
 ### 1. Resolve the queue and build the batch
 
-The queue lives in the **main clone**: `<raiz-principal>/.claude/programs/<nome>/`,
+The queue lives in the **main clone**: `<raiz-principal>/.claude/queues/<nome>/`,
 where `<raiz-principal>` is the parent of `git rev-parse --git-common-dir` without
 the trailing `/.git` — inside a linked worktree that is the MAIN clone, not this
 tree. You don't resolve this by hand (`cepa-plan` resolves it by the same rule),
@@ -158,7 +158,7 @@ What comes back: `batch` (the items runnable now, in queue order, each with the
 
 Exit 3 is a **waves plan**: stop and say that the runner for that document is
 `/maestro:run`. Exit 2 with no queue: say there is no queue and that the writer
-is `/common:plan <nome>` — do not invent an order, and do not fall back to
+is `/common:queue <nome>` — do not invent an order, and do not fall back to
 `/board-flow:drain` as a substitute, because it would run the board's order.
 
 The stop reasons, and what each one wants from you:
@@ -166,13 +166,13 @@ The stop reasons, and what each one wants from you:
 | `stop.reason` | what happened |
 |---|---|
 | `teto` | `--max` filled up; the named item would be the next. Run again later. |
-| `fim-da-fila` | no pending item left. Offer `/common:plan` for the next round. |
+| `fim-da-fila` | no pending item left. Offer `/common:queue` for the next round. |
 | `bloqueado` | the item depends on something that is neither done nor in this batch. |
 
 And `queue` also returns `deferred` — the **deferred** items, which don't run
 now and **don't stop the batch**. Deferring is an execution decision: the item
 leaves this batch and comes back in the next `queue`, and the order recorded in
-`plan.yaml` does not change. The four reasons:
+`queue.yaml` does not change. The four reasons:
 
 | deferral reason | what happened |
 |---|---|
@@ -510,8 +510,8 @@ A single report, in the `plain-report` format, written in Brazilian Portuguese
   behind it in an unattended window costs the whole window. Inheritance from
   `/board-flow:drain` deliberately revisited — there the order comes from the
   board, here it comes from the queue.
-- **Deferring never rewrites the order of `plan.yaml`.** Deferring is execution;
-  reordering belongs to `/common:plan`. A runner that touches the order is what
+- **Deferring never rewrites the order of `queue.yaml`.** Deferring is execution;
+  reordering belongs to `/common:queue`. A runner that touches the order is what
   the queue exists to prevent.
 - **An orphan reservation is recovered, a live reservation is respected.**
   Liveness is the one from `_wtlib` (live pid on the same host, 24h horizon), the
@@ -525,12 +525,12 @@ A single report, in the `plain-report` format, written in Brazilian Portuguese
 - **Marking is mechanical** (`cepa-plan start` / `finish`). Editing the YAML by
   hand bypasses all the refusals.
 - **The order never comes from the board.** Reconciling is reading each item's
-  STATE; the position remains the one `/common:plan` recorded. Taking the order
+  STATE; the position remains the one `/common:queue` recorded. Taking the order
   from the board rank is `/board-flow:drain`, and it is what this command exists
   to replace.
 - **Refuses a `parallel-waves` plan** — waves are run by `/maestro:run`.
 - **Does not write the queue.** An item missing from the queue belongs to
-  `/common:plan`; inventing a position and a `why` here would forge exactly the
+  `/common:queue`; inventing a position and a `why` here would forge exactly the
   decision the document keeps.
 - **Needs no tracker.** Without `board-flow.yaml`, the queue is the only truth.
   With a board, moving the card of every item that is a card is mandatory
