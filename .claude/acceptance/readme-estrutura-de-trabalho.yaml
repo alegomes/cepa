@@ -1,0 +1,30 @@
+key: readme-estrutura-de-trabalho
+status: complete
+auditor: completion-auditor
+note: superficie e o proprio README.md (docs-only); sem comportamento de codigo
+criteria:
+  - id: AC1
+    altitude: docs
+    surface: README.md secao "## How work is organised"
+    test: "grep -n '^## ' README.md (linhas 20 What Cepa is, 47 How work is organised, 81 Work has modes); corpo cobre Epic, cycle, queue, item, session (mode, intent), inboxes"
+    layer: leitura direta do arquivo
+    evidence: verified
+    run: "grep -n '^## ' README.md -> ordem correta; python3 tests/test_fio_condutor.py -> all green (54 ok)"
+    status: complete
+  - id: AC2
+    altitude: docs
+    surface: README.md secao "What you install" (linhas 334-422)
+    test: "grep -n Experimental README.md -> 0 ocorrencias; linha 416 'Frozen since 2026-10-08: maestro ...'; diff 76c8413..37eebd7 remove o 'Experimental: maestro' e a linha da tabela de referencia"
+    layer: leitura direta do arquivo
+    evidence: verified
+    run: "grep -n Experimental README.md -> vazio"
+    status: complete
+  - id: AC3
+    altitude: docs
+    surface: links e caminhos da secao nova
+    test: "ls/grep: docs/how-it-fits.md e '## Vocabulary' (linha 8), docs/maestro.md, #work-has-modes (heading 'Work has modes'), .claude/programs/archive/, common/bin/cepa-intencao escrevendo .claude/session-intent, common/commands/{epic,fila,next,whereami,drain-plan,plan}.md, docs/epics/"
+    layer: verificacao de existencia no disco
+    evidence: verified
+    run: "todos os caminhos existem; python3 tests/test_fio_condutor.py -> all green"
+    status: complete
+gaps: []
