@@ -213,6 +213,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
+
 try:
     import yaml
 except ImportError:
@@ -1401,6 +1404,9 @@ def cmd_status(raiz, nome, filtro, como_json):
                           "por_status": contagem, "filtro": filtro,
                           "items": visiveis}, ensure_ascii=False, indent=2))
         return 0
+    if _tui.TELA.ligada:
+        return status_na_tela(plan.get("program") or nome, alvo, linhas,
+                              contagem, visiveis)
 
     print(f"fila {plan.get('program') or nome} · {alvo}")
     print("  " + " · ".join(f"{contagem[st]} {rot}" for st, rot in GRUPOS_STATUS)
@@ -1428,6 +1434,91 @@ def cmd_status(raiz, nome, filtro, como_json):
                 print(f"       ação humana: {primeira_frase(l['human_pending'])}")
             if st == "blocked" and l["evidence"]:
                 print(f"       motivo: {primeira_frase(l['evidence'])}")
+    return 0
+
+
+# Glifo e cor de cada grupo na tela do terminal.
+VISUAL_STATUS = {
+    "in_progress": ("▶", "ciano"),
+    "pending": ("○", "amarelo"),
+    "blocked": ("■", "vermelho"),
+    "done": ("✓", "verde"),
+    "dropped": ("✗", "cinza"),
+}
+
+
+def status_na_tela(programa, alvo, linhas, contagem, visiveis):
+    """O `status` decorado, quando a saída é um terminal: barra de título,
+    placar por grupo, barra de progresso, e cada item com o id numa linha e
+    o título quebrado embaixo. Concluídos e descartados ocupam uma linha só."""
+    t = _tui.TELA
+    w = t.largura()
+    total = len(linhas)
+    feitos = contagem["done"] + contagem["dropped"]
+    print(t.cabecalho(f"fila {programa}", f"{total} itens"))
+    print(t.c("cinza", f"  {alvo}"))
+    print()
+    placar = []
+    for st, rot in GRUPOS_STATUS:
+        glifo, cor = VISUAL_STATUS[st]
+        n = contagem[st]
+        placar.append(t.c(cor if n else "cinza", f"{glifo} {n} {rot}"))
+    print("  " + "   ".join(placar))
+    frac = feitos / total if total else 0
+    print(f"  {t.barra(frac, n=min(40, max(w - 40, 10)))}  "
+          + t.c("negrito", f"{round(frac * 100)}%")
+          + t.c("cinza", f" fechados ({contagem['done']} concluídos + "
+                f"{contagem['dropped']} descartados) ÷ {total}"))
+    abertas = [l for l in linhas if l["human_pending"] is not None]
+    if abertas:
+        texto = (f"{len(abertas)} com ação humana aberta: "
+                 + ", ".join(l["id"] for l in abertas))
+        quebradas = t.quebra(texto, 4, 4)
+        print("  " + t.c("amarelo", "⚑ ") + t.c("amarelo", quebradas[0][4:]))
+        for x in quebradas[1:]:
+            print(t.c("amarelo", x))
+    for st, rot in GRUPOS_STATUS:
+        grupo = [l for l in visiveis if l["status"] == st]
+        if not grupo:
+            continue
+        glifo, cor = VISUAL_STATUS[st]
+        print()
+        print(t.secao(rot, len(grupo), cor=cor, glifo=glifo))
+        fechado = st in ("done", "dropped")
+        coluna = min(max(len(str(l["id"])) for l in grupo), 42)
+        for i, l in enumerate(grupo):
+            num = t.c("cinza", f"{l['posicao']:>5}  ")
+            if fechado:
+                ident = t.corta(str(l["id"]), coluna).ljust(coluna)
+                titulo = t.corta(" ".join(str(l["title"] or "").split()),
+                                 max(w - 9 - coluna, 10))
+                print(num + t.c(cor, ident) + "  " + t.c("cinza", titulo))
+                continue
+            if i:
+                print()
+            print(num + t.c(f"negrito+{cor}", l["id"]))
+            for x in t.quebra(" ".join(str(l["title"] or "").split()), 7):
+                print(x)
+            detalhes = []
+            if l["claimed_by"]:
+                c = l["claimed_by"]
+                detalhes.append(("reservado", f"sessão {c['session_id'] or '?'}"
+                                 f" desde {c['started_at'] or '?'}", "ciano"))
+            if l["blocked_by"]:
+                detalhes.append(("espera", ", ".join(map(str, l["blocked_by"])),
+                                 "amarelo"))
+            if l["human_pending"] is not None:
+                detalhes.append(("ação humana", primeira_frase(l["human_pending"]),
+                                 "amarelo"))
+            if st == "blocked" and l["evidence"]:
+                detalhes.append(("motivo", primeira_frase(l["evidence"]),
+                                 "vermelho"))
+            for rotulo, texto, cor_d in detalhes:
+                chave = f"↳ {rotulo}: "
+                quebradas = t.quebra(chave + texto, 7, 7 + len(chave))
+                print(" " * 7 + t.c(cor_d, chave) + quebradas[0][7 + len(chave):])
+                for x in quebradas[1:]:
+                    print(x)
     return 0
 
 
@@ -3269,4 +3360,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    _tui.instalar()
     sys.exit(main())
