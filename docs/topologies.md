@@ -10,7 +10,7 @@ as plugins but not wired by `--topology` (see
 [design](#design-product-design-upstream-of-the-build) and
 [marketing](#marketing-content-production)).
 The `maestro` plugin, which runs several work slices in parallel
-worktrees, is also installed; it is experimental and not a topology. See
+worktrees, is also installed; it is frozen since 2026-10-08 and is not a topology. See
 [`maestro.md`](maestro.md).
 
 | Topology | Agents | Best for | Path-lock | Commands |
