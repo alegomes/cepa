@@ -34,7 +34,7 @@ except ImportError:
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
 EPIC_REAL = REPO / "docs" / "epics" / "cepa-em-espiral.md"
-CMD = REPO / "common" / "commands" / "plan.md"
+CMD = REPO / "common" / "commands" / "queue.md"
 
 FAILURES = []
 
@@ -109,7 +109,7 @@ def corpo_yaml(saida):
 
 
 def plano_de(d, nome):
-    return d / ".claude" / "programs" / nome / "plan.yaml"
+    return d / ".claude" / "queues" / nome / "queue.yaml"
 
 
 def test_epic_real_ciclo_2(base):

@@ -11,8 +11,8 @@ cepa-until my-queue --until 07:00
 cepa-until my-queue --for 3h --dry-run     # prints the schedule of the run, executes nothing
 ```
 
-`my-queue` is the name of a queue written by `/common:plan`, stored at
-`.claude/programs/<name>/plan.yaml`. See [execution-plan.md](execution-plan.md).
+`my-queue` is the name of a queue written by `/common:queue`, stored at
+`.claude/queues/<name>/queue.yaml`. See [execution-plan.md](execution-plan.md).
 
 ## Why it exists
 
@@ -128,7 +128,7 @@ stops asking.
 `responde` refuses without a terminal: a `claude -p` subprocess has no TTY, so an agent cannot
 close a human route in the owner's place. It also refuses a text that does not answer the
 question (a "não entendi", a question back), showing the route's question, and it commits the
-`plan.yaml` in the same step, so the queue is never left dirty for the next run's guard
+`queue.yaml` in the same step, so the queue is never left dirty for the next run's guard
 (`--no-commit` writes without committing and says so). Without a terminal (`nohup`, cron) the run prints
 the same list and the command to come back: `cepa-until decidir <fila>/<run>`.
 

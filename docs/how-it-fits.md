@@ -19,15 +19,15 @@ stop). Inboxes feed the queue; nothing runs from an inbox.
 | **marketplace** | A repository that lists plugins to install from. Cepa is one marketplace with eleven plugins; each project picks the ones it needs. |
 | **hook** | A script Claude Code runs before or after an action, which can refuse it. The lock. The model cannot argue with a hook. |
 | **Epic** | A package of work worth a demonstration, written as `docs/epics/<name>.md` by `/common:epic`. It lists invariants that never regress and a ladder of cycles. |
-| **cycle** | One rung of an Epic's ladder. It closes when its demonstration script runs on screen and in the backend. Weeks long; crosses many sessions. `/common:plan --from-epic --ciclo N` turns it into a queue. |
-| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Stored as `.claude/programs/<name>/plan.yaml`; written only by `/common:plan`; read by `/common:next`, `/common:fila`, `/common:drain-plan` and `cepa-until`. See [execution-plan.md](execution-plan.md). |
+| **cycle** | One rung of an Epic's ladder. It closes when its demonstration script runs on screen and in the backend. Weeks long; crosses many sessions. `/common:queue --from-epic --ciclo N` turns it into a queue. |
+| **queue** | The ordered list of items for one slice of work, with the reason each item sits where it sits. Stored as `.claude/queues/<name>/queue.yaml`; written only by `/common:queue`; read by `/common:next`, `/common:fila`, `/common:drain-plan` and `cepa-until`. See [execution-plan.md](execution-plan.md). |
 | **item** | One line of a queue: `id`, `title`, `why`, `status`, `blocked_by`, `human_pending`, `evidence`. |
 | **card** | An item's mirror on the Jira board, in repos that have `board-flow.yaml`. The board keeps the status; it keeps neither the order nor the why. |
 | **session** | One Claude Code open on the repo. Interactive (`claude` or `cepa`) or unattended (`cepa-until`). It may work zero, one or several items, or write an Epic, or only investigate. |
 | **mode** | What kind of session it is (exploration, discovery, construction, refactor, ...). It decides where the agent may write and what must be true before the session can close. Every intent lives inside a mode. See [modos-de-trabalho.md](modos-de-trabalho.md). |
 | **intent** | What this session will do inside its mode and when to stop: a purpose, a stopping point and one to six steps. Stored in `.claude/session-intent`, written only by `cepa-intencao`, shown by `/common:whereami`. An unattended session has no intent file: its intent is the next item of the queue. |
 | **step** | One line of the intent. The cursor says which step is in progress. Hours long; one session only. |
-| **inbox** | Where demands wait before they are ordered: `BACKLOG.md`, the feedback ledger (`cepa-feedback`), `.claude/desvios.md`, the GitHub issues and, in repos with Jira, the backlog column. Nothing runs from an inbox; `/common:plan` turns it into items. |
+| **inbox** | Where demands wait before they are ordered: `BACKLOG.md`, the feedback ledger (`cepa-feedback`), `.claude/desvios.md`, the GitHub issues and, in repos with Jira, the backlog column. Nothing runs from an inbox; `/common:queue` turns it into items. |
 | **worktree** | A separate folder of the same repository on its own branch. Two sessions in two worktrees never step on each other. |
 | **cepa-until** | The command that runs the queue item by item until a clock time. The thing that works overnight. See [cepa-until.md](cepa-until.md). |
 | **proof** | An independent reviewer deliberately breaks each change and re-runs the tests. If nothing goes red, the change is unprotected and the item bounces. See [proof-gate.md](proof-gate.md). |
@@ -99,7 +99,7 @@ other topologies have the same shape with different counts (`build-solo` has two
 
 ```mermaid
 flowchart LR
-    queue["<b>queue</b><br/>plan.yaml, with the why of the order"]
+    queue["<b>queue</b><br/>queue.yaml, with the why of the order"]
     exec["<b>execute</b><br/>plan, build, validate (fig. 2)<br/><i>lock: commit only on a green build</i>"]
     review["<b>Review</b><br/>board column<br/><i>lock: enters only with one test<br/>per acceptance criterion</i>"]
     prove["<b>prove</b><br/>a reviewer that did not write the code<br/>breaks each change on purpose, runs the tests;<br/>a hook computes the verdict"]

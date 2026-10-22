@@ -1,5 +1,5 @@
 ---
-description: Validates the harness installation against reality in 30 seconds — plugins enabled and at the installed version, hooks compiling, board-flow.yaml structure, build baseline (status + age), stale/orphan worktrees (including the forgotten agent worktree inside the repo, which duplicates the source code), expired handoffs and the single-track queue (plan.yaml) diverging from BACKLOG.md. With --live, also checks board-flow.yaml and the queue against live Jira via atlassian-expert. Run it at the start of the day or when something in the harness looks wrong — each check exists because the matching failure has already cost a task.
+description: Validates the harness installation against reality in 30 seconds — plugins enabled and at the installed version, hooks compiling, board-flow.yaml structure, build baseline (status + age), stale/orphan worktrees (including the forgotten agent worktree inside the repo, which duplicates the source code), expired handoffs and the single-track queue (queue.yaml) diverging from BACKLOG.md. With --live, also checks board-flow.yaml and the queue against live Jira via atlassian-expert. Run it at the start of the day or when something in the harness looks wrong — each check exists because the matching failure has already cost a task.
 argument-hint: [--live] [--no-fix] [--projeto]
 interaction: routine
 ---
@@ -48,13 +48,13 @@ brings all of that forward to a moment when fixing is cheap.
    automatically) and **Precisa de você** (needs you).
 
    The `plano` area (when it shows up) is the single-track queue
-   (`.claude/programs/<fila>/plan.yaml`) compared with the project's
+   (`.claude/queues/<fila>/queue.yaml`) compared with the project's
    `BACKLOG.md` — the `cepa-plan divergencia` the script already ran on its
    own: BACKLOG.md sections without `**Plano:**` and a `**Plano:**` citing an id
    that does not exist in that queue. It only shows up when the repo has
    `BACKLOG.md` AND a queue that resolves without ambiguity (via
    `board-flow.yaml` → `defaults.project_key`, or exactly one `single-track`
-   queue in `.claude/programs/*/plan.yaml`); with more than one possible queue
+   queue in `.claude/queues/*/queue.yaml`); with more than one possible queue
    the script stays quiet — it does not guess which one the owner wants to see.
    It is a report, never a fix: no `--fix` touches it.
 

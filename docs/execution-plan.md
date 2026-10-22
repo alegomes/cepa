@@ -39,14 +39,14 @@ and I'll work them one at a time, across different sessions."
 
 ## The artifact
 
-One file: `<main-root>/.claude/programs/<nome>/plan.yaml`, `mode: single-track`,
+One file: `<main-root>/.claude/queues/<nome>/queue.yaml`, `mode: single-track`,
 schema annotated in [`common/plan-schema.yaml`](../common/plan-schema.yaml). The
 `<main-root>` prefix is not decoration — see "Where the file lives" below.
 
 ```yaml
 schema_version: 2
 mode: single-track
-program: ACME
+queue: ACME
 source: "Jira ACME · To Do, triaged 2026-07-28"
 items:
   - id: ACME-1235                 # card key OR an anchor in the source ("P9 do BACKLOG")
@@ -72,14 +72,25 @@ blocks the comment without it) and was simply never aggregated anywhere.
 **A tracker is optional.** An item's `id` is a card key *or* an anchor in
 whatever source the work comes from. A repo whose demands live in `BACKLOG.md` —
 the `cepa` repo itself, which keeps its own queue at
-`.claude/programs/cepa/plan.yaml` — gets the order, the `why` and the human debt
+`.claude/queues/cepa/queue.yaml` — gets the order, the `why` and the human debt
 all the same. What it doesn't get is reconciliation, and the tooling says so
 rather than implying a verification that never happened.
 
 ### Where the file lives
 
-`<programs>` = `<main-root>/.claude/programs`, where `<main-root>` is the parent
-of `git rev-parse --git-common-dir` with the trailing `/.git` removed. Inside a
+`<queues>` = `<main-root>/.claude/queues`, where `<main-root>` is the parent
+of `git rev-parse --git-common-dir` with the trailing `/.git` removed.
+
+**Transition (2026-10-20).** The queue used to live at
+`.claude/programs/<name>/plan.yaml`, with the key `program:`; it now lives at
+`.claude/queues/<name>/queue.yaml`, with the key `queue:`, to match the
+vocabulary of [how-it-fits.md](how-it-fits.md). Every reader (`cepa-plan`,
+`cepa-until`, `cepa-doctor`, the compass panel) reads BOTH layouts, and the new
+one wins when a name exists in both. `cepa-plan migrate --all` moves the
+existing queues (the whole folder, `until/` included, in one commit). Wave
+plans of `/maestro:program-plan` are not queues and stay in
+`.claude/programs/<name>/plan.yaml`. `/common:plan` is a deprecated alias of
+`/common:queue`. Inside a
 linked worktree that resolves to the MAIN clone, not to the current tree;
 anywhere else it is the same thing as `git rev-parse --show-toplevel`. Every
 command that touches a queue resolves the path this way — on read and on write
@@ -104,7 +115,7 @@ artifact loss: the layer that prevents the loss instead of recovering from it.
 
 ### What the file is called
 
-The folder name under `<programs>` is a **work slice**, not a project key:
+The folder name under `<queues>` is a **work slice**, not a project key:
 `wego-todo-agosto`, `wego-review-followups`, or `cepa` for this repo's single
 queue. A key names a project; a queue is one slice of work inside it. On
 2026-08-18 the main clone of wego-acesso-backend held `WEGO/` (To Do, 48 items)
@@ -115,11 +126,11 @@ Rules every reader follows (`/common:next`, `cepa-plan status`, `cepa-plan queue
 with no name):
 
 - one single-track queue → that one, whatever the name;
-- several → list them and ask; never pick `<project_key>/plan.yaml`
+- several → list them and ask; never pick `<project_key>/queue.yaml`
   automatically.
 
 Naming the only queue after the project key is fine, and is the default of
-`/common:plan <project_key> --from-jira` and the `/board-flow:*` commands (one
+`/common:queue <project_key> --from-jira` and the `/board-flow:*` commands (one
 queue per repo, owner decision 2026-09-25). The key is a label for that queue,
 not a key for finding it.
 
@@ -133,18 +144,18 @@ The queue answers the question only if something asks it. Three moments do:
 
 | When | What answers | What it does |
 |---|---|---|
-| The order is being decided | [`/common:plan`](commands.md) | The single writer of the queue. From a spec, from a board (`--from-jira`, where [`/board-flow:triage`](commands.md) grooms the column by code evidence and hands back the order), or dictated by hand |
+| The order is being decided | [`/common:queue`](commands.md) | The single writer of the queue. From a spec, from a board (`--from-jira`, where [`/board-flow:triage`](commands.md) grooms the column by code evidence and hands back the order), or dictated by hand |
 | A card closes | `/board-flow:execute` · `/fix` · `/prove` | Close with **"And now?"** — the human route verbatim + the next unblocked item |
 | Mid-session, thread lost | [`/common:next`](commands.md) | Reconciles against the tracker (if any) and names **one** next step |
 | Several items are ready to run | [`/common:drain-plan`](commands.md) | Executes the queue **in its own order**, stopping at the first item it cannot resolve on its own |
 
-### Writing it: `/common:plan`
+### Writing it: `/common:queue`
 
 One document, one writer, three sources. Triage already read every card,
 gathered evidence, and routed the queue — it was simply emitting an *unordered*
 list and letting the ordering rationale die in the chat. It now proposes the To
 Do list **in execution order**, each item carrying the reason it sits where it
-sits, and — since stage 2 — hands that classification to `/common:plan` instead
+sits, and — since stage 2 — hands that classification to `/common:queue` instead
 of writing the file itself.
 
 An order you merely approved still beats one that was never written down.
@@ -246,7 +257,7 @@ different stages, and saying "none of it ran" hid that:
 
 - **`/board-flow:triage` has run against live cards** — twice on the WEGO board
   (2026-08-16 over the whole 55-card queue, 2026-08-18 over 15 of them), and the
-  merged result is on disk at `.claude/programs/WEGO/plan.yaml`: 77 ordered
+  merged result is on disk at `.claude/queues/WEGO/queue.yaml`: 77 ordered
   items, each with its `why`. Checked 2026-08-24.
 - **`/common:next` has never reconciled against a live tracker.** That same file
   says so in its own header ("rode `/common:next --sync` para reconciliar contra
@@ -260,13 +271,13 @@ One question is still deliberately open, to be decided with use rather than
 guessed: whether the queue should surface at `SessionStart` alongside the handoff.
 
 The other one — **who writes the queue in a repo with no tracker** — was answered
-on 2026-08-24: a new `/common:plan <name>`, the single writer of the
+on 2026-08-24: a new `/common:queue <name>`, the single writer of the
 `single-track` file, fed by `--from-spec`, by `--from-jira` (where
 `/board-flow:triage` classifies and hands back the order instead of writing the
 file itself), or dictated by hand. The card in `BACKLOG.md` ("Cinco portas de
 planejamento") holds the full shape and what it costs.
 
-**Stage 1 is built** (2026-08-24): `/common:plan` with `--from-spec` and the
+**Stage 1 is built** (2026-08-24): `/common:queue` with `--from-spec` and the
 hand-dictated queue, plus `common/bin/cepa-plan` — the mechanical writer, so the
 refusals are code rather than prose. Reading the specification is mechanical too
 (`cepa-plan from-spec`, one item per `### CS-N`, in the order of the text): while
@@ -275,8 +286,8 @@ that paragraph, which proves the command *promises* to inherit the order and
 never that a run produces the queue it promised.
 
 **Stage 2 is built** (2026-08-25): `--from-jira`, and `/board-flow:triage` no
-longer writes `plan.yaml`. It writes a **handoff** —
-`<programs>/<project_key>/triagem-<YYYY-MM-DD>.json`, the four buckets in the
+longer writes `queue.yaml`. It writes a **handoff** —
+`<queues>/<project_key>/triagem-<YYYY-MM-DD>.json`, the four buckets in the
 execution order confirmed at its step 7 — and `cepa-plan from-triage` turns that
 into items. The same lesson as stage 1 decided the shape: the rules that say
 which bucket becomes a `pending` item (only `ready`; `implemented` belongs to
@@ -311,7 +322,7 @@ the route's question instead; `--forca` records it anyway (on 2026-10-14 a "não
 said in chat about something else landed as the owner's answer on an item).
 
 **Every write commits the queue or says it did not.** `responde` and `add` commit the
-`plan.yaml` (only it, `git commit -- <path>`) in the same step; `--no-commit` writes without
+`queue.yaml` (only it, `git commit -- <path>`) in the same step; `--no-commit` writes without
 committing and prints the commit command that is missing. `start` and `finish` print that
 the queue is modified and not committed (with the command), or commit it with `--commit`;
 inside a `cepa-until` run the notice says the clone stays modified on purpose until the owner
@@ -324,7 +335,7 @@ reads the `single-track` queue as its source instead of a prose file. This is
 the queue → waves promotion that the section below used to declare **manual**,
 and the answer to *"how do I use `program-plan` on a project with Jira"* — the
 `--source` flag only accepts a file, while the queue accepts the board (through
-`/common:plan --from-jira`). Reading the queue is mechanical too
+`/common:queue --from-jira`). Reading the queue is mechanical too
 (`cepa-plan promote`), for the same reason as stages 1–3, and it decides three
 things prose cannot be trusted to keep: **who may become a slice** (only
 `pending` — `in_progress` is reserved by another session, so forking a wave on
@@ -369,7 +380,7 @@ erase the debt at the exact moment someone is re-reading the queue.
 ## See also
 
 - [`common/plan-schema.yaml`](../common/plan-schema.yaml) — the annotated schema, both modes
-- [commands.md](commands.md) — `/common:plan` (the writer), `/common:next`, `/board-flow:triage`
+- [commands.md](commands.md) — `/common:queue` (the writer), `/common:next`, `/board-flow:triage`
 - [board-flow.md](board-flow.md) — the tracker half: config, Implementation Summary contract
 - [maestro.md](maestro.md) — the `parallel-waves` sibling
 - [handoff.md](handoff.md) — resuming *this* line of work (the queue holds the work *around* it)

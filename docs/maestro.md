@@ -64,7 +64,7 @@ Two alternative source modes:
   whole source and proposes the next 2–3 waves itself. Still a proposal: nothing
   is written without the conversation.
 - `--from-plan NAME` — the source is the repo's `single-track` queue
-  (`.claude/programs/NAME/plan.yaml`, written by `/common:plan`) instead of a
+  (`.claude/queues/NAME/queue.yaml`, written by `/common:queue`) instead of a
   prose file. This is the queue → waves promotion, and the way to use Maestro in
   a Jira repo (the queue accepts the board as a source; `--source` does not).
   The queue itself is read by `common/bin/cepa-plan promote` and left untouched;

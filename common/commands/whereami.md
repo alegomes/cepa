@@ -39,7 +39,7 @@ rewriting the facts, according to the state:
   states the purpose, propose it in three lines (purpose, by when, numbered plan)
   and record it with `cepa-intencao gravar`. If the output carries
   `delegar: /common:next` (a `cepa-until` run, where the intent is the
-  `plan.yaml` item), **run `/common:next`** and bring
+  `queue.yaml` item), **run `/common:next`** and bring
   its answer in place of this one.
 - **`outra-sessao`** (another session): the file was recorded by another
   session. Show the date and the question the output carries ("continuo ou abro

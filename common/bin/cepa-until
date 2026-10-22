@@ -220,6 +220,9 @@ except ImportError:
     sys.exit(2)
 
 AQUI = Path(__file__).resolve().parent
+sys.path.insert(0, str(AQUI.parent / "hooks"))
+import _queuepath as qp  # noqa: E402  (a fila mora em dois layouts na transição)
+
 CEPA_PLAN = AQUI / "cepa-plan"
 CEPA_UNTIL_DIGEST = AQUI / "cepa-until-digest"
 
@@ -1025,21 +1028,22 @@ def bloqueia_item(nome, repo, ident, tentativas, lateral=None):
 # ── guardas de largada ──────────────────────────────────────────────────────
 
 # O registro do próprio run (`.jsonl`, `.log`, `.review.md`) mora dentro do
-# repo, em `.claude/programs/<fila>/until/`. Não é sujeira: sem este filtro, o
+# repo, em `.claude/queues/<fila>/until/` (ou `.claude/programs/<fila>/until/`, o layout
+# antigo). Não é sujeira: sem este filtro, o
 # primeiro run deixa a pasta como não rastreada e o seguinte recusa a largada
 # por causa do que o anterior escreveu.
-REGISTRO_DO_RUN = re.compile(r"^.. \.claude/programs/[^/]+/until/")
+REGISTRO_DO_RUN = re.compile(r"^.. \.claude/(programs|queues)/[^/]+/until/")
 # Pelo mesmo motivo, a cópia que o `cepa-plan write` faz da fila anterior antes
 # de reescrevê-la: nasce não rastreada, e sem este filtro toda reescrita da
 # fila barrava o run seguinte até alguém apagar o `.bak` à mão. Só o não
 # rastreado (`??`): um `.bak` commitado e depois mudado é mudança de verdade.
-BAK_DA_FILA = re.compile(r"^\?\? \.claude/programs/[^/]+/plan\.yaml\.bak$")
+BAK_DA_FILA = re.compile(r"^\?\? \.claude/(programs/[^/]+/plan|queues/[^/]+/queue)\.yaml\.bak$")
 
 
 # O `plan.yaml` modificado no disco. Só o ` M` (não commitado, fora do stage):
 # é como o `cepa-plan start/finish` o deixa.
 PLANO_MODIFICADO = re.compile(
-    r"^ M (\.claude/programs/([^/]+)/plan\.yaml)$")
+    r"^ M (\.claude/(?:programs/([^/]+)/plan|queues/([^/]+)/queue)\.yaml)$")
 # Os campos que o `cepa-plan start/finish` de um run vivo escreve no item.
 CAMPOS_DO_RUN = ("status", "claimed_by", "evidence")
 
@@ -1102,7 +1106,8 @@ def arvore_suja(repo, run_vivo_ok=False):
     def so_o_run(linha):
         m = PLANO_MODIFICADO.match(linha)
         return bool(run_vivo_ok and m
-                    and plano_so_do_run_vivo(repo, m.group(1), m.group(2)))
+                    and plano_so_do_run_vivo(repo, m.group(1),
+                                             m.group(2) or m.group(3)))
 
     return [l for l in p.stdout.splitlines()
             if l.strip() and not REGISTRO_DO_RUN.match(l)
@@ -1113,7 +1118,7 @@ def tocados_pelo_ultimo_run(repo, fila):
     """Os arquivos que o último run desta fila commitou na branch da noite
     (`base..branch` do `run_start` mais recente). Sem registro, ou com a branch
     já apagada, devolve o vazio: nada no disco pode ter vindo do run."""
-    d = repo / ".claude" / "programs" / fila / "until"
+    d = qp.queue_dir(repo, fila) / "until"
     for reg in sorted(d.glob("*.jsonl"), reverse=True):
         largada = None
         try:
@@ -1221,7 +1226,7 @@ def heranca_do_run_anterior(repo, fila, caminho_plano):
     abertos = {str(it.get("id")) for it in (plano or {}).get("items") or []
                if str(it.get("status") or "pending").strip().lower()
                not in TERMINAIS}
-    d = repo / ".claude" / "programs" / fila / "until"
+    d = qp.queue_dir(repo, fila) / "until"
     vistos, por_branch = set(), {}
     for reg in sorted(d.glob("*.jsonl"), reverse=True):
         try:
@@ -1620,7 +1625,7 @@ def cmd_aterrissar(argv):
         return 2
     fila, run_id = a.alvo.split("/", 1)
     repo = Path(a.repo).resolve()
-    caminho = repo / ".claude" / "programs" / fila / "until" / \
+    caminho = qp.queue_dir(repo, fila) / "until" / \
         f"{run_id}.estado.json"
     try:
         est = json.loads(caminho.read_text(encoding="utf-8"))
@@ -1709,7 +1714,8 @@ def cmd_aterrissar(argv):
     # A fila mora no clone e o próprio run a atualiza (`cepa-plan finish`):
     # depois de todo run ela está modificada. A branch da noite não a toca, e
     # o merge e o `reset --keep` a preservam.
-    fila_do_clone = f".claude/programs/{fila}/plan.yaml"
+    fila_do_clone = (f".claude/queues/{fila}/queue.yaml",
+                     f".claude/programs/{fila}/plan.yaml")
     fila_suja = [l for l in sujos if l.endswith(fila_do_clone)]
     sujos = [l for l in sujos if l not in fila_suja]
     if sujos:
@@ -2173,7 +2179,7 @@ def cmd_decidir(argv):
               "sem barras nem `..` dentro de cada parte", file=sys.stderr)
         return 2
     repo = Path(a.repo).resolve()
-    pasta = repo / ".claude" / "programs" / fila / "until"
+    pasta = qp.queue_dir(repo, fila) / "until"
     try:
         est = json.loads((pasta / f"{run_id}.estado.json").read_text(
             encoding="utf-8"))
@@ -2216,7 +2222,7 @@ def cmd_fecha_morto(argv):
         return 2
     fila, run_id = a.alvo.split("/", 1)
     repo = raiz_principal(Path(a.repo).resolve())
-    caminho = repo / ".claude" / "programs" / fila / "until" / \
+    caminho = qp.queue_dir(repo, fila) / "until" / \
         f"{run_id}.estado.json"
     try:
         est = json.loads(caminho.read_text(encoding="utf-8"))
@@ -2354,14 +2360,21 @@ def raiz_principal(repo):
     return comum.parent if comum.name == ".git" else comum
 
 
+def estados_dos_runs(raiz):
+    """Todo `*.estado.json` de run, nos dois layouts, em ordem de caminho."""
+    achados = []
+    for base in (qp.LEGACY_DIR, qp.NEW_DIR):
+        achados.extend((Path(raiz) / base).glob("*/until/*.estado.json"))
+    return sorted(achados)
+
+
 def runs_esperando(repo):
     """Os runs cuja ação `aterrissar` ainda vale: estado `esperando-dono`,
     branch da noite existente e ainda fora da branch de destino. Um merge feito
     à mão, fora do `aterrissar`, também tira o run da lista."""
     raiz = raiz_principal(repo)
     achados = []
-    for caminho in sorted((raiz / ".claude" / "programs").glob(
-            "*/until/*.estado.json")):
+    for caminho in estados_dos_runs(raiz):
         try:
             est = json.loads(caminho.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -2422,8 +2435,7 @@ def runs_mortos(repo, agora=None):
     raiz = raiz_principal(repo)
     host = socket.gethostname()
     achados = []
-    for caminho in sorted((raiz / ".claude" / "programs").glob(
-            "*/until/*.estado.json")):
+    for caminho in estados_dos_runs(raiz):
         try:
             est = json.loads(caminho.read_text(encoding="utf-8"))
         except (OSError, ValueError):
@@ -2481,8 +2493,7 @@ def runs_mortos(repo, agora=None):
         fila = est.get("fila") or inicio.get("fila")
         status = None
         if em_voo:
-            it, _ = le_item(raiz / ".claude" / "programs" / str(fila)
-                            / "plan.yaml", em_voo)
+            it, _ = le_item(qp.queue_file(raiz, str(fila)), em_voo)
             status = str((it or {}).get("status") or "?")
         arvore = est.get("arvore") or inicio.get("arvore")
         verify = est.get("verify") if "verify" in est else inicio.get("verify")
@@ -2513,7 +2524,7 @@ def run_vivo_da_fila(repo, fila):
     ids dos itens com `item_start` no registro do run."""
     raiz = raiz_principal(repo)
     host = socket.gethostname()
-    pasta = raiz / ".claude" / "programs" / str(fila) / "until"
+    pasta = qp.queue_dir(raiz, str(fila)) / "until"
     for caminho in sorted(pasta.glob("*.estado.json")):
         try:
             est = json.loads(caminho.read_text(encoding="utf-8"))
@@ -2621,7 +2632,7 @@ def main(argv=None):
             "  cepa-until decidir <fila>/<run>\n"
             "      pergunta, uma por vez, o que o run deixou para você:\n"
             "      aterrissar e cada item adiado que só você destrava"))
-    ap.add_argument("fila", help="nome da fila em .claude/programs/<nome>/plan.yaml")
+    ap.add_argument("fila", help="nome da fila em .claude/queues/<nome>/queue.yaml")
     janela = ap.add_mutually_exclusive_group(required=True)
     janela.add_argument("--for", dest="duracao", metavar="12h",
                         help="quanto tempo rodar (ex.: 12h, 90m)")
@@ -2765,7 +2776,7 @@ def main(argv=None):
               "dele.", file=sys.stderr)
         return 2
 
-    ledger_dir = repo / ".claude" / "programs" / a.fila / "until"
+    ledger_dir = qp.queue_dir(repo, a.fila) / "until"
     ledger_dir.mkdir(parents=True, exist_ok=True)
     run_id = agora.strftime("%Y-%m-%d-%H%M")
     ledger = ledger_dir / f"{run_id}.jsonl"
@@ -2778,7 +2789,7 @@ def main(argv=None):
     TELA.titulo_inteiro = a.titulo_inteiro
     rot = lambda r: TELA.c("cinza", r)  # noqa: E731
     print(TELA.c("negrito", "cepa-until") + " · fila "
-          + TELA.c("ciano", str(dados.get("program"))) + f" · {repo.name} · até "
+          + TELA.c("ciano", str(qp.queue_name_of(dados))) + f" · {repo.name} · até "
           + TELA.c("negrito", prazo.strftime('%d/%m %H:%M'))
           + f" ({humano(prazo - agora)})")
     if TELA.ligada:

@@ -40,13 +40,16 @@ mode: single-track              # single-track | parallel-waves
 # Não tem `waves`, `surface`, `fork_after` nem `timeout_min`: nada aqui roda em
 # paralelo, então não há superfície a disjuntar nem sessão a cronometrar.
 
+# Plano de ondas: `program:` + .claude/programs/<nome>/plan.yaml. Fila single-track:
+# a chave é `queue:` + .claude/queues/<nome>/queue.yaml (`program:` segue lido, no
+# layout antigo, até `cepa-plan migrate`).
 program: exemplo                # nome do plano (vira .claude/programs/<nome>/)
 source: "Jira WEGO · coluna To Do, priorizada em 2026-07-28"
                                 # de onde as demandas vieram (rastreio, não costura)
 demonstra: "o operador carrega o PDF e vê 3 respostas"
                                 # OPCIONAL. O que a fila demonstra quando acaba,
                                 # numa frase observável — é o roteiro do ciclo
-                                # de um Epic (/common:plan --from-epic). Ausente
+                                # de um Epic (/common:queue --from-epic). Ausente
                                 # = a fila não declara; presente tem que ser
                                 # texto não-vazio (`cepa-plan validate` recusa
                                 # o resto). Repriorizar não o apaga. Quem lê:
@@ -100,7 +103,7 @@ items:                          # ORDEM DA LISTA = ordem de execução. É o dad
                                 # todas as rotas abertas são cobradas no
                                 # relatório do fim. A ordem GRAVADA aqui não
                                 # muda — adiar é execução, reordenar é do
-                                # /common:plan.
+                                # /common:queue.
                                 # FECHAR a pendência = trocar o texto por null.
                                 # Só o humano fecha: ele é o único que sabe se
                                 # rodou a rota. /common:next lista as

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cepa-plan — o escritor mecânico da fila `single-track` (.claude/programs/<nome>/plan.yaml).
+"""cepa-plan — o escritor mecânico da fila `single-track` (.claude/queues/<nome>/queue.yaml).
 
 Existe porque a etapa 1 do desenho "um escritor, três fontes" (BACKLOG.md,
 "Cinco portas de planejamento", aprovado em 2026-08-24) não pode viver só na
@@ -7,7 +7,7 @@ prosa de um comando: um `.md` que diz "valide os `why` antes de gravar" erode em
 silêncio, e o dano só aparece quando alguém abre o plano meses depois e a ordem
 não tem critério nenhum registrado. Aqui a recusa é código, e um teste a exercita.
 
-Quem chama: `/common:plan`. O comando conversa (lê a spec, pergunta a ordem, tira
+Quem chama: `/common:queue`. O comando conversa (lê a spec, pergunta a ordem, tira
 o `why` de onde ele já está escrito) e entrega a lista pronta para este script,
 que valida, resolve a raiz certa, recusa colisão e grava.
 
@@ -15,6 +15,12 @@ Só sabe `mode: single-track`. Ondas são outro documento, com outro autor
 (`/maestro:program-plan`) e outro consumidor (`/maestro:run`).
 
 Subcomandos:
+
+  cepa-plan migrate [<nome> | --all] [--dry-run] [--repo DIR]
+      Move a fila do layout antigo (.claude/programs/<n>/plan.yaml, chave
+      `program:`) para .claude/queues/<n>/queue.yaml (chave `queue:`), com o
+      diretório inteiro (until/ junto) e um commit. Recusa: reserva de sessão
+      VIVA, destino que já existe. Plano de ondas é pulado.
 
   cepa-plan check-name <nome> [--repo DIR]
       O nome de programa está livre para uma FILA? Espelho do
@@ -78,7 +84,7 @@ Subcomandos:
       resultado dele chega aqui pelo `--board`. `--apply` grava; sem ele,
       relata. NUNCA fecha um `human_pending` (só o humano fecha) e NUNCA anexa
       card que a fila não tem (posição sem `why` é a decisão que a fila guarda
-      — quem coloca é o /common:plan --from-jira). E NUNCA rebaixa item
+      — quem coloca é o /common:queue --from-jira). E NUNCA rebaixa item
       `done` (regra R3): card que voltou atrás no quadro vira aviso.
 
   cepa-plan start <nome> <id>
@@ -200,7 +206,7 @@ Reescrita (o nome já é uma fila): a lista nova manda na ORDEM, no `title` e no
 
 O que a reescrita NÃO preserva: os comentários escritos à mão no arquivo (o
 plano `cepa` deste repo tem vários, com a evidência de cada `done`). Antes de
-sobrescrever, o arquivo anterior é copiado para `plan.yaml.bak` e o caminho sai
+sobrescrever, o arquivo anterior é copiado para `<arquivo>.bak` e o caminho sai
 no relatório.
 """
 import argparse
@@ -221,6 +227,9 @@ try:
 except ImportError:
     print("cepa-plan precisa de PyYAML (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _queuepath as qp  # noqa: E402  (resolvedor dos dois layouts da fila)
 
 MODE = "single-track"
 SCHEMA_VERSION = 2
@@ -341,7 +350,8 @@ def raiz_principal(repo):
 
 
 def caminho_do_plano(raiz, nome):
-    return raiz / ".claude" / "programs" / nome / "plan.yaml"
+    """A fila `nome` nos dois layouts (novo ganha; ausente → caminho novo)."""
+    return qp.queue_file(raiz, nome)
 
 
 def le_plano(path):
@@ -472,8 +482,8 @@ def valida_plano(plan):
     if plan.get("schema_version") == 1 and plan.get("mode") == MODE:
         faltas.append("um plano v1 não pode declarar 'single-track': o modo não "
                       "existia lá. Suba `schema_version` para 2")
-    if not str(plan.get("program") or "").strip():
-        faltas.append("sem `program`")
+    if not str(qp.queue_name_of(plan, "")).strip():
+        faltas.append("sem `queue` (nem `program`, a chave do layout antigo)")
     if not str(plan.get("source") or "").strip():
         faltas.append("sem `source` — de onde as demandas vieram é o que permite "
                       "conferir a fila contra a fonte depois")
@@ -490,7 +500,7 @@ def valida_plano(plan):
 # ── escrita ──────────────────────────────────────────────────────────────────
 
 CABECALHO = """\
-# plan.yaml — fila `single-track`, escrita por /common:plan.
+# {arquivo} — fila `single-track`, escrita por /common:queue.
 #
 # ORDEM DA LISTA = ordem de execução; é o dado. O `why` de cada item é o
 # critério que colocou ele nessa posição — sem ele a fila guarda a ordem e
@@ -567,11 +577,11 @@ def funde(novos, antigos):
     return saida, reaproveitados
 
 
-def serializa(nome, fonte, itens, quando, demonstra=None):
+def serializa(nome, fonte, itens, quando, demonstra=None, chave="queue"):
     corpo = {
         "schema_version": SCHEMA_VERSION,
         "mode": MODE,
-        "program": nome,
+        chave: nome,
         "source": fonte,
     }
     # `demonstra` só existe quando alguém o escreveu: a fila sem ele continua
@@ -581,7 +591,8 @@ def serializa(nome, fonte, itens, quando, demonstra=None):
     corpo["items"] = itens
     dump = yaml.dump(corpo, allow_unicode=True, sort_keys=False,
                      default_flow_style=False, width=78)
-    return CABECALHO.format(fonte=fonte, quando=quando) + "\n" + dump
+    arquivo = qp.NEW_FILE if chave == "queue" else qp.LEGACY_FILE
+    return CABECALHO.format(fonte=fonte, quando=quando, arquivo=arquivo) + "\n" + dump
 
 
 def carrega_itens(origem):
@@ -1136,7 +1147,7 @@ def monta_lote(items, teto, estado_da_reserva=reserva_de):
       - **adiar** um item — ele não roda agora, mas não impede os seguintes.
         O item sai deste lote e volta no próximo `queue`, e a ORDEM GRAVADA no
         `plan.yaml` não é tocada: adiar é decisão de execução, reordenar é do
-        `/common:plan`.
+        `/common:queue`.
 
     O que ADIA (decisão do dono, 2026-08-28 — antes disso os dois primeiros
     paravam o lote inteiro):
@@ -1272,7 +1283,7 @@ def cmd_queue(raiz, nome, teto, como_json):
     alvo = caminho_do_plano(raiz, nome)
     if not alvo.is_file():
         print(f"{alvo} não existe — não há fila para executar. Quem escreve é "
-              "o /common:plan.", file=sys.stderr)
+              "o /common:queue.", file=sys.stderr)
         return 2
     plan, erro = le_plano(alvo)
     if erro:
@@ -1293,7 +1304,8 @@ def cmd_queue(raiz, nome, teto, como_json):
 
     items = plan.get("items") or []
     lote, parada, avisos, adiados = monta_lote(items, teto)
-    saida = {"program": plan.get("program"), "path": str(alvo), "max": teto,
+    saida = {"program": qp.queue_name_of(plan), "queue": qp.queue_name_of(plan),
+             "path": str(alvo), "max": teto,
              "batch": lote, "stop": parada, "deferred": adiados,
              "warnings": avisos,
              "totals": resumo_do_lote(items, lote, parada, adiados)}
@@ -1301,7 +1313,7 @@ def cmd_queue(raiz, nome, teto, como_json):
         print(json.dumps(saida, ensure_ascii=False, indent=2))
         return 0
 
-    print(f"fila {saida['program']} · {alvo}")
+    print(f"fila {saida['queue']} · {alvo}")
     if not lote:
         print("  lote VAZIO — nada a executar agora")
     for i, it in enumerate(lote, 1):
@@ -1337,12 +1349,11 @@ GRUPOS_STATUS = (
 
 def filas_single_track(raiz):
     """Os nomes das filas single-track do repo, em ordem alfabética."""
-    base = raiz / ".claude" / "programs"
     nomes = []
-    for arq in sorted(base.glob("*/plan.yaml")):
+    for nome, arq in qp.queue_files(raiz):
         plan, erro = le_plano(arq)
         if not erro and isinstance(plan, dict) and modo_de(plan) == MODE:
-            nomes.append(arq.parent.name)
+            nomes.append(nome)
     return nomes
 
 
@@ -1357,8 +1368,8 @@ def cmd_status(raiz, nome, filtro, como_json):
     if not nome:
         nomes = filas_single_track(raiz)
         if not nomes:
-            print(f"nenhuma fila em {raiz / '.claude' / 'programs'} — quem "
-                  "escreve é o /common:plan", file=sys.stderr)
+            print(f"nenhuma fila em {raiz / qp.NEW_DIR} — quem "
+                  "escreve é o /common:queue", file=sys.stderr)
             return 2
         if len(nomes) > 1:
             print("há mais de uma fila; diga qual: " + ", ".join(nomes),
@@ -1367,7 +1378,7 @@ def cmd_status(raiz, nome, filtro, como_json):
         nome = nomes[0]
     alvo = caminho_do_plano(raiz, nome)
     if not alvo.is_file():
-        print(f"{alvo} não existe — quem escreve a fila é o /common:plan",
+        print(f"{alvo} não existe — quem escreve a fila é o /common:queue",
               file=sys.stderr)
         return 2
     plan, erro = le_plano(alvo)
@@ -1399,7 +1410,8 @@ def cmd_status(raiz, nome, filtro, como_json):
     visiveis = [l for l in linhas if not filtro or l["status"] == filtro]
 
     if como_json:
-        print(json.dumps({"program": plan.get("program") or nome,
+        print(json.dumps({"program": qp.queue_name_of(plan, nome),
+                          "queue": qp.queue_name_of(plan, nome),
                           "path": str(alvo), "total": len(linhas),
                           "por_status": contagem, "filtro": filtro,
                           "items": visiveis}, ensure_ascii=False, indent=2))
@@ -1408,7 +1420,7 @@ def cmd_status(raiz, nome, filtro, como_json):
         return status_na_tela(plan.get("program") or nome, alvo, linhas,
                               contagem, visiveis)
 
-    print(f"fila {plan.get('program') or nome} · {alvo}")
+    print(f"fila {qp.queue_name_of(plan, nome)} · {alvo}")
     print("  " + " · ".join(f"{contagem[st]} {rot}" for st, rot in GRUPOS_STATUS)
           + f" · {len(linhas)} no total")
     abertas = [l for l in linhas if l["human_pending"] is not None]
@@ -1530,7 +1542,7 @@ def cmd_show(raiz, nome, como_json):
     """
     alvo = caminho_do_plano(raiz, nome)
     if not alvo.is_file():
-        print(f"{alvo} não existe — quem escreve a fila é o /common:plan",
+        print(f"{alvo} não existe — quem escreve a fila é o /common:queue",
               file=sys.stderr)
         return 2
     plan, erro = le_plano(alvo)
@@ -1544,12 +1556,13 @@ def cmd_show(raiz, nome, como_json):
     itens = plan.get("items") or []
     demonstra = plan.get("demonstra")
     if como_json:
-        print(json.dumps({"program": plan.get("program") or nome,
+        print(json.dumps({"program": qp.queue_name_of(plan, nome),
+                          "queue": qp.queue_name_of(plan, nome),
                           "path": str(alvo), "source": plan.get("source"),
                           "demonstra": demonstra, "total": len(itens)},
                          ensure_ascii=False, indent=2))
         return 0
-    print(f"fila {plan.get('program') or nome} · {alvo}")
+    print(f"fila {qp.queue_name_of(plan, nome)} · {alvo}")
     print(f"  fonte: {plan.get('source') or '(sem `source`)'}")
     print(f"  demonstra: {demonstra}" if demonstra else
           "  sem `demonstra:` — a fila não diz o que demonstra quando acaba")
@@ -1720,7 +1733,7 @@ def cmd_promote(raiz, nome, como_json, quando):
     alvo = caminho_do_plano(raiz, nome)
     if not alvo.is_file():
         print(f"{alvo} não existe — não há fila para promover. Quem escreve é "
-              "o /common:plan.", file=sys.stderr)
+              "o /common:queue.", file=sys.stderr)
         return 2
     plan, erro = le_plano(alvo)
     if erro:
@@ -1744,7 +1757,8 @@ def cmd_promote(raiz, nome, como_json, quando):
     ondas = max([d["onda_minima"] for d in demandas], default=0)
     piso_ok = len(demandas) >= PISO_DEMANDAS
     saida = {
-        "program": plan.get("program") or nome,
+        "program": qp.queue_name_of(plan, nome),
+        "queue": qp.queue_name_of(plan, nome),
         "path": str(alvo),
         "source": fonte_da_fila(plan, nome, alvo, len(demandas), len(items), quando),
         "demands": demandas,
@@ -1757,7 +1771,7 @@ def cmd_promote(raiz, nome, como_json, quando):
     if como_json:
         print(json.dumps(saida, ensure_ascii=False, indent=2))
     else:
-        print(f"fila {saida['program']} · {alvo}")
+        print(f"fila {saida['queue']} · {alvo}")
         for d in demandas:
             dep = f" (depois de {', '.join(d['depends_on'])})" if d["depends_on"] else ""
             print(f"  onda ≥{d['onda_minima']}  {d['id']} — {d['title']}{dep}")
@@ -2338,7 +2352,7 @@ FRASE_NAO_PRIORIZADO = "ainda não priorizado: entrou no fim da fila"
 def cmd_add(raiz, nome, ident, a):
     alvo, plan, por_id, rc = abre_plano_para_marcar(raiz, nome)
     if rc == 2:
-        print(f"  crie a fila primeiro: /common:plan {nome}", file=sys.stderr)
+        print(f"  crie a fila primeiro: /common:queue {nome}", file=sys.stderr)
         return rc
     if rc:
         return rc
@@ -2500,7 +2514,7 @@ def reconcilia(items, board, ausentes, papel_de):
             # R3 (dono, 2026-09-25): status vai do quadro para o plano e NUNCA
             # rebaixa item `done`. Rebaixar em bounce reabriu 11 cards prontos
             # no wego-acesso-backend. O quadro divergente vira aviso nomeado;
-            # reabrir o item é decisão do dono, pelo /common:plan.
+            # reabrir o item é decisão do dono, pelo /common:queue.
             bruto = "(não existe mais)" if ident in ausentes else board[ident]
             papel = "descartado" if ident in ausentes else papel_de.get(bruto)
             if papel in ("done", "em-revisao"):
@@ -2510,7 +2524,7 @@ def reconcilia(items, board, ausentes, papel_de):
                     f"{ident} está `done` aqui e '{bruto}' no quadro — não "
                     "rebaixei (regra R3: status nunca rebaixa item `done`). Se "
                     "o card reabriu de verdade, quem devolve o item à fila é o "
-                    "dono, pelo /common:plan")
+                    "dono, pelo /common:queue")
             continue
         if ident in ausentes:
             if st == "dropped":
@@ -2563,7 +2577,7 @@ def cmd_reconcile(raiz, nome, arquivo, config, aplicar, como_json):
     alvo = caminho_do_plano(raiz, nome)
     if not alvo.is_file():
         print(f"{alvo} não existe — não há fila para reconciliar. Quem escreve "
-              "é o /common:plan.", file=sys.stderr)
+              "é o /common:queue.", file=sys.stderr)
         return 2
     plan, erro = le_plano(alvo)
     if erro:
@@ -2604,14 +2618,15 @@ def cmd_reconcile(raiz, nome, arquivo, config, aplicar, como_json):
             aplicadas.append(d["id"])
         grava_corpo(alvo, plan, items)
 
-    saida = {"program": plan.get("program"), "path": str(alvo), "config": cfg,
+    saida = {"program": qp.queue_name_of(plan), "queue": qp.queue_name_of(plan),
+             "path": str(alvo), "config": cfg,
              "divergences": div, "in_sync": em_dia, "missing_from_plan": faltantes,
              "warnings": avisos, "applied": aplicadas, "wrote": bool(aplicadas)}
     if como_json:
         print(json.dumps(saida, ensure_ascii=False, indent=2))
         return 0
 
-    print(f"fila {saida['program']} · {alvo} × quadro ({cfg})")
+    print(f"fila {saida['queue']} · {alvo} × quadro ({cfg})")
     if not div:
         print("  nenhuma divergência — o plano descreve o que o quadro mostra")
     for d in div:
@@ -2619,7 +2634,7 @@ def cmd_reconcile(raiz, nome, arquivo, config, aplicar, como_json):
     if faltantes:
         print("  no quadro e FORA da fila (não anexados — posição sem `why` é "
               "a decisão que a fila guarda): " + ", ".join(faltantes))
-        print("  quem os coloca é o /common:plan <nome> --from-jira")
+        print("  quem os coloca é o /common:queue <nome> --from-jira")
     for a in avisos:
         print(f"  aviso: {a}")
     print(f"  {len(aplicadas)} gravada(s)" if aplicar else
@@ -2659,7 +2674,7 @@ def cmd_ordena(raiz, nome, chaves, como_json):
              for k in na_fila]
     ordem += [{"key": k, "posicao": None, "status": None} for k in fora]
 
-    saida = {"program": nome, "ordem": ordem, "fora_do_plano": fora}
+    saida = {"program": nome, "queue": nome, "ordem": ordem, "fora_do_plano": fora}
     if como_json:
         print(json.dumps(saida, ensure_ascii=False, indent=2))
         return 0
@@ -2839,7 +2854,7 @@ def cmd_divergencia(raiz, nome, arq_board, arq_backlog, como_json):
         avisos.append("sem `--backlog`: secoes_sem_plano e "
                       "plano_inexistente não avaliados")
 
-    saida = {"program": nome, "cards_sem_item": cards_sem_item,
+    saida = {"program": nome, "queue": nome, "cards_sem_item": cards_sem_item,
              "itens_com_card_done": itens_com_card_done,
              "secoes_sem_plano": secoes_sem_plano,
              "plano_inexistente": plano_inexistente, "avisos": avisos}
@@ -2956,7 +2971,7 @@ def cmd_write(raiz, a):
         return 2
 
     alvo = caminho_do_plano(raiz, a.nome)
-    antigos, fonte_antiga, demonstra_antigo = [], None, None
+    antigos, fonte_antiga, demonstra_antigo, chave_antiga = [], None, None, None
     if alvo.is_file():
         plan, err = le_plano(alvo)
         if err:
@@ -2970,6 +2985,8 @@ def cmd_write(raiz, a):
                   file=sys.stderr)
             return 3
         antigos = plan.get("items") or []
+        # a fila legada segue com a chave que tem até migrar
+        chave_antiga = "queue" if "queue" in plan else "program"
         fonte_antiga = plan.get("source")
         # Repriorizar mexe nos itens, não no que a fila demonstra: o campo
         # vem do disco, senão a primeira reescrita o apaga em silêncio.
@@ -3061,11 +3078,12 @@ def cmd_write(raiz, a):
         if a.from_spec else None) or (
         fonte_da_triagem(repasse) if a.from_triage else None
         ) or (fonte_do_epic if a.from_epic else None
-        ) or fonte_antiga or "ditada à mão em /common:plan"
+        ) or fonte_antiga or "ditada à mão em /common:queue"
     # Com --from-epic o `demonstra:` é o roteiro do ciclo e vem do Epic, que é
     # onde ele é decidido; nas outras fontes ele vem do disco, intocado.
     texto = serializa(a.nome, fonte, fundidos, a.quando or "(data não informada)",
-                      demonstra_do_epic if a.from_epic else demonstra_antigo)
+                      demonstra_do_epic if a.from_epic else demonstra_antigo,
+                      chave=chave_antiga or "queue")
 
     if a.dry_run:
         print(texto)
@@ -3074,7 +3092,7 @@ def cmd_write(raiz, a):
     backup = None
     alvo.parent.mkdir(parents=True, exist_ok=True)
     if alvo.is_file():
-        backup = alvo.with_suffix(".yaml.bak")
+        backup = alvo.with_name(alvo.name + ".bak")
         backup.write_text(alvo.read_text(encoding="utf-8"), encoding="utf-8")
     tmp = alvo.with_suffix(".yaml.tmp")
     tmp.write_text(texto, encoding="utf-8")
@@ -3099,10 +3117,201 @@ def cmd_write(raiz, a):
     return 0
 
 
+# ── migrate: .claude/programs/<n>/plan.yaml → .claude/queues/<n>/queue.yaml ─
+#
+# Decisão do dono (2026-10-20): a fila single-track passa a se chamar `queue`,
+# como em docs/how-it-fits.md. Durante a transição todo consumidor lê os dois
+# layouts (`_queuepath`); este subcomando move as filas existentes. O plano de
+# ondas do maestro NÃO é fila e fica onde está.
+
+def _rastreado(raiz, rel):
+    rc, out, _ = _git(raiz, "ls-files", "--", rel)
+    return rc == 0 and bool(out.strip())
+
+
+def _reescreve_chave(arq):
+    """`program:` → `queue:` na chave de topo, linha a linha (comentários e
+    o resto do texto ficam como estão; nada de dump do YAML)."""
+    texto = arq.read_text(encoding="utf-8")
+    if re.search(r"^queue:", texto, re.M):
+        return False
+    novo, n = re.subn(r"^program:", "queue:", texto, count=1, flags=re.M)
+    if not n:
+        # Fila sem `program:` no topo: sem isto ela sairia "migrada" sem nome
+        # gravado. A chave entra antes da primeira linha que não é comentário.
+        linhas = texto.splitlines(keepends=True)
+        i = next((k for k, l in enumerate(linhas)
+                  if l.strip() and not l.lstrip().startswith("#")), len(linhas))
+        linhas.insert(i, f"queue: {arq.parent.name}\n")
+        novo = "".join(linhas)
+    arq.write_text(novo, encoding="utf-8")
+    return True
+
+
+def _run_vivo(velho_dir):
+    """Um `cepa-until` desta fila de pé agora? Mesma regra do
+    `run_vivo_da_fila` / `supervisor_vivo` do cepa-until: `until/*.estado.json`
+    com estado `rodando`, pid vivo nesta máquina e cujo comando é um
+    `cepa-until`. Entre dois itens não há `in_progress`, e o run vivo segura o
+    `until/` aberto: mover a pasta embaixo dele parte o registro em dois."""
+    import socket
+    host = socket.gethostname()
+    for caminho in sorted((velho_dir / "until").glob("*.estado.json")):
+        try:
+            est = json.loads(caminho.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(est, dict) or est.get("estado") != "rodando":
+            continue
+        pid = est.get("pid")
+        if not pid or (est.get("host") and est.get("host") != host):
+            continue
+        try:
+            os.kill(int(pid), 0)
+        except ProcessLookupError:
+            continue
+        except PermissionError:
+            pass
+        except (OSError, ValueError, TypeError):
+            continue
+        r = subprocess.run(["ps", "-o", "command=", "-p", str(int(pid))],
+                           capture_output=True, text=True)
+        if "cepa-until" in r.stdout:
+            return f"run {est.get('run') or caminho.name}, pid {pid}"
+    return None
+
+
+def migra_uma(raiz, nome, dry_run):
+    """(estado, mensagem): estado em migrada | nada | pulada | recusada."""
+    velho_dir = Path(raiz) / qp.LEGACY_DIR / nome
+    velho = velho_dir / qp.LEGACY_FILE
+    novo_dir = Path(raiz) / qp.NEW_DIR / nome
+    if not velho.is_file():
+        return "nada", f"{nome}: nada a migrar (sem {velho})"
+    plan, erro = le_plano(velho)
+    if erro:
+        return "recusada", f"{nome}: {erro} — nada foi movido"
+    if modo_de(plan) != MODE:
+        return "pulada", (f"{nome}: é um plano '{modo_de(plan)}' (ondas do "
+                          "maestro), não uma fila — fica em .claude/programs")
+    if novo_dir.exists():
+        return "recusada", (f"{nome}: o destino {novo_dir} já existe — nada foi "
+                            "movido; resolva à mão qual dos dois vale")
+    for it in plan.get("items") or []:
+        if isinstance(it, dict) and status_de(it) == "in_progress":
+            estado, detalhe = reserva_de(it)
+            if estado == "viva":
+                return "recusada", (f"{nome}: o item {it.get('id')} está "
+                                    f"reservado por uma sessão VIVA ({detalhe}) "
+                                    "— nada foi movido; migre depois que ela acabar")
+    vivo = _run_vivo(velho_dir)
+    if vivo:
+        return "recusada", (f"{nome}: um cepa-until desta fila está rodando "
+                            f"({vivo}) — nada foi movido; migre depois que o "
+                            "run acabar")
+    rel_velho = _rel_da_fila(raiz, velho_dir)
+    rel_novo = _rel_da_fila(raiz, novo_dir)
+    rel_arq = _rel_da_fila(raiz, velho)
+    if _rastreado(raiz, rel_arq):
+        _, sujo, _ = _git(raiz, "status", "--porcelain", "--", rel_arq)
+        if sujo.strip():
+            return "recusada", (f"{nome}: {rel_arq} tem mudanças não "
+                                "commitadas — commite a fila antes; o commit "
+                                "da migração só move, não leva status de item")
+    if dry_run:
+        return "migrada", (f"{nome}: moveria {rel_velho}/ → {rel_novo}/, "
+                           f"{qp.LEGACY_FILE} → {qp.NEW_FILE}, `program:` → `queue:`")
+    rastreado = _rastreado(raiz, rel_velho)
+    novo_dir.parent.mkdir(parents=True, exist_ok=True)
+    if rastreado:
+        rc, _, err = _git(raiz, "mv", rel_velho, rel_novo)
+        if rc != 0:
+            return "recusada", f"{nome}: git mv falhou ({err.strip()}) — nada foi movido"
+    else:
+        velho_dir.rename(novo_dir)
+    for velho_nome, novo_nome in ((qp.LEGACY_FILE, qp.NEW_FILE),
+                                  (qp.LEGACY_FILE + ".bak", qp.NEW_FILE + ".bak")):
+        de, para = novo_dir / velho_nome, novo_dir / novo_nome
+        if not de.exists():
+            continue
+        try:
+            if rastreado and _rastreado(raiz, _rel_da_fila(raiz, de)):
+                rc, _, err = _git(raiz, "mv", _rel_da_fila(raiz, de),
+                                  _rel_da_fila(raiz, para))
+                if rc != 0:
+                    raise OSError(err.strip() or "git mv falhou")
+            else:
+                de.rename(para)
+        except OSError as e:
+            return "recusada", (f"{nome}: a pasta já foi para {rel_novo}/, mas "
+                                f"renomear {velho_nome} → {novo_nome} falhou "
+                                f"({e}) — estado MEIO-MOVIDO, nada commitado; "
+                                "termine à mão")
+    _reescreve_chave(novo_dir / qp.NEW_FILE)
+    msg = f"{nome}: movida para {rel_novo}/{qp.NEW_FILE}"
+    if rastreado:
+        _git(raiz, "add", "-A", "--", rel_velho, rel_novo)
+        mensagem = f"fila {nome}: .claude/programs → .claude/queues (cepa-plan migrate)"
+        rc, _, err = _git(raiz, "commit", "-q", "-m", mensagem, "--",
+                          rel_velho, rel_novo)
+        if rc == 0:
+            _, sha, _ = _git(raiz, "rev-parse", "--short", "HEAD")
+            msg += f" · commit {sha.strip()}"
+        else:
+            motivo = [l for l in (err or "").strip().splitlines() if l.strip()]
+            msg += (" · aviso: movida mas NÃO commitada "
+                    f"({motivo[-1] if motivo else 'o git falhou'})")
+    return "migrada", msg
+
+
+def cmd_migrate(raiz, nome, todos, dry_run):
+    if bool(nome) == bool(todos):
+        print("migrate pede UM nome de fila ou --all", file=sys.stderr)
+        return 2
+    if nome:
+        nomes = [nome]
+    else:
+        nomes = [n for n, arq in qp.queue_files(raiz)
+                 if arq.parent.parent.name == "programs"]
+    movidas, recusadas = 0, 0
+    for n in nomes:
+        estado, msg = migra_uma(raiz, n, dry_run)
+        if estado == "pulada" and todos:
+            print(f"pulada · {msg}")
+        elif estado == "pulada":
+            print(f"recusa: {msg}", file=sys.stderr)
+            recusadas += 1
+        elif estado == "recusada":
+            print(f"recusa: {msg}", file=sys.stderr)
+            recusadas += 1
+        elif estado == "migrada":
+            print(("(dry-run) " if dry_run else "migrada · ") + msg)
+            movidas += 1
+        else:
+            if nome and (Path(raiz) / qp.NEW_DIR / n / qp.NEW_FILE).is_file():
+                print(f"{n}: já está em {qp.NEW_DIR}/{n}/{qp.NEW_FILE} — nada a migrar")
+            elif nome:
+                print(f"{msg}", file=sys.stderr)
+                return 2
+    if not movidas and not recusadas:
+        print("nada a migrar")
+    return 3 if recusadas else 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="escreve e valida a fila single-track do harness")
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    mg = sub.add_parser("migrate",
+                        help="move a fila de .claude/programs/<n>/plan.yaml "
+                             "para .claude/queues/<n>/queue.yaml")
+    mg.add_argument("nome", nargs="?")
+    mg.add_argument("--all", action="store_true", dest="todos",
+                    help="todas as filas single-track do layout antigo")
+    mg.add_argument("--dry-run", action="store_true", dest="dry_run",
+                    help="diz o que moveria, sem mover")
+    mg.add_argument("--repo", default=".")
 
     c = sub.add_parser("check-name", help="o nome está livre para uma fila?")
     c.add_argument("nome")
@@ -3220,7 +3429,7 @@ def main(argv=None):
                          "(default: `git config user.name`, depois $USER)")
     rs.add_argument("--no-commit", action="store_true", dest="no_commit",
                     help="grava a fila sem commitar (por default o `responde` "
-                         "commita só o plan.yaml no mesmo passo)")
+                         "commita só a fila no mesmo passo)")
     rs.add_argument("--repo", default=".")
 
     rc = sub.add_parser("reconcile",
@@ -3254,7 +3463,7 @@ def main(argv=None):
                     help="ids desta MESMA fila que bloqueiam o item novo")
     ad.add_argument("--no-commit", action="store_true", dest="no_commit",
                     help="grava a fila sem commitar (por default o `add` "
-                         "commita só o plan.yaml no mesmo passo)")
+                         "commita só a fila no mesmo passo)")
     ad.add_argument("--repo", default=".")
 
     od = sub.add_parser("ordena",
@@ -3328,6 +3537,8 @@ def main(argv=None):
         print(f"{a.repo} não é um repositório git — a fila mora no clone "
               "principal, e sem git não dá para achá-lo", file=sys.stderr)
         return 2
+    if a.cmd == "migrate":
+        return cmd_migrate(raiz, a.nome, a.todos, a.dry_run)
     if a.cmd == "check-name":
         return cmd_check_name(raiz, a.nome)
     if a.cmd == "add":

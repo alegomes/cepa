@@ -33,7 +33,7 @@ COMMANDS = {
     # o ESCRITOR da fila: se ele resolver a raiz errada, o plano nasce dentro da
     # worktree e morre com ela — a perda que a camada 0 existe para impedir,
     # agora no lado da escrita e não só no da leitura.
-    REPO / "common" / "commands" / "plan.md": "<main-root>",
+    REPO / "common" / "commands" / "queue.md": "<main-root>",
     REPO / "board-flow" / "commands" / "triage.md": "<main-root>",
     REPO / "board-flow" / "commands" / "fix.md": "<main-root>",
     REPO / "board-flow" / "commands" / "prove.md": "<main-root>",
@@ -101,7 +101,7 @@ def main():
               token in ftxt)
         # o guard que importa: nenhuma menção a .claude/programs SEM prefixo de
         # raiz. É o que a perturbação quebra primeiro se alguém "simplificar".
-        bare = re.findall(r"(?<!main-root>/)(?<!raiz-principal>/)\.claude/programs",
+        bare = re.findall(r"(?<!main-root>/)(?<!raiz-principal>/)\.claude/(?:programs|queues)",
                           ftxt)
         check(f"{name}: nenhum caminho de plano relativo ao diretório corrente",
               not bare,

@@ -150,11 +150,28 @@ def _avalia(plan):
     return True, None, pendentes[0], resumo
 
 
+def _filas_novas(raiz):
+    """As filas single-track do layout novo, `.claude/queues/<n>/queue.yaml`.
+
+    O resolvedor oficial é `common/hooks/_queuepath.py`, mas o maestro é outro
+    plugin e não importa do `common`; aqui só se lista, então duplicar o caminho
+    é mais barato que acoplar os dois."""
+    base = raiz / ".claude" / "queues"
+    if not base.is_dir():
+        return []
+    return [{"nome": d.name, "dir": str(d), "elegivel": False,
+             "motivo": "fila single-track (.claude/queues) — quem executa é o "
+                       "/common:next ou o cepa-until, não o /maestro:run",
+             "mode": "single-track", "schema_version": 2,
+             "proxima_onda": None, "ondas": None}
+            for d in sorted(base.iterdir()) if (d / "queue.yaml").is_file()]
+
+
 def coleta(raiz):
     progs = []
     base = raiz / ".claude" / "programs"
     if not base.is_dir():
-        return progs
+        return _filas_novas(raiz)
     for d in sorted(p for p in base.iterdir() if p.is_dir()):
         item = {"nome": d.name, "dir": str(d), "elegivel": False,
                 "motivo": None, "mode": None, "schema_version": None,
@@ -178,7 +195,9 @@ def coleta(raiz):
         item["elegivel"], item["motivo"] = ok, motivo
         item["proxima_onda"], item["ondas"] = prox, resumo
         progs.append(item)
-    return progs
+    novas = {q["nome"] for q in _filas_novas(raiz)}
+    progs = [p for p in progs if p["nome"] not in novas] + _filas_novas(raiz)
+    return sorted(progs, key=lambda p: p["nome"])
 
 
 def imprime(raiz, progs):
@@ -240,6 +259,12 @@ def cmd_aguardando(raiz, como_json):
 
 def cmd_check_name(raiz, nome):
     """Exit 0 = nome livre (ou é o seu próprio plano de ondas). 3 = colisão."""
+    fila = raiz / ".claude" / "queues" / nome / "queue.yaml"
+    if fila.is_file():
+        print(f"COLISÃO: {fila} já é a fila '{nome}' (layout novo, escrita por "
+              f"/common:queue). Escrever ondas com este nome esconderia a fila "
+              f"de quem a lê. Escolha outro nome de programa.", file=sys.stderr)
+        return 3
     alvo = raiz / ".claude" / "programs" / nome / "plan.yaml"
     if not alvo.is_file():
         print(f"nome livre: {alvo} não existe")
@@ -255,7 +280,7 @@ def cmd_check_name(raiz, nome):
     if modo == "single-track":
         itens = plan.get("items") or []
         print(f"COLISÃO: {alvo} já é a fila single-track do board "
-              f"'{plan.get('program', nome)}' ({len(itens)} itens, escrita por "
+              f"'{plan.get('queue') or plan.get('program') or nome}' ({len(itens)} itens, escrita por "
               f"/board-flow:triage). Escrever ondas aqui apaga a ordem e o `why` "
               f"de cada item. Escolha outro nome de programa.", file=sys.stderr)
         return 3
