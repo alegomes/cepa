@@ -2396,3 +2396,16 @@ items:
   - renomear-para-queue
   human_pending: null
   evidence: null
+- id: onde-estamos-do-epic
+  title: 'Resumo ''onde estamos'' do Epic sempre à mão: ciclos fechados e em andamento,
+    o que falta e a pergunta pendente do dono, lido pelo hook de sessão e pelo /common:whereami'
+  why: 'Pedido do dono em 2026-10-20: uma sessão do wego-product perdeu o fio do
+    Epic e teve de reescrevê-lo; o ciclo 1 da intenção (cepa-intencao, /common:whereami,
+    docs/estrategia-intencao-da-sessao.md) cobre a sessão, não o projeto. Proposta:
+    bloco ''Onde estamos'' dentro do próprio Epic em docs/epics/<nome>.md, escrito
+    pelo /common:epic ao abrir e fechar cada ciclo, lido pelo hook session-mode
+    no primeiro turno e pelo whereami (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
