@@ -2380,3 +2380,18 @@ items:
     vizinhos: tests/test_fio_condutor.py all green; test_maestro_programs + test_eval_suite
     19 passed. Fora: docs/maestro.md:11 mantém ''Status (2026-09-19): experimental''
     como histórico abaixo do banner de congelado.'
+- id: code-names-in-english
+  title: Traduzir para o inglês nomes de função, variável e mensagem dos scripts
+    e hooks, os arquivos de hook (_modos.py, modo-escrita-gate.py, reflexao-gate.py,
+    reforma-gate.py, compass filas.ts e modo.ts), os arquivos de estado .claude/desvios.md
+    e .claude/reflexao/ e os 51 nomes de teste em português; um diretório por commit,
+    suíte verde a cada um
+  why: 'Decisão do dono em 2026-10-22 (achados F10 a F12): audiência internacional
+    lê o código, e esperar cada arquivo ser mexido por outro motivo não termina
+    nunca. Vem depois de renomear-para-queue para não brigar com os mesmos arquivos
+    (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by:
+  - renomear-para-queue
+  human_pending: null
+  evidence: null
