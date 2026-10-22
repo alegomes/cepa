@@ -2292,6 +2292,22 @@ items:
     de prompt em pt dentro do JavaScript do advisors.md mantidos (mudariam o idioma
     da resposta das lentes); contradição pré-existente em board-flow/commands/triage.md
     sobre confirmar Won''t Do card a card, traduzida como estava.'
+- id: interface-in-english
+  title: 'Interface do Cepa em inglês: nomes de comando (/common:fila, /common:modos),
+    scripts cepa-intencao e cepa-modos e seus subcomandos, as 40 flags em português,
+    os 7 modos e as chaves de .claude/session-mode e .claude/session-intent, as
+    chaves e o status metade do plan.yaml, o prefixo de commit "fila cepa:" e os
+    status pronta/rascunho/aberta do Epic e da spec'
+  why: 'Decisão do dono em 2026-10-22 (achados F1 a F6 da análise de termos em português):
+    sai na mesma migração do renomear-para-queue, com os scripts lendo nome antigo
+    e novo durante a transição, para a quebra caber numa janela só. /common:fila
+    precisa de outro nome, porque /common:queue fica com o /common:plan. Os títulos
+    de seção do Epic e da spec esperam a decisão sobre o idioma da saída para o
+    dono'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
 - id: renomear-para-queue
   title: 'Renomear plan.yaml, .claude/programs/, a chave program: e o comando /common:plan
     para o termo queue, com migração das filas existentes nos repos de cliente'
@@ -2304,11 +2320,30 @@ items:
     em 2026-10-20, segunda rodada: o comando /common:plan entra no mesmo rename
     (vira /common:queue), senão "plan" continua ambíguo no comando mais digitado;
     as referências em docs e testes acompanham'
-  status: pending
+  status: blocked
   blocked_by:
   - comandos-em-ingles
   human_pending: null
-  evidence: null
+  evidence: 'Código e testes na branch until/2026-10-20-2055, sem merge: 75c8cff
+    (rename), 2cffcc0 (10 testes novos em tests/test_queue_rename.py, 26 verdes;
+    fixture .claude/queues em compass/hooks/compass.test.tsx, 83 verdes), 0c-gates
+    no commit seguinte. proof-reviewer PROVEN (docs/proof/renomear-para-queue.yaml):
+    as 9 perturbações que sobreviviam (R4, W3, U4, U5, U6, G1, U7, U8, D4, D5) e
+    o ramo queues do register.tsx agora dão vermelho. completion-auditor INCOMPLETE
+    só pelo AC5 (.claude/acceptance/renomear-para-queue.yaml): AC1 a AC4 verificados;
+    a migração real das filas de cepa, wego-acessos-backend, wego-digitacao-backend
+    e wego-product não foi feita, de propósito (branch sem merge, cepa-until lendo
+    a fila cepa, repos de cliente fora da branch). Quem resolve: o dono, aceitando
+    que a migração real vire rota humana depois do merge (cepa-plan migrate --all
+    --repo <repo> nos quatro). Achado não corrigido, fora do escopo: compass/hooks/register.tsx
+    marca o nome como visto quando a pasta existe em .claude/queues mesmo sem queue.yaml,
+    e uma pasta vazia esconderia a fila antiga de mesmo nome. [supervisor] Os commits
+    do item, que não passaram pelo build do supervisor (ele só roda depois de `done`),
+    estão em `until/2026-10-20-2055-travado-renomear-para-queue`; a branch da noite
+    voltou para 76c8413f9e.'
+  owner_question: 'Fecho o rename e deixo a migração das quatro filas reais como
+    tarefa sua depois do merge? Recomendo sim: o código está provado e a migração
+    é um comando'
 - id: readme-estrutura-de-trabalho
   title: 'README: seção How work is organised (Epic, cycle, queue, item, session,
     inbox) e aviso do maestro congelado'
@@ -2316,7 +2351,18 @@ items:
     colar e conferir os links. Exige sessão em modo documentacao, porque o modo-escrita-gate
     barra README.md em descoberta. Depois desta sessão de descoberta fechar. (ainda
     não priorizado: entrou no fim da fila)'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commits na branch da noite until/2026-10-20-2055 (sem merge, sem push):
+    37eebd7 cola a seção How work is organised no README entre What Cepa is e Work
+    has modes, troca o parágrafo Experimental do maestro por Frozen since 2026-10-08
+    e alinha a linha da tabela Reference; apaga o rascunho .claude/rascunhos/readme-how-work-is-organised.md;
+    f9586dd alinha docs/topologies.md (maestro frozen, achado do pair-reviewer).
+    Links conferidos no disco: docs/how-it-fits.md#vocabulary, docs/maestro.md,
+    #work-has-modes, .claude/programs/archive/. completion-auditor COMPLETE (.claude/acceptance/readme-estrutura-de-trabalho.yaml).
+    pair-reviewer REJECT só pela frase de docs/topologies.md, corrigida em f9586dd.
+    proof-reviewer não se aplica: só documentação, nenhum comportamento mudou. Testes
+    vizinhos: tests/test_fio_condutor.py all green; test_maestro_programs + test_eval_suite
+    19 passed. Fora: docs/maestro.md:11 mantém ''Status (2026-09-19): experimental''
+    como histórico abaixo do banner de congelado.'
