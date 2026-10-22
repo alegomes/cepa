@@ -2336,36 +2336,19 @@ items:
     em 2026-10-20, segunda rodada: o comando /common:plan entra no mesmo rename
     (vira /common:queue), senão "plan" continua ambíguo no comando mais digitado;
     as referências em docs e testes acompanham'
-  status: in_progress
+  status: blocked
   blocked_by:
   - comandos-em-ingles
-  human_pending: null
-  evidence: 'Resposta do dono em 2026-10-22: sim: aceito o merge com a migração
-    das filas reais como tarefa minha depois. O item voltou de `blocked` para `pending`.
-    Evidência anterior: Código e testes na branch until/2026-10-20-2055, sem merge:
-    75c8cff (rename), 2cffcc0 (10 testes novos em tests/test_queue_rename.py, 26
-    verdes; fixture .claude/queues em compass/hooks/compass.test.tsx, 83 verdes),
-    0c-gates no commit seguinte. proof-reviewer PROVEN (docs/proof/renomear-para-queue.yaml):
-    as 9 perturbações que sobreviviam (R4, W3, U4, U5, U6, G1, U7, U8, D4, D5) e
-    o ramo queues do register.tsx agora dão vermelho. completion-auditor INCOMPLETE
-    só pelo AC5 (.claude/acceptance/renomear-para-queue.yaml): AC1 a AC4 verificados;
-    a migração real das filas de cepa, wego-acessos-backend, wego-digitacao-backend
-    e wego-product não foi feita, de propósito (branch sem merge, cepa-until lendo
-    a fila cepa, repos de cliente fora da branch). Quem resolve: o dono, aceitando
-    que a migração real vire rota humana depois do merge (cepa-plan migrate --all
-    --repo <repo> nos quatro). Achado não corrigido, fora do escopo: compass/hooks/register.tsx
-    marca o nome como visto quando a pasta existe em .claude/queues mesmo sem queue.yaml,
-    e uma pasta vazia esconderia a fila antiga de mesmo nome. [supervisor] Os commits
-    do item, que não passaram pelo build do supervisor (ele só roda depois de `done`),
-    estão em `until/2026-10-20-2055-travado-renomear-para-queue`; a branch da noite
-    voltou para 76c8413f9e.'
-  claimed_by:
-    session_id: 7ebec669-9c33-46df-80f9-999b319e7d2c
-    pid: 90143
-    hostname: Alexandres-MacBook-Pro.local
-    cwd: /Users/alegomes/coding/cepa
-    branch: main
-    started_at: '2026-10-22T20:51:31+00:00'
+  human_pending: Rodar cepa-plan migrate --all nos quatro repos (cepa, wego-acessos-backend,
+    wego-digitacao-backend, wego-product) e confirmar que /common:queue, cepa-until
+    e o compass leem .claude/queues
+  evidence: 'Merge no main em 2026-10-22: 1551d88 (branch session/queue-merge, que
+    continha 444c62b = merge de until/2026-10-20-2055-travado-renomear-para-queue).
+    Suíte completa verde na worktree antes do merge: tests/run-all.sh, 139 de 139
+    arquivos. Worktree e branch removidas. AC5 (migração real das filas) segue em
+    aberto por decisão do dono: a migração é rota humana.'
+  owner_question: 'Migro as quatro filas para o layout novo com um comando só e
+    fecho o item? Recomendo sim: o comando lê os dois layouts e tem dry-run.'
 - id: readme-estrutura-de-trabalho
   title: 'README: seção How work is organised (Epic, cycle, queue, item, session,
     inbox) e aviso do maestro congelado'
