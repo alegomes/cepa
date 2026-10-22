@@ -1,0 +1,46 @@
+schema_version: 2
+card: renomear-para-queue
+verdict: proven
+reviewed_at: 2026-10-20T00:00:00-03:00
+base_commit: 76c8413
+head_commit: 2cffcc0
+issue_type: Task
+scope:
+  base_commit_resolved: true
+  note: "Nao e projeto Quarkus: CLIs Python + painel TS. Sem PIT; tecnica unica = perturbacao em worktree descartavel (/tmp/proof-rpq3, detached em HEAD). Guardiao primario = tests/test_queue_rename.py (26 testes, baseline 26 passed) e compass/hooks/compass.test.tsx (83 pass)."
+  changed_classes:
+    - { class: "common/hooks/_queuepath.py", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-plan", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-until-digest", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "common/bin/cepa-doctor", module: common, external_observable: true, substituted_by_double: null }
+    - { class: "maestro/bin/maestro-programs", module: maestro, external_observable: true, substituted_by_double: null }
+    - { class: "compass/hooks/register.tsx", module: compass, external_observable: true, substituted_by_double: null }
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "projeto Python/TS, sem pitest"
+    perturbation:
+      status: pass
+      results:
+        - "baseline: PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_queue_rename.py -> 26 passed"
+        - "As 9 que antes sobreviveram, agora todas RED (pytest -x tests/test_queue_rename.py, __pycache__ limpo apos cada uma): R4 queue_files ordem legado-ganha -> 1 failed, 16 passed; W3 .bak com nome antigo -> 1 failed, 18 passed; U4 fila_do_clone so legado -> 1 failed, 21 passed; U5 estados_dos_runs so legado -> 1 failed, 21 passed; U6 ledger_dir fixo em programs -> 1 failed, 19 passed; G1 cabecalho dados.get('program') -> 1 failed, 20 passed; U7 digest raiz fixa em programs/plan.yaml -> 1 failed, 23 passed; U8 digest vizinho fixo no legado -> 1 failed, 22 passed; D4 doctor sem chamar check_layout_da_fila -> 1 failed, 24 passed; D5 tem_dir_de_planos sem queues -> 1 failed, 21 passed"
+        - "Spot-check das 24 antes RED: R1 (queue_files em ordem invertida) -> 1 failed, 16 passed; R5 (queue_name_of ignora queue:) -> 1 failed"
+        - "compass/hooks/register.tsx, `claude plugin test compass`: baseline 83 pass 0 fail. Perturbacao A (so .claude/programs, sem queues) -> 82 pass 1 fail ('nivel 1 le .claude/queues/<n>/queue.yaml; nome nos dois layouts, o novo ganha e aparece uma vez'). Perturbacao B (ordem invertida, legado ganha) -> mesmo teste 1 fail"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; cobertura dos ramos do layout novo determinada por perturbacao: cada linha alterada que antes sobrevivia agora vai a RED (ver l3)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "o diff move/renomeia o caminho de arquivos de fila entre dois layouts e adiciona testes; nao introduz parsing de entrada externa nem toca modulo com superficie HTTP (api-rest inexistente neste projeto)"
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+process_notes:
+  - "Todos os comandos em primeiro plano, cada um abaixo de 1 minuto. Arvore principal intocada; worktree descartavel /tmp/proof-rpq3 removido ao final."
+  - "O script de perturbacao precisou morar dentro do worktree descartavel (o path-lock nega executar script em /tmp fora dele); foi descartado junto com o worktree."
+routing_reason: "As 9 perturbacoes que sobreviviam na rodada anterior e o ramo .claude/queues do compass agora vao todas a RED contra os testes novos; 2 spot-checks das 24 anteriores seguem RED. PROVEN."

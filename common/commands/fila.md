@@ -1,5 +1,5 @@
 ---
-description: Lists the repo's whole `single-track` queue, grouped by status (in progress, pending, blocked, done, dropped), in the recorded order, with the reason of each block and the open human actions. Answers "how is the queue right now?" without opening plan.yaml. Read-only: does not reserve, execute or reconcile with Jira.
+description: Lists the repo's whole `single-track` queue, grouped by status (in progress, pending, blocked, done, dropped), in the recorded order, with the reason of each block and the open human actions. Answers "how is the queue right now?" without opening queue.yaml. Read-only: does not reserve, execute or reconcile with Jira.
 argument-hint: [queue-name] [--status pending|in_progress|blocked|done|dropped]
 interaction: conversational
 ---
@@ -12,7 +12,7 @@ The other queue commands answer other questions. `/common:next` names **one**
 next step. `/common:drain-plan` executes. `cepa-plan queue` shows only what the
 next batch would run, hides what has already closed and stops at the first
 stuck item. None answers "how is the queue right now?", and on 2026-09-28 the
-only way out was to open the 72-item `plan.yaml` by hand.
+only way out was to open the 72-item `queue.yaml` by hand.
 
 This command is the listing and nothing more.
 
@@ -42,7 +42,7 @@ status, does not call Jira. To reconcile with the board, `/common:next --sync`.
 
 ## Notes
 
-- The queue lives in the main clone (`<root>/.claude/programs/<name>/plan.yaml`),
+- The queue lives in the main clone (`<root>/.claude/queues/<name>/queue.yaml`),
   even when the session runs in a worktree. `cepa-plan` resolves that on its own.
 - The number before each item is its position in the recorded queue, not the
   execution order: a pending item may be waiting for another one further down.

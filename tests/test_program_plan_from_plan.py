@@ -74,7 +74,7 @@ def escreve_fila(d, itens, nome="fila"):
     r = run(d, "write", nome, "--items", str(p), "--source", "teste",
             "--quando", "2026-08-25", "--repo", ".")
     assert r.returncode == 0, r.stderr
-    return d / ".claude" / "programs" / nome / "plan.yaml"
+    return d / ".claude" / "queues" / nome / "queue.yaml"
 
 
 def promote(d, nome="fila", *extra):
@@ -246,8 +246,8 @@ def testes_de_comportamento(base):
           r.returncode == 3 and "ondas não se promovem" in r.stderr, r.stderr)
 
     r, _ = promote(d, "nao-existe")
-    check("promote: fila inexistente sai 2 apontando quem escreve (/common:plan)",
-          r.returncode == 2 and "/common:plan" in r.stderr, r.stderr)
+    check("promote: fila inexistente sai 2 apontando quem escreve (/common:queue)",
+          r.returncode == 2 and "/common:queue" in r.stderr, r.stderr)
 
     d = repo_git(base, "invalida")
     alvo = d / ".claude" / "programs" / "f" / "plan.yaml"

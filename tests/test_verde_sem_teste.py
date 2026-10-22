@@ -416,8 +416,8 @@ with tempfile.TemporaryDirectory() as tmp:
                   "--quando", "2026-09-25", "--repo", str(ligada))
     check("fila gravada a partir da worktree ligada", w.returncode == 0, w.stderr[:300])
     check("…e mora no clone principal",
-          (principal / ".claude" / "programs" / "fila" / "plan.yaml").exists()
-          and not (ligada / ".claude" / "programs" / "fila" / "plan.yaml").exists(), "")
+          (principal / ".claude" / "queues" / "fila" / "queue.yaml").exists()
+          and not (ligada / ".claude" / "queues" / "fila" / "queue.yaml").exists(), "")
 
     capture(ligada, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest",
             MAVEN_VAZIO)

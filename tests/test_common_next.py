@@ -79,9 +79,9 @@ def test_item_done_nao_desce_de_categoria():
     check("a tabela diz que item done continua done contra o quadro (R3)",
           "stays done" in limpo and "r3" in limpo,
           "o rebaixamento antigo reabriu 11 cards prontos no wego-acesso-backend")
-    check("e que reabrir é decisão do usuário, pelo /common:plan",
+    check("e que reabrir é decisão do usuário, pelo /common:queue",
           "reopening it is the user's call" in limpo
-          and "through /common:plan" in limpo,
+          and "through /common:queue" in limpo,
           "se o comando voltar a reabrir sozinho, a regra R3 some do leitor")
 
 

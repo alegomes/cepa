@@ -104,9 +104,9 @@ def main():
     triage = read(REPO / "board-flow" / "commands" / "triage.md")
     check("triage entrega o repasse da classificação, e não o plan.yaml",
           "triagem-<YYYY-MM-DD>.json" in triage
-          and "no longer writes `plan.yaml`" in triage)
+          and "no longer writes `queue.yaml`" in triage)
     check("e nomeia o escritor único da fila",
-          "/common:plan" in triage and "--from-triage" in triage)
+          "/common:queue" in triage and "--from-triage" in triage)
     # `<programs>` resolve para o clone principal, nunca para a worktree — a
     # regra e o guard mecânico moram em tests/test_plan_anchor_root.py.
     check("triage propõe a fila To Do em ORDEM",
@@ -126,7 +126,7 @@ def main():
               "Human validation route" in txt and "Left for you" in txt)
         check(f"{cmd}: aponta o próximo item do plano",
               "Next in the plan" in txt
-              and "plan.yaml" in txt)
+              and "queue.yaml" in txt)
         check(f"{cmd}: sem plano, não inventa ordem",
               "/board-flow:triage" in txt)
 
@@ -137,7 +137,7 @@ def main():
     nxt = read(nxt_path)
 
     check("next lê o plano single-track",
-          "plan.yaml" in nxt and "single-track" in nxt)
+          "queue.yaml" in nxt and "single-track" in nxt)
     check("next separa os DOIS tipos de próximo",
           "pending human action" in nxt.lower() or "ação humana" in nxt.lower())
     check("next trata o plano como hipótese, não contrato",

@@ -38,6 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
+import _queuepath as qp  # noqa: E402  (a fila mora em dois layouts na transição)
 
 try:
     import yaml
@@ -295,18 +296,23 @@ def _linha_de_proposta(d):
 
 
 def plano_da_fila(ledger, fila):
-    """O plan.yaml de verdade: o do clone PRINCIPAL, não o da árvore de onde o
+    """O arquivo da fila (queue.yaml, ou plan.yaml no layout antigo) de verdade: o do clone PRINCIPAL, não o da árvore de onde o
     `cepa-until` largou.
 
-    O registro mora em `<árvore>/.claude/programs/<fila>/until/`. Quando essa
-    árvore é uma worktree ligada, o plan.yaml ao lado dele é uma cópia que
+    O registro mora em `<árvore>/.claude/queues/<fila>/until/` (ou
+    `.claude/programs/...`). Quando essa árvore é uma worktree ligada, o arquivo
+    da fila ao lado dele é uma cópia que
     ninguém atualiza: quem grava a fila é o `cepa-plan`, sempre no clone
     principal (o pai de `git rev-parse --git-common-dir`, a mesma regra do
     `raiz_principal` dele). Em 2026-09-26 este resumo leu a cópia e mostrou 21
     itens `pending` que já estavam fechados. Fora de um repo git, sobra a
     vizinha do registro.
     """
-    vizinho = ledger.parent.parent / "plan.yaml"
+    pasta = ledger.parent.parent
+    vizinho = pasta / qp.NEW_FILE
+    if not vizinho.exists() and ((pasta / qp.LEGACY_FILE).exists()
+                                 or pasta.parent.name == "programs"):
+        vizinho = pasta / qp.LEGACY_FILE
     r = subprocess.run(["git", "-C", str(ledger.parent), "rev-parse",
                         "--git-common-dir"], capture_output=True, text=True)
     if r.returncode != 0:
@@ -315,8 +321,7 @@ def plano_da_fila(ledger, fila):
     if not comum.is_absolute():
         comum = (ledger.parent / comum).resolve()
     raiz = comum.parent if comum.name == ".git" else comum
-    return raiz / ".claude" / "programs" / (fila or ledger.parent.parent.name) \
-        / "plan.yaml"
+    return qp.queue_file(raiz, fila or ledger.parent.parent.name)
 
 
 def monta(ledger, result_max):

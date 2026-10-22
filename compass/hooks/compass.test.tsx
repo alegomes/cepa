@@ -76,6 +76,12 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null, ex
   }))
   on('fs.read', async ($: any, e: any) => ({ value: acha(e.path) }))
   on('fs.list', async ($: any, e: any) => {
+    // `.claude/queues` lista só as pastas que de fato têm arquivo (como o fs real);
+    // o resto da lista abaixo é fixa e serve a `.claude/programs`.
+    if (e.path.endsWith('/.claude/queues')) {
+      const nomes = [...new Set(dentro(e.path).map(k => k.slice(e.path.length + 1).split('/')[0]))]
+      return { value: nomes.map(name => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })) }
+    }
     if (!e.path.endsWith('/until') && !e.path.endsWith('/docs/epics')) {
       // Nomes fixos (inclusive 'maestro', que não tem plan.yaml) mais as pastas das fixtures.
       const fixos = ['zerada', 'cepa', 'velha', 'mods', 'maestro', 'cepa-espiral-c1', 'outro-c1']
@@ -239,6 +245,21 @@ test('nível 1: tabela com uma linha por fila e uma coluna por estado', async ($
   expect(linha('zerada')).toEqual(['zerada', '·', '·', '·', '1', '·'])
   expect(textos.filter((t: string) => /Item|▸|✗/.test(t))).toEqual([])
   expect(textos.filter((t: string) => /velha/.test(t))).toEqual([])
+})
+
+test('nível 1 lê .claude/queues/<n>/queue.yaml; nome nos dois layouts, o novo ganha e aparece uma vez', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, {
+    // `mods` existe nos dois layouts (programs: 2 pend, 1 and, 1 feito); `maestro` só no novo.
+    '/repo/.claude/queues/mods/queue.yaml': FILA('single-track', ['pending']),
+    '/repo/.claude/queues/maestro/queue.yaml': FILA('single-track', ['done', 'done', 'blocked']),
+  })
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  const linha = (nome: string) => textos.slice(textos.indexOf(nome), textos.indexOf(nome) + 6)
+  expect(linha('mods')).toEqual(['mods', '1', '·', '·', '·', '·'])
+  expect(linha('maestro')).toEqual(['maestro', '·', '·', '1', '2', '·'])
+  expect(linha('cepa')).toEqual(['cepa', '·', '·', '1', '1', '1'])
+  expect(textos.filter((t: string) => t === 'mods')).toHaveLength(1)
+  expect(textos.filter((t: string) => t === 'maestro')).toHaveLength(1)
 })
 
 test('nível 1 vem antes do nível 2 e as abertas em ordem de itens abertos', async ($, on) => {

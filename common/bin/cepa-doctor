@@ -65,6 +65,12 @@ try:
 except Exception:  # noqa: BLE001 — doctor degrada, nunca morre por causa disso
     PV = None
 
+# Onde mora a fila single-track (dois layouts na transição): fonte única.
+try:
+    import _queuepath as QP
+except Exception:  # noqa: BLE001
+    QP = None
+
 # `_wtlib.env_manifest_path` é a mesma resolução de caminho do seeding de
 # worktree (docs/env.yaml ganha de .claude/env.yaml, o legado) — fonte única.
 try:
@@ -527,6 +533,7 @@ def check_project(cwd: Path):
     check_divergencia_plano(root)
     check_aguardando_merge(root)
     check_until_esperando(root)
+    check_layout_da_fila(root)
 
 
 # ── Ambiente (docs/env.yaml, legado .claude/env.yaml) ───────────────────
@@ -603,10 +610,7 @@ def fila_com_pendente(root: Path):
     item, então regex basta; qualquer problema vira None (fail-silent), porque
     um diagnóstico não pode quebrar a largada da sessão.
     """
-    d = root / ".claude" / "programs"
-    if not d.is_dir():
-        return None
-    for plano in sorted(d.glob("*/plan.yaml")):
+    for nome, plano in candidatas_de_fila(root):
         try:
             texto = plano.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -614,8 +618,20 @@ def fila_com_pendente(root: Path):
         if not re.search(r"^mode:\s*single-track\s*$", texto, re.M):
             continue
         if re.search(r"^\s+status:\s*pending\s*$", texto, re.M):
-            return plano.parent.name
+            return nome
     return None
+
+
+def candidatas_de_fila(root: Path):
+    """[(nome, arquivo)] das filas candidatas nos dois layouts (novo ganha)."""
+    if QP is None:
+        return []
+    return QP.queue_files(root)
+
+
+def tem_dir_de_planos(root: Path):
+    return (root / ".claude" / "programs").is_dir() or \
+        (root / ".claude" / "queues").is_dir()
 
 
 def check_arvore_suja(root: Path):
@@ -636,7 +652,7 @@ def check_arvore_suja(root: Path):
         return
     # o registro dos runs anteriores não conta: o `cepa-until` também o ignora
     suja = [l for l in suja
-            if not re.match(r"^.. \.claude/programs/[^/]+/until/", l)]
+            if not re.match(r"^.. \.claude/(programs|queues)/[^/]+/until/", l)]
     if not suja:
         ok("execucao", f"fila `{fila}` pendente e árvore limpa — "
                        f"`cepa-until {fila} --for 12h` larga sem recusa")
@@ -758,7 +774,8 @@ def resolve_fila_unica(root: Path):
     """Nome da fila `single-track` deste repo, do mesmo jeito que o
     /common:next resolve: `board-flow.yaml` → `defaults.project_key` primeiro;
     senão, se houver exatamente UMA fila `mode: single-track` em
-    `.claude/programs/*/plan.yaml`, essa. Mais de uma → None (ambíguo — o
+    `.claude/queues/*/queue.yaml` (ou o layout antigo
+    `.claude/programs/*/plan.yaml`), essa. Mais de uma → None (ambíguo — o
     doctor não adivinha qual fila o dono quer ver)."""
     bf = root / "board-flow.yaml"
     if bf.is_file():
@@ -769,17 +786,14 @@ def resolve_fila_unica(root: Path):
                 return m.group(1)
         except OSError:
             pass
-    d = root / ".claude" / "programs"
-    if not d.is_dir():
-        return None
     filas = []
-    for plano in sorted(d.glob("*/plan.yaml")):
+    for nome, plano in candidatas_de_fila(root):
         try:
             texto = plano.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         if re.search(r"^mode:\s*single-track\s*$", texto, re.M):
-            filas.append(plano.parent.name)
+            filas.append(nome)
     return filas[0] if len(filas) == 1 else None
 
 
@@ -831,6 +845,32 @@ def maestro_programs():
     return None
 
 
+def check_layout_da_fila(root: Path):
+    """A fila saiu de `.claude/programs/<n>/plan.yaml` para
+    `.claude/queues/<n>/queue.yaml`. Nome nos dois layouts é aviso (o novo
+    esconde o antigo); fila antiga sozinha é só a dica de migrar."""
+    if QP is None:
+        return
+    antigas = []
+    for nome, arq in QP.queue_files(root):
+        if QP.both_layouts(root, nome):
+            warn("fila", f"`{nome}` existe nos dois layouts "
+                         f"(.claude/queues e .claude/programs) — o novo "
+                         f"esconde o antigo; apague o que sobrou depois de "
+                         f"conferir qual vale")
+        if arq.parent.parent.name == "programs":
+            try:
+                texto = arq.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if re.search(r"^mode:\s*single-track\s*$", texto, re.M):
+                antigas.append(nome)
+    if antigas:
+        ok("fila", f"{len(antigas)} fila(s) no layout antigo "
+                   f"(.claude/programs: {', '.join(antigas)}) — "
+                   "`cepa-plan migrate --all` move para .claude/queues")
+
+
 def check_aguardando_merge(root: Path):
     """Onda do Maestro que terminou e ninguém aterrissou é ação humana.
 
@@ -840,7 +880,7 @@ def check_aguardando_merge(root: Path):
     é do maestro-wave-state; aqui só se traduz em ⚠.
     """
     mp = maestro_programs()
-    if mp is None or not (root / ".claude" / "programs").is_dir():
+    if mp is None or not tem_dir_de_planos(root):
         return
     try:
         p = subprocess.run([sys.executable, str(mp), str(root),
@@ -866,7 +906,7 @@ def check_until_esperando(root: Path):
     principal, e sem este aviso nada lembra que ele espera: o mesmo modo de
     falha da onda do maestro que ninguém aterrissou."""
     until = Path(__file__).resolve().parent / "cepa-until"
-    if not until.is_file() or not (root / ".claude" / "programs").is_dir():
+    if not until.is_file() or not tem_dir_de_planos(root):
         return
     try:
         p = subprocess.run([sys.executable, str(until), "pendentes",

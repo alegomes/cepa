@@ -20,7 +20,7 @@ which was born by hand in `docs/epics/cepa-em-espiral.md` (decision 1 of the
 strategy in `docs/estrategia-cepa-proximo-nivel.md`).
 
 That is why it is a command of its own and not a flag of spec: spec closes
-with criteria, epic closes with scripts. After it, `/common:plan --from-epic
+with criteria, epic closes with scripts. After it, `/common:queue --from-epic
 docs/epics/<name>.md --ciclo N` turns one cycle into a queue.
 
 **Grill me** is the owner's request for this command (2026-10-08), and it
@@ -189,7 +189,7 @@ saying nothing leaves the owner thinking he was served. Other than that, when
 the last gap closes, the sieve passes and you write `pronta` in the same turn,
 without waiting for the owner to ask.
 
-On closing, tell the owner the file path and the next step: `/common:plan
+On closing, tell the owner the file path and the next step: `/common:queue
 <name>-c1 --from-epic docs/epics/<name>.md --ciclo 1` derives the queue of the
 first cycle.
 
@@ -234,7 +234,7 @@ placeholders below are in English.
 ```
 
 `Status` accepts `rascunho | pronta`. The "O que atravessa" column is written
-in short sentences ending in a period, one per piece, because `/common:plan`'s
+in short sentences ending in a period, one per piece, because `/common:queue`'s
 `--from-epic` turns each sentence into an item of that cycle's queue.
 
 ## Constraints
@@ -248,6 +248,6 @@ in short sentences ending in a period, one per piece, because `/common:plan`'s
 - **Never declares `pronta` what the sieve refuses.** If the gate blocks, go
   back to asking.
 - **Only writes `docs/epics/<name>.md`.** Neither code nor queue: the queue
-  belongs to `/common:plan --from-epic`.
+  belongs to `/common:queue --from-epic`.
 - **Does not delegate the interview**, and does not run inside
   `/common:session`.

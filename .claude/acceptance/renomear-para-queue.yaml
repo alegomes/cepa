@@ -1,0 +1,49 @@
+key: renomear-para-queue
+status: incomplete
+diff_range: 76c8413..HEAD
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "cepa-plan (subprocesso) cria a fila nova em .claude/queues/<n>/queue.yaml com a chave queue:"
+    test: tests/test_queue_rename.py::test_fila_nova_nasce_em_queues
+    layer: cli/subprocess
+    evidence: verified
+    run: "PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_queue_rename.py -> 26 passed"
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: "cepa-plan, cepa-until, cepa-doctor, cepa-until-digest, maestro-programs e painel compass leem os dois layouts; fila legada continua funcionando sem migrar"
+    test: "tests/test_queue_rename.py (cepa-plan, cepa-until, doctor, test_digest_le_o_arquivo_vizinho_queue_yaml_fora_de_repo_git, test_digest_le_a_fila_do_clone_principal_no_layout_novo, test_maestro_programs_lista_filas_novas_junto_com_ondas_e_dedupe); compass/hooks/compass.test.tsx 'nível 1 lê .claude/queues/<n>/queue.yaml...'"
+    layer: cli/subprocess + compass (bun test)
+    evidence: verified
+    run: "pytest tests/test_queue_rename.py -> 26 passed; python3 tests/test_cepa_until_digest.py -> tudo verde (legado); claude plugin test compass -> 83 pass, 0 fail"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: "cepa-plan migrate [<n>|--all]: move, reescreve chave, commita, idempotente; recusas"
+    test: tests/test_queue_rename.py::test_migrate_* (incluindo --all, --dry-run)
+    layer: cli/subprocess em repo git temporario
+    evidence: verified
+    run: "pytest tests/test_queue_rename.py -> 26 passed (migrate --all exercitado nas linhas 182-217)"
+    status: complete
+  - id: AC4
+    altitude: cli
+    surface: "comando /common:queue existe; /common:plan e alias; docs e prosa usam os nomes novos"
+    test: tests/test_queue_rename.py::test_comando_queue_existe_e_plan_e_alias
+    layer: arquivos de comando (leitura estrutural)
+    evidence: verified
+    run: "pytest tests/test_queue_rename.py -> 26 passed"
+    status: complete
+  - id: AC5
+    altitude: cli
+    surface: "migracao das filas reais (cepa, wego-acessos-backend, wego-digitacao-backend, wego-product)"
+    test: nenhum (adiada de proposito; mecanismo cepa-plan migrate --all testado em AC3)
+    layer: n/a
+    evidence: missing
+    gap: >
+      Adiamento nomeado: migracao real nao executada nesta rodada (branch nao
+      mergeado; run do cepa-until le a fila do cepa; repos de cliente fora do
+      branch). Follow-up: apos o merge, `cepa-plan migrate --all --repo <repo>`
+      nos quatro repos e commit em cada um. Pela regra, adiamento nomeado
+      mantem o criterio incomplete; aceitar a divisao e decisao do dono.
+    status: incomplete

@@ -140,24 +140,30 @@ async function releiaFilas($: EngineInterface) {
   if (git.exitCode !== 0) return
   const raiz = git.stdout.trim().replace(/\/\.git$/, '')
   await releiaEpics($, `${raiz}/docs/epics`)
-  const dir = `${raiz}/.claude/programs`
-  if (!(await $.fs.exists(dir))) return
   const lidas: Fila[] = []
   let recente: { caminho: string; fila: string; id: string } | null = null
-  for (const entrada of await $.fs.list(dir)) {
-    if (entrada.kind !== 'dir') continue
-    const plano = `${dir}/${entrada.name}/plan.yaml`
-    if (await $.fs.exists(plano)) {
-      const fila = contaFila(entrada.name, await $.fs.read(plano))
-      if (fila) lidas.push(fila)
-    }
-    // O run mais recente de todas as filas: o nome do `.jsonl` é a data e hora da largada.
-    const runs = `${dir}/${entrada.name}/until`
-    if (!(await $.fs.exists(runs))) continue
-    for (const arq of await $.fs.list(runs)) {
-      if (arq.kind !== 'file' || !arq.name.endsWith('.jsonl')) continue
-      const id = arq.name.slice(0, -'.jsonl'.length)
-      if (recente === null || id > recente.id) recente = { caminho: `${runs}/${arq.name}`, fila: entrada.name, id }
+  // Dois layouts na transição: `.claude/queues/<n>/queue.yaml` (novo) ganha de
+  // `.claude/programs/<n>/plan.yaml` (antigo) quando o nome existe nos dois.
+  const vistos = new Set<string>()
+  for (const [base, arquivo] of [['.claude/queues', 'queue.yaml'], ['.claude/programs', 'plan.yaml']]) {
+    const dir = `${raiz}/${base}`
+    if (!(await $.fs.exists(dir))) continue
+    for (const entrada of await $.fs.list(dir)) {
+      if (entrada.kind !== 'dir' || vistos.has(entrada.name)) continue
+      vistos.add(entrada.name)
+      const plano = `${dir}/${entrada.name}/${arquivo}`
+      if (await $.fs.exists(plano)) {
+        const fila = contaFila(entrada.name, await $.fs.read(plano))
+        if (fila) lidas.push(fila)
+      }
+      // O run mais recente de todas as filas: o nome do `.jsonl` é a data e hora da largada.
+      const runs = `${dir}/${entrada.name}/until`
+      if (!(await $.fs.exists(runs))) continue
+      for (const arq of await $.fs.list(runs)) {
+        if (arq.kind !== 'file' || !arq.name.endsWith('.jsonl')) continue
+        const id = arq.name.slice(0, -'.jsonl'.length)
+        if (recente === null || id > recente.id) recente = { caminho: `${runs}/${arq.name}`, fila: entrada.name, id }
+      }
     }
   }
   registroDoRun = recente

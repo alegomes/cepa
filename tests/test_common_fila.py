@@ -64,7 +64,7 @@ def escreve_fila(d, itens, nome="fila"):
     r = run(d, "write", nome, "--items", str(p), "--source", "teste",
             "--quando", "2026-09-28", "--repo", ".")
     assert r.returncode == 0, r.stderr
-    return d / ".claude" / "programs" / nome / "plan.yaml"
+    return d / ".claude" / "queues" / nome / "queue.yaml"
 
 
 ITENS = [
@@ -145,8 +145,8 @@ def test_nome_omitido(base):
           and "outra" in r.stderr and "unica" in r.stderr, r.stderr)
     vazio = repo_git(base, "vazio")
     r, _ = status_json(vazio)
-    check("sem fila, recusa apontando o /common:plan", r.returncode == 2
-          and "/common:plan" in r.stderr, r.stderr)
+    check("sem fila, recusa apontando o /common:queue", r.returncode == 2
+          and "/common:queue" in r.stderr, r.stderr)
 
 
 def test_nao_toca_no_arquivo(base):
