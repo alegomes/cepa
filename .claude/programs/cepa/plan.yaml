@@ -2334,14 +2334,16 @@ items:
     em 2026-10-20, segunda rodada: o comando /common:plan entra no mesmo rename
     (vira /common:queue), senão "plan" continua ambíguo no comando mais digitado;
     as referências em docs e testes acompanham'
-  status: blocked
+  status: pending
   blocked_by:
   - comandos-em-ingles
   human_pending: null
-  evidence: 'Código e testes na branch until/2026-10-20-2055, sem merge: 75c8cff
-    (rename), 2cffcc0 (10 testes novos em tests/test_queue_rename.py, 26 verdes;
-    fixture .claude/queues em compass/hooks/compass.test.tsx, 83 verdes), 0c-gates
-    no commit seguinte. proof-reviewer PROVEN (docs/proof/renomear-para-queue.yaml):
+  evidence: 'Resposta do dono em 2026-10-22: sim: aceito o merge com a migração
+    das filas reais como tarefa minha depois. O item voltou de `blocked` para `pending`.
+    Evidência anterior: Código e testes na branch until/2026-10-20-2055, sem merge:
+    75c8cff (rename), 2cffcc0 (10 testes novos em tests/test_queue_rename.py, 26
+    verdes; fixture .claude/queues em compass/hooks/compass.test.tsx, 83 verdes),
+    0c-gates no commit seguinte. proof-reviewer PROVEN (docs/proof/renomear-para-queue.yaml):
     as 9 perturbações que sobreviviam (R4, W3, U4, U5, U6, G1, U7, U8, D4, D5) e
     o ramo queues do register.tsx agora dão vermelho. completion-auditor INCOMPLETE
     só pelo AC5 (.claude/acceptance/renomear-para-queue.yaml): AC1 a AC4 verificados;
@@ -2355,9 +2357,6 @@ items:
     do item, que não passaram pelo build do supervisor (ele só roda depois de `done`),
     estão em `until/2026-10-20-2055-travado-renomear-para-queue`; a branch da noite
     voltou para 76c8413f9e.'
-  owner_question: 'Fecho o rename e deixo a migração das quatro filas reais como
-    tarefa sua depois do merge? Recomendo sim: o código está provado e a migração
-    é um comando'
 - id: readme-estrutura-de-trabalho
   title: 'README: seção How work is organised (Epic, cycle, queue, item, session,
     inbox) e aviso do maestro congelado'
