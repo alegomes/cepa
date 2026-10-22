@@ -93,3 +93,26 @@ items:
     viu o aviso do worktree-guard no cartão Modo do compass 0.8.0 em 2026-10-19
     (print: ''Merge barrado: a branch main está em uso por outra sessão viva'',
     2º bloqueio da sessão) e confirmou que mostra o certo'
+- id: M7
+  title: 'Nível 0 do compass, cartão Épicos: um bloco por docs/epics/*.md com o
+    nome, o status (rascunho ou pronta) e uma linha por ciclo da escada de valor
+    com o estado da fila daquele ciclo: sem fila, N/M feitos, demonstrável (tudo
+    feito) ou travado (item bloqueado sem nenhum em andamento)'
+  why: 'Pedido do dono em 2026-10-22: a área de mods tem Filas, Sessão, Modo e Run
+    e falta o Epic com seus ciclos. Vem acima de Filas porque a fila nasce de um
+    ciclo (/common:plan --from-epic) · superfície onde se observa: painel Compass
+    (Pane do mod), cartão acima de Filas · ligação fila→ciclo, nesta ordem: (1)
+    o `source:` da fila cita `docs/epics/<nome>.md` e `ciclo N`, que é o que --from-epic
+    escreve; (2) senão, o nome da fila casa com o padrão da linha **Construção:**
+    do Epic com <N> trocado pelo número do ciclo (ex. cepa-espiral-c1); (3) senão,
+    `<basename do epic>-c<N>` · teste vermelho declarado: em compass/hooks/compass.test.tsx,
+    com um docs/epics/cepa-em-espiral.md falso de dois ciclos ("1. Encadear" e "2.
+    Conduzir"), Construção `cepa-espiral-c<N>` e a fila cepa-espiral-c1 com um done
+    e um pending, o painel mostra o Text "Épicos" antes de "Filas", a linha "1.
+    Encadear" com "1/2 feitos" e a linha "2. Conduzir" com "sem fila"; sem docs/epics,
+    o cartão diz "nenhum Epic em docs/epics"; hoje nenhum desses textos existe no
+    painel (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
