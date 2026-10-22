@@ -5,6 +5,8 @@ import { idade, parseIntent } from './intent'
 import { contaDesvios, leSaidas, parseModo } from './modo'
 import { avisoDe, contagem, duracao, hora, parseRun, rotuloDoFim, tempoDoRun } from './until'
 import { leBloqueio, leGuarda } from './gate'
+import { contaFila } from './filas'
+import { estadoDoCiclo, filaDoCiclo, linhaDoCiclo, parseEpic } from './epics'
 
 const ARQUIVO = `proposito: "Construir o M1, painel da intenção"
 para_quando: "painel aparece no terminal"
@@ -74,9 +76,9 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null, ex
   }))
   on('fs.read', async ($: any, e: any) => ({ value: acha(e.path) }))
   on('fs.list', async ($: any, e: any) => {
-    if (!e.path.endsWith('/until')) {
+    if (!e.path.endsWith('/until') && !e.path.endsWith('/docs/epics')) {
       return {
-        value: ['zerada', 'cepa', 'velha', 'mods', 'maestro'].map(name => ({
+        value: ['zerada', 'cepa', 'velha', 'mods', 'maestro', 'cepa-espiral-c1', 'outro-c1'].map(name => ({
           name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false,
         })),
       }
@@ -1038,4 +1040,120 @@ test('resultado sem erro cujo texto cita o gate-advance não é bloqueio', async
   expect(avisos).toEqual([])
   const ui = await monta($)
   expect(await ui.find({ type: 'Text', text: /barrad/ })).toBeFalsy()
+})
+
+// ── nível 0: os Epics e o estado da fila de cada ciclo ───────────────────────
+
+const EPIC = `# Epic: Cepa em espiral
+
+**Status:** rascunho · **Aberto em:** 2026-10-08 · **Origem:** docs/estrategia.md
+**Repositório:** cepa · **Construção:** filas \`single-track\` em \`.claude/programs/cepa-espiral-c<N>/plan.yaml\`, uma por ciclo · **Aceite:** o roteiro.
+
+## Intenção
+
+Prosa.
+
+## Escada de valor
+
+| Ciclo | Roteiro de demonstração (o que o dono vê) | O que atravessa | Quando |
+|---|---|---|---|
+| 1. Encadear | O dono vê \`a \| b\` | x; y | hoje |
+| 2. Conduzir | O dono dorme | z | depois |
+
+## Decidido sem perguntar (vete aqui)
+
+- nada
+`
+
+const EPICS = (c1: string[] = ['done', 'pending']) => ({
+  '/repo/docs/epics/cepa-em-espiral.md': EPIC,
+  '/repo/.claude/programs/cepa-espiral-c1/plan.yaml': FILA('single-track', c1),
+})
+
+test('parseEpic lê nome, status, padrão de fila e os ciclos da escada', async () => {
+  const e = parseEpic('cepa-em-espiral.md', EPIC)!
+  expect(e.arquivo).toBe('cepa-em-espiral')
+  expect(e.nome).toBe('Cepa em espiral')
+  expect(e.status).toBe('rascunho')
+  expect(e.padraoFila).toBe('cepa-espiral-c<N>')
+  expect(e.ciclos).toEqual([{ numero: 1, rotulo: '1. Encadear' }, { numero: 2, rotulo: '2. Conduzir' }])
+  expect(parseEpic('x.md', '# Outra coisa\n')).toBe(null)
+  expect(parseEpic('x.md', '# Epic: Sem escada\n\n**Status:** pronta\n')!.ciclos).toEqual([])
+})
+
+test('filaDoCiclo: pelo source do --from-epic, pelo padrão da Construção, pelo nome do arquivo', async () => {
+  const e = parseEpic('cepa-em-espiral.md', EPIC)!
+  const fila = (nome: string, fonte: string) => contaFila(nome, `mode: single-track\nsource: ${fonte}\nitems:\n`)!
+  const porFonte = fila('qualquer', 'docs/epics/cepa-em-espiral.md, ciclo 2 (3 peças de "O que\n  atravessa"; ordem herdada do texto)')
+  const porPadrao = fila('cepa-espiral-c2', 'docs/spec/x.md')
+  const porArquivo = fila('cepa-em-espiral-c2', 'BACKLOG.md')
+  expect(porFonte.fonte).toBe('docs/epics/cepa-em-espiral.md, ciclo 2 (3 peças de "O que atravessa"; ordem herdada do texto)')
+  expect(filaDoCiclo(e, 2, [porArquivo, porPadrao, porFonte])).toBe(porFonte)
+  expect(filaDoCiclo(e, 2, [porArquivo, porPadrao])).toBe(porPadrao)
+  expect(filaDoCiclo(e, 2, [porArquivo])).toBe(porArquivo)
+  expect(filaDoCiclo(e, 1, [porArquivo, porPadrao, porFonte])).toBe(null)
+  // `ciclo 12` não é o ciclo 1
+  expect(filaDoCiclo(e, 1, [fila('q', 'docs/epics/cepa-em-espiral.md, ciclo 12')])).toBe(null)
+})
+
+test('estado do ciclo: sem fila, andando, travado, demonstrável; descartados fora da conta', async () => {
+  const f = (st: string[]) => contaFila('f', FILA('single-track', st))
+  expect(linhaDoCiclo(null)).toBe('sem fila')
+  expect(linhaDoCiclo(f(['done', 'pending', 'dropped']))).toBe('1/2 feitos')
+  expect(estadoDoCiclo(f(['done', 'pending']))).toBe('andando')
+  expect(linhaDoCiclo(f(['done', 'blocked', 'pending']))).toBe('travado · 1/3 feitos')
+  expect(estadoDoCiclo(f(['blocked', 'in_progress']))).toBe('andando')
+  expect(linhaDoCiclo(f(['done', 'done', 'dropped']))).toBe('demonstrável')
+  expect(estadoDoCiclo(f(['dropped']))).toBe('andando')
+})
+
+test('nível 0: um bloco por Epic, uma linha por ciclo com o estado da fila, antes de Filas', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, EPICS())
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  expect(textos.indexOf('Épicos')).toBeLessThan(textos.indexOf('Filas'))
+  expect(await ui.find({ type: 'Text', text: '1 Epic' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'Cepa em espiral' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'rascunho' })).toBeTruthy()
+  const linha = (rotulo: string) => textos.slice(textos.indexOf(rotulo), textos.indexOf(rotulo) + 2)
+  expect(linha('▶ 1. Encadear')).toEqual(['▶ 1. Encadear', '1/2 feitos'])
+  expect(linha('○ 2. Conduzir')).toEqual(['○ 2. Conduzir', 'sem fila'])
+  expect((await ui.find({ type: 'Text', text: '1/2 feitos' })).props.color).toBe('cyan')
+})
+
+test('nível 0: ciclo demonstrável em verde e travado em vermelho', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, {
+    ...EPICS(['done', 'done']),
+    '/repo/.claude/programs/outro-c1/plan.yaml': FILA('single-track', ['blocked', 'done']),
+    '/repo/docs/epics/outro.md': '# Epic: Outro\n\n**Status:** pronta\n\n## Escada de valor\n\n| Ciclo | Roteiro |\n|---|---|\n| 1. Só | x |\n',
+  })
+  const verde = await ui.find({ type: 'Text', text: 'demonstrável' })
+  expect(verde.props.color).toBe('green')
+  expect((await ui.find({ type: 'Text', text: '✓ 1. Encadear' })).props.color).toBe('green')
+  const vermelho = await ui.find({ type: 'Text', text: 'travado · 1/2 feitos' })
+  expect(vermelho.props.color).toBe('red')
+  expect(await ui.find({ type: 'Text', text: '2 Epics' })).toBeTruthy()
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  // ordem alfabética pelo nome: Cepa em espiral antes de Outro
+  expect(textos.indexOf('Cepa em espiral')).toBeLessThan(textos.indexOf('Outro'))
+})
+
+test('sem docs/epics, o nível 0 diz isso', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO)
+  expect(await ui.find({ type: 'Text', text: 'nenhum Epic em docs/epics' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'docs/epics' })).toBeTruthy()
+})
+
+test('sem intenção, o nível 0 continua lá', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-b', null, EPICS())
+  expect(await ui.find({ type: 'Text', text: '○ 2. Conduzir' })).toBeTruthy()
+})
+
+test('os Epics são relidos no fim do turno: um arquivo novo aparece sem reiniciar', async ($, on) => {
+  on('turn.complete', async () => ({ text: 'x' }))
+  const { arquivos } = await prepara($, on, 'sessao-a', ARQUIVO)
+  const ui = await monta($)
+  expect(await ui.find({ type: 'Text', text: 'nenhum Epic em docs/epics' })).toBeTruthy()
+  Object.assign(arquivos, EPICS())
+  await $.turn.complete({ answer: 'x', durationMs: 1, isAborted: false, turnId: 't1', reason: 'answer' })
+  expect(await ui.find({ type: 'Text', text: 'Cepa em espiral' })).toBeTruthy()
 })
