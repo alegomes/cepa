@@ -669,18 +669,20 @@ items:
   status: blocked
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-10-20: não: Devolvo a calibragem do porteiro
+  evidence: 'Resposta do dono em 2026-10-22: não: Devolvo a calibragem do porteiro
     à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve o item como
-    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-17: não:
-    Devolvo a calibragem do porteiro à fila agora, antes de qualquer onda rodar?.
+    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-20: não:
+    Devolvo a calibragem do porteiro à fila agora, mesmo sem nenhuma onda ter rodado?.
     O dono manteve o item como estava (`blocked`). Evidência anterior: Resposta
-    do dono em 2026-10-15: não: Mando calibrar o porteiro agora, antes de qualquer
-    onda rodar?. O dono manteve o item como estava (`blocked`). Evidência anterior:
-    Condicao de fora nao cumprida: o BACKLOG.md (secao ''Calibrar as regras do porteiro'',
-    decisao do dono 2026-08-24) adia o que falta (liberar escrita por shell cujo
-    alvo cai dentro da superficie da slice) ate a 0.4.3 do porteiro rodar pelo menos
-    uma onda de verdade. Conferido em 2026-09-27: o unico ledger de porteiro no
-    disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
+    do dono em 2026-10-17: não: Devolvo a calibragem do porteiro à fila agora, antes
+    de qualquer onda rodar?. O dono manteve o item como estava (`blocked`). Evidência
+    anterior: Resposta do dono em 2026-10-15: não: Mando calibrar o porteiro agora,
+    antes de qualquer onda rodar?. O dono manteve o item como estava (`blocked`).
+    Evidência anterior: Condicao de fora nao cumprida: o BACKLOG.md (secao ''Calibrar
+    as regras do porteiro'', decisao do dono 2026-08-24) adia o que falta (liberar
+    escrita por shell cujo alvo cai dentro da superficie da slice) ate a 0.4.3 do
+    porteiro rodar pelo menos uma onda de verdade. Conferido em 2026-09-27: o unico
+    ledger de porteiro no disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
     166 linhas) e de 2026-08-24 10:12, anterior ao commit 9b9846e da 0.4.3 (10:13);
     nenhuma onda rodou depois. As duas ondas da fila (rodar-onda-lotes-*) estao
     blocked por herdr fora do ar. Nada implementado, nenhum commit. Quem resolve:
