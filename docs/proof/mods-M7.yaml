@@ -1,0 +1,53 @@
+schema_version: 2
+card: mods-M7
+verdict: proven
+reviewed_at: 2026-10-22T14:00:00-03:00
+base_commit: b40077c
+head_commit: 60b910e
+issue_type: Task
+scope:
+  changed_classes:
+    - { class: "compass/hooks/epics.ts", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/hooks/filas.ts", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/hooks/register.tsx", module: compass, external_observable: true, substituted_by_double: null }
+    - { class: "compass/types/index.d.ts", module: compass, external_observable: false, substituted_by_double: null }
+  base_commit_resolved: true
+  notes: >
+    Repo nao e Quarkus: mod TypeScript do Claude Code, testado pelo engine real
+    (`claude plugin test .` dentro de compass/). Superficie externa = Pane montado pelo engine.
+    O teste so fornece o conteudo dos arquivos (docs/epics/*.md, plan.yaml) e o relogio do engine
+    (fronteira distante); epics.ts, filas.ts e register.tsx reais rodam, por isso substituted_by_double e null.
+    Duas rodadas em worktrees descartaveis (scratchpad/proof-mods-M7 sobre b5e75cc e depois sobre 60b910e),
+    ambas removidas e podadas; arvore principal intocada (git status limpo da worktree apos cada reversao).
+    Entre b5e75cc e 60b910e so compass.test.tsx mudou (+104 linhas: testes que fecham os sobreviventes);
+    epics.ts, filas.ts e register.tsx sao identicos, logo as perturbacoes da 1a rodada continuam validas.
+    Na 1a rodada duas perturbacoes (Q5, Q6) atingiram por engano leTitulo (codigo pre-existente, fora do diff)
+    e foram descartadas; refeitas como Q5b/Q6b contra leFonte.
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results: []
+    perturbation:
+      status: pass
+      results:
+        - "baseline 60b910e: `claude plugin test .` (em compass/) -> 98 pass, 0 fail"
+        - "Rodada 1 (b5e75cc, 90 pass): 119 perturbacoes validas, uma por vez: 76 RED, 43 verdes: 11 reais antes sem teste (S3, L4, F1, E17, E18, R31, R1, E3, E7, R27 e R12 cosmetico vacuo), 11 reais de baixa, 11 cosmeticos, 11 equivalentes (abaixo)."
+        - "Rodada 2 (60b910e), as 11 agora RED (>=1 fail cada, N>0 testes rodados): S3 epics.ts `abertos` sem emAndamento -> 96 pass 2 fail 'estado do ciclo: sem fila, andando...' e 'nivel 0: item em andamento mantem o ciclo andando e entra na conta'; L4 total sem emAndamento -> 96 pass 2 fail, os mesmos dois; F1 regra 1 sem checar o arquivo do Epic -> 96 pass 2 fail 'filaDoCiclo: pelo source do --from-epic...' e 'nivel 0: source que cita outro Epic nao liga a fila a este'; E17 sem break no proximo `##` -> 97 pass 1 fail 'parseEpic le nome, status, padrao de fila e os ciclos da escada'; E18 sem filtro de linha de tabela -> 97 pass 1 fail, mesmo teste; E3 status padrao 'pronta' -> 97 pass 1 fail, mesmo teste; E7 \\d em vez de \\d+ -> 97 pass 1 fail, mesmo teste; R31 `lidos.push(e!)` -> 97 pass 1 fail 'nivel 0: um .md sem \"# Epic:\" em docs/epics e ignorado, nao derruba o painel'; R1 ordem Epicos/Filas trocada sem intencao -> 97 pass 1 fail 'sem intencao, Epicos tambem vem antes de Filas'; R27 sort removido -> 97 pass 1 fail 'nivel 0: Epics em ordem alfabetica pelo nome, nao pela ordem dos arquivos'; R12 titulo 'Epics' -> 96 pass 2 fail 'nivel 0: um bloco por Epic...' e 'sem intencao, Epicos tambem vem antes de Filas'."
+        - "Demais RED da rodada 1 (76 no total, >=1 fail cada): parseEpic (titulo, padrao <N>, celulas startsWith, id numerico, arquivo sem .md, titulo null, m null, numero, rotulo, slice(1)); filaDoCiclo (ciclo N, \\b final, source, as 3 regras e a ordem entre elas); estado do ciclo e linhaDoCiclo (todas as ramificacoes); MARCA (simbolos e cores exceto ✗ e a cor de sem fila); leFonte (regex, dobra, slice, join, trim por linha, campo); register (nivel nos 2 ramos, texto vazio, plural, nome, status, lista de filas, numero do ciclo, rotulo, cores, sort invertido, releitura, dir, update, read, atom)."
+        - "NAO GATING, REAIS DE BAIXA (nao rerodadas, seguem verdes): E6 ancora ^ do ciclo; E2 `·` colado ao status; E25 titulo `## Escada de valor` frouxo; F3 `\\b` inicial de 'ciclo'; Q7 e Q8 aspas do source nao removidas; R15 R16 R17 mensagem 'escada de valor sem ciclos'; R29 filtro kind==file; R30 filtro .md. Casos de borda sem uso no repo; o dono pode pedir teste se quiser fixar."
+        - "NAO GATING, COSMETICOS (seguem verdes): M3 simbolo ✗; M8 cor de 'sem fila'; R8 subtitulo vazio 'docs/epics'; R9 e R11 singular '1 Epic' (busca por substring aceita '1 Epics'); R24 e R25 dimColor; R37 e R38 marginTop; R39 descricao do comando. Estilo puro."
+        - "EQUIVALENTES: E9 E10 E11 E12 (so a celula 0 e lida); E16 (sem escada, slice(-1) nao produz linha de tabela); E19 E20 (RE_CICLO ja recusa separador, cabecalho e vazio); F7 (nome de fila vazio nunca casa); Q2 e Q2b (fonte 'x' nunca contem caminho de Epic); Q6c (partes ja aparadas)."
+    caveats: "sem ferramenta de cobertura; painel exercitado pelo Pane do engine. Os 11 reais de baixa e os 11 cosmeticos ficam sem teste por decisao de classificar como borda/estilo, como no M6."
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "sem ferramenta de cobertura; as linhas de comportamento sao alcancadas e afirmadas: rodada 2 derrubou teste nas 11 antes sobreviventes relevantes (98 pass baseline, 96-97 pass com a quebra) e rodada 1 em dezenas de outras; resto borda, estilo ou equivalente"
+  l4_adversarial_input:
+    status: n/a
+    reason: "O diff nao abre superficie de entrada externa: epics.ts e filas.ts so leem arquivos locais do proprio repo (docs/epics/*.md e .claude/programs/*/plan.yaml, escritos pelo dono e por /common:epic e /common:plan); nao ha rede, argumento de usuario nem modulo api-rest. Segue o precedente docs/proof/mods-M6.yaml. A entrada .md sem '# Epic:' agora e coberta por teste."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: n/a
+routing_reason: "PROVEN: as 11 perturbacoes que sobreviviam na 1a rodada (estado e contador com item em andamento, regra do source sem checar o Epic, segunda tabela, linha de prosa, .md sem titulo, ordem sem intencao, status padrao, ciclo >= 10, ordenacao, titulo do cartao) agora derrubam teste em 60b910e (98 pass baseline; 96-97 pass com 1-2 fail em cada). Restam 11 reais de baixa, 11 cosmeticos e 11 equivalentes, declarados."

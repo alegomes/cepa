@@ -1,0 +1,62 @@
+schema_version: 1
+card: M7
+status: complete
+audited_at: 2026-10-22T15:20:00-03:00
+criteria:
+  - id: AC1
+    text: "Cartão Épicos acima de Filas, um bloco por docs/epics/*.md com o nome do Epic e o status (rascunho ou pronta)"
+    altitude: ui
+    surface: "Pane do compass montado pelo engine (ui.mount), nível 0, lendo docs/epics/*.md"
+    demonstrated_by:
+      test: "compass/hooks/compass.test.tsx: nível 0: um bloco por Epic, uma linha por ciclo com o estado da fila, antes de Filas; nível 0: ciclo demonstrável em verde e travado em vermelho (2 Epics, ordem alfabética); os Epics são relidos no fim do turno"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "cd /Users/alegomes/coding/cepa/compass && claude plugin test . -> 90 pass, 0 fail (Ran 90 tests across 1 file)"
+    verdict: complete
+    gap: null
+    note: "O status 'rascunho' é asserido no pane. O status 'pronta' só existe na fixture do Epic 'Outro' e nenhum teste de pane lê o Text 'pronta'; parseEpic é testado com 'pronta' só em nível de função."
+  - id: AC2
+    text: "Uma linha por ciclo da escada de valor com o estado da fila: sem fila, N/M feitos, demonstrável (tudo feito), travado (item bloqueado sem nenhum em andamento)"
+    altitude: ui
+    surface: "Pane do compass, linhas de ciclo do cartão Épicos (Text e props.color)"
+    demonstrated_by:
+      test: "nível 0: um bloco por Epic... ('1/2 feitos' em cyan, 'sem fila'); nível 0: ciclo demonstrável em verde e travado em vermelho ('demonstrável' green, 'travado · 1/2 feitos' red); estado do ciclo (unidade: blocked+in_progress conta como andando, dropped fora da conta)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 90 pass, 0 fail"
+    verdict: complete
+    gap: null
+  - id: AC3
+    text: "Ligação fila→ciclo nesta ordem: (1) source da fila cita docs/epics/<nome>.md e ciclo N; (2) nome da fila casa com o padrão da Construção com <N> trocado; (3) <basename do epic>-c<N>"
+    altitude: ui
+    surface: "Pane do compass: a linha do ciclo mostra o estado da fila escolhida pela ordem de precedência"
+    demonstrated_by:
+      test: "compass.test.tsx (commit 60887b4), todos via sobe() no pane: 'nível 0, regra 1: fila de nome qualquer entra no ciclo que o source cita' (fila 'qualquer' -> '2/3 feitos' em 2. Conduzir); 'nível 0, regra 3: sem source e sem o padrão da Construção, vale <arquivo do epic>-c<N>' (cepa-em-espiral-c1 -> demonstrável); 'nível 0, precedência: o source vence o padrão da Construção, que vence o nome do arquivo' (ciclo 1 source 1/3 contra padrão demonstrável e arquivo travado; ciclo 2 padrão 1/2 contra arquivo travado). Regra 2 já coberta pelos testes de nível 0 anteriores."
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "cd /Users/alegomes/coding/cepa/compass && claude plugin test . -> 93 pass, 0 fail (Ran 93 tests across 1 file); os três testes novos aparecem como (pass)"
+    verdict: complete
+    gap: null
+  - id: AC4
+    text: "Sem docs/epics, o cartão diz 'nenhum Epic em docs/epics'"
+    altitude: ui
+    surface: "Pane do compass, nível 0 sem arquivos de epic"
+    demonstrated_by:
+      test: "sem docs/epics, o nível 0 diz isso; os Epics são relidos no fim do turno (começa com a frase, depois aparece o Epic)"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 90 pass, 0 fail"
+    verdict: complete
+    gap: null
+  - id: AC5
+    text: "Teste vermelho declarado: docs/epics/cepa-em-espiral.md falso com '1. Encadear' e '2. Conduzir', Construção cepa-espiral-c<N>, fila cepa-espiral-c1 com um done e um pending: 'Épicos' antes de 'Filas', '1. Encadear' com '1/2 feitos', '2. Conduzir' com 'sem fila'"
+    altitude: ui
+    surface: "Pane do compass, ordem e conteúdo dos Text"
+    demonstrated_by:
+      test: "nível 0: um bloco por Epic, uma linha por ciclo com o estado da fila, antes de Filas (indexOf('Épicos') < indexOf('Filas'); '▶ 1. Encadear' seguido de '1/2 feitos'; '○ 2. Conduzir' seguido de 'sem fila')"
+      layer: engine-real (claude plugin test)
+      evidence: verified
+      run: "claude plugin test . -> 90 pass, 0 fail (Ran 90 tests across 1 file)"
+    verdict: complete
+    gap: null
+    note: "O texto exato dos rótulos no pane tem prefixo de glifo ('▶ 1. Encadear', '○ 2. Conduzir'); o critério declarado usa o rótulo sem glifo. Bate em conteúdo, não em string literal."
