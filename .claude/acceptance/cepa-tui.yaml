@@ -1,0 +1,34 @@
+key: cepa-tui
+status: complete
+auditor: completion-auditor
+commit: 62d4810
+note: "superficie e o CLI em terminal; tty simulado com CEPA_COR=sempre COLUMNS=N e tty real via script(1). cepa-until (tem classe Tela propria) e o launcher cepa foram excluidos declaradamente."
+criteria:
+  - id: AC1
+    altitude: cli
+    surface: "stdout em terminal de cada cepa-* python: autonomy, clock, doctor, dor, feedback, hotspots, intencao, metrics, modos, plan, promptcov, tokens, until-digest"
+    test: "tests/test_tui.py::test_filtro_decora_comando_sem_tela_propria e test_quebra_com_recuo_pendurado_sem_perder_texto; execucao manual de cada comando com CEPA_COR=sempre COLUMNS=80 --help"
+    layer: cli (subprocesso)
+    evidence: verified
+    run: "python3 tests/test_tui.py -> 7 ok, 0 falhas; 11 comandos com --help sob CEPA_COR=sempre emitem ANSI (2 a 22 sequencias ESC cada); cepa-plan sob pty real (script) abre com barra '1;7;35m fila ...'"
+    status: complete
+  - id: AC2
+    altitude: cli
+    surface: "cepa-plan status <fila> --repo ... em terminal"
+    test: "tests/test_tui.py::test_status_decorado_no_terminal"
+    layer: cli (subprocesso)
+    evidence: verified
+    run: "python3 tests/test_tui.py -> ok test_status_decorado_no_terminal; execucao manual em cepa-espiral-c1 (6 itens): barra de titulo, placar com glifos por status, barra 100% com conta '(6 concluidos + 0 descartados) / 6', regua de secao, concluidos em uma linha truncada com reticencias"
+    status: complete
+  - id: AC3
+    altitude: cli
+    surface: "stdout fora de terminal, NO_COLOR, --json; CEPA_COR=sempre|nunca"
+    test: "tests/test_tui.py::test_status_igual_ao_de_antes_fora_do_terminal, test_desligada_fora_do_terminal, test_no_color_vence_e_sempre_liga, test_json_nunca_decorado"
+    layer: cli (subprocesso)
+    evidence: verified
+    run: "python3 tests/test_tui.py -> 7 ok; cmp da saida de cepa-plan status em pipe entre 62d4810 e 62d4810^ -> byte a byte igual; NO_COLOR=1 sob pty real -> texto antigo sem ESC; --json com CEPA_COR=sempre identico ao sem; CEPA_COR=nunca -> texto antigo"
+    status: complete
+gaps: []
+observacoes:
+  - "CEPA_COR=sempre vence NO_COLOR quando ambos estao setados (_tui.py linhas 52-55): e o 'forca' declarado, nao falha, mas vale o dono saber."
+  - "--sem-cor so e aceito pelo argparse de cepa-feedback e cepa-modos; em cepa-plan o flag e rejeitado (preexistente). O filtro o respeita onde existe."
