@@ -1084,6 +1084,15 @@ test('parseEpic lê nome, status, padrão de fila e os ciclos da escada', async 
   expect(e.ciclos).toEqual([{ numero: 1, rotulo: '1. Encadear' }, { numero: 2, rotulo: '2. Conduzir' }])
   expect(parseEpic('x.md', '# Outra coisa\n')).toBe(null)
   expect(parseEpic('x.md', '# Epic: Sem escada\n\n**Status:** pronta\n')!.ciclos).toEqual([])
+  // sem linha de Status, o Epic é rascunho
+  expect(parseEpic('x.md', '# Epic: Novo\n').status).toBe('rascunho')
+  // ciclo com dois dígitos
+  const dez = parseEpic('x.md', '# Epic: Dez\n\n## Escada de valor\n\n| Ciclo | R |\n|---|---|\n| 10. Dez | x |\n')!
+  expect(dez.ciclos).toEqual([{ numero: 10, rotulo: '10. Dez' }])
+  // só a tabela da escada: prosa "3. algo" na seção e uma tabela da seção seguinte ficam de fora
+  const comLixo = EPIC.replace('| 2. Conduzir | O dono dorme | z | depois |\n', '| 2. Conduzir | O dono dorme | z | depois |\n\n3. isto é prosa, não ciclo\n')
+    + '\n| 4. Extra | de outra tabela |\n|---|---|\n| 5. Mais | y |\n'
+  expect(parseEpic('cepa-em-espiral.md', comLixo)!.ciclos.map(c => c.numero)).toEqual([1, 2])
 })
 
 test('filaDoCiclo: pelo source do --from-epic, pelo padrão da Construção, pelo nome do arquivo', async () => {
@@ -1097,6 +1106,8 @@ test('filaDoCiclo: pelo source do --from-epic, pelo padrão da Construção, pel
   expect(filaDoCiclo(e, 2, [porArquivo, porPadrao])).toBe(porPadrao)
   expect(filaDoCiclo(e, 2, [porArquivo])).toBe(porArquivo)
   expect(filaDoCiclo(e, 1, [porArquivo, porPadrao, porFonte])).toBe(null)
+  // o source precisa citar ESTE Epic: `outro.md, ciclo 2` não liga ao ciclo 2 daqui
+  expect(filaDoCiclo(e, 2, [fila('q', 'docs/epics/outro.md, ciclo 2')])).toBe(null)
   // `ciclo 12` não é o ciclo 1
   expect(filaDoCiclo(e, 1, [fila('q', 'docs/epics/cepa-em-espiral.md, ciclo 12')])).toBe(null)
 })
@@ -1110,11 +1121,16 @@ test('estado do ciclo: sem fila, andando, travado, demonstrável; descartados fo
   expect(estadoDoCiclo(f(['blocked', 'in_progress']))).toBe('andando')
   expect(linhaDoCiclo(f(['done', 'done', 'dropped']))).toBe('demonstrável')
   expect(estadoDoCiclo(f(['dropped']))).toBe('andando')
+  // em andamento conta como aberto: não é demonstrável e entra no total
+  expect(estadoDoCiclo(f(['done', 'in_progress']))).toBe('andando')
+  expect(linhaDoCiclo(f(['done', 'in_progress']))).toBe('1/2 feitos')
+  expect(linhaDoCiclo(f(['done', 'in_progress', 'pending']))).toBe('1/3 feitos')
 })
 
 test('nível 0: um bloco por Epic, uma linha por ciclo com o estado da fila, antes de Filas', async ($, on) => {
   const ui = await sobe($, on, 'sessao-a', ARQUIVO, EPICS())
   const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  expect(textos.indexOf('Épicos')).toBeGreaterThanOrEqual(0)
   expect(textos.indexOf('Épicos')).toBeLessThan(textos.indexOf('Filas'))
   expect(await ui.find({ type: 'Text', text: '1 Epic' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'Cepa em espiral' })).toBeTruthy()
@@ -1151,6 +1167,45 @@ test('sem docs/epics, o nível 0 diz isso', async ($, on) => {
 test('sem intenção, o nível 0 continua lá', async ($, on) => {
   const ui = await sobe($, on, 'sessao-b', null, EPICS())
   expect(await ui.find({ type: 'Text', text: '○ 2. Conduzir' })).toBeTruthy()
+})
+
+test('nível 0: item em andamento mantém o ciclo andando e entra na conta', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, EPICS(['done', 'in_progress']))
+  expect(await linhaDe(ui, '▶ 1. Encadear')).toEqual(['▶ 1. Encadear', '1/2 feitos'])
+  expect(await ui.find({ type: 'Text', text: 'demonstrável' })).toBeFalsy()
+})
+
+test('nível 0: source que cita outro Epic não liga a fila a este', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, {
+    '/repo/docs/epics/cepa-em-espiral.md': EPIC,
+    '/repo/.claude/programs/qualquer/plan.yaml': FILA_COM_FONTE('docs/epics/outro.md, ciclo 2', ['done', 'pending']),
+  })
+  expect(await linhaDe(ui, '○ 2. Conduzir')).toEqual(['○ 2. Conduzir', 'sem fila'])
+})
+
+test('nível 0: um .md sem "# Epic:" em docs/epics é ignorado, não derruba o painel', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { ...EPICS(), '/repo/docs/epics/README.md': '# Como escrever um Epic\n' })
+  expect(await ui.find({ type: 'Text', text: '1 Epic' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'Cepa em espiral' })).toBeTruthy()
+})
+
+test('nível 0: Epics em ordem alfabética pelo nome, não pela ordem dos arquivos', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, {
+    '/repo/docs/epics/zz.md': '# Epic: Alfa\n',
+    '/repo/docs/epics/aa.md': '# Epic: Zulu\n',
+    '/repo/docs/epics/mm.md': '# Epic: Mike\n',
+  })
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  const ordem = ['Alfa', 'Mike', 'Zulu'].map(n => textos.indexOf(n))
+  expect(ordem.every(i => i >= 0)).toBe(true)
+  expect(ordem).toEqual([...ordem].sort((a, b) => a - b))
+})
+
+test('sem intenção, Épicos também vem antes de Filas', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-b', null, EPICS())
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  expect(textos.indexOf('Épicos')).toBeGreaterThanOrEqual(0)
+  expect(textos.indexOf('Épicos')).toBeLessThan(textos.indexOf('Filas'))
 })
 
 // Fila com `source:` no formato que /common:plan --from-epic escreve.
