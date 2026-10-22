@@ -2292,6 +2292,16 @@ items:
     de prompt em pt dentro do JavaScript do advisors.md mantidos (mudariam o idioma
     da resposta das lentes); contradição pré-existente em board-flow/commands/triage.md
     sobre confirmar Won''t Do card a card, traduzida como estava.'
+- id: skills-agents-in-english
+  title: Traduzir para o inglês as skills default-yes, feedback-capture, guided-interrogation
+    e off-mode-capture e o bloco "Delegação é assíncrona" dos 10 agentes líderes
+  why: 'Decisão do dono em 2026-10-22 (achados F7 e F8): só texto, não quebra nenhum
+    contrato e os agentes leem a cada sessão, por isso vai antes da migração da
+    interface'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
 - id: interface-in-english
   title: 'Interface do Cepa em inglês: nomes de comando (/common:fila, /common:modos),
     scripts cepa-intencao e cepa-modos e seus subcomandos, as 40 flags em português,
