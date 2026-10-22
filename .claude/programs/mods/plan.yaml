@@ -112,7 +112,14 @@ items:
     Encadear" com "1/2 feitos" e a linha "2. Conduzir" com "sem fila"; sem docs/epics,
     o cartão diz "nenhum Epic em docs/epics"; hoje nenhum desses textos existe no
     painel (ainda não priorizado: entrou no fim da fila)'
-  status: pending
+  status: in_progress
   blocked_by: []
   human_pending: null
   evidence: null
+  claimed_by:
+    session_id: 49829bd0-8de3-4cc8-842c-ee5272c4e52d
+    pid: 90143
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/coding/cepa
+    branch: main
+    started_at: '2026-10-22T14:36:10+00:00'
