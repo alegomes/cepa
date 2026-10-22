@@ -2306,14 +2306,18 @@ items:
   title: 'Interface do Cepa em inglês: nomes de comando (/common:fila, /common:modos),
     scripts cepa-intencao e cepa-modos e seus subcomandos, as 40 flags em português,
     os 7 modos e as chaves de .claude/session-mode e .claude/session-intent, as
-    chaves e o status metade do plan.yaml, o prefixo de commit "fila cepa:" e os
-    status pronta/rascunho/aberta do Epic e da spec'
+    chaves e o status metade do plan.yaml, o prefixo de commit "fila cepa:", os
+    status pronta/rascunho/aberta e os títulos de seção do Epic e da spec, os rótulos
+    do plain-report e o texto fixo dos comentários de Jira'
   why: 'Decisão do dono em 2026-10-22 (achados F1 a F6 da análise de termos em português):
     sai na mesma migração do renomear-para-queue, com os scripts lendo nome antigo
     e novo durante a transição, para a quebra caber numa janela só. /common:fila
-    precisa de outro nome, porque /common:queue fica com o /common:plan. Os títulos
-    de seção do Epic e da spec esperam a decisão sobre o idioma da saída para o
-    dono'
+    precisa de outro nome, porque /common:queue fica com o /common:plan. Decisão
+    do dono em 2026-10-22, segunda rodada: audiência internacional, então todo texto
+    fixo do produto sai em inglês; a prosa do modelo segue o idioma do usuário pelo
+    CLAUDE.md dele. Títulos do Epic e da spec entram aqui porque spec-readiness-gate.py
+    e cepa-plan --from-epic os leem; rótulos do plain-report porque report-style-lint.py
+    os lê'
   status: pending
   blocked_by: []
   human_pending: null
