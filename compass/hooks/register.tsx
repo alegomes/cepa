@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { Fila } from '../types'
+import type { Epic, Fila } from '../types'
+import { filaDoCiclo, linhaDoCiclo, estadoDoCiclo, MARCA, parseEpic } from './epics'
 import { aberta, COLUNAS, contaFila } from './filas'
 import { idade, parseIntent } from './intent'
 import { COR, linhaBuild, parseBuild } from './build'
@@ -12,6 +13,7 @@ import { avisoDe, contagem, hora, parseRun, rotuloDoFim, tempoDoItem, tempoDoRun
 import type { Run } from './until'
 
 // Painel de orientação em níveis, do mais alto ao mais baixo:
+// 0. Epics de docs/epics e o estado da fila de cada ciclo da escada;
 // 1. filas do repo e um resumo dos itens; 2. intenção, plano e passo da sessão;
 // 3. modo da sessão, a condição de saída dele, o estado do build e os desvios registrados;
 // 4. o run mais recente do cepa-until: item atual, tempo, contagem e como acabou.
@@ -25,6 +27,7 @@ const BUILD = '.claude/last-build.json'
 const texto = atom({ plugin: 'compass', key: 'texto' } as const, null)
 const agora = atom({ plugin: 'compass', key: 'agora' } as const, 0)
 const filas = atom({ plugin: 'compass', key: 'filas' } as const, [])
+const epics = atom({ plugin: 'compass', key: 'epics' } as const, [])
 const modo = atom({ plugin: 'compass', key: 'modo' } as const, null)
 const desvios = atom({ plugin: 'compass', key: 'desvios' } as const, null)
 const build = atom({ plugin: 'compass', key: 'build' } as const, null)
@@ -117,11 +120,27 @@ async function releiaSaidas($: EngineInterface) {
   }
 }
 
+// Os Epics também moram no checkout principal: `docs/epics/<nome>.md`, um por arquivo.
+async function releiaEpics($: EngineInterface, dir: string) {
+  const lidos: Epic[] = []
+  if (await $.fs.exists(dir)) {
+    for (const arq of await $.fs.list(dir)) {
+      if (arq.kind !== 'file' || !arq.name.endsWith('.md')) continue
+      const e = parseEpic(arq.name, await $.fs.read(`${dir}/${arq.name}`))
+      if (e) lidos.push(e)
+    }
+  }
+  lidos.sort((a, b) => a.nome.localeCompare(b.nome))
+  await update($, epics, () => lidos)
+}
+
 // As filas moram no checkout principal (é onde o `cepa-plan` grava), não na worktree.
 async function releiaFilas($: EngineInterface) {
   const git = await $.process.run(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'])
   if (git.exitCode !== 0) return
-  const dir = `${git.stdout.trim().replace(/\/\.git$/, '')}/.claude/programs`
+  const raiz = git.stdout.trim().replace(/\/\.git$/, '')
+  await releiaEpics($, `${raiz}/docs/epics`)
+  const dir = `${raiz}/.claude/programs`
   if (!(await $.fs.exists(dir))) return
   const lidas: Fila[] = []
   let recente: { caminho: string; fila: string; id: string } | null = null
@@ -151,7 +170,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'compass',
-      description: 'Abre o painel de orientação: filas, intenção, modo, build, desvios e o run do cepa-until',
+      description: 'Abre o painel de orientação: épicos, filas, intenção, modo, build, desvios e o run do cepa-until',
     })
     await releiaSaidas($)
     await releiaFilas($)
@@ -193,6 +212,7 @@ export const register: Register = on => {
     const intent = bruto === null ? null : parseIntent(bruto)
     const lista = await read($, filas)
     const abertas = lista.filter(aberta)
+    const listaEpics = await read($, epics)
     const textoModo = await read($, modo)
     const m = textoModo === null ? null : parseModo(textoModo)
     const saida = m ? (await read($, saidas))[m.nome] ?? '' : ''
@@ -213,6 +233,38 @@ export const register: Register = on => {
         </Box>
         {corpo}
       </Box>
+    )
+
+    const nivelEpics = cartao(
+      'Épicos',
+      listaEpics.length === 0 ? 'docs/epics' : listaEpics.length === 1 ? '1 Epic' : `${listaEpics.length} Epics`,
+      <Box flexDirection="column" marginTop={1}>
+        {listaEpics.length === 0 && <Text dimColor>nenhum Epic em docs/epics</Text>}
+        {listaEpics.map((e, i) => (
+          <Box flexDirection="column" marginTop={i === 0 ? 0 : 1}>
+            <Box flexDirection="row" justifyContent="space-between">
+              <Text bold wrap="truncate-end">{e.nome}</Text>
+              <Text dimColor>{e.status}</Text>
+            </Box>
+            {e.ciclos.length === 0 && <Text dimColor>escada de valor sem ciclos</Text>}
+            {e.ciclos.map(c => {
+              const f = filaDoCiclo(e, c.numero, lista)
+              const estado = estadoDoCiclo(f)
+              const marca = MARCA[estado]
+              return (
+                <Box flexDirection="row" justifyContent="space-between">
+                  <Box flexGrow={1} flexShrink={1} minWidth={0}>
+                    <Text color={marca.cor} dimColor={estado === 'sem fila'} wrap="truncate-end">{`${marca.simbolo} ${c.rotulo}`}</Text>
+                  </Box>
+                  <Box flexShrink={0} marginLeft={1}>
+                    <Text color={marca.cor} dimColor={estado === 'sem fila'}>{linhaDoCiclo(f)}</Text>
+                  </Box>
+                </Box>
+              )
+            })}
+          </Box>
+        ))}
+      </Box>,
     )
 
     const LARGURA = 6
@@ -319,6 +371,7 @@ export const register: Register = on => {
     if (intent === null) {
       return (
         <Box flexDirection="column">
+          {nivelEpics}
           {nivelFilas}
           {cartao(
             'Sessão',
@@ -342,6 +395,7 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column">
+        {nivelEpics}
         {nivelFilas}
         {cartao(
           'Sessão',

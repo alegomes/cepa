@@ -27,10 +27,22 @@ const leTitulo = (bloco: string[]): string => {
   return t
 }
 
+// `source:` pode dobrar em linhas seguintes com recuo; o cabeçalho acaba em `items:`.
+const leFonte = (texto: string): string => {
+  const m = /^source:\s*(.*)$/m.exec(texto)
+  if (m === null) return ''
+  const partes = [m[1]!]
+  for (const l of texto.slice(m.index + m[0].length + 1).split('\n')) {
+    if (!/^\s+\S/.test(l)) break
+    partes.push(l.trim())
+  }
+  return partes.join(' ').trim().replace(/^['"]|['"]$/g, '')
+}
+
 export const contaFila = (nome: string, texto: string): Fila | null => {
   if (!/^mode:\s*single-track\s*$/m.test(texto)) return null
   const fila: Fila = {
-    nome, pendentes: 0, emAndamento: 0, bloqueados: 0, feitos: 0, descartados: 0, proximo: null, travado: null,
+    nome, fonte: leFonte(texto), pendentes: 0, emAndamento: 0, bloqueados: 0, feitos: 0, descartados: 0, proximo: null, travado: null,
   }
   const blocos = texto.split(/^(?=- id:)/m).slice(1)
   for (const b of blocos) {
