@@ -77,8 +77,13 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null, ex
   on('fs.read', async ($: any, e: any) => ({ value: acha(e.path) }))
   on('fs.list', async ($: any, e: any) => {
     if (!e.path.endsWith('/until') && !e.path.endsWith('/docs/epics')) {
+      // Nomes fixos (inclusive 'maestro', que não tem plan.yaml) mais as pastas das fixtures.
+      const fixos = ['zerada', 'cepa', 'velha', 'mods', 'maestro', 'cepa-espiral-c1', 'outro-c1']
+      const dasFixtures = Object.keys(arquivos)
+        .map(k => k.match(/^\/repo\/\.claude\/programs\/([^/]+)\//)?.[1])
+        .filter((n): n is string => n !== undefined && !fixos.includes(n))
       return {
-        value: ['zerada', 'cepa', 'velha', 'mods', 'maestro', 'cepa-espiral-c1', 'outro-c1'].map(name => ({
+        value: [...fixos, ...dasFixtures].map(name => ({
           name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false,
         })),
       }
@@ -1146,6 +1151,48 @@ test('sem docs/epics, o nível 0 diz isso', async ($, on) => {
 test('sem intenção, o nível 0 continua lá', async ($, on) => {
   const ui = await sobe($, on, 'sessao-b', null, EPICS())
   expect(await ui.find({ type: 'Text', text: '○ 2. Conduzir' })).toBeTruthy()
+})
+
+// Fila com `source:` no formato que /common:plan --from-epic escreve.
+const FILA_COM_FONTE = (fonte: string, status: string[]) =>
+  FILA('single-track', status).replace('items:\n', `source: ${fonte}\nitems:\n`)
+
+const linhaDe = async (ui: any, rotulo: string) => {
+  const textos = (await ui.findAll({ type: 'Text' })).map((t: any) => t.text)
+  return textos.slice(textos.indexOf(rotulo), textos.indexOf(rotulo) + 2)
+}
+
+test('nível 0, regra 1: fila de nome qualquer entra no ciclo que o source cita', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, {
+    '/repo/docs/epics/cepa-em-espiral.md': EPIC,
+    '/repo/.claude/programs/qualquer/plan.yaml': FILA_COM_FONTE('docs/epics/cepa-em-espiral.md, ciclo 2 (1 peça)', ['done', 'done', 'pending']),
+  })
+  expect(await linhaDe(ui, '▶ 2. Conduzir')).toEqual(['▶ 2. Conduzir', '2/3 feitos'])
+  expect(await linhaDe(ui, '○ 1. Encadear')).toEqual(['○ 1. Encadear', 'sem fila'])
+})
+
+test('nível 0, regra 3: sem source e sem o padrão da Construção, vale <arquivo do epic>-c<N>', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, {
+    '/repo/docs/epics/cepa-em-espiral.md': EPIC,
+    '/repo/.claude/programs/cepa-em-espiral-c1/plan.yaml': FILA('single-track', ['done', 'done']),
+  })
+  expect(await linhaDe(ui, '✓ 1. Encadear')).toEqual(['✓ 1. Encadear', 'demonstrável'])
+  expect(await linhaDe(ui, '○ 2. Conduzir')).toEqual(['○ 2. Conduzir', 'sem fila'])
+})
+
+test('nível 0, precedência: o source vence o padrão da Construção, que vence o nome do arquivo', async ($, on) => {
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, {
+    '/repo/docs/epics/cepa-em-espiral.md': EPIC,
+    '/repo/.claude/programs/qualquer/plan.yaml': FILA_COM_FONTE('docs/epics/cepa-em-espiral.md, ciclo 1', ['done', 'pending', 'pending']),
+    '/repo/.claude/programs/cepa-espiral-c1/plan.yaml': FILA('single-track', ['done', 'done']),
+    '/repo/.claude/programs/cepa-em-espiral-c1/plan.yaml': FILA('single-track', ['blocked']),
+    '/repo/.claude/programs/cepa-espiral-c2/plan.yaml': FILA('single-track', ['done', 'pending']),
+    '/repo/.claude/programs/cepa-em-espiral-c2/plan.yaml': FILA('single-track', ['blocked']),
+  })
+  // ciclo 1: source (1/3) e não o padrão (demonstrável) nem o arquivo (travado)
+  expect(await linhaDe(ui, '▶ 1. Encadear')).toEqual(['▶ 1. Encadear', '1/3 feitos'])
+  // ciclo 2: sem source, padrão (1/2) e não o arquivo (travado)
+  expect(await linhaDe(ui, '▶ 2. Conduzir')).toEqual(['▶ 2. Conduzir', '1/2 feitos'])
 })
 
 test('os Epics são relidos no fim do turno: um arquivo novo aparece sem reiniciar', async ($, on) => {
