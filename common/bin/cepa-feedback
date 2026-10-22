@@ -43,6 +43,7 @@ MIN_TEXTO = 12  # queixa de uma palavra não se reconstrói meses depois
 ORIGENS = ("comando", "skill", "hook", "manual")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
 try:
     import _telemetry as T
 except Exception:  # noqa: BLE001 — telemetria nunca decide se o registro acontece
@@ -337,4 +338,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    _tui.instalar()
     sys.exit(main())

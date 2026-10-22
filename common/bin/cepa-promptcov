@@ -43,6 +43,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
+
 # `**[tag:id]**` no arquivo do comando — captura tag e id separadamente para
 # permitir filtrar por --tag (um comando pode ter mais de uma família de
 # anotação um dia).
@@ -133,4 +136,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    _tui.instalar()
     sys.exit(main())

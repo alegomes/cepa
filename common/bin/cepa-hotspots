@@ -31,6 +31,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
+
 DEFAULT_MIN_PAIRS = 5
 
 
@@ -199,4 +202,5 @@ def main():
 
 
 if __name__ == "__main__":
+    _tui.instalar()
     main()

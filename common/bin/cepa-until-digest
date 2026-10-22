@@ -36,6 +36,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
+
 try:
     import yaml
 except ImportError:
@@ -472,4 +475,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    _tui.instalar()
     sys.exit(main())

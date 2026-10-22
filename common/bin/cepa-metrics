@@ -35,6 +35,9 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
+
 TELEMETRY_DIR = Path(os.environ.get("CEPA_TELEMETRY_DIR") or (Path.home() / ".claude" / "cepa-telemetry"))
 
 
@@ -552,6 +555,7 @@ def main():
 
 
 if __name__ == "__main__":
+    _tui.instalar()
     if sys.argv[1:2] == ["scorecard"]:
         sys.exit(scorecard(sys.argv[2:]))
     sys.exit(main())

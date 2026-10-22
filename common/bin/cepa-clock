@@ -54,6 +54,9 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
+
 PROJETOS = Path.home() / ".claude" / "projects"
 ESPERA_RE = re.compile(r"\buntil\b|\bsleep\b|\bwhile\b|\bfor\b.*\bseq\b")
 BUILD_RE = re.compile(r"\bmvn|\bgradle|npm (run )?(test|build)|\bpytest\b|\bcargo (test|build)")
@@ -246,4 +249,5 @@ def main():
 
 
 if __name__ == "__main__":
+    _tui.instalar()
     sys.exit(main())

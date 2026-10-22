@@ -59,6 +59,7 @@ RESULTS = []  # (level, area, message, fix)  level: "ok" | "warn" | "fail"
 # O comparador repo↔cache é compartilhado com session-registry.py, que faz a
 # mesma pergunta no boot da sessão. Fonte única, em hooks/ (ver _pluginver.py).
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
 try:
     import _pluginver as PV
 except Exception:  # noqa: BLE001 — doctor degrada, nunca morre por causa disso
@@ -1237,4 +1238,5 @@ def main():
 
 
 if __name__ == "__main__":
+    _tui.instalar()
     sys.exit(main())
