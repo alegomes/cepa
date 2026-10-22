@@ -2336,7 +2336,7 @@ items:
     em 2026-10-20, segunda rodada: o comando /common:plan entra no mesmo rename
     (vira /common:queue), senão "plan" continua ambíguo no comando mais digitado;
     as referências em docs e testes acompanham'
-  status: pending
+  status: in_progress
   blocked_by:
   - comandos-em-ingles
   human_pending: null
@@ -2359,6 +2359,13 @@ items:
     do item, que não passaram pelo build do supervisor (ele só roda depois de `done`),
     estão em `until/2026-10-20-2055-travado-renomear-para-queue`; a branch da noite
     voltou para 76c8413f9e.'
+  claimed_by:
+    session_id: 7ebec669-9c33-46df-80f9-999b319e7d2c
+    pid: 90143
+    hostname: Alexandres-MacBook-Pro.local
+    cwd: /Users/alegomes/coding/cepa
+    branch: main
+    started_at: '2026-10-22T20:51:31+00:00'
 - id: readme-estrutura-de-trabalho
   title: 'README: seção How work is organised (Epic, cycle, queue, item, session,
     inbox) e aviso do maestro congelado'
