@@ -27,6 +27,7 @@ import importlib.util
 import json
 import os
 import pty
+import re
 import select
 import subprocess
 import sys
@@ -52,12 +53,111 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def carrega_modulo():
-    loader = importlib.machinery.SourceFileLoader("cepa_until", str(CEPA_UNTIL))
-    spec = importlib.util.spec_from_loader("cepa_until", loader)
-    mod = importlib.util.module_from_spec(spec)
-    loader.exec_module(mod)
+def carrega_modulo(cor="nunca"):
+    """Carrega o cepa-until com a decoração de terminal desligada: os casos
+    em processo leem o texto puro, mesmo quando rodam num terminal. Com
+    `cor="sempre"` liga, para o caso que prova o layout decorado."""
+    antes = os.environ.get("CEPA_UNTIL_COR")
+    os.environ["CEPA_UNTIL_COR"] = cor
+    try:
+        loader = importlib.machinery.SourceFileLoader("cepa_until",
+                                                      str(CEPA_UNTIL))
+        spec = importlib.util.spec_from_loader("cepa_until", loader)
+        mod = importlib.util.module_from_spec(spec)
+        loader.exec_module(mod)
+    finally:
+        if antes is None:
+            del os.environ["CEPA_UNTIL_COR"]
+        else:
+            os.environ["CEPA_UNTIL_COR"] = antes
     return mod
+
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def test_decide_no_terminal_desenha_um_cartao_por_pergunta():
+    """O dono (23/10): "as perguntas feitas ao final do cepa-until ainda
+    estão com a formatação muito pobre". No terminal cada pergunta é um
+    cartão: régua `┌─ i/n · id`, borda `│` à esquerda, rótulos numa coluna,
+    a pergunta marcada com `?`, a recomendação com `✦`, o menu em chips que
+    cabem na largura e o fecho `└─`. As frases que o pty responde ficam
+    inteiras, sem cor no meio. Fora do terminal nada disso aparece."""
+    m = carrega_modulo(cor="sempre")
+    check("a decoração está ligada", m.TELA.ligada)
+    adiados = [
+        {"id": "W-1", "title": "Reenviar o envelope quando o e-mail muda",
+         "reason": "bloqueado-antes", "question": "Mantenho o reenvio?",
+         "evidence": "o gateway devolve 409"},
+        {"id": "W-2", "title": "Rotacionar o segredo", "reason": "human_pending",
+         "question": None, "human_pending": "rotacionar no cofre",
+         "evidence": ""},
+        {"id": "W-3", "title": "outro", "reason": "reservado"},
+    ]
+    analise = {"aterrissar": {"recomendo": "sim", "porque": "build verde"},
+               "itens": {"W-1": {"recomendo": "não", "porque": "duplica",
+                                 "contexto": "dois clientes pediram",
+                                 "instrucao": "cancelar e recriar"}}}
+    est = {"estado": "fim", "acoes": [{"id": "aterrissar", "frase": "levar X"}]}
+    prompts, tela = [], []
+
+    def pergunta(p):
+        prompts.append(p)
+        return {1: "s", 2: "n", 3: "", 4: ""}.get(len(prompts), "")
+    m.decide(Path("/nao/existe"), "fila", "run1", est, adiados, analise,
+             pergunta=pergunta, saida=tela.append,
+             responde=lambda i, t, mantem=False: (0, f"{i} voltou"),
+             aterrissa=lambda: 0)
+    bruto = "\n".join(tela)
+    texto = ANSI.sub("", bruto)
+    check("tem cor", "\x1b[" in bruto)
+    check("régua de abertura com a contagem",
+          "── 3 pergunta(s) para você ─" in texto, texto)
+    check("cartão de aterrissar com a recomendação marcada",
+          "┌─ aterrissar ─" in texto and "│  ✦ Recomendo sim: build verde"
+          in texto, texto)
+    check("um cartão por item, com i/n e id na régua",
+          "┌─ 1/2 · W-1 ─" in texto and "┌─ 2/2 · W-2 ─" in texto, texto)
+    check("rótulos numa coluna, com o curto no lugar do longo",
+          "│  Parou porque   travou" in texto
+          and "│  Contexto       dois clientes" in texto
+          and "│  Tarefa         rotacionar no cofre" in texto, texto)
+    check("a pergunta marcada e a instrução embaixo dela",
+          "│  ? Mantenho o reenvio?" in texto
+          and "│    Se sim, o próximo run recebe: cancelar e recriar" in texto,
+          texto)
+    check("recomendação do item com ✦", "│  ✦ Recomendo não: duplica" in texto,
+          texto)
+    check("menu em chips dentro do cartão, com a recomendada marcada",
+          "│  [s] sim · [n] não (recomendado) · [t] escrevo a resposta · "
+          "[e] evidência inteira" in texto, texto)
+    check("o prompt fica dentro do cartão e o cartão fecha",
+          ANSI.sub("", prompts[1]) == "│  ▸ " and texto.count("└─") == 3,
+          (prompts, texto))
+    check("o gravado aparece com ✓ no cartão", "│  ✓ W-1 voltou" in texto,
+          texto)
+    check("fecho com placar e o comando de volta",
+          "── fecho ─" in texto and "respondido agora 2" in texto
+          and "para depois 1" in texto
+          and "cepa-until decidir fila/run1" in texto, texto)
+    gatilhos = ("Aterrisso agora? [s/N/q] ", "[t] escrevo a resposta",
+                "Quer acrescentar algo, numa linha? [Enter pula] ")
+    tudo = bruto + "\n".join(prompts)
+    check("as frases que o pty responde ficam inteiras, sem cor no meio",
+          all(g in tudo for g in gatilhos), tudo)
+    check("a versão sem terminal não tem cartão",
+          "┌─" not in "\n".join(_decide_puro(adiados, analise, est)))
+
+
+def _decide_puro(adiados, analise, est):
+    m = carrega_modulo()
+    tela = []
+    respostas = iter(["s", "n", "", ""])
+    m.decide(Path("/nao/existe"), "fila", "run1", est, adiados, analise,
+             pergunta=lambda _p: next(respostas, ""), saida=tela.append,
+             responde=lambda i, t, mantem=False: (0, "ok"),
+             aterrissa=lambda: 0)
+    return tela
 
 
 def em_tty(cmd, cwd, entradas=(), env=None, timeout=120):

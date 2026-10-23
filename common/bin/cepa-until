@@ -1933,6 +1933,247 @@ def le_linha(prompt, saida=print):
                   "pela metade); digite de novo")
 
 
+class Painel:
+    """Como as perguntas do fim do run aparecem. Fora do terminal (testes,
+    `nohup`, agente) o texto é byte a byte o de antes: rótulo, dois-pontos,
+    recuo de 7 espaços. No terminal cada pergunta vira um cartão com borda
+    à esquerda, rótulos apagados numa coluna só, a pergunta em negrito, a
+    recomendação em cor e o menu em chips com a tecla recomendada em verde.
+    As frases que as teclas respondem (`Aterrisso agora?`, `[t] escrevo a
+    resposta`, `Quer acrescentar algo`) ficam inteiras numa cor só: é por
+    elas que os testes em pty sabem a hora de responder."""
+
+    ROTULO = 14
+
+    def __init__(self, tela, saida):
+        self.t = tela
+        self.ligada = tela.ligada
+        self.saida = saida
+
+    # ── primitivas ──────────────────────────────────────────────────────
+
+    def _w(self):
+        return self.t.largura()
+
+    def _quebra(self, texto, recuo, pendurado=None):
+        import textwrap
+        pendurado = recuo if pendurado is None else pendurado
+        texto = " ".join(str(texto).split())
+        return textwrap.wrap(texto, width=self._w(),
+                             initial_indent=" " * recuo,
+                             subsequent_indent=" " * pendurado,
+                             break_on_hyphens=False) or [" " * recuo]
+
+    def _borda(self, linha="", cor=None):
+        """`│  texto` com a borda apagada; `linha` já vem recuada."""
+        corpo = self.t.c(cor, linha) if cor else linha
+        self.saida(self.t.c("cinza", "│") + corpo)
+
+    def _topo(self, rotulo, cor="magenta"):
+        resto = max(self._w() - len(rotulo) - 4, 0)
+        self.saida(self.t.c(cor, "┌─ ") + self.t.c("negrito", rotulo) + " "
+                   + self.t.c(cor, "─" * resto))
+
+    def _prompt(self, texto):
+        """O prompt do `input()`, dentro do cartão."""
+        if not self.ligada:
+            return texto
+        return self.t.c("cinza", "│  ") + self.t.c("negrito", texto)
+
+    def fim(self):
+        """Fecha o cartão. Fora do terminal não existe."""
+        if self.ligada:
+            self.saida(self.t.c("cinza", "└─"))
+
+    # ── abertura e fecho ────────────────────────────────────────────────
+
+    def nada(self):
+        if self.ligada:
+            self.saida("")
+            self.saida(self.t.regua("nada espera por você neste run"))
+        else:
+            self.saida("\n── nada espera por você neste run")
+
+    def abre(self, total):
+        if not self.ligada:
+            self.saida(f"\n── {total} pergunta(s) para você. Uma por vez: s ou n "
+                       "basta; Enter deixa para depois, q encerra")
+            return
+        self.saida("")
+        self.saida(self.t.regua(f"{total} pergunta(s) para você"))
+        self.saida("   " + self.t.c("cinza", "uma por vez · s ou n basta · Enter "
+                                             "deixa para depois · q encerra"))
+
+    def fecho(self, sem_dono, aplicados, para_depois, volta):
+        t = self.t
+        if not self.ligada:
+            if sem_dono:
+                self.saida(f"\n   Não dependem de você ({len(sem_dono)}): "
+                           + "; ".join(sem_dono))
+            self.saida(f"\n   Respondido agora: {len(aplicados)} · para depois: "
+                       f"{len(para_depois)}")
+            for x in aplicados:
+                self.saida(f"     ✓ {x}")
+            if para_depois:
+                self.saida(f"   Para voltar a estas perguntas: {volta}")
+            return
+        self.saida("")
+        self.saida(t.regua("fecho"))
+        if sem_dono:
+            for l in self._quebra(f"Não dependem de você ({len(sem_dono)}): "
+                                  + "; ".join(sem_dono), 3):
+                self.saida(t.c("cinza", l))
+        self.saida("   " + t.c("verde", f"respondido agora {len(aplicados)}")
+                   + t.c("cinza", " · ")
+                   + t.c("amarelo" if para_depois else "cinza",
+                         f"para depois {len(para_depois)}"))
+        for x in aplicados:
+            self.saida("     " + t.c("verde", "✓ ") + x)
+        if para_depois:
+            self.saida("   " + t.c("cinza", "para voltar a estas perguntas: ")
+                       + t.c("ciano", volta))
+
+    # ── aterrissar ──────────────────────────────────────────────────────
+
+    def aterrissar(self, frase, rec):
+        if not self.ligada:
+            self.saida(f"\n   Aterrissar: {frase}")
+            if rec:
+                self.saida(recuado(rec, "   "))
+            return "   Aterrisso agora? [s/N/q] "
+        self.saida("")
+        self._topo("aterrissar")
+        for l in self._quebra(frase, 2):
+            self._borda(l)
+        if rec:
+            self.recomendo(rec)
+        return self._prompt("Aterrisso agora? [s/N/q] ")
+
+    # ── um item ─────────────────────────────────────────────────────────
+
+    def item(self, i, n, ident, titulo):
+        if not self.ligada:
+            self.saida(f"\n   ━━ [{i}/{n}] {ident}")
+            self.saida(recuado(titulo, "   "))
+            self.saida("")
+            return
+        self.saida("")
+        self._topo(f"{i}/{n} · {ident}", "ciano")
+        for l in self._quebra(titulo, 2):
+            self._borda(l, "negrito")
+        self._borda()
+
+    def rotulo(self, nome, texto, curto=None):
+        """`nome: texto` fora do terminal; no terminal o rótulo (ou o seu
+        `curto`) fica numa coluna apagada e o texto alinha ao lado."""
+        if not self.ligada:
+            self.saida(recuado(f"{nome}: {texto}"))
+            return
+        etiqueta = f"  {(curto or nome):<{self.ROTULO}} "
+        linhas = self._quebra(texto, len(etiqueta))
+        self._borda(self.t.c("cinza", etiqueta) + linhas[0][len(etiqueta):])
+        for l in linhas[1:]:
+            self._borda(l)
+
+    def vazio(self):
+        self.saida("") if not self.ligada else self._borda()
+
+    def pergunta(self, texto):
+        if not self.ligada:
+            self.saida(recuado(f"Pergunta: {texto}"))
+            return
+        linhas = self._quebra(texto, 4)
+        self._borda("  " + self.t.c("amarelo", "?") + " "
+                    + self.t.c("negrito", linhas[0][4:]))
+        for l in linhas[1:]:
+            self._borda(self.t.c("negrito", l))
+
+    def aviso(self, texto):
+        if not self.ligada:
+            self.saida(recuado(texto))
+            return
+        for l in self._quebra(texto, 4):
+            self._borda(l, "amarelo")
+
+    def nota(self, texto):
+        """Linha de apoio à pergunta (`Se sim, o próximo run recebe`)."""
+        if not self.ligada:
+            self.saida(recuado(texto))
+            return
+        for l in self._quebra(texto, 4):
+            self._borda(l, "cinza")
+
+    def recomendo(self, rec):
+        if not self.ligada:
+            self.saida(recuado(rec))
+            return
+        cabeca, _, resto = rec.partition(": ")
+        cor = "verde" if cabeca.endswith("sim") else "amarelo"
+        linhas = self._quebra(rec, 4, 4)
+        self._borda("  " + self.t.c(cor, "✦ " + linhas[0][4:]))
+        for l in linhas[1:]:
+            self._borda(l, cor)
+
+    def legenda(self, texto):
+        if not self.ligada:
+            self.saida(recuado(texto))
+            return
+        for l in self._quebra(texto, 2):
+            self._borda(l, "cinza")
+
+    def menu(self, chips, recomendada):
+        """`chips` é a lista de (tecla, rótulo); devolve o prompt do
+        `input()`. Fora do terminal é a linha de antes, inteira no prompt."""
+        partes = []
+        for tecla, rot in chips:
+            marca = " (recomendado)" if tecla == recomendada else ""
+            partes.append(f"[{tecla}] {rot}{marca}")
+        if not self.ligada:
+            return "       " + " · ".join(partes) + ": "
+        sep = self.t.c("cinza", " · ")
+        cor = {recomendada: "verde"}
+        pintados = [self.t.c("negrito", self.t.c(cor.get(k, "ciano"), p))
+                    for (k, _), p in zip(chips, partes)]
+        # As chips cabem na largura; o que sobra desce uma linha.
+        linhas, atual, gasto = [], [], 0
+        for cru, pintado in zip(partes, pintados):
+            if atual and gasto + 3 + len(cru) > self._w() - 3:
+                linhas.append(atual)
+                atual, gasto = [], 0
+            atual.append(pintado)
+            gasto += len(cru) + (3 if len(atual) > 1 else 0)
+        linhas.append(atual)
+        self._borda()
+        for l in linhas:
+            self._borda("  " + sep.join(l))
+        return self._prompt("▸ ")
+
+    def seguinte(self, texto):
+        """Prompt de uma pergunta de apoio dentro do cartão."""
+        if not self.ligada:
+            return f"       {texto}"
+        return self.t.c("cinza", "│  ") + texto
+
+    def erro_de_tecla(self, texto):
+        if not self.ligada:
+            self.saida(f"       {texto}")
+        else:
+            self._borda("  " + self.t.c("vermelho", texto))
+
+    def evidencia(self, texto):
+        if not self.ligada:
+            self.saida(recuado(f"Evidência: {texto}"))
+            return
+        self.rotulo("Evidência", texto)
+
+    def gravado(self, msg, ok=True):
+        if not self.ligada:
+            self.saida(f"       → {msg}" if ok else f"       → não gravei: {msg}")
+            return
+        self._borda("  " + (self.t.c("verde", f"✓ {msg}") if ok
+                            else self.t.c("vermelho", f"✗ não gravei: {msg}")))
+
+
 def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
            saida=print, responde=None, aterrissa=None):
     """Percorre o que só o dono destrava e aplica cada resposta. Devolve
@@ -1954,25 +2195,23 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
         def aterrissa():
             return cmd_aterrissar([f"{fila}/{run_id}", "--repo", str(repo),
                                    "--sim"])
+    tela = Painel(TELA, saida)
     aplicados, para_depois = [], []
     do_dono = [ad for ad in adiados if ad.get("reason") in MOTIVO_DO_DONO]
     sem_dono = [ad for ad in adiados if ad.get("reason") in MOTIVO_SEM_DONO]
     acao = acao_pendente(est)
     total = (1 if acao else 0) + len(do_dono)
     if not total:
-        saida("\n── nada espera por você neste run")
+        tela.nada()
         return aplicados, para_depois
 
-    saida(f"\n── {total} pergunta(s) para você. Uma por vez: s ou n basta; "
-          "Enter deixa para depois, q encerra")
+    tela.abre(total)
     parou = False
 
     if acao:
-        saida(f"\n   Aterrissar: {acao.get('frase')}")
-        rec = linha_de_recomendacao(analise.get("aterrissar"))
-        if rec:
-            saida(recuado(rec, "   "))
-        r = pergunta("   Aterrisso agora? [s/N/q] ")
+        prompt = tela.aterrissar(acao.get("frase"),
+                                 linha_de_recomendacao(analise.get("aterrissar")))
+        r = pergunta(prompt)
         if str(r).strip().lower() == "q":
             parou = True
         elif eh_sim(r):
@@ -1983,6 +2222,7 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
         if not eh_sim(r):
             para_depois.append(f"aterrissar: cepa-until aterrissar "
                                f"{fila}/{run_id} --sim")
+        tela.fim()
 
     for i, ad in enumerate(do_dono, 1):
         ident = str(ad.get("id"))
@@ -1998,86 +2238,81 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
         # entre contexto, pergunta e menu. Título inteiro: cortado em 60
         # caracteres o dono respondia a uma pergunta que via pela metade
         # (feedback de 15/10, decidir WEGO 2026-10-15-1128).
-        saida(f"\n   ━━ [{i}/{len(do_dono)}] {ident}")
-        saida(recuado(ad.get("title") or "", "   "))
-        saida("")
-        saida(recuado(f"Parou porque: {MOTIVO_DO_DONO[ad['reason']]}."))
+        tela.item(i, len(do_dono), ident, ad.get("title") or "")
+        tela.rotulo("Parou porque", f"{MOTIVO_DO_DONO[ad['reason']]}.")
         if rota is not None:
-            saida(recuado(f"Tarefa que ficou para você: {rota}"))
+            tela.rotulo("Tarefa que ficou para você", rota, curto="Tarefa")
         if contexto:
-            saida(recuado(f"Contexto: {contexto}"))
+            tela.rotulo("Contexto", contexto)
         # Uma pergunta só, e `sim` quer dizer sempre a mesma coisa: o item
         # volta para a fila. O menu antigo ([r]/[f]/[m]) não tinha "sim",
         # embora a pergunta terminasse em "Recomendo sim" (feedback de
         # 15/10: "em 99% das vezes eu não sei o que responder"). Sem pergunta
         # redigida, o terminal faz a padrão, em vez de mostrar a evidência e
         # deixar o dono achar a pergunta sozinho.
-        saida("")
+        tela.vazio()
         if texto_pergunta:
-            saida(recuado(f"Pergunta: {texto_pergunta}"))
+            tela.pergunta(texto_pergunta)
             fora = pergunta_fora_das_regras(texto_pergunta)
             if fora:
-                saida(recuado(f"(a análise escreveu esta pergunta fora das "
-                              f"regras: {fora}. Se ela não fizer sentido, "
-                              "[e] mostra a evidência inteira)"))
+                tela.aviso(f"(a análise escreveu esta pergunta fora das "
+                           f"regras: {fora}. Se ela não fizer sentido, "
+                           "[e] mostra a evidência inteira)")
         elif rota is not None:
-            saida(recuado("Pergunta: já fez? Com sim, a tarefa fecha e o "
-                          "item volta para a fila."))
+            tela.pergunta("já fez? Com sim, a tarefa fecha e o item volta "
+                          "para a fila.")
         else:
-            saida(recuado("O agente parou porque: "
-                          f"{resume_motivo(ad.get('evidence') or '')}"))
-            saida(recuado("Pergunta: destravo o item e devolvo para a fila?"))
+            tela.rotulo("O agente parou porque",
+                        resume_motivo(ad.get('evidence') or ''),
+                        curto="Evidência")
+            tela.pergunta("destravo o item e devolvo para a fila?")
         if instrucao:
-            saida(recuado(f"Se sim, o próximo run recebe: {instrucao}"))
+            tela.nota(f"Se sim, o próximo run recebe: {instrucao}")
         rec = linha_de_recomendacao(d)
         if rec:
-            saida(recuado(rec))
-        saida("")
-        saida(recuado("sim = o item volta para a fila com a sua resposta; "
-                      "não = fica como está e eu só gravo o que você disser"))
+            tela.recomendo(rec)
+        tela.vazio()
+        tela.legenda("sim = o item volta para a fila com a sua resposta; "
+                     "não = fica como está e eu só gravo o que você disser")
         mostrar = bool(ad.get("evidence"))
-        rl = letra_recomendada(d)
-
-        def marca(letra):
-            return " (recomendado)" if rl == letra else ""
-        opcoes = (f"[s] sim{marca('s')} · [n] não{marca('n')} · "
-                  "[t] escrevo a resposta")
+        chips = [("s", "sim"), ("n", "não"), ("t", "escrevo a resposta")]
+        if mostrar:
+            chips.append(("e", "evidência inteira"))
+        chips += [("Enter", "depois"), ("q", "encerra")]
+        prompt = tela.menu(chips, letra_recomendada(d))
         validas = {"s", "n", "t", "", "q"} | ({"e"} if mostrar else set())
         while True:
-            bruto = str(pergunta(f"       {opcoes}"
-                                 + (" · [e] evidência inteira" if mostrar
-                                    else "")
-                                 + " · [Enter] depois · [q] encerra: "))
+            bruto = str(pergunta(prompt))
             r = bruto.strip().lower()
             r = {"sim": "s", "yes": "s", "y": "s",
                  "não": "n", "nao": "n", "no": "n"}.get(r, r)
             if r == "e" and mostrar:
-                saida(recuado(f"Evidência: {ad.get('evidence')}"))
+                tela.evidencia(ad.get("evidence"))
                 continue
             if r not in validas:
                 # Texto solto aqui ia para depois calado, e a resposta
                 # que o dono escreveu sumia (decidir WEGO 2026-09-29-2059).
-                saida(f"       \"{bruto.strip()}\" não é uma das opções; "
-                      "para escrever uma resposta, digite t primeiro")
+                tela.erro_de_tecla(f"\"{bruto.strip()}\" não é uma das opções; "
+                                   "para escrever uma resposta, digite t primeiro")
                 continue
             break
         if r == "q":
             parou = True
         texto, devolve = "", False
         if r == "t":
-            texto = str(pergunta("       Sua resposta, numa linha (o próximo "
-                                 "run lê isto): ")).strip()
+            texto = str(pergunta(tela.seguinte("Sua resposta, numa linha (o "
+                                               "próximo run lê isto): "))).strip()
             if texto:
-                devolve = eh_sim(pergunta("       Devolvo o item para a fila "
-                                          "com essa resposta? [s/N] "))
+                devolve = eh_sim(pergunta(tela.seguinte(
+                    "Devolvo o item para a fila com essa resposta? [s/N] ")))
         elif r in ("s", "n"):
             devolve = r == "s"
             base = texto_pergunta or rota or "destravar o item"
             # Sempre há espaço para um comentário, também no `s` com
             # pergunta redigida: o dono quis dizer algo além de sim/não e
             # o próximo run lê o que ele escreveu (15/10).
-            extra = str(pergunta("       Quer acrescentar algo, numa "
-                                 "linha? [Enter pula] ")).strip()
+            extra = str(pergunta(tela.seguinte(
+                "Quer acrescentar algo, numa linha? [Enter pula] "))).strip()
             texto = (("sim" if devolve else "não") + f": {base}"
                      + (f" Instrução: {instrucao}" if devolve and instrucao
                         else "")
@@ -2087,22 +2322,16 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
                        else responde(ident, texto, mantem=True))
             if rc == 0:
                 aplicados.append(f"{ident}: {msg}")
-                saida(f"       → {msg}")
+                tela.gravado(msg)
+                tela.fim()
                 continue
-            saida(f"       → não gravei: {msg}")
+            tela.gravado(msg, ok=False)
         para_depois.append(f"{ident}: {MOTIVO_DO_DONO[ad['reason']]}")
+        tela.fim()
 
-    if sem_dono:
-        saida(f"\n   Não dependem de você ({len(sem_dono)}): "
-              + "; ".join(f"{ad.get('id')} ({MOTIVO_SEM_DONO[ad['reason']]})"
-                          for ad in sem_dono))
-    saida(f"\n   Respondido agora: {len(aplicados)} · para depois: "
-          f"{len(para_depois)}")
-    for x in aplicados:
-        saida(f"     ✓ {x}")
-    if para_depois:
-        saida(f"   Para voltar a estas perguntas: cepa-until decidir "
-              f"{fila}/{run_id}")
+    tela.fecho([f"{ad.get('id')} ({MOTIVO_SEM_DONO[ad['reason']]})"
+                for ad in sem_dono], aplicados, para_depois,
+               f"cepa-until decidir {fila}/{run_id}")
     return aplicados, para_depois
 
 
