@@ -1,0 +1,65 @@
+key: skills-agents-in-english
+status: complete
+diff_range: HEAD..working-tree (uncommitted)
+scope_note: >
+  O item diz "10 agentes líderes"; o content-lead (11º, bloco-variante curto) também
+  foi traduzido para o teste não aceitar dois títulos. Nota de escopo, não lacuna.
+  Mudança só de texto; o "altitude" é o próprio arquivo de texto lido pelo agente.
+criteria:
+  - id: AC1
+    altitude: domain
+    surface: common/skills/{default-yes,feedback-capture,guided-interrogation,off-mode-capture}/SKILL.md (texto lido pelo agente)
+    test: leitura do diff + contagem estrutural contra HEAD; tests/test_report_style_lint.py e tests/test_default_yes_inject.py leem default-yes
+    layer: conteúdo do arquivo
+    evidence: verified
+    run: "name: idêntico nos 4 (grep -m1 '^name:'); description em inglês nos 4; strings
+      '[modo] Esta sessão opera em X', 'Feedback registrado', 'Desviei e registrei',
+      nomes de modo na tabela e 'Recomendo sim/não' preservados (grep); triggers PT de
+      guided-interrogation com equivalentes em inglês na description"
+  - id: AC2
+    altitude: domain
+    surface: seção de delegação assíncrona em 11 specs de agente
+    test: tests/test_delegacao_assincrona_specs.py
+    layer: contrato de texto (script)
+    evidence: verified
+    run: "python3 tests/test_delegacao_assincrona_specs.py -> 'ok — 11 agentes que
+      delegam, todos com a seção completa' (rc=0). grep -rn 'Delegação é assíncrona'
+      */agents/ vazio; 11 arquivos com 'Delegation is asynchronous: do not poll the
+      disk'. difflib por arquivo: diff vs HEAD começa no título e termina no fim da
+      seção; nada fora dela mudou."
+  - id: AC3
+    altitude: domain
+    surface: testes de contrato e vizinhos
+    test: os 7 arquivos de teste listados
+    layer: scripts python / pytest
+    evidence: verified
+    run: "python3 tests/test_delegacao_assincrona_specs.py -> ok 11 agentes (rc=0);
+      python3 tests/test_report_style_lint.py -> 'ok spec: default-yes, seção \"Keep the
+      thread of the session\" tem \"After the wrap-up\"' ... 'all report-style tests
+      passed' (rc=0); python3 tests/test_default_yes_inject.py -> 'all green' (rc=0);
+      pytest tests/test_cepa_modo.py -> 38 passed; test_cepa_feedback.py -> 18 passed;
+      test_epic_readiness_gate.py -> 33 passed; test_pluginver_boot.py -> 7 passed.
+      (os 3 primeiros são scripts próprios, não pytest: pytest coleta 0 neles, por isso
+      rodados com python3.)"
+  - id: AC4
+    altitude: domain
+    surface: common/hooks/no-busy-wait.py e 7 plugin.json
+    test: git diff
+    layer: diff
+    evidence: verified
+    run: "git diff common/hooks/no-busy-wait.py -> 1 linha, dentro do docstring; 7
+      plugin.json só mudam version, PATCH+1 (1.4.3->1.4.4, 0.5.2->0.5.3, 2.30.2->2.30.3,
+      0.3.2->0.3.3, 0.4.2->0.4.3, 0.3.2->0.3.3, 0.1.2->0.1.3); pytest
+      tests/test_pluginver_boot.py -> 7 passed. Extra: docs/internals/invariantes.md
+      ganhou 1 frase registrando o novo título (docs, sem contrato)."
+  - id: AC5
+    altitude: domain
+    surface: paridade PT original (git show HEAD:path) vs EN
+    test: contagem estrutural
+    layer: diff
+    evidence: verified
+    run: "headings / linhas de tabela / bullets-numeradas / fences: default-yes 7/8/12/0,
+      feedback-capture 7/0/7/4, guided-interrogation 5/5/3/0, off-mode-capture 8/9/8/4,
+      idênticos old=new nos quatro; linhas em branco iguais exceto off-mode (+1, por
+      notas explicativas adicionadas). Agentes: parágrafos e bullets da seção
+      conferidos 1:1 no planning-lead e content-lead (o resto segue o mesmo bloco)."

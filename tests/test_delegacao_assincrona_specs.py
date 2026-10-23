@@ -36,7 +36,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-TITULO = "## Delegação é assíncrona"
+TITULO = "## Delegation is asynchronous"
 
 # O que a seção tem que dizer, além de existir. Cada marca é uma das três coisas
 # que o lead precisa saber; uma seção que perdeu qualquer uma delas parou de ensinar.
@@ -44,7 +44,7 @@ TITULO = "## Delegação é assíncrona"
 # branco onde houver espaço — casar com `\s+` e não com " " literal.
 MARCAS = [
     ("o retorno real da chamada", re.compile(r"Async\s+agent\s+launched\s+successfully")),
-    ("o que fazer no lugar", re.compile(r"[Ee]ncerre\s+o\s+turno")),
+    ("o que fazer no lugar", re.compile(r"[Ee]nd\s+the\s+turn")),
     ("o antipadrão medido", re.compile(r"until\s+\[\s+-f")),
     ("a exceção do run desatendido", re.compile(r"run_in_background:\s*false")),
 ]

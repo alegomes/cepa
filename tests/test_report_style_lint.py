@@ -589,9 +589,9 @@ check("spec: wrap-up.md cita pergunta-pos-wrap-up e \"Próxima sessão começa p
       "pergunta-pos-wrap-up" in wu and "Próxima sessão começa por" in wu)
 
 dy = ler("common/skills/default-yes/SKILL.md")
-sec = dy.split("## Guardar o fio da sessão", 1)[-1].split("\n## ", 1)[0]
-check("spec: default-yes, seção \"Guardar o fio da sessão\" tem \"Depois do wrap-up\"",
-      "## Guardar o fio da sessão" in dy and "Depois do wrap-up" in sec)
+sec = dy.split("## Keep the thread of the session", 1)[-1].split("\n## ", 1)[0]
+check("spec: default-yes, seção \"Keep the thread of the session\" tem \"After the wrap-up\"",
+      "## Keep the thread of the session" in dy and "After the wrap-up" in sec)
 
 # ── entrada corrompida não derruba o turno ─────────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))

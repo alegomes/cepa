@@ -37,7 +37,7 @@ Duas patologias distintas, as duas caras:
    turno acaba aqui", o lead preenche o silêncio com sondagem. (O que está
    verificado é o silêncio e o fluxo contínuo; o que o autor original acreditava
    não dá para saber.) O conserto da causa está
-   na seção "Delegação é assíncrona" das 10 specs que delegam; este hook é a
+   na seção "Delegation is asynchronous" das 10 specs que delegam; este hook é a
    rede. `until [ -f /dev/null ]` é o caso
    extremo: espera por condição que já era verdadeira, ou seja, o agente já não
    sabia o que estava esperando.

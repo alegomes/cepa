@@ -1,88 +1,88 @@
 ---
 name: guided-interrogation
-description: Use dentro de um frame de especificação — /common:spec, ou quando o usuário pede explicitamente para ser "grelhado", entrevistado ou interrogado até fechar um escopo. Suspende, e SÓ dentro desse frame, as três skills que empurram o agente a decidir sozinho (active-listener, zero-micromanagement, default-yes). Fora do frame, elas continuam valendo. Gatilhos — "me interrogue", "me grelhe", "me entreviste", "pergunta até fechar", "quero detalhar antes de construir", "especificação de alto nível", "não implemente ainda".
+description: Use inside a specification frame, /common:spec, or when the user explicitly asks to be "grilled", interviewed or interrogated until a scope closes. Suspends, and ONLY inside that frame, the three skills that push the agent to decide on its own (active-listener, zero-micromanagement, default-yes). Outside the frame, they keep applying. Triggers (Portuguese, as the user types them, with English equivalents): "me interrogue" (interrogate me), "me grelhe" (grill me), "me entreviste" (interview me), "pergunta até fechar" (ask until it closes), "quero detalhar antes de construir" (I want to detail before building), "especificação de alto nível" (high-level specification), "não implemente ainda" (don't implement yet).
 ---
 
 # Skill: guided-interrogation
 
-O harness é construído para **não** perguntar. `active-listener` diz que 80%
-dos pedidos de esclarecimento são contexto não lido. `zero-micromanagement` e
-`default-yes` mandam decidir sozinho o que é reversível e prestar conta depois.
-Isso é certo na construção, onde cada pergunta custa um turno do dono e a
-resposta quase sempre já estava no card.
+The harness is built **not** to ask. `active-listener` says that 80% of requests
+for clarification are unread context. `zero-micromanagement` and `default-yes`
+say to decide on your own whatever is reversible and account for it afterwards.
+That is right in construction, where each question costs the owner a turn and the
+answer was almost always already on the card.
 
-Na especificação é o contrário, e é o contrário por um motivo estrutural: **a
-informação que falta não está em lugar nenhum que o agente possa ler.** Ela está
-na cabeça do dono e não foi escrita ainda. Adivinhar aqui não economiza turno —
-produz uma especificação plausível e errada, que só se revela errada depois de
-construída.
+In specification it is the opposite, and for a structural reason: **the missing
+information is not anywhere the agent can read.** It is in the owner's head and
+has not been written yet. Guessing here does not save a turn: it produces a
+plausible and wrong specification, which only reveals itself as wrong after it
+has been built.
 
-## O que esta skill suspende, e só aqui
+## What this skill suspends, and only here
 
-Dentro de um frame de interrogação declarado:
+Inside a declared interrogation frame:
 
-| Skill | Regra normal | Dentro do frame |
+| Skill | Normal rule | Inside the frame |
 |---|---|---|
-| `active-listener` | não peça esclarecimento, releia o contexto | releia primeiro, **e depois pergunte assim mesmo** — o contexto não contém a resposta |
-| `zero-micromanagement` | não devolva escolha ao dono | devolver escolha **é** o trabalho |
-| `default-yes` | decida o reversível sozinho | uma decisão de escopo aqui não é reversível: ela vira código |
+| `active-listener` | do not ask for clarification, reread the context | reread first, **and then ask anyway**: the context does not contain the answer |
+| `zero-micromanagement` | do not hand the choice back to the owner | handing the choice back **is** the job |
+| `default-yes` | decide the reversible on your own | a scope decision here is not reversible: it becomes code |
 
-Fora do frame — mesma sessão, turno seguinte, qualquer outro comando — as três
-voltam a valer integralmente. A suspensão é do frame, não da sessão.
+Outside the frame (same session, next turn, any other command) all three apply
+again in full. The suspension belongs to the frame, not to the session.
 
-## Como interrogar
+## How to interrogate
 
-**Uma rodada por turno, no máximo quatro perguntas.** Interrogatório não é
-formulário: cada resposta muda quais são as próximas perguntas. Despejar
-quinze de uma vez transfere ao dono o trabalho de ordenar, que é seu.
+**One round per turn, at most four questions.** An interrogation is not a form:
+each answer changes what the next questions are. Dumping fifteen at once
+transfers to the owner the work of ordering them, which is yours.
 
-**Pergunte o que muda o que vai ser construído.** Antes de escrever uma
-pergunta, responda a si mesmo: *duas respostas diferentes aqui produzem código
-diferente?* Se não, não pergunte — decida e registre. Preferência de estilo,
-nome de variável, ordem de campo: decida.
+**Ask what changes what will be built.** Before writing a question, answer
+yourself: *do two different answers here produce different code?* If not, do not
+ask: decide and record it. Style preference, variable name, field order: decide.
 
-**Toda pergunta traz recomendação.** "Se você não tiver opinião, faça X, porque
-Y." O dono precisa poder responder "sim, sim, não" e seguir. Pergunta sem
-recomendação devolve o trabalho inteiro.
+**Every question carries a recommendation.** "If you have no opinion, do X,
+because Y." The owner must be able to answer "yes, yes, no" and move on. A
+question without a recommendation hands back the whole job.
 
-**Ataque primeiro o que tem mais consequência.** A ordem é por custo de errar,
-não pela ordem em que os assuntos apareceram na conversa. Fronteira de escopo e
-contrato antes de caso de borda.
+**Attack first what has the most consequence.** The order is by cost of being
+wrong, not by the order in which topics showed up in the conversation. Scope
+boundary and contract before edge case.
 
-**Registre a resposta na hora.** Cada resposta vai para o documento no mesmo
-turno. Interrogatório cuja resposta só existe no histórico da conversa se perde
-no primeiro compactar de contexto.
+**Record the answer on the spot.** Each answer goes into the document in the same
+turn. An interrogation whose answers exist only in the conversation history is
+lost at the first context compaction.
 
-**Nomeie o que você decidiu sozinho.** O que não virou pergunta e mesmo assim
-foi decidido aparece numa lista à parte do documento, para o dono poder vetar.
-Decisão silenciosa é o mesmo furo, com outra roupa.
+**Name what you decided on your own.** What did not become a question and was
+decided anyway appears in a separate list in the document, so the owner can veto
+it. A silent decision is the same hole in different clothes.
 
-## Quando o interrogatório acaba
+## When the interrogation ends
 
-Não acaba por cansaço, e não acaba porque o agente achou que está bom. Acaba
-quando a especificação passa num crivo mecânico:
+It does not end from fatigue, and it does not end because the agent thought it was
+good enough. It ends when the specification passes a mechanical sieve:
 
-- todo critério de sucesso tem uma **superfície** do vocabulário fechado
-  (`http`, `cli`, `ui`, `event`, `domain`, `application`) — a camada mais
-  externa que o critério nomeia;
-- todo critério tem um **teste vermelho** declarado naquela superfície: a frase
-  do teste que hoje falharia e que passará quando a coisa existir;
-- nenhuma pergunta em aberto continua sem resposta.
+- every success criterion has a **surface** from the closed vocabulary
+  (`http`, `cli`, `ui`, `event`, `domain`, `application`): the outermost layer
+  the criterion names;
+- every criterion has a declared **red test** on that surface: the test sentence
+  that fails today and will pass when the thing exists;
+- no open question remains unanswered.
 
-É a mesma régua da skill [`acceptance-completeness`](../acceptance-completeness/SKILL.md),
-aplicada uma fase antes. Lá ela julga se um card está pronto para ir a revisão;
-aqui, se uma especificação está pronta para virar código. Usar a mesma régua nas
-duas pontas é o ponto: a especificação nasce já medida pelo gate que a julgaria
-no fim.
+It is the same yardstick as the [`acceptance-completeness`](../acceptance-completeness/SKILL.md)
+skill, applied one phase earlier. There it judges whether a card is ready to go
+to review; here, whether a specification is ready to become code. Using the same
+yardstick at both ends is the point: the specification is born already measured
+by the gate that would judge it at the end.
 
-O campo se chama **Superfície** e não *Altitude* de propósito: `Altitude` já é
-um campo de bloco de decisão, com outro vocabulário fechado
-(`strategic`/`tactical`/`implementation`) e um gate próprio na escrita. Dois
-campos de mesmo nome e vocabulário diferente é como se aprende a ignorar os dois.
+The field is called **Superfície** (surface) and not *Altitude* on purpose:
+`Altitude` is already a decision-block field, with a different closed vocabulary
+(`strategic`/`tactical`/`implementation`) and a gate of its own at write time. Two
+fields with the same name and different vocabularies is how one learns to ignore
+both.
 
-## O que esta skill não é
+## What this skill is not
 
-Não é licença para perguntar em qualquer lugar. Fora de um frame declarado, a
-pergunta continua sendo o último recurso, não o primeiro. E não é licença para
-perguntar o que dá para descobrir lendo: antes de cada rodada, leia o código, o
-board e os documentos que existem. A pergunta boa é a que sobra depois disso.
+It is not a license to ask anywhere. Outside a declared frame, asking remains the
+last resort, not the first. And it is not a license to ask what can be found out
+by reading: before each round, read the code, the board and the documents that
+exist. The good question is the one that is left after that.

@@ -1,84 +1,94 @@
 ---
 name: off-mode-capture
-description: Use quando a sessão tem um modo de trabalho ativo (o hook session-mode injetou "[modo] Esta sessão opera em X") e a próxima ação que você ia executar não pertence a esse modo. Registre o desvio sozinho e siga com o trabalho do modo — não pergunte, não execute o desvio. As capturas vão para o relatório final. Não dispare sem modo ativo: aí vale o comportamento normal (board-flow:suggest-capture, se instalado).
+description: Use when the session has an active working mode (the session-mode hook injected "[modo] Esta sessão opera em X", meaning "[mode] This session operates in X") and the next action you were about to execute does not belong to that mode. Record the detour on your own and carry on with the mode's work; do not ask, do not execute the detour. The captures go into the final report. Do not trigger without an active mode: then normal behavior applies (board-flow:suggest-capture, if installed).
 ---
 
-# Captura de desvio
+# Detour capture
 
-## O problema
+## The problem
 
-O sintoma que originou os modos: *"eu começo a especificar uma funcionalidade,
-pulo pro desenvolvimento, mergulho em micro-ajustes e gasto energia na
-documentação antes de terminar"*.
+The symptom that gave rise to the modes: *"I start specifying a feature, jump to
+development, dive into micro-adjustments and spend energy on documentation before
+finishing"* (original: "eu começo a especificar uma funcionalidade, pulo pro
+desenvolvimento, mergulho em micro-ajustes e gasto energia na documentação antes
+de terminar").
 
-A causa não é falta de disciplina — é falta de **destino para o desvio**. Quando
-o desvio aparece e só existem duas saídas (fazer agora, ou perder), fazer agora
-sempre ganha, porque perder dói. Esta skill é a terceira saída.
+The cause is not a lack of discipline: it is a lack of a **destination for the
+detour**. When the detour shows up and there are only two exits (do it now, or
+lose it), doing it now always wins, because losing hurts. This skill is the third
+exit.
 
-## O teste, em uma pergunta
+## The test, in one question
 
-> Esta ação é necessária para a **condição de saída do modo ativo**?
+> Is this action necessary for the **exit condition of the active mode**?
 
-- **Sim** → é trabalho do modo. Execute, por mais que pareça outra coisa.
-- **Não** → é desvio. Registre e siga.
+- **Yes** -> it is the mode's work. Execute it, however much it looks like
+  something else.
+- **No** -> it is a detour. Record it and carry on.
 
-O teste é a condição de saída, não a aparência da ação. Escrever um teste durante
-a Construção parece trabalho de QA e é trabalho do modo. Corrigir um bug que
-impede o `proof-reviewer` de rodar parece Reforma e é trabalho do modo. Já
-renomear uma variável feia no arquivo ao lado não é trabalho do modo nenhum — é
-desvio, mesmo levando dez segundos. **O barato é justamente o que vaza.**
+The test is the exit condition, not the appearance of the action. Writing a test
+during Construction looks like QA work and is the mode's work. Fixing a bug that
+keeps the `proof-reviewer` from running looks like Reform and is the mode's work.
+Renaming an ugly variable in the file next door, on the other hand, is no mode's
+work: it is a detour, even if it takes ten seconds. **The cheap thing is exactly
+what leaks.**
 
-## O que é desvio, por modo
+## What counts as a detour, by mode
 
-| Modo ativo | Desvio típico |
+The mode names are the literal keys the hook uses, so they stay in Portuguese
+(English meaning in parentheses).
+
+| Active mode | Typical detour |
 |---|---|
-| exploração | começar a especificar critério de aceite, abrir código para "só conferir" |
-| descoberta | implementar, refatorar, escrever documentação |
-| design | implementar o design; mexer no design system além do que a feature usa |
-| construção | micro-ajuste fora do critério, refatoração oportunista, documentação |
-| reforma | qualquer coisa fora do orçamento declarado; mudar comportamento observável |
-| reflexão | **corrigir** o que você achou (o achado vira card, não patch) |
-| documentação | corrigir o código que a documentação revelou torto |
+| exploração (exploration) | starting to specify acceptance criteria, opening code to "just check" |
+| descoberta (discovery) | implementing, refactoring, writing documentation |
+| design (design) | implementing the design; touching the design system beyond what the feature uses |
+| construção (construction) | micro-adjustment outside the criterion, opportunistic refactoring, documentation |
+| reforma (reform) | anything outside the declared budget; changing observable behavior |
+| reflexão (reflection) | **fixing** what you found (the finding becomes a card, not a patch) |
+| documentação (documentation) | fixing the code that the documentation revealed to be crooked |
 
-## O que NÃO é desvio
+## What is NOT a detour
 
-- Pergunta de esclarecimento, leitura de código, busca — nada disso muda o repo.
-- O que o usuário pedir **explicitamente neste turno**: ele é o dono da fronteira
-  e pode atravessá-la. Registre que atravessou, e siga.
-- Bloqueio real: se sem aquilo a condição de saída do modo é inalcançável, é
-  trabalho do modo. Diga em uma linha por que era bloqueio, no relatório.
+- A clarifying question, reading code, searching: none of that changes the repo.
+- Whatever the user asks for **explicitly in this turn**: they own the boundary
+  and may cross it. Record that it was crossed, and carry on.
+- A real blocker: if without it the mode's exit condition is unreachable, it is
+  the mode's work. Say in one line, in the report, why it was a blocker.
 
-## O que fazer
+## What to do
 
-**Registre e siga. Não pergunte.** Perguntar devolve ao usuário a micro-interação
-que o modo existe para eliminar (`default-yes`).
+**Record and carry on. Do not ask.** Asking hands back to the user the
+micro-interaction that the mode exists to eliminate (`default-yes`).
 
-Destino, nesta ordem:
+Destination, in this order:
 
-1. **Com `board-flow.yaml` no repo** → card via `/board-flow:capture`, com o modo
-   ativo e a sessão na descrição.
-2. **Sem board-flow** → uma linha em `.claude/desvios.md` (crie se não existir):
+1. **With `board-flow.yaml` in the repo** -> a card via `/board-flow:capture`, with
+   the active mode and the session in the description.
+2. **Without board-flow** -> one line in `.claude/desvios.md` (create it if it does
+   not exist). The line below is written in the user's language (Portuguese example):
 
 ```markdown
 - [ ] 2026-08-18 · modo: construcao · o resolver de contatos duplica a query N vezes; vi ao passar por ContactResolver.java:88
 ```
 
-Cada linha diz **o quê**, **onde vi** e **em que modo eu estava**. Sem análise,
-sem proposta de correção — analisar já é fazer o desvio.
+Each line says **what**, **where I saw it** and **which mode I was in**. No
+analysis, no proposed fix: analyzing is already taking the detour.
 
-## No relatório final
+## In the final report
 
-Bloco próprio, contando quantos foram:
+A block of its own, counting how many there were. The block below is written in
+the user's language (Portuguese example):
 
 ```
 **Desviei e registrei (3):** duplicação de query no ContactResolver ·
 migration sem rollback · README apontando para endpoint que mudou de nome
 ```
 
-Se nenhum desvio apareceu, não escreva o bloco. Ausência não precisa de linha.
+If no detour showed up, do not write the block. Absence does not need a line.
 
-## Limite
+## Limit
 
-Esta skill registra; ela não prioriza nem decide. Card capturado entra na fila
-como qualquer outro e passa pela triagem normal. Você não está enfileirando
-trabalho aprovado — está evitando que o desvio vire trabalho **agora**.
+This skill records; it does not prioritize or decide. A captured card joins the
+queue like any other and goes through normal triage. You are not enqueueing
+approved work: you are keeping the detour from becoming work **now**.

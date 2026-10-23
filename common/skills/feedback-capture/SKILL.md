@@ -1,90 +1,94 @@
 ---
 name: feedback-capture
-description: Use quando o usuário reclamar do harness — do comando que perguntou demais, do gate que barrou o que não devia, do relatório ilegível, do agente que fez o que não foi pedido — ou quando pedir explicitamente para registrar um feedback sobre a Cepa. Grave a queixa verbatim pelo `cepa-feedback add` e siga com o trabalho do turno; não pergunte se deve registrar, não discuta se a queixa procede, não conserte o harness agora. Não dispare para reclamação sobre o CÓDIGO do projeto (isso é card, não feedback do harness).
+description: Use when the user complains about the harness (the command that asked too much, the gate that blocked what it should not have, the unreadable report, the agent that did what was not asked) or when they explicitly ask to record feedback about Cepa. Record the complaint verbatim through `cepa-feedback add` and carry on with the turn's work; do not ask whether to record it, do not argue whether the complaint is fair, do not fix the harness now. Do not trigger for complaints about the project's CODE (that is a card, not harness feedback).
 ---
 
-# Captura de feedback do harness
+# Harness feedback capture
 
-## O problema
+## The problem
 
-O incômodo com a Cepa nunca aparece sozinho. Ele aparece no meio de outra
-tarefa, no repo do cliente, com o contexto inteiro carregado — e nesse instante
-existem duas saídas: largar a tarefa para abrir o `BACKLOG.md` da Cepa (que quase
-nunca é o repo aberto), ou seguir e esquecer. Seguir e esquecer sempre ganha,
-porque parar dói. Esta skill é a terceira saída, e é a mesma forma do
-[off-mode-capture](../off-mode-capture/SKILL.md): registrar custa uma linha,
-então o desvio não precisa virar trabalho agora.
+Annoyance with Cepa never shows up on its own. It shows up in the middle of
+another task, in the client's repo, with the whole context loaded, and at that
+instant there are two exits: drop the task to open Cepa's `BACKLOG.md` (which is
+almost never the open repo), or carry on and forget. Carrying on and forgetting
+always wins, because stopping hurts. This skill is the third exit, and it has the
+same shape as [off-mode-capture](../off-mode-capture/SKILL.md): recording costs
+one line, so the detour does not need to become work now.
 
-O que se perde sem ela tem nome: a queixa existe como texto do dono, escrita no
-calor do episódio, com o comando que a causou ainda na tela. Um mês depois sobra
-"o harness pergunta demais" — verdadeiro, e não acionável.
+What is lost without it has a name: the complaint exists as the owner's text,
+written in the heat of the episode, with the command that caused it still on the
+screen. A month later what remains is "the harness asks too much", which is true
+and not actionable.
 
-## Quando disparar
+## When to trigger
 
-Dispare quando o alvo da reclamação é **a Cepa**: um comando, um hook, um gate,
-um agente, um relatório, um prompt, o fluxo de uma rotina.
+Trigger when the target of the complaint is **Cepa**: a command, a hook, a gate,
+an agent, a report, a prompt, the flow of a routine.
 
-Não dispare quando o alvo é o **projeto**: bug no código, API de terceiro,
-build quebrado, decisão de produto. Isso é card — `/board-flow:capture`, ou uma
-linha em `.claude/desvios.md` se não houver quadro.
+Do not trigger when the target is the **project**: a bug in the code, a
+third-party API, a broken build, a product decision. That is a card:
+`/board-flow:capture`, or a line in `.claude/desvios.md` if there is no board.
 
-O teste, em uma pergunta:
+The test, in one question:
 
-> Reinstalar a Cepa em outra máquina levaria o incômodo junto?
+> Would reinstalling Cepa on another machine take the annoyance along?
 
-Sim → feedback do harness. Não → card do projeto.
+Yes -> harness feedback. No -> project card.
 
-## O que fazer
+## What to do
 
-Uma chamada, e siga com o trabalho do turno:
+One call, then carry on with the turn's work:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" add \
-  "<o texto do dono, verbatim>" --alvo <comando|hook|agente> --origem skill
+  "<the owner's text, verbatim>" --alvo <comando|hook|agente> --origem skill
 ```
 
-(Fora de uma sessão com plugin carregado, o caminho é `common/bin/cepa-feedback`
-no repo da Cepa.)
+(Outside a session with the plugin loaded, the path is `common/bin/cepa-feedback`
+in the Cepa repo.)
 
-Três regras sobre o texto:
+Three rules about the text:
 
-1. **Verbatim.** Grave o que o dono escreveu, não o seu resumo dele. O resumo
-   troca a queixa pela sua leitura da queixa, e é a leitura que costuma estar
-   errada — se você tivesse entendido, o incômodo não teria acontecido.
-2. **`--alvo` sempre que der.** `modo-escrita-gate`, `board-flow:drain`,
-   `proof-reviewer`. É o que transforma "o harness atrapalha" em algo que alguém
-   consegue abrir. Sem alvo identificável, grave assim mesmo — feedback sem alvo
-   ainda é sinal; feedback não gravado não é nada.
-3. **Sem análise, sem proposta de correção.** Analisar já é fazer o desvio. O
-   registro guarda o episódio; a triagem decide o que fazer, depois.
+1. **Verbatim.** Record what the owner wrote, not your summary of it. The summary
+   swaps the complaint for your reading of the complaint, and your reading is the
+   part that tends to be wrong: if you had understood, the annoyance would not
+   have happened.
+2. **`--alvo` whenever possible.** `modo-escrita-gate`, `board-flow:drain`,
+   `proof-reviewer`. It is what turns "the harness gets in the way" into
+   something someone can open. With no identifiable target, record it anyway:
+   feedback without a target is still a signal; unrecorded feedback is nothing.
+3. **No analysis, no proposed fix.** Analyzing is already taking the detour. The
+   record keeps the episode; triage decides what to do, later.
 
-Repo, branch e modo da sessão entram sozinhos no registro — você não os digita.
+Repo, branch and session mode enter the record on their own: you do not type them.
 
-## O que NÃO fazer
+## What NOT to do
 
-- **Não pergunte se deve registrar.** A pergunta devolve ao dono a micro-interação
-  que a `default-yes` existe para matar. Registre e diga em uma linha que registrou.
-- **Não conserte o harness agora.** Mesmo parecendo trivial: o conserto é trabalho
-  de outra sessão, num repo que provavelmente não é este, e o turno em curso tem
-  dono. Se o dono pedir o conserto explicitamente, aí é ordem — atenda e registre
-  que atravessou.
-- **Não discuta a queixa.** "Na verdade o gate estava certo" pode ser verdade e
-  não é a hora. O registro guarda o que ele sentiu; a triagem confere os fatos.
-- **Não grave duas vezes o mesmo episódio.** Uma queixa repetida no mesmo turno é
-  um registro só.
+- **Do not ask whether to record it.** The question hands back to the owner the
+  micro-interaction that `default-yes` exists to kill. Record it and say in one
+  line that you did.
+- **Do not fix the harness now.** Even if it looks trivial: the fix is the work of
+  another session, in a repo that is probably not this one, and the turn in
+  progress has an owner. If the owner explicitly asks for the fix, then it is an
+  order: comply and record that it crossed over.
+- **Do not argue the complaint.** "Actually the gate was right" may be true and
+  this is not the time. The record keeps what they felt; triage checks the facts.
+- **Do not record the same episode twice.** A complaint repeated in the same turn
+  is a single record.
 
-## Como aparece na resposta
+## How it shows up in the reply
 
-Uma linha, no fim do que você já ia responder:
+One line, at the end of what you were already going to answer. The line below is
+written in the user's language (Portuguese example):
 
 ```
 **Feedback registrado (fb-20260826-2):** o gate de escrita barrou um commit legítimo · alvo: modo-escrita-gate
 ```
 
-Nada além disso. O turno pertence à tarefa que o dono pediu.
+Nothing beyond that. The turn belongs to the task the owner asked for.
 
-## Depois
+## Afterwards
 
-`/common:feedback` lista o que está aberto e — no repo da Cepa — vira item de
-`BACKLOG.md` com o episódio e o contexto junto. Registrar não é aprovar
-trabalho: o item entra na fila e passa pela triagem como qualquer outro.
+`/common:feedback` lists what is open and, in the Cepa repo, turns it into a
+`BACKLOG.md` item with the episode and context attached. Recording is not
+approving work: the item joins the queue and goes through triage like any other.
