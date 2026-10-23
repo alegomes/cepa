@@ -12,7 +12,7 @@
 
 schema_version: 2
 mode: single-track
-program: cepa
+queue: cepa
 source: BACKLOG.md (varredura de 2026-08-25) + sessão 2026-07-28/29 (fio condutor)
   + itens de 2026-09-24 + desvios.md (2026-09-29) + seções do BACKLOG sem plano
   em 2026-10-15 (feedbacks triados) + fatias dos lotes lotes-sweep-verify e lotes-2026-08-23
