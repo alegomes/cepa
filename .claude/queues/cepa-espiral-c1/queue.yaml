@@ -12,7 +12,7 @@
 
 schema_version: 2
 mode: single-track
-program: cepa-espiral-c1
+queue: cepa-espiral-c1
 source: docs/spec/cepa-espiral-c1.md (6 critérios; ordem proposta pelo agente, confirmada
   pelo dono em 2026-10-08)
 items:
