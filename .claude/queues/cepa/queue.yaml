@@ -2411,3 +2411,15 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: until-processo-nao-sai
+  title: cepa-until termina a rodada, grava a análise e o processo não sai
+  why: 'Decisão do dono em 2026-10-23: aconteceu duas vezes. PID 57237 (fila cepa,
+    rodada 2026-10-20-2055, run_end e analise às 22:16, vivo dois dias depois) e
+    PID 84993 (fila WEGO em wego-acessos-backend, rodada 2026-10-07-2132, analise
+    em 2026-10-08 07:20, vivo 15 dias depois). Processo pendurado confunde quem
+    confere o que está rodando. O 84993 fica vivo por decisão do dono e serve para
+    reproduzir o problema (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
