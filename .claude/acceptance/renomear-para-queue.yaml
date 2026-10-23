@@ -1,5 +1,5 @@
 key: renomear-para-queue
-status: incomplete
+status: complete
 diff_range: 76c8413..HEAD
 criteria:
   - id: AC1
@@ -37,13 +37,22 @@ criteria:
   - id: AC5
     altitude: cli
     surface: "migracao das filas reais (cepa, wego-acessos-backend, wego-digitacao-backend, wego-product)"
-    test: nenhum (adiada de proposito; mecanismo cepa-plan migrate --all testado em AC3)
-    layer: n/a
-    evidence: missing
-    gap: >
-      Adiamento nomeado: migracao real nao executada nesta rodada (branch nao
-      mergeado; run do cepa-until le a fila do cepa; repos de cliente fora do
-      branch). Follow-up: apos o merge, `cepa-plan migrate --all --repo <repo>`
-      nos quatro repos e commit em cada um. Pela regra, adiamento nomeado
-      mantem o criterio incomplete; aceitar a divisao e decisao do dono.
-    status: incomplete
+    test: "estado em disco/git dos quatro repos apos `cepa-plan migrate --all`; consumidores: tests/run-all.sh queue cepa_plan; claude plugin test ."
+    layer: cli (estado real dos repos + consumidores)
+    evidence: verified
+    run: >
+      cepa: ls .claude/queues = cepa, cepa-espiral-c1, fb-2026-10, intencao-c1, mods (todas com `queue:` e sem
+      `program:`/`plan:`); commits 3b5ea67..e7939c7; `cepa-plan status cepa` le .claude/queues/cepa/queue.yaml;
+      .claude/programs so com ariad-leva2, melhorias-2026-07, archive, maestro. wego-acessos-backend: commits
+      abce6e7d e 4f2f1df8, queues = WEGO, WEGO-in-progress, programs = so WEGO-paralelo (parallel-waves, correto
+      pular), git status limpo. wego-digitacao-backend: commits ea5d04a e 5de53dc, programs vazio, status limpo.
+      wego-product: queues/leitura-de-guias-fase-0-c1 presente, programs vazio, .claude/ ignorado (.gitignore:1),
+      sem commit possivel. Consumidores: `tests/run-all.sh queue cepa_plan` -> 7 de 7, tudo verde (8 passed);
+      `cd compass && claude plugin test .` -> 99 pass, 0 fail. cepa-until le queues com fallback (linhas 1035-1046, 1717).
+    status: complete
+    note: >
+      Observacoes, nao bloqueiam: (1) no cepa restam nao rastreados .claude/queues/*/until/ e
+      .claude/queues/mods/queue.yaml.bak (registro de run e copia de seguranca; o primeiro e filtrado pelo
+      cepa-until). (2) o cabecalho-comentario das filas migradas ainda diz "plan.yaml ... fila single-track,
+      escrita por /common:plan" (prosa antiga, chave `queue:` correta). (3) wego-product nao tem commit, entao a
+      migracao la nao e versionada.
