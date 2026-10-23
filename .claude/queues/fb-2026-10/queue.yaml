@@ -12,7 +12,7 @@
 
 schema_version: 2
 mode: single-track
-program: fb-2026-10
+queue: fb-2026-10
 source: BACKLOG.md, as três seções abertas vindas do ledger de feedback (fb-20261008-1,
   fb-20261016-1, fb-20260902-1) sem item de fila em 2026-10-19
 items:
