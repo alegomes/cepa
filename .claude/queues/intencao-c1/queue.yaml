@@ -12,7 +12,7 @@
 
 schema_version: 2
 mode: single-track
-program: intencao-c1
+queue: intencao-c1
 source: docs/estrategia-intencao-da-sessao.md, seção 'Ordem de implementação (ciclo
   1)', decisões do dono de 2026-10-16; fila ditada à mão porque o doc não é spec
   do /common:spec
