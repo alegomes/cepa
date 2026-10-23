@@ -2399,3 +2399,14 @@ items:
   blocked_by: []
   human_pending: null
   evidence: null
+- id: until-sigterm-teste-instavel
+  title: Estabilizar o teste 'SIGTERM encerra o claude do item' de tests/test_cepa_until_supervisor_morto.py,
+    que falha de vez em quando na suíte completa e passa isolado
+  why: 'Falhou 1 vez em 5 rodadas em 2026-10-22 (suíte completa no main após o merge
+    1551d88, pid_filho None no evento run_interrompido), verde nas 4 outras. Falha
+    intermitente num teste que o gate de merge roda vira falso vermelho na próxima
+    landagem (ainda não priorizado: entrou no fim da fila)'
+  status: pending
+  blocked_by: []
+  human_pending: null
+  evidence: null
