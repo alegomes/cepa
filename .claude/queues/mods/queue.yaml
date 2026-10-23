@@ -12,7 +12,7 @@
 
 schema_version: 2
 mode: single-track
-program: mods
+queue: mods
 source: Propostas de aplicação de mods do Claude Code, conversa de 2026-10-18/19
   na sessão session/oncoto; dono aprovou M1 primeiro e pediu que M2-M6 não se percam;
   em 2026-10-19 redefiniu o M1 como o mod cepa-rumo de orientação em níveis
