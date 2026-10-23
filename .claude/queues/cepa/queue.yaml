@@ -2336,19 +2336,20 @@ items:
     em 2026-10-20, segunda rodada: o comando /common:plan entra no mesmo rename
     (vira /common:queue), senão "plan" continua ambíguo no comando mais digitado;
     as referências em docs e testes acompanham'
-  status: blocked
+  status: done
   blocked_by:
   - comandos-em-ingles
   human_pending: Rodar cepa-plan migrate --all nos quatro repos (cepa, wego-acessos-backend,
     wego-digitacao-backend, wego-product) e confirmar que /common:queue, cepa-until
     e o compass leem .claude/queues
-  evidence: 'Merge no main em 2026-10-22: 1551d88 (branch session/queue-merge, que
-    continha 444c62b = merge de until/2026-10-20-2055-travado-renomear-para-queue).
-    Suíte completa verde na worktree antes do merge: tests/run-all.sh, 139 de 139
-    arquivos. Worktree e branch removidas. AC5 (migração real das filas) segue em
-    aberto por decisão do dono: a migração é rota humana.'
-  owner_question: 'Migro as quatro filas para o layout novo com um comando só e
-    fecho o item? Recomendo sim: o comando lê os dois layouts e tem dry-run.'
+  evidence: 'Merge 1551d88 no main. Migração real em 2026-10-22: cepa (3b5ea67,
+    e760b12, 0353bd3, 0098c2c, e7939c7), wego-acessos-backend (abce6e7d, 4f2f1df8),
+    wego-digitacao-backend (ea5d04a, 5de53dc), wego-product (migrada; .claude/ gitignored).
+    Consumidores no layout novo: tests/run-all.sh queue cepa_plan 7/7, compass claude
+    plugin test 99 pass, cepa-until lê queues com fallback. completion-auditor COMPLETE
+    (.claude/acceptance/renomear-para-queue.yaml); proof-reviewer PROVEN (docs/proof/renomear-para-queue.yaml).
+    Suíte completa no main após merge: 138/139, falha única intermitente registrada
+    no item until-sigterm-teste-instavel.'
 - id: readme-estrutura-de-trabalho
   title: 'README: seção How work is organised (Epic, cycle, queue, item, session,
     inbox) e aviso do maestro congelado'
