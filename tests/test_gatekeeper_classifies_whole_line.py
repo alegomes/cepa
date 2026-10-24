@@ -46,7 +46,7 @@ def load_gatekeeper():
             "gk", str(REPO / "maestro" / "bin" / "maestro-gatekeeper")))
     gk = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gk)
-    gk._carregar_shellscan()
+    gk._load_shellscan()
     return gk
 
 
@@ -56,7 +56,7 @@ def bash(cmd):
 
 def test_unit(gk):
     check("motor de leitura carregado (senão tudo escala)", gk._S is not None,
-          gk._SHELLSCAN_ERRO)
+          gk._SHELLSCAN_ERROR)
 
     # --- the main defect: a write disguised as a read
     writes = [
@@ -70,7 +70,7 @@ def test_unit(gk):
         "mkdir -p bin/tests && cat > bin/tests/t.sh <<'EOF'\n#!/bin/sh\nEOF",
     ]
     for c in writes:
-        rule_text, ok = gk.allow_mecanico(*bash(c))
+        rule_text, ok = gk.mechanical_allow(*bash(c))
         check(f"NÃO libera escrita: {c.splitlines()[0][:52]}", not ok, rule_text)
 
     # --- a real read remains allowed
@@ -83,7 +83,7 @@ def test_unit(gk):
         "find . -name '*.java' | wc -l",
     ]
     for c in reads:
-        rule_text, ok = gk.allow_mecanico(*bash(c))
+        rule_text, ok = gk.mechanical_allow(*bash(c))
         check(f"libera leitura como read-only: {c[:52]}",
               ok and rule_text == "read-only", rule_text)
 
@@ -93,24 +93,24 @@ def test_unit(gk):
         "./mvnw -pl api-rest -am test -Dtest=BarTest 2>&1 | grep -E 'ERROR|BUILD'",
     ]
     for c in builds:
-        rule_text, ok = gk.allow_mecanico(*bash(c))
+        rule_text, ok = gk.mechanical_allow(*bash(c))
         check(f"libera build/teste como base-pipeline: {c[:52]}",
               ok and rule_text == "base-pipeline", rule_text)
 
     # --- an interpreter is never pre-approved (legitimate gray zone)
     for c in ["python3 - <<'EOF'\nopen('X.java','w').write('')\nEOF",
               "perl -0pi -e 's/a/b/' X.java"]:
-        _, ok = gk.allow_mecanico(*bash(c))
+        _, ok = gk.mechanical_allow(*bash(c))
         check(f"interpretador escala: {c.splitlines()[0][:52]}", not ok)
 
     # --- heredoc body is content, not a command
     script = ("mkdir -p bin/tests && cat > bin/tests/t.sh <<'EOF'\n"
               "trap 'rm -rf \"${SANDBOX}\"' EXIT\nEOF")
-    scan = gk.texto_analisavel(*bash(script))
+    scan = gk.scannable_text(*bash(script))
     check("corpo de heredoc sai do texto varrido pelos padrões estratégicos",
           "rm -rf" not in scan, scan[:120])
     check("um rm -rf REAL continua visível",
-          "rm -rf" in gk.texto_analisavel(*bash("rm -rf build/")))
+          "rm -rf" in gk.scannable_text(*bash("rm -rf build/")))
 
 
 def test_reprocesses_the_batch(gk):
@@ -125,14 +125,14 @@ def test_reprocesses_the_batch(gk):
     for d in lines:
         ti = d.get("input") or {}
         tn = d.get("tool_name") or "Bash"
-        rule_text, ok = gk.allow_mecanico(tn, ti)
+        rule_text, ok = gk.mechanical_allow(tn, ti)
         cmd = ti.get("command", "") if isinstance(ti, dict) else ""
-        if ok and cmd and gk.escreve_alguma_coisa(cmd):
+        if ok and cmd and gk.writes_anything(cmd):
             allowed_that_write.append(cmd[:70])
         # strategic patterns over the analyzable text
         import re
         for rule, pat in gk.STRATEGIC:
-            if re.search(pat, gk.texto_analisavel(tn, ti), re.I):
+            if re.search(pat, gk.scannable_text(tn, ti), re.I):
                 delete_broad.append((rule, cmd[:70]))
                 break
         if d.get("decisao") == "escalate" and ok:

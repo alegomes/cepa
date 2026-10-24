@@ -73,7 +73,7 @@ def _quoted_mask(s: str) -> list:
     """
     mask = [False] * len(s)
     quote = None
-    pendentes = []
+    pending_heredocs = []
     i = 0
     n = len(s)
     while i < n:
@@ -82,16 +82,16 @@ def _quoted_mask(s: str) -> list:
             # The body of a heredoc announced on this line starts after the
             # line break and runs to the delimiter line. None of it is
             # shell, it is data.
-            if c == "\n" and pendentes:
+            if c == "\n" and pending_heredocs:
                 j = i + 1
-                for delim, apara in pendentes:
+                for delim, strip_tabs in pending_heredocs:
                     while j < n:
-                        fim_linha = s.find("\n", j)
-                        if fim_linha == -1:
-                            fim_linha = n
-                        linha = s[j:fim_linha]
-                        j = fim_linha + 1 if fim_linha < n else n
-                        if (linha.lstrip("\t") if apara else linha).strip() == delim:
+                        line_end = s.find("\n", j)
+                        if line_end == -1:
+                            line_end = n
+                        line = s[j:line_end]
+                        j = line_end + 1 if line_end < n else n
+                        if (line.lstrip("\t") if strip_tabs else line).strip() == delim:
                             break
                 # The line break that OPENS the body goes into the mask too:
                 # it is still a command separator for `_split_segments`, and
@@ -99,24 +99,24 @@ def _quoted_mask(s: str) -> list:
                 # is exactly how the body's prose came to be read as shell again.
                 for p in range(i, min(j, n)):
                     mask[p] = True
-                pendentes = []
+                pending_heredocs = []
                 i = min(j, n)
                 continue
             if s[i:i + 2] == "<<" and s[i:i + 3] != "<<<":
                 k = i + 2
-                apara = k < n and s[k] == "-"
-                if apara:
+                strip_tabs = k < n and s[k] == "-"
+                if strip_tabs:
                     k += 1
                 while k < n and s[k] in " \t":
                     k += 1
-                citado = s[k] if k < n and s[k] in "\"'" else None
-                if citado:
+                quoted = s[k] if k < n and s[k] in "\"'" else None
+                if quoted:
                     k += 1
-                inicio = k
+                delim_start = k
                 while k < n and (s[k].isalnum() or s[k] in "_-."):
                     k += 1
-                delim = s[inicio:k]
-                if citado and k < n and s[k] == citado:
+                delim = s[delim_start:k]
+                if quoted and k < n and s[k] == quoted:
                     k += 1
                 if delim:
                     # The operator and the delimiter stay VISIBLE on purpose:
@@ -125,7 +125,7 @@ def _quoted_mask(s: str) -> list:
                     # signal (_UNCOVERED_RE). Only the BODY is data. Masking
                     # the operator too would erase the signal and the heredoc
                     # would start writing silently.
-                    pendentes.append((delim, apara))
+                    pending_heredocs.append((delim, strip_tabs))
                     i = k
                     continue
             if c == "\\":
@@ -190,17 +190,17 @@ _REDIR_STRIP_RE = re.compile(
 
 def _strip_redirections(segment: str, mask: list) -> str:
     """Removes the redirections OUTSIDE quotes, leaving the rest intact."""
-    cortes = [
+    cuts = [
         (m.start(), m.end())
         for m in _REDIR_STRIP_RE.finditer(segment)
         if m.group() and not mask[m.start()]
     ]
-    if not cortes:
+    if not cuts:
         return segment
     out, pos = [], 0
-    for ini, fim in cortes:
-        out.append(segment[pos:ini])
-        pos = fim
+    for span_start, span_end in cuts:
+        out.append(segment[pos:span_start])
+        pos = span_end
     out.append(segment[pos:])
     return " ".join(p for p in out if p)
 
@@ -343,12 +343,12 @@ def _segment_targets(segment: str) -> list:
         # neither blocked nor logged. The form without an explicit destination
         # (`curl -O`, `wget <url>`, which save under the remote name in the
         # current directory) stays out: there the name is not on the command line.
-        destino = ("-o", "--output") if cmd == "curl" else ("-O", "--output-document")
-        prefixos = tuple(f"{d}=" for d in destino if d.startswith("--"))
+        dest = ("-o", "--output") if cmd == "curl" else ("-O", "--output-document")
+        prefixes = tuple(f"{d}=" for d in dest if d.startswith("--"))
         for i, t in enumerate(rest):
-            if t in destino and i + 1 < len(rest):
+            if t in dest and i + 1 < len(rest):
                 targets.append(rest[i + 1])
-            elif t.startswith(prefixos):
+            elif t.startswith(prefixes):
                 targets.append(t.split("=", 1)[1])
     elif cmd == "touch":
         # Creates the file if it does not exist: it is a write, even with empty content.

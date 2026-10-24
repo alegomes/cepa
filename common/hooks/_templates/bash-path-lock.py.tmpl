@@ -158,7 +158,7 @@ def _quoted_mask(s: str) -> list:
     """
     mask = [False] * len(s)
     quote = None
-    pendentes = []
+    pending_heredocs = []
     i = 0
     n = len(s)
     while i < n:
@@ -167,16 +167,16 @@ def _quoted_mask(s: str) -> list:
             # O corpo de um heredoc anunciado nesta linha começa depois da
             # quebra de linha e vai até a linha do delimitador. Nada dele é
             # shell — é dado.
-            if c == "\n" and pendentes:
+            if c == "\n" and pending_heredocs:
                 j = i + 1
-                for delim, apara in pendentes:
+                for delim, strip_tabs in pending_heredocs:
                     while j < n:
-                        fim_linha = s.find("\n", j)
-                        if fim_linha == -1:
-                            fim_linha = n
-                        linha = s[j:fim_linha]
-                        j = fim_linha + 1 if fim_linha < n else n
-                        if (linha.lstrip("\t") if apara else linha).strip() == delim:
+                        line_end = s.find("\n", j)
+                        if line_end == -1:
+                            line_end = n
+                        line = s[j:line_end]
+                        j = line_end + 1 if line_end < n else n
+                        if (line.lstrip("\t") if strip_tabs else line).strip() == delim:
                             break
                 # A quebra de linha que ABRE o corpo entra na máscara junto:
                 # ela ainda é separador de comando para `_split_segments`, e sem
@@ -184,24 +184,24 @@ def _quoted_mask(s: str) -> list:
                 # exatamente como a prosa do corpo voltou a ser lida como shell.
                 for p in range(i, min(j, n)):
                     mask[p] = True
-                pendentes = []
+                pending_heredocs = []
                 i = min(j, n)
                 continue
             if s[i:i + 2] == "<<" and s[i:i + 3] != "<<<":
                 k = i + 2
-                apara = k < n and s[k] == "-"
-                if apara:
+                strip_tabs = k < n and s[k] == "-"
+                if strip_tabs:
                     k += 1
                 while k < n and s[k] in " \t":
                     k += 1
-                citado = s[k] if k < n and s[k] in "\"'" else None
-                if citado:
+                quoted = s[k] if k < n and s[k] in "\"'" else None
+                if quoted:
                     k += 1
-                inicio = k
+                delim_start = k
                 while k < n and (s[k].isalnum() or s[k] in "_-."):
                     k += 1
-                delim = s[inicio:k]
-                if citado and k < n and s[k] == citado:
+                delim = s[delim_start:k]
+                if quoted and k < n and s[k] == quoted:
                     k += 1
                 if delim:
                     # O operador e o delimitador ficam VISÍVEIS de propósito:
@@ -210,7 +210,7 @@ def _quoted_mask(s: str) -> list:
                     # (_UNCOVERED_RE). Só o CORPO é dado. Mascarar o operador
                     # junto apagaria o sinal e o heredoc passaria a escrever
                     # calado.
-                    pendentes.append((delim, apara))
+                    pending_heredocs.append((delim, strip_tabs))
                     i = k
                     continue
             if c == "\\":
@@ -275,17 +275,17 @@ _REDIR_STRIP_RE = re.compile(
 
 def _strip_redirections(segment: str, mask: list) -> str:
     """Remove os redirecionamentos FORA de aspas, preservando o resto intacto."""
-    cortes = [
+    cuts = [
         (m.start(), m.end())
         for m in _REDIR_STRIP_RE.finditer(segment)
         if m.group() and not mask[m.start()]
     ]
-    if not cortes:
+    if not cuts:
         return segment
     out, pos = [], 0
-    for ini, fim in cortes:
-        out.append(segment[pos:ini])
-        pos = fim
+    for span_start, span_end in cuts:
+        out.append(segment[pos:span_start])
+        pos = span_end
     out.append(segment[pos:])
     return " ".join(p for p in out if p)
 
@@ -403,12 +403,12 @@ def _segment_targets(segment: str) -> list:
         # bloqueados nem registrados. A forma sem destino explícito (`curl -O`,
         # `wget <url>`, que gravam com o nome remoto no diretório corrente)
         # continua fora: ali o nome não está na linha de comando.
-        destino = ("-o", "--output") if cmd == "curl" else ("-O", "--output-document")
-        prefixos = tuple(f"{d}=" for d in destino if d.startswith("--"))
+        dest = ("-o", "--output") if cmd == "curl" else ("-O", "--output-document")
+        prefixes = tuple(f"{d}=" for d in dest if d.startswith("--"))
         for i, t in enumerate(rest):
-            if t in destino and i + 1 < len(rest):
+            if t in dest and i + 1 < len(rest):
                 targets.append(rest[i + 1])
-            elif t.startswith(prefixos):
+            elif t.startswith(prefixes):
                 targets.append(t.split("=", 1)[1])
     elif cmd == "touch":
         # Cria o arquivo se ele não existe: é escrita, mesmo com conteúdo vazio.
@@ -542,11 +542,11 @@ _WRITERS = frozenset("""
 
 
 class _Negado(Exception):
-    def __init__(self, balde, verbo, motivo, segmento="", alvos=None):
-        super().__init__(motivo)
+    def __init__(self, balde, verbo, reason, segmento="", alvos=None):
+        super().__init__(reason)
         self.balde = balde
         self.verbo = verbo
-        self.motivo = motivo
+        self.reason = reason
         self.segmento = segmento
         self.alvos = alvos or []
 
@@ -598,41 +598,41 @@ def _heredoc_at(s, i):
     if s[i:i + 2] != "<<" or s[i:i + 3] == "<<<":
         return None
     k = i + 2
-    apara = k < n and s[k] == "-"
-    if apara:
+    strip_tabs = k < n and s[k] == "-"
+    if strip_tabs:
         k += 1
     while k < n and s[k] in " \t":
         k += 1
-    citado = False
+    quoted = False
     q = None
     if k < n and s[k] in "\"'":
         q = s[k]
-        citado = True
+        quoted = True
         k += 1
     elif k < n and s[k] == "\\":
-        citado = True
+        quoted = True
         k += 1
-    ini = k
+    span_start = k
     while k < n and (s[k].isalnum() or s[k] in "_-."):
         k += 1
-    delim = s[ini:k]
+    delim = s[span_start:k]
     if q and k < n and s[k] == q:
         k += 1
     if not delim:
         return None
-    return k, delim, apara, citado
+    return k, delim, strip_tabs, quoted
 
 
-def _skip_heredoc_body(s, j, delim, apara):
+def _skip_heredoc_body(s, j, delim, strip_tabs):
     """A partir do início do corpo (j), devolve o índice logo após a linha do delimitador."""
     n = len(s)
     while j < n:
-        fim = s.find("\n", j)
-        if fim == -1:
-            fim = n
-        linha = s[j:fim]
-        j = fim + 1 if fim < n else n
-        if (linha.lstrip("\t") if apara else linha).strip() == delim:
+        span_end = s.find("\n", j)
+        if span_end == -1:
+            span_end = n
+        line = s[j:span_end]
+        j = span_end + 1 if span_end < n else n
+        if (line.lstrip("\t") if strip_tabs else line).strip() == delim:
             break
     return j
 
@@ -679,8 +679,8 @@ def _match_close(s, i, closer):
             return i
         if c == "\n" and pend:
             j = i + 1
-            for delim, apara in pend:
-                j = _skip_heredoc_body(s, j, delim, apara)
+            for delim, strip_tabs in pend:
+                j = _skip_heredoc_body(s, j, delim, strip_tabs)
             pend = []
             i = j
             continue
@@ -788,16 +788,16 @@ def _flatten(command):
         if c == "\n" and pend:
             out.append("\n")
             j = i + 1
-            for delim, apara, citado in pend:
-                fim = _skip_heredoc_body(s, j, delim, apara)
-                corpo = s[j:fim]
-                if not citado:
+            for delim, strip_tabs, quoted in pend:
+                span_end = _skip_heredoc_body(s, j, delim, strip_tabs)
+                corpo = s[j:span_end]
+                if not quoted:
                     # corpo sem aspas no delimitador: `$(...)` ali EXECUTA
                     _, c_subs, c_orf = _flatten('"' + corpo.replace('"', " ") + '"')
                     base = len(subs)
                     subs.extend(c_subs)
                     orfas.extend(range(base, len(subs)))
-                j = fim
+                j = span_end
             pend = []
             i = j
             continue
@@ -949,8 +949,8 @@ def _refs_root(ctx, text, args, cwds):
     return False
 
 
-def _deny(balde, verbo, motivo, seg):
-    raise _Negado(balde, verbo, motivo, seg)
+def _deny(balde, verbo, reason, seg):
+    raise _Negado(balde, verbo, reason, seg)
 
 
 def _check_targets(ctx, targets, cwds, verbo, seg):
@@ -1048,8 +1048,8 @@ def _nonflags(args, value_flags=()):
 def _generic_targets(verbo, args):
     """Alvos pelo extrator compartilhado (_segment_targets) + os que faltavam lá."""
     vals = [verbo] + _vals(args)
-    linha = " ".join(shlex.quote(v) for v in vals)
-    alvos = list(_segment_targets(linha))
+    line = " ".join(shlex.quote(v) for v in vals)
+    alvos = list(_segment_targets(line))
     rest = vals[1:]
     nf = [v for v in rest if v and not _is_flag(v)]
     if verbo in ("cp", "mv", "install", "ln"):
@@ -1155,7 +1155,7 @@ def _sed_endereco(script, i):
     return i
 
 
-def _sed_fim_da_linha(script, i, continua=False):
+def _sed_line_end(script, i, continua=False):
     """Avança até o fim da linha. Só o texto de a/i/c continua na linha
     seguinte com barra no fim; comentário e nome de arquivo acabam na quebra."""
     n = len(script)
@@ -1180,7 +1180,7 @@ def _sed_executes_or_writes(script):
             break
         c = script[i]
         if c == "#":
-            i = _sed_fim_da_linha(script, i)
+            i = _sed_line_end(script, i)
             continue
         if c == "}":
             i += 1
@@ -1212,10 +1212,10 @@ def _sed_executes_or_writes(script):
         if c == "{":
             continue
         if c in "aic":
-            i = _sed_fim_da_linha(script, i, continua=True)  # texto, nunca comando
+            i = _sed_line_end(script, i, continua=True)  # texto, nunca comando
             continue
         if c in "rR#":
-            i = _sed_fim_da_linha(script, i)  # nome de arquivo lido, ou comentário
+            i = _sed_line_end(script, i)  # nome de arquivo lido, ou comentário
             continue
         if c in ":btT":  # rótulo termina no `;` ou no espaço, como no GNU sed
             while i < n and script[i] in " \t":
@@ -1786,9 +1786,9 @@ def _h_docker(ctx, verbo, args, cwds, seg):
                 _deny(4, verbo, "docker run montando pasta do projeto: o container "
                                 "escreve nela sem passar pelo cadeado", seg)
     if sub == "cp" and len(nf) >= k + 3:
-        destino = nf[-1]
-        if ":" not in destino.value.split("/")[0]:
-            _check_targets(ctx, [destino], cwds, verbo, seg)
+        dest = nf[-1]
+        if ":" not in dest.value.split("/")[0]:
+            _check_targets(ctx, [dest], cwds, verbo, seg)
 
 
 def _h_gh(ctx, verbo, args, cwds, seg):
@@ -2235,14 +2235,14 @@ def _classify_segment(ctx, text, cwds):
             return frozenset(set(cwds) | {ctx.root}), frozenset(cwds)
         nf = _nonflags(args[1:])
         if not nf:
-            destino = {Path.home().resolve()}
+            dest = {Path.home().resolve()}
         elif not nf[0].known or nf[0].value == "-":
-            destino = {ctx.root}   # não sei para onde foi: trato como a raiz
+            dest = {ctx.root}   # não sei para onde foi: trato como a raiz
             if not nf[0].known:
                 ctx.dirs_desconhecidos.append(nf[0].raw)
         else:
-            destino = set(_resolve_all(nf[0].value, cwds))
-        return frozenset(destino), frozenset(cwds)
+            dest = set(_resolve_all(nf[0].value, cwds))
+        return frozenset(dest), frozenset(cwds)
 
     # balde 3 — tudo fora da raiz, e a linha não cita a raiz
     if all(not _inside(c, ctx.root) for c in cwds) and not _refs_root(
@@ -2337,23 +2337,23 @@ def _dica_dir_desconhecido(raws):
     ]
 
 
-def _mensagem(n, agent, command, allowed, dirs_desconhecidos=()):
+def _build_message(n, agent, command, allowed, dirs_desconhecidos=()):
     globs = "\n      - ".join(allowed or ["(nenhum — só o seu arquivo de expertise)"])
-    linhas = [
+    lines = [
         f"[@@PLUGIN@@ bash-path-lock] NEGADO ({_BALDE_NOME.get(n.balde, n.balde)}): "
         f"agente {agent!r}.",
-        f"  Motivo: {n.motivo}",
+        f"  Motivo: {n.reason}",
     ]
     if n.alvos:
-        linhas.append(f"  Alvo(s) fora da pista: {', '.join(n.alvos)}")
+        lines.append(f"  Alvo(s) fora da pista: {', '.join(n.alvos)}")
     if n.segmento and n.segmento.strip() != command.strip():
-        linhas.append(f"  Trecho: {n.segmento.strip()[:200]}")
-    linhas += [
+        lines.append(f"  Trecho: {n.segmento.strip()[:200]}")
+    lines += [
         f"  Comando: {command[:300]}",
     ]
     if dirs_desconhecidos:
-        linhas += _dica_dir_desconhecido(dirs_desconhecidos)
-    linhas += [
+        lines += _dica_dir_desconhecido(dirs_desconhecidos)
+    lines += [
         "",
         "  Este cadeado só deixa passar o que é comprovadamente inofensivo: escrita",
         "  com alvo visível dentro da sua pista, verbo da lista de inocentes, ou",
@@ -2370,7 +2370,7 @@ def _mensagem(n, agent, command, allowed, dirs_desconhecidos=()):
     # perturbação). Mostrada a todo agente negado, mandou o qa-engineer abrir worktree
     # de madrugada. Os demais recebem o apontamento para a ordem/proof-reviewer.
     if agent.rsplit(":", 1)[-1] == "proof-reviewer":
-        linhas += [
+        lines += [
             "    - provar RED revertendo código: worktree descartável FORA da raiz",
             "      (lá o cadeado não tem jurisdição, e a reversão nunca vaza para o diff):",
             "        D=$(mktemp -d) && git worktree add --detach \"$D/red\" HEAD && "
@@ -2380,22 +2380,22 @@ def _mensagem(n, agent, command, allowed, dirs_desconhecidos=()):
             "        git worktree remove --force /tmp/tmp.AbC123/red",
         ]
     else:
-        linhas += [
+        lines += [
             "    - provar RED revertendo código não é seu: a prova por perturbação (verde→vermelho)",
             "      é do proof-reviewer, na worktree descartável DELE. Teste de regressão fica",
             "      vermelho pela ORDEM (escrito antes do fix). Não abra worktree nem cópia do repo.",
         ]
-    linhas += [
+    lines += [
         "    - verbo legítimo que faltou na lista: diga no seu relatório — quem",
         "      decide incluir é o humano, nunca o agente bloqueado.",
         "",
         "  A negação foi registrada no ledger de telemetria. Contornar depois de",
         "  negado não é esperteza: é violação auditada.",
     ]
-    texto = "\n".join(linhas)
+    text = "\n".join(lines)
     # as marcas internas da leitura da linha voltam à forma que o agente escreveu
-    texto = _SUB_MARK_RE.sub("$(…)", texto).replace(_HEREDOC_MARK, "<<…")
-    return texto.replace("__CEPAARITH__", "$((…))")
+    text = _SUB_MARK_RE.sub("$(…)", text).replace(_HEREDOC_MARK, "<<…")
+    return text.replace("__CEPAARITH__", "$((…))")
 
 
 def main():
@@ -2446,7 +2446,7 @@ def main():
         _t_emit("bash_pathlock_deny", cwd=cwd_s, agent=agent, bucket=n.balde,
                 verb=n.verbo, cmd_hash=_cmd_hash(command),
                 card=os.environ.get("CLAUDE_AUTONOMOUS_RUN_ID", ""))
-        print(_mensagem(n, agent, command, allowed, ctx.dirs_desconhecidos),
+        print(_build_message(n, agent, command, allowed, ctx.dirs_desconhecidos),
               file=sys.stderr)
         sys.exit(2)
 

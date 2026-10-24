@@ -1,41 +1,41 @@
 #!/usr/bin/env python3
-"""maestro-fork-settings — gera o settings.json da filha a partir de um slice.
+"""maestro-fork-settings — generates the child's settings.json from a slice.
 
-Camada 1 do enforcement multi-camada do Maestro (design rev2.1). Deny-by-default
-com allow restrito à superfície declarada e regras `ask` que ROTEIAM ao porteiro
-tudo que a camada 1 não pré-aprova.
+Layer 1 of Maestro's multi-layer enforcement (design rev2.1). Deny-by-default
+with allow restricted to the declared surface and `ask` rules that ROUTE to the
+gatekeeper everything layer 1 does not pre-approve.
 
-ACHADO DO SPIKE (obrigatório, senão a camada 3 é decorativa): sem regras `ask`,
-o modo default do headless pré-aprova comandos "seguros" (touch, mkdir…) e o
-porteiro NUNCA é consultado. Por isso emitimos `ask` cobrindo Bash/Write/Edit —
-o allow mais específico (superfície, base de Bash) vence para o que é permitido,
-e o `ask` catch-all manda o resto ao `--permission-prompt-tool`.
+SPIKE FINDING (mandatory, otherwise layer 3 is decorative): without `ask` rules,
+the headless default mode pre-approves "safe" commands (touch, mkdir…) and the
+gatekeeper is NEVER consulted. Hence we emit `ask` covering Bash/Write/Edit —
+the most specific allow (surface, Bash base) wins for what is allowed, and the
+catch-all `ask` sends the rest to the `--permission-prompt-tool`.
 
-Modelo de precedência do Claude Code: deny > allow > ask, por especificidade.
-  - deny  : zona de enforcement (incondicional) — plugins/, hooks/, settings, cache
-  - allow : Edit(<glob da superfície>), Bash(<base>:*) + bash_extra
-  - ask   : Write, Edit, Bash (catch-all) → porteiro decide/escala
+Claude Code precedence model: deny > allow > ask, by specificity.
+  - deny  : enforcement zone (unconditional) — plugins/, hooks/, settings, cache
+  - allow : Edit(<surface glob>), Bash(<base>:*) + bash_extra
+  - ask   : Write, Edit, Bash (catch-all) → gatekeeper decides/escalates
 
-ACHADO DA ONDA WEGO-paralelo (2026-08-24): regra com caminho só vale como
-`Edit(path)` — o Claude Code RECUSA `Write(path)` com aviso ("only Edit(path)
-rules are [matched by file permission checks]") e `Edit(path)` já cobre todas as
-ferramentas de escrita. Emitir o par Write+Edit era ruído que não abria nem
-fechava nada. Só o catch-all `ask` mantém o nome nu `Write`.
+WEGO-parallel WAVE FINDING (2026-08-24): a rule with a path is only valid as
+`Edit(path)` — Claude Code REFUSES `Write(path)` with a warning ("only Edit(path)
+rules are [matched by file permission checks]") and `Edit(path)` already covers
+all the write tools. Emitting the Write+Edit pair was noise that neither opened
+nor closed anything. Only the `ask` catch-all keeps the bare name `Write`.
 
-ACHADO DA MESMA ONDA (custou a onda inteira): `mcpServers` em settings.json NÃO
-é lido pelo Claude Code — a filha subia sem a ferramenta do porteiro e morria na
-largada com `MCP tool mcp__gatekeeper__permission_prompt not found` (exit 1). O
-endereço do porteiro tem de sair num `.mcp.json` e a filha ser lançada com
-`--mcp-config .mcp.json --strict-mcp-config`. Por isso este gerador emite DOIS
-artefatos, não um.
+FINDING FROM THE SAME WAVE (cost the entire wave): `mcpServers` in settings.json
+is NOT read by Claude Code — the child came up without the gatekeeper's tool and
+died at launch with `MCP tool mcp__gatekeeper__permission_prompt not found`
+(exit 1). The gatekeeper's address has to go in a `.mcp.json` and the child be
+launched with `--mcp-config .mcp.json --strict-mcp-config`. That is why this
+generator emits TWO artifacts, not one.
 
-Uso:
+Usage:
   maestro-fork-settings <plan.yaml> <slice> [--port P] [--host H]
                         [--enforcement-zone GLOB ...]
                         [--emit settings|mcp] [--out-dir WORKTREE]
-Sem --out-dir, emite no stdout o artefato pedido por --emit (default settings).
-Com --out-dir, grava os dois no worktree do slice: <dir>/.claude/settings.json
-e <dir>/.mcp.json (é assim que o /maestro:run chama).
+Without --out-dir, emits to stdout the artifact requested by --emit (default
+settings). With --out-dir, writes both into the slice worktree:
+<dir>/.claude/settings.json and <dir>/.mcp.json (that is how /maestro:run calls it).
 """
 import argparse
 import json
@@ -48,8 +48,8 @@ except ImportError:
     print("maestro-fork-settings precisa de PyYAML", file=sys.stderr)
     sys.exit(2)
 
-# Conjunto base de Bash pré-aprovado nas settings (build/test/git local, leitura).
-# Deliberadamente conservador — o que passar daqui vai ao porteiro.
+# Base set of Bash pre-approved in the settings (build/test/local git, reading).
+# Deliberately conservative — whatever goes beyond this goes to the gatekeeper.
 BASE_BASH = [
     "ls", "cat", "pwd", "echo", "grep", "rg", "find", "head", "tail", "wc",
     "git status", "git diff", "git log", "git add", "git commit", "git show",
@@ -75,17 +75,17 @@ def build_settings(plan: dict, slice_name: str, gk_url: str,
     surface = sl.get("surface") or []
     bash_extra = sl.get("bash_extra") or []
 
-    # Só Edit(path): o Claude Code recusa Write(path) e Edit(path) já cobre
-    # toda ferramenta que edita arquivo (Write inclusive).
+    # Only Edit(path): Claude Code refuses Write(path) and Edit(path) already
+    # covers every tool that edits a file (Write included).
     deny: list[str] = [f"Edit({z})" for z in enforcement_zone]
 
     allow: list[str] = [f"Edit({g})" for g in surface]
     for cmd in BASE_BASH + list(bash_extra):
-        # Bash(cmd:*) casa o comando e seus argumentos
+        # Bash(cmd:*) matches the command and its arguments
         allow.append(f"Bash({cmd}:*)")
 
-    # ask catch-all → roteia ao porteiro tudo que allow não cobriu.
-    # (o allow mais específico vence; sem isto o porteiro é decorativo)
+    # ask catch-all → routes to the gatekeeper everything allow did not cover.
+    # (the most specific allow wins; without this the gatekeeper is decorative)
     ask = ["Bash", "Write", "Edit"]
 
     return {
@@ -94,8 +94,8 @@ def build_settings(plan: dict, slice_name: str, gk_url: str,
             "allow": allow,
             "ask": ask,
         },
-        # NÃO declarar mcpServers aqui: settings.json não é lido para MCP.
-        # O porteiro vai no .mcp.json (build_mcp_config).
+        # Do NOT declare mcpServers here: settings.json is not read for MCP.
+        # The gatekeeper goes in .mcp.json (build_mcp_config).
         "_maestro": {
             "slice": slice_name,
             "surface": surface,
@@ -105,10 +105,10 @@ def build_settings(plan: dict, slice_name: str, gk_url: str,
 
 
 def build_mcp_config(gk_url: str) -> dict:
-    """O .mcp.json da filha — a ÚNICA via pela qual ela enxerga o porteiro.
+    """The child's .mcp.json — the ONLY way through which it sees the gatekeeper.
 
-    A filha aponta o --permission-prompt-tool para ESTE servidor; a identidade
-    do slice vai na URL (achado do spike: o payload não a traz).
+    The child points --permission-prompt-tool at THIS server; the slice
+    identity goes in the URL (spike finding: the payload does not carry it).
     """
     return {"mcpServers": {"gatekeeper": {"type": "http", "url": gk_url}}}
 
@@ -129,7 +129,7 @@ def main() -> int:
     args = ap.parse_args()
 
     plan = yaml.safe_load(Path(args.plan).read_text())
-    # v1 = legado (só ondas); v2 = `mode` explícito. Ver common/plan-schema.yaml.
+    # v1 = legacy (waves only); v2 = explicit `mode`. See common/plan-schema.yaml.
     if not isinstance(plan, dict) or plan.get("schema_version") not in (1, 2):
         print("schema_version ausente ou desconhecida (esperado 1 ou 2)",
               file=sys.stderr)
@@ -138,7 +138,7 @@ def main() -> int:
         print("plano single-track não tem slices a forkar", file=sys.stderr)
         return 2
 
-    # identidade do slice via query param — 1 porteiro compartilhado por N filhas
+    # slice identity via query param — 1 gatekeeper shared by N children
     gk_url = f"http://{args.host}:{args.port}/mcp?slice={args.slice}"
     try:
         settings = build_settings(plan, args.slice, gk_url, args.enforcement_zone)

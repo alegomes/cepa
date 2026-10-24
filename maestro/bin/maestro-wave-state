@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
-"""maestro-wave-state — store do estado da onda (design rev2.1, Comp. 2c).
+"""maestro-wave-state — wave state store (design rev2.1, Comp. 2c).
 
-Morte da sessão maestro é o modo de falha mais provável de sessão longa; o
-wave-state.yaml é escrito a CADA transição para que /maestro:resume reconstrua a
-onda (nos moldes do /common:autonomous-resume). Este script é a única porta de
-escrita do wave-state — o /maestro:run e o /maestro:resume o chamam.
+Death of the maestro session is the most likely failure mode of a long session;
+wave-state.yaml is written on EVERY transition so that /maestro:resume rebuilds
+the wave (along the lines of /common:autonomous-resume). This script is the
+only write door of the wave-state — /maestro:run and /maestro:resume call it.
 
-Subcomandos:
+Subcommands:
   init <program-dir> --plan PLAN --wave N
-        cria wave-state.yaml da onda (slices em pending, timeout_min por slice)
+        creates the wave's wave-state.yaml (slices in pending, timeout_min per slice)
   set-slice <program-dir> <slice> <status> [--pane ID] [--worktree PATH]
         [--pid N] [--started-epoch E] [--detail TEXT]
   set-gk <program-dir> --pid N [--url URL]
   set-home <program-dir> --pane ID --tab ID --workspace ID
-        registra o pane/aba/Space que os forks da onda devem usar (ver
-        /maestro:run, passo capturado ANTES do intake gate — o foco na hora
-        do fork é o valor errado, WEGO-paralelo 2026-08-24)
-  landed <program-dir> <slice>          # marca merge aterrissado (slice → LANDED)
-  get <program-dir> [--json]            # imprime o estado (resume lê isto)
-  check-terminal <program-dir> [--json] # exit 0 se toda slice terminou; 2 senão
+        records the pane/tab/Space the wave's forks must use (see
+        /maestro:run, step captured BEFORE the intake gate — the focus at fork
+        time is the wrong value, WEGO-parallel 2026-08-24)
+  landed <program-dir> <slice>          # marks merge landed (slice → LANDED)
+  get <program-dir> [--json]            # prints the state (resume reads this)
+  check-terminal <program-dir> [--json] # exit 0 if every slice finished; 2 otherwise
   aguardando-merge <program-dir> [--json]
-        # slices DONE que ainda não aterrissaram; exit 0 sempre que leu
+        # DONE slices that have not landed yet; exit 0 whenever it read
 
-Estados terminais por slice: DONE | LANDED | FAIL | TIMEOUT | ESCALATED (nunca
-"pendurado"). DONE quer dizer "a filha terminou"; LANDED, "a branch está na
-integração". Separar os dois é o que deixa o disco dizer "onda esperando você"
-em vez de "onda rodando": na onda 1 do WEGO-paralelo (2026-08-24) a sessão do
-maestro morreu antes do merge train, o `landed:` ficou [] e cinco branches
-prontas esperaram horas até alguém reparar.
+Terminal states per slice: DONE | LANDED | FAIL | TIMEOUT | ESCALATED (never
+"hanging"). DONE means "the child finished"; LANDED, "the branch is in the
+integration". Separating the two is what lets the disk say "wave waiting for
+you" instead of "wave running": in wave 1 of WEGO-parallel (2026-08-24) the
+maestro session died before the merge train, `landed:` stayed [] and five ready
+branches waited hours until someone noticed.
 """
 import argparse
 import sys
@@ -42,18 +42,18 @@ except ImportError:
 
 VALID = {"pending", "running", "DONE", "LANDED", "FAIL", "TIMEOUT", "ESCALATED"}
 
-# Estados que ENCERRAM uma slice. O complemento (pending/running) não é um
-# resultado — é a ausência de um. Uma onda que aterrissa com slice aí dentro
-# some do radar sem ninguém ter decidido nada sobre ela.
+# States that END a slice. The complement (pending/running) is not an outcome —
+# it is the absence of one. A wave that lands with a slice in there vanishes
+# from the radar without anyone having decided anything about it.
 TERMINAL = {"DONE", "LANDED", "FAIL", "TIMEOUT", "ESCALATED"}
 
 
-def aguardando_merge(ws):
-    """Slices que terminaram e ninguém aterrissou, na ordem do wave-state.
+def awaiting_merge(ws):
+    """Slices that finished and nobody landed, in wave-state order.
 
-    Lê também o formato antigo, em que o merge só aparecia na lista solta
-    `landed:` do topo e a slice seguia DONE: nome na lista conta como
-    aterrissada. É a única cópia desta regra; o maestro-programs a importa.
+    Also reads the old format, in which the merge only appeared in the loose
+    `landed:` list at the top and the slice stayed DONE: a name in the list
+    counts as landed. It is the only copy of this rule; maestro-programs imports it.
     """
     landed = set((ws or {}).get("landed") or [])
     slices = (ws or {}).get("slices") or {}
@@ -80,7 +80,7 @@ def _save(d, ws):
 
 def cmd_init(a):
     plan = yaml.safe_load(Path(a.plan).read_text())
-    # v1 = legado (só ondas); v2 = `mode` explícito. Ver common/plan-schema.yaml.
+    # v1 = legacy (waves only); v2 = explicit `mode`. See common/plan-schema.yaml.
     if plan.get("schema_version") not in (1, 2):
         print("schema_version desconhecida (esperado 1 ou 2)", file=sys.stderr)
         return 2
@@ -151,12 +151,12 @@ def cmd_set_gk(a):
 
 
 def cmd_set_home(a):
-    """Registra o pane/aba/Space capturados no início da rotina.
+    """Records the pane/tab/Space captured at the start of the routine.
 
-    É a única fonte de "onde nascem as filhas". Sem isto, o spawn do passo 6c
-    cairia de volta no foco corrente na hora do fork — exatamente o bug do
-    item (a onda WEGO-paralelo, 2026-08-24, forkou 5 panes na aba que estava
-    em foco, não na do /maestro:run).
+    It is the only source of "where the children are born". Without it, the
+    step 6c spawn would fall back to the current focus at fork time — exactly
+    the bug of the item (the WEGO-parallel wave, 2026-08-24, forked 5 panes in
+    the tab that was in focus, not in the /maestro:run one).
     """
     ws = _load(a.program_dir)
     ws["home"] = {"pane": a.pane, "tab": a.tab, "workspace": a.workspace}
@@ -170,8 +170,8 @@ def cmd_landed(a):
     sl = (ws.get("slices") or {}).get(a.slice)
     st = (sl or {}).get("status")
     if st not in ("DONE", "LANDED"):
-        # O merge train só aterrissa DONE. Mesclar outra coisa e marcar aqui
-        # apagaria o FAIL/TIMEOUT/ESCALATED que manda a slice re-forkar.
+        # The merge train only lands DONE. Merging anything else and marking it
+        # here would erase the FAIL/TIMEOUT/ESCALATED that sends the slice to re-fork.
         print(f"{a.slice} está {st or 'fora do wave-state'}, não DONE — só "
               f"slice DONE aterrissa (merge feito à mão? registre antes: "
               f"set-slice {a.program_dir} {a.slice} DONE)", file=sys.stderr)
@@ -186,11 +186,11 @@ def cmd_landed(a):
 
 
 def cmd_check_terminal(a):
-    """Fronteira de término da onda: nada aterrissa com slice pendurada.
+    """Wave end boundary: nothing lands with a hanging slice.
 
-    Chamado pelo /maestro:run antes do merge train e antes do relatório. É
-    mecânico de propósito — 'a onda acabou' vira uma pergunta com resposta
-    verificável, não uma impressão de quem estava conduzindo.
+    Called by /maestro:run before the merge train and before the report. It is
+    mechanical on purpose — 'the wave is over' becomes a question with a
+    verifiable answer, not an impression of whoever was driving.
     """
     ws = _load(a.program_dir)
     slices = ws.get("slices") or {}
@@ -211,9 +211,9 @@ def cmd_check_terminal(a):
     return 2 if pend else 0
 
 
-def cmd_aguardando_merge(a):
+def cmd_awaiting_merge(a):
     ws = _load(a.program_dir)
-    pend = aguardando_merge(ws)
+    pend = awaiting_merge(ws)
     if a.json:
         import json
         print(json.dumps({"wave": ws.get("wave"), "aguardando_merge": pend},
@@ -273,7 +273,7 @@ def main():
 
     p = sub.add_parser("aguardando-merge"); p.add_argument("program_dir")
     p.add_argument("--json", action="store_true")
-    p.set_defaults(fn=cmd_aguardando_merge)
+    p.set_defaults(fn=cmd_awaiting_merge)
 
     a = ap.parse_args()
     return a.fn(a)
