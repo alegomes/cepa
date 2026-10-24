@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""cepa-modes — a tabela dos modos de trabalho, para consultar no meio da sessão.
+"""cepa-modes — the table of work modes, to consult mid-session.
 
-Toda sessão declara um modo, e o modo é um ESTADO que dura até a condição de
-saída ser satisfeita. Quem esquece o propósito de um modo no meio do trabalho
-não vai abrir `docs/modos-de-trabalho.md`, que tem 307 linhas — vai chutar. Este
-comando é a tabela, e nada além dela.
+Every session declares a mode, and the mode is a STATE that lasts until the
+exit condition is met. Whoever forgets a mode's purpose mid-work will not open
+`docs/modos-de-trabalho.md`, which has 307 lines — they will guess. This
+command is the table, and nothing beyond it.
 
-A fonte é `common/hooks/_modes.py`, o mesmo arquivo que o `session-mode.py` lê
-para injetar a condição de saída a cada turno. Uma tabela, dois leitores.
+The source is `common/hooks/_modes.py`, the same file `session-mode.py` reads
+to inject the exit condition on every turn. One table, two readers.
 
-Uso:
-    cepa-modes              # a tabela toda; marca o modo da sessão atual
-    cepa-modes <nome>       # só um modo, com entrada/produz/saída/gate
-    cepa-modes --purposes # uma linha por modo: para que ele serve
+Usage:
+    cepa-modes              # the whole table; marks the current session's mode
+    cepa-modes <name>       # a single mode, with entry/produces/exit/gate
+    cepa-modes --purposes # one line per mode: what it is for
     cepa-modes --json
 """
 
@@ -37,82 +37,82 @@ except ImportError:
 _JSON_KEYS = {"purpose": "proposito", "entry": "entrada", "produces": "produz",
               "exit": "saida", "gate": "gate", "write": "escrita"}
 
-BOLD, DIM, AMARELO, VERDE, RESET = "\033[1m", "\033[2m", "\033[33m", "\033[32m", "\033[0m"
+BOLD, DIM, YELLOW, GREEN, RESET = "\033[1m", "\033[2m", "\033[33m", "\033[32m", "\033[0m"
 
 
-def modo_da_sessao():
-    """O modo declarado nesta árvore, se houver — o mesmo arquivo do hook.
-    Lê `mode:` (ou o antigo `modo:`) e devolve sempre o nome novo."""
+def session_mode():
+    """The mode declared in this tree, if any — the same file the hook reads.
+    Reads `mode:` (or the old `modo:`) and always returns the new name."""
     try:
         out = subprocess.run(["git", "rev-parse", "--show-toplevel"],
                              capture_output=True, text=True, timeout=5)
-        raiz = out.stdout.strip() if out.returncode == 0 else os.getcwd()
+        root = out.stdout.strip() if out.returncode == 0 else os.getcwd()
     except (OSError, subprocess.SubprocessError):
-        raiz = os.getcwd()
-    return (read_session_mode(raiz) or {}).get("mode")
+        root = os.getcwd()
+    return (read_session_mode(root) or {}).get("mode")
 
 
-def bloco(nome, d, atual, cor):
-    marca = f"  {VERDE}◀ esta sessão{RESET}" if nome == atual else ""
-    saida = [f"{BOLD}{AMARELO}{nome}{RESET}{marca}"]
-    for rot, chave in (("serve para", "purpose"), ("entra com", "entry"), ("produz", "produces"),
+def render_block(name, info, current, color):
+    mark = f"  {GREEN}◀ esta sessão{RESET}" if name == current else ""
+    lines = [f"{BOLD}{YELLOW}{name}{RESET}{mark}"]
+    for label, key in (("serve para", "purpose"), ("entra com", "entry"), ("produz", "produces"),
                        ("fecha quando", "exit"), ("gate", "gate")):
-        corpo = textwrap.fill(d[chave], width=78,
+        body = textwrap.fill(info[key], width=78,
                               initial_indent="", subsequent_indent=" " * 16)
-        rotulo = f"{DIM}{rot:>13}{RESET} " if cor else f"{rot:>13} "
-        saida.append(f"  {rotulo}{corpo}")
-    return "\n".join(saida)
+        tag = f"{DIM}{label:>13}{RESET} " if color else f"{label:>13} "
+        lines.append(f"  {tag}{body}")
+    return "\n".join(lines)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Os modos de trabalho e suas fronteiras.")
-    ap.add_argument("modo", nargs="?", help="só este modo")
+    ap.add_argument("mode", nargs="?", metavar="modo", help="só este modo")
     ap.add_argument("--json", action="store_true", dest="as_json")
     ap.add_argument("--purposes", "--propositos", action="store_true", dest="purposes",
                     help="uma linha por modo: para que ele serve")
     ap.add_argument("--no-color", "--sem-cor", action="store_true", dest="no_color")
     args = ap.parse_args()
 
-    cor = not args.no_color and sys.stdout.isatty()
-    if not cor:
-        global BOLD, DIM, AMARELO, VERDE, RESET
-        BOLD = DIM = AMARELO = VERDE = RESET = ""
+    color = not args.no_color and sys.stdout.isatty()
+    if not color:
+        global BOLD, DIM, YELLOW, GREEN, RESET
+        BOLD = DIM = YELLOW = GREEN = RESET = ""
 
-    if args.modo:
-        args.modo = normalize_mode(args.modo)  # o nome antigo (`reforma`) ainda vale
-    if args.modo and args.modo not in MODES:
-        print(f"✗ modo desconhecido: {args.modo}\n  válidos: {', '.join(MODES)}",
+    if args.mode:
+        args.mode = normalize_mode(args.mode)  # the old name (`reforma`) still works
+    if args.mode and args.mode not in MODES:
+        print(f"✗ modo desconhecido: {args.mode}\n  válidos: {', '.join(MODES)}",
               file=sys.stderr)
         return 2
 
-    alvo = {args.modo: MODES[args.modo]} if args.modo else MODES
+    target = {args.mode: MODES[args.mode]} if args.mode else MODES
     if args.as_json:
-        legacy = {n: {_JSON_KEYS[k]: v for k, v in d.items()} for n, d in alvo.items()}
+        legacy = {n: {_JSON_KEYS[k]: v for k, v in d.items()} for n, d in target.items()}
         print(json.dumps(legacy, indent=2, ensure_ascii=False))
         return 0
 
     if args.purposes:
         print(f"{BOLD}Modos de trabalho{RESET} — para que serve cada um:")
-        larg = max(len(n) for n in alvo)
-        for nome, d in alvo.items():
-            corpo = textwrap.fill(d["purpose"], width=78,
-                                  initial_indent="", subsequent_indent=" " * (larg + 4))
-            print(f"  {AMARELO}{nome:<{larg}}{RESET}  {corpo}")
+        width = max(len(n) for n in target)
+        for name, info in target.items():
+            body = textwrap.fill(info["purpose"], width=78,
+                                 initial_indent="", subsequent_indent=" " * (width + 4))
+            print(f"  {YELLOW}{name:<{width}}{RESET}  {body}")
         print(f"\n{DIM}A tabela inteira (entra com / produz / fecha quando / gate): "
               f"cepa-modes{RESET}")
         return 0
 
-    atual = modo_da_sessao()
+    current = session_mode()
     print(f"{BOLD}Modos de trabalho{RESET} — um estado que dura até a condição de "
           f"saída ser satisfeita.")
     print(f"{DIM}Nenhuma sessão sobe sem modo. Desenho completo: "
           f"docs/modos-de-trabalho.md{RESET}\n")
-    for nome, d in alvo.items():
-        print(bloco(nome, d, atual, cor))
+    for name, info in target.items():
+        print(render_block(name, info, current, color))
         print()
-    if not args.modo:
-        if atual:
-            print(f"{DIM}Modo desta sessão: {RESET}{AMARELO}{atual}{RESET}"
+    if not args.mode:
+        if current:
+            print(f"{DIM}Modo desta sessão: {RESET}{YELLOW}{current}{RESET}"
                   f"{DIM} — trocar exige nova sessão (`cepa --mode <x>`).{RESET}")
         else:
             print(f"{DIM}Esta árvore não tem modo declarado.{RESET}")
