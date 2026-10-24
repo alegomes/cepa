@@ -669,20 +669,23 @@ items:
   status: blocked
   blocked_by: []
   human_pending: null
-  evidence: 'Resposta do dono em 2026-10-22: não: Devolvo a calibragem do porteiro
+  evidence: 'Resposta do dono em 2026-10-23: não: Devolvo a calibragem do porteiro
     à fila agora, mesmo sem nenhuma onda ter rodado?. O dono manteve o item como
-    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-20: não:
+    estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-22: não:
     Devolvo a calibragem do porteiro à fila agora, mesmo sem nenhuma onda ter rodado?.
     O dono manteve o item como estava (`blocked`). Evidência anterior: Resposta
-    do dono em 2026-10-17: não: Devolvo a calibragem do porteiro à fila agora, antes
-    de qualquer onda rodar?. O dono manteve o item como estava (`blocked`). Evidência
-    anterior: Resposta do dono em 2026-10-15: não: Mando calibrar o porteiro agora,
-    antes de qualquer onda rodar?. O dono manteve o item como estava (`blocked`).
-    Evidência anterior: Condicao de fora nao cumprida: o BACKLOG.md (secao ''Calibrar
-    as regras do porteiro'', decisao do dono 2026-08-24) adia o que falta (liberar
-    escrita por shell cujo alvo cai dentro da superficie da slice) ate a 0.4.3 do
-    porteiro rodar pelo menos uma onda de verdade. Conferido em 2026-09-27: o unico
-    ledger de porteiro no disco (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
+    do dono em 2026-10-20: não: Devolvo a calibragem do porteiro à fila agora, mesmo
+    sem nenhuma onda ter rodado?. O dono manteve o item como estava (`blocked`).
+    Evidência anterior: Resposta do dono em 2026-10-17: não: Devolvo a calibragem
+    do porteiro à fila agora, antes de qualquer onda rodar?. O dono manteve o item
+    como estava (`blocked`). Evidência anterior: Resposta do dono em 2026-10-15:
+    não: Mando calibrar o porteiro agora, antes de qualquer onda rodar?. O dono
+    manteve o item como estava (`blocked`). Evidência anterior: Condicao de fora
+    nao cumprida: o BACKLOG.md (secao ''Calibrar as regras do porteiro'', decisao
+    do dono 2026-08-24) adia o que falta (liberar escrita por shell cujo alvo cai
+    dentro da superficie da slice) ate a 0.4.3 do porteiro rodar pelo menos uma
+    onda de verdade. Conferido em 2026-09-27: o unico ledger de porteiro no disco
+    (wego-acessos-backend/.claude/programs/WEGO-paralelo/gatekeeper/decisions.jsonl,
     166 linhas) e de 2026-08-24 10:12, anterior ao commit 9b9846e da 0.4.3 (10:13);
     nenhuma onda rodou depois. As duas ondas da fila (rodar-onda-lotes-*) estao
     blocked por herdr fora do ar. Nada implementado, nenhum commit. Quem resolve:
@@ -2300,10 +2303,25 @@ items:
   why: 'Decisão do dono em 2026-10-22 (achados F7 e F8): só texto, não quebra nenhum
     contrato e os agentes leem a cada sessão, por isso vai antes da migração da
     interface'
-  status: pending
+  status: done
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: 'Commit 80edad2 na branch until/2026-10-23-1919 (sem merge, sem push:
+    o build completo e o pouso são do supervisor). 4 skills traduzidas por inteiro
+    (frontmatter incluso); bloco de delegação traduzido nos 11 agentes que delegam
+    (10 cópias idênticas + variante do content-lead, incluído para o teste não aceitar
+    dois títulos), título novo ''Delegation is asynchronous: do not poll the disk''.
+    Ficaram em português de propósito: texto injetado pelo hook session-mode, gatilhos
+    pt-BR do guided-interrogation (com equivalentes em inglês), linhas de exemplo
+    ''Feedback registrado''/''Desviei e registrei'', nomes de modo (vão no item
+    interface-in-english). Testes ajustados: test_delegacao_assincrona_specs (título
+    + marca ''End the turn''), test_report_style_lint (seção ''Keep the thread of
+    the session''). Docstring do no-busy-wait e invariantes I8 apontam o título
+    novo. PATCH em 7 plugin.json. Gates: pair-reviewer OK-WITH-NOTES (nota aplicada),
+    completion-auditor COMPLETE (.claude/acceptance/skills-agents-in-english.yaml);
+    proof-reviewer não se aplica (só prosa). 13 arquivos de teste rodados individualmente,
+    todos verdes. Fora: BACKLOG.md e 2 acceptance antigos ainda citam os títulos
+    em português como histórico.'
 - id: interface-in-english
   title: 'Interface do Cepa em inglês: nomes de comando (/common:fila, /common:modos),
     scripts cepa-intencao e cepa-modos e seus subcomandos, as 40 flags em português,
@@ -2320,10 +2338,13 @@ items:
     CLAUDE.md dele. Títulos do Epic e da spec entram aqui porque spec-readiness-gate.py
     e cepa-plan --from-epic os leem; rótulos do plain-report porque report-style-lint.py
     os lê'
-  status: pending
+  status: blocked
   blocked_by: []
   human_pending: null
-  evidence: null
+  evidence: '2 tentativas seguidas do `cepa-until` na mesma janela sem tirar o item
+    do lugar. Isto NÃO é veredito sobre o trabalho nem condição de fora: é o supervisor
+    tirando o item da frente para a fila andar. A saída do `claude` de cada tentativa
+    está no `.log` do run; devolva o item para `pending` quando souber o que travou.'
 - id: renomear-para-queue
   title: 'Renomear plan.yaml, .claude/programs/, a chave program: e o comando /common:plan
     para o termo queue, com migração das filas existentes nos repos de cliente'
