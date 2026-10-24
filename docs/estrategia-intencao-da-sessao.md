@@ -168,6 +168,14 @@ O agente mostra as três linhas e segue trabalhando no mesmo turno. "sim" ou sil
 - Plano cumprido: "Os 4 passos estão feitos. Ponto de parada: <by_when>. Próximo: `/common:wrap-up`."
 - Intenção de outra sessão: mostra a data e pergunta se continua.
 
+### Altitude do Epic (2026-10-24)
+
+Em 2026-10-20 o dono pediu o mesmo resumo na altitude do projeto: uma sessão perdeu o fio do Epic e teve de reescrevê-lo. A intenção da sessão cobre só a altitude da sessão.
+
+Decisão: o resumo é derivado, não escrito. Um bloco mantido à mão desvia do Epic; o comando `cepa-plan epics` (só lê) monta o resumo da escada de valor mais as filas `single-track`. Cada fila é ligada a um ciclo por uma de três regras: (a) o `source` da fila cita `docs/epics/<nome>.md` e "ciclo N"; (b) a fila se chama `<nome>-c<N>`; (c) o cabeçalho do Epic declara `<prefixo>-c<N>` e a fila se chama `<prefixo>-c<N>`.
+
+Aparece em dois lugares: no hook de sessão, uma linha `[epic]` só no primeiro turno (fora de run do `cepa-until`), e no passo 0 do `/common:whereami`, com o detalhe completo.
+
 ### Statusline (conveniência local)
 
 Linha 2 = `sed -n 's/^summary: //p' .claude/session-intent`, cortada a 80 colunas. O `summary:` já vem na ordem de corte certa: passo, nome do passo, propósito. Não repete o modo, que está na linha 1. Se o spike mostrar que duas linhas não renderizam, a linha 1 perde o segmento de tokens e ganha o passo; isso é decisão do dono.

@@ -1,5 +1,5 @@
 ---
-description: Answers "where are we?" at any point in the session: purpose, by when, the plan with the current step marked and how long the cursor has been on it. Reads the intent recorded in .claude/session-intent (written only by cepa-intent) and checks the cursor against the latest prompts in the session-log. Only proposes advancing the cursor, never advances it on its own. With no recorded intent, teaches the way; in a cepa-until run, delegates to /common:next.
+description: Answers "where are we?" at any point in the session, opening with the project's Epic altitude (cycles closed, in progress, without a queue, open owner questions, derived by cepa-plan epics): purpose, by when, the plan with the current step marked and how long the cursor has been on it. Reads the intent recorded in .claude/session-intent (written only by cepa-intent) and checks the cursor against the latest prompts in the session-log. Only proposes advancing the cursor, never advances it on its own. With no recorded intent, teaches the way; in a cepa-until run, delegates to /common:next.
 argument-hint: (none)
 interaction: routine
 ---
@@ -23,6 +23,19 @@ the check against the log (step 2). Never edit `.claude/session-intent` by hand:
 the only writer is `cepa-intent`.
 
 ## Workflow
+
+### 0. The project's altitude
+
+If `docs/epics/` exists, run:
+
+```
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" epics --repo .
+```
+
+and show its output (pt-BR, verbatim, not rewritten) above the session block,
+under a line "Onde estamos no Epic:". No output means no Epic: say nothing
+about Epics. The summary is derived from the Epic and its queues, never written
+by hand.
 
 ### 1. Read the state
 

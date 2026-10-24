@@ -810,6 +810,36 @@ def sentences_of(cell):
     return [" ".join(f.split()) for f in sentences if f.strip()]
 
 
+def ladder_rows(text):
+    """(idx, rows, problem) of the Epic's `## Value ladder` (or the old
+    `## Escada de valor`) table. `idx` maps the canonical column key to its
+    position; `rows` are the data rows as lists of cells (separator rows
+    dropped). `problem` is None, "section" (no ladder section) or "table"
+    (section without a table)."""
+    marks = list(RE_SECTION.finditer(text))
+    ladder = None
+    for i, s in enumerate(marks):
+        if s.group(1).strip().lower().startswith(("value ladder",
+                                                  "escada de valor")):
+            end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
+            ladder = text[s.end():end]
+            break
+    if ladder is None:
+        return {}, [], "section"
+    lines = [l for l in ladder.splitlines() if l.strip().startswith("|")]
+    if not lines:
+        return {}, [], "table"
+    header_cells = [c.lower() for c in row_cells(lines[0])]
+    idx = {}
+    for keys, _ in QUEUE_COLUMNS:
+        pos = [i for i, c in enumerate(header_cells) if c.startswith(keys)]
+        if pos:
+            idx[CANONICAL_COLUMN[keys]] = pos[0]
+    rows = [row_cells(l) for l in lines[1:]
+            if not re.fullmatch(r"[\s|:\-]*", l)]
+    return idx, rows, None
+
+
 def items_from_epic(text, cycle, path):
     """(demonstrates, items, warnings, error). One item per sentence of "O que
     atravessa" of the requested cycle, in text order; the cycle's script becomes
@@ -831,27 +861,13 @@ def items_from_epic(text, cycle, path):
     if open_items:
         warnings.append(f"{open_items} pergunta(s) ainda em aberto no Epic")
 
-    marks = list(RE_SECTION.finditer(text))
-    ladder = None
-    for i, s in enumerate(marks):
-        if s.group(1).strip().lower().startswith(("value ladder",
-                                                  "escada de valor")):
-            end = marks[i + 1].start() if i + 1 < len(marks) else len(text)
-            ladder = text[s.end():end]
-            break
-    if ladder is None:
+    idx, rows, problem = ladder_rows(text)
+    if problem == "section":
         return None, [], warnings, (f"{path} não tem a seção `## Value "
                                   "ladder` — sem ciclo não há fila a derivar")
-    lines = [l for l in ladder.splitlines() if l.strip().startswith("|")]
-    if not lines:
+    if problem == "table":
         return None, [], warnings, ("a `## Value ladder` não tem tabela — "
                                   "sem ciclo não há fila a derivar")
-    header_cells = [c.lower() for c in row_cells(lines[0])]
-    idx = {}
-    for keys, _ in QUEUE_COLUMNS:
-        pos = [i for i, c in enumerate(header_cells) if c.startswith(keys)]
-        if pos:
-            idx[CANONICAL_COLUMN[keys]] = pos[0]
     missing_cols = [name for keys, name in QUEUE_COLUMNS
               if CANONICAL_COLUMN[keys] in REQUIRED_COLUMNS
               and CANONICAL_COLUMN[keys] not in idx]
@@ -860,10 +876,7 @@ def items_from_epic(text, cycle, path):
                                   f"coluna(s) {', '.join(missing_cols)}")
 
     cycle_row, names = None, []
-    for l in lines[1:]:
-        if re.fullmatch(r"[\s|:\-]*", l):
-            continue
-        cells = row_cells(l)
+    for cells in rows:
         label = cells[idx["ciclo"]] if idx["ciclo"] < len(cells) else ""
         names.append(label)
         n = re.match(r"\D*?(\d+)", label)
@@ -1636,6 +1649,245 @@ OUT_OF_PROMOTION = {
     "blocked": ("saiu `blocked` de um run anterior, numa condição de fora que "
                 "ninguém mexeu desde então; forkar mede o mesmo travamento"),
 }
+
+
+# ── "where are we" of the Epics, derived (read-only) ─────────────────────────
+
+RE_EPIC_QUEUE_PREFIX = re.compile(
+    r"([A-Za-z0-9_][A-Za-z0-9_-]*)-c(?:<N>|\d+)")
+OPEN_STATUSES = ("blocked", "pending", "in_progress")
+
+
+def epic_cycles(text):
+    """[(number, label)] of the Epic's ladder, in table order. The number is the
+    leading integer of the "Cycle" cell (`1. Encadear` -> 1, `Encadear`); with
+    no integer it is the row position."""
+    idx, rows, _ = ladder_rows(text)
+    if "ciclo" not in idx:
+        return []
+    out = []
+    for pos, cells in enumerate(rows, 1):
+        cell = cells[idx["ciclo"]] if idx["ciclo"] < len(cells) else ""
+        cell = " ".join(cell.replace("**", "").split())
+        m = re.match(r"(\d+)\s*[.):\-]?\s*(.*)$", cell)
+        out.append((int(m.group(1)), m.group(2) or str(m.group(1))) if m
+                   else (pos, cell or str(pos)))
+    return out
+
+
+def queue_belongs(slug, epic_rel, header, prefixes, number, qname, plan):
+    """Does the single-track queue `qname` belong to cycle `number` of the Epic
+    `slug`? True when ANY of the three rules holds:
+
+    (a) the queue `source` contains the Epic path (`docs/epics/<slug>.md`) AND
+        mentions `ciclo N` or `cycle N` (what `--from-epic` writes);
+    (b) the queue name is `<slug>-c<N>`;
+    (c) the Epic HEADER (text before the first `## `) names a queue pattern
+        `<prefix>-c<N>` (placeholder) or `<prefix>-c<digits>`, and the queue
+        name is `<prefix>-c<N>` (the Epic written by hand, before
+        /common:epic, declares its queues this way).
+    """
+    source = str(plan.get("source") or "")
+    if epic_rel in source and re.search(
+            rf"\b(?:ciclo|cycle)\s*{number}\b", source, re.I):
+        return True
+    if qname == f"{slug}-c{number}":
+        return True
+    return any(qname == f"{pre}-c{number}" for pre in prefixes)
+
+
+def queue_summary(qname, plan):
+    items = [i for i in (plan.get("items") or []) if isinstance(i, dict)]
+    counts = {st: 0 for st in STATUSES}
+    for it in items:
+        st = status_of(it)
+        counts[st] = counts.get(st, 0) + 1
+    opened = []
+    for it in items:
+        st = status_of(it)
+        if st in OPEN_STATUSES and (it.get("human_pending")
+                                    or it.get("owner_question")):
+            opened.append({"id": it.get("id"), "status": st,
+                           "human_pending": it.get("human_pending") or None,
+                           "question": it.get("owner_question") or None})
+    return {"queue": qname, "counts": counts,
+            "in_progress": [it.get("id") for it in items
+                            if status_of(it) == "in_progress"],
+            "open": opened}
+
+
+def queue_closed(summary):
+    """Closed = at least one `done` and nothing else but `done`/`dropped`. An
+    empty queue (`items: []`) is therefore NOT closed: it stays `em-andamento`
+    with 0/0, because nothing was ever delivered."""
+    c = summary["counts"]
+    return c.get("done", 0) > 0 and (
+        c.get("done", 0) + c.get("dropped", 0) == sum(c.values()))
+
+
+def epic_report(root, path, queues):
+    """One Epic's report. `queues` is {name: plan} of the single-track queues."""
+    text = path.read_text(encoding="utf-8")
+    slug = path.stem
+    rel = f"docs/epics/{path.name}"
+    m = re.search(r"^#\s+Epic:\s*(.+?)\s*$", text, re.M)
+    st = re.search(r"^\*\*Status:\*\*\s*([^\s·*]+)", text, re.M)
+    first = RE_SECTION.search(text)
+    header = text[:first.start()] if first else text
+    prefixes = sorted(set(RE_EPIC_QUEUE_PREFIX.findall(header)))
+    cycles, missing = [], []
+    for number, label in epic_cycles(text):
+        linked = [queue_summary(n, pl) for n, pl in sorted(queues.items())
+                  if queue_belongs(slug, rel, header, prefixes, number, n, pl)]
+        if not linked:
+            state = "sem-fila"
+            missing.append(f"ciclo {number} {label} sem fila")
+        elif all(queue_closed(x) for x in linked):
+            state = "fechado"
+        else:
+            state = "em-andamento"
+            pend = sum(x["counts"].get("pending", 0) for x in linked)
+            blk = sum(x["counts"].get("blocked", 0) for x in linked)
+            missing.append(f"ciclo {number} {label}: {pend} pending, "
+                           f"{blk} blocked")
+        cycles.append({"number": number, "label": label, "state": state,
+                       "queues": linked})
+    questions = [first_sentence(mm.group(1), 200) for mm in
+                 re.finditer(r"^\s*-\s+\[ \]\s*(.*)$", text, re.M)]
+    return {"name": slug, "path": rel,
+            "queue_prefix": prefixes[0] if prefixes else None,
+            "title": m.group(1) if m else None,
+            "status": st.group(1) if st else None,
+            "cycles": cycles, "open_questions": questions,
+            "missing": missing}
+
+
+def _tally(cycle):
+    done = sum(x["counts"].get("done", 0) for x in cycle["queues"])
+    total = sum(sum(x["counts"].values()) for x in cycle["queues"])
+    return done, total
+
+
+def _runs(numbers):
+    """[2,3,4,6] -> "2-4, 6"."""
+    parts, i = [], 0
+    while i < len(numbers):
+        j = i
+        while j + 1 < len(numbers) and numbers[j + 1] == numbers[j] + 1:
+            j += 1
+        parts.append(str(numbers[i]) if i == j
+                     else f"{numbers[i]}-{numbers[j]}")
+        i = j + 1
+    return ", ".join(parts)
+
+
+def epic_text(e):
+    lines = [f"Epic {e['name']} (Status: {e['status'] or '?'}) · {e['path']}"]
+    for c in e["cycles"]:
+        done, total = _tally(c)
+        head = f"  ciclo {c['number']} {c['label']}: "
+        names = ", ".join(x["queue"] for x in c["queues"])
+        if c["state"] == "sem-fila":
+            lines.append(head + "sem fila")
+        elif c["state"] == "fechado":
+            lines.append(head + f"fechado — fila {names}, {done}/{total} done")
+        else:
+            sums = {st: sum(x["counts"].get(st, 0) for x in c["queues"])
+                    for st in STATUSES}
+            extra = "".join(f", {sums[st]} {st}" for st in
+                            ("pending", "in_progress", "blocked") if sums[st])
+            lines.append(head + f"em andamento — fila {names}, "
+                         f"{done}/{total} done{extra}")
+    qs = e["open_questions"]
+    if qs:
+        lines.append(f"  pendente com o dono: {len(qs)} pergunta(s) em "
+                     "aberto no Epic")
+        lines += [f"    - {q}" for q in qs]
+    for c in e["cycles"]:
+        for x in c["queues"]:
+            for o in x["open"]:
+                what = (f'pergunta: "{o["question"]}"' if o["question"]
+                        else f'pendente: "{o["human_pending"]}"')
+                lines.append(f"  fila em andamento: {o['id']} ({x['queue']}) "
+                             f"{o['status']} — {what}")
+    nxt = next((c for c in e["cycles"] if c["state"] == "sem-fila"), None)
+    if nxt:
+        lines.append(f"  próximo ciclo sem fila: {nxt['number']} "
+                     f"{nxt['label']} → /common:queue "
+                     f"{e.get('queue_prefix') or e['name']}-c"
+                     f"{nxt['number']} --from-epic {e['path']} --cycle "
+                     f"{nxt['number']}")
+    return "\n".join(lines)
+
+
+def epic_brief(e, limit=200):
+    def body(labels):
+        parts = []
+        for c in e["cycles"]:
+            if c["state"] == "sem-fila":
+                continue
+            done, total = _tally(c)
+            name = f"ciclo {c['number']}" + (f" {c['label']}" if labels else "")
+            parts.append(f"{name} " + ("fechado" if c["state"] == "fechado"
+                                       else "em andamento")
+                         + f" ({done}/{total})")
+        free = [c["number"] for c in e["cycles"] if c["state"] == "sem-fila"]
+        if free:
+            parts.append(f"ciclo{'s' if len(free) > 1 else ''} "
+                         f"{_runs(free)} sem fila")
+        for c in e["cycles"]:
+            for x in c["queues"]:
+                if x["open"] and c["state"] == "em-andamento":
+                    k = len(x["open"])
+                    parts.append(f"{k} pergunta{'s' if k > 1 else ''} "
+                                 f"pendente{'s' if k > 1 else ''} na fila "
+                                 f"{x['queue']}")
+        k = len(e["open_questions"])
+        if k:
+            parts.append(f"{k} pergunta{'s' if k > 1 else ''} em aberto do dono")
+        return "; ".join(parts) or "sem ciclos na escada"
+
+    tail = " Detalhe: /common:whereami."
+    line = f"[epic] {e['name']}: {body(True)}.{tail}"
+    if len(line) > limit:
+        line = f"[epic] {e['name']}: {body(False)}.{tail}"
+    if len(line) > limit:
+        room = limit - len(tail) - len(f"[epic] {e['name']}: ") - 1
+        line = (f"[epic] {e['name']}: {body(False)[:max(room, 0)].rstrip()}…"
+                f".{tail}")
+    return line
+
+
+def cmd_epics(root, as_json, brief):
+    """Read-only. The "where are we" of each `docs/epics/*.md`, derived from its
+    ladder plus the single-track queues linked to each cycle (rules in
+    `queue_belongs`). Nothing is written; no Epic -> prints nothing, rc 0."""
+    files = sorted((root / "docs" / "epics").glob("*.md")) \
+        if (root / "docs" / "epics").is_dir() else []
+    queues = {}
+    if files:
+        for name, qfile in qp.queue_files(root):
+            plan, error = read_plan(qfile)
+            if error:
+                print(f"{error}; o ciclo dessa fila pode aparecer como "
+                      "\"sem fila\" por isso", file=sys.stderr)
+                continue
+            if isinstance(plan, dict) and mode_of(plan) == MODE:
+                queues[name] = plan
+    reports = []
+    for f in files:
+        try:
+            reports.append(epic_report(root, f, queues))
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"{f}: ilegível ({e.__class__.__name__})", file=sys.stderr)
+    if as_json:
+        print(json.dumps({"epics": reports}, ensure_ascii=False, indent=2))
+    elif brief:
+        for e in reports:
+            print(epic_brief(e))
+    elif reports:
+        print("\n\n".join(epic_text(e) for e in reports))
+    return 0
 
 
 def _human_gate(it):
@@ -3417,6 +3669,14 @@ def main(argv=None):
     sh.add_argument("--repo", default=".")
     sh.add_argument("--json", action="store_true", dest="as_json")
 
+    ep = sub.add_parser("epics",
+                        help="o \"onde estamos\" de cada Epic em docs/epics/, "
+                             "derivado da escada e das filas de cada ciclo; só lê")
+    ep.add_argument("--repo", default=".")
+    ep.add_argument("--json", action="store_true", dest="as_json")
+    ep.add_argument("--brief", action="store_true",
+                    help="uma linha por Epic (para o hook de sessão)")
+
     pr = sub.add_parser("promote",
                         help="as demandas que a fila entrega ao "
                              "/maestro:program-plan --from-plan")
@@ -3608,6 +3868,8 @@ def main(argv=None):
         return cmd_status(root, a.name, a.status_filter, a.as_json)
     if a.cmd == "show":
         return cmd_show(root, a.name, a.as_json)
+    if a.cmd == "epics":
+        return cmd_epics(root, a.as_json, a.brief)
     if a.cmd == "queue":
         return cmd_queue(root, a.name, a.max_items, a.as_json)
     if a.cmd == "promote":

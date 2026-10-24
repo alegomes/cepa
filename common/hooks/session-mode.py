@@ -32,6 +32,14 @@ A `cepa-until` run (`CEPA_UNTIL_RUN`) gets no intent at all: there the intent is
 the plan.yaml item, and a file inherited from another session would become a
 question nobody is there to answer.
 
+The PROJECT altitude comes once per session, on the first turn only (the hook
+pays a toll per turn): when `docs/epics/` has an Epic, one `[epic]` line per
+Epic with the cycles closed, in progress and without a queue, and the owner's
+open questions. It is not written anywhere: `cepa-plan epics --brief` derives it
+from the Epic and the queues, so it cannot drift. It needs no mode (the session
+that lost the Epic's thread may have had none) and is skipped in a `cepa-until`
+run, where the intent is the queue item.
+
 Never blocks anything. With no mode and no intent, it is silent.
 """
 
@@ -41,6 +49,7 @@ import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 # Exit condition of each mode: what has to be true for it to close.
 # Without it the mode is a label, not a boundary. The table lives in `_modes.py`
@@ -237,6 +246,29 @@ def intent_lines(root, payload, has_mode):
     ]
 
 
+def epic_lines(root, payload):
+    """The `[epic]` lines (one per Epic) on the session's FIRST turn, or [].
+
+    Fail-silent: any error or non-zero exit from `cepa-plan epics` is silence."""
+    try:
+        epics = os.path.join(root, "docs", "epics")
+        if not os.path.isdir(epics) or not any(
+                n.endswith(".md") for n in os.listdir(epics)):
+            return []
+        if len(first_prompts(root, payload.get("session_id"),
+                             payload.get("prompt"))) > 1:
+            return []
+        plan = Path(__file__).resolve().parent.parent / "bin" / "cepa-plan"
+        out = subprocess.run(
+            [sys.executable, str(plan), "epics", "--brief", "--repo", root],
+            capture_output=True, text=True, timeout=8)
+        if out.returncode != 0:
+            return []
+        return [l for l in out.stdout.splitlines() if l.strip()]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def main():
     try:
         payload = json.load(sys.stdin)
@@ -271,6 +303,9 @@ def main():
                 blocks += intent_lines(root, payload, bool(mode))
             except Exception as e:  # noqa: BLE001 — intent never takes the mode down
                 print(f"[session-mode] intenção: {e}", file=sys.stderr)
+
+        if not os.environ.get(ENV_WINDOW):
+            blocks += epic_lines(root, payload)
 
         if not blocks:
             sys.exit(0)

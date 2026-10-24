@@ -30,6 +30,12 @@ answer is challenged once before being accepted; the accepted answer is
 written down in the same turn; and the document closes by the sieve, not by
 fatigue.
 
+The "where are we" of an Epic is not written into the file: `cepa-plan epics`
+derives it from the ladder plus the queues linked to each cycle (name
+`<name>-c<N>`, or a `--from-epic` source naming the Epic and the cycle), and
+`/common:whereami` and the session hook show it. Consequence: name each cycle's
+queue `<name>-c<N>`.
+
 ## Variables
 
 - `<name>` — the Epic in kebab-case. The file is `docs/epics/<name>.md` at the
