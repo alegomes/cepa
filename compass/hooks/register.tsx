@@ -22,7 +22,9 @@ const PANE = 'compass'
 const ABRE = { id: PANE, title: 'Compass', columns: 48 }
 const ARQUIVO = '.claude/session-intent'
 const MODO = '.claude/session-mode'
-const DESVIOS = '.claude/desvios.md'
+const DESVIOS = '.claude/deviations.md'
+// Legacy name, still present in client repos that predate the rename.
+const DESVIOS_LEGADO = '.claude/desvios.md'
 const BUILD = '.claude/last-build.json'
 const texto = atom({ plugin: 'compass', key: 'texto' } as const, null)
 const agora = atom({ plugin: 'compass', key: 'agora' } as const, 0)
@@ -45,6 +47,8 @@ let registroDoRun: { caminho: string; fila: string; id: string } | null = null
 const leSe = async ($: EngineInterface, caminho: string) =>
   (await $.fs.exists(caminho)) ? await $.fs.read(caminho) : null
 
+const leDesvios = async ($: EngineInterface) => (await leSe($, DESVIOS)) ?? (await leSe($, DESVIOS_LEGADO))
+
 async function releia($: EngineInterface) {
   const novo = await leSe($, ARQUIVO)
   const ms = await $.clock.now()
@@ -64,7 +68,7 @@ async function releia($: EngineInterface) {
 async function releiaModo($: EngineInterface) {
   const textoModo = await leSe($, MODO)
   await update($, modo, () => textoModo)
-  const textoDesvios = await leSe($, DESVIOS)
+  const textoDesvios = await leDesvios($)
   await update($, desvios, () => textoDesvios)
   const textoBuild = await leSe($, BUILD)
   await update($, build, () => textoBuild)

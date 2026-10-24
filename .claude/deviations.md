@@ -1,8 +1,8 @@
-# Desvios capturados
+# Captured deviations
 
-Achados que apareceram fora do modo da sessão em que nasceram. Registrados em
-vez de trabalhados, para não virarem o próprio vazamento que os modos existem
-para impedir (docs/modos-de-trabalho.md).
+Findings that surfaced outside the session mode they were born in. Logged
+instead of worked on, so they do not become the very leak the modes exist to
+prevent (docs/modos-de-trabalho.md).
 
 - [x] 2026-08-18 · modo: construcao · RESOLVIDO em board-flow 0.16.0 (a regra saiu; Won't Do entra na rodada única). `/board-flow:triage` proibia agrupar
   exatamente a decisão mais repetitiva da triagem: *"Nothing destructive without

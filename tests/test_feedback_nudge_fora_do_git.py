@@ -6,7 +6,7 @@
 O hook `common/hooks/feedback-nudge.py` grava em `.claude/feedback-nudge` o id
 da sessão que já recebeu o aviso, para avisar uma vez só por sessão. É estado
 de runtime desta máquina, reescrito a cada sessão — mas estava versionado, e
-duas worktrees que o reescreveram deram conflito no merge 3f4fe2e (desvios.md,
+duas worktrees que o reescreveram deram conflito no merge 3f4fe2e (deviations.md,
 2026-09-26).
 
 O teste cobra as duas metades do conserto, na superfície em que o problema

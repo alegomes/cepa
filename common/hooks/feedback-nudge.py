@@ -63,7 +63,7 @@ QUEIXA = re.compile(
 # `<task-notification>...</task-notification>`, com o texto do AGENTE dentro
 # (um veredito com "não funciona", um resumo que cita o gate). Não é fala do
 # dono, e mandar registrar a queixa "com o texto do dono verbatim" ali seria
-# pedir para inventar uma (desvios.md, 2026-08-30). Só o que sobra fora desses
+# pedir para inventar uma (deviations.md, 2026-08-30). Só o que sobra fora desses
 # blocos conta como prompt.
 AVISO = re.compile(r"<task-notification>.*?(?:</task-notification>|\Z)", re.S)
 

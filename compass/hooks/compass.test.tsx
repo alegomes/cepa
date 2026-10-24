@@ -202,7 +202,7 @@ test('saídas vêm do cepa-modes --json; json quebrado não derruba', async () =
 })
 
 test('nível 3: modo, condição de saída e desvios, depois do nível 2', async ($, on) => {
-  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': MODO, '.claude/desvios.md': DESVIOS })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': MODO, '.claude/deviations.md': DESVIOS })
   expect(await ui.find({ type: 'Text', text: 'construction' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'fecha quando: completion-auditor COMPLETE e proof-reviewer PROVEN' })).toBeTruthy()
   expect((await ui.find({ type: 'Text', text: '2 desvios abertos' }))?.props?.color).toBe('yellow')
@@ -234,9 +234,15 @@ test('sem modo e sem desvios, o nível 3 diz isso (sem intenção)', async ($, o
 
 test('singular para um desvio aberto e um resolvido', async ($, on) => {
   const um = '- [x] 2026-08-18 · modo: construcao · a\n- [ ] 2026-08-19 · modo: construcao · b\n'
-  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/desvios.md': um })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/deviations.md': um })
   expect(await ui.find({ type: 'Text', text: /^1 desvio aberto$/ })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: /^ · 1 resolvido$/ })).toBeTruthy()
+})
+
+test('nível 3 cai no .claude/desvios.md legado quando o novo não existe', async ($, on) => {
+  const um = '- [x] 2026-08-18 · modo: construcao · a\n- [ ] 2026-08-19 · modo: construcao · b\n'
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/desvios.md': um })
+  expect(await ui.find({ type: 'Text', text: /^1 desvio aberto$/ })).toBeTruthy()
 })
 
 test('desvio novo que já nasce resolvido também gera aviso', async ($, on) => {
@@ -245,8 +251,8 @@ test('desvio novo que já nasce resolvido também gera aviso', async ($, on) => 
     avisos.push(e.text)
     return { value: undefined }
   })
-  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, { '.claude/desvios.md': DESVIOS })
-  arquivos['.claude/desvios.md'] = `${DESVIOS}- [x] 2026-10-19 · modo: construcao · resolvido na hora\n`
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, { '.claude/deviations.md': DESVIOS })
+  arquivos['.claude/deviations.md'] = `${DESVIOS}- [x] 2026-10-19 · modo: construcao · resolvido na hora\n`
   await relogio.advance(5000)
   expect(avisos).toEqual(['Desvio registrado: resolvido na hora'])
 })
@@ -257,10 +263,10 @@ test('desvio novo gera aviso; os que já existiam na abertura, não', async ($, 
     avisos.push(e.text)
     return { value: undefined }
   })
-  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, { '.claude/desvios.md': DESVIOS })
+  const { arquivos, relogio } = await prepara($, on, 'sessao-a', ARQUIVO, { '.claude/deviations.md': DESVIOS })
   await relogio.advance(5000)
   expect(avisos).toEqual([])
-  arquivos['.claude/desvios.md'] = `${DESVIOS}- [ ] 2026-10-19 · modo: construcao · o mod não lê o build\n`
+  arquivos['.claude/deviations.md'] = `${DESVIOS}- [ ] 2026-10-19 · modo: construcao · o mod não lê o build\n`
   await relogio.advance(5000)
   expect(avisos).toEqual(['Desvio registrado: o mod não lê o build'])
   const ui = await monta($)

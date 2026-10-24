@@ -847,7 +847,7 @@ def test_na_branch_da_noite(base):
 
 
 def test_rotulos_do_quadro_dizem_a_direcao_da_escrita(base):
-    """desvios.md 2026-08-29: "Reconciliar" e "Sync" são sinônimos em
+    """deviations.md 2026-08-29: "Reconciliar" e "Sync" são sinônimos em
     português comum, e o dono precisou perguntar qual gravava onde. Cada ponta
     do quadro é nomeada pela direção: uma grava no plano, a outra no quadro."""
     f = CMD.read_text(encoding="utf-8")

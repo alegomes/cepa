@@ -12,7 +12,7 @@ modes — a loose finding does not go away, it comes back as a micro-adjustment
 in the middle of the next construction. The report is the right place to
 enforce this, because it is where the finding is born.
 
-Blocks the Write of `.claude/reflexao/*.yaml` that declares `fechado: true`
+Blocks the Write of `.claude/reflection/*.yaml` (legacy `.claude/reflexao/`) that declares `fechado: true`
 with any finding lacking `destino`, or with a discard whose reason is empty or
 decorative ("n/a", "-", "ok"). A reason that is too short is the same as no
 reason: it exists so you can find the decision again three months from now.
@@ -37,7 +37,10 @@ DECORATIVE = {"n/a", "na", "-", "--", "ok", "nao", "não", "sim", "ja", "já",
 
 def is_report(file_path):
     p = file_path.replace(os.sep, "/")
-    return "/.claude/reflexao/" in f"/{p.lstrip('/')}" and p.endswith((".yaml", ".yml"))
+    full = f"/{p.lstrip('/')}"
+    # `/.claude/reflexao/` is the legacy name, still used by client repos.
+    in_dir = "/.claude/reflection/" in full or "/.claude/reflexao/" in full
+    return in_dir and p.endswith((".yaml", ".yml"))
 
 
 def load(text):
@@ -119,7 +122,7 @@ def main():
             f"in the middle of the next construction, which is the leak the "
             f"modes exist to prevent.\n"
             f"  Write one of the two things on this finding:\n"
-            f"    destino: WEGO-1234        (or the line in .claude/desvios.md)\n"
+            f"    destino: WEGO-1234        (or the line in .claude/deviations.md)\n"
             f"    descartado: <why it is not worth it, in one sentence>\n"
             f"  Or save the report with `fechado: false` while you are still "
             f"triaging.",

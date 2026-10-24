@@ -7,7 +7,7 @@ Sai não-zero se algum comando faltar.
 A dor: o guard de catálogo (test_catalogo_comandos.py) cobria só o
 docs/commands.md. A descrição do common em .claude-plugin/marketplace.json
 ficou parada nas skills de mentalidade enquanto o plugin ganhava /plan, /spec,
-/session, /doctor e mais duas dúzias de comandos (desvios.md 2026-08-25). Quem
+/session, /doctor e mais duas dúzias de comandos (deviations.md 2026-08-25). Quem
 olhava a vitrine do marketplace não via metade do que o plugin entrega.
 
 Vale `/<comando>` com fronteira de palavra: o caractere depois do nome não pode

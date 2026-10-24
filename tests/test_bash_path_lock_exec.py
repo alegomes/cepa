@@ -267,7 +267,7 @@ ALLOW = [
     ("cp para a pista", "cp {OUT} {IN}"),
     ("redirect para a pista", "echo x > {IN}"),
     ("sed -i na pista", "sed -i 's/a/b/' {IN}"),
-    # desvios.md 2026-09-27: "stays" fora de um s/// era lido como s + delimitador t
+    # deviations.md 2026-09-27: "stays" fora de um s/// era lido como s + delimitador t
     ("sed -i com stays no endereço", "sed -i '/o item stays at the entry/d' {IN}"),
     ("sed -i com stays no texto do a", "sed -i '/^fim/a o item stays até que o teste rode' {IN}"),
     ("sed -i com stays no texto do c",

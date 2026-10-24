@@ -67,8 +67,8 @@ Destination, in this order:
 
 1. **With `board-flow.yaml` in the repo** -> a card via `/board-flow:capture`, with
    the active mode and the session in the description.
-2. **Without board-flow** -> one line in `.claude/desvios.md` (create it if it does
-   not exist). The line below is written in the user's language (Portuguese example):
+2. **Without board-flow** -> one line in `.claude/deviations.md` (create it if it does
+   not exist; if only the legacy `.claude/desvios.md` exists in the repo, append there instead). The line below is written in the user's language (Portuguese example):
 
 ```markdown
 - [ ] 2026-08-18 · modo: construction · o resolver de contatos duplica a query N vezes; vi ao passar por ContactResolver.java:88

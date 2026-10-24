@@ -1089,7 +1089,7 @@ def _h_sed(ctx, verbo, args, cwds, seg):
 # anterior varria o texto caractere a caractere atrás de um `s`: numa palavra
 # como "stays" dentro de um endereço `/.../` ou do texto de um `a`/`i`/`c`, ela
 # lia `s` + delimitador `t` e achava um `e` nas "flags" — negando `sed -i`
-# legítimo (desvios.md, 2026-09-27). Ler por comando é o que separa texto de
+# legítimo (deviations.md, 2026-09-27). Ler por comando é o que separa texto de
 # comando; o que este leitor não reconhece é negado, nunca liberado.
 _SED_SIMPLES = set("=dDgGhHlnNpPxzFqQLv")
 

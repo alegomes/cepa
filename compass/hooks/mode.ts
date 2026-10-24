@@ -1,4 +1,4 @@
-// Reads the session mode (`.claude/session-mode`) and the deviations (`.claude/desvios.md`).
+// Reads the session mode (`.claude/session-mode`) and the deviations (`.claude/deviations.md`, legacy `.claude/desvios.md`).
 // The mode is written by `cepa` as shallow `key: value` lines (`mode`, `routine`, `budget`,
 // `opened_at`; the old pt-BR keys and mode names are still read); `null` and empty mean absent,
 // as in `read_mode` of common/hooks/session-mode.py. Deviations are the lines

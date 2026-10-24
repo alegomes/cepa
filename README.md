@@ -67,7 +67,7 @@ The session has two attributes:
   the next item of the queue.
 
 Demands wait in **inboxes** before they get an order: `BACKLOG.md`, the feedback ledger
-(`cepa-feedback`), `.claude/desvios.md`, GitHub issues and, with Jira, the backlog column.
+(`cepa-feedback`), `.claude/deviations.md`, GitHub issues and, with Jira, the backlog column.
 Nothing runs from an inbox. `/common:queue` turns what is there into items.
 
 The old names are kept as deprecated aliases during the transition: `/common:plan` runs

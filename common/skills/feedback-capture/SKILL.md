@@ -27,7 +27,8 @@ an agent, a report, a prompt, the flow of a routine.
 
 Do not trigger when the target is the **project**: a bug in the code, a
 third-party API, a broken build, a product decision. That is a card:
-`/board-flow:capture`, or a line in `.claude/desvios.md` if there is no board.
+`/board-flow:capture`, or a line in `.claude/deviations.md` if there is no board
+(append to the legacy `.claude/desvios.md` instead when only that file exists in the repo).
 
 The test, in one question:
 

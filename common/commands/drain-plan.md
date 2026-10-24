@@ -103,7 +103,7 @@ The name says the direction: this step READS Jira and WRITES to `queue.yaml`. It
 does not touch the board. (The opposite, writing to the board, is the
 "Atualizar o Jira (grava no quadro)" of step 3.e.) "Reconciliar" (reconcile) and
 "sync" were the old names and did not say which of the two sides changed; the
-owner had to ask (desvios.md, 2026-08-29).
+owner had to ask (deviations.md, 2026-08-29).
 
 Skip this whole step if there is no `board-flow.yaml` (nor
 `.claude/board-flow.lifecycle.yaml`), or with `--offline`. Without a board there

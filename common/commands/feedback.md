@@ -120,7 +120,7 @@ leaves it with a named destination.
 - **Does not judge.** "The gate was right" may be true and is not the record's
   business. The ledger keeps the episode; triage checks the facts.
 - **Is not a project card.** A bug in the client's code, a third-party API, a
-  broken build → `/board-flow:capture` or `.claude/desvios.md`. The test is one
+  broken build → `/board-flow:capture` or `.claude/deviations.md`. The test is one
   question: would reinstalling Cepa on another machine bring the annoyance along?
 
 ## Relation to the rest

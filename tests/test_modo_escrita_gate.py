@@ -98,7 +98,7 @@ PERMITIDO = {
     "discovery": ["docs/discovery/c/framing.md", "docs/spec/x.md",
                    ".claude/acceptance/x.yaml", "BACKLOG.md"],
     "design": ["docs/design/fluxos.md", ".claude/x", "BACKLOG.md"],
-    "reflection": [".claude/reflexao/r.md", "docs/qualquer.md", "BACKLOG.md"],
+    "reflection": [".claude/reflection/r.md", "docs/qualquer.md", "BACKLOG.md"],
     "documentation": ["docs/tutorial/primeiro-dia.md", "docs/reference/api.md",
                      ".claude/x", "BACKLOG.md"],
 }

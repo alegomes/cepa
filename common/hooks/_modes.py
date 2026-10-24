@@ -96,8 +96,8 @@ MODES = {
         "produces": "um relatório de achados classificados",
         "exit": "nenhum achado sem destino — cada um virou card ou foi "
                  "descartado com motivo escrito",
-        "gate": "reflection-gate.py barra relatório fechado com achado solto, e o write-mode-gate barra escrita fora de docs/** e .claude/reflexao",
-        "write": [".claude/reflexao/**", "docs/**", "BACKLOG.md"],
+        "gate": "reflection-gate.py barra relatório fechado com achado solto, e o write-mode-gate barra escrita fora de docs/** e .claude/reflection (ou o legado .claude/reflexao)",
+        "write": [".claude/reflection/**", ".claude/reflexao/**", "docs/**", "BACKLOG.md"],
     },
     "documentation": {
         "purpose": "documentar código estável na árvore Diátaxis, com cada porquê citando sua fonte",

@@ -13,7 +13,7 @@ Contratos guardados aqui:
     impressão de que a triagem aconteceu;
   - achado com destino, ou com descarte de motivo real, passa;
   - `fechado: false` passa sempre — triagem em andamento não é violação;
-  - fail-open: arquivo fora de .claude/reflexao/, YAML quebrado, conteúdo
+  - fail-open: arquivo fora de .claude/reflection/, YAML quebrado, conteúdo
     ausente → deixa passar, nunca inventa bloqueio;
   - CEPA_MODO=off desliga.
 
@@ -42,7 +42,7 @@ def check(name, cond, detail=""):
         failures.append(name)
 
 
-def run(conteudo, path=".claude/reflexao/fronteiras-2026-08-18.yaml", env=None):
+def run(conteudo, path=".claude/reflection/fronteiras-2026-08-18.yaml", env=None):
     e = {**os.environ}
     e.update(env or {})
     with tempfile.TemporaryDirectory() as tmp:
@@ -104,6 +104,13 @@ def test_passa_quando_tudo_tem_destino():
     check("todos com destino: passa", p.returncode == 0, p.stderr)
 
 
+def test_bloqueia_no_caminho_novo_e_no_legado():
+    p = run(SEM_DESTINO, path=".claude/reflection/x.yaml")
+    check("caminho novo .claude/reflection/: bloqueia", p.returncode == 2, str(p.returncode))
+    p = run(SEM_DESTINO, path=".claude/reflexao/x.yaml")
+    check("caminho legado .claude/reflexao/: bloqueia", p.returncode == 2, str(p.returncode))
+
+
 def test_aberto_passa():
     p = run(ABERTO)
     check("fechado: false passa", p.returncode == 0, p.stderr)
@@ -111,7 +118,7 @@ def test_aberto_passa():
 
 def test_fail_open():
     p = run(SEM_DESTINO, path="docs/notas.yaml")
-    check("fora de .claude/reflexao: passa", p.returncode == 0, p.stderr)
+    check("fora de .claude/reflection: passa", p.returncode == 0, p.stderr)
     p = run("isto: [não é: yaml válido\n  ::", )
     check("yaml quebrado: passa", p.returncode == 0, p.stderr)
     p = run("fechado: true\nachados: []\n")
@@ -126,7 +133,8 @@ def test_kill_switch():
 def main():
     print("test_reflexao_gate")
     for fn in (test_bloqueia_achado_solto, test_bloqueia_motivo_decorativo,
-               test_passa_quando_tudo_tem_destino, test_aberto_passa,
+               test_passa_quando_tudo_tem_destino,
+               test_bloqueia_no_caminho_novo_e_no_legado, test_aberto_passa,
                test_fail_open, test_kill_switch):
         fn()
     if failures:
