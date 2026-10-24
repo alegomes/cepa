@@ -185,14 +185,14 @@ def main():
     # Blocking here is what makes the move mechanical instead of a habit; the
     # message names the destination so the agent retries and self-corrects.
     if is_legacy_destination(file_path):
-        alvo = re.sub(r"(^|/)\.claude/proof/", r"\1docs/proof/",
+        dest_path = re.sub(r"(^|/)\.claude/proof/", r"\1docs/proof/",
                       file_path.replace(os.sep, "/"))
         print(
             f"[common ui-proof-verdict-guard] BLOCKED: {file_path} grava o "
             f"veredito em `.claude/proof/`, que é gitignored nos projetos que "
             f"rodam este portão — o arquivo morre junto com a worktree "
             f"descartável da sessão, sem aviso.\n"
-            f"  Escreva em: {alvo}\n"
+            f"  Escreva em: {dest_path}\n"
             f"  Vale para QUALQUER veredito, não só `proven`: um `needs-human` "
             f"honesto se perde do mesmo jeito.\n"
             f"  Não edite este hook para contornar. Se achar que o bloqueio "

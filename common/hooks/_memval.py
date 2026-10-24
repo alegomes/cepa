@@ -97,9 +97,9 @@ def sweep(mdir: Path, today: date = None):
 def notice(expired):
     if not expired:
         return None
-    itens = ", ".join(f"`{v['file'][:-3]}` (venceu em {v['validade']})" for v in expired)
+    items = ", ".join(f"`{v['file'][:-3]}` (venceu em {v['validade']})" for v in expired)
     return (
-        f"[memória] {len(expired)} memória(s) com validade vencida: {itens}. "
+        f"[memória] {len(expired)} memória(s) com validade vencida: {items}. "
         "O que elas afirmam sobre estado (instalado ou não, rodado ou não, pendente) "
         "pode ter mudado: reconfira no disco/git antes de repetir. Ao reconferir, "
         "atualize o texto e a `validade:` da memória; a marca no MEMORY.md sai sozinha."

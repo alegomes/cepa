@@ -7,7 +7,7 @@ A session's mode is a STATE that lasts (`docs/modos-de-trabalho.md`), and each
 mode has an entry, a product and an exit condition. That information used to
 live in three places that did not talk to each other:
 
-- `common/bin/cepa` — the list of valid names (`MODOS=`), to validate `--mode`;
+- `common/bin/cepa` — the list of valid names (`MODES=`), to validate `--mode`;
 - `common/hooks/session-mode.py` — only the exit conditions, to inject in the turn;
 - `docs/modos-de-trabalho.md` — the full prose, which nobody reads mid-session.
 
@@ -180,7 +180,7 @@ def read_session_mode(root):
 #
 # Format and reader live HERE, in one place, for the same reason as the table
 # above. `session-mode` is read line by line by six readers (`grep`/`sed` and
-# hooks) that do not understand lists, and the `cepa` `write_modo` rewrites it
+# hooks) that do not understand lists, and the `cepa` `write_mode` rewrites it
 # whole with `>`: putting the plan and the history in there would lose them on
 # the first mode switch. That is why the intent is its own file, and whoever
 # reads it (hook, `whereami`, statusline, `cepa-intent`) imports `read_intent`

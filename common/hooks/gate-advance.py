@@ -182,9 +182,9 @@ def target_dir(command: str, cwd: str):
     try:
         for seg, d, explicit in S.segment_dirs(command, cwd):
             if classify(seg) in ("local", "sharing"):
-                # Alvo que não resolve (`cd $VAR`, `cd -`, caminho inexistente)
-                # é falha de resolução, não um repo sem build: volta ao repo
-                # da sessão.
+                # A target that does not resolve (`cd $VAR`, `cd -`, nonexistent
+                # path) is a resolution failure, not a build-less repo: falls
+                # back to the session's repo.
                 return d if explicit and os.path.isdir(d) else None
     except Exception:
         pass
@@ -216,14 +216,15 @@ def main():
     harvest_background(payload.get("session_id"),
                        L.session_root(payload.get("cwd") or os.getcwd()))
 
-    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
-    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
-    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
-    # Mas se o comando age em OUTRO repo (`cd X && git commit`, `git -C X ...`),
-    # é a baseline do repo que recebe o commit que vale (2026-10-10).
-    sessao = payload.get("cwd") or os.getcwd()
-    alvo = target_dir(command, sessao) or sessao
-    cwd = Path(L.session_root(alvo)).resolve()
+    # The worktree ROOT, not the current directory: Bash's cwd persists
+    # between calls, and a `cd subdir` would divert this session's state
+    # to `subdir/.claude/` for the rest of it (see _wtlib.session_root).
+    # But if the command acts on ANOTHER repo (`cd X && git commit`,
+    # `git -C X ...`), the baseline of the repo that receives the commit is
+    # the one that counts (2026-10-10).
+    session_cwd = payload.get("cwd") or os.getcwd()
+    target = target_dir(command, session_cwd) or session_cwd
+    cwd = Path(L.session_root(target)).resolve()
 
     # Explicit opt-out. A project with no build to verify declares it by
     # creating `.claude/no-build`. The gate has nothing to baseline here,

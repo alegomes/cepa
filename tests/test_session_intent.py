@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""O formato do `.claude/session-intent` e o leitor compartilhado em `_modes.py`.
+"""The format of `.claude/session-intent` and the shared reader in `_modes.py`.
 
-Sem dependência externa — rode com `python3 tests/test_session_intent.py`.
-Sai com código != 0 se algo falhar.
+No external dependency — run with `python3 tests/test_session_intent.py`.
+Exits with code != 0 if anything fails.
 
-## Por que existe
+## Why it exists
 
-A intenção da sessão (propósito, plano, passo, histórico) é um arquivo próprio
-porque o `session-mode` é lido linha a linha por seis leitores que não entendem
-lista, e o `write_modo` do `cepa` o reescreve com `>`. O leitor mora em
-`common/hooks/_modes.py` (um só, sem pyyaml) e é tolerante: hook que quebra por
-arquivo meio escrito derruba o turno. O resgate de worktree também precisa
-ignorar o arquivo (`RESCUE_SKIP` em `_wtlib.py`), senão a intenção de uma sessão
-que acabou seria carregada para a árvore seguinte.
+The session intent (purpose, plan, step, history) is a file of its own
+because `session-mode` is read line by line by six readers that do not understand
+lists, and the `write_mode` of `cepa` rewrites it with `>`. The reader lives in
+`common/hooks/_modes.py` (a single one, without pyyaml) and is tolerant: a hook that breaks on a
+half-written file takes down the turn. The worktree rescue also needs to
+ignore the file (`RESCUE_SKIP` in `_wtlib.py`), otherwise the intent of a session
+that ended would be carried to the next tree.
 
-O YAML de exemplo é o literal de `docs/estrategia-intencao-da-sessao.md`.
-`EXEMPLO_ANTIGO` é o mesmo arquivo com as chaves em pt-BR (formato anterior ao
-item `interface-in-english`): o leitor ainda o entende e devolve as chaves novas.
+The example YAML is the literal of `docs/estrategia-intencao-da-sessao.md`.
+`EXAMPLE_OLD` is the same file with the keys in pt-BR (format prior to the
+`interface-in-english` item): the reader still understands it and returns the new keys.
 """
 
 import sys
@@ -39,7 +39,7 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-EXEMPLO = '''purpose: "institucionalizar as quatro perguntas de aterrissagem"
+EXAMPLE = '''purpose: "institucionalizar as quatro perguntas de aterrissagem"
 by_when: "doc de estratégia em docs/ passado pelo /common:advisors e decidido"
 plan:
   - levantar o que o harness já cobre
@@ -57,7 +57,7 @@ history:
     purpose: "criar um comando whereami"
     change_reason: "o dono reformulou: o objeto é a intenção, não o comando"
 '''
-EXEMPLO_ANTIGO = '''proposito: "institucionalizar as quatro perguntas de aterrissagem"
+EXAMPLE_OLD = '''proposito: "institucionalizar as quatro perguntas de aterrissagem"
 para_quando: "doc de estratégia em docs/ passado pelo /common:advisors e decidido"
 plano:
   - levantar o que o harness já cobre
@@ -77,8 +77,8 @@ historico:
 '''
 
 
-def test_exemplo_do_doc():
-    d = M.parse_intent(EXEMPLO)
+def test_doc_example():
+    d = M.parse_intent(EXAMPLE)
     check("purpose", d["purpose"] == "institucionalizar as quatro perguntas de aterrissagem", d)
     check("by_when com ':' e '/' no meio",
           d["by_when"] == "doc de estratégia em docs/ passado pelo /common:advisors e decidido", d)
@@ -101,43 +101,43 @@ def test_exemplo_do_doc():
     check("PLAN_MAX é 6", M.PLAN_MAX == 6)
 
 
-def test_chaves_antigas_sao_lidas_como_novas():
-    antigo, novo = M.parse_intent(EXEMPLO_ANTIGO), M.parse_intent(EXEMPLO)
-    check("exemplo antigo (proposito/plano/passo/...) == exemplo novo", antigo == novo, (antigo, novo))
-    check("antigo: passo vira `step` int", antigo["step"] == 3 and "passo" not in antigo, antigo)
+def test_old_keys_are_read_as_new():
+    legacy, new = M.parse_intent(EXAMPLE_OLD), M.parse_intent(EXAMPLE)
+    check("exemplo antigo (proposito/plano/passo/...) == exemplo novo", legacy == new, (legacy, new))
+    check("antigo: passo vira `step` int", legacy["step"] == 3 and "passo" not in legacy, legacy)
     check("antigo: nenhuma chave pt-BR sobra",
           not {"proposito", "para_quando", "plano", "passo", "passo_desde", "aberto_em",
-               "resumo", "historico"} & set(antigo), sorted(antigo))
+               "resumo", "historico"} & set(legacy), sorted(legacy))
     check("antigo: entradas do histórico com chaves novas",
-          antigo["history"][0].keys() == {"at", "purpose", "change_reason"}, antigo["history"])
+          legacy["history"][0].keys() == {"at", "purpose", "change_reason"}, legacy["history"])
     check("só `proposito:` antigo ainda é intenção",
           M.parse_intent("proposito: x\nplano:\n  - a\npasso: 2\n")
           == {"purpose": "x", "plan": ["a"], "step": 2})
-    # ida e volta: render escreve as chaves novas, parse as lê iguais
-    texto = M.render_intent(antigo)
+    # round trip: render writes the new keys, parse reads them back the same
+    text = M.render_intent(legacy)
     check("render_intent grava só chaves novas",
-          texto.startswith('purpose: ') and "\nproposito" not in texto and "\nplano" not in texto
-          and "\nstep: 3\n" in texto and "\nhistory:\n" in texto, texto)
-    check("render -> parse é identidade", M.parse_intent(texto) == antigo)
+          text.startswith('purpose: ') and "\nproposito" not in text and "\nplano" not in text
+          and "\nstep: 3\n" in text and "\nhistory:\n" in text, text)
+    check("render -> parse é identidade", M.parse_intent(text) == legacy)
     with tempfile.TemporaryDirectory() as tmp:
         (Path(tmp) / ".claude").mkdir()
-        (Path(tmp) / M.INTENT_FILE).write_text(EXEMPLO_ANTIGO)
+        (Path(tmp) / M.INTENT_FILE).write_text(EXAMPLE_OLD)
         d = M.read_intent(tmp)
-        check("read_intent de arquivo antigo devolve chaves novas", d == novo, d)
+        check("read_intent de arquivo antigo devolve chaves novas", d == new, d)
 
 
-def test_session_mode_antigo_e_novo():
-    novo = M.parse_session_mode("mode: construction\nroutine: null\nbudget: null\nopened_at: 2026-10-19T13:46:36Z\n")
-    antigo = M.parse_session_mode("modo: construcao\nrotina: null\norcamento: null\naberto_em: 2026-10-19T13:46:36Z\n")
-    check("session-mode antigo (modo: construcao) == novo (mode: construction)", antigo == novo, (antigo, novo))
-    check("session-mode: mode=construction", antigo["mode"] == "construction", antigo)
-    check("session-mode: null vira None", antigo["routine"] is None and antigo["budget"] is None)
-    check("session-mode: opened_at", antigo["opened_at"] == "2026-10-19T13:46:36Z", antigo)
-    for velho, nv in (("exploracao", "exploration"), ("descoberta", "discovery"), ("design", "design"),
+def test_session_mode_old_and_new():
+    new = M.parse_session_mode("mode: construction\nroutine: null\nbudget: null\nopened_at: 2026-10-19T13:46:36Z\n")
+    legacy = M.parse_session_mode("modo: construcao\nrotina: null\norcamento: null\naberto_em: 2026-10-19T13:46:36Z\n")
+    check("session-mode antigo (modo: construcao) == novo (mode: construction)", legacy == new, (legacy, new))
+    check("session-mode: mode=construction", legacy["mode"] == "construction", legacy)
+    check("session-mode: null vira None", legacy["routine"] is None and legacy["budget"] is None)
+    check("session-mode: opened_at", legacy["opened_at"] == "2026-10-19T13:46:36Z", legacy)
+    for old, nv in (("exploracao", "exploration"), ("descoberta", "discovery"), ("design", "design"),
                       ("construcao", "construction"), ("reforma", "refactor"),
                       ("reflexao", "reflection"), ("documentacao", "documentation")):
-        check(f"session-mode: modo: {velho} -> {nv}",
-              M.parse_session_mode(f"modo: {velho}\n")["mode"] == nv)
+        check(f"session-mode: modo: {old} -> {nv}",
+              M.parse_session_mode(f"modo: {old}\n")["mode"] == nv)
         check(f"session-mode: mode: {nv} fica {nv}", M.parse_session_mode(f"mode: {nv}\n")["mode"] == nv)
     check("session-mode: orcamento entre aspas", M.parse_session_mode(
         'modo: reforma\norcamento: "só o filas.ts"\n')["budget"] == "só o filas.ts")
@@ -152,20 +152,20 @@ def test_session_mode_antigo_e_novo():
         check("read_session_mode: modo null -> None", M.read_session_mode(tmp) is None)
 
 
-def test_arquivo_ausente_e_lido_do_disco(tmp):
+def test_missing_file_is_read_from_disk(tmp):
     check("ausente -> None", M.read_intent(tmp) is None)
     (Path(tmp) / ".claude").mkdir()
-    (Path(tmp) / M.INTENT_FILE).write_text(EXEMPLO)
+    (Path(tmp) / M.INTENT_FILE).write_text(EXAMPLE)
     d = M.read_intent(tmp)
     check("presente -> dict", isinstance(d, dict) and d["step"] == 3, d)
 
 
-def test_tolerancia():
-    lixos = ["", "\n\n", "   ", "isto nao e yaml", ":::", "plano:\n  - a\n  lixo sem hifen\n",
+def test_tolerance():
+    junk = ["", "\n\n", "   ", "isto nao e yaml", ":::", "plano:\n  - a\n  lixo sem hifen\n",
              "passo: tres\n", "historico:\n  - \n    em\n", "- solto\n", "\tindentado\n",
              'proposito: "aspas sem fechar\n', "plano:\n", "# so comentario\n",
              "historico:\n    em: sem item\n", "\x00\xff"]
-    for t in lixos:
+    for t in junk:
         try:
             r = M.parse_intent(t)
             check(f"nao levanta: {t[:25]!r}", isinstance(r, dict))
@@ -194,7 +194,7 @@ def test_tolerancia():
         check("bytes invalidos nao levantam", isinstance(M.read_intent(tmp), dict))
 
 
-def test_aspas_preservam_dois_pontos_e_cerquilha():
+def test_quotes_preserve_colons_and_hashes():
     d = M.parse_intent('proposito: "corrigir a: parte # dois"   # nota\n'
                        'resumo: \'passo 1/2 # x\'\n'
                        'branch: feat/x # comentario\n'
@@ -207,10 +207,10 @@ def test_aspas_preservam_dois_pontos_e_cerquilha():
     check("'#' colado (sem espaco) nao e comentario", d["url"] == "http://x/a#frag", d["url"])
 
 
-def test_resgate_nao_arrasta_a_intencao(tmp):
+def test_rescue_does_not_drag_the_intent(tmp):
     w = Path(tmp) / "w"
     (w / ".claude").mkdir(parents=True)
-    (w / ".claude" / "session-intent").write_text(EXEMPLO)
+    (w / ".claude" / "session-intent").write_text(EXAMPLE)
     (w / ".claude" / "outro-artefato.yaml").write_text("x: 1\n")
     doomed = L.doomed_artifacts(str(w))
     check("session-intent fora do resgate", ".claude/session-intent" not in doomed, doomed)
@@ -219,15 +219,15 @@ def test_resgate_nao_arrasta_a_intencao(tmp):
 
 
 def main():
-    test_exemplo_do_doc()
-    test_chaves_antigas_sao_lidas_como_novas()
-    test_session_mode_antigo_e_novo()
-    test_tolerancia()
-    test_aspas_preservam_dois_pontos_e_cerquilha()
+    test_doc_example()
+    test_old_keys_are_read_as_new()
+    test_session_mode_old_and_new()
+    test_tolerance()
+    test_quotes_preserve_colons_and_hashes()
     with tempfile.TemporaryDirectory() as tmp:
-        test_arquivo_ausente_e_lido_do_disco(tmp)
+        test_missing_file_is_read_from_disk(tmp)
     with tempfile.TemporaryDirectory() as tmp:
-        test_resgate_nao_arrasta_a_intencao(tmp)
+        test_rescue_does_not_drag_the_intent(tmp)
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s): {FAILURES}")
         return 1

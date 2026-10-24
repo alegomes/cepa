@@ -33,8 +33,8 @@ def emit_context(text: str) -> None:
     }))
 
 
-# A marca que o `cepa-until` exporta para cada rodada (ver ENV_JANELA lá).
-ENV_JANELA = "CEPA_UNTIL_RUN"
+# The marker that `cepa-until` exports on every run (see ENV_WINDOW there).
+RUN_ENV = "CEPA_UNTIL_RUN"
 
 
 def resume_notice(session_id: str, cwd: str, root: str, env=None):
@@ -50,13 +50,13 @@ def resume_notice(session_id: str, cwd: str, root: str, env=None):
     path = H.handoff_path(root, branch)
     if not path.exists():
         return None
-    # Rodada do cepa-until: cada rodada é um `claude -p` novo na MESMA worktree
-    # e no MESMO branch, então o handoff é o da rodada anterior, sobre OUTRO
-    # item. Entregá-lo com "siga de onde parou" fez a rodada do WEGO-2321
-    # reescrever o relatório do WEGO-2337 (run 2026-09-27-0832). O item da
-    # rodada é o que o drain-plan reservar. Não reserva o handoff: o dono ainda
-    # o retoma de manhã.
-    if env.get(ENV_JANELA):
+    # A cepa-until run: each run is a new `claude -p` in the SAME worktree and
+    # the SAME branch, so the handoff is the previous run's, about ANOTHER
+    # item. Handing it over with "pick up where you left off" made the
+    # WEGO-2321 run rewrite the WEGO-2337 report (run 2026-09-27-0832). The
+    # run's item is whatever drain-plan reserves. It does not reserve the
+    # handoff: the owner still resumes it in the morning.
+    if env.get(RUN_ENV):
         return (
             "[resume] Handoff deste branch NÃO entregue: esta sessão é uma rodada "
             "do cepa-until, e o handoff é da rodada anterior, sobre outro item. "
@@ -76,9 +76,9 @@ def resume_notice(session_id: str, cwd: str, root: str, env=None):
     if not body:
         return None
 
-    # Retomada única. `live_sessions_in` acima compara o cwd EXATO — uma sessão
-    # aberta num subdiretório desta árvore passa por ele. A reserva transforma o
-    # palpite em fato: quem retomou fica registrado, e o segundo é avisado.
+    # Single resume. `live_sessions_in` above compares the EXACT cwd: a session
+    # opened in a subdirectory of this tree slips past it. The reservation turns
+    # the guess into fact: whoever resumed is recorded, and the second one is warned.
     held = H.holder(path, meta)
     if held and held != session_id:
         if L.entry_is_live(L.find_entry(root, held) or {}):
@@ -91,7 +91,7 @@ def resume_notice(session_id: str, cwd: str, root: str, env=None):
                 "mesmo próximo passo se atropelam. Se o usuário pedir esse trabalho, diga "
                 "que há outra sessão nele e pergunte se é para assumir."
             )
-        H.release(path)  # reserva de sessão morta não trava o trabalho
+        H.release(path)  # a dead session's reservation does not block the work
         meta, auto, note = H.parse(path)
     if not H.claim(path, meta, session_id, L.now_iso()):
         return None  # perdeu a corrida agora mesmo; o vencedor segue
@@ -144,17 +144,17 @@ def on_start(session_id: str, cwd: str) -> None:
         }
     entry["session_id"] = session_id
     entry["last_seen"] = L.now_iso()
-    # Foto das versões que ESTA sessão carregou. Um reinstall no meio da sessão
-    # atualiza o cache mas não os hooks já lidos; sem a foto, nada distingue
-    # "está valendo" de "vai valer na próxima sessão".
+    # Snapshot of the versions THIS session loaded. A reinstall in the middle of
+    # the session updates the cache but not the hooks already read; without the
+    # snapshot, nothing tells "in effect" from "will be in effect next session".
     entry.setdefault("plugin_versions", V.loaded_now())
     entry.setdefault("start_commit", L.current_commit(cwd))  # baseline for "commits this session"
     entry.pop("claim", None)
     L.write_entry(root, session_id, entry)
 
-    # 1b. Encadeamento: o `cepa` só conhece o CEPA_LAUNCH_ID que gerou. Anotar
-    #     aqui o session_id nascido dessa abertura é o que deixa o launcher, quando
-    #     o claude sair, achar o <session_id>.next.json (session-chain.py).
+    # 1b. Chaining: `cepa` only knows the CEPA_LAUNCH_ID it generated. Noting
+    #     here the session_id born from that launch is what lets the launcher,
+    #     when claude exits, find the <session_id>.next.json (session-chain.py).
     launch_id = os.environ.get("CEPA_LAUNCH_ID", "").strip()
     if launch_id and "/" not in launch_id:
         try:
@@ -168,35 +168,35 @@ def on_start(session_id: str, cwd: str) -> None:
 
     notices = []
 
-    # 2b. Versão: o repo é o que está rodando? PRIMEIRO da lista, de propósito.
-    # Um drift aqui contamina a leitura de todo o resto — se o hook live não é
-    # o do repo, qualquer outra conclusão desta sessão pode estar medindo a
-    # coisa errada. Silencioso quando está em dia (o caso normal).
+    # 2b. Version: is the repo what is running? FIRST in the list, on purpose.
+    # A drift here contaminates the reading of everything else: if the live
+    # hook is not the repo's, any other conclusion of this session may be
+    # measuring the wrong thing. Silent when up to date (the normal case).
     drift_notice = V.boot_notice()
     if drift_notice:
         notices.append(drift_notice)
 
-    # 2c. Sessões VIZINHAS que ficaram para trás. A sessão que abre agora
-    # carrega o cache atual por definição; quem corre risco é a que já estava
-    # aberta quando o install rodou — ela segue executando os hooks antigos e
-    # nada na tela dela denuncia isso. Avisar aqui é o unico momento em que o
-    # dono está olhando e ainda pode reiniciar a outra janela.
+    # 2c. NEIGHBOR sessions that were left behind. The session opening now
+    # loads the current cache by definition; the one at risk is the one that
+    # was already open when the install ran: it keeps executing the old hooks
+    # and nothing on its screen reveals it. Warning here is the only moment
+    # when the owner is looking and can still restart the other window.
     try:
-        atrasadas = []
+        lagging = []
         for f, other in L.read_entries(root):
             if f.stem == session_id or not L.entry_is_live(other):
                 continue
-            fora = V.session_stale(other)
-            if fora:
-                onde = other.get("branch") or other.get("cwd") or "?"
-                quais = ", ".join(f"{n} {vb} → {va}" for n, vb, va in fora)
-                atrasadas.append(f"{onde} ({quais})")
-        if atrasadas:
+            stale = V.session_stale(other)
+            if stale:
+                where = other.get("branch") or other.get("cwd") or "?"
+                which = ", ".join(f"{n} {vb} → {va}" for n, vb, va in stale)
+                lagging.append(f"{where} ({which})")
+        if lagging:
             notices.append(
-                "⚠ " + str(len(atrasadas)) + " sessão(ões) aberta(s) estão "
+                "⚠ " + str(len(lagging)) + " sessão(ões) aberta(s) estão "
                 "rodando uma versão que o cache já não tem — os hooks delas são "
                 "os antigos, e só reiniciar resolve:\n  - "
-                + "\n  - ".join(atrasadas))
+                + "\n  - ".join(lagging))
     except Exception:  # noqa: BLE001
         pass
 
@@ -272,18 +272,18 @@ def on_start(session_id: str, cwd: str) -> None:
     except Exception as e:  # noqa: BLE001
         print(f"[session-registry] worktree scan failed: {e}", file=sys.stderr)
 
-    # Memórias com validade vencida: marca no índice e avisa. A marca vale para
-    # a PRÓXIMA sessão (o MEMORY.md desta já foi carregado); o aviso, para esta.
+    # Memories past their expiry: mark the index and warn. The mark applies to
+    # the NEXT session (this one's MEMORY.md was already loaded); the warning, to this one.
     try:
         import _memval as MV
         mnote = MV.notice(MV.sweep(MV.memory_dir(root)))
         if mnote:
             notices.append(mnote)
-    except Exception as e:  # noqa: BLE001 — memória nunca derruba o SessionStart
+    except Exception as e:  # noqa: BLE001 — a memory never takes down SessionStart
         print(f"[session-registry] memory sweep failed: {e}", file=sys.stderr)
 
-    # Nudges de manutenção — sugestão, nunca bloqueio. O doctor pega falhas de
-    # infraestrutura ANTES de custarem uma tarefa; o metrics só vale se lido.
+    # Maintenance nudges: a suggestion, never a block. The doctor catches
+    # infrastructure failures BEFORE they cost a task; metrics only pays off if read.
     try:
         from datetime import datetime, timezone
 
@@ -471,9 +471,10 @@ def main():
     except Exception:
         pass  # telemetry never breaks the session
 
-    # Tokens da sessão que acabou. Roda DESTACADO: o SessionEnd tem prazo curto
-    # e uma sessão longa com subagentes soma dezenas de MB de transcript. O
-    # processo filho sobrevive ao hook e grava o evento token_usage sozinho.
+    # Tokens of the session that just ended. Runs DETACHED: SessionEnd has a
+    # short deadline and a long session with subagents adds up to tens of MB of
+    # transcript. The child process outlives the hook and writes the token_usage
+    # event on its own.
     transcript = payload.get("transcript_path") or ""
     if event == "SessionEnd" and transcript and os.path.exists(transcript):
         try:

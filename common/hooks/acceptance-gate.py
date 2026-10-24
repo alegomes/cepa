@@ -150,8 +150,8 @@ def transition_map(cwd: Path) -> dict:
 
 def resolve_target(mut: dict, tid: str | None, cwd: Path) -> str | None:
     """Logical target status of the transition, or None when unresolvable."""
-    # Nome de status vindo da `twg` precisa virar chave lógica: "In Review"
-    # baixado de caixa dava `in review` e passava como movimento lateral.
+    # A status name coming from `twg` must become a logical key: a lowercased
+    # "In Review" gave `in review` and passed as a lateral move.
     if mut["target_status"]:
         return J.logical_status(mut["target_status"], cwd)
     return transition_map(cwd).get(tid) if tid else None
@@ -215,9 +215,9 @@ def empty_build(cwd: Path) -> dict | None:
     status = str(state.get("status", "")).upper()
     if status == "EMPTY":
         return state
-    # EMPTY seguido de edição de fonte: o mark-build-stale grava STALE e guarda
-    # o EMPTY em `last_known_status`. Nenhum build novo rodou, então o card
-    # continua sem teste executado — e agora nem o código é o mesmo.
+    # EMPTY followed by a source edit: mark-build-stale writes STALE and keeps
+    # the EMPTY in `last_known_status`. No new build ran, so the card still has
+    # no executed test, and now not even the code is the same.
     if status == "STALE" and str(state.get("last_known_status", "")).upper() == "EMPTY":
         return dict(state, _stale=True,
                     command=state.get("last_known_command"),
@@ -226,14 +226,14 @@ def empty_build(cwd: Path) -> dict | None:
 
 
 def block_empty(key: str, target: str | None, state: dict, cwd: Path):
-    alvo = target or "a forward status (target unresolved, enforced by default)"
+    target_label = target or "a forward status (target unresolved, enforced by default)"
     stale = (
         f"  The code changed since (last edit: {state.get('after_edit_to', '<unknown>')}),\n"
         f"  and no build ran after it: the baseline is STALE on top of that EMPTY run.\n"
         if state.get("_stale") else ""
     )
     print(
-        f"[acceptance-gate] BLOCKED: cannot move {key} to {alvo} — the last real build "
+        f"[acceptance-gate] BLOCKED: cannot move {key} to {target_label} — the last real build "
         f"is EMPTY: the test filter in `{state.get('command') or '<unknown>'}` matched zero "
         f"tests (recorded {state.get('at') or '<unknown time>'} in "
         f"{cwd / '.claude' / 'last-build.json'}).\n"
@@ -279,14 +279,14 @@ def main():
     # left this gate with zero teeth on `mcp-atlassian`, which is the server
     # the local Jira runs use — every transition there sailed through
     # regardless of the audit. Found by the direction tests, 2026-08-01.
-    # Reconhecimento por EFEITO, nao por nome de ferramenta. O nome MCP so
-    # cobria MCP; a CLI `twg` chega como Bash e passava calada por aqui.
+    # Recognition by EFFECT, not by tool name. The MCP name only covered MCP;
+    # the `twg` CLI arrives as Bash and used to pass silently through here.
     _mut = J.classify(payload)
     if _mut is None:
         sys.exit(0)
-    # A opacidade se checa ANTES de filtrar por tipo: uma mutacao que nao da
-    # para ler pode ser justamente a que este gate guarda. Filtrar primeiro
-    # deixava `twg api ... -X POST` escapar por nao ser classificavel.
+    # Opacity is checked BEFORE filtering by kind: a mutation that cannot be
+    # read may be exactly the one this gate guards. Filtering first let
+    # `twg api ... -X POST` escape for not being classifiable.
     if _mut["opaque"]:
         J.block(_mut, "acceptance-gate")
     if _mut["kind"] != "transition":
@@ -298,48 +298,48 @@ def main():
         # Can't identify the card -> can't gate. Never spuriously block.
         sys.exit(0)
 
-    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
-    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
-    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
+    # The worktree ROOT, not the current directory: Bash's cwd persists
+    # between calls, and a `cd subdir` would divert this session's state
+    # to `subdir/.claude/` for the rest of it (see _wtlib.session_root).
     here = payload.get("cwd") or os.getcwd()
     cwd = Path(L.session_root(here)).resolve()
-    # Fora de um repo git o `main_root` é "", e `Path("")` seria o diretório
-    # do processo: sem clone principal, só a própria raiz conta.
+    # Outside a git repo `main_root` is "", and `Path("")` would be the
+    # process directory: with no main clone, only the own root counts.
     main = L.main_root(here)
     artifact = find_artifact(key, cwd, Path(main).resolve() if main else cwd)
 
     tid = extract_transition_id(tool_input)
     target = resolve_target(_mut, tid, cwd)
 
-    # Build filtrado que casou zero teste (EMPTY, gravado pelo
-    # capture-build-result) não declara card nenhum feito — com ou sem
-    # artefato de auditoria. Só a ida para frente é barrada; voltar o card
-    # continua livre, pelo mesmo motivo da direção abaixo.
+    # A filtered build that matched zero tests (EMPTY, written by
+    # capture-build-result) declares no card done, with or without an audit
+    # artifact. Only the forward move is blocked; sending the card back stays
+    # free, for the same reason as the direction below.
     if target is None or target in ENFORCED_TARGETS:
         empty = empty_build(cwd)
         if empty is not None:
             block_empty(key, target, empty, cwd)
 
     if artifact is None:
-        # Ausente + alvo == done: BARRA (decisão do dono, 2026-09-27, item
-        # `acceptance-gate-barra-done-sem-auditoria`, pergunta 6 da revisão do
-        # run 2026-09-26-2203). Toda esteira do harness roda o
-        # completion-auditor antes de Review; chegar a Done sem NENHUM
-        # artefato nas quatro árvores significa que o fluxo foi pulado, não
-        # que a auditoria "ainda não rodou" — WEGO-1891, 2202 e 2218
-        # chegaram a Done assim.
+        # Absent + target == done: BLOCK (owner's decision, 2026-09-27, item
+        # `acceptance-gate-barra-done-sem-auditoria`, question 6 of the review of
+        # run 2026-09-26-2203). Every harness pipeline runs the
+        # completion-auditor before Review; reaching Done with NO artifact
+        # in the four trees means the flow was skipped, not that the audit
+        # "has not run yet": WEGO-1891, 2202 and 2218
+        # reached Done that way.
         if target == "done":
             block_no_artifact(key, cwd, Path(main).resolve() if main else cwd)
-        # Ausente + alvo NÃO resolvido (None): ainda libera, de propósito.
-        # Falhar fechado aqui bloquearia toda transição To Do -> In Progress
-        # em repos sem `transition_ids`, já que nenhuma auditoria existe
-        # nesse ponto do fluxo (o completion-auditor só roda depois da
-        # implementação). Falhar fechado é o comportamento certo quando HÁ
-        # um `target` resolvido para `done`; sem alvo resolvido, seria só
-        # ruído.
-        # Ausente + alvo in_review ou qualquer outro: nada a fazer ainda, o
-        # completion-auditor escreve este arquivo bem antes da transição para
-        # In Review; é aí que os dentes aparecem.
+        # Absent + target NOT resolved (None): still allows, on purpose.
+        # Failing closed here would block every To Do -> In Progress
+        # transition in repos without `transition_ids`, since no audit exists
+        # at that point of the flow (the completion-auditor only runs after
+        # implementation). Failing closed is the right behavior when there IS
+        # a `target` resolved to `done`; with no resolved target, it would be
+        # just noise.
+        # Absent + target in_review or anything else: nothing to do yet, the
+        # completion-auditor writes this file well before the transition to
+        # In Review; that is where the teeth show up.
         sys.exit(0)
 
     try:

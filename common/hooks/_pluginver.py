@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Compara a versão de cada plugin no REPO com a que está no CACHE instalado.
+"""Compares each plugin's version in the REPO with the one in the installed CACHE.
 
-Por que isto é um módulo e não uma função dentro de quem pergunta: a pergunta
-"o harness que está rodando é o que eu acho que está?" é feita de dois lugares
-com propósitos diferentes —
+Why this is a module and not a function inside whoever asks: the question
+"is the harness that is running the one I think it is?" is asked from two
+places with different purposes:
 
-  - `common/bin/cepa-doctor` faz o diagnóstico completo, sob demanda;
-  - `common/hooks/session-registry.py` avisa no boot da sessão, sem ser
-    perguntado (o gatilho voluntário era exatamente a falha: ninguém roda o
-    doctor justamente quando não suspeita de nada).
+  - `common/bin/cepa-doctor` does the full diagnosis, on demand;
+  - `common/hooks/session-registry.py` warns at session boot, unprompted
+    (the voluntary trigger was exactly the failure: nobody runs the doctor
+    precisely when they suspect nothing).
 
-Duas cópias do comparador seriam a mesma doença que o harness já tem nos
-path-locks (5 cópias, correção por disciplina). Uma só, importada pelos dois.
+Two copies of the comparator would be the same disease the harness already has
+in the path-locks (5 copies, fixes by discipline). One only, imported by both.
 
-Contrato: nada aqui levanta exceção para quem chama. Um comparador que quebra
-o boot da sessão seria desligado, e aí não protege ninguém.
+Contract: nothing here raises to the caller. A comparator that breaks the
+session boot would be turned off, and then it protects nobody.
 """
 
 import json
@@ -26,7 +26,7 @@ CLAUDE_DIR = Path.home() / ".claude"
 
 
 def semver(v: str):
-    """(1, 2, 3) a partir de "1.2.3". Qualquer coisa ilegível vira (0,)."""
+    """(1, 2, 3) from "1.2.3". Anything unreadable becomes (0,)."""
     try:
         return tuple(int(x) for x in re.findall(r"\d+", str(v))[:3])
     except Exception:  # noqa: BLE001
@@ -34,7 +34,7 @@ def semver(v: str):
 
 
 def cepa_repo_root():
-    """De qual clone veio o marketplace instalado, segundo o próprio CC."""
+    """Which clone the installed marketplace came from, according to CC itself."""
     try:
         mk = json.loads(
             (CLAUDE_DIR / "plugins" / "known_marketplaces.json").read_text(encoding="utf-8")
@@ -46,7 +46,7 @@ def cepa_repo_root():
 
 
 def last_install():
-    """O registro operacional escrito por bin/install.sh, ou None."""
+    """The operational record written by bin/install.sh, or None."""
     try:
         return json.loads(
             (CLAUDE_DIR / "ops" / "last-install.json").read_text(encoding="utf-8")
@@ -68,7 +68,7 @@ def age_days(iso: str):
 
 
 def cache_versions(name: str):
-    """Versões presentes no cache para um plugin, da mais velha para a mais nova."""
+    """Versions present in the cache for a plugin, oldest to newest."""
     cdir = CLAUDE_DIR / "plugins" / "cache" / "cepa" / name
     if not cdir.is_dir():
         return []
@@ -79,14 +79,14 @@ def cache_versions(name: str):
 
 
 def scan(repo_root=None, enabled=None):
-    """Estado de cada plugin do repo: nome, versão no repo, versão no cache.
+    """State of each repo plugin: name, version in the repo, version in the cache.
 
-    Retorna uma lista de dicts com as chaves:
-      name, repo_version, cache_version (None = nada instalado),
-      drift (repo > cache), missing (nada no cache), enabled (None = não checado).
+    Returns a list of dicts with the keys:
+      name, repo_version, cache_version (None = nothing installed),
+      drift (repo > cache), missing (nothing in the cache), enabled (None = not checked).
 
-    `enabled` é o dict `enabledPlugins` do settings.json, quando o chamador já
-    o tem em mãos; sem ele o campo sai None em vez de um palpite.
+    `enabled` is the `enabledPlugins` dict from settings.json, when the caller
+    already has it at hand; without it the field comes out None instead of a guess.
     """
     repo = Path(repo_root) if repo_root else cepa_repo_root()
     if not repo or not repo.is_dir():
@@ -97,8 +97,8 @@ def scan(repo_root=None, enabled=None):
             meta = json.loads(pj.read_text(encoding="utf-8"))
         except Exception:  # noqa: BLE001
             continue
-        # O nome do plugin vem do manifest, não do diretório: docs-topology/ é
-        # a fonte do plugin "docs".
+        # The plugin name comes from the manifest, not the directory:
+        # docs-topology/ is the source of the "docs" plugin.
         name = meta.get("name") or pj.parent.parent.name
         repo_v = meta.get("version", "0")
         versions = cache_versions(name)
@@ -115,21 +115,22 @@ def scan(repo_root=None, enabled=None):
 
 
 def drifted(repo_root=None):
-    """Só os plugins cuja edição no repo NÃO está valendo na máquina."""
+    """Only the plugins whose repo edit is NOT in effect on this machine."""
     return [p for p in scan(repo_root) if p["drift"] or p["missing"]]
 
 
 def loaded_now():
-    """Versão de cada plugin que uma sessão aberta AGORA carregaria do cache.
+    """Version of each plugin that a session opened RIGHT NOW would load from the cache.
 
-    Fotografada no SessionStart e guardada na entrada da sessão. Sem essa foto,
-    ninguém consegue responder a pergunta que mais custou tempo neste harness:
-    "a sessão em que estou está rodando os hooks que acabei de instalar?".
+    Snapshotted at SessionStart and kept in the session's entry. Without that
+    snapshot, nobody can answer the question that cost the most time in this
+    harness: "is the session I am in running the hooks I just installed?".
 
-    `scan()` compara REPO com CACHE e pega o caso "editei e não reinstalei".
-    Ele não pega o caso oposto e mais traiçoeiro: reinstalei DURANTE a sessão,
-    o cache já está novo, e esta sessão segue executando os hooks velhos que
-    leu na abertura. Os dois parecem iguais no doctor e falham diferente.
+    `scan()` compares REPO with CACHE and catches the "edited and did not
+    reinstall" case. It does not catch the opposite, trickier case: I
+    reinstalled DURING the session, the cache is already new, and this session
+    keeps running the old hooks it read at opening. The two look the same in
+    the doctor and fail differently.
     """
     out = {}
     try:
@@ -142,30 +143,30 @@ def loaded_now():
 
 
 def session_stale(entry):
-    """Plugins que mudaram no cache DEPOIS que esta sessão abriu.
+    """Plugins that changed in the cache AFTER this session opened.
 
-    Recebe a entrada do registry. Devolve uma lista de
-    (nome, versão_carregada, versão_no_cache) — vazia quando a sessão está em
-    dia, ou quando ela é antiga demais para ter a foto (aí não há o que
-    comparar, e inventar um alerta seria pior que ficar calado).
+    Takes the registry entry. Returns a list of
+    (name, loaded_version, cache_version), empty when the session is up to
+    date, or when it is too old to have the snapshot (then there is nothing to
+    compare, and inventing an alert would be worse than staying silent).
     """
     booted = (entry or {}).get("plugin_versions") or {}
     if not booted:
         return []
-    agora = loaded_now()
-    fora = []
-    for nome, v_boot in sorted(booted.items()):
-        v_agora = agora.get(nome)
-        if v_agora and v_agora != v_boot:
-            fora.append((nome, v_boot, v_agora))
-    return fora
+    current = loaded_now()
+    stale = []
+    for name, v_boot in sorted(booted.items()):
+        v_now = current.get(name)
+        if v_now and v_now != v_boot:
+            stale.append((name, v_boot, v_now))
+    return stale
 
 
 def boot_notice():
-    """A linha única do SessionStart, ou None quando está tudo em dia.
+    """The single SessionStart line, or None when everything is up to date.
 
-    Silêncio é o caso normal e é deliberado: aviso que aparece toda sessão vira
-    ruído e treina o olho a pular justamente o dia em que ele importa.
+    Silence is the normal case and is deliberate: a warning that shows up every
+    session becomes noise and trains the eye to skip precisely the day it matters.
     """
     try:
         bad = drifted()
@@ -192,7 +193,7 @@ def boot_notice():
             "estivesse). `/common:doctor` mostra o quadro completo."
         )
     except Exception:  # noqa: BLE001
-        return None  # nunca quebra o boot
+        return None  # never breaks the boot
 
 
 if __name__ == "__main__":

@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""A tabela de modos tem uma fonte só, e ela não pode divergir do `cepa`.
+"""The table of modes has a single source, and it cannot diverge from `cepa`.
 
-Sem dependência externa — rode com `python3 tests/test_modes_single_source.py`.
+No external dependency — run with `python3 tests/test_modes_single_source.py`.
 
-## Por que existe
+## Why it exists
 
-A definição dos modos de trabalho estava em três lugares: a lista de nomes
-válidos no `common/bin/cepa` (`MODOS=`), as condições de saída no
-`common/hooks/session-mode.py`, e a prosa em `docs/modos-de-trabalho.md`. Três
-cópias da mesma tabela é exatamente o padrão que este repo já pagou caro — a
-memória `hooks-texto-citado-nao-e-shell` registra 7 cópias do mesmo parser com o
-conserto aplicado em 5.
+The definition of the working modes was in three places: the list of valid
+names in `common/bin/cepa` (`MODES=`), the exit conditions in
+`common/hooks/session-mode.py`, and the prose in `docs/modos-de-trabalho.md`. Three
+copies of the same table is exactly the pattern this repo has already paid dearly for — the
+memory `hooks-texto-citado-nao-e-shell` records 7 copies of the same parser with the
+fix applied to 5.
 
-A tabela virou `common/hooks/_modes.py`. Este teste garante que ela e o `cepa`
-continuem falando dos mesmos modos: um modo novo aceito pelo `--mode` mas ausente
-da tabela sobe uma sessão cujo hook não sabe dizer quando ela fecha, e um modo na
-tabela que o `cepa` recusa é documentação de algo que ninguém consegue usar.
+The table became `common/hooks/_modes.py`. This test guarantees that it and `cepa`
+keep talking about the same modes: a new mode accepted by `--mode` but absent from
+the table starts a session whose hook cannot say when it closes, and a mode in the
+table that `cepa` refuses is documentation of something nobody can use.
 
-Confere também que cada modo tem os cinco campos preenchidos: propósito,
-entrada, produz, saída e gate. O propósito é o que a ajuda do menu do `cepa`
-mostra — um modo sem ele volta a ser escolhido pelo nome. Um modo sem condição
-de saída é rótulo, não fronteira — que é a tese inteira de
+It also checks that each mode has the five fields filled: purpose,
+entry, produces, exit and gate. The purpose is what the `cepa` menu help
+shows — a mode without it goes back to being chosen by name. A mode without an exit
+condition is a label, not a boundary — which is the whole thesis of
 `docs/modos-de-trabalho.md`.
 """
 
@@ -32,13 +32,13 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 
-CAMPOS = ("purpose", "entry", "produces", "exit", "gate")
+FIELDS = ("purpose", "entry", "produces", "exit", "gate")
 
 
-def modos_do_cepa():
-    """A lista que o `cepa --mode` aceita, lida do shell script."""
-    texto = (REPO / "common" / "bin" / "cepa").read_text(encoding="utf-8")
-    m = re.search(r'^MODOS="([^"]+)"', texto, flags=re.M)
+def cepa_modes():
+    """The list that `cepa --mode` accepts, read from the shell script."""
+    text = (REPO / "common" / "bin" / "cepa").read_text(encoding="utf-8")
+    m = re.search(r'^MODES="([^"]+)"', text, flags=re.M)
     if not m:
         return None
     return m.group(1).split()
@@ -51,76 +51,76 @@ def main():
         print(f"FAIL: não consegui importar common/hooks/_modes.py ({e})", file=sys.stderr)
         return 1
 
-    falhas = []
+    failures = []
 
-    do_cepa = modos_do_cepa()
-    if do_cepa is None:
-        falhas.append("não achei `MODOS=\"...\"` em common/bin/cepa — o detector "
+    from_cepa = cepa_modes()
+    if from_cepa is None:
+        failures.append("não achei `MODES=\"...\"` em common/bin/cepa — o detector "
                       "quebrou, não o repo")
     else:
-        so_no_cepa = [m for m in do_cepa if m not in MODES]
-        so_na_tabela = [m for m in MODES if m not in do_cepa]
-        for m in so_no_cepa:
-            falhas.append(f"`{m}` é aceito pelo `cepa --mode` e NÃO está em "
+        only_in_cepa = [m for m in from_cepa if m not in MODES]
+        only_in_table = [m for m in MODES if m not in from_cepa]
+        for m in only_in_cepa:
+            failures.append(f"`{m}` é aceito pelo `cepa --mode` e NÃO está em "
                           f"_modes.py — sessão que não sabe quando fecha")
-        for m in so_na_tabela:
-            falhas.append(f"`{m}` está em _modes.py e o `cepa --mode` RECUSA — "
+        for m in only_in_table:
+            failures.append(f"`{m}` está em _modes.py e o `cepa --mode` RECUSA — "
                           f"documentação de algo inusável")
-        if do_cepa == list(MODES) and not falhas:
-            pass  # ordem também bate; não é exigência, mas é bom sinal
+        if from_cepa == list(MODES) and not failures:
+            pass  # the order matches too; not a requirement, but a good sign
 
-    for nome, d in MODES.items():
-        for campo in CAMPOS:
-            if not (d.get(campo) or "").strip():
-                falhas.append(f"`{nome}`: campo `{campo}` vazio — modo sem "
-                              f"{campo} não é fronteira")
+    for name, d in MODES.items():
+        for field in FIELDS:
+            if not (d.get(field) or "").strip():
+                failures.append(f"`{name}`: campo `{field}` vazio — modo sem "
+                              f"{field} não é fronteira")
 
     if set(EXIT) != set(MODES):
-        falhas.append("EXIT e MODES discordam — EXIT é derivado, alguém o "
+        failures.append("EXIT e MODES discordam — EXIT é derivado, alguém o "
                       "reescreveu à mão")
 
-    # --- interface em inglês (item `interface-in-english`) -------------------
-    nomes_novos = ["exploration", "discovery", "design", "construction",
+    # --- English interface (item `interface-in-english`) ----------------
+    new_names = ["exploration", "discovery", "design", "construction",
                    "refactor", "reflection", "documentation"]
-    if list(MODES) != nomes_novos:
-        falhas.append(f"os modos deveriam ser {nomes_novos}, são {list(MODES)}")
-    if do_cepa is not None and do_cepa != nomes_novos:
-        falhas.append(f"`MODOS=` do cepa deveria ser {nomes_novos}, é {do_cepa}")
+    if list(MODES) != new_names:
+        failures.append(f"os modos deveriam ser {new_names}, são {list(MODES)}")
+    if from_cepa is not None and from_cepa != new_names:
+        failures.append(f"`MODES=` do cepa deveria ser {new_names}, é {from_cepa}")
     from _modes import OLD_TO_NEW_MODE, normalize_mode
-    for velho, novo in (("exploracao", "exploration"), ("descoberta", "discovery"),
+    for old, new in (("exploracao", "exploration"), ("descoberta", "discovery"),
                         ("design", "design"), ("construcao", "construction"),
                         ("reforma", "refactor"), ("reflexao", "reflection"),
                         ("documentacao", "documentation")):
-        if normalize_mode(velho) != novo or OLD_TO_NEW_MODE.get(velho) != novo:
-            falhas.append(f"o nome antigo `{velho}` deveria virar `{novo}`")
-        if normalize_mode(novo) != novo:
-            falhas.append(f"o nome novo `{novo}` deveria ficar como está")
-    # alias: o script antigo `cepa-modos` imprime o mesmo que `cepa-modes`
+        if normalize_mode(old) != new or OLD_TO_NEW_MODE.get(old) != new:
+            failures.append(f"o nome antigo `{old}` deveria virar `{new}`")
+        if normalize_mode(new) != new:
+            failures.append(f"o nome novo `{new}` deveria ficar como está")
+    # alias: the old script `cepa-modos` prints the same as `cepa-modes`
     bindir = REPO / "common" / "bin"
     for args in (["--json"], ["--purposes", "--no-color"], ["refactor", "--no-color"],
                  ["reforma", "--no-color"], ["--propositos", "--sem-cor"]):
-        novo = subprocess.run([sys.executable, str(bindir / "cepa-modes"), *args],
+        new = subprocess.run([sys.executable, str(bindir / "cepa-modes"), *args],
                               capture_output=True, text=True, timeout=30)
-        velho = subprocess.run([sys.executable, str(bindir / "cepa-modos"), *args],
+        old = subprocess.run([sys.executable, str(bindir / "cepa-modos"), *args],
                                capture_output=True, text=True, timeout=30)
-        if novo.returncode != 0 or not novo.stdout.strip():
-            falhas.append(f"cepa-modes {' '.join(args)} falhou: {novo.stderr[:200]}")
-        if (novo.returncode, novo.stdout) != (velho.returncode, velho.stdout):
-            falhas.append(f"o atalho cepa-modos {' '.join(args)} não imprime o mesmo que cepa-modes")
-    # o atalho também roda como executável direto (não só via `python3`)
-    direto = subprocess.run([str(bindir / "cepa-modos"), "--purposes", "--no-color"],
+        if new.returncode != 0 or not new.stdout.strip():
+            failures.append(f"cepa-modes {' '.join(args)} falhou: {new.stderr[:200]}")
+        if (new.returncode, new.stdout) != (old.returncode, old.stdout):
+            failures.append(f"o atalho cepa-modos {' '.join(args)} não imprime o mesmo que cepa-modes")
+    # the shortcut also runs as a direct executable (not only via `python3`)
+    direct = subprocess.run([str(bindir / "cepa-modos"), "--purposes", "--no-color"],
                             capture_output=True, text=True, timeout=30)
-    if direto.returncode != 0 or "construction" not in direto.stdout:
-        falhas.append("o atalho cepa-modos não roda como executável direto")
+    if direct.returncode != 0 or "construction" not in direct.stdout:
+        failures.append("o atalho cepa-modos não roda como executável direto")
 
-    for f in falhas:
+    for f in failures:
         print("FAIL:", f, file=sys.stderr)
-    if falhas:
-        print(f"\n{len(falhas)} falha(s).", file=sys.stderr)
+    if failures:
+        print(f"\n{len(failures)} falha(s).", file=sys.stderr)
         return 1
 
     print(f"ok — {len(MODES)} modos, mesma lista no `cepa` e em _modes.py, "
-          f"todos com os {len(CAMPOS)} campos")
+          f"todos com os {len(FIELDS)} campos")
     return 0
 
 
