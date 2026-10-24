@@ -1,0 +1,30 @@
+key: until-sigterm-teste-instavel
+status: complete
+criteria:
+  - id: AC1
+    text: causa identificada e corrigida (sem retry, sem asserção removida)
+    altitude: cli
+    surface: supervisor cepa-until recebendo SIGTERM com claude em voo
+    test: tests/test_cepa_until_dead_supervisor.py::_interrupt
+    layer: processo real (supervisor + fake claude)
+    evidence: verified
+    run: "python3 tests/test_cepa_until_dead_supervisor.py -> 'tudo verde'; stress antigo 5/64 vermelho (pid_filho null), novo 0/64 (/tmp/sigterm-stress/*-summary.txt)"
+    status: complete
+  - id: AC2
+    text: teste SIGTERM e irmão Ctrl+C passam de forma confiável sob carga
+    altitude: cli
+    surface: SIGTERM/SIGINT ao supervisor
+    test: test_sigterm_writes_interrupted_run_with_the_in_flight_item; test_ctrl_c_writes_interrupted_run_with_the_in_flight_item
+    layer: processo real
+    evidence: verified
+    run: "ok 'SIGTERM encerra o claude do item (sessão própria) antes de sair'; ok 'Ctrl+C encerra o claude do item antes de sair'; 0/64 vermelho sob carga (stress de SIGTERM; SIGINT usa o mesmo _interrupt)"
+    status: complete
+  - id: AC3
+    text: sem mudança em código de produção; nada enfraquecido
+    altitude: domain
+    surface: diff do commit f96834c
+    test: git diff f96834c^ f96834c --stat
+    layer: n/a
+    evidence: verified
+    run: "1 arquivo (o teste), +11 -3; asserções preservadas, adicionado um check novo"
+    status: complete
