@@ -33,6 +33,14 @@ except ImportError:
     print("✗ precisa de PyYAML (pip install pyyaml)", file=sys.stderr)
     sys.exit(2)
 
+# This test executes the session-mode hook and touches .claude/session-log.md;
+# without this, any telemetry it emits would fall in ~/.claude/cepa-telemetry/
+# and enter the /common:metrics report as if it were real use.
+# See tests/_isolated_telemetry.py (test_isolated_telemetry.py sweeps for it).
+from _isolated_telemetry import isolate
+
+isolate()
+
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
 HOOK = REPO / "common" / "hooks" / "session-mode.py"
