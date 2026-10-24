@@ -1,16 +1,16 @@
-// Lê o subconjunto de YAML que o `cepa-intent` grava em `.claude/session-intent`.
-// O escritor é único (common/bin/cepa-intent) e só emite `chave: "valor"`,
-// `step: N` e a lista `plan:` de itens entre aspas; `history:` é ignorado.
-// As chaves antigas (proposito, para_quando, plano, passo, ...) ainda são lidas.
+// Reads the YAML subset that `cepa-intent` writes to `.claude/session-intent`.
+// The writer is unique (common/bin/cepa-intent) and only emits `key: "value"`,
+// `step: N` and the `plan:` list of quoted items; `history:` is ignored.
+// The old keys (proposito, para_quando, plano, passo, ...) are still read.
 
 export type Intent = {
-  proposito: string
-  paraQuando: string
-  plano: string[]
-  passo: number
-  passoDesde: string
+  purpose: string
+  byWhen: string
+  plan: string[]
+  step: number
+  stepSince: string
   sessionId: string
-  abertoEm: string
+  openedAt: string
 }
 
 const unquote = (raw: string): string => {
@@ -26,37 +26,37 @@ const unquote = (raw: string): string => {
 }
 
 export const parseIntent = (text: string): Intent | null => {
-  const campos: Record<string, string> = {}
-  const plano: string[] = []
-  let bloco = ''
-  for (const linha of text.split('\n')) {
-    if (linha.startsWith('  - ')) {
-      if (bloco === 'plan' || bloco === 'plano') plano.push(unquote(linha.slice(4)))
+  const fields: Record<string, string> = {}
+  const plan: string[] = []
+  let block = ''
+  for (const line of text.split('\n')) {
+    if (line.startsWith('  - ')) {
+      if (block === 'plan' || block === 'plano') plan.push(unquote(line.slice(4)))
       continue
     }
-    if (linha.startsWith(' ') || linha.trim() === '') continue
-    const i = linha.indexOf(':')
+    if (line.startsWith(' ') || line.trim() === '') continue
+    const i = line.indexOf(':')
     if (i < 0) continue
-    bloco = linha.slice(0, i)
-    campos[bloco] = unquote(linha.slice(i + 1))
+    block = line.slice(0, i)
+    fields[block] = unquote(line.slice(i + 1))
   }
-  const proposito = campos.purpose ?? campos.proposito
-  if (!proposito) return null
+  const purpose = fields.purpose ?? fields.proposito
+  if (!purpose) return null
   return {
-    proposito,
-    paraQuando: campos.by_when ?? campos.para_quando ?? '',
-    plano,
-    passo: Number(campos.step ?? campos.passo ?? '1') || 1,
-    passoDesde: campos.step_since ?? campos.passo_desde ?? '',
-    sessionId: campos.session_id ?? '',
-    abertoEm: campos.opened_at ?? campos.aberto_em ?? '',
+    purpose,
+    byWhen: fields.by_when ?? fields.para_quando ?? '',
+    plan,
+    step: Number(fields.step ?? fields.passo ?? '1') || 1,
+    stepSince: fields.step_since ?? fields.passo_desde ?? '',
+    sessionId: fields.session_id ?? '',
+    openedAt: fields.opened_at ?? fields.aberto_em ?? '',
   }
 }
 
-export const idade = (desde: string, agora: number): string => {
-  const t = Date.parse(desde)
-  if (Number.isNaN(t) || agora <= 0) return ''
-  const min = Math.max(0, Math.floor((agora - t) / 60000))
+export const age = (since: string, now: number): string => {
+  const t = Date.parse(since)
+  if (Number.isNaN(t) || now <= 0) return ''
+  const min = Math.max(0, Math.floor((now - t) / 60000))
   if (min < 60) return `há ${min} min`
   const h = Math.floor(min / 60)
   if (h < 48) return `há ${h} h`

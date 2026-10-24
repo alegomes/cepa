@@ -12,14 +12,14 @@ export type Queue = {
   stuck: QueueItem | null
 }
 
-export type Ciclo = { numero: number; rotulo: string }
+export type Cycle = { number: number; label: string }
 
 export type Epic = {
-  arquivo: string
-  nome: string
+  file: string
+  name: string
   status: string
-  padraoFila: string
-  ciclos: Ciclo[]
+  queuePattern: string
+  cycles: Cycle[]
 }
 
 declare module 'claude-code' {
@@ -33,8 +33,8 @@ declare module 'claude-code' {
       desvios: string | null
       build: string | null
       saidas: Record<string, string>
-      until: { fila: string; id: string; texto: string } | null
-      gate: { gate: 'gate-advance' | 'acceptance-gate' | 'worktree-guard'; frase: string; quando: string; vezes: number } | null
+      until: { queue: string; id: string; text: string } | null
+      gate: { gate: 'gate-advance' | 'acceptance-gate' | 'worktree-guard'; phrase: string; when: string; times: number } | null
     }
   }
 }
