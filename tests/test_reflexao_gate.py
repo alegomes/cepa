@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for common/hooks/reflexao-gate.py.
+"""Regression tests for common/hooks/reflection-gate.py.
 
 A Reflexão fecha quando NENHUM achado ficou solto: cada um virou card ou foi
 descartado com motivo escrito (docs/modos-de-trabalho.md). Achado solto não
@@ -29,7 +29,7 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-GATE = REPO / "common" / "hooks" / "reflexao-gate.py"
+GATE = REPO / "common" / "hooks" / "reflection-gate.py"
 
 failures = []
 

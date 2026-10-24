@@ -41,19 +41,19 @@ import sys
 from datetime import datetime, timezone
 
 # Condição de saída de cada modo — o que precisa ser verdade para ele fechar.
-# Sem isso o modo é rótulo, não fronteira. A tabela mora em `_modos.py` (fonte
+# Sem isso o modo é rótulo, não fronteira. A tabela mora em `_modes.py` (fonte
 # única, compartilhada com o `cepa-modes`); aqui só se lê.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
-    from _modos import SAIDA
+    from _modes import EXIT
 except Exception:  # noqa: BLE001 — o hook roda todo turno; nunca pode quebrar
-    SAIDA = {}
+    EXIT = {}
 try:
-    from _modos import read_intent, mesma_sessao, pergunta_outra_sessao
+    from _modes import read_intent, same_session, other_session_question
 except Exception:  # noqa: BLE001
     read_intent = None
 try:
-    from _modos import parse_session_mode
+    from _modes import parse_session_mode
 except Exception:  # noqa: BLE001
     parse_session_mode = None
 
@@ -212,8 +212,8 @@ def linhas_intencao(root, payload, tem_modo):
         ]
 
     prop = corta(intent["purpose"], CORTE_PROPOSITO)
-    if not mesma_sessao(intent.get("session_id"), payload.get("session_id")):
-        return pergunta_outra_sessao(intent, prop)
+    if not same_session(intent.get("session_id"), payload.get("session_id")):
+        return other_session_question(intent, prop)
 
     m = len(plano)
     passo = intent.get("step")
@@ -255,8 +255,8 @@ def main():
             linhas = [f"[modo] Esta sessão opera em **{nome}**."]
             if mode.get("budget"):
                 linhas.append(f"Orçamento declarado: {mode['budget']}.")
-            if nome in SAIDA:
-                linhas.append(f"Fecha quando: {SAIDA[nome]}.")
+            if nome in EXIT:
+                linhas.append(f"Fecha quando: {EXIT[nome]}.")
             linhas.append(
                 "Ação fora deste modo NÃO vira pergunta e NÃO vira trabalho agora: "
                 "registre pelo skill `off-mode-capture` e siga. As capturas entram "

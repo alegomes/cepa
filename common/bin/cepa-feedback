@@ -22,7 +22,7 @@ Desenho, e o porquê de cada escolha:
     você disse; grava verbatim.
 
 Uso:
-    cepa-feedback add "o gate X barrou o commit legítimo" --target modo-escrita-gate
+    cepa-feedback add "o gate X barrou o commit legítimo" --target write-mode-gate
     cepa-feedback list                     # os abertos
     cepa-feedback list --status todos --json
     cepa-feedback triage fb-20260826-1 --destination "BACKLOG.md § Gate de escrita"

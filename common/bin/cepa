@@ -137,7 +137,7 @@ modo_valido() {
 # Pergunta o modo em /dev/tty. Sem tty, não há como perguntar → falha com a
 # instrução, em vez de assumir um modo por você.
 # O propósito de cada modo, uma linha por modo, lido da fonte única
-# (common/hooks/_modos.py) pelo cepa-modes. O menu listava só os sete nomes, e
+# (common/hooks/_modes.py) pelo cepa-modes. O menu listava só os sete nomes, e
 # quem não lembra o que "reforma" cobra escolhia pelo nome — o modo, que é
 # fronteira, virava rótulo. Sem python3 ou sem o script, a ajuda degrada para os
 # nomes e o caminho do documento; ela nunca some calada.

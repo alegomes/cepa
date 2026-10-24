@@ -53,7 +53,7 @@ Three rules about the text:
    swaps the complaint for your reading of the complaint, and your reading is the
    part that tends to be wrong: if you had understood, the annoyance would not
    have happened.
-2. **`--target` whenever possible.** `modo-escrita-gate`, `board-flow:drain`,
+2. **`--target` whenever possible.** `write-mode-gate`, `board-flow:drain`,
    `proof-reviewer`. It is what turns "the harness gets in the way" into
    something someone can open. With no identifiable target, record it anyway:
    feedback without a target is still a signal; unrecorded feedback is nothing.
@@ -82,7 +82,7 @@ One line, at the end of what you were already going to answer. The line below is
 written in the user's language (Portuguese example):
 
 ```
-**Feedback registrado (fb-20260826-2):** o gate de escrita barrou um commit legítimo · alvo: modo-escrita-gate
+**Feedback registrado (fb-20260826-2):** o gate de escrita barrou um commit legítimo · alvo: write-mode-gate
 ```
 
 Nothing beyond that. The turn belongs to the task the owner asked for.

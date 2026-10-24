@@ -32,7 +32,7 @@ CMDS = PLUGIN_ROOT / "commands"
 HOOK = PLUGIN_ROOT / "hooks" / "session-mode.py"
 BIN = '"${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent"'
 sys.path.insert(0, str(PLUGIN_ROOT / "hooks"))
-import _modos as M  # noqa: E402
+import _modes as M  # noqa: E402
 
 FAILURES = []
 
@@ -156,7 +156,7 @@ def main():
             input=json.dumps({"cwd": str(r), "session_id": "sess-B", "prompt": "oi"}),
             env={**os.environ, "CEPA_MODO": "on", "CEPA_UNTIL_RUN": ""})
         ctx = json.loads(hook.stdout)["hookSpecificOutput"]["additionalContext"] if hook.stdout else ""
-        frases = M.pergunta_outra_sessao(M.read_intent(r), "criar o comando whereami")
+        frases = M.other_session_question(M.read_intent(r), "criar o comando whereami")
         check("a pergunta do estado é a mesma que o hook injeta",
               all(f in ctx and f in out.stdout for f in frases), f"{ctx!r}")
         sh("python3 " + BIN + " continue", r, sessao="sess-B")

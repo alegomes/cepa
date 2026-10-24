@@ -7,8 +7,8 @@ Sai com código != 0 se algo falhar.
 (Os nomes antigos — `gravar`, `--proposito`, etc. — ainda funcionam; a seção
 "nomes antigos" no fim prova.)
 
-Por que existe: o leitor (`_modos.read_intent`) é tolerante e não impõe regra
-nenhuma; as regras (plano de 1 a PLANO_MAX, item sem ':', motivo obrigatório na
+Por que existe: o leitor (`_modes.read_intent`) é tolerante e não impõe regra
+nenhuma; as regras (plano de 1 a PLAN_MAX, item sem ':', motivo obrigatório na
 troca) só existem porque o escritor as recusa. Cada recusa é testada junto com
 "o arquivo não mudou", senão uma recusa que escreve pela metade passaria.
 O bin roda como subprocesso num repo git temporário: o teste exercita a
@@ -29,7 +29,7 @@ REPO = Path(__file__).resolve().parent.parent
 BIN = REPO / "common" / "bin" / "cepa-intent"
 BIN_ANTIGO = REPO / "common" / "bin" / "cepa-intencao"  # atalho: nome antigo
 sys.path.insert(0, str(REPO / "common" / "hooks"))
-import _modos as M  # noqa: E402
+import _modes as M  # noqa: E402
 
 FAILURES = []
 
@@ -147,11 +147,11 @@ for ruim in ("0", "6", "-1"):
 r3 = novo_repo("r3")
 p = gravar(r3, plano=["tem: dois pontos"])
 check("item com ':' recusado, nada escrito", p.returncode == 2 and arquivo(r3) is None, p.stderr)
-p = gravar(r3, plano=[f"passo {i}" for i in range(M.PLANO_MAX + 1)])
-check("plano > PLANO_MAX recusado, aponta plan.yaml",
+p = gravar(r3, plano=[f"passo {i}" for i in range(M.PLAN_MAX + 1)])
+check("plano > PLAN_MAX recusado, aponta plan.yaml",
       p.returncode == 2 and arquivo(r3) is None and "plan.yaml" in p.stderr, p.stderr)
-p = gravar(r3, plano=[f"passo {i}" for i in range(M.PLANO_MAX)])
-check("plano com PLANO_MAX itens aceito", p.returncode == 0, p.stderr)
+p = gravar(r3, plano=[f"passo {i}" for i in range(M.PLAN_MAX)])
+check("plano com PLAN_MAX itens aceito", p.returncode == 0, p.stderr)
 
 # --- --proposito / --plano --------------------------------------------------
 r4 = novo_repo("r4")

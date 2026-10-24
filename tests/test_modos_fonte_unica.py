@@ -12,7 +12,7 @@ cópias da mesma tabela é exatamente o padrão que este repo já pagou caro —
 memória `hooks-texto-citado-nao-e-shell` registra 7 cópias do mesmo parser com o
 conserto aplicado em 5.
 
-A tabela virou `common/hooks/_modos.py`. Este teste garante que ela e o `cepa`
+A tabela virou `common/hooks/_modes.py`. Este teste garante que ela e o `cepa`
 continuem falando dos mesmos modos: um modo novo aceito pelo `--mode` mas ausente
 da tabela sobe uma sessão cujo hook não sabe dizer quando ela fecha, e um modo na
 tabela que o `cepa` recusa é documentação de algo que ninguém consegue usar.
@@ -32,7 +32,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 
-CAMPOS = ("proposito", "entrada", "produz", "saida", "gate")
+CAMPOS = ("purpose", "entry", "produces", "exit", "gate")
 
 
 def modos_do_cepa():
@@ -46,9 +46,9 @@ def modos_do_cepa():
 
 def main():
     try:
-        from _modos import MODOS, SAIDA
+        from _modes import MODES, EXIT
     except ImportError as e:
-        print(f"FAIL: não consegui importar common/hooks/_modos.py ({e})", file=sys.stderr)
+        print(f"FAIL: não consegui importar common/hooks/_modes.py ({e})", file=sys.stderr)
         return 1
 
     falhas = []
@@ -58,40 +58,40 @@ def main():
         falhas.append("não achei `MODOS=\"...\"` em common/bin/cepa — o detector "
                       "quebrou, não o repo")
     else:
-        so_no_cepa = [m for m in do_cepa if m not in MODOS]
-        so_na_tabela = [m for m in MODOS if m not in do_cepa]
+        so_no_cepa = [m for m in do_cepa if m not in MODES]
+        so_na_tabela = [m for m in MODES if m not in do_cepa]
         for m in so_no_cepa:
             falhas.append(f"`{m}` é aceito pelo `cepa --mode` e NÃO está em "
-                          f"_modos.py — sessão que não sabe quando fecha")
+                          f"_modes.py — sessão que não sabe quando fecha")
         for m in so_na_tabela:
-            falhas.append(f"`{m}` está em _modos.py e o `cepa --mode` RECUSA — "
+            falhas.append(f"`{m}` está em _modes.py e o `cepa --mode` RECUSA — "
                           f"documentação de algo inusável")
-        if do_cepa == list(MODOS) and not falhas:
+        if do_cepa == list(MODES) and not falhas:
             pass  # ordem também bate; não é exigência, mas é bom sinal
 
-    for nome, d in MODOS.items():
+    for nome, d in MODES.items():
         for campo in CAMPOS:
             if not (d.get(campo) or "").strip():
                 falhas.append(f"`{nome}`: campo `{campo}` vazio — modo sem "
                               f"{campo} não é fronteira")
 
-    if set(SAIDA) != set(MODOS):
-        falhas.append("SAIDA e MODOS discordam — SAIDA é derivado, alguém o "
+    if set(EXIT) != set(MODES):
+        falhas.append("EXIT e MODES discordam — EXIT é derivado, alguém o "
                       "reescreveu à mão")
 
     # --- interface em inglês (item `interface-in-english`) -------------------
     nomes_novos = ["exploration", "discovery", "design", "construction",
                    "refactor", "reflection", "documentation"]
-    if list(MODOS) != nomes_novos:
-        falhas.append(f"os modos deveriam ser {nomes_novos}, são {list(MODOS)}")
+    if list(MODES) != nomes_novos:
+        falhas.append(f"os modos deveriam ser {nomes_novos}, são {list(MODES)}")
     if do_cepa is not None and do_cepa != nomes_novos:
         falhas.append(f"`MODOS=` do cepa deveria ser {nomes_novos}, é {do_cepa}")
-    from _modos import MODO_ANTIGO_PARA_NOVO, normalize_mode
+    from _modes import OLD_TO_NEW_MODE, normalize_mode
     for velho, novo in (("exploracao", "exploration"), ("descoberta", "discovery"),
                         ("design", "design"), ("construcao", "construction"),
                         ("reforma", "refactor"), ("reflexao", "reflection"),
                         ("documentacao", "documentation")):
-        if normalize_mode(velho) != novo or MODO_ANTIGO_PARA_NOVO.get(velho) != novo:
+        if normalize_mode(velho) != novo or OLD_TO_NEW_MODE.get(velho) != novo:
             falhas.append(f"o nome antigo `{velho}` deveria virar `{novo}`")
         if normalize_mode(novo) != novo:
             falhas.append(f"o nome novo `{novo}` deveria ficar como está")
@@ -119,7 +119,7 @@ def main():
         print(f"\n{len(falhas)} falha(s).", file=sys.stderr)
         return 1
 
-    print(f"ok — {len(MODOS)} modos, mesma lista no `cepa` e em _modos.py, "
+    print(f"ok — {len(MODES)} modos, mesma lista no `cepa` e em _modes.py, "
           f"todos com os {len(CAMPOS)} campos")
     return 0
 

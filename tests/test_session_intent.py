@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""O formato do `.claude/session-intent` e o leitor compartilhado em `_modos.py`.
+"""O formato do `.claude/session-intent` e o leitor compartilhado em `_modes.py`.
 
 Sem dependência externa — rode com `python3 tests/test_session_intent.py`.
 Sai com código != 0 se algo falhar.
@@ -9,7 +9,7 @@ Sai com código != 0 se algo falhar.
 A intenção da sessão (propósito, plano, passo, histórico) é um arquivo próprio
 porque o `session-mode` é lido linha a linha por seis leitores que não entendem
 lista, e o `write_modo` do `cepa` o reescreve com `>`. O leitor mora em
-`common/hooks/_modos.py` (um só, sem pyyaml) e é tolerante: hook que quebra por
+`common/hooks/_modes.py` (um só, sem pyyaml) e é tolerante: hook que quebra por
 arquivo meio escrito derruba o turno. O resgate de worktree também precisa
 ignorar o arquivo (`RESCUE_SKIP` em `_wtlib.py`), senão a intenção de uma sessão
 que acabou seria carregada para a árvore seguinte.
@@ -25,7 +25,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "common" / "hooks"))
-import _modos as M  # noqa: E402
+import _modes as M  # noqa: E402
 import _wtlib as L  # noqa: E402
 
 FAILURES = []
@@ -98,7 +98,7 @@ def test_exemplo_do_doc():
               "purpose": "criar um comando whereami",
               "change_reason": "o dono reformulou: o objeto é a intenção, não o comando"}],
           d["history"])
-    check("PLANO_MAX é 6", M.PLANO_MAX == 6)
+    check("PLAN_MAX é 6", M.PLAN_MAX == 6)
 
 
 def test_chaves_antigas_sao_lidas_como_novas():

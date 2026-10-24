@@ -53,7 +53,7 @@ COBAIA = TESTES / "test_proof_status_enum.py"
 # destes e não isole é o próximo poluidor.
 HOOKS_EMISSORES = [
     "capture-build-result", "gate-advance", "loop-budget", "maven-reactor-guard",
-    "modo-escrita-gate", "proof-verdict-guard", "report-style-lint", "session-log",
+    "write-mode-gate", "proof-verdict-guard", "report-style-lint", "session-log",
     "session-registry", "ui-proof-verdict-guard",
 ]
 

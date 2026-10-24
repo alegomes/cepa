@@ -96,13 +96,13 @@ class Caixa:
 def test_add_grava_verbatim_com_contexto():
     with Caixa() as c:
         texto = "o gate barrou meu commit legítimo e eu tive que desligar o modo"
-        p = c.cli("add", texto, "--target", "modo-escrita-gate", "--origin", "skill")
+        p = c.cli("add", texto, "--target", "write-mode-gate", "--origin", "skill")
         check("add: rc=0", p.returncode == 0, p.stderr)
         evs = c.linhas()
         check("add: uma linha no ledger", len(evs) == 1, evs)
         ev = evs[0]
         check("add: texto verbatim", ev["texto"] == texto, ev.get("texto"))
-        check("add: alvo registrado", ev["alvo"] == "modo-escrita-gate", ev.get("alvo"))
+        check("add: alvo registrado", ev["alvo"] == "write-mode-gate", ev.get("alvo"))
         check("add: origem registrada", ev["origem"] == "skill", ev.get("origem"))
         check("add: repo capturado sozinho", ev["repo"] == "projeto-x", ev.get("repo"))
         check("add: branch capturado sozinho",

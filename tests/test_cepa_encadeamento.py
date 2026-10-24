@@ -47,7 +47,7 @@ CEPA = REPO / "common" / "bin" / "cepa"
 REGISTRY = REPO / "common" / "hooks" / "session-registry.py"
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _wtlib as L  # noqa: E402
-import _modos  # noqa: E402
+import _modes  # noqa: E402
 
 BRIEF = 'Abra o /common:epic contratos-e-regras.\nLeia o handoff "anterior" antes.'
 
@@ -216,7 +216,7 @@ def t_encadeia_com_intencao():
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
         if len(c) == 2:
-            it = _modos.parse_intent(c[1]["intent"])
+            it = _modes.parse_intent(c[1]["intent"])
             check("o propósito é o da intenção", it.get("purpose") == INTENCAO["purpose"],
                   repr(it.get("purpose")))
             check("a meta é a da intenção", it.get("by_when") == INTENCAO["by_when"],
@@ -253,12 +253,12 @@ def t_intencao_anterior_vai_para_historico():
                   "opened_at": "2026-01-01T00:00:00Z", "summary": "passo 1/1 · a · antigo",
                   "history": []}
         (w.b / ".claude").mkdir()
-        (w.b / ".claude" / "session-intent").write_text(_modos.render_intent(antiga))
+        (w.b / ".claude" / "session-intent").write_text(_modes.render_intent(antiga))
         w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "intent": INTENCAO})
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"{len(c)}")
         if len(c) == 2:
-            it = _modos.parse_intent(c[1]["intent"])
+            it = _modes.parse_intent(c[1]["intent"])
             check("o propósito agora é o da intenção", it.get("purpose") == INTENCAO["purpose"],
                   repr(it.get("purpose")))
             hist = it.get("history") or []
@@ -274,7 +274,7 @@ def t_intencao_inteira_na_linha_de_comando():
         c = w.calls()
         check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
         if c:
-            it = _modos.parse_intent(c[0]["intent"])
+            it = _modes.parse_intent(c[0]["intent"])
             check("a meta veio do --by-when=", it.get("by_when") == "meta m", repr(it))
             check("o plano veio do --plano=, um passo por linha, * sem virar nome de arquivo",
                   it.get("plan") == ["*", "segundo passo"], repr(it.get("plan")))
@@ -292,7 +292,7 @@ def t_proposito_direto_na_worktree():
         if c:
             check("rodou numa worktree", Path(c[0]["cwd"]).resolve().is_relative_to(w.wt_home.resolve()),
                   c[0]["cwd"])
-            it = _modos.parse_intent(c[0]["intent"])
+            it = _modes.parse_intent(c[0]["intent"])
             check("a intenção na worktree é 'x y'", it.get("purpose") == "x y", repr(it))
             check("--proposito não vaza para o claude", "--purpose" not in c[0]["args"],
                   repr(c[0]["args"]))
@@ -308,7 +308,7 @@ def t_proposito_em_branch_session():
         check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
         if c:
             check("rodou no próprio repo, sem nova worktree", same(c[0]["cwd"], w.a), c[0]["cwd"])
-            it = _modos.parse_intent(c[0]["intent"])
+            it = _modes.parse_intent(c[0]["intent"])
             check("a intenção existe antes do 1o turno, com 'x y'",
                   it.get("purpose") == "x y", repr(it))
             check("--proposito não vaza para o claude", "--purpose" not in c[0]["args"],
@@ -322,7 +322,7 @@ def t_proposito_forma_com_igual():
         c = w.calls()
         check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
         if c:
-            it = _modos.parse_intent(c[0]["intent"])
+            it = _modes.parse_intent(c[0]["intent"])
             check("a intenção é 'a b'", it.get("purpose") == "a b", repr(it))
             check("a forma com = não vaza para o claude",
                   not any(x.startswith("--purpose") for x in c[0]["args"]), repr(c[0]["args"]))
@@ -465,14 +465,14 @@ def t_nomes_antigos():
         if len(c) == 2:
             check("antigo: a segunda abriu em `mode: discovery`", "mode: discovery" in c[1]["mode"],
                   repr(c[1]["mode"]))
-            it = _modos.parse_intent(c[1]["intent"])
+            it = _modes.parse_intent(c[1]["intent"])
             check("antigo: a intenção do arquivo antigo foi gravada",
                   it.get("purpose") == INTENCAO["purpose"] and it.get("plan") == INTENCAO["plan"], repr(it))
     with World() as w:  # as flags antigas do próprio cepa
         r = w.run(args=["--proposito=p", "--para-quando=meta m", "--plano=um\ndois"])
         c = w.calls()
         if c:
-            it = _modos.parse_intent(c[0]["intent"])
+            it = _modes.parse_intent(c[0]["intent"])
             check("antigo: --proposito=/--para-quando=/--plano= gravam a intenção",
                   (it.get("purpose"), it.get("by_when"), it.get("plan")) == ("p", "meta m", ["um", "dois"]),
                   repr(it))
@@ -484,7 +484,7 @@ def t_nomes_antigos():
     with World() as w:
         r = w.run(args=["--proposito", "x y", "--para-quando", "q", "--plano", "a"])
         c = w.calls()
-        it = _modos.parse_intent(c[0]["intent"]) if c else {}
+        it = _modes.parse_intent(c[0]["intent"]) if c else {}
         check("antigo: forma com espaço (--proposito x --para-quando q --plano a)",
               it.get("purpose") == "x y" and it.get("by_when") == "q" and it.get("plan") == ["a"], r.stderr)
     with World() as w:

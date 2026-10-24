@@ -347,7 +347,7 @@ SHELLSCAN_CONSTS = ["_REDIR_RE", "_REDIR_STRIP_RE", "_SEP_PAIRS", "_SEP_CHARS",
                     "_PSEUDO", "_UNCOVERED_RE"]
 
 # O degrau acima do parsing: quais arquivos a linha de comando ESCREVE. Entrou
-# no `_shellscan` em 26/08/2026 para o `modo-escrita-gate`, portado do
+# no `_shellscan` em 26/08/2026 para o `write-mode-gate`, portado do
 # bash-path-lock. Fica FORA de SHELLSCAN_FUNCS de propósito: o
 # `enforcement-guard` mantém uma versão própria e mais pobre destas duas (não
 # conhece `git mv`, não conta a origem de um `mv`), e o caso

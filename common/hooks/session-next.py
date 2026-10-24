@@ -35,7 +35,7 @@ import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import _modos  # noqa: E402
+import _modes  # noqa: E402
 import _wtlib as L  # noqa: E402
 
 NOTE_RE = re.compile(r"<!-- HANDOFF:NOTE -->(.*?)<!-- /HANDOFF:NOTE -->", re.S)
@@ -116,7 +116,7 @@ def main() -> int:
     campos = parse_linha(m.group(1))
     # `mode=` (ou o antigo `modo=`); o valor, antigo ou novo, vira o nome novo
     repo, comando = campos.get("repo", ""), campos.get("comando", "")
-    modo = _modos.normalize_mode(campos.get("mode") or campos.get("modo") or "")
+    modo = _modes.normalize_mode(campos.get("mode") or campos.get("modo") or "")
     brief = brief_da_secao(note)
     intencao = intencao_da_secao(note)
     faltam_intencao = [r for c, r in (("proposito", "Intenção"), ("para_quando", "Meta"),
@@ -126,8 +126,8 @@ def main() -> int:
         motivo = f"a linha `**Próximo:**` não traz {', '.join(faltas)}"
     elif not os.path.isdir(repo):
         motivo = f"repo {repo} não existe"
-    elif modo not in _modos.MODOS:
-        motivo = f"modo {modo} não é um dos modos ({' '.join(_modos.MODOS)})"
+    elif modo not in _modes.MODES:
+        motivo = f"modo {modo} não é um dos modos ({' '.join(_modes.MODES)})"
     elif modo == "refactor":
         motivo = "modo refactor exige --budget, que o encadeamento não passa"
     elif not brief:

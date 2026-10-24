@@ -245,7 +245,7 @@ def test_hook_nunca_quebra_o_turno():
 # quantos turnos, próximo). Rodada do cepa-until não recebe intenção.
 
 sys.path.insert(0, str(REPO / "common" / "hooks"))
-import _modos as _M  # noqa: E402
+import _modes as _M  # noqa: E402
 
 PLANO = ["levantar o que existe", "escrever o doc", "rodar advisors", "decidir"]
 SID = "209286bf-1111-2222-3333-444455556666"
@@ -644,7 +644,7 @@ def test_intencao_respeita_kill_switch():
 # --- ajuda do menu de modos -------------------------------------------------
 # O menu do `cepa` listava os sete nomes e mais nada. Quem não lembra o que
 # "reforma" cobra escolhia pelo nome — e o modo, que é fronteira, virava rótulo.
-# A ajuda mostra o propósito de cada modo lido de _modos.py (fonte única), sem
+# A ajuda mostra o propósito de cada modo lido de _modes.py (fonte única), sem
 # abrir o doc de 307 linhas.
 
 def test_ajuda_nao_interativa():

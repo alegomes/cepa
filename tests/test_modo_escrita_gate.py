@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Testes de regressão de common/hooks/modo-escrita-gate.py.
+"""Testes de regressão de common/hooks/write-mode-gate.py.
 
 O modo de uma sessão era prosa: o `session-mode.py` injeta a cada turno "ação
 fora deste modo NÃO vira pergunta e NÃO vira trabalho agora", e nada barrava. Na
@@ -7,14 +7,14 @@ sessão `session/drain-plan-speed` (26/08/2026) o agente furou o modo sete vezes
 seguidas — transformou cada desvio numa pergunta fechada com "Recomendo sim",
 colheu o sim, e construiu. Nenhuma captura de desvio foi registrada.
 
-Este gate é o irmão do `reforma-gate.py`: uma lista branca de DESTINOS por modo,
+Este gate é o irmão do `refactor-gate.py`: uma lista branca de DESTINOS por modo,
 aplicada em Edit/Write/MultiEdit/NotebookEdit e também em Bash.
 
 Contratos guardados aqui:
   - modo com lista branca: destino fora dela bloqueia (rc=2) com o motivo;
   - destino dentro da lista passa;
   - `construction` e `refactor` são mudos — quem cobra ali são o
-    completion-auditor/proof-reviewer e o reforma-gate;
+    completion-auditor/proof-reviewer e o refactor-gate;
   - sem modo declarado, mudo;
   - Bash não é rota de fuga: `>`, `>>`, `sed -i`, `tee` e `git mv` bloqueiam
     igual (bloquear só Write já deixou agentes escaparem por sed neste repo);
@@ -46,7 +46,7 @@ from _telemetria_isolada import isola
 isola()
 
 REPO = Path(__file__).resolve().parent.parent
-GATE = REPO / "common" / "hooks" / "modo-escrita-gate.py"
+GATE = REPO / "common" / "hooks" / "write-mode-gate.py"
 
 failures = []
 
@@ -150,7 +150,7 @@ def test_session_mode_no_formato_antigo_vale():
                 encoding="utf-8")
             p = r.edit("src/App.java")
             check(f"antigo: modo: {velho} bloqueia como {novo}",
-                  p.returncode == 2 and f"modo {novo}" in p.stderr, p.stderr[:200])
+                  p.returncode == 2 and f"mode {novo}" in p.stderr, p.stderr[:200])
     with Repo() as r:
         (r.path / ".claude" / "session-mode").write_text("modo: construcao\n", encoding="utf-8")
         p = r.edit("src/App.java")
@@ -235,10 +235,10 @@ def test_construcao_indecidivel_avisa_sem_barrar():
             p = r.bash(cmd)
             check(f"indecidível não barra: {cmd[:26]}", p.returncode == 0,
                   p.stderr[:160])
-            check(f"indecidível avisa: {cmd[:26]}", "AVISO" in p.stderr,
+            check(f"indecidível avisa: {cmd[:26]}", "WARNING" in p.stderr,
                   p.stderr[:160] or "(stderr vazio)")
             check(f"aviso diz que não conferiu: {cmd[:22]}",
-                  "não conferiu" in p.stderr, p.stderr[:200])
+                  "did not check" in p.stderr, p.stderr[:200])
 
 
 def test_comando_legivel_nao_avisa():
@@ -248,14 +248,14 @@ def test_comando_legivel_nao_avisa():
         for cmd in ('echo x > docs/estrategia.md', 'grep -rn modo common/'):
             p = r.bash(cmd)
             check(f"sem aviso em comando legível: {cmd[:24]}",
-                  "AVISO" not in p.stderr, p.stderr[:160])
+                  "WARNING" not in p.stderr, p.stderr[:160])
 
 
 def test_indecidivel_e_mudo_em_modo_sem_lista():
     with Repo() as r:
         r.modo("construction")
         p = r.bash('python3 -c "open(\'x.py\',\'w\')"')
-        check("construction: nem aviso", p.returncode == 0 and "AVISO" not in p.stderr,
+        check("construction: nem aviso", p.returncode == 0 and "WARNING" not in p.stderr,
               p.stderr[:160])
 
 
@@ -299,7 +299,7 @@ def test_mensagem_diz_o_que_fazer():
         check("mensagem oferece a captura do desvio",
               "off-mode-capture" in p.stderr, p.stderr[:200])
         check("mensagem oferece encerrar o modo",
-              "encerre" in p.stderr.lower(), p.stderr[:300])
+              "end this mode" in p.stderr.lower(), p.stderr[:300])
         check("mensagem NÃO anuncia o kill switch",
               "CEPA_MODO" not in p.stderr, p.stderr[:300])
 
@@ -312,17 +312,17 @@ def test_kill_switch():
 
 
 def test_tabela_vem_de_modos_py():
-    """A lista branca mora em _modos.py, junto com o resto da tabela de modos.
+    """A lista branca mora em _modes.py, junto com o resto da tabela de modos.
 
-    Uma segunda tabela de modos no hook é a doença que _modos.py trata.
+    Uma segunda tabela de modos no hook é a doença que _modes.py trata.
     """
     sys.path.insert(0, str(REPO / "common" / "hooks"))
-    from _modos import MODOS
-    for nome, d in MODOS.items():
-        check(f"_modos: {nome} declara `escrita`", "escrita" in d,
+    from _modes import MODES
+    for nome, d in MODES.items():
+        check(f"_modes: {nome} declara `write`", "write" in d,
               "modo sem lista branca declarada — nem 'tudo' nem os globs")
     src = GATE.read_text(encoding="utf-8") if GATE.exists() else ""
-    check("o hook importa a tabela em vez de copiá-la", "_modos" in src)
+    check("o hook importa a tabela em vez de copiá-la", "_modes" in src)
 
 
 def test_corpo_do_heredoc_nao_e_alvo():
@@ -400,10 +400,10 @@ def test_alvo_nao_resolvivel_nao_culpa_o_modo():
             check(f"não resolvido barra: {cmd[:28]}", p.returncode == 2,
                   p.stderr[:200])
             check(f"diz que não resolveu: {cmd[:28]}",
-                  "não consegui resolver" in p.stderr, p.stderr[:300])
+                  "could not resolve" in p.stderr, p.stderr[:300])
             check(f"não culpa o modo: {cmd[:28]}",
-                  "fora do que esse modo produz" not in p.stderr
-                  and "encerre" not in p.stderr.lower(), p.stderr[:300])
+                  "outside what that mode produces" not in p.stderr
+                  and "end this mode" not in p.stderr.lower(), p.stderr[:300])
         # Comando que mexe na variável sem atribuição simples invalida o valor
         # que o gate guardou: `unset D` deixa `$D` vazio no shell, e liberar
         # `docs/y` seria liberar um alvo que não é o real.
@@ -412,7 +412,7 @@ def test_alvo_nao_resolvivel_nao_culpa_o_modo():
                     'D=docs; ((D+=1)); echo x > $D/y.md'):
             p = r.bash(cmd)
             check(f"mutação invalida o valor: {cmd[8:22]}",
-                  p.returncode == 2 and "não consegui resolver" in p.stderr,
+                  p.returncode == 2 and "could not resolve" in p.stderr,
                   p.stderr[:200])
         # Variável de ambiente de verdade continua valendo (os.path.expandvars).
         p = r.bash('echo x > "$RAIZ_TESTE/docs/a.md"',

@@ -10,11 +10,11 @@ Por que um escritor só, e não o agente editando o YAML:
   - o `summary:` (uma linha pronta para statusline e hook) precisa ser
     re-renderizado a cada escrita, e o agente esqueceria;
   - as regras (plano de 1 a 6 itens, item sem dois-pontos) só valem se há um
-    portão; o leitor em `common/hooks/_modos.py` é tolerante de propósito e
+    portão; o leitor em `common/hooks/_modes.py` é tolerante de propósito e
     não as impõe;
   - o histórico (propósito e plano anteriores, com hora e motivo) só é
     confiável se ninguém o reescreve à mão.
-Formato, leitor e serializador moram em `_modos.py`; aqui não há segundo parser.
+Formato, leitor e serializador moram em `_modes.py`; aqui não há segundo parser.
 
 As ações e opções antigas (gravar/mostrar/continuar/estado/encerrar,
 --proposito/--para-quando/--plano/--passo/--motivo) continuam aceitas.
@@ -41,7 +41,7 @@ Regras:
     anteriores vão para o `history` (hora da troca em `at:`).
   - `--purpose` exige `--reason`. `--plan` zera o cursor (passo 1) e guarda o
     plano anterior no histórico (`previous_plan`, itens separados por " | ").
-  - Itens do plano não contêm ':'; plano tem 1 a PLANO_MAX itens (mais que isso
+  - Itens do plano não contêm ':'; plano tem 1 a PLAN_MAX itens (mais que isso
     é programa: `plan.yaml` / `/common:plan`). Recusa = nada é escrito.
   - `continue` é a resposta "continuo" à pergunta que o hook `session-mode.py`
     faz quando a intenção foi gravada por outra sessão (decisão D1): troca só
@@ -66,7 +66,7 @@ Regras:
   - `state` é a leitura que o /common:whereami, o /common:next (fallback) e o
     /common:recap (linha de abertura) rodam. Nunca escreve e sai 0 em todos os
     estados. A primeira linha é `state: empty|normal|fulfilled|other-session`;
-    a regra de "outra sessão" é a do hook (`_modos.mesma_sessao`). Numa rodada
+    a regra de "outra sessão" é a do hook (`_modes.same_session`). Numa rodada
     do `cepa-until` (`CEPA_UNTIL_RUN`) o estado é sempre `empty` com a linha
     `delegate: /common:next`: ali a intenção é o item do plan.yaml. A segunda
     linha, `opening:`, é a do recap ("propósito / passo N de M"), ausente nos
@@ -87,7 +87,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
-import _modos as M  # noqa: E402
+import _modes as M  # noqa: E402
 
 try:
     import _telemetry as T
@@ -115,8 +115,8 @@ def recusa(msg, codigo=2):
 
 def valida_plano(itens):
     itens = [i.strip() for i in itens]
-    if not 1 <= len(itens) <= M.PLANO_MAX:
-        recusa(f"o plano tem {len(itens)} itens; aceito de 1 a {M.PLANO_MAX}. "
+    if not 1 <= len(itens) <= M.PLAN_MAX:
+        recusa(f"o plano tem {len(itens)} itens; aceito de 1 a {M.PLAN_MAX}. "
                "Mais que isso é programa: use plan.yaml (/common:plan).")
     for i in itens:
         if not i:
@@ -208,9 +208,9 @@ def estado(root, atual):
               "proponho o plano.")
         return
     prop = " ".join(atual["purpose"].split())
-    if not M.mesma_sessao(atual.get("session_id"), sessao_atual()):
+    if not M.same_session(atual.get("session_id"), sessao_atual()):
         print("state: other-session")
-        print("\n".join(M.pergunta_outra_sessao(atual, prop)))
+        print("\n".join(M.other_session_question(atual, prop)))
         return
     m = len(plano)
     passo = atual.get("step")
@@ -241,7 +241,7 @@ def encerrar(root, atual):
     if not (atual and atual.get("purpose") and isinstance(plano, list) and plano):
         print("encerrar: sem intenção gravada.")
         return
-    if not M.mesma_sessao(atual.get("session_id"), sessao_atual()):
+    if not M.same_session(atual.get("session_id"), sessao_atual()):
         print("encerrar: a intenção é de outra sessão; nada a registrar.")
         return
     m, passo = len(plano), atual.get("step")

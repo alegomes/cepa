@@ -36,7 +36,7 @@ on purpose: if you could switch midway, the mode would go back to being a label.
 
 ## Notes
 
-- The source is `common/hooks/_modos.py`, the same file `session-mode.py` reads
+- The source is `common/hooks/_modes.py`, the same file `session-mode.py` reads
   to inject the exit condition on every turn. One table, two readers;
   `tests/test_modos_fonte_unica.py` fails if the list of valid names in `cepa`
   diverges from it.

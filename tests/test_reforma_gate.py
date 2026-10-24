@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for common/hooks/reforma-gate.py.
+"""Regression tests for common/hooks/refactor-gate.py.
 
 A Reforma reorganiza o código SEM mudar o comportamento observável. Se o teste
 que já passava precisou mudar, o comportamento mudou — não era reforma, era
@@ -31,7 +31,7 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-GATE = REPO / "common" / "hooks" / "reforma-gate.py"
+GATE = REPO / "common" / "hooks" / "refactor-gate.py"
 
 failures = []
 
@@ -87,7 +87,7 @@ def test_bloqueia_teste_externo():
         p = r.edit("src/test/java/com/x/AuthResourceIT.java")
         check("reforma: bloqueia teste externo", p.returncode == 2, str(p.returncode))
         check("reforma: explica que virou construção",
-              "construção" in p.stderr, p.stderr)
+              "construction" in p.stderr, p.stderr)
         check("reforma: mostra o orçamento", "só o módulo de auth" in p.stderr, p.stderr)
         check("reforma: oferece a captura do desvio",
               "off-mode-capture" in p.stderr, p.stderr)

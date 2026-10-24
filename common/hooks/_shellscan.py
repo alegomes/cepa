@@ -231,7 +231,7 @@ def _is_flag(tok: str) -> bool:
 # Extração de ALVOS DE ESCRITA — o degrau acima do parsing.
 #
 # Portado verbatim do `bash-path-lock.py` do build-hex em 26/08/2026, quando o
-# `modo-escrita-gate` precisou da mesma pergunta que os locks já respondiam:
+# `write-mode-gate` precisou da mesma pergunta que os locks já respondiam:
 # "que arquivos esta linha de comando ESCREVE?". A cópia que existia no
 # `enforcement-guard.py` já havia divergido em silêncio — ela não conhece
 # `git mv` nem conta a ORIGEM de um `mv` como escrita, então um agente move um

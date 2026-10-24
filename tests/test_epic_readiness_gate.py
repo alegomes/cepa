@@ -35,7 +35,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 HOOK = REPO / "common" / "hooks" / "spec-readiness-gate.py"
-ESCRITA = REPO / "common" / "hooks" / "modo-escrita-gate.py"
+ESCRITA = REPO / "common" / "hooks" / "write-mode-gate.py"
 CMD = REPO / "common" / "commands" / "epic.md"
 
 FAILURES = []
@@ -568,11 +568,11 @@ def test_prosa_da_intencao_e_do_fechamento():
 def test_textos_descritivos():
     import importlib.util
     spec = importlib.util.spec_from_file_location(
-        "_modos", REPO / "common" / "hooks" / "_modos.py")
+        "_modes", REPO / "common" / "hooks" / "_modes.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     check("o gate da descoberta cita docs/epics",
-          "docs/epics" in (mod.MODOS.get("discovery") or mod.MODOS["descoberta"])["gate"])
+          "docs/epics" in (mod.MODES.get("discovery") or mod.MODES["descoberta"])["gate"])
     cat = (REPO / "docs" / "commands.md").read_text()
     check("o cenário 'ideia vaga' do catálogo cita /common:epic",
           re.search(r"^- `/common:epic <nome>`", cat, re.M) is not None)

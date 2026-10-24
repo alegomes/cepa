@@ -57,7 +57,7 @@ what the repo already answers, yes.
 the question would come back as an assumption.
 
 **Run in a session in `discovery` mode.** It is the mode that produces this
-document: `modo-escrita-gate` allows `docs/epics/**` in it. `/common:session`
+document: `write-mode-gate` allows `docs/epics/**` in it. `/common:session`
 refuses this command (`session-routine-guard` reads the
 `interaction: conversational` above), because each answer decides the next
 question and none of that can be anticipated.

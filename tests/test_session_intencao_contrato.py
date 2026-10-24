@@ -24,7 +24,7 @@ REPO = Path(__file__).resolve().parent.parent
 SESSION_MD = REPO / "common" / "commands" / "session.md"
 PLUGIN_ROOT = REPO / "common"
 sys.path.insert(0, str(PLUGIN_ROOT / "hooks"))
-import _modos as M  # noqa: E402
+import _modes as M  # noqa: E402
 
 failures = []
 

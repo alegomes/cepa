@@ -35,7 +35,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
 try:
-    from _modos import normalize_mode as _normaliza_modo
+    from _modes import normalize_mode as _normaliza_modo
 except Exception:  # noqa: BLE001 — o encadeamento nunca quebra por causa da tabela
     def _normaliza_modo(v):
         return v

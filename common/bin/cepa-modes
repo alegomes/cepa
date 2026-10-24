@@ -6,7 +6,7 @@ saída ser satisfeita. Quem esquece o propósito de um modo no meio do trabalho
 não vai abrir `docs/modos-de-trabalho.md`, que tem 307 linhas — vai chutar. Este
 comando é a tabela, e nada além dela.
 
-A fonte é `common/hooks/_modos.py`, o mesmo arquivo que o `session-mode.py` lê
+A fonte é `common/hooks/_modes.py`, o mesmo arquivo que o `session-mode.py` lê
 para injetar a condição de saída a cada turno. Uma tabela, dois leitores.
 
 Uso:
@@ -27,10 +27,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
 try:
-    from _modos import MODOS, read_session_mode, normalize_mode
+    from _modes import MODES, read_session_mode, normalize_mode
 except ImportError:
-    print("✗ cepa-modes: não achei common/hooks/_modos.py", file=sys.stderr)
+    print("✗ cepa-modes: não achei common/hooks/_modes.py", file=sys.stderr)
     sys.exit(2)
+
+# `--json` keeps the legacy (pt-BR) keys of the table: compass reads `saida`
+# from it, and the output was settled by item `interface-in-english`.
+_JSON_KEYS = {"purpose": "proposito", "entry": "entrada", "produces": "produz",
+              "exit": "saida", "gate": "gate", "write": "escrita"}
 
 BOLD, DIM, AMARELO, VERDE, RESET = "\033[1m", "\033[2m", "\033[33m", "\033[32m", "\033[0m"
 
@@ -50,8 +55,8 @@ def modo_da_sessao():
 def bloco(nome, d, atual, cor):
     marca = f"  {VERDE}◀ esta sessão{RESET}" if nome == atual else ""
     saida = [f"{BOLD}{AMARELO}{nome}{RESET}{marca}"]
-    for rot, chave in (("serve para", "proposito"), ("entra com", "entrada"), ("produz", "produz"),
-                       ("fecha quando", "saida"), ("gate", "gate")):
+    for rot, chave in (("serve para", "purpose"), ("entra com", "entry"), ("produz", "produces"),
+                       ("fecha quando", "exit"), ("gate", "gate")):
         corpo = textwrap.fill(d[chave], width=78,
                               initial_indent="", subsequent_indent=" " * 16)
         rotulo = f"{DIM}{rot:>13}{RESET} " if cor else f"{rot:>13} "
@@ -75,21 +80,22 @@ def main():
 
     if args.modo:
         args.modo = normalize_mode(args.modo)  # o nome antigo (`reforma`) ainda vale
-    if args.modo and args.modo not in MODOS:
-        print(f"✗ modo desconhecido: {args.modo}\n  válidos: {', '.join(MODOS)}",
+    if args.modo and args.modo not in MODES:
+        print(f"✗ modo desconhecido: {args.modo}\n  válidos: {', '.join(MODES)}",
               file=sys.stderr)
         return 2
 
-    alvo = {args.modo: MODOS[args.modo]} if args.modo else MODOS
+    alvo = {args.modo: MODES[args.modo]} if args.modo else MODES
     if args.as_json:
-        print(json.dumps(alvo, indent=2, ensure_ascii=False))
+        legacy = {n: {_JSON_KEYS[k]: v for k, v in d.items()} for n, d in alvo.items()}
+        print(json.dumps(legacy, indent=2, ensure_ascii=False))
         return 0
 
     if args.purposes:
         print(f"{BOLD}Modos de trabalho{RESET} — para que serve cada um:")
         larg = max(len(n) for n in alvo)
         for nome, d in alvo.items():
-            corpo = textwrap.fill(d["proposito"], width=78,
+            corpo = textwrap.fill(d["purpose"], width=78,
                                   initial_indent="", subsequent_indent=" " * (larg + 4))
             print(f"  {AMARELO}{nome:<{larg}}{RESET}  {corpo}")
         print(f"\n{DIM}A tabela inteira (entra com / produz / fecha quando / gate): "
