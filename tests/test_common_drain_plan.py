@@ -170,7 +170,7 @@ def test_adiar_nao_reescreve_a_ordem_gravada(base):
     """Adiar é decisão de execução. Reordenar o documento é do /common:plan —
     um executor que mexe na ordem é o que a fila existe para impedir.
 
-    Comparar só o CONTEÚDO não prova isso: o `grava_corpo` é idempotente, então
+    Comparar só o CONTEÚDO não prova isso: o `write_body` é idempotente, então
     um `queue` que regravasse o arquivo com os mesmos bytes passaria calado (o
     gate de prova pegou exatamente essa perturbação sobrevivendo). Por isso o
     teste olha também se o arquivo foi TOCADO — a garantia é que o `queue` não
@@ -951,11 +951,11 @@ def test_topologias_com_validacao_batem_com_os_agentes(base):
     conferência, uma topologia nova com validation-lead fecharia sem ele."""
     import re as _re
     fonte = CEPA_PLAN.read_text(encoding="utf-8")
-    m = _re.search(r"^TOPOLOGIAS_COM_VALIDACAO = \(([^)]*)\)", fonte, _re.M)
+    m = _re.search(r"^TOPOLOGIES_WITH_VALIDATION = \(([^)]*)\)", fonte, _re.M)
     declaradas = set(_re.findall(r'"([^"]+)"', m.group(1))) if m else set()
     no_disco = {a.parent.parent.name
                 for a in REPO.glob("*/agents/validation-lead.md")}
-    check("TOPOLOGIAS_COM_VALIDACAO == plugins com agents/validation-lead.md",
+    check("TOPOLOGIES_WITH_VALIDATION == plugins com agents/validation-lead.md",
           declaradas == no_disco, f"{declaradas} != {no_disco}")
     for f in no_disco:
         spec = (REPO / f / "agents" / "validation-lead.md").read_text(

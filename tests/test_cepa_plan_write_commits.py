@@ -183,7 +183,7 @@ def test_resposta_do_decidir_passa_mesmo_citando_a_pergunta():
 
 
 def test_entradas_adversariais_no_filtro_de_resposta():
-    """Nível adversarial: o `nao_responde` interpreta texto digitado. Casos de
+    """Nível adversarial: o `not_an_answer` interpreta texto digitado. Casos de
     borda que não podem recusar o que responde nem aceitar o que não."""
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)

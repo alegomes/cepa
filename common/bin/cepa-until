@@ -1009,7 +1009,7 @@ def bloqueia_item(nome, repo, ident, tentativas, lateral=None):
     nem o `/common:drain-plan` nem o `cepa-plan` têm como enxergar a repetição.
     Sem a marca, o `queue` reoferece o mesmo item para sempre.
 
-    `blocked` é o estado certo e não é um estado novo: o `monta_lote` ADIA
+    `blocked` é o estado certo e não é um estado novo: o `build_batch` ADIA
     `blocked` e segue para o próximo item, que é exatamente a semântica pedida,
     e o `finish` já limpa o `claimed_by` — a reserva órfã não fica pendurada.
     """

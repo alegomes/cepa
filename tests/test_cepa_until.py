@@ -110,7 +110,7 @@ def fake_claude(tmp, corpo):
         "        if it['id'] == ident:\n"
         "            it.update(campos)\n"
         "    grava(p)\n"
-        # Espelha a regra de adiamento do `cepa-plan monta_lote`: item com
+        # Espelha a regra de adiamento do `cepa-plan build_batch`: item com
         # `human_pending` aberto NÃO é entregue de novo ao executor. Sem isto o
         # falso remarca o mesmo item para sempre e o teste mede a si mesmo.
         "def primeiro_pendente():\n"

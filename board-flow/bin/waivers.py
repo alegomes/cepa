@@ -22,7 +22,7 @@ prova em nome do dono (fb-20261014-3: um run gravou `autor: alegomes` sozinho).
 Por isso, nesse modo `gravar` vira `propor`: o arquivo nasce como PROPOSTA
 (`status: proposta`, `autor: null`), `carregar` não a enxerga, e só o
 `cepa-plan answer` do dono, num terminal, a converte em dispensa
-(`converter`). Gêmeo inline da conversão: `common/bin/cepa-plan` (`cmd_responde`).
+(`converter`). Gêmeo inline da conversão: `common/bin/cepa-plan` (`cmd_answer`).
 """
 from __future__ import annotations
 

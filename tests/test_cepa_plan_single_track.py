@@ -196,7 +196,7 @@ def test_add_blocked_by_valido_e_multiplo(base):
 
 def test_add_preserva_cabecalho_escrito_a_mao(base):
     """O cabeçalho do arquivo (comentários) não pode virar vítima do `add`:
-    ele usa `abre_plano_para_marcar` + `grava_corpo`, a mesma dupla do
+    ele usa `open_plan_for_marking` + `write_body`, a mesma dupla do
     `start`/`finish`, que preserva o topo do arquivo verbatim."""
     d = repo_git(base, "add-cabecalho")
     alvo = escreve_fila(d, [item("A")])
@@ -213,7 +213,7 @@ def test_add_preserva_cabecalho_escrito_a_mao(base):
 
 
 def test_add_recusa_quando_resultado_falha_na_validacao(base):
-    """O `add` roda `valida_plano` no resultado INTEIRO, não só nos campos do
+    """O `add` roda `validate_plan` no resultado INTEIRO, não só nos campos do
     item novo — uma lacuna que já morava no disco (escrita à mão, ou de uma
     versão anterior do escritor) não pode ser ignorada só porque o item novo
     em si está correto."""
@@ -227,7 +227,7 @@ def test_add_recusa_quando_resultado_falha_na_validacao(base):
                     encoding="utf-8")
 
     r = run(d, "add", "fila", "B", "--title", "b", "--why", "w", "--repo", ".")
-    check("recusa: o resultado (item novo + disco) não passa em valida_plano",
+    check("recusa: o resultado (item novo + disco) não passa em validate_plan",
           r.returncode == 2, r.stdout)
     check("a recusa nomeia o bloqueio fantasma pré-existente",
           "FANTASMA" in r.stderr, r.stderr)
