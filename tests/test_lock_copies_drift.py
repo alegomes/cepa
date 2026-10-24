@@ -259,13 +259,13 @@ def test_bash_path_lock_identical():
 
     # 1. module-level tables / constants
     consts = {t: module_constants(s) for t, s in found.items()}
-    ref_topo = "build-hex"
-    ref = consts[ref_topo]
+    ref_topology = "build-hex"
+    ref = consts[ref_topology]
     divergent = [t for t, s in consts.items() if s != ref]
     check("bash-path-lock.py: tabelas de módulo idênticas nas 5 cópias",
-          not divergent, f"divergem de {ref_topo}: {divergent}")
+          not divergent, f"divergem de {ref_topology}: {divergent}")
     for t in divergent:
-        _report_first_diff(ref_topo, ref, t, consts[t])
+        _report_first_diff(ref_topology, ref, t, consts[t])
 
     # 2. functions, one by one
     funcs = {t: functions_of(s) for t, s in found.items()}
@@ -276,8 +276,8 @@ def test_bash_path_lock_identical():
         present = {t: f[name] for t, f in funcs.items() if name in f}
         if len(present) < 2:
             continue
-        ref = present[ref_topo] if ref_topo in present else present[sorted(present)[0]]
-        base = ref_topo if ref_topo in present else sorted(present)[0]
+        ref = present[ref_topology] if ref_topology in present else present[sorted(present)[0]]
+        base = ref_topology if ref_topology in present else sorted(present)[0]
         divergent = [t for t, s in present.items() if s != ref]
         check(f"bash-path-lock.py:{name} idêntico em {len(present)} cópias",
               not divergent, f"divergem de {base}: {divergent}")
@@ -296,15 +296,15 @@ def test_path_lock_core_identical():
         present = {t: f[name] for t, f in funcs.items() if name in f}
         if len(present) < 2:
             continue  # function in one copy only — nothing to compare
-        ref_topo = "build-hex" if "build-hex" in present else sorted(present)[0]
-        ref = present[ref_topo]
+        ref_topology = "build-hex" if "build-hex" in present else sorted(present)[0]
+        ref = present[ref_topology]
         divergent = [t for t, s in present.items() if s != ref]
         check(f"path-lock.py:{name} idêntico em {len(present)} cópias",
               not divergent,
-              f"divergem de {ref_topo}: {divergent}")
+              f"divergem de {ref_topology}: {divergent}")
         if divergent:
             for t in divergent:
-                _report_first_diff(f"{ref_topo}:{name}", ref, t, present[t])
+                _report_first_diff(f"{ref_topology}:{name}", ref, t, present[t])
 
 
 def test_exemptions_have_reason():
@@ -327,15 +327,15 @@ def test_pathlock_main_matches_outside_the_hex():
     if len(mains) < 2:
         check("path-lock.py:main comparável fora do build-hex", False)
         return
-    ref_topo = sorted(mains)[0]
-    ref = mains[ref_topo]
+    ref_topology = sorted(mains)[0]
+    ref = mains[ref_topology]
     divergent = [t for t, s in mains.items() if s != ref]
     check(f"path-lock.py:main idêntico nas {len(mains)} topologias sem build-hex.yaml",
           not divergent,
-          f"divergem de {ref_topo}: {divergent}")
+          f"divergem de {ref_topology}: {divergent}")
     if divergent:
         for t in divergent:
-            _report_first_diff(f"{ref_topo}:main", ref, t, mains[t])
+            _report_first_diff(f"{ref_topology}:main", ref, t, mains[t])
 
 
 # The command-line reading engine, in the two sources that remained: the template

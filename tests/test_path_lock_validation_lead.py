@@ -66,7 +66,7 @@ def main():
 
     failures = 0
     for hook in HOOKS:
-        topo = hook.parent.parent.name
+        topology = hook.parent.parent.name
         agent = f"{plugin_name(hook)}:validation-lead"
         proj = Path(tempfile.mkdtemp())
 
@@ -89,10 +89,10 @@ def main():
         for label, fp, want, why in cases:
             got = run(hook, agent, fp, proj)
             if got == want:
-                print(f"PASS [{topo:11}] {label} -> exit {got}")
+                print(f"PASS [{topology:11}] {label} -> exit {got}")
             else:
                 failures += 1
-                print(f"FAIL [{topo:11}] {label} -> exit {got} (want {want}: {why})")
+                print(f"FAIL [{topology:11}] {label} -> exit {got} (want {want}: {why})")
 
     print()
     if failures:

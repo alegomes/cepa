@@ -886,7 +886,7 @@ const AG_EMPTY = `[acceptance-gate] BLOCKED: cannot move WEGO-2218 to done — t
 const WG_SRC = `BLOCK: 1
   source \`session/oncoto\` is held by a LIVE session — mac:/repo (active 2 min ago)
     its history may be rewritten under you; ask it to land or close first.`
-const WG_AMBOS = `BLOCK: 2
+const WG_BOTH = `BLOCK: 2
   source \`session/oncoto\` is held by a LIVE session — mac:/repo (active 2 min ago)
   destination \`main\` is held by a LIVE session — mac:/repo2 (active 1 min ago)`
 
@@ -926,7 +926,7 @@ test('leGuarda só lê stdout de Bash que chamou o worktree-guard e começa com 
     gate: 'worktree-guard',
     phrase: 'Merge barrado: a branch session/oncoto está em uso por outra sessão viva. Peça para ela fechar ou aterrissar antes.',
   })
-  expect(readGuard(cmd, WG_AMBOS)?.phrase).toBe(
+  expect(readGuard(cmd, WG_BOTH)?.phrase).toBe(
     'Merge barrado: as branches session/oncoto e main estão em uso por outra sessão viva. Peça para ela fechar ou aterrissar antes.',
   )
   expect(readGuard(cmd, 'BLOCK: 1\n  (detalhe fora do formato)')?.phrase).toBe(

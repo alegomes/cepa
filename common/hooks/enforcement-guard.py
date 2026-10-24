@@ -68,11 +68,11 @@ def _segment_targets(segment: str) -> list:
     redir_mask = _quoted_mask(segment)
     targets = [_unquote(m.group(1)) for m in _REDIR_RE.finditer(segment)
                if not redir_mask[m.start()]]
-    sem_redir = _strip_redirections(segment, redir_mask)
+    no_redir = _strip_redirections(segment, redir_mask)
     try:
-        argv = shlex.split(sem_redir, posix=True)
+        argv = shlex.split(no_redir, posix=True)
     except ValueError:
-        argv = sem_redir.split()
+        argv = no_redir.split()
     if not argv:
         return targets
     cmd = os.path.basename(argv[0])

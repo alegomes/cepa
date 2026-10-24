@@ -61,7 +61,7 @@ def main():
 
     failures = 0
     for hook in HOOKS:
-        topo = hook.parent.parent.name
+        topology = hook.parent.parent.name
         pname = plugin_name(hook)
         proj = Path(tempfile.mkdtemp())   # project root
         other = Path(tempfile.mkdtemp())  # disjoint tree — stands in for /tmp/proof-*
@@ -103,10 +103,10 @@ def main():
         for label, agent_type, fp, want, why in cases:
             got = run(hook, agent_type, fp, proj)
             if got == want:
-                print(f"PASS [{topo:11}] {label:34} -> exit {got}")
+                print(f"PASS [{topology:11}] {label:34} -> exit {got}")
             else:
                 failures += 1
-                print(f"FAIL [{topo:11}] {label:34} -> exit {got} (want {want}: {why})")
+                print(f"FAIL [{topology:11}] {label:34} -> exit {got} (want {want}: {why})")
 
     print()
     if failures:

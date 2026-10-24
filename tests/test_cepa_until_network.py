@@ -325,9 +325,9 @@ def test_network_wait_respects_the_deadline_and_the_return():
     def probe():
         n["v"] += 1
         return n["v"] >= 3
-    ate = datetime.now() + timedelta(seconds=10)
+    until_ts = datetime.now() + timedelta(seconds=10)
     began = time.monotonic()
-    check("volta na 3ª sonda", m.wait_for_network(ate, probe, 0.1) is True
+    check("volta na 3ª sonda", m.wait_for_network(until_ts, probe, 0.1) is True
           and n["v"] == 3 and time.monotonic() - began < 2)
     began = time.monotonic()
     check("prazo vencido devolve False",
