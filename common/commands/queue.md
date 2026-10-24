@@ -1,5 +1,5 @@
 ---
-description: The single writer of the repo's `single-track` queue, `.claude/queues/<name>/queue.yaml`: the document that keeps the ORDER of the items and the WHY of each position, which is what a tracker loses. Four sources: `--from-spec` turns each success criterion of a /common:spec specification into an item, inheriting the order of the text (and saying so); `--from-epic` with `--cycle N` turns each sentence of a cycle's "What it crosses" in a /common:epic Epic into an item and the cycle's demonstration script into the queue's `demonstra:`; `--from-jira` takes the classification of /board-flow:triage (which reads the cards and hunts evidence in the code) and records the order it proposed; or a queue dictated by hand, for a repo with no tracker and no spec. Needs no Jira. Refuses to overwrite a `parallel-waves` file of /maestro:program-plan. /common:next reads the queue afterwards.
+description: The single writer of the repo's `single-track` queue, `.claude/queues/<name>/queue.yaml`: the document that keeps the ORDER of the items and the WHY of each position, which is what a tracker loses. Four sources: `--from-spec` turns each success criterion of a /common:spec specification into an item, inheriting the order of the text (and saying so); `--from-epic` with `--cycle N` turns each sentence of a cycle's "What it crosses" in a /common:epic Epic into an item and the cycle's demonstration script into the queue's `demonstrates:`; `--from-jira` takes the classification of /board-flow:triage (which reads the cards and hunts evidence in the code) and records the order it proposed; or a queue dictated by hand, for a repo with no tracker and no spec. Needs no Jira. Refuses to overwrite a `parallel-waves` file of /maestro:program-plan. /common:next reads the queue afterwards.
 argument-hint: <name> [--from-spec docs/spec/<slug>.md | --from-epic docs/epics/<name>.md --cycle N | --from-jira [column|handoff.json]] [--dry-run] [--on-missing refuse|keep|drop]
 interaction: conversational
 ---
@@ -57,7 +57,7 @@ instead of erasing it.
 - `--from-epic docs/epics/<name>.md` — the queue comes from ONE cycle of the
   value ladder of a `/common:epic` Epic: each sentence of the "What it crosses"
   column becomes an item, and the cycle's demonstration script becomes the
-  header's `demonstra:`. Always with `--cycle`.
+  header's `demonstrates:`. Always with `--cycle`.
 - `--cycle N` — which cycle of the ladder becomes a queue (the number in the
   "Ciclo" column). An Epic has several cycles and a queue belongs to only one;
   the custom is for the queue name to end in `-c<N>`.
@@ -205,10 +205,10 @@ mechanical**, not yours:
 python3 common/bin/cepa-plan from-epic docs/epics/<name>.md --cycle N
 ```
 
-It returns a JSON with the cycle's `demonstra` and `items`, and applies the
+It returns a JSON with the cycle's `demonstrates` and `items`, and applies the
 rules that previously had no owner:
 
-- **the queue's `demonstra:` is the cycle's script**, verbatim. It is what the
+- **the queue's `demonstrates:` is the cycle's script**, verbatim. It is what the
   Epic declares as acceptance, and it is what `cepa-plan show` prints later;
 - **one item per sentence of "What it crosses"**, in the order of the text,
   with id `C<N>-<k>`. A sentence is the stretch ending in `.` or `;` outside
@@ -235,7 +235,7 @@ rules that previously had no owner:
 
 When nothing changed in what `from-epic` returned, write directly with
 `--from-epic <file> --cycle N` in place of `--items`: it is the only path
-that brings `demonstra:` into the header, because the item list does not carry
+that brings `demonstrates:` into the header, because the item list does not carry
 it.
 
 #### With `--from-jira`

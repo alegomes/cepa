@@ -105,7 +105,7 @@ def test_sim_converte_a_proposta_em_dispensa():
         check("o item voltou para pending", itens_de(raiz)["a1"]["status"] == "pending")
         check("plan.yaml commitado (árvore limpa)",
               git(raiz, "status", "--porcelain", "--untracked-files=no") == "", git(raiz, "status", "--porcelain"))
-        check("o commit é o da resposta", "resposta do dono a a1" in git(raiz, "log", "-1", "--format=%s"))
+        check("o commit é o da resposta", "owner's answer to a1" in git(raiz, "log", "-1", "--format=%s"))
         check("o arquivo da dispensa entrou no commit (não está mais sujo)",
               ".claude/waivers" not in git(raiz, "status", "--porcelain"), git(raiz, "status", "--porcelain"))
 
@@ -182,7 +182,7 @@ def test_gitignore_em_dot_claude_nao_quebra_o_responde():
         check("com waivers ignorado o responde sai 0", rc == 0, out)
         check("...a dispensa foi convertida mesmo assim",
               "status" not in yaml.safe_load(path.read_text()))
-        check("...e o plan.yaml foi commitado", "resposta do dono a a1" in git(raiz, "log", "-1", "--format=%s"))
+        check("...e o plan.yaml foi commitado", "owner's answer to a1" in git(raiz, "log", "-1", "--format=%s"))
 
 
 def test_yaml_quebrado_ao_lado_nao_derruba_o_responde():

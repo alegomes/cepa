@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CS-1 do ciclo 1 do Epic Cepa em espiral: `demonstra:` no cabeçalho da fila.
+"""CS-1 do ciclo 1 do Epic Cepa em espiral: `demonstrates:` no cabeçalho da fila.
 
 Rode com `python3 tests/test_cepa_plan_demonstra.py`. Superfície: a CLI
 `common/bin/cepa-plan`, chamada como subprocesso.
@@ -73,63 +73,91 @@ def le(alvo):
 
 def test_validate_aceita_demonstra(base):
     d = repo_git(base, "valida")
-    alvo = grava_plano(d, {"demonstra": DEMONSTRA})
+    alvo = grava_plano(d, {"demonstrates": DEMONSTRA})
     r = run(d, "validate", str(alvo))
-    check("validate aceita a fila com `demonstra:`", r.returncode == 0,
+    check("validate aceita a fila com `demonstrates:`", r.returncode == 0,
           r.stdout + r.stderr)
 
     sem = grava_plano(d, {}, nome="sem")
-    check("fila sem `demonstra:` continua válida",
+    check("fila sem `demonstrates:` continua válida",
           run(d, "validate", str(sem)).returncode == 0)
 
 
 def test_validate_recusa_demonstra_que_nao_e_texto(base):
     d = repo_git(base, "tipo")
     for rot, valor in (("lista", ["a", "b"]), ("vazio", "  ")):
-        alvo = grava_plano(d, {"demonstra": valor}, nome=rot)
+        alvo = grava_plano(d, {"demonstrates": valor}, nome=rot)
         r = run(d, "validate", str(alvo))
-        check(f"validate recusa `demonstra:` {rot}", r.returncode == 2,
+        check(f"validate recusa `demonstrates:` {rot}", r.returncode == 2,
               r.stdout + r.stderr)
-        check(f"e nomeia o campo na recusa ({rot})", "demonstra" in r.stderr,
+        check(f"e nomeia o campo na recusa ({rot})", "demonstrates" in r.stderr,
               r.stderr)
 
 
 def test_show_imprime_o_texto(base):
     d = repo_git(base, "show")
-    grava_plano(d, {"demonstra": DEMONSTRA})
+    grava_plano(d, {"demonstrates": DEMONSTRA})
     r = run(d, "show", "fila", "--repo", ".")
     check("show sai 0", r.returncode == 0, r.stderr)
-    check("show imprime o texto do `demonstra:`", DEMONSTRA in r.stdout, r.stdout)
+    check("show imprime o texto do `demonstrates:`", DEMONSTRA in r.stdout, r.stdout)
 
     r = run(d, "show", "fila", "--repo", ".", "--json")
     dados = json.loads(r.stdout) if r.returncode == 0 else {}
-    check("show --json traz o campo", dados.get("demonstra") == DEMONSTRA,
+    check("show --json traz o campo", dados.get("demonstrates") == DEMONSTRA,
           r.stdout + r.stderr)
 
     grava_plano(d, {}, nome="sem")
     r = run(d, "show", "sem", "--repo", ".")
     check("show de fila sem o campo diz que não tem",
-          r.returncode == 0 and "sem `demonstra:`" in r.stdout,
+          r.returncode == 0 and "sem `demonstrates:`" in r.stdout,
           r.stdout + r.stderr)
 
 
 def test_reescrita_preserva_demonstra(base):
     d = repo_git(base, "reescrita")
-    alvo = grava_plano(d, {"demonstra": DEMONSTRA})
+    alvo = grava_plano(d, {"demonstrates": DEMONSTRA})
     itens = d / "itens.json"
     itens.write_text(json.dumps([{"id": "CS-1", "title": "um",
                                   "why": "outro motivo",
                                   "human_pending": None}]), encoding="utf-8")
     r = run(d, "write", "fila", "--items", str(itens), "--repo", ".")
     check("repriorização grava", r.returncode == 0, r.stderr)
-    check("e não apaga o `demonstra:` do disco",
-          le(alvo).get("demonstra") == DEMONSTRA, str(le(alvo)))
+    check("e não apaga o `demonstrates:` do disco",
+          le(alvo).get("demonstrates") == DEMONSTRA, str(le(alvo)))
 
     run(d, "start", "fila", "CS-1", "--repo", ".")
     run(d, "finish", "fila", "CS-1", "--status", "done",
         "--evidence", "teste", "--repo", ".")
     check("start/finish também não o apagam",
-          le(alvo).get("demonstra") == DEMONSTRA, str(le(alvo)))
+          le(alvo).get("demonstrates") == DEMONSTRA, str(le(alvo)))
+
+
+def test_chave_antiga_demonstra_ainda_e_lida(base):
+    d = repo_git(base, "antiga")
+    alvo = grava_plano(d, {"demonstra": DEMONSTRA})
+    r = run(d, "validate", str(alvo))
+    check("validate aceita a fila gravada com a chave antiga `demonstra:`",
+          r.returncode == 0, r.stderr)
+    r = run(d, "show", "fila", "--repo", ".")
+    check("show imprime o texto da chave antiga", DEMONSTRA in r.stdout, r.stdout)
+    r = run(d, "show", "fila", "--repo", ".", "--json")
+    dados = json.loads(r.stdout) if r.returncode == 0 else {}
+    check("show --json devolve o texto da chave antiga como `demonstrates`",
+          dados.get("demonstrates") == DEMONSTRA, r.stdout + r.stderr)
+    grava_plano(d, {"demonstra": ""}, nome="vazia")
+    r = run(d, "validate", str(d / ".claude" / "programs" / "vazia" / "plan.yaml"))
+    check("validate recusa a chave antiga vazia", r.returncode == 2, r.stderr)
+    itens = d / "itens.json"
+    itens.write_text(json.dumps([{"id": "CS-1", "title": "um",
+                                  "why": "outro motivo",
+                                  "human_pending": None}]), encoding="utf-8")
+    r = run(d, "write", "fila", "--items", str(itens), "--repo", ".")
+    check("repriorização sobre a fila de chave antiga grava", r.returncode == 0,
+          r.stderr)
+    plano = le(alvo)
+    check("e o roteiro sobrevive, regravado como `demonstrates:`",
+          plano.get("demonstrates") == DEMONSTRA and "demonstra" not in plano,
+          str(plano))
 
 
 def main():
@@ -137,7 +165,8 @@ def main():
         for fn in (test_validate_aceita_demonstra,
                    test_validate_recusa_demonstra_que_nao_e_texto,
                    test_show_imprime_o_texto,
-                   test_reescrita_preserva_demonstra):
+                   test_reescrita_preserva_demonstra,
+                   test_chave_antiga_demonstra_ainda_e_lida):
             print(f"\n{fn.__name__}")
             fn(base)
     print()

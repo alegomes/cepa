@@ -8,12 +8,12 @@ Rode com `python3 tests/test_cepa_plan_from_epic.py`. Superfície: a CLI
 O que estes testes cobram:
 
   - sobre o Epic real `docs/epics/cepa-em-espiral.md`, `write cepa-espiral-c2
-    --from-epic ... --ciclo 2 --dry-run` imprime uma fila cujo `demonstra:` é
+    --from-epic ... --ciclo 2 --dry-run` imprime uma fila cujo `demonstrates:` é
     o roteiro do ciclo 2 e que tem um item por frase de "O que atravessa", na
     ordem do texto, cada um com critério de aceite e superfície; e não grava;
   - no formato do /common:epic (com "Efeito em tela" e "Efeito em backend") a
     superfície sai dessas colunas, e frase com ponto dentro de crase não parte;
-  - gravar de verdade leva o `demonstra:` ao disco, o `show` o imprime, e
+  - gravar de verdade leva o `demonstrates:` ao disco, o `show` o imprime, e
     reescrever o ciclo não apaga o `status` que a execução gravou;
   - o que não dá para derivar é recusa com motivo: ciclo que não existe,
     Epic sem escada, ciclo sem peça, `--from-epic` sem `--ciclo` e vice-versa.
@@ -39,7 +39,7 @@ CMD = REPO / "common" / "commands" / "queue.md"
 FAILURES = []
 
 # O roteiro do ciclo 2, copiado do Epic à mão: se o parser trocar de coluna
-# ou cortar a célula, o `demonstra:` deixa de bater com este texto.
+# ou cortar a célula, o `demonstrates:` deixa de bater com este texto.
 ROTEIRO_C2 = (
     "Com a escada do Epic Contratos aprovada, o dono vai dormir e de manhã o "
     "ciclo 2 do Contratos está demonstrável: construção (drain), prova "
@@ -120,8 +120,8 @@ def test_epic_real_ciclo_2(base):
     if r.returncode != 0:
         return
     plan = corpo_yaml(r.stdout)
-    check("o cabeçalho tem `demonstra:` igual ao roteiro do ciclo 2",
-          plan.get("demonstra") == ROTEIRO_C2, repr(plan.get("demonstra")))
+    check("o cabeçalho tem `demonstrates:` igual ao roteiro do ciclo 2",
+          plan.get("demonstrates") == ROTEIRO_C2, repr(plan.get("demonstrates")))
     itens = plan.get("items") or []
     check("um item por frase de \"O que atravessa\", na ordem do texto",
           [i.get("title") for i in itens] == PECAS_C2,
@@ -164,9 +164,9 @@ def test_formato_do_epic_command(base):
     if r.returncode != 0:
         return
     dados = json.loads(r.stdout)
-    check("from-epic devolve o `demonstra` do ciclo pedido",
-          dados.get("demonstra") == "O operador carrega o PDF e vê 3 respostas.",
-          repr(dados.get("demonstra")))
+    check("from-epic devolve o `demonstrates` do ciclo pedido",
+          dados.get("demonstrates") == "O operador carrega o PDF e vê 3 respostas.",
+          repr(dados.get("demonstrates")))
     titulos = [i["title"] for i in dados.get("items") or []]
     check("frase terminada em ponto vira item; ponto dentro de crase e `\\|` "
           "não partem",
@@ -220,8 +220,8 @@ def test_nomes_novos_e_antigos_do_epic(base):
           len({json.dumps([(i["id"], i["title"]) for i in json.loads(v)["items"]])
                for v in saidas.values()}) == 1,
           repr(list(saidas.values())))
-    check("...e o mesmo `demonstra`",
-          len({json.loads(v)["demonstra"] for v in saidas.values()}) == 1)
+    check("...e o mesmo `demonstrates`",
+          len({json.loads(v)["demonstrates"] for v in saidas.values()}) == 1)
     w = run(d, "write", "fx-en", "--from-epic", "novo.md", "--cycle", "1",
             "--when", "2026-10-23", "--repo", ".")
     check("write --from-epic novo.md --cycle 1 --when grava", w.returncode == 0,
@@ -233,9 +233,9 @@ def test_nomes_novos_e_antigos_do_epic(base):
     if w.returncode == 0 and w2.returncode == 0:
         a = yaml.safe_load(plano_de(d, "fx-en").read_text(encoding="utf-8"))
         b = yaml.safe_load(plano_de(d, "fx-pt").read_text(encoding="utf-8"))
-        check("as duas filas gravadas têm os mesmos itens e `demonstra`",
+        check("as duas filas gravadas têm os mesmos itens e `demonstrates`",
               [i["title"] for i in a["items"]] == [i["title"] for i in b["items"]]
-              and a["demonstra"] == b["demonstra"])
+              and a["demonstrates"] == b["demonstrates"])
     rascunho = d / "rascunho.md"
     rascunho.write_text(EPIC_EN.replace("**Status:** ready", "**Status:** draft"),
                         encoding="utf-8")
@@ -257,13 +257,13 @@ def test_grava_e_reescreve(base):
         check("o plano existe depois do write", False)
         return
     plan = yaml.safe_load(alvo.read_text(encoding="utf-8"))
-    check("o `demonstra:` gravado é o roteiro do ciclo",
-          plan.get("demonstra") == "O operador carrega o PDF e vê 3 respostas.",
-          repr(plan.get("demonstra")))
+    check("o `demonstrates:` gravado é o roteiro do ciclo",
+          plan.get("demonstrates") == "O operador carrega o PDF e vê 3 respostas.",
+          repr(plan.get("demonstrates")))
     v = run(d, "validate", str(alvo))
     check("a fila gravada passa no validate", v.returncode == 0, v.stderr)
     s = run(d, "show", "fx-c1", "--repo", ".")
-    check("show imprime o roteiro como `demonstra`",
+    check("show imprime o roteiro como `demonstrates`",
           "O operador carrega o PDF e vê 3 respostas." in s.stdout, s.stdout)
     st = run(d, "start", "fx-c1", "C1-1", "--repo", ".")
     check("o primeiro item é reservável", st.returncode == 0, st.stderr)
@@ -274,6 +274,37 @@ def test_grava_e_reescreve(base):
     check("reescrever o ciclo preserva o status que a execução gravou",
           r.returncode == 0 and status.get("C1-1") == "in_progress",
           f"{r.stderr} {status}")
+
+
+def test_from_epic_sobre_fila_de_chave_antiga(base):
+    d = repo_git(base, "antiga")
+    (d / "epic.md").write_text(EPIC_NOVO, encoding="utf-8")
+    r = run(d, "write", "fx-old", "--from-epic", "epic.md", "--ciclo", "1",
+            "--quando", "2026-10-08", "--repo", ".")
+    alvo = plano_de(d, "fx-old")
+    check("grava a fila de partida", r.returncode == 0 and alvo.exists(), r.stderr)
+    if not alvo.exists():
+        return
+    plan = yaml.safe_load(alvo.read_text(encoding="utf-8"))
+    roteiro = plan.pop("demonstrates")
+    plan["demonstra"] = roteiro  # como a versão anterior gravava
+    alvo.write_text(yaml.dump(plan, allow_unicode=True, sort_keys=False),
+                    encoding="utf-8")
+    s = run(d, "show", "fx-old", "--repo", ".")
+    check("show imprime o roteiro de uma fila com a chave antiga `demonstra:`",
+          roteiro in s.stdout, s.stdout + s.stderr)
+    st = run(d, "start", "fx-old", "C1-1", "--repo", ".")
+    check("o item da fila antiga é reservável", st.returncode == 0, st.stderr)
+    r = run(d, "write", "fx-old", "--from-epic", "epic.md", "--ciclo", "1",
+            "--repo", ".")
+    novo = yaml.safe_load(alvo.read_text(encoding="utf-8"))
+    status = {i["id"]: i["status"] for i in novo["items"]}
+    check("reescrever sobre a chave antiga funciona e preserva o status",
+          r.returncode == 0 and status.get("C1-1") == "in_progress",
+          f"{r.stderr} {status}")
+    check("e grava só `demonstrates:`, com o roteiro do Epic",
+          novo.get("demonstrates") == roteiro and "demonstra" not in novo,
+          str(list(novo)))
 
 
 def test_recusas(base):
@@ -369,6 +400,7 @@ def main():
         test_formato_do_epic_command(base)
         test_nomes_novos_e_antigos_do_epic(base)
         test_grava_e_reescreve(base)
+        test_from_epic_sobre_fila_de_chave_antiga(base)
         test_recusas(base)
         test_avisos_e_recusas_de_epic_malformado(base)
     test_contrato_de_prosa()

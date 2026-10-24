@@ -90,7 +90,7 @@ def test_responde_commita_so_a_fila_e_deixa_a_arvore_limpa():
         check("o item voltou para pending",
               itens_de(raiz)["a1"]["status"] == "pending")
         check("a fila foi commitada no mesmo passo",
-              "resposta do dono a a1" in ultimo_commit(raiz), ultimo_commit(raiz))
+              "owner's answer to a1" in ultimo_commit(raiz), ultimo_commit(raiz))
         check("...e a saída nomeia o commit", "commit " in out, out)
         check("o commit levou só a fila: a mudança alheia continua na árvore",
               status(raiz) == "M outro.txt", status(raiz))

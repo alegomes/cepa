@@ -1,0 +1,23 @@
+item: interface-in-english
+status: complete
+audited_range: 290f157..f26a765 + working tree (uncommitted rename demonstra -> demonstrates)
+reaudit: "AC1-4, AC6-9 unchanged from the first audit (complete). AC5 re-evaluated."
+criteria:
+  - {id: AC1, altitude: doc, test: tests/test_commands_english.py, evidence: verified, status: complete}
+  - {id: AC2, altitude: cli, test: "tests/test_cepa_intencao.py, tests/test_modos_fonte_unica.py", evidence: verified, status: complete}
+  - {id: AC3, altitude: cli, test: "tests/test_cepa_until_aliases_ingles.py, tests/test_cepa_plan_escrita_commita.py", evidence: verified, status: complete}
+  - {id: AC4, altitude: file-format, test: "tests/test_session_intent.py", evidence: verified, status: complete}
+  - id: AC5
+    altitude: file-format
+    surface: queue file keys (header + item keys) and item statuses
+    test: "tests/test_cepa_plan_demonstra.py (test_chave_antiga_demonstra_ainda_e_lida), tests/test_cepa_plan_from_epic.py (test_from_epic_sobre_fila_de_chave_antiga)"
+    evidence: verified
+    run: "python3 tests/test_cepa_plan_demonstra.py -> all green; python3 tests/test_cepa_plan_from_epic.py -> tudo ok"
+    status: complete
+    met: "Item keys (id,title,why,status,blocked_by,human_pending,evidence,owner_question) and statuses (pending/in_progress/done/blocked/dropped) were already English at 0dd5cb9 (git show: 106 items, statuses blocked/done/dropped/pending only). No status 'metade' ever existed (git grep metade 099be0d -- common/bin/cepa-plan is empty). Last Portuguese header key demonstra: is now written as demonstrates:, old key still read, rewrite migrates it."
+    caveat_owner_decision: "Stop/deferral REASON vocabulary of 'cepa-plan queue --json' (teto, fim-da-fila, bloqueado, reservado, depende-de-adiado, bloqueado-antes; 18 consumer files) remains Portuguese. Whether 'o status metade' meant these is an interpretation; routed to the owner as a closed question (human_pending), not done speculatively. Not closed by this artifact."
+    note: "The demonstrates rename is UNCOMMITTED; it must be committed for the evidence to hold on the branch."
+  - {id: AC6, altitude: cli, test: tests/test_cepa_plan_escrita_commita.py, evidence: verified, status: complete, note: "message body 'resposta do dono a' still pt"}
+  - {id: AC7, altitude: hook, test: "test_spec_readiness_gate.py, test_epic_readiness_gate.py, test_cepa_plan_from_epic.py", evidence: verified, status: complete}
+  - {id: AC8, altitude: hook, test: tests/test_report_style_lint.py, evidence: verified, status: complete}
+  - {id: AC9, altitude: doc, test: tests/test_card_claim.py, evidence: verified, status: complete}
