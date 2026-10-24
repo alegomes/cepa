@@ -2232,7 +2232,7 @@ def not_an_answer(text):
 # `.claude/waivers/*.yaml` (`status: proposta`, `autor: null`, `fila`, `item`) and
 # opens the human route on the item. Whoever converts it into a waiver is the
 # owner's `answer`, in a terminal (fb-20261014-3). The reading/writing below is
-# the INLINE TWIN of `converter`/`recusar` in board-flow/bin/waivers.py — I do
+# the INLINE TWIN of `convert`/`decline` in board-flow/bin/waivers.py — I do
 # not import that module because imports between plugins break with the versioned
 # cache directories; the test tests/test_cepa_plan_answer_waiver.py checks that
 # the two agree.

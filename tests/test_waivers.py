@@ -29,55 +29,55 @@ def outside_autonomous_run(monkeypatch):
 
 
 def _write(repo, **kw):
-    base = dict(motivo="teste-cego", escopo="PlugSignAdapter",
-                razao="aceito a prova interna: o fornecedor não é alcançável no automatizado",
-                autor="alegomes", revisit_trigger="quando o adapter mudar")
+    base = dict(reason="teste-cego", scope="PlugSignAdapter",
+                rationale="aceito a prova interna: o fornecedor não é alcançável no automatizado",
+                author="alegomes", revisit_trigger="quando o adapter mudar")
     base.update(kw)
-    return waivers.gravar(repo, hoje=TODAY, **base)
+    return waivers.write(repo, today=TODAY, **base)
 
 
 def test_recorded_waiver_prevents_the_same_question(tmp_path):
     repo = str(tmp_path)
     _write(repo)
-    loaded = waivers.carregar(repo)
+    loaded = waivers.load(repo)
     assert len(loaded) == 1
-    assert waivers.aplicavel(loaded, "teste-cego", "PlugSignAdapter", TODAY)
+    assert waivers.applicable(loaded, "teste-cego", "PlugSignAdapter", TODAY)
 
 
 def test_different_scope_still_asks(tmp_path):
     repo = str(tmp_path)
     _write(repo)
-    loaded = waivers.carregar(repo)
-    assert waivers.aplicavel(loaded, "teste-cego", "TasyGatewayAdapter", TODAY) is None
+    loaded = waivers.load(repo)
+    assert waivers.applicable(loaded, "teste-cego", "TasyGatewayAdapter", TODAY) is None
 
 
 def test_different_reason_in_same_scope_still_asks(tmp_path):
     repo = str(tmp_path)
     _write(repo)
-    loaded = waivers.carregar(repo)
-    assert waivers.aplicavel(loaded, "guarda-fraca", "PlugSignAdapter", TODAY) is None
+    loaded = waivers.load(repo)
+    assert waivers.applicable(loaded, "guarda-fraca", "PlugSignAdapter", TODAY) is None
 
 
 def test_scope_matches_by_slug_not_by_spelling(tmp_path):
     repo = str(tmp_path)
     _write(repo)
-    loaded = waivers.carregar(repo)
-    assert waivers.aplicavel(loaded, "teste-cego", "plugsign adapter", TODAY)
+    loaded = waivers.load(repo)
+    assert waivers.applicable(loaded, "teste-cego", "plugsign adapter", TODAY)
 
 
 def test_trigger_with_expired_date_asks_again(tmp_path):
     repo = str(tmp_path)
     _write(repo, revisit_trigger="revisar em 2026-07-01")
-    loaded = waivers.carregar(repo)
-    assert waivers.aplicavel(loaded, "teste-cego", "PlugSignAdapter", TODAY) is None
-    assert waivers.vencido(loaded[0], TODAY)
+    loaded = waivers.load(repo)
+    assert waivers.applicable(loaded, "teste-cego", "PlugSignAdapter", TODAY) is None
+    assert waivers.expired(loaded[0], TODAY)
 
 
 def test_trigger_with_future_date_still_waives(tmp_path):
     repo = str(tmp_path)
     _write(repo, revisit_trigger="revisar em 2026-12-31")
-    loaded = waivers.carregar(repo)
-    assert waivers.aplicavel(loaded, "teste-cego", "PlugSignAdapter", TODAY)
+    loaded = waivers.load(repo)
+    assert waivers.applicable(loaded, "teste-cego", "PlugSignAdapter", TODAY)
 
 
 def test_prose_trigger_is_not_evaluated_by_code(tmp_path):
@@ -88,10 +88,10 @@ def test_prose_trigger_is_not_evaluated_by_code(tmp_path):
     """
     repo = str(tmp_path)
     _write(repo, revisit_trigger="quando o adapter mudar")
-    assert not waivers.vencido(waivers.carregar(repo)[0], TODAY)
+    assert not waivers.expired(waivers.load(repo)[0], TODAY)
 
 
-@pytest.mark.parametrize("missing", ["razao", "autor", "revisit_trigger"])
+@pytest.mark.parametrize("missing", ["rationale", "author", "revisit_trigger"])
 def test_does_not_record_waiver_without_required_field(tmp_path, missing):
     with pytest.raises(ValueError):
         _write(str(tmp_path), **{missing: ""})
@@ -105,7 +105,7 @@ def test_malformed_file_is_ignored_instead_of_waiving(tmp_path):
     d.mkdir(parents=True)
     (d / "teste-cego--plugsignadapter.yaml").write_text(
         "motivo: teste-cego\nescopo: PlugSignAdapter\n", encoding="utf-8")
-    loaded = waivers.carregar(str(tmp_path))
+    loaded = waivers.load(str(tmp_path))
     assert loaded == []
 
 
@@ -135,17 +135,17 @@ def _outside_run(monkeypatch):
 def test_in_autonomous_run_recording_becomes_proposal(tmp_path, monkeypatch, var):
     repo = str(tmp_path)
     _in_run(monkeypatch, var)
-    assert waivers.em_run_autonomo()
-    path = _write(repo, fila="fila", item="a1")
+    assert waivers.in_autonomous_run()
+    path = _write(repo, queue="fila", item="a1")
     d = yaml.safe_load(open(path))
     assert d["status"] == "proposta"
     assert "autor" in d and d["autor"] is None
     assert "alegomes" in d["proposto_por"]
     assert (d["fila"], d["item"]) == ("fila", "a1")
     assert d["pergunta"].startswith("Aceito a dispensa de PlugSignAdapter")
-    assert waivers.carregar(repo) == []
-    assert waivers.aplicavel(waivers.carregar(repo), "teste-cego", "PlugSignAdapter", TODAY) is None
-    assert [p["_path"] for p in waivers.propostas(repo)] == [path]
+    assert waivers.load(repo) == []
+    assert waivers.applicable(waivers.load(repo), "teste-cego", "PlugSignAdapter", TODAY) is None
+    assert [p["_path"] for p in waivers.proposals(repo)] == [path]
 
 
 def test_run_id_appears_in_proposto_por(tmp_path, monkeypatch):
@@ -160,37 +160,37 @@ def test_convert_and_refuse_are_forbidden_in_the_run(tmp_path, monkeypatch, var)
     _in_run(monkeypatch, var)
     _write(repo)
     with pytest.raises(PermissionError):
-        waivers.converter(repo, "teste-cego", "PlugSignAdapter", "alegomes")
+        waivers.convert(repo, "teste-cego", "PlugSignAdapter", "alegomes")
     with pytest.raises(PermissionError):
-        waivers.recusar(repo, "teste-cego", "PlugSignAdapter", "não")
-    assert waivers.carregar(repo) == []
+        waivers.decline(repo, "teste-cego", "PlugSignAdapter", "não")
+    assert waivers.load(repo) == []
 
 
 def test_owner_converts_the_proposal_into_a_valid_waiver(tmp_path, monkeypatch):
     repo = str(tmp_path)
     _in_run(monkeypatch, "CEPA_UNTIL_RUN")
-    _write(repo, fila="fila", item="a1")
+    _write(repo, queue="fila", item="a1")
     _outside_run(monkeypatch)
-    waivers.converter(repo, "teste-cego", "PlugSignAdapter", "alegomes",
-                      resposta="sim: aceito", hoje=TODAY)
-    w = waivers.aplicavel(waivers.carregar(repo), "teste-cego", "PlugSignAdapter", TODAY)
+    waivers.convert(repo, "teste-cego", "PlugSignAdapter", "alegomes",
+                      answer="sim: aceito", today=TODAY)
+    w = waivers.applicable(waivers.load(repo), "teste-cego", "PlugSignAdapter", TODAY)
     assert w is not None
     assert w["autor"] == "alegomes" and "status" not in w
     assert w["criado_em"] == "2026-08-03"
     assert w["resposta_do_dono"] == "sim: aceito"
     assert "alegomes" in w["proposto_por"] and w["proposto_em"] == "2026-08-03"
-    assert waivers.propostas(repo) == []
+    assert waivers.proposals(repo) == []
 
 
 def test_convert_without_proposal_or_over_real_waiver(tmp_path):
     repo = str(tmp_path)
     with pytest.raises(FileNotFoundError):
-        waivers.converter(repo, "teste-cego", "PlugSignAdapter", "alegomes")
+        waivers.convert(repo, "teste-cego", "PlugSignAdapter", "alegomes")
     _write(repo)  # outside the run: real waiver
     with pytest.raises(ValueError):
-        waivers.converter(repo, "teste-cego", "PlugSignAdapter", "alegomes")
+        waivers.convert(repo, "teste-cego", "PlugSignAdapter", "alegomes")
     with pytest.raises(ValueError):
-        waivers.converter(repo, "teste-cego", "PlugSignAdapter", "")
+        waivers.convert(repo, "teste-cego", "PlugSignAdapter", "")
 
 
 def test_refuse_leaves_the_proposal_without_effect(tmp_path, monkeypatch):
@@ -198,11 +198,11 @@ def test_refuse_leaves_the_proposal_without_effect(tmp_path, monkeypatch):
     _in_run(monkeypatch, "CEPA_UNTIL_RUN")
     path = _write(repo)
     _outside_run(monkeypatch)
-    waivers.recusar(repo, "teste-cego", "PlugSignAdapter", "não: prova de verdade", hoje=TODAY)
+    waivers.decline(repo, "teste-cego", "PlugSignAdapter", "não: prova de verdade", today=TODAY)
     d = yaml.safe_load(open(path))
     assert d["status"] == "recusada" and d["recusada_em"] == "2026-08-03"
     assert d["resposta_do_dono"] == "não: prova de verdade"
-    assert waivers.carregar(repo) == [] and waivers.propostas(repo) == []
+    assert waivers.load(repo) == [] and waivers.proposals(repo) == []
 
 
 def test_proposal_status_never_waives_even_with_author_filled(tmp_path):
@@ -211,7 +211,7 @@ def test_proposal_status_never_waives_even_with_author_filled(tmp_path):
     (d / "teste-cego--x.yaml").write_text(
         "status: proposta\nmotivo: teste-cego\nescopo: X\nrazao: r\nautor: alguem\n"
         "criado_em: 2026-08-03\nrevisit_trigger: t\n", encoding="utf-8")
-    assert waivers.carregar(str(tmp_path)) == []
+    assert waivers.load(str(tmp_path)) == []
 
 
 @pytest.mark.parametrize("var", RUN_VARS)
@@ -220,22 +220,22 @@ def test_propose_does_not_overwrite_valid_waiver(tmp_path, monkeypatch, var):
     path = _write(repo)  # real waiver by the owner, outside the run
     before = open(path).read()
     _in_run(monkeypatch, var)
-    again = _write(repo, razao="outra razão qualquer")
+    again = _write(repo, rationale="outra razão qualquer")
     assert again == path
     assert open(path).read() == before
-    assert waivers.aplicavel(waivers.carregar(repo), "teste-cego", "PlugSignAdapter", TODAY)
+    assert waivers.applicable(waivers.load(repo), "teste-cego", "PlugSignAdapter", TODAY)
 
 
 def test_propose_overwrites_old_proposal_and_requires_fields(tmp_path):
     repo = str(tmp_path)
-    kw = dict(motivo="teste-cego", escopo="X", razao="r1", revisit_trigger="t",
-              proposto_por="agente", hoje=TODAY)
-    path = waivers.propor(repo, **kw)
-    waivers.propor(repo, **dict(kw, razao="r2"))
+    kw = dict(reason="teste-cego", scope="X", rationale="r1", revisit_trigger="t",
+              proposed_by="agente", today=TODAY)
+    path = waivers.propose(repo, **kw)
+    waivers.propose(repo, **dict(kw, rationale="r2"))
     assert yaml.safe_load(open(path))["razao"] == "r2"
-    for missing in ("razao", "revisit_trigger", "proposto_por"):
+    for missing in ("rationale", "revisit_trigger", "proposed_by"):
         with pytest.raises(ValueError):
-            waivers.propor(repo, **dict(kw, **{missing: ""}))
+            waivers.propose(repo, **dict(kw, **{missing: ""}))
 
 
 def test_propose_does_not_reopen_what_the_owner_refused(tmp_path, monkeypatch):
@@ -243,9 +243,9 @@ def test_propose_does_not_reopen_what_the_owner_refused(tmp_path, monkeypatch):
     _in_run(monkeypatch, "CEPA_UNTIL_RUN")
     path = _write(repo)
     _outside_run(monkeypatch)
-    waivers.recusar(repo, "teste-cego", "PlugSignAdapter", "não: prova de verdade", hoje=TODAY)
+    waivers.decline(repo, "teste-cego", "PlugSignAdapter", "não: prova de verdade", today=TODAY)
     _in_run(monkeypatch, "CEPA_UNTIL_RUN")
-    assert _write(repo, razao="outra tentativa") == path
+    assert _write(repo, rationale="outra tentativa") == path
     d = yaml.safe_load(open(path))
     assert d["status"] == "recusada"
     assert d["resposta_do_dono"] == "não: prova de verdade"
@@ -256,5 +256,5 @@ def test_corrupted_yaml_is_ignored_without_taking_down_the_other_waivers(tmp_pat
     _write(repo)
     (tmp_path / ".claude" / "waivers" / "quebrado.yaml").write_text(
         "motivo: [unclosed", encoding="utf-8")
-    assert [w["motivo"] for w in waivers.carregar(repo)] == ["teste-cego"]
-    assert waivers.propostas(repo) == []
+    assert [w["motivo"] for w in waivers.load(repo)] == ["teste-cego"]
+    assert waivers.proposals(repo) == []

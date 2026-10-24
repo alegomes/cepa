@@ -5,15 +5,15 @@ Origin (BACKLOG.md § "Waiver recorded in the owner's name during an autonomous
 run", fb-20261014-3): in an autonomous run the agent records a proposal
 (`board-flow/bin/waivers.py` `propor`: `status: proposta`, `autor: null`, `fila`,
 `item`) and opens the human route on the item. Only the owner's `responde`, in a terminal,
-converts it. The `cepa-plan` conversion is an INLINE TWIN of `waivers.converter` /
-`waivers.recusar` (it does not import the module); this test uses the real `waivers` to
+converts it. The `cepa-plan` conversion is an INLINE TWIN of `waivers.convert` /
+`waivers.decline` (it does not import the module); this test uses the real `waivers` to
 write the proposal and to read the result, so it proves the two agree
 on the file schema.
 
 Against the real CLI, in a real git repo, in a PTY:
   - "sim: ..." -> without `status`, `autor` = git config user.name, `resposta_do_dono`,
-    `proposto_por` preserved, `waivers.aplicavel` matches; plan.yaml committed;
-  - "não: ..." -> `status: recusada`, `waivers.carregar` empty;
+    `proposto_por` preserved, `waivers.applicable` matches; plan.yaml committed;
+  - "não: ..." -> `status: recusada`, `waivers.load` empty;
   - `--mantem` -> stays a proposal; "talvez depois" -> stays a proposal and says so;
   - a proposal of ANOTHER item is not touched.
 """
@@ -65,9 +65,9 @@ def builds(tmp, ident="a1", proposal_queue="fila", proposal_item=None):
     before = os.environ.get("CEPA_UNTIL_RUN")
     os.environ["CEPA_UNTIL_RUN"] = "1"
     try:
-        path = waivers.gravar(str(root), REASON, SCOPE, "o fornecedor não é alcançável",
+        path = waivers.write(str(root), REASON, SCOPE, "o fornecedor não é alcançável",
                               "alegomes", "quando o adapter mudar",
-                              fila=proposal_queue, item=proposal_item or ident)
+                              queue=proposal_queue, item=proposal_item or ident)
     finally:
         if before is None:
             os.environ.pop("CEPA_UNTIL_RUN")
@@ -86,7 +86,7 @@ def test_yes_converts_the_proposal_into_a_waiver():
     with tempfile.TemporaryDirectory() as tmp:
         root, path = builds(tmp)
         check("a proposta nasce sem efeito",
-              waivers.carregar(str(root)) == [] and len(waivers.propostas(str(root))) == 1)
+              waivers.load(str(root)) == [] and len(waivers.proposals(str(root))) == 1)
         rc, out = answer(root, "a1", f"sim: {QUESTION}")
         check("responde sai 0", rc == 0, out)
         check("a saída nomeia a dispensa aceita",
@@ -97,7 +97,7 @@ def test_yes_converts_the_proposal_into_a_waiver():
         check("resposta_do_dono gravada", str(d.get("resposta_do_dono", "")).startswith("sim:"), d)
         check("proposto_por/proposto_em preservados",
               "alegomes" in str(d.get("proposto_por")) and d.get("proposto_em"), d)
-        w = waivers.aplicavel(waivers.carregar(str(root)), REASON, SCOPE)
+        w = waivers.applicable(waivers.load(str(root)), REASON, SCOPE)
         check("o `waivers` real aplica a dispensa", bool(w) and w["autor"] == "Dona Fulana", w)
         check("a evidência do item diz que o dono aceitou",
               f"Dispensa {REASON} em {SCOPE}: aceita pelo dono" in items_of(root)["a1"]["evidence"],
@@ -127,8 +127,8 @@ def test_does_not_refuse_the_proposal():
         d = yaml.safe_load(path.read_text())
         check("status: recusada + resposta do dono",
               d.get("status") == "recusada" and d.get("resposta_do_dono", "").startswith("não"), d)
-        check("carregar não enxerga nada", waivers.carregar(str(root)) == [])
-        check("...nem como proposta", waivers.propostas(str(root)) == [])
+        check("carregar não enxerga nada", waivers.load(str(root)) == [])
+        check("...nem como proposta", waivers.proposals(str(root)) == [])
 
 
 def test_keep_and_answer_without_yes_or_no_leave_the_proposal():
@@ -139,7 +139,7 @@ def test_keep_and_answer_without_yes_or_no_leave_the_proposal():
         check("...a proposta segue proposta",
               yaml.safe_load(path.read_text()).get("status") == "proposta")
         check("...e a saída diz quantas seguem pendentes", "1 dispensa(s) proposta(s) seguem" in out, out)
-        check("...sem dispensa válida", waivers.carregar(str(root)) == [])
+        check("...sem dispensa válida", waivers.load(str(root)) == [])
     with tempfile.TemporaryDirectory() as tmp:
         root, path = builds(tmp)
         rc, out = answer(root, "a1", "talvez depois")

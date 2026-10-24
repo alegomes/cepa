@@ -18,9 +18,9 @@ yaml = pytest.importorskip("yaml")
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "board-flow", "bin"))
 from classify_needs_human import (  # noqa: E402
-    MOTIVOS,
-    NAO_PERGUNTA,
-    ORDEM_FILA,
+    REASONS,
+    NOT_A_QUESTION,
+    QUEUE_ORDER,
     classify,
 )
 
@@ -68,7 +68,7 @@ EXPECTED = {
     "WEGO-1709": "nada-a-provar",   # pure ADR
     "WEGO-1962": "nada-a-provar",   # an HTTP fuzzer does not fit in log leakage
     # Only .md, recognized by structure (changed_classes empty, L4 n/a,
-    # perturbation skipped): the prose does not match DIFF_SEM_PRODUCAO and until
+    # perturbation skipped): the prose does not match DIFF_WITHOUT_PRODUCTION and until
     # 2026-09-25 the three fell into `teste-cego` through the skipped-perturbation
     # fallback. They came from the prove-drain of wego-acesso-backend.
     "WEGO-2117": "nada-a-provar",
@@ -194,13 +194,13 @@ def test_doc_only_diff_only_leaves_blind_test_with_the_three_signals():
 
 
 def test_only_not_run_stops_becoming_a_question():
-    assert NAO_PERGUNTA == {"nao-rodou"}
+    assert NOT_A_QUESTION == {"nao-rodou"}
 
 
 def test_queue_order_covers_every_reason_that_becomes_a_question():
-    askable = set(MOTIVOS) - NAO_PERGUNTA - {"sem-motivo"}
-    assert set(ORDEM_FILA) == askable
-    assert ORDEM_FILA[0] == "sem-cobertura", "a fila abre pelo de maior risco"
+    askable = set(REASONS) - NOT_A_QUESTION - {"sem-motivo"}
+    assert set(QUEUE_ORDER) == askable
+    assert QUEUE_ORDER[0] == "sem-cobertura", "a fila abre pelo de maior risco"
 
 
 def test_accepts_both_level_spellings():

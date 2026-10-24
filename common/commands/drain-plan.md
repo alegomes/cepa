@@ -389,7 +389,7 @@ For each item of the batch, in order:
      passed, and the command refuses.
 
      **A waiver produced in the item is a proposal, not a waiver.** If a waiver
-     came out during the item (`waivers.gravar` in an autonomous run records
+     came out during the item (`waivers.write` in an autonomous run records
      `status: proposta`, with `fila=`/`item=`), open it as `--human-pending
      "Aceitar ou recusar a dispensa de <escopo> (<motivo>)"` with `--question
      "Aceito a dispensa de <escopo> por <razão>? Recomendo <sim/não>: <porquê>"`
