@@ -156,15 +156,23 @@ def _interrupt(sig):
                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                      text=True)
         try:
-            waiting(lambda: in_flight_item(root))
+            # Wait for the child's own pid mark, not for `item_start`: the
+            # supervisor logs `item_start` BEFORE the Popen of `claude`, so a
+            # signal in that gap finds no child and `pid_filho` is None (the
+            # intermittent red of 2026-10-22). The fake writes segue.pid as its
+            # first action, which happens only after Popen and `on_launch`.
+            file = Path(tmp) / "segue.pid"
+            check("o `claude` do item foi lançado e registrado",
+                  waiting(lambda: file.exists() and file.read_text().strip()),
+                  str(ledger_of(root)))
+            pid_text = file.read_text().strip() if file.exists() else ""
+            child = int(pid_text) if pid_text else None
             os.kill(proc.pid, sig)
             try:
                 output, _ = proc.communicate(timeout=30)
             except subprocess.TimeoutExpired:
                 proc.kill()
                 output, _ = proc.communicate()
-            file = Path(tmp) / "segue.pid"
-            child = int(file.read_text()) if file.exists() else None
             time.sleep(0.5)
             live_child = child is not None and alive(child)
         finally:
