@@ -2,7 +2,7 @@
 // ciclos da escada de valor; e liga cada ciclo à fila `single-track` que o
 // constrói, para o painel dizer em que pé está cada degrau sem abrir arquivo.
 
-import type { Epic, Fila } from '../types'
+import type { Epic, Queue } from '../types'
 
 const RE_TITULO = /^#\s+Epic:\s*(.+?)\s*$/m
 const RE_STATUS = /\*\*Status:\*\*\s*([^\s·|]+)/
@@ -50,30 +50,30 @@ export const parseEpic = (arquivo: string, texto: string): Epic | null => {
 // A fila de um ciclo, nesta ordem: (1) o `source:` da fila cita o arquivo do Epic
 // e `ciclo N`, que é o que `/common:plan --from-epic` escreve; (2) o nome da fila
 // casa com o padrão da linha Construção com `<N>` trocado; (3) `<arquivo>-c<N>`.
-export const filaDoCiclo = (epic: Epic, ciclo: number, filas: readonly Fila[]): Fila | null => {
+export const filaDoCiclo = (epic: Epic, ciclo: number, filas: readonly Queue[]): Queue | null => {
   const cita = new RegExp(`\\b(?:ciclo|cycle)\\s+${ciclo}\\b`)
-  const porFonte = filas.find(f => f.fonte.includes(`docs/epics/${epic.arquivo}.md`) && cita.test(f.fonte))
+  const porFonte = filas.find(f => f.source.includes(`docs/epics/${epic.arquivo}.md`) && cita.test(f.source))
   if (porFonte) return porFonte
-  const porPadrao = epic.padraoFila === '' ? null : filas.find(f => f.nome === epic.padraoFila.replace('<N>', String(ciclo)))
-  return porPadrao ?? filas.find(f => f.nome === `${epic.arquivo}-c${ciclo}`) ?? null
+  const porPadrao = epic.padraoFila === '' ? null : filas.find(f => f.name === epic.padraoFila.replace('<N>', String(ciclo)))
+  return porPadrao ?? filas.find(f => f.name === `${epic.arquivo}-c${ciclo}`) ?? null
 }
 
 export type EstadoDoCiclo = 'sem fila' | 'demonstrável' | 'travado' | 'andando'
 
-export const estadoDoCiclo = (f: Fila | null): EstadoDoCiclo => {
+export const estadoDoCiclo = (f: Queue | null): EstadoDoCiclo => {
   if (f === null) return 'sem fila'
-  const abertos = f.pendentes + f.emAndamento + f.bloqueados
-  if (abertos === 0 && f.feitos > 0) return 'demonstrável'
-  if (f.bloqueados > 0 && f.emAndamento === 0) return 'travado'
+  const abertos = f.pending + f.inProgress + f.blocked
+  if (abertos === 0 && f.done > 0) return 'demonstrável'
+  if (f.blocked > 0 && f.inProgress === 0) return 'travado'
   return 'andando'
 }
 
 // O que a linha do ciclo diz: `sem fila`, `demonstrável`, `travado · 1/3 feitos`
 // ou `1/2 feitos`. Descartados não entram na conta: não são trabalho a fazer.
-export const linhaDoCiclo = (f: Fila | null): string => {
+export const linhaDoCiclo = (f: Queue | null): string => {
   const e = estadoDoCiclo(f)
   if (f === null || e === 'demonstrável') return e
-  const conta = `${f.feitos}/${f.pendentes + f.emAndamento + f.bloqueados + f.feitos} feitos`
+  const conta = `${f.done}/${f.pending + f.inProgress + f.blocked + f.done} feitos`
   return e === 'travado' ? `travado · ${conta}` : conta
 }
 

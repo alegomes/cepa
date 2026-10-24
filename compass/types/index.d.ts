@@ -1,15 +1,15 @@
-export type ItemFila = { id: string; titulo: string }
+export type QueueItem = { id: string; title: string }
 
-export type Fila = {
-  nome: string
-  fonte: string
-  pendentes: number
-  emAndamento: number
-  bloqueados: number
-  feitos: number
-  descartados: number
-  proximo: ItemFila | null
-  travado: ItemFila | null
+export type Queue = {
+  name: string
+  source: string
+  pending: number
+  inProgress: number
+  blocked: number
+  done: number
+  dropped: number
+  next: QueueItem | null
+  stuck: QueueItem | null
 }
 
 export type Ciclo = { numero: number; rotulo: string }
@@ -27,7 +27,7 @@ declare module 'claude-code' {
     compass: {
       texto: string | null
       agora: number
-      filas: Fila[]
+      filas: Queue[]
       epics: Epic[]
       modo: string | null
       desvios: string | null

@@ -1,21 +1,21 @@
-// Resume uma fila `single-track` (.claude/queues/<nome>/queue.yaml, ou .claude/programs/<nome>/plan.yaml no layout antigo): contagem
-// por status, o primeiro item pendente e o primeiro bloqueado, na ordem da fila.
-// Filas de outro formato (as `parallel-waves` do maestro) ficam de fora: o
-// /common:next não as lê.
+// Summarizes a `single-track` queue (.claude/queues/<name>/queue.yaml, or .claude/programs/<name>/plan.yaml in the old layout): count
+// by status, the first pending item and the first blocked one, in queue order.
+// Queues in another format (the maestro's `parallel-waves`) are left out: /common:next
+// does not read them.
 
-import type { Fila, ItemFila } from '../types'
+import type { Queue, QueueItem } from '../types'
 
-// `title:` vem sem aspas, entre aspas simples ou duplas, e o serializador
-// dobra o texto longo em linhas seguintes com recuo maior.
-const leTitulo = (bloco: string[]): string => {
-  const i = bloco.findIndex(l => /^\s{2}title:/.test(l))
+// `title:` comes unquoted, in single quotes or in double quotes, and the serializer
+// folds long text onto following lines with a deeper indent.
+const readTitle = (block: string[]): string => {
+  const i = block.findIndex(l => /^\s{2}title:/.test(l))
   if (i < 0) return ''
-  const partes = [bloco[i]!.replace(/^\s{2}title:\s*/, '')]
-  for (const l of bloco.slice(i + 1)) {
+  const parts = [block[i]!.replace(/^\s{2}title:\s*/, '')]
+  for (const l of block.slice(i + 1)) {
     if (!/^\s{4,}\S/.test(l)) break
-    partes.push(l.trim())
+    parts.push(l.trim())
   }
-  const t = partes.join(' ').trim()
+  const t = parts.join(' ').trim()
   if (t.startsWith("'")) return t.slice(1, -1).replace(/''/g, "'")
   if (t.startsWith('"')) {
     try {
@@ -27,51 +27,51 @@ const leTitulo = (bloco: string[]): string => {
   return t
 }
 
-// `source:` pode dobrar em linhas seguintes com recuo; o cabeçalho acaba em `items:`.
-const leFonte = (texto: string): string => {
-  const m = /^source:\s*(.*)$/m.exec(texto)
+// `source:` may fold onto following indented lines; the header ends at `items:`.
+const readSource = (text: string): string => {
+  const m = /^source:\s*(.*)$/m.exec(text)
   if (m === null) return ''
-  const partes = [m[1]!]
-  for (const l of texto.slice(m.index + m[0].length + 1).split('\n')) {
+  const parts = [m[1]!]
+  for (const l of text.slice(m.index + m[0].length + 1).split('\n')) {
     if (!/^\s+\S/.test(l)) break
-    partes.push(l.trim())
+    parts.push(l.trim())
   }
-  return partes.join(' ').trim().replace(/^['"]|['"]$/g, '')
+  return parts.join(' ').trim().replace(/^['"]|['"]$/g, '')
 }
 
-export const contaFila = (nome: string, texto: string): Fila | null => {
-  if (!/^mode:\s*single-track\s*$/m.test(texto)) return null
-  const fila: Fila = {
-    nome, fonte: leFonte(texto), pendentes: 0, emAndamento: 0, bloqueados: 0, feitos: 0, descartados: 0, proximo: null, travado: null,
+export const countQueue = (name: string, text: string): Queue | null => {
+  if (!/^mode:\s*single-track\s*$/m.test(text)) return null
+  const queue: Queue = {
+    name, source: readSource(text), pending: 0, inProgress: 0, blocked: 0, done: 0, dropped: 0, next: null, stuck: null,
   }
-  const blocos = texto.split(/^(?=- id:)/m).slice(1)
-  for (const b of blocos) {
-    const linhas = b.split('\n')
-    const id = linhas[0]!.replace(/^- id:\s*/, '').replace(/^['"]|['"]$/g, '').trim()
+  const blocks = text.split(/^(?=- id:)/m).slice(1)
+  for (const b of blocks) {
+    const lines = b.split('\n')
+    const id = lines[0]!.replace(/^- id:\s*/, '').replace(/^['"]|['"]$/g, '').trim()
     const status = (/^\s{2}status:\s*(\w+)/m.exec(b)?.[1] ?? '').toLowerCase()
-    const item: ItemFila = { id, titulo: leTitulo(linhas) }
+    const item: QueueItem = { id, title: readTitle(lines) }
     if (status === 'pending') {
-      fila.pendentes += 1
-      fila.proximo ??= item
+      queue.pending += 1
+      queue.next ??= item
     }
-    if (status === 'in_progress') fila.emAndamento += 1
+    if (status === 'in_progress') queue.inProgress += 1
     if (status === 'blocked') {
-      fila.bloqueados += 1
-      fila.travado ??= item
+      queue.blocked += 1
+      queue.stuck ??= item
     }
-    if (status === 'done') fila.feitos += 1
-    if (status === 'dropped') fila.descartados += 1
+    if (status === 'done') queue.done += 1
+    if (status === 'dropped') queue.dropped += 1
   }
-  return fila
+  return queue
 }
 
-export const aberta = (f: Fila): boolean => f.pendentes + f.emAndamento + f.bloqueados > 0
+export const isOpen = (q: Queue): boolean => q.pending + q.inProgress + q.blocked > 0
 
-// Colunas da tabela do painel, na ordem do ciclo de vida de um item.
-export const COLUNAS = [
-  { rotulo: 'pend', campo: 'pendentes', cor: 'yellow' },
-  { rotulo: 'and', campo: 'emAndamento', cor: 'cyan' },
-  { rotulo: 'bloq', campo: 'bloqueados', cor: 'red' },
-  { rotulo: 'feito', campo: 'feitos', cor: 'green' },
-  { rotulo: 'desc', campo: 'descartados', cor: 'gray' },
+// Columns of the panel table, in the order of an item's lifecycle.
+export const COLUMNS = [
+  { label: 'pend', field: 'pending', color: 'yellow' },
+  { label: 'and', field: 'inProgress', color: 'cyan' },
+  { label: 'bloq', field: 'blocked', color: 'red' },
+  { label: 'feito', field: 'done', color: 'green' },
+  { label: 'desc', field: 'dropped', color: 'gray' },
 ] as const

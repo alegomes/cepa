@@ -1,11 +1,11 @@
-// Lê o modo da sessão (`.claude/session-mode`) e os desvios (`.claude/desvios.md`).
-// O modo é gravado pelo `cepa` com `chave: valor` raso (`mode`, `routine`, `budget`,
-// `opened_at`; as chaves e os nomes de modo antigos em pt-BR ainda são lidos); `null` e vazio são ausência,
-// como no `read_mode` do common/hooks/session-mode.py. Os desvios são as linhas
-// `- [ ]` (aberto) e `- [x]` (resolvido) que o skill off-mode-capture acrescenta.
+// Reads the session mode (`.claude/session-mode`) and the deviations (`.claude/desvios.md`).
+// The mode is written by `cepa` as shallow `key: value` lines (`mode`, `routine`, `budget`,
+// `opened_at`; the old pt-BR keys and mode names are still read); `null` and empty mean absent,
+// as in `read_mode` of common/hooks/session-mode.py. Deviations are the lines
+// `- [ ]` (open) and `- [x]` (resolved) that the off-mode-capture skill appends.
 
-// Nome antigo (pt-BR) do modo -> o novo; `cepa-modes --json` só conhece os novos.
-const MODOS_ANTIGOS: Record<string, string> = {
+// Old (pt-BR) mode name -> the new one; `cepa-modes --json` only knows the new ones.
+const OLD_MODES: Record<string, string> = {
   exploracao: 'exploration',
   descoberta: 'discovery',
   construcao: 'construction',
@@ -14,48 +14,48 @@ const MODOS_ANTIGOS: Record<string, string> = {
   documentacao: 'documentation',
 }
 
-export type Modo = { nome: string; orcamento: string; abertoEm: string }
+export type Mode = { name: string; budget: string; openedAt: string }
 
-export type Desvios = { abertos: number; resolvidos: number; ultimo: string }
+export type Deviations = { open: number; resolved: number; last: string }
 
-export const parseModo = (text: string): Modo | null => {
-  const campos: Record<string, string> = {}
-  for (const linha of text.split('\n')) {
-    const i = linha.indexOf(':')
+export const parseMode = (text: string): Mode | null => {
+  const fields: Record<string, string> = {}
+  for (const line of text.split('\n')) {
+    const i = line.indexOf(':')
     if (i < 0) continue
-    const v = linha.slice(i + 1).trim().replace(/^"|"$/g, '')
-    if (v !== '' && v !== 'null') campos[linha.slice(0, i).trim()] = v
+    const v = line.slice(i + 1).trim().replace(/^"|"$/g, '')
+    if (v !== '' && v !== 'null') fields[line.slice(0, i).trim()] = v
   }
-  const nome = campos.mode ?? campos.modo
-  if (!nome) return null
+  const name = fields.mode ?? fields.modo
+  if (!name) return null
   return {
-    nome: MODOS_ANTIGOS[nome] ?? nome,
-    orcamento: campos.budget ?? campos.orcamento ?? '',
-    abertoEm: campos.opened_at ?? campos.aberto_em ?? '',
+    name: OLD_MODES[name] ?? name,
+    budget: fields.budget ?? fields.orcamento ?? '',
+    openedAt: fields.opened_at ?? fields.aberto_em ?? '',
   }
 }
 
-export const contaDesvios = (text: string): Desvios => {
-  const d: Desvios = { abertos: 0, resolvidos: 0, ultimo: '' }
-  for (const linha of text.split('\n')) {
-    const m = /^- \[( |x|X)\]\s*(.*)$/.exec(linha)
+export const countDeviations = (text: string): Deviations => {
+  const d: Deviations = { open: 0, resolved: 0, last: '' }
+  for (const line of text.split('\n')) {
+    const m = /^- \[( |x|X)\]\s*(.*)$/.exec(line)
     if (!m) continue
-    if (m[1] === ' ') d.abertos += 1
-    else d.resolvidos += 1
-    // `data · modo: X · o quê`: o aviso mostra só o quê.
-    const partes = m[2]!.split(' · ')
-    d.ultimo = partes.length > 2 ? partes.slice(2).join(' · ') : m[2]!
+    if (m[1] === ' ') d.open += 1
+    else d.resolved += 1
+    // `date · modo: X · what`: the warning shows only the "what".
+    const parts = m[2]!.split(' · ')
+    d.last = parts.length > 2 ? parts.slice(2).join(' · ') : m[2]!
   }
   return d
 }
 
-// A condição de saída mora em common/hooks/_modos.py; `cepa-modes --json` a expõe.
-export const leSaidas = (json: string): Record<string, string> => {
+// The exit condition lives in common/hooks/_modes.py; `cepa-modes --json` exposes it.
+export const readExits = (json: string): Record<string, string> => {
   try {
-    const tabela = JSON.parse(json) as Record<string, { saida?: string }>
-    const saidas: Record<string, string> = {}
-    for (const [nome, d] of Object.entries(tabela)) if (d.saida) saidas[nome] = d.saida
-    return saidas
+    const table = JSON.parse(json) as Record<string, { saida?: string }>
+    const exits: Record<string, string> = {}
+    for (const [name, d] of Object.entries(table)) if (d.saida) exits[name] = d.saida
+    return exits
   } catch {
     return {}
   }

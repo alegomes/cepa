@@ -2,10 +2,10 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { linhaBuild, parseBuild } from './build'
 import { idade, parseIntent } from './intent'
-import { contaDesvios, leSaidas, parseModo } from './modo'
+import { countDeviations, readExits, parseMode } from './mode'
 import { avisoDe, contagem, duracao, hora, parseRun, rotuloDoFim, tempoDoRun } from './until'
 import { leBloqueio, leGuarda } from './gate'
-import { contaFila } from './filas'
+import { countQueue } from './queues'
 import { estadoDoCiclo, filaDoCiclo, linhaDoCiclo, parseEpic } from './epics'
 
 const ARQUIVO = `purpose: "Construir o M1, painel da intenção"
@@ -177,28 +177,28 @@ Texto de abertura com - [ ] no meio da linha, que não conta.
 `
 
 test('lê o modo e trata null como ausência', async () => {
-  expect(parseModo(MODO)).toEqual({ nome: 'construction', orcamento: '', abertoEm: '2026-10-19T13:46:36Z' })
-  expect(parseModo('mode: refactor\nbudget: "só o filas.ts"\n')?.orcamento).toBe('só o filas.ts')
-  expect(parseModo('mode: null\n')).toBe(null)
+  expect(parseMode(MODO)).toEqual({ name: 'construction', budget: '', openedAt: '2026-10-19T13:46:36Z' })
+  expect(parseMode('mode: refactor\nbudget: "só o filas.ts"\n')?.budget).toBe('só o filas.ts')
+  expect(parseMode('mode: null\n')).toBe(null)
 })
 
 test('session-mode antigo (modo: construcao) ainda é lido como construction', async () => {
-  expect(parseModo(MODO_ANTIGO)).toEqual(parseModo(MODO))
-  expect(parseModo('modo: reforma\norcamento: "só o filas.ts"\n')).toEqual({
-    nome: 'refactor', orcamento: 'só o filas.ts', abertoEm: '',
+  expect(parseMode(MODO_ANTIGO)).toEqual(parseMode(MODO))
+  expect(parseMode('modo: reforma\norcamento: "só o filas.ts"\n')).toEqual({
+    name: 'refactor', budget: 'só o filas.ts', openedAt: '',
   })
-  expect(parseModo('modo: null\n')).toBe(null)
+  expect(parseMode('modo: null\n')).toBe(null)
 })
 
 test('conta desvios abertos e resolvidos e guarda o quê do último', async () => {
-  expect(contaDesvios(DESVIOS)).toEqual({ abertos: 2, resolvidos: 1, ultimo: 'bash-path-lock lê sed -i errado' })
-  expect(contaDesvios('')).toEqual({ abertos: 0, resolvidos: 0, ultimo: '' })
-  expect(contaDesvios('- [X] 2026-10-19 · modo: reforma · marcado em maiúscula\n').resolvidos).toBe(1)
+  expect(countDeviations(DESVIOS)).toEqual({ open: 2, resolved: 1, last: 'bash-path-lock lê sed -i errado' })
+  expect(countDeviations('')).toEqual({ open: 0, resolved: 0, last: '' })
+  expect(countDeviations('- [X] 2026-10-19 · modo: reforma · marcado em maiúscula\n').resolved).toBe(1)
 })
 
 test('saídas vêm do cepa-modes --json; json quebrado não derruba', async () => {
-  expect(leSaidas(MODOS_JSON).construction).toBe('completion-auditor COMPLETE e proof-reviewer PROVEN')
-  expect(leSaidas('não é json')).toEqual({})
+  expect(readExits(MODOS_JSON).construction).toBe('completion-auditor COMPLETE e proof-reviewer PROVEN')
+  expect(readExits('não é json')).toEqual({})
 })
 
 test('nível 3: modo, condição de saída e desvios, depois do nível 2', async ($, on) => {
@@ -1152,11 +1152,11 @@ test('parseEpic lê nome, status, padrão de fila e os ciclos da escada', async 
 
 test('filaDoCiclo: pelo source do --from-epic, pelo padrão da Construção, pelo nome do arquivo', async () => {
   const e = parseEpic('cepa-em-espiral.md', EPIC)!
-  const fila = (nome: string, fonte: string) => contaFila(nome, `mode: single-track\nsource: ${fonte}\nitems:\n`)!
+  const fila = (nome: string, fonte: string) => countQueue(nome, `mode: single-track\nsource: ${fonte}\nitems:\n`)!
   const porFonte = fila('qualquer', 'docs/epics/cepa-em-espiral.md, ciclo 2 (3 peças de "O que\n  atravessa"; ordem herdada do texto)')
   const porPadrao = fila('cepa-espiral-c2', 'docs/spec/x.md')
   const porArquivo = fila('cepa-em-espiral-c2', 'BACKLOG.md')
-  expect(porFonte.fonte).toBe('docs/epics/cepa-em-espiral.md, ciclo 2 (3 peças de "O que atravessa"; ordem herdada do texto)')
+  expect(porFonte.source).toBe('docs/epics/cepa-em-espiral.md, ciclo 2 (3 peças de "O que atravessa"; ordem herdada do texto)')
   expect(filaDoCiclo(e, 2, [porArquivo, porPadrao, porFonte])).toBe(porFonte)
   expect(filaDoCiclo(e, 2, [porArquivo, porPadrao])).toBe(porPadrao)
   expect(filaDoCiclo(e, 2, [porArquivo])).toBe(porArquivo)
@@ -1168,7 +1168,7 @@ test('filaDoCiclo: pelo source do --from-epic, pelo padrão da Construção, pel
 })
 
 test('estado do ciclo: sem fila, andando, travado, demonstrável; descartados fora da conta', async () => {
-  const f = (st: string[]) => contaFila('f', FILA('single-track', st))
+  const f = (st: string[]) => countQueue('f', FILA('single-track', st))
   expect(linhaDoCiclo(null)).toBe('sem fila')
   expect(linhaDoCiclo(f(['done', 'pending', 'dropped']))).toBe('1/2 feitos')
   expect(estadoDoCiclo(f(['done', 'pending']))).toBe('andando')

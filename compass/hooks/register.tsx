@@ -1,12 +1,12 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, RenderChildren } from 'claude-code'
 
-import type { Epic, Fila } from '../types'
+import type { Epic, Queue } from '../types'
 import { filaDoCiclo, linhaDoCiclo, estadoDoCiclo, MARCA, parseEpic } from './epics'
-import { aberta, COLUNAS, contaFila } from './filas'
+import { isOpen, COLUMNS, countQueue } from './queues'
 import { idade, parseIntent } from './intent'
 import { COR, linhaBuild, parseBuild } from './build'
-import { contaDesvios, leSaidas, parseModo } from './modo'
+import { countDeviations, readExits, parseMode } from './mode'
 import { leBloqueio, leGuarda } from './gate'
 import type { Barrada } from './gate'
 import { avisoDe, contagem, hora, parseRun, rotuloDoFim, tempoDoItem, tempoDoRun } from './until'
@@ -68,9 +68,9 @@ async function releiaModo($: EngineInterface) {
   await update($, desvios, () => textoDesvios)
   const textoBuild = await leSe($, BUILD)
   await update($, build, () => textoBuild)
-  const d = contaDesvios(textoDesvios ?? '')
-  const total = d.abertos + d.resolvidos
-  if (desviosAnteriores >= 0 && total > desviosAnteriores) $.ui.toast(`Desvio registrado: ${d.ultimo}`)
+  const d = countDeviations(textoDesvios ?? '')
+  const total = d.open + d.resolved
+  if (desviosAnteriores >= 0 && total > desviosAnteriores) $.ui.toast(`Desvio registrado: ${d.last}`)
   desviosAnteriores = total
 }
 
@@ -114,7 +114,7 @@ async function observaGate($: EngineInterface, comando: string, r: { isError?: t
 async function releiaSaidas($: EngineInterface) {
   try {
     const r = await $.process.run(['cepa-modes', '--json'])
-    if (r.exitCode === 0) await update($, saidas, () => leSaidas(r.stdout))
+    if (r.exitCode === 0) await update($, saidas, () => readExits(r.stdout))
   } catch {
     // cepa-modes fora do PATH: o cartão mostra o modo sem a condição de saída
   }
@@ -140,7 +140,7 @@ async function releiaFilas($: EngineInterface) {
   if (git.exitCode !== 0) return
   const raiz = git.stdout.trim().replace(/\/\.git$/, '')
   await releiaEpics($, `${raiz}/docs/epics`)
-  const lidas: Fila[] = []
+  const lidas: Queue[] = []
   let recente: { caminho: string; fila: string; id: string } | null = null
   // Dois layouts na transição: `.claude/queues/<n>/queue.yaml` (novo) ganha de
   // `.claude/programs/<n>/plan.yaml` (antigo) quando o nome existe nos dois.
@@ -153,7 +153,7 @@ async function releiaFilas($: EngineInterface) {
       vistos.add(entrada.name)
       const plano = `${dir}/${entrada.name}/${arquivo}`
       if (await $.fs.exists(plano)) {
-        const fila = contaFila(entrada.name, await $.fs.read(plano))
+        const fila = countQueue(entrada.name, await $.fs.read(plano))
         if (fila) lidas.push(fila)
       }
       // O run mais recente de todas as filas: o nome do `.jsonl` é a data e hora da largada.
@@ -167,8 +167,8 @@ async function releiaFilas($: EngineInterface) {
     }
   }
   registroDoRun = recente
-  const abertos = (f: Fila) => f.pendentes + f.emAndamento + f.bloqueados
-  lidas.sort((a, b) => abertos(b) - abertos(a) || a.nome.localeCompare(b.nome))
+  const abertos = (f: Queue) => f.pending + f.inProgress + f.blocked
+  lidas.sort((a, b) => abertos(b) - abertos(a) || a.name.localeCompare(b.name))
   await update($, filas, () => lidas)
 }
 
@@ -217,13 +217,13 @@ export const register: Register = on => {
     const bruto = await read($, texto)
     const intent = bruto === null ? null : parseIntent(bruto)
     const lista = await read($, filas)
-    const abertas = lista.filter(aberta)
+    const abertas = lista.filter(isOpen)
     const listaEpics = await read($, epics)
     const textoModo = await read($, modo)
-    const m = textoModo === null ? null : parseModo(textoModo)
-    const saida = m ? (await read($, saidas))[m.nome] ?? '' : ''
+    const m = textoModo === null ? null : parseMode(textoModo)
+    const saida = m ? (await read($, saidas))[m.name] ?? '' : ''
     const textoDesvios = await read($, desvios)
-    const d = contaDesvios(textoDesvios ?? '')
+    const d = countDeviations(textoDesvios ?? '')
     const textoBuild = await read($, build)
     const b = textoBuild === null ? null : parseBuild(textoBuild)
     const momento = await read($, agora)
@@ -282,21 +282,21 @@ export const register: Register = on => {
         {lista.length > 0 && (
           <Box flexDirection="row">
             <Box flexGrow={1} flexShrink={1} minWidth={0}><Text dimColor>fila</Text></Box>
-            {COLUNAS.map(c => (
-              <Box width={LARGURA} flexShrink={0} justifyContent="flex-end"><Text dimColor>{c.rotulo}</Text></Box>
+            {COLUMNS.map(c => (
+              <Box width={LARGURA} flexShrink={0} justifyContent="flex-end"><Text dimColor>{c.label}</Text></Box>
             ))}
           </Box>
         )}
         {lista.map(f => (
           <Box flexDirection="row">
             <Box flexGrow={1} flexShrink={1} minWidth={0}>
-              <Text bold={aberta(f)} dimColor={!aberta(f)} wrap="truncate-end">{f.nome}</Text>
+              <Text bold={isOpen(f)} dimColor={!isOpen(f)} wrap="truncate-end">{f.name}</Text>
             </Box>
-            {COLUNAS.map(c => (
+            {COLUMNS.map(c => (
               <Box width={LARGURA} flexShrink={0} justifyContent="flex-end">
-                {f[c.campo] === 0
+                {f[c.field] === 0
                   ? <Text dimColor>·</Text>
-                  : <Text color={c.cor} dimColor={!aberta(f)}>{String(f[c.campo])}</Text>}
+                  : <Text color={c.color} dimColor={!isOpen(f)}>{String(f[c.field])}</Text>}
               </Box>
             ))}
           </Box>
@@ -306,24 +306,24 @@ export const register: Register = on => {
 
     const nivelModo = cartao(
       'Modo',
-      m ? m.nome : 'sem modo',
+      m ? m.name : 'sem modo',
       <Box flexDirection="column" marginTop={1}>
         {m === null && <Text dimColor>Esta sessão não declarou modo.</Text>}
         {m !== null && saida !== '' && <Text>fecha quando: {saida}</Text>}
-        {m !== null && m.orcamento !== '' && <Text dimColor>orçamento: {m.orcamento}</Text>}
+        {m !== null && m.budget !== '' && <Text dimColor>orçamento: {m.budget}</Text>}
         <Box flexDirection="row" marginTop={1}>
           <Text dimColor>build: </Text>
           {b === null && <Text dimColor>nenhum registrado</Text>}
           {b !== null && <Text color={COR[b.estado]} bold={b.estado === 'vermelho'}>{linhaBuild(b, momento)}</Text>}
         </Box>
         <Box flexDirection="row">
-          {d.abertos + d.resolvidos === 0 && <Text dimColor>nenhum desvio registrado</Text>}
-          {d.abertos + d.resolvidos > 0 && (
-            <Text color={d.abertos > 0 ? 'yellow' : undefined} dimColor={d.abertos === 0}>
-              {d.abertos === 1 ? '1 desvio aberto' : `${d.abertos} desvios abertos`}
+          {d.open + d.resolved === 0 && <Text dimColor>nenhum desvio registrado</Text>}
+          {d.open + d.resolved > 0 && (
+            <Text color={d.open > 0 ? 'yellow' : undefined} dimColor={d.open === 0}>
+              {d.open === 1 ? '1 desvio aberto' : `${d.open} desvios abertos`}
             </Text>
           )}
-          {d.resolvidos > 0 && <Text dimColor>{` · ${d.resolvidos} ${d.resolvidos === 1 ? 'resolvido' : 'resolvidos'}`}</Text>}
+          {d.resolved > 0 && <Text dimColor>{` · ${d.resolved} ${d.resolved === 1 ? 'resolvido' : 'resolvidos'}`}</Text>}
         </Box>
         {g !== null && (
           <Box flexDirection="column" marginTop={1}>
