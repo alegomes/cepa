@@ -865,10 +865,10 @@ def register_background(task_id, session_id, command, kind,
             print(f"[capture-build-result] could not register background build: {e}",
                   file=sys.stderr)
             return False
-        origem = d.parent.name
+        origin = d.parent.name
         where = ""
-        if origem != session_id:
-            where = (f" (found under session {origem}'s tasks folder: session "
+        if origin != session_id:
+            where = (f" (found under session {origin}'s tasks folder: session "
                      f"continued after a context overflow)")
         print(f"[capture-build-result] build in background ({task_id}){where}; its result "
               f"will be recorded when it ends.", file=sys.stderr)

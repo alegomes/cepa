@@ -268,11 +268,11 @@ def _segment_targets(segment: str) -> list:
     # 2. argv-shaped writers — tokenize; fall back silently if shlex chokes.
     #    Without the redirections: they already became targets in step 1, and
     #    leaving them here makes `tee` count the input operand as a write.
-    sem_redir = _strip_redirections(segment, redir_mask)
+    no_redir = _strip_redirections(segment, redir_mask)
     try:
-        argv = shlex.split(sem_redir, posix=True)
+        argv = shlex.split(no_redir, posix=True)
     except ValueError:
-        argv = sem_redir.split()
+        argv = no_redir.split()
     if not argv:
         return targets
 

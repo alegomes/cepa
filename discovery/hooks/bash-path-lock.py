@@ -15,59 +15,62 @@ This hook is the SECOND lock. It reuses path-lock.py's per-agent allowlist
 (single source of truth — never re-declare globs here) and applies it to
 shell-level writes.
 
-QUATRO BALDES — deny-by-default (Camada 1, desde 2026-09-25)
--------------------------------------------------------------
-Até aqui o hook perguntava "este comando parece uma escrita conhecida?" e
-liberava o resto. O resto incluía `python3 -c "open('src/main/...','w')"`: foi
-exatamente o que um qa-engineer usou no WEGO-1936 depois de ter o `cp` barrado.
-Agora a pergunta é "este comando é comprovadamente inofensivo?". Todo segmento
-de comando de um agente trancado cai em exatamente um balde:
+FOUR BUCKETS — deny-by-default (Layer 1, since 2026-09-25)
+----------------------------------------------------------
+Until then the hook asked "does this command look like a known write?" and
+let the rest through. The rest included `python3 -c "open('src/main/...','w')"`:
+exactly what a qa-engineer used in WEGO-1936 after having its `cp` blocked.
+Now the question is "is this command provably harmless?". Every command
+segment of a locked agent falls into exactly one bucket:
 
-1. ESCRITOR ANALISÁVEL — o alvo está na linha (redirect, tee, cp, mv, sed -i,
-   mkdir, rm, ln, sort -o, git mv/checkout --/restore...). Alvo dentro da raiz e
-   fora dos globs do agente → NEGA.
-2. VERBO INOCENTE — lista auditada (_SIMPLE, _HANDLERS), cada verbo com as
-   flags que o tornam escritor/executor negadas (sed -i/w/e, find -exec/-delete,
+1. ANALYZABLE WRITER — the target is on the line (redirect, tee, cp, mv, sed -i,
+   mkdir, rm, ln, sort -o, git mv/checkout --/restore...). Target inside the
+   root and outside the agent's globs → DENY.
+2. HARMLESS VERB — audited list (_SIMPLE, _HANDLERS), each verb with the flags
+   that make it a writer/executor denied (sed -i/w/e, find -exec/-delete,
    git reset --hard/stash/apply, npm exec, npx -c, mvn exec:...).
-3. FORA DA JURISDIÇÃO — o segmento roda num diretório fora da raiz (o worktree
-   descartável de perturbação: `cd "$D/red" && ...`, `git -C /tmp/x ...`) e nada
-   na linha cita a raiz → tudo permitido. É o mesmo carve-out out-of-root do
-   path-lock.py, que a perturbação do proof-reviewer precisa.
-4. TODO O RESTO → NEGA. Interpretador inline, shell aninhado, heredoc/pipe para
-   interpretador, script fora do projeto ou dentro da própria pista — salvo
-   dentro de um worktree deste repo (a cópia descartável de perturbação), que
-   é jurisdição do balde 3 —, xargs com escritor, verbo que ninguém listou. Um
-   vetor novo cai aqui por construção.
+3. OUTSIDE THE JURISDICTION — the segment runs in a directory outside the root
+   (the disposable perturbation worktree: `cd "$D/red" && ...`,
+   `git -C /tmp/x ...`) and nothing on the line cites the root → everything
+   allowed. It is the same out-of-root carve-out as path-lock.py, which the
+   proof-reviewer's perturbation needs.
+4. EVERYTHING ELSE → DENY. Inline interpreter, nested shell, heredoc/pipe to an
+   interpreter, script outside the project or inside the agent's own lane —
+   except inside a worktree of this repo (the disposable perturbation copy),
+   which is bucket 3 jurisdiction —, xargs with a writer, a verb nobody
+   listed. A new vector falls here by construction.
 
-Substituição de comando (`$(...)`, crase, `<(...)`) é outro comando e é
-classificada com as mesmas regras antes do segmento que a contém. Um `cd` só
-tira da raiz os segmentos ligados por `&&` a ele (com `;` ou `||` o cd pode ter
-falhado; em `|` e subshell ele não vale fora).
+Command substitution (`$(...)`, backtick, `<(...)`) is another command and is
+classified with the same rules before the segment that contains it. A `cd`
+only takes out of the root the segments linked to it by `&&` (with `;` or `||`
+the cd may have failed; in `|` and subshell it does not hold outside).
 
 Main session / built-in agents (no plugin-prefixed agent_type) are NOT gated —
 same fail-open contract as path-lock.py.
 
-Modo sombra: CEPA_BASHLOCK_ENFORCE=0 libera o balde 4 e grava
-`bash_pathlock_would_deny` no ledger de telemetria (o balde 1 nunca afrouxa).
-Toda negação grava `bash_pathlock_deny`; `git worktree add` fora da raiz grava
-`perturb_worktree_created`. O log órfão em /tmp que ninguém lia morreu.
+Shadow mode: CEPA_BASHLOCK_ENFORCE=0 lets bucket 4 through and records
+`bash_pathlock_would_deny` in the telemetry ledger (bucket 1 is never
+loosened). Every denial records `bash_pathlock_deny`; `git worktree add`
+outside the root records `perturb_worktree_created`. The orphan log in /tmp
+that nobody read is dead.
 
-LIMITES HONESTOS (guardrail, não sandbox)
------------------------------------------
-- PREVINE: escrita shell com alvo visível fora da pista, e execução de código
-  não sancionado no momento do Bash (o vetor nem roda).
-- NÃO VÊ: o que um verbo inocente escreve por SUBPROCESSO (`./mvnw test` rodando
-  um teste que grava em src/main; `npm test` rodando script do package.json;
-  `git merge` do lead). Isso é trabalho da Camada 2 (write-fence por diff), ainda
-  não construída.
-- NÃO VÊ: caminho da raiz montado em tempo de execução a partir de um diretório
-  fora dela (balde 3 é checagem de string). Ofuscar depois de um deny é dolo.
-- Script do projeto que o agente NÃO pode escrever (fora da pista dele) é
-  tratado como `npm test`: inocente. Script em /tmp ou na própria pista, não.
+HONEST LIMITS (guardrail, not sandbox)
+--------------------------------------
+- PREVENTS: a shell write with a visible target outside the lane, and execution
+  of unsanctioned code at the moment of the Bash call (the vector does not even
+  run).
+- DOES NOT SEE: what a harmless verb writes through a SUBPROCESS (`./mvnw test`
+  running a test that writes to src/main; `npm test` running a package.json
+  script; the lead's `git merge`). That is Layer 2 work (diff-based
+  write-fence), not built yet.
+- DOES NOT SEE: a root path assembled at runtime from a directory outside it
+  (bucket 3 is a string check). Obfuscating after a deny is willful.
+- A project script the agent CANNOT write (outside its lane) is treated like
+  `npm test`: harmless. A script in /tmp or in its own lane is not.
 
 Exit codes:
-  0 — permitido (ou fora de escopo)
-  2 — negado: balde 1 (escrita fora da pista) ou balde 4 (fora da lista)
+  0 — allowed (or out of scope)
+  2 — denied: bucket 1 (write outside the lane) or bucket 4 (outside the list)
 """
 
 import importlib.util
@@ -114,31 +117,32 @@ _UNCOVERED_RE = re.compile(
 # Targets that are never real files.
 _PSEUDO = ("/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty")
 
-# Separadores de comando, aplicados só FORA de aspas (ver _quoted_mask).
+# Command separators, applied only OUTSIDE quotes (see _quoted_mask).
 _SEP_PAIRS = ("||", "&&")
 _SEP_CHARS = ";|&\n"
 
 
 def _quoted_mask(s: str) -> list:
-    """Um booleano por caractere: True onde ele está entre aspas ou escapado.
+    """One boolean per character: True where it is inside quotes or escaped.
 
-    Existe porque o hook lia texto citado como se fosse shell. O caso real
-    (22/08/2026, WEGO-2087): `git commit -m "titulo\n\ncorpo com A -> B"`. O
-    `\n` do corpo era tratado como separador de comando, cada linha da mensagem
-    virava um "segmento", e o `->` de uma frase casava com _REDIR_RE — o hook
-    acusava escrita fantasma em `B` e barrava o commit. O dev só conseguiu
-    commitar depois de encurtar a mensagem para uma linha.
+    It exists because the hook used to read quoted text as if it were shell. The
+    real case (22/08/2026, WEGO-2087): `git commit -m "title\n\nbody with A -> B"`.
+    The body's `\n` was treated as a command separator, each line of the message
+    became a "segment", and the `->` of a sentence matched _REDIR_RE: the hook
+    reported a phantom write to `B` and blocked the commit. The dev could only
+    commit after shortening the message to one line.
 
-    Aspas não fechadas mascaram o resto da string: é fail-open, coerente com o
-    contrato do hook, e um comando com aspas não fechadas não roda no shell.
+    Unclosed quotes mask the rest of the string: it is fail-open, consistent
+    with the hook's contract, and a command with unclosed quotes does not run in
+    the shell.
 
-    O corpo de um heredoc (`<<EOF`, `<<-EOF`, `<<'EOF'`) também é dado, não
-    shell, e também é mascarado. Mesmo defeito das aspas, um degrau adiante e
-    medido em 04/09/2026: uma mensagem de commit passada por
-    `git commit -F - <<'MSG'` que CITAVA `while true` fez o `no-busy-wait`
-    barrar o commit como se fosse espera ativa. A citação estava dentro do
-    corpo, não numa linha de comando. Um here-string (`<<<`) não abre corpo e
-    fica de fora.
+    The body of a heredoc (`<<EOF`, `<<-EOF`, `<<'EOF'`) is also data, not
+    shell, and is masked too. Same defect as the quotes, one step further and
+    measured on 04/09/2026: a commit message passed via
+    `git commit -F - <<'MSG'` that QUOTED `while true` made `no-busy-wait`
+    block the commit as if it were a busy wait. The quote was inside the body,
+    not on a command line. A here-string (`<<<`) does not open a body and is
+    left out.
     """
     mask = [False] * len(s)
     quote = None
@@ -148,9 +152,9 @@ def _quoted_mask(s: str) -> list:
     while i < n:
         c = s[i]
         if quote is None:
-            # O corpo de um heredoc anunciado nesta linha começa depois da
-            # quebra de linha e vai até a linha do delimitador. Nada dele é
-            # shell — é dado.
+            # The body of a heredoc announced on this line starts after the
+            # line break and runs to the delimiter line. None of it is
+            # shell, it is data.
             if c == "\n" and pending_heredocs:
                 j = i + 1
                 for delim, strip_tabs in pending_heredocs:
@@ -162,10 +166,10 @@ def _quoted_mask(s: str) -> list:
                         j = line_end + 1 if line_end < n else n
                         if (line.lstrip("\t") if strip_tabs else line).strip() == delim:
                             break
-                # A quebra de linha que ABRE o corpo entra na máscara junto:
-                # ela ainda é separador de comando para `_split_segments`, e sem
-                # ela o corpo inteiro virava um "segundo comando" — que foi
-                # exatamente como a prosa do corpo voltou a ser lida como shell.
+                # The line break that OPENS the body goes into the mask too:
+                # it is still a command separator for `_split_segments`, and
+                # without it the whole body became a "second command", which
+                # is exactly how the body's prose came to be read as shell again.
                 for p in range(i, min(j, n)):
                     mask[p] = True
                 pending_heredocs = []
@@ -188,12 +192,12 @@ def _quoted_mask(s: str) -> list:
                 if quoted and k < n and s[k] == quoted:
                     k += 1
                 if delim:
-                    # O operador e o delimitador ficam VISÍVEIS de propósito:
-                    # `cat <<EOF > out.txt` escreve, e é o `<<` na visão sem
-                    # aspas que sustenta o sinal "não sei analisar isto"
-                    # (_UNCOVERED_RE). Só o CORPO é dado. Mascarar o operador
-                    # junto apagaria o sinal e o heredoc passaria a escrever
-                    # calado.
+                    # The operator and the delimiter stay VISIBLE on purpose:
+                    # `cat <<EOF > out.txt` writes, and it is the `<<` in the
+                    # unquoted view that sustains the "cannot analyze this"
+                    # signal (_UNCOVERED_RE). Only the BODY is data. Masking
+                    # the operator too would erase the signal and the heredoc
+                    # would start writing silently.
                     pending_heredocs.append((delim, strip_tabs))
                     i = k
                     continue
@@ -221,7 +225,7 @@ def _quoted_mask(s: str) -> list:
 
 
 def _split_segments(command: str) -> list:
-    """Quebra em segmentos de comando ignorando separadores dentro de aspas."""
+    """Splits into command segments, ignoring separators inside quotes."""
     mask = _quoted_mask(command)
     segments = []
     start = i = 0
@@ -245,20 +249,20 @@ def _split_segments(command: str) -> list:
     return segments
 
 
-# Um redirecionamento inteiro — descritor opcional (`2>`), operador, `&`
-# opcional (`>&2`) e o operando. Serve só para APAGAR o redirecionamento antes
-# de tokenizar o comando: `tee saida.txt < entrada.txt` tokenizava como
-# `["tee", "saida.txt", "<", "entrada.txt"]`, e a regra do `tee` — todo
-# argumento que não é flag é escrito — registrava `<` e `entrada.txt` como
-# alvos de escrita. `entrada.txt` está sendo LIDO. Mesma família do falso
-# positivo do commit multilinha: um pedaço da linha lido como o que não é.
+# A whole redirection: optional descriptor (`2>`), operator, optional `&`
+# (`>&2`) and the operand. It serves only to ERASE the redirection before
+# tokenizing the command: `tee out.txt < in.txt` used to tokenize as
+# `["tee", "out.txt", "<", "in.txt"]`, and the `tee` rule (every argument that
+# is not a flag is written) recorded `<` and `in.txt` as write targets.
+# `in.txt` is being READ. Same family as the multi-line commit false
+# positive: a piece of the line read as what it is not.
 _REDIR_STRIP_RE = re.compile(
     r"""[0-9]?(?:>>?|<<?)&?\s*(?:"[^"]*"|'[^']*'|[^\s;&|<>()]+)?"""
 )
 
 
 def _strip_redirections(segment: str, mask: list) -> str:
-    """Remove os redirecionamentos FORA de aspas, preservando o resto intacto."""
+    """Removes the redirections OUTSIDE quotes, leaving the rest intact."""
     cuts = [
         (m.start(), m.end())
         for m in _REDIR_STRIP_RE.finditer(segment)
@@ -275,13 +279,13 @@ def _strip_redirections(segment: str, mask: list) -> str:
 
 
 def _unquoted_view(command: str) -> str:
-    """A linha de comando com o conteúdo citado trocado por espaço.
+    """The command line with the quoted content replaced by spaces.
 
-    O detector de construção indecidível (_UNCOVERED_RE) varria a linha inteira,
-    aspas incluídas: uma mensagem de commit com a palavra `ed`, ou com um `<<`
-    no meio da prosa, gerava uma entrada falsa no log de cobertura. O log só
-    existe para dizer o que o hook NÃO conseguiu analisar — enchê-lo de prosa
-    ensina a ignorá-lo.
+    The undecidable-construct detector (_UNCOVERED_RE) used to scan the whole
+    line, quotes included: a commit message with the word `ed`, or with a `<<`
+    in the middle of the prose, generated a false entry in the coverage log.
+    The log exists only to say what the hook could NOT analyze, and filling it
+    with prose teaches people to ignore it.
     """
     mask = _quoted_mask(command)
     return "".join(" " if m else c for c, m in zip(command, mask))
@@ -302,21 +306,21 @@ def _segment_targets(segment: str) -> list:
     targets = []
 
     # 1. Redirections (covers `cat > f`, `echo .. >> f`, `cmd > f`, heredoc-to-file).
-    #    O `>` precisa estar fora de aspas: um `->` no meio de uma mensagem de
-    #    commit é prosa, não redirecionamento.
+    #    The `>` must be outside quotes: a `->` in the middle of a commit
+    #    message is prose, not a redirection.
     redir_mask = _quoted_mask(segment)
     for m in _REDIR_RE.finditer(segment):
         if not redir_mask[m.start()]:
             targets.append(_unquote(m.group(1)))
 
     # 2. argv-shaped writers — tokenize; fall back silently if shlex chokes.
-    #    Sem os redirecionamentos: eles já viraram alvo no passo 1, e deixá-los
-    #    aqui faz o `tee` contar o operando de entrada como escrita.
-    sem_redir = _strip_redirections(segment, redir_mask)
+    #    Without the redirections: they already became targets in step 1, and
+    #    leaving them here makes `tee` count the input operand as a write.
+    no_redir = _strip_redirections(segment, redir_mask)
     try:
-        argv = shlex.split(sem_redir, posix=True)
+        argv = shlex.split(no_redir, posix=True)
     except ValueError:
-        argv = sem_redir.split()
+        argv = no_redir.split()
     if not argv:
         return targets
 
@@ -350,29 +354,29 @@ def _segment_targets(segment: str) -> list:
             if t.startswith("of="):
                 targets.append(t[3:])
     elif cmd == "git":
-        # `git mv <src> <dst>` — move real de arquivo, que o path-lock precisa
-        # governar como qualquer outra escrita. Estava só na cópia do docs
-        # (structure-surgeon usa git mv para preservar histórico); as outras
-        # quatro deixavam passar. Encontrado pelo detector de divergência.
+        # `git mv <src> <dst>` is a real file move, which the path-lock must
+        # govern like any other write. It was only in the docs copy
+        # (structure-surgeon uses git mv to preserve history); the other
+        # four let it through. Found by the divergence detector.
         #
-        # Origem E destino contam como escrita (P4, CS-5): `git mv` apaga o
-        # caminho de origem tanto quanto cria o de destino — um slice travado
-        # para escrever em domain/** que renomeia infrastructure/Foo.java para
-        # domain/Foo.java "escreveu" fora da própria pista (removeu um arquivo
-        # de infrastructure/), mesmo o destino sendo permitido. Checar só o
-        # destino, como antes, deixava esse sentido passar batido.
+        # Source AND destination count as a write (P4, CS-5): `git mv` deletes
+        # the source path as much as it creates the destination one. A slice
+        # locked to write in domain/** that renames infrastructure/Foo.java to
+        # domain/Foo.java "wrote" outside its own lane (it removed a file from
+        # infrastructure/), even though the destination is allowed. Checking
+        # only the destination, as before, let this direction slip by.
         if len(nonflags) >= 3 and nonflags[0] == "mv":
             targets.extend(nonflags[1:])
         elif nonflags and nonflags[0] in ("checkout", "restore"):
-            # `git checkout <ref> -- arquivo` e `git restore arquivo`
-            # SOBRESCREVEM o arquivo no disco com a versão de outro lugar —
-            # mesmo efeito do `git mv` acima, na mesma ferramenta já vigiada,
-            # e era a forma mais fácil de reverter em silêncio um arquivo fora
-            # da pista (achado do proof-reviewer, 26/08/2026).
+            # `git checkout <ref> -- file` and `git restore file`
+            # OVERWRITE the file on disk with the version from elsewhere,
+            # the same effect as the `git mv` above, in the same tool already
+            # watched, and it was the easiest way to silently revert a file
+            # outside the lane (proof-reviewer finding, 26/08/2026).
             #
-            # Sem `--`, o `checkout` é troca de branch: escreve muita coisa,
-            # mas não é escrita dirigida a um caminho, e tratá-lo como alvo
-            # transformaria todo `git checkout main` num bloqueio.
+            # Without `--`, `checkout` is a branch switch: it writes a lot,
+            # but it is not a write aimed at a path, and treating it as a
+            # target would turn every `git checkout main` into a block.
             if "--" in rest:
                 targets.extend(t for t in rest[rest.index("--") + 1:]
                                if not _is_flag(t))
@@ -381,12 +385,12 @@ def _segment_targets(segment: str) -> list:
     elif cmd == "truncate":
         targets.extend(nonflags[1:] if nonflags else [])
     elif cmd in ("curl", "wget"):
-        # Baixar para um arquivo é escrever nele. Achado do proof-reviewer em
-        # 26/08/2026: `curl -o` e `wget -O` são estaticamente decidíveis — o
-        # destino está explícito no argv — e mesmo assim passavam calados, nem
-        # bloqueados nem registrados. A forma sem destino explícito (`curl -O`,
-        # `wget <url>`, que gravam com o nome remoto no diretório corrente)
-        # continua fora: ali o nome não está na linha de comando.
+        # Downloading to a file is writing to it. Proof-reviewer finding on
+        # 26/08/2026: `curl -o` and `wget -O` are statically decidable (the
+        # destination is explicit in argv) and yet they went through silent,
+        # neither blocked nor logged. The form without an explicit destination
+        # (`curl -O`, `wget <url>`, which save under the remote name in the
+        # current directory) stays out: there the name is not on the command line.
         dest = ("-o", "--output") if cmd == "curl" else ("-O", "--output-document")
         prefixes = tuple(f"{d}=" for d in dest if d.startswith("--"))
         for i, t in enumerate(rest):
@@ -395,10 +399,10 @@ def _segment_targets(segment: str) -> list:
             elif t.startswith(prefixes):
                 targets.append(t.split("=", 1)[1])
     elif cmd == "touch":
-        # Cria o arquivo se ele não existe: é escrita, mesmo com conteúdo vazio.
+        # Creates the file if it does not exist: it is a write, even with empty content.
         targets.extend(nonflags)
     elif cmd == "rsync":
-        # Como `cp`: lê a origem, escreve no último operando.
+        # Like `cp`: reads the source, writes to the last operand.
         if len(nonflags) >= 2:
             targets.append(nonflags[-1])
 
@@ -425,44 +429,46 @@ def extract_write_targets(command: str) -> tuple:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CAMADA 1 — deny-by-default em quatro baldes
+# LAYER 1 — deny-by-default in four buckets
 #
-# Desenho: docs/internals/gauntlet-pilot-bash-path-lock.md ("Camada 1"),
-# aprovado em 2026-08-15. Motivo: WEGO-1936 — um qa-engineer barrado no `cp`
-# reescreveu `src/main` com `python3 -c "open(...,'w')"`, e o hook antigo
-# deixava interpretador inline passar ("não sei analisar → libera + log em
-# /tmp"). O log ninguém lia.
+# Design: docs/internals/gauntlet-pilot-bash-path-lock.md ("Layer 1"),
+# approved on 2026-08-15. Reason: WEGO-1936 — a qa-engineer blocked on `cp`
+# rewrote `src/main` with `python3 -c "open(...,'w')"`, and the old hook let
+# inline interpreters through ("I can't analyze it → allow + log in /tmp").
+# Nobody read the log.
 #
-# A pergunta do hook foi invertida. Antes: "isto parece uma escrita conhecida?"
-# — cada vetor novo era um falso-negativo invisível. Agora: "isto é
-# comprovadamente inofensivo?". Cada segmento de comando de um agente trancado
-# cai em exatamente um balde:
+# The hook's question was inverted. Before: "does this look like a known
+# write?" — every new vector was an invisible false negative. Now: "is this
+# provably harmless?". Every command segment of a locked agent falls into
+# exactly one bucket:
 #
-#   1. ESCRITOR ANALISÁVEL — o alvo está na linha de comando (redirect, tee,
-#      cp, sed -i, mkdir, rm...). Alvo dentro da raiz e fora da pista → nega.
-#   2. VERBO INOCENTE — lista auditada abaixo (_SIMPLE e _HANDLERS), cada verbo
-#      com as flags que o transformam em escritor/executor negadas.
-#   3. FORA DA JURISDIÇÃO — todos os diretórios em que o segmento pode rodar
-#      estão fora da raiz, e nada na linha cita a raiz: é o worktree descartável
-#      de perturbação. Tudo permitido.
-#   4. TODO O RESTO → NEGADO. Interpretador inline, shell aninhado, script que o
-#      próprio agente poderia ter escrito — salvo dentro de um worktree deste
-#      repo (a cópia descartável de perturbação), que é jurisdição do balde 3
-#      —, verbo que ninguém listou. Um vetor novo cai aqui POR CONSTRUÇÃO: ele
-#      não precisa constar em lista nenhuma, basta não constar na de inocentes.
+#   1. ANALYZABLE WRITER — the target is on the command line (redirect, tee,
+#      cp, sed -i, mkdir, rm...). Target inside the root and outside the
+#      lane → deny.
+#   2. HARMLESS VERB — audited list below (_SIMPLE and _HANDLERS), each verb
+#      with the flags that turn it into a writer/executor denied.
+#   3. OUTSIDE THE JURISDICTION — every directory the segment may run in is
+#      outside the root, and nothing on the line cites the root: it is the
+#      disposable perturbation worktree. Everything allowed.
+#   4. EVERYTHING ELSE → DENIED. Inline interpreter, nested shell, a script
+#      the agent itself could have written — except inside a worktree of this
+#      repo (the disposable perturbation copy), which is bucket 3
+#      jurisdiction —, a verb nobody listed. A new vector falls here BY
+#      CONSTRUCTION: it does not need to be on any list, it only needs not to
+#      be on the harmless one.
 #
-# Manutenção vira acrescentar verbo inocente (falso-positivo: barulhento,
-# visível, barato) em vez de caçar bypass (falso-negativo: invisível).
+# Maintenance becomes adding a harmless verb (false positive: noisy, visible,
+# cheap) instead of hunting bypasses (false negative: invisible).
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Modo sombra (rollout): CEPA_BASHLOCK_ENFORCE=0 libera o balde 4 e registra
-# `bash_pathlock_would_deny` no ledger. O balde 1 (escrita fora da pista) nunca
-# é afrouxado — ele já bloqueava antes desta camada existir.
+# Shadow mode (rollout): CEPA_BASHLOCK_ENFORCE=0 lets bucket 4 through and
+# records `bash_pathlock_would_deny` in the ledger. Bucket 1 (write outside the
+# lane) is never loosened — it already blocked before this layer existed.
 _ENFORCE_ENV = "CEPA_BASHLOCK_ENFORCE"
 
 _MAX_DEPTH = 6
 
-# Marcas que a leitura da linha insere no lugar do que não é argv.
+# Marks that the line reading inserts in place of what is not argv.
 _SUB_MARK = "__CEPASUB{}__"
 _SUB_MARK_RE = re.compile(r"__CEPASUB(\d+)__")
 _HEREDOC_MARK = "<__CEPAHEREDOC__"
@@ -473,9 +479,9 @@ _VAR_RE = re.compile(
 )
 _ASSIGN_RE = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)(\+?=)(.*)$", re.S)
 
-# Redirecionamentos de stdout que o _REDIR_RE compartilhado não vê porque
-# começam com dígito ou `&`: `1> f`, `&> f`, `>| f`, `3> f`. `2>` (stderr) segue
-# fora de escopo, como sempre foi (`./mvnw test 2> err.log`).
+# Stdout redirections that the shared _REDIR_RE does not see because they
+# start with a digit or `&`: `1> f`, `&> f`, `>| f`, `3> f`. `2>` (stderr)
+# stays out of scope, as it always was (`./mvnw test 2> err.log`).
 _EXTRA_REDIR_RE = re.compile(
     r"""(?<![0-9&>])(?:[013-9]>>?|&>>?|>>?\|)\s*(?!&)("[^"]+"|'[^']+'|[^\s;&|<>()]+)"""
 )
@@ -483,8 +489,8 @@ _EXTRA_REDIR_RE = re.compile(
 _SYSTEM_BIN_DIRS = {"/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin",
                     "/usr/sbin", "/sbin"}
 
-# Variáveis que fazem um verbo inocente executar código escolhido por quem as
-# define (pager, editor, diff externo, pré-carga de biblioteca, PATH).
+# Variables that make a harmless verb run code chosen by whoever defines them
+# (pager, editor, external diff, library preload, PATH).
 _DANGEROUS_ENV = {
     "PATH", "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "BASH_ENV", "ENV",
     "PROMPT_COMMAND", "PYTHONSTARTUP", "PERL5OPT", "RUBYOPT", "NODE_OPTIONS",
@@ -498,12 +504,12 @@ _DANGEROUS_ENV_PREFIX = ("DYLD_", "GIT_CONFIG_KEY_", "GIT_CONFIG_VALUE_")
 _JVM_OPTS_ENV = {"JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "JDK_JAVA_OPTIONS",
                  "MAVEN_OPTS", "GRADLE_OPTS", "JAVA_OPTS"}
 
-# ─── balde 2: a lista auditada de inocentes ─────────────────────────────────
+# ─── bucket 2: the audited list of harmless verbs ───────────────────────────
 #
-# Verbos que não escrevem arquivo nem executam código trazido pela linha de
-# comando. Os argumentos deles não importam; escrita, se houver, só por
-# redirecionamento — e redirecionamento é balde 1. Quem tem flag perigosa NÃO
-# entra aqui: vai para _HANDLERS, com a flag negada.
+# Verbs that neither write files nor run code brought in by the command line.
+# Their arguments do not matter; a write, if any, only through redirection —
+# and redirection is bucket 1. Whoever has a dangerous flag does NOT go here:
+# it goes to _HANDLERS, with the flag denied.
 _SIMPLE = frozenset("""
     ls cat head tail wc grep egrep fgrep zgrep ag diff diff3 cmp comm stat file
     du df pwd echo printf true false : test [ [[ ]] which whereis type basename
@@ -515,32 +521,32 @@ _SIMPLE = frozenset("""
     netstat cal look jobs fi done esac } for select
 """.split())
 
-# Palavras de controle que abrem um comando: a palavra sai, o comando fica.
+# Control words that open a command: the word goes, the command stays.
 _LEADING_KEYWORDS = {"if", "then", "do", "else", "elif", "while", "until", "!", "{"}
 
-# Verbos cujas escritas estão todas na linha de comando (balde 1).
+# Verbs whose writes are all on the command line (bucket 1).
 _WRITERS = frozenset("""
     cp mv install tee dd truncate touch rsync mkdir rmdir rm unlink ln chmod
     chown chgrp
 """.split())
 
 
-class _Negado(Exception):
-    def __init__(self, balde, verbo, reason, segmento="", alvos=None):
+class _Denied(Exception):
+    def __init__(self, bucket, verb, reason, segment="", targets=None):
         super().__init__(reason)
-        self.balde = balde
-        self.verbo = verbo
+        self.bucket = bucket
+        self.verb = verb
         self.reason = reason
-        self.segmento = segmento
-        self.alvos = alvos or []
+        self.segment = segment
+        self.targets = targets or []
 
 
 class _Arg:
-    """Um token do argv com as variáveis conhecidas expandidas.
+    """A token of the argv with the known variables expanded.
 
-    `value` troca o que não dá para saber por _UNKNOWN. `lead_unknown` diz se
-    o token COMEÇA com algo desconhecido — só esse pode esconder uma flag
-    (`sed $X arquivo` com X=-i), então só ele pesa na decisão.
+    `value` replaces what cannot be known with _UNKNOWN. `lead_unknown` says
+    whether the token STARTS with something unknown — only that one can hide a
+    flag (`sed $X file` with X=-i), so only it weighs in the decision.
     """
     __slots__ = ("raw", "value", "known", "lead_unknown")
 
@@ -560,24 +566,24 @@ class _Ctx:
         self.shadow = shadow
         self.vars = {}
         self.sub_values = {}
-        self.would = []     # negações do balde 4 em modo sombra
-        self.events = []    # (evento, campos) para o ledger
-        self.sub_base = 0   # numeração global das substituições
-        # diretórios (`cd $X`, `git -C $X`) cujo valor esta chamada não conhece.
-        # Não negam nada sozinhos; entram na mensagem de uma negação que vier
-        # depois, porque são quase sempre a causa dela.
-        self.dirs_desconhecidos = []
-        # argv + redirecionamentos do segmento corrente, para _script_rule
-        # reusar _refs_root sem precisar recalculá-los.
+        self.would = []     # bucket 4 denials in shadow mode
+        self.events = []    # (event, fields) for the ledger
+        self.sub_base = 0   # global numbering of the substitutions
+        # directories (`cd $X`, `git -C $X`) whose value this call does not know.
+        # They deny nothing on their own; they go into the message of a denial
+        # that comes later, because they are almost always its cause.
+        self.unknown_dirs = []
+        # argv + redirections of the current segment, so _script_rule can
+        # reuse _refs_root without recomputing them.
         self.seg_args = []
-        # cache preguiçoso dos worktrees registrados deste repo (ver _worktrees).
+        # lazy cache of this repo's registered worktrees (see _worktrees).
         self._worktrees = None
 
 
-# ─── leitura da linha: substituições e heredocs ─────────────────────────────
+# ─── line reading: substitutions and heredocs ──────────────────────────────
 
 def _heredoc_at(s, i):
-    """Se há um operador de heredoc em s[i:], devolve (fim, delim, apara, citado)."""
+    """If there is a heredoc operator at s[i:], returns (end, delim, strip_tabs, quoted)."""
     n = len(s)
     if s[i:i + 2] != "<<" or s[i:i + 3] == "<<<":
         return None
@@ -608,7 +614,7 @@ def _heredoc_at(s, i):
 
 
 def _skip_heredoc_body(s, j, delim, strip_tabs):
-    """A partir do início do corpo (j), devolve o índice logo após a linha do delimitador."""
+    """From the start of the body (j), returns the index right after the delimiter line."""
     n = len(s)
     while j < n:
         span_end = s.find("\n", j)
@@ -622,11 +628,11 @@ def _skip_heredoc_body(s, j, delim, strip_tabs):
 
 
 def _match_close(s, i, closer):
-    """Índice do fechamento de uma substituição aberta logo antes de s[i].
+    """Index of the close of a substitution opened right before s[i].
 
-    Respeita aspas, escapes, substituições aninhadas e corpo de heredoc (a
-    mensagem de commit no padrão `"$(cat <<'EOF' ... EOF)"` tem apóstrofos e
-    parênteses na prosa). Devolve -1 se não fecha.
+    Respects quotes, escapes, nested substitutions and heredoc bodies (the
+    commit message in the `"$(cat <<'EOF' ... EOF)"` pattern has apostrophes
+    and parentheses in the prose). Returns -1 if it does not close.
     """
     n = len(s)
     depth = 1
@@ -694,21 +700,21 @@ def _match_close(s, i, closer):
 
 
 def _flatten(command):
-    """Troca cada `$(...)`, crase, `<(...)` e `>(...)` por uma marca e tira os
-    corpos de heredoc.
+    """Replaces each `$(...)`, backtick, `<(...)` and `>(...)` with a mark and
+    strips the heredoc bodies.
 
-    Devolve (linha_plana, substituicoes, orfas). Substituição é outro comando,
-    que roda ANTES do segmento que a contém — então é classificada como
-    comando, com as mesmas regras. É o gap do desenho: `echo $(python3 -c ...)`
-    tinha verbo inocente na frente e código arbitrário dentro. `orfas` são as
-    substituições no corpo de heredoc sem aspas no delimitador (o shell as
-    expande).
+    Returns (flat_line, substitutions, orphans). A substitution is another
+    command, which runs BEFORE the segment that contains it — so it is
+    classified as a command, with the same rules. That is the design's gap:
+    `echo $(python3 -c ...)` had a harmless verb in front and arbitrary code
+    inside. `orphans` are the substitutions in the body of a heredoc whose
+    delimiter is unquoted (the shell expands them).
     """
     s = command
     n = len(s)
     out = []
     subs = []
-    orfas = []
+    orphans = []
     quote = None
     pend = []
     i = 0
@@ -738,7 +744,7 @@ def _flatten(command):
             i = j + 1 if j >= 0 else n
             continue
         if s.startswith("$((", i):
-            # Aritmética não é comando — mas pode esconder `$(...)` dentro.
+            # Arithmetic is not a command — but it may hide `$(...)` inside.
             j = _match_close(s, i + 3, ")")
             inner = s[i + 3:j] if j >= 0 else s[i + 3:]
             f_inner, f_subs, _ = _flatten(inner)
@@ -747,7 +753,7 @@ def _flatten(command):
             f_inner = _SUB_MARK_RE.sub(
                 lambda m: _SUB_MARK.format(base + int(m.group(1))), f_inner)
             out.append("__CEPAARITH__")
-            orfas.extend(range(base, len(subs)))
+            orphans.extend(range(base, len(subs)))
             del f_inner
             i = (j + 2) if j >= 0 else n
             continue
@@ -763,7 +769,7 @@ def _flatten(command):
                 quote = None
             i += 1
             continue
-        # fora de aspas
+        # outside quotes
         if c in "\"'":
             quote = c
             out.append(c)
@@ -774,19 +780,19 @@ def _flatten(command):
             j = i + 1
             for delim, strip_tabs, quoted in pend:
                 span_end = _skip_heredoc_body(s, j, delim, strip_tabs)
-                corpo = s[j:span_end]
+                body = s[j:span_end]
                 if not quoted:
-                    # corpo sem aspas no delimitador: `$(...)` ali EXECUTA
-                    _, c_subs, c_orf = _flatten('"' + corpo.replace('"', " ") + '"')
+                    # body with an unquoted delimiter: `$(...)` there EXECUTES
+                    _, c_subs, c_orf = _flatten('"' + body.replace('"', " ") + '"')
                     base = len(subs)
                     subs.extend(c_subs)
-                    orfas.extend(range(base, len(subs)))
+                    orphans.extend(range(base, len(subs)))
                 j = span_end
             pend = []
             i = j
             continue
         if s.startswith("<<<", i):
-            out.append("<<<")  # here-string: não abre corpo
+            out.append("<<<")  # here-string: does not open a body
             i += 3
             continue
         h = _heredoc_at(s, i)
@@ -797,16 +803,16 @@ def _flatten(command):
             continue
         out.append(c)
         i += 1
-    return "".join(out), subs, orfas
+    return "".join(out), subs, orphans
 
 
 def _split_with_seps(command):
-    """Segmentos com o separador que os PRECEDE: '', '&&', '||', ';', '|', '&', '\\n'.
+    """Segments with the separator that PRECEDES them: '', '&&', '||', ';', '|', '&', '\\n'.
 
-    Diferente do _split_segments compartilhado em dois pontos que decidem
-    balde: guarda o separador (um `cd` só vale para o próximo segmento se veio
-    `&&`) e não corta no `&` de `2>&1` / `&>` — cortar ali transformava o `1`
-    de `./mvnw test 2>&1 | tail` num "comando" desconhecido.
+    Differs from the shared _split_segments at two points that decide the
+    bucket: it keeps the separator (a `cd` only holds for the next segment if
+    `&&` came) and it does not cut at the `&` of `2>&1` / `&>` — cutting there
+    turned the `1` of `./mvnw test 2>&1 | tail` into an unknown "command".
     """
     mask = _quoted_mask(command)
     out = []
@@ -829,7 +835,7 @@ def _split_with_seps(command):
             i += 1
             continue
         if c == "|" and i > 0 and command[i - 1] == ">":
-            i += 1  # `>|` é redirecionamento, não pipe
+            i += 1  # `>|` is a redirection, not a pipe
             continue
         if c in ";|&\n":
             out.append((sep, command[start:i]))
@@ -842,7 +848,7 @@ def _split_with_seps(command):
     return out
 
 
-# ─── expansão e resolução ───────────────────────────────────────────────────
+# ─── expansion and resolution ───────────────────────────────────────────────
 
 def _expand(ctx, raw, cwds):
     def var(m):
@@ -883,12 +889,12 @@ def _inside(p, root):
 
 
 def _worktrees(ctx):
-    """Worktrees registrados deste repo (git worktree list), exceto a raiz.
+    """Registered worktrees of this repo (git worktree list), except the root.
 
-    Cache em ctx: só chamado quando um script FORA da raiz é de fato
-    executado, então não custa nada no caminho comum. Fail-silent: erro ou
-    timeout devolve lista vazia — pior caso é o script cair na negação
-    antiga, nunca liberar por engano.
+    Cache in ctx: only called when a script OUTSIDE the root is actually
+    executed, so it costs nothing on the common path. Fail-silent: an error or
+    timeout returns an empty list — the worst case is the script falling into
+    the old denial, never being allowed by mistake.
     """
     if ctx._worktrees is not None:
         return ctx._worktrees
@@ -911,11 +917,11 @@ def _worktrees(ctx):
 
 
 def _refs_root(ctx, text, args, cwds):
-    """A linha cita a raiz? (condição para o balde 3 NÃO valer)
+    """Does the line cite the root? (condition for bucket 3 NOT to hold)
 
-    Checagem de string, declarada como tal: um caminho montado em tempo de
-    execução (`$(echo L3Jvb3Q= | base64 -d)`) escapa. O desenho aceita esse
-    residual — ofuscar depois de um deny é dolo, não descoberta.
+    A string check, declared as such: a path assembled at runtime
+    (`$(echo L3Jvb3Q= | base64 -d)`) escapes. The design accepts that
+    residue — obfuscating after a deny is willful, not discovery.
     """
     root_s = str(ctx.root)
     if root_s in text:
@@ -933,19 +939,19 @@ def _refs_root(ctx, text, args, cwds):
     return False
 
 
-def _deny(balde, verbo, reason, seg):
-    raise _Negado(balde, verbo, reason, seg)
+def _deny(bucket, verb, reason, seg):
+    raise _Denied(bucket, verb, reason, seg)
 
 
-def _check_targets(ctx, targets, cwds, verbo, seg):
-    """Balde 1: todo alvo dentro da raiz tem de estar na pista do agente."""
-    fora = []
+def _check_targets(ctx, targets, cwds, verb, seg):
+    """Bucket 1: every target inside the root must be in the agent's lane."""
+    outside = []
     for t in targets:
         val = t.value if isinstance(t, _Arg) else t
         raw = t.raw if isinstance(t, _Arg) else t
         val = _unquote(val).strip()
         if _UNKNOWN in val:
-            raise _Negado(1, verbo, f"alvo de escrita que não sei resolver: {raw}",
+            raise _Denied(1, verb, f"alvo de escrita que não sei resolver: {raw}",
                           seg, [raw])
         if not val or val in _PSEUDO or val.startswith("&") or val == "-":
             continue
@@ -957,57 +963,58 @@ def _check_targets(ctx, targets, cwds, verbo, seg):
                 continue
             if ctx.allowed and ctx.pl.path_matches(ps, ctx.allowed, ctx.root):
                 continue
-            fora.append(raw)
+            outside.append(raw)
             break
-    if fora:
-        raise _Negado(1, verbo, "escrita fora da sua pista", seg, fora)
+    if outside:
+        raise _Denied(1, verb, "escrita fora da sua pista", seg, outside)
 
 
-def _no_hidden_flags(args, verbo, seg, value_flags=()):
-    """Token que COMEÇA com valor desconhecido pode ser uma flag disfarçada."""
+def _no_hidden_flags(args, verb, seg, value_flags=()):
+    """A token that STARTS with an unknown value may be a disguised flag."""
     prev = None
     for a in args:
         if a.lead_unknown and prev not in value_flags:
-            _deny(4, verbo, f"argumento que não sei avaliar ({a.raw}) pode esconder "
-                            f"uma flag que torna `{verbo}` escritor ou executor", seg)
+            _deny(4, verb, f"argumento que não sei avaliar ({a.raw}) pode esconder "
+                            f"uma flag que torna `{verb}` escritor ou executor", seg)
         prev = a.value if a.known else None
 
 
-def _script_rule(ctx, arg, cwds, verbo, seg):
-    """Executar um arquivo é inocente só se o agente NÃO pode tê-lo escrito.
+def _script_rule(ctx, arg, cwds, verb, seg):
+    """Running a file is harmless only if the agent CANNOT have written it.
 
-    Script do projeto fora da pista (`./mvnw`, `bash scripts/build.sh`,
-    `source .venv/bin/activate`): foi escrito por outro — é o equivalente a um
-    `npm test`. Script fora da raiz (/tmp) ou dentro da própria pista: o agente
-    pode tê-lo escrito agora mesmo, então executar é escrever arbitrariamente.
+    A project script outside the lane (`./mvnw`, `bash scripts/build.sh`,
+    `source .venv/bin/activate`): written by someone else — it is the
+    equivalent of an `npm test`. A script outside the root (/tmp) or inside
+    the agent's own lane: the agent may have just written it, so running it is
+    writing arbitrarily.
 
-    Exceção: script dentro de um worktree registrado deste repo (a cópia
-    descartável de perturbação criada com `git worktree add`) é a mesma
-    jurisdição do balde 3 — executar o script de dentro da cópia não abre
-    nada que `cd <cópia> && <o mesmo script>` (balde 3, já permitido) não
-    abrisse, desde que a linha não cite a raiz. Achado no run
-    2026-09-28-0558: o proof-reviewer criava a cópia em /tmp e era barrado ao
-    rodar o teste de dentro dela.
+    Exception: a script inside a registered worktree of this repo (the
+    disposable perturbation copy created with `git worktree add`) is the same
+    jurisdiction as bucket 3 — running the script from inside the copy opens
+    nothing that `cd <copy> && <the same script>` (bucket 3, already allowed)
+    would not open, as long as the line does not cite the root. Found in run
+    2026-09-28-0558: the proof-reviewer created the copy in /tmp and was
+    blocked when running the test from inside it.
     """
     if not arg.known:
-        _deny(4, verbo, f"o arquivo executado vem de valor que não sei avaliar ({arg.raw})", seg)
+        _deny(4, verb, f"o arquivo executado vem de valor que não sei avaliar ({arg.raw})", seg)
     for p in _resolve_all(arg.value, cwds):
         if not _inside(p, ctx.root):
             if any(_inside(p, wt) for wt in _worktrees(ctx)) and not _refs_root(
                     ctx, seg, ctx.seg_args, cwds):
                 continue
-            _deny(4, verbo, f"executar arquivo fora do projeto ({arg.value}) — "
+            _deny(4, verb, f"executar arquivo fora do projeto ({arg.value}) — "
                             f"você pode tê-lo escrito, e aí ele escreve o que quiser. "
                             f"Cópia descartável criada com `git worktree add` é a "
                             f"exceção: script de dentro dela passa", seg)
         ps = str(p)
         if ctx.pl.is_own_expertise_file(ps, ctx.agent) or (
                 ctx.allowed and ctx.pl.path_matches(ps, ctx.allowed, ctx.root)):
-            _deny(4, verbo, f"executar arquivo da sua própria pista ({arg.value}) — "
+            _deny(4, verb, f"executar arquivo da sua própria pista ({arg.value}) — "
                             f"é código que você mesmo pode ter escrito", seg)
 
 
-# ─── handlers por verbo (balde 2 com flag negada, ou balde 1) ───────────────
+# ─── per-verb handlers (bucket 2 with a denied flag, or bucket 1) ──────────
 
 def _vals(args):
     return [a.value for a in args]
@@ -1029,44 +1036,44 @@ def _nonflags(args, value_flags=()):
     return out
 
 
-def _generic_targets(verbo, args):
-    """Alvos pelo extrator compartilhado (_segment_targets) + os que faltavam lá."""
-    vals = [verbo] + _vals(args)
+def _generic_targets(verb, args):
+    """Targets from the shared extractor (_segment_targets) + the ones missing there."""
+    vals = [verb] + _vals(args)
     line = " ".join(shlex.quote(v) for v in vals)
-    alvos = list(_segment_targets(line))
+    targets = list(_segment_targets(line))
     rest = vals[1:]
     nf = [v for v in rest if v and not _is_flag(v)]
-    if verbo in ("cp", "mv", "install", "ln"):
+    if verb in ("cp", "mv", "install", "ln"):
         for k, v in enumerate(rest):
             if v in ("-t", "--target-directory") and k + 1 < len(rest):
-                alvos.append(rest[k + 1])
+                targets.append(rest[k + 1])
             elif v.startswith("--target-directory="):
-                alvos.append(v.split("=", 1)[1])
-    if verbo == "ln":
+                targets.append(v.split("=", 1)[1])
+    if verb == "ln":
         if len(nf) >= 2:
-            alvos.append(nf[-1])
+            targets.append(nf[-1])
         elif nf:
-            alvos.append(os.path.basename(nf[0].rstrip("/")))
-    elif verbo in ("mkdir", "rmdir", "rm", "unlink"):
-        alvos.extend(nf)
-    elif verbo in ("chmod", "chown", "chgrp"):
-        alvos.extend(nf[1:])
-    return alvos
+            targets.append(os.path.basename(nf[0].rstrip("/")))
+    elif verb in ("mkdir", "rmdir", "rm", "unlink"):
+        targets.extend(nf)
+    elif verb in ("chmod", "chown", "chgrp"):
+        targets.extend(nf[1:])
+    return targets
 
 
-def _h_writer(ctx, verbo, args, cwds, seg):
-    if verbo == "rsync" and any(a.value in ("-e", "--rsh", "--rsync-path") or
+def _h_writer(ctx, verb, args, cwds, seg):
+    if verb == "rsync" and any(a.value in ("-e", "--rsh", "--rsync-path") or
                                a.value.startswith(("--rsh=", "--rsync-path="))
                                for a in args):
-        _deny(4, verbo, "rsync -e/--rsh executa um comando", seg)
-    _check_targets(ctx, _generic_targets(verbo, args), cwds, verbo, seg)
+        _deny(4, verb, "rsync -e/--rsh executa um comando", seg)
+    _check_targets(ctx, _generic_targets(verb, args), cwds, verb, seg)
 
 
-def _h_sed(ctx, verbo, args, cwds, seg):
+def _h_sed(ctx, verb, args, cwds, seg):
     vals = _vals(args)
     if any(v in ("-f", "--file") or v.startswith("--file=") for v in vals):
-        _deny(4, verbo, "sed -f lê o programa de um arquivo — não sei o que ele faz", seg)
-    _no_hidden_flags(args, verbo, seg, ("-e", "--expression"))
+        _deny(4, verb, "sed -f lê o programa de um arquivo — não sei o que ele faz", seg)
+    _no_hidden_flags(args, verb, seg, ("-e", "--expression"))
     scripts = []
     for k, v in enumerate(vals):
         if v in ("-e", "--expression") and k + 1 < len(vals):
@@ -1075,27 +1082,28 @@ def _h_sed(ctx, verbo, args, cwds, seg):
             scripts.append(v.split("=", 1)[1])
     if not scripts:
         nf = [a.value for a in _nonflags(args, ("-e", "--expression", "-l"))]
-        nf = [v for v in nf if v]  # `sed -i ''` (BSD): o sufixo vazio não é script
+        nf = [v for v in nf if v]  # `sed -i ''` (BSD): the empty suffix is not a script
         if nf:
             scripts.append(nf[0])
     for sc in scripts:
         if _sed_executes_or_writes(sc):
-            _deny(4, verbo, "o programa do sed escreve arquivo (w/W) ou executa (e)", seg)
+            _deny(4, verb, "o programa do sed escreve arquivo (w/W) ou executa (e)", seg)
     if any(v == "-i" or v.startswith("-i") or v.startswith("--in-place") for v in vals):
-        _check_targets(ctx, _generic_targets("sed", args), cwds, verbo, seg)
+        _check_targets(ctx, _generic_targets("sed", args), cwds, verb, seg)
 
 
-# O script do sed é lido comando a comando, como o próprio sed lê. A versão
-# anterior varria o texto caractere a caractere atrás de um `s`: numa palavra
-# como "stays" dentro de um endereço `/.../` ou do texto de um `a`/`i`/`c`, ela
-# lia `s` + delimitador `t` e achava um `e` nas "flags" — negando `sed -i`
-# legítimo (deviations.md, 2026-09-27). Ler por comando é o que separa texto de
-# comando; o que este leitor não reconhece é negado, nunca liberado.
-_SED_SIMPLES = set("=dDgGhHlnNpPxzFqQLv")
+# The sed script is read command by command, the way sed itself reads it. The
+# previous version scanned the text character by character looking for an `s`:
+# on a word like "stays" inside an `/.../` address or inside the text of an
+# `a`/`i`/`c`, it read `s` + delimiter `t` and found an `e` in the "flags" —
+# denying a legitimate `sed -i` (deviations.md, 2026-09-27). Reading by command
+# is what separates text from command; what this reader does not recognize is
+# denied, never allowed.
+_SED_SIMPLE = set("=dDgGhHlnNpPxzFqQLv")
 
 
-def _sed_delimitado(script, i, d):
-    """Avança de `i` até depois do próximo `d` não escapado; -1 se não fecha."""
+def _sed_delimited(script, i, d):
+    """Advances from `i` to just after the next unescaped `d`; -1 if it does not close."""
     n = len(script)
     while i < n:
         c = script[i]
@@ -1110,8 +1118,8 @@ def _sed_delimitado(script, i, d):
     return -1
 
 
-def _sed_endereco(script, i):
-    """Consome um endereço (número, $, /re/, \\cREc, first~step); -1 se malformado."""
+def _sed_address(script, i):
+    """Consumes an address (number, $, /re/, \\cREc, first~step); -1 if malformed."""
     n = len(script)
     if i < n and script[i].isdigit():
         while i < n and script[i].isdigit():
@@ -1130,7 +1138,7 @@ def _sed_endereco(script, i):
             d, i = script[i + 1], i + 2
         else:
             d, i = "/", i + 1
-        i = _sed_delimitado(script, i, d)
+        i = _sed_delimited(script, i, d)
         if i < 0:
             return -1
         while i < n and script[i] in "IM":
@@ -1139,12 +1147,12 @@ def _sed_endereco(script, i):
     return i
 
 
-def _sed_line_end(script, i, continua=False):
-    """Avança até o fim da linha. Só o texto de a/i/c continua na linha
-    seguinte com barra no fim; comentário e nome de arquivo acabam na quebra."""
+def _sed_line_end(script, i, continues=False):
+    """Advances to the end of the line. Only the text of a/i/c continues onto the
+    next line with a trailing backslash; a comment and a file name end at the break."""
     n = len(script)
     while i < n:
-        if continua and script[i] == "\\":
+        if continues and script[i] == "\\":
             i += 2
             continue
         if script[i] == "\n":
@@ -1154,8 +1162,8 @@ def _sed_line_end(script, i, continua=False):
 
 
 def _sed_executes_or_writes(script):
-    """True se o script escreve arquivo (w/W, flag w do s) ou executa (e,
-    flag e do s) — ou se não dá para ler. Falha fechada: o chamador nega."""
+    """True if the script writes a file (w/W, the s flag w) or executes (e,
+    the s flag e) — or if it cannot be read. Fails closed: the caller denies."""
     i, n = 0, len(script)
     while i < n:
         while i < n and script[i] in " \t\n;":
@@ -1169,7 +1177,7 @@ def _sed_executes_or_writes(script):
         if c == "}":
             i += 1
             continue
-        i = _sed_endereco(script, i)
+        i = _sed_address(script, i)
         if i < 0:
             return True
         if i < n and script[i] == ",":
@@ -1181,14 +1189,14 @@ def _sed_executes_or_writes(script):
                 while i < n and script[i].isdigit():
                     i += 1
             else:
-                j = _sed_endereco(script, i)
+                j = _sed_address(script, i)
                 if j < 0 or j == i:
                     return True
                 i = j
         while i < n and script[i] in " \t!":
             i += 1
         if i >= n:
-            return True  # endereço sem comando: o sed recusa, eu não adivinho
+            return True  # address without a command: sed refuses, I do not guess
         c = script[i]
         i += 1
         if c in "eWw":
@@ -1196,12 +1204,12 @@ def _sed_executes_or_writes(script):
         if c == "{":
             continue
         if c in "aic":
-            i = _sed_line_end(script, i, continua=True)  # texto, nunca comando
+            i = _sed_line_end(script, i, continues=True)  # text, never a command
             continue
         if c in "rR#":
-            i = _sed_line_end(script, i)  # nome de arquivo lido, ou comentário
+            i = _sed_line_end(script, i)  # name of a file to read, or a comment
             continue
-        if c in ":btT":  # rótulo termina no `;` ou no espaço, como no GNU sed
+        if c in ":btT":  # a label ends at `;` or at a space, as in GNU sed
             while i < n and script[i] in " \t":
                 i += 1
             while i < n and script[i] not in " \t;\n}":
@@ -1211,9 +1219,9 @@ def _sed_executes_or_writes(script):
             if i >= n or script[i] in "\n\\":
                 return True
             d = script[i]
-            i = _sed_delimitado(script, i + 1, d)
+            i = _sed_delimited(script, i + 1, d)
             if i >= 0:
-                i = _sed_delimitado(script, i, d)
+                i = _sed_delimited(script, i, d)
             if i < 0:
                 return True
             if c == "s":
@@ -1227,193 +1235,193 @@ def _sed_executes_or_writes(script):
                     return True  # flag desconhecida
                 i = k
             continue
-        if c in _SED_SIMPLES:
+        if c in _SED_SIMPLE:
             while i < n and script[i] not in ";\n}#":
                 i += 1
             continue
-        return True  # comando que o sed não tem, ou que este leitor não conhece
+        return True  # a command sed does not have, or that this reader does not know
     return False
 
 
-def _h_awk(ctx, verbo, args, cwds, seg):
+def _h_awk(ctx, verb, args, cwds, seg):
     vals = _vals(args)
     for v in vals:
         if v in ("-f", "--file", "-i", "--include", "-l", "--load", "-E", "--exec") \
                 or v.startswith(("--file=", "--include=", "--load=", "--exec=")):
-            _deny(4, verbo, f"awk {v} carrega programa de fora da linha", seg)
+            _deny(4, verb, f"awk {v} carrega programa de fora da linha", seg)
     nf = _nonflags(args, ("-F", "-v", "--field-separator", "--assign"))
     if not nf:
         return
     prog = nf[0].raw
-    # `>` e `|` só escrevem/executam no contexto de print/printf; fora dele são
-    # comparação (`NR>1`) e alternância de regex (`/a|b/`), leitura pura.
+    # `>` and `|` only write/execute in the context of print/printf; outside it
+    # they are comparison (`NR>1`) and regex alternation (`/a|b/`), pure reads.
     if re.search(r"\bsystem\s*\(|\bgetline\b|@(?:include|load|namespace)\b", prog) or \
             re.search(r"\bprintf?\b[^;{}]*[>|]", prog):
-        _deny(4, verbo, "o programa awk escreve (print > arquivo), abre pipe ou "
+        _deny(4, verb, "o programa awk escreve (print > arquivo), abre pipe ou "
                         "executa (system/getline)", seg)
 
 
-def _h_find(ctx, verbo, args, cwds, seg):
-    _no_hidden_flags(args, verbo, seg)
-    ruins = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0",
+def _h_find(ctx, verb, args, cwds, seg):
+    _no_hidden_flags(args, verb, seg)
+    bad_flags = {"-exec", "-execdir", "-ok", "-okdir", "-delete", "-fprint", "-fprint0",
              "-fprintf", "-fls"}
     for a in args:
-        if a.value in ruins:
-            _deny(4, verbo, f"find {a.value} executa comando ou apaga/escreve arquivo", seg)
+        if a.value in bad_flags:
+            _deny(4, verb, f"find {a.value} executa comando ou apaga/escreve arquivo", seg)
 
 
 def _h_flagdeny(bad, prefixes=()):
-    def h(ctx, verbo, args, cwds, seg):
-        _no_hidden_flags(args, verbo, seg)
+    def h(ctx, verb, args, cwds, seg):
+        _no_hidden_flags(args, verb, seg)
         for a in args:
             if a.value in bad or (prefixes and a.value.startswith(prefixes)):
-                _deny(4, verbo, f"{verbo} {a.value} escreve arquivo ou executa comando", seg)
+                _deny(4, verb, f"{verb} {a.value} escreve arquivo ou executa comando", seg)
     return h
 
 
 def _h_output_flag(flags):
-    """Verbo inocente cuja flag de saída vira alvo de escrita (sort -o, tree -o)."""
-    def h(ctx, verbo, args, cwds, seg):
-        _no_hidden_flags(args, verbo, seg, flags)
+    """Harmless verb whose output flag becomes a write target (sort -o, tree -o)."""
+    def h(ctx, verb, args, cwds, seg):
+        _no_hidden_flags(args, verb, seg, flags)
         vals = _vals(args)
-        alvos = []
+        targets = []
         for k, v in enumerate(vals):
             if v in flags and k + 1 < len(vals):
-                alvos.append(args[k + 1])
+                targets.append(args[k + 1])
             for f in flags:
                 if f.startswith("--") and v.startswith(f + "="):
-                    alvos.append(v.split("=", 1)[1])
+                    targets.append(v.split("=", 1)[1])
                 elif not f.startswith("--") and v.startswith(f) and len(v) > len(f):
-                    alvos.append(v[len(f):])
-        _check_targets(ctx, alvos, cwds, verbo, seg)
+                    targets.append(v[len(f):])
+        _check_targets(ctx, targets, cwds, verb, seg)
     return h
 
 
-def _h_second_operand(ctx, verbo, args, cwds, seg):
-    """`uniq entrada saida`, `xxd entrada saida`: o 2º operando é escrito."""
-    _no_hidden_flags(args, verbo, seg)
+def _h_second_operand(ctx, verb, args, cwds, seg):
+    """`uniq input output`, `xxd input output`: the 2nd operand is written."""
+    _no_hidden_flags(args, verb, seg)
     nf = _nonflags(args, ("-s", "-f", "-c", "-l", "-g", "-o", "-n", "-w"))
     if len(nf) >= 2:
-        _check_targets(ctx, [nf[1]], cwds, verbo, seg)
+        _check_targets(ctx, [nf[1]], cwds, verb, seg)
 
 
-def _h_mktemp(ctx, verbo, args, cwds, seg):
-    _no_hidden_flags(args, verbo, seg, ("-p", "--tmpdir", "-t", "--suffix"))
-    alvos = []
+def _h_mktemp(ctx, verb, args, cwds, seg):
+    _no_hidden_flags(args, verb, seg, ("-p", "--tmpdir", "-t", "--suffix"))
+    targets = []
     vals = _vals(args)
     for k, v in enumerate(vals):
         if v in ("-p", "--tmpdir") and k + 1 < len(vals):
-            alvos.append(os.path.join(vals[k + 1], "x"))
+            targets.append(os.path.join(vals[k + 1], "x"))
         elif v.startswith("--tmpdir="):
-            alvos.append(os.path.join(v.split("=", 1)[1], "x"))
+            targets.append(os.path.join(v.split("=", 1)[1], "x"))
     nf = _nonflags(args, ("-p", "--tmpdir", "-t", "--suffix"))
-    if nf and not alvos:
-        alvos.append(nf[0])
-    _check_targets(ctx, alvos, cwds, verbo, seg)
+    if nf and not targets:
+        targets.append(nf[0])
+    _check_targets(ctx, targets, cwds, verb, seg)
 
 
-def _h_curl(ctx, verbo, args, cwds, seg):
-    _no_hidden_flags(args, verbo, seg, ("-o", "--output", "-d", "--data", "-H",
+def _h_curl(ctx, verb, args, cwds, seg):
+    _no_hidden_flags(args, verb, seg, ("-o", "--output", "-d", "--data", "-H",
                                         "--header", "-u", "--user", "-X", "-F"))
     vals = _vals(args)
-    alvos = []
+    targets = []
     for k, v in enumerate(vals):
         if v in ("-O", "--remote-name", "--remote-name-all", "-J",
                  "--remote-header-name", "--output-dir", "-K", "--config") \
                 or v.startswith(("--output-dir=", "--config=")):
-            _deny(4, verbo, f"curl {v} grava com nome que a linha não diz", seg)
+            _deny(4, verb, f"curl {v} grava com nome que a linha não diz", seg)
         if v in ("-o", "--output") and k + 1 < len(vals):
-            alvos.append(args[k + 1])
+            targets.append(args[k + 1])
         elif v.startswith("--output="):
-            alvos.append(v.split("=", 1)[1])
+            targets.append(v.split("=", 1)[1])
         elif re.match(r"^-[a-zA-Z]+$", v) and not v.startswith("--"):
-            letras = v[1:]
-            if "O" in letras or "K" in letras or "J" in letras:
-                _deny(4, verbo, f"curl {v} grava com nome que a linha não diz", seg)
-            if "o" in letras:
-                resto = letras[letras.index("o") + 1:]
-                if resto:
-                    alvos.append(resto)
+            letters = v[1:]
+            if "O" in letters or "K" in letters or "J" in letters:
+                _deny(4, verb, f"curl {v} grava com nome que a linha não diz", seg)
+            if "o" in letters:
+                remainder = letters[letters.index("o") + 1:]
+                if remainder:
+                    targets.append(remainder)
                 elif k + 1 < len(vals):
-                    alvos.append(args[k + 1])
-    _check_targets(ctx, alvos, cwds, verbo, seg)
+                    targets.append(args[k + 1])
+    _check_targets(ctx, targets, cwds, verb, seg)
 
 
-def _h_wget(ctx, verbo, args, cwds, seg):
+def _h_wget(ctx, verb, args, cwds, seg):
     vals = _vals(args)
-    alvos = []
+    targets = []
     for k, v in enumerate(vals):
         if v in ("-O", "--output-document") and k + 1 < len(vals):
-            alvos.append(args[k + 1])
+            targets.append(args[k + 1])
         elif v.startswith("--output-document="):
-            alvos.append(v.split("=", 1)[1])
+            targets.append(v.split("=", 1)[1])
         elif re.match(r"^-[a-zA-Z]*O", v):
-            resto = v[v.index("O") + 1:]
-            alvos.append(resto if resto else (vals[k + 1] if k + 1 < len(vals) else "?"))
-    if not alvos and "--spider" not in vals:
-        _deny(4, verbo, "wget sem -O grava com o nome remoto no diretório corrente", seg)
-    _check_targets(ctx, alvos, cwds, verbo, seg)
+            remainder = v[v.index("O") + 1:]
+            targets.append(remainder if remainder else (vals[k + 1] if k + 1 < len(vals) else "?"))
+    if not targets and "--spider" not in vals:
+        _deny(4, verb, "wget sem -O grava com o nome remoto no diretório corrente", seg)
+    _check_targets(ctx, targets, cwds, verb, seg)
 
 
 def _h_archive_readonly(modes_ok):
-    def h(ctx, verbo, args, cwds, seg):
+    def h(ctx, verb, args, cwds, seg):
         vals = _vals(args)
-        if verbo == "tar":
-            letras = ""
+        if verb == "tar":
+            letters = ""
             for k, v in enumerate(vals):
                 if v.startswith("--"):
-                    letras += {"--list": "t", "--extract": "x", "--get": "x",
+                    letters += {"--list": "t", "--extract": "x", "--get": "x",
                                "--create": "c", "--append": "r",
                                "--update": "u"}.get(v, "")
                 elif v.startswith("-") or k == 0:
-                    letras += v.lstrip("-")
-            if "t" in letras and not any(m in letras for m in "xcruA"):
+                    letters += v.lstrip("-")
+            if "t" in letters and not any(m in letters for m in "xcruA"):
                 return
-            _deny(4, verbo, "tar só é inocente listando (-t); extrair/criar escreve "
+            _deny(4, verb, "tar só é inocente listando (-t); extrair/criar escreve "
                             "onde a linha não diz", seg)
         if not any(v in modes_ok for v in vals):
-            _deny(4, verbo, f"{verbo} só é inocente em modo de leitura "
+            _deny(4, verb, f"{verb} só é inocente em modo de leitura "
                             f"({', '.join(sorted(modes_ok))})", seg)
     return h
 
 
-def _wrapper_inner(verbo, args):
-    """Tira as opções de um wrapper finito e devolve o comando embrulhado."""
+def _wrapper_inner(verb, args):
+    """Strips the options of a finite wrapper and returns the wrapped command."""
     vals = _vals(args)
     i = 0
-    if verbo == "time":
+    if verb == "time":
         while i < len(vals) and vals[i] in ("-p", "-l"):
             i += 1
-    elif verbo == "nohup":
+    elif verb == "nohup":
         pass
-    elif verbo == "nice":
+    elif verb == "nice":
         while i < len(vals) and _is_flag(vals[i]):
             i += 2 if vals[i] in ("-n", "--adjustment") else 1
-    elif verbo == "timeout":
+    elif verb == "timeout":
         while i < len(vals) and _is_flag(vals[i]):
             i += 2 if vals[i] in ("-s", "--signal", "-k", "--kill-after") else 1
-        i += 1  # a duração
-    elif verbo == "stdbuf":
+        i += 1  # the duration
+    elif verb == "stdbuf":
         while i < len(vals) and _is_flag(vals[i]):
             i += 2 if vals[i] in ("-i", "-o", "-e") else 1
-    elif verbo == "command":
+    elif verb == "command":
         while i < len(vals) and vals[i] == "-p":
             i += 1
     return args[i:]
 
 
-def _h_wrapper(ctx, verbo, args, cwds, seg):
-    if verbo == "command" and any(a.value in ("-v", "-V") for a in args):
+def _h_wrapper(ctx, verb, args, cwds, seg):
+    if verb == "command" and any(a.value in ("-v", "-V") for a in args):
         return
     for a in args:
         if a.lead_unknown:
-            _deny(4, verbo, f"{verbo} com argumento que não sei avaliar ({a.raw})", seg)
-    inner = _wrapper_inner(verbo, args)
+            _deny(4, verb, f"{verb} com argumento que não sei avaliar ({a.raw})", seg)
+    inner = _wrapper_inner(verb, args)
     if inner:
         _dispatch(ctx, inner, cwds, seg)
 
 
-def _h_env(ctx, verbo, args, cwds, seg):
+def _h_env(ctx, verb, args, cwds, seg):
     i = 0
     vals = _vals(args)
     while i < len(vals):
@@ -1421,7 +1429,7 @@ def _h_env(ctx, verbo, args, cwds, seg):
         if v in ("-S", "--split-string", "-C", "--chdir") or v.startswith(
                 ("--split-string=", "--chdir=")) or (re.match(r"^-[a-zA-Z]+$", v)
                                                      and ("S" in v or "C" in v)):
-            _deny(4, verbo, "env -S/-C monta ou muda o comando por fora da linha", seg)
+            _deny(4, verb, "env -S/-C monta ou muda o comando por fora da linha", seg)
         if v in ("-u", "--unset"):
             i += 2
             continue
@@ -1439,17 +1447,17 @@ _XARGS_VALUE_FLAGS = {"-I", "-L", "-l", "-n", "-P", "-s", "-d", "-E", "-e", "-a"
                       "--replace", "--max-lines", "--eof", "--max-chars"}
 
 
-def _h_xargs(ctx, verbo, args, cwds, seg):
+def _h_xargs(ctx, verb, args, cwds, seg):
     vals = _vals(args)
     i = 0
     while i < len(vals) and _is_flag(vals[i]):
         i += 2 if vals[i] in _XARGS_VALUE_FLAGS else 1
     inner = args[i:]
     if not inner:
-        return  # xargs sem comando = echo
+        return  # xargs without a command = echo
     iv = inner[0].value if inner[0].known else ""
     if iv not in _SIMPLE and iv not in ("sed", "awk", "find", "rg", "fd", "jq"):
-        _deny(4, verbo, f"xargs executa `{inner[0].raw}` com argumentos vindos da "
+        _deny(4, verb, f"xargs executa `{inner[0].raw}` com argumentos vindos da "
                         f"entrada — só verbos de leitura passam por xargs", seg)
     _dispatch(ctx, inner, cwds, seg)
 
@@ -1460,7 +1468,7 @@ _PY_MODULES_OK = {"pytest", "unittest", "json.tool", "py_compile", "compileall",
 
 
 def _h_pylike_tool(ctx, tool, args, cwds, seg):
-    """Ferramentas python que podem ser chamadas soltas ou via `-m`."""
+    """Python tools that can be called standalone or via `-m`."""
     vals = _vals(args)
     nf = [a.value for a in _nonflags(args)]
     if tool == "pip" or tool == "pip3":
@@ -1486,23 +1494,23 @@ def _h_pylike_tool(ctx, tool, args, cwds, seg):
                 if k + 1 >= len(rv) or rv[k + 1] not in _PY_MODULES_OK:
                     _deny(4, tool, "coverage run -m com módulo fora da lista", seg)
                 return
-            rnf = _nonflags(rest, ("--rcfile", "--source", "--omit", "--include",
+            rest_nonflags = _nonflags(rest, ("--rcfile", "--source", "--omit", "--include",
                                    "--data-file", "--context"))
-            if rnf:
-                _script_rule(ctx, rnf[0], cwds, tool, seg)
+            if rest_nonflags:
+                _script_rule(ctx, rest_nonflags[0], cwds, tool, seg)
         return
-    # mypy, flake8, pylint...: só leem
+    # mypy, flake8, pylint...: they only read
     return
 
 
-def _h_python(ctx, verbo, args, cwds, seg):
+def _h_python(ctx, verb, args, cwds, seg):
     vals = _vals(args)
     i = 0
     while i < len(vals):
         a = args[i]
         v = vals[i]
         if a.lead_unknown:
-            _deny(4, verbo, f"argumento que não sei avaliar ({a.raw})", seg)
+            _deny(4, verb, f"argumento que não sei avaliar ({a.raw})", seg)
         if v in ("-V", "--version", "-h", "--help", "-VV"):
             return
         if v == "--":
@@ -1519,60 +1527,60 @@ def _h_python(ctx, verbo, args, cwds, seg):
                 mod = vals[i + 1] if i + 1 < len(vals) else ""
                 rest = args[i + 2:]
             else:
-                resto = v[v.index("m") + 1:]
-                mod = resto or (vals[i + 1] if i + 1 < len(vals) else "")
-                rest = args[i + 1:] if resto else args[i + 2:]
+                remainder = v[v.index("m") + 1:]
+                mod = remainder or (vals[i + 1] if i + 1 < len(vals) else "")
+                rest = args[i + 1:] if remainder else args[i + 2:]
             if mod in _PY_MODULES_OK:
                 return
             if mod in ("pip", "ruff", "black", "isort", "coverage"):
                 _h_pylike_tool(ctx, mod, rest, cwds, seg)
                 return
-            _deny(4, verbo, f"`{verbo} -m {mod}` — módulo fora da lista de inocentes", seg)
+            _deny(4, verb, f"`{verb} -m {mod}` — módulo fora da lista de inocentes", seg)
         if v.startswith("--"):
             i += 1
             continue
         if v.startswith("-") and v != "-":
-            letras = v[1:]
-            if "c" in letras:
-                _deny(4, verbo, f"`{verbo} -c` roda código inline — código arbitrário "
+            letters = v[1:]
+            if "c" in letters:
+                _deny(4, verb, f"`{verb} -c` roda código inline — código arbitrário "
                                 f"é escrita arbitrária", seg)
-            if "i" in letras:
-                _deny(4, verbo, f"`{verbo} -i` é interpretador interativo", seg)
+            if "i" in letters:
+                _deny(4, verb, f"`{verb} -i` é interpretador interativo", seg)
             i += 1
             continue
         break
     if i >= len(vals) or vals[i] == "-":
-        _deny(4, verbo, f"`{verbo}` lendo o programa da entrada (heredoc/pipe) — "
+        _deny(4, verb, f"`{verb}` lendo o programa da entrada (heredoc/pipe) — "
                         f"código arbitrário é escrita arbitrária", seg)
-    _script_rule(ctx, args[i], cwds, verbo, seg)
+    _script_rule(ctx, args[i], cwds, verb, seg)
 
 
-def _h_node(ctx, verbo, args, cwds, seg):
+def _h_node(ctx, verb, args, cwds, seg):
     vals = _vals(args)
-    ruins = ("-e", "--eval", "-p", "--print", "-r", "--require", "--import",
+    bad_flags = ("-e", "--eval", "-p", "--print", "-r", "--require", "--import",
              "--loader", "--experimental-loader", "-i", "--interactive", "-pe")
     for a in args:
         if a.lead_unknown:
-            _deny(4, verbo, f"argumento que não sei avaliar ({a.raw})", seg)
+            _deny(4, verb, f"argumento que não sei avaliar ({a.raw})", seg)
         v = a.value
-        if v in ruins or v.startswith(tuple(r + "=" for r in ruins if r.startswith("--"))):
-            _deny(4, verbo, f"`node {v}` roda código inline — código arbitrário é "
+        if v in bad_flags or v.startswith(tuple(r + "=" for r in bad_flags if r.startswith("--"))):
+            _deny(4, verb, f"`node {v}` roda código inline — código arbitrário é "
                             f"escrita arbitrária", seg)
     if any(v in ("-v", "--version", "-h", "--help") for v in vals) or "--test" in vals:
         return
     nf = _nonflags(args)
     if not nf or nf[0].value == "-":
-        _deny(4, verbo, "`node` lendo o programa da entrada", seg)
-    _script_rule(ctx, nf[0], cwds, verbo, seg)
+        _deny(4, verb, "`node` lendo o programa da entrada", seg)
+    _script_rule(ctx, nf[0], cwds, verb, seg)
 
 
-def _h_shell(ctx, verbo, args, cwds, seg):
+def _h_shell(ctx, verb, args, cwds, seg):
     vals = _vals(args)
     i = 0
     while i < len(vals):
         v = vals[i]
         if args[i].lead_unknown:
-            _deny(4, verbo, f"argumento que não sei avaliar ({args[i].raw})", seg)
+            _deny(4, verb, f"argumento que não sei avaliar ({args[i].raw})", seg)
         if v == "--":
             i += 1
             break
@@ -1581,7 +1589,7 @@ def _h_shell(ctx, verbo, args, cwds, seg):
             continue
         if re.match(r"^[-+][a-zA-Z]+$", v):
             if any(x in v[1:] for x in "csi"):
-                _deny(4, verbo, f"`{verbo} {v}` roda comando de uma string ou da "
+                _deny(4, verb, f"`{verb} {v}` roda comando de uma string ou da "
                                 f"entrada — shell aninhado não é analisável", seg)
             i += 1
             continue
@@ -1590,43 +1598,43 @@ def _h_shell(ctx, verbo, args, cwds, seg):
             continue
         break
     if i >= len(vals):
-        _deny(4, verbo, f"`{verbo}` lendo comandos da entrada (heredoc/pipe)", seg)
-    _script_rule(ctx, args[i], cwds, verbo, seg)
+        _deny(4, verb, f"`{verb}` lendo comandos da entrada (heredoc/pipe)", seg)
+    _script_rule(ctx, args[i], cwds, verb, seg)
 
 
-def _h_source(ctx, verbo, args, cwds, seg):
+def _h_source(ctx, verb, args, cwds, seg):
     nf = _nonflags(args)
     if not nf:
-        _deny(4, verbo, "source sem arquivo", seg)
-    _script_rule(ctx, nf[0], cwds, verbo, seg)
+        _deny(4, verb, "source sem arquivo", seg)
+    _script_rule(ctx, nf[0], cwds, verb, seg)
 
 
-def _mvn_args(ctx, verbo, args, seg):
+def _mvn_args(ctx, verb, args, seg):
     for a in args:
         if a.lead_unknown:
-            _deny(4, verbo, f"argumento que não sei avaliar ({a.raw}) pode esconder "
+            _deny(4, verb, f"argumento que não sei avaliar ({a.raw}) pode esconder "
                             f"um goal que executa comando", seg)
         v = a.value
         if v.startswith(("exec:", "antrun:")) or any(
                 p in v for p in ("exec-maven-plugin", "maven-antrun-plugin",
                                  "gmavenplus", "groovy-maven-plugin")):
-            _deny(4, verbo, f"goal `{v}` executa comando arbitrário", seg)
+            _deny(4, verb, f"goal `{v}` executa comando arbitrário", seg)
 
 
-def _h_mvn(ctx, verbo, args, cwds, seg):
-    _mvn_args(ctx, verbo, args, seg)
+def _h_mvn(ctx, verb, args, cwds, seg):
+    _mvn_args(ctx, verb, args, seg)
 
 
-def _h_gradle(ctx, verbo, args, cwds, seg):
-    _no_hidden_flags(args, verbo, seg)
+def _h_gradle(ctx, verb, args, cwds, seg):
+    _no_hidden_flags(args, verb, seg)
 
 
-def _h_make(ctx, verbo, args, cwds, seg):
-    _no_hidden_flags(args, verbo, seg, ("-C", "-j"))
+def _h_make(ctx, verb, args, cwds, seg):
+    _no_hidden_flags(args, verb, seg, ("-C", "-j"))
     for v in _vals(args):
         if v in ("-f", "--file", "--makefile", "--eval", "-E") or v.startswith(
                 ("--file=", "--makefile=", "--eval=")):
-            _deny(4, verbo, f"make {v} lê receita de fora do projeto", seg)
+            _deny(4, verb, f"make {v} lê receita de fora do projeto", seg)
 
 
 _NPM_VALUE_FLAGS = {"--prefix", "-C", "--dir", "-w", "--workspace", "--filter",
@@ -1643,29 +1651,29 @@ _PM_DENY = {"exec", "x", "dlx", "node", "add", "remove", "rm", "uninstall", "un"
             "pack", "rebuild", "dedupe", "prune", "pkg", "set-script", "edit"}
 
 
-def _h_pm(ctx, verbo, args, cwds, seg):
+def _h_pm(ctx, verb, args, cwds, seg):
     """npm / pnpm / yarn."""
-    _no_hidden_flags(args, verbo, seg, tuple(_NPM_VALUE_FLAGS))
+    _no_hidden_flags(args, verb, seg, tuple(_NPM_VALUE_FLAGS))
     vals = _vals(args)
     if any(v in ("--fix", "--write") for v in vals):
-        _deny(4, verbo, f"{verbo} ... --fix/--write reescreve arquivos de outras pistas", seg)
+        _deny(4, verb, f"{verb} ... --fix/--write reescreve arquivos de outras pistas", seg)
     nf = _nonflags(args, _NPM_VALUE_FLAGS)
     if not nf:
         return  # `npm --version`, `yarn` (= install)
     sub = nf[0].value
     if sub in _PM_DENY:
-        _deny(4, verbo, f"`{verbo} {sub}` instala/executa/reescreve fora da lista", seg)
+        _deny(4, verb, f"`{verb} {sub}` instala/executa/reescreve fora da lista", seg)
     if sub in ("install", "i", "in", "ins", "inst", "insta", "instal", "isnt",
                "isnta", "isntal") and len(nf) > 1:
-        _deny(4, verbo, f"`{verbo} {sub} <pacote>` muda o package.json", seg)
+        _deny(4, verb, f"`{verb} {sub} <pacote>` muda o package.json", seg)
     if sub == "audit" and len(nf) > 1 and nf[1].value == "fix":
-        _deny(4, verbo, "`audit fix` reescreve package.json/lockfile", seg)
+        _deny(4, verb, "`audit fix` reescreve package.json/lockfile", seg)
     if sub in ("config", "c") and len(nf) > 1 and nf[1].value not in ("get", "list", "ls"):
-        _deny(4, verbo, "config que grava", seg)
+        _deny(4, verb, "config que grava", seg)
     if sub == "version" and len(nf) > 1:
-        _deny(4, verbo, "`version <x>` reescreve o package.json", seg)
-    if verbo == "npm" and sub not in _NPM_OK:
-        _deny(4, verbo, f"`npm {sub}` fora da lista de inocentes", seg)
+        _deny(4, verb, "`version <x>` reescreve o package.json", seg)
+    if verb == "npm" and sub not in _NPM_OK:
+        _deny(4, verb, f"`npm {sub}` fora da lista de inocentes", seg)
 
 
 _NPX_DENY_PKGS = {"node", "ts-node", "tsx", "bun", "deno", "zx", "sh", "bash",
@@ -1674,55 +1682,55 @@ _NPX_DENY_PKGS = {"node", "ts-node", "tsx", "bun", "deno", "zx", "sh", "bash",
                   "rm", "npm", "pnpm", "yarn"}
 
 
-def _h_npx(ctx, verbo, args, cwds, seg):
+def _h_npx(ctx, verb, args, cwds, seg):
     vals = _vals(args)
-    _no_hidden_flags(args, verbo, seg, ("-p", "--package"))
+    _no_hidden_flags(args, verb, seg, ("-p", "--package"))
     for v in vals:
         if v in ("-c", "--call") or v.startswith("--call="):
-            _deny(4, verbo, "`npx -c` roda uma string de shell", seg)
+            _deny(4, verb, "`npx -c` roda uma string de shell", seg)
         if v in ("--fix", "--write"):
-            _deny(4, verbo, f"npx ... {v} reescreve arquivos de outras pistas", seg)
+            _deny(4, verb, f"npx ... {v} reescreve arquivos de outras pistas", seg)
     nf = _nonflags(args, ("-p", "--package"))
     if not nf:
-        _deny(4, verbo, "npx sem pacote", seg)
+        _deny(4, verb, "npx sem pacote", seg)
     pkg = nf[0].value
     base = pkg.rsplit("@", 1)[0] if pkg.count("@") and not pkg.startswith("@") else pkg
     if base.split("/")[-1] in _NPX_DENY_PKGS or base in _NPX_DENY_PKGS:
-        _deny(4, verbo, f"`npx {pkg}` executa código arbitrário ou apaga/copia arquivo", seg)
+        _deny(4, verb, f"`npx {pkg}` executa código arbitrário ou apaga/copia arquivo", seg)
     if base.endswith("prettier") and "-w" in vals:
-        _deny(4, verbo, "prettier -w reescreve arquivos", seg)
+        _deny(4, verb, "prettier -w reescreve arquivos", seg)
 
 
-def _h_js_tool(ctx, verbo, args, cwds, seg):
+def _h_js_tool(ctx, verb, args, cwds, seg):
     vals = _vals(args)
-    _no_hidden_flags(args, verbo, seg)
-    if verbo == "eslint" and "--fix" in vals:
-        _deny(4, verbo, "eslint --fix reescreve arquivos", seg)
-    if verbo == "prettier" and any(v in ("--write", "-w") for v in vals):
-        _deny(4, verbo, "prettier --write reescreve arquivos", seg)
+    _no_hidden_flags(args, verb, seg)
+    if verb == "eslint" and "--fix" in vals:
+        _deny(4, verb, "eslint --fix reescreve arquivos", seg)
+    if verb == "prettier" and any(v in ("--write", "-w") for v in vals):
+        _deny(4, verb, "prettier --write reescreve arquivos", seg)
 
 
 def _h_sub_allow(allowed_subs, deny_flags=()):
-    def h(ctx, verbo, args, cwds, seg):
-        _no_hidden_flags(args, verbo, seg)
+    def h(ctx, verb, args, cwds, seg):
+        _no_hidden_flags(args, verb, seg)
         vals = _vals(args)
         if any(v in ("--version", "-V", "version", "--help", "-h") for v in vals[:1]):
             return
         for f in deny_flags:
             if f in vals:
-                _deny(4, verbo, f"{verbo} {f} reescreve arquivos", seg)
+                _deny(4, verb, f"{verb} {f} reescreve arquivos", seg)
         nf = _nonflags(args)
         if not nf or nf[0].value not in allowed_subs:
             sub = nf[0].value if nf else "(nada)"
-            _deny(4, verbo, f"`{verbo} {sub}` fora da lista de inocentes "
+            _deny(4, verb, f"`{verb} {sub}` fora da lista de inocentes "
                             f"({', '.join(sorted(allowed_subs))})", seg)
     return h
 
 
-def _h_java(ctx, verbo, args, cwds, seg):
+def _h_java(ctx, verb, args, cwds, seg):
     if all(a.value in ("-version", "--version", "-showversion") for a in args) and args:
         return
-    _deny(4, verbo, "java roda bytecode/fonte arbitrário — use o build (./mvnw)", seg)
+    _deny(4, verb, "java roda bytecode/fonte arbitrário — use o build (./mvnw)", seg)
 
 
 _DOCKER_OK = {"ps", "images", "image", "logs", "inspect", "version", "info", "stats",
@@ -1735,8 +1743,8 @@ _DOCKER_VALUE_FLAGS = ("-H", "--host", "--context", "-c", "-f", "--file", "-p",
                        "--env-file", "--log-level")
 
 
-def _h_docker(ctx, verbo, args, cwds, seg):
-    _no_hidden_flags(args, verbo, seg, _DOCKER_VALUE_FLAGS)
+def _h_docker(ctx, verb, args, cwds, seg):
+    _no_hidden_flags(args, verb, seg, _DOCKER_VALUE_FLAGS)
     nf = _nonflags(args, _DOCKER_VALUE_FLAGS)
     if not nf:
         return
@@ -1747,11 +1755,11 @@ def _h_docker(ctx, verbo, args, cwds, seg):
         return
     sub = nf[k].value
     if sub not in _DOCKER_OK:
-        _deny(4, verbo, f"`{verbo} {sub}` fora da lista de inocentes", seg)
+        _deny(4, verb, f"`{verb} {sub}` fora da lista de inocentes", seg)
     vals = _vals(args)
     if sub == "build" and any(v in ("-o", "--output") or v.startswith("--output=")
                               for v in vals):
-        _deny(4, verbo, "docker build --output grava no disco local", seg)
+        _deny(4, verb, "docker build --output grava no disco local", seg)
     if sub in ("run", "create"):
         for i, v in enumerate(vals):
             src = None
@@ -1761,31 +1769,31 @@ def _h_docker(ctx, verbo, args, cwds, seg):
                 src = _Arg(v, v.split("=", 1)[1])
             if src is None:
                 continue
-            origem = src.value.split(":", 1)[0]
+            source = src.value.split(":", 1)[0]
             if src.value.startswith("type="):
                 m = re.search(r"(?:source|src)=([^,]+)", src.value)
-                origem = m.group(1) if m else ""
-            if not src.known or not os.path.isabs(os.path.expanduser(origem)) or any(
-                    _inside(p, ctx.root) for p in _resolve_all(origem, cwds)):
-                _deny(4, verbo, "docker run montando pasta do projeto: o container "
+                source = m.group(1) if m else ""
+            if not src.known or not os.path.isabs(os.path.expanduser(source)) or any(
+                    _inside(p, ctx.root) for p in _resolve_all(source, cwds)):
+                _deny(4, verb, "docker run montando pasta do projeto: o container "
                                 "escreve nela sem passar pelo cadeado", seg)
     if sub == "cp" and len(nf) >= k + 3:
         dest = nf[-1]
         if ":" not in dest.value.split("/")[0]:
-            _check_targets(ctx, [dest], cwds, verbo, seg)
+            _check_targets(ctx, [dest], cwds, verb, seg)
 
 
-def _h_gh(ctx, verbo, args, cwds, seg):
-    _no_hidden_flags(args, verbo, seg, ("-R", "--repo", "-b", "--body", "-t",
+def _h_gh(ctx, verb, args, cwds, seg):
+    _no_hidden_flags(args, verb, seg, ("-R", "--repo", "-b", "--body", "-t",
                                         "--title", "-F", "--body-file", "-q", "--jq"))
     nf = [a.value for a in _nonflags(args, ("-R", "--repo", "-b", "--body", "-t",
                                            "--title", "-F", "--body-file", "-q",
                                            "--jq"))]
-    par = tuple(nf[:2])
-    if par in {("repo", "clone"), ("run", "download"), ("release", "download"),
+    pair = tuple(nf[:2])
+    if pair in {("repo", "clone"), ("run", "download"), ("release", "download"),
                ("pr", "checkout"), ("gist", "clone")} or (nf and nf[0] in
                                                           ("alias", "extension", "ext")):
-        _deny(4, verbo, f"`gh {' '.join(par)}` grava arquivos ou executa extensão", seg)
+        _deny(4, verb, f"`gh {' '.join(pair)}` grava arquivos ou executa extensão", seg)
 
 
 # git ─────────────────────────────────────────────────────────────────────────
@@ -1800,7 +1808,7 @@ _GIT_READONLY = {
     "switch", "fsck", "verify-commit", "verify-tag", "symbolic-ref", "merge",
     "grep",
 }
-# `git -c chave=valor`: só chaves que não executam nada.
+# `git -c key=value`: only keys that execute nothing.
 _GIT_C_OK = ("color.", "core.quotepath", "user.", "log.", "advice.",
              "init.defaultbranch", "commit.gpgsign", "gc.auto", "diff.renames",
              "diff.noprefix", "merge.conflictstyle", "pull.rebase", "push.default",
@@ -1816,7 +1824,7 @@ def _looks_like_path(v, cwds):
     return "/" in v and bool(re.search(r"\.[A-Za-z][A-Za-z0-9]{0,5}$", v))
 
 
-def _h_git(ctx, verbo, args, cwds, seg):
+def _h_git(ctx, verb, args, cwds, seg):
     vals = _vals(args)
     i = 0
     git_cwds = cwds
@@ -1824,32 +1832,32 @@ def _h_git(ctx, verbo, args, cwds, seg):
         v = vals[i]
         a = args[i]
         if a.lead_unknown:
-            _deny(4, verbo, f"argumento que não sei avaliar ({a.raw})", seg)
+            _deny(4, verb, f"argumento que não sei avaliar ({a.raw})", seg)
         if v == "-C" and i + 1 < len(args):
-            alvo = args[i + 1]
-            if not alvo.known:
-                ctx.dirs_desconhecidos.append(alvo.raw)
-                _deny(4, verbo, f"git -C com caminho que não sei avaliar ({alvo.raw})", seg)
-            git_cwds = {p for p in _resolve_all(alvo.value, git_cwds)}
+            target = args[i + 1]
+            if not target.known:
+                ctx.unknown_dirs.append(target.raw)
+                _deny(4, verb, f"git -C com caminho que não sei avaliar ({target.raw})", seg)
+            git_cwds = {p for p in _resolve_all(target.value, git_cwds)}
             i += 2
             continue
         if v == "-c" and i + 1 < len(args):
-            chave = vals[i + 1].split("=", 1)[0].lower()
-            if not chave.startswith(_GIT_C_OK):
-                _deny(4, verbo, f"git -c {chave}=... pode fazer o git executar um "
+            key = vals[i + 1].split("=", 1)[0].lower()
+            if not key.startswith(_GIT_C_OK):
+                _deny(4, verb, f"git -c {key}=... pode fazer o git executar um "
                                 f"comando (pager, editor, alias, hook)", seg)
             i += 2
             continue
         if v in ("--git-dir", "--work-tree") or v.startswith(("--git-dir=", "--work-tree=")):
-            _deny(4, verbo, f"git {v} aponta o git para outra árvore — use git -C", seg)
+            _deny(4, verb, f"git {v} aponta o git para outra árvore — use git -C", seg)
         if v.startswith("-"):
             i += 1
             continue
         break
-    # git -C <fora da raiz> sem citar a raiz: é o worktree descartável (balde 3)
-    resto_args = args[i:]
+    # git -C <outside the root> without citing the root: it is the disposable worktree (bucket 3)
+    rest_args = args[i:]
     if git_cwds is not cwds and all(not _inside(c, ctx.root) for c in git_cwds) and \
-            not _refs_root(ctx, seg, resto_args, git_cwds):
+            not _refs_root(ctx, seg, rest_args, git_cwds):
         return
     if i >= len(vals):
         return  # `git --version`, `git -C x`
@@ -1858,12 +1866,12 @@ def _h_git(ctx, verbo, args, cwds, seg):
     rv = _vals(rest)
     cw = git_cwds
 
-    def writer(alvos):
-        _check_targets(ctx, alvos, cw, "git", seg)
+    def writer(targets):
+        _check_targets(ctx, targets, cw, "git", seg)
 
     if sub in ("diff", "show", "log", "format-patch"):
         if sub == "format-patch":
-            _deny(4, verbo, "git format-patch grava arquivos", seg)
+            _deny(4, verb, "git format-patch grava arquivos", seg)
         for k, x in enumerate(rv):
             if x == "--output" and k + 1 < len(rest):
                 writer([rest[k + 1]])
@@ -1873,7 +1881,7 @@ def _h_git(ctx, verbo, args, cwds, seg):
     if sub == "grep":
         if any(x in ("-O", "--open-files-in-pager") or x.startswith(
                 ("-O", "--open-files-in-pager=")) for x in rv):
-            _deny(4, verbo, "git grep -O abre um pager/editor", seg)
+            _deny(4, verb, "git grep -O abre um pager/editor", seg)
         return
     if sub == "commit":
         return
@@ -1899,73 +1907,73 @@ def _h_git(ctx, verbo, args, cwds, seg):
                 writer(nf[1:])
             return
         if any(not a.known for a in nf):
-            _deny(4, verbo, "git checkout com argumento que não sei avaliar pode "
+            _deny(4, verb, "git checkout com argumento que não sei avaliar pode "
                             "sobrescrever arquivo", seg)
         if len(nf) >= 2:
-            writer(nf[1:])  # `git checkout <ref> <caminho>` sem `--`
+            writer(nf[1:])  # `git checkout <ref> <path>` without `--`
         elif len(nf) == 1 and nf[0].known and _looks_like_path(nf[0].value, cw):
-            writer(nf)      # `git checkout <arquivo>`: sobrescreve o arquivo
+            writer(nf)      # `git checkout <file>`: overwrites the file
         return
     if sub == "reset":
         if any(x in ("--hard", "--merge", "--keep") for x in rv):
-            _deny(4, verbo, "git reset --hard/--merge/--keep reescreve arquivos da árvore", seg)
+            _deny(4, verb, "git reset --hard/--merge/--keep reescreve arquivos da árvore", seg)
         return
     if sub == "stash":
         if rv and rv[0] in ("list", "show"):
             return
-        _deny(4, verbo, "git stash (push/pop/apply) reescreve arquivos da árvore", seg)
+        _deny(4, verb, "git stash (push/pop/apply) reescreve arquivos da árvore", seg)
     if sub == "config":
-        leitura = ("--get", "--get-all", "--get-regexp", "--list", "-l",
+        read_only_flags = ("--get", "--get-all", "--get-regexp", "--list", "-l",
                    "--get-urlmatch", "--show-origin", "--show-scope", "--name-only")
         nf = _nonflags(rest, ("--file", "-f", "--blob", "--type"))
-        if any(x in leitura for x in rv) or len(nf) <= 1:
+        if any(x in read_only_flags for x in rv) or len(nf) <= 1:
             return
-        _deny(4, verbo, "git config que grava (core.hooksPath, alias, pager executam "
+        _deny(4, verb, "git config que grava (core.hooksPath, alias, pager executam "
                         "comandos)", seg)
     if sub == "remote":
         nf = _nonflags(rest)
         if not nf or nf[0].value in ("show", "get-url"):
             return
-        _deny(4, verbo, "git remote que grava", seg)
+        _deny(4, verb, "git remote que grava", seg)
     if sub == "reflog":
         if not rv or rv[0] in ("show",) or _is_flag(rv[0]):
             return
-        _deny(4, verbo, "git reflog expire/delete", seg)
+        _deny(4, verb, "git reflog expire/delete", seg)
     if sub == "submodule":
         if rv and rv[0] in ("status", "summary"):
             return
-        _deny(4, verbo, "git submodule que grava ou executa (foreach)", seg)
+        _deny(4, verb, "git submodule que grava ou executa (foreach)", seg)
     if sub == "worktree":
-        acao = rv[0] if rv else ""
-        if acao in ("list", "prune", "lock", "unlock", "repair", "remove"):
+        action = rv[0] if rv else ""
+        if action in ("list", "prune", "lock", "unlock", "repair", "remove"):
             return
-        if acao == "add":
+        if action == "add":
             nf = _nonflags(rest[1:], ("-b", "-B", "--reason"))
             if not nf:
-                _deny(4, verbo, "git worktree add sem caminho", seg)
+                _deny(4, verb, "git worktree add sem caminho", seg)
             dest = nf[0]
             if not dest.known:
-                _deny(4, verbo, f"git worktree add num caminho que não sei avaliar "
+                _deny(4, verb, f"git worktree add num caminho que não sei avaliar "
                                 f"({dest.raw})", seg)
             if any(_inside(p, ctx.root) for p in _resolve_all(dest.value, cw)):
-                # fb-20261013-3: a receita de worktree descartável é só do proof-reviewer.
+                # fb-20261013-3: the disposable-worktree recipe belongs only to the proof-reviewer.
                 if (ctx.agent or "").rsplit(":", 1)[-1] == "proof-reviewer":
-                    _deny(4, verbo, "git worktree add DENTRO da raiz duplica o código na "
+                    _deny(4, verb, "git worktree add DENTRO da raiz duplica o código na "
                                     "árvore — crie fora: D=$(mktemp -d) && git worktree "
                                     "add --detach \"$D/red\" HEAD", seg)
-                _deny(4, verbo, "git worktree add DENTRO da raiz duplica o código na "
+                _deny(4, verb, "git worktree add DENTRO da raiz duplica o código na "
                                 "árvore, e worktree descartável não é sua: a prova por "
                                 "perturbação é do proof-reviewer; teste de regressão fica "
                                 "vermelho pela ORDEM (escrito antes do fix)", seg)
             ctx.events.append(("perturb_worktree_created", {}))
             return
-        _deny(4, verbo, f"git worktree {acao}", seg)
-    _deny(4, verbo, f"`git {sub}` reescreve arquivos da árvore ou não está na lista "
+        _deny(4, verb, f"git worktree {action}", seg)
+    _deny(4, verb, f"`git {sub}` reescreve arquivos da árvore ou não está na lista "
                     f"de subcomandos inocentes", seg)
 
 
-def _h_decl(ctx, verbo, args, cwds, seg):
-    """export / declare / local / typeset / readonly: atribuições que persistem."""
+def _h_decl(ctx, verb, args, cwds, seg):
+    """export / declare / local / typeset / readonly: assignments that persist."""
     for a in args:
         m = _ASSIGN_RE.match(a.raw)
         if not m:
@@ -2041,7 +2049,7 @@ for _w in _WRITERS:
 
 
 def _dispatch(ctx, args, cwds, seg):
-    """Classifica um argv já expandido: balde 1, 2 ou 4."""
+    """Classifies an already-expanded argv: bucket 1, 2 or 4."""
     assigns = []
     while args and args[0].raw in _LEADING_KEYWORDS:
         args = args[1:]
@@ -2053,10 +2061,10 @@ def _dispatch(ctx, args, cwds, seg):
         assigns.append((m.group(1), m.group(3)))
         args = args[1:]
     if not args:
-        # atribuição pura: persiste para os próximos segmentos
-        for nome, bruto in assigns:
-            e = _expand(ctx, bruto, cwds)
-            ctx.vars[nome] = e.value if e.known else None
+        # pure assignment: persists for the next segments
+        for name, raw_value in assigns:
+            e = _expand(ctx, raw_value, cwds)
+            ctx.vars[name] = e.value if e.known else None
         return
     va = args[0]
     rest = args[1:]
@@ -2087,7 +2095,7 @@ def _dispatch(ctx, args, cwds, seg):
 
 
 def _sub_value(ctx, inner, cwds):
-    """O valor de uma substituição, quando dá para saber sem executá-la."""
+    """The value of a substitution, when it can be known without running it."""
     try:
         argv = shlex.split(inner.strip(), posix=True)
     except ValueError:
@@ -2108,8 +2116,8 @@ def _sub_value(ctx, inner, cwds):
     if v == "git" and "--show-toplevel" in argv and len(cwds) == 1:
         c = next(iter(cwds))
         return str(ctx.root) if _inside(c, ctx.root) else None
-    # `$(echo palavra)`: só um literal único, que não começa com `-` e não se
-    # parte em palavras. Sem isso, `sed $(printf -- -i) ...` escondia o `-i`.
+    # `$(echo word)`: only a single literal, that does not start with `-` and
+    # does not split into words. Without this, `sed $(printf -- -i) ...` hid the `-i`.
     if v in ("echo", "printf") and len(argv) == 2 and not argv[1].startswith("-") \
             and not re.search(r"[\s*?\[\\%$`]", argv[1]):
         return argv[1]
@@ -2117,13 +2125,13 @@ def _sub_value(ctx, inner, cwds):
 
 
 def _classify(ctx, command, cwds, depth=0):
-    """Classifica a linha inteira; levanta _Negado no primeiro problema."""
+    """Classifies the whole line; raises _Denied at the first problem."""
     if depth > _MAX_DEPTH:
         _deny(4, "", "substituições aninhadas demais para analisar", command[:120])
-    flat, subs, orfas = _flatten(command)
+    flat, subs, orphans = _flatten(command)
     base = ctx.sub_base
     ctx.sub_base += len(subs) + 1
-    # as marcas são locais a esta chamada: renumera para não colidir com a de fora
+    # the marks are local to this call: renumber so they do not collide with the outer one's
     flat = _SUB_MARK_RE.sub(lambda m: _SUB_MARK.format(base + int(m.group(1))), flat)
     done = set()
 
@@ -2131,11 +2139,11 @@ def _classify(ctx, command, cwds, depth=0):
         if idx in done:
             return
         done.add(idx)
-        salvo = dict(ctx.vars)
+        saved = dict(ctx.vars)
         try:
             _guard(ctx, lambda: _classify(ctx, subs[idx], where, depth + 1))
         finally:
-            ctx.vars = salvo
+            ctx.vars = saved
         ctx.sub_values[base + idx] = _sub_value(ctx, subs[idx], where)
 
     state_in = frozenset(cwds)
@@ -2159,9 +2167,9 @@ def _classify(ctx, command, cwds, depth=0):
             stack.append(state_in)
             text = text[1:].lstrip()
         m = _quoted_mask(text)
-        abre = sum(1 for c, q in zip(text, m) if c == "(" and not q)
-        fecha = sum(1 for c, q in zip(text, m) if c == ")" and not q)
-        pops = max(0, fecha - abre)
+        opens = sum(1 for c, q in zip(text, m) if c == "(" and not q)
+        closes = sum(1 for c, q in zip(text, m) if c == ")" and not q)
+        pops = max(0, closes - opens)
         for _ in range(pops):
             text = text.rstrip()
             if text.endswith(")"):
@@ -2177,58 +2185,58 @@ def _classify(ctx, command, cwds, depth=0):
             ok = fail = stack.pop() if stack else frozenset(cwds)
         history |= ok | fail | state_in
         prev = (state_in, ok, fail)
-    for idx in orfas:
+    for idx in orphans:
         run_sub(idx, frozenset(cwds))
     for idx in range(len(subs)):
         run_sub(idx, frozenset(cwds))
 
 
 def _guard(ctx, fn):
-    """Em modo sombra, o balde 4 anota em vez de negar — e a análise segue."""
+    """In shadow mode, bucket 4 records instead of denying — and the analysis goes on."""
     try:
         return fn()
-    except _Negado as n:
-        if ctx.shadow and n.balde == 4:
+    except _Denied as n:
+        if ctx.shadow and n.bucket == 4:
             ctx.would.append(n)
             return None
         raise
 
 
 def _classify_segment(ctx, text, cwds):
-    """Um segmento. Devolve (cwds se deu certo, cwds se falhou)."""
+    """One segment. Returns (cwds if it succeeded, cwds if it failed)."""
     mask = _quoted_mask(text)
     redirs = []
     for rx in (_REDIR_RE, _EXTRA_REDIR_RE):
         for m in rx.finditer(text):
             if not mask[m.start()]:
                 redirs.append(_expand(ctx, _unquote(m.group(1)), cwds))
-    sem = _strip_redirections(text, mask)
+    no_redir = _strip_redirections(text, mask)
     try:
-        argv = shlex.split(sem, posix=True)
+        argv = shlex.split(no_redir, posix=True)
     except ValueError:
         _deny(4, "", "não consegui ler a linha (aspas desbalanceadas?)", text)
     args = [_expand(ctx, t, cwds) for t in argv]
     while args and args[0].raw in _LEADING_KEYWORDS:
         args = args[1:]
 
-    # cd / pushd / popd mudam onde os PRÓXIMOS segmentos rodam
+    # cd / pushd / popd change where the NEXT segments run
     if args and args[0].raw in ("cd", "pushd", "popd"):
-        verbo = args[0].raw
-        _check_targets(ctx, redirs, cwds, verbo, text)
-        if verbo == "popd":
+        verb = args[0].raw
+        _check_targets(ctx, redirs, cwds, verb, text)
+        if verb == "popd":
             return frozenset(set(cwds) | {ctx.root}), frozenset(cwds)
         nf = _nonflags(args[1:])
         if not nf:
             dest = {Path.home().resolve()}
         elif not nf[0].known or nf[0].value == "-":
-            dest = {ctx.root}   # não sei para onde foi: trato como a raiz
+            dest = {ctx.root}   # I do not know where it went: treat it as the root
             if not nf[0].known:
-                ctx.dirs_desconhecidos.append(nf[0].raw)
+                ctx.unknown_dirs.append(nf[0].raw)
         else:
             dest = set(_resolve_all(nf[0].value, cwds))
         return frozenset(dest), frozenset(cwds)
 
-    # balde 3 — tudo fora da raiz, e a linha não cita a raiz
+    # bucket 3 — everything outside the root, and the line does not cite the root
     if all(not _inside(c, ctx.root) for c in cwds) and not _refs_root(
             ctx, text, args + redirs, cwds):
         if args and _ASSIGN_RE.match(args[0].raw) and all(
@@ -2239,23 +2247,23 @@ def _classify_segment(ctx, text, cwds):
                 ctx.vars[mm.group(1)] = e.value if e.known else None
         return cwds, cwds
 
-    # torna argv + redirs deste segmento disponível para _script_rule, que
-    # precisa de _refs_root fora daqui (balde 4, script dentro de worktree).
+    # make argv + redirs of this segment available to _script_rule, which
+    # needs _refs_root outside of here (bucket 4, script inside a worktree).
     ctx.seg_args = args + redirs
 
-    # balde 1 — redirecionamentos
-    verbo = args[0].value if args and args[0].known else "?"
-    _check_targets(ctx, redirs, cwds, verbo, text)
+    # bucket 1 — redirections
+    verb = args[0].value if args and args[0].known else "?"
+    _check_targets(ctx, redirs, cwds, verb, text)
     if args:
         _dispatch(ctx, args, cwds, text)
     return cwds, cwds
 
 
-# ─── telemetria (espelho mínimo de common/hooks/_telemetry.py) ─────────────
+# ─── telemetry (minimal mirror of common/hooks/_telemetry.py) ─────────────
 
 def _t_emit(event: str, cwd: str = None, **fields) -> None:
-    """Espelho mínimo de common/hooks/_telemetry.py (import cross-plugin é
-    frágil entre diretórios de cache versionados). Estritamente fail-silent."""
+    """Minimal mirror of common/hooks/_telemetry.py (a cross-plugin import is
+    fragile across versioned cache directories). Strictly fail-silent."""
     try:
         import subprocess
         from datetime import datetime, timezone
@@ -2290,27 +2298,28 @@ def _cmd_hash(command: str) -> str:
     return hashlib.blake2b(command.encode("utf-8", "replace"), digest_size=6).hexdigest()
 
 
-_BALDE_NOME = {
+_BUCKET_NAME = {
     1: "balde 1 — escrita fora da sua pista",
     4: "balde 4 — fora da lista de comandos inocentes",
 }
 
 
-def _dica_dir_desconhecido(raws):
-    """A negação veio de um diretório que esta chamada não sabe resolver.
+def _unknown_dir_hint(raws):
+    """The denial came from a directory this call does not know how to resolve.
 
-    Caso medido em 2026-09-26: o proof-reviewer criava a worktree descartável
-    numa chamada (`WT=$(mktemp -d)/red && git worktree add ...`) e usava
-    `cd "$WT" && git checkout ...` na seguinte. O cadeado lê cada chamada
-    sozinha, então `$WT` não tem valor, o `cd` conta como "continua na raiz" e
-    a reversão vira escrita fora da pista. A mensagem antiga dizia só "escrita
-    fora da sua pista" e sugeria a mesma receita com `"$D/red"`; os agentes
-    contornavam com `python3 -c`, o vetor do WEGO-1936.
+    Case measured on 2026-09-26: the proof-reviewer created the disposable
+    worktree in one call (`WT=$(mktemp -d)/red && git worktree add ...`) and
+    used `cd "$WT" && git checkout ...` in the next one. The lock reads each
+    call on its own, so `$WT` has no value, the `cd` counts as "stays in the
+    root" and the revert becomes a write outside the lane. The old message said
+    only "write outside your lane" and suggested the same recipe with
+    `"$D/red"`; the agents worked around it with `python3 -c`, the WEGO-1936
+    vector.
     """
-    nomes = ", ".join(dict.fromkeys(raws))
+    names = ", ".join(dict.fromkeys(raws))
     return [
         "",
-        f"  Por que caiu aqui: {nomes} não tem valor que eu conheça nesta chamada.",
+        f"  Por que caiu aqui: {names} não tem valor que eu conheça nesta chamada.",
         "  Cada chamada do Bash é lida sozinha: variável definida numa chamada",
         "  anterior (WT=..., D=$(mktemp -d)) não existe nesta. Sem saber o destino,",
         "  o `cd` conta como se você continuasse na raiz do projeto.",
@@ -2321,22 +2330,22 @@ def _dica_dir_desconhecido(raws):
     ]
 
 
-def _build_message(n, agent, command, allowed, dirs_desconhecidos=()):
+def _build_message(n, agent, command, allowed, unknown_dirs=()):
     globs = "\n      - ".join(allowed or ["(nenhum — só o seu arquivo de expertise)"])
     lines = [
-        f"[discovery bash-path-lock] NEGADO ({_BALDE_NOME.get(n.balde, n.balde)}): "
+        f"[discovery bash-path-lock] NEGADO ({_BUCKET_NAME.get(n.bucket, n.bucket)}): "
         f"agente {agent!r}.",
         f"  Motivo: {n.reason}",
     ]
-    if n.alvos:
-        lines.append(f"  Alvo(s) fora da pista: {', '.join(n.alvos)}")
-    if n.segmento and n.segmento.strip() != command.strip():
-        lines.append(f"  Trecho: {n.segmento.strip()[:200]}")
+    if n.targets:
+        lines.append(f"  Alvo(s) fora da pista: {', '.join(n.targets)}")
+    if n.segment and n.segment.strip() != command.strip():
+        lines.append(f"  Trecho: {n.segment.strip()[:200]}")
     lines += [
         f"  Comando: {command[:300]}",
     ]
-    if dirs_desconhecidos:
-        lines += _dica_dir_desconhecido(dirs_desconhecidos)
+    if unknown_dirs:
+        lines += _unknown_dir_hint(unknown_dirs)
     lines += [
         "",
         "  Este cadeado só deixa passar o que é comprovadamente inofensivo: escrita",
@@ -2350,9 +2359,10 @@ def _build_message(n, agent, command, allowed, dirs_desconhecidos=()):
         f"      - {globs}",
         "    - escrever fora da sua pista: delegue ao worker dono do caminho;",
     ]
-    # fb-20261013-3: a receita de worktree descartável é do proof-reviewer (portão de
-    # perturbação). Mostrada a todo agente negado, mandou o qa-engineer abrir worktree
-    # de madrugada. Os demais recebem o apontamento para a ordem/proof-reviewer.
+    # fb-20261013-3: the disposable-worktree recipe belongs to the proof-reviewer
+    # (perturbation gate). Shown to every denied agent, it sent the qa-engineer
+    # off to open a worktree in the middle of the night. The others get the
+    # pointer to the order/proof-reviewer.
     if agent.rsplit(":", 1)[-1] == "proof-reviewer":
         lines += [
             "    - provar RED revertendo código: worktree descartável FORA da raiz",
@@ -2377,7 +2387,7 @@ def _build_message(n, agent, command, allowed, dirs_desconhecidos=()):
         "  negado não é esperteza: é violação auditada.",
     ]
     text = "\n".join(lines)
-    # as marcas internas da leitura da linha voltam à forma que o agente escreveu
+    # the internal marks of the line reading go back to the form the agent wrote
     text = _SUB_MARK_RE.sub("$(…)", text).replace(_HEREDOC_MARK, "<<…")
     return text.replace("__CEPAARITH__", "$((…))")
 
@@ -2415,31 +2425,31 @@ def main():
     try:
         try:
             _classify(ctx, command, [project_root])
-        except _Negado:
+        except _Denied:
             raise
         except Exception as e:  # noqa: BLE001
-            # Defeito do próprio classificador. Liberar calado seria a falha
-            # silenciosa que esta camada existe para matar; negar é barulhento
-            # e aparece no ledger. No modo sombra, só registra.
+            # A defect in the classifier itself. Allowing silently would be the
+            # silent failure this layer exists to kill; denying is loud and
+            # shows up in the ledger. In shadow mode, it only records.
             if shadow:
                 _t_emit("bash_pathlock_would_deny", cwd=cwd_s, agent=agent, bucket=0,
                         verb="?", cmd_hash=_cmd_hash(command), erro=type(e).__name__)
                 sys.exit(0)
-            raise _Negado(4, "?", f"erro interno do classificador ({type(e).__name__}: "
+            raise _Denied(4, "?", f"erro interno do classificador ({type(e).__name__}: "
                                   f"{e}) — relate este comando no seu relatório", command)
-    except _Negado as n:
-        _t_emit("bash_pathlock_deny", cwd=cwd_s, agent=agent, bucket=n.balde,
-                verb=n.verbo, cmd_hash=_cmd_hash(command),
+    except _Denied as n:
+        _t_emit("bash_pathlock_deny", cwd=cwd_s, agent=agent, bucket=n.bucket,
+                verb=n.verb, cmd_hash=_cmd_hash(command),
                 card=os.environ.get("CLAUDE_AUTONOMOUS_RUN_ID", ""))
-        print(_build_message(n, agent, command, allowed, ctx.dirs_desconhecidos),
+        print(_build_message(n, agent, command, allowed, ctx.unknown_dirs),
               file=sys.stderr)
         sys.exit(2)
 
     for n in ctx.would:
-        _t_emit("bash_pathlock_would_deny", cwd=cwd_s, agent=agent, bucket=n.balde,
-                verb=n.verbo, cmd_hash=_cmd_hash(command))
-    for ev, campos in ctx.events:
-        _t_emit(ev, cwd=cwd_s, agent=agent, **campos)
+        _t_emit("bash_pathlock_would_deny", cwd=cwd_s, agent=agent, bucket=n.bucket,
+                verb=n.verb, cmd_hash=_cmd_hash(command))
+    for ev, fields in ctx.events:
+        _t_emit(ev, cwd=cwd_s, agent=agent, **fields)
     sys.exit(0)
 
 

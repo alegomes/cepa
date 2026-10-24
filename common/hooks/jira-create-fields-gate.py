@@ -105,15 +105,15 @@ def _load_rules(cwd):
         raise RuntimeError(f"{path} não é YAML válido: {e}")
 
     defaults = data.get("defaults") or {}
-    topo = None
+    topology = None
     marker = os.path.join(root, ".claude", "topology")
     if os.path.isfile(marker):
         try:
-            topo = open(marker, encoding="utf-8").read().strip() or None
+            topology = open(marker, encoding="utf-8").read().strip() or None
         except OSError:
-            topo = None
-    topo = topo or defaults.get("default_topology") or data.get("default_topology")
-    override = ((data.get("topologies") or {}).get(topo) or {}) if topo else {}
+            topology = None
+    topology = topology or defaults.get("default_topology") or data.get("default_topology")
+    override = ((data.get("topologies") or {}).get(topology) or {}) if topology else {}
 
     fields = override.get("required_fields", defaults.get("required_fields")) or []
     project = override.get("project_key") or defaults.get("project_key")
