@@ -319,13 +319,13 @@ def carrega_until():
 def test_cepa_until_filtros_de_sujeira_aceitam_os_dois_layouts():
     cu = carrega_until()
     for base, arq in ((".claude/programs", "plan.yaml"), (".claude/queues", "queue.yaml")):
-        assert cu.REGISTRO_DO_RUN.match(f"?? {base}/f/until/2026-10-20-0900.jsonl"), base
-        assert cu.BAK_DA_FILA.match(f"?? {base}/f/{arq}.bak"), base
-        m = cu.PLANO_MODIFICADO.match(f" M {base}/f/{arq}")
+        assert cu.RUN_RECORD.match(f"?? {base}/f/until/2026-10-20-0900.jsonl"), base
+        assert cu.QUEUE_BAK.match(f"?? {base}/f/{arq}.bak"), base
+        m = cu.PLAN_MODIFIED.match(f" M {base}/f/{arq}")
         assert m and m.group(1) == f"{base}/f/{arq}", base
         assert (m.group(2) or m.group(3)) == "f", base
-    assert not cu.BAK_DA_FILA.match("?? .claude/queues/f/plan.yaml.bak")
-    assert not cu.REGISTRO_DO_RUN.match("?? .claude/outro/f/until/x")
+    assert not cu.QUEUE_BAK.match("?? .claude/queues/f/plan.yaml.bak")
+    assert not cu.RUN_RECORD.match("?? .claude/outro/f/until/x")
 
 
 @com_repo
@@ -341,9 +341,9 @@ def test_cepa_until_arvore_suja_ignora_registro_e_bak_dos_dois_layouts(d):
         pasta = d / ".claude" / base / "f"
         (pasta / "until" / "2026-10-20-0900.jsonl").write_text("{}\n")
         (pasta / (arq + ".bak")).write_text("x\n")
-    assert cu.arvore_suja(d) == [], cu.arvore_suja(d)
+    assert cu.dirty_tree(d) == [], cu.dirty_tree(d)
     (d / "sujeira.txt").write_text("x\n")
-    assert [l for l in cu.arvore_suja(d)] == ["?? sujeira.txt"]
+    assert [l for l in cu.dirty_tree(d)] == ["?? sujeira.txt"]
 
 
 @com_repo
@@ -544,14 +544,14 @@ def test_cepa_until_cabecalho_mostra_nome_de_fila_com_so_queue():
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [it("a1")])
         para_layout_novo(raiz)
-        real = cu.consulta_fila
+        real = cu.query_queue
 
         def so_queue(nome, repo):
             dados, erro = real(nome, repo)
             dados.pop("program", None)
             dados["queue"] = "NOME-GRAVADO"
             return dados, erro
-        cu.consulta_fila = so_queue
+        cu.query_queue = so_queue
         saida = io.StringIO()
         with contextlib.redirect_stdout(saida):
             rc = cu.main(["fila", "--repo", str(raiz), "--for", "1h", "--dry-run",

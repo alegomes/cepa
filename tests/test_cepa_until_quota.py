@@ -345,30 +345,30 @@ def test_horario_do_reset_em_texto():
     m = carrega_modulo()
     agora = datetime(2026, 9, 18, 1, 0)
     check("3:20am à 01:00 é hoje",
-          m.horario_do_reset("resets 3:20am", agora) == datetime(2026, 9, 18, 3, 20))
+          m.reset_time("resets 3:20am", agora) == datetime(2026, 9, 18, 3, 20))
     check("8pm às 21:00 é amanhã",
-          m.horario_do_reset("resets 8pm", datetime(2026, 9, 18, 21, 0))
+          m.reset_time("resets 8pm", datetime(2026, 9, 18, 21, 0))
           == datetime(2026, 9, 19, 20, 0))
     check("12:30pm é meio-dia e meia",
-          m.horario_do_reset("resets 12:30pm", agora) == datetime(2026, 9, 18, 12, 30))
+          m.reset_time("resets 12:30pm", agora) == datetime(2026, 9, 18, 12, 30))
     check("reset de 5min atrás é o de agora, não o de amanhã",
-          m.horario_do_reset("resets 3:20am", datetime(2026, 9, 18, 3, 25))
+          m.reset_time("resets 3:20am", datetime(2026, 9, 18, 3, 25))
           == datetime(2026, 9, 18, 3, 20))
     check("com data na frente (teto semanal) não vira horário",
-          m.horario_do_reset("resets Sep 22, 4pm", agora) is None)
+          m.reset_time("resets Sep 22, 4pm", agora) is None)
     check("com fuso entre parênteses vira horário",
-          m.horario_do_reset("resets 3:20am (America/Sao_Paulo)", agora) is not None)
+          m.reset_time("resets 3:20am (America/Sao_Paulo)", agora) is not None)
     check("hora impossível não vira horário",
-          m.horario_do_reset("resets 13:00pm", agora) is None)
+          m.reset_time("resets 13:00pm", agora) is None)
 
 
 def test_custo_de_item_so_compara_a_mesma_janela():
     m = carrega_modulo()
     check("dois pares na mesma janela: o maior salto",
-          abs(m.custo_de_item([(0.1, 1), (0.3, 1), (0.35, 1)]) - 0.2) < 1e-9)
+          abs(m.item_cost([(0.1, 1), (0.3, 1), (0.35, 1)]) - 0.2) < 1e-9)
     check("par que atravessa o reset não conta",
-          m.custo_de_item([(0.9, 1), (0.05, 2)]) is None)
-    check("uma leitura só: sem custo", m.custo_de_item([(0.5, 1)]) is None)
+          m.item_cost([(0.9, 1), (0.05, 2)]) is None)
+    check("uma leitura só: sem custo", m.item_cost([(0.5, 1)]) is None)
 
 
 def main():

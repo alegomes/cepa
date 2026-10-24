@@ -84,7 +84,7 @@ def test_decide_no_terminal_desenha_um_cartao_por_pergunta():
     cabem na largura e o fecho `└─`. As frases que o pty responde ficam
     inteiras, sem cor no meio. Fora do terminal nada disso aparece."""
     m = carrega_modulo(cor="sempre")
-    check("a decoração está ligada", m.TELA.ligada)
+    check("a decoração está ligada", m.SCREEN.enabled)
     adiados = [
         {"id": "W-1", "title": "Reenviar o envelope quando o e-mail muda",
          "reason": "bloqueado-antes", "question": "Mantenho o reenvio?",
@@ -105,9 +105,9 @@ def test_decide_no_terminal_desenha_um_cartao_por_pergunta():
         prompts.append(p)
         return {1: "s", 2: "n", 3: "", 4: ""}.get(len(prompts), "")
     m.decide(Path("/nao/existe"), "fila", "run1", est, adiados, analise,
-             pergunta=pergunta, saida=tela.append,
-             responde=lambda i, t, mantem=False: (0, f"{i} voltou"),
-             aterrissa=lambda: 0)
+             question=pergunta, output=tela.append,
+             answer=lambda i, t, keep=False: (0, f"{i} voltou"),
+             land=lambda: 0)
     bruto = "\n".join(tela)
     texto = ANSI.sub("", bruto)
     check("tem cor", "\x1b[" in bruto)
@@ -154,9 +154,9 @@ def _decide_puro(adiados, analise, est):
     tela = []
     respostas = iter(["s", "n", "", ""])
     m.decide(Path("/nao/existe"), "fila", "run1", est, adiados, analise,
-             pergunta=lambda _p: next(respostas, ""), saida=tela.append,
-             responde=lambda i, t, mantem=False: (0, "ok"),
-             aterrissa=lambda: 0)
+             question=lambda _p: next(respostas, ""), output=tela.append,
+             answer=lambda i, t, keep=False: (0, "ok"),
+             land=lambda: 0)
     return tela
 
 
@@ -315,13 +315,13 @@ def test_decide_oferece_manter_travado():
         return next(respostas)
     aplicados, depois = m.decide(
         Path("/nao/existe"), "fila", "run1", {}, adiados, {},
-        pergunta=pergunta, saida=tela.append,
-        responde=lambda i, t, mantem=False: (
-            respondidos.append((i, t, mantem)), (0, f"{i} ok"))[1])
+        question=pergunta, output=tela.append,
+        answer=lambda i, t, keep=False: (
+            respondidos.append((i, t, keep)), (0, f"{i} ok"))[1])
     check("as opções oferecem [n] não e [t] escrevo",
           all("[n] não" in p_ and "[t] escrevo" in p_
               for p_ in perguntas if "[Enter]" in p_), perguntas)
-    check("[t] + N no 'devolvo?' chama o responde com mantem=True",
+    check("[t] + N no 'devolvo?' chama o responde com keep=True",
           respondidos == [("W-1", "mantenha", True),
                           ("W-2", "não liguei", True)], respondidos)
     check("...e conta como respondido", len(aplicados) == 2, aplicados)
@@ -341,7 +341,7 @@ def test_decide_pergunta_e_aplica_cada_resposta():
          "evidence": "a evidência longa"},
         {"id": "W-4", "title": "cascata", "reason": "depende-de-adiado"},
     ]
-    analise = m.decisoes_da_analise(
+    analise = m.analysis_decisions(
         "texto\n```json cepa-decisoes\n"
         '{"aterrissar": {"recomendo": "sim", "porque": "build verde"},'
         ' "itens": [{"id": "W-1", "pergunta": "Movo para o checklist?",'
@@ -354,9 +354,9 @@ def test_decide_pergunta_e_aplica_cada_resposta():
     tela, respondidos, aterrissou = [], [], []
     aplicados, depois = m.decide(
         Path("/nao/existe"), "fila", "run1", est, adiados, analise,
-        pergunta=lambda _p: next(respostas), saida=tela.append,
-        responde=lambda i, t: (respondidos.append((i, t)), (0, f"{i} ok"))[1],
-        aterrissa=lambda: aterrissou.append(1) or 0)
+        question=lambda _p: next(respostas), output=tela.append,
+        answer=lambda i, t: (respondidos.append((i, t)), (0, f"{i} ok"))[1],
+        land=lambda: aterrissou.append(1) or 0)
     texto = "\n".join(tela)
     check("pergunta aterrissar e aterrissa com s", aterrissou == [1], texto)
     check("...mostrando a recomendação da análise",
@@ -403,9 +403,9 @@ def test_decide_s_e_n_respondem_a_pergunta_redigida():
         return next(respostas)
     aplicados, _ = m.decide(
         Path("/nao/existe"), "fila", "run1", {}, adiados, analise,
-        pergunta=pergunta, saida=tela.append,
-        responde=lambda i, t, mantem=False: (
-            respondidos.append((i, t, mantem)), (0, f"{i} ok"))[1])
+        question=pergunta, output=tela.append,
+        answer=lambda i, t, keep=False: (
+            respondidos.append((i, t, keep)), (0, f"{i} ok"))[1])
     texto = "\n".join(tela)
     check("o título sai inteiro (cortado em 60, o dono respondia a uma "
           "pergunta que via pela metade; 15/10)", "t" * 90 in texto, texto)
@@ -439,7 +439,7 @@ def test_decide_s_e_n_respondem_a_pergunta_redigida():
              [{"id": "W-9", "title": "rota", "reason": "human_pending",
                "question": None, "human_pending": "valide o login real",
                "evidence": None}], {},
-             pergunta=lambda _p: next(resp2), saida=tela2.append)
+             question=lambda _p: next(resp2), output=tela2.append)
     texto2 = "\n".join(tela2)
     check("rota humana sem pergunta: mostra a tarefa e pergunta 'já fez?'",
           "Tarefa que ficou para você: valide o login real" in texto2
@@ -480,9 +480,9 @@ def test_decide_mostra_contexto_instrucao_e_avisa_pergunta_fora_das_regras():
     respostas = iter(["s", "", "s", ""])
     tela, respondidos = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", {}, adiados, analise,
-             pergunta=lambda _p: next(respostas), saida=tela.append,
-             responde=lambda i, t, mantem=False: (
-                 respondidos.append((i, t, mantem)), (0, "ok"))[1])
+             question=lambda _p: next(respostas), output=tela.append,
+             answer=lambda i, t, keep=False: (
+                 respondidos.append((i, t, keep)), (0, "ok"))[1])
     texto = "\n".join(tela)
     bloco_s5 = texto.split("━━ [1/2] S5")[1].split("━━ [2/2] S6")[0]
     check("cada item abre com separador e id em linha própria",
@@ -519,18 +519,18 @@ def test_decide_mostra_contexto_instrucao_e_avisa_pergunta_fora_das_regras():
           and "fora das regras: 37 palavras, o limite é 25; nome de branch, "
               "classe de teste ou arquivo" in bloco_s6, bloco_s6)
     check("pergunta_fora_das_regras: None dentro das regras",
-          m.pergunta_fora_das_regras("Fecho o card como 'medir depois'?")
+          m.question_breaks_rules("Fecho o card como 'medir depois'?")
           is None, "")
     check("...e pega a alternativa entre parênteses",
-          "classe" in (m.pergunta_fora_das_regras(
+          "classe" in (m.question_breaks_rules(
               "Fecho? (a alternativa é não)") or ""), "")
 
 
 def test_analise_sem_bloco_ou_quebrada_nao_derruba():
     m = carrega_modulo()
-    check("sem bloco devolve vazio", m.decisoes_da_analise("só texto") == {})
+    check("sem bloco devolve vazio", m.analysis_decisions("só texto") == {})
     check("JSON quebrado devolve vazio",
-          m.decisoes_da_analise("```json cepa-decisoes\n{quebrado\n```") == {})
+          m.analysis_decisions("```json cepa-decisoes\n{quebrado\n```") == {})
 
 
 BLOQUEIA_COM_PERGUNTA = (
@@ -619,8 +619,8 @@ def test_reservado_nao_vira_pergunta():
              [{"id": "W-9", "title": "em outra sessão", "reason": "reservado"},
               {"id": "W-8", "title": "cascata",
                "reason": "depende-de-adiado"}],
-             {}, pergunta=lambda p_: perguntas.append(p_) or "",
-             saida=tela.append)
+             {}, question=lambda p_: perguntas.append(p_) or "",
+             output=tela.append)
     texto = "\n".join(tela)
     check("nenhuma pergunta é feita", perguntas == [], perguntas)
     check("...e o fecho diz que nada espera por você",
@@ -759,13 +759,13 @@ def test_fim_parado_pela_cota_tambem_pergunta():
 def test_lista_sem_terminal_filtra_o_que_nao_e_do_dono():
     m = carrega_modulo()
     tela = []
-    m.pendencias_em_texto(
+    m.pending_as_text(
         "fila", "run1", {"acoes": [{"id": "aterrissar", "frase": "leva 3"}]},
         [{"id": "W-1", "reason": "human_pending",
           "human_pending": "rode o login real"},
          {"id": "W-2", "reason": "reservado", "detail": "sessão viva"},
          {"id": "W-3", "reason": "depende-de-adiado", "detail": "de W-1"}],
-        {}, saida=tela.append)
+        {}, output=tela.append)
     texto = "\n".join(tela)
     check("sem terminal, lista aterrissar", "aterrissar: leva 3" in texto,
           texto)
@@ -778,7 +778,7 @@ def test_lista_sem_terminal_filtra_o_que_nao_e_do_dono():
 def test_bloco_que_nao_e_objeto_e_ignorado():
     m = carrega_modulo()
     check("lista no lugar de objeto devolve vazio",
-          m.decisoes_da_analise("```json cepa-decisoes\n[1, 2]\n```") == {})
+          m.analysis_decisions("```json cepa-decisoes\n[1, 2]\n```") == {})
 
 
 def test_pergunta_sai_quando_o_item_volta_a_andar_e_reserva_some_no_responde():
@@ -849,10 +849,10 @@ def test_run_ja_aterrissado_nao_pergunta_de_novo():
            "acoes": [{"id": "aterrissar", "frase": "leva 5"}]}
     tela, perguntas = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", est, [], {},
-             pergunta=lambda p_: perguntas.append(p_) or "", saida=tela.append)
+             question=lambda p_: perguntas.append(p_) or "", output=tela.append)
     check("run aterrissado não pergunta aterrissar", perguntas == [], perguntas)
     tela2 = []
-    m.pendencias_em_texto("fila", "run1", est, [], {}, saida=tela2.append)
+    m.pending_as_text("fila", "run1", est, [], {}, output=tela2.append)
     check("...nem lista sem terminal", tela2 == [], tela2)
 
 
@@ -936,8 +936,8 @@ def test_texto_solto_no_prompt_de_opcoes_nao_some():
     m.decide(Path("/nao/existe"), "fila", "run1", {},
              [{"id": "W-1", "title": "t", "reason": "bloqueado-antes",
                "question": "Ligou a flag?"}], {},
-             pergunta=lambda _p: next(respostas), saida=tela.append,
-             responde=lambda i, t: (respondidos.append((i, t)), (0, "ok"))[1])
+             question=lambda _p: next(respostas), output=tela.append,
+             answer=lambda i, t: (respondidos.append((i, t)), (0, "ok"))[1])
     texto = "\n".join(tela)
     check("avisa que o texto não é uma opção",
           "não é uma das opções" in texto, texto)

@@ -150,7 +150,7 @@ def test_reparo_nao_escreve_fora_da_pasta_de_worktrees_do_clone():
                         str(arvore), "HEAD"], cwd=raiz, check=True)
         fora = Path(tmp) / "fora" / "wt"
         (arvore / ".git").write_text(f"gitdir: {fora}\n")
-        falha = cu.repara_ligacao(raiz, arvore, "until/x")
+        falha = cu.repair_link(raiz, arvore, "until/x")
         check("recusa ligação fora de .git/worktrees",
               falha is not None and "fora de" in falha, str(falha))
         check("e não cria nada lá", not fora.parent.exists())

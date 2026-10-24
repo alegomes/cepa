@@ -1298,7 +1298,7 @@ def test_run_vivo_recusa_antes_do_guarda_de_sujeira():
 
 
 def test_arvore_suja_continua_estrita_para_os_outros_chamadores():
-    """O filtro do run vivo só vale com `run_vivo_ok=True`; o default
+    """O filtro do run vivo só vale com `live_run_ok=True`; o default
     (usado pelos demais chamadores de `arvore_suja`) segue listando o
     `plan.yaml` de outra fila."""
     import importlib.machinery
@@ -1327,13 +1327,13 @@ def test_arvore_suja_continua_estrita_para_os_outros_chamadores():
                                      "evidence": "feito"})
             outra.write_text(yaml.safe_dump(novo, allow_unicode=True),
                              encoding="utf-8")
-            estrito = mod.arvore_suja(raiz)
+            estrito = mod.dirty_tree(raiz)
             check("default segue estrito: lista o plan de outra fila",
                   any(l.startswith(" M ")
                       and l.endswith(".claude/programs/outra/plan.yaml")
                       for l in estrito or []), f"{estrito}")
-            frouxo = mod.arvore_suja(raiz, run_vivo_ok=True)
-            check("run_vivo_ok=True filtra o mesmo diff",
+            frouxo = mod.dirty_tree(raiz, live_run_ok=True)
+            check("live_run_ok=True filtra o mesmo diff",
                   frouxo == [], f"{frouxo}")
         finally:
             vivo.kill()

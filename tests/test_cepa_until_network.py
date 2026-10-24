@@ -296,26 +296,26 @@ def test_queda_de_rede_exige_api_error_e_mensagem_de_rede():
     m = carrega_modulo()
     real = json.dumps(RESULTADO_SEM_REDE)
     check("o result real de 2026-09-18 é queda de rede",
-          m.queda_de_rede("lixo de hook\n" + real + "\n"))
+          m.network_drop("lixo de hook\n" + real + "\n"))
     prosa = json.dumps({"type": "assistant", "message": {"content": [
         {"type": "text", "text": "o teste falhou com ENOTFOUND no mock"}]}})
     ok = json.dumps({"type": "result", "subtype": "success", "is_error": False,
                      "result": "fechei o item"})
     check("prosa de agente com ENOTFOUND + result normal NÃO é queda",
-          not m.queda_de_rede(prosa + "\n" + ok + "\n"))
+          not m.network_drop(prosa + "\n" + ok + "\n"))
     teto = json.dumps({"type": "result", "is_error": True,
                        "terminal_reason": "api_error",
                        "result": "You've hit your session limit · resets 3:20am"})
     check("erro de API que não é de rede NÃO é queda (é do teto)",
-          not m.queda_de_rede(teto + "\n"))
-    check("saída vazia não é queda", not m.queda_de_rede(""))
+          not m.network_drop(teto + "\n"))
+    check("saída vazia não é queda", not m.network_drop(""))
     sucesso_com_palavra = json.dumps({
         "type": "result", "subtype": "success", "is_error": False,
         "result": "corrigi o timeout ECONNRESET no teste do cliente HTTP"})
     check("result de SUCESSO com palavra de rede NÃO é queda",
-          not m.queda_de_rede(sucesso_com_palavra + "\n"))
+          not m.network_drop(sucesso_com_palavra + "\n"))
     check("o último result é o que vale",
-          not m.queda_de_rede(real + "\n" + ok + "\n"))
+          not m.network_drop(real + "\n" + ok + "\n"))
 
 
 def test_espera_a_rede_respeita_o_prazo_e_a_volta():
@@ -327,22 +327,22 @@ def test_espera_a_rede_respeita_o_prazo_e_a_volta():
         return n["v"] >= 3
     ate = datetime.now() + timedelta(seconds=10)
     inicio = time.monotonic()
-    check("volta na 3ª sonda", m.espera_a_rede(ate, sonda, 0.1) is True
+    check("volta na 3ª sonda", m.wait_for_network(ate, sonda, 0.1) is True
           and n["v"] == 3 and time.monotonic() - inicio < 2)
     inicio = time.monotonic()
     check("prazo vencido devolve False",
-          m.espera_a_rede(datetime.now() + timedelta(seconds=0.5),
+          m.wait_for_network(datetime.now() + timedelta(seconds=0.5),
                           lambda: False, 0.1) is False
           and 0.4 <= time.monotonic() - inicio < 2)
     porta = porta_livre()
     check("sonda TCP: porta fechada é sem rede",
-          m.rede_alcancavel(f"127.0.0.1:{porta}", timeout=1) is False)
+          m.network_reachable(f"127.0.0.1:{porta}", timeout=1) is False)
     check("sonda TCP: alvo mal formado é sem rede, não exceção",
-          m.rede_alcancavel("semporta", timeout=1) is False)
+          m.network_reachable("semporta", timeout=1) is False)
     escuta_depois(porta, 0, por=3)
     time.sleep(0.3)
     check("sonda TCP: porta aberta é rede",
-          m.rede_alcancavel(f"127.0.0.1:{porta}", timeout=1) is True)
+          m.network_reachable(f"127.0.0.1:{porta}", timeout=1) is True)
 
 
 def main():
