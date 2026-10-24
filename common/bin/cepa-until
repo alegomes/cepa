@@ -207,6 +207,7 @@ import shlex
 import shutil
 import signal
 import socket
+import select
 import subprocess
 import sys
 import time
@@ -246,6 +247,12 @@ VERIFY_BY_FILE = [
 # there is no suite. With both in the repo, the suite runs: in run 2026-09-26-2203
 # `no-build` alone let 18 items close without anyone running the whole suite.
 SUITE_WITHOUT_BUILD = "tests/run-all.sh"
+
+# The end-of-run questions are asked on a terminal, but the owner is usually
+# not there when an overnight run ends (PID 84993, run WEGO 2026-10-07-2132,
+# stayed alive 15 days blocked in `input()`). After this wait (seconds) with no
+# keystroke the run prints the `cepa-until decide` command and exits.
+ANSWER_WAIT_SEC = float(os.environ.get("CEPA_UNTIL_ESPERA_RESPOSTA", "600"))
 
 # How long the end-of-run analysis may take. It reads a summary of tens of KB,
 # not the whole `.log`; 20 minutes is slack, not an estimate.
@@ -1920,13 +1927,23 @@ def is_yes(r):
     return str(r or "").strip().lower() in ("s", "sim", "y", "yes")
 
 
-def read_line(prompt, output=print):
+class NoAnswer(TimeoutError):
+    """Nobody typed within the wait."""
+
+
+def read_line(prompt, output=print, wait=None):
     """`input()` that doesn't die on an unreadable line. A dead-key accent
     half-erased arrives as a stray byte (`n\\xcb\\xc3\\xa3o`) and
     `input()` blows up with UnicodeDecodeError; the line was already consumed, so
     just ask again (decidir WEGO 2026-09-29-2059)."""
     while True:
         try:
+            if wait is not None:
+                sys.stdout.write(prompt)
+                sys.stdout.flush()
+                if not select.select([sys.stdin], [], [], wait)[0]:
+                    raise NoAnswer(f"no answer in {wait}s")
+                return input("")
             return input(prompt)
         except UnicodeDecodeError:
             output("       não consegui ler essa linha (algum acento chegou "
@@ -2175,12 +2192,12 @@ class Panel:
 
 
 def decide(repo, queue, run_id, item_states, deferred, analysis, question=None,
-           output=print, answer=None, land=None):
+           output=print, answer=None, land=None, wait=None):
     """Goes through what only the owner unblocks and applies each answer. Returns
     (applied, for_later), as text, for the closing."""
     if question is None:
         def question(prompt):
-            return read_line(prompt, output)
+            return read_line(prompt, output, wait)
     analysis = analysis or {}
     by_item = analysis.get("itens") or {}
     if answer is None:
@@ -2356,7 +2373,8 @@ def pending_as_text(queue, run_id, item_states, deferred, analysis, output=print
           f"{queue}/{run_id}")
 
 
-def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=None):
+def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=None,
+                     wait=None):
     """The closing of the run and of `cepa-until decide`: queries the queue again (its
     state now, not the launch one) and asks, or lists without a terminal."""
     data, error = query_queue(queue, repo)
@@ -2378,7 +2396,10 @@ def close_with_owner(repo, queue, run_id, item_states, review=None, interactive=
         pending_as_text(queue, run_id, item_states, deferred, analysis)
         return 0
     try:
-        decide(repo, queue, run_id, item_states, deferred, analysis)
+        decide(repo, queue, run_id, item_states, deferred, analysis, wait=wait)
+    except NoAnswer:
+        print(f"\n   ninguém respondeu em {wait / 60:g} min; o run termina aqui. "
+              f"Para responder depois: cepa-until decide {queue}/{run_id}")
     except (EOFError, KeyboardInterrupt):
         print(f"\n   perguntas interrompidas; volte com: cepa-until decide "
               f"{queue}/{run_id}")
@@ -3958,7 +3979,8 @@ def main(argv=None):
             item_states = json.loads(state_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             item_states = {}
-        return close_with_owner(repo, a.queue, run_id, item_states, review)
+        return close_with_owner(repo, a.queue, run_id, item_states, review,
+                               wait=ANSWER_WAIT_SEC)
 
     # The analysis spends quota: stopping on the quota and then analyzing hits the
     # same ceiling. In those cases, and with nothing executed, it is left for by hand.

@@ -580,6 +580,48 @@ def test_run_on_terminal_ends_asking_and_applies():
               and "vira item do checklist" in a1["evidence"], a1)
 
 
+def test_run_on_terminal_without_answer_exits_after_the_wait():
+    """Item until-processo-nao-sai: an overnight run ends with nobody at the
+    keyboard. The end-of-run prompt had no limit and PID 84993 (run WEGO
+    2026-10-07-2132) stayed alive 15 days blocked in `input()`. With no
+    keystroke inside CEPA_UNTIL_ESPERA_RESPOSTA the run prints the
+    `cepa-until decide` command and exits 0, applying nothing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        env = env_do_run(tmp, root, binv)
+        env["CEPA_UNTIL_ESPERA_RESPOSTA"] = "2"
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=[], env=env, timeout=90)
+        check("o run sai 0 sem resposta", rc == 0, out[-1500:])
+        check("o menu foi mostrado",
+              "Fecho o card como medir depois do go-live?" in out, out[-1500:])
+        check("imprime o comando para responder depois",
+              "cepa-until decide fila/" in out, out[-1500:])
+        check("nada foi aplicado",
+              items_of(root)["a1"]["status"] == "blocked", items_of(root)["a1"])
+
+
+def test_read_line_raises_when_nobody_types():
+    mod = load_module()
+    r, w = os.pipe()
+    saved = sys.stdin
+    sys.stdin = os.fdopen(r)
+    try:
+        try:
+            mod.read_line("? ", wait=0.2)
+            raised = False
+        except mod.NoAnswer:
+            raised = True
+    finally:
+        sys.stdin.close()
+        sys.stdin = saved
+        os.close(w)
+    check("read_line sem digitação levanta NoAnswer", raised)
+
+
 def env_do_run(tmp, root, binv):
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"

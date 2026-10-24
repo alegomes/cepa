@@ -119,6 +119,9 @@ to the owner, the analysis' `contexto` (lay words), the question, and `instrucao
 instruction the next run receives if the answer is yes, recorded together with the yes). A
 question over 25 words or carrying a branch, test class or file name is shown anyway, with a
 warning that the analysis broke the rules.
+
+On a terminal the first question waits up to 10 minutes (`CEPA_UNTIL_ESPERA_RESPOSTA`, in seconds) for a keystroke; with none, the run prints the `cepa-until decide` command and exits, because an overnight run ends with nobody at the keyboard and a prompt without a limit left the process alive for days (PID 84993, 2026-10-07).
+
 An answer is applied on the spot by `cepa-plan answer`: a `blocked` item goes back to
 `pending` and an open route closes, with the owner's answer in the item's evidence, where the
 next run reads it. `m` records the answer and keeps the item as it was (still `blocked`,
