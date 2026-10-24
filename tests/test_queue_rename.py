@@ -418,13 +418,13 @@ def test_doctor_avisa_nome_nos_dois_layouts_e_sugere_migrar():
         mod = importlib.util.module_from_spec(spec)
         loader.exec_module(mod)
         mod.RESULTS.clear()
-        mod.check_layout_da_fila(d)
+        mod.check_queue_layout(d)
         assert any("migrate --all" in m for _, _, m, _ in mod.RESULTS), mod.RESULTS
         novo = d / ".claude" / "queues" / "x"
         novo.mkdir(parents=True)
         (novo / "queue.yaml").write_text("queue: x\nmode: single-track\n")
         mod.RESULTS.clear()
-        mod.check_layout_da_fila(d)
+        mod.check_queue_layout(d)
         assert any(k == "warn" and "dois layouts" in m for k, _, m, _ in mod.RESULTS), \
             mod.RESULTS
 
@@ -653,7 +653,7 @@ def test_digest_le_a_fila_do_clone_principal_no_layout_novo():
             str((fila / "queue.yaml").resolve()) in p.stdout, p.stdout[-900:]
 
 
-# [D4] o doctor CHAMA check_layout_da_fila (pela CLI)
+# [D4] o doctor CHAMA check_queue_layout (pela CLI)
 
 def test_doctor_cli_avisa_nome_nos_dois_layouts():
     with tempfile.TemporaryDirectory() as base:

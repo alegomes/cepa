@@ -61,7 +61,7 @@ def test_variavel_desliga():
     os.environ["CEPA_DOCTOR_INSTALL"] = "off"
     try:
         check("CEPA_DOCTOR_INSTALL=off desliga a reinstalação",
-              D.install_automatico_permitido() is False)
+              D.auto_install_allowed() is False)
         ok, msg = D.fix_install({"kind": "install", "repo": str(REPO)})
         check("e o fix_install recusa em vez de rodar o install.sh",
               ok is False and "instalação da máquina" in msg, msg)
@@ -78,7 +78,7 @@ def test_diretorio_temporario_desliga():
         os.chdir(tmp)
         try:
             check("doctor rodando de um diretório temporário não reinstala",
-                  D.install_automatico_permitido() is False)
+                  D.auto_install_allowed() is False)
         finally:
             os.chdir(origem)
 
@@ -94,7 +94,7 @@ def test_tmp_tambem_conta_como_temporario():
     os.chdir(alvo)
     try:
         check("/tmp também conta como temporário",
-              D.install_automatico_permitido() is False)
+              D.auto_install_allowed() is False)
     finally:
         os.chdir(origem)
 
@@ -105,7 +105,7 @@ def test_uso_real_continua_permitido():
     os.chdir(REPO)
     try:
         check("fora do temporário e sem a variável, a reinstalação segue permitida",
-              D.install_automatico_permitido() is True)
+              D.auto_install_allowed() is True)
     finally:
         os.chdir(origem)
 
