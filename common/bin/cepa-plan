@@ -2209,7 +2209,7 @@ def nao_responde(texto):
 # num terminal (fb-20261014-3). A leitura/escrita abaixo é o GÊMEO INLINE de
 # `converter`/`recusar` em board-flow/bin/waivers.py — não importo aquele módulo
 # porque import entre plugins quebra com os diretórios de cache versionados; o
-# teste tests/test_cepa_plan_responde_dispensa.py confere que os dois concordam.
+# teste tests/test_cepa_plan_answer_waiver.py confere que os dois concordam.
 
 def _pastas_de_dispensa(raiz, repo):
     pastas = [Path(raiz) / ".claude" / "waivers"]

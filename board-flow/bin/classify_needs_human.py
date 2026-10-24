@@ -12,7 +12,7 @@ nenhuma regra sai como `sem-motivo`, e `/board-flow:decide` para e avisa — ele
 nunca inventa um oitavo motivo em tempo de execução, porque motivo inventado é
 o que faz um waiver gravado casar depois com o card errado.
 
-A suíte de regressão é tests/test_needs_human_motivos.py, montada sobre 33
+A suíte de regressão é tests/test_needs_human_reasons.py, montada sobre 33
 artefatos reais de wego-assinatura-backend e wego-tasy-gateway.
 
 Uso como script (leitura, não escreve nada):

@@ -15,7 +15,7 @@ Whoever forgets a mode's purpose halfway through the work is not going to open a
 307-line doc. And three copies of the same table is the pattern this repo has
 already paid dearly for (memory `hooks-texto-citado-nao-e-shell`: 7 copies of the
 same parser, fix applied to 5). Here the table is one; the hook imports it,
-`cepa-modes` prints it, and `tests/test_modos_fonte_unica.py` fails if the
+`cepa-modes` prints it, and `tests/test_modes_single_source.py` fails if the
 `cepa` list diverges from this one.
 
 Each mode also declares `write`: the allow-list of DESTINATIONS it produces,

@@ -6,7 +6,7 @@
 
 Durante a transição todo consumidor LÊ os dois layouts e `cepa-plan migrate`
 move as filas existentes. Cada teste chama o binário de verdade (subprocess)
-num repo git temporário, como os vizinhos (`test_cepa_plan_escrita_commita.py`).
+num repo git temporário, como os vizinhos (`test_cepa_plan_write_commits.py`).
 
 Rode com `python3 tests/test_queue_rename.py` ou com pytest (cada teste cria o
 próprio diretório temporário).
@@ -566,7 +566,7 @@ def test_cepa_until_noite_aterrissa_e_pendentes_e_doctor_enxergam_fila_nova():
     `pendentes` e pelo doctor ([D5]: repo só com .claude/queues); [U4] a fila
     suja no clone, no layout novo, não impede `aterrissar`."""
     from test_cepa_until import fake_claude, item as it, monta_repo, roda
-    from test_cepa_until_branch_da_noite import TRABALHA, VERIFY
+    from test_cepa_until_run_branch import TRABALHA, VERIFY
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [it("a1")])
         para_layout_novo(raiz)

@@ -2,7 +2,7 @@
 
 Boa parte das suítes daqui são scripts: funções `test_*(tmp)` chamadas por um
 `main()` que cria o diretório temporário e passa adiante
-(`python3 tests/test_maestro_run_cores.py` → "all green"). O pytest coleta essas
+(`python3 tests/test_maestro_run_colors.py` → "all green"). O pytest coleta essas
 mesmas funções pelo nome, vê o parâmetro `tmp` e procura uma fixture com esse
 nome — não acha, e reporta 4 ERROs que parecem teste quebrado sem nenhum teste
 quebrado. Suíte que reporta vermelho sem defeito ensina a ignorar vermelho.
@@ -21,7 +21,7 @@ from _telemetria_isolada import isola
 # telemetria precisa ser pedido aqui também. Ver tests/_telemetria_isolada.py.
 isola()
 
-# Os subdiretórios que o main() de test_maestro_run_cores.py cria antes de
+# Os subdiretórios que o main() de test_maestro_run_colors.py cria antes de
 # chamar as funções: cada cenário de poll precisa do seu, senão um vaza no outro.
 SUBDIRS = "a b c d e f g".split()
 

@@ -76,16 +76,16 @@ slices:
                                 # o plano original só listava o template/prosa
       - "maestro/plan-template.yaml"
       - "maestro/commands/program-plan.md"
-      - "tests/test_cepa_dor.py"
+      - "tests/test_cepa_pain.py"
     human_gate: none   # decisão tomada: campo acceptance_form: bdd | substrate; US sem BDD e sem declaração de substrato = NOT-READY
-    acceptance: "test_cepa_dor.py verde com +2 casos: slice US sem BDD reprova nomeando a lacuna; slice substrate declarado passa"
-    acceptance_cmd: "python3 tests/test_cepa_dor.py"
+    acceptance: "test_cepa_pain.py verde com +2 casos: slice US sem BDD reprova nomeando a lacuna; slice substrate declarado passa"
+    acceptance_cmd: "python3 tests/test_cepa_pain.py"
     context:
       - "BACKLOG.md#a3-teste-bdd-ou-substrato-no-cepa-dor"
       - "maestro/plan-template.yaml"
     bash_extra: ["python3"]
     timeout_min: 45
-    status: DONE   # 2026-07-21 · test_cepa_dor.py verde (15 casos, +5 do A3);
+    status: DONE   # 2026-07-21 · test_cepa_pain.py verde (15 casos, +5 do A3);
                    # perturbação: cepa-dor @HEAD dá READY no mesmo plano ruim
 
   A4:
@@ -196,16 +196,16 @@ slices:
       - "maestro/commands/run.md"
       - "maestro/.claude-plugin/plugin.json"
       - "common/agents/completion-auditor.md"
-      - "tests/test_maestro_run_cores.py"
+      - "tests/test_maestro_run_colors.py"
     human_gate: none   # decisão tomada: merge train/relatório não completa com slice sem estado terminal (DONE|FAIL|TIMEOUT|ESCALATED); revisores com Write: veredito em YAML, mudança vira card
-    acceptance: "test_maestro_run_cores.py verde com caso novo: onda com slice não-terminal não aterrissa; frase normativa nos revisores"
-    acceptance_cmd: "python3 tests/test_maestro_run_cores.py"
+    acceptance: "test_maestro_run_colors.py verde com caso novo: onda com slice não-terminal não aterrissa; frase normativa nos revisores"
+    acceptance_cmd: "python3 tests/test_maestro_run_colors.py"
     context:
       - "BACKLOG.md#a8-fronteira-de-mutação--outcome-terminal-por-onda"
       - "maestro/bin/maestro-wave-state"
     bash_extra: ["python3"]
     timeout_min: 45
-    status: DONE   # 2026-07-22 · test_maestro_run_cores.py verde (+9 casos do A8).
+    status: DONE   # 2026-07-22 · test_maestro_run_colors.py verde (+9 casos do A8).
                    # Perturbações: check-terminal sempre-0 derruba 3 casos;
                    # TERMINAL reduzido a {DONE} derruba 4. maestro 0.3.0.
                    # build-hex:proof-reviewer NÃO precisou de edição: já tinha

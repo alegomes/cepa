@@ -561,7 +561,7 @@ def test_script_na_copia_descartavel():
     balde 4 ("script fora do projeto"):
 
       cd /tmp/proof-agb-head && ls tests/ | grep -i gate_status; \\
-        timeout 120 python3 tests/test_gate_status_por_nome.py; echo "EXIT=$?"
+        timeout 120 python3 tests/test_gate_status_by_name.py; echo "EXIT=$?"
 
       python3 /tmp/proof-vigia-solo/tests/test_no_background_build.py 2>&1 \\
         | grep -A5 ...

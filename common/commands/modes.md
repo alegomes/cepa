@@ -38,7 +38,7 @@ on purpose: if you could switch midway, the mode would go back to being a label.
 
 - The source is `common/hooks/_modes.py`, the same file `session-mode.py` reads
   to inject the exit condition on every turn. One table, two readers;
-  `tests/test_modos_fonte_unica.py` fails if the list of valid names in `cepa`
+  `tests/test_modes_single_source.py` fails if the list of valid names in `cepa`
   diverges from it.
 - There are 7 modes. The document's 8th, `deploy`, is out of this round by the
   owner's decision — it is the only one that depends on external infra

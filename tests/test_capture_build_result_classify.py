@@ -8,7 +8,7 @@ import sys
 import importlib.util
 from pathlib import Path
 
-# Pedido explícito de isolamento: tests/test_telemetria_isolada.py exige que todo
+# Pedido explícito de isolamento: tests/test_isolated_telemetry.py exige que todo
 # teste que cite um hook emissor isole a telemetria por conta própria.
 from _telemetria_isolada import isola
 
