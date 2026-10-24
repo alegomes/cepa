@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""cepa-until-digest — o resumo de um run do `cepa-until` que cabe numa sessão.
+"""cepa-until-digest — the summary of a `cepa-until` run that fits in one session.
 
-## Por que existe
+## Why it exists
 
-O `cepa-until` deixa dois arquivos por run: o registro (`<run>.jsonl`, poucos
-KB) e a saída bruta de cada subprocesso `claude` (`<run>.log`, stream-json).
-O `.log` do run de 2026-09-23 no WEGO tem 10,6 MB, cerca de 2,6 milhões de
-tokens (10.617.662 bytes ÷ ~4 bytes por token): não cabe em sessão nenhuma. Uma
-análise que lê o `.log` por grep lê o que o grep achou, e o que ele não achou
-some calado.
+`cepa-until` leaves two files per run: the ledger (`<run>.jsonl`, a few KB) and
+the raw output of each `claude` subprocess (`<run>.log`, stream-json). The
+`.log` of the 2026-09-23 run on WEGO is 10.6 MB, about 2.6 million tokens
+(10,617,662 bytes ÷ ~4 bytes per token): it fits in no session. An analysis
+that reads the `.log` by grep reads what grep found, and what it did not find
+silently disappears.
 
-Este script escolhe o que ler de forma MECÂNICA, e diz o que escolheu:
+This script picks what to read MECHANICALLY, and says what it picked:
 
-  - o registro inteiro (largada, fim, cada item, cada build);
-  - de cada rodada, o relatório final do `claude` (o `result` do stream-json),
-    as chamadas de agente por tipo, os erros de ferramenta e o custo;
-  - de cada rodada, os SINAIS DE PROCESSO: worktree aberta por quem não é o
-    proof-reviewer, e relato de gate de build contornado com o verde de outro
-    módulo (ver `SINAIS`, abaixo);
-  - de cada build completo do supervisor, a cauda da saída;
-  - o `status` e a `evidence` ATUAIS de cada item tocado, lidos do plano.
+  - the whole ledger (start, end, each item, each build);
+  - for each round, the final report of `claude` (the stream-json `result`),
+    the agent calls by type, the tool errors and the cost;
+  - for each round, the PROCESS SIGNALS: a worktree opened by anyone other
+    than the proof-reviewer, and a report of a build gate bypassed with the
+    green of another module (see `TEXT_SIGNALS`, below);
+  - for each full supervisor build, the tail of the output;
+  - the CURRENT `status` and `evidence` of each touched item, read from the plan.
 
-Quem interpreta é o `/common:until-review`. Este script não opina.
+Whoever interprets is `/common:until-review`. This script does not opine.
 
-Uso:
+Usage:
     cepa-until-digest .claude/programs/WEGO/until/2026-09-23-1826.jsonl
     cepa-until-digest <run>.jsonl --result-max 4000
 """
@@ -38,43 +38,43 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
 import _tui  # noqa: E402
-import _queuepath as qp  # noqa: E402  (a fila mora em dois layouts na transição)
+import _queuepath as qp  # noqa: E402  (the queue lives in two layouts during the transition)
 
 try:
     import yaml
 except ImportError:
     yaml = None
 
-RESULT_MAX_PADRAO = 3000
-ERROS_POR_RODADA = 5
-CAUDA_DO_VERIFY = 15
-SINAIS_POR_RODADA = 8
-TRECHO_DO_SINAL = 160
+DEFAULT_RESULT_MAX = 3000
+ERRORS_PER_ROUND = 5
+VERIFY_TAIL = 15
+SIGNALS_PER_ROUND = 8
+SIGNAL_EXCERPT = 160
 
-# ## SINAIS de processo
+# ## Process SIGNALS
 #
-# No run 2026-09-27-1632 do WEGO o `qa-engineer` abriu worktree descartável
-# (proibida nas regras da noite) no WEGO-2327 e no WEGO-2329, e no 2329
-# contornou o hook que barra commit com build vermelho apresentando o build
-# verde de OUTRO módulo. Nada disso apareceu neste resumo: o `qa-engineer` é
-# neto do orquestrador (engineering-lead → qa-engineer), e o stream-json do
-# `claude -p` só traz as chamadas de ferramenta dos filhos diretos. O que o
-# log TEM é o relatório que cada agente devolve a quem o chamou (o
-# `tool_result` da chamada `Agent`), e os arquivos que o filho escreve (o
-# RESULT.md do engineering-lead citou os dois desvios). É nesses textos que os
-# sinais abaixo são procurados, além das chamadas de ferramenta visíveis.
+# In the 2026-09-27-1632 WEGO run the `qa-engineer` opened a disposable
+# worktree (forbidden by the night rules) in WEGO-2327 and WEGO-2329, and in
+# 2329 it bypassed the hook that blocks a commit with a red build by presenting
+# the green build of ANOTHER module. None of that showed up in this summary: the
+# `qa-engineer` is a grandchild of the orchestrator (engineering-lead →
+# qa-engineer), and the stream-json of `claude -p` only carries the tool calls
+# of direct children. What the log HAS is the report each agent hands back to
+# whoever called it (the `tool_result` of the `Agent` call), and the files the
+# child writes (the engineering-lead's RESULT.md cited both deviations). The
+# signals below are searched for in those texts, besides the visible tool calls.
 #
-# Os sinais de TEXTO só são procurados no relatório devolvido por um agente e
-# no conteúdo que um agente escreve (Write/Edit): o resultado de qualquer
-# outra ferramenta traz a dica que o hook de path-lock imprime ("provar RED
-# revertendo código: worktree descartável FORA da raiz"), e a leitura de um
-# RESULT.md repete o que ele já disse — cada um deles virava um sinal falso.
+# TEXT signals are only searched for in the report returned by an agent and in
+# the content an agent writes (Write/Edit): the result of any other tool
+# carries the hint the path-lock hook prints ("prove RED by reverting code:
+# disposable worktree OUTSIDE the root"), and reading a RESULT.md repeats what
+# it already said — each of those became a false signal.
 #
-# Cada sinal sai com QUEM (o agente cuja chamada ou relatório o trouxe) e um
-# trecho literal. Este script não julga: worktree `--detach` do proof-reviewer
-# para perturbação é permitida (e vem anotada assim), e quem decide é o
-# /common:until-review.
-SINAIS_DE_TEXTO = [
+# Each signal comes out with WHO (the agent whose call or report brought it) and
+# a literal excerpt. This script does not judge: a `--detach` worktree of the
+# proof-reviewer for perturbation is allowed (and is annotated as such), and
+# /common:until-review decides.
+TEXT_SIGNALS = [
     ("worktree descartável relatada",
      re.compile(r"worktree\s+descart[aá]vel|c[oó]pia\s+descart[aá]vel"
                 r"|worktree\s+tempor[aá]ri[ao]", re.I)),
@@ -88,355 +88,356 @@ SINAIS_DE_TEXTO = [
 WORKTREE_ADD = re.compile(r"git\s+(?:-C\s+\S+\s+)?worktree\s+add\b")
 
 
-def _texto_do_conteudo(c):
+def _content_text(c):
     t = c.get("content")
     if isinstance(t, list):
         t = " ".join(str(x.get("text", "")) for x in t if isinstance(x, dict))
     return str(t or "")
 
 
-def _trecho(texto, m):
-    ini = max(0, m.start() - TRECHO_DO_SINAL // 2)
-    fim = min(len(texto), m.end() + TRECHO_DO_SINAL)
-    return " ".join(texto[ini:fim].split())
+def _excerpt(text, m):
+    start = max(0, m.start() - SIGNAL_EXCERPT // 2)
+    end = min(len(text), m.end() + SIGNAL_EXCERPT)
+    return " ".join(text[start:end].split())
 
 
-def sinais_no_texto(texto, quem, origem):
-    achados = []
-    for nome, rx in SINAIS_DE_TEXTO:
-        m = rx.search(texto)
+def signals_in_text(text, who, origin):
+    found = []
+    for name, rx in TEXT_SIGNALS:
+        m = rx.search(text)
         if m:
-            achados.append({"sinal": nome, "quem": quem, "origem": origem,
-                            "trecho": _trecho(texto, m)})
-    return achados
+            found.append({"signal": name, "who": who, "origin": origin,
+                          "excerpt": _excerpt(text, m)})
+    return found
 
 
-def le_jsonl(caminho):
-    eventos = []
-    for linha in Path(caminho).read_text(encoding="utf-8",
-                                         errors="replace").splitlines():
+def read_jsonl(path):
+    events = []
+    for line in Path(path).read_text(encoding="utf-8",
+                                     errors="replace").splitlines():
         try:
-            eventos.append(json.loads(linha))
+            events.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-    return eventos
+    return events
 
 
-def segmentos_do_log(caminho):
-    """[(cabeçalho, [linhas])], um por `===== <quando> · <comando>` que o
-    supervisor escreve antes de cada subprocesso e de cada build."""
-    segs, atual = [], None
+def log_segments(path):
+    """[(header, [lines])], one per `===== <when> · <command>` that the
+    supervisor writes before each subprocess and each build."""
+    segs, current = [], None
     try:
-        f = open(caminho, encoding="utf-8", errors="replace")
+        f = open(path, encoding="utf-8", errors="replace")
     except OSError:
         return segs
     with f:
-        for linha in f:
-            if linha.startswith("===== "):
-                atual = (linha[6:].strip(), [])
-                segs.append(atual)
-            elif atual is not None:
-                atual[1].append(linha)
+        for line in f:
+            if line.startswith("===== "):
+                current = (line[6:].strip(), [])
+                segs.append(current)
+            elif current is not None:
+                current[1].append(line)
     return segs
 
 
-def resume_rodada(linhas, result_max):
-    """O que importa de UM subprocesso `claude` em stream-json."""
-    agentes, erros, resultado, sinais = Counter(), [], None, []
-    # id da chamada `Agent` → tipo do agente chamado: é o que diz DE QUEM é
-    # o relatório devolvido (tool_result) e de quem é cada chamada de
-    # ferramenta (parent_tool_use_id).
-    agente_por_chamada = {}
+def summarize_round(lines, result_max):
+    """What matters from ONE `claude` subprocess in stream-json."""
+    agents, errors, result, signals = Counter(), [], None, []
+    # id of the `Agent` call → type of the agent called: it says WHOSE the
+    # returned report (tool_result) is and whose each tool call is
+    # (parent_tool_use_id).
+    agent_by_call = {}
 
-    def autor(e):
-        pai = e.get("parent_tool_use_id")
-        return agente_por_chamada.get(pai, "orquestrador" if not pai
-                                      else f"agente {pai[:12]}")
+    def author(e):
+        parent = e.get("parent_tool_use_id")
+        return agent_by_call.get(parent, "orquestrador" if not parent
+                                 else f"agente {parent[:12]}")
 
-    for linha in linhas:
+    for line in lines:
         try:
-            e = json.loads(linha)
+            e = json.loads(line)
         except (json.JSONDecodeError, ValueError):
             continue
-        tipo = e.get("type")
-        if tipo == "assistant":
+        kind = e.get("type")
+        if kind == "assistant":
             for c in (e.get("message") or {}).get("content") or []:
                 if not isinstance(c, dict) or c.get("type") != "tool_use":
                     continue
-                nome, inp = c.get("name"), c.get("input") or {}
-                if nome in ("Agent", "Task"):
-                    alvo = inp.get("subagent_type") or "?"
-                    agentes[alvo] += 1
+                name, inp = c.get("name"), c.get("input") or {}
+                if name in ("Agent", "Task"):
+                    target = inp.get("subagent_type") or "?"
+                    agents[target] += 1
                     if c.get("id"):
-                        agente_por_chamada[c["id"]] = alvo
+                        agent_by_call[c["id"]] = target
                     if inp.get("isolation") == "worktree":
-                        sinais.append({"sinal": "worktree aberta (Agent com "
-                                                "isolation=worktree)",
-                                       "quem": autor(e),
-                                       "origem": f"chamada a {alvo}",
-                                       "trecho": ""})
-                elif nome == "EnterWorktree":
-                    sinais.append({"sinal": "worktree aberta (EnterWorktree)",
-                                   "quem": autor(e), "origem": "ferramenta",
-                                   "trecho": json.dumps(inp,
-                                                        ensure_ascii=False)[:TRECHO_DO_SINAL]})
-                elif nome == "Bash":
+                        signals.append({"signal": "worktree aberta (Agent com "
+                                                  "isolation=worktree)",
+                                        "who": author(e),
+                                        "origin": f"chamada a {target}",
+                                        "excerpt": ""})
+                elif name == "EnterWorktree":
+                    signals.append({"signal": "worktree aberta (EnterWorktree)",
+                                    "who": author(e), "origin": "ferramenta",
+                                    "excerpt": json.dumps(inp,
+                                                          ensure_ascii=False)[:SIGNAL_EXCERPT]})
+                elif name == "Bash":
                     cmd = str(inp.get("command") or "")
                     m = WORKTREE_ADD.search(cmd)
                     if m:
                         flag = ("--detach" if "--detach" in cmd
                                 else "-b" if re.search(r"\s-b\s", cmd)
                                 else "sem --detach")
-                        sinais.append({"sinal": f"worktree aberta ({flag})",
-                                       "quem": autor(e), "origem": "Bash",
-                                       "trecho": _trecho(cmd, m)})
-                elif nome in ("Write", "Edit", "MultiEdit"):
-                    texto = str(inp.get("content") or inp.get("new_string")
-                                or "")
-                    alvo = str(inp.get("file_path") or "")
-                    sinais.extend(sinais_no_texto(
-                        texto, autor(e), f"{nome} em {Path(alvo).name}"))
-        elif tipo == "user":
+                        signals.append({"signal": f"worktree aberta ({flag})",
+                                        "who": author(e), "origin": "Bash",
+                                        "excerpt": _excerpt(cmd, m)})
+                elif name in ("Write", "Edit", "MultiEdit"):
+                    text = str(inp.get("content") or inp.get("new_string")
+                               or "")
+                    target = str(inp.get("file_path") or "")
+                    signals.extend(signals_in_text(
+                        text, author(e), f"{name} em {Path(target).name}"))
+        elif kind == "user":
             for c in (e.get("message") or {}).get("content") or []:
                 if not isinstance(c, dict) or c.get("type") != "tool_result":
                     continue
-                texto = _texto_do_conteudo(c)
+                text = _content_text(c)
                 if c.get("is_error"):
-                    erros.append(" ".join(texto.split())[:240])
-                devolvido_por = agente_por_chamada.get(c.get("tool_use_id"))
-                if devolvido_por:
-                    sinais.extend(sinais_no_texto(texto, devolvido_por,
-                                                  "relatório devolvido"))
-        elif tipo == "result":
-            resultado = e
-    vistos, unicos = set(), []
-    for sn in sinais:
-        chave = (sn["sinal"], sn["quem"], sn["trecho"][:80])
-        if chave not in vistos:
-            vistos.add(chave)
-            unicos.append(sn)
-    # a worktree do proof-reviewer é a permitida: vai por último, para o teto
-    # de SINAIS_POR_RODADA não esconder a que não é
-    sinais = sorted(unicos, key=lambda sn: sn["sinal"].startswith("worktree")
-                    and "proof-reviewer" in sn["quem"])
-    r = resultado or {}
-    texto = r.get("result") if isinstance(r.get("result"), str) else ""
-    cortado = len(texto) > result_max
+                    errors.append(" ".join(text.split())[:240])
+                returned_by = agent_by_call.get(c.get("tool_use_id"))
+                if returned_by:
+                    signals.extend(signals_in_text(text, returned_by,
+                                                   "relatório devolvido"))
+        elif kind == "result":
+            result = e
+    seen, unique = set(), []
+    for sn in signals:
+        key = (sn["signal"], sn["who"], sn["excerpt"][:80])
+        if key not in seen:
+            seen.add(key)
+            unique.append(sn)
+    # the proof-reviewer's worktree is the allowed one: it goes last, so the
+    # SIGNALS_PER_ROUND cap does not hide the one that is not
+    signals = sorted(unique, key=lambda sn: sn["signal"].startswith("worktree")
+                     and "proof-reviewer" in sn["who"])
+    r = result or {}
+    text = r.get("result") if isinstance(r.get("result"), str) else ""
+    truncated = len(text) > result_max
     return {
-        "agentes": dict(agentes),
-        "erros": erros,
-        "custo": r.get("total_cost_usd"),
-        "turnos": r.get("num_turns"),
+        "agents": dict(agents),
+        "errors": errors,
+        "cost": r.get("total_cost_usd"),
+        "turns": r.get("num_turns"),
         "is_error": r.get("is_error"),
         "terminal": r.get("terminal_reason") or r.get("subtype"),
-        "relatorio": texto[:result_max] + ("\n[… cortado]" if cortado else ""),
-        "tem_result": resultado is not None,
-        "sinais": sinais,
+        "report": text[:result_max] + ("\n[… cortado]" if truncated else ""),
+        "has_result": result is not None,
+        "signals": signals,
     }
 
 
-def itens_do_plano(caminho_plano):
-    if yaml is None or not caminho_plano.is_file():
+def plan_items(plan_path):
+    if yaml is None or not plan_path.is_file():
         return {}
     try:
-        plano = yaml.safe_load(caminho_plano.read_text(encoding="utf-8")) or {}
+        plan = yaml.safe_load(plan_path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
-    return {str(it.get("id")): it for it in plano.get("items") or []
+    return {str(it.get("id")): it for it in plan.get("items") or []
             if isinstance(it, dict)}
 
 
-def propostas_de_dispensa(caminho_plano, ledger=None):
-    """Dispensas que o agente PROPÔS e o dono ainda não respondeu
-    (`.claude/waivers/*.yaml` com `status: proposta`).
+def proposed_waivers(plan_path, ledger=None):
+    """Waivers the agent PROPOSED and the owner has not answered yet
+    (`.claude/waivers/*.yaml` with `status: proposta`).
 
-    Procura em duas pastas: a do clone principal (ao lado da fila) e a da árvore
-    do registro (`<raiz>/.claude/programs/<fila>/until/<run>.jsonl`). O run grava
-    a proposta na árvore onde roda, que numa worktree do `cepa-until` fica fora
-    do clone principal, e nos repos hospedeiros `.claude/` é ignorado pelo git,
-    então ela nunca chega lá por commit. A união não repete o mesmo arquivo.
+    Looks in two folders: the main clone's (next to the queue) and the ledger
+    tree's (`<root>/.claude/programs/<queue>/until/<run>.jsonl`). The run
+    writes the proposal in the tree where it runs, which in a `cepa-until`
+    worktree is outside the main clone, and in host repos `.claude/` is ignored
+    by git, so it never gets there by commit. The union does not repeat the
+    same file.
 
-    Fail-safe: pasta ausente ou arquivo ilegível não listam nada e não quebram
-    o resumo."""
+    Fail-safe: a missing folder or an unreadable file lists nothing and does
+    not break the summary."""
     if yaml is None:
         return []
-    pastas = []
+    folders = []
     try:
-        pastas.append(Path(caminho_plano).parents[3] / ".claude" / "waivers")
+        folders.append(Path(plan_path).parents[3] / ".claude" / "waivers")
     except IndexError:
         pass
     if ledger is not None:
         try:
-            pastas.append(Path(ledger).resolve().parents[4] / ".claude" / "waivers")
+            folders.append(Path(ledger).resolve().parents[4] / ".claude" / "waivers")
         except IndexError:
             pass
-    achadas, vistos = [], set()
-    for pasta in pastas:
+    found, seen = [], set()
+    for folder in folders:
         try:
-            arquivos = sorted(pasta.glob("*.yaml"))
+            files = sorted(folder.glob("*.yaml"))
         except OSError:
             continue
-        for f in arquivos:
+        for f in files:
             try:
-                chave = f.resolve()
-                if chave in vistos:
+                key = f.resolve()
+                if key in seen:
                     continue
                 d = yaml.safe_load(f.read_text(encoding="utf-8"))
             except (OSError, yaml.YAMLError):
                 continue
-            vistos.add(chave)
+            seen.add(key)
             if isinstance(d, dict) and d.get("status") == "proposta":
-                achadas.append(d)
-    return achadas
+                found.append(d)
+    return found
 
 
-def _linha_de_proposta(d):
+def _proposal_line(d):
     return (f"{d.get('motivo')} em {d.get('escopo')} — pergunta: "
             f"{' '.join(str(d.get('pergunta') or '(sem pergunta gravada)').split())}")
 
 
-def plano_da_fila(ledger, fila):
-    """O arquivo da fila (queue.yaml, ou plan.yaml no layout antigo) de verdade: o do clone PRINCIPAL, não o da árvore de onde o
-    `cepa-until` largou.
+def queue_plan_path(ledger, queue):
+    """The real queue file (queue.yaml, or plan.yaml in the old layout): the
+    MAIN clone's, not that of the tree `cepa-until` was launched from.
 
-    O registro mora em `<árvore>/.claude/queues/<fila>/until/` (ou
-    `.claude/programs/...`). Quando essa árvore é uma worktree ligada, o arquivo
-    da fila ao lado dele é uma cópia que
-    ninguém atualiza: quem grava a fila é o `cepa-plan`, sempre no clone
-    principal (o pai de `git rev-parse --git-common-dir`, a mesma regra do
-    `raiz_principal` dele). Em 2026-09-26 este resumo leu a cópia e mostrou 21
-    itens `pending` que já estavam fechados. Fora de um repo git, sobra a
-    vizinha do registro.
+    The ledger lives in `<tree>/.claude/queues/<queue>/until/` (or
+    `.claude/programs/...`). When that tree is a linked worktree, the queue file
+    next to it is a copy nobody updates: whoever writes the queue is
+    `cepa-plan`, always in the main clone (the parent of
+    `git rev-parse --git-common-dir`, the same rule as its `main_root`). On
+    2026-09-26 this summary read the copy and showed 21 `pending` items that
+    were already closed. Outside a git repo, the ledger's neighbor is what is
+    left.
     """
-    pasta = ledger.parent.parent
-    vizinho = pasta / qp.NEW_FILE
-    if not vizinho.exists() and ((pasta / qp.LEGACY_FILE).exists()
-                                 or pasta.parent.name == "programs"):
-        vizinho = pasta / qp.LEGACY_FILE
+    folder = ledger.parent.parent
+    neighbor = folder / qp.NEW_FILE
+    if not neighbor.exists() and ((folder / qp.LEGACY_FILE).exists()
+                                  or folder.parent.name == "programs"):
+        neighbor = folder / qp.LEGACY_FILE
     r = subprocess.run(["git", "-C", str(ledger.parent), "rev-parse",
                         "--git-common-dir"], capture_output=True, text=True)
     if r.returncode != 0:
-        return vizinho
-    comum = Path(r.stdout.strip())
-    if not comum.is_absolute():
-        comum = (ledger.parent / comum).resolve()
-    raiz = comum.parent if comum.name == ".git" else comum
-    return qp.queue_file(raiz, fila or ledger.parent.parent.name)
+        return neighbor
+    common = Path(r.stdout.strip())
+    if not common.is_absolute():
+        common = (ledger.parent / common).resolve()
+    root = common.parent if common.name == ".git" else common
+    return qp.queue_file(root, queue or ledger.parent.parent.name)
 
 
-def monta(ledger, result_max):
+def build_digest(ledger, result_max):
     ledger = Path(ledger).resolve()
     log = ledger.with_suffix(".log")
-    eventos = le_jsonl(ledger)
-    inicio = next((e for e in eventos if e.get("evento") == "run_start"), {})
-    fim = next((e for e in eventos if e.get("evento") == "run_end"), {})
-    caminho_plano = plano_da_fila(ledger, inicio.get("fila"))
-    plano = itens_do_plano(caminho_plano)
+    events = read_jsonl(ledger)
+    start = next((e for e in events if e.get("evento") == "run_start"), {})
+    end = next((e for e in events if e.get("evento") == "run_end"), {})
+    plan_path = queue_plan_path(ledger, start.get("fila"))
+    plan = plan_items(plan_path)
 
-    rodadas = [s for s in segmentos_do_log(log) if " · verify · " not in s[0]
-               and "/common:until-review" not in s[0]]
-    builds = [s for s in segmentos_do_log(log) if " · verify · " in s[0]]
-    starts = [e for e in eventos if e.get("evento") == "item_start"]
-    ends = [e for e in eventos if e.get("evento") == "item_end"]
+    rounds = [s for s in log_segments(log) if " · verify · " not in s[0]
+              and "/common:until-review" not in s[0]]
+    builds = [s for s in log_segments(log) if " · verify · " in s[0]]
+    starts = [e for e in events if e.get("evento") == "item_start"]
+    ends = [e for e in events if e.get("evento") == "item_end"]
 
     out = [f"# Resumo do run {ledger.stem}", ""]
     out.append(f"- registro: `{ledger}`")
     out.append(f"- saída bruta: `{log}` "
                f"({log.stat().st_size if log.exists() else 0} bytes; este "
                "resumo lê dela só o que está listado abaixo)")
-    out.append(f"- fila: `{inicio.get('fila')}` · branch: `{inicio.get('branch')}`"
-               f" · base: `{(inicio.get('base') or '')[:10]}`"
-               f" · build: `{inicio.get('verify')}`")
-    out.append(f"- largada: {inicio.get('quando')} · prazo: {inicio.get('prazo')}"
-               f" · fim: {fim.get('quando')} · motivo: `{fim.get('motivo')}`")
-    out.append(f"- detalhe do fim: {fim.get('detalhe')}")
-    contagens = {k: v for k, v in fim.items()
-                 if isinstance(v, int) and k not in ("max_falhas",)}
-    out.append(f"- contagens: {json.dumps(contagens, ensure_ascii=False)}")
-    if len(rodadas) != len(starts):
+    out.append(f"- fila: `{start.get('fila')}` · branch: `{start.get('branch')}`"
+               f" · base: `{(start.get('base') or '')[:10]}`"
+               f" · build: `{start.get('verify')}`")
+    out.append(f"- largada: {start.get('quando')} · prazo: {start.get('prazo')}"
+               f" · fim: {end.get('quando')} · motivo: `{end.get('motivo')}`")
+    out.append(f"- detalhe do fim: {end.get('detalhe')}")
+    counts = {k: v for k, v in end.items()
+              if isinstance(v, int) and k not in ("max_falhas",)}
+    out.append(f"- contagens: {json.dumps(counts, ensure_ascii=False)}")
+    if len(rounds) != len(starts):
         out.append(f"- ATENÇÃO: {len(starts)} item_start no registro e "
-                   f"{len(rodadas)} rodadas no `.log` — o pareamento abaixo "
+                   f"{len(rounds)} rodadas no `.log` — o pareamento abaixo "
                    "pode estar deslocado")
     out.append("")
 
     out.append("## Eventos do registro fora das rodadas")
-    for e in eventos:
+    for e in events:
         if e.get("evento") not in ("run_start", "run_end", "item_start",
                                    "item_end"):
             out.append(f"- {json.dumps(e, ensure_ascii=False)}")
     out.append("")
 
-    custo_total = 0.0
+    total_cost = 0.0
     out.append("## Rodadas")
     for i, st in enumerate(starts):
         ident = st.get("id")
         en = ends[i] if i < len(ends) else {}
-        r = resume_rodada(rodadas[i][1], result_max) if i < len(rodadas) else None
-        custo = (r or {}).get("custo")
-        if isinstance(custo, (int, float)):
-            custo_total += custo
+        r = summarize_round(rounds[i][1], result_max) if i < len(rounds) else None
+        cost = (r or {}).get("cost")
+        if isinstance(cost, (int, float)):
+            total_cost += cost
         out.append(f"### {i + 1}. {ident} — {st.get('title')}")
         out.append(f"- desfecho no registro: status `{en.get('status')}`, "
                    f"{en.get('segundos')} s, exit {en.get('exit_code')}, "
                    f"commits na branch da noite: {en.get('commits')}, "
                    f"tentativa {en.get('tentativa')}")
         if r:
-            out.append(f"- custo US$ {custo} · {r['turnos']} turnos · "
+            out.append(f"- custo US$ {cost} · {r['turns']} turnos · "
                        f"fim `{r['terminal']}`"
                        + (" · is_error" if r["is_error"] else ""))
-            if r["agentes"]:
+            if r["agents"]:
                 out.append("- agentes chamados: "
                            + ", ".join(f"{k} ×{v}" for k, v in
-                                       sorted(r["agentes"].items())))
+                                       sorted(r["agents"].items())))
             else:
                 out.append("- agentes chamados: nenhum")
-            if r["erros"]:
-                out.append(f"- erros de ferramenta: {len(r['erros'])}; os "
-                           f"primeiros {min(len(r['erros']), ERROS_POR_RODADA)}:")
-                for erro in r["erros"][:ERROS_POR_RODADA]:
-                    out.append(f"  - {erro}")
-            if r["sinais"]:
-                out.append(f"- sinais de processo: {len(r['sinais'])}"
-                           + (f"; os primeiros {SINAIS_POR_RODADA}:"
-                              if len(r["sinais"]) > SINAIS_POR_RODADA else ":"))
-                for sn in r["sinais"][:SINAIS_POR_RODADA]:
-                    prova = (sn["sinal"].startswith("worktree")
-                             and "proof-reviewer" in sn["quem"])
-                    out.append(f"  - {sn['sinal']} · quem: {sn['quem']}"
+            if r["errors"]:
+                out.append(f"- erros de ferramenta: {len(r['errors'])}; os "
+                           f"primeiros {min(len(r['errors']), ERRORS_PER_ROUND)}:")
+                for error in r["errors"][:ERRORS_PER_ROUND]:
+                    out.append(f"  - {error}")
+            if r["signals"]:
+                out.append(f"- sinais de processo: {len(r['signals'])}"
+                           + (f"; os primeiros {SIGNALS_PER_ROUND}:"
+                              if len(r["signals"]) > SIGNALS_PER_ROUND else ":"))
+                for sn in r["signals"][:SIGNALS_PER_ROUND]:
+                    proof = (sn["signal"].startswith("worktree")
+                             and "proof-reviewer" in sn["who"])
+                    out.append(f"  - {sn['signal']} · quem: {sn['who']}"
                                + (" (prova por perturbação: permitida na noite)"
-                                  if prova else "")
-                               + f" · onde: {sn['origem']}"
-                               + (f" · «{sn['trecho']}»" if sn["trecho"] else ""))
+                                  if proof else "")
+                               + f" · onde: {sn['origin']}"
+                               + (f" · «{sn['excerpt']}»" if sn["excerpt"] else ""))
             else:
                 out.append("- sinais de processo: nenhum (nenhuma worktree "
                            "aberta, nenhum relato de gate contornado)")
-            if not r["tem_result"]:
+            if not r["has_result"]:
                 out.append("- SEM `result` final: o subprocesso morreu antes de "
                            "relatar")
             out.append("")
             out.append("Relatório final da rodada:")
             out.append("")
-            out.append("> " + (r["relatorio"] or "(vazio)").replace("\n", "\n> "))
+            out.append("> " + (r["report"] or "(vazio)").replace("\n", "\n> "))
         out.append("")
 
     if builds:
         out.append("## Builds completos do supervisor")
-        for cab, linhas in builds:
-            out.append(f"### {cab}")
+        for header, lines in builds:
+            out.append(f"### {header}")
             out.append("```")
-            out.extend(l.rstrip() for l in linhas[-CAUDA_DO_VERIFY:])
+            out.extend(l.rstrip() for l in lines[-VERIFY_TAIL:])
             out.append("```")
         out.append("")
 
-    tocados = []
+    touched = []
     for st in starts:
-        if st.get("id") not in tocados:
-            tocados.append(st.get("id"))
+        if st.get("id") not in touched:
+            touched.append(st.get("id"))
     out.append("## Estado ATUAL na fila dos itens tocados")
-    out.append(f"(lido agora de `{caminho_plano}`, não do momento do run)")
-    propostas = propostas_de_dispensa(caminho_plano, ledger)
-    for ident in tocados:
-        it = plano.get(str(ident))
+    out.append(f"(lido agora de `{plan_path}`, não do momento do run)")
+    proposals = proposed_waivers(plan_path, ledger)
+    for ident in touched:
+        it = plan.get(str(ident))
         if not it:
             out.append(f"- {ident}: não está mais na fila")
             continue
@@ -447,35 +448,35 @@ def monta(ledger, result_max):
                       if it.get("human_pending") else ""))
         if it.get("evidence"):
             out.append(f"  - evidence: {' '.join(str(it['evidence']).split())}")
-        for d in propostas:
+        for d in proposals:
             if str(d.get("item")) == str(ident):
                 out.append("  - dispensa proposta pelo agente: "
-                           + _linha_de_proposta(d))
+                           + _proposal_line(d))
     out.append("")
     out.append("## Dispensas propostas pelo agente, sem resposta do dono")
-    if propostas:
-        for d in propostas:
-            out.append(f"- {_linha_de_proposta(d)} · item: "
+    if proposals:
+        for d in proposals:
+            out.append(f"- {_proposal_line(d)} · item: "
                        f"{d.get('item') or 'sem item'}")
     else:
         out.append("nenhuma")
     out.append("")
-    out.append(f"Custo somado das rodadas: US$ {custo_total:.2f} (soma do "
+    out.append(f"Custo somado das rodadas: US$ {total_cost:.2f} (soma do "
                "`total_cost_usd` de cada `result`).")
     return "\n".join(out) + "\n"
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="resumo de um run do cepa-until")
-    ap.add_argument("ledger", help="o <run>.jsonl do cepa-until")
-    ap.add_argument("--result-max", type=int, default=RESULT_MAX_PADRAO,
-                    help=f"caracteres do relatório final de cada rodada "
-                         f"(default {RESULT_MAX_PADRAO})")
+    ap = argparse.ArgumentParser(description="summary of a cepa-until run")
+    ap.add_argument("ledger", help="the cepa-until <run>.jsonl")
+    ap.add_argument("--result-max", type=int, default=DEFAULT_RESULT_MAX,
+                    help=f"characters of each round's final report "
+                         f"(default {DEFAULT_RESULT_MAX})")
     a = ap.parse_args(argv)
     if not Path(a.ledger).is_file():
-        print(f"cepa-until-digest: {a.ledger} não existe", file=sys.stderr)
+        print(f"cepa-until-digest: {a.ledger} does not exist", file=sys.stderr)
         return 2
-    sys.stdout.write(monta(a.ledger, a.result_max))
+    sys.stdout.write(build_digest(a.ledger, a.result_max))
     return 0
 
 
