@@ -1,0 +1,39 @@
+schema_version: 2
+card: until-processo-nao-sai
+verdict: proven
+reviewed_at: 2026-10-24T00:00:00-03:00
+base_commit: 09eecba
+head_commit: b07485e
+issue_type: Bug
+scope:
+  changed_classes:
+    - { class: "common/bin/cepa-until (read_line, decide, close_with_owner, main)", module: common, external_observable: true, substituted_by_double: null }
+  base_commit_resolved: true
+levels:
+  l3_load_bearing:
+    technique: perturbation
+    pit:
+      status: n/a
+      results:
+        - "Python CLI repo, no PIT"
+    perturbation:
+      status: pass
+      results:
+        - "break: remove wait=ANSWER_WAIT_SEC from close_with_owner(...) in main() -> pty test test_run_on_terminal_without_answer_exits_after_the_wait hangs, killed by timeout 90 after 1:30.02 (RED)"
+        - "same perturbation: test_run_on_terminal_ends_asking_and_applies stays green (3 ok, FAILURES []) -> change is additive"
+        - "unperturbed HEAD: python3 tests/test_cepa_until_decide.py -> rc=0, 'tudo verde', pty test 4 ok, unit test_read_line_raises_when_nobody_types ok"
+      run: "cd throwaway worktree; sed removes wait arg; timeout 90 python3 proof-runone.py <wt> test_run_on_terminal_without_answer_exits_after_the_wait -> 1:30.02 elapsed, no result (hang)"
+  l2_coverage:
+    status: pass
+    uncovered_lines: []
+    run: "changed path main() -> close_with_owner -> decide -> read_line(wait) executed end to end by the pty test running the real common/bin/cepa-until (no double for the changed code); NoAnswer branch printed the decide command (asserted)"
+  l4_adversarial_input:
+    status: n/a
+    reason: "Diff adds only a timeout on stdin read at end of run plus an env var parsed as float; opens no new external input surface (no api-rest module, no parsing of outside data)."
+    findings: []
+  bugfix_regression_red_at_base:
+    status: pass
+    run: "base 09eecba common/bin/cepa-until + HEAD test: timeout 90 python3 proof-runone.py <wt> test_run_on_terminal_without_answer_exits_after_the_wait -> 1:30.02 elapsed, no output, killed by timeout (process hangs in input(), the reported bug); HEAD -> passes in ~2s wait"
+no_tty_path:
+  run: "HEAD full file run: test_run_without_terminal_lists_the_pending_and_the_command 3 ok"
+routing_reason: "Regression red at base (hang), fix load-bearing at the real binary on a pty (removing the wait argument hangs again), additive (existing tty test green), no-tty path green."

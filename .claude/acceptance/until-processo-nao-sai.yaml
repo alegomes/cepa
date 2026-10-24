@@ -1,0 +1,39 @@
+key: until-processo-nao-sai
+status: complete
+criteria:
+  - id: AC1
+    text: run em terminal sem resposta sai sozinho (exit 0) após espera limitada
+    altitude: cli
+    surface: processo real cepa-until em pty, sem entrada, CEPA_UNTIL_ESPERA_RESPOSTA=2
+    test: tests/test_cepa_until_decide.py::test_run_on_terminal_without_answer_exits_after_the_wait (+ test_read_line_raises_when_nobody_types)
+    layer: processo real em pty
+    evidence: verified
+    run: "python3 -c \"...t.test_run_on_terminal_without_answer_exits_after_the_wait()\" -> ok 'o run sai 0 sem resposta'; FAILURES []. 4 checks executados (N>0)"
+    status: complete
+  - id: AC2
+    text: ao sair, imprime cepa-until decide <fila>/<run> e nada é aplicado
+    altitude: cli
+    surface: saída do processo + estado da fila
+    test: tests/test_cepa_until_decide.py::test_run_on_terminal_without_answer_exits_after_the_wait
+    layer: processo real em pty
+    evidence: verified
+    run: "ok 'imprime o comando para responder depois'; ok 'nada foi aplicado' (a1 segue blocked); FAILURES []"
+    status: complete
+  - id: AC3
+    text: com dono presente, perguntas e respostas aplicadas como antes
+    altitude: cli
+    surface: run em pty com resposta digitada
+    test: tests/test_cepa_until_decide.py::test_run_on_terminal_ends_asking_and_applies
+    layer: processo real em pty
+    evidence: verified
+    run: "ok 'o run sai 0'; ok 'a resposta volta o item para a fila'; FAILURES []"
+    status: complete
+  - id: AC4
+    text: sem terminal, comportamento inalterado (lista pendências + comando)
+    altitude: cli
+    surface: run/decide sem tty
+    test: test_run_without_terminal_lists_the_pending_and_the_command; test_decidir_as_process_with_and_without_terminal
+    layer: processo real
+    evidence: verified
+    run: "ok 'o fim lista o que espera o dono'; ok '...e o comando para responder'; ok 'sem terminal, decidir sai 0 e lista'; FAILURES [] em ambos"
+    status: complete
