@@ -36,13 +36,13 @@ def _load_lib():
 
 
 def cmd_list(args, lib):
-    cfg = lib.carregar(args.repo)
+    cfg = lib.load(args.repo)
     if args.json:
         print(json.dumps(cfg, ensure_ascii=False, indent=2))
         return 0
     print(f"autonomy.yaml (versao {cfg['versao']}) — fontes: {', '.join(cfg['fontes']) or 'nenhuma'}")
-    for band, label in ((lib.FAIXA_AUTOMATICA, "executa e reporta (reversível)"),
-                          (lib.FAIXA_PERGUNTA, "sempre pergunta (irreversível ou de fora)")):
+    for band, label in ((lib.BAND_AUTOMATIC, "executa e reporta (reversível)"),
+                          (lib.BAND_ASK, "sempre pergunta (irreversível ou de fora)")):
         print(f"\n{label}:")
         for item in cfg[band]:
             detect = ", ".join(f"{k}={v!r}" for k, v in item["detect"].items())
@@ -56,10 +56,10 @@ def cmd_list(args, lib):
 
 
 def cmd_classify(args, lib):
-    cfg = lib.carregar(args.repo)
+    cfg = lib.load(args.repo)
     if args.id:
-        band = lib.faixa_de(cfg, args.id)
-        res = {"faixa": band or lib.FAIXA_PERGUNTA, "id": args.id if band else None,
+        band = lib.band_of(cfg, args.id)
+        res = {"faixa": band or lib.BAND_ASK, "id": args.id if band else None,
                "listado": band is not None, "precondicao": None, "condicoes": {}}
         if band:
             item = next(i for i in cfg[band] if i["id"] == args.id)
@@ -72,7 +72,7 @@ def cmd_classify(args, lib):
                 return 2
             k, v = c.split("=", 1)
             conds[k.strip()] = v.strip()
-        res = lib.casar(cfg, bash=args.bash, mcp=args.mcp, path=args.path, op=args.op,
+        res = lib.match(cfg, bash=args.bash, mcp=args.mcp, path=args.path, op=args.op,
                         slash=args.slash, cond=conds)
     res["avisos"] = cfg["avisos"]
     if args.json:
@@ -81,7 +81,7 @@ def cmd_classify(args, lib):
     if not res["listado"]:
         print(f"não listado → {cfg['default_nao_listado']}: pergunte, e termine a pergunta "
               f"propondo o id a acrescentar em common/autonomy.yaml")
-    elif res["faixa"] == lib.FAIXA_AUTOMATICA:
+    elif res["faixa"] == lib.BAND_AUTOMATIC:
         print(f"executa e reporta ({res['id']}): faça e reporte como linha de informação, não como pergunta")
         if res.get("precondicao"):
             print(f"  SÓ depois de conferir a precondição: {res['precondicao']} — "

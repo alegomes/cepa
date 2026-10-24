@@ -1,30 +1,34 @@
 #!/usr/bin/env python3
-"""Faixas de autonomia: leitura de `common/autonomy.yaml` e casamento de ações.
+"""Autonomy bands: reads `common/autonomy.yaml` and matches actions to them.
 
-Por que existe: "pergunto ou faço?" era julgamento do agente a cada turno, e o
-viés medido foi perguntar demais — na sessão WEGO de 2026-08-03 a 08-10, ~10
-das ~20 interrupções eram mecânica reversível que o relatório recomendava e o
-dono só carimbava ("Recomendo sim" → "sim"). A fronteira sai do julgamento e
-vira este arquivo versionado, lido por código (BACKLOG § "Atrito de decisão";
-design em docs/internals/gauntlet-pilot-atrito-decisao.md, Fase 1).
+Why it exists: "do I ask or just do it?" used to be agent judgment on every
+turn, and the measured bias was asking too much. In the WEGO session of
+2026-08-03 to 08-10, ~10 of the ~20 interruptions were reversible mechanics
+that the report recommended and the owner just rubber-stamped ("Recomendo
+sim" -> "sim"). The boundary moves out of judgment and into this versioned
+file, read by code (BACKLOG section "Atrito de decisão"; design in
+docs/internals/gauntlet-pilot-atrito-decisao.md, Phase 1).
 
-O que este módulo faz (Fase 1):
-  - `carregar(repo)`: lê o YAML do plugin, aplica o override do repo
-    (`.claude/autonomy.yaml`, que só pode ENDURECER — mover ação para
-    `sempre_pergunta` ou acrescentar ação lá) e valida item a item. Item
-    malformado é DESCARTADO com aviso, nunca aceito pela metade: um item sem
-    `detect:` na faixa automática seria permissão sem impressão digital.
-  - `casar(cfg, bash=..., mcp=..., path=..., slash=...)`: encontra a ação que
-    o tool-call realiza. Quando o mesmo call casa as duas faixas,
-    `sempre_pergunta` vence — o lado seguro.
-  - `faixa_de(cfg, id)`: a faixa de um id, para quem já sabe o nome da ação.
+What this module does (Phase 1):
+  - `load(repo)`: reads the plugin YAML, applies the repo override
+    (`.claude/autonomy.yaml`, which can only HARDEN: move an action to
+    `sempre_pergunta` or add an action there) and validates item by item. A
+    malformed item is DISCARDED with a warning, never half-accepted: an item
+    without `detect:` in the automatic band would be permission without a
+    fingerprint.
+  - `match(cfg, bash=..., mcp=..., path=..., slash=...)`: finds the action the
+    tool call performs. When the same call matches both bands,
+    `sempre_pergunta` wins, the safe side.
+  - `band_of(cfg, id)`: the band of an id, for callers who already know the
+    action name.
 
-O que ele NÃO faz (Fase 2+): rodar `precondicao`, resolver `destino_terminal`
-pelo status_map, bloquear tool-call. Isso é do hook `autonomy-gate.py`. Aqui as
-condições que não dão para conferir voltam listadas em `condicoes`, e quem
-chama decide o que fazer com elas — na Fase 1, o `/board-flow:decide`.
+What it does NOT do (Phase 2+): run `precondicao`, resolve `destino_terminal`
+through the status_map, block a tool call. That belongs to the
+`autonomy-gate.py` hook. Here, the conditions that cannot be checked come back
+listed in `condicoes`, and the caller decides what to do with them; in
+Phase 1, that caller is `/board-flow:decide`.
 
-Consumidores: `common/bin/cepa-autonomy` (CLI) e, por ele, o passo 5b do
+Consumers: `common/bin/cepa-autonomy` (CLI) and, through it, step 5b of
 `board-flow/commands/decide.md`.
 """
 from __future__ import annotations
@@ -33,44 +37,44 @@ import os
 import re
 from pathlib import Path
 
-FAIXAS = ("executa_e_reporta", "sempre_pergunta")
-FAIXA_AUTOMATICA, FAIXA_PERGUNTA = FAIXAS
-DEFAULT_NAO_LISTADO = "sempre-pergunta"
-CHAVES_DETECT = ("bash", "mcp", "path", "slash")
-# Chaves de `detect:` que são CONDIÇÕES resolvidas pelo hook (Fase 2), não
-# padrões casados aqui. Devolvidas em `condicoes` para o chamador saber.
-CHAVES_CONDICAO = ("branch_atual", "destino_terminal", "label", "paths_only", "op")
+BANDS = ("executa_e_reporta", "sempre_pergunta")
+BAND_AUTOMATIC, BAND_ASK = BANDS
+DEFAULT_UNLISTED = "sempre-pergunta"
+DETECT_KEYS = ("bash", "mcp", "path", "slash")
+# `detect:` keys that are CONDITIONS resolved by the hook (Phase 2), not
+# patterns matched here. Returned in `condicoes` so the caller knows.
+CONDITION_KEYS = ("branch_atual", "destino_terminal", "label", "paths_only", "op")
 OVERRIDE_REL = os.path.join(".claude", "autonomy.yaml")
 
-# Separadores de segmento num comando de terminal: `cd x && git commit` tem
-# que casar `^git commit`, senão toda ação encadeada escapa da lista.
-_SEGMENTOS = re.compile(r"\s*(?:&&|\|\||;|\||&|\n)\s*")
-# Prefixos que não mudam a ação: `FOO=1 pytest`, `$(git push)`, `(git push)`.
-# Segmentos que não realizam ação nenhuma e por isso não contam: `cd x &&
-# git commit` é um commit, não "um cd desconhecido mais um commit". Lista
-# curta de propósito — crescer aqui é afrouxar.
-# Fora da lista de propósito (revisão 2026-10-16, rodada 3): `sort` (`-o` grava),
-# `git diff|log|show` (`--output=` grava), `export` (PYTHONPATH/LD_PRELOAD/PATH
-# mudam o que o `pytest` seguinte executa). Neutro com `-o`/`--output` deixa de
-# ser neutro, pelo mesmo motivo.
-_NEUTROS = re.compile(
+# Segment separators in a terminal command: `cd x && git commit` has to match
+# `^git commit`, otherwise every chained action escapes the list.
+_SEGMENT_SPLIT = re.compile(r"\s*(?:&&|\|\||;|\||&|\n)\s*")
+# Segments that perform no action at all and therefore do not count: `cd x &&
+# git commit` is a commit, not "an unknown cd plus a commit". Short list on
+# purpose: growing it loosens the policy.
+# Left off the list on purpose (review 2026-10-16, round 3): `sort` (`-o`
+# writes), `git diff|log|show` (`--output=` writes), `export`
+# (PYTHONPATH/LD_PRELOAD/PATH change what the following `pytest` runs). A
+# neutral command with `-o`/`--output` stops being neutral, for the same reason.
+_NEUTRAL = re.compile(
     r"^(cd|echo|printf|true|ls|cat|head|tail|grep|wc|set -[a-zA-Z]+"
     r"|git (add|status|rev-parse|branch --show-current))(\s|$)"
 )
-_NEUTRO_QUE_GRAVA = re.compile(r"(^|\s)(-o|--output(=|\s|$))")
-# Substituição de comando/processo ou redirecionamento: `pytest $(git push)`,
-# `echo x > ~/.bashrc && pytest`. O segmento deixa de ser o que parece — é
-# tratado como NÃO LISTADO (pergunta), e um neutro com isso deixa de ser neutro.
-_ESCONDIDO = re.compile(r"`|\$\(|<\(|>\(|>")
-_PREFIXO = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:\$\(|\()?\s*")
+_NEUTRAL_THAT_WRITES = re.compile(r"(^|\s)(-o|--output(=|\s|$))")
+# Command/process substitution or redirection: `pytest $(git push)`,
+# `echo x > ~/.bashrc && pytest`. The segment stops being what it looks like:
+# it is treated as UNLISTED (ask), and a neutral command with this stops being neutral.
+_HIDDEN = re.compile(r"`|\$\(|<\(|>\(|>")
+# Prefixes that do not change the action: `FOO=1 pytest`, `$(git push)`, `(git push)`.
+_PREFIX = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)*(?:\$\(|\()?\s*")
 
 
-def yaml_do_plugin() -> Path:
-    """`common/autonomy.yaml`, irmão do diretório `hooks/` em que este módulo vive."""
+def plugin_yaml_path() -> Path:
+    """`common/autonomy.yaml`, sibling of the `hooks/` directory this module lives in."""
     return Path(__file__).resolve().parent.parent / "autonomy.yaml"
 
 
-def _ler_yaml(path: Path):
+def _read_yaml(path: Path):
     import yaml
 
     try:
@@ -78,163 +82,163 @@ def _ler_yaml(path: Path):
             return yaml.safe_load(fh)
     except FileNotFoundError:
         return None
-    except Exception as exc:  # YAML inválido não pode derrubar a leitura toda
+    except Exception as exc:  # invalid YAML must not take down the whole read
         return {"__erro__": f"{path}: {exc}"}
 
 
-def _item_valido(item, faixa: str, origem: str, avisos: list) -> dict | None:
+def _valid_item(item, band: str, source: str, warnings: list) -> dict | None:
     if not isinstance(item, dict) or not item.get("id"):
-        avisos.append(f"{origem}: item sem `id` em `{faixa}` descartado: {item!r}")
+        warnings.append(f"{source}: item sem `id` em `{band}` descartado: {item!r}")
         return None
     det = item.get("detect")
-    if not isinstance(det, dict) or not any(k in det for k in CHAVES_DETECT):
-        avisos.append(
-            f"{origem}: `{item['id']}` sem `detect:` ({'/'.join(CHAVES_DETECT)}) descartado"
+    if not isinstance(det, dict) or not any(k in det for k in DETECT_KEYS):
+        warnings.append(
+            f"{source}: `{item['id']}` sem `detect:` ({'/'.join(DETECT_KEYS)}) descartado"
         )
         return None
-    if sum(k in det for k in CHAVES_DETECT) > 1:
-        avisos.append(
-            f"{origem}: `{item['id']}` com mais de um padrão em detect: "
-            f"({', '.join(k for k in CHAVES_DETECT if k in det)}) descartado — um item, uma impressão digital"
+    if sum(k in det for k in DETECT_KEYS) > 1:
+        warnings.append(
+            f"{source}: `{item['id']}` com mais de um padrão em detect: "
+            f"({', '.join(k for k in DETECT_KEYS if k in det)}) descartado — um item, uma impressão digital"
         )
         return None
-    for k in CHAVES_DETECT:
+    for k in DETECT_KEYS:
         if k in det:
             try:
                 re.compile(str(det[k]))
             except re.error as exc:
-                avisos.append(f"{origem}: `{item['id']}` com regex inválida em detect.{k}: {exc}")
+                warnings.append(f"{source}: `{item['id']}` com regex inválida em detect.{k}: {exc}")
                 return None
-    limpo = {"id": str(item["id"]), "detect": dict(det), "faixa": faixa}
+    clean = {"id": str(item["id"]), "detect": dict(det), "faixa": band}
     if item.get("precondicao"):
-        limpo["precondicao"] = str(item["precondicao"])
-    return limpo
+        clean["precondicao"] = str(item["precondicao"])
+    return clean
 
 
-def carregar(repo: str | None = None, plugin_yaml: str | Path | None = None) -> dict:
-    """Configuração mesclada: plugin + override do repo. Nunca levanta exceção.
+def load(repo: str | None = None, plugin_yaml: str | Path | None = None) -> dict:
+    """Merged configuration: plugin + repo override. Never raises.
 
-    Devolve {"versao", "executa_e_reporta": [...], "sempre_pergunta": [...],
+    Returns {"versao", "executa_e_reporta": [...], "sempre_pergunta": [...],
     "default_nao_listado", "avisos": [...], "fontes": [...]}.
     """
-    avisos: list[str] = []
-    fontes: list[str] = []
-    base_path = Path(plugin_yaml) if plugin_yaml else yaml_do_plugin()
-    base = _ler_yaml(base_path)
-    cfg = {f: [] for f in FAIXAS}
+    warnings: list[str] = []
+    sources: list[str] = []
+    base_path = Path(plugin_yaml) if plugin_yaml else plugin_yaml_path()
+    base = _read_yaml(base_path)
+    cfg = {f: [] for f in BANDS}
     cfg["versao"] = None
-    cfg["default_nao_listado"] = DEFAULT_NAO_LISTADO
+    cfg["default_nao_listado"] = DEFAULT_UNLISTED
     if not isinstance(base, dict) or "__erro__" in (base or {}):
-        avisos.append(
+        warnings.append(
             f"{base_path}: ausente ou ilegível ({(base or {}).get('__erro__', 'sem conteúdo')}); "
-            f"sem lista, toda ação cai em `{DEFAULT_NAO_LISTADO}`"
+            f"sem lista, toda ação cai em `{DEFAULT_UNLISTED}`"
         )
     else:
-        fontes.append(str(base_path))
+        sources.append(str(base_path))
         cfg["versao"] = base.get("versao")
-        if base.get("default_nao_listado") not in (None, DEFAULT_NAO_LISTADO):
-            avisos.append(
+        if base.get("default_nao_listado") not in (None, DEFAULT_UNLISTED):
+            warnings.append(
                 f"{base_path}: default_nao_listado={base.get('default_nao_listado')!r} ignorado; "
-                f"o default é `{DEFAULT_NAO_LISTADO}` por decisão de design"
+                f"o default é `{DEFAULT_UNLISTED}` por decisão de design"
             )
-        vistos: dict[str, str] = {}
-        for faixa in FAIXAS:
-            for item in base.get(faixa) or []:
-                ok = _item_valido(item, faixa, str(base_path), avisos)
+        seen: dict[str, str] = {}
+        for band in BANDS:
+            for item in base.get(band) or []:
+                ok = _valid_item(item, band, str(base_path), warnings)
                 if ok is None:
                     continue
-                if ok["id"] in vistos:
-                    avisos.append(
-                        f"{base_path}: `{ok['id']}` repetido ({vistos[ok['id']]} e {faixa}); "
+                if ok["id"] in seen:
+                    warnings.append(
+                        f"{base_path}: `{ok['id']}` repetido ({seen[ok['id']]} e {band}); "
                         f"a segunda ocorrência foi descartada"
                     )
                     continue
-                vistos[ok["id"]] = faixa
-                cfg[faixa].append(ok)
+                seen[ok["id"]] = band
+                cfg[band].append(ok)
 
     if repo:
-        _aplicar_override(cfg, Path(repo) / OVERRIDE_REL, avisos, fontes)
+        _apply_override(cfg, Path(repo) / OVERRIDE_REL, warnings, sources)
 
-    cfg["avisos"] = avisos
-    cfg["fontes"] = fontes
+    cfg["avisos"] = warnings
+    cfg["fontes"] = sources
     return cfg
 
 
-def _aplicar_override(cfg: dict, path: Path, avisos: list, fontes: list) -> None:
-    """O override do repo só ENDURECE: move id para `sempre_pergunta` ou
-    acrescenta id novo lá. Tudo o mais é ignorado com aviso — afrouxar é diff
-    versionado no cepa, nunca decisão local."""
-    ov = _ler_yaml(path)
+def _apply_override(cfg: dict, path: Path, warnings: list, sources: list) -> None:
+    """The repo override only HARDENS: it moves an id to `sempre_pergunta` or
+    adds a new id there. Everything else is ignored with a warning: loosening
+    is a versioned diff in cepa, never a local decision."""
+    ov = _read_yaml(path)
     if ov is None:
         return
     if not isinstance(ov, dict) or "__erro__" in ov:
-        avisos.append(f"{path}: override ilegível, ignorado ({(ov or {}).get('__erro__', 'não é um mapa')})")
+        warnings.append(f"{path}: override ilegível, ignorado ({(ov or {}).get('__erro__', 'não é um mapa')})")
         return
-    fontes.append(str(path))
-    if ov.get(FAIXA_AUTOMATICA):
-        avisos.append(
-            f"{path}: `{FAIXA_AUTOMATICA}` ignorado — override só pode endurecer; "
+    sources.append(str(path))
+    if ov.get(BAND_AUTOMATIC):
+        warnings.append(
+            f"{path}: `{BAND_AUTOMATIC}` ignorado — override só pode endurecer; "
             f"promover ação é edição em common/autonomy.yaml"
         )
-    if ov.get("default_nao_listado") not in (None, DEFAULT_NAO_LISTADO):
-        avisos.append(f"{path}: default_nao_listado ignorado — o default não é configurável por repo")
-    for item in ov.get(FAIXA_PERGUNTA) or []:
+    if ov.get("default_nao_listado") not in (None, DEFAULT_UNLISTED):
+        warnings.append(f"{path}: default_nao_listado ignorado — o default não é configurável por repo")
+    for item in ov.get(BAND_ASK) or []:
         ident = item.get("id") if isinstance(item, dict) else item
         if not ident:
-            avisos.append(f"{path}: item sem id em `{FAIXA_PERGUNTA}` ignorado: {item!r}")
+            warnings.append(f"{path}: item sem id em `{BAND_ASK}` ignorado: {item!r}")
             continue
         ident = str(ident)
-        movido = [i for i in cfg[FAIXA_AUTOMATICA] if i["id"] == ident]
-        if movido:
-            cfg[FAIXA_AUTOMATICA] = [i for i in cfg[FAIXA_AUTOMATICA] if i["id"] != ident]
-            novo = dict(movido[0], faixa=FAIXA_PERGUNTA, movido_por=str(path))
-            cfg[FAIXA_PERGUNTA].append(novo)
+        moved = [i for i in cfg[BAND_AUTOMATIC] if i["id"] == ident]
+        if moved:
+            cfg[BAND_AUTOMATIC] = [i for i in cfg[BAND_AUTOMATIC] if i["id"] != ident]
+            new = dict(moved[0], faixa=BAND_ASK, movido_por=str(path))
+            cfg[BAND_ASK].append(new)
             continue
-        if any(i["id"] == ident for i in cfg[FAIXA_PERGUNTA]):
-            continue  # já está lá
-        ok = _item_valido(item if isinstance(item, dict) else {"id": ident}, FAIXA_PERGUNTA, str(path), avisos)
+        if any(i["id"] == ident for i in cfg[BAND_ASK]):
+            continue  # already there
+        ok = _valid_item(item if isinstance(item, dict) else {"id": ident}, BAND_ASK, str(path), warnings)
         if ok is not None:
             ok["movido_por"] = str(path)
-            cfg[FAIXA_PERGUNTA].append(ok)
+            cfg[BAND_ASK].append(ok)
 
 
-def faixa_de(cfg: dict, ident: str) -> str | None:
-    for faixa in FAIXAS:
-        if any(i["id"] == ident for i in cfg.get(faixa) or []):
-            return faixa
+def band_of(cfg: dict, ident: str) -> str | None:
+    for band in BANDS:
+        if any(i["id"] == ident for i in cfg.get(band) or []):
+            return band
     return None
 
 
-def _segmentos(bash: str) -> list[str]:
+def _segments(bash: str) -> list[str]:
     segs = []
-    for seg in _SEGMENTOS.split(bash.strip()):
-        seg = _PREFIXO.sub("", seg).rstrip(") ").strip()
+    for seg in _SEGMENT_SPLIT.split(bash.strip()):
+        seg = _PREFIX.sub("", seg).rstrip(") ").strip()
         if seg:
             segs.append(seg)
     return segs
 
 
-def _condicoes_ok(item: dict, cond: dict | None) -> bool | None:
-    """True: toda condição do detect bate com `cond`. False: alguma não bate.
-    None: alguma não foi informada (não dá para saber)."""
+def _conditions_ok(item: dict, cond: dict | None) -> bool | None:
+    """True: every detect condition matches `cond`. False: some do not match.
+    None: some were not provided (cannot tell)."""
     cond = cond or {}
-    resultado = True
+    outcome = True
     for k, v in item["detect"].items():
-        if k not in CHAVES_CONDICAO or k == "op":
+        if k not in CONDITION_KEYS or k == "op":
             continue
         if k not in cond:
-            resultado = None
+            outcome = None
             continue
-        dado = cond[k]
+        given = cond[k]
         if isinstance(v, bool):
-            if str(dado).lower() in ("true", "1", "sim", "yes") != v:
+            if str(given).lower() in ("true", "1", "sim", "yes") != v:
                 return False
-        elif re.search(str(v), str(dado)) is None:
+        elif re.search(str(v), str(given)) is None:
             return False
-    return resultado
+    return outcome
 
 
-def _casa_padrao(item: dict, bash, mcp, path, op, slash) -> bool:
+def _matches_pattern(item: dict, bash, mcp, path, op, slash) -> bool:
     det = item["detect"]
     if "bash" in det:
         return bool(bash) and re.search(str(det["bash"]), bash) is not None
@@ -243,84 +247,86 @@ def _casa_padrao(item: dict, bash, mcp, path, op, slash) -> bool:
     if "path" in det:
         if not path or re.search(str(det["path"]), path) is None:
             return False
-        exigido = str(det.get("op", "any"))
-        return exigido == "any" or (op or "any") == exigido
+        required = str(det.get("op", "any"))
+        return required == "any" or (op or "any") == required
     if "slash" in det:
         return bool(slash) and re.search(str(det["slash"]), slash) is not None
     return False
 
 
-def _casa_item(item: dict, bash, mcp, path, op, slash, cond) -> bool:
-    """Casa padrão E condições. Ação automática com condição não informada
-    NÃO casa (não se libera o que não dá para conferir); ação de pergunta
-    casa mesmo assim (o lado seguro), e a condição volta em `condicoes`."""
-    if not _casa_padrao(item, bash, mcp, path, op, slash):
+def _matches_item(item: dict, bash, mcp, path, op, slash, cond) -> bool:
+    """Matches pattern AND conditions. An automatic action with a condition
+    not provided does NOT match (we do not release what cannot be checked); an
+    ask action matches anyway (the safe side), and the condition comes back in
+    `condicoes`."""
+    if not _matches_pattern(item, bash, mcp, path, op, slash):
         return False
-    ok = _condicoes_ok(item, cond)
+    ok = _conditions_ok(item, cond)
     if ok is False:
         return False
-    if ok is None and item["faixa"] == FAIXA_AUTOMATICA:
+    if ok is None and item["faixa"] == BAND_AUTOMATIC:
         return False
     return True
 
 
-def _resultado(item: dict | None, cfg: dict) -> dict:
+def _result(item: dict | None, cfg: dict) -> dict:
     if item is None:
         return {
-            "faixa": FAIXA_PERGUNTA if cfg.get("default_nao_listado", DEFAULT_NAO_LISTADO) == DEFAULT_NAO_LISTADO else FAIXA_AUTOMATICA,
+            "faixa": BAND_ASK if cfg.get("default_nao_listado", DEFAULT_UNLISTED) == DEFAULT_UNLISTED else BAND_AUTOMATIC,
             "id": None, "precondicao": None, "condicoes": {}, "listado": False,
         }
     return {
         "faixa": item["faixa"],
         "id": item["id"],
         "precondicao": item.get("precondicao"),
-        "condicoes": {k: v for k, v in item["detect"].items() if k in CHAVES_CONDICAO and k != "op"},
+        "condicoes": {k: v for k, v in item["detect"].items() if k in CONDITION_KEYS and k != "op"},
         "listado": True,
     }
 
 
-def _casar_um(cfg: dict, bash, mcp, path, op, slash, cond) -> dict | None:
-    for faixa in (FAIXA_PERGUNTA, FAIXA_AUTOMATICA):
-        for item in cfg.get(faixa) or []:
-            if _casa_item(item, bash, mcp, path, op, slash, cond):
+def _match_one(cfg: dict, bash, mcp, path, op, slash, cond) -> dict | None:
+    for band in (BAND_ASK, BAND_AUTOMATIC):
+        for item in cfg.get(band) or []:
+            if _matches_item(item, bash, mcp, path, op, slash, cond):
                 return item
     return None
 
 
-def casar(cfg: dict, bash: str | None = None, mcp: str | None = None,
+def match(cfg: dict, bash: str | None = None, mcp: str | None = None,
           path: str | None = None, op: str | None = None, slash: str | None = None,
           cond: dict | None = None) -> dict:
-    """A ação que este tool-call realiza, e a faixa dela.
+    """The action this tool call performs, and its band.
 
-    Devolve {"faixa", "id", "precondicao", "condicoes", "listado"}. Casou as
-    duas faixas → `sempre_pergunta` (o lado seguro). Não casou nada → faixa do
-    default, `id` None, `listado` False.
+    Returns {"faixa", "id", "precondicao", "condicoes", "listado"}. Matched
+    both bands -> `sempre_pergunta` (the safe side). Matched nothing -> the
+    default band, `id` None, `listado` False.
 
-    Comando de terminal é julgado segmento a segmento (`&&`, `;`, `|`, `&`),
-    ignorando os neutros (`cd`, `echo`, `git add`...) sem redirecionamento,
-    substituição nem `-o`/`--output`; segmento com `$(`, crase, `<(` ou `>` é não listado: um segmento de pergunta decide
-    pelo comando inteiro, em qualquer posição; senão um segmento não listado
-    decide (default); só é automático o comando em que TODOS os segmentos
-    são automáticos. Sem isso `rm -rf x && pytest` seria "rodar
-    build" — uma parte conhecida não pode lavar a parte desconhecida.
-    `cond` são as condições do detect que o chamador já conferiu
-    (ex.: {"label": "infra"}).
+    A terminal command is judged segment by segment (`&&`, `;`, `|`, `&`),
+    ignoring the neutral ones (`cd`, `echo`, `git add`...) without redirection,
+    substitution or `-o`/`--output`; a segment with `$(`, a backtick, `<(` or
+    `>` is unlisted: an ask segment decides for the whole command, in any
+    position; otherwise an unlisted segment decides (default); a command is
+    automatic only if ALL its segments are automatic. Without this,
+    `rm -rf x && pytest` would be "run build": a known part must not launder
+    the unknown part.
+    `cond` are the detect conditions the caller has already checked
+    (e.g. {"label": "infra"}).
     """
     if bash:
-        automatico = None   # o primeiro item automático, se todos os segmentos forem
-        nao_listado = False
-        segs = [s for s in _segmentos(bash)
-                if not (_NEUTROS.match(s) and not _ESCONDIDO.search(s) and not _NEUTRO_QUE_GRAVA.search(s))]
+        automatic = None   # the first automatic item, if all segments are
+        unlisted = False
+        segs = [s for s in _segments(bash)
+                if not (_NEUTRAL.match(s) and not _HIDDEN.search(s) and not _NEUTRAL_THAT_WRITES.search(s))]
         for seg in segs or [bash]:
-            if _ESCONDIDO.search(seg):
-                nao_listado = True   # `pytest $(git push)` não é "rodar build"
+            if _HIDDEN.search(seg):
+                unlisted = True   # `pytest $(git push)` is not "run build"
                 continue
-            item = _casar_um(cfg, seg, None, None, None, None, cond)
+            item = _match_one(cfg, seg, None, None, None, None, cond)
             if item is None:
-                nao_listado = True
-            elif item["faixa"] == FAIXA_PERGUNTA:
-                return _resultado(item, cfg)   # pergunta vence em qualquer posição
+                unlisted = True
+            elif item["faixa"] == BAND_ASK:
+                return _result(item, cfg)   # ask wins in any position
             else:
-                automatico = automatico or item
-        return _resultado(None if nao_listado else automatico, cfg)
-    return _resultado(_casar_um(cfg, None, mcp, path, op, slash, cond), cfg)
+                automatic = automatic or item
+        return _result(None if unlisted else automatic, cfg)
+    return _result(_match_one(cfg, None, mcp, path, op, slash, cond), cfg)

@@ -62,13 +62,13 @@ def test_arquivo_tem_as_duas_faixas_com_detect_e_default_pergunta():
     bruto = yaml.safe_load(YAML_PATH.read_text(encoding="utf-8"))
     check(bruto.get("default_nao_listado") == "sempre-pergunta",
           "ação não listada cai em sempre-pergunta, declarado no arquivo")
-    cfg = aut.carregar(None)
+    cfg = aut.load(None)
     check(cfg["avisos"] == [], f"o arquivo do plugin carrega sem aviso: {cfg['avisos']}")
     todos = ids(cfg, "executa_e_reporta") + ids(cfg, "sempre_pergunta")
     check(len(todos) == len(set(todos)), "nenhum id repetido entre as faixas")
-    for faixa in aut.FAIXAS:
+    for faixa in aut.BANDS:
         for item in bruto[faixa]:
-            check(any(k in item["detect"] for k in aut.CHAVES_DETECT),
+            check(any(k in item["detect"] for k in aut.DETECT_KEYS),
                   f"{item['id']} tem detect: com bash/mcp/path/slash")
     check(AUTOMATICAS_EXIGIDAS <= set(ids(cfg, "executa_e_reporta")),
           f"as mecânicas carimbadas de 08-03/08-10 estão na faixa automática: "
@@ -81,7 +81,7 @@ def test_arquivo_tem_as_duas_faixas_com_detect_e_default_pergunta():
 
 
 def test_casamento_mecanico_dos_tool_calls():
-    cfg = aut.carregar(None)
+    cfg = aut.load(None)
     casos = [
         (dict(bash="./mvnw verify -pl api"), "executa_e_reporta", "rodar-build"),
         (dict(bash="cd /x && git commit -m 'docs'"), "executa_e_reporta", "commit-local"),
@@ -149,23 +149,23 @@ def test_casamento_mecanico_dos_tool_calls():
         (dict(bash="grep --output=x f && pytest"), "sempre_pergunta", None),
     ]
     for entrada, faixa, ident in casos:
-        r = aut.casar(cfg, **entrada)
+        r = aut.match(cfg, **entrada)
         check((r["faixa"], r["id"]) == (faixa, ident),
               f"{entrada} → {faixa}/{ident} (veio {r['faixa']}/{r['id']})")
 
-    r = aut.casar(cfg, bash="git branch -D feature/x")
+    r = aut.match(cfg, bash="git branch -D feature/x")
     check(r["id"] == "apagar-branch-contida" and "merge-base --is-ancestor" in (r["precondicao"] or ""),
           "apagar branch casa a ação automática E devolve a precondição que o hook confere")
 
-    r = aut.casar(cfg, path=".claude/handoffs/x.md", op="edit")
+    r = aut.match(cfg, path=".claude/handoffs/x.md", op="edit")
     check(r["id"] is None and r["faixa"] == "sempre_pergunta" and r["listado"] is False,
           "editar um handoff NÃO é apagar handoff: cai no default (não listado)")
 
-    r = aut.casar(cfg, bash="rm -rf /tmp/qualquer")
+    r = aut.match(cfg, bash="rm -rf /tmp/qualquer")
     check(r["listado"] is False and r["faixa"] == "sempre_pergunta",
           "comando fora da lista → não listado → sempre pergunta")
 
-    r = aut.casar(cfg, mcp="mcp__Atlassian__transitionJiraIssue")
+    r = aut.match(cfg, mcp="mcp__Atlassian__transitionJiraIssue")
     check(r["condicoes"].get("destino_terminal") is True,
           "a condição que o hook da Fase 2 resolve volta em `condicoes`")
 
@@ -183,10 +183,10 @@ def test_override_do_repo_so_endurece(tmp):
         "default_nao_listado: executa-e-reporta\n",               # ignorado
         encoding="utf-8",
     )
-    cfg = aut.carregar(str(repo))
+    cfg = aut.load(str(repo))
     check("commit-local" in ids(cfg, "sempre_pergunta") and "commit-local" not in ids(cfg, "executa_e_reporta"),
           "override MOVE commit-local para sempre_pergunta")
-    check(aut.casar(cfg, bash="git commit -m x")["faixa"] == "sempre_pergunta",
+    check(aut.match(cfg, bash="git commit -m x")["faixa"] == "sempre_pergunta",
           "e o casamento respeita a movida")
     check("apagar-tag" in ids(cfg, "sempre_pergunta"), "override ACRESCENTA ação nova à faixa de pergunta")
     check("push-remoto" in ids(cfg, "sempre_pergunta") and "push-remoto" not in ids(cfg, "executa_e_reporta"),
@@ -198,7 +198,7 @@ def test_override_do_repo_so_endurece(tmp):
           f"cada coisa ignorada vira aviso nomeado: {cfg['avisos']}")
     check(len(cfg["fontes"]) == 2, "as duas fontes (plugin + override) ficam registradas")
 
-    sem_override = aut.carregar(str(Path(tmp) / "nao-existe"))
+    sem_override = aut.load(str(Path(tmp) / "nao-existe"))
     check(sem_override["avisos"] == [] and "commit-local" in ids(sem_override, "executa_e_reporta"),
           "repo sem .claude/autonomy.yaml usa só o plugin, sem aviso")
 
@@ -214,12 +214,12 @@ def test_plugin_yaml_malformado_cai_tudo_em_pergunta(tmp):
         "sempre_pergunta: []\n",
         encoding="utf-8",
     )
-    cfg = aut.carregar(None, plugin_yaml=ruim)
+    cfg = aut.load(None, plugin_yaml=ruim)
     check(cfg["executa_e_reporta"] == [], "item sem detect, regex inválida e dois padrões num detect são descartados")
     check(len(cfg["avisos"]) == 3, f"um aviso por item descartado: {cfg['avisos']}")
-    check(aut.casar(cfg, bash="git commit")["faixa"] == "sempre_pergunta",
+    check(aut.match(cfg, bash="git commit")["faixa"] == "sempre_pergunta",
           "sem lista válida, tudo cai em pergunta (o lado seguro)")
-    cfg2 = aut.carregar(None, plugin_yaml=Path(tmp) / "inexistente.yaml")
+    cfg2 = aut.load(None, plugin_yaml=Path(tmp) / "inexistente.yaml")
     check(cfg2["executa_e_reporta"] == [] and cfg2["avisos"], "arquivo ausente: lista vazia + aviso, sem exceção")
 
 
