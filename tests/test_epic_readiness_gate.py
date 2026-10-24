@@ -475,8 +475,8 @@ def _gate_mod():
 
 def test_celulas_barra_escapada_no_fim():
     # S6: `\|` no fim da linha é conteúdo da última célula, não o divisor.
-    cel = _gate_mod().celulas("| a | b \\|")
-    check("celulas: '\\|' no fim fica na última célula",
+    cel = _gate_mod().cells("| a | b \\|")
+    check("cells: '\\|' no fim fica na última célula",
           cel == ["a", "b \\|"], repr(cel))
 
 

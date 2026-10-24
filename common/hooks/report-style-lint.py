@@ -1,78 +1,84 @@
 #!/usr/bin/env python3
-"""Mede o relatório final do turno contra o formato da skill `plain-report`.
+"""Measures the turn's final report against the format of the `plain-report` skill.
 
-Motivo (03/08/2026): o usuário relatou que precisa ler os relatórios mais de
-uma vez para entender — jargão interno demais, ordem invertida (mecanismo antes
-do resultado) e detalhe irrelevante. A regra já existia no CLAUDE.md global
-("2 frases leigas, recomendação default, técnico por último") e vinha sendo
-aplicada só a findings isolados. Regra clara que segue violada precisa de
-medição, não de mais prosa — mesmo princípio do proof-verdict-guard.
+Reason (2026-08-03): the user reported having to read the reports more than
+once to understand them -- too much internal jargon, inverted order (mechanism
+before result) and irrelevant detail. The rule already existed in the global
+CLAUDE.md ("2 lay sentences, default recommendation, technical last") and had
+only been applied to isolated findings. A clear rule that keeps being violated
+needs measurement, not more prose -- same principle as proof-verdict-guard.
 
-Dois eventos, um arquivo:
+Two events, one file:
 
-  Stop              — lê a última mensagem do assistente no transcript, mede e,
-                      havendo desvio, BLOQUEIA a parada: devolve
-                      {"decision": "block"} com os desvios, e o turno continua
-                      para reescrever o relatório no formato. Aperto decidido em
-                      25/08/2026: um mês de "avisa e mede" deu 247 relatórios
-                      fora do padrão em 501 medidos (49%) — o aviso não bastou.
-                      Trava anti-loop: se a parada JÁ veio de um bloqueio deste
-                      hook (`stop_hook_active`), ele não bloqueia de novo; grava
-                      a pendência e deixa passar, para o aviso chegar no turno
-                      seguinte sem prender a sessão.
-  UserPromptSubmit  — se houver desvio pendente da vez anterior, injeta o aviso
-                      no contexto do próximo turno e apaga a pendência. É assim
-                      que o aviso chega ao modelo sem travar o turno.
+  Stop              -- reads the assistant's last message in the transcript,
+                       measures it and, if there is a deviation, BLOCKS the
+                       stop: returns {"decision": "block"} with the deviations,
+                       and the turn goes on to rewrite the report in the
+                       format. Tightening decided on 2026-08-25: a month of
+                       "warn and measure" gave 247 off-format reports out of
+                       501 measured (49%) -- the warning was not enough.
+                       Anti-loop lock: if the stop ALREADY came from a block by
+                       this hook (`stop_hook_active`), it does not block again;
+                       it records the pending item and lets it through, so the
+                       warning reaches the next turn without trapping the
+                       session.
+  UserPromptSubmit  -- if there is a deviation pending from last time, injects
+                       the warning into the next turn's context and deletes the
+                       pending item. That is how the warning reaches the model
+                       without blocking the turn.
 
-Escopo (decisão do usuário, 03/08/2026): só relatório de TRABALHO FEITO. Para
-saber se a resposta é um relatório, o hook olha se o turno usou Edit, Write,
-MultiEdit, NotebookEdit ou rodou `git commit`. Se não usou, ele nem abre o
-texto: conversa, pergunta curta e discussão de design ficam de fora, porque
-formatar um "sim, existe" em três blocos seria pior que o problema.
+Scope (owner decision, 2026-08-03): only reports of WORK DONE. To know whether
+the reply is a report, the hook checks whether the turn used Edit, Write,
+MultiEdit, NotebookEdit or ran `git commit`. If it did not, the hook does not
+even open the text: conversation, short questions and design discussion are
+left out, because formatting a "yes, it exists" into three blocks would be
+worse than the problem.
 
-Exceção (CS-5, 2026-10-08): o turno de ENTREVISTA do `/common:epic`. Ali o
-comando manda gravar a resposta aceita no documento no mesmo turno, então todo turno escreve, e o hook o tratava como relatório: na
-transcrição de teste do `/common:epic` ele mandou reescrever o desafio no
-formato plain-report, e a pergunta virou item numerado com "Recomendo sim",
-que é o menu que a entrevista proíbe. O turno é poupado quando TODA escrita
-dele foi em `docs/epics/<nome>.md`, não houve commit, o último parágrafo da
-fala tem uma pergunta e a fala não traz nenhuma marca do relatório
-(`**For you:**`, "Technical detail", "Decisions and next steps", ou os rótulos pt-BR antigos). O
-relatório de fechamento tem essas marcas e termina em pergunta numerada, então
-continua medido. O `/common:spec` fica fora da exceção: o turno dele pergunta
-em rodadas de até quatro, e poupá-lo é outra decisão.
+Exception (CS-5, 2026-10-08): the INTERVIEW turn of `/common:epic`. There the
+command orders the accepted answer to be written into the document in the same
+turn, so every turn writes, and the hook treated it as a report: in the
+`/common:epic` test transcript it ordered the challenge rewritten into the
+plain-report format, and the question became a numbered item with "I recommend
+yes", which is the menu the interview forbids. The turn is spared when ALL of
+its writes were to `docs/epics/<name>.md`, there was no commit, the last
+paragraph of the speech has a question and the speech carries no mark of the
+report (`**For you:**`, "Technical detail", "Decisions and next steps", or the
+old pt-BR labels). The closing report has those marks and ends in a numbered
+question, so it is still measured. `/common:spec` is outside the exception: its
+turn asks in rounds of up to four, and sparing it is another decision.
 
-Tarefa do dono com passo a passo (2026-10-15). Em 14/10/2026 o dono reprovou um
-relatório cujo `Pra você:` dizia "fechar as duas rotas humanas ... e os sete
-buracos do RIPD" e cuja lista do fim dizia "Nada pendente.": a tarefa dele só
-existia como categoria, e ele perguntou "O que, afinal, que eu tenho que fazer?
-Dê-me o passo a passo." Duas medições novas: `pra-voce-sem-lista` (o `Pra
-você:` anuncia algo pendente e a lista do fim não tem item numerado nenhum) e
-`tarefa-sem-passo` (item "Você ..." sem comando ou arquivo, ou sem a linha
-"Pronto quando"). A primeira só olha se o que o topo anuncia aparece no fim; a
-segunda só olha a forma do item, não se o comando está certo.
+Owner task with step by step (2026-10-15). On 2026-10-14 the owner rejected a
+report whose `Pra você:` said "close the two human routes ... and the seven
+holes of the RIPD" and whose closing list said "Nada pendente.": his task only
+existed as a category, and he asked "What, after all, do I have to do? Give me
+the step by step." Two new measurements: `pra-voce-sem-lista` (the `Pra você:`
+announces something pending and the closing list has no numbered item at all)
+and `tarefa-sem-passo` (a "Você ..." item without a command or file, or
+without the "Pronto quando" line). The first only checks whether what the top
+announces shows up at the end; the second only checks the shape of the item,
+not whether the command is right.
 
-Sessão já encerrada pelo wrap-up (2026-10-16, feedback fb-20261016-4). Depois
-de `/common:wrap-up` terminar com "Safe to `exit`", o agente ofereceu
-`/common:metrics` na lista do fim, o dono aceitou, e o relatório do metrics
-terminou com uma pergunta fechada nova: a sessão fechada abriu uma frente
-nova, e o dono se perdeu na árvore de forks. Medição nova, categoria
-`pergunta-pos-wrap-up`: se o wrap-up foi invocado e DEPOIS algum texto do
-assistente diz "Safe to exit", todo relatório seguinte que traga item numerado
-com `?` na lista do fim, ou um `Pra você:` que anuncia algo, é barrado. A
-sessão encerrada é lida do TRANSCRIPT, não de um arquivo-marcador, de
-propósito: um marcador no handoff vazaria para a próxima sessão na mesma
-branch, e um marcador em `.claude/` dependeria de o modelo lembrar de
-escrevê-lo. O transcript tem o escopo da sessão e é mecânico. Um wrap-up
-invocado que parou numa trava (conflito de merge, por exemplo) nunca disse
-"Safe to exit" e NÃO encerra a sessão: ali o relatório pode mesmo pedir que o
-usuário resolva algo. O turno do metrics só lê, então a regra de escopo acima
-(turno que alterou algo) deixaria o incidente sem medição; por isso, com a
-sessão encerrada, o hook lê o relatório mesmo sem alteração e mede só esta
-categoria.
+Session already closed by wrap-up (2026-10-16, feedback fb-20261016-4). After
+`/common:wrap-up` finished with "Safe to `exit`", the agent offered
+`/common:metrics` in the closing list, the owner accepted, and the metrics
+report ended with a new closed question: the closed session opened a new
+front, and the owner got lost in the fork tree. New measurement, category
+`pergunta-pos-wrap-up`: if wrap-up was invoked and AFTER that some assistant
+text says "Safe to exit", every following report that carries a numbered item
+with `?` in the closing list, or a `Pra você:` that announces something, is
+blocked. The closed session is read from the TRANSCRIPT, not from a marker
+file, on purpose: a marker in the handoff would leak into the next session on
+the same branch, and a marker in `.claude/` would depend on the model
+remembering to write it. The transcript has the session's scope and is
+mechanical. A wrap-up that was invoked and stopped on a lock (a merge
+conflict, for example) never said "Safe to exit" and does NOT close the
+session: there the report may indeed ask the user to resolve something. The
+metrics turn only reads, so the scope rule above (turn that changed something)
+would leave the incident unmeasured; that is why, with the session closed, the
+hook reads the report even without a change and measures only this category.
 
-Saída: exit 0 sempre. O bloqueio viaja no JSON de stdout, não no código de
-saída — o hook nunca derruba o turno por erro próprio.
+Output: always exit 0. The block travels in the stdout JSON, not in the exit
+code -- the hook never takes the turn down over its own error.
 """
 
 import json
@@ -82,39 +88,39 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# ── limites do formato (common/skills/plain-report/SKILL.md) ────────────────
-MAX_FRASES_ABERTURA = 3
-MAX_PALAVRAS_ANTES_DO_TECNICO = 200
-MIN_PALAVRAS_PARA_MEDIR = 80   # abaixo disso não é relatório, é recado
-MAX_PASSIVAS = 3               # densidade, não caça: uma passiva é normal
+# ── format limits (common/skills/plain-report/SKILL.md) ────────────────────
+MAX_OPENING_SENTENCES = 3
+MAX_WORDS_BEFORE_TECHNICAL = 200
+MIN_WORDS_TO_MEASURE = 80   # below this it is not a report, it is a note
+MAX_PASSIVES = 3            # density, not a hunt: one passive is normal
 
-# Rótulos canônicos em inglês (interface-in-english, 2026-10-23); os rótulos
-# pt-BR continuam aceitos durante a transição.
-MARCADOR_TECNICO = re.compile(
+# Canonical English labels (interface-in-english, 2026-10-23); the pt-BR labels
+# remain accepted during the transition.
+TECHNICAL_MARKER = re.compile(
     r"^\s{0,3}#{1,6}\s*(?:technical\s+detail|detalhe\s+t[ée]cnico)", re.I | re.M)
-MARCADOR_PRA_VOCE = re.compile(
+FOR_YOU_MARKER = re.compile(
     r"(^\s{0,3}#{1,6}\s*(?:for\s+you|pra\s+voc[êe])"
     r"|\*\*\s*(?:for\s+you|pra\s+voc[êe])\s*:?\s*\*\*)", re.I | re.M)
-# A lista do fim (pedido do usuário, 03/08/2026). Aceita "Próximos passos",
-# "Decisões" ou as duas juntas — o título canônico da skill é o terceiro.
-MARCADOR_PASSOS = re.compile(
+# The closing list (user request, 2026-08-03). Accepts "Next steps",
+# "Decisions" or both together -- the skill's canonical title is the third.
+STEPS_MARKER = re.compile(
     r"^\s{0,3}#{1,6}\s*(decisions(?:\s+and\s+next\s+steps)?|next\s+steps|"
     r"decis(?:ões|oes)(?:\s+e\s+pr[óo]ximos\s+passos)?|"
     r"pr[óo]ximos\s+passos)\s*$", re.I | re.M)
-CABECALHO = re.compile(r"^\s{0,3}#{1,6}\s+\S", re.M)
-ITEM_DE_LISTA = re.compile(r"^\s{0,3}([-*+]|\d+[.)])\s+\S", re.M)
-# Item numerado: o usuário responde "1 sim, 2 não, 3 vamos falar" sem ter de
-# copiar o texto de volta. Marcador solto ("- ") não dá número para citar.
-ITEM_NUMERADO = re.compile(r"^\s{0,3}\d+[.)]\s+\S", re.M)
-RECOMENDACAO = re.compile(r"recomendo\b|i\s+recommend\b", re.I)
-# Item de tarefa do dono: a pergunta começa por "Você ..." (2026-10-15).
-ITEM_VOCE = re.compile(r"^\s*\d+[.)]\s+\**\s*(?:voc[êe]|you)\b", re.I)
-NADA_PENDENTE = re.compile(r"nada\s+pendente|nothing\s+pending", re.I)
-PRONTO_QUANDO = re.compile(r"pronto\s+quando|done\s+when", re.I)
-# Caminho de arquivo: começa por / ~/ ./ ../ ; ou tem 2+ trechos ASCII
-# separados por barra ("docs/lgpd"); ou é nome com extensão ("ripd.md").
-# Trecho com acento não conta, para "sim/não" não passar por caminho.
-CAMINHO = re.compile(
+HEADING = re.compile(r"^\s{0,3}#{1,6}\s+\S", re.M)
+LIST_ITEM = re.compile(r"^\s{0,3}([-*+]|\d+[.)])\s+\S", re.M)
+# Numbered item: the user answers "1 yes, 2 no, 3 let's talk" without having to
+# copy the text back. A loose marker ("- ") gives no number to cite.
+NUMBERED_ITEM = re.compile(r"^\s{0,3}\d+[.)]\s+\S", re.M)
+RECOMMENDATION = re.compile(r"recomendo\b|i\s+recommend\b", re.I)
+# Owner task item: the question starts with "Você ..." (2026-10-15).
+YOU_ITEM = re.compile(r"^\s*\d+[.)]\s+\**\s*(?:voc[êe]|you)\b", re.I)
+NOTHING_PENDING = re.compile(r"nada\s+pendente|nothing\s+pending", re.I)
+DONE_WHEN = re.compile(r"pronto\s+quando|done\s+when", re.I)
+# File path: starts with / ~/ ./ ../ ; or has 2+ ASCII segments separated by
+# slash ("docs/lgpd"); or is a name with an extension ("ripd.md"). A segment
+# with an accent does not count, so "sim/não" does not pass as a path.
+PATH_RE = re.compile(
     r"(?:(?:^|[\s(])(?:~|\.{1,2})?/[\w.-]+)"
     r"|(?:(?:^|[\s(])[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)+)"
     r"|(?:\b[A-Za-z0-9_-]+\.[A-Za-z]\w{0,4}\b)")
@@ -124,8 +130,8 @@ STATE_DIR = Path(os.environ.get("CEPA_REPORT_STYLE_DIR")
 
 
 def _t_emit(event: str, cwd: str = None, **fields) -> None:
-    """Espelho mínimo de common/hooks/_telemetry.py (import cross-plugin é
-    frágil entre diretórios de cache versionados). Estritamente fail-silent."""
+    """Minimal mirror of common/hooks/_telemetry.py (cross-plugin import is
+    fragile across versioned cache directories). Strictly fail-silent."""
     try:
         import subprocess
         repo = ""
@@ -150,9 +156,9 @@ def _t_emit(event: str, cwd: str = None, **fields) -> None:
         pass
 
 
-# ── glossário ───────────────────────────────────────────────────────────────
-def _secao(titulo: str) -> list:
-    """Os termos em negrito de uma seção do common/glossario.md."""
+# ── glossary ───────────────────────────────────────────────────────────────
+def _glossary_section(title: str) -> list:
+    """The bold terms of a section of common/glossario.md."""
     for base in (Path(__file__).resolve().parent.parent,          # common/
                  Path(__file__).resolve().parent.parent.parent):  # repo/common
         f = base / "glossario.md"
@@ -161,72 +167,72 @@ def _secao(titulo: str) -> list:
     else:
         return []
     try:
-        texto = f.read_text(encoding="utf-8", errors="replace")
+        text = f.read_text(encoding="utf-8", errors="replace")
     except Exception:
         return []
 
-    m = re.search(r"^##\s*" + re.escape(titulo) + r"\s*$(.*?)(?=^##\s|\Z)",
-                  texto, re.S | re.M | re.I)
+    m = re.search(r"^##\s*" + re.escape(title) + r"\s*$(.*?)(?=^##\s|\Z)",
+                  text, re.S | re.M | re.I)
     if not m:
         return []
-    termos = []
-    for linha in m.group(1).splitlines():
-        m2 = re.match(r"^\s*-\s*\*\*(.+?)\*\*", linha)
+    terms = []
+    for line in m.group(1).splitlines():
+        m2 = re.match(r"^\s*-\s*\*\*(.+?)\*\*", line)
         if not m2:
             continue
-        # "portão", "falha aberto / falha fechado", "é medido / são medidas"
-        for termo in m2.group(1).split("/"):
-            termo = termo.strip().lower()
-            if len(termo) >= 4:
-                termos.append(termo)
-    return termos
+        # "portão", "falha aberto / falha fechado", "é medido / são medidas" (several terms per line)
+        for term in m2.group(1).split("/"):
+            term = term.strip().lower()
+            if len(term) >= 4:
+                terms.append(term)
+    return terms
 
 
-def load_jargao() -> list:
-    """Termos internos do projeto — sinalizados só na ABERTURA.
+def load_jargon() -> list:
+    """Internal project terms -- flagged only in the OPENING.
 
-    A seção 'Aceitos sem tradução' fica de fora de propósito: é o vocabulário
-    já corrente entre o usuário e o harness, e sinalizá-lo geraria ruído que
-    faria o medidor ser ignorado. No detalhe técnico esses termos são
-    permitidos: lá eles são densos e úteis.
+    The 'Aceitos sem tradução' section is left out on purpose: it is the
+    vocabulary already current between the user and the harness, and flagging
+    it would generate noise that would make the meter get ignored. In the
+    technical detail these terms are allowed: there they are dense and useful.
     """
-    return _secao("Traduzir sempre")
+    return _glossary_section("Traduzir sempre")
 
 
-def load_abstracoes() -> list:
-    """Categorias inventadas que ocupam o lugar do fato — sinalizadas no texto
-    INTEIRO, inclusive no detalhe técnico.
+def load_abstractions() -> list:
+    """Invented categories that take the place of the fact -- flagged in the
+    WHOLE text, including the technical detail.
 
-    Motivo (03/08/2026): a primeira versão deste hook tratava o bloco técnico
-    como zona franca, e foi exatamente lá que o usuário achou "virou um sinal
-    mecânico", "nunca são medidas" e "chega por um caminho indireto" — nenhuma
-    delas é jargão do projeto, todas são abstração inventada na hora. Bloco
-    técnico tem liberdade de TAMANHO, não de clareza.
+    Reason (2026-08-03): the first version of this hook treated the technical
+    block as a free zone, and it was exactly there that the user found "virou
+    um sinal mecânico", "nunca são medidas" and "chega por um caminho
+    indireto" -- none of them is project jargon, all are abstractions invented
+    on the spot. The technical block has freedom of LENGTH, not of clarity.
     """
-    return _secao("Abstrações a evitar")
+    return _glossary_section("Abstrações a evitar")
 
 
-def load_higiene() -> list:
-    """Frases que só interessam quando falham — sinalizadas na abertura e no
-    `Pra você:`, nunca no detalhe técnico.
+def load_hygiene() -> list:
+    """Phrases that only matter when they fail -- flagged in the opening and in
+    `Pra você:`, never in the technical detail.
 
-    Motivo (03/08/2026): o usuário leu um relatório inteiro dentro do formato e
-    ainda assim perguntou "so what?". Quatro linhas dele diziam que a árvore
-    ficou limpa, que nenhum worktree sobrou e que a memória foi atualizada —
-    nenhuma delas muda alguma coisa para quem lê. No detalhe técnico uma oração
-    dessas é barata; nas 200 palavras do topo ela toma o lugar da consequência.
+    Reason (2026-08-03): the user read a whole report inside the format and
+    still asked "so what?". Four lines of it said the tree was clean, that no
+    worktree was left and that memory was updated -- none of them changes
+    anything for the reader. In the technical detail such a sentence is cheap;
+    in the 200 words at the top it takes the place of the consequence.
     """
-    return _secao("Higiene (não relatar)")
+    return _glossary_section("Higiene (não relatar)")
 
 
-# Voz passiva e nominalização escondem quem faz o quê: "são medidas" não diz
-# quem mede nem como. Regex proposital sobre ser + particípio.
-PASSIVA = re.compile(
+# Passive voice and nominalization hide who does what: "são medidas" does not
+# say who measures or how. Deliberate regex over "to be" + participle.
+PASSIVE = re.compile(
     r"\b(é|são|foi|foram|será|serão|era|eram|seja|sejam|sendo|ser)\s+"
     r"(\w{3,}(?:ad|id)[oa]s?)\b", re.I)
 
 
-# ── leitura do transcript ───────────────────────────────────────────────────
+# ── reading the transcript ───────────────────────────────────────────────────
 def read_rows(transcript_path: str) -> list:
     try:
         with open(transcript_path, encoding="utf-8", errors="replace") as fh:
@@ -236,7 +242,7 @@ def read_rows(transcript_path: str) -> list:
 
 
 def _is_user_prompt(row) -> bool:
-    """Turno do usuário de verdade — não um tool_result travestido de user."""
+    """A real user turn -- not a tool_result disguised as user."""
     if row.get("type") != "user" or row.get("isSidechain"):
         return False
     content = (row.get("message") or {}).get("content")
@@ -247,39 +253,39 @@ def _is_user_prompt(row) -> bool:
     return False
 
 
-def turno_alterou_algo(rows) -> bool:
-    """Houve escrita, edição ou commit desde o último prompt do usuário?
+def turn_changed_something(rows) -> bool:
+    """Was there a write, edit or commit since the user's last prompt?
 
-    Se sim, a resposta final conta como relatório de trabalho feito. Olha
-    também o que subagente fez: trabalho de subagente é trabalho feito.
+    If so, the final answer counts as a report of work done. It also looks at
+    what the subagent did: subagent work is work done.
     """
-    inicio = 0
+    start = 0
     for i in range(len(rows) - 1, -1, -1):
         if _is_user_prompt(rows[i]):
-            inicio = i
+            start = i
             break
-    for row in rows[inicio:]:
+    for row in rows[start:]:
         if row.get("type") != "assistant":
             continue
-        for bloco in (row.get("message") or {}).get("content") or []:
-            if not isinstance(bloco, dict) or bloco.get("type") != "tool_use":
+        for block in (row.get("message") or {}).get("content") or []:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
                 continue
-            nome = bloco.get("name", "")
-            if nome in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+            name = block.get("name", "")
+            if name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
                 return True
-            if nome == "Bash":
-                cmd = str((bloco.get("input") or {}).get("command", ""))
+            if name == "Bash":
+                cmd = str((block.get("input") or {}).get("command", ""))
                 if re.search(r"\bgit\s+(commit|merge|push)\b", cmd):
                     return True
     return False
 
 
 SAFE_TO_EXIT = re.compile(r"safe\s+to\s+`?exit`?", re.I)
-INVOCA_WRAP_UP = re.compile(
+WRAP_UP_INVOKED = re.compile(
     r"<command-name>\s*/?(?:common:)?wrap-up\s*</command-name>", re.I)
 
 
-def _texto_do_usuario(row) -> str:
+def _user_text(row) -> str:
     content = (row.get("message") or {}).get("content")
     if isinstance(content, str):
         return content
@@ -289,230 +295,230 @@ def _texto_do_usuario(row) -> str:
     return ""
 
 
-def sessao_encerrada(rows) -> bool:
-    """O `/common:wrap-up` foi invocado e DEPOIS disse "Safe to exit"?
+def session_closed(rows) -> bool:
+    """Was `/common:wrap-up` invoked and AFTER that said "Safe to exit"?
 
-    Só a conversa principal conta (nunca `isSidechain`). Invocação: a linha do
-    usuário com `<command-name>/common:wrap-up</command-name>` (é assim que um
-    slash command cai no transcript) ou começando por `/common:wrap-up` ou
-    `/wrap-up`; ou um `tool_use` de `Skill` cujo `input.skill` termina em
-    `wrap-up`. "Safe to exit" vale na mesma linha da invocação ou em qualquer
-    texto de assistente posterior, inclusive o último relatório. Só texto de
-    assistente conta: o corpo do comando, injetado como linha de usuário,
-    também cita a frase."""
-    invocado = False
+    Only the main conversation counts (never `isSidechain`). Invocation: the
+    user line with `<command-name>/common:wrap-up</command-name>` (that is how
+    a slash command lands in the transcript) or starting with
+    `/common:wrap-up` or `/wrap-up`; or a `tool_use` of `Skill` whose
+    `input.skill` ends in `wrap-up`. "Safe to exit" counts on the same line as
+    the invocation or in any later assistant text, including the last report.
+    Only assistant text counts: the command body, injected as a user line,
+    also quotes the phrase."""
+    invoked = False
     for row in rows:
         if row.get("isSidechain"):
             continue
-        tipo = row.get("type")
-        if tipo == "user":
-            texto = _texto_do_usuario(row)
-            if INVOCA_WRAP_UP.search(texto) or re.match(
-                    r"\s*/(?:common:)?wrap-up\b", texto):
-                invocado = True
-        elif tipo == "assistant":
-            for bloco in (row.get("message") or {}).get("content") or []:
-                if not isinstance(bloco, dict):
+        kind = row.get("type")
+        if kind == "user":
+            text = _user_text(row)
+            if WRAP_UP_INVOKED.search(text) or re.match(
+                    r"\s*/(?:common:)?wrap-up\b", text):
+                invoked = True
+        elif kind == "assistant":
+            for block in (row.get("message") or {}).get("content") or []:
+                if not isinstance(block, dict):
                     continue
-                if bloco.get("type") == "tool_use" and bloco.get("name") == "Skill":
-                    skill = str((bloco.get("input") or {}).get("skill", ""))
+                if block.get("type") == "tool_use" and block.get("name") == "Skill":
+                    skill = str((block.get("input") or {}).get("skill", ""))
                     if skill.endswith("wrap-up"):
-                        invocado = True
-                elif (bloco.get("type") == "text" and invocado
-                      and SAFE_TO_EXIT.search(bloco.get("text", ""))):
+                        invoked = True
+                elif (block.get("type") == "text" and invoked
+                      and SAFE_TO_EXIT.search(block.get("text", ""))):
                     return True
     return False
 
 
-DOC_DE_ENTREVISTA = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
+INTERVIEW_DOC = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
 
 
-def turno_de_entrevista(rows, fala: str) -> bool:
-    """O turno só gravou o documento da entrevista e termina perguntando?
+def interview_turn(rows, speech: str) -> bool:
+    """Did the turn only write the interview document and end by asking?
 
-    "Termina perguntando" é o último parágrafo ter `?`, não o último
-    caractere: a proposta que acompanha a pergunta às vezes vem depois dela
-    ("...? Minha proposta: X. Corrija."), e foi esse o turno barrado na
-    transcrição."""
-    if (MARCADOR_PRA_VOCE.search(fala) or MARCADOR_TECNICO.search(fala)
-            or MARCADOR_PASSOS.search(fala)):
+    "Ends by asking" means the last paragraph has a `?`, not the last
+    character: the proposal that accompanies the question sometimes comes
+    after it ("...? My proposal: X. Correct me."), and that was the turn
+    blocked in the transcript."""
+    if (FOR_YOU_MARKER.search(speech) or TECHNICAL_MARKER.search(speech)
+            or STEPS_MARKER.search(speech)):
         return False
-    paragrafos = [p for p in re.split(r"\n\s*\n", fala) if p.strip()]
-    if not paragrafos or "?" not in paragrafos[-1]:
+    paragraphs = [p for p in re.split(r"\n\s*\n", speech) if p.strip()]
+    if not paragraphs or "?" not in paragraphs[-1]:
         return False
-    inicio = 0
+    start = 0
     for i in range(len(rows) - 1, -1, -1):
         if _is_user_prompt(rows[i]):
-            inicio = i
+            start = i
             break
-    escreveu = False
-    for row in rows[inicio:]:
+    wrote = False
+    for row in rows[start:]:
         if row.get("type") != "assistant" or row.get("isSidechain"):
             continue
-        for bloco in (row.get("message") or {}).get("content") or []:
-            if not isinstance(bloco, dict) or bloco.get("type") != "tool_use":
+        for block in (row.get("message") or {}).get("content") or []:
+            if not isinstance(block, dict) or block.get("type") != "tool_use":
                 continue
-            nome = bloco.get("name", "")
-            entrada = bloco.get("input") or {}
-            if nome in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
-                alvo = str(entrada.get("file_path") or entrada.get("notebook_path") or "")
-                if not DOC_DE_ENTREVISTA.search(alvo.replace("\\", "/")):
+            name = block.get("name", "")
+            tool_input = block.get("input") or {}
+            if name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+                target = str(tool_input.get("file_path") or tool_input.get("notebook_path") or "")
+                if not INTERVIEW_DOC.search(target.replace("\\", "/")):
                     return False
-                escreveu = True
-            elif nome == "Bash" and re.search(
+                wrote = True
+            elif name == "Bash" and re.search(
                     r"\bgit\s+(commit|merge|push)\b",
-                    str(entrada.get("command", ""))):
+                    str(tool_input.get("command", ""))):
                 return False
-    return escreveu
+    return wrote
 
 
-def ultimo_relatorio(rows) -> str:
-    """O último texto do assistente na conversa principal (nunca sidechain:
-    a resposta de um subagente não é o relatório que o usuário lê)."""
+def last_report(rows) -> str:
+    """The assistant's last text in the main conversation (never sidechain:
+    a subagent's reply is not the report the user reads)."""
     for row in reversed(rows):
         if row.get("type") != "assistant" or row.get("isSidechain"):
             continue
         content = (row.get("message") or {}).get("content")
         if not isinstance(content, list):
             continue
-        textos = [b.get("text", "") for b in content
+        texts = [b.get("text", "") for b in content
                   if isinstance(b, dict) and b.get("type") == "text"]
-        junto = "\n".join(t for t in textos if t.strip())
-        if junto.strip():
-            return junto
+        joined = "\n".join(t for t in texts if t.strip())
+        if joined.strip():
+            return joined
     return ""
 
 
-# ── medição ─────────────────────────────────────────────────────────────────
-def conta_palavras(texto: str) -> int:
-    return len(re.findall(r"\S+", texto))
+# ── measurement ─────────────────────────────────────────────────────────────────
+def count_words(text: str) -> int:
+    return len(re.findall(r"\S+", text))
 
 
-def frases(texto: str) -> list:
-    """Divisão pobre de propósito: só precisa distinguir 3 de 8. Abreviações
-    e números com ponto contam a mais, então o limite é generoso."""
-    partes = re.split(r"(?<=[.!?…])\s+", texto.strip())
-    return [p for p in partes if p.strip()]
+def sentences(text: str) -> list:
+    """Deliberately crude split: it only needs to tell 3 from 8. Abbreviations
+    and numbers with a dot count extra, so the limit is generous."""
+    parts = re.split(r"(?<=[.!?…])\s+", text.strip())
+    return [p for p in parts if p.strip()]
 
 
-def primeiro_paragrafo(texto: str) -> str:
-    """A abertura: tudo até a primeira linha em branco, cabeçalho ou lista."""
-    linhas = []
-    for linha in texto.strip().splitlines():
-        if not linha.strip():
+def first_paragraph(text: str) -> str:
+    """The opening: everything up to the first blank line, heading or list."""
+    lines = []
+    for line in text.strip().splitlines():
+        if not line.strip():
             break
-        if re.match(r"^\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|\||>)", linha):
+        if re.match(r"^\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|\||>)", line):
             break
-        linhas.append(linha)
-    return " ".join(linhas).strip()
+        lines.append(line)
+    return " ".join(lines).strip()
 
 
-def itens_da_lista(cauda: str) -> list:
-    """Os itens da seção final, um por número. Linhas de continuação (indentadas
-    ou soltas) pertencem ao item aberto — a recomendação quase sempre está na
-    segunda linha."""
-    itens, atual, cercado = [], None, False
-    for linha in cauda.splitlines():
-        if atual is not None and linha.strip().startswith("```"):
-            cercado = not cercado
-        if ITEM_NUMERADO.match(linha) and not cercado:
-            if atual is not None:
-                itens.append(atual)
-            atual = linha
-        elif atual is not None:
-            if linha.strip():
-                atual += " " + linha.strip()
-            elif not cercado:
-                itens.append(atual)
-                atual = None
-    if atual is not None:
-        itens.append(atual)
-    return itens
+def list_items(tail: str) -> list:
+    """The items of the final section, one per number. Continuation lines
+    (indented or loose) belong to the open item -- the recommendation is almost
+    always on the second line."""
+    items, current, fenced = [], None, False
+    for line in tail.splitlines():
+        if current is not None and line.strip().startswith("```"):
+            fenced = not fenced
+        if NUMBERED_ITEM.match(line) and not fenced:
+            if current is not None:
+                items.append(current)
+            current = line
+        elif current is not None:
+            if line.strip():
+                current += " " + line.strip()
+            elif not fenced:
+                items.append(current)
+                current = None
+    if current is not None:
+        items.append(current)
+    return items
 
 
-def medir_itens(cauda: str) -> list:
-    """Cada item da lista do fim é uma pergunta fechada com recomendação.
+def measure_items(tail: str) -> list:
+    """Each item of the closing list is a closed question with a recommendation.
 
-    Motivo (03/08/2026, segunda correção do usuário no mesmo dia): a primeira
-    versão da lista nomeava o assunto e devolvia a decisão — *"qual de fato é a
-    decisão que tenho que tomar? preciso interpretar o texto, acessar o card,
-    entender todo o contexto, para poder elaborar uma próxima instrução"*. Ele
-    quer responder "1 sim, 2 não, 3 vamos falar".
+    Reason (2026-08-03, the user's second correction on the same day): the
+    first version of the list named the subject and handed the decision back --
+    *"which is actually the decision I have to make? I need to interpret the
+    text, open the card, understand the whole context, to be able to write a
+    next instruction"*. He wants to answer "1 yes, 2 no, 3 let's talk".
     """
-    if NADA_PENDENTE.search(cauda):
+    if NOTHING_PENDING.search(tail):
         return []
-    if not ITEM_DE_LISTA.search(cauda):
-        return []          # a falta de itens já virou desvio em quem chamou
+    if not LIST_ITEM.search(tail):
+        return []          # the missing items already became a deviation in the caller
 
-    desvios = []
-    itens = itens_da_lista(cauda)
-    if not itens:
+    deviations = []
+    items = list_items(tail)
+    if not items:
         return [("passos-nao-numerados",
                  "a lista do fim não é numerada — numere para o usuário poder "
                  "responder \"1 sim, 2 não\" sem citar o texto de volta")]
 
-    sem_pergunta = [i for i in itens if "?" not in i]
-    if sem_pergunta:
-        desvios.append(("item-sem-pergunta",
-                        f"{len(sem_pergunta)} de {len(itens)} itens não fazem uma "
-                        f"pergunta fechada (ex.: {sem_pergunta[0][:70].strip()}…) — "
+    no_question = [i for i in items if "?" not in i]
+    if no_question:
+        deviations.append(("item-sem-pergunta",
+                        f"{len(no_question)} de {len(items)} itens não fazem uma "
+                        f"pergunta fechada (ex.: {no_question[0][:70].strip()}…) — "
                         f"o usuário precisa poder responder sim ou não sem "
                         f"interpretar o assunto"))
 
-    sem_reco = [i for i in itens if not RECOMENDACAO.search(i)]
-    if sem_reco:
-        desvios.append(("item-sem-recomendacao",
-                        f"{len(sem_reco)} de {len(itens)} itens não trazem "
+    no_reco = [i for i in items if not RECOMMENDATION.search(i)]
+    if no_reco:
+        deviations.append(("item-sem-recomendacao",
+                        f"{len(no_reco)} de {len(items)} itens não trazem "
                         f"\"I recommend yes/no\" — decisão crua sem recomendação "
                         f"devolve o trabalho para o usuário"))
 
-    tarefas = [i for i in itens if ITEM_VOCE.match(i)]
-    sem_comando = [i for i in tarefas if "`" not in i and not CAMINHO.search(
+    tasks = [i for i in items if YOU_ITEM.match(i)]
+    no_command = [i for i in tasks if "`" not in i and not PATH_RE.search(
         re.sub(r"^\s*\d+[.)]\s+", "", i))]
-    sem_pronto = [i for i in tarefas if not PRONTO_QUANDO.search(i)]
-    if sem_comando or sem_pronto:
-        ruins = [i for i in tarefas if i in sem_comando or i in sem_pronto]
-        falta = []
-        if sem_comando:
-            falta.append("comando ou arquivo")
-        if sem_pronto:
-            falta.append("a linha 'Done when:'")
-        desvios.append(("tarefa-sem-passo",
-                        f"{len(ruins)} de {len(tarefas)} itens de tarefa sua "
+    no_done = [i for i in tasks if not DONE_WHEN.search(i)]
+    if no_command or no_done:
+        bad = [i for i in tasks if i in no_command or i in no_done]
+        missing = []
+        if no_command:
+            missing.append("comando ou arquivo")
+        if no_done:
+            missing.append("a linha 'Done when:'")
+        deviations.append(("tarefa-sem-passo",
+                        f"{len(bad)} de {len(tasks)} itens de tarefa sua "
                         f"(\"Você ...\") não trazem o passo a passo — falta "
-                        f"{' e '.join(falta)} (ex.: {ruins[0][:70].strip()}…); "
+                        f"{' e '.join(missing)} (ex.: {bad[0][:70].strip()}…); "
                         f"sem isso o item diz a categoria, não o passo"))
-    return desvios
+    return deviations
 
 
-def texto_do_pra_voce(relatorio: str) -> str:
-    """Do marcador `Pra você:` até o fim do parágrafo."""
-    m = MARCADOR_PRA_VOCE.search(relatorio)
+def for_you_text(report: str) -> str:
+    """From the `Pra você:` marker to the end of the paragraph."""
+    m = FOR_YOU_MARKER.search(report)
     if not m:
         return ""
-    resto = relatorio[m.end():]
-    return re.split(r"\n\s*\n", resto, maxsplit=1)[0].strip()
+    rest = report[m.end():]
+    return re.split(r"\n\s*\n", rest, maxsplit=1)[0].strip()
 
 
-def pra_voce_anuncia(texto: str) -> bool:
-    """O `Pra você:` diz que algo espera pelo usuário?"""
-    limpo = re.sub(r"^[\W_]+", "", texto)
-    if not limpo:
+def for_you_announces(text: str) -> bool:
+    """Does the `Pra você:` say something is waiting for the user?"""
+    cleaned = re.sub(r"^[\W_]+", "", text)
+    if not cleaned:
         return False
-    return not limpo.lower().startswith(("nada", "nothing"))
+    return not cleaned.lower().startswith(("nada", "nothing"))
 
 
-def desvio_pos_wrap_up(relatorio: str):
-    """A sessão já foi encerrada: o relatório abre frente nova?
+def post_wrap_up_deviation(report: str):
+    """The session is already closed: does the report open a new front?
 
-    Devolve (categoria, mensagem) ou None. Frente nova = item numerado com `?`
-    na lista do fim, ou `Pra você:` que anuncia algo."""
-    mp = MARCADOR_PASSOS.search(relatorio)
-    cortes = [x.start() for x in (MARCADOR_TECNICO.search(relatorio), mp) if x]
-    cabeca = relatorio[:min(cortes)] if cortes else relatorio
-    pergunta = bool(mp) and any(
-        "?" in i for i in itens_da_lista(relatorio[mp.end():]))
-    if not (pergunta or pra_voce_anuncia(texto_do_pra_voce(cabeca))):
+    Returns (category, message) or None. New front = numbered item with `?` in
+    the closing list, or a `Pra você:` that announces something."""
+    steps_match = STEPS_MARKER.search(report)
+    cuts = [x.start() for x in (TECHNICAL_MARKER.search(report), steps_match) if x]
+    head = report[:min(cuts)] if cuts else report
+    question = bool(steps_match) and any(
+        "?" in i for i in list_items(report[steps_match.end():]))
+    if not (question or for_you_announces(for_you_text(head))):
         return None
     return ("pergunta-pos-wrap-up",
             "a sessão já foi encerrada pelo wrap-up (\"Safe to exit\"): o "
@@ -523,176 +529,176 @@ def desvio_pos_wrap_up(relatorio: str):
             "<o Próximo do handoff>.\"")
 
 
-def medir(relatorio: str, jargao: list, abstracoes: list = (),
-          higiene: list = (), encerrada: bool = False) -> list:
-    """Devolve os desvios como (categoria, mensagem). Categoria é rótulo
-    estável para a telemetria; mensagem é o que o modelo lê. Lista vazia =
-    relatório dentro do formato."""
-    desvios = []
+def measure(report: str, jargon: list, abstractions: list = (),
+          hygiene: list = (), closed: bool = False) -> list:
+    """Returns the deviations as (category, message). Category is a stable label
+    for telemetry; message is what the model reads. Empty list = report inside
+    the format."""
+    deviations = []
 
-    # O topo vai até o primeiro dos dois cabeçalhos — sem o detalhe técnico, a
-    # lista do fim não pode cair dentro do teto de 200 palavras.
-    cortes = [x.start() for x in (MARCADOR_TECNICO.search(relatorio),
-                                  MARCADOR_PASSOS.search(relatorio)) if x]
-    cabeca = relatorio[:min(cortes)] if cortes else relatorio
+    # The top goes up to the first of the two headings -- without the technical
+    # detail, the closing list must not fall inside the 200-word ceiling.
+    cuts = [x.start() for x in (TECHNICAL_MARKER.search(report),
+                                  STEPS_MARKER.search(report)) if x]
+    head = report[:min(cuts)] if cuts else report
 
-    abertura = primeiro_paragrafo(relatorio)
-    if not abertura:
-        desvios.append(("sem-abertura",
+    opening = first_paragraph(report)
+    if not opening:
+        deviations.append(("sem-abertura",
                         "não abre com um parágrafo de resultado — a primeira "
                         "coisa é cabeçalho, lista ou tabela"))
     else:
-        n = len(frases(abertura))
-        if n > MAX_FRASES_ABERTURA:
-            desvios.append(("abertura-longa",
-                            f"abertura com {n} frases (máximo {MAX_FRASES_ABERTURA})"))
-        achados = sorted({t for t in jargao if t in abertura.lower()})
-        if achados:
-            desvios.append(("jargao",
-                            "jargão na abertura: " + ", ".join(achados) +
+        n = len(sentences(opening))
+        if n > MAX_OPENING_SENTENCES:
+            deviations.append(("abertura-longa",
+                            f"abertura com {n} frases (máximo {MAX_OPENING_SENTENCES})"))
+        found = sorted({t for t in jargon if t in opening.lower()})
+        if found:
+            deviations.append(("jargao",
+                            "jargão na abertura: " + ", ".join(found) +
                             " — traduza ou mova para o detalhe técnico"))
 
-    if not MARCADOR_PRA_VOCE.search(cabeca):
-        desvios.append(("sem-pra-voce",
+    if not FOR_YOU_MARKER.search(head):
+        deviations.append(("sem-pra-voce",
                         "falta a linha `**For you:**` — mesmo que seja "
                         "\"nothing to decide\""))
 
-    # A lista do fim: existe, é a última seção, e traz itens de verdade.
-    mp = MARCADOR_PASSOS.search(relatorio)
-    if not mp:
-        desvios.append(("sem-proximos-passos",
+    # The closing list: it exists, is the last section, and carries real items.
+    steps_match = STEPS_MARKER.search(report)
+    if not steps_match:
+        deviations.append(("sem-proximos-passos",
                         "falta a seção final `### Decisions and next steps` — "
                         "uma linha por ação (Decidir / Você faz / Eu faço), ou "
                         "\"Nothing pending.\" quando não há nenhuma"))
     else:
-        cauda = relatorio[mp.end():]
-        if CABECALHO.search(cauda):
-            desvios.append(("passos-nao-sao-o-fim",
+        tail = report[steps_match.end():]
+        if HEADING.search(tail):
+            deviations.append(("passos-nao-sao-o-fim",
                             "`### Decisions and next steps` não é a última seção — "
                             "nada vem depois dela"))
-        if not ITEM_DE_LISTA.search(cauda) and not NADA_PENDENTE.search(cauda):
-            desvios.append(("passos-em-prosa",
+        if not LIST_ITEM.search(tail) and not NOTHING_PENDING.search(tail):
+            deviations.append(("passos-em-prosa",
                             "a seção final não tem itens de lista — cada ação em "
                             "uma linha começando por verbo, não em prosa"))
-        desvios += medir_itens(cauda)
-        topo = texto_do_pra_voce(cabeca)
-        if (pra_voce_anuncia(topo) and not ITEM_NUMERADO.search(cauda)
-                and not encerrada):
-            desvios.append(("pra-voce-sem-lista",
+        deviations += measure_items(tail)
+        top = for_you_text(head)
+        if (for_you_announces(top) and not NUMBERED_ITEM.search(tail)
+                and not closed):
+            deviations.append(("pra-voce-sem-lista",
                             f"`For you:` diz que algo espera pelo usuário "
-                            f"({topo[:60].strip()}), e a lista do fim não tem "
+                            f"({top[:60].strip()}), e a lista do fim não tem "
                             f"item numerado nenhum — cada tarefa dele é um item "
                             f"numerado com Onde, Comando (ou arquivo) e Done "
                             f"when; só quando o For you diz \"nothing\" a lista "
                             f"pode dizer \"Nothing pending.\""))
 
-    if encerrada:
-        d = desvio_pos_wrap_up(relatorio)
+    if closed:
+        d = post_wrap_up_deviation(report)
         if d:
-            desvios.append(d)
+            deviations.append(d)
 
-    palavras = conta_palavras(cabeca)
-    if palavras > MAX_PALAVRAS_ANTES_DO_TECNICO:
-        desvios.append(("acima-do-teto",
-                        f"{palavras} palavras antes do detalhe técnico "
-                        f"(teto {MAX_PALAVRAS_ANTES_DO_TECNICO}) — o resto desce "
+    words = count_words(head)
+    if words > MAX_WORDS_BEFORE_TECHNICAL:
+        deviations.append(("acima-do-teto",
+                        f"{words} palavras antes do detalhe técnico "
+                        f"(teto {MAX_WORDS_BEFORE_TECHNICAL}) — o resto desce "
                         f"para `### Technical detail`"))
 
-    # Higiene: só no topo (abertura + `Pra você:`). No detalhe técnico "commit
-    # 8827471" é informação barata e útil; aqui em cima ela empurra para fora a
-    # frase que diz o que mudou para o leitor.
-    limpas = sorted({h for h in higiene if h in cabeca.lower()})
-    if limpas:
-        mostra = ", ".join(f"\"{v}\"" for v in limpas[:3])
-        desvios.append(("higiene",
-                        f"higiene relatada como resultado: {mostra} — só interessa "
+    # Hygiene: only at the top (opening + `Pra você:`). In the technical detail
+    # "commit 8827471" is cheap, useful information; up here it pushes out the
+    # sentence that says what changed for the reader.
+    hits = sorted({h for h in hygiene if h in head.lower()})
+    if hits:
+        shown = ", ".join(f"\"{v}\"" for v in hits[:3])
+        deviations.append(("higiene",
+                        f"higiene relatada como resultado: {shown} — só interessa "
                         f"quando falha ou quando exige algo do usuário; no topo, "
                         f"escreva no lugar o que mudou para ele"))
 
-    # Estas duas valem no texto INTEIRO. O bloco técnico tem liberdade de
-    # tamanho, não de clareza — foi lá dentro que o usuário achou as três
-    # frases obscuras que motivaram esta versão.
-    baixo = relatorio.lower()
-    vagas = sorted({a for a in abstracoes if a in baixo})
-    if vagas:
-        mostra = ", ".join(f"\"{v}\"" for v in vagas[:4])
-        resto = f" (+{len(vagas) - 4})" if len(vagas) > 4 else ""
-        desvios.append(("abstracao",
-                        f"abstração no lugar do fato: {mostra}{resto} — nomeie a "
+    # These two apply to the WHOLE text. The technical block has freedom of
+    # length, not of clarity -- it was in there that the user found the three
+    # obscure sentences that motivated this version.
+    lowered = report.lower()
+    vague = sorted({a for a in abstractions if a in lowered})
+    if vague:
+        shown = ", ".join(f"\"{v}\"" for v in vague[:4])
+        rest = f" (+{len(vague) - 4})" if len(vague) > 4 else ""
+        deviations.append(("abstracao",
+                        f"abstração no lugar do fato: {shown}{rest} — nomeie a "
                         f"coisa, não a categoria da coisa (ver a seção "
                         f"\"Abstrações a evitar\" do glossário)"))
 
-    passivas = PASSIVA.findall(relatorio)
-    if len(passivas) > MAX_PASSIVAS:
-        exemplos = ", ".join(f"\"{a} {b}\"" for a, b in passivas[:3])
-        desvios.append(("passiva",
-                        f"{len(passivas)} construções passivas ({exemplos}...) — "
+    passives = PASSIVE.findall(report)
+    if len(passives) > MAX_PASSIVES:
+        examples = ", ".join(f"\"{a} {b}\"" for a, b in passives[:3])
+        deviations.append(("passiva",
+                        f"{len(passives)} construções passivas ({examples}...) — "
                         f"escondem quem faz o quê; diga quem age"))
 
-    return desvios
+    return deviations
 
 
-# ── pendência entre turnos ──────────────────────────────────────────────────
-def pendencia_path(session_id: str) -> Path:
+# ── pending item between turns ──────────────────────────────────────────────────
+def pending_path(session_id: str) -> Path:
     slug = re.sub(r"[^A-Za-z0-9_-]", "_", session_id or "sem-sessao")
     return STATE_DIR / f"{slug}.json"
 
 
 def on_stop(payload):
-    """Devolve o motivo do bloqueio, ou None para deixar a parada seguir."""
+    """Returns the block reason, or None to let the stop proceed."""
     rows = read_rows(payload.get("transcript_path", ""))
     if not rows:
         return None
-    alterou = turno_alterou_algo(rows)
-    encerrada = sessao_encerrada(rows)
-    # Escopo: relatório de trabalho feito. Exceção estreita: sessão encerrada
-    # pelo wrap-up, onde mesmo o turno que só lê (metrics) é medido, mas só
-    # pela categoria `pergunta-pos-wrap-up`.
-    if not alterou and not encerrada:
+    changed = turn_changed_something(rows)
+    closed = session_closed(rows)
+    # Scope: report of work done. Narrow exception: session closed by wrap-up,
+    # where even the turn that only reads (metrics) is measured, but only by
+    # the `pergunta-pos-wrap-up` category.
+    if not changed and not closed:
         return None
 
-    relatorio = ultimo_relatorio(rows)
-    if conta_palavras(relatorio) < MIN_PALAVRAS_PARA_MEDIR:
+    report = last_report(rows)
+    if count_words(report) < MIN_WORDS_TO_MEASURE:
         return None
-    if turno_de_entrevista(rows, relatorio):
+    if interview_turn(rows, report):
         return None
 
-    if alterou:
-        desvios = medir(relatorio, load_jargao(), load_abstracoes(),
-                        load_higiene(), encerrada=encerrada)
+    if changed:
+        deviations = measure(report, load_jargon(), load_abstractions(),
+                        load_hygiene(), closed=closed)
     else:
-        d = desvio_pos_wrap_up(relatorio)
-        desvios = [d] if d else []
+        d = post_wrap_up_deviation(report)
+        deviations = [d] if d else []
     cwd = payload.get("cwd") or os.getcwd()
 
-    # Trava anti-loop: esta parada já é consequência de um bloqueio deste hook.
-    # Bloquear de novo prenderia a sessão num par reescreve-bloqueia sem fim.
-    reincidente = bool(payload.get("stop_hook_active"))
-    vai_bloquear = bool(desvios) and not reincidente
+    # Anti-loop lock: this stop is already the consequence of a block by this hook.
+    # Blocking again would trap the session in an endless rewrite-block pair.
+    repeat = bool(payload.get("stop_hook_active"))
+    will_block = bool(deviations) and not repeat
 
     _t_emit("report_style", cwd=cwd,
-            palavras=conta_palavras(relatorio),
-            desvios=len(desvios),
-            tipos=[cat for cat, _ in desvios],
-            bloqueou=vai_bloquear,
-            reincidente=reincidente,
-            pos_wrap_up=encerrada)
+            palavras=count_words(report),
+            desvios=len(deviations),
+            tipos=[cat for cat, _ in deviations],
+            bloqueou=will_block,
+            reincidente=repeat,
+            pos_wrap_up=closed)
 
-    p = pendencia_path(payload.get("session_id", ""))
-    if not desvios:
+    p = pending_path(payload.get("session_id", ""))
+    if not deviations:
         p.unlink(missing_ok=True)
         return None
 
-    if vai_bloquear:
-        # O relatório é reescrito AGORA, no mesmo turno: nada de pendência para
-        # o turno seguinte, senão o usuário leva o aviso de um texto já corrigido.
+    if will_block:
+        # The report is rewritten NOW, in the same turn: no pending item for the
+        # next turn, otherwise the user gets the warning for an already fixed text.
         p.unlink(missing_ok=True)
-        return motivo_bloqueio([m for _, m in desvios], encerrada)
+        return block_reason([m for _, m in deviations], closed)
 
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps({"desvios": [m for _, m in desvios],
-                                "encerrada": encerrada},
+        p.write_text(json.dumps({"desvios": [m for _, m in deviations],
+                                "encerrada": closed},
                                ensure_ascii=False),
                      encoding="utf-8")
     except Exception:
@@ -700,7 +706,7 @@ def on_stop(payload):
     return None
 
 
-FORMATO_ENCERRADA = (
+CLOSED_FORMAT = (
     "abertura de até 3 frases sem jargão → **For you:** nothing → "
     "### Technical detail → ### Decisions and next steps contendo só "
     "\"Nothing pending. Próxima sessão começa por <o Próximo do handoff>.\", "
@@ -708,12 +714,12 @@ FORMATO_ENCERRADA = (
     "(BACKLOG.md, item de fila ou `cepa-feedback add`) e o relatório diz onde.")
 
 
-def motivo_bloqueio(desvios, encerrada: bool = False) -> str:
-    if encerrada:
-        fim = ("Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
-               "turno: " + FORMATO_ENCERRADA + " ")
+def block_reason(deviations, closed: bool = False) -> str:
+    if closed:
+        ending = ("Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
+               "turno: " + CLOSED_FORMAT + " ")
     else:
-        fim = ("Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
+        ending = ("Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
                "turno: abertura de até 3 frases sem jargão → **For you:** → "
                "### Technical detail → ### Decisions and next steps (lista "
                "numerada, uma pergunta fechada por item, cada uma com "
@@ -721,28 +727,28 @@ def motivo_bloqueio(desvios, encerrada: bool = False) -> str:
                "Onde, Comando (ou arquivo) e Done when; \"Nothing pending.\" "
                "só se o For you disser nothing). ")
     return ("Seu relatório final saiu do formato `plain-report`:\n" +
-            "".join(f"  - {d}\n" for d in desvios) + fim +
+            "".join(f"  - {d}\n" for d in deviations) + ending +
             "Não peça desculpa e não explique a reescrita \u2014 entregue o "
             "relatório corrigido e nada mais.")
 
 
 def on_prompt(payload) -> None:
-    p = pendencia_path(payload.get("session_id", ""))
+    p = pending_path(payload.get("session_id", ""))
     if not p.is_file():
         return
     try:
-        dado = json.loads(p.read_text(encoding="utf-8"))
-        desvios = dado.get("desvios") or []
-        encerrada = bool(dado.get("encerrada"))
+        data = json.loads(p.read_text(encoding="utf-8"))
+        deviations = data.get("desvios") or []
+        closed = bool(data.get("encerrada"))
     except Exception:
-        desvios, encerrada = [], False
+        deviations, closed = [], False
     p.unlink(missing_ok=True)
-    if not desvios:
+    if not deviations:
         return
     print("[cepa report-style] Seu relatório anterior saiu do formato "
           "`plain-report`:\n" +
-          "".join(f"  - {d}\n" for d in desvios) +
-          "  Formato: " + (FORMATO_ENCERRADA + " " if encerrada else
+          "".join(f"  - {d}\n" for d in deviations) +
+          "  Formato: " + (CLOSED_FORMAT + " " if closed else
           "abertura de até 3 frases sem jargão → **For you:** → "
           "### Technical detail → ### Decisions and next steps (numerada, uma "
           "pergunta fechada por item, cada uma com \"I recommend yes/no\"; tarefa "
@@ -759,17 +765,17 @@ def main():
     except json.JSONDecodeError:
         sys.exit(0)
 
-    evento = payload.get("hook_event_name") or ""
+    event = payload.get("hook_event_name") or ""
     try:
-        if evento == "Stop":
-            motivo = on_stop(payload)
-            if motivo:
-                print(json.dumps({"decision": "block", "reason": motivo},
+        if event == "Stop":
+            reason = on_stop(payload)
+            if reason:
+                print(json.dumps({"decision": "block", "reason": reason},
                                  ensure_ascii=False))
-        elif evento == "UserPromptSubmit":
+        elif event == "UserPromptSubmit":
             on_prompt(payload)
     except Exception:
-        pass  # o medidor nunca derruba o turno por erro próprio
+        pass  # the meter never takes the turn down over its own error
     sys.exit(0)
 
 

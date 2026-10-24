@@ -1,62 +1,75 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: bloqueia uma especificação que se declara pronta para
-construir enquanto algum critério de sucesso não tem superfície e teste vermelho.
+"""PreToolUse hook: blocks a specification that declares itself ready to build
+while some success criterion has no surface and no red test.
 
-O `/common:spec` conduz um interrogatório: o agente pergunta, o dono responde, e
-a especificação cresce. O risco não é o interrogatório ficar curto — é ele
-TERMINAR por cansaço. O agente decide que já está bom, escreve `Status:
-ready-to-build (ou o antigo pronta-para-construir)`, e o que sai é uma especificação plausível cujos
-critérios são frases de intenção ("o sistema deve validar o cadastro") sem
-nenhuma superfície observável onde alguém possa provar que aconteceu. Isso não
-falha na especificação: falha três semanas depois, na construção, quando o
-critério é interpretado por outra pessoa de outro jeito.
+`/common:spec` runs an interrogation: the agent asks, the owner answers, and the
+specification grows. The risk is not the interrogation being short -- it is it
+ENDING out of tiredness. The agent decides it is good enough, writes `Status:
+ready-to-build` (or the old `pronta-para-construir`), and what comes out is a
+plausible specification whose criteria are statements of intent ("the system
+must validate the registration") with no observable surface where anyone could
+prove it happened. That does not fail in the specification: it fails three
+weeks later, in construction, when the criterion is interpreted differently by
+someone else.
 
-Por isso o encerramento é mecânico e não editorial. `Status: draft (ou rascunho)` nunca
-bloqueia nada — o interrogatório precisa poder escrever livremente enquanto
-corre. O que é gateado é exclusivamente a AFIRMAÇÃO de que acabou.
+That is why closing is mechanical, not editorial. `Status: draft` (or the old
+`rascunho`) never blocks anything -- the interrogation must be free to write
+while it runs. What is gated is exclusively the CLAIM that it is over.
 
-Mecanismo:
-  - Fira em Write/Edit/MultiEdit; só olha conteúdo com um campo Status.
-  - Em Edit/MultiEdit com `file_path`, não julga o fragmento (`new_string`)
-    isolado: lê o arquivo do disco, aplica cada `old_string` → `new_string` na
-    ordem (respeitando `replace_all`; sem ele, exige que `old_string` seja
-    único no texto e troca essa única ocorrência — o mesmo que a ferramenta
-    Edit faz de verdade) e julga o ARQUIVO RESULTANTE inteiro, Status incluso.
-    Sem isso, um Edit que só troca `Status:` engana o gate (não vê os
-    critérios, que estão fora do fragmento) e um Edit que fura um critério ou
-    reabre uma pergunta engana o gate do lado oposto (o fragmento não tem
-    Status, então nada dispara). Se o arquivo não existe, não lê, algum
-    `old_string` não bate, ou bate mais de uma vez sem `replace_all`, libera (a
-    própria ferramenta vai falhar por conta própria). Sem `file_path`, mantém
-    o comportamento antigo: julga só os fragmentos (`new_string`).
-  - Status diferente de "ready-to-build (ou o antigo pronta-para-construir)" → libera, sem olhar mais nada.
-  - Declarou pronta, então exige, em cada bloco `### CS-<n>`:
-      · **Surface:** (ou Superfície:) com valor do vocabulário fechado (o mesmo da skill
-        acceptance-completeness: http, cli, ui, event, domain, application);
-      · **Red test:** (ou Teste vermelho:) com texto que não seja placeholder.
-  - Exige pelo menos um critério: especificação pronta com zero critérios é o
-    caso mais silencioso de todos.
-  - Exige que nenhuma pergunta em aberto (`- [ ]`) tenha sobrado.
-  - A linha-modelo do próprio formato (enumeração ou <placeholder>) passa, senão
-    o gate impede editar o documento que define o formato.
+Mechanism:
+  - Fires on Write/Edit/MultiEdit; only looks at content with a Status field.
+  - On Edit/MultiEdit with `file_path`, it does not judge the fragment
+    (`new_string`) alone: it reads the file from disk, applies each
+    `old_string` -> `new_string` in order (honoring `replace_all`; without it,
+    it requires `old_string` to be unique in the text and replaces that single
+    occurrence -- the same as the Edit tool really does) and judges the whole
+    RESULTING FILE, Status included. Without that, an Edit that only swaps
+    `Status:` fools the gate (it does not see the criteria, which are outside
+    the fragment) and an Edit that punches a hole in a criterion or reopens a
+    question fools the gate from the other side (the fragment has no Status, so
+    nothing fires). If the file does not exist, cannot be read, some
+    `old_string` does not match, or matches more than once without
+    `replace_all`, it allows (the tool itself will fail on its own). Without
+    `file_path`, it keeps the old behavior: it judges only the fragments
+    (`new_string`).
+  - Status other than "ready-to-build" (or the old `pronta-para-construir`) ->
+    allows, without looking at anything else.
+  - Declared ready, so it requires, in each `### CS-<n>` block:
+      * **Surface:** (or the old Superfície:) with a value from the closed
+        vocabulary (the same as the acceptance-completeness skill: http, cli,
+        ui, event, domain, application);
+      * **Red test:** (or the old Teste vermelho:) with text that is not a
+        placeholder.
+  - Requires at least one criterion: a ready specification with zero criteria
+    is the quietest case of all.
+  - Requires that no open question (`- [ ]`) was left over.
+  - The format's own template line (enumeration or <placeholder>) passes,
+    otherwise the gate would stop editing the document that defines the format.
 
-Crivo de Epic (`/common:epic`, CS-5 do ciclo 1 do Epic Cepa em espiral):
-  - Um Epic fecha por roteiro, não por critério. É Epic o documento em
-    `docs/epics/*.md` ou o que abre com `# Epic:`; nele, `Status: ready` (ou
-    `ready-to-build`; os antigos `pronta`/`pronta-para-construir` valem) é a afirmação gateada, e o crivo é outro:
-      · a tabela de `## Value ladder (ou Escada de valor)` tem pelo menos um ciclo, e as colunas
-        "Script", "Effect on screen" e "Effect in backend" (ou os antigos Roteiro, Efeito em tela, Efeito em backend);
-      · cada linha de ciclo preenche as três, sem placeholder: o roteiro é o
-        que o dono vê, e tela e backend são onde alguém observa que aconteceu;
-      · `## Invariants` (ou Invariantes) tem pelo menos um item de lista que não é placeholder;
-      · a seção `## Decided without asking` (ou Decidido sem perguntar) existe;
-      · nenhuma pergunta em aberto (`- [ ]`) sobrou.
-  - Documento que não é Epic segue com a régua de antes: `Status: pronta` nele
-    não é gateado, só `ready-to-build (ou o antigo pronta-para-construir)`.
+Epic screen (`/common:epic`, CS-5 of cycle 1 of the spiral Cepa Epic):
+  - An Epic closes by script, not by criterion. An Epic is the document in
+    `docs/epics/*.md` or the one that opens with `# Epic:`; in it, `Status:
+    ready` (or `ready-to-build`; the old `pronta`/`pronta-para-construir` also
+    count) is the gated claim, and the screen is a different one:
+      * the table under `## Value ladder` (or the old `Escada de valor`) has at
+        least one cycle, and the columns "Script", "Effect on screen" and
+        "Effect in backend" (or the old Roteiro, Efeito em tela, Efeito em
+        backend);
+      * each cycle row fills all three, with no placeholder: the script is what
+        the owner sees, and screen and backend are where someone observes that
+        it happened;
+      * `## Invariants` (or the old Invariantes) has at least one list item that
+        is not a placeholder;
+      * the `## Decided without asking` section (or the old Decidido sem
+        perguntar) exists;
+      * no open question (`- [ ]`) was left over.
+  - A document that is not an Epic keeps the earlier yardstick: `Status:
+    pronta` in it is not gated, only `ready-to-build` (or the old
+    `pronta-para-construir`).
 
 Exit codes:
-  0 — liberado
-  2 — bloqueado (o stderr chega ao agente, que corrige sozinho)
+  0 -- allowed
+  2 -- blocked (stderr reaches the agent, which fixes it on its own)
 """
 
 import json
@@ -66,13 +79,13 @@ from pathlib import Path
 
 GATED_TOOLS = ("Write", "Edit", "MultiEdit")
 
-SUPERFICIES = ("http", "cli", "ui", "event", "domain", "application")
+SURFACES = ("http", "cli", "ui", "event", "domain", "application")
 
-# Nomes em inglês (2026-10-23, item interface-in-english) e os antigos: o gate
-# aceita os dois; as mensagens mandam escrever os novos.
-PRONTA = "ready-to-build"
-PRONTA_ANTIGO = "pronta-para-construir"
-PRONTAS_SPEC = (PRONTA, PRONTA_ANTIGO)
+# English names (2026-10-23, item interface-in-english) and the old ones: the
+# gate accepts both; the messages tell the agent to write the new ones.
+READY = "ready-to-build"
+READY_OLD = "pronta-para-construir"
+SPEC_READY = (READY, READY_OLD)
 
 MARKER = r"(?:\*\*|__|#{1,6}\s*|h[1-6]\.\s*|[-*+]\s+)"
 
@@ -81,11 +94,11 @@ STATUS_RE = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 
-# Cabeçalho de critério: "### CS-1: texto". O id é o que aparece na mensagem de
-# bloqueio, para o agente saber QUAL critério consertar.
+# Criterion heading: "### CS-1: text". The id is what shows up in the block
+# message, so the agent knows WHICH criterion to fix.
 CS_RE = re.compile(r"^#{2,6}\s*(CS-[0-9A-Za-z]+)\s*:?\s*(.*)$", re.MULTILINE)
 
-CAMPO_RE = {
+FIELD_RE = {
     "superficie": re.compile(
         rf"^{MARKER}?\s*(?:Superf[íi]cie|Surface)\s*(?:\*\*|__)?\s*:\s*{MARKER}?\s*(.+)$",
         re.MULTILINE | re.IGNORECASE,
@@ -96,20 +109,20 @@ CAMPO_RE = {
     ),
 }
 
-# Pergunta em aberto no formato checklist markdown.
-ABERTA_RE = re.compile(r"^\s*[-*+]\s*\[\s\]\s*(.+)$", re.MULTILINE)
+# Open question in markdown checklist format.
+OPEN_RE = re.compile(r"^\s*[-*+]\s*\[\s\]\s*(.+)$", re.MULTILINE)
 
-# Epic: o status que ele afirma ao fechar. `pronta-para-construir` também vale,
-# senão um Epic que use a palavra da especificação escapa do crivo dele.
-EPIC_PRONTA = ("ready", "pronta", PRONTA, PRONTA_ANTIGO)
+# Epic: the status it claims when closing. `pronta-para-construir` also counts,
+# otherwise an Epic that uses the specification's word would escape its screen.
+EPIC_READY = ("ready", "pronta", READY, READY_OLD)
 
-EPIC_TITULO_RE = re.compile(r"^#\s+Epic\s*:", re.MULTILINE | re.IGNORECASE)
-EPIC_CAMINHO_RE = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
+EPIC_TITLE_RE = re.compile(r"^#\s+Epic\s*:", re.MULTILINE | re.IGNORECASE)
+EPIC_PATH_RE = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
 
-SECAO_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
+SECTION_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
-# Colunas da escada que o crivo exige, achadas pelo cabeçalho da tabela.
-COLUNAS_EPIC = (
+# Ladder columns the screen requires, found by the table header.
+EPIC_COLUMNS = (
     (("script", "roteiro"), "Script",
      "o que o dono vê funcionando no fim do ciclo"),
     (("effect on screen", "efeito em tela"), "Effect on screen",
@@ -136,32 +149,31 @@ def extract_content(tool_input: dict):
     return None
 
 
-def aplica_edicao(texto: str, edit: dict):
-    """Aplica um `old_string` → `new_string` sobre `texto`, como a ferramenta
-    Edit faria de verdade. Retorna None se `old_string` não bate, ou se bate
-    mais de uma vez sem `replace_all` — a ferramenta real exige que
-    `old_string` seja único nesse caso e falha sozinha; quem chama aqui
-    decide liberar."""
+def apply_edit(text: str, edit: dict):
+    """Apply an `old_string` -> `new_string` over `text`, as the Edit tool
+    really would. Returns None if `old_string` does not match, or if it matches
+    more than once without `replace_all` -- the real tool requires
+    `old_string` to be unique in that case and fails on its own; the caller
+    here decides to allow."""
     old = edit.get("old_string")
     new = edit.get("new_string")
     if not isinstance(old, str) or not isinstance(new, str) or old == "":
         return None
-    if old not in texto:
+    if old not in text:
         return None
     if edit.get("replace_all"):
-        return texto.replace(old, new)
-    if texto.count(old) > 1:
+        return text.replace(old, new)
+    if text.count(old) > 1:
         return None
-    return texto.replace(old, new, 1)
+    return text.replace(old, new, 1)
 
 
-def resultado_apos_edicoes(tool_name: str, tool_input: dict):
-    """Para Edit/MultiEdit com `file_path`: lê o arquivo do disco e aplica cada
-    edição na ordem, retornando o conteúdo resultante inteiro. Retorna None
-    quando não dá para calcular com segurança (sem `file_path`, arquivo
-    ilegível, formato inesperado, ou algum `old_string` que não bate) — nesses
-    casos quem chama libera, porque a ferramenta real vai falhar por conta
-    própria."""
+def result_after_edits(tool_name: str, tool_input: dict):
+    """For Edit/MultiEdit with `file_path`: reads the file from disk and applies
+    each edit in order, returning the whole resulting content. Returns None
+    when it cannot be computed safely (no `file_path`, unreadable file,
+    unexpected format, or some `old_string` that does not match) -- in those
+    cases the caller allows, because the real tool will fail on its own."""
     file_path = tool_input.get("file_path")
     if not isinstance(file_path, str) or not file_path:
         return None
@@ -174,84 +186,84 @@ def resultado_apos_edicoes(tool_name: str, tool_input: dict):
         return None
 
     try:
-        texto = Path(file_path).read_text(encoding="utf-8", errors="replace")
+        text = Path(file_path).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
 
     for edit in edits:
         if not isinstance(edit, dict):
             return None
-        texto = aplica_edicao(texto, edit)
-        if texto is None:
+        text = apply_edit(text, edit)
+        if text is None:
             return None
-    return texto
+    return text
 
 
-def limpa(valor: str) -> str:
-    v = valor.strip()
+def clean(value: str) -> str:
+    v = value.strip()
     v = re.sub(r"^(\*\*|__|`)+|(\*\*|__|`)+$", "", v).strip()
     v = v.strip("*_`").strip()
     return v.rstrip(".;,").strip()
 
 
-def e_linha_modelo(valor: str) -> bool:
-    """A linha que ENSINA o formato, não um critério real."""
-    v = limpa(valor).lower()
+def is_template_line(value: str) -> bool:
+    """The line that TEACHES the format, not a real criterion."""
+    v = clean(value).lower()
     if v.startswith("<"):
         return True
     v = v.strip("<>").strip()
-    partes = [p.strip() for p in re.split(r"[|/]", v) if p.strip()]
-    return len(partes) > 1 and all(p in SUPERFICIES for p in partes)
+    parts = [p.strip() for p in re.split(r"[|/]", v) if p.strip()]
+    return len(parts) > 1 and all(p in SURFACES for p in parts)
 
 
-def e_vazio(valor: str) -> bool:
-    """Texto que ocupa a linha sem dizer nada."""
-    v = limpa(valor).lower()
+def is_empty(value: str) -> bool:
+    """Text that takes up the line without saying anything."""
+    v = clean(value).lower()
     if not v or v.startswith("<"):
         return True
     return v in ("", "-", "n/a", "na", "tbd", "todo", "a definir", "?", "...")
 
 
-def blocos_de_criterio(content: str):
-    """Fatiar o documento em (id, corpo) por cabeçalho `### CS-<n>`."""
-    marcas = list(CS_RE.finditer(content))
-    for i, m in enumerate(marcas):
-        fim = marcas[i + 1].start() if i + 1 < len(marcas) else len(content)
-        yield m.group(1), content[m.end():fim]
+def criterion_blocks(content: str):
+    """Slice the document into (id, body) by `### CS-<n>` heading."""
+    marks = list(CS_RE.finditer(content))
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(content)
+        yield m.group(1), content[m.end():end]
 
 
-def e_epic(content: str, file_path) -> bool:
-    if isinstance(file_path, str) and EPIC_CAMINHO_RE.search(
+def is_epic(content: str, file_path) -> bool:
+    if isinstance(file_path, str) and EPIC_PATH_RE.search(
             file_path.replace("\\", "/")):
         return True
-    return EPIC_TITULO_RE.search(content) is not None
+    return EPIC_TITLE_RE.search(content) is not None
 
 
-def secoes(content: str):
-    """{título da seção ## em minúsculas: corpo até a próxima ##}."""
-    marcas = list(SECAO_RE.finditer(content))
+def sections(content: str):
+    """{lowercase ## section title: body up to the next ##}."""
+    marks = list(SECTION_RE.finditer(content))
     out = {}
-    for i, m in enumerate(marcas):
-        fim = marcas[i + 1].start() if i + 1 < len(marcas) else len(content)
-        out.setdefault(m.group(1).strip().lower(), content[m.end():fim])
+    for i, m in enumerate(marks):
+        end = marks[i + 1].start() if i + 1 < len(marks) else len(content)
+        out.setdefault(m.group(1).strip().lower(), content[m.end():end])
     return out
 
 
-def secao(content: str, prefixo: str):
-    """O corpo da primeira seção `## <prefixo>...`, ou None se não existe.
-    `prefixo` pode ser uma tupla: o nome novo e o antigo valem."""
-    if isinstance(prefixo, str):
-        prefixo = (prefixo,)
-    for titulo, corpo in secoes(content).items():
-        if titulo.startswith(tuple(prefixo)):
-            return corpo
+def section(content: str, prefix: str):
+    """The body of the first `## <prefix>...` section, or None if it does not
+    exist. `prefix` may be a tuple: the new name and the old one both count."""
+    if isinstance(prefix, str):
+        prefix = (prefix,)
+    for title, body in sections(content).items():
+        if title.startswith(tuple(prefix)):
+            return body
     return None
 
 
-def celulas(linha: str):
-    """As células de uma linha de tabela. `\\|` é barra escapada dentro da
-    célula, não divisor: dividir nela deslocaria as colunas seguintes."""
-    s = linha.strip()
+def cells(line: str):
+    """The cells of a table row. `\\|` is an escaped pipe inside the cell, not
+    a divider: splitting on it would shift the following columns."""
+    s = line.strip()
     if s.startswith("|"):
         s = s[1:]
     if s.endswith("|") and not s.endswith("\\|"):
@@ -259,86 +271,87 @@ def celulas(linha: str):
     return [c.strip() for c in re.split(r"(?<!\\)\|", s)]
 
 
-# Célula de escada que ocupa o lugar sem dizer nada, além do que `e_vazio`
-# já pega. Fica só no crivo de Epic para não mexer na régua da especificação.
-VAZIO_EPIC = ("—", "–", "nenhum", "nenhuma", "n/d", "nd", "-/-")
+# Ladder cell that takes up space without saying anything, beyond what
+# `is_empty` already catches. It stays only in the Epic screen so as not to
+# touch the specification's yardstick.
+EPIC_EMPTY = ("—", "–", "nenhum", "nenhuma", "n/d", "nd", "-/-")
 
 
-def problemas_do_epic(content: str):
-    problemas = []
+def epic_problems(content: str):
+    problems = []
 
-    escada = secao(content, ("value ladder", "escada de valor"))
-    if escada is None:
-        problemas.append(
+    ladder = section(content, ("value ladder", "escada de valor"))
+    if ladder is None:
+        problems.append(
             "falta a seção `## Value ladder` — um Epic pronto sem ciclo "
             "não tem o que demonstrar"
         )
     else:
-        linhas = [l for l in escada.splitlines() if l.strip().startswith("|")]
-        cab = [c.lower() for c in celulas(linhas[0])] if linhas else []
+        lines = [l for l in ladder.splitlines() if l.strip().startswith("|")]
+        header = [c.lower() for c in cells(lines[0])] if lines else []
         idx = {}
-        for chave, nome, _ in COLUNAS_EPIC:
-            pos = [i for i, c in enumerate(cab) if c.startswith(chave)]
+        for key, name, _ in EPIC_COLUMNS:
+            pos = [i for i, c in enumerate(header) if c.startswith(key)]
             if pos:
-                idx[chave] = pos[0]
+                idx[key] = pos[0]
             else:
-                problemas.append(
-                    f'Value ladder: falta a coluna "{nome}"'
+                problems.append(
+                    f'Value ladder: falta a coluna "{name}"'
                 )
-        ciclos = [l for l in linhas[1:]
+        cycles = [l for l in lines[1:]
                   if not re.fullmatch(r"[\s|:\-]*", l)]
-        if not ciclos:
-            problemas.append(
+        if not cycles:
+            problems.append(
                 "Value ladder: nenhum ciclo — a tabela precisa de pelo menos "
                 "uma linha"
             )
-        if len(idx) == len(COLUNAS_EPIC):
-            for l in ciclos:
-                cel = celulas(l)
-                nome_ciclo = limpa(cel[0]) if cel and cel[0] else "(sem nome)"
-                for chave, nome, _ in COLUNAS_EPIC:
-                    i = idx[chave]
-                    valor = cel[i] if i < len(cel) else ""
-                    if e_vazio(valor) or limpa(valor).lower() in VAZIO_EPIC:
-                        problemas.append(
-                            f'ciclo "{nome_ciclo}": falta "{nome}"'
+        if len(idx) == len(EPIC_COLUMNS):
+            for l in cycles:
+                row_cells = cells(l)
+                cycle_name = clean(row_cells[0]) if row_cells and row_cells[0] else "(sem nome)"
+                for key, name, _ in EPIC_COLUMNS:
+                    i = idx[key]
+                    value = row_cells[i] if i < len(row_cells) else ""
+                    if is_empty(value) or clean(value).lower() in EPIC_EMPTY:
+                        problems.append(
+                            f'ciclo "{cycle_name}": falta "{name}"'
                         )
 
-    invariantes = secao(content, ("invariants", "invariantes"))
-    if invariantes is None:
-        problemas.append("falta a seção `## Invariants`")
+    invariants = section(content, ("invariants", "invariantes"))
+    if invariants is None:
+        problems.append("falta a seção `## Invariants`")
     else:
-        itens = [v for v in ITEM_RE.findall(invariantes) if not e_vazio(v)]
-        if not itens:
-            problemas.append(
+        items = [v for v in ITEM_RE.findall(invariants) if not is_empty(v)]
+        if not items:
+            problems.append(
                 "Invariants: a lista está vazia — diga o que nunca pode "
                 "regredir enquanto os ciclos andam"
             )
 
-    if secao(content, ("decided without asking", "decidido sem perguntar")) is None:
-        problemas.append(
+    if section(content, ("decided without asking", "decidido sem perguntar")) is None:
+        problems.append(
             "falta a seção `## Decided without asking` — é onde o dono veta o "
             "que você decidiu sozinho"
         )
 
-    abertas = [limpa(q) for q in ABERTA_RE.findall(content) if not e_vazio(q)]
-    for q in abertas[:5]:
-        problemas.append(f'pergunta em aberto sem resposta: "{q}"')
-    if len(abertas) > 5:
-        problemas.append(f"... e mais {len(abertas) - 5} pergunta(s) em aberto")
+    open_questions = [clean(q) for q in OPEN_RE.findall(content) if not is_empty(q)]
+    for q in open_questions[:5]:
+        problems.append(f'pergunta em aberto sem resposta: "{q}"')
+    if len(open_questions) > 5:
+        problems.append(f"... e mais {len(open_questions) - 5} pergunta(s) em aberto")
 
-    return problemas
+    return problems
 
 
-def bloqueia_epic(problemas):
-    linhas = "\n".join(f"   · {p}" for p in problemas)
-    colunas = "\n".join(f'   · "{nome}": {o_que}' for _, nome, o_que in COLUNAS_EPIC)
+def block_epic(problems):
+    lines = "\n".join(f"   · {p}" for p in problems)
+    columns = "\n".join(f'   · "{name}": {what}' for _, name, what in EPIC_COLUMNS)
     print(
         "[spec-readiness-gate] BLOQUEADO: o Epic se declara `Status: ready` "
         "mas ainda não passa no crivo.\n"
-        f"{linhas}\n"
+        f"{lines}\n"
         "  O que o crivo exige de CADA ciclo da escada:\n"
-        f"{colunas}\n"
+        f"{columns}\n"
         "  E do documento: pelo menos um invariante, a seção \"Decided without "
         "asking\" e nenhuma pergunta em aberto.\n"
         "  Enquanto faltar qualquer um, o Status correto é `draft` — e a "
@@ -364,81 +377,81 @@ def main():
     file_path = tool_input.get("file_path")
 
     if tool_name in ("Edit", "MultiEdit") and isinstance(file_path, str) and file_path:
-        # Com file_path, o fragmento (new_string) não basta — precisa do
-        # ARQUIVO INTEIRO depois da edição, Status incluso (ver docstring).
-        content = resultado_apos_edicoes(tool_name, tool_input)
+        # With file_path, the fragment (new_string) is not enough -- it needs the
+        # WHOLE FILE after the edit, Status included (see docstring).
+        content = result_after_edits(tool_name, tool_input)
         if content is None:
-            sys.exit(0)      # arquivo ilegível ou old_string não bate: libera
+            sys.exit(0)      # unreadable file or old_string does not match: allow
     else:
         content = extract_content(tool_input)
         if content is None:
-            sys.exit(0)          # sem ver o conteúdo, não se bloqueia nada
+            sys.exit(0)          # without seeing the content, nothing is blocked
 
-    status = [limpa(v).lower() for v in STATUS_RE.findall(content)]
+    status = [clean(v).lower() for v in STATUS_RE.findall(content)]
     status = [s for s in status if not s.startswith("<")]
-    # A linha-modelo "rascunho | pronta-para-construir" ensina o formato.
+    # The template line "draft | ready-to-build" teaches the format.
     status = [s for s in status if "|" not in s]
 
-    if e_epic(content, file_path):
-        # O Status do Epic costuma dividir a linha com outros campos
-        # (`**Status:** pronta · **Aberto em:** ...`): vale a primeira palavra.
-        primeiras = [re.split(r"\s*[·•]\s*|\s+\*\*|\s+__", s)[0].strip()
+    if is_epic(content, file_path):
+        # The Epic Status often shares the line with other fields
+        # (`**Status:** pronta · **Opened on:** ...`): the first word counts.
+        first_words = [re.split(r"\s*[·•]\s*|\s+\*\*|\s+__", s)[0].strip()
                      for s in status]
-        if not any(s in EPIC_PRONTA for s in primeiras):
-            sys.exit(0)      # rascunho corre livre
-        problemas = problemas_do_epic(content)
-        if problemas:
-            bloqueia_epic(problemas)
+        if not any(s in EPIC_READY for s in first_words):
+            sys.exit(0)      # a draft runs free
+        problems = epic_problems(content)
+        if problems:
+            block_epic(problems)
         sys.exit(0)
 
-    if not any(s in PRONTAS_SPEC for s in status):
-        sys.exit(0)          # rascunho corre livre; só a afirmação é gateada
+    if not any(s in SPEC_READY for s in status):
+        sys.exit(0)          # a draft runs free; only the claim is gated
 
-    problemas = []
+    problems = []
 
-    criterios = list(blocos_de_criterio(content))
-    if not criterios:
-        problemas.append(
+    criteria = list(criterion_blocks(content))
+    if not criteria:
+        problems.append(
             "nenhum critério de sucesso (`### CS-1: ...`) — uma especificação "
             "pronta sem critério é a que mais engana"
         )
 
-    for cid, corpo in criterios:
-        sup = [v for v in CAMPO_RE["superficie"].findall(corpo)
-               if not e_linha_modelo(v)]
-        if not sup:
-            problemas.append(f"{cid}: falta **Surface:**")
+    for cid, body in criteria:
+        surfaces = [v for v in FIELD_RE["superficie"].findall(body)
+               if not is_template_line(v)]
+        if not surfaces:
+            problems.append(f"{cid}: falta **Surface:**")
         else:
-            for v in sup:
-                if limpa(v).lower() not in SUPERFICIES:
-                    problemas.append(
-                        f'{cid}: Surface "{limpa(v)}" fora do vocabulário'
+            for v in surfaces:
+                if clean(v).lower() not in SURFACES:
+                    problems.append(
+                        f'{cid}: Surface "{clean(v)}" fora do vocabulário'
                     )
 
-        teste = [v for v in CAMPO_RE["teste"].findall(corpo) if not e_vazio(v)]
-        if not teste:
-            problemas.append(
+        test = [v for v in FIELD_RE["teste"].findall(body) if not is_empty(v)]
+        if not test:
+            problems.append(
                 f"{cid}: falta **Red test:** — a frase do teste que hoje "
                 "falharia"
             )
 
-    abertas = [limpa(q) for q in ABERTA_RE.findall(content) if not e_vazio(q)]
-    for q in abertas[:5]:
-        problemas.append(f'pergunta em aberto sem resposta: "{q}"')
-    if len(abertas) > 5:
-        problemas.append(f"... e mais {len(abertas) - 5} pergunta(s) em aberto")
+    open_questions = [clean(q) for q in OPEN_RE.findall(content) if not is_empty(q)]
+    for q in open_questions[:5]:
+        problems.append(f'pergunta em aberto sem resposta: "{q}"')
+    if len(open_questions) > 5:
+        problems.append(f"... e mais {len(open_questions) - 5} pergunta(s) em aberto")
 
-    if not problemas:
+    if not problems:
         sys.exit(0)
 
-    linhas = "\n".join(f"   · {p}" for p in problemas)
+    lines = "\n".join(f"   · {p}" for p in problems)
     print(
         "[spec-readiness-gate] BLOQUEADO: a especificação se declara "
-        f"`Status: {PRONTA}` mas ainda não passa no crivo.\n"
-        f"{linhas}\n"
+        f"`Status: {READY}` mas ainda não passa no crivo.\n"
+        f"{lines}\n"
         "  O que o crivo exige de CADA critério de sucesso:\n"
         "   · **Surface:** a camada mais externa que o critério nomeia — "
-        f"{', '.join(SUPERFICIES)}. Não é o assunto do critério, é onde ele é "
+        f"{', '.join(SURFACES)}. Não é o assunto do critério, é onde ele é "
         "observável.\n"
         "   · **Red test:** a frase do teste que HOJE falharia naquela "
         "superfície e passará quando a coisa existir.\n"
