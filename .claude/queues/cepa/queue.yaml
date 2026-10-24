@@ -2338,13 +2338,20 @@ items:
     CLAUDE.md dele. Títulos do Epic e da spec entram aqui porque spec-readiness-gate.py
     e cepa-plan --from-epic os leem; rótulos do plain-report porque report-style-lint.py
     os lê'
-  status: blocked
+  status: pending
   blocked_by: []
   human_pending: null
-  evidence: '2 tentativas seguidas do `cepa-until` na mesma janela sem tirar o item
-    do lugar. Isto NÃO é veredito sobre o trabalho nem condição de fora: é o supervisor
-    tirando o item da frente para a fila andar. A saída do `claude` de cada tentativa
-    está no `.log` do run; devolva o item para `pending` quando souber o que travou.'
+  evidence: 'Resposta do dono em 2026-10-23: sim: Devolvo o item para a fila, retomando
+    das quatro partes já feitas que você guardou? Instrução: retomar da branch until/2026-10-23-1919-interface-wip
+    (rebase sobre main depois do aterrissar); as 4 fatias A-D estão feitas; corrigir
+    tests/test_cepa_until_aliases_ingles.py para isolar o ledger de telemetria (CEPA_TELEMETRY_DIR
+    / isola(), como tests/test_cepa_until.py faz) para tests/test_telemetria_isolada.py
+    passar; rodar tests/run-all.sh inteiro; passar pair-reviewer e completion-auditor;
+    commitar. O item voltou de `blocked` para `pending`. Evidência anterior: 2 tentativas
+    seguidas do `cepa-until` na mesma janela sem tirar o item do lugar. Isto NÃO
+    é veredito sobre o trabalho nem condição de fora: é o supervisor tirando o item
+    da frente para a fila andar. A saída do `claude` de cada tentativa está no `.log`
+    do run; devolva o item para `pending` quando souber o que travou.'
 - id: renomear-para-queue
   title: 'Renomear plan.yaml, .claude/programs/, a chave program: e o comando /common:plan
     para o termo queue, com migração das filas existentes nos repos de cliente'
