@@ -20,6 +20,8 @@ What these tests charge:
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -313,6 +315,59 @@ def test_hook():
         check("hook sem docs/epics: silêncio", ctx(p) == "", ctx(p))
 
 
+def test_hook_fail_silent():
+    """`cepa-plan epics` failing (rc 3, or missing) must not break the hook."""
+    with TmpRepo() as r, tempfile.TemporaryDirectory() as plug:
+        r.epic("x", EPIC_X)
+        r.queue("x-c1", "x", [item("A-1", "done")])
+        p = run_hook(r.path, session_id="s1", prompt="oi")
+        check("controle: o hook real imprime [epic]", "[epic]" in ctx(p),
+              ctx(p) + p.stderr)
+        hooks = Path(plug) / "hooks"
+        shutil.copytree(HOOK.parent, hooks,
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        (Path(plug) / "bin").mkdir()
+        fake = Path(plug) / "bin" / "cepa-plan"
+        for variant in ("exit 3", "missing"):
+            if variant == "exit 3":
+                fake.write_text("import sys\nsys.exit(3)\n")
+            elif fake.exists():
+                fake.unlink()
+            p = subprocess.run(
+                [sys.executable, str(hooks / "session-mode.py")],
+                input=json.dumps({"cwd": str(r.path), "session_id": "s1",
+                                  "prompt": "oi"}),
+                capture_output=True, text=True, timeout=30,
+                env={k: v for k, v in os.environ.items()
+                     if k != "CEPA_UNTIL_RUN"})
+            check(f"fail-silent ({variant}): rc 0", p.returncode == 0,
+                  p.stderr)
+            check(f"fail-silent ({variant}): sem [epic]",
+                  "[epic]" not in ctx(p), ctx(p))
+            check(f"fail-silent ({variant}): sem traceback",
+                  "Traceback" not in p.stderr, p.stderr)
+
+
+def test_whereami_step0_runs():
+    txt = WHEREAMI.read_text(encoding="utf-8")
+    m = re.search(r'^\s*(python3 "\$\{CLAUDE_PLUGIN_ROOT\}/bin/cepa-plan" '
+                  r'epics --repo \.)\s*$', txt, re.M)
+    check("whereami.md: linha do passo 0 extraível", m is not None)
+    if not m:
+        return
+    with TmpRepo() as r:
+        r.epic("x", EPIC_X)
+        r.queue("x-c1", "x", [item("A-1", "done")])
+        env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(REPO / "common")}
+        env.pop("CEPA_UNTIL_RUN", None)
+        p = subprocess.run(["bash", "-c", m.group(1)], cwd=r.path, env=env,
+                           capture_output=True, text=True, timeout=60)
+        check("passo 0 do whereami: rc 0", p.returncode == 0, p.stderr)
+        check("passo 0 do whereami: linhas de ciclo",
+              "ciclo 1 A: fechado" in p.stdout and "ciclo 3 C: sem fila"
+              in p.stdout, p.stdout + p.stderr)
+
+
 def test_docs():
     w = WHEREAMI.read_text(encoding="utf-8")
     check("whereami.md traz o comando do passo 0",
@@ -347,6 +402,7 @@ def test_real_repo():
 
 for fn in (test_cycles_and_rules, test_rule_c,
            test_unreadable_and_empty_queue, test_brief_long, test_no_epics, test_hook,
+           test_hook_fail_silent, test_whereami_step0_runs,
            test_docs, test_real_repo):
     print(fn.__name__)
     fn()
