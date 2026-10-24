@@ -55,23 +55,23 @@ def fila(raiz):
 
 
 def test_desligada_fora_do_terminal():
-    t = _tui.Tela(fluxo=open(os.devnull, "w"))
-    assert not t.ligada
+    t = _tui.Screen(stream=open(os.devnull, "w"))
+    assert not t.enabled
     linha = "  18. id-x — " + "texto " * 50
-    assert t.linha(linha) == linha
-    assert t.secao("pendentes", 3) == "pendentes (3)"
-    assert t.cabecalho("fila x") == "fila x"
+    assert t.line(linha) == linha
+    assert t.section("pendentes", 3) == "pendentes (3)"
+    assert t.header("fila x") == "fila x"
 
 
 def test_no_color_vence_e_sempre_liga():
     os.environ["NO_COLOR"] = "1"
     try:
-        assert not _tui.Tela().ligada
+        assert not _tui.Screen().enabled
     finally:
         del os.environ["NO_COLOR"]
     os.environ["CEPA_COR"] = "sempre"
     try:
-        assert _tui.Tela(fluxo=open(os.devnull, "w")).ligada
+        assert _tui.Screen(stream=open(os.devnull, "w")).enabled
     finally:
         del os.environ["CEPA_COR"]
 
@@ -80,9 +80,9 @@ def test_quebra_com_recuo_pendurado_sem_perder_texto():
     os.environ["CEPA_COR"] = "sempre"
     os.environ["COLUMNS"] = "60"
     try:
-        t = _tui.Tela()
+        t = _tui.Screen()
         original = "  18. item-x — " + " ".join(f"p{i}" for i in range(60))
-        saida = ANSI.sub("", t.linha(original)).split("\n")
+        saida = ANSI.sub("", t.line(original)).split("\n")
     finally:
         del os.environ["CEPA_COR"]
     assert len(saida) > 1

@@ -555,7 +555,7 @@ def main():
 
 
 if __name__ == "__main__":
-    _tui.instalar()
+    _tui.install()
     if sys.argv[1:2] == ["scorecard"]:
         sys.exit(scorecard(sys.argv[2:]))
     sys.exit(main())

@@ -1463,7 +1463,7 @@ def cmd_status(root, name, status_filter, as_json):
                           "por_status": counts, "filtro": status_filter,
                           "items": visible}, ensure_ascii=False, indent=2))
         return 0
-    if _tui.TELA.ligada:
+    if _tui.SCREEN.enabled:
         return status_on_screen(plan.get("program") or name, target, lines,
                               counts, visible)
 
@@ -1510,11 +1510,11 @@ def status_on_screen(program, target, lines, counts, visible):
     """The decorated `status`, when the output is a terminal: title bar,
     scoreboard per group, progress bar, and each item with the id on one line
     and the title wrapped below. Done and dropped take a single line."""
-    t = _tui.TELA
-    w = t.largura()
+    t = _tui.SCREEN
+    w = t.width()
     total = len(lines)
     done_count = counts["done"] + counts["dropped"]
-    print(t.cabecalho(f"fila {program}", f"{total} itens"))
+    print(t.header(f"fila {program}", f"{total} itens"))
     print(t.c("cinza", f"  {target}"))
     print()
     scoreboard = []
@@ -1524,7 +1524,7 @@ def status_on_screen(program, target, lines, counts, visible):
         scoreboard.append(t.c(color if n else "cinza", f"{glyph} {n} {grp_label}"))
     print("  " + "   ".join(scoreboard))
     frac = done_count / total if total else 0
-    print(f"  {t.barra(frac, n=min(40, max(w - 40, 10)))}  "
+    print(f"  {t.bar(frac, n=min(40, max(w - 40, 10)))}  "
           + t.c("negrito", f"{round(frac * 100)}%")
           + t.c("cinza", f" fechados ({counts['done']} concluídos + "
                 f"{counts['dropped']} descartados) ÷ {total}"))
@@ -1532,7 +1532,7 @@ def status_on_screen(program, target, lines, counts, visible):
     if open_items:
         text = (f"{len(open_items)} com ação humana aberta: "
                  + ", ".join(l["id"] for l in open_items))
-        wrapped = t.quebra(text, 4, 4)
+        wrapped = t.wrap(text, 4, 4)
         print("  " + t.c("amarelo", "⚑ ") + t.c("amarelo", wrapped[0][4:]))
         for x in wrapped[1:]:
             print(t.c("amarelo", x))
@@ -1542,21 +1542,21 @@ def status_on_screen(program, target, lines, counts, visible):
             continue
         glyph, color = STATUS_VISUAL[st]
         print()
-        print(t.secao(grp_label, len(group), cor=color, glifo=glyph))
+        print(t.section(grp_label, len(group), color=color, glyph=glyph))
         is_closed = st in ("done", "dropped")
         col_width = min(max(len(str(l["id"])) for l in group), 42)
         for i, l in enumerate(group):
             num = t.c("cinza", f"{l['posicao']:>5}  ")
             if is_closed:
-                ident = t.corta(str(l["id"]), col_width).ljust(col_width)
-                title = t.corta(" ".join(str(l["title"] or "").split()),
+                ident = t.cut(str(l["id"]), col_width).ljust(col_width)
+                title = t.cut(" ".join(str(l["title"] or "").split()),
                                  max(w - 9 - col_width, 10))
                 print(num + t.c(color, ident) + "  " + t.c("cinza", title))
                 continue
             if i:
                 print()
             print(num + t.c(f"negrito+{color}", l["id"]))
-            for x in t.quebra(" ".join(str(l["title"] or "").split()), 7):
+            for x in t.wrap(" ".join(str(l["title"] or "").split()), 7):
                 print(x)
             details = []
             if l["claimed_by"]:
@@ -1574,7 +1574,7 @@ def status_on_screen(program, target, lines, counts, visible):
                                  "vermelho"))
             for label, text, d_color in details:
                 key = f"↳ {label}: "
-                wrapped = t.quebra(key + text, 7, 7 + len(key))
+                wrapped = t.wrap(key + text, 7, 7 + len(key))
                 print(" " * 7 + t.c(d_color, key) + wrapped[0][7 + len(key):])
                 for x in wrapped[1:]:
                     print(x)
@@ -3627,5 +3627,5 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    _tui.instalar()
+    _tui.install()
     sys.exit(main())

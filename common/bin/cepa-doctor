@@ -1279,5 +1279,5 @@ def main():
 
 
 if __name__ == "__main__":
-    _tui.instalar()
+    _tui.install()
     sys.exit(main())
