@@ -181,8 +181,8 @@ def test_check_ops():
     def verdicts(rec):
         d.RESULTS.clear()
         d.check_ops(rec)
-        # RESULTS carrega (level, area, msg, fix) desde o --fix do doctor;
-        # este teste só olha nível e mensagem.
+        # RESULTS carries (level, area, msg, fix) since the doctor's --fix;
+        # this test only looks at level and message.
         return [(r[0], r[2]) for r in d.RESULTS]
 
     v = verdicts(None)

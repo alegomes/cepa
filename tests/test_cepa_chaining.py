@@ -1,34 +1,34 @@
 #!/usr/bin/env python3
-"""CS-3 (cepa-espiral-c1): o launcher `cepa` abre a sessão seguinte quando a
-anterior deixou o próximo passo gravado.
+"""CS-3 (cepa-espiral-c1): the `cepa` launcher opens the next session when the
+previous one left the next step recorded.
 
-A sessão que sai deixa `<raiz-principal>/.claude/sessions/<session_id>.next.json`
-com `{"repo", "mode", "brief"}`. O `cepa` não faz mais `exec` do claude: quando
-ele sai, o launcher lê o arquivo, apaga, entra em `repo` e abre a sessão
-seguinte com `--mode <modo>` e o brief como prompt inicial.
+The session that leaves writes `<main-root>/.claude/sessions/<session_id>.next.json`
+with `{"repo", "mode", "brief"}`. `cepa` no longer does `exec` of claude: when
+it exits, the launcher reads the file, deletes it, enters `repo` and opens the next
+session with `--mode <mode>` and the brief as the initial prompt.
 
-O `claude` aqui é um stub que registra argumentos, cwd e o modo gravado. Na
-primeira chamada ele faz o papel da sessão inteira: roda o hook REAL
-`session-registry.py` no SessionStart (que liga o CEPA_LAUNCH_ID do launcher ao
-session_id), escreve o `.next.json` como o wrap-up escreveria, roda o
-SessionEnd e sai.
+The `claude` here is a stub that records arguments, cwd and the recorded mode. On the
+first call it plays the role of the whole session: runs the REAL hook
+`session-registry.py` at SessionStart (which links the launcher's CEPA_LAUNCH_ID to the
+session_id), writes the `.next.json` as the wrap-up would write it, runs the
+SessionEnd and exits.
 
-Contratos guardados aqui:
-  - com o arquivo: o stub roda uma segunda vez, cwd = repo, modo gravado =
-    descoberta, último argumento = o brief verbatim; o arquivo some;
-  - sem o arquivo: o stub roda uma vez só e o código de saída dele é o do cepa;
-  - CEPA_ENCADEAR=off: uma vez só, o arquivo fica;
-  - arquivo inválido (repo inexistente): uma vez só, o arquivo fica, e o cepa diz;
-  - com `intencao` no arquivo, a sessão seguinte nasce com ela (propósito,
-    meta e plano escritos para ela, passo 1, via cepa-intencao); sem `intencao`,
-    nasce sem intenção, porque o brief fala da sessão que saiu; `intencao`
-    inválida avisa e a sessão abre sem ela; intenção anterior vai para o
-    histórico; falha ao gravar avisa e a sessão abre; sem `--proposito`, nada;
-  - o `.next.json` não é lido como sessão pelo registro (`read_entries`);
-  - sem o SessionEnd, o registro da sessão que saiu não faz a seguinte se
-    isolar numa worktree.
+Contracts guarded here:
+  - with the file: the stub runs a second time, cwd = repo, recorded mode =
+    discovery, last argument = the brief verbatim; the file vanishes;
+  - without the file: the stub runs only once and its exit code is that of cepa;
+  - CEPA_ENCADEAR=off: only once, the file stays;
+  - invalid file (missing repo): only once, the file stays, and cepa says so;
+  - with `intencao` in the file, the next session is born with it (purpose,
+    goal and plan written for it, step 1, via cepa-intencao); without `intencao`,
+    it is born without intent, because the brief talks about the session that left; invalid
+    `intencao` warns and the session opens without it; previous intent goes to the
+    history; failure to write warns and the session opens; without `--proposito`, nothing;
+  - the `.next.json` is not read as a session by the registry (`read_entries`);
+  - without the SessionEnd, the record of the session that left does not make the next one
+    isolate itself in a worktree.
 
-Sem deps de terceiros — rode com `python3 tests/test_cepa_chaining.py`.
+No third-party deps — run with `python3 tests/test_cepa_chaining.py`.
 """
 
 import json
@@ -51,9 +51,9 @@ import _modes  # noqa: E402
 
 BRIEF = 'Abra o /common:epic contratos-e-regras.\nLeia o handoff "anterior" antes.'
 
-# O stub: registra cada chamada como uma linha JSON em $STUB_LOG. Só na
-# primeira chamada ($STUB_STATE ainda não existe) ele age como a sessão que
-# termina e deixa o próximo passo.
+# The stub: records each call as a JSON line in $STUB_LOG. Only on the
+# first call ($STUB_STATE does not exist yet) does it act as the session that
+# ends and leaves the next step.
 STUB = r'''#!/usr/bin/env python3
 import json, os, subprocess, sys
 from pathlib import Path
@@ -170,7 +170,7 @@ def same(a, b):
     return Path(a).resolve() == Path(b).resolve()
 
 
-def t_encadeia():
+def t_chains():
     print("com o próximo passo gravado, a sessão seguinte abre sozinha")
     with World() as w:
         r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF})
@@ -201,27 +201,27 @@ def t_encadeia():
         check("sai 0", r.returncode == 0, f"rc={r.returncode}")
 
 
-INTENCAO = {"purpose": "Grelhar o dono no epic contratos-e-regras",
+INTENT = {"purpose": "Grelhar o dono no epic contratos-e-regras",
             "by_when": "cada ciclo com roteiro em tela e em backend",
             "plan": ["abrir o epic", "grelhar ciclo a ciclo"]}
-# O mesmo conteúdo no formato ANTIGO do .next.json (chaves em pt-BR).
-INTENCAO_ANTIGA = {"proposito": INTENCAO["purpose"], "para_quando": INTENCAO["by_when"],
-                   "plano": INTENCAO["plan"]}
+# The same content in the OLD .next.json format (keys in pt-BR).
+OLD_INTENT = {"proposito": INTENT["purpose"], "para_quando": INTENT["by_when"],
+                   "plano": INTENT["plan"]}
 
 
-def t_encadeia_com_intencao():
+def t_chains_with_intent():
     print("com `intencao` no arquivo, a sessão seguinte nasce com ela, não com o brief")
     with World() as w:
-        r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "intent": INTENCAO})
+        r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "intent": INTENT})
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
         if len(c) == 2:
             it = _modes.parse_intent(c[1]["intent"])
-            check("o propósito é o da intenção", it.get("purpose") == INTENCAO["purpose"],
+            check("o propósito é o da intenção", it.get("purpose") == INTENT["purpose"],
                   repr(it.get("purpose")))
-            check("a meta é a da intenção", it.get("by_when") == INTENCAO["by_when"],
+            check("a meta é a da intenção", it.get("by_when") == INTENT["by_when"],
                   repr(it.get("by_when")))
-            check("o plano tem os dois passos, em ordem", it.get("plan") == INTENCAO["plan"],
+            check("o plano tem os dois passos, em ordem", it.get("plan") == INTENT["plan"],
                   repr(it.get("plan")))
             check("o passo é 1", it.get("step") == 1, repr(it.get("step")))
             check("o brief continua o prompt inicial", c[1]["args"][-1:] == [BRIEF], repr(c[1]["args"]))
@@ -230,43 +230,43 @@ def t_encadeia_com_intencao():
         check("o cepa diz a intenção gravada", "◆ intenção:" in r.stderr, r.stderr)
 
 
-def t_intencao_invalida_abre_sem():
-    casos = [("meta vazia", {"purpose": "x", "by_when": "", "plan": ["a"]}),
+def t_invalid_intent_opens_without():
+    cases = [("meta vazia", {"purpose": "x", "by_when": "", "plan": ["a"]}),
              ("plano vazio", {"purpose": "x", "by_when": "m", "plan": []}),
              ("passo com quebra de linha", {"purpose": "x", "by_when": "m", "plan": ["a\nb"]})]
-    for nome, it in casos:
-        print(f"`intencao` inválida ({nome}): avisa e a sessão seguinte abre sem intenção")
+    for given_name, it in cases:
+        print(f"`intencao` inválida ({given_name}): avisa e a sessão seguinte abre sem intenção")
         with World() as w:
             r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "intent": it})
             c = w.calls()
-            check(f"{nome}: o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
+            check(f"{given_name}: o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
             if len(c) == 2:
-                check(f"{nome}: a segunda nasce sem intenção", c[1]["intent"] == "", repr(c[1]["intent"]))
-            check(f"{nome}: o cepa avisa", "intenção inválida" in r.stderr, r.stderr)
+                check(f"{given_name}: a segunda nasce sem intenção", c[1]["intent"] == "", repr(c[1]["intent"]))
+            check(f"{given_name}: o cepa avisa", "intenção inválida" in r.stderr, r.stderr)
 
 
-def t_intencao_anterior_vai_para_historico():
+def t_previous_intent_goes_to_history():
     print("repo de destino já tinha intenção: a nova a substitui e a antiga vai ao histórico")
     with World() as w:
-        antiga = {"purpose": "antigo", "by_when": "x", "plan": ["a"], "step": 1,
+        old = {"purpose": "antigo", "by_when": "x", "plan": ["a"], "step": 1,
                   "step_since": "2026-01-01T00:00:00Z", "session_id": "", "branch": "master",
                   "opened_at": "2026-01-01T00:00:00Z", "summary": "passo 1/1 · a · antigo",
                   "history": []}
         (w.b / ".claude").mkdir()
-        (w.b / ".claude" / "session-intent").write_text(_modes.render_intent(antiga))
-        w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "intent": INTENCAO})
+        (w.b / ".claude" / "session-intent").write_text(_modes.render_intent(old))
+        w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "intent": INTENT})
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"{len(c)}")
         if len(c) == 2:
             it = _modes.parse_intent(c[1]["intent"])
-            check("o propósito agora é o da intenção", it.get("purpose") == INTENCAO["purpose"],
+            check("o propósito agora é o da intenção", it.get("purpose") == INTENT["purpose"],
                   repr(it.get("purpose")))
             hist = it.get("history") or []
             check("o histórico guarda o propósito antigo",
                   any(h.get("purpose") == "antigo" for h in hist), repr(hist))
 
 
-def t_intencao_inteira_na_linha_de_comando():
+def t_whole_intent_on_the_command_line():
     print("--by-when=/--plan= valem como a forma com espaço; passo com * fica literal")
     with World() as w:
         (w.a / "LEIAME").write_text("x")
@@ -283,7 +283,7 @@ def t_intencao_inteira_na_linha_de_comando():
                   repr(c[0]["args"]))
 
 
-def t_proposito_direto_na_worktree():
+def t_purpose_direct_in_the_worktree():
     print("cepa --purpose dentro da worktree isolada: a intenção mora lá, não na raiz")
     with World() as w:
         r = w.run(args=["-s", "fatia", "--purpose", "x y"])
@@ -299,7 +299,7 @@ def t_proposito_direto_na_worktree():
         check("a raiz não ganhou intenção", not (w.a / ".claude" / "session-intent").exists())
 
 
-def t_proposito_em_branch_session():
+def t_purpose_in_branch_session():
     print("já numa branch session/* (caminho launch_here): a intenção é gravada ali")
     with World() as w:
         subprocess.run(["git", "checkout", "-q", "-b", "session/ja-isolada"], cwd=w.a, check=True)
@@ -315,7 +315,7 @@ def t_proposito_em_branch_session():
                   repr(c[0]["args"]))
 
 
-def t_proposito_forma_com_igual():
+def t_purpose_form_with_equals():
     print("--purpose=<texto> vale como --purpose <texto>; sem valor é erro")
     with World() as w:
         r = w.run(args=["--purpose=a b"])
@@ -333,7 +333,7 @@ def t_proposito_forma_com_igual():
               f"rc={r.returncode} {r.stderr!r}")
 
 
-def t_sem_proposito_sem_intencao():
+def t_without_purpose_without_intent():
     print("cepa sem --purpose não grava intenção")
     with World() as w:
         r = w.run()
@@ -343,7 +343,7 @@ def t_sem_proposito_sem_intencao():
         check("não fala de intenção", "intenção" not in r.stderr, r.stderr)
 
 
-def t_falha_do_escritor_nao_impede():
+def t_writer_failure_does_not_prevent():
     print("cepa-intent recusa: a sessão abre mesmo assim e o cepa avisa")
     with World() as w:
         (w.a / ".claude" / "session-intent").mkdir(parents=True)
@@ -353,7 +353,7 @@ def t_falha_do_escritor_nao_impede():
         check("sai 0", r.returncode == 0, f"rc={r.returncode}")
 
 
-def t_sem_arquivo():
+def t_without_file():
     print("sem o próximo passo, o cepa sai depois do primeiro claude")
     with World() as w:
         r = w.run(env={"STUB_RC": "3"})
@@ -362,7 +362,7 @@ def t_sem_arquivo():
         check("não diz que encadeou", "próxima sessão em" not in r.stderr, r.stderr)
 
 
-def t_desligado():
+def t_off():
     print("CEPA_ENCADEAR=off: não encadeia e o arquivo fica")
     with World() as w:
         r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF},
@@ -372,7 +372,7 @@ def t_desligado():
         check("o código de saída é o do claude", r.returncode == 7, f"rc={r.returncode}")
 
 
-def t_invalido():
+def t_invalid():
     print("próximo passo com repo inexistente: não encadeia, avisa, deixa o arquivo")
     with World() as w:
         r = w.run(nxt={"repo": str(w.b / "nao-existe"), "mode": "discovery", "brief": BRIEF})
@@ -385,22 +385,22 @@ def t_invalido():
         check("json quebrado: o cepa diz", "ilegível" in r.stderr, r.stderr)
 
 
-def t_campos_vazios():
+def t_empty_fields():
     print("brief ou modo vazio, ou brief que não é texto: não encadeia, avisa, deixa o arquivo")
-    casos = {
+    cases = {
         "brief em branco": {"mode": "discovery", "brief": "   \n"},
         "brief não-texto": {"mode": "discovery", "brief": 42},
         "modo vazio": {"mode": "", "brief": BRIEF},
     }
-    for nome, campos in casos.items():
+    for given_name, fields in cases.items():
         with World() as w:
-            r = w.run(nxt={"repo": str(w.b), **campos})
-            check(f"{nome}: o stub rodou uma vez", len(w.calls()) == 1, f"{len(w.calls())}")
-            check(f"{nome}: o arquivo continua lá", (w.sessions / "sess-1.next.json").exists())
-            check(f"{nome}: o cepa diz que é inválido", "inválido" in r.stderr, r.stderr)
+            r = w.run(nxt={"repo": str(w.b), **fields})
+            check(f"{given_name}: o stub rodou uma vez", len(w.calls()) == 1, f"{len(w.calls())}")
+            check(f"{given_name}: o arquivo continua lá", (w.sessions / "sess-1.next.json").exists())
+            check(f"{given_name}: o cepa diz que é inválido", "inválido" in r.stderr, r.stderr)
 
 
-def t_mais_recente_vence():
+def t_most_recent_wins():
     print("duas sessões na mesma abertura (/clear): vale o próximo passo da mais recente")
     with World() as w:
         w.run(nxt={"repo": str(w.a), "mode": "discovery", "brief": "da primeira"},
@@ -415,7 +415,7 @@ def t_mais_recente_vence():
                   repr(c[1]["args"]))
 
 
-def t_sem_session_end():
+def t_without_session_end():
     print("sem o SessionEnd, o registro da sessão que saiu não isola a seguinte")
     with World() as w:
         w.run(nxt={"repo": str(w.a), "mode": "discovery", "brief": BRIEF},
@@ -427,7 +427,7 @@ def t_sem_session_end():
                   c[1]["cwd"])
 
 
-def t_worktree_apagada():
+def t_worktree_erased():
     print("a sessão apagou a própria worktree (wrap-up): encadeia mesmo assim, sem ruído")
     with World() as w:
         r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF},
@@ -445,7 +445,7 @@ def t_worktree_apagada():
         check("sai 0", r.returncode == 0, f"rc={r.returncode} stderr={r.stderr!r}")
 
 
-def t_registro_ignora_next():
+def t_record_ignores_next():
     print("o registro de sessões não lê .next.json como sessão")
     with World() as w:
         w.sessions.mkdir(parents=True)
@@ -455,11 +455,11 @@ def t_registro_ignora_next():
         check("só a sessão de verdade aparece", stems == ["s.json"], repr(stems))
 
 
-def t_nomes_antigos():
+def t_old_names():
     print("nomes antigos: .next.json com modo/intencao, e as flags --modo/--proposito/--para-quando/--plano")
-    with World() as w:  # .next.json no formato ANTIGO (modo + intencao em pt-BR)
+    with World() as w:  # .next.json in the OLD format (modo + intencao in pt-BR)
         r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF,
-                       "intencao": INTENCAO_ANTIGA})
+                       "intencao": OLD_INTENT})
         c = w.calls()
         check("antigo: o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; {r.stderr!r}")
         if len(c) == 2:
@@ -467,8 +467,8 @@ def t_nomes_antigos():
                   repr(c[1]["mode"]))
             it = _modes.parse_intent(c[1]["intent"])
             check("antigo: a intenção do arquivo antigo foi gravada",
-                  it.get("purpose") == INTENCAO["purpose"] and it.get("plan") == INTENCAO["plan"], repr(it))
-    with World() as w:  # as flags antigas do próprio cepa
+                  it.get("purpose") == INTENT["purpose"] and it.get("plan") == INTENT["plan"], repr(it))
+    with World() as w:  # cepa's own old flags
         r = w.run(args=["--proposito=p", "--para-quando=meta m", "--plano=um\ndois"])
         c = w.calls()
         if c:
@@ -494,25 +494,25 @@ def t_nomes_antigos():
 
 
 if __name__ == "__main__":
-    t_encadeia()
-    t_encadeia_com_intencao()
-    t_nomes_antigos()
-    t_intencao_invalida_abre_sem()
-    t_intencao_anterior_vai_para_historico()
-    t_intencao_inteira_na_linha_de_comando()
-    t_proposito_direto_na_worktree()
-    t_proposito_em_branch_session()
-    t_proposito_forma_com_igual()
-    t_sem_proposito_sem_intencao()
-    t_falha_do_escritor_nao_impede()
-    t_sem_arquivo()
-    t_desligado()
-    t_invalido()
-    t_campos_vazios()
-    t_mais_recente_vence()
-    t_sem_session_end()
-    t_worktree_apagada()
-    t_registro_ignora_next()
+    t_chains()
+    t_chains_with_intent()
+    t_old_names()
+    t_invalid_intent_opens_without()
+    t_previous_intent_goes_to_history()
+    t_whole_intent_on_the_command_line()
+    t_purpose_direct_in_the_worktree()
+    t_purpose_in_branch_session()
+    t_purpose_form_with_equals()
+    t_without_purpose_without_intent()
+    t_writer_failure_does_not_prevent()
+    t_without_file()
+    t_off()
+    t_invalid()
+    t_empty_fields()
+    t_most_recent_wins()
+    t_without_session_end()
+    t_worktree_erased()
+    t_record_ignores_next()
     if failures:
         print(f"\n{len(failures)} FAIL")
         sys.exit(1)

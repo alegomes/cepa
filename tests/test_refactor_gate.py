@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
 """Regression tests for common/hooks/refactor-gate.py.
 
-A Reforma reorganiza o código SEM mudar o comportamento observável. Se o teste
-que já passava precisou mudar, o comportamento mudou — não era reforma, era
-construção. Esse gate é a parte mecânica da condição de saída do modo
+A Reform reorganizes the code WITHOUT changing the observable behavior. If the test
+that was already passing had to change, the behavior changed — it was not a reform, it was
+construction. This gate is the mechanical part of the mode's exit condition
 (docs/modos-de-trabalho.md).
 
-Contratos guardados aqui:
-  - teste EXTERNO editado durante reforma → bloqueia (rc=2), com o motivo;
-  - teste INTERNO (unidade) segue livre — renomear classe obriga a mexer nele,
-    e isso é reforma legítima;
-  - código de produção segue livre;
-  - fora do modo refactor o gate é mudo, mesmo mexendo em teste externo;
-  - Bash não é rota de fuga: `>`, `>>`, `sed -i` e `tee` no alvo bloqueiam
-    igual — bloquear só Write já deixou agentes escaparem por sed/cat neste
-    repo antes;
-  - `>=` numa condição não vira redirecionamento (esse falso bloqueio já
-    aconteceu no bash-path-lock e silenciou perturbações);
-  - .claude/external-tests sobrescreve os padrões default;
-  - CEPA_MODO=off desliga o gate.
+Contracts guarded here:
+  - an EXTERNAL test edited during a reform → blocks (rc=2), with the reason;
+  - an INTERNAL (unit) test remains free — renaming a class forces touching it,
+    and that is a legitimate reform;
+  - production code remains free;
+  - outside the refactor mode the gate is silent, even when touching an external test;
+  - Bash is not an escape route: `>`, `>>`, `sed -i` and `tee` on the target block
+    the same — blocking only Write has already let agents escape through sed/cat in this
+    repo before;
+  - `>=` in a condition does not become a redirect (that false block has already
+    happened in the bash-path-lock and silenced perturbations);
+  - .claude/external-tests overrides the default patterns;
+  - CEPA_MODO=off turns the gate off.
 
-Sem deps de terceiros — rode com `python3 tests/test_refactor_gate.py`.
+No third-party deps — run with `python3 tests/test_refactor_gate.py`.
 """
 
 import json
@@ -55,12 +55,12 @@ class Repo:
     def __exit__(self, *a):
         self.tmp.cleanup()
 
-    def modo(self, nome, orcamento=None):
-        body = f"mode: {nome}\n"
-        body += f'budget: "{orcamento}"\n' if orcamento else "budget: null\n"
+    def mode(self, name, budget=None):
+        body = f"mode: {name}\n"
+        body += f'budget: "{budget}"\n' if budget else "budget: null\n"
         (self.path / ".claude" / "session-mode").write_text(body, encoding="utf-8")
 
-    def externos(self, *globs):
+    def external(self, *globs):
         (self.path / ".claude" / "external-tests").write_text(
             "\n".join(globs) + "\n", encoding="utf-8")
 
@@ -81,9 +81,9 @@ class Repo:
         return self.call("Bash", {"command": cmd}, **kw)
 
 
-def test_bloqueia_teste_externo():
+def test_blocks_external_test():
     with Repo() as r:
-        r.modo("refactor", "só o módulo de auth")
+        r.mode("refactor", "só o módulo de auth")
         p = r.edit("src/test/java/com/x/AuthResourceIT.java")
         check("reforma: bloqueia teste externo", p.returncode == 2, str(p.returncode))
         check("reforma: explica que virou construção",
@@ -93,19 +93,19 @@ def test_bloqueia_teste_externo():
               "off-mode-capture" in p.stderr, p.stderr)
 
 
-def test_libera_teste_interno_e_producao():
+def test_allows_internal_test_and_production():
     with Repo() as r:
-        r.modo("refactor")
-        for alvo in ("src/test/java/com/x/AuthServiceTest.java",
+        r.mode("refactor")
+        for target in ("src/test/java/com/x/AuthServiceTest.java",
                      "src/main/java/com/x/AuthService.java",
                      "tests/test_parser.py"):
-            p = r.edit(alvo)
-            check(f"reforma: libera {os.path.basename(alvo)}",
+            p = r.edit(target)
+            check(f"reforma: libera {os.path.basename(target)}",
                   p.returncode == 0, p.stderr)
 
 
-def test_session_mode_no_formato_antigo_vale():
-    """`modo: reforma` + `orcamento:` (o `cepa` antigo) ainda ativam o gate."""
+def test_session_mode_in_old_format_applies():
+    """`modo: reforma` + `orcamento:` (the old `cepa`) still activate the gate."""
     with Repo() as r:
         (r.path / ".claude" / "session-mode").write_text(
             'modo: reforma\nrotina: null\norcamento: "só o módulo de auth"\n', encoding="utf-8")
@@ -118,9 +118,9 @@ def test_session_mode_no_formato_antigo_vale():
         check("antigo: modo: construcao deixa o gate mudo", p.returncode == 0, p.stderr)
 
 
-def test_mudo_fora_do_modo():
+def test_silent_outside_the_mode():
     with Repo() as r:
-        r.modo("construction")
+        r.mode("construction")
         p = r.edit("src/test/java/com/x/AuthResourceIT.java")
         check("fora de reforma: gate é mudo", p.returncode == 0, p.stderr)
     with Repo() as r:
@@ -128,9 +128,9 @@ def test_mudo_fora_do_modo():
         check("sem modo: gate é mudo", p.returncode == 0, p.stderr)
 
 
-def test_bash_nao_e_rota_de_fuga():
+def test_bash_is_not_an_escape_route():
     with Repo() as r:
-        r.modo("refactor")
+        r.mode("refactor")
         for cmd in ('echo x > e2e/checkout.spec.ts',
                     'cat foo >> tests/e2e/login.py',
                     "sed -i '' 's/a/b/' src/test/java/AuthResourceIT.java",
@@ -139,30 +139,31 @@ def test_bash_nao_e_rota_de_fuga():
             check(f"bash bloqueado: {cmd[:28]}", p.returncode == 2, p.stderr[:120])
 
 
-def test_ge_nao_e_redirecionamento():
+def test_ge_is_not_a_redirect():
     with Repo() as r:
-        r.modo("refactor")
+        r.mode("refactor")
         p = r.bash('if [ "$n" >= 3 ]; then echo e2e; fi')
         check(">= não vira redirecionamento", p.returncode == 0, p.stderr)
 
 
-def test_diretorio_na_raiz():
-    """*/cypress/* precisa casar tanto em a/cypress/x quanto em cypress/x na
-    raiz. Um gate que pega alguns casos e parece cobrir todos é pior que gate
-    nenhum — foi assim que este aqui passou verde na primeira rodada."""
+def test_directory_at_root():
+    """*/cypress/* must match both in a/cypress/x and in cypress/x at the
+    root. A gate that catches some cases and seems to cover all is worse than no gate
+    at all — that is how this one passed green in the first round.
+    """
     with Repo() as r:
-        r.modo("refactor")
-        for alvo in ("cypress/specs/pay.cy.js", "app/cypress/specs/pay.cy.js",
+        r.mode("refactor")
+        for target in ("cypress/specs/pay.cy.js", "app/cypress/specs/pay.cy.js",
                      "e2e/checkout.spec.ts", "sub/e2e/checkout.spec.ts",
                      "integration/pay_test.go"):
-            p = r.edit(alvo)
-            check(f"raiz e subdir: bloqueia {alvo}", p.returncode == 2, p.stderr[:80])
+            p = r.edit(target)
+            check(f"raiz e subdir: bloqueia {target}", p.returncode == 2, p.stderr[:80])
 
 
-def test_override_do_repo():
+def test_repo_override():
     with Repo() as r:
-        r.modo("refactor")
-        r.externos("*/contract/*")
+        r.mode("refactor")
+        r.external("*/contract/*")
         p = r.edit("src/contract/PayContract.java")
         check("override: bloqueia o que o repo declarou", p.returncode == 2, p.stderr)
         p = r.edit("src/test/java/AuthResourceIT.java")
@@ -171,17 +172,17 @@ def test_override_do_repo():
 
 def test_kill_switch():
     with Repo() as r:
-        r.modo("refactor")
+        r.mode("refactor")
         p = r.edit("e2e/checkout.spec.ts", env={"CEPA_MODO": "off"})
         check("CEPA_MODO=off desliga o gate", p.returncode == 0, p.stderr)
 
 
 def main():
     print("test_refactor_gate")
-    for fn in (test_bloqueia_teste_externo, test_libera_teste_interno_e_producao,
-               test_session_mode_no_formato_antigo_vale, test_mudo_fora_do_modo, test_bash_nao_e_rota_de_fuga,
-               test_ge_nao_e_redirecionamento, test_diretorio_na_raiz,
-               test_override_do_repo,
+    for fn in (test_blocks_external_test, test_allows_internal_test_and_production,
+               test_session_mode_in_old_format_applies, test_silent_outside_the_mode, test_bash_is_not_an_escape_route,
+               test_ge_is_not_a_redirect, test_directory_at_root,
+               test_repo_override,
                test_kill_switch):
         fn()
     if failures:

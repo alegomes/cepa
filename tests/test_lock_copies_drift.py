@@ -1,64 +1,64 @@
 #!/usr/bin/env python3
-"""Detector de divergência entre as 5 cópias dos path-locks (P0-3, revisão 2026-08-17).
+"""Divergence detector among the 5 copies of the path-locks (P0-3, review 2026-08-17).
 
-Sem dependências — rode com `python3 tests/test_lock_copies_drift.py`.
-Sai não-zero em falha.
+No dependencies — run with `python3 tests/test_lock_copies_drift.py`.
+Exits non-zero on failure.
 
-## O problema que este arquivo existe para pegar
+## The problem this file exists to catch
 
-`path-lock.py` e `bash-path-lock.py` são os dois hooks que sustentam a garantia
-central do produto: worker escreve só na própria pista, lead delega em vez de
-codar. Eles existem em **cinco cópias**, uma por topologia com hook, e a regra
-de manutenção é humana — "todo fix aterrissa nas 5". Ela já falhou: o conserto
-do falso-positivo `>=` (o hook lia o `>` de `>=` como redirecionamento e
-bloqueava comando legítimo) teve de ser propagado à mão, e a memória do projeto
-registra o episódio da cópia que ficou para trás.
+`path-lock.py` and `bash-path-lock.py` are the two hooks that sustain the product's
+central guarantee: a worker writes only in its own lane, a lead delegates instead of
+coding. They exist in **five copies**, one per topology with a hook, and the
+maintenance rule is human — "every fix lands in all 5". It has already failed: the fix
+of the `>=` false positive (the hook read the `>` of `>=` as a redirection and
+blocked a legitimate command) had to be propagated by hand, and the project's memory
+records the episode of the copy that was left behind.
 
-O modo de falha é silencioso, que é o que o torna caro: a cópia defasada não
-quebra nada — ela **permite** o que as outras quatro bloqueiam, e o relatório
-do agente lê como sucesso.
+The failure mode is silent, which is what makes it expensive: the lagging copy does not
+break anything — it **allows** what the other four block, and the agent's report
+reads as success.
 
-## O que é comparado: código, não prosa
+## What is compared: code, not prose
 
-A comparação é feita sobre a **árvore sintática** (AST) de cada função, com
-docstrings removidos. Isso é uma decisão, tomada depois de a primeira versão
-deste teste (comparação textual) acusar seis divergências que se revelaram
-todas cosméticas: comentários reescritos, docstrings de estilos diferentes e
-`list[str]` contra `list` numa anotação. Nenhuma mudava comportamento.
+The comparison is made over the **syntax tree** (AST) of each function, with
+docstrings removed. This is a decision, made after the first version of
+this test (textual comparison) reported six divergences that all turned out to be
+cosmetic: rewritten comments, docstrings of different styles and
+`list[str]` versus `list` in an annotation. None changed behavior.
 
-Um detector que grita por vírgula ensina a ignorá-lo, e o dia em que ele grita
-por um `>=` virando `>` é o dia em que alguém aperta "ignorar". Então:
+A detector that shouts over a comma teaches people to ignore it, and the day it shouts
+over a `>=` turning into `>` is the day someone presses "ignore". So:
 
-- **Comentário, docstring e anotação de tipo não são comparados.** Prosa por
-  topologia é legítima — o `build-hex` carrega o incidente real que originou o
-  hook, e faz sentido que carregue.
-- **Todo o resto é.** Comparar o corpo em AST pega exatamente a classe que
-  importa: uma condição alterada numa cópia só, que é como o falso-positivo do
-  `>=` sobreviveu em quatro cópias e não na quinta.
+- **Comments, docstrings and type annotations are not compared.** Per-topology
+  prose is legitimate — `build-hex` carries the real incident that originated the
+  hook, and it makes sense that it does.
+- **Everything else is.** Comparing the body in AST catches exactly the class that
+  matters: a condition altered in one copy only, which is how the `>=` false positive
+  survived in four copies and not in the fifth.
 
-Cobertura por arquivo:
+Coverage per file:
 
-- **`bash-path-lock.py`: o módulo inteiro**, incluindo as tabelas de regex no
-  nível do módulo — que é onde o bug do `>=` morava.
-- **`common/hooks/_shellscan.py` contra o `bash-path-lock`**: o motor de leitura
-  da linha de comando (máscara de aspas, quebra em segmentos, regex de
-  redirecionamento) existe em duas fontes — o molde das 5 cópias e este módulo,
-  de onde o `enforcement-guard` e o `maven-reactor-guard` importam. Duas fontes
-  porque hook de outro plugin não importa do `common`. Antes de 23/08/2026 eram
-  **sete cópias manuais** e este detector conhecia cinco: o falso-positivo do
-  `>=` ficou 2 meses sem conserto no `enforcement-guard`, e o commit de várias
-  linhas (WEGO-2087) repetiu a história.
-- **`path-lock.py`: o núcleo compartilhado** (`detect_agent`,
-  `is_own_expertise_file`, `path_matches`) mais o `main` das topologias sem YAML
-  próprio. O `main` do `build-hex` e o `debug_log` legitimamente diferem, e
-  estão declarados em `EXEMPT` **com o motivo** — exceção declarada é decisão;
-  exceção silenciosa é a doença que este arquivo trata.
+- **`bash-path-lock.py`: the whole module**, including the module-level regex
+  tables — which is where the `>=` bug lived.
+- **`common/hooks/_shellscan.py` against `bash-path-lock`**: the command-line
+  reading engine (quote mask, split into segments, redirection regex) exists in two
+  sources — the template of the 5 copies and this module, from which the
+  `enforcement-guard` and the `maven-reactor-guard` import. Two sources
+  because a hook of another plugin does not import from `common`. Before 2026-08-23 there were
+  **seven manual copies** and this detector knew five: the `>=` false positive
+  went 2 months unfixed in the `enforcement-guard`, and the multi-line commit
+  (WEGO-2087) repeated the story.
+- **`path-lock.py`: the shared core** (`detect_agent`,
+  `is_own_expertise_file`, `path_matches`) plus the `main` of the topologies without their own
+  YAML. The `main` of `build-hex` and `debug_log` legitimately differ, and
+  are declared in `EXEMPT` **with the reason** — a declared exception is a decision;
+  a silent exception is the disease this file treats.
 
-## Perturbação (como saber que este teste prova algo)
+## Perturbation (how to know this test proves something)
 
-Edite qualquer função comparada em UMA cópia — por exemplo troque um `>=` por
-`>` em `build-hex/hooks/bash-path-lock.py` — e este teste fica vermelho
-nomeando a cópia divergente. Se ficar verde, ele não está provando nada.
+Edit any compared function in ONE copy — for example swap a `>=` for
+`>` in `build-hex/hooks/bash-path-lock.py` — and this test turns red
+naming the divergent copy. If it stays green, it is proving nothing.
 """
 
 import ast
@@ -68,9 +68,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Este teste cita hook emissor de telemetria. Hoje ele não chega a executá-lo,
-# mas citar e executar são um passo um do outro, e foi essa distância que
-# deixou 7 testes poluindo o ledger real por um mês. Ver
+# This test cites a telemetry emitter hook. Today it does not get to execute it,
+# but citing and executing are one step apart, and that distance is what
+# left 7 tests polluting the real ledger for a month. See
 # tests/_telemetria_isolada.py.
 from _telemetria_isolada import isola
 
@@ -79,10 +79,10 @@ isola()
 
 REPO = Path(__file__).resolve().parent.parent
 
-# Diretório da topologia → os tokens que aquela cópia legitimamente carrega.
-# Todos viram <T> antes da comparação. Manter esta tabela é o preço de ter 5
-# cópias; quando a geração automática existir (2ª metade do item no BACKLOG),
-# ela lê daqui.
+# Topology directory → the tokens that copy legitimately carries.
+# All become <T> before the comparison. Maintaining this table is the price of having 5
+# copies; when automatic generation exists (2nd half of the BACKLOG item),
+# it reads from here.
 TOPOLOGIES = {
     "build-team": ["build-team", "multiteam"],
     "build-hex": ["build-hex", "hex", "HEX_PATHLOCK_DEBUG"],
@@ -92,10 +92,10 @@ TOPOLOGIES = {
     "marketing": ["marketing"],
 }
 
-# Funções do path-lock.py que TÊM de ser idênticas nas cópias onde existem.
+# Functions of path-lock.py that MUST be identical in the copies where they exist.
 PATHLOCK_CORE = ["detect_agent", "is_own_expertise_file", "path_matches"]
 
-# Divergências legítimas, com o motivo. Sem motivo escrito, não entra aqui.
+# Legitimate divergences, with the reason. Without a written reason, it does not go in here.
 EXEMPT = {
     ("path-lock.py", "main"):
         "build-hex resolve papéis→módulos via build-hex.yaml (load_roles + "
@@ -126,26 +126,26 @@ def check(label, cond, detail=""):
 
 
 def normalize(src: str) -> str:
-    """Apaga o que é legitimamente por-topologia, preserva o resto.
+    """Erases what is legitimately per-topology, preserves the rest.
 
-    Só substituições MECÂNICAS entram aqui. Se um dia for preciso normalizar
-    lógica para dois arquivos baterem, a resposta é consertar a cópia, não
-    ampliar esta função — normalizar diferença de comportamento é como um
-    detector de divergência para de detectar.
+    Only MECHANICAL substitutions go in here. If one day it is necessary to normalize
+    logic for two files to match, the answer is to fix the copy, not to
+    widen this function — normalizing a behavior difference is how a
+    divergence detector stops detecting.
     """
-    # O alias do módulo importado (`hex_path_lock`, `design_path_lock`, ...):
-    # `_` é caractere de palavra, então a substituição por \b abaixo não o
-    # alcança. Precisa vir antes, e explicitamente.
+    # The alias of the imported module (`hex_path_lock`, `design_path_lock`, ...):
+    # `_` is a word character, so the \b substitution below does not
+    # reach it. It must come first, and explicitly.
     src = re.sub(r"\b\w+_path_lock\b", "<T>_path_lock", src)
     words = sorted({w for ws in TOPOLOGIES.values() for w in ws}, key=len, reverse=True)
     for w in words:
         src = re.sub(rf"\b{re.escape(w)}\b", "<T>", src)
-    # O substantivo do que a topologia escreve: build-* escreve `source`,
-    # design/discovery/docs escrevem `artifacts`. Diferença declarada, não
-    # acidental.
+    # The noun of what the topology writes: build-* writes `source`,
+    # design/discovery/docs write `artifacts`. A declared difference, not an
+    # accidental one.
     src = re.sub(r"Writing (?:source|artifacts) via Bash", "Writing <NOUN> via Bash", src)
     src = re.sub(r"Escrever (?:código|artefatos) por Bash", "Escrever <NOUN> por Bash", src)
-    # Espaço em branco no fim de linha não é divergência.
+    # Trailing whitespace on a line is not a divergence.
     return "\n".join(line.rstrip() for line in src.splitlines()).strip()
 
 
@@ -155,10 +155,10 @@ def _is_docstring(node) -> bool:
 
 
 def _strip_docstrings(tree):
-    """Tira o docstring do módulo e de cada função, recursivamente.
+    """Strips the docstring of the module and of each function, recursively.
 
-    Comentários já não existem na AST — é justamente por isso que a comparação
-    é feita aqui e não no texto.
+    Comments no longer exist in the AST — that is precisely why the comparison
+    is made here and not on the text.
     """
     for node in ast.walk(tree):
         body = getattr(node, "body", None)
@@ -168,11 +168,11 @@ def _strip_docstrings(tree):
 
 
 def module_constants(src: str) -> str:
-    """Statements de nível de módulo que NÃO são função, import ou o guard final.
+    """Module-level statements that are NOT a function, import or the final guard.
 
-    É aqui que vivem `_REDIR_RE`, `_UNCOVERED_RE`, `_SEP_RE` e `_PSEUDO` — as
-    tabelas que decidem o que conta como escrita. `PLUGIN_NAME` sai da conta
-    porque é justamente o que cada topologia tem de próprio.
+    This is where `_REDIR_RE`, `_UNCOVERED_RE`, `_SEP_RE` and `_PSEUDO` live — the
+    tables that decide what counts as a write. `PLUGIN_NAME` leaves the count
+    because it is precisely what each topology has of its own.
     """
     tree = _strip_docstrings(ast.parse(normalize(src)))
     out = []
@@ -188,23 +188,23 @@ def module_constants(src: str) -> str:
 
 
 def code_of(src: str) -> str:
-    """A AST do módulo inteiro, sem docstrings, como string comparável.
+    """The AST of the whole module, without docstrings, as a comparable string.
 
-    Uma linha por statement de topo, para que a primeira divergência relatada
-    seja localizável em vez de um paredão de texto.
+    One line per top-level statement, so that the first divergence reported
+    is locatable instead of a wall of text.
     """
     tree = _strip_docstrings(ast.parse(normalize(src)))
     return "\n".join(ast.dump(node) for node in tree.body)
 
 
 def _is_diagnostic_call(node) -> bool:
-    """`debug_log(...)` solto — diagnóstico, fora do caminho de decisão.
+    """A bare `debug_log(...)` — diagnostics, outside the decision path.
 
-    Só duas das cinco cópias têm o `debug_log` (build-hex e docs-topology), e a
-    chamada dele no `main` faria os `main` divergirem por uma linha que não
-    permite nem bloqueia nada. Tirar SÓ essa chamada mantém o resto do `main`
-    sob comparação — exceptuar o `main` inteiro cegaria a checagem justamente
-    na função que decide.
+    Only two of the five copies have `debug_log` (build-hex and docs-topology), and
+    its call in `main` would make the `main`s diverge over a line that neither
+    allows nor blocks anything. Removing ONLY that call keeps the rest of `main`
+    under comparison — exempting the whole `main` would blind the check precisely
+    on the function that decides.
     """
     return (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
             and isinstance(node.value.func, ast.Name)
@@ -212,10 +212,10 @@ def _is_diagnostic_call(node) -> bool:
 
 
 def functions_of(src: str) -> dict:
-    """nome → AST do CORPO da função (sem docstring, sem assinatura).
+    """name → AST of the function BODY (no docstring, no signature).
 
-    Sem a assinatura de propósito: `list[str]` contra `list` é estilo de
-    anotação, não comportamento, e uma delas é só mais nova que a outra.
+    Without the signature on purpose: `list[str]` versus `list` is annotation
+    style, not behavior, and one of them is just newer than the other.
     """
     tree = _strip_docstrings(ast.parse(normalize(src)))
     out = {}
@@ -228,16 +228,16 @@ def functions_of(src: str) -> dict:
 
 def copies(filename: str) -> dict:
     out = {}
-    for topo in TOPOLOGIES:
-        p = REPO / topo / "hooks" / filename
+    for top in TOPOLOGIES:
+        p = REPO / top / "hooks" / filename
         if p.exists():
-            out[topo] = p.read_text(encoding="utf-8")
+            out[top] = p.read_text(encoding="utf-8")
     return out
 
 
-# ── casos ────────────────────────────────────────────────────────────────────
+# ── cases ────────────────────────────────────────────────────────────────────
 
-def test_todas_as_copias_existem():
+def test_all_copies_exist():
     for filename in ("path-lock.py", "bash-path-lock.py"):
         found = copies(filename)
         check(f"{filename}: as 5 cópias existem",
@@ -245,19 +245,19 @@ def test_todas_as_copias_existem():
               f"achei {sorted(found)}")
 
 
-def test_bash_path_lock_identico():
-    """Toda função e toda tabela de nível de módulo, nas 5 cópias.
+def test_bash_path_lock_identical():
+    """Every function and every module-level table, in the 5 copies.
 
-    As tabelas entram porque é onde o bug do `>=` morava: `_REDIR_RE` é uma
-    constante de módulo, não uma função, e uma regressão ali não apareceria numa
-    comparação que só olhasse funções.
+    The tables go in because that is where the `>=` bug lived: `_REDIR_RE` is a
+    module constant, not a function, and a regression there would not show up in a
+    comparison that only looked at functions.
     """
     found = copies("bash-path-lock.py")
     if not found:
         check("bash-path-lock.py: cópias encontradas", False)
         return
 
-    # 1. tabelas / constantes de nível de módulo
+    # 1. module-level tables / constants
     consts = {t: module_constants(s) for t, s in found.items()}
     ref_topo = "build-hex"
     ref = consts[ref_topo]
@@ -267,7 +267,7 @@ def test_bash_path_lock_identico():
     for t in divergent:
         _report_first_diff(ref_topo, ref, t, consts[t])
 
-    # 2. funções, uma a uma
+    # 2. functions, one by one
     funcs = {t: functions_of(s) for t, s in found.items()}
     names = sorted({n for f in funcs.values() for n in f})
     for name in names:
@@ -285,8 +285,8 @@ def test_bash_path_lock_identico():
             _report_first_diff(f"{base}:{name}", ref, t, present[t])
 
 
-def test_path_lock_nucleo_identico():
-    """O núcleo compartilhado tem de bater; o resto é declarado em EXEMPT."""
+def test_path_lock_core_identical():
+    """The shared core must match; the rest is declared in EXEMPT."""
     found = copies("path-lock.py")
     if not found:
         check("path-lock.py: cópias encontradas", False)
@@ -295,7 +295,7 @@ def test_path_lock_nucleo_identico():
     for name in PATHLOCK_CORE:
         present = {t: f[name] for t, f in funcs.items() if name in f}
         if len(present) < 2:
-            continue  # função de uma cópia só — nada a comparar
+            continue  # function in one copy only — nothing to compare
         ref_topo = "build-hex" if "build-hex" in present else sorted(present)[0]
         ref = present[ref_topo]
         divergent = [t for t, s in present.items() if s != ref]
@@ -307,19 +307,19 @@ def test_path_lock_nucleo_identico():
                 _report_first_diff(f"{ref_topo}:{name}", ref, t, present[t])
 
 
-def test_exempcoes_tem_motivo():
-    """Uma exceção sem motivo escrito é uma divergência que se disfarçou."""
+def test_exemptions_have_reason():
+    """An exception without a written reason is a divergence that disguised itself."""
     for key, reason in EXEMPT.items():
         check(f"exceção {key[0]}:{key[1]} declara motivo",
               isinstance(reason, str) and len(reason.strip()) > 40,
               "motivo ausente ou vago demais para auditar")
 
 
-def test_main_do_pathlock_bate_fora_do_hex():
-    """As 4 topologias sem YAML de módulos compartilham o `main` inteiro.
+def test_pathlock_main_matches_outside_the_hex():
+    """The 4 topologies without module YAML share the whole `main`.
 
-    O `build-hex` está em EXEMPT; as outras quatro não têm desculpa — se uma
-    delas divergir, é exatamente o caso "4 de 5 consertadas".
+    `build-hex` is in EXEMPT; the other four have no excuse — if one
+    of them diverges, it is exactly the "4 of 5 fixed" case.
     """
     found = {t: s for t, s in copies("path-lock.py").items() if t != "build-hex"}
     mains = {t: fs["main"] for t, fs in ((t, functions_of(s)) for t, s in found.items())
@@ -338,26 +338,26 @@ def test_main_do_pathlock_bate_fora_do_hex():
             _report_first_diff(f"{ref_topo}:main", ref, t, mains[t])
 
 
-# O motor de leitura de linha de comando, nas duas fontes que restaram: o molde
-# das 5 cópias (representado pela do build-hex) e common/hooks/_shellscan.py,
-# de onde os dois guards do common importam.
+# The command-line reading engine, in the two sources that remained: the template
+# of the 5 copies (represented by build-hex's) and common/hooks/_shellscan.py,
+# from which the two common guards import.
 SHELLSCAN_FUNCS = ["_quoted_mask", "_split_segments", "_strip_redirections",
                    "_unquoted_view", "_unquote", "_is_flag"]
 SHELLSCAN_CONSTS = ["_REDIR_RE", "_REDIR_STRIP_RE", "_SEP_PAIRS", "_SEP_CHARS",
                     "_PSEUDO", "_UNCOVERED_RE"]
 
-# O degrau acima do parsing: quais arquivos a linha de comando ESCREVE. Entrou
-# no `_shellscan` em 26/08/2026 para o `write-mode-gate`, portado do
-# bash-path-lock. Fica FORA de SHELLSCAN_FUNCS de propósito: o
-# `enforcement-guard` mantém uma versão própria e mais pobre destas duas (não
-# conhece `git mv`, não conta a origem de um `mv`), e o caso
-# `test_guards_do_common_nao_recopiam_o_motor` ficaria vermelho por uma dívida
-# que não é deste detector resolver — ela está registrada no BACKLOG.
-SHELLSCAN_ALVO_FUNCS = ["_segment_targets", "extract_write_targets"]
+# The step above parsing: which files the command line WRITES. It entered
+# `_shellscan` on 2026-08-26 for the `write-mode-gate`, ported from
+# bash-path-lock. It stays OUT of SHELLSCAN_FUNCS on purpose: the
+# `enforcement-guard` keeps its own, poorer version of these two (it does not
+# know `git mv`, does not count the source of a `mv`), and the case
+# `test_common_guards_do_not_recopy_the_engine` would turn red over a debt
+# that is not this detector's to resolve — it is recorded in the BACKLOG.
+SHELLSCAN_TARGET_FUNCS = ["_segment_targets", "extract_write_targets"]
 
 
 def named_constants(src: str, names: list) -> dict:
-    """nome → AST da atribuição, para as constantes pedidas."""
+    """name → AST of the assignment, for the requested constants."""
     tree = _strip_docstrings(ast.parse(normalize(src)))
     out = {}
     for node in tree.body:
@@ -368,13 +368,13 @@ def named_constants(src: str, names: list) -> dict:
     return out
 
 
-def test_motor_do_shellscan_bate_com_o_bash_path_lock():
-    """As duas fontes do motor de parsing têm de dizer a mesma coisa.
+def test_shellscan_engine_matches_bash_path_lock():
+    """The two sources of the parsing engine must say the same thing.
 
-    Perturbação: troque `(?![&=])` por `(?!&)` no `_REDIR_RE` de
-    `common/hooks/_shellscan.py` — o falso-positivo do `>=`, exatamente como ele
-    sobreviveu no enforcement-guard — e este caso fica vermelho nomeando a
-    constante. Se ficar verde, ele não está provando nada.
+    Perturbation: swap `(?![&=])` for `(?!&)` in the `_REDIR_RE` of
+    `common/hooks/_shellscan.py` — the `>=` false positive, exactly as it
+    survived in the enforcement-guard — and this case turns red naming the
+    constant. If it stays green, it is proving nothing.
     """
     ref_p = REPO / "build-hex" / "hooks" / "bash-path-lock.py"
     scan_p = REPO / "common" / "hooks" / "_shellscan.py"
@@ -395,53 +395,53 @@ def test_motor_do_shellscan_bate_com_o_bash_path_lock():
                   "a tabela divergiu entre as duas fontes do motor")
 
     ref_f, scan_f = functions_of(ref_src), functions_of(scan_src)
-    for name in SHELLSCAN_FUNCS + SHELLSCAN_ALVO_FUNCS:
+    for name in SHELLSCAN_FUNCS + SHELLSCAN_TARGET_FUNCS:
         check(f"_shellscan:{name} presente nas duas fontes",
               name in ref_f and name in scan_f,
               f"bash-path-lock={name in ref_f} _shellscan={name in scan_f}")
         if name in ref_f and name in scan_f:
-            igual = ref_f[name] == scan_f[name]
-            check(f"_shellscan:{name} idêntico ao bash-path-lock", igual,
+            equal = ref_f[name] == scan_f[name]
+            check(f"_shellscan:{name} idêntico ao bash-path-lock", equal,
                   "o corpo divergiu entre as duas fontes do motor")
-            if not igual:
+            if not equal:
                 _report_first_diff(f"bash-path-lock:{name}", ref_f[name],
                                    "_shellscan", scan_f[name])
 
 
-def test_guards_do_common_nao_recopiam_o_motor():
-    """Os dois guards importam o motor; não podem voltar a definir o seu.
+def test_common_guards_do_not_recopy_the_engine():
+    """The two guards import the engine; they cannot go back to defining their own.
 
-    Redefinir `_quoted_mask` ou `_REDIR_RE` num guard é exatamente como a
-    duplicação começou da primeira vez — e a cópia nova não seria vista por
-    nenhum dos casos acima, porque eles comparam as DUAS fontes declaradas.
+    Redefining `_quoted_mask` or `_REDIR_RE` in a guard is exactly how the
+    duplication started the first time — and the new copy would not be seen by
+    any of the cases above, because they compare the two DECLARED sources.
     """
-    for nome in ("enforcement-guard.py", "maven-reactor-guard.py"):
-        p = REPO / "common" / "hooks" / nome
-        check(f"{nome} existe", p.exists())
+    for name in ("enforcement-guard.py", "maven-reactor-guard.py"):
+        p = REPO / "common" / "hooks" / name
+        check(f"{name} existe", p.exists())
         if not p.exists():
             continue
         src = p.read_text(encoding="utf-8")
-        check(f"{nome} importa _shellscan", "import _shellscan" in src,
+        check(f"{name} importa _shellscan", "import _shellscan" in src,
               "o guard precisa importar o motor em vez de copiá-lo")
         tree = ast.parse(src)
-        redefinidos = [n.name for n in tree.body
+        redefined = [n.name for n in tree.body
                        if isinstance(n, ast.FunctionDef)
                        and n.name in SHELLSCAN_FUNCS]
-        redefinidos += [t.id for n in tree.body if isinstance(n, ast.Assign)
+        redefined += [t.id for n in tree.body if isinstance(n, ast.Assign)
                         for t in n.targets
                         if isinstance(t, ast.Name) and t.id in SHELLSCAN_CONSTS
                         and not (isinstance(n.value, ast.Attribute))]
-        check(f"{nome} não redefine nada do motor", not redefinidos,
-              f"redefinido localmente: {sorted(set(redefinidos))}")
+        check(f"{name} não redefine nada do motor", not redefined,
+              f"redefinido localmente: {sorted(set(redefined))}")
 
 
 def _report_first_diff(ref_label, ref, other_label, other):
-    """Mostra o TRECHO que difere — não o começo da linha, que é igual.
+    """Shows the SNIPPET that differs — not the start of the line, which is equal.
 
-    A comparação é sobre dumps de AST, que são longos e começam idênticos:
-    imprimir os primeiros 100 caracteres mostraria duas linhas iguais e mandaria
-    quem lê caçar a diferença na mão. Aqui a janela é centrada no primeiro
-    caractere divergente.
+    The comparison is over AST dumps, which are long and start identical:
+    printing the first 100 characters would show two equal lines and send
+    the reader hunting for the difference by hand. Here the window is centered on the first
+    divergent character.
     """
     a, b = ref.splitlines(), other.splitlines()
     for i in range(max(len(a), len(b))):
@@ -459,20 +459,20 @@ def _report_first_diff(ref_label, ref, other_label, other):
         return
 
 
-def test_bash_path_lock_sai_do_molde():
-    """As 5 cópias têm de ser exatamente o molde renderizado.
+def test_bash_path_lock_comes_from_template():
+    """The 5 copies must be exactly the rendered template.
 
-    Esta é a garantia FORTE, e ela substitui a comparação entre cópias para
-    este arquivo: comparar cópias entre si prova que elas concordam; comparar
-    com o molde prova que elas vêm de um lugar só. A diferença importa quando
-    alguém edita as cinco à mão de um jeito consistente e errado.
+    This is the STRONG guarantee, and it replaces the comparison between copies for
+    this file: comparing copies with each other proves they agree; comparing
+    with the template proves they come from a single place. The difference matters when
+    someone edits the five by hand in a consistent and wrong way.
 
-    Construir o gerador rendeu um achado que a comparação entre cópias não
-    tinha dado: `discovery` e `docs-topology` diziam "Writing source via Bash"
-    na mensagem de bloqueio, sendo que os agentes deles escrevem documento, não
-    código — vieram copiados do build-team sem ajustar a palavra. A comparação
-    entre cópias tratava esse substantivo como diferença legítima por
-    topologia; o molde obriga a declarar qual é o certo para cada uma.
+    Building the generator yielded a finding that the comparison between copies had
+    not given: `discovery` and `docs-topology` said "Writing source via Bash"
+    in the block message, though their agents write documents, not
+    code — they came copied from build-team without adjusting the word. The comparison
+    between copies treated that noun as a legitimate per-topology difference;
+    the template forces declaring which is the right one for each.
     """
     gen = REPO / "bin" / "gen-locks.py"
     check("bin/gen-locks.py existe", gen.exists())
@@ -484,79 +484,79 @@ def test_bash_path_lock_sai_do_molde():
           r.returncode == 0, (r.stdout + r.stderr).strip()[:300])
 
 
-def _gen_locks_topologias():
-    """Carrega bin/gen-locks.py como módulo e devolve seu TOPOLOGIES.
+def _gen_locks_topologies():
+    """Loads bin/gen-locks.py as a module and returns its TOPOLOGIES.
 
-    `importlib` porque o nome do arquivo tem hífen (`gen-locks.py`) e não dá
-    para `import` direto. Carregar o módulo não executa nada: o gerador só
-    age dentro de `if __name__ == "__main__"`, e este teste nunca é chamado
-    como `__main__`.
+    `importlib` because the file name has a hyphen (`gen-locks.py`) and a direct
+    `import` is not possible. Loading the module executes nothing: the generator only
+    acts inside `if __name__ == "__main__"`, and this test is never called
+    as `__main__`.
     """
-    caminho = REPO / "bin" / "gen-locks.py"
-    spec = importlib.util.spec_from_file_location("gen_locks_drift_check", str(caminho))
+    path_ = REPO / "bin" / "gen-locks.py"
+    spec = importlib.util.spec_from_file_location("gen_locks_drift_check", str(path_))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.TOPOLOGIES
 
 
-def test_lista_de_topologias_bate_com_o_disco():
-    """As 3 fontes da lista de topologias com hook têm de dizer a mesma coisa.
+def test_topology_list_matches_the_disk():
+    """The 3 sources of the list of topologies with a hook must say the same thing.
 
-    O gap que o proof-gate achou: apagar a linha `marketing` só de
-    `bin/gen-locks.py` (ou só do `TOPOLOGIES` deste arquivo) deixava os dois
-    testes correspondentes verdes, porque cada um comparava só contra a
-    própria lista — nenhum comparava a lista contra o disco. Uma topologia
-    podia sumir de uma fonte sem que ninguém detectasse, porque a outra fonte
-    nunca era consultada como árbitro.
+    The gap the proof-gate found: deleting the `marketing` line only from
+    `bin/gen-locks.py` (or only from the `TOPOLOGIES` of this file) left the two
+    corresponding tests green, because each compared only against its
+    own list — none compared the list against the disk. A topology
+    could vanish from one source without anyone detecting it, because the other source
+    was never consulted as arbiter.
 
-    As três fontes:
+    The three sources:
 
-      1. o disco — todo diretório com `hooks/bash-path-lock.py` de fato;
-      2. `bin/gen-locks.py`'s `TOPOLOGIES` — o que o gerador escreve;
-      3. o `TOPOLOGIES` deste arquivo — o que os outros casos deste arquivo
-         comparam.
+      1. the disk — every directory that actually has `hooks/bash-path-lock.py`;
+      2. `bin/gen-locks.py`'s `TOPOLOGIES` — what the generator writes;
+      3. the `TOPOLOGIES` of this file — what the other cases of this file
+         compare.
 
-    As três têm de ser exatamente o mesmo conjunto de diretórios. Uma
-    divergência é reportada nomeando qual conjunto tem o quê, não só "não
-    bateu" — é isso que torna o teste, e não só a leitura do código, quem
-    decide se uma topologia nova (ou apagada) está registrada em todo lugar.
+    The three must be exactly the same set of directories. A
+    divergence is reported naming which set has what, not just "did not
+    match" — that is what makes the test, and not just the reading of the code, the one who
+    decides whether a new (or deleted) topology is registered everywhere.
 
-    Perturbação (como saber que este caso prova algo): apague a linha
-    `marketing` de UMA das duas listas (`bin/gen-locks.py` ou o `TOPOLOGIES`
-    deste arquivo) e rode este arquivo — ele tem de ficar vermelho nomeando
-    a lista da qual ela sumiu. Se ficar verde, ele não está provando nada.
+    Perturbation (how to know this case proves something): delete the `marketing`
+    line from ONE of the two lists (`bin/gen-locks.py` or the `TOPOLOGIES`
+    of this file) and run this file — it must turn red naming
+    the list from which it vanished. If it stays green, it is proving nothing.
     """
-    do_disco = {p.parent.parent.name
+    from_disk = {p.parent.parent.name
                 for p in REPO.glob("*/hooks/bash-path-lock.py")}
-    do_gerador = {t["dir"] for t in _gen_locks_topologias()}
-    deste_arquivo = set(TOPOLOGIES)
+    from_generator = {t["dir"] for t in _gen_locks_topologies()}
+    this_file = set(TOPOLOGIES)
 
     check("disco e bin/gen-locks.py: mesmo conjunto de topologias",
-          do_disco == do_gerador,
-          f"só no disco: {sorted(do_disco - do_gerador) or '—'}; "
-          f"só no gen-locks: {sorted(do_gerador - do_disco) or '—'}")
+          from_disk == from_generator,
+          f"só no disco: {sorted(from_disk - from_generator) or '—'}; "
+          f"só no gen-locks: {sorted(from_generator - from_disk) or '—'}")
 
     check("disco e TOPOLOGIES deste arquivo: mesmo conjunto de topologias",
-          do_disco == deste_arquivo,
-          f"só no disco: {sorted(do_disco - deste_arquivo) or '—'}; "
-          f"só no TOPOLOGIES do teste: {sorted(deste_arquivo - do_disco) or '—'}")
+          from_disk == this_file,
+          f"só no disco: {sorted(from_disk - this_file) or '—'}; "
+          f"só no TOPOLOGIES do teste: {sorted(this_file - from_disk) or '—'}")
 
     check("bin/gen-locks.py e TOPOLOGIES deste arquivo: mesmo conjunto de topologias",
-          do_gerador == deste_arquivo,
-          f"só no gen-locks: {sorted(do_gerador - deste_arquivo) or '—'}; "
-          f"só no TOPOLOGIES do teste: {sorted(deste_arquivo - do_gerador) or '—'}")
+          from_generator == this_file,
+          f"só no gen-locks: {sorted(from_generator - this_file) or '—'}; "
+          f"só no TOPOLOGIES do teste: {sorted(this_file - from_generator) or '—'}")
 
 
 def main():
-    test_todas_as_copias_existem()
-    test_lista_de_topologias_bate_com_o_disco()
-    test_bash_path_lock_sai_do_molde()
-    test_bash_path_lock_identico()
-    test_path_lock_nucleo_identico()
-    test_main_do_pathlock_bate_fora_do_hex()
-    test_motor_do_shellscan_bate_com_o_bash_path_lock()
-    test_guards_do_common_nao_recopiam_o_motor()
-    test_exempcoes_tem_motivo()
+    test_all_copies_exist()
+    test_topology_list_matches_the_disk()
+    test_bash_path_lock_comes_from_template()
+    test_bash_path_lock_identical()
+    test_path_lock_core_identical()
+    test_pathlock_main_matches_outside_the_hex()
+    test_shellscan_engine_matches_bash_path_lock()
+    test_common_guards_do_not_recopy_the_engine()
+    test_exemptions_have_reason()
 
     print()
     if FAILURES:

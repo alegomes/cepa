@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Testes da etapa 4 de "um escritor, três fontes": /maestro:program-plan --from-plan.
+"""Tests of stage 4 of "one writer, three sources": /maestro:program-plan --from-plan.
 
-Rode com `python3 tests/test_program_plan_from_plan.py` (só precisa do PyYAML).
-Duas famílias, como em test_common_plan.py e test_common_drain_plan.py:
+Run with `python3 tests/test_program_plan_from_plan.py` (only needs PyYAML).
+Two families, as in test_common_plan.py and test_common_drain_plan.py:
 
-  - COMPORTAMENTO do `common/bin/cepa-plan promote` — quem da fila pode virar
-    slice de onda, quem NÃO pode e por quê, e o piso de onda que o `blocked_by`
-    impõe. Cada recusa aqui existe porque a falha correspondente custa uma onda
-    inteira: forkar em cima de item reservado duplica trabalho, forkar duas
-    demandas dependentes na mesma onda faz a de baixo nascer sem o que consome,
-    e promover uma fila de 2 itens paga fork, porteiro e merge train para o que
-    uma sessão em série resolve.
-  - CONTRATO DE PROSA do `maestro/commands/program-plan.md`. O comando é
-    `interaction: conversational` — um agente segue a prosa, não há função a
-    chamar — então a única guarda possível sobre a instrução é mecânica. Cada
-    `check()` embute o `[from-plan:id]` do bloco que cobre, para o
-    `common/bin/cepa-promptcov` cruzar os dois conjuntos (docs/promptcov.md).
+  - BEHAVIOR of `common/bin/cepa-plan promote` — which queue items can become a
+    wave slice, which CANNOT and why, and the wave floor that `blocked_by`
+    imposes. Each refusal here exists because the corresponding failure costs an entire
+    wave: forking on top of a reserved item duplicates work, forking two
+    dependent demands in the same wave makes the lower one be born without what it consumes,
+    and promoting a 2-item queue pays fork, gatekeeper and merge train for what
+    a serial session solves.
+  - PROSE CONTRACT of `maestro/commands/program-plan.md`. The command is
+    `interaction: conversational` — an agent follows the prose, there is no function to
+    call — so the only possible guard over the instruction is mechanical. Each
+    `check()` embeds the `[from-plan:id]` of the block it covers, for
+    `common/bin/cepa-promptcov` to cross the two sets (docs/promptcov.md).
 
-O que estes testes NÃO provam: que um agente agrupou bem as ondas numa sessão
-real. Isso é conversa, e só um run diz.
+What these tests do NOT prove: that an agent grouped the waves well in a real
+session. That is conversation, and only a run tells.
 """
 
 import json
@@ -53,8 +53,8 @@ def run(repo, *args):
                           capture_output=True, text=True, cwd=str(repo))
 
 
-def repo_git(base, nome):
-    d = Path(base) / nome
+def repo_git(base, name):
+    d = Path(base) / name
     d.mkdir(parents=True)
     subprocess.run(["git", "-C", str(d), "init", "-q"], check=True)
     return d
@@ -67,116 +67,116 @@ def item(ident, **kw):
     return base
 
 
-def escreve_fila(d, itens, nome="fila"):
-    """Grava a fila pelo próprio escritor, para o teste não fabricar YAML."""
+def write_queue(d, items, name="fila"):
+    """Writes the queue through the writer itself, so the test does not fabricate YAML."""
     p = d / "itens.json"
-    p.write_text(json.dumps(itens, ensure_ascii=False), encoding="utf-8")
-    r = run(d, "write", nome, "--items", str(p), "--source", "teste",
+    p.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    r = run(d, "write", name, "--items", str(p), "--source", "teste",
             "--quando", "2026-08-25", "--repo", ".")
     assert r.returncode == 0, r.stderr
-    return d / ".claude" / "queues" / nome / "queue.yaml"
+    return d / ".claude" / "queues" / name / "queue.yaml"
 
 
-def promote(d, nome="fila", *extra):
-    r = run(d, "promote", nome, "--json", "--repo", ".", *extra)
-    saida = None
+def promote(d, name="fila", *extra):
+    r = run(d, "promote", name, "--json", "--repo", ".", *extra)
+    output = None
     if r.stdout.strip():
         try:
-            saida = json.loads(r.stdout)
+            output = json.loads(r.stdout)
         except json.JSONDecodeError:
-            saida = None
-    return r, saida
+            output = None
+    return r, output
 
 
-def quatro(**kw):
-    """Uma fila que passa o piso D7, para o piso não mascarar o caso testado."""
+def four(**kw):
+    """A queue that passes the D7 floor, so the floor does not mask the tested case."""
     return [item("A", **kw), item("B"), item("C"), item("D")]
 
 
-def ids(demandas):
-    return [d["id"] for d in demandas]
+def ids(demands):
+    return [d["id"] for d in demands]
 
 
-def fora_de(saida, ident):
-    for f in saida["excluded"]:
+def outside_of(output, ident):
+    for f in output["excluded"]:
         if f["id"] == ident:
             return f
     return None
 
 
-def testes_de_comportamento(base):
-    # ── quem vira demanda ────────────────────────────────────────────────────
+def behavior_tests(base):
+    # ── who becomes a demand ─────────────────────────────────────────────────
     d = repo_git(base, "status")
-    escreve_fila(d, [item("A"), item("B", status="done"),
+    write_queue(d, [item("A"), item("B", status="done"),
                      item("C", status="in_progress"), item("D", status="blocked"),
                      item("E", status="dropped"), item("F"), item("G"), item("H")])
     r, s = promote(d)
     check("promote: só `pending` vira demanda", r.returncode == 0 and
           ids(s["demands"]) == ["A", "F", "G", "H"], r.stderr + str(r.stdout[:200]))
     check("promote: `in_progress` fica de fora por estar reservado",
-          "reservado" in (fora_de(s, "C") or {}).get("motivo", ""))
+          "reservado" in (outside_of(s, "C") or {}).get("motivo", ""))
     check("promote: `blocked` fica de fora nomeando o run anterior",
-          "run anterior" in (fora_de(s, "D") or {}).get("motivo", ""))
+          "run anterior" in (outside_of(s, "D") or {}).get("motivo", ""))
     check("promote: `done` e `dropped` ficam de fora com motivo",
-          (fora_de(s, "B") or {}).get("motivo") and (fora_de(s, "E") or {}).get("motivo"))
+          (outside_of(s, "B") or {}).get("motivo") and (outside_of(s, "E") or {}).get("motivo"))
 
-    # ── a ordem da fila é o dado; promote não reordena ───────────────────────
+    # ── the queue order is the data; promote does not reorder ────────────────
     d = repo_git(base, "ordem")
-    escreve_fila(d, [item("Z"), item("Y"), item("X"), item("W")])
+    write_queue(d, [item("Z"), item("Y"), item("X"), item("W")])
     r, s = promote(d)
     check("promote: preserva a ordem da fila", ids(s["demands"]) == ["Z", "Y", "X", "W"])
 
-    # ── onda_minima: o piso que o blocked_by impõe ───────────────────────────
+    # ── onda_minima: the floor that blocked_by imposes ───────────────────────
     d = repo_git(base, "ondas")
-    escreve_fila(d, [item("A"), item("B", blocked_by=["A"]),
+    write_queue(d, [item("A"), item("B", blocked_by=["A"]),
                      item("C", blocked_by=["B"]), item("D")])
     r, s = promote(d)
-    piso = {x["id"]: x["onda_minima"] for x in s["demands"]}
+    floor = {x["id"]: x["onda_minima"] for x in s["demands"]}
     check("promote: item sem dependência tem onda_minima 1",
-          piso["A"] == 1 and piso["D"] == 1, str(piso))
+          floor["A"] == 1 and floor["D"] == 1, str(floor))
     check("promote: item que depende de outro da promoção sobe de onda",
-          piso["B"] == 2, str(piso))
+          floor["B"] == 2, str(floor))
     check("promote: dependência encadeada empilha as ondas",
-          piso["C"] == 3, str(piso))
+          floor["C"] == 3, str(floor))
     check("promote: depends_on só lista bloqueador que está na promoção",
           [x for x in s["demands"] if x["id"] == "B"][0]["depends_on"] == ["A"])
     check("promote: `ondas_minimas` resume quantas ondas a dependência exige",
           s["ondas_minimas"] == 3, str(s.get("ondas_minimas")))
 
-    # blocked_by apontando para item POSTERIOR na fila (a ordem é de execução,
-    # não topológica) — uma passada só resolveria errado.
+    # blocked_by pointing to a LATER item in the queue (the order is of execution,
+    # not topological) — a single pass would resolve wrongly.
     d = repo_git(base, "pra-frente")
-    escreve_fila(d, [item("A", blocked_by=["B"]), item("B"), item("C"), item("D")])
+    write_queue(d, [item("A", blocked_by=["B"]), item("B"), item("C"), item("D")])
     r, s = promote(d)
-    piso = {x["id"]: x["onda_minima"] for x in s["demands"]}
+    floor = {x["id"]: x["onda_minima"] for x in s["demands"]}
     check("promote: dependência que aponta para frente na fila também sobe a onda",
-          piso["A"] == 2 and piso["B"] == 1, str(piso))
+          floor["A"] == 2 and floor["B"] == 1, str(floor))
 
-    # Fila INVERTIDA: a ordem do arquivo é o oposto da ordem da dependência
-    # (D depende de C, C de B, B de A, e A é o último item). Sem ponto-fixo, uma
-    # passada só resolveria os pisos errados — nos dois casos acima a ordem do
-    # arquivo coincide, por acaso, com a ordem em que a dependência precisa ser
-    # resolvida, então eles não distinguem uma implementação da outra. Achado do
-    # proof-reviewer em 2026-08-25.
+    # INVERTED queue: the file order is the opposite of the dependency order
+    # (D depends on C, C on B, B on A, and A is the last item). Without a fixed point, a
+    # single pass would resolve the floors wrongly — in the two cases above the file
+    # order coincides, by chance, with the order in which the dependency must be
+    # resolved, so they do not distinguish one implementation from the other. Finding of the
+    # proof-reviewer on 2026-08-25.
     d = repo_git(base, "invertida")
-    escreve_fila(d, [item("D", blocked_by=["C"]), item("C", blocked_by=["B"]),
+    write_queue(d, [item("D", blocked_by=["C"]), item("C", blocked_by=["B"]),
                      item("B", blocked_by=["A"]), item("A")])
     r, s = promote(d)
-    piso = {x["id"]: x["onda_minima"] for x in s["demands"]}
+    floor = {x["id"]: x["onda_minima"] for x in s["demands"]}
     check("promote: fila com a ordem inversa da dependência empilha as ondas igual",
-          piso == {"A": 1, "B": 2, "C": 3, "D": 4}, str(piso))
+          floor == {"A": 1, "B": 2, "C": 3, "D": 4}, str(floor))
 
-    # ── bloqueador que não é candidato ───────────────────────────────────────
+    # ── blocker that is not a candidate ──────────────────────────────────────
     d = repo_git(base, "bloq-done")
-    escreve_fila(d, [item("A", status="done"), item("B", blocked_by=["A"]),
+    write_queue(d, [item("A", status="done"), item("B", blocked_by=["A"]),
                      item("C"), item("D"), item("E")])
     r, s = promote(d)
-    piso = {x["id"]: x["onda_minima"] for x in s["demands"]}
+    floor = {x["id"]: x["onda_minima"] for x in s["demands"]}
     check("promote: bloqueador `done` não segura ninguém",
-          "B" in piso and piso["B"] == 1, str(piso))
+          "B" in floor and floor["B"] == 1, str(floor))
 
     d = repo_git(base, "bloq-dropped")
-    escreve_fila(d, [item("A", status="dropped"), item("B", blocked_by=["A"]),
+    write_queue(d, [item("A", status="dropped"), item("B", blocked_by=["A"]),
                      item("C"), item("D"), item("E")])
     r, s = promote(d)
     check("promote: bloqueador `dropped` sai do campo mas vira AVISO",
@@ -186,21 +186,21 @@ def testes_de_comportamento(base):
           len(s["warnings"]) == len(set(s["warnings"])), str(s["warnings"]))
 
     d = repo_git(base, "bloq-aberto")
-    escreve_fila(d, [item("A", status="in_progress"), item("B", blocked_by=["A"]),
+    write_queue(d, [item("A", status="in_progress"), item("B", blocked_by=["A"]),
                      item("C", blocked_by=["B"]), item("D"), item("E"), item("F")])
     r, s = promote(d)
     check("promote: item cujo bloqueador segue aberto e fora da promoção sai junto",
           "B" not in ids(s["demands"]) and "depende de A" in
-          (fora_de(s, "B") or {}).get("motivo", ""), str(fora_de(s, "B")))
+          (outside_of(s, "B") or {}).get("motivo", ""), str(outside_of(s, "B")))
     check("promote: a exclusão cascateia para quem dependia do excluído",
           "C" not in ids(s["demands"]) and "depende de B" in
-          (fora_de(s, "C") or {}).get("motivo", ""), str(fora_de(s, "C")))
+          (outside_of(s, "C") or {}).get("motivo", ""), str(outside_of(s, "C")))
     check("promote: o resto da fila sobrevive à cascata",
           ids(s["demands"]) == ["D", "E", "F"], str(ids(s["demands"])))
 
-    # ── human_pending aberto vira gate aberto, não silêncio ──────────────────
+    # ── open human_pending becomes an open gate, not silence ─────────────────
     d = repo_git(base, "gate")
-    escreve_fila(d, quatro(human_pending="abrir /admin e conferir\na recusa"))
+    write_queue(d, four(human_pending="abrir /admin e conferir\na recusa"))
     r, s = promote(d)
     gate = [x for x in s["demands"] if x["id"] == "A"][0]["human_gate"]
     check("promote: `human_pending` aberto vira human_gate `open:`",
@@ -210,9 +210,9 @@ def testes_de_comportamento(base):
     check("promote: item sem rota humana sai com human_gate `none`",
           [x for x in s["demands"] if x["id"] == "B"][0]["human_gate"] == "none")
 
-    # ── piso D7 ──────────────────────────────────────────────────────────────
+    # ── D7 floor ─────────────────────────────────────────────────────────────
     d = repo_git(base, "piso")
-    escreve_fila(d, [item("A"), item("B"), item("C")])
+    write_queue(d, [item("A"), item("B"), item("C")])
     r, s = promote(d)
     check("promote: 3 demandas não atingem o piso D7 (exit 4)", r.returncode == 4,
           f"exit={r.returncode}")
@@ -222,23 +222,23 @@ def testes_de_comportamento(base):
           s is not None and s["floor"] == {"minimo": 4, "demandas": 3,
                                            "atingido": False}, str(s and s.get("floor")))
     d = repo_git(base, "piso-ok")
-    escreve_fila(d, quatro())
+    write_queue(d, four())
     r, s = promote(d)
     check("promote: 4 demandas atingem o piso (exit 0)", r.returncode == 0,
           f"exit={r.returncode} {r.stderr}")
 
-    # fila só com item fechado: zero demandas, e o motivo é dito
+    # queue with only a closed item: zero demands, and the reason is stated
     d = repo_git(base, "vazia")
-    escreve_fila(d, [item("A", status="done"), item("B", status="done")])
+    write_queue(d, [item("A", status="done"), item("B", status="done")])
     r, s = promote(d)
     check("promote: fila sem nenhum `pending` para de vez, dizendo isso",
           r.returncode == 4 and "nenhum item `pending`" in r.stderr, r.stderr)
 
-    # ── recusas ──────────────────────────────────────────────────────────────
+    # ── refusals ─────────────────────────────────────────────────────────────
     d = repo_git(base, "ondas-plan")
-    alvo = d / ".claude" / "programs" / "w" / "plan.yaml"
-    alvo.parent.mkdir(parents=True)
-    alvo.write_text(yaml.dump({"schema_version": 2, "mode": "parallel-waves",
+    target = d / ".claude" / "programs" / "w" / "plan.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text(yaml.dump({"schema_version": 2, "mode": "parallel-waves",
                                "program": "w", "waves": [], "slices": {}}),
                     encoding="utf-8")
     r, _ = promote(d, "w")
@@ -250,9 +250,9 @@ def testes_de_comportamento(base):
           r.returncode == 2 and "/common:queue" in r.stderr, r.stderr)
 
     d = repo_git(base, "invalida")
-    alvo = d / ".claude" / "programs" / "f" / "plan.yaml"
-    alvo.parent.mkdir(parents=True)
-    alvo.write_text(yaml.dump({
+    target = d / ".claude" / "programs" / "f" / "plan.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text(yaml.dump({
         "schema_version": 2, "mode": "single-track", "program": "f",
         "items": [{"id": "A", "title": "t", "why": "", "status": "pending",
                    "blocked_by": [], "human_pending": None}]}), encoding="utf-8")
@@ -260,55 +260,55 @@ def testes_de_comportamento(base):
     check("promote: recusa promover fila inválida (`why` vazio) — exit 2",
           r.returncode == 2 and "why" in r.stderr, r.stderr)
 
-    # ── rastreio e leitura pura ──────────────────────────────────────────────
+    # ── tracing and pure reading ─────────────────────────────────────────────
     d = repo_git(base, "fonte")
-    plano = escreve_fila(d, quatro(status="done"))
-    antes = plano.read_bytes()
+    plan = write_queue(d, four(status="done"))
+    before = plan.read_bytes()
     r, s = promote(d, "fila", "--quando", "2026-08-25")
     check("promote: `source` diz de qual fila, de qual caminho e quantos itens",
-          "single-track 'fila'" in s["source"] and str(plano) in s["source"]
+          "single-track 'fila'" in s["source"] and str(plan) in s["source"]
           and "3 de 4" in s["source"] and "2026-08-25" in s["source"], s["source"])
     check("promote: `source` carrega a fonte da própria fila (o fio até a origem)",
           "teste" in s["source"], s["source"])
     check("[from-plan:queue-untouched] promote não escreve na fila",
-          plano.read_bytes() == antes)
+          plan.read_bytes() == before)
 
 
-def testes_de_prosa():
+def prose_tests():
     if not CMD.is_file():
         check("program-plan.md existe", False, str(CMD))
         return
-    texto = CMD.read_text(encoding="utf-8")
-    linhas = texto.splitlines()
+    text = CMD.read_text(encoding="utf-8")
+    lines = text.splitlines()
 
-    check("--from-plan está no argument-hint", "--from-plan" in linhas[2])
-    check("--from-plan está na descrição do comando", "--from-plan" in linhas[1])
+    check("--from-plan está no argument-hint", "--from-plan" in lines[2])
+    check("--from-plan está na descrição do comando", "--from-plan" in lines[1])
     check("[from-plan:source] a fonte é a fila, lida pelo cepa-plan promote",
-          "cepa-plan promote" in texto)
+          "cepa-plan promote" in text)
     check("[from-plan:source] o piso D7 é o exit 4, e a saída é o /common:drain-plan",
-          "**exit 4 = stop**" in texto and "/common:drain-plan" in texto)
+          "**exit 4 = stop**" in text and "/common:drain-plan" in text)
     check("[from-plan:source] mostra ao usuário o que ficou de fora",
-          "excluded[]" in texto)
+          "excluded[]" in text)
     check("[from-plan:carry-why] o `why` da fila é copiado, nunca reescrito",
-          "COPIED, never rewritten" in texto)
+          "COPIED, never rewritten" in text)
     check("[from-plan:human-gate] rota humana aberta é decidida agora ou fica fora da onda",
-          "human_gate" in texto and "the slice stays out of the wave" in texto)
+          "human_gate" in text and "the slice stays out of the wave" in text)
     check("[from-plan:deps-to-waves] onda_minima é piso, não sugestão",
-          "onda_minima" in texto and "a FLOOR, not a suggestion" in texto)
+          "onda_minima" in text and "a FLOOR, not a suggestion" in text)
     check("[from-plan:deps-to-waves] onda N forka depois da N-1",
-          'fork_after: "wave-<N-1>"' in texto)
+          'fork_after: "wave-<N-1>"' in text)
     check("[from-plan:other-name] o plano de ondas precisa de nome próprio, escolhido pelo usuário",
-          "OF ITS OWN" in texto and "do not invent a suffix on your own" in texto)
+          "OF ITS OWN" in text and "do not invent a suffix on your own" in text)
     check("[from-plan:traceable-source] o `source` do plano vem do promote",
-          "is born orphaned" in texto)
+          "is born orphaned" in text)
     check("[from-plan:queue-untouched] promover não mexe na fila, e o dobro de executores é dito",
-          "the items remain `pending`" in texto and "builds it twice" in texto)
+          "the items remain `pending`" in text and "builds it twice" in text)
 
 
 def main():
     with tempfile.TemporaryDirectory() as base:
-        testes_de_comportamento(base)
-    testes_de_prosa()
+        behavior_tests(base)
+    prose_tests()
     print()
     if FAILURES:
         print(f"✗ {len(FAILURES)} falha(s): " + ", ".join(FAILURES))

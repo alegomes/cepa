@@ -83,13 +83,13 @@ def main():
                  f"{pname}:proof-reviewer", other / "src/main/java/Foo.java", 0,
                  "proof-reviewer must be able to break code in its /tmp worktree")
             )
-            # O destino do veredito (22/08/2026). Nos projetos que rodam o
-            # portão `.claude/` é gitignored, então o veredito gravado lá some
-            # junto com a worktree descartável da sessão — sobrevivia só porque
-            # alguém copiava o arquivo para docs/ depois de cada card, e é o
-            # passo que se esquece ao fechar a sessão. Travar a escrita em
-            # docs/proof/ é o que torna isso mecânico em vez de disciplina: se o
-            # caminho velho continuasse liberado, o esquecimento voltaria calado.
+            # The destination of the verdict (2026-08-22). In the projects that run the
+            # gate `.claude/` is gitignored, so the verdict written there vanishes
+            # together with the session's disposable worktree — it only survived because
+            # someone copied the file to docs/ after each card, and that is the
+            # step that gets forgotten when closing the session. Locking the write in
+            # docs/proof/ is what makes this mechanical instead of discipline: if the
+            # old path remained allowed, the forgetting would come back silently.
             cases += [
                 ("proof-reviewer docs/proof   -> allow",
                  f"{pname}:proof-reviewer", proj / "docs/proof/WEGO-1.yaml", 0,

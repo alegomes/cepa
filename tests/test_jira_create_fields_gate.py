@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Regressão do common/hooks/jira-create-fields-gate.py.
+"""Regression of common/hooks/jira-create-fields-gate.py.
 
-Roda com `python3 tests/test_jira_create_fields_gate.py`; sai não-zero em falha.
+Runs with `python3 tests/test_jira_create_fields_gate.py`; exits non-zero on failure.
 
-O caso-âncora é a chamada real de 22/09/2026 (WEGO-2303): o atlassian-expert
-criou a Story pelo MCP sem `additional_fields`, e o card nasceu sem Team e sem
-Módulo do sistema. Com o hook, essa chamada tem de ser barrada.
+The anchor case is the real call of 2026-09-22 (WEGO-2303): the atlassian-expert
+created the Story through the MCP without `additional_fields`, and the card was born without Team and without
+System Module. With the hook, that call must be blocked.
 """
 
 import json
@@ -66,7 +66,7 @@ BATCH = "mcp__mcp-atlassian__jira_batch_create_issues"
 OK_FIELDS = {"customfield_10001": TEAM, "customfield_10414": {"id": "10372"}}
 repo = make_repo()
 
-# ── caso-âncora: a chamada de 22/09 ─────────────────────────────────────────
+# ── anchor case: the 09/22 call ─────────────────────────────────────────────
 r = run(MCP, {"project_key": "WEGO", "summary": "Lote de concessão habilita várias pessoas numa chamada",
               "issue_type": "Story", "description": "CS-1: ..."}, repo)
 check("chamada de 22/09 sem campos BLOQUEIA", r.returncode == 2, f"rc={r.returncode} {r.stderr[:200]}")
@@ -74,7 +74,7 @@ check("a mensagem nomeia os dois campos e o valor",
       "Team" in r.stderr and "Módulo do sistema" in r.stderr and TEAM in r.stderr, r.stderr[:400])
 check("a mensagem diz que o campo não é inventado", "inventado" in r.stderr, r.stderr[-300:])
 
-# ── MCP com os campos (formato que funcionou em 17/09) ──────────────────────
+# ── MCP with the fields (format that worked on 09/17) ───────────────────────
 r = run(MCP, {"project_key": "WEGO", "summary": "x", "issue_type": "Story",
               "additional_fields": json.dumps({"parent": "WEGO-2221", **OK_FIELDS})}, repo)
 check("MCP com additional_fields em string passa", r.returncode == 0, r.stderr[:300])
@@ -96,7 +96,7 @@ r = run(MCP, {"project_key": "WEGO", "summary": "x", "issue_type": "Story",
               "additional_fields": {"Team": TEAM, "Módulo do sistema": {"id": "10372"}}}, repo)
 check("campos pelo nome em vez do id passam", r.returncode == 0, r.stderr[:300])
 
-# ── lote ────────────────────────────────────────────────────────────────────
+# ── batch ───────────────────────────────────────────────────────────────────
 issues = [{"project_key": "WEGO", "summary": "a", "issue_type": "Story", **OK_FIELDS},
           {"project_key": "WEGO", "summary": "b", "issue_type": "Story"}]
 r = run(BATCH, {"issues": json.dumps(issues)}, repo)
@@ -138,11 +138,11 @@ for c in ("twg jira workitem create --help", "twg jira workitem get WEGO-1",
     r = run("Bash", {"command": c}, repo)
     check(f"não é criação, passa: {c[:50]}", r.returncode == 0, r.stderr[:200])
 
-# ── sessão principal também é conferida ─────────────────────────────────────
+# ── the main session is also checked ────────────────────────────────────────
 r = run(MCP, {"project_key": "WEGO", "summary": "x", "issue_type": "Task"}, repo, agent_type=None)
 check("sessão principal sem campo BLOQUEIA", r.returncode == 2, r.stderr[:200])
 
-# ── escopo ──────────────────────────────────────────────────────────────────
+# ── scope ───────────────────────────────────────────────────────────────────
 r = run(MCP, {"project_key": "WGD", "summary": "x", "issue_type": "Story"}, repo)
 check("card de outro projeto passa", r.returncode == 0, r.stderr[:200])
 
@@ -159,7 +159,7 @@ check("required_fields vazio passa", r.returncode == 0, r.stderr[:200])
 r = run(MCP, {"project_key": "WEGO", "summary": "x", "issue_type": "Story"}, make_repo(config="defaults: [unclosed"))
 check("board-flow.yaml ilegível BLOQUEIA", r.returncode == 2, r.stderr[:200])
 
-# ── topologia substitui a lista inteira ─────────────────────────────────────
+# ── topology replaces the whole list ────────────────────────────────────────
 disc = make_repo(topology="discovery")
 r = run(MCP, {"project_key": "WEGO", "summary": "x", "issue_type": "Story",
               "additional_fields": {"customfield_10001": "product-team"}}, disc)
@@ -168,7 +168,7 @@ r = run(MCP, {"project_key": "WEGO", "summary": "x", "issue_type": "Story",
               "additional_fields": OK_FIELDS}, disc)
 check("topologia discovery: Team do defaults BLOQUEIA", r.returncode == 2, r.stderr[:300])
 
-# ── ferramentas que não criam ───────────────────────────────────────────────
+# ── tools that do not create ────────────────────────────────────────────────
 r = run("mcp__mcp-atlassian__jira_update_issue", {"issue_key": "WEGO-1"}, repo)
 check("update pelo MCP não é conferido", r.returncode == 0, r.stderr[:200])
 r = run("Bash", {"command": "ls"}, repo)

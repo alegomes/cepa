@@ -1,13 +1,13 @@
-"""Regressão do classificador de motivos de NEEDS-HUMAN.
+"""Regression of the NEEDS-HUMAN reason classifier.
 
-As fixtures em tests/fixtures/needs-human/ são os 33 artefatos reais que o
-piloto de 03/08/2026 encontrou em wego-assinatura-backend e wego-tasy-gateway,
-reduzidos aos campos que o classificador lê. A classificação esperada abaixo
-foi conferida à mão, artefato por artefato.
+The fixtures in tests/fixtures/needs-human/ are the 33 real artifacts that the
+2026-08-03 pilot found in wego-assinatura-backend and wego-tasy-gateway,
+reduced to the fields the classifier reads. The expected classification below
+was checked by hand, artifact by artifact.
 
-Por que esta suíte existe: a primeira versão do classificador errou 7 dos 33
-por ler só uma das duas grafias de nome de nível que existem no disco — entre
-eles o WEGO-1698, que é o caso de referência da documentação.
+Why this suite exists: the first version of the classifier got 7 of the 33 wrong
+by reading only one of the two spellings of level name that exist on disk — among
+them WEGO-1698, which is the reference case in the documentation.
 """
 import os
 import sys
@@ -26,11 +26,11 @@ from classify_needs_human import (  # noqa: E402
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures", "needs-human")
 
-# card -> motivo esperado
-ESPERADO = {
-    # A prova não chegou a rodar — ninguém decide nada aqui
+# card -> expected reason
+EXPECTED = {
+    # The proof did not even get to run — nobody decides anything here
     "WEGO-1558": "nao-rodou",
-    "WEGO-1698": "nao-rodou",   # PIT ausente no projeto inteiro
+    "WEGO-1698": "nao-rodou",   # PIT absent from the whole project
     "WEGO-1732": "nao-rodou",
     "WEGO-1763": "nao-rodou",
     "WEGO-1769": "nao-rodou",
@@ -39,204 +39,204 @@ ESPERADO = {
     "WEGO-1949": "nao-rodou",
     "WEGO-1958": "nao-rodou",
     "WEGO-1675": "nao-rodou",
-    "WEGO-1785": "nao-rodou",   # trava do harness bloqueou a escrita da prova
-    # O teste não consegue enxergar essa mudança
+    "WEGO-1785": "nao-rodou",   # the harness lock blocked the write of the proof
+    # The test cannot see this change
     "WEGO-1529": "teste-cego",
     "WEGO-1538": "teste-cego",
     "WEGO-1540": "teste-cego",
     "WEGO-1546": "teste-cego",
     "WEGO-1611": "teste-cego",
-    "WEGO-1710": "teste-cego",  # vermelho-no-base só por argumento analítico
-    "WEGO-1778": "teste-cego",  # perturbação só coletiva (dois portões juntos)
+    "WEGO-1710": "teste-cego",  # red-on-base only by analytical argument
+    "WEGO-1778": "teste-cego",  # collective-only perturbation (two gates together)
     "WEGO-1783": "teste-cego",
-    "WEGO-1510": "teste-cego",  # a superfície viva do PlugSign não é alcançável no automatizado
-    "WEGO-1614": "teste-cego",  # reverter só o pedaço não compila no commit-base
-    "WEGO-1619": "teste-cego",  # falta o @QuarkusTest que asserta o 400 na rejeição
-    # Tem os três sinais de diff só de doc (changed_classes vazio, L4 n/a,
-    # perturbação skipped), mas o único arquivo é o application.properties:
-    # configuração muda comportamento, não é "nada a provar".
+    "WEGO-1510": "teste-cego",  # PlugSign's live surface is not reachable in the automated run
+    "WEGO-1614": "teste-cego",  # reverting only the piece does not compile on the base commit
+    "WEGO-1619": "teste-cego",  # the @QuarkusTest that asserts the 400 on rejection is missing
+    # Has the three signals of a doc-only diff (changed_classes empty, L4 n/a,
+    # perturbation skipped), but the only file is application.properties:
+    # configuration changes behavior, it is not "nothing to prove".
     "WEGO-2021": "teste-cego",
-    # Não havia o que provar aqui
-    # Epic-mãe sem commit-base próprio. Classificado `nao-rodou` até 2026-08-04,
-    # quando o primeiro run real do /board-flow:decide mostrou o custo: `nao-rodou`
-    # é o único motivo que sai da frente do humano sem perguntar, e sua saída
-    # prescrita é re-rodar a prova — que num Epic devolve o mesmo resultado para
-    # sempre. O artefato já dizia em prosa "não fabrica um diff sintético agregando
-    # as 8 Stories filhas"; faltava a regra olhar issue_type.
+    # There was nothing to prove here
+    # Parent Epic without its own base commit. Classified `nao-rodou` until 2026-08-04,
+    # when the first real run of /board-flow:decide showed the cost: `nao-rodou`
+    # is the only reason that leaves the human's front without asking, and its prescribed exit
+    # is to re-run the proof — which on an Epic returns the same result
+    # forever. The artifact already said in prose "does not fabricate a synthetic diff aggregating
+    # the 8 child Stories"; the rule was missing a look at issue_type.
     "WEGO-1550": "nada-a-provar",
-    "WEGO-1658": "nada-a-provar",   # card só de documentação
-    "WEGO-1709": "nada-a-provar",   # ADR puro
-    "WEGO-1962": "nada-a-provar",   # fuzzer HTTP não cabe em vazamento de log
-    # Só .md, reconhecidos pela estrutura (changed_classes vazio, L4 n/a,
-    # perturbação skipped): a prosa não casa DIFF_SEM_PRODUCAO e até
-    # 2026-09-25 os três caíam em `teste-cego` pelo fallback de perturbação
-    # skipped. Vindos do prove-drain de wego-acesso-backend.
+    "WEGO-1658": "nada-a-provar",   # documentation-only card
+    "WEGO-1709": "nada-a-provar",   # pure ADR
+    "WEGO-1962": "nada-a-provar",   # an HTTP fuzzer does not fit in log leakage
+    # Only .md, recognized by structure (changed_classes empty, L4 n/a,
+    # perturbation skipped): the prose does not match DIFF_SEM_PRODUCAO and until
+    # 2026-09-25 the three fell into `teste-cego` through the skipped-perturbation
+    # fallback. They came from the prove-drain of wego-acesso-backend.
     "WEGO-2117": "nada-a-provar",
     "WEGO-2275": "nada-a-provar",
     "WEGO-2276": "nada-a-provar",
-    # Os testes rodam, mas seguram pouco
-    "WEGO-1564": "guarda-fraca",    # PedidoAssinatura, 60% dos mutantes mortos
-    # Apareceu comportamento que nenhum teste confere
+    # The tests run, but hold little
+    "WEGO-1564": "guarda-fraca",    # PedidoAssinatura, 60% of the mutants killed
+    # Behavior appeared that no test checks
     "WEGO-1819": "sem-cobertura",
-    # Estes quatro esperavam `nao-rodou` até 2026-08-22, e a expectativa era o
-    # que estava errado, não a regra. Em 14/08/2026 a checagem estrutural de
-    # `l4_adversarial_input.status == "findings"` subiu para ANTES dos casadores
-    # de prosa, porque o texto do próprio achado estava roteando o card: um
-    # artefato cuja prosa cita "quarkus-jacoco não configurado" ou "PIT ausente
-    # no pom do worktree" casava o padrão de "não rodou" e caía no ÚNICO balde
-    # que sai da frente do humano sem perguntar. Foi assim que o WEGO-1894
-    # (colisão de hash) e o WEGO-1897 (byte NUL derrubando a API) sumiram da
-    # fila do prove-drain de wego-acesso-backend.
+    # These four expected `nao-rodou` until 2026-08-22, and the expectation was
+    # what was wrong, not the rule. On 2026-08-14 the structural check of
+    # `l4_adversarial_input.status == "findings"` moved up to BEFORE the prose
+    # matchers, because the text of the finding itself was routing the card: an
+    # artifact whose prose cites "quarkus-jacoco not configured" or "PIT absent
+    # from the worktree's pom" matched the "did not run" pattern and fell into the ONLY
+    # bucket that leaves the human's front without asking. That is how WEGO-1894
+    # (hash collision) and WEGO-1897 (NUL byte taking the API down) vanished from the
+    # prove-drain queue of wego-acesso-backend.
     #
-    # Nos quatro a prova RODOU — perturbação com verde→vermelho→verde registrado
-    # — e o L4 achou coisa que precisa de decisão humana:
-    #   1612: GET ?syncStatus=true transita ENVIADO→ABERTO e nenhum @QuarkusTest
-    #         asserta a transição.
-    #   1663: 14 testes @Disabled entregues dentro de um card cujo título é
-    #         "cobertura E2E completa" (achado de severidade alta).
-    #   1682: quatro achados que o próprio routing_reason manda triar.
-    #   1683: a flag wego.refresh-on-dispatch.enabled default false e sem
-    #         override em %prod — produção sem a proteção que o card entregou.
-    # Manter `nao-rodou` aqui seria pedir para o comando esconder os quatro.
+    # In the four the proof RAN — perturbation with green→red→green recorded
+    # — and L4 found things that need a human decision:
+    #   1612: GET ?syncStatus=true transitions ENVIADO→ABERTO and no @QuarkusTest
+    #         asserts the transition.
+    #   1663: 14 @Disabled tests delivered inside a card whose title is
+    #         "complete E2E coverage" (high-severity finding).
+    #   1682: four findings that the routing_reason itself orders triaged.
+    #   1683: the flag wego.refresh-on-dispatch.enabled defaults to false and has no
+    #         override in %prod — production without the protection the card delivered.
+    # Keeping `nao-rodou` here would be asking the command to hide the four.
     "WEGO-1612": "sem-cobertura",
     "WEGO-1663": "sem-cobertura",
     "WEGO-1682": "sem-cobertura",
     "WEGO-1683": "sem-cobertura",
-    # Depende de alguém de fora
-    "WEGO-1757": "fora-do-alcance",  # schedule no Bitbucket + quota da Tecnospeed
+    # Depends on someone outside
+    "WEGO-1757": "fora-do-alcance",  # schedule in Bitbucket + Tecnospeed quota
 }
 
 
-def _carrega(card):
+def _load(card):
     with open(os.path.join(FIXTURES, f"{card}.yaml")) as fh:
         return yaml.safe_load(fh)
 
 
-@pytest.mark.parametrize("card,motivo", sorted(ESPERADO.items()))
-def test_classifica_artefato_real(card, motivo):
-    slug, evidencia = classify(_carrega(card))
-    assert slug == motivo, f"{card}: esperado {motivo}, veio {slug} ({evidencia})"
-    assert evidencia, f"{card}: motivo sem evidência para mostrar ao usuário"
+@pytest.mark.parametrize("card,reason", sorted(EXPECTED.items()))
+def test_classifies_real_artifact(card, reason):
+    slug, evidence = classify(_load(card))
+    assert slug == reason, f"{card}: esperado {reason}, veio {slug} ({evidence})"
+    assert evidence, f"{card}: motivo sem evidência para mostrar ao usuário"
 
 
-def test_todas_as_fixtures_estao_cobertas():
-    no_disco = {f[:-5] for f in os.listdir(FIXTURES) if f.endswith(".yaml")}
-    assert no_disco == set(ESPERADO), (
+def test_all_fixtures_are_covered():
+    on_disk = {f[:-5] for f in os.listdir(FIXTURES) if f.endswith(".yaml")}
+    assert on_disk == set(EXPECTED), (
         "fixture sem classificação esperada (ou vice-versa): "
-        f"{no_disco ^ set(ESPERADO)}"
+        f"{on_disk ^ set(EXPECTED)}"
     )
 
 
-def test_nenhum_artefato_real_cai_em_sem_motivo():
-    """A lista é fechada, mas precisa cobrir o que existe de verdade.
+def test_no_real_artifact_falls_into_no_reason():
+    """The list is closed, but it needs to cover what really exists.
 
-    Um `sem-motivo` aqui significa que a lista de sete ficou incompleta — é
-    sinal de motivo novo a discutir com o dono, nunca de regra a afrouxar.
+    A `sem-motivo` here means the list of seven was left incomplete — it is
+    a sign of a new reason to discuss with the owner, never of a rule to loosen.
     """
-    orfaos = [c for c in ESPERADO if classify(_carrega(c))[0] == "sem-motivo"]
-    assert not orfaos, f"artefatos sem motivo: {orfaos}"
+    orphans = [c for c in EXPECTED if classify(_load(c))[0] == "sem-motivo"]
+    assert not orphans, f"artefatos sem motivo: {orphans}"
 
 
-def test_epic_so_sai_do_nao_rodou_quando_nao_tem_commit_base():
-    """A guarda de Epic é estreita de propósito.
+def test_epic_only_leaves_not_run_when_it_has_no_base_commit():
+    """The Epic guard is narrow on purpose.
 
-    Ela existe para o Epic-mãe que nunca terá diff próprio (WEGO-1550). Um Epic
-    COM commit-base resolvido tem diff e continua sujeito a todas as regras
-    seguintes — varrer todo Epic para `nada-a-provar` esconderia prova real.
-    O WEGO-1732 é esse caso: Epic, base_commit resolvido, e o artefato aponta
-    mutantes sobreviventes de verdade.
+    It exists for the parent Epic that will never have its own diff (WEGO-1550). An Epic
+    WITH a resolved base commit has a diff and remains subject to all the
+    following rules — sweeping every Epic into `nada-a-provar` would hide real proof.
+    WEGO-1732 is that case: Epic, resolved base_commit, and the artifact points to
+    mutants that really survived.
     """
-    mil732 = _carrega("WEGO-1732")
+    mil732 = _load("WEGO-1732")
     assert mil732["issue_type"] == "Epic"
     assert mil732["base_commit"], "fixture perdeu o commit-base que faz o caso"
     assert classify(mil732)[0] != "nada-a-provar"
 
-    # e o mesmo Epic, se perdesse o commit-base, cairia na guarda
-    sem_base = dict(mil732, base_commit=None, scope={"base_commit_resolved": False})
-    assert classify(sem_base)[0] == "nada-a-provar"
+    # and the same Epic, if it lost the base commit, would fall into the guard
+    without_base = dict(mil732, base_commit=None, scope={"base_commit_resolved": False})
+    assert classify(without_base)[0] == "nada-a-provar"
 
 
-def test_diff_so_de_doc_so_sai_do_teste_cego_com_os_tres_sinais():
-    """A regra estrutural de `nada-a-provar` é estreita de propósito.
+def test_doc_only_diff_only_leaves_blind_test_with_the_three_signals():
+    """The structural `nada-a-provar` rule is narrow on purpose.
 
-    Precisa dos três: `changed_classes` ESCRITO e vazio, perturbação `skipped`
-    e L4 `n/a` — e, quando o artefato lista `changed_files`, todo arquivo tem
-    que ser documentação. Faltando qualquer um, o card segue para o fallback e continua
-    `teste-cego` — senão a regra engoliria perturbação que não rodou num diff
-    com código de verdade.
+    It needs all three: `changed_classes` WRITTEN and empty, perturbation `skipped`
+    and L4 `n/a` — and, when the artifact lists `changed_files`, every file has
+    to be documentation. If any is missing, the card goes on to the fallback and remains
+    `teste-cego` — otherwise the rule would swallow a perturbation that did not run on a diff
+    with real code.
     """
-    doc = _carrega("WEGO-2117")
+    doc = _load("WEGO-2117")
     assert classify(doc) == (
         "nada-a-provar", "diff sem classe de produção (changed_classes vazio)")
 
-    sem_chave = dict(doc, scope={"base_commit_resolved": True})
-    com_classe = dict(doc, scope={"base_commit_resolved": True,
+    without_key = dict(doc, scope={"base_commit_resolved": True})
+    with_class = dict(doc, scope={"base_commit_resolved": True,
                                   "changed_classes": ["com.wego.Foo"]})
-    levels_l4_rodou = dict(doc["levels"])
-    levels_l4_rodou["l4_adversarial_input"] = {"status": "pass"}
-    l4_rodou = dict(doc, levels=levels_l4_rodou)
+    levels_l4_ran = dict(doc["levels"])
+    levels_l4_ran["l4_adversarial_input"] = {"status": "pass"}
+    l4_ran = dict(doc, levels=levels_l4_ran)
     config = dict(doc, scope=dict(doc["scope"], changed_files=[
         {"file": "docs/x.md"}, {"file": "bootstrap/src/main/resources/application.properties"}]))
-    for caso in (sem_chave, com_classe, l4_rodou, config):
-        assert classify(caso)[0] == "teste-cego"
+    for case in (without_key, with_class, l4_ran, config):
+        assert classify(case)[0] == "teste-cego"
 
-    # Perturbação que RODOU não é diff sem nada a provar, mesmo só com .md.
-    # Sintético e sem prosa: a do WEGO-2117 casa outra regra de `nada-a-provar`
-    # e esconderia a condição que este caso existe para segurar.
-    pert_rodou = {
+    # A perturbation that RAN is not a diff with nothing to prove, even with only .md.
+    # Synthetic and without prose: WEGO-2117's matches another `nada-a-provar` rule
+    # and would hide the condition this case exists to hold.
+    pert_ran = {
         "card": "X-4", "verdict": "needs-human", "base_commit": "abc1234",
         "scope": {"changed_classes": [], "changed_files": [{"file": "docs/x.md"}]},
         "levels": {"l3_load_bearing": {"perturbation": {"status": "pass"}},
                    "l2_coverage": {"status": "assumed"},
                    "l4_adversarial_input": {"status": "n/a"}},
     }
-    assert classify(pert_rodou)[0] != "nada-a-provar"
+    assert classify(pert_ran)[0] != "nada-a-provar"
 
 
-def test_so_nao_rodou_deixa_de_virar_pergunta():
+def test_only_not_run_stops_becoming_a_question():
     assert NAO_PERGUNTA == {"nao-rodou"}
 
 
-def test_ordem_da_fila_cobre_todo_motivo_que_vira_pergunta():
-    perguntaveis = set(MOTIVOS) - NAO_PERGUNTA - {"sem-motivo"}
-    assert set(ORDEM_FILA) == perguntaveis
+def test_queue_order_covers_every_reason_that_becomes_a_question():
+    askable = set(MOTIVOS) - NAO_PERGUNTA - {"sem-motivo"}
+    assert set(ORDEM_FILA) == askable
     assert ORDEM_FILA[0] == "sem-cobertura", "a fila abre pelo de maior risco"
 
 
-def test_aceita_as_duas_grafias_de_nivel():
-    """Grafia antiga e schema 2 têm que dar o mesmo motivo.
+def test_accepts_both_level_spellings():
+    """The old spelling and schema 2 must give the same reason.
 
-    Ler só a documentada foi o erro que classificou 7 dos 33 errado.
+    Reading only the documented one was the mistake that classified 7 of the 33 wrong.
     """
-    antigo = {
+    old = {
         "card": "X-1", "verdict": "needs-human", "base_commit": "abc1234",
         "routing_reason": "L4 encontrou algo",
         "levels": {"l4_adversarial_input": {"status": "findings",
                                             "findings": ["header aceito sem validação"]}},
     }
-    novo = dict(antigo)
-    novo["levels"] = {"l4_adversarial_input": dict(antigo["levels"]["l4_adversarial_input"])}
-    assert classify(antigo)[0] == classify(novo)[0] == "sem-cobertura"
+    new = dict(old)
+    new["levels"] = {"l4_adversarial_input": dict(old["levels"]["l4_adversarial_input"])}
+    assert classify(old)[0] == classify(new)[0] == "sem-cobertura"
 
-    perturbado_antigo = {
+    perturbed_old = {
         "card": "X-2", "verdict": "needs-human", "base_commit": "abc1234",
         "routing_reason": "sem prova externa",
         "levels": {"l3_diff_mutation": {"status": "skipped", "note": "sem detalhe"}},
     }
-    perturbado_novo = {
+    perturbed_new = {
         "card": "X-2", "verdict": "needs-human", "base_commit": "abc1234",
         "routing_reason": "sem prova externa",
         "levels": {"l3_load_bearing": {"perturbation": {"status": "skipped",
                                                         "results": ["sem detalhe"]}}},
     }
-    assert classify(perturbado_antigo)[0] == classify(perturbado_novo)[0] == "teste-cego"
+    assert classify(perturbed_old)[0] == classify(perturbed_new)[0] == "teste-cego"
 
 
-def test_caso_desconhecido_nao_inventa_motivo():
-    desconhecido = {
+def test_unknown_case_does_not_invent_a_reason():
+    unknown = {
         "card": "X-3", "verdict": "needs-human", "base_commit": "abc1234",
         "routing_reason": "algo que nunca vimos antes",
         "levels": {"l2_coverage": {"status": "assumed"}},
     }
-    slug, _ = classify(desconhecido)
+    slug, _ = classify(unknown)
     assert slug == "sem-motivo"

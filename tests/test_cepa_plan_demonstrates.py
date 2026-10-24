@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""CS-1 do ciclo 1 do Epic Cepa em espiral: `demonstrates:` no cabeçalho da fila.
+"""CS-1 of cycle 1 of the Cepa in a spiral Epic: `demonstrates:` in the queue header.
 
-Rode com `python3 tests/test_cepa_plan_demonstrates.py`. Superfície: a CLI
-`common/bin/cepa-plan`, chamada como subprocesso.
+Run with `python3 tests/test_cepa_plan_demonstrates.py`. Surface: the CLI
+`common/bin/cepa-plan`, called as a subprocess.
 
-O campo diz o que a fila DEMONSTRA quando acaba ("o operador carrega o PDF e vê
-3 respostas"). É opcional: fila sem ele continua válida. O que estes testes
-cobram:
+The field says what the queue DEMONSTRATES when it ends ("the operator loads the PDF and sees
+3 answers"). It is optional: a queue without it stays valid. What these tests
+charge:
 
-  - `validate` aceita uma fila com o campo, e recusa um valor que não é texto;
-  - `show` imprime o texto, e diz quando a fila não tem o campo;
-  - uma repriorização (`write` sobre a fila existente) não o apaga em silêncio,
-    nem o `start`/`finish` que regravam o arquivo.
+  - `validate` accepts a queue with the field, and refuses a value that is not text;
+  - `show` prints the text, and says when the queue does not have the field;
+  - a reprioritization (`write` over the existing queue) does not erase it silently,
+    nor do `start`/`finish`, which rewrite the file.
 """
 
 import json
@@ -47,126 +47,126 @@ def run(repo, *args):
                           capture_output=True, text=True, cwd=str(repo))
 
 
-def repo_git(base, nome):
-    d = Path(base) / nome
+def git_repo(base, given_name):
+    d = Path(base) / given_name
     d.mkdir(parents=True)
     subprocess.run(["git", "-C", str(d), "init", "-q"], check=True)
     return d
 
 
-def grava_plano(d, cabecalho_extra, nome="fila"):
-    alvo = d / ".claude" / "programs" / nome / "plan.yaml"
-    alvo.parent.mkdir(parents=True, exist_ok=True)
-    corpo = {"schema_version": 2, "mode": "single-track", "program": nome,
-             "source": "docs/spec/x.md", **cabecalho_extra,
+def write_plan(d, extra_header, given_name="fila"):
+    target = d / ".claude" / "programs" / given_name / "plan.yaml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    body = {"schema_version": 2, "mode": "single-track", "program": given_name,
+             "source": "docs/spec/x.md", **extra_header,
              "items": [{"id": "CS-1", "title": "um", "why": "primeiro",
                         "status": "pending", "blocked_by": [],
                         "human_pending": None}]}
-    alvo.write_text(yaml.dump(corpo, allow_unicode=True, sort_keys=False),
+    target.write_text(yaml.dump(body, allow_unicode=True, sort_keys=False),
                     encoding="utf-8")
-    return alvo
+    return target
 
 
-def le(alvo):
-    return yaml.safe_load(alvo.read_text(encoding="utf-8"))
+def reads(target):
+    return yaml.safe_load(target.read_text(encoding="utf-8"))
 
 
-def test_validate_aceita_demonstra(base):
-    d = repo_git(base, "valida")
-    alvo = grava_plano(d, {"demonstrates": DEMONSTRA})
-    r = run(d, "validate", str(alvo))
+def test_validate_accepts_demonstrates(base):
+    d = git_repo(base, "valida")
+    target = write_plan(d, {"demonstrates": DEMONSTRA})
+    r = run(d, "validate", str(target))
     check("validate aceita a fila com `demonstrates:`", r.returncode == 0,
           r.stdout + r.stderr)
 
-    sem = grava_plano(d, {}, nome="sem")
+    without_ = write_plan(d, {}, given_name="sem")
     check("fila sem `demonstrates:` continua válida",
-          run(d, "validate", str(sem)).returncode == 0)
+          run(d, "validate", str(without_)).returncode == 0)
 
 
-def test_validate_recusa_demonstra_que_nao_e_texto(base):
-    d = repo_git(base, "tipo")
-    for rot, valor in (("lista", ["a", "b"]), ("vazio", "  ")):
-        alvo = grava_plano(d, {"demonstrates": valor}, nome=rot)
-        r = run(d, "validate", str(alvo))
+def test_validate_refuses_demonstrates_that_is_not_text(base):
+    d = git_repo(base, "tipo")
+    for rot, value in (("lista", ["a", "b"]), ("vazio", "  ")):
+        target = write_plan(d, {"demonstrates": value}, given_name=rot)
+        r = run(d, "validate", str(target))
         check(f"validate recusa `demonstrates:` {rot}", r.returncode == 2,
               r.stdout + r.stderr)
         check(f"e nomeia o campo na recusa ({rot})", "demonstrates" in r.stderr,
               r.stderr)
 
 
-def test_show_imprime_o_texto(base):
-    d = repo_git(base, "show")
-    grava_plano(d, {"demonstrates": DEMONSTRA})
+def test_show_prints_the_text(base):
+    d = git_repo(base, "show")
+    write_plan(d, {"demonstrates": DEMONSTRA})
     r = run(d, "show", "fila", "--repo", ".")
     check("show sai 0", r.returncode == 0, r.stderr)
     check("show imprime o texto do `demonstrates:`", DEMONSTRA in r.stdout, r.stdout)
 
     r = run(d, "show", "fila", "--repo", ".", "--json")
-    dados = json.loads(r.stdout) if r.returncode == 0 else {}
-    check("show --json traz o campo", dados.get("demonstrates") == DEMONSTRA,
+    data = json.loads(r.stdout) if r.returncode == 0 else {}
+    check("show --json traz o campo", data.get("demonstrates") == DEMONSTRA,
           r.stdout + r.stderr)
 
-    grava_plano(d, {}, nome="sem")
+    write_plan(d, {}, given_name="sem")
     r = run(d, "show", "sem", "--repo", ".")
     check("show de fila sem o campo diz que não tem",
           r.returncode == 0 and "sem `demonstrates:`" in r.stdout,
           r.stdout + r.stderr)
 
 
-def test_reescrita_preserva_demonstra(base):
-    d = repo_git(base, "reescrita")
-    alvo = grava_plano(d, {"demonstrates": DEMONSTRA})
-    itens = d / "itens.json"
-    itens.write_text(json.dumps([{"id": "CS-1", "title": "um",
+def test_rewrite_preserves_demonstrates(base):
+    d = git_repo(base, "reescrita")
+    target = write_plan(d, {"demonstrates": DEMONSTRA})
+    items = d / "itens.json"
+    items.write_text(json.dumps([{"id": "CS-1", "title": "um",
                                   "why": "outro motivo",
                                   "human_pending": None}]), encoding="utf-8")
-    r = run(d, "write", "fila", "--items", str(itens), "--repo", ".")
+    r = run(d, "write", "fila", "--items", str(items), "--repo", ".")
     check("repriorização grava", r.returncode == 0, r.stderr)
     check("e não apaga o `demonstrates:` do disco",
-          le(alvo).get("demonstrates") == DEMONSTRA, str(le(alvo)))
+          reads(target).get("demonstrates") == DEMONSTRA, str(reads(target)))
 
     run(d, "start", "fila", "CS-1", "--repo", ".")
     run(d, "finish", "fila", "CS-1", "--status", "done",
         "--evidence", "teste", "--repo", ".")
     check("start/finish também não o apagam",
-          le(alvo).get("demonstrates") == DEMONSTRA, str(le(alvo)))
+          reads(target).get("demonstrates") == DEMONSTRA, str(reads(target)))
 
 
-def test_chave_antiga_demonstra_ainda_e_lida(base):
-    d = repo_git(base, "antiga")
-    alvo = grava_plano(d, {"demonstra": DEMONSTRA})
-    r = run(d, "validate", str(alvo))
+def test_old_demonstra_key_is_still_read(base):
+    d = git_repo(base, "antiga")
+    target = write_plan(d, {"demonstra": DEMONSTRA})
+    r = run(d, "validate", str(target))
     check("validate aceita a fila gravada com a chave antiga `demonstra:`",
           r.returncode == 0, r.stderr)
     r = run(d, "show", "fila", "--repo", ".")
     check("show imprime o texto da chave antiga", DEMONSTRA in r.stdout, r.stdout)
     r = run(d, "show", "fila", "--repo", ".", "--json")
-    dados = json.loads(r.stdout) if r.returncode == 0 else {}
+    data = json.loads(r.stdout) if r.returncode == 0 else {}
     check("show --json devolve o texto da chave antiga como `demonstrates`",
-          dados.get("demonstrates") == DEMONSTRA, r.stdout + r.stderr)
-    grava_plano(d, {"demonstra": ""}, nome="vazia")
+          data.get("demonstrates") == DEMONSTRA, r.stdout + r.stderr)
+    write_plan(d, {"demonstra": ""}, given_name="vazia")
     r = run(d, "validate", str(d / ".claude" / "programs" / "vazia" / "plan.yaml"))
     check("validate recusa a chave antiga vazia", r.returncode == 2, r.stderr)
-    itens = d / "itens.json"
-    itens.write_text(json.dumps([{"id": "CS-1", "title": "um",
+    items = d / "itens.json"
+    items.write_text(json.dumps([{"id": "CS-1", "title": "um",
                                   "why": "outro motivo",
                                   "human_pending": None}]), encoding="utf-8")
-    r = run(d, "write", "fila", "--items", str(itens), "--repo", ".")
+    r = run(d, "write", "fila", "--items", str(items), "--repo", ".")
     check("repriorização sobre a fila de chave antiga grava", r.returncode == 0,
           r.stderr)
-    plano = le(alvo)
+    plan = reads(target)
     check("e o roteiro sobrevive, regravado como `demonstrates:`",
-          plano.get("demonstrates") == DEMONSTRA and "demonstra" not in plano,
-          str(plano))
+          plan.get("demonstrates") == DEMONSTRA and "demonstra" not in plan,
+          str(plan))
 
 
 def main():
     with tempfile.TemporaryDirectory() as base:
-        for fn in (test_validate_aceita_demonstra,
-                   test_validate_recusa_demonstra_que_nao_e_texto,
-                   test_show_imprime_o_texto,
-                   test_reescrita_preserva_demonstra,
-                   test_chave_antiga_demonstra_ainda_e_lida):
+        for fn in (test_validate_accepts_demonstrates,
+                   test_validate_refuses_demonstrates_that_is_not_text,
+                   test_show_prints_the_text,
+                   test_rewrite_preserves_demonstrates,
+                   test_old_demonstra_key_is_still_read):
             print(f"\n{fn.__name__}")
             fn(base)
     print()

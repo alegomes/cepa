@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Dispensa proposta não é prova: o guard barra `proven` ao lado dela.
+"""A proposed waiver is not proof: the guard blocks `proven` next to it.
 
-Origem (BACKLOG.md § "Dispensa (waiver) gravada em nome do dono durante run
-autônomo", fb-20261014-3): em run autônomo a dispensa vira PROPOSTA
-(board-flow/bin/waivers.py `propor`), e uma proposta é uma pergunta ao dono.
-O artefato que a carrega (`waiver_proposto: <caminho>`) fica NEEDS-HUMAN.
+Origin (BACKLOG.md § "Waiver recorded in the owner's name during an
+autonomous run", fb-20261014-3): in an autonomous run the waiver becomes a PROPOSAL
+(board-flow/bin/waivers.py `propor`), and a proposal is a question to the owner.
+The artifact that carries it (`waiver_proposto: <path>`) stays NEEDS-HUMAN.
 
-  - `proven` + `waiver_proposto` (ou dispensa_proposta/waiver/dispensa) -> BLOQUEIA;
-  - `needs-human` / `unproven` + a mesma chave -> PASSA;
-  - `proven` sem a chave -> PASSA (comportamento anterior);
-  - o fallback sem PyYAML enxerga a chave de topo.
+  - `proven` + `waiver_proposto` (or dispensa_proposta/waiver/dispensa) -> BLOCKS;
+  - `needs-human` / `unproven` + the same key -> PASSES;
+  - `proven` without the key -> PASSES (previous behavior);
+  - the fallback without PyYAML sees the top-level key.
 """
 import importlib.util
 import json
@@ -27,7 +27,7 @@ HOOK = REPO / "build-hex" / "hooks" / "proof-verdict-guard.py"
 ARTIFACT = str(Path(tempfile.gettempdir()) / "proj" / "docs" / "proof" / "WEGO-2000.yaml")
 FAILURES = []
 
-LIMPO = """\
+CLEAN = """\
 scope:
   changed_classes:
     - class: "com.wego.AssinaturaUseCase"
@@ -47,8 +47,8 @@ levels:
 """
 
 
-def artefato(verdict="proven", extra=""):
-    return f"schema_version: 2\ncard: WEGO-2000\nverdict: {verdict}\n{extra}{LIMPO}"
+def artifact_text(verdict="proven", extra=""):
+    return f"schema_version: 2\ncard: WEGO-2000\nverdict: {verdict}\n{extra}{CLEAN}"
 
 
 def run(content):
@@ -69,33 +69,33 @@ def check(name, cond, detail=""):
 
 WAIVER = "waiver_proposto: .claude/waivers/teste-cego--plugsignadapter.yaml\n"
 
-r = run(artefato("proven", WAIVER))
+r = run(artifact_text("proven", WAIVER))
 check("proven + waiver_proposto -> BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
 check("...e a mensagem diz waiver_proposto e needs-human",
       "waiver_proposto" in r.stderr and "needs-human" in r.stderr, r.stderr[:300])
 
-for chave in ("dispensa_proposta", "waiver", "dispensa"):
-    r = run(artefato("proven", f"{chave}: .claude/waivers/x.yaml\n"))
-    check(f"proven + {chave} -> BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
+for key in ("dispensa_proposta", "waiver", "dispensa"):
+    r = run(artifact_text("proven", f"{key}: .claude/waivers/x.yaml\n"))
+    check(f"proven + {key} -> BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
 
 for v in ("needs-human", "unproven"):
-    r = run(artefato(v, WAIVER))
+    r = run(artifact_text(v, WAIVER))
     check(f"{v} + waiver_proposto -> PASSA", r.returncode == 0, r.stderr[:300])
 
-r = run(artefato("proven"))
+r = run(artifact_text("proven"))
 check("proven sem a chave -> PASSA (inalterado)", r.returncode == 0, r.stderr[:300])
 
-r = run(artefato("proven", "waiver_proposto: null\n"))
+r = run(artifact_text("proven", "waiver_proposto: null\n"))
 check("proven + waiver_proposto nulo -> PASSA (nada proposto)", r.returncode == 0,
       r.stderr[:300])
 
-# Fallback sem PyYAML: a função de linhas enxerga a chave de topo.
+# Fallback without PyYAML: the lines function sees the top-level key.
 spec = importlib.util.spec_from_file_location("guard", HOOK)
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
-v = guard.parse_with_lines(artefato("proven", WAIVER))
+v = guard.parse_with_lines(artifact_text("proven", WAIVER))
 check("parse_with_lines marca a dispensa (6o elemento)", len(v) == 6 and v[5] is True, v)
-v = guard.parse_with_lines(artefato("proven"))
+v = guard.parse_with_lines(artifact_text("proven"))
 check("parse_with_lines sem a chave -> False", v[5] is False, v)
 
 print()

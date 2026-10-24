@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Executa common/gauntlet/gauntlet.workflow.js com agent/parallel/phase/log SIMULADOS.
+"""Executes common/gauntlet/gauntlet.workflow.js with SIMULATED agent/parallel/phase/log.
 
-Sem gastar token: um harness em node lê o script, troca `export const meta` por
-`const meta`, embrulha o corpo numa função async (o `return` no topo vira
-válido) e injeta fakes que gravam cada chamada e devolvem JSON pronto por label.
-O teste então inspeciona as chamadas e o retorno: ordem das fases, isolamento
-dos builders, cegueira e rotação dos juízes, Borda, desempate, rótulo
-desconhecido, menos de 2 designs, e `args` como string JSON.
+Without spending tokens: a node harness reads the script, swaps `export const meta` for
+`const meta`, wraps the body in an async function (the top-level `return` becomes
+valid) and injects fakes that record each call and return ready JSON by label.
+The test then inspects the calls and the return: order of the phases, isolation
+of the builders, blindness and rotation of the judges, Borda, tiebreak, unknown
+label, fewer than 2 designs, and `args` as a JSON string.
 
-Sem `node` o teste FALHA (não pula): execução do script é a única prova de que
-ele roda; pular esconderia a regressão.
+Without `node` the test FAILS (does not skip): executing the script is the only proof
+that it runs; skipping would hide the regression.
 """
 
 import json
@@ -71,10 +71,10 @@ ARGS = {"repo": "/tmp/repo-fake", "goal": "GOAL-FAKE reduzir atrito",
         "context": "CTX-FAKE contexto", "angles": ANGLES, "reads": ["a.md", "b.md"]}
 
 
-def check(nome, cond, detalhe=""):
-    print(("  ok  " if cond else "FAIL  ") + nome + ("" if cond else f"  {detalhe}"))
+def check(name, cond, detail=""):
+    print(("  ok  " if cond else "FAIL  ") + name + ("" if cond else f"  {detail}"))
     if not cond:
-        FAILURES.append(nome)
+        FAILURES.append(name)
 
 
 def run(tmp, rankings, angles=None, null_builders=(), as_string=False):
@@ -111,42 +111,42 @@ def main():
     if out is None:
         return 1
 
-    # a. ordem das fases
-    fases = [e["name"] for e in out["events"] if e["t"] == "phase"]
+    # a. order of the phases
+    phases = [e["name"] for e in out["events"] if e["t"] == "phase"]
     check("a. fases na ordem Barra, Builders, Julgamento, Revisão",
-          fases == ["Barra", "Builders", "Julgamento", "Revisão"], str(fases))
-    ordem = [e["label"] for e in out["events"] if e["t"] == "agent"]
-    ib = ordem.index("bar-setter")
+          phases == ["Barra", "Builders", "Julgamento", "Revisão"], str(phases))
+    order = [e["label"] for e in out["events"] if e["t"] == "agent"]
+    ib = order.index("bar-setter")
     check("a. bar-setter roda antes de qualquer builder",
-          all(ordem.index(b["label"]) > ib for b in agents(out, "builder:")))
+          all(order.index(b["label"]) > ib for b in agents(out, "builder:")))
     check("a. builders antes dos juízes, juízes antes do reviser e da checagem",
-          ordem.index("judge-1") > ordem.index(agents(out, "builder:")[-1]["label"])
-          and ordem.index("reviser") > ordem.index("judge-3")
-          and ordem[-1] == "final-check", str(ordem))
+          order.index("judge-1") > order.index(agents(out, "builder:")[-1]["label"])
+          and order.index("reviser") > order.index("judge-3")
+          and order[-1] == "final-check", str(order))
 
-    # b. isolamento dos builders
+    # b. isolation of the builders
     bs = agents(out, "builder:")
     check("b. um builder por ângulo", len(bs) == 3, str(len(bs)))
     for i, b in enumerate(bs):
-        outros = [MARKERS[k] for k in range(3) if k != i]
+        others = [MARKERS[k] for k in range(3) if k != i]
         check(f"b. builder {i+1} não contém design de outro builder",
-              not any(m in b["prompt"] for m in outros))
+              not any(m in b["prompt"] for m in others))
         check(f"b. builder {i+1} contém o próprio brief",
               ANGLES[i]["brief"] in b["prompt"])
         check(f"b. builder {i+1} não contém o brief dos outros",
               not any(ANGLES[k]["brief"] in b["prompt"] for k in range(3) if k != i))
 
-    # c. juízes
+    # c. judges
     js = agents(out, "judge-")
     check("c. exatamente 3 juízes", len(js) == 3, str(len(js)))
     for j, jd in enumerate(js):
         p = jd["prompt"]
         check(f"c. juiz {j+1} não vê ângulo, brief nem label de builder",
               not any(a["key"] in p or a["brief"] in p for a in ANGLES) and "builder:" not in p)
-        marcas = re.findall(r"=== DESIGN ([A-Z]) ===", p)
-        esperado = [("ABC")[(i + j) % 3] for i in range(3)]
-        check(f"c. juiz {j+1} recebe ordem rotacionada {''.join(esperado)}",
-              marcas == esperado, str(marcas))
+        marks = re.findall(r"=== DESIGN ([A-Z]) ===", p)
+        expected = [("ABC")[(i + j) % 3] for i in range(3)]
+        check(f"c. juiz {j+1} recebe ordem rotacionada {''.join(expected)}",
+              marks == expected, str(marks))
         check(f"c. juiz {j+1} recebe objetivo e barra",
               "GOAL-FAKE" in p and "QUALITY BAR" in p)
 
@@ -159,7 +159,7 @@ def main():
           set(r) == {"bar", "designs", "full_designs", "verdicts", "borda_points",
                      "winner", "revised_design", "final_check"}, str(sorted(r)))
 
-    # e. desempate
+    # e. tiebreak
     o, _ = run(tmp, [["A", "B", "C"], ["B", "A", "C"], ["C", "A", "B"]])
     check("e. sem empate: A=3+2+2=7, B=2+3+1=6, C=1+1+3=5, vence A",
           o["result"]["borda_points"] == {"A": 7, "B": 6, "C": 5} and o["result"]["winner"]["label"] == "A")
@@ -175,7 +175,7 @@ def main():
           o["result"]["borda_points"]["A"] == 7 and o["result"]["borda_points"]["C"] == 7
           and o["result"]["winner"]["label"] == "C", str(o["result"]["borda_points"]))
 
-    # f. rótulo desconhecido
+    # f. unknown label
     o, _ = run(tmp, [["Z", "A", "B", "C"], ["A", "B", "C"], ["A", "C", "B"]])
     pts = o["result"]["borda_points"]
     check("f. Z não entra nos pontos", "Z" not in pts, str(pts))
@@ -183,24 +183,24 @@ def main():
           any("juiz 1" in m and '"Z"' in m for m in logs(o)), str(logs(o)))
     check("f. vencedor não afetado (A)", o["result"]["winner"]["label"] == "A")
 
-    # g. menos de 2 designs
+    # g. fewer than 2 designs
     o, _ = run(tmp, base, null_builders=[0, 1])
     check("g. 1 design sobrevivente devolve error",
           "error" in o["result"] and "2 designs" in o["result"]["error"], str(o["result"])[:200])
     check("g. sem juízes quando não há competição", not agents(o, "judge-"))
 
-    # h. args como string JSON
+    # h. args as a JSON string
     o2, _ = run(tmp, base, as_string=True)
     check("h. args string JSON dá o mesmo resultado que objeto",
           o2 is not None and o2["result"]["borda_points"] == r["borda_points"]
           and o2["result"]["winner"] == r["winner"])
 
-    # ciclo de ângulos: labels únicos
-    ciclo = [ANGLES[0], ANGLES[1], ANGLES[0]]
-    o, _ = run(tmp, base, angles=ciclo)
-    rotulos = [b["label"] for b in agents(o, "builder:")]
+    # angle cycle: unique labels
+    cycle = [ANGLES[0], ANGLES[1], ANGLES[0]]
+    o, _ = run(tmp, base, angles=cycle)
+    labels = [b["label"] for b in agents(o, "builder:")]
     check("labels de builder únicos quando o ângulo se repete",
-          len(set(rotulos)) == 3, str(rotulos))
+          len(set(labels)) == 3, str(labels))
 
     shutil.rmtree(tmp, ignore_errors=True)
     if FAILURES:

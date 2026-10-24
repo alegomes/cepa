@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""O `cepa-until` diante de uma queda de rede.
+"""`cepa-until` facing a network drop.
 
-## Por que existe
+## Why it exists
 
-Em 2026-09-18 a internet caiu às 11:32 no meio do WEGO-2293. O `claude` saiu 1
-com "Can't reach the API server (ENOTFOUND)"; as duas tentativas seguintes
-morreram do mesmo jeito em 3 minutos. O supervisor leu três "sem progresso",
-marcou o item `blocked` e desligou pelo disjuntor. Este arquivo prova a regra
-que nasceu disso:
+On 2026-09-18 the internet dropped at 11:32 in the middle of WEGO-2293. `claude` exited 1
+with "Can't reach the API server (ENOTFOUND)"; the next two attempts
+died the same way in 3 minutes. The supervisor read three "no progress",
+marked the item `blocked` and shut down through the circuit breaker. This file proves the rule
+that was born from it:
 
-  - queda de rede não é falha do item: não gasta a vez dele nem conta no
-    disjuntor;
-  - o supervisor sonda a rede e retoma o MESMO item quando ela volta;
-  - se ela não volta dentro da janela, ou cai três vezes seguidas sem progresso
-    entre elas, o run para com motivo `sem-rede`.
+  - a network drop is not the item's failure: it does not spend its turn nor count toward the
+    circuit breaker;
+  - the supervisor probes the network and resumes the SAME item when it comes back;
+  - if it does not come back within the window, or drops three times in a row without progress
+    between them, the run stops with reason `sem-rede`.
 
-O `claude` falso imprime o `result` final no formato real, copiado do `.log`
-do run de 2026-09-18.
+The fake `claude` prints the final `result` in the real format, copied from the `.log`
+of the 2026-09-18 run.
 
 Run: python3 tests/test_cepa_until_network.py
 """
@@ -34,8 +34,8 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
-    fake_claude, item, ledger_de, monta_repo, roda)
-from test_cepa_until_quota import carrega_modulo  # noqa: E402
+    fake_claude, item, ledger_of, build_repo, run_until)
+from test_cepa_until_quota import load_module  # noqa: E402
 
 FAILURES = []
 
@@ -48,307 +48,307 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-# O `result` real de 2026-09-18 (campos que importam).
-RESULTADO_SEM_REDE = {
+# The real `result` of 2026-09-18 (fields that matter).
+RESULT_WITHOUT_NETWORK = {
     "type": "result", "subtype": "success", "is_error": True,
     "terminal_reason": "api_error", "api_error_status": None,
     "stop_reason": "stop_sequence", "num_turns": 1,
     "result": "API Error: Can't reach the API server — check your internet "
               "or DNS (ENOTFOUND)"}
 
-CORPO = (
+BODY = (
     "def sem_rede():\n"
-    f"    print(json.dumps({RESULTADO_SEM_REDE!r}), flush=True)\n"
+    f"    print(json.dumps({RESULT_WITHOUT_NETWORK!r}), flush=True)\n"
     "    sys.exit(1)\n"
     "N = len(open(os.environ['FAKE_CHAMADAS']).read().splitlines())\n"
 )
 
 
-def plano_de(raiz):
-    return raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+def plan_of(root):
+    return root / ".claude" / "programs" / "fila" / "plan.yaml"
 
 
-def status(plano):
+def status(plan):
     return {it["id"]: it["status"]
-            for it in yaml.safe_load(plano.read_text())["items"]}
+            for it in yaml.safe_load(plan.read_text())["items"]}
 
 
-def run_end(raiz):
-    return [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
+def run_end(root):
+    return [e for e in ledger_of(root) if e.get("evento") == "run_end"][0]
 
 
-def porta_livre():
+def free_port():
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
-def escuta_depois(porta, segundos, por=30):
-    """Uma porta local que só passa a aceitar conexão depois de `segundos`:
-    a rede "voltando"."""
-    def corpo():
-        time.sleep(segundos)
+def listens_after(port, secs, by=30):
+    """A local port that only starts accepting connections after `seconds`:
+    the network "coming back"."""
+    def body():
+        time.sleep(secs)
         with socket.socket() as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(("127.0.0.1", porta))
+            s.bind(("127.0.0.1", port))
             s.listen(8)
             s.settimeout(0.5)
-            fim = time.monotonic() + por
-            while time.monotonic() < fim:
+            end = time.monotonic() + by
+            while time.monotonic() < end:
                 try:
                     c, _ = s.accept()
                     c.close()
                 except socket.timeout:
                     pass
-    t = threading.Thread(target=corpo, daemon=True)
+    t = threading.Thread(target=body, daemon=True)
     t.start()
     return t
 
 
-def ambiente(porta, intervalo="0.5"):
-    return {"CEPA_UNTIL_SONDA_REDE": f"127.0.0.1:{porta}",
-            "CEPA_UNTIL_SONDA_INTERVALO": intervalo}
+def environment(port, interval="0.5"):
+    return {"CEPA_UNTIL_SONDA_REDE": f"127.0.0.1:{port}",
+            "CEPA_UNTIL_SONDA_INTERVALO": interval}
 
 
-# ── 1. a rede cai e volta: retoma o mesmo item sem gastar a vez ─────────────
+# ── 1. the network drops and comes back: resumes the same item without spending its turn ─
 
-def test_queda_de_rede_espera_a_volta_e_retoma_o_mesmo_item():
+def test_network_drop_waits_for_the_return_and_resumes_the_same_item():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        corpo = CORPO + (
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        body = BODY + (
             "if N == 1:\n"
             "    sem_rede()\n"
             "marca(primeiro_pendente(), status='done')\n")
-        binv = fake_claude(tmp, corpo)
-        porta = porta_livre()
-        escuta_depois(porta, 2)
-        inicio = time.monotonic()
-        # Teto de UMA tentativa por item: se a queda contasse como tentativa,
-        # o a1 viraria `blocked` na hora e nunca seria retomado.
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        binv = fake_claude(tmp, body)
+        port = free_port()
+        listens_after(port, 2)
+        began = time.monotonic()
+        # Ceiling of ONE attempt per item: if the drop counted as an attempt,
+        # a1 would become `blocked` right away and would never be resumed.
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--attempts-per-item", "1"],
-                    extra_env=ambiente(porta))
-        gasto = time.monotonic() - inicio
-        ev = ledger_de(raiz)
+                    extra_env=environment(port))
+        spent = time.monotonic() - began
+        ev = ledger_of(root)
         starts = [e["id"] for e in ev if e.get("evento") == "item_start"]
         check("o a1 foi retomado quando a rede voltou",
               starts == ["a1", "a1", "a2"], str(starts))
         check("...e fechou, não virou `blocked` (a queda não gastou a vez)",
-              status(plano_de(raiz)) == {"a1": "done", "a2": "done"},
-              str(status(plano_de(raiz))))
-        check("...o supervisor esperou a rede", gasto >= 2, f"{gasto:.1f}s")
-        queda = [e for e in ev if e.get("evento") == "queda_de_rede"]
+              status(plan_of(root)) == {"a1": "done", "a2": "done"},
+              str(status(plan_of(root))))
+        check("...o supervisor esperou a rede", spent >= 2, f"{spent:.1f}s")
+        drop = [e for e in ev if e.get("evento") == "queda_de_rede"]
         check("o registro tem a queda com espera=True",
-              len(queda) == 1 and queda[0]["espera"] is True
-              and queda[0]["id"] == "a1", str(queda))
+              len(drop) == 1 and drop[0]["espera"] is True
+              and drop[0]["id"] == "a1", str(drop))
         check("...e a volta da rede",
               any(e.get("evento") == "rede_voltou" for e in ev), str(ev))
         check("o run terminou pela fila, não pelo disjuntor",
-              run_end(raiz)["motivo"] == "fim-da-fila"
-              and run_end(raiz)["quedas_de_rede"] == 1, str(run_end(raiz)))
+              run_end(root)["motivo"] == "fim-da-fila"
+              and run_end(root)["quedas_de_rede"] == 1, str(run_end(root)))
         check("o relatório lista a queda como não-falha",
               "Quedas de rede (1)" in p.stdout and "SEM REDE" in p.stdout,
               p.stdout[-800:])
 
 
-def test_queda_de_rede_nao_conta_no_teto_por_item():
-    """queda, falha REAL, fecha — com teto de 2 por item. Se a queda contasse,
-    a falha real já seria a 2ª vez e o a1 viraria `blocked`."""
+def test_network_drop_does_not_count_toward_the_per_item_ceiling():
+    """drop, REAL failure, closes — with a ceiling of 2 per item. If the drop counted,
+    the real failure would already be the 2nd time and a1 would become `blocked`."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        corpo = CORPO + (
+        root = build_repo(tmp, [item("a1")])
+        body = BODY + (
             "if N == 1:\n"
             "    sem_rede()\n"
             "if N == 2:\n"
             "    sys.exit(1)\n"
             "marca(primeiro_pendente(), status='done')\n")
-        binv = fake_claude(tmp, corpo)
-        porta = porta_livre()
-        escuta_depois(porta, 0)
+        binv = fake_claude(tmp, body)
+        port = free_port()
+        listens_after(port, 0)
         time.sleep(0.3)
-        p, chamadas = roda(raiz, binv, plano_de(raiz),
+        p, calls = run_until(root, binv, plan_of(root),
                            ["--for", "2h", "--attempts-per-item", "2"],
-                           extra_env=ambiente(porta))
+                           extra_env=environment(port))
         check("3 chamadas: queda, falha real, fechou",
-              len(chamadas) == 3, str(len(chamadas)))
+              len(calls) == 3, str(len(calls)))
         check("o a1 fechou — a queda não gastou uma das 2 vezes",
-              status(plano_de(raiz)) == {"a1": "done"},
-              str(status(plano_de(raiz))))
-        fim = run_end(raiz)
+              status(plan_of(root)) == {"a1": "done"},
+              str(status(plan_of(root))))
+        end = run_end(root)
         check("só a falha real conta como sem progresso",
-              fim["sem_progresso"] == 1 and fim["esgotados"] == 0
-              and fim["motivo"] == "fim-da-fila", str(fim))
+              end["sem_progresso"] == 1 and end["esgotados"] == 0
+              and end["motivo"] == "fim-da-fila", str(end))
 
 
-# ── 2. três quedas seguidas sem progresso param o run ───────────────────────
+# ── 2. three drops in a row without progress stop the run ───────────────────
 
-def test_tres_quedas_seguidas_param_o_run_sem_culpar_o_item():
+def test_three_drops_in_a_row_stop_the_run_without_blaming_the_item():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        binv = fake_claude(tmp, CORPO + "sem_rede()\n")
-        porta = porta_livre()
-        escuta_depois(porta, 0)  # a sonda sempre vê rede
+        root = build_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, BODY + "sem_rede()\n")
+        port = free_port()
+        listens_after(port, 0)  # the probe always sees the network
         time.sleep(0.3)
-        p, chamadas = roda(raiz, binv, plano_de(raiz),
+        p, calls = run_until(root, binv, plan_of(root),
                            ["--for", "2h", "--attempts-per-item", "2",
                             "--max-failures", "2"],
-                           extra_env=ambiente(porta))
-        fim = run_end(raiz)
+                           extra_env=environment(port))
+        end = run_end(root)
         check("3 quedas e parou com motivo `sem-rede`",
-              len(chamadas) == 3 and fim["motivo"] == "sem-rede",
-              f"{len(chamadas)} chamadas · {fim}")
+              len(calls) == 3 and end["motivo"] == "sem-rede",
+              f"{len(calls)} chamadas · {end}")
         check("...não pelo disjuntor de 2 nem pelo teto de 2 por item",
-              fim["sem_progresso"] == 0 and fim["esgotados"] == 0, str(fim))
+              end["sem_progresso"] == 0 and end["esgotados"] == 0, str(end))
         check("o a1 continua `pending`, sem culpa",
-              status(plano_de(raiz)) == {"a1": "pending"},
-              str(status(plano_de(raiz))))
+              status(plan_of(root)) == {"a1": "pending"},
+              str(status(plan_of(root))))
         check("o detalhe explica que a sonda vê rede e o claude não",
-              "3ª queda seguida" in fim["detalhe"], fim["detalhe"])
-        eventos = [e for e in ledger_de(raiz) if e.get("evento") == "queda_de_rede"]
+              "3ª queda seguida" in end["detalhe"], end["detalhe"])
+        events = [e for e in ledger_of(root) if e.get("evento") == "queda_de_rede"]
         check("run_end conta as 3 quedas, inclusive a que parou o run",
-              fim["quedas_de_rede"] == len(eventos) == 3,
-              f"run_end={fim['quedas_de_rede']} eventos={len(eventos)}")
+              end["quedas_de_rede"] == len(events) == 3,
+              f"run_end={end['quedas_de_rede']} eventos={len(events)}")
 
 
-# ── 3. a rede não volta a tempo: para com `sem-rede` ────────────────────────
+# ── 3. the network does not come back in time: stops with `sem-rede` ────────
 
-def test_rede_que_nao_volta_dentro_da_janela_para_o_run():
+def test_network_that_does_not_return_within_the_window_stops_the_run():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        binv = fake_claude(tmp, CORPO + "sem_rede()\n")
-        porta = porta_livre()  # ninguém escuta: a rede nunca volta
-        inicio = time.monotonic()
-        # Janela de 12s com reserva de 3s: a espera vai até ~9s da largada.
-        p, chamadas = roda(raiz, binv, plano_de(raiz),
+        root = build_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, BODY + "sem_rede()\n")
+        port = free_port()  # nobody listens: the network never comes back
+        began = time.monotonic()
+        # 12s window with a 3s reserve: the wait goes up to ~9s from the launch.
+        p, calls = run_until(root, binv, plan_of(root),
                            ["--for", "0.2m", "--min-reserve", "0.05m"],
-                           extra_env=ambiente(porta))
-        gasto = time.monotonic() - inicio
-        fim = run_end(raiz)
+                           extra_env=environment(port))
+        spent = time.monotonic() - began
+        end = run_end(root)
         check("uma chamada só, e parou com `sem-rede`",
-              len(chamadas) == 1 and fim["motivo"] == "sem-rede",
-              f"{len(chamadas)} chamadas · {fim}")
+              len(calls) == 1 and end["motivo"] == "sem-rede",
+              f"{len(calls)} chamadas · {end}")
         check("esperou até o prazo menos a reserva, não além",
-              5 <= gasto <= 14, f"{gasto:.1f}s")
+              5 <= spent <= 14, f"{spent:.1f}s")
         check("o detalhe diz até quando esperou",
-              "não voltou até" in fim["detalhe"], fim["detalhe"])
+              "não voltou até" in end["detalhe"], end["detalhe"])
         check("run_end conta a queda da qual a rede não voltou",
-              fim["quedas_de_rede"] == 1, str(fim))
+              end["quedas_de_rede"] == 1, str(end))
         check("o resumo do fim lista a queda sem volta",
               "não voltou" in p.stdout and "Quedas de rede (1)" in p.stdout,
               p.stdout[-600:])
 
 
-def test_queda_perto_do_fim_da_janela_para_sem_sondar():
-    """A rede cai quando já falta menos que a reserva mínima: não há o que
-    esperar, para na hora com `sem-rede`."""
+def test_drop_near_the_end_of_the_window_stops_without_probing():
+    """The network drops when less than the minimum reserve is already left: there is nothing to
+    wait for, stops right away with `sem-rede`."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        # Janela de 12s, reserva de 9s: cabe começar (12 >= 9). O item gasta
-        # 4s e cai; aí o último instante útil (prazo - reserva = 3s) já passou.
-        binv = fake_claude(tmp, CORPO + "time.sleep(4)\nsem_rede()\n")
-        porta = porta_livre()  # ninguém escuta
-        inicio = time.monotonic()
-        p, chamadas = roda(raiz, binv, plano_de(raiz),
+        root = build_repo(tmp, [item("a1")])
+        # 12s window, 9s reserve: it fits to start (12 >= 9). The item spends
+        # 4s and drops; by then the last useful instant (deadline - reserve = 3s) has passed.
+        binv = fake_claude(tmp, BODY + "time.sleep(4)\nsem_rede()\n")
+        port = free_port()  # nobody listens
+        began = time.monotonic()
+        p, calls = run_until(root, binv, plan_of(root),
                            ["--for", "0.2m", "--min-reserve", "0.15m"],
-                           extra_env=ambiente(porta))
-        gasto = time.monotonic() - inicio
-        fim = run_end(raiz)
-        queda = [e for e in ledger_de(raiz) if e.get("evento") == "queda_de_rede"]
+                           extra_env=environment(port))
+        spent = time.monotonic() - began
+        end = run_end(root)
+        drop = [e for e in ledger_of(root) if e.get("evento") == "queda_de_rede"]
         check("parou com `sem-rede` sem tentar esperar",
-              len(chamadas) == 1 and fim["motivo"] == "sem-rede"
-              and queda and queda[0]["espera"] is False,
-              f"{len(chamadas)} chamadas · {fim} · {queda}")
+              len(calls) == 1 and end["motivo"] == "sem-rede"
+              and drop and drop[0]["espera"] is False,
+              f"{len(calls)} chamadas · {end} · {drop}")
         check("o detalhe diz que não sobra tempo, não que esperou",
-              "não sobra tempo" in fim["detalhe"], fim["detalhe"])
+              "não sobra tempo" in end["detalhe"], end["detalhe"])
         check("run_end conta a queda mesmo sem ter esperado",
-              fim["quedas_de_rede"] == 1, str(fim))
-        check("não ficou sondando", gasto < 9, f"{gasto:.1f}s")
+              end["quedas_de_rede"] == 1, str(end))
+        check("não ficou sondando", spent < 9, f"{spent:.1f}s")
 
 
-# ── 4. um item que fecha zera a contagem de quedas ──────────────────────────
+# ── 4. an item that closes resets the drop count ────────────────────────────
 
-def test_item_que_fecha_entre_quedas_zera_a_contagem():
+def test_item_that_closes_between_drops_resets_the_count():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        # queda, queda, a1 fecha, queda, queda, a2 fecha. Sem zerar, a 3ª
-        # queda (4ª chamada) encerraria o run.
-        corpo = CORPO + (
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        # drop, drop, a1 closes, drop, drop, a2 closes. Without resetting, the 3rd
+        # drop (4th call) would end the run.
+        body = BODY + (
             "if N in (1, 2, 4, 5):\n"
             "    sem_rede()\n"
             "marca(primeiro_pendente(), status='done')\n")
-        binv = fake_claude(tmp, corpo)
-        porta = porta_livre()
-        escuta_depois(porta, 0)
+        binv = fake_claude(tmp, body)
+        port = free_port()
+        listens_after(port, 0)
         time.sleep(0.3)
-        p, chamadas = roda(raiz, binv, plano_de(raiz), ["--for", "2h"],
-                           extra_env=ambiente(porta))
+        p, calls = run_until(root, binv, plan_of(root), ["--for", "2h"],
+                           extra_env=environment(port))
         check("6 chamadas e os dois itens fechados",
-              len(chamadas) == 6
-              and status(plano_de(raiz)) == {"a1": "done", "a2": "done"},
-              f"{len(chamadas)} · {status(plano_de(raiz))}")
+              len(calls) == 6
+              and status(plan_of(root)) == {"a1": "done", "a2": "done"},
+              f"{len(calls)} · {status(plan_of(root))}")
         check("o run terminou pela fila",
-              run_end(raiz)["motivo"] == "fim-da-fila", str(run_end(raiz)))
+              run_end(root)["motivo"] == "fim-da-fila", str(run_end(root)))
 
 
-# ── 5. o reconhecedor ───────────────────────────────────────────────────────
+# ── 5. the recognizer ───────────────────────────────────────────────────────
 
-def test_queda_de_rede_exige_api_error_e_mensagem_de_rede():
-    m = carrega_modulo()
-    real = json.dumps(RESULTADO_SEM_REDE)
+def test_network_drop_requires_api_error_and_network_message():
+    m = load_module()
+    real = json.dumps(RESULT_WITHOUT_NETWORK)
     check("o result real de 2026-09-18 é queda de rede",
           m.network_drop("lixo de hook\n" + real + "\n"))
-    prosa = json.dumps({"type": "assistant", "message": {"content": [
+    prose = json.dumps({"type": "assistant", "message": {"content": [
         {"type": "text", "text": "o teste falhou com ENOTFOUND no mock"}]}})
     ok = json.dumps({"type": "result", "subtype": "success", "is_error": False,
                      "result": "fechei o item"})
     check("prosa de agente com ENOTFOUND + result normal NÃO é queda",
-          not m.network_drop(prosa + "\n" + ok + "\n"))
-    teto = json.dumps({"type": "result", "is_error": True,
+          not m.network_drop(prose + "\n" + ok + "\n"))
+    ceiling = json.dumps({"type": "result", "is_error": True,
                        "terminal_reason": "api_error",
                        "result": "You've hit your session limit · resets 3:20am"})
     check("erro de API que não é de rede NÃO é queda (é do teto)",
-          not m.network_drop(teto + "\n"))
+          not m.network_drop(ceiling + "\n"))
     check("saída vazia não é queda", not m.network_drop(""))
-    sucesso_com_palavra = json.dumps({
+    success_with_word = json.dumps({
         "type": "result", "subtype": "success", "is_error": False,
         "result": "corrigi o timeout ECONNRESET no teste do cliente HTTP"})
     check("result de SUCESSO com palavra de rede NÃO é queda",
-          not m.network_drop(sucesso_com_palavra + "\n"))
+          not m.network_drop(success_with_word + "\n"))
     check("o último result é o que vale",
           not m.network_drop(real + "\n" + ok + "\n"))
 
 
-def test_espera_a_rede_respeita_o_prazo_e_a_volta():
-    m = carrega_modulo()
+def test_network_wait_respects_the_deadline_and_the_return():
+    m = load_module()
     n = {"v": 0}
 
-    def sonda():
+    def probe():
         n["v"] += 1
         return n["v"] >= 3
     ate = datetime.now() + timedelta(seconds=10)
-    inicio = time.monotonic()
-    check("volta na 3ª sonda", m.wait_for_network(ate, sonda, 0.1) is True
-          and n["v"] == 3 and time.monotonic() - inicio < 2)
-    inicio = time.monotonic()
+    began = time.monotonic()
+    check("volta na 3ª sonda", m.wait_for_network(ate, probe, 0.1) is True
+          and n["v"] == 3 and time.monotonic() - began < 2)
+    began = time.monotonic()
     check("prazo vencido devolve False",
           m.wait_for_network(datetime.now() + timedelta(seconds=0.5),
                           lambda: False, 0.1) is False
-          and 0.4 <= time.monotonic() - inicio < 2)
-    porta = porta_livre()
+          and 0.4 <= time.monotonic() - began < 2)
+    port = free_port()
     check("sonda TCP: porta fechada é sem rede",
-          m.network_reachable(f"127.0.0.1:{porta}", timeout=1) is False)
+          m.network_reachable(f"127.0.0.1:{port}", timeout=1) is False)
     check("sonda TCP: alvo mal formado é sem rede, não exceção",
           m.network_reachable("semporta", timeout=1) is False)
-    escuta_depois(porta, 0, por=3)
+    listens_after(port, 0, by=3)
     time.sleep(0.3)
     check("sonda TCP: porta aberta é rede",
-          m.network_reachable(f"127.0.0.1:{porta}", timeout=1) is True)
+          m.network_reachable(f"127.0.0.1:{port}", timeout=1) is True)
 
 
 def main():
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"\n{nome}")
+    for given_name, fn in sorted(globals().items()):
+        if given_name.startswith("test_") and callable(fn):
+            print(f"\n{given_name}")
             fn()
     print()
     if FAILURES:

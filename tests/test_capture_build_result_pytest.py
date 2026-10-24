@@ -1,12 +1,12 @@
-"""pytest precisa de marcadores de texto: o CC omite o exit code no sucesso, e sem
-marcador um pytest verde nunca limpava o STALE do gate-advance (pastinha-pipeline, 2026-10-10)."""
+"""pytest needs text markers: CC omits the exit code on success, and without a
+marker a green pytest never cleared the STALE of gate-advance (pastinha-pipeline, 2026-10-10)."""
 import importlib.util
 from pathlib import Path
 
-# Este arquivo só chama classify(), que é pura, e a família pytest já isola
-# a telemetria pelo conftest.py. O pedido explícito está aqui porque
-# tests/test_isolated_telemetry.py exige que TODO teste que cite um hook
-# emissor isole por conta própria: citar e executar distam um commit.
+# This file only calls classify(), which is pure, and the pytest family already isolates
+# telemetry through conftest.py. The explicit request is here because
+# tests/test_isolated_telemetry.py requires that EVERY test that cites an
+# emitting hook isolate on its own: citing and executing are one commit apart.
 from _telemetria_isolada import isola
 
 isola()

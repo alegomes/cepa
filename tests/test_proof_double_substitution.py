@@ -22,9 +22,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Este teste executa hook que emite telemetria; sem isto os eventos cairiam
-# em ~/.claude/cepa-telemetry/ e entrariam no relatório do /common:metrics
-# como se fossem uso real. Ver tests/_telemetria_isolada.py.
+# This test executes a hook that emits telemetry; without this the events would fall
+# in ~/.claude/cepa-telemetry/ and enter the /common:metrics report
+# as if they were real use. See tests/_telemetria_isolada.py.
 from _telemetria_isolada import isola
 
 isola()
@@ -123,10 +123,10 @@ r = run(artifact("proven", [{"class": "X", "double": '"Mock"'}]),
         file_path=str(Path(tempfile.gettempdir()) / "notes.yaml"))
 check("arquivo fora de qualquer diretório de prova → PASSA", r.returncode == 0)
 
-# ── docs/proof é o destino de escrita desde 22/08/2026 ─────────────────────
-# Ver o comentário longo em tests/test_proof_status_enum.py: o proof-reviewer
-# grava em docs/proof/ porque `.claude/` é gitignored, e um guarda cego para o
-# destino novo deixaria de checar exatamente os vereditos que passam a existir.
+# ── docs/proof is the write destination since 2026-08-22 ────────────────────
+# See the long comment in tests/test_proof_status_enum.py: the proof-reviewer
+# writes to docs/proof/ because `.claude/` is gitignored, and a guard blind to the
+# new destination would stop checking exactly the verdicts that come to exist.
 r = run(artifact("proven", [{"class": "X", "double": '"Mock"'}]),
         file_path=str(Path(tempfile.gettempdir()) / "repo" / "docs" / "proof" / "WEGO-1.yaml"))
 check("dublê em docs/proof → BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")

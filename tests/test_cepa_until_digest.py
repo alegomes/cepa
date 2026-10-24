@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""cepa-until-digest — o resumo mecânico de um run do `cepa-until`.
+"""cepa-until-digest — the mechanical summary of a `cepa-until` run.
 
-O `.log` de um run real passa de 10 MB. O resumo tem de trazer, de cada
-rodada, o relatório final, os agentes chamados, os erros de ferramenta e o
-custo, e de cada item tocado o estado ATUAL na fila — e dizer quando o
-pareamento registro↔log não fecha, em vez de parear errado calado.
+The `.log` of a real run exceeds 10 MB. The summary has to bring, of each
+round, the final report, the agents called, the tool errors and the
+cost, and of each item touched the CURRENT state in the queue — and say when the
+record↔log pairing does not close, instead of pairing wrongly in silence.
 """
 
 import json
@@ -20,91 +20,91 @@ DIGEST = REPO / "common" / "bin" / "cepa-until-digest"
 FAILURES = []
 
 
-def check(nome, cond, detalhe=""):
-    print(("  ok  " if cond else "FAIL  ") + nome + ("" if cond else f"  {detalhe}"))
+def check(name, cond, detail=""):
+    print(("  ok  " if cond else "FAIL  ") + name + ("" if cond else f"  {detail}"))
     if not cond:
-        FAILURES.append(nome)
+        FAILURES.append(name)
 
 
-def rodada(texto_final, agentes=(), erro=None, custo=0.5, extra=()):
-    linhas = [json.dumps({"type": "system", "subtype": "init"})]
-    for a in agentes:
-        linhas.append(json.dumps({"type": "assistant", "message": {"content": [
+def build_round(final_text, agents=(), error=None, cost=0.5, extra=()):
+    lines = [json.dumps({"type": "system", "subtype": "init"})]
+    for a in agents:
+        lines.append(json.dumps({"type": "assistant", "message": {"content": [
             {"type": "tool_use", "name": "Agent",
              "input": {"subagent_type": a}}]}}))
-    if erro:
-        linhas.append(json.dumps({"type": "user", "message": {"content": [
-            {"type": "tool_result", "is_error": True, "content": erro}]}}))
-    linhas.extend(json.dumps(e) for e in extra)
-    linhas.append(json.dumps({"type": "result", "subtype": "success",
-                              "result": texto_final, "total_cost_usd": custo,
+    if error:
+        lines.append(json.dumps({"type": "user", "message": {"content": [
+            {"type": "tool_result", "is_error": True, "content": error}]}}))
+    lines.extend(json.dumps(e) for e in extra)
+    lines.append(json.dumps({"type": "result", "subtype": "success",
+                              "result": final_text, "total_cost_usd": cost,
                               "num_turns": 9}))
-    return "\n".join(linhas) + "\n"
+    return "\n".join(lines) + "\n"
 
 
-def chamada(nome, inp, ident=None, pai=None):
-    c = {"type": "tool_use", "name": nome, "input": inp}
+def call(name, inp, ident=None, parent=None):
+    c = {"type": "tool_use", "name": name, "input": inp}
     if ident:
         c["id"] = ident
     e = {"type": "assistant", "message": {"content": [c]}}
-    if pai:
-        e["parent_tool_use_id"] = pai
+    if parent:
+        e["parent_tool_use_id"] = parent
     return e
 
 
-def devolvido(ident, texto, pai=None):
+def returned(ident, plain_text, parent=None):
     e = {"type": "user", "message": {"content": [
-        {"type": "tool_result", "tool_use_id": ident, "content": texto}]}}
-    if pai:
-        e["parent_tool_use_id"] = pai
+        {"type": "tool_result", "tool_use_id": ident, "content": plain_text}]}}
+    if parent:
+        e["parent_tool_use_id"] = parent
     return e
 
 
-DICA_DO_HOOK = ("[build-hex bash-path-lock] NEGADO. A pista: provar RED "
+HOOK_HINT = ("[build-hex bash-path-lock] NEGADO. A pista: provar RED "
                 "revertendo código: worktree descartável FORA da raiz "
                 "(lá o cadeado não tem jurisdição): D=$(mktemp -d)")
 
-# O que o run 2026-09-27-1632 do WEGO deixou no `.log` (WEGO-2329): o
-# qa-engineer é neto do orquestrador, então as chamadas dele não aparecem;
-# aparece o relatório que o engineering-lead devolve, o RESULT.md que ele
-# escreve, e as chamadas de ferramenta dos filhos diretos.
-RODADA_COM_DESVIOS = [
-    chamada("Agent", {"subagent_type": "build-hex:engineering-lead",
+# What WEGO run 2026-09-27-1632 left in the `.log` (WEGO-2329): the
+# qa-engineer is a grandchild of the orchestrator, so its calls do not show up;
+# what shows up is the report the engineering-lead returns, the RESULT.md it
+# writes, and the tool calls of the direct children.
+ROUND_WITH_DEVIATIONS = [
+    call("Agent", {"subagent_type": "build-hex:engineering-lead",
                       "prompt": "build it"}, ident="tu_lead"),
-    # filho direto lendo algo: a dica do hook vem em resultado de ferramenta
-    chamada("Bash", {"command": "git status"}, pai="tu_lead"),
-    devolvido("tu_bash_1", DICA_DO_HOOK, pai="tu_lead"),
-    # o próprio engineering-lead abrindo worktree (proibido na noite)
-    chamada("Bash", {"command": "git worktree add --detach /tmp/lead-x HEAD"},
-            pai="tu_lead"),
-    chamada("Write", {"file_path": "/r/docs/tasks/x/RESULT.md",
+    # direct child reading something: the hook hint comes in a tool result
+    call("Bash", {"command": "git status"}, parent="tu_lead"),
+    returned("tu_bash_1", HOOK_HINT, parent="tu_lead"),
+    # the engineering-lead itself opening a worktree (forbidden at night)
+    call("Bash", {"command": "git worktree add --detach /tmp/lead-x HEAD"},
+            parent="tu_lead"),
+    call("Write", {"file_path": "/r/docs/tasks/x/RESULT.md",
                       "content": "# RESULT\n- Processo: o qa-engineer criou "
                                  "um worktree descartável (removido) para "
-                                 "medir os vermelhos."}, pai="tu_lead"),
-    devolvido("tu_lead", "Task fechada. O hook de gate bloqueou o commit por "
+                                 "medir os vermelhos."}, parent="tu_lead"),
+    returned("tu_lead", "Task fechada. O hook de gate bloqueou o commit por "
               "BUILD FAILURE do bootstrap; o qa-engineer contornou rodando um "
               "build verde de outro módulo antes de commitar."),
-    # um worker que RECUSA contornar não é sinal
-    chamada("Agent", {"subagent_type": "build-hex:adapter-dev"},
+    # a worker that REFUSES to get around it is not a signal
+    call("Agent", {"subagent_type": "build-hex:adapter-dev"},
             ident="tu_adapter"),
-    devolvido("tu_adapter", "Não posso contornar nem pedir para o hook ser "
+    returned("tu_adapter", "Não posso contornar nem pedir para o hook ser "
               "desativado; parei aqui."),
-    # a worktree do proof-reviewer é a permitida
-    chamada("Agent", {"subagent_type": "build-hex:proof-reviewer"},
+    # the proof-reviewer's worktree is the permitted one
+    call("Agent", {"subagent_type": "build-hex:proof-reviewer"},
             ident="tu_proof"),
-    chamada("Bash", {"command": "cd /r && git worktree add --detach "
-                                "/tmp/proof-X HEAD"}, pai="tu_proof"),
-    # Agent forkando worktree pelo parâmetro da ferramenta
-    chamada("Agent", {"subagent_type": "build-hex:qa-engineer",
-                      "isolation": "worktree"}, pai="tu_lead"),
+    call("Bash", {"command": "cd /r && git worktree add --detach "
+                                "/tmp/proof-X HEAD"}, parent="tu_proof"),
+    # Agent forking a worktree through the tool parameter
+    call("Agent", {"subagent_type": "build-hex:qa-engineer",
+                      "isolation": "worktree"}, parent="tu_lead"),
 ]
 
 
-def monta_run(tmp, n_rodadas_no_log=2, extra_rodada_1=()):
-    fila = Path(tmp) / ".claude" / "programs" / "F"
-    until = fila / "until"
+def build_run(tmp, n_rounds_in_log=2, extra_round_1=()):
+    queue = Path(tmp) / ".claude" / "programs" / "F"
+    until = queue / "until"
     until.mkdir(parents=True)
-    (fila / "plan.yaml").write_text(yaml.safe_dump({"items": [
+    (queue / "plan.yaml").write_text(yaml.safe_dump({"items": [
         {"id": "A1", "status": "done", "blocked_by": [],
          "evidence": "commits abc; build verde"},
         {"id": "A2", "status": "blocked", "blocked_by": [],
@@ -123,28 +123,28 @@ def monta_run(tmp, n_rodadas_no_log=2, extra_rodada_1=()):
     ledger = until / "r.jsonl"
     ledger.write_text("\n".join(json.dumps(e) for e in ev) + "\n")
     log = ("\n===== t · claude -p /common:drain-plan F --max 1\n"
-           + rodada("RELATORIO A1 " + "x" * 50,
-                    agentes=["build-hex:engineering-lead",
+           + build_round("RELATORIO A1 " + "x" * 50,
+                    agents=["build-hex:engineering-lead",
                              "common:completion-auditor"],
-                    erro="Exit code 1 mvn quebrou", custo=1.25,
-                    extra=extra_rodada_1)
+                    error="Exit code 1 mvn quebrou", cost=1.25,
+                    extra=extra_round_1)
            + "\n===== t · verify · ./mvnw -B clean verify\n"
            + "\n".join(f"linha {i}" for i in range(40)) + "\nBUILD SUCCESS\n")
-    if n_rodadas_no_log >= 2:
+    if n_rounds_in_log >= 2:
         log += ("\n===== t · claude -p /common:drain-plan F --max 1\n"
-                + rodada("RELATORIO A2 travou", custo=0.25))
+                + build_round("RELATORIO A2 travou", cost=0.25))
     (until / "r.log").write_text(log)
     return ledger
 
 
-def roda(ledger, *args):
+def run_digest(ledger, *args):
     return subprocess.run([sys.executable, str(DIGEST), str(ledger), *args],
                           capture_output=True, text=True, timeout=60)
 
 
-def test_resumo_traz_o_que_cada_rodada_disse_e_fez():
+def test_summary_brings_what_each_round_said_and_did():
     with tempfile.TemporaryDirectory() as tmp:
-        p = roda(monta_run(tmp))
+        p = run_digest(build_run(tmp))
         out = p.stdout
         check("sai 0", p.returncode == 0, p.stderr)
         check("traz o relatório final de cada rodada",
@@ -166,62 +166,62 @@ def test_resumo_traz_o_que_cada_rodada_disse_e_fez():
               "commits na branch da noite: 3" in out)
 
 
-def test_relatorio_longo_e_cortado_e_diz_que_cortou():
+def test_long_report_is_cut_and_says_it_cut():
     with tempfile.TemporaryDirectory() as tmp:
-        p = roda(monta_run(tmp), "--result-max", "20")
+        p = run_digest(build_run(tmp), "--result-max", "20")
         check("o corte é declarado", "[… cortado]" in p.stdout)
 
 
-def test_pareamento_que_nao_fecha_e_avisado():
+def test_pairing_that_does_not_close_is_warned():
     with tempfile.TemporaryDirectory() as tmp:
-        p = roda(monta_run(tmp, n_rodadas_no_log=1))
+        p = run_digest(build_run(tmp, n_rounds_in_log=1))
         check("avisa quando registro e log discordam",
               "ATENÇÃO: 2 item_start" in p.stdout, p.stdout[:800])
 
 
-def test_estado_da_fila_vem_do_clone_principal_nao_da_worktree():
-    """O registro mora na árvore de onde o `cepa-until` largou. Se ela é uma
-    worktree ligada, o plan.yaml dela é uma cópia velha; a fila de verdade é a
-    do clone principal (mesma regra do `cepa-plan`). Em 2026-09-26 o resumo
-    leu a cópia e mostrou 21 itens `pending` que já estavam fechados."""
+def test_queue_state_comes_from_the_main_clone_not_the_worktree():
+    """The record lives in the tree `cepa-until` was launched from. If it is a
+    linked worktree, its plan.yaml is an old copy; the real queue is that of the
+    main clone (same rule as `cepa-plan`). On 2026-09-26 the summary
+    read the copy and showed 21 `pending` items that were already closed."""
     with tempfile.TemporaryDirectory() as tmp:
-        principal = Path(tmp) / "principal"
-        principal.mkdir()
-        g = lambda *a, cwd=principal: subprocess.run(
+        main_ = Path(tmp) / "principal"
+        main_.mkdir()
+        g = lambda *a, cwd=main_: subprocess.run(
             ["git", *a], cwd=str(cwd), capture_output=True, text=True, check=True)
         g("init", "-q")
         g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
           "--allow-empty", "-m", "raiz")
         wt = Path(tmp) / "wt"
         g("worktree", "add", "-q", "--detach", str(wt))
-        ledger = monta_run(wt)  # cópia velha na worktree: A2 blocked
-        fila = principal / ".claude" / "programs" / "F"
-        fila.mkdir(parents=True)
-        (fila / "plan.yaml").write_text(yaml.safe_dump({"items": [
+        ledger = build_run(wt)  # old copy in the worktree: A2 blocked
+        queue = main_ / ".claude" / "programs" / "F"
+        queue.mkdir(parents=True)
+        (queue / "plan.yaml").write_text(yaml.safe_dump({"items": [
             {"id": "A1", "status": "done", "blocked_by": [],
              "evidence": "commits abc; build verde"},
             {"id": "A2", "status": "done", "blocked_by": [],
              "evidence": "FECHADO NO CLONE PRINCIPAL"}]}), encoding="utf-8")
-        p = roda(ledger)
+        p = run_digest(ledger)
         check("lê o estado da fila do clone principal",
               "FECHADO NO CLONE PRINCIPAL" in p.stdout, p.stdout[-900:])
         check("não lê a cópia velha da worktree",
               "depende do A1 que não está na main" not in p.stdout)
         check("diz de qual arquivo leu a fila",
-              str((fila / "plan.yaml").resolve()) in p.stdout
-              or str(fila / "plan.yaml") in p.stdout, p.stdout[-900:])
+              str((queue / "plan.yaml").resolve()) in p.stdout
+              or str(queue / "plan.yaml") in p.stdout, p.stdout[-900:])
 
 
-def test_sinais_de_processo_worktree_e_build_alheio():
-    """No run 2026-09-27-1632 do WEGO o qa-engineer abriu worktree descartável
-    (2327, 2329) e no 2329 contornou o gate de build vermelho apresentando o
-    build verde de outro módulo. Nada disso aparecia no resumo: as chamadas
-    dele não estão no `.log` (é neto do orquestrador), só o relatório que o
-    engineering-lead devolve e o RESULT.md que ele escreve. O resumo tem de
-    mostrar cada sinal, dizer de quem é, e não confundir com a dica que o hook
-    imprime nem com um worker que se RECUSA a contornar."""
+def test_signals_of_process_worktree_and_foreign_build():
+    """In WEGO run 2026-09-27-1632 the qa-engineer opened a disposable worktree
+    (2327, 2329) and in 2329 got around the red build gate by presenting the
+    green build of another module. None of that showed up in the summary: its calls
+    are not in the `.log` (it is a grandchild of the orchestrator), only the report the
+    engineering-lead returns and the RESULT.md it writes. The summary has to
+    show each signal, say whose it is, and not confuse it with the hint the hook
+    prints nor with a worker that REFUSES to get around it."""
     with tempfile.TemporaryDirectory() as tmp:
-        p = roda(monta_run(tmp, extra_rodada_1=RODADA_COM_DESVIOS))
+        p = run_digest(build_run(tmp, extra_round_1=ROUND_WITH_DEVIATIONS))
         out = p.stdout
         check("sai 0", p.returncode == 0, p.stderr)
         r1 = out[out.index("### 1. A1"):out.index("### 2. A2")]
@@ -256,11 +256,11 @@ def test_sinais_de_processo_worktree_e_build_alheio():
               "sinais de processo: nenhum" in r2, r2[:800])
 
 
-def test_dispensas_propostas_aparecem_para_o_review_ler_a_pergunta():
-    """Em run autônomo a dispensa vira proposta (fb-20261014-3); o resumo traz a
-    pergunta para o dono ler, tanto no item quanto na seção própria."""
+def test_proposed_waivers_appear_for_the_review_to_read_the_question():
+    """In an autonomous run the waiver becomes a proposal (fb-20261014-3); the summary brings the
+    question for the owner to read, both in the item and in its own section."""
     with tempfile.TemporaryDirectory() as tmp:
-        ledger = monta_run(tmp)
+        ledger = build_run(tmp)
         w = Path(tmp) / ".claude" / "waivers"
         w.mkdir(parents=True)
         (w / "teste-cego--plugsign.yaml").write_text(yaml.safe_dump({
@@ -271,7 +271,7 @@ def test_dispensas_propostas_aparecem_para_o_review_ler_a_pergunta():
         (w / "decidida--x.yaml").write_text(
             "motivo: decidida\nescopo: X\nautor: alguem\n", encoding="utf-8")
         (w / "quebrado.yaml").write_text("status: [proposta", encoding="utf-8")
-        out = roda(ledger).stdout
+        out = run_digest(ledger).stdout
         check("traz a seção das dispensas propostas",
               "## Dispensas propostas pelo agente, sem resposta do dono" in out, out[-900:])
         check("...com motivo, escopo e pergunta",
@@ -282,29 +282,29 @@ def test_dispensas_propostas_aparecem_para_o_review_ler_a_pergunta():
               "  - dispensa proposta pelo agente: teste-cego em PlugSignAdapter" in out, out[-900:])
         check("...sem listar a dispensa já decidida", "decidida" not in out)
     with tempfile.TemporaryDirectory() as tmp:
-        out = roda(monta_run(tmp)).stdout
+        out = run_digest(build_run(tmp)).stdout
         check("sem proposta, a seção diz `nenhuma`",
               "## Dispensas propostas pelo agente, sem resposta do dono\nnenhuma" in out,
               out[-600:])
 
 
-def test_proposta_so_na_arvore_do_registro_tambem_e_listada():
-    """O run grava a proposta na árvore onde roda (worktree do cepa-until), não
-    ao lado da fila do clone principal."""
+def test_proposal_only_in_the_record_tree_is_also_listed():
+    """The run records the proposal in the tree where it runs (cepa-until's worktree), not
+    beside the main clone's queue."""
     with tempfile.TemporaryDirectory() as tmp:
-        principal = Path(tmp) / "principal"
-        principal.mkdir()
-        g = lambda *a: subprocess.run(["git", *a], cwd=str(principal),
+        main_ = Path(tmp) / "principal"
+        main_.mkdir()
+        g = lambda *a: subprocess.run(["git", *a], cwd=str(main_),
                                       capture_output=True, text=True, check=True)
         g("init", "-q")
         g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
           "--allow-empty", "-m", "raiz")
         wt = Path(tmp) / "wt"
         g("worktree", "add", "-q", "--detach", str(wt))
-        ledger = monta_run(wt)
-        fila = principal / ".claude" / "programs" / "F"
-        fila.mkdir(parents=True)
-        (fila / "plan.yaml").write_text(yaml.safe_dump({"items": [
+        ledger = build_run(wt)
+        queue = main_ / ".claude" / "programs" / "F"
+        queue.mkdir(parents=True)
+        (queue / "plan.yaml").write_text(yaml.safe_dump({"items": [
             {"id": "A2", "status": "blocked", "blocked_by": []}]}), encoding="utf-8")
         w = wt / ".claude" / "waivers"
         w.mkdir(parents=True)
@@ -312,32 +312,32 @@ def test_proposta_so_na_arvore_do_registro_tambem_e_listada():
             "status": "proposta", "motivo": "teste-cego", "escopo": "SoNaWorktree",
             "autor": None, "item": "A2", "pergunta": "Aceito a dispensa de SoNaWorktree?"},
             allow_unicode=True), encoding="utf-8")
-        out = roda(ledger).stdout
+        out = run_digest(ledger).stdout
         check("proposta só na árvore do registro é listada",
               "teste-cego em SoNaWorktree — pergunta: Aceito a dispensa de SoNaWorktree?" in out,
               out[-700:])
         check("...uma vez só na seção", out.count("teste-cego em SoNaWorktree") == 2, out[-700:])
 
 
-def test_proposta_so_no_clone_principal_tambem_e_listada():
-    """Espelho do caso anterior: o plano e a proposta moram no clone principal,
-    e a worktree do registro não tem proposta nenhuma."""
+def test_proposal_only_in_the_main_clone_is_also_listed():
+    """Mirror of the previous case: the plan and the proposal live in the main clone,
+    and the record's worktree has no proposal at all."""
     with tempfile.TemporaryDirectory() as tmp:
-        principal = Path(tmp) / "principal"
-        principal.mkdir()
-        g = lambda *a: subprocess.run(["git", *a], cwd=str(principal),
+        main_ = Path(tmp) / "principal"
+        main_.mkdir()
+        g = lambda *a: subprocess.run(["git", *a], cwd=str(main_),
                                       capture_output=True, text=True, check=True)
         g("init", "-q")
         g("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
           "--allow-empty", "-m", "raiz")
         wt = Path(tmp) / "wt"
         g("worktree", "add", "-q", "--detach", str(wt))
-        ledger = monta_run(wt)
-        fila = principal / ".claude" / "programs" / "F"
-        fila.mkdir(parents=True)
-        (fila / "plan.yaml").write_text(yaml.safe_dump({"items": [
+        ledger = build_run(wt)
+        queue = main_ / ".claude" / "programs" / "F"
+        queue.mkdir(parents=True)
+        (queue / "plan.yaml").write_text(yaml.safe_dump({"items": [
             {"id": "A2", "status": "blocked", "blocked_by": []}]}), encoding="utf-8")
-        w = principal / ".claude" / "waivers"
+        w = main_ / ".claude" / "waivers"
         w.mkdir(parents=True)
         (w / "teste-cego--x.yaml").write_text(yaml.safe_dump({
             "status": "proposta", "motivo": "teste-cego", "escopo": "SoNoPrincipal",
@@ -345,15 +345,15 @@ def test_proposta_so_no_clone_principal_tambem_e_listada():
             allow_unicode=True), encoding="utf-8")
         check("a worktree do registro não tem pasta de dispensas",
               not (wt / ".claude" / "waivers").exists())
-        out = roda(ledger).stdout
+        out = run_digest(ledger).stdout
         check("proposta só no clone principal é listada",
               "teste-cego em SoNoPrincipal — pergunta: Aceito a dispensa de SoNoPrincipal?" in out,
               out[-700:])
 
 
-def test_yaml_quebrado_ao_lado_da_proposta_nao_derruba_o_resumo():
+def test_broken_yaml_alongside_proposal_does_not_crash_summary():
     with tempfile.TemporaryDirectory() as tmp:
-        ledger = monta_run(tmp)
+        ledger = build_run(tmp)
         w = Path(tmp) / ".claude" / "waivers"
         w.mkdir(parents=True)
         (w / "a-quebrado.yaml").write_text("motivo: [unclosed", encoding="utf-8")
@@ -361,22 +361,22 @@ def test_yaml_quebrado_ao_lado_da_proposta_nao_derruba_o_resumo():
             "status": "proposta", "motivo": "teste-cego", "escopo": "Viva",
             "item": "A2", "pergunta": "Aceito a dispensa de Viva?"},
             allow_unicode=True), encoding="utf-8")
-        p = roda(ledger)
+        p = run_digest(ledger)
         check("resumo sai 0 com YAML quebrado ao lado", p.returncode == 0, p.stderr)
         check("...e ainda lista a proposta", "teste-cego em Viva — pergunta:" in p.stdout,
               p.stdout[-500:])
 
 
-def test_registro_inexistente_sai_2():
-    p = roda("/nao/existe.jsonl")
+def test_missing_record_exits_2():
+    p = run_digest("/nao/existe.jsonl")
     check("registro inexistente sai 2", p.returncode == 2, p.stderr)
 
 
 def main():
     print("cepa-until-digest\n")
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"{nome}:")
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"{name}:")
             fn()
     print()
     if FAILURES:

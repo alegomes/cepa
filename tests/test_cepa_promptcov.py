@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Regressão de `common/bin/cepa-promptcov` — cobertura de checkpoints de prosa.
+"""Regression of `common/bin/cepa-promptcov` — coverage of prose checkpoints.
 
 No third-party deps — run with `python3 tests/test_cepa_promptcov.py`. Exits
 non-zero on the first failure.
 
-Guardas:
-  - checkpoint `**[tag:id]**` no comando, sem `tag:id` correspondente no
-    teste → aparece como sem cobertura, exit 1;
-  - todo checkpoint coberto → exit 0;
-  - `--tag` filtra para uma família só (um comando pode ter mais de uma);
-  - sem nenhum checkpoint do tag pedido → nunca declara cobertura 100% por
-    vacuidade — devolve "nada para medir", exit 2 (mesmo espírito de CS-3 do
-    cepa-hotspots: histórico insuficiente vira aviso explícito, não heurística
-    disfarçada);
-  - arquivo inexistente → exit 2;
-  - run REAL sobre maestro/commands/program-plan.md × tests/test_program_plan_sweep.py
-    (o par que motivou a ferramenta) sai com cobertura total — se isso quebrar,
-    é regressão real no P1, não só neste script.
+Guards:
+  - checkpoint `**[tag:id]**` in the command, without a matching `tag:id` in the
+    test → shows up as uncovered, exit 1;
+  - every checkpoint covered → exit 0;
+  - `--tag` filters to a single family (a command may have more than one);
+  - without any checkpoint of the requested tag → never declares 100% coverage by
+    vacuity — returns "nothing to measure", exit 2 (same spirit as CS-3 of
+    cepa-hotspots: insufficient history becomes an explicit warning, not a disguised
+    heuristic);
+  - missing file → exit 2;
+  - REAL run over maestro/commands/program-plan.md × tests/test_program_plan_sweep.py
+    (the pair that motivated the tool) comes out with full coverage — if this breaks,
+    it is a real regression in P1, not only in this script.
 """
 
 import subprocess
@@ -82,7 +82,7 @@ def main():
         cmd = Path(tmp) / "comando.md"
         cmd.write_text(CMD_TEXT)
 
-        # ── caso feliz: cobertura total ──────────────────────────────────
+        # ── happy case: full coverage ────────────────────────────────────
         t_full = Path(tmp) / "test_full.py"
         t_full.write_text(TEST_FULL)
         r = run(cmd, t_full)
@@ -93,7 +93,7 @@ def main():
         check("relata 3/3 coberto(s)", "3/3 checkpoint(s) coberto(s)" in r.stdout,
               r.stdout)
 
-        # ── checkpoint sem cobertura é detectado ─────────────────────────
+        # ── uncovered checkpoint is detected ─────────────────────────────
         t_missing = Path(tmp) / "test_missing.py"
         t_missing.write_text(TEST_MISSING_BETA)
         r = run(cmd, t_missing)
@@ -103,7 +103,7 @@ def main():
         check("checkpoint coberto não aparece como sem cobertura",
               "sweep:alpha" not in r.stdout.split("sem cobertura:")[-1], r.stdout)
 
-        # ── --tag filtra para uma família só ─────────────────────────────
+        # ── --tag filters to a single family ─────────────────────────────
         r = run(cmd, t_missing, ["--tag", "sweep"])
         check("--tag=sweep não mede a família 'outro'",
               "outro:gamma" not in r.stdout, r.stdout)
@@ -114,27 +114,27 @@ def main():
         check("--tag=outro mede só gamma, que está coberto -> exit 0",
               r.returncode == 0, r.stdout)
 
-        # ── sem checkpoint nenhum do tag pedido: nunca 100% por vacuidade ─
+        # ── without any checkpoint of the requested tag: never 100% by vacuity ─
         r = run(cmd, t_missing, ["--tag", "inexistente"])
         check("tag sem nenhum checkpoint -> exit 2 (recusa, não 100% falso)",
               r.returncode == 2, r.stdout)
         check("a recusa nomeia que não há dado para medir",
               "nenhum checkpoint" in r.stdout, r.stdout)
 
-        # ── comando sem NENHUM checkpoint (nem outro tag) ────────────────
-        cmd_sem = Path(tmp) / "comando_sem.md"
-        cmd_sem.write_text("# comando sem anotação nenhuma\n")
-        r = run(cmd_sem, t_full)
+        # ── command with NO checkpoint (not even another tag) ────────────
+        cmd_without = Path(tmp) / "comando_sem.md"
+        cmd_without.write_text("# comando sem anotação nenhuma\n")
+        r = run(cmd_without, t_full)
         check("comando sem checkpoint algum -> exit 2", r.returncode == 2, r.stdout)
 
-        # ── teste vazio: todo checkpoint aparece sem cobertura ───────────
+        # ── empty test: every checkpoint shows up uncovered ──────────────
         t_empty = Path(tmp) / "test_empty.py"
         t_empty.write_text(TEST_EMPTY)
         r = run(cmd, t_empty)
         check("teste sem nenhuma cobertura -> exit 1, todos sem cobertura",
               r.returncode == 1 and r.stdout.count("✗") == 3, r.stdout)
 
-        # ── arquivo inexistente ───────────────────────────────────────────
+        # ── missing file ──────────────────────────────────────────────────
         r = run(Path(tmp) / "nao-existe.md", t_full)
         check("comando inexistente -> exit 2", r.returncode == 2, r.stderr)
         r = run(cmd, Path(tmp) / "nao-existe.py")
@@ -148,17 +148,17 @@ def main():
         check("--json nomeia uncovered corretamente",
               data.get("uncovered") == ["sweep:beta"], data)
 
-    # ── run real sobre os pares de verdade ───────────────────────────────
-    # O mesmo comando carrega DUAS famílias de anotação (`sweep`, do modo de
-    # varrimento, e `from-plan`, da promoção fila → ondas), cada uma com o seu
-    # teste de regressão. Sem o `--tag` o cruzamento mede um teste contra os
-    # checkpoints do outro e acusa falta que não existe — que é exatamente o
-    # que o filtro existe para evitar.
+    # ── real run over the real pairs ─────────────────────────────────────
+    # The same command carries TWO families of annotation (`sweep`, of the sweep
+    # mode, and `from-plan`, of the queue → waves promotion), each with its own
+    # regression test. Without `--tag` the crossing measures one test against the
+    # other's checkpoints and accuses a lack that does not exist — which is exactly
+    # what the filter exists to avoid.
     real_cmd = REPO / "maestro" / "commands" / "program-plan.md"
-    for familia, arquivo in (("sweep", "test_program_plan_sweep.py"),
+    for family, file in (("sweep", "test_program_plan_sweep.py"),
                              ("from-plan", "test_program_plan_from_plan.py")):
-        r = run(real_cmd, REPO / "tests" / arquivo, ["--tag", familia])
-        check(f"run real: program-plan.md × {arquivo} cobre tudo de `{familia}`",
+        r = run(real_cmd, REPO / "tests" / file, ["--tag", family])
+        check(f"run real: program-plan.md × {file} cobre tudo de `{family}`",
               r.returncode == 0, r.stdout)
 
     print()

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Regression tests: cepa-doctor reporta (nunca corrige) a fila × BACKLOG.md.
+"""Regression tests: cepa-doctor reports (never fixes) the queue × BACKLOG.md divergence.
 
-## Por que este check existe
+## Why this check exists
 
-A "Fila única" (BACKLOG.md, Jira e plan.yaml convergem no plan.yaml) só se
-mantém se algo cobra a divergência entre os três. `cepa-plan divergencia` faz
-o cálculo (seções do BACKLOG.md sem `**Plano:**`, `**Plano:**` citando id que
-não existe na fila); este check só chama esse comando e traduz o resultado em
-✓/⚠, na abertura de sessão que já roda o doctor. Nunca corrige — fechar uma
-seção ou inventar um `**Plano:**` é decisão do dono.
+The "single queue" (BACKLOG.md, Jira and plan.yaml converge on plan.yaml) only
+holds if something charges for the divergence among the three. `cepa-plan divergencia` does
+the calculation (BACKLOG.md sections without `**Plano:**`, `**Plano:**` citing an id that
+does not exist in the queue); this check only calls that command and translates the result into
+✓/⚠, at the session opening that already runs the doctor. It never fixes — closing a
+section or inventing a `**Plano:**` is the owner's decision.
 
-## Por que é gateado em ter BACKLOG.md E uma fila resolvível
+## Why it is gated on having BACKLOG.md AND a resolvable queue
 
-Repo sem `BACKLOG.md` não tem o que comparar. Repo com MAIS DE UMA fila
-`single-track` é ambíguo — o doctor não adivinha qual o dono quer ver, então
-fica calado em vez de arriscar a fila errada.
+A repo without `BACKLOG.md` has nothing to compare. A repo with MORE THAN ONE
+`single-track` queue is ambiguous — the doctor does not guess which one the owner wants to see, so
+it stays quiet instead of risking the wrong queue.
 
 Run: python3 tests/test_doctor_queue_divergence.py
 """
@@ -38,7 +38,7 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-PLANO = """schema_version: 2
+PLAN = """schema_version: 2
 mode: single-track
 program: WEGO
 source: teste
@@ -53,106 +53,106 @@ items:
 """
 
 
-def monta(tmp, com_backlog=True, backlog_texto=None, com_fila=True,
-          com_board_flow=False):
-    raiz = Path(tmp)
-    if com_fila:
-        d = raiz / ".claude" / "programs" / "WEGO"
+def build(tmp, with_backlog=True, backlog_text=None, with_queue=True,
+          with_board_flow=False):
+    root = Path(tmp)
+    if with_queue:
+        d = root / ".claude" / "programs" / "WEGO"
         d.mkdir(parents=True)
-        (d / "plan.yaml").write_text(PLANO, encoding="utf-8")
-    if com_backlog:
-        (raiz / "BACKLOG.md").write_text(
-            backlog_texto or "## Seção X\n\n**Plano:** WEGO-1\n",
+        (d / "plan.yaml").write_text(PLAN, encoding="utf-8")
+    if with_backlog:
+        (root / "BACKLOG.md").write_text(
+            backlog_text or "## Seção X\n\n**Plano:** WEGO-1\n",
             encoding="utf-8")
-    if com_board_flow:
-        (raiz / "board-flow.yaml").write_text(
+    if with_board_flow:
+        (root / "board-flow.yaml").write_text(
             "site: x\nproject_key: WEGO\nstatus_map:\n  to_do: To Do\n",
             encoding="utf-8")
-    (raiz / "README.md").write_text("base\n", encoding="utf-8")
-    subprocess.run(["git", "init", "-q", "."], cwd=raiz, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+    (root / "README.md").write_text("base\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", "."], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", "base"], cwd=raiz, check=True)
-    return raiz
+                    "commit", "-qm", "base"], cwd=root, check=True)
+    return root
 
 
-def roda(raiz):
+def run_doctor(root):
     p = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
-                       cwd=str(raiz), capture_output=True, text=True, timeout=120)
+                       cwd=str(root), capture_output=True, text=True, timeout=120)
     return p.stdout + p.stderr
 
 
-def test_sem_divergencia_confirma():
+def test_without_divergence_confirms():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp)
-        out = roda(raiz)
+        root = build(tmp)
+        out = run_doctor(root)
         check("fila × BACKLOG em dia confirma", "[plano]" in out and "✓" in out, out)
 
 
-def test_secao_sem_plano_avisa():
+def test_section_without_plan_warns():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp, backlog_texto="## Seção sem plano\n\nnada aqui.\n")
-        out = roda(raiz)
+        root = build(tmp, backlog_text="## Seção sem plano\n\nnada aqui.\n")
+        out = run_doctor(root)
         check("seção sem `**Plano:**` gera aviso",
               "[plano]" in out and "⚠" in out, out)
         check("...e nomeia a seção", "Seção sem plano" in out, out)
 
 
-def test_plano_citando_id_fora_da_fila_avisa():
+def test_plan_citing_id_outside_the_queue_warns():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp, backlog_texto="## Seção Y\n\n**Plano:** WEGO-999\n")
-        out = roda(raiz)
+        root = build(tmp, backlog_text="## Seção Y\n\n**Plano:** WEGO-999\n")
+        out = run_doctor(root)
         check("`**Plano:**` com id inexistente gera aviso",
               "[plano]" in out and "⚠" in out, out)
         check("...e nomeia o id", "WEGO-999" in out, out)
 
 
-def test_sem_backlog_e_silencioso():
+def test_without_backlog_is_silent():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp, com_backlog=False)
-        out = roda(raiz)
+        root = build(tmp, with_backlog=False)
+        out = run_doctor(root)
         check("sem BACKLOG.md: nada a comparar, silêncio",
               "[plano]" not in out, out)
 
 
-def test_duas_filas_sem_board_flow_e_ambiguo_e_silencioso():
-    """Sem `board-flow.yaml` e com MAIS de uma fila `single-track`, o doctor
-    não pode escolher uma delas no chute — pegar "a primeira que achar" é
-    exatamente a ambiguidade que `resolve_fila_unica` existe para recusar.
+def test_two_queues_without_board_flow_is_ambiguous_and_silent():
+    """Without `board-flow.yaml` and with MORE than one `single-track` queue, the doctor
+    cannot pick one of them at random — taking "the first it finds" is
+    exactly the ambiguity `resolve_fila_unica` exists to refuse.
     """
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = Path(tmp)
-        for nome in ("WEGO", "OUTRA"):
-            d = raiz / ".claude" / "programs" / nome
+        root = Path(tmp)
+        for name in ("WEGO", "OUTRA"):
+            d = root / ".claude" / "programs" / name
             d.mkdir(parents=True)
-            (d / "plan.yaml").write_text(PLANO.replace("program: WEGO", f"program: {nome}"),
+            (d / "plan.yaml").write_text(PLAN.replace("program: WEGO", f"program: {name}"),
                                          encoding="utf-8")
-        (raiz / "BACKLOG.md").write_text("## Seção sem plano\n\nnada aqui.\n",
+        (root / "BACKLOG.md").write_text("## Seção sem plano\n\nnada aqui.\n",
                                          encoding="utf-8")
-        (raiz / "README.md").write_text("base\n", encoding="utf-8")
-        subprocess.run(["git", "init", "-q", "."], cwd=raiz, check=True)
-        subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+        (root / "README.md").write_text("base\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", "."], cwd=root, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                        "commit", "-qm", "base"], cwd=raiz, check=True)
-        out = roda(raiz)
+                        "commit", "-qm", "base"], cwd=root, check=True)
+        out = run_doctor(root)
         check("duas filas ambíguas: nenhuma linha [plano] no relatório",
               "[plano]" not in out, out)
 
 
-def test_resolve_via_project_key_do_board_flow():
+def test_resolves_via_board_flow_project_key():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp, com_board_flow=True,
-                     backlog_texto="## Seção Z\n\n**Plano:** WEGO-1\n")
-        out = roda(raiz)
+        root = build(tmp, with_board_flow=True,
+                     backlog_text="## Seção Z\n\n**Plano:** WEGO-1\n")
+        out = run_doctor(root)
         check("resolve a fila pelo project_key do board-flow.yaml e confirma",
               "[plano]" in out and "✓" in out, out)
 
 
 def main():
     print("cepa-doctor — divergência da fila única × BACKLOG.md\n")
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"{nome}:")
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"{name}:")
             fn()
     print()
     if FAILURES:

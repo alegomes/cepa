@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Regression tests do spec-readiness-gate.
+"""Regression tests of the spec-readiness-gate.
 
-O `/common:spec` conduz um interrogatório até a especificação ficar rica o
-bastante para construir. O modo de falha que este gate existe para impedir não é
-o interrogatório ficar curto — é ele TERMINAR por cansaço: o agente decide que
-já está bom, escreve `Status: pronta-para-construir`, e entrega critérios que são
-frases de intenção ("o sistema deve validar o cadastro"), sem superfície
-observável onde alguém possa provar que aconteceu. Isso não falha ali; falha na
-construção, semanas depois, quando outra pessoa interpreta o critério de outro
-jeito.
+`/common:spec` leads an interrogation until the specification becomes rich
+enough to build. The failure mode this gate exists to prevent is not
+the interrogation being short — it is it ENDING out of tiredness: the agent decides it
+is good enough, writes `Status: pronta-para-construir`, and delivers criteria that are
+sentences of intent ("the system must validate the registration"), without an
+observable surface where anyone could prove it happened. That does not fail there; it fails
+at construction, weeks later, when another person interprets the criterion
+another way.
 
-O que estes testes fixam:
-  - `Status: rascunho` NUNCA bloqueia, nem com o documento todo furado (o
-    interrogatório precisa poder escrever enquanto corre);
-  - declarada pronta e completa, passa;
-  - critério sem Superfície, sem Teste vermelho, ou com Superfície fora do
-    vocabulário, bloqueia — e a mensagem nomeia QUAL critério;
-  - pronta com zero critérios bloqueia (o caso mais silencioso);
-  - pergunta em aberto (`- [ ]`) sobrando bloqueia;
-  - a linha-modelo do formato passa, senão não dá para editar o documento que
-    define o formato;
-  - o gate lê Write, Edit e MultiEdit, e nunca bloqueia o que não consegue ver.
+What these tests pin down:
+  - `Status: rascunho` NEVER blocks, not even with the whole document full of holes (the
+    interrogation must be able to write while it runs);
+  - declared ready and complete, it passes;
+  - a criterion without Surface, without Red test, or with a Surface outside the
+    vocabulary, blocks — and the message names WHICH criterion;
+  - ready with zero criteria blocks (the most silent case);
+  - a leftover open question (`- [ ]`) blocks;
+  - the format's template line passes, otherwise the document that
+    defines the format could not be edited;
+  - the gate reads Write, Edit and MultiEdit, and never blocks what it cannot see.
 
 Run: python3 tests/test_spec_readiness_gate.py
 """
@@ -56,23 +56,23 @@ def write(content, tool="Write"):
     return run({"tool_name": tool, "tool_input": {key: content}})
 
 
-CRITERIO_OK = """### CS-1: POST /api/v1/assinaturas sem responsável responde 422
+CRITERION_OK = """### CS-1: POST /api/v1/assinaturas sem responsável responde 422
 
 **Superfície:** http
 **Teste vermelho:** AssinaturaResourceIT#post_menorSemResponsavel_retorna422 — hoje não existe.
 """
 
-PRONTA_OK = f"""# Especificação: assinatura de menor
+READY_OK = f"""# Especificação: assinatura de menor
 
 **Status:** pronta-para-construir
 
 ## Critérios de sucesso
 
-{CRITERIO_OK}
+{CRITERION_OK}
 """
 
 
-def test_rascunho_nunca_bloqueia():
+def test_draft_never_blocks():
     doc = """# Especificação: qualquer coisa
 
 **Status:** rascunho
@@ -88,41 +88,41 @@ def test_rascunho_nunca_bloqueia():
     check("rascunho furado não bloqueia", rc == 0, f"rc={rc}")
 
 
-def test_pronta_completa_passa():
-    rc, err = write(PRONTA_OK)
+def test_ready_complete_passes():
+    rc, err = write(READY_OK)
     check("pronta e completa passa", rc == 0, f"rc={rc} err={err[:200]}")
 
 
-def test_falta_superficie():
-    doc = PRONTA_OK.replace("**Superfície:** http\n", "")
+def test_missing_surface():
+    doc = READY_OK.replace("**Superfície:** http\n", "")
     rc, err = write(doc)
     check("falta Superfície bloqueia", rc == 2, f"rc={rc}")
     check("mensagem nomeia o critério", "CS-1" in err, err[:200])
 
 
-def test_falta_teste_vermelho():
-    doc = "\n".join(l for l in PRONTA_OK.splitlines()
+def test_missing_red_test():
+    doc = "\n".join(l for l in READY_OK.splitlines()
                     if not l.startswith("**Teste vermelho:**"))
     rc, err = write(doc)
     check("falta Teste vermelho bloqueia", rc == 2, f"rc={rc}")
     check("mensagem cita Red test", "Red test" in err, err[:200])
 
 
-def test_superficie_fora_do_vocabulario():
-    doc = PRONTA_OK.replace("**Superfície:** http", "**Superfície:** banco de dados")
+def test_surface_outside_the_vocabulary():
+    doc = READY_OK.replace("**Superfície:** http", "**Superfície:** banco de dados")
     rc, err = write(doc)
     check("Superfície inventada bloqueia", rc == 2, f"rc={rc}")
     check("mensagem mostra o valor recusado", "banco de dados" in err, err[:200])
 
 
-def test_todas_as_superficies_do_vocabulario_passam():
-    for sup in ("http", "cli", "ui", "event", "domain", "application"):
-        doc = PRONTA_OK.replace("**Superfície:** http", f"**Superfície:** {sup}")
+def test_all_vocabulary_surfaces_pass():
+    for surface in ("http", "cli", "ui", "event", "domain", "application"):
+        doc = READY_OK.replace("**Superfície:** http", f"**Superfície:** {surface}")
         rc, err = write(doc)
-        check(f"superfície {sup} passa", rc == 0, f"rc={rc} err={err[:120]}")
+        check(f"superfície {surface} passa", rc == 0, f"rc={rc} err={err[:120]}")
 
 
-def test_pronta_sem_criterio_nenhum():
+def test_ready_without_any_criterion():
     doc = """# Especificação: vazia
 
 **Status:** pronta-para-construir
@@ -135,8 +135,8 @@ Alguma prosa convincente e nenhum critério.
     check("mensagem explica o vazio", "nenhum critério" in err, err[:200])
 
 
-def test_pergunta_em_aberto_sobrando():
-    doc = PRONTA_OK.replace(
+def test_leftover_open_question():
+    doc = READY_OK.replace(
         "## Critérios de sucesso",
         "## Perguntas em aberto\n- [ ] menor emancipado conta como menor?\n\n## Critérios de sucesso",
     )
@@ -145,8 +145,8 @@ def test_pergunta_em_aberto_sobrando():
     check("mensagem cita a pergunta", "emancipado" in err, err[:300])
 
 
-def test_pergunta_respondida_nao_bloqueia():
-    doc = PRONTA_OK.replace(
+def test_answered_question_does_not_block():
+    doc = READY_OK.replace(
         "## Critérios de sucesso",
         "## Perguntas em aberto\n- [x] menor emancipado conta como menor? Não.\n\n## Critérios de sucesso",
     )
@@ -154,7 +154,7 @@ def test_pergunta_respondida_nao_bloqueia():
     check("pergunta marcada como respondida passa", rc == 0, f"rc={rc} err={err[:200]}")
 
 
-def test_linha_modelo_do_formato_passa():
+def test_format_template_line_passes():
     doc = """# Formato da especificação
 
 **Status:** rascunho | pronta-para-construir
@@ -170,8 +170,8 @@ def test_linha_modelo_do_formato_passa():
     check("documento que ensina o formato passa", rc == 0, f"rc={rc} err={err[:200]}")
 
 
-def test_edit_e_multiedit():
-    doc = PRONTA_OK.replace("**Superfície:** http\n", "")
+def test_edit_and_multiedit():
+    doc = READY_OK.replace("**Superfície:** http\n", "")
     rc, _ = write(doc, tool="Edit")
     check("Edit é lido", rc == 2, f"rc={rc}")
 
@@ -180,27 +180,28 @@ def test_edit_e_multiedit():
     check("MultiEdit é lido", rc == 2, f"rc={rc}")
 
 
-def com_arquivo_temporario(conteudo):
-    """Escreve `conteudo` num arquivo temporário e devolve o Path; quem chama
-    apaga depois."""
+def with_temp_file(content):
+    """Writes `content` to a temporary file and returns the Path; the caller
+    deletes it afterwards.
+    """
     f = tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False,
                                      encoding="utf-8")
-    f.write(conteudo)
+    f.write(content)
     f.close()
     return Path(f.name)
 
 
-def test_edit_com_file_path_le_o_arquivo_resultante():
-    # (a) Status rascunho -> pronta, critério já completo no arquivo: hoje
-    # bloqueava (falso bloqueio, o fragmento só tem o Status). Deve liberar.
-    doc_rascunho = PRONTA_OK.replace("**Status:** pronta-para-construir",
+def test_edit_with_file_path_reads_the_resulting_file():
+    # (a) Status rascunho -> pronta, criterion already complete in the file: it used
+    # to block (false block, the fragment only has the Status). Must release.
+    doc_draft = READY_OK.replace("**Status:** pronta-para-construir",
                                      "**Status:** rascunho")
-    caminho = com_arquivo_temporario(doc_rascunho)
+    path_ = with_temp_file(doc_draft)
     try:
         rc, err = run({
             "tool_name": "Edit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "old_string": "**Status:** rascunho",
                 "new_string": "**Status:** pronta-para-construir",
             },
@@ -208,16 +209,16 @@ def test_edit_com_file_path_le_o_arquivo_resultante():
         check("Edit que só muda o Status vê o critério completo e libera",
               rc == 0, f"rc={rc} err={err[:200]}")
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
-    # (b) já pronta no arquivo, Edit adiciona pergunta em aberto no fragmento
-    # (que não tem Status): hoje passava (falso passe). Deve bloquear.
-    caminho = com_arquivo_temporario(PRONTA_OK)
+    # (b) already pronta in the file, Edit adds an open question in the fragment
+    # (which has no Status): it used to pass (false pass). Must block.
+    path_ = with_temp_file(READY_OK)
     try:
         rc, err = run({
             "tool_name": "Edit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "old_string": "## Critérios de sucesso",
                 "new_string": "## Perguntas em aberto\n- [ ] pergunta nova\n\n## Critérios de sucesso",
             },
@@ -226,16 +227,16 @@ def test_edit_com_file_path_le_o_arquivo_resultante():
               rc == 2, f"rc={rc}")
         check("mensagem cita a pergunta reaberta", "pergunta nova" in err, err[:300])
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
-    # (c) já pronta no arquivo, Edit remove o Teste vermelho no fragmento (que
-    # não tem Status nem CS): hoje passava. Deve bloquear.
-    caminho = com_arquivo_temporario(PRONTA_OK)
+    # (c) already pronta in the file, Edit removes the Red test in the fragment (which
+    # has neither Status nor CS): it used to pass. Must block.
+    path_ = with_temp_file(READY_OK)
     try:
         rc, err = run({
             "tool_name": "Edit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "old_string": "**Teste vermelho:** AssinaturaResourceIT#post_menorSemResponsavel_retorna422 — hoje não existe.\n",
                 "new_string": "",
             },
@@ -244,21 +245,21 @@ def test_edit_com_file_path_le_o_arquivo_resultante():
               rc == 2, f"rc={rc}")
         check("mensagem cita Red test", "Red test" in err, err[:300])
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
 
-def test_multiedit_com_file_path_aplica_em_sequencia():
-    # A segunda edição só bate DEPOIS que a primeira foi aplicada (o old_string
-    # da segunda não existe no arquivo original). O veredito só pode estar
-    # certo se o gate aplicar as duas em sequência sobre o mesmo texto.
-    doc = PRONTA_OK.replace("**Status:** pronta-para-construir",
+def test_multiedit_with_file_path_applies_in_sequence():
+    # The second edit only matches AFTER the first was applied (the old_string
+    # of the second does not exist in the original file). The verdict can only be
+    # right if the gate applies both in sequence over the same text.
+    doc = READY_OK.replace("**Status:** pronta-para-construir",
                             "**Status:** RASCUNHO_TEMPORARIO")
-    caminho = com_arquivo_temporario(doc)
+    path_ = with_temp_file(doc)
     try:
         rc, err = run({
             "tool_name": "MultiEdit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "edits": [
                     {"old_string": "**Status:** RASCUNHO_TEMPORARIO",
                      "new_string": "**Status:** rascunho"},
@@ -270,10 +271,10 @@ def test_multiedit_com_file_path_aplica_em_sequencia():
         check("MultiEdit aplica as edições em sequência e libera (completa)",
               rc == 0, f"rc={rc} err={err[:200]}")
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
 
-DUAS_SUPERFICIES_OK = """# Especificação: duas superfícies
+TWO_SURFACES_OK = """# Especificação: duas superfícies
 **Status:** pronta-para-construir
 ## Critérios de sucesso
 ### CS-1: POST /api/v1/assinaturas sem responsável responde 422
@@ -285,21 +286,21 @@ DUAS_SUPERFICIES_OK = """# Especificação: duas superfícies
 """
 
 
-def test_multiedit_replace_all_troca_TODAS_as_ocorrencias():
-    # old_string ("**Superfície:** http") aparece nos DOIS blocos, e o
-    # veredito só fica certo se replace_all trocar as duas. Se a
-    # implementação "esquecesse" o replace_all e caísse na checagem de
-    # unicidade (que existe para o Edit sem replace_all), old_string bateria
-    # 2x sem replace_all pedido, e o código teria que liberar (rc 0) em vez
-    # de aplicar a troca. Aqui a troca É esperada, então o rc correto é 2
-    # (as duas Superfícies viram inválidas) -- bem diferente do rc 0 que a
-    # implementação quebrada devolveria.
-    caminho = com_arquivo_temporario(DUAS_SUPERFICIES_OK)
+def test_multiedit_replace_all_swaps_ALL_occurrences():
+    # old_string ("**Superfície:** http") appears in BOTH blocks, and the
+    # verdict is only right if replace_all swaps both. If the
+    # implementation "forgot" replace_all and fell into the uniqueness check
+    # (which exists for Edit without replace_all), old_string would match
+    # 2x without replace_all requested, and the code would have to release (rc 0) instead
+    # of applying the swap. Here the swap IS expected, so the correct rc is 2
+    # (both Surfaces become invalid) -- quite different from the rc 0 that the broken
+    # implementation would return.
+    path_ = with_temp_file(TWO_SURFACES_OK)
     try:
         rc, err = run({
             "tool_name": "MultiEdit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "edits": [
                     {"old_string": "**Superfície:** http",
                      "new_string": "**Superfície:** banco de dados",
@@ -312,10 +313,10 @@ def test_multiedit_replace_all_troca_TODAS_as_ocorrencias():
         check("mensagem cita os dois critérios", "CS-1" in err and "CS-2" in err,
               err[:400])
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
 
-DUAS_CS_UMA_INVALIDA = """# Especificação: duas superfícies
+TWO_CS_ONE_INVALID = """# Especificação: duas superfícies
 **Status:** pronta-para-construir
 ## Critérios de sucesso
 ### CS-1: POST /api/v1/assinaturas sem responsável responde 422
@@ -327,22 +328,22 @@ DUAS_CS_UMA_INVALIDA = """# Especificação: duas superfícies
 """
 
 
-def test_multiedit_acumula_sobre_o_resultado_da_edicao_anterior():
-    # edit1 conserta a Superfície inválida do CS-2. edit2 mexe numa região que
-    # edit1 NÃO tocou (o Teste vermelho do CS-1) -- o old_string de edit2
-    # existe tanto no arquivo ORIGINAL quanto no resultado de edit1 (porque
-    # edit1 não passou perto dali). Uma implementação que aplicasse cada
-    # edição sobre o texto ORIGINAL (em vez de acumular sobre o resultado da
-    # edição anterior) casaria os dois old_string igualmente -- só que o
-    # resultado final dela DESCARTARIA o conserto de edit1: CS-2 continuaria
-    # com "banco de dados" e o rc ficaria 2, contra o rc 0 da implementação
-    # correta (que preserva os dois consertos).
-    caminho = com_arquivo_temporario(DUAS_CS_UMA_INVALIDA)
+def test_multiedit_accumulates_over_the_result_of_the_previous_edit():
+    # edit1 fixes the invalid Surface of CS-2. edit2 touches a region that
+    # edit1 did NOT touch (the Red test of CS-1) -- edit2's old_string
+    # exists both in the ORIGINAL file and in the result of edit1 (because
+    # edit1 did not go near there). An implementation that applied each
+    # edit over the ORIGINAL text (instead of accumulating over the result of the
+    # previous edit) would match both old_strings equally -- only that its
+    # final result would DISCARD edit1's fix: CS-2 would remain
+    # with "banco de dados" and the rc would be 2, against the rc 0 of the correct
+    # implementation (which preserves both fixes).
+    path_ = with_temp_file(TWO_CS_ONE_INVALID)
     try:
         rc, err = run({
             "tool_name": "MultiEdit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "edits": [
                     {"old_string": "**Superfície:** banco de dados",
                      "new_string": "**Superfície:** http"},
@@ -354,18 +355,18 @@ def test_multiedit_acumula_sobre_o_resultado_da_edicao_anterior():
         check("os dois consertos se acumulam e a spec completa libera",
               rc == 0, f"rc={rc} err={err[:200]}")
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
 
 def test_multiedit_replace_all():
-    doc = PRONTA_OK.replace("**Status:** pronta-para-construir",
+    doc = READY_OK.replace("**Status:** pronta-para-construir",
                             "**Status:** rascunho")
-    caminho = com_arquivo_temporario(doc)
+    path_ = with_temp_file(doc)
     try:
         rc, err = run({
             "tool_name": "MultiEdit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "edits": [
                     {"old_string": "rascunho", "new_string": "pronta-para-construir",
                      "replace_all": True},
@@ -375,10 +376,10 @@ def test_multiedit_replace_all():
         check("replace_all é respeitado e a spec completa libera",
               rc == 0, f"rc={rc} err={err[:200]}")
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
 
-def test_edit_com_file_path_inexistente_libera():
+def test_edit_with_nonexistent_file_path_releases():
     rc, err = run({
         "tool_name": "Edit",
         "tool_input": {
@@ -390,20 +391,20 @@ def test_edit_com_file_path_inexistente_libera():
     check("file_path inexistente libera", rc == 0, f"rc={rc} err={err[:200]}")
 
 
-def test_edit_com_old_string_duplicado_sem_replace_all_libera():
-    # old_string bate duas vezes e replace_all não foi pedido: a ferramenta
-    # Edit real exige unicidade e falha sozinha, então o gate libera em vez de
-    # trocar "a primeira" ocorrência por conta própria.
-    doc = PRONTA_OK.replace(
+def test_edit_with_duplicate_old_string_without_replace_all_releases():
+    # old_string matches twice and replace_all was not requested: the real Edit
+    # tool requires uniqueness and fails by itself, so the gate releases instead of
+    # swapping "the first" occurrence on its own.
+    doc = READY_OK.replace(
         "**Superfície:** http",
         "**Superfície:** http\n**Superfície:** http",
     )
-    caminho = com_arquivo_temporario(doc)
+    path_ = with_temp_file(doc)
     try:
         rc, err = run({
             "tool_name": "Edit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "old_string": "**Superfície:** http",
                 "new_string": "**Superfície:** banco de dados",
             },
@@ -411,41 +412,41 @@ def test_edit_com_old_string_duplicado_sem_replace_all_libera():
         check("old_string duplicado sem replace_all libera",
               rc == 0, f"rc={rc} err={err[:200]}")
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
 
-def test_edit_com_old_string_que_nao_bate_libera():
-    caminho = com_arquivo_temporario(PRONTA_OK)
+def test_edit_with_old_string_that_does_not_match_releases():
+    path_ = with_temp_file(READY_OK)
     try:
         rc, err = run({
             "tool_name": "Edit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "old_string": "isto não existe no arquivo",
                 "new_string": "qualquer coisa",
             },
         })
         check("old_string que não bate libera", rc == 0, f"rc={rc} err={err[:200]}")
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
 
-def test_edit_com_old_string_que_nao_bate_em_spec_invalida_libera():
-    # A spec no disco JÁ é inválida (pronta sem Superfície no CS-1) --
-    # o teste anterior usa uma spec VÁLIDA como base, e por isso não pegaria
-    # uma implementação que, ao não achar old_string, devolvesse o texto
-    # ORIGINAL sem sinalizar erro (em vez de liberar): com uma base válida os
-    # dois caminhos dão rc 0 igual. Aqui a base é inválida, então só uma
-    # implementação que realmente libera (em vez de julgar o texto original
-    # sem edição nenhuma aplicada) devolve rc 0; uma que "aplicasse mesmo
-    # assim" o texto inalterado devolveria rc 2 (a spec inválida seria julgada).
-    doc = PRONTA_OK.replace("**Superfície:** http\n", "")
-    caminho = com_arquivo_temporario(doc)
+def test_edit_with_old_string_that_does_not_match_on_invalid_spec_releases():
+    # The spec on disk is ALREADY invalid (pronta without Surface in CS-1) --
+    # the previous test uses a VALID spec as base, and so it would not catch
+    # an implementation that, on not finding old_string, returned the ORIGINAL text
+    # without signaling an error (instead of releasing): with a valid base the two
+    # paths give the same rc 0. Here the base is invalid, so only an
+    # implementation that really releases (instead of judging the original text
+    # with no edit applied) returns rc 0; one that "applied anyway" the unchanged
+    # text would return rc 2 (the invalid spec would be judged).
+    doc = READY_OK.replace("**Superfície:** http\n", "")
+    path_ = with_temp_file(doc)
     try:
         rc, err = run({
             "tool_name": "Edit",
             "tool_input": {
-                "file_path": str(caminho),
+                "file_path": str(path_),
                 "old_string": "isto não existe no arquivo",
                 "new_string": "qualquer coisa",
             },
@@ -453,11 +454,11 @@ def test_edit_com_old_string_que_nao_bate_em_spec_invalida_libera():
         check("old_string que não bate numa spec inválida libera",
               rc == 0, f"rc={rc} err={err[:200]}")
     finally:
-        caminho.unlink(missing_ok=True)
+        path_.unlink(missing_ok=True)
 
 
 
-def test_nunca_bloqueia_o_que_nao_ve():
+def test_never_blocks_what_it_cannot_see():
     rc, _ = run({"tool_name": "Bash", "tool_input": {"command": "echo pronta-para-construir"}})
     check("ferramenta fora do escopo passa", rc == 0, f"rc={rc}")
 
@@ -472,29 +473,29 @@ def test_nunca_bloqueia_o_que_nao_ve():
     check("documento sem Status passa", rc == 0, f"rc={rc}")
 
 
-PRONTA_EN = (PRONTA_OK.replace("pronta-para-construir", "ready-to-build")
+READY_EN = (READY_OK.replace("pronta-para-construir", "ready-to-build")
              .replace("**Superfície:**", "**Surface:**")
              .replace("**Teste vermelho:**", "**Red test:**"))
 
 
-def test_nomes_em_ingles_e_antigos_valem():
-    rc, err = write(PRONTA_EN)
+def test_english_and_old_names_are_valid():
+    rc, err = write(READY_EN)
     check("ready-to-build + Surface + Red test completo passa", rc == 0, err[:200])
-    rc, err = write(PRONTA_EN.replace("**Surface:** http\n", ""))
+    rc, err = write(READY_EN.replace("**Surface:** http\n", ""))
     check("ready-to-build sem Surface bloqueia, nomeando o campo novo",
           rc == 2 and "**Surface:**" in err, err[:300])
-    rc, err = write("\n".join(l for l in PRONTA_EN.splitlines()
+    rc, err = write("\n".join(l for l in READY_EN.splitlines()
                               if not l.startswith("**Red test:**")))
     check("ready-to-build sem Red test bloqueia, nomeando o campo novo",
           rc == 2 and "**Red test:**" in err and "`draft`" in err, err[:300])
-    rc, err = write(PRONTA_EN.replace("**Surface:** http", "**Surface:** banana"))
+    rc, err = write(READY_EN.replace("**Surface:** http", "**Surface:** banana"))
     check("Surface fora do vocabulário bloqueia", rc == 2 and "Surface" in err, err[:300])
-    rc, err = write(PRONTA_EN.replace("ready-to-build", "draft")
+    rc, err = write(READY_EN.replace("ready-to-build", "draft")
                     .replace("**Red test:**", "**x:**"))
     check("Status: draft furado não bloqueia", rc == 0, err[:200])
-    rc, err = write(PRONTA_OK)
+    rc, err = write(READY_OK)
     check("o formato antigo (pronta-para-construir) segue passando", rc == 0, err[:200])
-    rc, err = write(PRONTA_OK.replace("**Superfície:** http\n", ""))
+    rc, err = write(READY_OK.replace("**Superfície:** http\n", ""))
     check("...e segue bloqueando", rc == 2, err[:200])
 
 

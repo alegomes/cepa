@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""cepa-until decidir — o fim do run pergunta, em vez de só contar.
+"""cepa-until decidir — the end of the run asks, instead of only telling.
 
-Em 30/09 o dono leu no fim de um run "a fila acabou, e 14 ficaram adiados
-(cada um com o motivo, no relatório)" e "Fica com você: WEGO-2336 (o motivo
-está na linha de cada um, em Itens)", e perguntou o que fazer com aquilo. A
-aterrissagem aparecia como comando para copiar, e a pergunta que travava o
-WEGO-2336 estava no meio de 600 caracteres de evidência.
+On 30/09 the owner read at the end of a run "the queue ended, and 14 stayed deferred
+(each with the reason, in the report)" and "It stays with you: WEGO-2336 (the reason
+is on each one's line, in Items)", and asked what to do with that. The
+landing appeared as a command to copy, and the question that blocked
+WEGO-2336 was in the middle of 600 characters of evidence.
 
-O que estes casos provam:
+What these cases prove:
 
-  - o `cepa-plan finish --pergunta` grava a pergunta fechada do item, e o
-    `queue` a devolve junto com o adiado;
-  - o `cepa-plan responde` devolve um `blocked` para `pending` e fecha a rota
-    humana, com a resposta do dono na evidência, e SÓ num terminal (um agente
-    de `claude -p` não tem TTY e não fecha a rota no lugar do humano);
-  - o `decide` pergunta aterrissar e cada item que só o dono destrava, aplica
-    cada resposta e deixa o resto para depois com o comando de volta;
-  - o run de verdade, num terminal, termina perguntando; sem terminal, lista
-    as pendências com o comando `cepa-until decidir`.
+  - `cepa-plan finish --pergunta` records the item's closed question, and
+    `queue` returns it together with the deferred item;
+  - `cepa-plan responde` turns a `blocked` back into `pending` and closes the human
+    route, with the owner's answer in the evidence, and ONLY in a terminal (a `claude -p`
+    agent has no TTY and does not close the route in place of the human);
+  - `decide` asks to land and each item that only the owner unblocks, applies
+    each answer and leaves the rest for later with the command to come back;
+  - the real run, in a terminal, ends by asking; without a terminal, it lists
+    the pending items with the `cepa-until decidir` command.
 
-Rode com `python3 tests/test_cepa_until_decide.py`.
+Run with `python3 tests/test_cepa_until_decide.py`.
 """
 
 import importlib.machinery
@@ -39,7 +39,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
-    CEPA_UNTIL, fake_claude, item, monta_repo, roda)
+    CEPA_UNTIL, fake_claude, item, build_repo, run_until)
 
 CEPA_PLAN = CEPA_UNTIL.parent / "cepa-plan"
 FAILURES = []
@@ -53,12 +53,12 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def carrega_modulo(cor="nunca"):
-    """Carrega o cepa-until com a decoração de terminal desligada: os casos
-    em processo leem o texto puro, mesmo quando rodam num terminal. Com
-    `cor="sempre"` liga, para o caso que prova o layout decorado."""
-    antes = os.environ.get("CEPA_UNTIL_COR")
-    os.environ["CEPA_UNTIL_COR"] = cor
+def load_module(color="nunca"):
+    """Loads cepa-until with the terminal decoration turned off: the in-process
+    cases read the plain text, even when they run in a terminal. With
+    `color="sempre"` it turns on, for the case that proves the decorated layout."""
+    before = os.environ.get("CEPA_UNTIL_COR")
+    os.environ["CEPA_UNTIL_COR"] = color
     try:
         loader = importlib.machinery.SourceFileLoader("cepa_until",
                                                       str(CEPA_UNTIL))
@@ -66,26 +66,26 @@ def carrega_modulo(cor="nunca"):
         mod = importlib.util.module_from_spec(spec)
         loader.exec_module(mod)
     finally:
-        if antes is None:
+        if before is None:
             del os.environ["CEPA_UNTIL_COR"]
         else:
-            os.environ["CEPA_UNTIL_COR"] = antes
+            os.environ["CEPA_UNTIL_COR"] = before
     return mod
 
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
 
-def test_decide_no_terminal_desenha_um_cartao_por_pergunta():
-    """O dono (23/10): "as perguntas feitas ao final do cepa-until ainda
-    estão com a formatação muito pobre". No terminal cada pergunta é um
-    cartão: régua `┌─ i/n · id`, borda `│` à esquerda, rótulos numa coluna,
-    a pergunta marcada com `?`, a recomendação com `✦`, o menu em chips que
-    cabem na largura e o fecho `└─`. As frases que o pty responde ficam
-    inteiras, sem cor no meio. Fora do terminal nada disso aparece."""
-    m = carrega_modulo(cor="sempre")
+def test_decide_on_terminal_draws_one_card_per_question():
+    """The owner (23/10): "the questions asked at the end of cepa-until are still
+    with very poor formatting". In the terminal each question is a
+    card: ruler `┌─ i/n · id`, left border `│`, labels in a column,
+    the question marked with `?`, the recommendation with `✦`, the menu in chips that
+    fit the width and the closing `└─`. The sentences the pty answers stay
+    whole, with no color in the middle. Outside the terminal none of this shows up."""
+    m = load_module(color="sempre")
     check("a decoração está ligada", m.SCREEN.enabled)
-    adiados = [
+    deferred_ones = [
         {"id": "W-1", "title": "Reenviar o envelope quando o e-mail muda",
          "reason": "bloqueado-antes", "question": "Mantenho o reenvio?",
          "evidence": "o gateway devolve 409"},
@@ -94,158 +94,158 @@ def test_decide_no_terminal_desenha_um_cartao_por_pergunta():
          "evidence": ""},
         {"id": "W-3", "title": "outro", "reason": "reservado"},
     ]
-    analise = {"aterrissar": {"recomendo": "sim", "porque": "build verde"},
+    analysis = {"aterrissar": {"recomendo": "sim", "porque": "build verde"},
                "itens": {"W-1": {"recomendo": "não", "porque": "duplica",
                                  "contexto": "dois clientes pediram",
                                  "instrucao": "cancelar e recriar"}}}
-    est = {"estado": "fim", "acoes": [{"id": "aterrissar", "frase": "levar X"}]}
-    prompts, tela = [], []
+    state_dict = {"estado": "fim", "acoes": [{"id": "aterrissar", "frase": "levar X"}]}
+    prompts, screen = [], []
 
-    def pergunta(p):
+    def question_text(p):
         prompts.append(p)
         return {1: "s", 2: "n", 3: "", 4: ""}.get(len(prompts), "")
-    m.decide(Path("/nao/existe"), "fila", "run1", est, adiados, analise,
-             question=pergunta, output=tela.append,
+    m.decide(Path("/nao/existe"), "fila", "run1", state_dict, deferred_ones, analysis,
+             question=question_text, output=screen.append,
              answer=lambda i, t, keep=False: (0, f"{i} voltou"),
              land=lambda: 0)
-    bruto = "\n".join(tela)
-    texto = ANSI.sub("", bruto)
-    check("tem cor", "\x1b[" in bruto)
+    raw = "\n".join(screen)
+    plain_text = ANSI.sub("", raw)
+    check("tem cor", "\x1b[" in raw)
     check("régua de abertura com a contagem",
-          "── 3 pergunta(s) para você ─" in texto, texto)
+          "── 3 pergunta(s) para você ─" in plain_text, plain_text)
     check("cartão de aterrissar com a recomendação marcada",
-          "┌─ aterrissar ─" in texto and "│  ✦ Recomendo sim: build verde"
-          in texto, texto)
+          "┌─ aterrissar ─" in plain_text and "│  ✦ Recomendo sim: build verde"
+          in plain_text, plain_text)
     check("um cartão por item, com i/n e id na régua",
-          "┌─ 1/2 · W-1 ─" in texto and "┌─ 2/2 · W-2 ─" in texto, texto)
+          "┌─ 1/2 · W-1 ─" in plain_text and "┌─ 2/2 · W-2 ─" in plain_text, plain_text)
     check("rótulos numa coluna, com o curto no lugar do longo",
-          "│  Parou porque   travou" in texto
-          and "│  Contexto       dois clientes" in texto
-          and "│  Tarefa         rotacionar no cofre" in texto, texto)
+          "│  Parou porque   travou" in plain_text
+          and "│  Contexto       dois clientes" in plain_text
+          and "│  Tarefa         rotacionar no cofre" in plain_text, plain_text)
     check("a pergunta marcada e a instrução embaixo dela",
-          "│  ? Mantenho o reenvio?" in texto
-          and "│    Se sim, o próximo run recebe: cancelar e recriar" in texto,
-          texto)
-    check("recomendação do item com ✦", "│  ✦ Recomendo não: duplica" in texto,
-          texto)
+          "│  ? Mantenho o reenvio?" in plain_text
+          and "│    Se sim, o próximo run recebe: cancelar e recriar" in plain_text,
+          plain_text)
+    check("recomendação do item com ✦", "│  ✦ Recomendo não: duplica" in plain_text,
+          plain_text)
     check("menu em chips dentro do cartão, com a recomendada marcada",
           "│  [s] sim · [n] não (recomendado) · [t] escrevo a resposta · "
-          "[e] evidência inteira" in texto, texto)
+          "[e] evidência inteira" in plain_text, plain_text)
     check("o prompt fica dentro do cartão e o cartão fecha",
-          ANSI.sub("", prompts[1]) == "│  ▸ " and texto.count("└─") == 3,
-          (prompts, texto))
-    check("o gravado aparece com ✓ no cartão", "│  ✓ W-1 voltou" in texto,
-          texto)
+          ANSI.sub("", prompts[1]) == "│  ▸ " and plain_text.count("└─") == 3,
+          (prompts, plain_text))
+    check("o gravado aparece com ✓ no cartão", "│  ✓ W-1 voltou" in plain_text,
+          plain_text)
     check("fecho com placar e o comando de volta",
-          "── fecho ─" in texto and "respondido agora 2" in texto
-          and "para depois 1" in texto
-          and "cepa-until decide fila/run1" in texto, texto)
-    gatilhos = ("Aterrisso agora? [s/N/q] ", "[t] escrevo a resposta",
+          "── fecho ─" in plain_text and "respondido agora 2" in plain_text
+          and "para depois 1" in plain_text
+          and "cepa-until decide fila/run1" in plain_text, plain_text)
+    triggers = ("Aterrisso agora? [s/N/q] ", "[t] escrevo a resposta",
                 "Quer acrescentar algo, numa linha? [Enter pula] ")
-    tudo = bruto + "\n".join(prompts)
+    all_ = raw + "\n".join(prompts)
     check("as frases que o pty responde ficam inteiras, sem cor no meio",
-          all(g in tudo for g in gatilhos), tudo)
+          all(g in all_ for g in triggers), all_)
     check("a versão sem terminal não tem cartão",
-          "┌─" not in "\n".join(_decide_puro(adiados, analise, est)))
+          "┌─" not in "\n".join(_decide_pure(deferred_ones, analysis, state_dict)))
 
 
-def _decide_puro(adiados, analise, est):
-    m = carrega_modulo()
-    tela = []
-    respostas = iter(["s", "n", "", ""])
-    m.decide(Path("/nao/existe"), "fila", "run1", est, adiados, analise,
-             question=lambda _p: next(respostas, ""), output=tela.append,
+def _decide_pure(deferred_ones, analysis, state_dict):
+    m = load_module()
+    screen = []
+    answers = iter(["s", "n", "", ""])
+    m.decide(Path("/nao/existe"), "fila", "run1", state_dict, deferred_ones, analysis,
+             question=lambda _p: next(answers, ""), output=screen.append,
              answer=lambda i, t, keep=False: (0, "ok"),
              land=lambda: 0)
-    return tela
+    return screen
 
 
-def em_tty(cmd, cwd, entradas=(), env=None, timeout=120):
-    """Roda `cmd` num pseudo-terminal e responde cada pergunta quando ela
-    aparece: `entradas` é uma lista de (trecho que a tela mostra, resposta)."""
+def on_tty(cmd, cwd, inputs=(), env=None, timeout=120):
+    """Runs `cmd` in a pseudo-terminal and answers each question when it
+    appears: `inputs` is a list of (excerpt the screen shows, answer)."""
     pid, fd = pty.fork()
     if pid == 0:
         os.chdir(cwd)
         os.execve(cmd[0], cmd, env or dict(os.environ))
-    saida, fila, fim = "", list(entradas), time.time() + timeout
-    while time.time() < fim:
+    out_text, queue, end = "", list(inputs), time.time() + timeout
+    while time.time() < end:
         r, _, _ = select.select([fd], [], [], 0.5)
         if r:
             try:
-                dado = os.read(fd, 4096)
+                datum = os.read(fd, 4096)
             except OSError:
                 break
-            if not dado:
+            if not datum:
                 break
-            saida += dado.decode(errors="replace")
-        while fila and fila[0][0] in saida:
-            gatilho, resposta = fila.pop(0)
-            # Consome o gatilho para a próxima pergunta igual não casar nele.
-            saida = saida.replace(gatilho, f"<{gatilho}>", 1)
-            if isinstance(resposta, str):
-                resposta = resposta.encode()
-            os.write(fd, resposta + b"\n")
+            out_text += datum.decode(errors="replace")
+        while queue and queue[0][0] in out_text:
+            trigger, reply = queue.pop(0)
+            # Consumes the trigger so the next equal question does not match on it.
+            out_text = out_text.replace(trigger, f"<{trigger}>", 1)
+            if isinstance(reply, str):
+                reply = reply.encode()
+            os.write(fd, reply + b"\n")
     _, st = os.waitpid(pid, 0)
-    return os.waitstatus_to_exitcode(st), saida
+    return os.waitstatus_to_exitcode(st), out_text
 
 
-def plano_de(raiz):
-    return raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+def plan_of(root):
+    return root / ".claude" / "programs" / "fila" / "plan.yaml"
 
 
-def itens_de(raiz):
+def items_of(root):
     return {it["id"]: it for it in
-            yaml.safe_load(plano_de(raiz).read_text())["items"]}
+            yaml.safe_load(plan_of(root).read_text())["items"]}
 
 
-def test_finish_grava_a_pergunta_e_o_queue_a_devolve():
+def test_finish_writes_the_question_and_queue_returns_it():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        root = build_repo(tmp, [item("a1"), item("a2")])
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "finish", "fila", "a1",
              "--status", "blocked", "--evidence", "não há produção para medir",
              "--pergunta", "Fecho o card como medir depois do go-live?",
-             "--repo", str(raiz)], capture_output=True, text=True)
+             "--repo", str(root)], capture_output=True, text=True)
         check("finish com --pergunta sai 0", p.returncode == 0, p.stderr)
         check("...e grava owner_question",
-              itens_de(raiz)["a1"].get("owner_question")
+              items_of(root)["a1"].get("owner_question")
               == "Fecho o card como medir depois do go-live?",
-              itens_de(raiz)["a1"])
+              items_of(root)["a1"])
         q = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "queue", "fila", "--json",
-             "--repo", str(raiz)], capture_output=True, text=True)
-        adiado = json.loads(q.stdout)["deferred"][0]
+             "--repo", str(root)], capture_output=True, text=True)
+        deferred = json.loads(q.stdout)["deferred"][0]
         check("o queue devolve a pergunta junto com o adiado",
-              adiado.get("question", "").startswith("Fecho o card"), adiado)
+              deferred.get("question", "").startswith("Fecho o card"), deferred)
         check("...e a evidência inteira, não só o detalhe",
-              adiado.get("evidence") == "não há produção para medir", adiado)
+              deferred.get("evidence") == "não há produção para medir", deferred)
 
 
-def test_responde_recusa_sem_terminal():
+def test_answer_refuses_without_terminal():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1", status="blocked")])
+        root = build_repo(tmp, [item("a1", status="blocked")])
         p = subprocess.run(
             [sys.executable, str(CEPA_PLAN), "responde", "fila", "a1",
-             "--resposta", "pode seguir", "--repo", str(raiz)],
+             "--resposta", "pode seguir", "--repo", str(root)],
             capture_output=True, text=True, stdin=subprocess.DEVNULL)
         check("sem TTY, `responde` recusa", p.returncode == 2, p.stdout)
         check("...e diz que só o dono responde", "terminal" in p.stderr,
               p.stderr)
         check("...e o item continua `blocked`",
-              itens_de(raiz)["a1"]["status"] == "blocked")
+              items_of(root)["a1"]["status"] == "blocked")
 
 
-def test_responde_no_terminal_destrava_blocked_e_fecha_rota():
+def test_answer_on_terminal_unblocks_blocked_and_closes_route():
     with tempfile.TemporaryDirectory() as tmp:
-        travado = item("a1", status="blocked")
-        travado["evidence"] = "não há produção"
-        travado["owner_question"] = "Fecho o card?"
-        rota = item("a2", human_pending="valide o login real")
-        raiz = monta_repo(tmp, [travado, rota])
-        rc, out = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+        stuck = item("a1", status="blocked")
+        stuck["evidence"] = "não há produção"
+        stuck["owner_question"] = "Fecho o card?"
+        route = item("a2", human_pending="valide o login real")
+        root = build_repo(tmp, [stuck, route])
+        rc, out = on_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
                           "a1", "--resposta", "vira item do checklist",
-                          "--repo", str(raiz)], str(raiz))
-        a1 = itens_de(raiz)["a1"]
+                          "--repo", str(root)], str(root))
+        a1 = items_of(root)["a1"]
         check("no terminal, `responde` sai 0", rc == 0, out)
         check("o blocked volta para pending", a1["status"] == "pending", a1)
         check("...com a resposta do dono na evidência",
@@ -254,10 +254,10 @@ def test_responde_no_terminal_destrava_blocked_e_fecha_rota():
               "não há produção" in a1["evidence"], a1["evidence"])
         check("...e a pergunta respondida sai do item",
               "owner_question" not in a1, a1)
-        rc, out = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+        rc, out = on_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
                           "a2", "--resposta", "login ok, trilha gravada",
-                          "--repo", str(raiz)], str(raiz))
-        a2 = itens_de(raiz)["a2"]
+                          "--repo", str(root)], str(root))
+        a2 = items_of(root)["a2"]
         check("a rota humana fecha", a2.get("human_pending") is None, a2)
         check("...com a chave presente e nula, como o validador da fila exige",
               "human_pending" in a2 and a2["human_pending"] is None, a2)
@@ -266,21 +266,21 @@ def test_responde_no_terminal_destrava_blocked_e_fecha_rota():
               and "trilha gravada" in a2["evidence"], a2["evidence"])
 
 
-def test_responde_mantem_grava_a_resposta_sem_destravar():
-    """WEGO 2026-09-30-2016: o dono respondeu "mantenha travado" ao WEGO-2337
-    e "não liguei" ao WEGO-1933, e os dois voltaram para `pending` — o
-    `responde` destravava todo `blocked` que recebia resposta, qualquer que
-    fosse ela. O próximo run executaria os dois."""
+def test_answer_keep_writes_the_answer_without_unblocking():
+    """WEGO 2026-09-30-2016: the owner answered "mantenha travado" to WEGO-2337
+    and "não liguei" to WEGO-1933, and both went back to `pending` — the
+    `responde` unblocked every `blocked` that got an answer, whatever
+    it was. The next run would execute both."""
     with tempfile.TemporaryDirectory() as tmp:
-        travado = item("a1", status="blocked")
-        travado["evidence"] = "causa não determinada"
-        travado["owner_question"] = "Destravo?"
-        rota = item("a2", human_pending="ligue a flag")
-        raiz = monta_repo(tmp, [travado, rota])
-        rc, out = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+        stuck = item("a1", status="blocked")
+        stuck["evidence"] = "causa não determinada"
+        stuck["owner_question"] = "Destravo?"
+        route = item("a2", human_pending="ligue a flag")
+        root = build_repo(tmp, [stuck, route])
+        rc, out = on_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
                           "a1", "--resposta", "mantenha travado", "--mantem",
-                          "--repo", str(raiz)], str(raiz))
-        a1 = itens_de(raiz)["a1"]
+                          "--repo", str(root)], str(root))
+        a1 = items_of(root)["a1"]
         check("`responde --mantem` sai 0", rc == 0, out)
         check("...e o blocked continua blocked", a1["status"] == "blocked", a1)
         check("...com a resposta do dono na evidência",
@@ -290,46 +290,46 @@ def test_responde_mantem_grava_a_resposta_sem_destravar():
               "voltou de `blocked`" not in a1["evidence"], a1["evidence"])
         check("...e a pergunta continua aberta para o próximo decidir",
               a1.get("owner_question") == "Destravo?", a1)
-        rc, out = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+        rc, out = on_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
                           "a2", "--resposta", "não liguei", "--mantem",
-                          "--repo", str(raiz)], str(raiz))
-        a2 = itens_de(raiz)["a2"]
+                          "--repo", str(root)], str(root))
+        a2 = items_of(root)["a2"]
         check("`--mantem` numa rota humana não fecha a rota",
               a2.get("human_pending") == "ligue a flag", a2)
         check("...mas grava a resposta", "não liguei" in a2["evidence"], a2)
 
 
-def test_decide_oferece_manter_travado():
-    m = carrega_modulo()
-    adiados = [
+def test_decide_offers_to_keep_stuck():
+    m = load_module()
+    deferred_ones = [
         {"id": "W-1", "title": "flaky", "reason": "bloqueado-antes",
          "question": "Destravo?", "human_pending": None, "evidence": "x"},
         {"id": "W-2", "title": "flag", "reason": "human_pending",
          "question": None, "human_pending": "ligue a flag", "evidence": None},
     ]
-    respostas = iter(["t", "mantenha", "", "t", "não liguei", ""])
-    tela, respondidos, perguntas = [], [], []
+    answers = iter(["t", "mantenha", "", "t", "não liguei", ""])
+    screen, answered, questions = [], [], []
 
-    def pergunta(p_):
-        perguntas.append(p_)
-        return next(respostas)
-    aplicados, depois = m.decide(
-        Path("/nao/existe"), "fila", "run1", {}, adiados, {},
-        question=pergunta, output=tela.append,
+    def question_text(p_):
+        questions.append(p_)
+        return next(answers)
+    applied, after = m.decide(
+        Path("/nao/existe"), "fila", "run1", {}, deferred_ones, {},
+        question=question_text, output=screen.append,
         answer=lambda i, t, keep=False: (
-            respondidos.append((i, t, keep)), (0, f"{i} ok"))[1])
+            answered.append((i, t, keep)), (0, f"{i} ok"))[1])
     check("as opções oferecem [n] não e [t] escrevo",
           all("[n] não" in p_ and "[t] escrevo" in p_
-              for p_ in perguntas if "[Enter]" in p_), perguntas)
+              for p_ in questions if "[Enter]" in p_), questions)
     check("[t] + N no 'devolvo?' chama o responde com keep=True",
-          respondidos == [("W-1", "mantenha", True),
-                          ("W-2", "não liguei", True)], respondidos)
-    check("...e conta como respondido", len(aplicados) == 2, aplicados)
+          answered == [("W-1", "mantenha", True),
+                          ("W-2", "não liguei", True)], answered)
+    check("...e conta como respondido", len(applied) == 2, applied)
 
 
-def test_decide_pergunta_e_aplica_cada_resposta():
-    m = carrega_modulo()
-    adiados = [
+def test_decide_asks_and_applies_each_answer():
+    m = load_module()
+    deferred_ones = [
         {"id": "W-1", "title": "medir produção", "reason": "bloqueado-antes",
          "question": None, "human_pending": None,
          "evidence": "não existe produção do wego-acessos"},
@@ -341,51 +341,51 @@ def test_decide_pergunta_e_aplica_cada_resposta():
          "evidence": "a evidência longa"},
         {"id": "W-4", "title": "cascata", "reason": "depende-de-adiado"},
     ]
-    analise = m.analysis_decisions(
+    analysis = m.analysis_decisions(
         "texto\n```json cepa-decisoes\n"
         '{"aterrissar": {"recomendo": "sim", "porque": "build verde"},'
         ' "itens": [{"id": "W-1", "pergunta": "Movo para o checklist?",'
         ' "recomendo": "sim", "porque": "não trava a fila"}]}\n```\n')
     check("o bloco da análise é lido",
-          analise["itens"]["W-1"]["pergunta"] == "Movo para o checklist?",
-          analise)
-    est = {"acoes": [{"id": "aterrissar", "frase": "leva 5 commits"}]}
-    respostas = iter(["s", "t", "vira checklist", "s", "", "e", "q"])
-    tela, respondidos, aterrissou = [], [], []
-    aplicados, depois = m.decide(
-        Path("/nao/existe"), "fila", "run1", est, adiados, analise,
-        question=lambda _p: next(respostas), output=tela.append,
-        answer=lambda i, t: (respondidos.append((i, t)), (0, f"{i} ok"))[1],
-        land=lambda: aterrissou.append(1) or 0)
-    texto = "\n".join(tela)
-    check("pergunta aterrissar e aterrissa com s", aterrissou == [1], texto)
+          analysis["itens"]["W-1"]["pergunta"] == "Movo para o checklist?",
+          analysis)
+    state_dict = {"acoes": [{"id": "aterrissar", "frase": "leva 5 commits"}]}
+    answers = iter(["s", "t", "vira checklist", "s", "", "e", "q"])
+    screen, answered, landed = [], [], []
+    applied, after = m.decide(
+        Path("/nao/existe"), "fila", "run1", state_dict, deferred_ones, analysis,
+        question=lambda _p: next(answers), output=screen.append,
+        answer=lambda i, t: (answered.append((i, t)), (0, f"{i} ok"))[1],
+        land=lambda: landed.append(1) or 0)
+    plain_text = "\n".join(screen)
+    check("pergunta aterrissar e aterrissa com s", landed == [1], plain_text)
     check("...mostrando a recomendação da análise",
-          "Recomendo sim: build verde" in texto, texto)
+          "Recomendo sim: build verde" in plain_text, plain_text)
     check("a pergunta da análise aparece no lugar da evidência",
-          "Movo para o checklist?" in texto, texto)
+          "Movo para o checklist?" in plain_text, plain_text)
     check("a resposta digitada vai para o `responde`",
-          respondidos == [("W-1", "vira checklist")], respondidos)
+          answered == [("W-1", "vira checklist")], answered)
     check("rota humana mostra a rota verbatim",
-          "rode o login do Bradesco" in texto, texto)
+          "rode o login do Bradesco" in plain_text, plain_text)
     check("[e] mostra a evidência inteira do item com pergunta",
-          "a evidência longa" in texto, texto)
+          "a evidência longa" in plain_text, plain_text)
     check("q encerra e o que sobrou fica para depois",
-          any(x.startswith("W-3") for x in depois)
-          and any(x.startswith("W-2") for x in depois), depois)
+          any(x.startswith("W-3") for x in after)
+          and any(x.startswith("W-2") for x in after), after)
     check("cascata não vira pergunta, só aparece como não sendo do dono",
-          "W-4 (depende de um item adiado" in texto, texto)
+          "W-4 (depende de um item adiado" in plain_text, plain_text)
     check("o fecho diz como voltar",
-          "cepa-until decide fila/run1" in texto, texto)
+          "cepa-until decide fila/run1" in plain_text, plain_text)
     check("aplicados listam aterrissar e W-1",
-          aplicados == ["aterrissar", "W-1: W-1 ok"], aplicados)
+          applied == ["aterrissar", "W-1: W-1 ok"], applied)
 
 
-def test_decide_s_e_n_respondem_a_pergunta_redigida():
-    """Feedback de 15/10: a pergunta era sim/não ("Fecho a rota...? Recomendo
-    sim") e o menu não tinha sim. Agora `s` devolve o item para a fila com
-    "sim: <pergunta>" e `n` grava "não: <pergunta>" mantendo o item."""
-    m = carrega_modulo()
-    adiados = [
+def test_decide_s_and_n_answer_the_drafted_question():
+    """Feedback of 15/10: the question was yes/no ("Fecho a rota...? Recomendo
+    sim") and the menu had no yes. Now `s` returns the item to the queue with
+    "sim: <question>" and `n` records "não: <question>" keeping the item."""
+    m = load_module()
+    deferred_ones = [
         {"id": "W-1", "title": "t" * 90, "reason": "human_pending",
          "question": "Fecho a rota como 'fica para depois'?",
          "human_pending": "rodar os 20 lotes", "evidence": "x"},
@@ -394,36 +394,36 @@ def test_decide_s_e_n_respondem_a_pergunta_redigida():
         {"id": "W-3", "title": "sem pergunta", "reason": "bloqueado-antes",
          "question": None, "human_pending": None, "evidence": "sem produção"},
     ]
-    analise = {"itens": {"W-1": {"recomendo": "sim", "porque": "só após merge"}}}
-    respostas = iter(["sim", "", "n", "por enquanto não", "s", "ligue a flag"])
-    tela, respondidos, perguntas = [], [], []
+    analysis = {"itens": {"W-1": {"recomendo": "sim", "porque": "só após merge"}}}
+    answers = iter(["sim", "", "n", "por enquanto não", "s", "ligue a flag"])
+    screen, answered, questions = [], [], []
 
-    def pergunta(p_):
-        perguntas.append(p_)
-        return next(respostas)
-    aplicados, _ = m.decide(
-        Path("/nao/existe"), "fila", "run1", {}, adiados, analise,
-        question=pergunta, output=tela.append,
+    def question_text(p_):
+        questions.append(p_)
+        return next(answers)
+    applied, _ = m.decide(
+        Path("/nao/existe"), "fila", "run1", {}, deferred_ones, analysis,
+        question=question_text, output=screen.append,
         answer=lambda i, t, keep=False: (
-            respondidos.append((i, t, keep)), (0, f"{i} ok"))[1])
-    texto = "\n".join(tela)
+            answered.append((i, t, keep)), (0, f"{i} ok"))[1])
+    plain_text = "\n".join(screen)
     check("o título sai inteiro (cortado em 60, o dono respondia a uma "
-          "pergunta que via pela metade; 15/10)", "t" * 90 in texto, texto)
+          "pergunta que via pela metade; 15/10)", "t" * 90 in plain_text, plain_text)
     check("a recomendação marca a letra no menu",
-          any("[s] sim (recomendado)" in p_ for p_ in perguntas), perguntas)
+          any("[s] sim (recomendado)" in p_ for p_ in questions), questions)
     check("a legenda diz o que sim e não fazem",
-          "sim = o item volta para a fila" in texto, texto)
+          "sim = o item volta para a fila" in plain_text, plain_text)
     check("sem pergunta redigida, o terminal faz a padrão",
-          "destravo o item e devolvo para a fila?" in texto
-          and "O agente parou porque: sem produção" in texto, texto)
+          "destravo o item e devolvo para a fila?" in plain_text
+          and "O agente parou porque: sem produção" in plain_text, plain_text)
     check("sim/n/s viram respostas gravadas, com a pergunta dentro",
-          respondidos == [
+          answered == [
               ("W-1", "sim: Fecho a rota como 'fica para depois'?", False),
               ("W-2", "não: Destravo?. por enquanto não", True),
               ("W-3", "sim: destravar o item. ligue a flag", False)],
-          respondidos)
-    check("os três contam como respondidos", len(aplicados) == 3, aplicados)
-    menus = [p_ for p_ in perguntas if "[Enter]" in p_]
+          answered)
+    check("os três contam como respondidos", len(applied) == 3, applied)
+    menus = [p_ for p_ in questions if "[Enter]" in p_]
     check("o menu completo, com evidência: s, n, t, e, Enter, q",
           menus and all("[s] sim" in p_ and "[n] não" in p_
                         and "[t] escrevo a resposta" in p_
@@ -433,33 +433,33 @@ def test_decide_s_e_n_respondem_a_pergunta_redigida():
     check("...e sem as teclas antigas [r]/[f]/[m]",
           not any(k in p_ for p_ in menus for k in ("[r]", "[f]", "[m]")),
           menus)
-    # AC3, ramo da rota humana sem pergunta redigida
-    tela2, resp2 = [], iter(["", "q"])
+    # AC3, branch of the human route without a drafted question
+    screen2, resp2 = [], iter(["", "q"])
     m.decide(Path("/nao/existe"), "fila", "run1", {},
              [{"id": "W-9", "title": "rota", "reason": "human_pending",
                "question": None, "human_pending": "valide o login real",
                "evidence": None}], {},
-             question=lambda _p: next(resp2), output=tela2.append)
-    texto2 = "\n".join(tela2)
+             question=lambda _p: next(resp2), output=screen2.append)
+    text2 = "\n".join(screen2)
     check("rota humana sem pergunta: mostra a tarefa e pergunta 'já fez?'",
-          "Tarefa que ficou para você: valide o login real" in texto2
-          and "Pergunta: já fez?" in texto2, texto2)
+          "Tarefa que ficou para você: valide o login real" in text2
+          and "Pergunta: já fez?" in text2, text2)
     check("...e sem evidência o menu não oferece [e]",
-          not any("[e]" in p_ for p_ in tela2), tela2)
+          not any("[e]" in p_ for p_ in screen2), screen2)
 
 
-def test_decide_mostra_contexto_instrucao_e_avisa_pergunta_fora_das_regras():
-    """Feedback de 15/10 (decidir WEGO 2026-10-15-1128): a análise pôs 71
-    palavras, branch e classe de teste na pergunta, e tudo saía num bloco
-    só. Agora a análise separa `contexto` (leigo) e `instrucao` (técnica,
-    gravada com o sim), o terminal rotula cada parte, e uma pergunta fora
-    das regras ganha o aviso, sem deixar de ser mostrada."""
-    m = carrega_modulo()
-    longa = ("Fecho a rota humana B.14 e devolvo o item à fila com a "
+def test_decide_shows_context_instruction_and_warns_question_outside_the_rules():
+    """Feedback of 15/10 (decidir WEGO 2026-10-15-1128): the analysis put 71
+    words, branch and test class in the question, and it all came out in a single
+    block. Now the analysis separates `contexto` (lay) and `instrucao` (technical,
+    recorded with the yes), the terminal labels each part, and a question outside
+    the rules gets the warning, without ceasing to be shown."""
+    m = load_module()
+    long_ = ("Fecho a rota humana B.14 e devolvo o item à fila com a "
              "instrução: retomar da lateral until/2026-10-15-1128-vermelho "
              "e dar tinta à página sem texto de PipelineSemVazamentoTest, "
              "como nas outras 4 fixtures? (a alternativa é deixar adiado)")
-    adiados = [
+    deferred_ones = [
         {"id": "S5", "title": "Pipeline marca página em branco",
          "reason": "human_pending", "question": None,
          "human_pending": "rodar os 20 lotes", "evidence": "x"},
@@ -467,7 +467,7 @@ def test_decide_mostra_contexto_instrucao_e_avisa_pergunta_fora_das_regras():
          "question": None, "human_pending": "revisar a prova",
          "evidence": "y"},
     ]
-    analise = {"itens": {
+    analysis = {"itens": {
         "S5": {"pergunta": "Deixo a rodada dos 20 lotes para depois do merge "
                            "e devolvo o item à fila?",
                "contexto": "O código está pronto numa branch lateral; "
@@ -476,48 +476,48 @@ def test_decide_mostra_contexto_instrucao_e_avisa_pergunta_fora_das_regras():
                             "dar tinta à fixture de PipelineTest",
                "recomendo": "sim", "porque": "a rodada só é possível após "
                                              "o merge"},
-        "S6": {"pergunta": longa, "recomendo": "sim", "porque": "p"}}}
-    respostas = iter(["s", "", "s", ""])
-    tela, respondidos = [], []
-    m.decide(Path("/nao/existe"), "fila", "run1", {}, adiados, analise,
-             question=lambda _p: next(respostas), output=tela.append,
+        "S6": {"pergunta": long_, "recomendo": "sim", "porque": "p"}}}
+    answers = iter(["s", "", "s", ""])
+    screen, answered = [], []
+    m.decide(Path("/nao/existe"), "fila", "run1", {}, deferred_ones, analysis,
+             question=lambda _p: next(answers), output=screen.append,
              answer=lambda i, t, keep=False: (
-                 respondidos.append((i, t, keep)), (0, "ok"))[1])
-    texto = "\n".join(tela)
-    bloco_s5 = texto.split("━━ [1/2] S5")[1].split("━━ [2/2] S6")[0]
+                 answered.append((i, t, keep)), (0, "ok"))[1])
+    plain_text = "\n".join(screen)
+    block_s5 = plain_text.split("━━ [1/2] S5")[1].split("━━ [2/2] S6")[0]
     check("cada item abre com separador e id em linha própria",
-          "━━ [1/2] S5\n" in texto and "━━ [2/2] S6\n" in texto, texto)
+          "━━ [1/2] S5\n" in plain_text and "━━ [2/2] S6\n" in plain_text, plain_text)
     check("o bloco tem Parou porque / Tarefa / Contexto / Pergunta / "
           "Se sim / Recomendo, nesta ordem",
-          [bloco_s5.find(r) for r in (
+          [block_s5.find(r) for r in (
               "Parou porque: ficou uma tarefa que só você faz",
               "Tarefa que ficou para você: rodar os 20 lotes",
               "Contexto: O código está pronto numa branch lateral",
               "Pergunta: Deixo a rodada dos 20 lotes",
               "Se sim, o próximo run recebe: retomar de until/",
               "Recomendo sim: a rodada só é possível")]
-          == sorted(i for i in (bloco_s5.find(r) for r in (
+          == sorted(i for i in (block_s5.find(r) for r in (
               "Parou porque:", "Tarefa que ficou", "Contexto:",
               "Pergunta:", "Se sim,", "Recomendo sim")))
-          and all(r in bloco_s5 for r in (
+          and all(r in block_s5 for r in (
               "Parou porque:", "Tarefa que ficou", "Contexto:",
-              "Pergunta:", "Se sim,", "Recomendo sim")), bloco_s5)
+              "Pergunta:", "Se sim,", "Recomendo sim")), block_s5)
     check("linha em branco antes da pergunta e antes da legenda do menu",
-          "\n\n       Pergunta:" in bloco_s5
-          and "\n\n       sim = o item volta" in bloco_s5, bloco_s5)
+          "\n\n       Pergunta:" in block_s5
+          and "\n\n       sim = o item volta" in block_s5, block_s5)
     check("a pergunta dentro das regras não ganha aviso",
-          "fora das regras" not in bloco_s5, bloco_s5)
+          "fora das regras" not in block_s5, block_s5)
     check("o sim grava a pergunta E a instrução, para o próximo run",
-          respondidos[0] == ("S5", "sim: Deixo a rodada dos 20 lotes para "
+          answered[0] == ("S5", "sim: Deixo a rodada dos 20 lotes para "
                              "depois do merge e devolvo o item à fila? "
                              "Instrução: retomar de until/2026-10-15-1128-"
                              "vermelho-S5 e dar tinta à fixture de "
-                             "PipelineTest", False), respondidos)
-    bloco_s6 = " ".join(texto.split("━━ [2/2] S6")[1].split())
+                             "PipelineTest", False), answered)
+    block_s6 = " ".join(plain_text.split("━━ [2/2] S6")[1].split())
     check("a pergunta longa com branch e classe é mostrada E avisada",
-          "Pergunta: Fecho a rota humana B.14" in bloco_s6
+          "Pergunta: Fecho a rota humana B.14" in block_s6
           and "fora das regras: 37 palavras, o limite é 25; nome de branch, "
-              "classe de teste ou arquivo" in bloco_s6, bloco_s6)
+              "classe de teste ou arquivo" in block_s6, block_s6)
     check("pergunta_fora_das_regras: None dentro das regras",
           m.question_breaks_rules("Fecho o card como 'medir depois'?")
           is None, "")
@@ -526,14 +526,14 @@ def test_decide_mostra_contexto_instrucao_e_avisa_pergunta_fora_das_regras():
               "Fecho? (a alternativa é não)") or ""), "")
 
 
-def test_analise_sem_bloco_ou_quebrada_nao_derruba():
-    m = carrega_modulo()
+def test_analysis_without_block_or_broken_does_not_crash():
+    m = load_module()
     check("sem bloco devolve vazio", m.analysis_decisions("só texto") == {})
     check("JSON quebrado devolve vazio",
           m.analysis_decisions("```json cepa-decisoes\n{quebrado\n```") == {})
 
 
-BLOQUEIA_COM_PERGUNTA = (
+BLOCKS_WITH_QUESTION = (
     "ident = primeiro_pendente()\n"
     "if ident == 'a1':\n"
     "    marca(ident, status='blocked', evidence='não há produção',\n"
@@ -542,11 +542,11 @@ BLOQUEIA_COM_PERGUNTA = (
     "    marca(ident, status='done')\n")
 
 
-def test_run_sem_terminal_lista_as_pendencias_e_o_comando():
+def test_run_without_terminal_lists_the_pending_and_the_command():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        binv = fake_claude(tmp, BLOQUEIA_COM_PERGUNTA)
-        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        p, _ = run_until(root, binv, plan_of(root), ["--for", "2h"])
         check("o fim lista o que espera o dono",
               "esperam por você" in p.stdout, p.stdout[-1500:])
         check("...com a pergunta do item, não a evidência",
@@ -556,107 +556,107 @@ def test_run_sem_terminal_lista_as_pendencias_e_o_comando():
               "cepa-until decide fila/" in p.stdout, p.stdout[-800:])
 
 
-def test_run_no_terminal_termina_perguntando_e_aplica():
+def test_run_on_terminal_ends_asking_and_applies():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        binv = fake_claude(tmp, BLOQUEIA_COM_PERGUNTA)
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
         env = dict(os.environ)
         env["PATH"] = f"{binv}:{env['PATH']}"
-        env["FAKE_PLANO"] = str(plano_de(raiz))
+        env["FAKE_PLANO"] = str(plan_of(root))
         env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
         env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
-        rc, out = em_tty(
-            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz),
-             "--for", "2h", "--no-verify", "--no-analysis"], str(raiz),
-            entradas=[("[t] escrevo a resposta", "t"),
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(root),
+            inputs=[("[t] escrevo a resposta", "t"),
                       ("Sua resposta", "vira item do checklist"),
                       ("Devolvo o item para a fila", "s")], env=env)
         check("o run sai 0", rc == 0, out[-1500:])
         check("pergunta o item travado com a pergunta gravada",
               "Fecho o card como medir depois do go-live?" in out, out[-1500:])
-        a1 = itens_de(raiz)["a1"]
+        a1 = items_of(root)["a1"]
         check("a resposta volta o item para a fila",
               a1["status"] == "pending"
               and "vira item do checklist" in a1["evidence"], a1)
 
 
-def env_do_run(tmp, raiz, binv):
+def env_do_run(tmp, root, binv):
     env = dict(os.environ)
     env["PATH"] = f"{binv}:{env['PATH']}"
-    env["FAKE_PLANO"] = str(plano_de(raiz))
+    env["FAKE_PLANO"] = str(plan_of(root))
     env["FAKE_CHAMADAS"] = str(Path(tmp) / "chamadas.jsonl")
     env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
     return env
 
 
-def test_run_no_terminal_pergunta_aterrissar_e_aterrissa_com_s():
-    """AC1: o `s` no prompt do fim do run aterrissa de verdade."""
-    from test_cepa_until_land import com_origin, estado
-    from test_cepa_until_run_branch import TRABALHA, VERIFY, git
+def test_run_on_terminal_asks_to_land_and_lands_with_s():
+    """AC1: `s` at the end-of-run prompt really lands."""
+    from test_cepa_until_land import with_origin, state
+    from test_cepa_until_run_branch import WORKS, VERIFY, git
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        com_origin(raiz)
-        binv = fake_claude(tmp, TRABALHA)
-        rc, out = em_tty(
-            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz),
-             "--for", "2h", "--verify", VERIFY, "--no-analysis"], str(raiz),
-            entradas=[("Aterrisso agora?", "s")],
-            env=env_do_run(tmp, raiz, binv), timeout=240)
+        root = build_repo(tmp, [item("a1")])
+        with_origin(root)
+        binv = fake_claude(tmp, WORKS)
+        rc, out = on_tty(
+            [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(root),
+             "--for", "2h", "--verify", VERIFY, "--no-analysis"], str(root),
+            inputs=[("Aterrisso agora?", "s")],
+            env=env_do_run(tmp, root, binv), timeout=240)
         check("o run sai 0", rc == 0, out[-1500:])
         check("o fim pergunta se aterrissa", "Aterrisso agora?" in out,
               out[-1500:])
-        log = git(raiz, "log", "--format=%s", "HEAD").splitlines()
+        log = git(root, "log", "--format=%s", "HEAD").splitlines()
         check("com s, o commit do item chega à main", "a1" in log, str(log))
         check("...e o estado do run vira aterrissado",
-              estado(raiz).get("estado") == "aterrissado", str(estado(raiz)))
+              state(root).get("estado") == "aterrissado", str(state(root)))
 
 
-def test_reservado_nao_vira_pergunta():
-    """AC3: outra sessão viva no item não é assunto do dono."""
-    m = carrega_modulo()
-    tela, perguntas = [], []
+def test_reserved_does_not_become_a_question():
+    """AC3: another live session on the item is not the owner's business."""
+    m = load_module()
+    screen, questions = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", {},
              [{"id": "W-9", "title": "em outra sessão", "reason": "reservado"},
               {"id": "W-8", "title": "cascata",
                "reason": "depende-de-adiado"}],
-             {}, question=lambda p_: perguntas.append(p_) or "",
-             output=tela.append)
-    texto = "\n".join(tela)
-    check("nenhuma pergunta é feita", perguntas == [], perguntas)
+             {}, question=lambda p_: questions.append(p_) or "",
+             output=screen.append)
+    plain_text = "\n".join(screen)
+    check("nenhuma pergunta é feita", questions == [], questions)
     check("...e o fecho diz que nada espera por você",
-          "nada espera por você" in texto, texto)
+          "nada espera por você" in plain_text, plain_text)
 
 
-def test_decidir_como_processo_com_e_sem_terminal():
-    """AC5: `cepa-until decidir <fila>/<run>` depois do run, e AC2 na ponta:
-    a rota humana fecha respondendo dentro do decide."""
+def test_decidir_as_process_with_and_without_terminal():
+    """AC5: `cepa-until decidir <queue>/<run>` after the run, and AC2 at the end:
+    the human route closes by answering inside decide."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        corpo = ("ident = primeiro_pendente()\n"
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        body = ("ident = primeiro_pendente()\n"
                  "if ident == 'a1':\n"
                  "    marca(ident, status='blocked', evidence='sem produção',\n"
                  "          owner_question='Fecho o card?')\n"
                  "elif ident == 'a2':\n"
                  "    marca(ident, status='pending', evidence='feito',\n"
                  "          human_pending='valide o login real')\n")
-        binv = fake_claude(tmp, corpo)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
-        run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
+        binv = fake_claude(tmp, body)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
                         .glob("*.estado.json"))[-1].name.split(".")[0]
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
-               "--repo", str(raiz)]
+               "--repo", str(root)]
         p = subprocess.run(cmd, capture_output=True, text=True,
                            stdin=subprocess.DEVNULL, timeout=60)
         check("sem terminal, decidir sai 0 e lista", p.returncode == 0
               and "Fecho o card?" in p.stdout
               and "valide o login real" in p.stdout, p.stdout + p.stderr)
         check("...sem mexer na fila",
-              itens_de(raiz)["a1"]["status"] == "blocked")
-        rc, out = em_tty(cmd, str(raiz), entradas=[
+              items_of(root)["a1"]["status"] == "blocked")
+        rc, out = on_tty(cmd, str(root), inputs=[
             ("[t] escrevo a resposta", "t"), ("Sua resposta", "vira checklist"),
             ("Devolvo o item para a fila", "s"),
             ("[t] escrevo a resposta", "s"), ("Quer acrescentar algo", "login ok")])
-        a1, a2 = itens_de(raiz)["a1"], itens_de(raiz)["a2"]
+        a1, a2 = items_of(root)["a1"], items_of(root)["a2"]
         check("no terminal, decidir aplica o blocked",
               rc == 0 and a1["status"] == "pending"
               and "vira checklist" in a1["evidence"], out[-1200:])
@@ -665,12 +665,12 @@ def test_decidir_como_processo_com_e_sem_terminal():
               and "login ok" in a2["evidence"], a2)
 
 
-def test_instrucoes_dos_agentes_pedem_a_pergunta():
-    """AC6: sem estas linhas, o agente volta a travar item sem pergunta e a
-    análise volta a não gravar o bloco que o terminal lê."""
-    comandos = CEPA_UNTIL.parent.parent / "commands"
-    review = (comandos / "until-review.md").read_text(encoding="utf-8")
-    drain = (comandos / "drain-plan.md").read_text(encoding="utf-8")
+def test_agent_instructions_ask_for_the_question():
+    """AC6: without these lines, the agent goes back to blocking an item without a question and the
+    analysis goes back to not recording the block the terminal reads."""
+    commands = CEPA_UNTIL.parent.parent / "commands"
+    review = (commands / "until-review.md").read_text(encoding="utf-8")
+    drain = (commands / "drain-plan.md").read_text(encoding="utf-8")
     check("until-review manda gravar o bloco cepa-decisoes",
           "```json cepa-decisoes" in review, "")
     check("...cobrindo todos os adiados da fila, pelo queue",
@@ -682,32 +682,32 @@ def test_instrucoes_dos_agentes_pedem_a_pergunta():
     p = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-plan"),
                         "finish", "--help"], capture_output=True, text=True,
                        timeout=30)
-    ajuda = " ".join(p.stdout.split())
-    for nome, texto in (("until-review", review), ("drain-plan", drain),
-                        ("cepa-plan finish --help", ajuda)):
-        texto = " ".join(texto.replace("**", "").split())
-        # Os comandos foram traduzidos para inglês; a ajuda do cepa-plan não.
-        frases = {
+    help_ = " ".join(p.stdout.split())
+    for given_name, plain_text in (("until-review", review), ("drain-plan", drain),
+                        ("cepa-plan finish --help", help_)):
+        plain_text = " ".join(plain_text.replace("**", "").split())
+        # The commands were translated to English; cepa-plan's help was not.
+        sentences = {
             "drain-plan": ("Up to 25 words", "without a branch name",
                            "the item goes back to the queue"),
-            # o menu do terminal é impresso em pt-BR pelo cepa-until e o
-            # comando o cita literalmente.
+            # the terminal menu is printed in pt-BR by cepa-until and the
+            # command quotes it literally.
             "until-review": ("Up to 25 words", "no branch name",
                              "volta para a fila"),
-        }.get(nome, ("25 palavras", "sem nome de branch", "volta para a fila"))
-        check(f"{nome}: pergunta de até 25 palavras",
-              frases[0] in texto, texto[-600:])
-        check(f"{nome}: sem nome de branch, classe ou arquivo",
-              frases[1] in texto, texto[-600:])
-        check(f"{nome}: sim = o item volta para a fila",
-              frases[2] in texto, texto[-600:])
+        }.get(given_name, ("25 palavras", "sem nome de branch", "volta para a fila"))
+        check(f"{given_name}: pergunta de até 25 palavras",
+              sentences[0] in plain_text, plain_text[-600:])
+        check(f"{given_name}: sem nome de branch, classe ou arquivo",
+              sentences[1] in plain_text, plain_text[-600:])
+        check(f"{given_name}: sim = o item volta para a fila",
+              sentences[2] in plain_text, plain_text[-600:])
     r = " ".join(review.replace("`", "").split())
     check("until-review: o bloco tem contexto (leigo) e instrucao (técnica)",
           '"contexto"' in r and '"instrucao"' in r
           and "contexto is" in r and "instrucao is" in r, r[-1500:])
 
 
-REVIEW_COM_BLOCO = (
+REVIEW_WITH_BLOCK = (
     "if ARGS and ARGS[1].startswith('/common:until-review'):\n"
     "    print('RELATORIO')\n"
     "    print('```json cepa-decisoes')\n"
@@ -718,167 +718,167 @@ REVIEW_COM_BLOCO = (
     "    sys.exit(0)\n")
 
 
-def test_fim_com_analise_pergunta_com_a_redacao_do_bloco():
-    """Caminho de saída 3 (com análise): a pergunta vem do bloco da análise
-    quando o agente não gravou nenhuma."""
+def test_end_with_analysis_asks_with_the_block_wording():
+    """Exit path 3 (with analysis): the question comes from the analysis block
+    when the agent recorded none."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        corpo = REVIEW_COM_BLOCO + (
+        root = build_repo(tmp, [item("a1")])
+        body = REVIEW_WITH_BLOCK + (
             "marca(primeiro_pendente(), status='blocked', "
             "evidence='evidência crua longa')\n")
-        binv = fake_claude(tmp, corpo)
-        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--com-analise"])
-        fim = p.stdout.split("── esperam por você")[-1]
+        binv = fake_claude(tmp, body)
+        p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", "--com-analise"])
+        end = p.stdout.split("── esperam por você")[-1]
         check("com análise, o fim lista o que espera o dono",
               "── esperam por você" in p.stdout, p.stdout[-1200:])
         check("...com a pergunta redigida pela análise",
-              "Movo a medição para o checklist?" in fim, fim)
+              "Movo a medição para o checklist?" in end, end)
 
 
-def test_fim_parado_pela_cota_tambem_pergunta():
-    """Caminho de saída 2 (cota): a análise não roda, mas as perguntas sim."""
+def test_end_stopped_by_quota_also_asks():
+    """Exit path 2 (quota): the analysis does not run, but the questions do."""
     with tempfile.TemporaryDirectory() as tmp:
-        travado = item("a1", status="blocked")
-        travado["evidence"] = "sem produção"
-        travado["owner_question"] = "Fecho o card?"
-        raiz = monta_repo(tmp, [travado, item("a2")])
-        corpo = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+        stuck = item("a1", status="blocked")
+        stuck["evidence"] = "sem produção"
+        stuck["owner_question"] = "Fecho o card?"
+        root = build_repo(tmp, [stuck, item("a2")])
+        body = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
                  "    sys.exit(0)\n"
                  "print(json.dumps({'type': 'result', 'result': "
                  "\"You've hit your session limit\"}))\n")
-        binv = fake_claude(tmp, corpo)
-        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--com-analise"])
-        from test_cepa_until import ledger_de
-        fim = [e for e in ledger_de(raiz) if e["evento"] == "run_end"][0]
-        check("o run parou pela cota", fim["motivo"] == "limite-de-uso", str(fim))
+        binv = fake_claude(tmp, body)
+        p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", "--com-analise"])
+        from test_cepa_until import ledger_of
+        end = [e for e in ledger_of(root) if e["evento"] == "run_end"][0]
+        check("o run parou pela cota", end["motivo"] == "limite-de-uso", str(end))
         check("...e mesmo assim termina perguntando",
               "── esperam por você" in p.stdout
               and "Fecho o card?" in p.stdout, p.stdout[-1200:])
 
 
-def test_lista_sem_terminal_filtra_o_que_nao_e_do_dono():
-    m = carrega_modulo()
-    tela = []
+def test_list_without_terminal_filters_what_is_not_the_owners():
+    m = load_module()
+    screen = []
     m.pending_as_text(
         "fila", "run1", {"acoes": [{"id": "aterrissar", "frase": "leva 3"}]},
         [{"id": "W-1", "reason": "human_pending",
           "human_pending": "rode o login real"},
          {"id": "W-2", "reason": "reservado", "detail": "sessão viva"},
          {"id": "W-3", "reason": "depende-de-adiado", "detail": "de W-1"}],
-        {}, output=tela.append)
-    texto = "\n".join(tela)
-    check("sem terminal, lista aterrissar", "aterrissar: leva 3" in texto,
-          texto)
-    check("...e a rota humana verbatim", "rode o login real" in texto, texto)
+        {}, output=screen.append)
+    plain_text = "\n".join(screen)
+    check("sem terminal, lista aterrissar", "aterrissar: leva 3" in plain_text,
+          plain_text)
+    check("...e a rota humana verbatim", "rode o login real" in plain_text, plain_text)
     check("...contando 2, sem reservado nem cascata",
-          "esperam por você: 2" in texto and "W-2" not in texto
-          and "W-3" not in texto, texto)
+          "esperam por você: 2" in plain_text and "W-2" not in plain_text
+          and "W-3" not in plain_text, plain_text)
 
 
-def test_bloco_que_nao_e_objeto_e_ignorado():
-    m = carrega_modulo()
+def test_block_that_is_not_an_object_is_ignored():
+    m = load_module()
     check("lista no lugar de objeto devolve vazio",
           m.analysis_decisions("```json cepa-decisoes\n[1, 2]\n```") == {})
 
 
-def test_pergunta_sai_quando_o_item_volta_a_andar_e_reserva_some_no_responde():
+def test_question_leaves_when_the_item_moves_again_and_reservation_vanishes_in_answer():
     with tempfile.TemporaryDirectory() as tmp:
-        travado = item("a1", status="blocked")
-        travado["owner_question"] = "Fecho?"
-        outro = item("a2", status="blocked")
-        outro["evidence"] = "x"
-        outro["claimed_by"] = {"session": "morta"}
-        raiz = monta_repo(tmp, [travado, outro])
+        stuck = item("a1", status="blocked")
+        stuck["owner_question"] = "Fecho?"
+        other_one = item("a2", status="blocked")
+        other_one["evidence"] = "x"
+        other_one["claimed_by"] = {"session": "morta"}
+        root = build_repo(tmp, [stuck, other_one])
         subprocess.run(
             [sys.executable, str(CEPA_PLAN), "finish", "fila", "a1",
              "--status", "pending", "--evidence", "destravou",
-             "--repo", str(raiz)], capture_output=True, text=True, check=True)
+             "--repo", str(root)], capture_output=True, text=True, check=True)
         check("finish pending sem --pergunta tira a pergunta velha",
-              "owner_question" not in itens_de(raiz)["a1"], itens_de(raiz)["a1"])
-        em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila", "a2",
-                "--resposta", "segue", "--repo", str(raiz)], str(raiz))
+              "owner_question" not in items_of(root)["a1"], items_of(root)["a1"])
+        on_tty([sys.executable, str(CEPA_PLAN), "responde", "fila", "a2",
+                "--resposta", "segue", "--repo", str(root)], str(root))
         check("responde limpa a reserva do item",
-              "claimed_by" not in itens_de(raiz)["a2"], itens_de(raiz)["a2"])
+              "claimed_by" not in items_of(root)["a2"], items_of(root)["a2"])
 
 
-def test_entrada_hostil_nao_corrompe_a_fila_nem_sai_da_pasta():
-    """Nível adversarial: a resposta é texto livre do dono e vai para o YAML
-    da fila; o alvo do `decidir` vira caminho no disco."""
-    hostil = "a: b\n- c # x 'q' \"z\" {{}} [1] ---\n!!python/object:os.system"
+def test_hostile_input_does_not_corrupt_the_queue_nor_leave_the_folder():
+    """Adversarial level: the answer is free text from the owner and goes into the queue
+    YAML; the `decidir` target becomes a path on disk."""
+    hostile = "a: b\n- c # x 'q' \"z\" {{}} [1] ---\n!!python/object:os.system"
     with tempfile.TemporaryDirectory() as tmp:
-        travado = item("a1", status="blocked")
-        raiz = monta_repo(tmp, [travado])
-        rc, out = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
-                          "a1", "--resposta", hostil, "--repo", str(raiz)],
-                         str(raiz))
+        stuck = item("a1", status="blocked")
+        root = build_repo(tmp, [stuck])
+        rc, out = on_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+                          "a1", "--resposta", hostile, "--repo", str(root)],
+                         str(root))
         check("resposta com sintaxe de YAML é aceita", rc == 0, out)
         v = subprocess.run([sys.executable, str(CEPA_PLAN), "validate",
-                            str(plano_de(raiz))], capture_output=True, text=True)
+                            str(plan_of(root))], capture_output=True, text=True)
         check("...a fila continua válida", v.returncode == 0, v.stdout + v.stderr)
-        ev = itens_de(raiz)["a1"]["evidence"]
+        ev = items_of(root)["a1"]["evidence"]
         check("...e o texto fica como texto, numa linha",
               "!!python/object:os.system" in ev and "\n" not in ev, ev)
-        vazio = em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
-                        "a1", "--resposta", "   ", "--repo", str(raiz)],
-                       str(raiz))
-        check("resposta só de espaços é recusada", vazio[0] == 2, vazio[1])
-        # Um estado de verdade fora da pasta do run: sem ele, o alvo com `..`
-        # recusava só porque o arquivo não existia (achado da prova, 30/09).
-        fora = raiz / ".claude" / "programs" / "x.estado.json"
-        fora.write_text('{"acoes": []}')
-        # `until/..` só resolve se a pasta do run existir, como existe depois
-        # do primeiro run.
-        (raiz / ".claude" / "programs" / "fila" / "until").mkdir()
-        for alvo in ("../../etc/passwd", "semBarra", "fila/../../x",
+        empty = on_tty([sys.executable, str(CEPA_PLAN), "responde", "fila",
+                        "a1", "--resposta", "   ", "--repo", str(root)],
+                       str(root))
+        check("resposta só de espaços é recusada", empty[0] == 2, empty[1])
+        # A real state outside the run folder: without it, the target with `..`
+        # was refused only because the file did not exist (finding of the proof, 30/09).
+        outside = root / ".claude" / "programs" / "x.estado.json"
+        outside.write_text('{"acoes": []}')
+        # `until/..` only resolves if the run folder exists, as it does after
+        # the first run.
+        (root / ".claude" / "programs" / "fila" / "until").mkdir()
+        for target in ("../../etc/passwd", "semBarra", "fila/../../x",
                      "fila/../x", "../fila/x"):
             p_ = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide",
-                                 alvo, "--repo", str(raiz)],
+                                 target, "--repo", str(root)],
                                 capture_output=True, text=True,
                                 stdin=subprocess.DEVNULL, timeout=60)
-            check(f"alvo {alvo!r} recusa com 2, sem traceback",
+            check(f"alvo {target!r} recusa com 2, sem traceback",
                   p_.returncode == 2 and "Traceback" not in p_.stderr
                   and "esperam por você" not in p_.stdout,
                   p_.stdout + p_.stderr)
 
 
-def test_run_ja_aterrissado_nao_pergunta_de_novo():
-    """No run WEGO 2026-09-29-2059 o dono aterrissou às 07:15 e o `decidir`
-    ainda listava a aterrissagem: a ação fica no estado como registro."""
-    m = carrega_modulo()
-    est = {"estado": "aterrissado",
+def test_already_landed_run_does_not_ask_again():
+    """In WEGO run 2026-09-29-2059 the owner landed at 07:15 and `decidir`
+    still listed the landing: the action stays in the state as a record."""
+    m = load_module()
+    state_dict = {"estado": "aterrissado",
            "acoes": [{"id": "aterrissar", "frase": "leva 5"}]}
-    tela, perguntas = [], []
-    m.decide(Path("/nao/existe"), "fila", "run1", est, [], {},
-             question=lambda p_: perguntas.append(p_) or "", output=tela.append)
-    check("run aterrissado não pergunta aterrissar", perguntas == [], perguntas)
-    tela2 = []
-    m.pending_as_text("fila", "run1", est, [], {}, output=tela2.append)
-    check("...nem lista sem terminal", tela2 == [], tela2)
+    screen, questions = [], []
+    m.decide(Path("/nao/existe"), "fila", "run1", state_dict, [], {},
+             question=lambda p_: questions.append(p_) or "", output=screen.append)
+    check("run aterrissado não pergunta aterrissar", questions == [], questions)
+    screen2 = []
+    m.pending_as_text("fila", "run1", state_dict, [], {}, output=screen2.append)
+    check("...nem lista sem terminal", screen2 == [], screen2)
 
 
-def test_decidir_s_e_n_no_terminal_chegam_ao_plano():
-    """AC2 na ponta: `n` e `s` digitados num terminal de verdade passam pelo
-    `cepa-plan responde` real e gravam "não: <pergunta>" (item como está)
-    e "sim: <pergunta>" (item de volta à fila)."""
+def test_decidir_s_and_n_on_terminal_reach_the_plan():
+    """AC2 at the end: `n` and `s` typed in a real terminal go through the real
+    `cepa-plan responde` and record "não: <question>" (item as it is)
+    and "sim: <question>" (item back to the queue)."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        corpo = ("ident = primeiro_pendente()\n"
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        body = ("ident = primeiro_pendente()\n"
                  "if ident == 'a1':\n"
                  "    marca(ident, status='blocked', evidence='sem produção',\n"
                  "          owner_question='Fecho o card?')\n"
                  "elif ident == 'a2':\n"
                  "    marca(ident, status='pending', evidence='feito',\n"
                  "          human_pending='valide o login real')\n")
-        binv = fake_claude(tmp, corpo)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
-        run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
+        binv = fake_claude(tmp, body)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
                         .glob("*.estado.json"))[-1].name.split(".")[0]
         cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
-               "--repo", str(raiz)]
-        rc, out = em_tty(cmd, str(raiz), entradas=[
+               "--repo", str(root)]
+        rc, out = on_tty(cmd, str(root), inputs=[
             ("[t] escrevo a resposta", "n"), ("Quer acrescentar algo", ""),
             ("[t] escrevo a resposta", "s"), ("Quer acrescentar algo", "vi ok")])
-        a1, a2 = itens_de(raiz)["a1"], itens_de(raiz)["a2"]
+        a1, a2 = items_of(root)["a1"], items_of(root)["a2"]
         check("n no terminal: o blocked continua blocked",
               rc == 0 and a1["status"] == "blocked", (rc, a1, out[-1200:]))
         check("...com 'não: <pergunta>' na evidência",
@@ -887,30 +887,30 @@ def test_decidir_s_e_n_no_terminal_chegam_ao_plano():
               a2.get("human_pending") is None, a2)
         check("...com 'sim: <rota>. <acréscimo>' na evidência",
               "sim: valide o login real. vi ok" in a2["evidence"], a2)
-        rc, out = em_tty(cmd, str(raiz), entradas=[
+        rc, out = on_tty(cmd, str(root), inputs=[
             ("[t] escrevo a resposta", "s"),
             ("Quer acrescentar algo", "mas só depois do deploy")])
-        a1 = itens_de(raiz)["a1"]
+        a1 = items_of(root)["a1"]
         check("s no blocked com pergunta: volta para pending, com o comentário",
               rc == 0 and a1["status"] == "pending"
               and "sim: Fecho o card?. mas só depois do deploy" in a1["evidence"],
               (a1, out[-800:]))
 
 
-def test_byte_invalido_no_terminal_nao_derruba_o_decidir():
-    """No decidir WEGO 2026-09-29-2059 o dono digitou `não` e o terminal
-    entregou `n\\xcb...` (o til da tecla morta, apagado pela metade): o
-    `input()` estourou UnicodeDecodeError e as perguntas morreram com
-    traceback. A linha ilegível tem de ser pedida de novo."""
+def test_invalid_byte_on_terminal_does_not_crash_decide():
+    """In decidir WEGO 2026-09-29-2059 the owner typed `não` and the terminal
+    delivered `n\\xcb...` (the tilde of the dead key, half erased): `input()`
+    blew up with UnicodeDecodeError and the questions died with a
+    traceback. The unreadable line has to be asked for again."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        binv = fake_claude(tmp, BLOQUEIA_COM_PERGUNTA)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
-        run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
                         .glob("*.estado.json"))[-1].name.split(".")[0]
-        rc, out = em_tty(
+        rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
-             "--repo", str(raiz)], str(raiz), entradas=[
+             "--repo", str(root)], str(root), inputs=[
                 ("[t] escrevo a resposta", b"n\xcb\xc3\xa3o"),
                 ("digite de novo", "t"),
                 ("Sua resposta", "vira checklist"),
@@ -918,46 +918,46 @@ def test_byte_invalido_no_terminal_nao_derruba_o_decidir():
         check("sem traceback", "Traceback" not in out, out[-1500:])
         check("...avisa que não leu e pede de novo",
               "digite de novo" in out, out[-1500:])
-        a1 = itens_de(raiz)["a1"]
+        a1 = items_of(root)["a1"]
         check("...e a resposta seguinte ainda é aplicada",
               rc == 0 and a1["status"] == "pending"
               and "vira checklist" in a1["evidence"], a1)
 
 
-def test_texto_solto_no_prompt_de_opcoes_nao_some():
-    """No mesmo decidir o dono escreveu a resposta direto no prompt de
-    opções (`eu não faço ideia...`, `não`): não era r/f/e/q, o item foi
-    para depois e o texto sumiu sem aviso. Tem de avisar e perguntar de
-    novo."""
-    m = carrega_modulo()
-    respostas = iter(["eu não faço ideia de como resolver isso", "t",
+def test_loose_text_at_options_prompt_does_not_vanish():
+    """In the same decidir the owner wrote the answer straight into the options
+    prompt (`eu não faço ideia...`, `não`): it was not r/f/e/q, the item went
+    to later and the text vanished without warning. It has to warn and ask
+    again."""
+    m = load_module()
+    answers = iter(["eu não faço ideia de como resolver isso", "t",
                       "não sei", "s"])
-    tela, respondidos = [], []
+    screen, answered = [], []
     m.decide(Path("/nao/existe"), "fila", "run1", {},
              [{"id": "W-1", "title": "t", "reason": "bloqueado-antes",
                "question": "Ligou a flag?"}], {},
-             question=lambda _p: next(respostas), output=tela.append,
-             answer=lambda i, t: (respondidos.append((i, t)), (0, "ok"))[1])
-    texto = "\n".join(tela)
+             question=lambda _p: next(answers), output=screen.append,
+             answer=lambda i, t: (answered.append((i, t)), (0, "ok"))[1])
+    plain_text = "\n".join(screen)
     check("avisa que o texto não é uma opção",
-          "não é uma das opções" in texto, texto)
+          "não é uma das opções" in plain_text, plain_text)
     check("...e a resposta dada depois do r é gravada",
-          respondidos == [("W-1", "não sei")], respondidos)
+          answered == [("W-1", "não sei")], answered)
 
 
-def test_texto_solto_no_terminal_avisa_e_ainda_grava():
-    """O mesmo caso do teste acima, pelo `cepa-until decidir` num terminal
-    de verdade: o texto solto é recusado com aviso e a resposta dada
-    depois do r chega ao plan.yaml."""
+def test_loose_text_on_terminal_warns_and_still_writes():
+    """The same case as the test above, through `cepa-until decidir` in a real
+    terminal: the loose text is refused with a warning and the answer given
+    after the r reaches plan.yaml."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        binv = fake_claude(tmp, BLOQUEIA_COM_PERGUNTA)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
-        run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, BLOCKS_WITH_QUESTION)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        run_id = sorted((root / ".claude" / "programs" / "fila" / "until")
                         .glob("*.estado.json"))[-1].name.split(".")[0]
-        rc, out = em_tty(
+        rc, out = on_tty(
             [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
-             "--repo", str(raiz)], str(raiz), entradas=[
+             "--repo", str(root)], str(root), inputs=[
                 ("[t] escrevo a resposta", "eu não faço ideia"),
                 ("digite t primeiro", "t"),
                 ("Sua resposta", "não sei ainda"),
@@ -965,7 +965,7 @@ def test_texto_solto_no_terminal_avisa_e_ainda_grava():
         check("avisa que o texto solto não é opção",
               "não é uma das opções" in out and "digite t primeiro" in out,
               out[-1500:])
-        a1 = itens_de(raiz)["a1"]
+        a1 = items_of(root)["a1"]
         check("...e a resposta dada depois do r chega ao plano",
               rc == 0 and a1["status"] == "pending"
               and "não sei ainda" in a1["evidence"], a1)
@@ -973,9 +973,9 @@ def test_texto_solto_no_terminal_avisa_e_ainda_grava():
 
 def main():
     print("cepa-until decidir — o fim do run pergunta\n")
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"{nome}:")
+    for given_name, fn in sorted(globals().items()):
+        if given_name.startswith("test_") and callable(fn):
+            print(f"{given_name}:")
             fn()
     print()
     if FAILURES:

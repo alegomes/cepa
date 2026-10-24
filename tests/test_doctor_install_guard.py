@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Regression tests: a suíte não pode trocar a instalação viva do dono.
+"""Regression tests: the suite must not swap the owner's live installation.
 
-`cepa-doctor --fix` tem uma correção que sai do projeto: `fix_install` roda o
-`bin/install.sh` do repo do cepa e reinstala os plugins DA MÁQUINA, não importa
-de qual diretório o doctor foi chamado. Isso é o que se quer no preflight de uma
-sessão de verdade.
+`cepa-doctor --fix` has one correction that leaves the project: `fix_install` runs
+the cepa repo's `bin/install.sh` and reinstalls the MACHINE's plugins, no matter
+which directory the doctor was called from. That is what you want in the
+preflight of a real session.
 
-Em 2026-08-19 aconteceu o oposto: a suíte do próprio doctor, rodando `--fix` em
-repositórios temporários, viu o repo à frente do cache e reinstalou o harness do
-dono no meio de um `python3 tests/...`. Ninguém pediu, nada avisou, e a troca só
-apareceu depois, no relatório do doctor. Um teste capaz de trocar o harness
-instalado pode provocar exatamente a classe de falha que o doctor existe para
-achar — e ainda apagar o rastro dela.
+On 2026-08-19 the opposite happened: the doctor's own suite, running `--fix` in
+temporary repositories, saw the repo ahead of the cache and reinstalled the
+owner's harness in the middle of a `python3 tests/...`. Nobody asked, nothing
+warned, and the swap only showed up later, in the doctor's report. A test able to
+swap the installed harness can cause exactly the class of failure the doctor
+exists to find — and even erase its trail.
 
-O que estes testes fixam:
-  - CEPA_DOCTOR_INSTALL=off desliga a reinstalação;
-  - doctor chamado de dentro de um diretório temporário também não reinstala
-    (a rede para o teste que ainda não foi escrito e vai esquecer a variável);
-  - fora do temporário e sem a variável, a reinstalação continua permitida —
-    o preflight não pode perder a função;
-  - bloqueada, ela NÃO vira "falhou ao corrigir": sai do lote e vai para o
-    bloco de decisão do dono, com o comando à mão.
+What these tests pin down:
+  - CEPA_DOCTOR_INSTALL=off turns the reinstall off;
+  - a doctor called from inside a temporary directory does not reinstall either
+    (the net for the test not yet written that will forget the variable);
+  - outside the temporary directory and without the variable, the reinstall remains
+    allowed — the preflight cannot lose its function;
+  - when blocked, it does NOT become "failed to fix": it leaves the batch and goes to
+    the owner's decision block, with the command at hand.
 
 Run: python3 tests/test_doctor_install_guard.py
 """
@@ -47,7 +47,7 @@ def check(name, cond, detail=""):
 
 
 def load_doctor():
-    """Carrega o cepa-doctor como módulo — ele é script, sem extensão .py."""
+    """Loads the cepa-doctor as a module — it is a script, without a .py extension."""
     spec = importlib.util.spec_from_loader(
         "cepa_doctor", importlib.machinery.SourceFileLoader("cepa_doctor", str(DOCTOR)))
     mod = importlib.util.module_from_spec(spec)
@@ -55,9 +55,9 @@ def load_doctor():
     return mod
 
 
-def test_variavel_desliga():
+def test_variable_turns_it_off():
     D = load_doctor()
-    antes = os.environ.get("CEPA_DOCTOR_INSTALL")
+    before = os.environ.get("CEPA_DOCTOR_INSTALL")
     os.environ["CEPA_DOCTOR_INSTALL"] = "off"
     try:
         check("CEPA_DOCTOR_INSTALL=off desliga a reinstalação",
@@ -67,59 +67,60 @@ def test_variavel_desliga():
               ok is False and "instalação da máquina" in msg, msg)
     finally:
         os.environ.pop("CEPA_DOCTOR_INSTALL", None)
-        if antes is not None:
-            os.environ["CEPA_DOCTOR_INSTALL"] = antes
+        if before is not None:
+            os.environ["CEPA_DOCTOR_INSTALL"] = before
 
 
-def test_diretorio_temporario_desliga():
+def test_temporary_directory_turns_it_off():
     D = load_doctor()
-    origem = Path.cwd()
+    origin = Path.cwd()
     with tempfile.TemporaryDirectory() as tmp:
         os.chdir(tmp)
         try:
             check("doctor rodando de um diretório temporário não reinstala",
                   D.auto_install_allowed() is False)
         finally:
-            os.chdir(origem)
+            os.chdir(origin)
 
 
-def test_tmp_tambem_conta_como_temporario():
-    """No macOS o tempdir do Python é /var/folders/...; quem rodar de /tmp
-    passaria batido se a lista tivesse só o gettempdir()."""
+def test_tmp_also_counts_as_temporary():
+    """On macOS Python's tempdir is /var/folders/...; whoever runs from /tmp
+    would slip through if the list had only gettempdir().
+    """
     D = load_doctor()
-    origem = Path.cwd()
-    alvo = Path("/private/tmp") if Path("/private/tmp").is_dir() else Path("/tmp")
-    if not alvo.is_dir():
+    origin = Path.cwd()
+    target = Path("/private/tmp") if Path("/private/tmp").is_dir() else Path("/tmp")
+    if not target.is_dir():
         return
-    os.chdir(alvo)
+    os.chdir(target)
     try:
         check("/tmp também conta como temporário",
               D.auto_install_allowed() is False)
     finally:
-        os.chdir(origem)
+        os.chdir(origin)
 
 
-def test_uso_real_continua_permitido():
+def test_real_use_remains_allowed():
     D = load_doctor()
-    origem = Path.cwd()
+    origin = Path.cwd()
     os.chdir(REPO)
     try:
         check("fora do temporário e sem a variável, a reinstalação segue permitida",
               D.auto_install_allowed() is True)
     finally:
-        os.chdir(origem)
+        os.chdir(origin)
 
 
-def test_bloqueada_vira_decisao_do_dono_nao_falha():
+def test_blocked_becomes_owner_decision_not_failure():
     D = load_doctor()
     os.environ["CEPA_DOCTOR_INSTALL"] = "off"
     try:
         D.RESULTS.clear()
         D.warn("plugins", "common: repo está em 9.9.9 mas o cache instalado é 1.0.0",
                fix={"kind": "install", "repo": str(REPO)})
-        pend = D.pending_fixes()
+        pending = D.pending_fixes()
         check("a reinstalação bloqueada sai do lote automático",
-              all(f["kind"] != "install" for f in pend), pend)
+              all(f["kind"] != "install" for f in pending), pending)
         check("mas o achado continua no relatório para o dono decidir",
               any("cache instalado" in r[2] for r in D.RESULTS))
     finally:
@@ -127,12 +128,12 @@ def test_bloqueada_vira_decisao_do_dono_nao_falha():
         D.RESULTS.clear()
 
 
-def test_ponta_a_ponta_o_install_sh_nao_roda():
-    """A prova que interessa: o `bin/install.sh` não é EXECUTADO.
+def test_end_to_end_install_sh_does_not_run():
+    """The proof that matters: `bin/install.sh` is not EXECUTED.
 
-    Monta um HOME falso cujo marketplace aponta para um repo falso, cujo
-    install.sh só escreve um marcador. Se o doctor rodar a reinstalação, o
-    marcador aparece — foi assim que a instalação do dono foi trocada.
+    Builds a fake HOME whose marketplace points to a fake repo, whose
+    install.sh only writes a marker. If the doctor runs the reinstall, the
+    marker appears — that is how the owner's installation was swapped.
     """
     import json
     import subprocess
@@ -142,9 +143,9 @@ def test_ponta_a_ponta_o_install_sh_nao_roda():
         (fake_home / ".claude" / "plugins").mkdir(parents=True)
         fake_repo = tmpp / "cepa-falso"
         (fake_repo / "bin").mkdir(parents=True)
-        marcador = tmpp / "INSTALL-RODOU"
+        marker = tmpp / "INSTALL-RODOU"
         (fake_repo / "bin" / "install.sh").write_text(
-            f"#!/bin/sh\ntouch '{marcador}'\n", encoding="utf-8")
+            f"#!/bin/sh\ntouch '{marker}'\n", encoding="utf-8")
         (fake_repo / "bin" / "install.sh").chmod(0o755)
         for plug in ("common",):
             d = fake_repo / plug / ".claude-plugin"
@@ -165,16 +166,16 @@ def test_ponta_a_ponta_o_install_sh_nao_roda():
         subprocess.run([sys.executable, str(DOCTOR), "--fix"], capture_output=True,
                        text=True, cwd=str(proj), env=env)
         check("o install.sh NÃO roda quando o doctor é chamado de um temporário",
-              not marcador.exists())
+              not marker.exists())
 
 
-def test_correcao_que_nao_resolve_roda_uma_vez_so():
-    """O lote tenta cada correção UMA vez, mesmo que o achado sobreviva.
+def test_fix_that_does_not_resolve_runs_only_once():
+    """The batch tries each correction ONCE, even if the finding survives.
 
-    O `--fix` re-diagnostica entre as passadas (uma correção muda o que as
-    outras enxergam). Sem memória do que já foi tentado, a correção que não
-    resolve o próprio achado voltava a ser aplicada a cada passada: três
-    execuções do install.sh e a mesma linha repetida três vezes no relatório.
+    `--fix` re-diagnoses between passes (one correction changes what the
+    others see). Without memory of what was already tried, a correction that does not
+    resolve its own finding was applied again on every pass: three
+    runs of install.sh and the same line repeated three times in the report.
     """
     import json
     import subprocess
@@ -184,9 +185,9 @@ def test_correcao_que_nao_resolve_roda_uma_vez_so():
         (fake_home / ".claude" / "plugins").mkdir(parents=True)
         fake_repo = tmpp / "cepa-falso"
         (fake_repo / "bin").mkdir(parents=True)
-        contador = tmpp / "execucoes"
+        counter = tmpp / "execucoes"
         (fake_repo / "bin" / "install.sh").write_text(
-            f"#!/bin/sh\necho x >> '{contador}'\n", encoding="utf-8")
+            f"#!/bin/sh\necho x >> '{counter}'\n", encoding="utf-8")
         (fake_repo / "bin" / "install.sh").chmod(0o755)
         d = fake_repo / "common" / ".claude-plugin"
         d.mkdir(parents=True)
@@ -201,13 +202,13 @@ def test_correcao_que_nao_resolve_roda_uma_vez_so():
         (proj / ".claude").mkdir()
         (proj / ".claude" / "no-build").touch()
 
-        # HOME=temporário mas cwd=repo real: a trava do temporário não vale
-        # aqui, senão o install nem seria tentado e o teste não mediria nada.
+        # HOME=temporary but cwd=real repo: the temporary lock does not apply
+        # here, otherwise the install would not even be attempted and the test would measure nothing.
         env = dict(os.environ, HOME=str(fake_home))
         env.pop("CEPA_DOCTOR_INSTALL", None)
         out = subprocess.run([sys.executable, str(DOCTOR), "--fix"], capture_output=True,
                              text=True, cwd=str(REPO), env=env)
-        n = len(contador.read_text().splitlines()) if contador.exists() else 0
+        n = len(counter.read_text().splitlines()) if counter.exists() else 0
         check("a reinstalação que não resolve o achado roda UMA vez, não três",
               n == 1, f"{n} execuções\n{out.stdout[-800:]}")
         check("e o relatório não repete a mesma linha",
@@ -215,13 +216,13 @@ def test_correcao_que_nao_resolve_roda_uma_vez_so():
 
 
 def main():
-    test_variavel_desliga()
-    test_diretorio_temporario_desliga()
-    test_tmp_tambem_conta_como_temporario()
-    test_uso_real_continua_permitido()
-    test_bloqueada_vira_decisao_do_dono_nao_falha()
-    test_ponta_a_ponta_o_install_sh_nao_roda()
-    test_correcao_que_nao_resolve_roda_uma_vez_so()
+    test_variable_turns_it_off()
+    test_temporary_directory_turns_it_off()
+    test_tmp_also_counts_as_temporary()
+    test_real_use_remains_allowed()
+    test_blocked_becomes_owner_decision_not_failure()
+    test_end_to_end_install_sh_does_not_run()
+    test_fix_that_does_not_resolve_runs_only_once()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")

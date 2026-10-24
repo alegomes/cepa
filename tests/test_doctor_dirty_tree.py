@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Regression tests: árvore suja com fila esperando execução desatendida.
+"""Regression tests: dirty tree with a queue waiting for unattended execution.
 
-## Por que este check existe
+## Why this check exists
 
-O `cepa-until` (a janela de execução desatendida) RECUSA largar com a árvore
-suja — é como ele separa, de manhã, o que o run fez do que já estava ali. A
-recusa é instantânea, então descobrir o problema às 23h custa a janela inteira.
-O doctor cobra antes, na abertura da sessão.
+`cepa-until` (the unattended execution window) REFUSES to start with a dirty
+tree — it is how it separates, in the morning, what the run did from what was
+already there. The refusal is instant, so discovering the problem at 11pm costs
+the whole window. The doctor charges for it beforehand, when the session opens.
 
-## Por que o aviso é GATEADO na fila, e não solto
+## Why the warning is GATED on the queue, and not loose
 
-Árvore suja é o estado NORMAL de quem está trabalhando. Um aviso em toda
-abertura de sessão é o ruído que o usuário aprende a pular — a mesma razão pela
-qual o modo resumido do doctor não imprime "está tudo ok". O aviso só aparece
-quando as duas coisas são verdade ao mesmo tempo: existe fila `single-track`
-com item `pending`, E a árvore está suja.
+A dirty tree is the NORMAL state of someone who is working. A warning on every
+session opening is the noise the user learns to skip — the same reason the
+doctor's summarized mode does not print "everything is ok". The warning only
+appears when both things are true at the same time: a `single-track` queue
+with a `pending` item exists, AND the tree is dirty.
 
-O teste que mais importa aqui é justamente o do SILÊNCIO: árvore suja sem fila
-pendente não pode dizer nada.
+The test that matters most here is precisely the SILENCE one: a dirty tree
+without a pending queue must say nothing.
 
 Run: python3 tests/test_doctor_dirty_tree.py
 """
@@ -41,7 +41,7 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-PLANO = """schema_version: 2
+PLAN = """schema_version: 2
 mode: single-track
 program: fila
 source: teste
@@ -56,38 +56,38 @@ items:
 """
 
 
-def monta(tmp, status="pending", mode="single-track", com_fila=True):
-    raiz = Path(tmp)
-    if com_fila:
-        d = raiz / ".claude" / "programs" / "fila"
+def build(tmp, status="pending", mode="single-track", with_queue=True):
+    root = Path(tmp)
+    if with_queue:
+        d = root / ".claude" / "programs" / "fila"
         d.mkdir(parents=True)
         (d / "plan.yaml").write_text(
-            PLANO.format(status=status).replace("mode: single-track",
+            PLAN.format(status=status).replace("mode: single-track",
                                                 f"mode: {mode}"),
             encoding="utf-8")
-    (raiz / "README.md").write_text("base\n", encoding="utf-8")
-    subprocess.run(["git", "init", "-q", "."], cwd=raiz, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+    (root / "README.md").write_text("base\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", "."], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", "base"], cwd=raiz, check=True)
-    return raiz
+                    "commit", "-qm", "base"], cwd=root, check=True)
+    return root
 
 
-def roda(raiz):
+def run_doctor(root):
     p = subprocess.run([sys.executable, str(DOCTOR), "--projeto"],
-                       cwd=str(raiz), capture_output=True, text=True, timeout=120)
+                       cwd=str(root), capture_output=True, text=True, timeout=120)
     return p.stdout + p.stderr
 
 
-def suja(raiz):
-    (raiz / "lixo.txt").write_text("trabalho não commitado\n", encoding="utf-8")
+def make_dirty(root):
+    (root / "lixo.txt").write_text("trabalho não commitado\n", encoding="utf-8")
 
 
-def test_suja_com_fila_pendente_avisa():
+def test_dirty_with_pending_queue_warns():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp)
-        suja(raiz)
-        out = roda(raiz)
+        root = build(tmp)
+        make_dirty(root)
+        out = run_doctor(root)
         check("avisa quando há fila pendente E árvore suja",
               "[execucao]" in out and "⚠" in out, out[-600:])
         check("...e nomeia o comando que vai recusar",
@@ -96,63 +96,64 @@ def test_suja_com_fila_pendente_avisa():
         check("...e nomeia a fila", "`fila`" in out, out[-600:])
 
 
-def test_suja_sem_fila_pendente_e_SILENCIOSA():
-    """O caso que decide se o check é útil ou ruído."""
+def test_dirty_without_pending_queue_is_SILENT():
+    """The case that decides whether the check is useful or noise."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp, status="done")
-        suja(raiz)
-        out = roda(raiz)
+        root = build(tmp, status="done")
+        make_dirty(root)
+        out = run_doctor(root)
         check("fila sem item pendente + árvore suja → não diz nada",
               "[execucao]" not in out, out[-600:])
 
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp, com_fila=False)
-        suja(raiz)
-        out = roda(raiz)
+        root = build(tmp, with_queue=False)
+        make_dirty(root)
+        out = run_doctor(root)
         check("repo sem fila nenhuma + árvore suja → não diz nada",
               "[execucao]" not in out, out[-600:])
 
 
-def test_plano_de_ondas_nao_conta_como_fila():
-    """`mode: waves` é do /maestro:run, que não passa pelo cepa-until."""
+def test_waves_plan_does_not_count_as_queue():
+    """`mode: waves` belongs to /maestro:run, which does not go through cepa-until."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp, mode="waves")
-        suja(raiz)
-        out = roda(raiz)
+        root = build(tmp, mode="waves")
+        make_dirty(root)
+        out = run_doctor(root)
         check("plano de ondas não dispara o aviso", "[execucao]" not in out,
               out[-600:])
 
 
-def test_limpa_com_fila_pendente_confirma_que_pode_largar():
+def test_clean_with_pending_queue_confirms_it_can_start():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp)
-        out = roda(raiz)
+        root = build(tmp)
+        out = run_doctor(root)
         check("árvore limpa + fila pendente → confirma que larga",
               "[execucao]" in out and "✓" in out, out[-600:])
         check("...e não é um aviso", "⚠ [execucao]" not in out, out[-600:])
 
 
-def test_registro_do_cepa_until_nao_conta_como_sujeira():
-    """O registro dos runs anteriores mora em `.claude/programs/<fila>/until/`
-    e o `cepa-until` não recusa por causa dele — então o doctor não pode
-    avisar que vai recusar."""
+def test_cepa_until_record_does_not_count_as_dirt():
+    """The record of previous runs lives in `.claude/programs/<queue>/until/`
+    and `cepa-until` does not refuse because of it — so the doctor must not
+    warn that it will refuse.
+    """
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta(tmp)
-        # o doctor grava `.claude/doctor-last-run` na 1ª passada; fora da conta
-        (raiz / ".gitignore").write_text(".claude/doctor-last-run\n",
+        root = build(tmp)
+        # the doctor writes `.claude/doctor-last-run` on the 1st pass; outside the count
+        (root / ".gitignore").write_text(".claude/doctor-last-run\n",
                                          encoding="utf-8")
-        subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                        "commit", "-qm", "ignore"], cwd=raiz, check=True)
-        d = raiz / ".claude" / "programs" / "fila" / "until"
+                        "commit", "-qm", "ignore"], cwd=root, check=True)
+        d = root / ".claude" / "programs" / "fila" / "until"
         d.mkdir(parents=True)
         (d / "2026-09-26-1809.jsonl").write_text("{}\n", encoding="utf-8")
         (d / "2026-09-26-1809.log").write_text("saida\n", encoding="utf-8")
-        out = roda(raiz)
+        out = run_doctor(root)
         check("só o registro do run → confirma que larga",
               "[execucao]" in out and "⚠ [execucao]" not in out, out[-600:])
-        suja(raiz)
-        out = roda(raiz)
+        make_dirty(root)
+        out = run_doctor(root)
         check("registro + sujeira de verdade → ainda avisa",
               "⚠ [execucao]" in out and "1 arquivo(s)" in out,
               [l for l in out.splitlines() if "execucao" in l])
@@ -160,9 +161,9 @@ def test_registro_do_cepa_until_nao_conta_como_sujeira():
 
 def main():
     print("cepa-doctor — árvore suja vs. fila pendente\n")
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"{nome}:")
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"{name}:")
             fn()
     print()
     if FAILURES:

@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Regression tests: o marcador do hook feedback-nudge não é versionado.
+"""Regression tests: the feedback-nudge hook's marker is not versioned.
 
-## Por que este teste existe
+## Why this test exists
 
-O hook `common/hooks/feedback-nudge.py` grava em `.claude/feedback-nudge` o id
-da sessão que já recebeu o aviso, para avisar uma vez só por sessão. É estado
-de runtime desta máquina, reescrito a cada sessão — mas estava versionado, e
-duas worktrees que o reescreveram deram conflito no merge 3f4fe2e (deviations.md,
+The hook `common/hooks/feedback-nudge.py` writes to `.claude/feedback-nudge` the id
+of the session that already received the warning, to warn only once per session. It is
+runtime state of this machine, rewritten every session — but it was versioned, and
+two worktrees that rewrote it caused a conflict in merge 3f4fe2e (deviations.md,
 2026-09-26).
 
-O teste cobra as duas metades do conserto, na superfície em que o problema
-aparece (o `git status` de quem vai commitar):
+The test charges for both halves of the fix, on the surface where the problem
+shows up (the `git status` of whoever is going to commit):
 
-- neste repo, o arquivo não está no índice e o `.gitignore` o ignora;
-- num repo com o `.gitignore` deste, o hook de verdade dispara, grava o
-  marcador, e o `git status` continua limpo.
+- in this repo, the file is not in the index and `.gitignore` ignores it;
+- in a repo with this one's `.gitignore`, the real hook fires, writes the
+  marker, and `git status` stays clean.
 
 Run: python3 tests/test_feedback_nudge_outside_git.py
 """
@@ -27,7 +27,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 HOOK = REPO / "common" / "hooks" / "feedback-nudge.py"
-MARCADOR = ".claude/feedback-nudge"
+MARKER = ".claude/feedback-nudge"
 
 FAILURES = []
 
@@ -40,48 +40,48 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def git(raiz, *args):
-    return subprocess.run(["git", "-C", str(raiz), *args],
+def git(root, *args):
+    return subprocess.run(["git", "-C", str(root), *args],
                           capture_output=True, text=True)
 
 
-def test_repo_nao_versiona_o_marcador():
-    listado = git(REPO, "ls-files", "--", MARCADOR).stdout.strip()
-    check("marcador fora do índice do repo", listado == "", listado)
-    ignorado = git(REPO, "check-ignore", "-q", "--no-index", MARCADOR)
-    check("o .gitignore do repo ignora o marcador", ignorado.returncode == 0,
-          f"exit {ignorado.returncode}")
+def test_repo_does_not_version_the_marker():
+    listed = git(REPO, "ls-files", "--", MARKER).stdout.strip()
+    check("marcador fora do índice do repo", listed == "", listed)
+    ignored = git(REPO, "check-ignore", "-q", "--no-index", MARKER)
+    check("o .gitignore do repo ignora o marcador", ignored.returncode == 0,
+          f"exit {ignored.returncode}")
 
 
-def test_hook_grava_e_status_fica_limpo():
+def test_hook_writes_and_status_stays_clean():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = Path(tmp)
-        git(raiz, "init", "-q")
-        git(raiz, "config", "user.email", "t@t")
-        git(raiz, "config", "user.name", "t")
-        (raiz / ".gitignore").write_text(
+        root = Path(tmp)
+        git(root, "init", "-q")
+        git(root, "config", "user.email", "t@t")
+        git(root, "config", "user.name", "t")
+        (root / ".gitignore").write_text(
             (REPO / ".gitignore").read_text(encoding="utf-8"), encoding="utf-8")
-        git(raiz, "add", ".gitignore")
-        git(raiz, "commit", "-qm", "base")
+        git(root, "add", ".gitignore")
+        git(root, "commit", "-qm", "base")
 
         payload = {"prompt": "esse hook é irritante, não gosto dele",
-                   "session_id": "sessao-teste", "cwd": str(raiz)}
+                   "session_id": "sessao-teste", "cwd": str(root)}
         r = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(payload),
-                           capture_output=True, text=True, cwd=raiz)
+                           capture_output=True, text=True, cwd=root)
         check("o hook disparou o aviso", "feedback-capture" in r.stdout,
               r.stdout[-300:] + r.stderr[-300:])
-        arq = raiz / MARCADOR
+        file = root / MARKER
         check("o hook gravou o marcador",
-              arq.exists() and arq.read_text().strip() == "sessao-teste")
-        status = git(raiz, "status", "--porcelain").stdout.strip()
+              file.exists() and file.read_text().strip() == "sessao-teste")
+        status = git(root, "status", "--porcelain").stdout.strip()
         check("git status limpo depois do hook", status == "", status)
 
 
 def main():
     print("feedback-nudge — marcador fora do git\n")
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"{nome}:")
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"{name}:")
             fn()
     print()
     if FAILURES:

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""/common:until-review — o contrato do comando, por conteúdo.
+"""/common:until-review — the command's contract, by content.
 
-Ele roda num `claude -p` no fim do run, sem ninguém olhando. Se uma edição
-apagar a cláusula "só leitura", o próximo run pode mesclar, mexer na fila ou
-transicionar card às 4h da manhã, e nenhum outro teste acusaria.
+It runs in a `claude -p` at the end of the run, with nobody watching. If an edit
+deleted the "read-only" clause, the next run could merge, tamper with the queue or
+transition a card at 4am, and no other test would accuse it.
 """
 
 import sys
@@ -13,10 +13,10 @@ CMD = Path(__file__).resolve().parents[1] / "common" / "commands" / "until-revie
 FAILURES = []
 
 
-def check(nome, cond, detalhe=""):
-    print(("  ok  " if cond else "FAIL  ") + nome + ("" if cond else f"  {detalhe}"))
+def check(name, cond, detail=""):
+    print(("  ok  " if cond else "FAIL  ") + name + ("" if cond else f"  {detail}"))
     if not cond:
-        FAILURES.append(nome)
+        FAILURES.append(name)
 
 
 def main():
@@ -25,31 +25,31 @@ def main():
     if not CMD.is_file():
         return 1
     f = CMD.read_text(encoding="utf-8")
-    limpo = f.replace("`", "").lower()
-    i = limpo.find("**read-only.**")
-    trecho = " ".join(limpo[i:i + 600].split()) if i != -1 else ""
-    check("declara só leitura nas instruções", bool(trecho))
-    for proibido in ("git merge", "cepa-plan finish", "card transition",
+    clean = f.replace("`", "").lower()
+    i = clean.find("**read-only.**")
+    excerpt = " ".join(clean[i:i + 600].split()) if i != -1 else ""
+    check("declara só leitura nas instruções", bool(excerpt))
+    for forbidden in ("git merge", "cepa-plan finish", "card transition",
                      "build", "push", "file edit"):
-        check(f"...e proíbe {proibido}", proibido in trecho, trecho[:200])
+        check(f"...e proíbe {forbidden}", forbidden in excerpt, excerpt[:200])
     check("proíbe executar providência mesmo reversível",
-          "never execute a course of action, even a reversible one" in limpo)
+          "never execute a course of action, even a reversible one" in clean)
     check("lê o resumo do cepa-until-digest, não o .log inteiro",
-          "cepa-until-digest" in f and "read the digest, not the .log" in limpo)
+          "cepa-until-digest" in f and "read the digest, not the .log" in clean)
     check("manda conferir no git antes de afirmar",
-          "check before you state" in limpo)
+          "check before you state" in clean)
     check("relata em plain-report", "plain-report" in f)
     check("lê o estado do run e comenta cada ação pelo id",
-          ".estado.json" in f and "by its id" in limpo)
+          ".estado.json" in f and "by its id" in clean)
     check("não numera as ações por conta própria",
-          "with no numbering of your own" in limpo)
-    check("repete o bloco 'fica com você'", "fica com você" in limpo)
-    check("tarefa do dono traz 'Done when'", "done when" in limpo)
-    j = limpo.find("fica com você")
+          "with no numbering of your own" in clean)
+    check("repete o bloco 'fica com você'", "fica com você" in clean)
+    check("tarefa do dono traz 'Done when'", "done when" in clean)
+    j = clean.find("fica com você")
     check("'Fica com você' manda escrever o cepa-plan answer colável",
-          "cepa-plan answer" in limpo[j:j + 2500], limpo[j:j + 200])
+          "cepa-plan answer" in clean[j:j + 2500], clean[j:j + 200])
     check("fecha com perguntas fechadas com recomendação",
-          "closed questions" in limpo and "i recommend yes/no" in limpo)
+          "closed questions" in clean and "i recommend yes/no" in clean)
     print()
     if FAILURES:
         print(f"✗ {len(FAILURES)} falha(s): {', '.join(FAILURES)}")

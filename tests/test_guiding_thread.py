@@ -51,23 +51,24 @@ def check(name, cond, detail=""):
 
 
 def read(p):
-    """Arquivo ausente devolve vazio em vez de estourar.
+    """A missing file returns empty instead of blowing up.
 
-    Um arquivo sumido tem de derrubar as asserções QUE FALAM DELE, não abortar
-    a suíte no meio — senão a primeira remoção esconde todas as regressões
-    seguintes (foi o que a perturbação pegou, duas vezes)."""
+    A vanished file must knock down the assertions THAT SPEAK OF IT, not abort
+    the suite midway — otherwise the first removal hides all the following
+    regressions (which is what the perturbation caught, twice).
+    """
     return p.read_text(encoding="utf-8") if p.exists() else ""
 
 
 def main():
-    # ── schema canônico ─────────────────────────────────────────────────────
+    # ── canonical schema ────────────────────────────────────────────────────
     schema_txt = read(SCHEMA)
     check("common/plan-schema.yaml existe", SCHEMA.exists())
     check("schema documenta os dois modos",
           "single-track" in schema_txt and "parallel-waves" in schema_txt)
 
-    # O bloco single-track é YAML vivo (o parallel-waves fica comentado como
-    # exemplo), então tem de parsear e trazer os campos que carregam a dor.
+    # The single-track block is live YAML (parallel-waves stays commented as an
+    # example), so it must parse and carry the fields that carry the pain.
     plan = yaml.safe_load(schema_txt)
     check("schema canônico está em v2 (mode explícito)",
           plan.get("schema_version") == 2, repr(plan.get("schema_version")))
@@ -78,15 +79,15 @@ def main():
 
     items = plan.get("items") or []
     check("single-track traz items ordenados", len(items) >= 2, f"{len(items)} item(s)")
-    for field, perda in (("why", "loss 1: a ordem sem critério"),
+    for field, loss in (("why", "loss 1: a ordem sem critério"),
                          ("human_pending", "loss 2: o que sobrou pro humano"),
                          ("status", "estado por item"),
                          ("blocked_by", "o topo da fila pode estar bloqueado")):
-        check(f"item declara `{field}` ({perda})",
+        check(f"item declara `{field}` ({loss})",
               all(field in it for it in items),
               f"faltando em {[it.get('id') for it in items if field not in it]}")
 
-    # ── sem front-door rival ────────────────────────────────────────────────
+    # ── no rival front-door ─────────────────────────────────────────────────
     pointer_txt = read(POINTER)
     check("maestro/plan-template.yaml aponta para o canônico",
           "common/plan-schema.yaml" in pointer_txt)
@@ -94,21 +95,21 @@ def main():
           "slices:" not in pointer_txt and "items:" not in pointer_txt,
           "o template voltou a duplicar o schema — front-door rival")
 
-    # ── produtor: triage produz ordem + porquê e ENTREGA (loss 1) ───────────
-    # Até a etapa 2 (2026-08-25) o triage também GRAVAVA o plan.yaml, e estas
-    # duas guardas cobravam isso. Ele parou: agora grava o repasse da
-    # classificação e o escritor é o /common:plan --from-jira. O que a fila não
-    # pode perder continua o mesmo — ordem, `why` por item, e a fusão que não
-    # apaga `human_pending` —, então as guardas apontam para onde essas três
-    # coisas passaram a morar, em vez de sumir com a etapa antiga.
+    # ── producer: triage produces order + why and DELIVERS (loss 1) ─────────
+    # Until stage 2 (2026-08-25) triage also WROTE plan.yaml, and these
+    # two guards charged for that. It stopped: now it writes the handoff of the
+    # classification and the writer is /common:plan --from-jira. What the queue
+    # must not lose remains the same — order, `why` per item, and the merge that does not
+    # erase `human_pending` —, so the guards point to where those three
+    # things came to live, instead of vanishing with the old stage.
     triage = read(REPO / "board-flow" / "commands" / "triage.md")
     check("triage entrega o repasse da classificação, e não o plan.yaml",
           "triagem-<YYYY-MM-DD>.json" in triage
           and "no longer writes `queue.yaml`" in triage)
     check("e nomeia o escritor único da fila",
           "/common:queue" in triage and "--from-triage" in triage)
-    # `<programs>` resolve para o clone principal, nunca para a worktree — a
-    # regra e o guard mecânico moram em tests/test_plan_anchor_root.py.
+    # `<programs>` resolves to the main clone, never to the worktree — the
+    # rule and the mechanical guard live in tests/test_plan_anchor_root.py.
     check("triage propõe a fila To Do em ORDEM",
           "in execution order" in triage)
     check("triage exige o `why` por item",
@@ -118,7 +119,7 @@ def main():
           "quem funde agora é o cepa-plan; o triage precisa continuar dizendo "
           "o que está em jogo, senão a regra some do lugar onde ela é lida")
 
-    # ── fechamento que aponta adiante (loss 2) ──────────────────────────────
+    # ── closing that points forward (loss 2) ────────────────────────────────
     for cmd in ("execute", "fix", "prove"):
         txt = read(REPO / "board-flow" / "commands" / f"{cmd}.md")
         check(f"{cmd}: fecha com \"And now?\"", '"And now?"' in txt)
@@ -130,7 +131,7 @@ def main():
         check(f"{cmd}: sem plano, não inventa ordem",
               "/board-flow:triage" in txt)
 
-    # ── /common:next: a pergunta respondida sob demanda (loss 3) ────────
+    # ── /common:next: the question answered on demand (loss 3) ──────────
     nxt_path = REPO / "common" / "commands" / "next.md"
     check("/common:next existe (mora em common — plano não exige tracker)",
           nxt_path.exists())
@@ -152,17 +153,17 @@ def main():
           "Read-only unless `--sync`" in nxt)
     check("next recusa plano de ondas (é do maestro)",
           "parallel-waves" in nxt and "/maestro:run" in nxt)
-    # só o humano fecha a dívida — senão a lista vira decoração
+    # only the human closes the debt — otherwise the list becomes decoration
     check("só o usuário fecha um human_pending",
           "only the user clears it" in nxt)
     check("o schema registra que fechar = null, e só o humano fecha",
           "Só o humano fecha" in schema_txt)
 
-    # registrado onde o usuário encontra
+    # recorded where the user finds it
     check("next está na tabela de comandos",
           "/common:next" in read(REPO / "docs" / "commands.md"))
-    # o doc canônico é o do mecanismo (common), não o do plugin de tracker —
-    # o board-flow.md guarda ponteiro + a metade que é dele, sem duplicar
+    # the canonical doc is the mechanism's (common), not the tracker plugin's —
+    # board-flow.md keeps a pointer + the half that is its own, without duplicating
     doc = read(REPO / "docs" / "execution-plan.md")
     check("existe doc canônico do mecanismo", bool(doc))
     check("o doc nomeia as 3 perdas", doc.count("three distinct losses") == 1)
@@ -183,10 +184,10 @@ def main():
     check("board-flow não reivindica mais o next",
           "advance, next" not in read(REPO / "board-flow" / ".claude-plugin" / "plugin.json"))
 
-    # o furo que o dono achou: um repo sem Jira (como o cepa) tem de conseguir usar
-    # a frase "A tracker is optional" aparece 2x (Purpose e Constraints) — casar
-    # a solta deixaria a asserção passar com uma das duas removida, que foi o que
-    # a perturbação pegou. Cada uma é ancorada no seu contexto.
+    # the hole the owner found: a repo without Jira (like cepa) must be able to use
+    # the phrase "A tracker is optional" appears 2x (Purpose and Constraints) — matching
+    # the loose one would let the assertion pass with one of the two removed, which is what
+    # the perturbation caught. Each one is anchored in its context.
     check("next declara no Purpose que tracker é opcional",
           "**A tracker is optional.** The plan is a file" in nxt)
     check("a constraint reafirma tracker opcional, plano não",

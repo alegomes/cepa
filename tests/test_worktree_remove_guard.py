@@ -2,18 +2,18 @@
 """Regression tests for common/hooks/worktree-remove-guard.py.
 
 No third-party deps — run with `python3 tests/test_worktree_remove_guard.py`
-(or under pytest: `test_worktree_remove_guard` roda o mesmo cenário).
+(or under pytest: `test_worktree_remove_guard` runs the same scenario).
 
 Guards the contracts of the guard:
-  - `git worktree remove` / `git branch -D|-d` com sessão VIVA de outra janela
-    no worktree ou no branch é BLOQUEADO (exit 2), inclusive encadeado
-    (incidente de 2026-08-17);
-  - sessão morta nunca bloqueia;
-  - a sessão que chama é excluída pelo session_id, NUNCA pelo cwd
-    (episódio fb-20261013-1): outra sessão no mesmo cwd continua bloqueando;
-  - caminho relativo e nome do slice (basename) casam o worktree;
-  - texto (`echo`), `worktree list`, `branch -a`, outras tools, comando vazio,
-    payload ilegível e fora de repo falham ABERTO.
+  - `git worktree remove` / `git branch -D|-d` with a LIVE session of another window
+    in the worktree or on the branch is BLOCKED (exit 2), including chained
+    (incident of 2026-08-17);
+  - a dead session never blocks;
+  - the calling session is excluded by session_id, NEVER by cwd
+    (episode fb-20261013-1): another session in the same cwd still blocks;
+  - a relative path and the slice name (basename) match the worktree;
+  - text (`echo`), `worktree list`, `branch -a`, other tools, empty command,
+    unreadable payload and outside a repo fail OPEN.
 """
 
 import json
@@ -63,7 +63,7 @@ def blocked(res):
 
 
 def dead_pid():
-    """PID de um processo que já terminou e foi colhido: garantidamente morto."""
+    """PID of a process that has already ended and been reaped: guaranteed dead."""
     proc = subprocess.Popen([sys.executable, "-c", "pass"])
     proc.wait()
     try:
@@ -93,7 +93,7 @@ def clear_entries(main):
 
 
 def check_wiring():
-    """O hook só vale se o plugin o registra no matcher Bash do PreToolUse."""
+    """The hook is only worth anything if the plugin registers it in the PreToolUse Bash matcher."""
     manifest = REPO / "common" / ".claude-plugin" / "plugin.json"
     data = json.loads(manifest.read_text(encoding="utf-8"))
     cmds = [
@@ -124,7 +124,7 @@ def main():
         OWNER = "aaaaaaaa-owner-0001"
         CALLER = "bbbbbbbb-caller-0002"
 
-        # ── sessão viva de OUTRA janela dentro do worktree ──────────────────
+        # ── live session of ANOTHER window inside the worktree ───────────────
         write_entry(mainrepo, OWNER, wt, "session/prove")
         r = run_hook(f"git worktree remove {wt}", mainrepo, session_id=CALLER)
         check("worktree remove com dono vivo bloqueia", blocked(r), r.stderr)
@@ -152,13 +152,13 @@ def main():
         check("branch -fd (cluster) bloqueia",
               blocked(run_hook("git branch -fd session/prove", mainrepo, CALLER)))
 
-        # ── caminho relativo / nome do slice ────────────────────────────────
+        # ── relative path / slice name ──────────────────────────────────────
         check("cd <main> && worktree remove <nome do slice> bloqueia",
               blocked(run_hook(f"cd {mainrepo} && git worktree remove wt-prove", outside, CALLER)))
         check("caminho relativo ../wt-prove bloqueia",
               blocked(run_hook("git worktree remove ../wt-prove", mainrepo, CALLER)))
 
-        # ── a sessão que chama não se bloqueia — por session_id, não por cwd ─
+        # ── the calling session does not block itself — by session_id, not by cwd ─
         clear_entries(mainrepo)
         write_entry(mainrepo, CALLER, wt, "session/prove")
         check("a própria sessão (mesmo session_id, cwd diferente do payload) libera",
@@ -166,7 +166,7 @@ def main():
         check("a própria sessão no branch libera",
               not blocked(run_hook("git branch -D session/prove", mainrepo, session_id=CALLER)))
 
-        # fb-20261013-1: outra sessão viva NO MESMO cwd do chamador continua visível
+        # fb-20261013-1: another live session IN THE SAME cwd as the caller remains visible
         write_entry(mainrepo, OWNER, wt, "session/prove")
         r = run_hook(f"git worktree remove {wt}", wt, session_id=CALLER)
         check("outra sessão com o MESMO cwd do chamador ainda bloqueia (fb-20261013-1)",
@@ -174,7 +174,7 @@ def main():
         check("sem session_id no payload nada é excluído",
               blocked(run_hook(f"git worktree remove {wt}", mainrepo)))
 
-        # ── sessão morta não bloqueia ───────────────────────────────────────
+        # ── dead session does not block ─────────────────────────────────────
         clear_entries(mainrepo)
         write_entry(mainrepo, OWNER, wt, "session/prove", pid=dead_pid())
         check("worktree remove com dono morto libera",
@@ -184,7 +184,7 @@ def main():
         check("branch -d com dono morto libera",
               not blocked(run_hook("git branch -d session/prove", mainrepo, CALLER)))
 
-        # ── texto e comandos que não removem nada ───────────────────────────
+        # ── text and commands that remove nothing ───────────────────────────
         clear_entries(mainrepo)
         write_entry(mainrepo, OWNER, wt, "session/prove")
         check("echo com o comando dentro NÃO bloqueia",

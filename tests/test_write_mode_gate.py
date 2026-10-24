@@ -1,35 +1,35 @@
 #!/usr/bin/env python3
-"""Testes de regressão de common/hooks/write-mode-gate.py.
+"""Regression tests of common/hooks/write-mode-gate.py.
 
-O modo de uma sessão era prosa: o `session-mode.py` injeta a cada turno "ação
-fora deste modo NÃO vira pergunta e NÃO vira trabalho agora", e nada barrava. Na
-sessão `session/drain-plan-speed` (26/08/2026) o agente furou o modo sete vezes
-seguidas — transformou cada desvio numa pergunta fechada com "Recomendo sim",
-colheu o sim, e construiu. Nenhuma captura de desvio foi registrada.
+A session's mode was prose: `session-mode.py` injects on every turn "an action
+outside this mode does NOT become a question and does NOT become work now", and nothing blocked. In
+session `session/drain-plan-speed` (2026-08-26) the agent broke the mode seven times
+in a row — turned each deviation into a closed question with "Recomendo sim",
+harvested the yes, and built. No deviation capture was recorded.
 
-Este gate é o irmão do `refactor-gate.py`: uma lista branca de DESTINOS por modo,
-aplicada em Edit/Write/MultiEdit/NotebookEdit e também em Bash.
+This gate is the sibling of `refactor-gate.py`: a whitelist of DESTINATIONS per mode,
+applied to Edit/Write/MultiEdit/NotebookEdit and also to Bash.
 
-Contratos guardados aqui:
-  - modo com lista branca: destino fora dela bloqueia (rc=2) com o motivo;
-  - destino dentro da lista passa;
-  - `construction` e `refactor` são mudos — quem cobra ali são o
-    completion-auditor/proof-reviewer e o refactor-gate;
-  - sem modo declarado, mudo;
-  - Bash não é rota de fuga: `>`, `>>`, `sed -i`, `tee` e `git mv` bloqueiam
-    igual (bloquear só Write já deixou agentes escaparem por sed neste repo);
-  - `>=` numa condição não vira redirecionamento (falso bloqueio real do
-    bash-path-lock, que silenciou perturbações por 2 meses);
-  - escrita FORA da raiz da sessão passa — a worktree de perturbação em /tmp e o
-    scratchpad da sessão não são governados por modo (path-lock-out-of-root);
-  - construção indecidível (`python3 -c`, `patch`, heredoc) NÃO bloqueia e
-    AVISA — barrar levaria junto todo heredoc, que é como este repo roda
-    script; o silêncio de antes deixava a linha furar o modo sem rastro;
-  - a mensagem diz o que fazer (registrar pelo off-mode-capture, ou encerrar o
-    modo) e NÃO anuncia o kill switch: escape barato é a mesma fuga de novo;
-  - CEPA_MODO=off desliga o gate.
+Contracts guarded here:
+  - a mode with a whitelist: a destination outside it blocks (rc=2) with the reason;
+  - a destination inside the list passes;
+  - `construction` and `refactor` are silent — whoever charges there are the
+    completion-auditor/proof-reviewer and the refactor-gate;
+  - with no declared mode, silent;
+  - Bash is not an escape route: `>`, `>>`, `sed -i`, `tee` and `git mv` block
+    the same (blocking only Write has already let agents escape through sed in this repo);
+  - `>=` in a condition does not become a redirect (a real false block of the
+    bash-path-lock, which silenced perturbations for 2 months);
+  - a write OUTSIDE the session root passes — the perturbation worktree in /tmp and the
+    session's scratchpad are not governed by mode (path-lock-out-of-root);
+  - an undecidable construct (`python3 -c`, `patch`, heredoc) does NOT block and
+    WARNS — blocking would take every heredoc along, which is how this repo runs
+    scripts; the silence of before let the line break the mode without a trace;
+  - the message says what to do (record through off-mode-capture, or end the
+    mode) and does NOT announce the kill switch: a cheap escape is the same escape again;
+  - CEPA_MODO=off turns the gate off.
 
-Sem deps de terceiros — rode com `python3 tests/test_write_mode_gate.py`.
+No third-party deps — run with `python3 tests/test_write_mode_gate.py`.
 """
 
 import json
@@ -39,8 +39,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-# O hook emite `modo_escrita_indecidivel`, e esta suíte o executa: sem isolar, o
-# ensaio vira linha no relatório do /common:metrics de quem rodar os testes.
+# The hook emits `modo_escrita_indecidivel`, and this suite executes it: without isolating, the
+# rehearsal becomes a line in the /common:metrics report of whoever runs the tests.
 from _telemetria_isolada import isola
 
 isola()
@@ -70,9 +70,9 @@ class Repo:
     def __exit__(self, *a):
         self.tmp.cleanup()
 
-    def modo(self, nome):
+    def mode(self, name):
         (self.path / ".claude" / "session-mode").write_text(
-            f"mode: {nome}\nbudget: null\n", encoding="utf-8")
+            f"mode: {name}\nbudget: null\n", encoding="utf-8")
 
     def call(self, tool, tool_input, env=None):
         e = {**os.environ}
@@ -91,8 +91,8 @@ class Repo:
         return self.call("Bash", {"command": cmd}, **kw)
 
 
-# Um caso por modo: o que ele PRODUZ (passa) e o que ele não produz (bloqueia).
-PERMITIDO = {
+# One case per mode: what it PRODUCES (passes) and what it does not produce (blocks).
+ALLOWED = {
     "exploration": ["docs/estrategia-x.md", ".claude/programs/p/plan.yaml",
                    "BACKLOG.md"],
     "discovery": ["docs/discovery/c/framing.md", "docs/spec/x.md",
@@ -102,7 +102,7 @@ PERMITIDO = {
     "documentation": ["docs/tutorial/primeiro-dia.md", "docs/reference/api.md",
                      ".claude/x", "BACKLOG.md"],
 }
-BLOQUEADO = {
+BLOCKED = {
     "exploration": ["common/hooks/novo.py", "common/commands/x.md",
                    "tests/test_x.py", "common/agents/lead.md", "src/App.java"],
     "discovery": ["docs/estrategia-x.md", "common/hooks/novo.py",
@@ -114,43 +114,43 @@ BLOQUEADO = {
 }
 
 
-def test_lista_branca_por_modo():
-    for modo, alvos in PERMITIDO.items():
+def test_whitelist_per_mode():
+    for mode, targets in ALLOWED.items():
         with Repo() as r:
-            r.modo(modo)
-            for alvo in alvos:
-                p = r.edit(alvo)
-                check(f"{modo}: libera {alvo}", p.returncode == 0, p.stderr[:160])
-    for modo, alvos in BLOQUEADO.items():
+            r.mode(mode)
+            for target in targets:
+                p = r.edit(target)
+                check(f"{mode}: libera {target}", p.returncode == 0, p.stderr[:160])
+    for mode, targets in BLOCKED.items():
         with Repo() as r:
-            r.modo(modo)
-            for alvo in alvos:
-                p = r.edit(alvo)
-                check(f"{modo}: bloqueia {alvo}", p.returncode == 2, p.stderr[:160])
+            r.mode(mode)
+            for target in targets:
+                p = r.edit(target)
+                check(f"{mode}: bloqueia {target}", p.returncode == 2, p.stderr[:160])
 
 
-def test_modos_sem_lista_sao_mudos():
-    for modo in ("construction", "refactor"):
+def test_modes_without_list_are_silent():
+    for mode in ("construction", "refactor"):
         with Repo() as r:
-            r.modo(modo)
-            for alvo in ("common/hooks/novo.py", "tests/test_x.py",
+            r.mode(mode)
+            for target in ("common/hooks/novo.py", "tests/test_x.py",
                          "src/main/java/App.java"):
-                p = r.edit(alvo)
-                check(f"{modo}: gate é mudo em {alvo}", p.returncode == 0,
+                p = r.edit(target)
+                check(f"{mode}: gate é mudo em {target}", p.returncode == 0,
                       p.stderr[:160])
 
 
-def test_session_mode_no_formato_antigo_vale():
-    """`modo: exploracao` (o `cepa` antigo) ainda é lido como `exploration`."""
-    for velho, novo in (("exploracao", "exploration"), ("descoberta", "discovery"),
+def test_session_mode_in_old_format_applies():
+    """`modo: exploracao` (the old `cepa`) is still read as `exploration`."""
+    for old, new in (("exploracao", "exploration"), ("descoberta", "discovery"),
                         ("documentacao", "documentation"), ("reflexao", "reflection")):
         with Repo() as r:
             (r.path / ".claude" / "session-mode").write_text(
-                f"modo: {velho}\nrotina: null\norcamento: null\naberto_em: 2026-10-19T13:46:36Z\n",
+                f"modo: {old}\nrotina: null\norcamento: null\naberto_em: 2026-10-19T13:46:36Z\n",
                 encoding="utf-8")
             p = r.edit("src/App.java")
-            check(f"antigo: modo: {velho} bloqueia como {novo}",
-                  p.returncode == 2 and f"mode {novo}" in p.stderr, p.stderr[:200])
+            check(f"antigo: modo: {old} bloqueia como {new}",
+                  p.returncode == 2 and f"mode {new}" in p.stderr, p.stderr[:200])
     with Repo() as r:
         (r.path / ".claude" / "session-mode").write_text("modo: construcao\n", encoding="utf-8")
         p = r.edit("src/App.java")
@@ -161,15 +161,15 @@ def test_session_mode_no_formato_antigo_vale():
         check("antigo: modo: exploracao libera docs/**", p.returncode == 0, p.stderr[:200])
 
 
-def test_sem_modo_e_mudo():
+def test_without_mode_is_silent():
     with Repo() as r:
         p = r.edit("common/hooks/novo.py")
         check("sem modo declarado: gate é mudo", p.returncode == 0, p.stderr[:160])
 
 
-def test_todas_as_ferramentas_de_escrita():
+def test_all_write_tools():
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         for tool, ti in (("Write", {"file_path": "common/hooks/n.py"}),
                          ("MultiEdit", {"file_path": "common/hooks/n.py"}),
                          ("NotebookEdit", {"notebook_path": "analise/n.ipynb"})):
@@ -177,58 +177,58 @@ def test_todas_as_ferramentas_de_escrita():
             check(f"exploration: {tool} bloqueado", p.returncode == 2, p.stderr[:120])
 
 
-def test_bash_nao_e_rota_de_fuga():
+def test_bash_is_not_an_escape_route():
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         for cmd in ('echo x > common/hooks/novo.py',
                     'cat foo >> common/commands/run.md',
                     "sed -i '' 's/a/b/' common/bin/cepa",
                     'tee tests/test_x.py < /dev/null',
                     'git mv common/hooks/a.py common/hooks/b.py',
-                    # Baixar/criar/sincronizar também escreve, e o destino está
-                    # explícito no argv — achado do proof-reviewer.
+                    # Downloading/creating/syncing also writes, and the destination is
+                    # explicit in the argv — finding of the proof-reviewer.
                     'curl -o common/hooks/novo.py https://e.com/f',
                     'wget -O tests/test_x.py https://e.com/f',
                     'touch common/hooks/novo.py',
                     'rsync -a /tmp/x/ common/hooks/',
-                    # Reverter um arquivo travado para uma versão antiga é
-                    # escrever nele — mesma ferramenta que o `git mv` vigiado.
+                    # Reverting a locked file to an old version is
+                    # writing to it — the same tool as the watched `git mv`.
                     'git checkout main -- common/hooks/novo.py',
                     'git restore tests/test_x.py'):
             p = r.bash(cmd)
             check(f"bash bloqueado: {cmd[:30]}", p.returncode == 2, p.stderr[:120])
 
 
-def test_bash_libera_o_que_o_modo_produz():
+def test_bash_allows_what_the_mode_produces():
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         for cmd in ('echo x > docs/estrategia.md',
                     'git commit -m "docs(estrategia): dois caminhos\n\nA -> B"',
                     'grep -rn "modo" common/hooks/',
-                    # A forma BSD do sed deixa o `''` como operando: sem filtrar
-                    # o token vazio, o SCRIPT `s/a/b/` era contado como arquivo
-                    # escrito e este comando legítimo bloqueava.
+                    # The BSD form of sed leaves `''` as an operand: without filtering
+                    # the empty token, the SCRIPT `s/a/b/` was counted as a written file
+                    # and this legitimate command was blocked.
                     "sed -i '' 's/a/b/' docs/estrategia.md",
                     'curl -o docs/baixado.md https://e.com/f',
                     'touch docs/nota.md',
                     'git checkout main -- docs/estrategia.md',
-                    # Troca de branch não é escrita dirigida a caminho: se
-                    # virasse alvo, o modo barraria todo `git checkout`.
+                    # Switching branches is not a path-directed write: if it
+                    # became a target, the mode would block every `git checkout`.
                     'git checkout main'):
             p = r.bash(cmd)
             check(f"bash liberado: {cmd[:30]}", p.returncode == 0, p.stderr[:160])
 
 
-def test_construcao_indecidivel_avisa_sem_barrar():
-    """`python3 -c`, `patch` e heredoc escrevem onde o gate não enxerga.
+def test_undecidable_construct_warns_without_blocking():
+    """`python3 -c`, `patch` and heredoc write where the gate cannot see.
 
-    Achado do proof-reviewer (26/08/2026): o sinal existia no `_shellscan` e o
-    gate o descartava, então essas linhas passavam sem bloqueio E sem rastro.
-    A decisão foi avisar, não barrar — a lista inclui heredoc, e um modo que
-    barra todo `python3 - <<PY` é um modo que ninguém usa.
+    Finding of the proof-reviewer (2026-08-26): the signal existed in `_shellscan` and the
+    gate discarded it, so these lines passed without a block AND without a trace.
+    The decision was to warn, not to block — the list includes heredoc, and a mode that
+    blocks every `python3 - <<PY` is a mode nobody uses.
     """
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         for cmd in ('python3 -c "open(\'common/hooks/evil.py\',\'w\').write(1)"',
                     'patch common/bin/cepa < /tmp/p.diff',
                     "python3 - <<'PY'\nprint(1)\nPY"):
@@ -241,57 +241,57 @@ def test_construcao_indecidivel_avisa_sem_barrar():
                   "did not check" in p.stderr, p.stderr[:200])
 
 
-def test_comando_legivel_nao_avisa():
-    """O aviso só vale se ele for raro — um que grita sempre ensina a ignorá-lo."""
+def test_readable_command_does_not_warn():
+    """The warning is only worth anything if it is rare — one that always shouts teaches people to ignore it."""
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         for cmd in ('echo x > docs/estrategia.md', 'grep -rn modo common/'):
             p = r.bash(cmd)
             check(f"sem aviso em comando legível: {cmd[:24]}",
                   "WARNING" not in p.stderr, p.stderr[:160])
 
 
-def test_indecidivel_e_mudo_em_modo_sem_lista():
+def test_undecidable_is_silent_in_mode_without_list():
     with Repo() as r:
-        r.modo("construction")
+        r.mode("construction")
         p = r.bash('python3 -c "open(\'x.py\',\'w\')"')
         check("construction: nem aviso", p.returncode == 0 and "WARNING" not in p.stderr,
               p.stderr[:160])
 
 
-def test_indecidivel_nao_engole_bloqueio():
-    """Alvo legível fora da lista barra mesmo quando a linha também é opaca."""
+def test_undecidable_does_not_swallow_a_block():
+    """A readable target outside the list blocks even when the line is also opaque."""
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         p = r.bash('echo x > common/hooks/n.py && python3 -c "pass"')
         check("alvo legível fora da lista ainda barra", p.returncode == 2,
               p.stderr[:160])
 
 
-def test_ge_nao_e_redirecionamento():
+def test_ge_is_not_a_redirect():
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         p = r.bash('if [ "$n" >= 3 ]; then echo common/hooks/x.py; fi')
         check(">= não vira redirecionamento", p.returncode == 0, p.stderr[:160])
 
 
-def test_fora_da_raiz_passa():
-    """A worktree de perturbação em /tmp e o scratchpad não são do modo.
+def test_outside_the_root_passes():
+    """The perturbation worktree in /tmp and the scratchpad do not belong to the mode.
 
-    Estreitar o gate para fora da raiz foi o que travou o proof-reviewer em
-    2026-06-18 (memória path-lock-out-of-root) e deixou 5 cards presos em
-    NEEDS-HUMAN. Aqui o modo governa o repo da sessão, e só ele.
+    Narrowing the gate to outside the root is what locked the proof-reviewer on
+    2026-06-18 (memory path-lock-out-of-root) and left 5 cards stuck in
+    NEEDS-HUMAN. Here the mode governs the session's repo, and only it.
     """
     with Repo() as r:
-        r.modo("exploration")
-        for alvo in ("/tmp/perturba/App.java", "/tmp/scratch/nota.py"):
-            p = r.edit(alvo)
-            check(f"fora da raiz passa: {alvo}", p.returncode == 0, p.stderr[:160])
+        r.mode("exploration")
+        for target in ("/tmp/perturba/App.java", "/tmp/scratch/nota.py"):
+            p = r.edit(target)
+            check(f"fora da raiz passa: {target}", p.returncode == 0, p.stderr[:160])
 
 
-def test_mensagem_diz_o_que_fazer():
+def test_message_says_what_to_do():
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         p = r.edit("common/hooks/novo.py")
         check("mensagem nomeia o modo ativo", "exploration" in p.stderr, p.stderr[:200])
         check("mensagem nomeia o alvo", "common/hooks/novo.py" in p.stderr,
@@ -306,36 +306,36 @@ def test_mensagem_diz_o_que_fazer():
 
 def test_kill_switch():
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         p = r.edit("common/hooks/novo.py", env={"CEPA_MODO": "off"})
         check("CEPA_MODO=off desliga o gate", p.returncode == 0, p.stderr[:160])
 
 
-def test_tabela_vem_de_modos_py():
-    """A lista branca mora em _modes.py, junto com o resto da tabela de modos.
+def test_table_comes_from_modes_py():
+    """The whitelist lives in _modes.py, together with the rest of the modes table.
 
-    Uma segunda tabela de modos no hook é a doença que _modes.py trata.
+    A second table of modes in the hook is the disease that _modes.py treats.
     """
     sys.path.insert(0, str(REPO / "common" / "hooks"))
     from _modes import MODES
-    for nome, d in MODES.items():
-        check(f"_modes: {nome} declara `write`", "write" in d,
+    for name, d in MODES.items():
+        check(f"_modes: {name} declara `write`", "write" in d,
               "modo sem lista branca declarada — nem 'tudo' nem os globs")
     src = GATE.read_text(encoding="utf-8") if GATE.exists() else ""
     check("o hook importa a tabela em vez de copiá-la", "_modes" in src)
 
 
-def test_corpo_do_heredoc_nao_e_alvo():
-    """Episódios 2 e 3 do item portao-modo-escrita-le-heredoc (02/09/2026).
+def test_heredoc_body_is_not_a_target():
+    """Episodes 2 and 3 of the item portao-modo-escrita-le-heredoc (2026-09-02).
 
-    O portão tratava o texto DE DENTRO do heredoc como shell: uma crase citada
-    no corpo virava alvo, e um `>` de um exemplo citado na prosa virava o
-    destino da escrita. A tentativa de gravar a própria seção do BACKLOG que
-    descrevia o defeito foi barrada por ele. O corpo é dado, não comando.
+    The gate treated the text INSIDE the heredoc as shell: a backtick quoted
+    in the body became a target, and a `>` of an example quoted in the prose became the
+    destination of the write. The attempt to record the very BACKLOG section
+    that described the defect was blocked by it. The body is data, not a command.
     """
     with Repo() as r:
-        r.modo("exploration")
-        casos = {
+        r.mode("exploration")
+        cases = {
             "crase no corpo":
                 f"cat > {r.path}/docs/nota.md <<'EOF'\n"
                 "veja `common/hooks/x.py` e `\n"
@@ -349,25 +349,25 @@ def test_corpo_do_heredoc_nao_e_alvo():
                 "echo x > common/hooks/novo.py\n"
                 "EOF",
         }
-        for nome, cmd in casos.items():
+        for name, cmd in cases.items():
             p = r.bash(cmd)
-            check(f"heredoc liberado: {nome}", p.returncode == 0, p.stderr[:200])
-        # O corpo ser dado não pode abrir um furo: o destino REAL do comando
-        # continua sendo conferido.
+            check(f"heredoc liberado: {name}", p.returncode == 0, p.stderr[:200])
+        # The body being data cannot open a hole: the REAL destination of the command
+        # is still checked.
         p = r.bash("cat > common/hooks/novo.py <<'EOF'\nconteudo\nEOF")
         check("heredoc para destino fora do modo ainda barra",
               p.returncode == 2, p.stderr[:200])
 
 
-def test_variavel_do_proprio_comando_e_expandida():
-    """Episódio 1: o alvo montado por variável atribuída no próprio comando.
+def test_variable_of_the_command_itself_is_expanded():
+    """Episode 1: the target assembled by a variable assigned in the command itself.
 
-    O portão relatava o literal `$D/x.md`, que não casa com lista nenhuma, e
-    barrava dizendo "você está fora do modo". O mesmo caminho por extenso
-    passava. A atribuição simples está na linha: dá para ler sem executar.
+    The gate reported the literal `$D/x.md`, which matches no list, and
+    blocked saying "you are outside the mode". The same path written out in full
+    passed. The simple assignment is on the line: it can be read without executing.
     """
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         for cmd in (f'D={r.path}/.claude/notas; cat > "$D/x.md" <<EOF\noi\nEOF',
                     f'D={r.path}/.claude/notas && echo oi > ${{D}}/x.md',
                     f'export D="{r.path}/docs"; echo oi >> $D/y.md',
@@ -375,7 +375,7 @@ def test_variavel_do_proprio_comando_e_expandida():
             p = r.bash(cmd)
             check(f"variável do comando expandida: {cmd[-24:]!r}",
                   p.returncode == 0, p.stderr[:200])
-        # Expandir não é afrouxar: o destino expandido fora do modo barra.
+        # Expanding is not loosening: the expanded destination outside the mode blocks.
         p = r.bash('D=common/hooks; echo x > "$D/novo.py"')
         check("variável expandida para fora do modo barra", p.returncode == 2,
               p.stderr[:200])
@@ -383,16 +383,16 @@ def test_variavel_do_proprio_comando_e_expandida():
               "common/hooks/novo.py" in p.stderr, p.stderr[:300])
 
 
-def test_alvo_nao_resolvivel_nao_culpa_o_modo():
-    """A rede do item: quando o alvo não dá para ler, dizer isso.
+def test_unresolvable_target_does_not_blame_the_mode():
+    """The net of the item: when the target cannot be read, say so.
 
-    As duas falhas eram indistinguíveis para quem lê — a de parsing saía com a
-    mensagem de "fora do modo", que manda encerrar o modo, e quem leva o
-    bloqueio acredita. Alvo com variável que o comando não atribui (ou atribui
-    por substituição de comando) é alvo não resolvido, não veredito.
+    The two failures were indistinguishable to whoever reads — the parsing one came out with the
+    "outside the mode" message, which orders ending the mode, and whoever takes
+    the block believes it. A target with a variable the command does not assign (or assigns
+    through command substitution) is an unresolved target, not a verdict.
     """
     with Repo() as r:
-        r.modo("exploration")
+        r.mode("exploration")
         for cmd in ('echo x > "$DESTINO_QUE_NINGUEM_DEFINIU/a.md"',
                     'D=$(pwd)/docs; echo x > $D/a.md',
                     'echo x > "${D:-docs}/a.md"'):
@@ -404,9 +404,9 @@ def test_alvo_nao_resolvivel_nao_culpa_o_modo():
             check(f"não culpa o modo: {cmd[:28]}",
                   "outside what that mode produces" not in p.stderr
                   and "end this mode" not in p.stderr.lower(), p.stderr[:300])
-        # Comando que mexe na variável sem atribuição simples invalida o valor
-        # que o gate guardou: `unset D` deixa `$D` vazio no shell, e liberar
-        # `docs/y` seria liberar um alvo que não é o real.
+        # A command that touches the variable without a simple assignment invalidates the value
+        # the gate kept: `unset D` leaves `$D` empty in the shell, and releasing
+        # `docs/y` would be releasing a target that is not the real one.
         for cmd in ('D=docs; unset D; echo x > $D/y.md',
                     'D=docs; read D < /tmp/entrada; echo x > $D/y.md',
                     'D=docs; ((D+=1)); echo x > $D/y.md'):
@@ -414,7 +414,7 @@ def test_alvo_nao_resolvivel_nao_culpa_o_modo():
             check(f"mutação invalida o valor: {cmd[8:22]}",
                   p.returncode == 2 and "could not resolve" in p.stderr,
                   p.stderr[:200])
-        # Variável de ambiente de verdade continua valendo (os.path.expandvars).
+        # A real environment variable remains valid (os.path.expandvars).
         p = r.bash('echo x > "$RAIZ_TESTE/docs/a.md"',
                    env={"RAIZ_TESTE": str(r.path)})
         check("variável de ambiente definida resolve", p.returncode == 0,
@@ -426,20 +426,20 @@ def main():
     if not GATE.exists():
         print(f"  FAIL hook ausente: {GATE}")
         return 1
-    for fn in (test_lista_branca_por_modo, test_modos_sem_lista_sao_mudos,
-               test_session_mode_no_formato_antigo_vale,
-               test_sem_modo_e_mudo, test_todas_as_ferramentas_de_escrita,
-               test_bash_nao_e_rota_de_fuga, test_bash_libera_o_que_o_modo_produz,
-               test_construcao_indecidivel_avisa_sem_barrar,
-               test_comando_legivel_nao_avisa,
-               test_indecidivel_e_mudo_em_modo_sem_lista,
-               test_indecidivel_nao_engole_bloqueio,
-               test_ge_nao_e_redirecionamento, test_fora_da_raiz_passa,
-               test_mensagem_diz_o_que_fazer, test_kill_switch,
-               test_tabela_vem_de_modos_py,
-               test_corpo_do_heredoc_nao_e_alvo,
-               test_variavel_do_proprio_comando_e_expandida,
-               test_alvo_nao_resolvivel_nao_culpa_o_modo):
+    for fn in (test_whitelist_per_mode, test_modes_without_list_are_silent,
+               test_session_mode_in_old_format_applies,
+               test_without_mode_is_silent, test_all_write_tools,
+               test_bash_is_not_an_escape_route, test_bash_allows_what_the_mode_produces,
+               test_undecidable_construct_warns_without_blocking,
+               test_readable_command_does_not_warn,
+               test_undecidable_is_silent_in_mode_without_list,
+               test_undecidable_does_not_swallow_a_block,
+               test_ge_is_not_a_redirect, test_outside_the_root_passes,
+               test_message_says_what_to_do, test_kill_switch,
+               test_table_comes_from_modes_py,
+               test_heredoc_body_is_not_a_target,
+               test_variable_of_the_command_itself_is_expanded,
+               test_unresolvable_target_does_not_blame_the_mode):
         fn()
     if failures:
         print(f"\n{len(failures)} falha(s): {', '.join(failures)}")

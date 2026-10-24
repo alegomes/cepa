@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""C1-4 (intencao-c1): o contrato do passo 3b de /common:session.
+"""C1-4 (intencao-c1): the contract of step 3b of /common:session.
 
-A rotina grava a intenção da sessão pelo `cepa-intencao` logo depois da
-largada, sem um segundo ritual. Aqui se garante que o comando documentado
-existe entre os passos 3 e 4, trata a saída 4 (`--motivo`), avança o cursor,
-não roda no `--help`, e que nenhum item de `--plano` tem ':' (o escritor
-recusaria). E, mais forte que o texto: o comando documentado é EXECUTADO
-contra o `cepa-intencao` real num repo temporário, com a saída 4 e o
-`--motivo` da segunda gravação, e os dois `--passo`.
+The routine records the session intent through `cepa-intencao` right after the
+start, without a second ritual. Here it is guaranteed that the documented command
+exists between steps 3 and 4, handles exit 4 (`--motivo`), advances the cursor,
+does not run on `--help`, and that no item of `--plano` has ':' (the writer
+would refuse). And, stronger than the text: the documented command is EXECUTED
+against the real `cepa-intencao` in a temporary repo, with exit 4 and the
+`--motivo` of the second recording, and the two `--passo`.
 
-Sem deps de terceiros — rode com `python3 tests/test_session_intent_contract.py`.
+No third-party deps — run with `python3 tests/test_session_intent_contract.py`.
 """
 
 import os
@@ -51,27 +51,27 @@ def main():
     check("avança o cursor com --step 2", "--step 2" in sec)
     check("avança o cursor com --step 3", "--step 3" in sec)
     check("diz que não roda no --help", "--help" in sec and "never on the `--help` path" in sec)
-    plano = " ".join(sec.split())
+    plan = " ".join(sec.split())
     check("diz que substitui o pedido do hook (sem segundo ritual)",
-          "do not propose it separately" in plano and "second ritual" in plano)
+          "do not propose it separately" in plan and "second ritual" in plan)
     check("diz que falha do escritor não para a rotina",
-          "A writer failure does not stop the routine" in plano)
+          "A writer failure does not stop the routine" in plan)
 
-    linha = next((l for l in sec.splitlines() if 'cepa-intent" write' in l), "")
-    check("achou a linha do comando documentado", bool(linha))
-    m = re.search(r"--plan\s+(.*)$", linha)
-    itens = []
+    line = next((l for l in sec.splitlines() if 'cepa-intent" write' in l), "")
+    check("achou a linha do comando documentado", bool(line))
+    m = re.search(r"--plan\s+(.*)$", line)
+    items = []
     if m:
         try:
-            itens = shlex.split(m.group(1))
+            items = shlex.split(m.group(1))
         except ValueError:
-            itens = []
-    itens = [i for i in itens if not i.startswith("--")]
-    check("o plano documentado tem 1 a 6 itens", 1 <= len(itens) <= 6, repr(itens))
-    check("nenhum item do plano tem ':'", all(":" not in i for i in itens), repr(itens))
+            items = []
+    items = [i for i in items if not i.startswith("--")]
+    check("o plano documentado tem 1 a 6 itens", 1 <= len(items) <= 6, repr(items))
+    check("nenhum item do plano tem ':'", all(":" not in i for i in items), repr(items))
 
-    executa(sec, linha)
-    alias_antigo(sec, linha)
+    execute(sec, line)
+    old_alias(sec, line)
 
     if failures:
         print(f"\n{len(failures)} FAIL")
@@ -79,68 +79,68 @@ def main():
     print("\nOK")
 
 
-def roda(cmd, cwd, env):
+def run_documented(cmd, cwd, env):
     return subprocess.run(cmd, shell=True, cwd=cwd, env=env, capture_output=True,
                           text=True, timeout=60)
 
 
-def alias_antigo(sec, linha):
-    """O comando documentado, escrito com os nomes antigos, ainda roda (atalho + flags)."""
+def old_alias(sec, line):
+    """The documented command, written with the old names, still runs (shortcut + flags)."""
     print("os nomes antigos do mesmo comando ainda funcionam")
-    velho = (linha.strip().replace("cepa-intent\" write", "cepa-intencao\" gravar")
+    old = (line.strip().replace("cepa-intent\" write", "cepa-intencao\" gravar")
              .replace("--purpose", "--proposito").replace("--by-when", "--para-quando")
              .replace("--plan", "--plano"))
-    velho = re.sub(r'--proposito "<[^>]*>"', '--proposito "rodar via nomes antigos"', velho)
+    old = re.sub(r'--proposito "<[^>]*>"', '--proposito "rodar via nomes antigos"', old)
     with tempfile.TemporaryDirectory() as t:
         subprocess.run(["git", "init", "-q", t], check=True)
         env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT),
                "CEPA_TELEMETRY_DIR": os.path.join(t, ".tel"),
                "CLAUDE_CODE_SESSION_ID": "sess-contrato"}
-        r = roda(velho, t, env)
+        r = run_documented(old, t, env)
         check("antigo: `cepa-intencao gravar --proposito ...` sai 0", r.returncode == 0,
               f"rc={r.returncode} {r.stderr!r}")
         d = M.read_intent(t) or {}
         check("antigo: gravou o propósito e o plano de 3 passos",
               d.get("purpose") == "rodar via nomes antigos" and len(d.get("plan") or []) == 3, repr(d))
-        r = roda(velho, t, env)
+        r = run_documented(old, t, env)
         check("antigo: regravar sem --motivo sai 4", r.returncode == 4, f"rc={r.returncode}")
-        r = roda(f'{velho} --motivo "m"', t, env)
+        r = run_documented(f'{old} --motivo "m"', t, env)
         check("antigo: com --motivo sai 0", r.returncode == 0, r.stderr)
-        r = roda('python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" --passo 2', t, env)
+        r = run_documented('python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" --passo 2', t, env)
         check("antigo: `--passo 2` sai 0 e move o cursor",
               r.returncode == 0 and (M.read_intent(t) or {}).get("step") == 2, r.stderr)
 
 
-def executa(sec, linha):
-    """Roda a linha documentada (placeholder do propósito trocado) num repo novo."""
+def execute(sec, line):
+    """Runs the documented line (purpose placeholder swapped) in a fresh repo."""
     print("o comando documentado roda contra o cepa-intent real")
-    cmd = re.sub(r'--purpose "<[^>]*>"', '--purpose "rodar prove-drain --max 5"', linha.strip())
-    motivo = re.search(r'`(--reason "[^"]*")`', sec)
-    passos = re.findall(r'`(python3 "\$\{CLAUDE_PLUGIN_ROOT\}/bin/cepa-intent" --step \d)`', sec)
+    cmd = re.sub(r'--purpose "<[^>]*>"', '--purpose "rodar prove-drain --max 5"', line.strip())
+    reason = re.search(r'`(--reason "[^"]*")`', sec)
+    steps = re.findall(r'`(python3 "\$\{CLAUDE_PLUGIN_ROOT\}/bin/cepa-intent" --step \d)`', sec)
     with tempfile.TemporaryDirectory() as t:
         subprocess.run(["git", "init", "-q", t], check=True)
         env = {**os.environ, "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT),
                "CEPA_TELEMETRY_DIR": os.path.join(t, ".tel"),
                "CLAUDE_CODE_SESSION_ID": "sess-contrato"}
-        r = roda(cmd, t, env)
+        r = run_documented(cmd, t, env)
         check("a 1a gravação sai 0", r.returncode == 0, f"rc={r.returncode} {r.stderr!r}")
         d = M.read_intent(t) or {}
         check("o propósito é o da largada", d.get("purpose") == "rodar prove-drain --max 5",
               repr(d.get("purpose")))
         check("o plano gravado tem 3 passos, no passo 1",
               len(d.get("plan") or []) == 3 and d.get("step") == 1, repr(d))
-        r = roda(cmd, t, env)
+        r = run_documented(cmd, t, env)
         check("regravar sem --reason sai 4, como o passo diz", r.returncode == 4,
               f"rc={r.returncode}")
-        check("o passo documenta o --reason", bool(motivo))
-        if motivo:
-            r = roda(f"{cmd} {motivo.group(1).replace('<rotina>', 'prove-drain')}", t, env)
+        check("o passo documenta o --reason", bool(reason))
+        if reason:
+            r = run_documented(f"{cmd} {reason.group(1).replace('<rotina>', 'prove-drain')}", t, env)
             check("com o --reason documentado sai 0", r.returncode == 0, r.stderr)
             d = M.read_intent(t) or {}
             check("a anterior foi para o histórico", len(d.get("history") or []) == 1, repr(d))
-        check("os dois --step estão no formato executável", len(passos) == 2, repr(passos))
-        for p in passos:
-            r = roda(p, t, env)
+        check("os dois --step estão no formato executável", len(steps) == 2, repr(steps))
+        for p in steps:
+            r = run_documented(p, t, env)
             check(f"`{p[-9:]}` sai 0", r.returncode == 0, r.stderr)
         d = M.read_intent(t) or {}
         check("o cursor terminou no passo 3", d.get("step") == 3, repr(d.get("step")))

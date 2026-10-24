@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-"""Regression test: o aviso "📋 Unmerged session worktrees" do SessionStart
-listava branches que `git branch -a` não conhece.
+"""Regression test: the "📋 Unmerged session worktrees" warning of SessionStart
+listed branches that `git branch -a` does not know.
 
-O defeito (medido em wego-acesso-backend, 2026-08-24): o bloco listou três
-`session/WEGO-paralelo-*` como não mescladas, uma delas "com alterações não
-commitadas", e nenhuma existia. A lista já vinha do git na hora — o que
-mentia era o caso em que o ref da branch some (update-ref -d, ferramenta que
-contorna o `git branch -D`) enquanto `git worktree list` ainda registra a
+The defect (measured in wego-acesso-backend, 2026-08-24): the block listed three
+`session/WEGO-paralelo-*` as unmerged, one of them "with uncommitted
+changes", and none existed. The list already came from git on the spot — what
+lied was the case where the branch ref vanishes (update-ref -d, a tool that
+bypasses `git branch -D`) while `git worktree list` still registers the
 worktree:
-  - `rev-list main..<branch>` falha → ahead = -1, e o filtro `ahead != 0`
-    contava "desconhecido" como pendência;
-  - com o diretório ainda no disco, `git status` numa branch sem ref mostra
-    todo arquivo como staged → "uncommitted changes".
+  - `rev-list main..<branch>` fails → ahead = -1, and the `ahead != 0` filter
+    counted "unknown" as pending;
+  - with the directory still on disk, `git status` on a branch without a ref shows
+    every file as staged → "uncommitted changes".
 
-Contratos guardados aqui, disparando o hook de verdade:
-  - branch apagada + diretório sumido → não aparece em lugar nenhum;
-  - branch apagada + diretório presente → sai do bloco 📋 e ganha linha
-    própria dizendo que a branch não existe mais, com o caminho;
-  - branch viva com commit à frente → continua no bloco 📋 ("1 commit").
+Contracts guarded here, firing the real hook:
+  - deleted branch + vanished directory → appears nowhere;
+  - deleted branch + directory present → leaves the 📋 block and gets its own
+    line saying the branch no longer exists, with the path;
+  - live branch with a commit ahead → stays in the 📋 block ("1 commit").
 
-Rode com `python3 tests/test_ghost_worktrees_warning.py`.
+Run with `python3 tests/test_ghost_worktrees_warning.py`.
 """
 
 import json
@@ -54,26 +54,26 @@ def git(*args, cwd):
                    cwd=cwd, check=True, capture_output=True)
 
 
-def montar(base: Path) -> Path:
+def build(base: Path) -> Path:
     repo = base / "r"
     repo.mkdir()
     git("init", "-q", "-b", "main", cwd=repo)
     git("commit", "-q", "--allow-empty", "-m", "init", cwd=repo)
 
-    # fantasma: diretório e ref sumiram, só o registro da worktree sobrou
+    # ghost: directory and ref vanished, only the worktree registration remained
     git("worktree", "add", "-q", "-b", "session/fantasma", str(base / "wt-fantasma"), cwd=repo)
     subprocess.run(["rm", "-rf", str(base / "wt-fantasma")], check=True)
     git("update-ref", "-d", "refs/heads/session/fantasma", cwd=repo)
 
-    # órfã: ref sumiu, diretório com um arquivo continua no disco
-    orfa = base / "wt-orfa"
-    git("worktree", "add", "-q", "-b", "session/orfa", str(orfa), cwd=repo)
-    (orfa / "f").write_text("x\n")
-    git("add", "f", cwd=orfa)
-    git("commit", "-q", "-m", "f", cwd=orfa)
+    # orphan: ref vanished, directory with a file remains on disk
+    orphan = base / "wt-orfa"
+    git("worktree", "add", "-q", "-b", "session/orfa", str(orphan), cwd=repo)
+    (orphan / "f").write_text("x\n")
+    git("add", "f", cwd=orphan)
+    git("commit", "-q", "-m", "f", cwd=orphan)
     git("update-ref", "-d", "refs/heads/session/orfa", cwd=repo)
 
-    # real: branch viva com um commit que a main não tem
+    # real: live branch with a commit that main does not have
     real = base / "wt-real"
     git("worktree", "add", "-q", "-b", "session/real", str(real), cwd=repo)
     (real / "g").write_text("y\n")
@@ -82,7 +82,7 @@ def montar(base: Path) -> Path:
     return repo
 
 
-def rodar_hook(repo: Path, home: Path) -> str:
+def run_hook(repo: Path, home: Path) -> str:
     env = dict(os.environ, HOME=str(home))
     env.pop("CLAUDE_WT_CLAIM", None)
     p = subprocess.run(
@@ -95,10 +95,10 @@ def rodar_hook(repo: Path, home: Path) -> str:
     return json.loads(p.stdout)["hookSpecificOutput"]["additionalContext"]
 
 
-def bloco(ctx: str, cabeca: str) -> str:
-    for parte in ctx.split("\n\n"):
-        if parte.startswith(cabeca):
-            return parte
+def block(ctx: str, head: str) -> str:
+    for part in ctx.split("\n\n"):
+        if part.startswith(head):
+            return part
     return ""
 
 
@@ -106,7 +106,7 @@ def main():
     with tempfile.TemporaryDirectory() as t:
         base = Path(t).resolve()
         (base / "home").mkdir()
-        repo = montar(base)
+        repo = build(base)
 
         rows = {c["branch"]: c for c in L.classify(str(repo))}
         check("classify: ref apagado é branch_gone",
@@ -115,16 +115,16 @@ def main():
         check("classify: branch viva não é branch_gone",
               rows["session/real"]["branch_gone"] is False, str(rows["session/real"]))
 
-        ctx = rodar_hook(repo, base / "home")
-        unmerged = bloco(ctx, "📋 Unmerged session worktrees")
-        orfas = bloco(ctx, "⚠ Worktrees whose branch no longer exists")
+        ctx = run_hook(repo, base / "home")
+        unmerged = block(ctx, "📋 Unmerged session worktrees")
+        orphans = block(ctx, "⚠ Worktrees whose branch no longer exists")
 
         check("fantasma não aparece em lugar nenhum", "session/fantasma" not in ctx, ctx)
         check("órfã não é listada como não mesclada", "session/orfa" not in unmerged, unmerged)
         check("órfã não vira 'uncommitted changes'",
               "uncommitted" not in unmerged, unmerged)
         check("órfã ganha linha própria com o caminho",
-              str(base / "wt-orfa") in orfas and "session/orfa" in orfas, ctx)
+              str(base / "wt-orfa") in orphans and "session/orfa" in orphans, ctx)
         check("branch viva com commit continua no aviso",
               "session/real" in unmerged and "1 commit" in unmerged, ctx)
 

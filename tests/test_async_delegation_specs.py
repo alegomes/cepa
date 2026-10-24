@@ -1,34 +1,34 @@
 #!/usr/bin/env python3
-"""Todo agente que delega carrega a seção de delegação assíncrona.
+"""Every agent that delegates carries the async delegation section.
 
-Sem dependência externa — rode com `python3 tests/test_async_delegation_specs.py`.
+No external dependency — run with `python3 tests/test_async_delegation_specs.py`.
 
-## Por que existe
+## Why it exists
 
-A ferramenta `Agent` deste harness devolve `Async agent launched successfully`, não o
-resultado: o subagente roda em segundo plano e o resultado chega depois, como notificação
-que reinvoca quem delegou. As 10 specs que delegam eram silenciosas sobre isso — nenhuma
-dizia onde o turno termina — e os leads preenchiam o silêncio sondando o disco atrás do
-arquivo do worker. Medição de 2026-08-26 sobre 5 runs: 912 minutos (15 horas) em comando
-que não fazia nada, entre 19% e 52% do relógio de cada run.
+The `Agent` tool of this harness returns `Async agent launched successfully`, not the
+result: the subagent runs in the background and the result arrives later, as a notification
+that re-invokes whoever delegated. The 10 specs that delegate were silent about this — none
+said where the turn ends — and the leads filled the silence by polling the disk for the
+worker's file. Measurement of 2026-08-26 over 5 runs: 912 minutes (15 hours) in commands
+that did nothing, between 19% and 52% of each run's clock.
 
-A seção entrou nas 10. O buraco que sobra é o próximo agente: quem criar o 11º lead, ou
-uma topologia nova, não tem como saber que essa seção precisa existir — e a ausência não
-falha nada, ela só devolve a sondagem em silêncio. É o padrão que este repo já catalogou
-três vezes (memória `gate-por-nome-de-ferramenta-falha-aberto`): conserto aplicado em N
-cópias, cópia N+1 nasce sem ele.
+The section went into all 10. The hole that remains is the next agent: whoever creates the
+11th lead, or a new topology, has no way to know that this section needs to exist — and its
+absence fails nothing, it just brings the polling back in silence. It is the pattern this
+repo has already catalogued three times (memory `gate-por-nome-de-ferramenta-falha-aberto`):
+a fix applied in N copies, copy N+1 is born without it.
 
-Este teste é o radar. A regra é mecânica e derivada do frontmatter, não de uma lista fixa:
-**se o agente tem `Task` nas ferramentas, ele delega; se delega, precisa da seção.** Uma
-lista fixa envelheceria exatamente como as 10 specs envelheceram.
+This test is the radar. The rule is mechanical and derived from the frontmatter, not from a
+fixed list: **if the agent has `Task` in its tools, it delegates; if it delegates, it needs
+the section.** A fixed list would age exactly as the 10 specs aged.
 
-## A exceção do run desatendido
+## The exception of the unattended run
 
-Em 2026-10-19 a seção ganhou a exceção para run desatendido (`cepa-until`, `claude -p`): ali o
-lead é subagente do orquestrador, e encerrar o turno não espera a notificação, devolve o item
-ao orquestrador com o worker ainda rodando. Medição no run `until/2026-10-15-1946`: 10
-retomadas à mão em 5 de 7 rodadas. A quarta marca (`run_in_background: false`) impede que a
-exceção se perca numa cópia.
+On 2026-10-19 the section gained the exception for the unattended run (`cepa-until`, `claude -p`): there the
+lead is a subagent of the orchestrator, and ending the turn does not wait for the notification, it returns the item
+to the orchestrator with the worker still running. Measurement in run `until/2026-10-15-1946`: 10
+hand resumptions in 5 of 7 rounds. The fourth mark (`run_in_background: false`) keeps the
+exception from getting lost in a copy.
 """
 
 import re
@@ -36,13 +36,13 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-TITULO = "## Delegation is asynchronous"
+TITLE = "## Delegation is asynchronous"
 
-# O que a seção tem que dizer, além de existir. Cada marca é uma das três coisas
-# que o lead precisa saber; uma seção que perdeu qualquer uma delas parou de ensinar.
-# As specs quebram linha no meio das frases, então cada marca tolera espaço em
-# branco onde houver espaço — casar com `\s+` e não com " " literal.
-MARCAS = [
+# What the section has to say, beyond existing. Each mark is one of the three things
+# the lead needs to know; a section that lost any of them stopped teaching.
+# The specs break lines in the middle of sentences, so each mark tolerates whitespace
+# wherever there is a space — match with `\s+` and not with a literal " ".
+MARKS = [
     ("o retorno real da chamada", re.compile(r"Async\s+agent\s+launched\s+successfully")),
     ("o que fazer no lugar", re.compile(r"[Ee]nd\s+the\s+turn")),
     ("o antipadrão medido", re.compile(r"until\s+\[\s+-f")),
@@ -50,9 +50,9 @@ MARCAS = [
 ]
 
 
-def delega(texto: str) -> bool:
-    """O agente declara `Task` no campo `tools:` do frontmatter."""
-    m = re.search(r"^tools:.*$", texto, flags=re.M)
+def delegates(text: str) -> bool:
+    """The agent declares `Task` in the `tools:` field of the frontmatter."""
+    m = re.search(r"^tools:.*$", text, flags=re.M)
     return bool(m) and re.search(r"\bTask\b", m.group(0)) is not None
 
 
@@ -62,34 +62,34 @@ def main():
         print(f"FAIL: nenhum */agents/*.md sob {REPO}", file=sys.stderr)
         return 1
 
-    delegantes = [p for p in specs if delega(p.read_text(encoding="utf-8"))]
-    if not delegantes:
+    delegators = [p for p in specs if delegates(p.read_text(encoding="utf-8"))]
+    if not delegators:
         print("FAIL: nenhum agente com Task encontrado — o detector quebrou, "
               "não o repo", file=sys.stderr)
         return 1
 
-    falhas = []
-    for p in delegantes:
-        texto = p.read_text(encoding="utf-8")
+    fails = []
+    for p in delegators:
+        text = p.read_text(encoding="utf-8")
         rel = p.relative_to(REPO)
-        if TITULO not in texto:
-            falhas.append(f"{rel}: delega (tem Task) e NÃO tem a seção "
-                          f"'{TITULO}'")
+        if TITLE not in text:
+            fails.append(f"{rel}: delega (tem Task) e NÃO tem a seção "
+                          f"'{TITLE}'")
             continue
-        for nome, marca in MARCAS:
-            if not marca.search(texto):
-                falhas.append(f"{rel}: tem a seção mas perdeu {nome} "
-                              f"({marca.pattern})")
+        for name, mark in MARKS:
+            if not mark.search(text):
+                fails.append(f"{rel}: tem a seção mas perdeu {name} "
+                              f"({mark.pattern})")
 
-    for f in falhas:
+    for f in fails:
         print("FAIL:", f, file=sys.stderr)
-    if falhas:
-        print(f"\n{len(falhas)} falha(s) em {len(delegantes)} agentes que delegam.\n"
+    if fails:
+        print(f"\n{len(fails)} falha(s) em {len(delegators)} agentes que delegam.\n"
               "Todo agente com `Task` precisa da seção — copie de "
               "build-hex/agents/engineering-lead.md.", file=sys.stderr)
         return 1
 
-    print(f"ok — {len(delegantes)} agentes que delegam, todos com a seção completa")
+    print(f"ok — {len(delegators)} agentes que delegam, todos com a seção completa")
     return 0
 
 

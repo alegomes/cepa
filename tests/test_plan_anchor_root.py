@@ -30,9 +30,9 @@ NEXT = REPO / "common" / "commands" / "next.md"
 # the main clone (English plugins vs the pt-BR maestro).
 COMMANDS = {
     REPO / "common" / "commands" / "next.md": "<main-root>",
-    # o ESCRITOR da fila: se ele resolver a raiz errada, o plano nasce dentro da
-    # worktree e morre com ela — a perda que a camada 0 existe para impedir,
-    # agora no lado da escrita e não só no da leitura.
+    # the queue WRITER: if it resolves the wrong root, the plan is born inside the
+    # worktree and dies with it — the loss that layer 0 exists to prevent,
+    # now on the write side and not only on the read side.
     REPO / "common" / "commands" / "queue.md": "<main-root>",
     REPO / "board-flow" / "commands" / "triage.md": "<main-root>",
     REPO / "board-flow" / "commands" / "fix.md": "<main-root>",
@@ -90,7 +90,7 @@ def main():
     check("a seção liga o conserto ao item do BACKLOG",
           "camada 0" in doc)
 
-    # ── cada comando ancora, e nenhum deixa caminho relativo ao cwd ─────────
+    # ── each command anchors, and none leaves a path relative to the cwd ────
     for path, token in COMMANDS.items():
         name = path.name
         txt = body(path)
@@ -99,15 +99,15 @@ def main():
               "git rev-parse --git-common-dir" in ftxt)
         check(f"{name}: usa o token da raiz principal ({token})",
               token in ftxt)
-        # o guard que importa: nenhuma menção a .claude/programs SEM prefixo de
-        # raiz. É o que a perturbação quebra primeiro se alguém "simplificar".
+        # the guard that matters: no mention of .claude/programs WITHOUT a root
+        # prefix. It is what the perturbation breaks first if someone "simplifies".
         bare = re.findall(r"(?<!main-root>/)(?<!raiz-principal>/)\.claude/(?:programs|queues)",
                           ftxt)
         check(f"{name}: nenhum caminho de plano relativo ao diretório corrente",
               not bare,
               f"{len(bare)} ocorrência(s) de .claude/programs sem raiz")
 
-    # ── /common:next procura antes de declarar ausência ─────────────────────
+    # ── /common:next searches before declaring absence ──────────────────────
     nxt = flat(body(NEXT))
     check("next procura no clone principal e no resgate antes de dizer 'não há plano'",
           "Before declaring absence" in nxt)

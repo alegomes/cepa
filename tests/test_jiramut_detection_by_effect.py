@@ -6,32 +6,32 @@ def bash(cmd): return {"tool_name":"Bash","tool_input":{"command":cmd}}
 def mcp(n,ti): return {"tool_name":n,"tool_input":ti}
 
 CASES = [
- # (descricao, payload, esperado: None|"pass"|"opaque", kind)
+ # (description, payload, expected: None|"pass"|"opaque", kind)
  ("MCP transition (regressao)", mcp("mcp__claude_ai_Atlassian__transitionJiraIssue",{"issueIdOrKey":"W-1","transition":{"id":"31"}}), "pass","transition"),
  ("MCP comment (regressao)", mcp("mcp__mcp-atlassian__jira_add_comment",{"issue_key":"W-1","comment":"x"}), "pass","comment"),
  ("Write nao relacionado", {"tool_name":"Write","tool_input":{"file_path":"/a"}}, None,None),
  ("bash sem twg", bash("git status"), None,None),
 
- # --- o furo C1 que 5 lentes apontaram ---
+ # --- the C1 hole that 5 lenses pointed out ---
  ("twg api POST cria card", bash("twg api jira:/rest/api/3/issue -X POST --input p.json"), "opaque","mutation"),
  ("twg api POST graphql", bash("twg api graphql -X POST -f query=@m.gql"), "opaque","mutation"),
  ("twg api GET e leitura", bash("twg api jira:/rest/api/3/myself"), None,None),
 
- # --- transicao via CLI ---
+ # --- transition via CLI ---
  ("twg transition por id", bash("twg jira workitem transition --id WEGO-1 --transition-id 31"), "pass","transition"),
  ("twg transition por NOME", bash("twg jira workitem transition --id WEGO-1 --transition-id Done"), "pass","transition"),
  ("twg transition descoberta (read-only)", bash("twg jira workitem transition --id WEGO-1"), None,None),
 
- # --- comentario via CLI ---
+ # --- comment via CLI ---
  ("twg comment create", bash("twg jira workitem comment create --issue-id WEGO-1 --body 'texto'"), "pass","comment"),
  ("twg comment sem body (opaco)", bash("twg jira workitem comment create --issue-id WEGO-1 --body-format markdown"), "opaque","comment"),
 
- # --- leituras nao podem ser barradas ---
+ # --- reads cannot be blocked ---
  ("twg query", bash("twg jira workitem query 'project = WEGO' -o json"), None,None),
  ("twg get", bash("twg jira workitem get WEGO-1"), None,None),
  ("twg bulk-get", bash("twg jira workitem bulk-get WEGO-1 WEGO-2"), None,None),
 
- # --- evasao ---
+ # --- evasion ---
  ("encadeado com &&", bash("cd /tmp && twg jira workitem transition --id WEGO-1 --transition-id 31"), "pass","transition"),
  ("escondido apos ; ainda e achado", bash("echo oi; twg jira workitem create --summary x"), "pass","create"),
  ("caminho absoluto", bash("/Users/alegomes/.local/bin/twg jira workitem delete WEGO-1"), "opaque","mutation"),
@@ -41,7 +41,7 @@ CASES = [
  ("archive", bash("twg jira workitem archive --id WEGO-1"), "opaque","mutation"),
  ("outro produto nao e deste gate", bash("twg confluence content create --title x"), None,None),
  ("aspas nao fechadas", bash("twg jira workitem comment create --body 'aberta"), "opaque","mutation"),
- # --- O3 (2026-09-24): escrita legivel que nao transiciona nem comenta ---
+ # --- O3 (2026-09-24): readable write that neither transitions nor comments ---
  ("create legivel", bash("twg jira workitem create --space WEGO --type Task --summary x"), "pass","create"),
  ("update de campo legivel", bash("twg jira workitem update --id WEGO-1 --add-labels a"), "pass","edit"),
  ("link entre cards", bash("twg jira workitem link workitem --id WEGO-1 --target-id WEGO-2 --link-type-id 10003"), "pass","link"),
@@ -52,13 +52,13 @@ CASES = [
  ("update --fields-json e JSON livre", bash("twg jira workitem update --id WEGO-1 --fields-json '{}'"), "opaque","mutation"),
  ("update --resolution fecha por fora", bash("twg jira workitem update --id WEGO-1 --resolution Done"), "opaque","mutation"),
  ("link para commit segue opaco", bash("twg jira workitem link commit --id WEGO-1 --url x"), "opaque","mutation"),
- # --- leituras de terceiro nivel e ajuda ---
+ # --- third-level reads and help ---
  ("link query e leitura", bash("twg jira workitem link query --issue-id WEGO-1"), None,None),
  ("create-metadata e leitura", bash("twg jira workitem field create-metadata --space WEGO --type Task"), None,None),
  ("comment query e leitura", bash("twg jira workitem comment query --issue-id WEGO-1"), None,None),
  ("--help nao e escrita", bash("twg jira workitem create --help"), None,None),
  ("-h nao e escrita", bash("twg jira workitem update -h"), None,None),
- # o falso-positivo historico do repo
+ # the repo's historical false positive
  (">= nao pode virar redirect", bash("twg jira workitem query 'sp >= 3' -o json"), None,None),
 ]
 
@@ -77,7 +77,7 @@ for desc, payload, exp, kind in CASES:
         print(f"  ok  [{str(exp or 'ignora'):6}] {desc}")
 print(f"\n{len(CASES)-fail}/{len(CASES)} passaram")
 
-# --- Bitbucket: quem pode decidir o destino de um PR ---
+# --- Bitbucket: who may decide the destination of a PR ---
 BB = [
  ("dev aprova proprio PR",        "build-hex:domain-dev",            "twg bitbucket pull-requests approve 42",        2),
  ("dev mergeia",                  "build-hex:domain-dev",            "twg bitbucket pull-requests merge --id 42",     2),
@@ -110,7 +110,7 @@ for desc, agent, cmd, want in BB:
         print(f"  ok  [exit {want}] {desc}")
 print(f"{len(BB)-bfail}/{len(BB)} passaram")
 
-# --- jira-write-lock: so o atlassian-expert escreve no Jira pela twg (O3) ---
+# --- jira-write-lock: only the atlassian-expert writes to Jira through twg (O3) ---
 JW = [
  ("dev cria card",                "build-hex:domain-dev",       "twg jira workitem create --space WEGO --type Task --summary x", 2),
  ("dev transiciona",              "build-team:backend-dev",     "twg jira workitem transition --id WEGO-1 --transition-id 31",   2),
@@ -140,31 +140,31 @@ for desc, agent, cmd, want in JW:
         print(f"  ok  [exit {want}] {desc}")
 print(f"{len(JW)-jfail}/{len(JW)} passaram")
 
-# --- registro: hook que existe mas nao esta no plugin.json nunca roda ---
-# A prova de 2026-09-24 (docs/proof/TWG-O0-O3.yaml) apagou a entrada do
-# jira-write-lock no plugin.json e nenhum teste ficou vermelho: todos chamam o
-# script direto. Estes hooks precisam estar no PreToolUse de matcher Bash, que e
-# por onde a twg chega.
+# --- registration: a hook that exists but is not in plugin.json never runs ---
+# The 2026-09-24 proof (docs/proof/TWG-O0-O3.yaml) deleted the jira-write-lock
+# entry from plugin.json and no test turned red: all of them call the
+# script directly. These hooks must be in the PreToolUse of the Bash matcher, which is
+# where twg arrives.
 PLUGIN = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "common", ".claude-plugin", "plugin.json")
 _pre = _json.load(open(PLUGIN, encoding="utf-8"))["hooks"]["PreToolUse"]
 _bash = [h["command"] for e in _pre if e.get("matcher") == "Bash" for h in e["hooks"]]
 rfail = 0
 print("\n--- registro no plugin.json (PreToolUse, matcher Bash) ---")
-for nome in ("jira-write-lock.py", "bitbucket-decision-lock.py", "acceptance-gate.py",
+for name in ("jira-write-lock.py", "bitbucket-decision-lock.py", "acceptance-gate.py",
              "merge-truth-gate.py", "summary-nulls-gate.py", "bounce-reason-gate.py"):
-    if any(c.endswith(f'/hooks/{nome}"') for c in _bash):
-        print(f"  ok  {nome}")
+    if any(c.endswith(f'/hooks/{name}"') for c in _bash):
+        print(f"  ok  {name}")
     else:
-        rfail += 1; print(f"  FALHOU: {nome} nao esta registrado no matcher Bash")
+        rfail += 1; print(f"  FALHOU: {name} nao esta registrado no matcher Bash")
 
-# --- os quatro gates, rodados como processo, com comando twg (altitude do AC5) ---
-# O loop CASES prova o classify; isto prova que cada gate de verdade usa a
-# classificacao: escrita legivel e leitura passam, escrita opaca e barrada.
+# --- the four gates, run as a process, with a twg command (altitude of AC5) ---
+# The CASES loop proves classify; this proves that each real gate uses the
+# classification: a readable write and a read pass, an opaque write is blocked.
 import tempfile
 GATES = ("acceptance-gate.py", "merge-truth-gate.py", "summary-nulls-gate.py",
          "bounce-reason-gate.py")
-GCASOS = [
+GCASES = [
  ("create legivel passa",           "twg jira workitem create --space WEGO --type Task --summary x", 0),
  ("update de campo passa",          "twg jira workitem update --id WEGO-1 --add-labels a",           0),
  ("link entre cards passa",         "twg jira workitem link workitem --id WEGO-1 --target-id WEGO-2", 0),
@@ -179,7 +179,7 @@ gfail = 0
 print("\n--- quatro gates como processo, com twg ---")
 with tempfile.TemporaryDirectory() as cwd:
     for gate in GATES:
-        for desc, cmd, want in GCASOS:
+        for desc, cmd, want in GCASES:
             body = {"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": cwd,
                     "agent_type": "board-flow:atlassian-expert"}
             rc = subprocess.run([sys.executable, os.path.join(HOOKS, gate)],
@@ -189,5 +189,5 @@ with tempfile.TemporaryDirectory() as cwd:
                 gfail += 1; print(f"  FALHOU: {gate}: {desc} — esperado exit={want}, obtido {rc}")
             else:
                 print(f"  ok  [exit {want}] {gate}: {desc}")
-print(f"{len(GATES)*len(GCASOS)-gfail}/{len(GATES)*len(GCASOS)} passaram")
+print(f"{len(GATES)*len(GCASES)-gfail}/{len(GATES)*len(GCASES)} passaram")
 sys.exit(1 if (fail or bfail or jfail or rfail or gfail) else 0)

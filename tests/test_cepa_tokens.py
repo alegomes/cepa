@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Testes da medição de tokens por sessão (cepa-tokens + seção do cepa-metrics).
+"""Tests of the per-session token measurement (cepa-tokens + section of cepa-metrics).
 
-Existe porque, em 12/09/2026, a decisão "copiar o desvio de leitura do Portal
-da Spotify?" dependia de saber se leitura pesa no gasto do Cepa, e o ledger
-tinha 0 eventos com token.
+It exists because, on 12/09/2026, the decision "copy Spotify Portal's read
+detour?" depended on knowing whether reading weighs on Cepa's spend, and the ledger
+had 0 events with tokens.
 
-O que os testes fixam:
-  - a mesma resposta repetida em várias linhas conta UMA vez, com o usage da
-    última linha (as primeiras trazem contagem parcial);
-  - o gasto de cada subagente vai para o tipo dele, lido do .meta.json;
-  - o tamanho do resultado de cada ferramenta é atribuído à ferramenta certa;
-  - o evento cai no mês em que a sessão acabou, não no dia da varredura;
-  - o cepa-metrics conta uma sessão gravada duas vezes só uma vez;
-  - o SessionEnd do session-registry grava o evento sozinho.
+What the tests pin:
+  - the same response repeated on several lines counts ONCE, with the usage of the
+    last line (the first ones carry a partial count);
+  - each subagent's spend goes to its type, read from .meta.json;
+  - the size of each tool's result is attributed to the right tool;
+  - the event falls in the month the session ended, not on the day of the sweep;
+  - cepa-metrics counts a session recorded twice only once;
+  - the SessionEnd of session-registry records the event by itself.
 
 Run: python3 tests/test_cepa_tokens.py
 """
@@ -50,17 +50,17 @@ def _usage(i, o, cw=0, cr=0):
             "cache_creation_input_tokens": cw, "cache_read_input_tokens": cr}
 
 
-def _escreve(f, linhas):
+def _write(f, lines):
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text("\n".join(json.dumps(l) for l in linhas) + "\n", encoding="utf-8")
+    f.write_text("\n".join(json.dumps(l) for l in lines) + "\n", encoding="utf-8")
 
 
-def monta_sessao(raiz: Path, cwd: str) -> Path:
-    """Sessão principal com 2 respostas e 1 subagente; valores escolhidos à mão."""
-    sess = raiz / "proj" / "aaaabbbb-0000.jsonl"
+def build_session(root: Path, cwd: str) -> Path:
+    """Main session with 2 responses and 1 subagent; values chosen by hand."""
+    sess = root / "proj" / "aaaabbbb-0000.jsonl"
     ts = "2026-07-15T10:00:00.000Z"
-    _escreve(sess, [
-        # resposta m1 em duas linhas (thinking + tool_use), mesmo usage
+    _write(sess, [
+        # response m1 on two lines (thinking + tool_use), same usage
         {"type": "assistant", "cwd": cwd, "timestamp": ts,
          "message": {"id": "m1", "model": "claude-opus-5", "usage": _usage(10, 5, cw=1000),
                      "content": [{"type": "thinking", "thinking": ""}]}},
@@ -78,9 +78,9 @@ def monta_sessao(raiz: Path, cwd: str) -> Path:
              {"type": "tool_result", "tool_use_id": "t2",
               "content": [{"type": "text", "text": "y" * 40}]}]}},
     ])
-    sub = raiz / "proj" / "aaaabbbb-0000" / "subagents" / "agent-s1.jsonl"
-    _escreve(sub, [
-        # subagente: primeira linha parcial (saída 1), última com o valor final (saída 50)
+    sub = root / "proj" / "aaaabbbb-0000" / "subagents" / "agent-s1.jsonl"
+    _write(sub, [
+        # subagent: first line partial (output 1), last with the final value (output 50)
         {"type": "assistant", "timestamp": ts, "isSidechain": True,
          "message": {"id": "s1", "model": "claude-sonnet-5", "usage": _usage(3, 1, cw=200),
                      "content": [{"type": "thinking", "thinking": ""}]}},
@@ -96,15 +96,15 @@ def monta_sessao(raiz: Path, cwd: str) -> Path:
     return sess
 
 
-def test_medicao():
+def test_measurement():
     with tempfile.TemporaryDirectory() as tmp:
-        sess = monta_sessao(Path(tmp), tmp)
+        sess = build_session(Path(tmp), tmp)
         p = subprocess.run([sys.executable, str(TOKENS), "--file", str(sess), "--json"],
                            capture_output=True, text=True)
         check("roda sem erro", p.returncode == 0, p.stderr)
         r = json.loads(p.stdout)[0]
-        # main: m1 (10+1000 novo, 5 saída) + m2 (20 novo, 7 saída, 5000 lido)
-        # sub:  s1 última linha (3+200 novo, 50 saída)
+        # main: m1 (10+1000 new, 5 output) + m2 (20 new, 7 output, 5000 read)
+        # sub:  s1 last line (3+200 new, 50 output)
         check("resposta repetida conta uma vez, com a última linha",
               r["total"] == {"entrada": 33, "cache_w": 1200, "cache_r": 5000, "saida": 62},
               r["total"])
@@ -123,21 +123,21 @@ def test_medicao():
         env = dict(os.environ, CEPA_TELEMETRY_DIR=str(tel))
         subprocess.run([sys.executable, str(TOKENS), "--file", str(sess), "--emit"],
                        capture_output=True, text=True, env=env)
-        arq = tel / "events-2026-07.jsonl"
-        check("evento cai no mês em que a sessão acabou", arq.exists(),
+        file = tel / "events-2026-07.jsonl"
+        check("evento cai no mês em que a sessão acabou", file.exists(),
               [f.name for f in tel.glob("*")])
-        if arq.exists():
-            ev = json.loads(arq.read_text().splitlines()[-1])
+        if file.exists():
+            ev = json.loads(file.read_text().splitlines()[-1])
             check("evento token_usage com a chave curta da sessão",
                   ev["event"] == "token_usage" and ev["sessao"] == "aaaabbbb", ev)
 
 
 def test_metrics_dedupe():
     with tempfile.TemporaryDirectory() as tmp:
-        sess = monta_sessao(Path(tmp), tmp)
+        sess = build_session(Path(tmp), tmp)
         tel = Path(tmp) / "tel"
         env = dict(os.environ, CEPA_TELEMETRY_DIR=str(tel))
-        for _ in range(2):   # fim automático + varredura manual
+        for _ in range(2):   # automatic end + manual sweep
             subprocess.run([sys.executable, str(TOKENS), "--file", str(sess), "--emit"],
                            capture_output=True, text=True, env=env)
         p = subprocess.run([sys.executable, str(METRICS), "--month", "2026-07", "--json"],
@@ -155,9 +155,9 @@ def test_metrics_dedupe():
               p2.stdout[-600:])
 
 
-def test_session_end_grava_sozinho():
+def test_session_end_writes_by_itself():
     with tempfile.TemporaryDirectory() as tmp:
-        sess = monta_sessao(Path(tmp), tmp)
+        sess = build_session(Path(tmp), tmp)
         tel = Path(tmp) / "tel"
         env = dict(os.environ, CEPA_TELEMETRY_DIR=str(tel))
         payload = json.dumps({"session_id": "aaaabbbb-0000", "cwd": tmp,
@@ -165,42 +165,42 @@ def test_session_end_grava_sozinho():
         p = subprocess.run([sys.executable, str(REGISTRY)], input=payload,
                            capture_output=True, text=True, env=env)
         check("hook sai 0", p.returncode == 0, p.stderr)
-        arq = tel / "events-2026-07.jsonl"
-        prazo = time.time() + 15   # o emissor roda destacado do hook
-        while time.time() < prazo and not (arq.exists() and "token_usage" in arq.read_text()):
+        file = tel / "events-2026-07.jsonl"
+        deadline = time.time() + 15   # the emitter runs detached from the hook
+        while time.time() < deadline and not (file.exists() and "token_usage" in file.read_text()):
             time.sleep(0.2)
         check("SessionEnd grava token_usage sem ninguém pedir",
-              arq.exists() and "token_usage" in arq.read_text())
+              file.exists() and "token_usage" in file.read_text())
 
 
-def test_session_end_nao_quebra_nem_atrasa():
-    """O emissor pode falhar ou demorar: o hook sai 0 e volta rápido mesmo assim.
+def test_session_end_does_not_break_nor_delay():
+    """The emitter may fail or be slow: the hook exits 0 and returns fast anyway.
 
-    Arquivo grande não serve de prova: 50 MB de transcript parseiam em 0,3s e
-    um emissor síncrono passaria. Por isso o hook roda numa cópia cujo
-    bin/cepa-tokens é um falso que dorme 10s ou quebra."""
+    A large file does not serve as proof: 50 MB of transcript parse in 0.3s and
+    a synchronous emitter would pass. That is why the hook runs on a copy whose
+    bin/cepa-tokens is a fake that sleeps 10s or breaks."""
     import shutil
     with tempfile.TemporaryDirectory() as tmp:
         tel = Path(tmp) / "tel"
         env = dict(os.environ, CEPA_TELEMETRY_DIR=str(tel))
         transcript = Path(tmp) / "t.jsonl"
         transcript.write_bytes(b"\x00\xff{nao e json\n" * 100)
-        falsos = {"lento": "import time\ntime.sleep(10)\n",
+        fake_ones = {"lento": "import time\ntime.sleep(10)\n",
                   "quebrado": "raise SystemExit('cepa-tokens quebrou')\n"}
-        for nome, corpo in falsos.items():
-            copia = Path(tmp) / nome / "common"
-            shutil.copytree(REGISTRY.parent, copia / "hooks")
-            (copia / "bin").mkdir()
-            (copia / "bin" / "cepa-tokens").write_text(corpo, encoding="utf-8")
-            payload = json.dumps({"session_id": f"sess-{nome}", "cwd": tmp,
+        for given_name, body in fake_ones.items():
+            copy = Path(tmp) / given_name / "common"
+            shutil.copytree(REGISTRY.parent, copy / "hooks")
+            (copy / "bin").mkdir()
+            (copy / "bin" / "cepa-tokens").write_text(body, encoding="utf-8")
+            payload = json.dumps({"session_id": f"sess-{given_name}", "cwd": tmp,
                                   "hook_event_name": "SessionEnd",
                                   "transcript_path": str(transcript)})
             t0 = time.time()
-            p = subprocess.run([sys.executable, str(copia / "hooks" / "session-registry.py")],
+            p = subprocess.run([sys.executable, str(copy / "hooks" / "session-registry.py")],
                                input=payload, capture_output=True, text=True, env=env)
             dt = time.time() - t0
-            check(f"emissor {nome}: hook sai 0", p.returncode == 0, p.stderr)
-            check(f"emissor {nome}: hook volta em menos de 3s ({dt:.1f}s)", dt < 3)
+            check(f"emissor {given_name}: hook sai 0", p.returncode == 0, p.stderr)
+            check(f"emissor {given_name}: hook volta em menos de 3s ({dt:.1f}s)", dt < 3)
         payload = json.dumps({"session_id": "sess-ausente", "cwd": tmp,
                               "hook_event_name": "SessionEnd",
                               "transcript_path": str(Path(tmp) / "nao-existe.jsonl")})
@@ -210,10 +210,10 @@ def test_session_end_nao_quebra_nem_atrasa():
 
 
 def main():
-    test_medicao()
+    test_measurement()
     test_metrics_dedupe()
-    test_session_end_grava_sozinho()
-    test_session_end_nao_quebra_nem_atrasa()
+    test_session_end_writes_by_itself()
+    test_session_end_does_not_break_nor_delay()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")

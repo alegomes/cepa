@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
-"""Regression tests: worktree de agente esquecida DENTRO do repositório.
+"""Regression tests: agent worktree forgotten INSIDE the repository.
 
-A ferramenta de subagente do Claude Code cria worktree em
-`.claude/worktrees/agent-<id>` — dentro da árvore, não em ~/cepa-worktrees/ como
-as `session/*`. Ela deveria sumir sozinha quando nada muda, mas sobrevive se o
-agente commitar, e aí duplica o código-fonte inteiro para qualquer ferramenta
-que varra o projeto com `find`.
+Claude Code's subagent tool creates a worktree at
+`.claude/worktrees/agent-<id>` — inside the tree, not in ~/cepa-worktrees/ like
+the `session/*` ones. It should vanish by itself when nothing changes, but it survives if
+the agent commits, and then it duplicates the entire source code for any tool
+that sweeps the project with `find`.
 
-O caso que pagou por este check (2026-08-19, wego-acesso-backend): a sobra fez o
-`bin/run-dev.sh doctor` contar cada migration duas vezes e acusar 14 versões
-duplicadas inexistentes — o boot do backend ficou barrado, o portão de prova de
-UI de outro repo caiu e a auditoria de aceite de dois cards também. O preflight
-do cepa-doctor tinha rodado limpo no começo daquela sessão.
+The case that paid for this check (2026-08-19, wego-acesso-backend): the leftover made
+`bin/run-dev.sh doctor` count each migration twice and report 14 nonexistent
+duplicate versions — the backend boot was blocked, another repo's UI proof gate
+fell and the acceptance audit of two cards too. The cepa-doctor preflight
+had run clean at the start of that session.
 
-O que estes testes fixam:
-  - a sobra limpa e já contida na base é ACHADA e removida por --fix;
-  - a sobra com arquivo não rastreado NÃO é removida (havia um teste de medição
-    do WEGO-2037 que só existia dentro da worktree do caso real);
-  - a sobra com commit que a base não tem NÃO é removida;
-  - worktree de sessão (fora do repo) continua tratada como antes.
+What these tests pin down:
+  - the clean leftover, already contained in the base, is FOUND and removed by --fix;
+  - the leftover with an untracked file is NOT removed (there was a measurement test
+    from WEGO-2037 that only existed inside the real case's worktree);
+  - the leftover with a commit the base does not have is NOT removed;
+  - a session worktree (outside the repo) remains treated as before.
 
 Run: python3 tests/test_doctor_internal_worktree.py
 """
@@ -62,7 +62,7 @@ def make_repo(tmp: Path):
 
 
 def add_agent_worktree(root: Path, name="agent-a3494bc82de7f33a6", branch=None):
-    """A worktree como a ferramenta de agente a cria: dentro de .claude/."""
+    """The worktree as the agent tool creates it: inside .claude/."""
     path = root / ".claude" / "worktrees" / name
     if branch:
         git(["worktree", "add", "-q", str(path), "-b", branch], root)
@@ -79,7 +79,7 @@ def run_doctor(root: Path, *args):
     return p.returncode, p.stdout + p.stderr
 
 
-def test_sobra_limpa_e_achada_e_removida():
+def test_clean_leftover_is_found_and_removed():
     with tempfile.TemporaryDirectory() as tmp:
         root = make_repo(Path(tmp))
         path = add_agent_worktree(root, branch="claude/agent-1")
@@ -99,21 +99,21 @@ def test_sobra_limpa_e_achada_e_removida():
               "## Corrigido automaticamente" in out and "worktree de agente" in out, out)
 
 
-def test_sobra_com_arquivo_nao_rastreado_sobrevive():
+def test_leftover_with_untracked_file_survives():
     with tempfile.TemporaryDirectory() as tmp:
         root = make_repo(Path(tmp))
         path = add_agent_worktree(root, branch="claude/agent-2")
-        so_existe_aqui = path / "medicao-wego-2037.md"
-        so_existe_aqui.write_text("dado que só existe aqui\n", encoding="utf-8")
+        only_exists_here = path / "medicao-wego-2037.md"
+        only_exists_here.write_text("dado que só existe aqui\n", encoding="utf-8")
 
         _rc, out = run_doctor(root, "--fix")
         check("worktree com arquivo não rastreado NÃO é removida", path.is_dir(), out)
-        check("o arquivo que só existia ali sobrevive", so_existe_aqui.exists())
+        check("o arquivo que só existia ali sobrevive", only_exists_here.exists())
         check("o achado vai para o bloco de decisão do dono",
               "## Precisa de você" in out and "não rastreado" in out, out)
 
 
-def test_sobra_com_commit_exclusivo_sobrevive():
+def test_leftover_with_exclusive_commit_survives():
     with tempfile.TemporaryDirectory() as tmp:
         root = make_repo(Path(tmp))
         path = add_agent_worktree(root, branch="claude/agent-3")
@@ -129,25 +129,25 @@ def test_sobra_com_commit_exclusivo_sobrevive():
               "claude/agent-3" in git(["branch", "--list"], root).stdout)
 
 
-def test_worktree_de_sessao_fora_do_repo_nao_muda():
-    """O parse foi reescrito; a regra antiga das session/* tem que sobreviver."""
+def test_session_worktree_outside_repo_is_unchanged():
+    """The parse was rewritten; the old rule for session/* must survive."""
     with tempfile.TemporaryDirectory() as tmp:
         tmpp = Path(tmp)
         root = make_repo(tmpp)
-        fora = tmpp / "proj-slice"
-        git(["worktree", "add", "-q", str(fora), "-b", "session/slice"], root)
+        outside = tmpp / "proj-slice"
+        git(["worktree", "add", "-q", str(outside), "-b", "session/slice"], root)
 
         _rc, out = run_doctor(root, "--fix")
         check("session/* fora do repo não é confundida com worktree de agente",
               "worktree de agente" not in out, out)
-        check("e não é removida por --fix", fora.is_dir())
+        check("e não é removida por --fix", outside.is_dir())
 
 
 def main():
-    test_sobra_limpa_e_achada_e_removida()
-    test_sobra_com_arquivo_nao_rastreado_sobrevive()
-    test_sobra_com_commit_exclusivo_sobrevive()
-    test_worktree_de_sessao_fora_do_repo_nao_muda()
+    test_clean_leftover_is_found_and_removed()
+    test_leftover_with_untracked_file_survives()
+    test_leftover_with_exclusive_commit_survives()
+    test_session_worktree_outside_repo_is_unchanged()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")

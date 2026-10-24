@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""`cepa-plan responde` converte a dispensa PROPOSTA pelo agente em dispensa.
+"""`cepa-plan responde` converts the waiver PROPOSED by the agent into a waiver.
 
-Origem (BACKLOG.md § "Dispensa (waiver) gravada em nome do dono durante run
-autônomo", fb-20261014-3): em run autônomo o agente grava uma proposta
+Origin (BACKLOG.md § "Waiver recorded in the owner's name during an autonomous
+run", fb-20261014-3): in an autonomous run the agent records a proposal
 (`board-flow/bin/waivers.py` `propor`: `status: proposta`, `autor: null`, `fila`,
-`item`) e abre a rota humana no item. Só o `responde` do dono, num terminal,
-converte. A conversão do `cepa-plan` é um GÊMEO INLINE de `waivers.converter` /
-`waivers.recusar` (não importa o módulo); este teste usa o `waivers` real para
-escrever a proposta e para ler o resultado, então prova que os dois concordam
-no esquema do arquivo.
+`item`) and opens the human route on the item. Only the owner's `responde`, in a terminal,
+converts it. The `cepa-plan` conversion is an INLINE TWIN of `waivers.converter` /
+`waivers.recusar` (it does not import the module); this test uses the real `waivers` to
+write the proposal and to read the result, so it proves the two agree
+on the file schema.
 
-Contra o CLI real, num repo git de verdade, num PTY:
-  - "sim: ..." -> sem `status`, `autor` = git config user.name, `resposta_do_dono`,
-    `proposto_por` preservado, `waivers.aplicavel` casa; plan.yaml commitado;
-  - "não: ..." -> `status: recusada`, `waivers.carregar` vazio;
-  - `--mantem` -> segue proposta; "talvez depois" -> segue proposta e diz;
-  - proposta de OUTRO item não é tocada.
+Against the real CLI, in a real git repo, in a PTY:
+  - "sim: ..." -> without `status`, `autor` = git config user.name, `resposta_do_dono`,
+    `proposto_por` preserved, `waivers.aplicavel` matches; plan.yaml committed;
+  - "não: ..." -> `status: recusada`, `waivers.carregar` empty;
+  - `--mantem` -> stays a proposal; "talvez depois" -> stays a proposal and says so;
+  - a proposal of ANOTHER item is not touched.
 """
 import os
 import subprocess
@@ -27,8 +27,8 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "board-flow" / "bin"))
-from test_cepa_until import item, monta_repo  # noqa: E402
-from test_cepa_until_decide import CEPA_PLAN, em_tty, itens_de  # noqa: E402
+from test_cepa_until import item, build_repo  # noqa: E402
+from test_cepa_until_decide import CEPA_PLAN, on_tty, items_of  # noqa: E402
 import waivers  # noqa: E402
 
 FAILURES = []
@@ -38,8 +38,8 @@ ENV = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
 for v in ("CEPA_UNTIL_RUN", "CLAUDE_AUTONOMOUS_RUN_ID"):
     ENV.pop(v, None)
 
-MOTIVO, ESCOPO = "teste-cego", "PlugSignAdapter"
-PERGUNTA = f"Aceito a dispensa de {ESCOPO} por prova interna?"
+REASON, SCOPE = "teste-cego", "PlugSignAdapter"
+QUESTION = f"Aceito a dispensa de {SCOPE} por prova interna?"
 
 
 def check(name, cond, detail=""):
@@ -50,44 +50,44 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def git(raiz, *args):
-    return subprocess.run(["git", "-C", str(raiz), *args], capture_output=True,
+def git(root, *args):
+    return subprocess.run(["git", "-C", str(root), *args], capture_output=True,
                           text=True).stdout.strip()
 
 
-def monta(tmp, ident="a1", fila_da_proposta="fila", item_da_proposta=None):
-    """Repo com `ident` blocked + rota humana, e uma proposta amarrada a ele."""
-    travado = item(ident, status="blocked", human_pending=f"Aceitar ou recusar a dispensa de {ESCOPO}")
-    travado["owner_question"] = PERGUNTA
-    raiz = monta_repo(tmp, [travado])
-    subprocess.run(["git", "-C", str(raiz), "config", "user.name", "Dona Fulana"], check=True)
-    # A proposta nasce como nasce em run: com o ambiente de run ligado.
-    antes = os.environ.get("CEPA_UNTIL_RUN")
+def builds(tmp, ident="a1", proposal_queue="fila", proposal_item=None):
+    """Repo with `ident` blocked + human route, and a proposal tied to it."""
+    stuck = item(ident, status="blocked", human_pending=f"Aceitar ou recusar a dispensa de {SCOPE}")
+    stuck["owner_question"] = QUESTION
+    root = build_repo(tmp, [stuck])
+    subprocess.run(["git", "-C", str(root), "config", "user.name", "Dona Fulana"], check=True)
+    # The proposal is born as it is born in a run: with the run environment on.
+    before = os.environ.get("CEPA_UNTIL_RUN")
     os.environ["CEPA_UNTIL_RUN"] = "1"
     try:
-        path = waivers.gravar(str(raiz), MOTIVO, ESCOPO, "o fornecedor não é alcançável",
+        path = waivers.gravar(str(root), REASON, SCOPE, "o fornecedor não é alcançável",
                               "alegomes", "quando o adapter mudar",
-                              fila=fila_da_proposta, item=item_da_proposta or ident)
+                              fila=proposal_queue, item=proposal_item or ident)
     finally:
-        if antes is None:
+        if before is None:
             os.environ.pop("CEPA_UNTIL_RUN")
         else:
-            os.environ["CEPA_UNTIL_RUN"] = antes
-    return raiz, Path(path)
+            os.environ["CEPA_UNTIL_RUN"] = before
+    return root, Path(path)
 
 
-def responde(raiz, ident, texto, *extra):
-    return em_tty([sys.executable, str(CEPA_PLAN), "answer", "fila", ident,
-                   "--answer", texto, "--repo", str(raiz)] + list(extra),
-                  str(raiz), env=ENV)
+def answer(root, ident, plain_text, *extra):
+    return on_tty([sys.executable, str(CEPA_PLAN), "answer", "fila", ident,
+                   "--answer", plain_text, "--repo", str(root)] + list(extra),
+                  str(root), env=ENV)
 
 
-def test_sim_converte_a_proposta_em_dispensa():
+def test_yes_converts_the_proposal_into_a_waiver():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz, path = monta(tmp)
+        root, path = builds(tmp)
         check("a proposta nasce sem efeito",
-              waivers.carregar(str(raiz)) == [] and len(waivers.propostas(str(raiz))) == 1)
-        rc, out = responde(raiz, "a1", f"sim: {PERGUNTA}")
+              waivers.carregar(str(root)) == [] and len(waivers.propostas(str(root))) == 1)
+        rc, out = answer(root, "a1", f"sim: {QUESTION}")
         check("responde sai 0", rc == 0, out)
         check("a saída nomeia a dispensa aceita",
               "dispensa aceita pelo dono: " in out and path.name in out, out)
@@ -97,108 +97,108 @@ def test_sim_converte_a_proposta_em_dispensa():
         check("resposta_do_dono gravada", str(d.get("resposta_do_dono", "")).startswith("sim:"), d)
         check("proposto_por/proposto_em preservados",
               "alegomes" in str(d.get("proposto_por")) and d.get("proposto_em"), d)
-        w = waivers.aplicavel(waivers.carregar(str(raiz)), MOTIVO, ESCOPO)
+        w = waivers.aplicavel(waivers.carregar(str(root)), REASON, SCOPE)
         check("o `waivers` real aplica a dispensa", bool(w) and w["autor"] == "Dona Fulana", w)
         check("a evidência do item diz que o dono aceitou",
-              f"Dispensa {MOTIVO} em {ESCOPO}: aceita pelo dono" in itens_de(raiz)["a1"]["evidence"],
-              itens_de(raiz)["a1"]["evidence"])
-        check("o item voltou para pending", itens_de(raiz)["a1"]["status"] == "pending")
+              f"Dispensa {REASON} em {SCOPE}: aceita pelo dono" in items_of(root)["a1"]["evidence"],
+              items_of(root)["a1"]["evidence"])
+        check("o item voltou para pending", items_of(root)["a1"]["status"] == "pending")
         check("plan.yaml commitado (árvore limpa)",
-              git(raiz, "status", "--porcelain", "--untracked-files=no") == "", git(raiz, "status", "--porcelain"))
-        check("o commit é o da resposta", "owner's answer to a1" in git(raiz, "log", "-1", "--format=%s"))
+              git(root, "status", "--porcelain", "--untracked-files=no") == "", git(root, "status", "--porcelain"))
+        check("o commit é o da resposta", "owner's answer to a1" in git(root, "log", "-1", "--format=%s"))
         check("o arquivo da dispensa entrou no commit (não está mais sujo)",
-              ".claude/waivers" not in git(raiz, "status", "--porcelain"), git(raiz, "status", "--porcelain"))
+              ".claude/waivers" not in git(root, "status", "--porcelain"), git(root, "status", "--porcelain"))
 
 
-def test_sim_com_autor_explicito():
+def test_yes_with_explicit_author():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz, path = monta(tmp)
-        rc, out = responde(raiz, "a1", "Sim: aceito", "--author", "alegomes")
+        root, path = builds(tmp)
+        rc, out = answer(root, "a1", "Sim: aceito", "--author", "alegomes")
         check("responde sai 0 (Sim maiúsculo)", rc == 0, out)
         check("--author vence o git config", yaml.safe_load(path.read_text()).get("autor") == "alegomes")
 
 
-def test_nao_recusa_a_proposta():
+def test_does_not_refuse_the_proposal():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz, path = monta(tmp)
-        rc, out = responde(raiz, "a1", "não: prova de verdade, sem dispensa")
+        root, path = builds(tmp)
+        rc, out = answer(root, "a1", "não: prova de verdade, sem dispensa")
         check("responde sai 0", rc == 0, out)
         check("a saída diz dispensa recusada", "dispensa recusada: " in out and path.name in out, out)
         d = yaml.safe_load(path.read_text())
         check("status: recusada + resposta do dono",
               d.get("status") == "recusada" and d.get("resposta_do_dono", "").startswith("não"), d)
-        check("carregar não enxerga nada", waivers.carregar(str(raiz)) == [])
-        check("...nem como proposta", waivers.propostas(str(raiz)) == [])
+        check("carregar não enxerga nada", waivers.carregar(str(root)) == [])
+        check("...nem como proposta", waivers.propostas(str(root)) == [])
 
 
-def test_mantem_e_resposta_sem_sim_nem_nao_deixam_a_proposta():
+def test_keep_and_answer_without_yes_or_no_leave_the_proposal():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz, path = monta(tmp)
-        rc, out = responde(raiz, "a1", "sim: depois eu vejo", "--keep")
+        root, path = builds(tmp)
+        rc, out = answer(root, "a1", "sim: depois eu vejo", "--keep")
         check("--keep sai 0", rc == 0, out)
         check("...a proposta segue proposta",
               yaml.safe_load(path.read_text()).get("status") == "proposta")
         check("...e a saída diz quantas seguem pendentes", "1 dispensa(s) proposta(s) seguem" in out, out)
-        check("...sem dispensa válida", waivers.carregar(str(raiz)) == [])
+        check("...sem dispensa válida", waivers.carregar(str(root)) == [])
     with tempfile.TemporaryDirectory() as tmp:
-        raiz, path = monta(tmp)
-        rc, out = responde(raiz, "a1", "talvez depois")
+        root, path = builds(tmp)
+        rc, out = answer(root, "a1", "talvez depois")
         check("'talvez depois' sai 0", rc == 0, out)
         d = yaml.safe_load(path.read_text())
         check("...a proposta segue proposta", d.get("status") == "proposta" and d.get("autor") is None, d)
         check("...a saída diz que segue pendente e o que decide",
               "seguem pendente(s)" in out and "sim" in out and "não" in out, out)
         check("...evidência registra 'segue proposta'",
-              "segue proposta" in itens_de(raiz)["a1"]["evidence"])
+              "segue proposta" in items_of(root)["a1"]["evidence"])
 
 
-def test_proposta_de_outro_item_ou_fila_nao_e_tocada():
+def test_proposal_of_another_item_or_queue_is_not_touched():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz, path = monta(tmp, item_da_proposta="z9")
-        rc, out = responde(raiz, "a1", "sim: aceito")
+        root, path = builds(tmp, proposal_item="z9")
+        rc, out = answer(root, "a1", "sim: aceito")
         check("responde sai 0", rc == 0, out)
         check("proposta de outro item intacta", yaml.safe_load(path.read_text()).get("status") == "proposta")
     with tempfile.TemporaryDirectory() as tmp:
-        raiz, path = monta(tmp, fila_da_proposta="outra-fila")
-        rc, out = responde(raiz, "a1", "sim: aceito")
+        root, path = builds(tmp, proposal_queue="outra-fila")
+        rc, out = answer(root, "a1", "sim: aceito")
         check("proposta de outra fila intacta", yaml.safe_load(path.read_text()).get("status") == "proposta", out)
 
 
-def test_sem_proposta_o_responde_segue_igual():
+def test_without_proposal_answer_proceeds_the_same():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1", status="blocked")])
-        rc, out = responde(raiz, "a1", "sim: pode seguir")
+        root = build_repo(tmp, [item("a1", status="blocked")])
+        rc, out = answer(root, "a1", "sim: pode seguir")
         check("responde sem proposta sai 0", rc == 0 and "dispensa" not in out.lower(), out)
 
 
-def test_gitignore_em_dot_claude_nao_quebra_o_responde():
+def test_gitignore_in_dot_claude_does_not_break_answer():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz, path = monta(tmp)
-        (raiz / ".gitignore").write_text(".claude/waivers/\n")
-        subprocess.run(["git", "-C", str(raiz), "add", ".gitignore"], check=True)
-        subprocess.run(["git", "-C", str(raiz), "-c", "user.email=t@t", "-c", "user.name=t",
+        root, path = builds(tmp)
+        (root / ".gitignore").write_text(".claude/waivers/\n")
+        subprocess.run(["git", "-C", str(root), "add", ".gitignore"], check=True)
+        subprocess.run(["git", "-C", str(root), "-c", "user.email=t@t", "-c", "user.name=t",
                         "commit", "-qm", "ignora"], check=True)
-        rc, out = responde(raiz, "a1", "sim: aceito")
+        rc, out = answer(root, "a1", "sim: aceito")
         check("com waivers ignorado o responde sai 0", rc == 0, out)
         check("...a dispensa foi convertida mesmo assim",
               "status" not in yaml.safe_load(path.read_text()))
-        check("...e o plan.yaml foi commitado", "owner's answer to a1" in git(raiz, "log", "-1", "--format=%s"))
+        check("...e o plan.yaml foi commitado", "owner's answer to a1" in git(root, "log", "-1", "--format=%s"))
 
 
-def test_yaml_quebrado_ao_lado_nao_derruba_o_responde():
+def test_broken_yaml_alongside_does_not_crash_answer():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz, path = monta(tmp)
+        root, path = builds(tmp)
         (path.parent / "quebrado.yaml").write_text("motivo: [unclosed", encoding="utf-8")
-        rc, out = responde(raiz, "a1", "sim: aceito")
+        rc, out = answer(root, "a1", "sim: aceito")
         check("com um YAML quebrado ao lado o responde sai 0", rc == 0, out)
         check("...e converte a proposta do item",
               "status" not in yaml.safe_load(path.read_text()))
 
 
 def main():
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"\n{nome}")
+    for given_name, fn in sorted(globals().items()):
+        if given_name.startswith("test_") and callable(fn):
+            print(f"\n{given_name}")
             fn()
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s): {FAILURES}")

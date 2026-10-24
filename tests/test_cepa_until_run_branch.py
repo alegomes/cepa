@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""cepa-until — a branch da noite e o build completo do supervisor.
+"""cepa-until — the night branch and the supervisor's full build.
 
-O run de 2026-09-23 no WEGO entregou 5 cards em 25 rodadas: cada subprocesso
-abriu a própria worktree a partir de `origin/main`, nada mesclou, e os cards
-seguintes travaram porque o antecessor só existia numa branch solta. A 2308
-ainda fechou `done` com o build completo rodado antes do último refactor.
+The 2026-09-23 run on WEGO delivered 5 cards in 25 rounds: each subprocess
+opened its own worktree from `origin/main`, nothing merged, and the following cards
+jammed because the predecessor only existed on a loose branch. 2308
+even closed `done` with the full build run before the last refactor.
 
-Os casos abaixo fixam o conserto:
-  - o supervisor cria `until/<run>` numa worktree e roda cada subprocesso nela;
-  - o clone principal não sai da branch em que estava;
-  - o 2º card enxerga o commit do 1º;
-  - depois de cada `done` o supervisor roda o build completo; vermelho tira os
-    commits do item da branch da noite (sem perdê-los) e marca o item
+The cases below pin the fix:
+  - the supervisor creates `until/<run>` in a worktree and runs each subprocess in it;
+  - the main clone does not leave the branch it was on;
+  - the 2nd card sees the 1st's commit;
+  - after each `done` the supervisor runs the full build; red takes the item's
+    commits off the night branch (without losing them) and marks the item
     `blocked`;
-  - `done` sem commit na branch da noite é apontado no registro;
-  - repo sem build conhecido não começa sem `--verify` ou `--sem-verify`;
-  - o resumo separa entregues de travados;
-  - a análise do fim chama `/common:until-review` e grava `<run>.review.md`.
+  - `done` without a commit on the night branch is pointed out in the record;
+  - a repo without a known build does not start without `--verify` or `--sem-verify`;
+  - the summary separates delivered from stuck;
+  - the end analysis calls `/common:until-review` and writes `<run>.review.md`.
 """
 
 import json
@@ -30,13 +30,13 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
-    FAILURES, check, fake_claude, item, ledger_de, monta_repo, roda)
+    FAILURES, check, fake_claude, item, ledger_of, build_repo, run_until)
 
 
-# Um `claude` falso que trabalha como o drain-plan com `--na-branch`: commita
-# no diretório em que acordou. Grava o conteúdo que viu de `a1.txt` para o
-# teste saber se o 2º card enxergou o 1º.
-TRABALHA = (
+# A fake `claude` that works like drain-plan with `--na-branch`: commits
+# in the directory it woke up in. Records the content it saw of `a1.txt` so the
+# test knows whether the 2nd card saw the 1st.
+WORKS = (
     "import subprocess\n"
     "ident = primeiro_pendente()\n"
     "viu = os.path.exists('a1.txt')\n"
@@ -51,109 +51,109 @@ TRABALHA = (
     " + '\\n')\n"
     "marca(ident, status='done', evidence='ok')\n")
 
-# Build completo de mentira: vermelho quando o item deixou `quebra.txt`.
+# Fake full build: red when the item left `quebra.txt`.
 VERIFY = "test ! -f quebra.txt"
 
 
-def cwds(raiz):
-    f = Path(raiz).parent / "chamadas.jsonl.cwd"
+def cwds(root):
+    f = Path(root).parent / "chamadas.jsonl.cwd"
     return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
 
 
-def plano_de(raiz):
-    return raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+def plan_of(root):
+    return root / ".claude" / "programs" / "fila" / "plan.yaml"
 
 
-def status(raiz, ident):
-    for it in yaml.safe_load(plano_de(raiz).read_text())["items"]:
+def status(root, ident):
+    for it in yaml.safe_load(plan_of(root).read_text())["items"]:
         if it["id"] == ident:
             return it
     return None
 
 
-def git(raiz, *args):
-    return subprocess.run(["git", *args], cwd=raiz, capture_output=True,
+def git(root, *args):
+    return subprocess.run(["git", *args], cwd=root, capture_output=True,
                           text=True).stdout.strip()
 
 
-def test_subprocesso_roda_na_branch_da_noite_e_o_clone_fica_parado():
+def test_subprocess_runs_on_the_night_branch_and_the_clone_stays_put():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        branch_antes = git(raiz, "rev-parse", "--abbrev-ref", "HEAD")
-        binv = fake_claude(tmp, TRABALHA)
-        p, chamadas = roda(raiz, binv, plano_de(raiz),
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        branch_before = git(root, "rev-parse", "--abbrev-ref", "HEAD")
+        binv = fake_claude(tmp, WORKS)
+        p, calls = run_until(root, binv, plan_of(root),
                            ["--for", "2h", "--verify", VERIFY])
-        inicio = [e for e in ledger_de(raiz) if e["evento"] == "run_start"][0]
-        branch = inicio.get("branch") or ""
+        start = [e for e in ledger_of(root) if e["evento"] == "run_start"][0]
+        branch = start.get("branch") or ""
         check("a largada cria uma branch until/<run>",
-              branch.startswith("until/"), str(inicio))
-        vistos = cwds(raiz)
+              branch.startswith("until/"), str(start))
+        seen_ones = cwds(root)
         check("cada subprocesso acorda na worktree da noite",
-              len(vistos) == 2 and all(Path(v["cwd"]).resolve()
-                                       == Path(inicio["arvore"]).resolve()
-                                       for v in vistos), str(vistos))
+              len(seen_ones) == 2 and all(Path(v["cwd"]).resolve()
+                                       == Path(start["arvore"]).resolve()
+                                       for v in seen_ones), str(seen_ones))
         check("...que fica fora do clone",
-              not Path(inicio["arvore"]).resolve().is_relative_to(raiz.resolve()),
-              inicio["arvore"])
+              not Path(start["arvore"]).resolve().is_relative_to(root.resolve()),
+              start["arvore"])
         check("o pedido ao claude leva --na-branch",
-              chamadas and all(f"--na-branch {branch}" in c[1] for c in chamadas),
-              str(chamadas))
+              calls and all(f"--na-branch {branch}" in c[1] for c in calls),
+              str(calls))
         check("o 2º card enxerga o commit do 1º",
-              len(vistos) == 2 and vistos[1]["viu_a1"], str(vistos))
+              len(seen_ones) == 2 and seen_ones[1]["viu_a1"], str(seen_ones))
         check("o clone principal não sai da branch em que estava",
-              git(raiz, "rev-parse", "--abbrev-ref", "HEAD") == branch_antes)
+              git(root, "rev-parse", "--abbrev-ref", "HEAD") == branch_before)
         check("a branch da noite tem os 2 commits",
-              git(raiz, "rev-list", "--count", f"{inicio['base']}..{branch}")
+              git(root, "rev-list", "--count", f"{start['base']}..{branch}")
               == "2", p.stdout[-600:])
         check("o resumo diz como aterrissar",
               f"cepa-until aterrissar fila/{branch.split('/', 1)[1]}"
               in p.stdout, p.stdout[-600:])
 
 
-def test_build_vermelho_tira_o_item_da_branch_sem_perder_os_commits():
+def test_red_build_takes_the_item_off_the_branch_without_losing_the_commits():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
-        binv = fake_claude(tmp, TRABALHA)
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        root = build_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        binv = fake_claude(tmp, WORKS)
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
                     extra_env={"FAKE_QUEBRA": "a2"})
-        ev = ledger_de(raiz)
-        inicio = [e for e in ev if e["evento"] == "run_start"][0]
-        branch = inicio["branch"]
+        ev = ledger_of(root)
+        start = [e for e in ev if e["evento"] == "run_start"][0]
+        branch = start["branch"]
         check("o item com build vermelho vira blocked",
-              status(raiz, "a2")["status"] == "blocked", str(status(raiz, "a2")))
+              status(root, "a2")["status"] == "blocked", str(status(root, "a2")))
         check("...e a evidência diz onde estão os commits",
-              "vermelho-a2" in (status(raiz, "a2").get("evidence") or ""),
-              str(status(raiz, "a2")))
-        lateral = f"{branch}-vermelho-a2"
+              "vermelho-a2" in (status(root, "a2").get("evidence") or ""),
+              str(status(root, "a2")))
+        side_branch = f"{branch}-vermelho-a2"
         check("os commits do item ficam na branch lateral",
-              git(raiz, "log", "-1", "--format=%s", lateral) == "a2")
-        log_noite = git(raiz, "log", "--format=%s", branch).splitlines()
+              git(root, "log", "-1", "--format=%s", side_branch) == "a2")
+        night_log = git(root, "log", "--format=%s", branch).splitlines()
         check("a branch da noite não tem o commit vermelho",
-              "a2" not in log_noite and "a1" in log_noite and "a3" in log_noite,
-              str(log_noite))
-        vistos = {v["id"]: v for v in cwds(raiz)}
+              "a2" not in night_log and "a1" in night_log and "a3" in night_log,
+              str(night_log))
+        seen_ones = {v["id"]: v for v in cwds(root)}
         check("o card seguinte começa sem o código vermelho",
-              "a3" in vistos, str(vistos))
-        fim = [e for e in ev if e["evento"] == "run_end"][0]
-        # Revisão 3: o a2 volta a `pending` na 1ª volta vermelha e só vira
-        # `blocked` na 2ª, então são dois vermelhos para um travado.
+              "a3" in seen_ones, str(seen_ones))
+        end = [e for e in ev if e["evento"] == "run_end"][0]
+        # Revision 3: a2 goes back to `pending` on the 1st red return and only becomes
+        # `blocked` on the 2nd, so it takes two reds for one stuck item.
         check("o registro conta entregues, travados e vermelhos",
-              (fim.get("entregues"), fim.get("travados"),
-               fim.get("verify_vermelho")) == (2, 1, 2), str(fim))
+              (end.get("entregues"), end.get("travados"),
+               end.get("verify_vermelho")) == (2, 1, 2), str(end))
         check("o resumo separa entregues de travados",
               "2 entregue(s) · 1 travado(s)" in p.stdout, p.stdout[-800:])
 
 
-def test_done_sem_commit_na_branch_da_noite_e_apontado():
-    """O caso de 23/09 visto por dentro: o card fecha `done`, mas o trabalho
-    foi para outra branch. O supervisor não tem como buscá-lo; tem como dizer."""
+def test_done_without_commit_on_the_night_branch_is_pointed_out():
+    """The 23/09 case seen from the inside: the card closes `done`, but the work
+    went to another branch. The supervisor has no way to fetch it; it has a way to say so."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
+        root = build_repo(tmp, [item("a1")])
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY])
-        ev = ledger_de(raiz)
+        ev = ledger_of(root)
         check("o registro marca done_sem_commit",
               any(e["evento"] == "done_sem_commit" and e["id"] == "a1"
                   for e in ev), str(ev))
@@ -161,45 +161,45 @@ def test_done_sem_commit_na_branch_da_noite_e_apontado():
               p.stdout[-600:])
         check("sem nenhum commit, a branch da noite some",
               "removi" in p.stdout
-              and not git(raiz, "branch", "--list", "until/*"), p.stdout[-400:])
+              and not git(root, "branch", "--list", "until/*"), p.stdout[-400:])
 
 
-def test_sobra_nao_commitada_nao_passa_para_o_proximo_item():
+def test_uncommitted_leftover_does_not_pass_to_the_next_item():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        corpo = ("ident = primeiro_pendente()\n"
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        body = ("ident = primeiro_pendente()\n"
                  "suja = os.path.exists('sobra.txt')\n"
                  "with open(os.environ['FAKE_CHAMADAS'] + '.cwd', 'a') as f:\n"
                  "    f.write(json.dumps({'id': ident, 'cwd': os.getcwd(),"
                  " 'viu_a1': suja}) + '\\n')\n"
                  "open('sobra.txt', 'w').write('x')\n"
                  "marca(ident, status='blocked', evidence='travou')\n")
-        binv = fake_claude(tmp, corpo)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
-        vistos = cwds(raiz)
+        binv = fake_claude(tmp, body)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        seen_ones = cwds(root)
         check("o 2º item não acorda com a sobra do 1º",
-              len(vistos) == 2 and not vistos[1]["viu_a1"], str(vistos))
-        ev = ledger_de(raiz)
-        guardadas = [e for e in ev if e["evento"] == "sobra_guardada"]
+              len(seen_ones) == 2 and not seen_ones[1]["viu_a1"], str(seen_ones))
+        ev = ledger_of(root)
+        saved = [e for e in ev if e["evento"] == "sobra_guardada"]
         check("a sobra fica num stash registrado",
-              len(guardadas) == 2 and all(e.get("stash") for e in guardadas),
-              str(guardadas))
-        for e in guardadas:
-            subprocess.run(["git", "stash", "drop", e["stash"]], cwd=raiz,
+              len(saved) == 2 and all(e.get("stash") for e in saved),
+              str(saved))
+        for e in saved:
+            subprocess.run(["git", "stash", "drop", e["stash"]], cwd=root,
                            capture_output=True)
 
 
-def test_repo_sem_build_conhecido_nao_comeca_sem_dizer_qual():
+def test_repo_without_known_build_does_not_start_without_saying_which():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        binv = fake_claude(tmp, TRABALHA)
+        root = build_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, WORKS)
         env = dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}")
         p = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
                                  / "bin" / "cepa-until"),
-             "fila", "--repo", str(raiz), "--for", "2h", "--no-analysis"],
+             "fila", "--repo", str(root), "--for", "2h", "--no-analysis"],
             capture_output=True, text=True, timeout=60,
-            env={**env, "FAKE_PLANO": str(plano_de(raiz)),
+            env={**env, "FAKE_PLANO": str(plan_of(root)),
                  "FAKE_CHAMADAS": str(Path(tmp) / "chamadas.jsonl"),
                  "CEPA_WORKTREE_HOME": str(Path(tmp) / "worktrees")})
         check("sem mvnw/gradlew e sem flag, recusa", p.returncode == 2,
@@ -208,28 +208,28 @@ def test_repo_sem_build_conhecido_nao_comeca_sem_dizer_qual():
               "--verify" in p.stderr and "--no-verify" in p.stderr, p.stderr)
         check("...e nomeia a suíte que teria bastado",
               "tests/run-all.sh" in p.stderr, p.stderr)
-        check("...sem ter criado branch", not git(raiz, "branch", "--list",
+        check("...sem ter criado branch", not git(root, "branch", "--list",
                                                   "until/*"))
 
 
-def test_mvnw_na_raiz_vira_o_build_padrao():
+def test_mvnw_at_root_becomes_the_default_build():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        (raiz / "mvnw").write_text("#!/bin/sh\nexit 0\n")
-        subprocess.run(["git", "add", "-A"], cwd=raiz)
+        root = build_repo(tmp, [item("a1")])
+        (root / "mvnw").write_text("#!/bin/sh\nexit 0\n")
+        subprocess.run(["git", "add", "-A"], cwd=root)
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                        "commit", "-qm", "mvnw"], cwd=raiz)
-        binv = fake_claude(tmp, TRABALHA)
-        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--dry-run",
+                        "commit", "-qm", "mvnw"], cwd=root)
+        binv = fake_claude(tmp, WORKS)
+        p, _ = run_until(root, binv, plan_of(root), ["--for", "2h", "--dry-run",
                                                   "--verify", "x"])
-        # --verify explícito ganha; sem ele, o banner mostra o mvnw.
+        # explicit --verify wins; without it, the banner shows mvnw.
         check("--verify explícito ganha do mvnw", "x depois de cada item" in
               p.stdout, p.stdout)
         env_args = ["--for", "2h", "--dry-run"]
         p = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
                                  / "bin" / "cepa-until"),
-             "fila", "--repo", str(raiz), *env_args],
+             "fila", "--repo", str(root), *env_args],
             capture_output=True, text=True, timeout=60,
             env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
                      FAKE_PLANO="x", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl")))
@@ -237,138 +237,138 @@ def test_mvnw_na_raiz_vira_o_build_padrao():
               "./mvnw -B clean verify" in p.stdout, p.stdout + p.stderr)
 
 
-def _roda_sem_flag_de_verify(tmp, raiz, binv):
-    """Sem `--verify` nem `--sem-verify`: quem escolhe é o `cepa-until`."""
+def _run_without_verify_flag(tmp, root, binv):
+    """Without `--verify` nor `--sem-verify`: whoever chooses is `cepa-until`."""
     return subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
                              / "bin" / "cepa-until"),
-         "fila", "--repo", str(raiz), "--for", "2h", "--no-analysis"],
+         "fila", "--repo", str(root), "--for", "2h", "--no-analysis"],
         capture_output=True, text=True, timeout=120,
         env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
-                 FAKE_PLANO=str(plano_de(raiz)),
+                 FAKE_PLANO=str(plan_of(root)),
                  FAKE_CHAMADAS=str(Path(tmp) / "chamadas.jsonl"),
                  CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"),
-                 # longe do ledger real do /common:metrics
+                 # away from the real ledger of /common:metrics
                  CEPA_TELEMETRY_DIR=str(Path(tmp) / "telemetria")))
 
 
-def _commita(raiz, msg):
-    subprocess.run(["git", "add", "-A"], cwd=raiz)
+def _commits(root, msg):
+    subprocess.run(["git", "add", "-A"], cwd=root)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", msg], cwd=raiz)
+                    "commit", "-qm", msg], cwd=root)
 
 
-def test_no_build_com_suite_roda_a_suite():
-    # O cepa tem `.claude/no-build` (sem build para o gate-advance) e
-    # `tests/run-all.sh`. O run 2026-09-26-2203 leu o primeiro como "sem
-    # verify" e 18 itens fecharam sem a suíte inteira rodar.
+def test_no_build_with_suite_runs_the_suite():
+    # cepa has `.claude/no-build` (no build for gate-advance) and
+    # `tests/run-all.sh`. Run 2026-09-26-2203 read the first as "without
+    # verify" and 18 items closed without the whole suite running.
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        marca_suite = Path(tmp) / "suite-rodou"
-        (raiz / ".claude" / "no-build").write_text("# sem build\n")
-        (raiz / "tests").mkdir(exist_ok=True)
-        suite = raiz / "tests" / "run-all.sh"
-        suite.write_text(f"#!/bin/sh\necho x >> {marca_suite}\nexit 0\n")
+        root = build_repo(tmp, [item("a1")])
+        suite_mark = Path(tmp) / "suite-rodou"
+        (root / ".claude" / "no-build").write_text("# sem build\n")
+        (root / "tests").mkdir(exist_ok=True)
+        suite = root / "tests" / "run-all.sh"
+        suite.write_text(f"#!/bin/sh\necho x >> {suite_mark}\nexit 0\n")
         suite.chmod(0o755)
-        _commita(raiz, "no-build + suite")
-        binv = fake_claude(tmp, TRABALHA)
-        p = _roda_sem_flag_de_verify(tmp, raiz, binv)
-        inicio = [e for e in ledger_de(raiz) if e["evento"] == "run_start"]
+        _commits(root, "no-build + suite")
+        binv = fake_claude(tmp, WORKS)
+        p = _run_without_verify_flag(tmp, root, binv)
+        start = [e for e in ledger_of(root) if e["evento"] == "run_start"]
         check("com no-build e tests/run-all.sh, o run começa",
-              p.returncode == 0 and inicio, f"saiu {p.returncode}: {p.stderr[-300:]}")
+              p.returncode == 0 and start, f"saiu {p.returncode}: {p.stderr[-300:]}")
         check("...e o run_start grava a suíte como verify, não null",
-              inicio and inicio[0].get("verify") == "tests/run-all.sh",
-              str(inicio))
-        check("...e a suíte rodou depois do item done", marca_suite.exists(),
+              start and start[0].get("verify") == "tests/run-all.sh",
+              str(start))
+        check("...e a suíte rodou depois do item done", suite_mark.exists(),
               p.stdout[-400:])
 
 
-def test_suite_sem_no_build_vira_o_verify():
-    # Repo sem mvnw/gradlew e sem `.claude/no-build`, só com a suíte: ela é o
-    # build completo, em vez da recusa "não sei o build deste repo".
+def test_suite_without_no_build_becomes_the_verify():
+    # Repo without mvnw/gradlew and without `.claude/no-build`, only with the suite: it is the
+    # full build, instead of the refusal "I don't know this repo's build".
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        marca_suite = Path(tmp) / "suite-rodou"
-        (raiz / "tests").mkdir(exist_ok=True)
-        suite = raiz / "tests" / "run-all.sh"
-        suite.write_text(f"#!/bin/sh\necho x >> {marca_suite}\nexit 0\n")
+        root = build_repo(tmp, [item("a1")])
+        suite_mark = Path(tmp) / "suite-rodou"
+        (root / "tests").mkdir(exist_ok=True)
+        suite = root / "tests" / "run-all.sh"
+        suite.write_text(f"#!/bin/sh\necho x >> {suite_mark}\nexit 0\n")
         suite.chmod(0o755)
-        _commita(raiz, "suite")
-        binv = fake_claude(tmp, TRABALHA)
-        p = _roda_sem_flag_de_verify(tmp, raiz, binv)
-        inicio = [e for e in ledger_de(raiz) if e["evento"] == "run_start"]
+        _commits(root, "suite")
+        binv = fake_claude(tmp, WORKS)
+        p = _run_without_verify_flag(tmp, root, binv)
+        start = [e for e in ledger_of(root) if e["evento"] == "run_start"]
         check("só com tests/run-all.sh, o run começa com a suíte como verify",
-              p.returncode == 0 and inicio
-              and inicio[0].get("verify") == "tests/run-all.sh",
-              f"saiu {p.returncode}: {inicio} {p.stderr[-300:]}")
-        check("...e a suíte rodou", marca_suite.exists(), p.stdout[-400:])
+              p.returncode == 0 and start
+              and start[0].get("verify") == "tests/run-all.sh",
+              f"saiu {p.returncode}: {start} {p.stderr[-300:]}")
+        check("...e a suíte rodou", suite_mark.exists(), p.stdout[-400:])
 
 
-def test_no_build_sem_suite_continua_dispensando():
+def test_no_build_without_suite_still_waives():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        (raiz / ".claude" / "no-build").write_text("# sem build\n")
-        _commita(raiz, "no-build")
-        binv = fake_claude(tmp, TRABALHA)
-        p = _roda_sem_flag_de_verify(tmp, raiz, binv)
-        inicio = [e for e in ledger_de(raiz) if e["evento"] == "run_start"]
+        root = build_repo(tmp, [item("a1")])
+        (root / ".claude" / "no-build").write_text("# sem build\n")
+        _commits(root, "no-build")
+        binv = fake_claude(tmp, WORKS)
+        p = _run_without_verify_flag(tmp, root, binv)
+        start = [e for e in ledger_of(root) if e["evento"] == "run_start"]
         check("só com no-build, o run começa sem verify",
-              p.returncode == 0 and inicio and inicio[0].get("verify") is None,
-              f"saiu {p.returncode}: {inicio} {p.stderr[-300:]}")
+              p.returncode == 0 and start and start[0].get("verify") is None,
+              f"saiu {p.returncode}: {start} {p.stderr[-300:]}")
 
 
-def test_analise_do_fim_grava_o_review_ao_lado_do_registro():
+def test_end_analysis_writes_the_review_beside_the_record():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        corpo = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+        root = build_repo(tmp, [item("a1")])
+        body = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
                  "    print('RELATORIO DA NOITE')\n"
                  "    sys.exit(0)\n"
                  "marca(primeiro_pendente(), status='blocked', evidence='x')\n")
-        binv = fake_claude(tmp, corpo)
-        p, chamadas = roda(raiz, binv, plano_de(raiz),
+        binv = fake_claude(tmp, body)
+        p, calls = run_until(root, binv, plan_of(root),
                            ["--for", "2h", "--com-analise"])
-        pedidos = [c[1] for c in chamadas]
+        requests = [c[1] for c in calls]
         check("a última chamada é o /common:until-review do registro",
-              pedidos and pedidos[-1].startswith("/common:until-review ")
-              and pedidos[-1].endswith(".jsonl"), str(pedidos))
-        revs = list((raiz / ".claude" / "programs" / "fila" / "until")
+              requests and requests[-1].startswith("/common:until-review ")
+              and requests[-1].endswith(".jsonl"), str(requests))
+        revs = list((root / ".claude" / "programs" / "fila" / "until")
                     .glob("*.review.md"))
         check("o review.md fica ao lado do registro",
               len(revs) == 1 and "RELATORIO DA NOITE" in revs[0].read_text(),
               str(revs))
-        ev = ledger_de(raiz)
+        ev = ledger_of(root)
         check("o registro diz que a análise foi feita",
               any(e["evento"] == "analise" and e["feita"] for e in ev), str(ev))
 
 
-def test_run_parado_pela_cota_nao_roda_a_analise():
+def test_run_stopped_by_quota_does_not_run_the_analysis():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        corpo = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
+        root = build_repo(tmp, [item("a1")])
+        body = ("if ARGS and ARGS[1].startswith('/common:until-review'):\n"
                  "    sys.exit(0)\n"
                  "print(json.dumps({'type': 'result', 'result': "
                  "\"You've hit your session limit\"}))\n")
-        binv = fake_claude(tmp, corpo)
-        p, chamadas = roda(raiz, binv, plano_de(raiz),
+        binv = fake_claude(tmp, body)
+        p, calls = run_until(root, binv, plan_of(root),
                            ["--for", "2h", "--com-analise"])
-        fim = [e for e in ledger_de(raiz) if e["evento"] == "run_end"][0]
-        check("o run parou pela cota", fim["motivo"] == "limite-de-uso", str(fim))
+        end = [e for e in ledger_of(root) if e["evento"] == "run_end"][0]
+        check("o run parou pela cota", end["motivo"] == "limite-de-uso", str(end))
         check("...e a análise não foi chamada",
-              not any(c[1].startswith("/common:until-review") for c in chamadas),
-              str(chamadas))
+              not any(c[1].startswith("/common:until-review") for c in calls),
+              str(calls))
         check("...mas o resumo diz como rodá-la depois",
               "/common:until-review" in p.stdout, p.stdout[-400:])
 
 
-# ── todas as tentativas vão para a lateral (Revisão 3, passo 1; C4) ─────────
+# ── all attempts go to the side branch (Revision 3, step 1; C4) ─────────────
 
-# Um `claude` falso que precisa de mais de uma tentativa. Cada chamada commita
-# `<id>-t<n>`. Os itens em FAKE_DUAS só fecham na 2ª; os em FAKE_QUEBRA deixam
-# o build vermelho na 2ª; os em FAKE_ADIA vão para o fim da fila depois da 1ª
-# (para outro item fechar no meio); os em FAKE_PARA não fazem nada da 2ª em
-# diante (tentativa sem progresso); os em FAKE_TRAVA commitam e, na tentativa
-# em que fechariam, fecham `blocked` em vez de `done`.
-TENTA = (
+# A fake `claude` that needs more than one attempt. Each call commits
+# `<id>-t<n>`. The items in FAKE_DUAS only close on the 2nd; those in FAKE_QUEBRA leave
+# the build red on the 2nd; those in FAKE_ADIA go to the end of the queue after the 1st
+# (so another item closes in the middle); those in FAKE_PARA do nothing from the 2nd
+# on (an attempt without progress); those in FAKE_TRAVA commit and, on the attempt
+# in which they would close, close `blocked` instead of `done`.
+TRIES = (
     "import subprocess\n"
     "ident = primeiro_pendente()\n"
     "lista = lambda k: os.environ.get(k, '').split(',')\n"
@@ -394,137 +394,137 @@ TENTA = (
     "    grava(p)\n")
 
 
-def test_build_vermelho_leva_os_commits_de_todas_as_tentativas():
-    """O WEGO-2320 levou duas tentativas: a lateral ficou com os 2 commits da
-    segunda e os 9 da primeira ficaram na branch da noite, sem nunca passar
-    pelo build do supervisor."""
+def test_red_build_takes_the_commits_of_all_attempts():
+    """WEGO-2320 took two attempts: the side branch kept the 2nd's 2 commits
+    and the 9 of the 1st stayed on the night branch, never passing
+    through the supervisor's build."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a0"), item("a1"), item("a2")])
-        binv = fake_claude(tmp, TENTA)
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        root = build_repo(tmp, [item("a0"), item("a1"), item("a2")])
+        binv = fake_claude(tmp, TRIES)
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
                     extra_env={"FAKE_DUAS": "a1", "FAKE_QUEBRA": "a1"})
-        branch = [e for e in ledger_de(raiz)
+        branch = [e for e in ledger_of(root)
                   if e["evento"] == "run_start"][0]["branch"]
-        lateral = git(raiz, "log", "--format=%s",
+        side_branch = git(root, "log", "--format=%s",
                       f"{branch}-vermelho-a1").splitlines()
         check("a lateral tem os commits das duas tentativas",
-              "a1-t1" in lateral and "a1-t2" in lateral, str(lateral))
-        noite = git(raiz, "log", "--format=%s", branch).splitlines()
+              "a1-t1" in side_branch and "a1-t2" in side_branch, str(side_branch))
+        night = git(root, "log", "--format=%s", branch).splitlines()
         check("a branch da noite não tem nenhum commit do item vermelho",
-              "a1-t1" not in noite and "a1-t2" not in noite, str(noite))
+              "a1-t1" not in night and "a1-t2" not in night, str(night))
         check("...e guarda os itens verdes de antes e de depois",
-              "a0-t1" in noite and "a2-t1" in noite, str(noite))
+              "a0-t1" in night and "a2-t1" in night, str(night))
 
 
-def test_outro_done_no_meio_das_tentativas_para_em_vez_de_resetar():
-    """O reset até o começo da 1ª tentativa apagaria o item que fechou verde no
-    meio. A C4 manda parar e avisar."""
+def test_other_done_amid_attempts_stops_instead_of_resetting():
+    """The reset to the start of the 1st attempt would erase the item that closed green in the
+    middle. C4 says to stop and warn."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        binv = fake_claude(tmp, TENTA)
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, TRIES)
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
                     extra_env={"FAKE_DUAS": "a1", "FAKE_QUEBRA": "a1",
                                "FAKE_ADIA": "a1"})
-        ev = ledger_de(raiz)
+        ev = ledger_of(root)
         branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
-        noite = git(raiz, "log", "--format=%s", branch).splitlines()
+        night = git(root, "log", "--format=%s", branch).splitlines()
         check("o item verde do meio continua na branch da noite",
-              "a2-t1" in noite, str(noite))
-        fim = [e for e in ev if e["evento"] == "run_end"][0]
-        check("o run para no vermelho", fim["motivo"] == "verify-vermelho",
-              str(fim))
+              "a2-t1" in night, str(night))
+        end = [e for e in ev if e["evento"] == "run_end"][0]
+        check("o run para no vermelho", end["motivo"] == "verify-vermelho",
+              str(end))
         check("...e o aviso nomeia o item do meio",
-              "a2" in (fim.get("detalhe") or ""), str(fim))
+              "a2" in (end.get("detalhe") or ""), str(end))
 
 
-def test_item_esgotado_leva_os_commits_das_tentativas_para_a_lateral():
-    """A 1ª tentativa commitou sem fechar e a 2ª não andou: o teto marca
-    `blocked`, e os commits da 1ª ficavam na branch da noite sem build."""
+def test_exhausted_item_takes_the_attempt_commits_to_the_side_branch():
+    """The 1st attempt committed without closing and the 2nd did not advance: the ceiling marks
+    `blocked`, and the 1st's commits stayed on the night branch without a build."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        binv = fake_claude(tmp, TENTA)
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, TRIES)
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
                     extra_env={"FAKE_DUAS": "a1", "FAKE_PARA": "a1"})
-        branch = [e for e in ledger_de(raiz)
+        branch = [e for e in ledger_of(root)
                   if e["evento"] == "run_start"][0]["branch"]
-        check("o item vira blocked", status(raiz, "a1")["status"] == "blocked",
-              str(status(raiz, "a1")))
-        noite = git(raiz, "log", "--format=%s", branch).splitlines()
+        check("o item vira blocked", status(root, "a1")["status"] == "blocked",
+              str(status(root, "a1")))
+        night = git(root, "log", "--format=%s", branch).splitlines()
         check("a branch da noite não tem o commit do item parado",
-              "a1-t1" not in noite and "a2-t1" in noite, str(noite))
-        laterais = git(raiz, "branch", "--list", f"{branch}-*-a1").split()
+              "a1-t1" not in night and "a2-t1" in night, str(night))
+        side_branches = git(root, "branch", "--list", f"{branch}-*-a1").split()
         check("o commit fica numa lateral",
-              laterais and "a1-t1" in git(raiz, "log", "--format=%s",
-                                          laterais[-1]), str(laterais))
+              side_branches and "a1-t1" in git(root, "log", "--format=%s",
+                                          side_branches[-1]), str(side_branches))
         check("...que a evidência nomeia",
-              laterais and laterais[-1] in (status(raiz, "a1").get("evidence")
-                                            or ""), str(status(raiz, "a1")))
+              side_branches and side_branches[-1] in (status(root, "a1").get("evidence")
+                                            or ""), str(status(root, "a1")))
 
 
 
-def test_item_que_o_agente_trava_depois_de_commitar_sai_da_branch_da_noite():
-    """O supervisor só roda o build depois de `done`: um item que o agente
-    fecha `blocked` depois de commitar deixava os commits na
-    branch da noite, sem build, embaixo do próximo card."""
+def test_item_the_agent_blocks_after_committing_leaves_the_night_branch():
+    """The supervisor only runs the build after `done`: an item the agent
+    closes `blocked` after committing left the commits on the
+    night branch, without a build, under the next card."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
-        binv = fake_claude(tmp, TENTA)
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        root = build_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        binv = fake_claude(tmp, TRIES)
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
                     extra_env={"FAKE_TRAVA": "a1,a2"})
-        ev = ledger_de(raiz)
+        ev = ledger_of(root)
         branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
-        noite = git(raiz, "log", "--format=%s", branch).splitlines()
+        night = git(root, "log", "--format=%s", branch).splitlines()
         check("a branch da noite não tem os commits dos itens travados",
-              "a1-t1" not in noite and "a2-t1" not in noite, str(noite))
+              "a1-t1" not in night and "a2-t1" not in night, str(night))
         check("...e guarda o item entregue depois deles",
-              "a3-t1" in noite, str(noite))
+              "a3-t1" in night, str(night))
         for ident in ("a1", "a2"):
-            it = status(raiz, ident)
-            laterais = git(raiz, "branch", "--list", f"{branch}-*-{ident}").split()
+            it = status(root, ident)
+            side_branches = git(root, "branch", "--list", f"{branch}-*-{ident}").split()
             check(f"{ident} continua `blocked`", it["status"] == "blocked",
                   str(it))
             check(f"o commit do {ident} fica numa lateral",
-                  laterais and f"{ident}-t1" in git(raiz, "log", "--format=%s",
-                                                    laterais[-1]), str(laterais))
+                  side_branches and f"{ident}-t1" in git(root, "log", "--format=%s",
+                                                    side_branches[-1]), str(side_branches))
             ev_item = it.get("evidence") or ""
             check(f"...que a evidência do {ident} nomeia, sem perder o motivo "
-                  "do agente", laterais and laterais[-1] in ev_item
+                  "do agente", side_branches and side_branches[-1] in ev_item
                   and "condicao de fora" in ev_item, ev_item)
-        separados = [e["id"] for e in ev if e["evento"] == "travado_separado"]
-        check("o registro diz o que foi separado", separados == ["a1", "a2"],
-              str(separados))
+        separated = [e["id"] for e in ev if e["evento"] == "travado_separado"]
+        check("o registro diz o que foi separado", separated == ["a1", "a2"],
+              str(separated))
 
 
-def test_item_travado_com_outro_done_no_meio_para_em_vez_de_resetar():
-    """Tirar os commits do item travado voltaria a branch para o começo da 1ª
-    tentativa e apagaria o item que fechou verde no meio. O run para."""
+def test_stuck_item_with_other_done_amid_stops_instead_of_resetting():
+    """Taking the stuck item's commits off would take the branch back to the start of the 1st
+    attempt and erase the item that closed green in the middle. The run stops."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        binv = fake_claude(tmp, TENTA)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY],
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, TRIES)
+        run_until(root, binv, plan_of(root), ["--for", "2h", "--verify", VERIFY],
              extra_env={"FAKE_DUAS": "a1", "FAKE_ADIA": "a1",
                         "FAKE_TRAVA": "a1"})
-        ev = ledger_de(raiz)
+        ev = ledger_of(root)
         branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
-        noite = git(raiz, "log", "--format=%s", branch).splitlines()
-        fim = [e for e in ev if e["evento"] == "run_end"][0]
-        check("o run para com item-preso", fim["motivo"] == "item-preso",
-              str(fim))
+        night = git(root, "log", "--format=%s", branch).splitlines()
+        end = [e for e in ev if e["evento"] == "run_end"][0]
+        check("o run para com item-preso", end["motivo"] == "item-preso",
+              str(end))
         check("...e o aviso nomeia o item do meio",
-              "a2" in (fim.get("detalhe") or ""), str(fim))
+              "a2" in (end.get("detalhe") or ""), str(end))
         check("nada foi apagado da branch da noite",
-              all(c in noite for c in ("a1-t1", "a2-t1", "a1-t2")), str(noite))
+              all(c in night for c in ("a1-t1", "a2-t1", "a1-t2")), str(night))
 
 
-def test_item_travado_sem_commit_nao_mexe_na_branch():
-    """Sem commit do item, não há o que separar: nem lateral nem reset."""
+def test_stuck_item_without_commit_leaves_the_branch_alone():
+    """Without a commit of the item, there is nothing to separate: neither side branch nor reset."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        corpo = ("import subprocess\n"
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        body = ("import subprocess\n"
                  "ident = primeiro_pendente()\n"
                  "if ident == 'a1':\n"
                  "    marca(ident, status='blocked', evidence='condicao de fora')\n"
@@ -535,94 +535,94 @@ def test_item_travado_sem_commit_nao_mexe_na_branch():
                  "                'user.name=t', 'commit', '-qm', ident],\n"
                  "               check=True)\n"
                  "marca(ident, status='done', evidence='ok')\n")
-        binv = fake_claude(tmp, corpo)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY])
-        ev = ledger_de(raiz)
+        binv = fake_claude(tmp, body)
+        run_until(root, binv, plan_of(root), ["--for", "2h", "--verify", VERIFY])
+        ev = ledger_of(root)
         branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
         check("nenhum travado_separado no registro",
               not [e for e in ev if e["evento"] == "travado_separado"], str(ev))
         check("nenhuma lateral travado",
-              not git(raiz, "branch", "--list", f"{branch}-travado-*"),
-              git(raiz, "branch", "--list", "until/*"))
+              not git(root, "branch", "--list", f"{branch}-travado-*"),
+              git(root, "branch", "--list", "until/*"))
         check("a evidência do a1 fica como o agente escreveu",
-              status(raiz, "a1").get("evidence") == "condicao de fora",
-              str(status(raiz, "a1")))
+              status(root, "a1").get("evidence") == "condicao de fora",
+              str(status(root, "a1")))
         check("...e o a2 entra na branch da noite",
-              "a2" in git(raiz, "log", "--format=%s", branch).splitlines(),
-              git(raiz, "log", "--format=%s", branch))
+              "a2" in git(root, "log", "--format=%s", branch).splitlines(),
+              git(root, "log", "--format=%s", branch))
 
-# ── o vermelho se resolve sem o dono (Revisão 3, passos 4a, 4b, 4d, 4e) ─────
+# ── red resolves without the owner (Revision 3, steps 4a, 4b, 4d, 4e) ───────
 
-# Um `claude` falso que, a cada chamada, anota a `evidence` que o item tinha ao
-# ser pego: é o recado que o agente veria no `cepa-plan start`.
-TRABALHA_E_LE = TRABALHA.replace(
+# A fake `claude` that, on each call, notes the `evidence` the item had when
+# it was picked: it is the note the agent would see in `cepa-plan start`.
+WORKS_AND_READS = WORKS.replace(
     "ident = primeiro_pendente()\n",
     "ident = primeiro_pendente()\n"
     "_ev = [it.get('evidence') for it in carrega()['items'] if it['id'] == ident][0]\n"
     "with open(os.environ['FAKE_CHAMADAS'] + '.recado', 'a') as f:\n"
     "    f.write(json.dumps({'id': ident, 'evidence': _ev}) + '\\n')\n", 1)
 
-SEMPRE_VERMELHO = "false"
+ALWAYS_RED = "false"
 
 
-def recados(raiz):
-    f = Path(raiz).parent / "chamadas.jsonl.recado"
+def notes(root):
+    f = Path(root).parent / "chamadas.jsonl.recado"
     return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
 
 
-def telemetria(dirt):
+def telemetry(dirt):
     ev = []
     for f in Path(dirt).glob("*.jsonl"):
         ev += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
     return ev
 
 
-def test_4a_segundo_build_verde_fecha_done_e_grava_a_instabilidade():
+def test_4a_second_green_build_closes_done_and_records_the_instability():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        binv = fake_claude(tmp, TRABALHA)
+        root = build_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, WORKS)
         cont = Path(tmp) / "n-verify"
-        # vermelho na 1ª chamada, verde da 2ª em diante
+        # red on the 1st call, green from the 2nd on
         verify = (f"n=$(cat {cont} 2>/dev/null || echo 0); "
                   f"echo $((n+1)) > {cont}; [ $n -ge 1 ]")
         tele = Path(tmp) / "tele"
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", verify],
                     extra_env={"CEPA_TELEMETRY_DIR": str(tele)})
-        check("o item fecha done", status(raiz, "a1")["status"] == "done",
-              str(status(raiz, "a1")) + p.stdout[-600:])
-        ev = ledger_de(raiz)
+        check("o item fecha done", status(root, "a1")["status"] == "done",
+              str(status(root, "a1")) + p.stdout[-600:])
+        ev = ledger_of(root)
         check("o registro grava verify_repetido_verde",
               any(e["evento"] == "verify_repetido_verde" and e["id"] == "a1"
                   for e in ev), str(ev))
-        t = [e for e in telemetria(tele) if e.get("event") == "build_instavel"]
+        t = [e for e in telemetry(tele) if e.get("event") == "build_instavel"]
         check("a telemetria grava build_instavel com card e run",
               len(t) == 1 and t[0].get("card") == "a1" and t[0].get("run"),
-              str(telemetria(tele)))
+              str(telemetry(tele)))
         branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
         check("o commit fica na branch da noite",
-              "a1" in git(raiz, "log", "--format=%s", branch).splitlines())
+              "a1" in git(root, "log", "--format=%s", branch).splitlines())
 
 
-def test_4b_volta_vermelha_devolve_o_item_a_pending_com_recado():
+def test_4b_red_return_gives_the_item_back_to_pending_with_a_note():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        binv = fake_claude(tmp, TRABALHA_E_LE)
-        p, _ = roda(raiz, binv, plano_de(raiz),
-                    ["--for", "2h", "--verify", SEMPRE_VERMELHO,
+        root = build_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, WORKS_AND_READS)
+        p, _ = run_until(root, binv, plan_of(root),
+                    ["--for", "2h", "--verify", ALWAYS_RED,
                      "--max-failures", "5"])
-        ev = ledger_de(raiz)
+        ev = ledger_of(root)
         branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
-        vistos = recados(raiz)
+        seen_ones = notes(root)
         check("o item volta a ser executado depois da 1ª volta",
-              len(vistos) >= 2, str(vistos) + p.stdout[-800:])
-        recado = (vistos[1]["evidence"] or "") if len(vistos) >= 2 else ""
+              len(seen_ones) >= 2, str(seen_ones) + p.stdout[-800:])
+        note = (seen_ones[1]["evidence"] or "") if len(seen_ones) >= 2 else ""
         check("...como pending, com a lateral no recado",
-              f"{branch}-vermelho-a1" in recado, recado)
+              f"{branch}-vermelho-a1" in note, note)
         check("...o motivo e o número da volta",
-              "saiu 1" in recado and "volta 1" in recado, recado)
+              "saiu 1" in note and "volta 1" in note, note)
         check("...e que desligar teste não conserta",
-              "desabilitar" in recado.lower(), recado)
+              "desabilitar" in note.lower(), note)
         check("o registro grava volta_vermelha",
               any(e["evento"] == "volta_vermelha" and e["id"] == "a1"
                   for e in ev), str(ev))
@@ -631,136 +631,136 @@ def test_4b_volta_vermelha_devolve_o_item_a_pending_com_recado():
                    and e["id"] == "a1"]) >= 2, str(ev))
 
 
-def test_4d_segunda_volta_vermelha_vira_blocked():
+def test_4d_second_red_return_becomes_blocked():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        binv = fake_claude(tmp, TRABALHA)
-        p, _ = roda(raiz, binv, plano_de(raiz),
-                    ["--for", "2h", "--verify", SEMPRE_VERMELHO])
+        root = build_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, WORKS)
+        p, _ = run_until(root, binv, plan_of(root),
+                    ["--for", "2h", "--verify", ALWAYS_RED])
         check("o run termina com o item blocked",
-              status(raiz, "a1")["status"] == "blocked",
-              str(status(raiz, "a1")) + p.stdout[-600:])
-        voltas = [e for e in ledger_de(raiz)
+              status(root, "a1")["status"] == "blocked",
+              str(status(root, "a1")) + p.stdout[-600:])
+        returns = [e for e in ledger_of(root)
                   if e["evento"] == "volta_vermelha" and e["id"] == "a1"]
-        check("...e exatamente duas voltas vermelhas", len(voltas) == 2,
-              str(voltas))
-        branch = [e for e in ledger_de(raiz)
+        check("...e exatamente duas voltas vermelhas", len(returns) == 2,
+              str(returns))
+        branch = [e for e in ledger_of(root)
                   if e["evento"] == "run_start"][0]["branch"]
         check("a 2ª volta não sobrescreve a lateral da 1ª",
-              git(raiz, "branch", "--list", f"{branch}-vermelho-a1")
-              and git(raiz, "branch", "--list", f"{branch}-vermelho-a1-v2"),
-              git(raiz, "branch", "--list", "until/*"))
+              git(root, "branch", "--list", f"{branch}-vermelho-a1")
+              and git(root, "branch", "--list", f"{branch}-vermelho-a1-v2"),
+              git(root, "branch", "--list", "until/*"))
 
 
-def test_4d_voltas_contam_entre_runs():
-    """O teto conta nos `.jsonl` da fila, e não só na janela corrente."""
+def test_4d_returns_count_across_runs():
+    """The ceiling counts in the queue's `.jsonl` files, and not only in the current window."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
-        binv = fake_claude(tmp, TRABALHA)
-        d = raiz / ".claude" / "programs" / "fila" / "until"
+        root = build_repo(tmp, [item("a1")])
+        binv = fake_claude(tmp, WORKS)
+        d = root / ".claude" / "programs" / "fila" / "until"
         d.mkdir(parents=True)
         (d / "2026-01-01-0000.jsonl").write_text(json.dumps(
             {"evento": "volta_vermelha", "id": "a1", "volta": 1}) + "\n")
-        subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+        subprocess.run(["git", "add", "-A"], cwd=root, check=True)
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                        "commit", "-qm", "run anterior"], cwd=raiz, check=True)
-        roda(raiz, binv, plano_de(raiz),
-             ["--for", "2h", "--verify", SEMPRE_VERMELHO])
+                        "commit", "-qm", "run anterior"], cwd=root, check=True)
+        run_until(root, binv, plan_of(root),
+             ["--for", "2h", "--verify", ALWAYS_RED])
         check("com uma volta de um run anterior, a 1ª deste já vira blocked",
-              status(raiz, "a1")["status"] == "blocked"
-              and len(recados(raiz)) == 0 and len(cwds(raiz)) == 1,
-              str(status(raiz, "a1")) + str(cwds(raiz)))
+              status(root, "a1")["status"] == "blocked"
+              and len(notes(root)) == 0 and len(cwds(root)) == 1,
+              str(status(root, "a1")) + str(cwds(root)))
 
 
-def test_4e_cada_volta_conta_no_disjuntor():
+def test_4e_each_return_counts_toward_the_circuit_breaker():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
-        binv = fake_claude(tmp, TRABALHA)
-        roda(raiz, binv, plano_de(raiz),
-             ["--for", "2h", "--verify", SEMPRE_VERMELHO, "--max-failures", "2"])
-        fim = [e for e in ledger_de(raiz) if e["evento"] == "run_end"][0]
-        check("o run para pelo disjuntor", fim["motivo"] == "disjuntor", str(fim))
+        root = build_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        binv = fake_claude(tmp, WORKS)
+        run_until(root, binv, plan_of(root),
+             ["--for", "2h", "--verify", ALWAYS_RED, "--max-failures", "2"])
+        end = [e for e in ledger_of(root) if e["evento"] == "run_end"][0]
+        check("o run para pelo disjuntor", end["motivo"] == "disjuntor", str(end))
         check("...sem nenhum item done",
-              not any(status(raiz, i)["status"] == "done"
-                      for i in ("a1", "a2", "a3")), str(fim))
+              not any(status(root, i)["status"] == "done"
+                      for i in ("a1", "a2", "a3")), str(end))
 
 
-# ── a lateral só some com cópia (Revisão 3, passo 4f) ───────────────────────
+# ── the side branch only goes away with a copy (Revision 3, step 4f) ────────
 
-def lateral_antiga(raiz, nome, arquivo):
-    """Uma lateral de um run anterior com um commit que a main não tem."""
-    git(raiz, "checkout", "-q", "-b", nome)
-    (raiz / arquivo).write_text("x")
-    git(raiz, "add", "-A")
-    git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
-        f"commit de {arquivo}")
-    git(raiz, "checkout", "-q", "-")
+def old_side_branch(root, given_name, file):
+    """A side branch from a previous run with a commit that main does not have."""
+    git(root, "checkout", "-q", "-b", given_name)
+    (root / file).write_text("x")
+    git(root, "add", "-A")
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+        f"commit de {file}")
+    git(root, "checkout", "-q", "-")
 
 
-def test_4f_lateral_de_item_fechado_vira_patch_antes_de_sumir():
+def test_4f_side_branch_of_closed_item_becomes_patch_before_vanishing():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1", status="dropped"), item("a2"),
+        root = build_repo(tmp, [item("a1", status="dropped"), item("a2"),
                                 item("a3", status="blocked")])
-        lateral_antiga(raiz, "until/2026-01-01-0000-vermelho-a1", "l1.txt")
-        lateral_antiga(raiz, "until/2026-01-01-0000-vermelho-a1-v2", "l1b.txt")
-        lateral_antiga(raiz, "until/2026-01-01-0000-parado-a3", "l3.txt")
-        lateral_antiga(raiz, "until/2026-01-01-0000-travado-a1", "l1c.txt")
+        old_side_branch(root, "until/2026-01-01-0000-vermelho-a1", "l1.txt")
+        old_side_branch(root, "until/2026-01-01-0000-vermelho-a1-v2", "l1b.txt")
+        old_side_branch(root, "until/2026-01-01-0000-parado-a3", "l3.txt")
+        old_side_branch(root, "until/2026-01-01-0000-travado-a1", "l1c.txt")
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
-        d = raiz / ".claude" / "programs" / "fila" / "until"
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        d = root / ".claude" / "programs" / "fila" / "until"
         patches = sorted(d.glob("*.laterais/*.patch"))
-        nomes = [p.name for p in patches]
+        names = [p.name for p in patches]
         check("as três laterais do item dropped viram patch",
               len(patches) == 3 and all(n.endswith(("-a1.patch", "-a1-v2.patch"))
-                                        for n in nomes), str(nomes))
+                                        for n in names), str(names))
         check("...inclusive a do item que o agente travou com commits",
-              any("travado-a1" in n for n in nomes), str(nomes))
+              any("travado-a1" in n for n in names), str(names))
         check("...com o commit dentro",
               any("commit de l1.txt" in p.read_text() for p in patches),
-              str(nomes))
+              str(names))
         check("...e só então somem",
-              not git(raiz, "branch", "--list", "until/*-a1*"),
-              git(raiz, "branch", "--list", "until/*"))
+              not git(root, "branch", "--list", "until/*-a1*"),
+              git(root, "branch", "--list", "until/*"))
         check("a lateral de item ainda aberto (blocked) fica",
-              git(raiz, "branch", "--list", "until/2026-01-01-0000-parado-a3"),
-              git(raiz, "branch", "--list", "until/*"))
+              git(root, "branch", "--list", "until/2026-01-01-0000-parado-a3"),
+              git(root, "branch", "--list", "until/*"))
         check("o registro grava a lateral apagada com o patch",
               any(e["evento"] == "lateral_apagada" and e.get("patch")
-                  for e in ledger_de(raiz)), str(ledger_de(raiz)))
+                  for e in ledger_of(root)), str(ledger_of(root)))
 
 
-def test_4f_sem_patch_a_lateral_fica():
+def test_4f_without_patch_the_side_branch_stays():
     import shutil
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1", status="done"), item("a2")])
-        lateral_antiga(raiz, "until/2026-01-01-0000-vermelho-a1", "l1.txt")
+        root = build_repo(tmp, [item("a1", status="done"), item("a2")])
+        old_side_branch(root, "until/2026-01-01-0000-vermelho-a1", "l1.txt")
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
-        falso = binv / "git"
-        falso.write_text(
+        fake_one = binv / "git"
+        fake_one.write_text(
             "#!/bin/sh\n"
             "for a in \"$@\"; do [ \"$a\" = format-patch ] && exit 1; done\n"
             f"exec {shutil.which('git')} \"$@\"\n")
-        falso.chmod(0o755)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
+        fake_one.chmod(0o755)
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
         check("com o format-patch falhando, a branch continua",
-              git(raiz, "branch", "--list", "until/2026-01-01-0000-vermelho-a1"),
-              git(raiz, "branch", "--list", "until/*"))
+              git(root, "branch", "--list", "until/2026-01-01-0000-vermelho-a1"),
+              git(root, "branch", "--list", "until/*"))
         check("...e o registro diz por quê",
-              any(e["evento"] == "lateral_mantida" for e in ledger_de(raiz)),
-              str(ledger_de(raiz)))
+              any(e["evento"] == "lateral_mantida" for e in ledger_of(root)),
+              str(ledger_of(root)))
 
 
-# ── estado do run e lista de ações (passo 2; C6, C7 e A4) ───────────────────
+# ── run state and list of actions (step 2; C6, C7 and A4) ───────────────────
 
-def estado_de(raiz):
-    d = raiz / ".claude" / "programs" / "fila" / "until"
-    arqs = sorted(d.glob("*.estado.json"))
-    return json.loads(arqs[-1].read_text()) if arqs else None
+def state_of(root):
+    d = root / ".claude" / "programs" / "fila" / "until"
+    files = sorted(d.glob("*.estado.json"))
+    return json.loads(files[-1].read_text()) if files else None
 
 
-# O `claude` falso anota o estado do run que vê: durante o item, e na análise
-# do fim (chamada `/common:until-review`).
-OLHA_ESTADO = (
+# The fake `claude` notes the run state it sees: during the item, and in the end
+# analysis (the `/common:until-review` call).
+LOOKS_AT_STATE = (
     "import glob\n"
     "def _estado():\n"
     "    d = os.path.join(os.path.dirname(PLANO), 'until')\n"
@@ -774,48 +774,48 @@ OLHA_ESTADO = (
     "    sys.exit(0)\n")
 
 
-def vistos_estado(raiz):
-    f = Path(raiz).parent / "chamadas.jsonl.estado"
+def seen_state(root):
+    f = Path(root).parent / "chamadas.jsonl.estado"
     return [json.loads(l) for l in f.read_text().splitlines()] if f.exists() else []
 
 
-def test_2_estado_do_run_rodando_e_depois_esperando_dono_antes_da_analise():
+def test_2_run_state_running_then_waiting_owner_before_the_analysis():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        corpo = OLHA_ESTADO + TRABALHA.replace(
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        body = LOOKS_AT_STATE + WORKS.replace(
             "marca(ident, status='done', evidence='ok')\n",
             "if ident == 'a2':\n"
             "    marca(ident, status='blocked', evidence='travou no Keycloak')\n"
             "else:\n"
             "    marca(ident, status='done', evidence='ok')\n")
-        binv = fake_claude(tmp, corpo)
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        binv = fake_claude(tmp, body)
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY, "--com-analise"])
-        vistos = vistos_estado(raiz)
-        durante = [v for v in vistos if not v["args0"].startswith("/common:until")]
+        seen_ones = seen_state(root)
+        during = [v for v in seen_ones if not v["args0"].startswith("/common:until")]
         check("durante o item, o estado é rodando",
-              durante and all((v["estado"] or {}).get("estado") == "rodando"
-                              for v in durante), str(durante)[:400])
-        analise = [v for v in vistos if v["args0"].startswith("/common:until")]
-        est = (analise[0]["estado"] or {}) if analise else {}
+              during and all((v["estado"] or {}).get("estado") == "rodando"
+                              for v in during), str(during)[:400])
+        analysis = [v for v in seen_ones if v["args0"].startswith("/common:until")]
+        state_dict = (analysis[0]["estado"] or {}) if analysis else {}
         check("a análise já encontra o estado final gravado",
-              est.get("estado") == "esperando-dono", str(analise)[:400])
-        acoes = est.get("acoes") or []
-        branch = [e for e in ledger_de(raiz)
+              state_dict.get("estado") == "esperando-dono", str(analysis)[:400])
+        actions = state_dict.get("acoes") or []
+        branch = [e for e in ledger_of(root)
                   if e["evento"] == "run_start"][0]["branch"]
         check("a única ação é aterrissar, com a branch da noite",
-              [a.get("id") for a in acoes] == ["aterrissar"]
+              [a.get("id") for a in actions] == ["aterrissar"]
               and f"fila/{branch.split('/', 1)[1]}"
-              in (acoes[0].get("comando") or ""), str(acoes))
+              in (actions[0].get("comando") or ""), str(actions))
         check("...com a frase leiga do efeito",
-              acoes and acoes[0].get("frase"), str(acoes))
-        itens = est.get("itens") or []
+              actions and actions[0].get("frase"), str(actions))
+        item_list = state_dict.get("itens") or []
         check("uma linha por item",
-              [i.get("id") for i in itens] == ["a1", "a2"], str(itens))
-        fica = est.get("fica_com_voce") or []
+              [i.get("id") for i in item_list] == ["a1", "a2"], str(item_list))
+        stays = state_dict.get("fica_com_voce") or []
         check("o travado vai para 'fica com você' com o motivo",
               any(f.get("id") == "a2" and "Keycloak" in (f.get("texto") or "")
-                  for f in fica), str(fica))
+                  for f in stays), str(stays))
         check("o terminal imprime a ação numerada",
               "1. aterrissar" in p.stdout, p.stdout[-900:])
         check("...e o bloco 'Fica com você'",
@@ -824,130 +824,130 @@ def test_2_estado_do_run_rodando_e_depois_esperando_dono_antes_da_analise():
               "worktree-merge" not in p.stdout, p.stdout[-900:])
 
 
-def test_2_cada_item_aparece_uma_vez_no_resumo():
-    """A4: o WEGO-2320 aparecia em "Travados", "Build vermelho" e "Sem
-    progresso", e lia-se como três problemas."""
+def test_2_each_item_appears_once_in_the_summary():
+    """A4: WEGO-2320 appeared in "Stuck", "Red build" and "No
+    progress", and was read as three problems."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
-        binv = fake_claude(tmp, TRABALHA)
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        root = build_repo(tmp, [item("a1"), item("a2"), item("a3")])
+        binv = fake_claude(tmp, WORKS)
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
                     extra_env={"FAKE_QUEBRA": "a2"})
-        fim = p.stdout[p.stdout.find("── fim"):]
+        end = p.stdout[p.stdout.find("── fim"):]
         for ident in ("a1", "a2", "a3"):
             check(f"{ident} aparece uma vez na lista de itens do fim",
-                  fim.count(f"- {ident}:") == 1, fim)
+                  end.count(f"- {ident}:") == 1, end)
         check("a linha do a2 diz volta vermelha e a lateral",
-              "vermelho-a2" in fim and "volta vermelha" in fim, fim)
+              "vermelho-a2" in end and "volta vermelha" in end, end)
 
 
-def test_2_run_sem_commit_termina_encerrado_sem_acao():
+def test_2_run_without_commit_ends_closed_without_action():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1")])
+        root = build_repo(tmp, [item("a1")])
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='dropped',"
                                 " evidence='não precisa mais')")
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
-        est = estado_de(raiz) or {}
+        run_until(root, binv, plan_of(root), ["--for", "2h"])
+        state_dict = state_of(root) or {}
         check("sem commit e sem pendência, o estado é encerrado",
-              est.get("estado") == "encerrado" and not est.get("acoes"),
-              str(est))
+              state_dict.get("estado") == "encerrado" and not state_dict.get("acoes"),
+              str(state_dict))
 
 
-# ── passo 1 entre runs: a tentativa do run anterior chega pela herança ──────
+# ── step 1 between runs: the previous run's attempt arrives through inheritance ─
 
-# Na 1ª chamada, os itens de FAKE_METADE commitam e ficam com uma rota humana
-# aberta: o run A termina com eles pela metade, sem que o laço os repita.
-METADE = TENTA.replace(
+# On the 1st call, the FAKE_METADE items commit and are left with an open
+# human route: run A ends with them half done, without the loop repeating them.
+HALF = TRIES.replace(
     "if ident not in lista('FAKE_DUAS') or n >= 2:\n",
     "if n == 1 and ident in lista('FAKE_METADE'):\n"
     "    marca(ident, human_pending='pela metade')\n"
     "elif ident not in lista('FAKE_DUAS') or n >= 2:\n", 1)
 
 
-def run_ids(raiz):
-    return [e["branch"] for e in ledger_de(raiz) if e["evento"] == "run_start"]
+def run_ids(root):
+    return [e["branch"] for e in ledger_of(root) if e["evento"] == "run_start"]
 
 
-def libera(raiz, *idents):
-    """O dono fecha a rota humana entre os dois runs e commita a fila (a
-    largada recusa a fila modificada fora do que o run anterior tocou)."""
-    p = yaml.safe_load(plano_de(raiz).read_text())
+def frees(root, *idents):
+    """The owner closes the human route between the two runs and commits the queue (the
+    launch refuses the modified queue outside what the previous run touched)."""
+    p = yaml.safe_load(plan_of(root).read_text())
     for it in p["items"]:
         if it["id"] in idents:
             it["human_pending"] = None
-    plano_de(raiz).write_text(yaml.safe_dump(p, allow_unicode=True))
-    git(raiz, "add", str(plano_de(raiz)))
-    git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+    plan_of(root).write_text(yaml.safe_dump(p, allow_unicode=True))
+    git(root, "add", str(plan_of(root)))
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
         "dono: fecha a rota")
 
 
-def test_1_tentativa_do_run_anterior_tambem_vai_para_a_lateral():
-    """Achado do completion-auditor (2026-09-28): o reset voltava até o começo
-    da 1ª tentativa DESTE run, que é depois da mescla da herança, e os commits
-    do run anterior ficavam na branch da noite sem passar pelo build.
+def test_1_attempt_of_the_previous_run_also_goes_to_the_side_branch():
+    """Finding of the completion-auditor (2026-09-28): the reset went back to the start
+    of the 1st attempt of THIS run, which is after the inheritance merge, and the commits
+    of the previous run stayed on the night branch without passing through the build.
 
-    O a2 entra na fila só no run B e fecha verde depois do a1: é ele que mantém
-    a branch da noite do run B viva para o teste olhar dentro dela."""
+    a2 enters the queue only in run B and closes green after a1: it is what keeps
+    run B's night branch alive for the test to look inside it."""
     import time
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2", status="dropped")])
-        binv = fake_claude(tmp, METADE)
+        root = build_repo(tmp, [item("a1"), item("a2", status="dropped")])
+        binv = fake_claude(tmp, HALF)
         env = {"FAKE_METADE": "a1", "FAKE_QUEBRA": "a1"}
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY],
+        run_until(root, binv, plan_of(root), ["--for", "2h", "--verify", VERIFY],
              extra_env=env)
-        libera(raiz, "a1")
-        p_ = yaml.safe_load(plano_de(raiz).read_text())
+        frees(root, "a1")
+        p_ = yaml.safe_load(plan_of(root).read_text())
         for it in p_["items"]:
             if it["id"] == "a2":
                 it["status"] = "pending"
-        plano_de(raiz).write_text(yaml.safe_dump(p_, allow_unicode=True))
-        git(raiz, "add", str(plano_de(raiz)))
-        git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+        plan_of(root).write_text(yaml.safe_dump(p_, allow_unicode=True))
+        git(root, "add", str(plan_of(root)))
+        git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
             "dono: a2 entra na fila")
-        time.sleep(61)  # o id do run é por minuto
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        time.sleep(61)  # the run id is per minute
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY], extra_env=env)
-        runs = run_ids(raiz)
+        runs = run_ids(root)
         check("o run B herdou a branch do run A",
               len(runs) == 2 and "herda" in p.stdout, p.stdout[:900])
         check("...e o a2 fechou verde nele",
-              status(raiz, "a2")["status"] == "done", str(status(raiz, "a2")))
-        noite_b = git(raiz, "log", "--format=%s", runs[-1]).splitlines()
+              status(root, "a2")["status"] == "done", str(status(root, "a2")))
+        night_b = git(root, "log", "--format=%s", runs[-1]).splitlines()
         check("a branch da noite do run B não tem o commit do run A",
-              "a2-t1" in noite_b and "a1-t1" not in noite_b, str(noite_b))
-        lateral = git(raiz, "log", "--format=%s",
+              "a2-t1" in night_b and "a1-t1" not in night_b, str(night_b))
+        side_branch = git(root, "log", "--format=%s",
                       f"{runs[-1]}-vermelho-a1").splitlines()
         check("...que está na lateral da 1ª volta",
-              "a1-t1" in lateral and "a1-t2" in lateral, str(lateral))
+              "a1-t1" in side_branch and "a1-t2" in side_branch, str(side_branch))
 
 
-def test_1_heranca_com_outro_item_aberto_para_em_vez_de_resetar():
+def test_1_inheritance_with_another_open_item_stops_instead_of_resetting():
     import time
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = monta_repo(tmp, [item("a1"), item("a2")])
-        binv = fake_claude(tmp, METADE)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY],
+        root = build_repo(tmp, [item("a1"), item("a2")])
+        binv = fake_claude(tmp, HALF)
+        run_until(root, binv, plan_of(root), ["--for", "2h", "--verify", VERIFY],
              extra_env={"FAKE_METADE": "a1,a2"})
-        libera(raiz, "a1")
+        frees(root, "a1")
         time.sleep(61)
-        roda(raiz, binv, plano_de(raiz), ["--for", "2h", "--verify", VERIFY],
+        run_until(root, binv, plan_of(root), ["--for", "2h", "--verify", VERIFY],
              extra_env={"FAKE_METADE": "a1,a2", "FAKE_QUEBRA": "a1"})
-        ev = ledger_de(raiz)
-        fim = [e for e in ev if e["evento"] == "run_end"][-1]
-        check("o run B para no vermelho", fim["motivo"] == "verify-vermelho",
-              str(fim))
+        ev = ledger_of(root)
+        end = [e for e in ev if e["evento"] == "run_end"][-1]
+        check("o run B para no vermelho", end["motivo"] == "verify-vermelho",
+              str(end))
         check("...e o aviso nomeia o outro item herdado",
-              "a2" in (fim.get("detalhe") or ""), str(fim))
-        noite_b = git(raiz, "log", "--format=%s", run_ids(raiz)[-1]).splitlines()
+              "a2" in (end.get("detalhe") or ""), str(end))
+        night_b = git(root, "log", "--format=%s", run_ids(root)[-1]).splitlines()
         check("o trabalho do a2 continua na branch da noite",
-              "a2-t1" in noite_b, str(noite_b))
+              "a2-t1" in night_b, str(night_b))
 
 
 def main():
     print("cepa-until — branch da noite\n")
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"{nome}:")
+    for given_name, fn in sorted(globals().items()):
+        if given_name.startswith("test_") and callable(fn):
+            print(f"{given_name}:")
             fn()
     print()
     if FAILURES:

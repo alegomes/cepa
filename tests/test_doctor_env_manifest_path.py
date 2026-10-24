@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Regression tests: check_env_manifest do cepa-doctor lê docs/env.yaml.
+"""Regression tests: the cepa-doctor's check_env_manifest reads docs/env.yaml.
 
-## Por que este check existe
+## Why this check exists
 
-O manifesto de ambiente mudou de endereço em 2026-08-22: `docs/env.yaml`
-ganha, com fallback para o legado `.claude/env.yaml` (ver
-docs/env-manifest.md). `check_env_manifest` hardcodava `.claude/env.yaml` e
-nunca via `docs/env.yaml` — regressão silenciosa, porque o check é
-fail-silent por design (arquivo ausente → nenhum aviso). Este teste prova
-que a porta declarada em `docs/env.yaml` é conferida.
+The environment manifest changed address on 2026-08-22: `docs/env.yaml`
+wins, with fallback to the legacy `.claude/env.yaml` (see
+docs/env-manifest.md). `check_env_manifest` hardcoded `.claude/env.yaml` and
+never saw `docs/env.yaml` — a silent regression, because the check is
+fail-silent by design (absent file → no warning). This test proves
+that the port declared in `docs/env.yaml` is checked.
 
 Run: python3 tests/test_doctor_env_manifest_path.py
 """
@@ -37,53 +37,55 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def monta(tmp, docs_env=None, legado_env=None):
-    """Repo git mínimo, com docs/env.yaml e/ou .claude/env.yaml opcionais."""
-    raiz = Path(tmp) / "repo"
-    raiz.mkdir()
-    (raiz / "README.md").write_text("base\n", encoding="utf-8")
+def build(tmp, docs_env=None, legacy_env=None):
+    """Minimal git repo, with optional docs/env.yaml and/or .claude/env.yaml."""
+    root = Path(tmp) / "repo"
+    root.mkdir()
+    (root / "README.md").write_text("base\n", encoding="utf-8")
     if docs_env is not None:
-        d = raiz / "docs"
+        d = root / "docs"
         d.mkdir(parents=True, exist_ok=True)
         (d / "env.yaml").write_text(docs_env, encoding="utf-8")
-    if legado_env is not None:
-        d = raiz / ".claude"
+    if legacy_env is not None:
+        d = root / ".claude"
         d.mkdir(parents=True, exist_ok=True)
-        (d / "env.yaml").write_text(legado_env, encoding="utf-8")
-    subprocess.run(["git", "init", "-q", "."], cwd=raiz, check=True)
-    subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+        (d / "env.yaml").write_text(legacy_env, encoding="utf-8")
+    subprocess.run(["git", "init", "-q", "."], cwd=root, check=True)
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", "base"], cwd=raiz, check=True)
-    return raiz
+                    "commit", "-qm", "base"], cwd=root, check=True)
+    return root
 
 
-def path_essenciais(tmp):
-    """Diretório só com symlinks para git/python3/lsof — o mínimo que o
-    doctor precisa para rodar `--projeto`."""
+def essential_paths(tmp):
+    """Directory with only symlinks to git/python3/lsof — the minimum the
+    doctor needs to run `--projeto`.
+    """
     d = Path(tmp) / "minpath"
     d.mkdir()
-    for nome in ("git", "python3", "lsof"):
-        real = shutil.which(nome)
+    for name in ("git", "python3", "lsof"):
+        real = shutil.which(name)
         if real:
-            (d / nome).symlink_to(real)
+            (d / name).symlink_to(real)
     return d
 
 
-def roda(raiz, path_dirs):
+def run_doctor(root, path_dirs):
     env = dict(os.environ)
     env["PATH"] = ":".join(str(p) for p in path_dirs)
-    p = subprocess.run([sys.executable, str(DOCTOR), "--projeto"], cwd=str(raiz),
+    p = subprocess.run([sys.executable, str(DOCTOR), "--projeto"], cwd=str(root),
                        capture_output=True, text=True, timeout=120, env=env)
     return p.stdout + p.stderr
 
 
-class OuvinteDePorta:
-    """Abre um socket TCP em 127.0.0.1:0 (porta livre escolhida pelo SO) e
-    fica escutando numa thread — o suficiente para o `lsof` do doctor
-    encontrar um LISTEN. O processo dono é este próprio interpretador
-    Python, cujo cwd (o diretório de onde este teste foi invocado) NÃO fica
-    dentro do repo temporário montado por `monta()` — condição que este
-    teste depende para acionar o ramo "processo de OUTRO diretório"."""
+class PortListener:
+    """Opens a TCP socket on 127.0.0.1:0 (free port chosen by the OS) and
+    keeps listening in a thread — enough for the doctor's `lsof` to
+    find a LISTEN. The owning process is this very Python interpreter,
+    whose cwd (the directory this test was invoked from) is NOT inside
+    the temporary repo built by `build()` — a condition this
+    test depends on to trigger the "process from ANOTHER directory" branch.
+    """
 
     def __init__(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -91,14 +93,14 @@ class OuvinteDePorta:
         self.sock.bind(("127.0.0.1", 0))
         self.port = self.sock.getsockname()[1]
         self.sock.listen(1)
-        self._parar = False
+        self._stop = False
         self._t = threading.Thread(target=self._loop, daemon=True)
         self._t.start()
-        time.sleep(0.2)  # dá tempo do lsof enxergar o LISTEN
+        time.sleep(0.2)  # gives lsof time to see the LISTEN
 
     def _loop(self):
         self.sock.settimeout(0.5)
-        while not self._parar:
+        while not self._stop:
             try:
                 conn, _ = self.sock.accept()
                 conn.close()
@@ -107,8 +109,8 @@ class OuvinteDePorta:
             except OSError:
                 return
 
-    def fechar(self):
-        self._parar = True
+    def close(self):
+        self._stop = True
         try:
             self.sock.close()
         except OSError:
@@ -116,70 +118,70 @@ class OuvinteDePorta:
         self._t.join(timeout=2)
 
 
-def lsof_disponivel():
+def lsof_available():
     return shutil.which("lsof") is not None
 
 
-def test_docs_env_yaml_porta_ocupada_avisa():
-    if not lsof_disponivel():
+def test_docs_env_yaml_busy_port_warns():
+    if not lsof_available():
         print("  skip  lsof ausente no PATH — pulando (sem como o doctor achar o holder)")
         return
-    ouvinte = OuvinteDePorta()
+    listener = PortListener()
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            raiz = monta(tmp, docs_env=f"ports: [{ouvinte.port}]\n")
-            out = roda(raiz, [path_essenciais(tmp)])
+            root = build(tmp, docs_env=f"ports: [{listener.port}]\n")
+            out = run_doctor(root, [essential_paths(tmp)])
             check("docs/env.yaml declara porta ocupada → warn nomeando a porta",
-                  f"porta {ouvinte.port} ocupada" in out, out)
+                  f"porta {listener.port} ocupada" in out, out)
     finally:
-        ouvinte.fechar()
+        listener.close()
 
 
-def test_legado_claude_env_yaml_porta_ocupada_tambem_avisa():
-    if not lsof_disponivel():
+def test_legacy_claude_env_yaml_busy_port_also_warns():
+    if not lsof_available():
         print("  skip  lsof ausente no PATH — pulando (sem como o doctor achar o holder)")
         return
-    ouvinte = OuvinteDePorta()
+    listener = PortListener()
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            raiz = monta(tmp, legado_env=f"ports: [{ouvinte.port}]\n")
-            out = roda(raiz, [path_essenciais(tmp)])
+            root = build(tmp, legacy_env=f"ports: [{listener.port}]\n")
+            out = run_doctor(root, [essential_paths(tmp)])
             check(".claude/env.yaml (legado, sem docs/env.yaml) também dispara o aviso",
-                  f"porta {ouvinte.port} ocupada" in out, out)
+                  f"porta {listener.port} ocupada" in out, out)
     finally:
-        ouvinte.fechar()
+        listener.close()
 
 
-def test_docs_env_yaml_ganha_do_legado_na_porta():
-    if not lsof_disponivel():
+def test_docs_env_yaml_wins_over_legacy_on_port():
+    if not lsof_available():
         print("  skip  lsof ausente no PATH — pulando (sem como o doctor achar o holder)")
         return
-    ouvinte = OuvinteDePorta()
+    listener = PortListener()
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            # porta livre garantida: abre e fecha na hora, só para reservar
-            # um número que a chance de colisão com o ouvinte é desprezível
+            # free port guaranteed: opens and closes right away, only to reserve
+            # a number whose chance of colliding with the listener is negligible
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.bind(("127.0.0.1", 0))
-            porta_legado_livre = s.getsockname()[1]
+            free_legacy_port = s.getsockname()[1]
             s.close()
 
-            raiz = monta(tmp, docs_env=f"ports: [{ouvinte.port}]\n",
-                         legado_env=f"ports: [{porta_legado_livre}]\n")
-            out = roda(raiz, [path_essenciais(tmp)])
+            root = build(tmp, docs_env=f"ports: [{listener.port}]\n",
+                         legacy_env=f"ports: [{free_legacy_port}]\n")
+            out = run_doctor(root, [essential_paths(tmp)])
             check("docs/env.yaml ganha: avisa da porta do docs/env.yaml",
-                  f"porta {ouvinte.port} ocupada" in out, out)
+                  f"porta {listener.port} ocupada" in out, out)
             check("...e NÃO menciona a porta do legado (docs/env.yaml venceu)",
-                  str(porta_legado_livre) not in out, out)
+                  str(free_legacy_port) not in out, out)
     finally:
-        ouvinte.fechar()
+        listener.close()
 
 
 def main():
     print("cepa-doctor — check_env_manifest usa docs/env.yaml\n")
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"{nome}:")
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"{name}:")
             fn()
     print()
     if FAILURES:

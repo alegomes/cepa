@@ -53,7 +53,7 @@ def write(repo, path, content):
 
 def make_conflict_repo(tmp, n_merges=6):
     """A repo whose history has N real merge commits that all conflict on the
-    same file (cartorio.txt) — the planted "arquivo-cartório"."""
+    same file (cartorio.txt) — the planted "registry file" (arquivo-cartório)."""
     repo = Path(tmp) / "r"
     repo.mkdir()
     git(repo, "init", "-q")

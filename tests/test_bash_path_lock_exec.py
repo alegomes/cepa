@@ -1,39 +1,39 @@
 #!/usr/bin/env python3
-"""Camada 1 do bash-path-lock: deny-by-default em quatro baldes.
+"""Layer 1 of bash-path-lock: deny-by-default in four buckets.
 
-Sem dependências — rode com `python3 tests/test_bash_path_lock_exec.py`.
-Sai não-zero em falha.
+No dependencies — run with `python3 tests/test_bash_path_lock_exec.py`.
+Exits non-zero on failure.
 
-## O furo que este arquivo trava
+## The hole this file locks
 
-WEGO-1936: um qa-engineer, trancado para escrever só em `*/src/test/**`,
-precisava reverter um arquivo de `src/main` para provar que o teste ficava
-vermelho sem o conserto. O `cp` foi barrado pelo cadeado. O agente trocou por
-`python3 -c "open('src/main/...','w').write(...)"` e passou: o hook antigo
-tratava interpretador inline como "não sei analisar" e LIBERAVA, deixando só
-uma linha num log em /tmp que ninguém lia.
+WEGO-1936: a qa-engineer, locked to write only in `*/src/test/**`,
+needed to revert a `src/main` file to prove the test went
+red without the fix. The `cp` was stopped by the lock. The agent swapped it for
+`python3 -c "open('src/main/...','w').write(...)"` and got through: the old hook
+treated an inline interpreter as "I don't know how to analyze" and RELEASED it, leaving only
+a line in a log in /tmp that nobody read.
 
-A correção (desenho em docs/internals/gauntlet-pilot-bash-path-lock.md,
-"Camada 1") inverte a pergunta do hook. Antes: "isto parece uma escrita
-conhecida?". Agora: "isto é comprovadamente inofensivo?". Todo comando de agente
-trancado cai em exatamente um balde:
+The fix (design in docs/internals/gauntlet-pilot-bash-path-lock.md,
+"Layer 1") inverts the hook's question. Before: "does this look like a known
+write?". Now: "is this provably harmless?". Every command of a locked agent
+falls into exactly one bucket:
 
-1. escritor analisável — o alvo é conferido contra os globs do agente;
-2. verbo inocente — lista auditada, com flags perigosas negadas por verbo;
-3. fora da jurisdição — roda num diretório fora da raiz do projeto (o worktree
-   descartável de perturbação) sem citar a raiz;
-4. todo o resto — NEGADO. Interpretador inline e verbo que ninguém listou caem
-   aqui por construção, sem precisar constar em lista nenhuma.
+1. analyzable writer — the target is checked against the agent's globs;
+2. innocent verb — audited list, with dangerous flags denied per verb;
+3. outside the jurisdiction — runs in a directory outside the project root (the disposable
+   perturbation worktree) without naming the root;
+4. everything else — DENIED. Inline interpreter and a verb nobody listed fall
+   here by construction, without needing to be on any list.
 
-Os casos rodam contra as CINCO cópias do hook, como subprocesso e olhando o
-código de saída real — um conserto que falta numa topologia continua sendo bug.
+The cases run against the FIVE copies of the hook, as a subprocess and looking at the real
+exit code — a fix missing in one topology is still a bug.
 
-## Perturbação (como saber que este teste prova algo)
+## Perturbation (how to know this test proves something)
 
-Em `common/hooks/_templates/bash-path-lock.py.tmpl`, faça `_INNOCENT` aceitar
-qualquer verbo (ou troque o `sys.exit(2)` do balde 4 por `sys.exit(0)`),
-regenere com `python3 bin/gen-locks.py --write` e rode: os casos do WEGO-1936
-e da classe de interpretadores ficam vermelhos nas cinco cópias.
+In `common/hooks/_templates/bash-path-lock.py.tmpl`, make `_INNOCENT` accept
+any verb (or swap the `sys.exit(2)` of bucket 4 for `sys.exit(0)`),
+regenerate with `python3 bin/gen-locks.py --write` and run: the WEGO-1936 cases
+and the interpreter-class cases turn red in all five copies.
 """
 
 import json
@@ -51,8 +51,8 @@ isola()
 REPO = Path(__file__).resolve().parent.parent
 HOOKS = sorted(REPO.glob("*/hooks/bash-path-lock.py"))
 
-# Por topologia: um agente trancado que existe no allowlist dela, um arquivo
-# DENTRO da pista dele e um FORA. Os caminhos são relativos à raiz do projeto.
+# Per topology: a locked agent that exists in its allowlist, a file
+# INSIDE its lane and one OUTSIDE. Paths are relative to the project root.
 LANES = {
     "build-hex":     ("qa-engineer",   "domain/src/test/java/FTest.java",
                       "domain/src/main/java/F.java"),
@@ -63,16 +63,16 @@ LANES = {
     "marketing":     ("copywriter",    "docs/marketing/x/pecas/f.md", "src/f.js"),
 }
 
-# Marcas nos comandos: {IN} arquivo na pista, {OUT} arquivo fora da pista,
-# {INDIR} diretório da pista, {TMP} diretório fora da raiz (o worktree
-# descartável), {ROOT} a raiz absoluta do projeto.
+# Marks in the commands: {IN} file in the lane, {OUT} file outside the lane,
+# {INDIR} directory of the lane, {TMP} directory outside the root (the disposable
+# worktree), {ROOT} the absolute root of the project.
 
 WEGO_1936 = "python3 -c \"open('{OUT}','w').write('revertido')\""
 
 DENY = [
-    # --- o vetor real do incidente ---
+    # --- the real vector of the incident ---
     ("WEGO-1936: python3 -c escrevendo src/main", WEGO_1936),
-    # --- a CLASSE, não o nome: variantes que ninguém listou antes ---
+    # --- the CLASS, not the name: variants nobody listed before ---
     ("python3 -B -c", "python3 -B -c \"open('{OUT}','w')\""),
     ("python3 -Bc (flags combinadas)", "python3 -Bc \"open('{OUT}','w')\""),
     ("python sem 3", "python -c 'print(1)'"),
@@ -101,7 +101,7 @@ DENY = [
     ("compilar na hora", "cc -o {TMP}/a.out {TMP}/a.c"),
     ("verbo desconhecido", "frobnicate --all"),
     ("verbo via variável desconhecida", "$ZZ_CEPA_NAO_EXISTE -c 1"),
-    # --- git que reescreve arquivo ---
+    # --- git that rewrites a file ---
     ("git apply", "git apply fix.patch"),
     ("git checkout -- fora da pista (balde 1)", "git checkout -- {OUT}"),
     ("git checkout <arquivo> sem --", "git checkout {OUT}"),
@@ -115,25 +115,25 @@ DENY = [
     ("git config grava hooksPath", "git config core.hooksPath /tmp/h"),
     ("git worktree add DENTRO da raiz", "git worktree add wt-interno HEAD"),
     ("git diff --output para fora da pista", "git diff --output={OUT}"),
-    # --- verbo inocente com flag que o transforma em escritor/executor ---
+    # --- innocent verb with a flag that turns it into a writer/executor ---
     ("sed -i fora da pista (balde 1)", "sed -i 's/a/b/' {OUT}"),
     ("sed com comando w", "sed 's/a/b/w {OUT}' {IN}"),
     ("sed com flag e (executa)", "sed 's/.*/date/e' {IN}"),
-    # comando w/e depois de um endereço ou de um texto de a/i/c: o leitor por
-    # comando que tirou o falso positivo do "stays" não pode abrir este furo
+    # w/e command after an address or after an a/i/c text: the per-command
+    # reader that removed the false positive on "stays" must not open this hole
     ("sed w depois de endereço com stays", "sed '/stays/w {OUT}' {IN}"),
     ("sed w na linha seguinte ao texto do a", "sed -i '1a stays\nw {OUT}' {IN}"),
     ("sed e depois de rótulo", "sed ':a;e date' {IN}"),
     ("sed com comando que ninguém conhece", "sed -i 'k' {IN}"),
-    # prova de 2026-09-29: barra no fim de comentário ou de `r arquivo` não
-    # continua a linha — o comando seguinte executa no sed real
+    # proof of 2026-09-29: a backslash at the end of a comment or of `r file` does not
+    # continue the line — the next command executes in the real sed
     ("sed w depois de comentário com barra", "sed -n '#c\\\nw {OUT}' {IN}"),
     ("sed w depois de r com barra", "sed -n 'r x\\\nw {OUT}' {IN}"),
     ("sed w depois de rótulo e espaço (GNU)", "sed -n 'ba w {OUT}' {IN}"),
     ("sed com flag do s desconhecida", "sed -i 's/a/b/Z' {IN}"),
     ("sed com y malformado", "sed -i 'y/ab/' {IN}"),
     ("sed com endereço sem comando", "sed -i '/x/' {IN}"),
-    # chaves: o `w` dentro de um bloco, ou colado ao `}`, continua sendo w
+    # braces: the `w` inside a block, or stuck to the `}`, is still a w
     ("sed w dentro de bloco", "sed -n '/x/{p;w {OUT}}' {IN}"),
     ("sed w na linha depois do bloco", "sed -n '{p}\nw {OUT}' {IN}"),
     ("sed w colado ao fim do bloco", "sed -n '{p}w {OUT}' {IN}"),
@@ -155,28 +155,28 @@ DENY = [
     ("env -S", "env -S 'python3 -c 1'"),
     ("GIT_EXTERNAL_DIFF executa", "GIT_EXTERNAL_DIFF={TMP}/x.sh git diff"),
     ("export de PAGER", "export GIT_PAGER='sh -c x' && git log"),
-    # --- wrappers não lavam o verbo ---
+    # --- wrappers do not launder the verb ---
     ("timeout python3 -c", "timeout 5 python3 -c 1"),
     ("nohup perl -e", "nohup perl -e 1"),
     ("env python3 -c", "env FOO=1 python3 -c 1"),
     ("sudo", "sudo ls"),
-    # --- gap: substituição de comando em argumento de verbo inocente ---
+    # --- gap: command substitution in the argument of an innocent verb ---
     ("$(...) dentro de echo", "echo $(python3 -c \"open('{OUT}','w')\")"),
     ("$(...) entre aspas duplas", "echo \"$(python3 -c 1)\""),
     ("crase dentro de echo", "echo `python3 -c 1`"),
     ("process substitution <(...)", "diff <(python3 -c 1) {IN}"),
     ("atribuição com substituição maliciosa", "D=$(python3 -c 1) && ls $D"),
-    # --- encadeamento: um segmento ruim contamina a linha ---
+    # --- chaining: one bad segment contaminates the line ---
     ("ls; python3 -c", "ls; python3 -c 1"),
     ("git status && perl -e", "git status && perl -e 1"),
-    # --- cd que pode falhar não tira da jurisdição ---
+    # --- a cd that may fail does not take it out of the jurisdiction ---
     ("cd /tmp; python3 -c (cd pode falhar)", "cd {TMP}; python3 -c 1"),
     ("cd /tmp || python3 -c", "cd {TMP} || python3 -c 1"),
     ("subshell (cd /tmp) && python3 -c", "(cd {TMP}) && python3 -c 1"),
     ("cd /tmp | python3 (pipe não herda cd)", "cd {TMP} | python3 -c 1"),
     ("cd /tmp && python3 citando a raiz",
      "cd {TMP} && python3 -c \"open('{ROOT}/{OUT}','w')\""),
-    # --- escritores do balde 1 que faltavam ---
+    # --- bucket 1 writers that were missing ---
     ("mkdir fora da pista", "mkdir -p {OUT}.d"),
     ("rm fora da pista", "rm -f {OUT}"),
     ("ln fora da pista", "ln -s /etc/passwd {OUT}"),
@@ -188,13 +188,13 @@ DENY = [
     ("heredoc para arquivo fora da pista", "cat <<EOF > {OUT}\nclass X{}\nEOF"),
     ("curl -sSLo (flags combinadas)", "curl -sSLo {OUT} http://x"),
     ("docker run montando a raiz", "docker run --rm -v $(pwd):/w alpine true"),
-    # substituição que esconde uma flag: o valor se parte em palavras
+    # substitution that hides a flag: the value splits into words
     ("flag escondida em $(printf)", "sed $(printf -- -i) 's/a/b/' {OUT}"),
     ("git pull reescreve a árvore", "git pull"),
 ]
 
 ALLOW = [
-    # --- leitura e diagnóstico ---
+    # --- reading and diagnostics ---
     ("grep com >=", "grep -rn '>=' src/"),
     ("[[ >= ]] && mvnw", "[[ $a >= $b ]] && ./mvnw test"),
     ("ls", "ls -la"),
@@ -218,7 +218,7 @@ ALLOW = [
     ("cd para a raiz via substituição", "cd $(git rev-parse --show-toplevel) && git status"),
     ("variável de ambiente conhecida", "ls $HOME"),
     ("xargs com verbo de leitura", "git diff --name-only | xargs wc -l"),
-    # --- git do dia a dia dos workers e do lead ---
+    # --- everyday git of the workers and of the lead ---
     ("git status", "git status --short"),
     ("git diff", "git diff HEAD~1 -- {IN}"),
     ("git log", "git log --oneline -3"),
@@ -263,11 +263,11 @@ ALLOW = [
     ("docker compose logs", "docker compose logs api"),
     ("script do projeto fora da pista", "bash scripts/build.sh"),
     ("make", "make test"),
-    # --- balde 1: escrita analisável dentro da pista ---
+    # --- bucket 1: analyzable write inside the lane ---
     ("cp para a pista", "cp {OUT} {IN}"),
     ("redirect para a pista", "echo x > {IN}"),
     ("sed -i na pista", "sed -i 's/a/b/' {IN}"),
-    # deviations.md 2026-09-27: "stays" fora de um s/// era lido como s + delimitador t
+    # deviations.md 2026-09-27: "stays" outside an s/// was read as s + delimiter t
     ("sed -i com stays no endereço", "sed -i '/o item stays at the entry/d' {IN}"),
     ("sed -i com stays no texto do a", "sed -i '/^fim/a o item stays até que o teste rode' {IN}"),
     ("sed -i com stays no texto do c",
@@ -276,7 +276,7 @@ ALLOW = [
     ("mkdir na pista", "mkdir -p {INDIR}/sub"),
     ("redirect para /tmp", "echo x > {TMP}/out.txt"),
     ("tee para /tmp", "git diff | tee {TMP}/d.patch"),
-    # --- balde 3: a rota sancionada de perturbação RED ---
+    # --- bucket 3: the sanctioned RED perturbation route ---
     ("receita canônica em uma linha",
      "D=$(mktemp -d) && git worktree add --detach \"$D/red\" HEAD && "
      "cd \"$D/red\" && git checkout HEAD~1 -- {OUT} && ./mvnw test -pl domain"),
@@ -291,8 +291,8 @@ ALLOW = [
     ("git -C /tmp apply -R", "git -C {TMP} apply -R x.patch"),
     ("cd /tmp && cp lendo da raiz", "cd {TMP} && cp {ROOT}/{OUT} {OUT}"),
     ("pushd /tmp && python3 -c", "pushd {TMP} && python3 -c 1"),
-    # --- formas comuns que o hook antigo lia errado ou que um classificador
-    #     ingênuo negaria ---
+    # --- common forms the old hook misread or that a naive classifier
+    #     would deny ---
     ("commit no padrão $(cat <<'EOF')",
      "git commit -m \"$(cat <<'EOF'\nfix: don't (break) it\n\nCorpo.\nEOF\n)\""),
     ("2>&1 | tail não é separador", "./mvnw test 2>&1 | tail -50"),
@@ -346,13 +346,13 @@ def check(label, cond, detail=""):
         print(f"FAIL  {label}  {detail}")
 
 
-def test_plugin_name_vem_do_caminho():
-    """Gap do desenho: a checagem anti-deriva deriva PLUGIN_NAME do caminho.
+def test_plugin_name_comes_from_the_path():
+    """Design gap: the anti-drift check derives PLUGIN_NAME from the path.
 
-    O PLUGIN_NAME de cada cópia tem de ser o `name` do plugin.json da pasta
-    onde a cópia mora. Um PLUGIN_NAME errado não quebra nada à vista: o hook
-    compara o prefixo do agent_type, não casa nunca, e passa a liberar TUDO
-    daquela topologia em silêncio.
+    The PLUGIN_NAME of each copy must be the `name` of the plugin.json of the folder
+    where the copy lives. A wrong PLUGIN_NAME breaks nothing in plain sight: the hook
+    compares the agent_type prefix, never matches, and starts releasing EVERYTHING
+    of that topology in silence.
     """
     import importlib.util
     for hook in HOOKS:
@@ -365,101 +365,101 @@ def test_plugin_name_vem_do_caminho():
               mod.PLUGIN_NAME == want, f"PLUGIN_NAME={mod.PLUGIN_NAME!r}")
 
 
-def test_baldes():
+def test_buckets():
     jobs = []
     for hook in HOOKS:
-        topo = hook.parent.parent.name
-        agent, lane_in, lane_out = LANES[topo]
+        top = hook.parent.parent.name
+        agent, lane_in, lane_out = LANES[top]
         agent_type = f"{plugin_of(hook)}:{agent}"
         proj = Path(tempfile.mkdtemp(prefix="bpl-proj-")).resolve()
         tmp = Path(tempfile.mkdtemp(prefix="bpl-wt-")).resolve()
         for want, cases in ((2, DENY), (0, ALLOW)):
             for label, cmd in cases:
-                jobs.append((topo, hook, agent_type, label,
+                jobs.append((top, hook, agent_type, label,
                              fill(cmd, lane_in, lane_out, proj, tmp), proj, want))
 
     def one(job):
-        topo, hook, agent_type, label, cmd, proj, want = job
+        top, hook, agent_type, label, cmd, proj, want = job
         rc, err = run(hook, agent_type, cmd, proj)
         return job, rc, err
 
     with ThreadPoolExecutor(max_workers=8) as ex:
         results = list(ex.map(one, jobs))
-    for (topo, _h, _a, label, cmd, _p, want), rc, err in results:
-        verbo = "nega" if want == 2 else "libera"
-        # Um erro interno do classificador também nega (falha fechada). Sem esta
-        # trava, um caso de negação poderia estar verde pelo motivo errado.
-        check(f"[{topo:13}] {verbo}: {label}",
+    for (top, _h, _a, label, cmd, _p, want), rc, err in results:
+        verb = "nega" if want == 2 else "libera"
+        # An internal error of the classifier also denies (fails closed). Without this
+        # lock, a denial case could be green for the wrong reason.
+        check(f"[{top:13}] {verb}: {label}",
               rc == want and "erro interno" not in err,
               f"exit={rc} (esperado {want}) cmd={cmd!r} stderr={err.strip()[:240]!r}")
 
 
-def test_fora_de_escopo_continua_livre():
-    """Contrato fail-open: sessão principal, built-in e plugin alheio passam."""
+def test_out_of_scope_remains_free():
+    """Fail-open contract: main session, built-in and foreign plugin pass."""
     for hook in HOOKS:
-        topo = hook.parent.parent.name
+        top = hook.parent.parent.name
         proj = Path(tempfile.mkdtemp(prefix="bpl-proj-")).resolve()
-        for agent_type, rotulo in (("", "sessão principal"),
+        for agent_type, caption in (("", "sessão principal"),
                                    ("Explore", "agente built-in"),
                                    ("outro-plugin:dev", "plugin alheio")):
             rc, err = run(hook, agent_type, WEGO_1936.replace("{OUT}", "src/F.java"), proj)
-            check(f"[{topo:13}] {rotulo} não é trancado", rc == 0, err[:200])
+            check(f"[{top:13}] {caption} não é trancado", rc == 0, err[:200])
 
 
-def test_mensagem_nomeia_balde_e_saida():
-    """A mensagem diz qual balde falhou e qual é o caminho legítimo.
+def test_message_names_bucket_and_exit():
+    """The message says which bucket failed and what the legitimate path is.
 
-    A receita de worktree descartável aparece só para o proof-reviewer
-    (fb-20261013-3): os demais agentes são mandados à ordem/proof-reviewer.
+    The disposable worktree recipe appears only for the proof-reviewer
+    (fb-20261013-3): the other agents are sent to ordem/proof-reviewer.
     """
     for hook in HOOKS:
-        topo = hook.parent.parent.name
-        agent, lane_in, lane_out = LANES[topo]
+        top = hook.parent.parent.name
+        agent, lane_in, lane_out = LANES[top]
         proj = Path(tempfile.mkdtemp(prefix="bpl-proj-")).resolve()
         rc, err = run(hook, f"{plugin_of(hook)}:{agent}",
                       WEGO_1936.replace("{OUT}", lane_out), proj)
-        check(f"[{topo:13}] deny do interpretador nomeia o balde 4",
+        check(f"[{top:13}] deny do interpretador nomeia o balde 4",
               rc == 2 and "balde 4" in err, err[:300])
-        check(f"[{topo:13}] deny da pista NÃO ensina worktree descartável",
+        check(f"[{top:13}] deny da pista NÃO ensina worktree descartável",
               "git worktree add" not in err and "mktemp" not in err, err[:600])
-        check(f"[{topo:13}] deny da pista nomeia o proof-reviewer como dono da prova",
+        check(f"[{top:13}] deny da pista nomeia o proof-reviewer como dono da prova",
               "proof-reviewer" in err, err[:600])
         rc_p, err_p = run(hook, f"{plugin_of(hook)}:proof-reviewer",
                           WEGO_1936.replace("{OUT}", lane_out), proj)
-        check(f"[{topo:13}] deny do proof-reviewer ensina worktree descartável",
+        check(f"[{top:13}] deny do proof-reviewer ensina worktree descartável",
               rc_p == 2 and "git worktree add" in err_p and "mktemp" in err_p,
               err_p[:600])
-        check(f"[{topo:13}] deny aponta Write/Edit", "Write" in err and "Edit" in err,
+        check(f"[{top:13}] deny aponta Write/Edit", "Write" in err and "Edit" in err,
               err[:600])
-        # git worktree add DENTRO da raiz: o motivo também só ensina a receita ao proof-reviewer
+        # git worktree add INSIDE the root: the reason also teaches the recipe only to the proof-reviewer
         cmd_wt = "git worktree add wt-interno HEAD"
         rc, err = run(hook, f"{plugin_of(hook)}:{agent}", cmd_wt, proj)
-        check(f"[{topo:13}] worktree add dentro da raiz: pista não recebe a receita",
+        check(f"[{top:13}] worktree add dentro da raiz: pista não recebe a receita",
               rc == 2 and "mktemp" not in err and "proof-reviewer" in err
               and "ORDEM" in err, err[:600])
         rc_p, err_p = run(hook, f"{plugin_of(hook)}:proof-reviewer", cmd_wt, proj)
-        check(f"[{topo:13}] worktree add dentro da raiz: proof-reviewer recebe a receita",
+        check(f"[{top:13}] worktree add dentro da raiz: proof-reviewer recebe a receita",
               rc_p == 2 and "mktemp" in err_p and "crie fora" in err_p, err_p[:600])
         rc, err = run(hook, f"{plugin_of(hook)}:{agent}", f"cp x {lane_out}", proj)
-        check(f"[{topo:13}] deny de escrita fora da pista nomeia o balde 1",
+        check(f"[{top:13}] deny de escrita fora da pista nomeia o balde 1",
               rc == 2 and "balde 1" in err and lane_out in err, err[:300])
 
 
-def test_modo_sombra_e_telemetria():
-    """CEPA_BASHLOCK_ENFORCE=0 libera o balde 4, mas registra o que negaria.
+def test_shadow_mode_and_telemetry():
+    """CEPA_BASHLOCK_ENFORCE=0 releases bucket 4, but records what it would deny.
 
-    E o deny de verdade também vira evento no ledger — a falha silenciosa do
-    log em /tmp que ninguém lia é o que este item existe para matar.
+    And the real deny also becomes an event in the ledger — the silent failure of the
+    log in /tmp that nobody read is what this item exists to kill.
     """
     for hook in HOOKS:
-        topo = hook.parent.parent.name
-        agent, lane_in, lane_out = LANES[topo]
+        top = hook.parent.parent.name
+        agent, lane_in, lane_out = LANES[top]
         at = f"{plugin_of(hook)}:{agent}"
         proj = Path(tempfile.mkdtemp(prefix="bpl-proj-")).resolve()
         tdir = Path(tempfile.mkdtemp(prefix="bpl-tel-"))
         env = {"CEPA_TELEMETRY_DIR": str(tdir)}
 
-        def eventos():
+        def events():
             out = []
             for f in tdir.glob("events-*.jsonl"):
                 out += [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
@@ -467,63 +467,63 @@ def test_modo_sombra_e_telemetria():
 
         rc, _ = run(hook, at, WEGO_1936.replace("{OUT}", lane_out), proj,
                     {**env, "CEPA_BASHLOCK_ENFORCE": "0"})
-        check(f"[{topo:13}] modo sombra libera o balde 4", rc == 0)
-        ev = [e for e in eventos() if e.get("event") == "bash_pathlock_would_deny"]
-        check(f"[{topo:13}] modo sombra grava bash_pathlock_would_deny",
+        check(f"[{top:13}] modo sombra libera o balde 4", rc == 0)
+        ev = [e for e in events() if e.get("event") == "bash_pathlock_would_deny"]
+        check(f"[{top:13}] modo sombra grava bash_pathlock_would_deny",
               len(ev) == 1 and ev[0].get("bucket") == 4 and ev[0].get("agent") == agent,
-              str(eventos())[:300])
+              str(events())[:300])
 
         rc, _ = run(hook, at, f"cp x {lane_out}", proj,
                     {**env, "CEPA_BASHLOCK_ENFORCE": "0"})
-        check(f"[{topo:13}] modo sombra NÃO afrouxa o balde 1", rc == 2)
+        check(f"[{top:13}] modo sombra NÃO afrouxa o balde 1", rc == 2)
 
         rc, _ = run(hook, at, WEGO_1936.replace("{OUT}", lane_out), proj, env)
-        ev = [e for e in eventos() if e.get("event") == "bash_pathlock_deny"]
-        check(f"[{topo:13}] deny grava bash_pathlock_deny no ledger",
+        ev = [e for e in events() if e.get("event") == "bash_pathlock_deny"]
+        check(f"[{top:13}] deny grava bash_pathlock_deny no ledger",
               rc == 2 and any(e.get("bucket") == 4 and e.get("verb") == "python3"
                               for e in ev), str(ev)[:300])
 
         tmp = Path(tempfile.mkdtemp(prefix="bpl-wt-")).resolve()
         rc, _ = run(hook, at, f"git worktree add --detach {tmp}/red HEAD", proj, env)
-        ev = [e for e in eventos() if e.get("event") == "perturb_worktree_created"]
-        check(f"[{topo:13}] worktree de perturbação vira evento contável",
-              rc == 0 and len(ev) == 1, str(eventos())[-300:])
+        ev = [e for e in events() if e.get("event") == "perturb_worktree_created"]
+        check(f"[{top:13}] worktree de perturbação vira evento contável",
+              rc == 0 and len(ev) == 1, str(events())[-300:])
 
 
-def test_dica_diretorio_nao_resolvido():
-    """Worktree descartável em duas chamadas: a negação diz por que e o que usar.
+def test_hint_unresolved_directory():
+    """Disposable worktree in two calls: the denial says why and what to use.
 
-    Caso de 2026-09-26: o agente de prova cria a worktree numa chamada e usa
-    `cd "$WT" && git checkout ...` na seguinte. O cadeado lê cada chamada
-    sozinha; `$WT` não tem valor, o `cd` conta como "continua na raiz" e a
-    reversão é negada. A mensagem antiga só dizia "escrita fora da sua pista",
-    e os agentes contornavam com python3 -c (o vetor do WEGO-1936). A negação
-    continua (o cadeado não pode adivinhar o destino); o que muda é que ela
-    nomeia a variável e oferece caminho literal ou `git -C`, que passam.
+    Case of 2026-09-26: the proof agent creates the worktree in one call and uses
+    `cd "$WT" && git checkout ...` in the next. The lock reads each call
+    alone; `$WT` has no value, the `cd` counts as "still at the root" and the
+    revert is denied. The old message only said "write outside your lane",
+    and the agents got around it with python3 -c (the WEGO-1936 vector). The denial
+    stays (the lock cannot guess the destination); what changes is that it
+    names the variable and offers a literal path or `git -C`, which pass.
 
-    Perturbação: tire a chamada a `_dica_dir_desconhecido` de `_mensagem` no
-    molde e regenere; os casos "nomeia a variável" ficam vermelhos.
+    Perturbation: remove the call to `_dica_dir_desconhecido` from `_mensagem` in the
+    template and regenerate; the "names the variable" cases turn red.
     """
     var = "$CEPA_WT_NAO_EXISTE"
     for hook in HOOKS:
-        topo = hook.parent.parent.name
-        agent, _lane_in, lane_out = LANES[topo]
+        top = hook.parent.parent.name
+        agent, _lane_in, lane_out = LANES[top]
         at = f"{plugin_of(hook)}:{agent}"
         proj = Path(tempfile.mkdtemp(prefix="bpl-proj-")).resolve()
         tmp = Path(tempfile.mkdtemp(prefix="bpl-wt-")).resolve()
-        for rotulo, cmd in (
+        for caption, cmd in (
                 ("cd \"$VAR\" && git checkout",
                  f'cd "{var}" && git checkout HEAD~1 -- {lane_out}'),
                 ("git -C \"$VAR\" checkout",
                  f'git -C "{var}" checkout HEAD~1 -- {lane_out}')):
             rc, err = run(hook, at, cmd, proj)
-            check(f"[{topo:13}] {rotulo}: continua negado", rc == 2, err[:200])
-            check(f"[{topo:13}] {rotulo}: nomeia a variável e a causa",
+            check(f"[{top:13}] {caption}: continua negado", rc == 2, err[:200])
+            check(f"[{top:13}] {caption}: nomeia a variável e a causa",
                   f"{var} não tem valor" in err and "Cada chamada do Bash" in err,
                   err[:600])
-            check(f"[{topo:13}] {rotulo}: sugere caminho literal e git -C",
+            check(f"[{top:13}] {caption}: sugere caminho literal e git -C",
                   "caminho LITERAL" in err and "git -C /tmp/" in err, err[:600])
-        for rotulo, cmd in (
+        for caption, cmd in (
                 ("cd <literal> && git checkout",
                  f"cd {tmp}/red && git checkout HEAD~1 -- {lane_out}"),
                 ("git -C <literal> checkout",
@@ -531,18 +531,18 @@ def test_dica_diretorio_nao_resolvido():
                 ("variável definida na MESMA chamada",
                  f"WT={tmp}/red; cd \"$WT\" && git checkout HEAD~1 -- {lane_out}")):
             rc, err = run(hook, at, cmd, proj)
-            check(f"[{topo:13}] {rotulo}: liberado", rc == 0, err[:300])
+            check(f"[{top:13}] {caption}: liberado", rc == 0, err[:300])
         rc, err = run(hook, at, f"cp x {lane_out}", proj)
-        check(f"[{topo:13}] negação sem variável não ganha a dica",
+        check(f"[{top:13}] negação sem variável não ganha a dica",
               rc == 2 and "não tem valor" not in err, err[:400])
 
 
-def test_agentes_de_prova_enderecam_worktree_por_caminho_literal():
-    """Os dois agentes de prova dizem para usar caminho literal ou git -C.
+def test_proof_agents_address_worktree_by_literal_path():
+    """The two proof agents say to use a literal path or git -C.
 
-    O hook só explica depois de negar; o texto do agente evita a negação.
-    Sem esta regra no agente, cada run de prova esbarra no cadeado uma vez
-    antes de acertar, e é nesse esbarrão que o python3 -c aparece.
+    The hook only explains after denying; the agent's text avoids the denial.
+    Without this rule in the agent, each proof run bumps into the lock once
+    before getting it right, and it is in that bump that python3 -c shows up.
     """
     for rel in ("build-hex/agents/proof-reviewer.md",
                 "common/agents/ui-proof-reviewer.md"):
@@ -552,13 +552,13 @@ def test_agentes_de_prova_enderecam_worktree_por_caminho_literal():
               and "python3 -c" in txt)
 
 
-def test_script_na_copia_descartavel():
-    """Script python3 rodado de DENTRO do worktree descartável passa (balde 3).
+def test_script_on_the_disposable_copy():
+    """python3 script run from INSIDE the disposable worktree passes (bucket 3).
 
-    Achado no run 2026-09-28-0558: o proof-reviewer, path-locked, cria a cópia
-    descartável com `git worktree add /tmp/proof-<KEY> <commit>` e era negado
-    ao rodar o teste de dentro dela. Duas das formas reais que caíram no
-    balde 4 ("script fora do projeto"):
+    Found in run 2026-09-28-0558: the proof-reviewer, path-locked, creates the disposable
+    copy with `git worktree add /tmp/proof-<KEY> <commit>` and was denied
+    when running the test from inside it. Two of the real forms that fell into
+    bucket 4 ("script outside the project"):
 
       cd /tmp/proof-agb-head && ls tests/ | grep -i gate_status; \\
         timeout 120 python3 tests/test_gate_status_by_name.py; echo "EXIT=$?"
@@ -566,21 +566,21 @@ def test_script_na_copia_descartavel():
       python3 /tmp/proof-vigia-solo/tests/test_no_background_build.py 2>&1 \\
         | grep -A5 ...
 
-    A distinção do caso legítimo é o script morar dentro de um worktree
-    REGISTRADO deste repo (`git worktree list --porcelain`), não em qualquer
-    /tmp: um script solto fora da raiz e fora de qualquer worktree continua
-    negado (pinned em DENY acima, "script em /tmp executado por sh").
+    What distinguishes the legitimate case is the script living inside a
+    REGISTERED worktree of this repo (`git worktree list --porcelain`), not in any
+    /tmp: a loose script outside the root and outside any worktree stays
+    denied (pinned in DENY above, "script in /tmp run by sh").
     """
     for hook in HOOKS:
-        topo = hook.parent.parent.name
-        agent, _lane_in, lane_out = LANES[topo]
+        top = hook.parent.parent.name
+        agent, _lane_in, lane_out = LANES[top]
         at = f"{plugin_of(hook)}:{agent}"
         proj = Path(tempfile.mkdtemp(prefix="bpl-proj-")).resolve()
         outside = Path(tempfile.mkdtemp(prefix="bpl-wtreg-")).resolve()
         wt = outside / "proof-x"
-        solto = outside / "solto"
-        solto.mkdir()
-        (solto / "x.sh").write_text("#!/bin/sh\necho hi\n")
+        loose = outside / "solto"
+        loose.mkdir()
+        (loose / "x.sh").write_text("#!/bin/sh\necho hi\n")
 
         def git(*args):
             subprocess.run(["git", "-C", str(proj), *args], check=True,
@@ -589,10 +589,10 @@ def test_script_na_copia_descartavel():
         git("init", "-q")
         git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q",
             "--allow-empty", "-m", "init")
-        # "harness/", não "tests/": em build-team a pista do qa-engineer É
-        # "tests/**" — um script ali dentro cairia no deny de "própria pista"
-        # (pinned em DENY: "script DENTRO da própria pista"), mascarando o
-        # caso que este teste prova.
+        # "harness/", not "tests/": in build-team the qa-engineer's lane IS
+        # "tests/**" — a script in there would fall into the "own lane" deny
+        # (pinned in DENY: "script INSIDE the own lane"), masking the
+        # case this test proves.
         (proj / "harness").mkdir(exist_ok=True)
         tpy = proj / "harness" / "t.py"
         tpy.write_text("#!/usr/bin/env python3\nprint(1)\n")
@@ -618,19 +618,19 @@ def test_script_na_copia_descartavel():
                 ("<WT>/harness/t.py direto", f"{wt}/harness/t.py"),
             ):
                 rc, err = run(hook, at, cmd, proj)
-                check(f"[{topo:13}] libera: {label}", rc == 0, err[:300])
+                check(f"[{top:13}] libera: {label}", rc == 0, err[:300])
 
             rc, err = run(hook, at, f"python3 {wt}/harness/t.py {proj}/{lane_out}", proj)
-            check(f"[{topo:13}] nega: script na cópia citando a raiz (paridade balde 3)",
+            check(f"[{top:13}] nega: script na cópia citando a raiz (paridade balde 3)",
                   rc == 2 and "erro interno" not in err, err[:300])
 
-            rc, err = run(hook, at, f"sh {solto}/x.sh", proj)
-            check(f"[{topo:13}] nega: script fora da raiz e fora de worktree registrado",
+            rc, err = run(hook, at, f"sh {loose}/x.sh", proj)
+            check(f"[{top:13}] nega: script fora da raiz e fora de worktree registrado",
                   rc == 2 and "erro interno" not in err, err[:300])
 
             git("worktree", "remove", "--force", str(wt))
             rc, err = run(hook, at, f"python3 {wt}/harness/t.py", proj)
-            check(f"[{topo:13}] nega: worktree removido do registro (perturbação)",
+            check(f"[{top:13}] nega: worktree removido do registro (perturbação)",
                   rc == 2 and "erro interno" not in err, err[:300])
         finally:
             subprocess.run(["git", "-C", str(proj), "worktree", "remove", "--force", str(wt)],
@@ -641,14 +641,14 @@ def main():
     if not HOOKS:
         print("FAIL: nenhum */hooks/bash-path-lock.py em", REPO)
         return 1
-    test_plugin_name_vem_do_caminho()
-    test_baldes()
-    test_fora_de_escopo_continua_livre()
-    test_mensagem_nomeia_balde_e_saida()
-    test_dica_diretorio_nao_resolvido()
-    test_agentes_de_prova_enderecam_worktree_por_caminho_literal()
-    test_modo_sombra_e_telemetria()
-    test_script_na_copia_descartavel()
+    test_plugin_name_comes_from_the_path()
+    test_buckets()
+    test_out_of_scope_remains_free()
+    test_message_names_bucket_and_exit()
+    test_hint_unresolved_directory()
+    test_proof_agents_address_worktree_by_literal_path()
+    test_shadow_mode_and_telemetry()
+    test_script_on_the_disposable_copy()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} falha(s) em {len(HOOKS)} cópias")

@@ -1,34 +1,34 @@
 #!/usr/bin/env python3
-"""Regressão do `common/hooks/ui-proof-verdict-guard.py`.
+"""Regression of `common/hooks/ui-proof-verdict-guard.py`.
 
-Sem dependências — rode com `python3 tests/test_ui_proof_verdict_guard.py`.
-Sai não-zero em falha.
+No dependencies — run with `python3 tests/test_ui_proof_verdict_guard.py`.
+Exits non-zero on failure.
 
-## O que este hook faz, e o que este arquivo prova
+## What this hook does, and what this file proves
 
-O `ui-proof-reviewer` grava o veredito da prova de tela num YAML. Duas coisas
-podem dar errado nesse arquivo, e o hook pega as duas:
+The `ui-proof-reviewer` records the screen-proof verdict in a YAML. Two things
+can go wrong in that file, and the hook catches both:
 
-1. **O veredito mente sobre os próprios fluxos.** `verdict: proven` ao lado de
-   um fluxo `skipped` / `pass-visual-only` / `fail` é um waiver que o agente se
-   deu sozinho. O hook recomputa o veredito dos status e bloqueia.
-2. **O veredito é gravado onde ele não sobrevive.** Até 22/08/2026 o destino
-   era `.claude/proof/ui-<slug>.yaml`. Nos projetos que rodam o portão,
-   `.claude/` é gitignored: o arquivo é invisível para o git e some junto com a
-   worktree descartável da sessão, sem ninguém notar. O destino agora é
-   `docs/proof/`, e o caminho antigo BLOQUEIA.
+1. **The verdict lies about its own flows.** `verdict: proven` next to a
+   `skipped` / `pass-visual-only` / `fail` flow is a waiver the agent gave
+   itself. The hook recomputes the verdict from the statuses and blocks.
+2. **The verdict is written where it does not survive.** Until 2026-08-22 the destination
+   was `.claude/proof/ui-<slug>.yaml`. In the projects that run the gate,
+   `.claude/` is gitignored: the file is invisible to git and vanishes with the
+   session's disposable worktree, without anyone noticing. The destination is now
+   `docs/proof/`, and the old path BLOCKS.
 
-O segundo bloqueio mora aqui, e não no `path-lock`, por um motivo mecânico: o
-`path-lock` só age sobre agente cujo prefixo de plugin bate com uma topologia
-que carrega o lock, e o `ui-proof-reviewer` é um agente do `common`, que não
-carrega. Este hook é o único ponto que consegue segurar o destino do gate de
-tela — o que também significa que, se ele parar de reconhecer um caminho, não
-fica mais rígido: fica mudo.
+The second block lives here, and not in `path-lock`, for a mechanical reason: the
+`path-lock` only acts on an agent whose plugin prefix matches a topology
+that carries the lock, and the `ui-proof-reviewer` is an agent of `common`, which does not
+carry it. This hook is the only point able to hold the destination of the screen
+gate — which also means that, if it stops recognizing a path, it does not
+become stricter: it becomes mute.
 
-## Perturbação (como saber que este teste prova algo)
+## Perturbation (how to know this test proves something)
 
-Troque `_LEGACY_PROOF_DIR_RE` para nunca casar, ou tire `docs` de
-`_UI_PROOF_DIR_RE`, e este arquivo fica vermelho nomeando o caso.
+Make `_LEGACY_PROOF_DIR_RE` never match, or remove `docs` from
+`_UI_PROOF_DIR_RE`, and this file turns red naming the case.
 """
 
 import json
@@ -37,9 +37,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Este teste executa hook que emite telemetria; sem isto os eventos cairiam
-# em ~/.claude/cepa-telemetry/ e entrariam no relatório do /common:metrics
-# como se fossem uso real. Ver tests/_telemetria_isolada.py.
+# This test executes a hook that emits telemetry; without this the events would fall
+# in ~/.claude/cepa-telemetry/ and enter the /common:metrics report
+# as if they were real use. See tests/_telemetria_isolada.py.
 from _telemetria_isolada import isola
 
 isola()
@@ -47,8 +47,8 @@ isola()
 
 HOOK = Path(__file__).resolve().parent.parent / "common" / "hooks" / "ui-proof-verdict-guard.py"
 TMP = Path(tempfile.gettempdir()) / "repo"
-NOVO = str(TMP / "docs" / "proof" / "ui-wego-acesso.yaml")
-ANTIGO = str(TMP / ".claude" / "proof" / "ui-wego-acesso.yaml")
+NEW = str(TMP / "docs" / "proof" / "ui-wego-acesso.yaml")
+OLD = str(TMP / ".claude" / "proof" / "ui-wego-acesso.yaml")
 
 FAILURES = []
 
@@ -70,7 +70,7 @@ def artifact(verdict="proven", status="pass", perturbation="red"):
     )
 
 
-def run(content, file_path=NOVO):
+def run(content, file_path=NEW):
     payload = json.dumps({
         "tool_name": "Write",
         "tool_input": {"file_path": file_path, "content": content},
@@ -88,25 +88,25 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-# ── destino: o caminho antigo bloqueia, com QUALQUER veredito ──────────────
+# ── destination: the old path blocks, with ANY verdict ─────────────────────
 for v in ("proven", "unproven", "needs-human"):
-    r = run(artifact(verdict=v), file_path=ANTIGO)
+    r = run(artifact(verdict=v), file_path=OLD)
     check(f"veredito {v} em .claude/proof → BLOQUEIA (destino)", r.returncode == 2,
           f"rc={r.returncode}")
 
-r = run(artifact(), file_path=ANTIGO)
+r = run(artifact(), file_path=OLD)
 check("…e a mensagem nomeia o destino que sobrevive",
       "docs/proof/ui-wego-acesso.yaml" in r.stderr, r.stderr[:300])
 check("…e diz por que o arquivo morria", "gitignored" in r.stderr, r.stderr[:300])
 
-# ── conteúdo: a regra que já existia segue valendo, agora em docs/proof ────
+# ── content: the rule that already existed remains in force, now in docs/proof ──
 r = run(artifact())
 check("proven coerente com os fluxos em docs/proof → PASSA", r.returncode == 0,
       r.stderr[:300])
 
-for ruim in ("skipped", "pass-visual-only", "pass-stale", "not-executable"):
-    r = run(artifact(status=ruim))
-    check(f"proven + fluxo {ruim} → BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
+for bad in ("skipped", "pass-visual-only", "pass-stale", "not-executable"):
+    r = run(artifact(status=bad))
+    check(f"proven + fluxo {bad} → BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
 
 r = run(artifact(perturbation="survived"))
 check("proven + perturbação survived → BLOQUEIA", r.returncode == 2,
@@ -118,13 +118,13 @@ r = run(artifact(status="skipped", perturbation="n/a"))
 check("fluxo skipped computa needs-human", "verdict: needs-human" in r.stderr,
       r.stderr[:400])
 
-# ── só `proven` pode ser contradito pelo conteúdo ──────────────────────────
+# ── only `proven` can be contradicted by the content ───────────────────────
 for v in ("unproven", "needs-human"):
     r = run(artifact(verdict=v, status="skipped"))
     check(f"veredito {v} + fluxo skipped em docs/proof → PASSA", r.returncode == 0,
           r.stderr[:200])
 
-# ── o que não é deste hook ────────────────────────────────────────────────
+# ── what is not this hook's business ──────────────────────────────────────
 r = run(artifact(), file_path=str(TMP / "docs" / "proof" / "WEGO-1.yaml"))
 check("artefato sem prefixo ui- → PASSA (é do guarda de backend)",
       r.returncode == 0, r.stderr[:200])

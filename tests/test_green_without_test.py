@@ -1,35 +1,35 @@
 #!/usr/bin/env python3
-"""Verde sem teste nenhum não é verde (item `gate-verde-sem-teste`, BACKLOG).
+"""Green without any test is not green (item `gate-verde-sem-teste`, BACKLOG).
 
-Sem dependências — `python3 tests/test_green_without_test.py`. Sai não-zero em falha.
+No dependencies — `python3 tests/test_green_without_test.py`. Exits non-zero on failure.
 
-O defeito, medido no wego em 2026-08-24: com `surefire.failIfNoSpecifiedTests=false`
-no pom, `./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest` imprime
-BUILD SUCCESS sem nenhuma linha "Tests run:". O capture-build-result gravava isso
-como SUCCESS, o gate-advance liberava o commit, e o card virava feito sem que um
-teste sequer tivesse rodado. O mesmo vale para `pytest -k NomeErrado`,
-`go test -run NomeErrado` e `npm test -- -t NomeErrado`.
+The defect, measured in wego on 2026-08-24: with `surefire.failIfNoSpecifiedTests=false`
+in the pom, `./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest` prints
+BUILD SUCCESS without any "Tests run:" line. capture-build-result recorded that
+as SUCCESS, gate-advance released the commit, and the card became done without a single
+test having run. The same applies to `pytest -k NomeErrado`,
+`go test -run NomeErrado` and `npm test -- -t NomeErrado`.
 
-O contrato que este arquivo guarda:
+The contract this file guards:
 
   capture-build-result.py
-    - comando COM filtro de teste + saída verde + zero teste executado → EMPTY
-      (não SUCCESS), com `tests_run: 0` e motivo nomeado;
-    - comando COM filtro + contagem > 0 → SUCCESS, com `tests_run`;
-    - comando SEM filtro → comportamento de antes (não exige contagem).
+    - command WITH a test filter + green output + zero tests executed → EMPTY
+      (not SUCCESS), with `tests_run: 0` and a named reason;
+    - command WITH filter + count > 0 → SUCCESS, with `tests_run`;
+    - command WITHOUT filter → behavior as before (does not require a count).
 
-  gate-advance.py (critério de pronto, ponta a ponta)
-    - depois de uma captura EMPTY, `git commit` é BARRADO, e a mensagem diz que
-      o filtro casou zero teste e como corrigir.
+  gate-advance.py (done criterion, end to end)
+    - after an EMPTY capture, `git commit` is BLOCKED, and the message says that
+      the filter matched zero tests and how to fix it.
 
-  acceptance-gate.py e cepa-plan finish (a outra metade: "nem declarar feito")
-    - depois de uma captura EMPTY, a transição do card para in_review/done é
-      BARRADA mesmo com auditoria `complete`; voltar para in_progress passa;
-    - `cepa-plan finish --status done` recusa; blocked/pending aceitam;
-    - depois de um verde com teste executado, as duas portas liberam.
+  acceptance-gate.py and cepa-plan finish (the other half: "not even declare done")
+    - after an EMPTY capture, the card transition to in_review/done is
+      BLOCKED even with a `complete` audit; going back to in_progress passes;
+    - `cepa-plan finish --status done` refuses; blocked/pending accept;
+    - after a green with an executed test, both doors release.
 
   prompts
-    - proof-reviewer e completion-auditor exigem N > 0 testes executados.
+    - proof-reviewer and completion-auditor require N > 0 tests executed.
 """
 
 import json
@@ -38,7 +38,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Este teste executa hooks que emitem telemetria. Ver tests/_telemetria_isolada.py.
+# This test executes hooks that emit telemetry. See tests/_telemetria_isolada.py.
 from _telemetria_isolada import isola
 
 isola()
@@ -106,7 +106,7 @@ defaults:
 
 
 def transition(repo, tid):
-    """Transição do card pelo mcp-atlassian, no hook real do acceptance-gate."""
+    """Card transition through mcp-atlassian, in the real acceptance-gate hook."""
     return run_hook(ACCEPTANCE, {
         "tool_name": "mcp__mcp-atlassian__jira_transition_issue",
         "tool_input": {"issue_key": KEY, "transition_id": tid},
@@ -124,9 +124,9 @@ def state(repo):
     return json.loads(p.read_text()) if p.exists() else None
 
 
-# ── saídas realistas ──────────────────────────────────────────────────────
+# ── realistic outputs ─────────────────────────────────────────────────────
 
-MAVEN_VAZIO = """\
+MAVEN_EMPTY = """\
 [INFO] Scanning for projects...
 [INFO] ------------------------------------------------------------------------
 [INFO] Reactor Build Order:
@@ -146,7 +146,7 @@ MAVEN_VAZIO = """\
 [INFO] Total time:  2.601 s
 """
 
-MAVEN_COM_TESTE = """\
+MAVEN_WITH_TEST = """\
 [INFO] --- maven-surefire-plugin:3.2.5:test (default-test) @ domain ---
 [INFO] -------------------------------------------------------
 [INFO]  T E S T S
@@ -161,7 +161,7 @@ MAVEN_COM_TESTE = """\
 [INFO] BUILD SUCCESS
 """
 
-MAVEN_ZERO_EXPLICITO = """\
+MAVEN_EXPLICIT_ZERO = """\
 [INFO] Results:
 [INFO]
 [INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
@@ -169,7 +169,7 @@ MAVEN_ZERO_EXPLICITO = """\
 [INFO] BUILD SUCCESS
 """
 
-PYTEST_VAZIO = """\
+PYTEST_EMPTY = """\
 ============================= test session starts ==============================
 platform darwin -- Python 3.12.4, pytest-8.2.0, pluggy-1.5.0
 rootdir: /repo
@@ -178,7 +178,7 @@ collected 5 items / 5 deselected / 0 selected
 ============================ 5 deselected in 0.02s =============================
 """
 
-PYTEST_COM_TESTE = """\
+PYTEST_WITH_TEST = """\
 ============================= test session starts ==============================
 collected 5 items / 3 deselected / 2 selected
 
@@ -187,30 +187,30 @@ tests/test_cpf.py ..                                                     [100%]
 ======================= 2 passed, 3 deselected in 0.03s ========================
 """
 
-GO_VAZIO = """\
+GO_EMPTY = """\
 ok  \tgithub.com/wego/acesso/domain\t0.012s [no tests to run]
 ?   \tgithub.com/wego/acesso/cmd\t[no test files]
 """
 
-GO_COM_TESTE = """\
+GO_WITH_TEST = """\
 ok  \tgithub.com/wego/acesso/domain\t0.015s
 """
 
-JEST_VAZIO = """\
+JEST_EMPTY = """\
 > acesso-web@1.0.0 test
 > jest -t NomeErrado
 
 No tests found, exiting with code 0
 """
 
-JEST_TUDO_PULADO = """\
+JEST_ALL_SKIPPED = """\
 Test Suites: 3 skipped, 0 of 3 total
 Tests:       14 skipped, 14 total
 Snapshots:   0 total
 Time:        1.2 s
 """
 
-JEST_COM_TESTE = """\
+JEST_WITH_TEST = """\
 PASS src/cpf.test.ts
 Test Suites: 1 passed, 1 total
 Tests:       2 passed, 12 skipped, 14 total
@@ -225,7 +225,7 @@ with tempfile.TemporaryDirectory() as tmp:
     print("\n# capture-build-result.py — filtro de teste que casou zero teste")
 
     r = make_repo(tmp / "mvn-vazio")
-    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_VAZIO)
+    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_EMPTY)
     s = state(r)
     check("maven -Dtest= com BUILD SUCCESS e nenhum 'Tests run:' → EMPTY",
           s is not None and s.get("status") == "EMPTY", str(s))
@@ -235,13 +235,13 @@ with tempfile.TemporaryDirectory() as tmp:
           s is not None and "zero" in (s.get("reason") or "").lower(), str(s))
 
     r = make_repo(tmp / "mvn-zero")
-    capture(r, "./mvnw test -Dtest=Nada", MAVEN_ZERO_EXPLICITO)
+    capture(r, "./mvnw test -Dtest=Nada", MAVEN_EXPLICIT_ZERO)
     s = state(r)
     check("maven -Dtest= com 'Tests run: 0' explícito → EMPTY",
           s is not None and s.get("status") == "EMPTY", str(s))
 
     r = make_repo(tmp / "mvn-ok")
-    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_COM_TESTE)
+    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_WITH_TEST)
     s = state(r)
     check("maven -Dtest= com 'Tests run: 3' → SUCCESS",
           s is not None and s.get("status") == "SUCCESS", str(s))
@@ -249,55 +249,55 @@ with tempfile.TemporaryDirectory() as tmp:
           s is not None and (s.get("tests_run") or 0) > 0, str(s))
 
     r = make_repo(tmp / "mvn-sem-filtro")
-    capture(r, "./mvnw verify", MAVEN_VAZIO)
+    capture(r, "./mvnw verify", MAVEN_EMPTY)
     s = state(r)
     check("maven SEM filtro e sem 'Tests run:' continua SUCCESS (fora de escopo)",
           s is not None and s.get("status") == "SUCCESS", str(s))
 
     r = make_repo(tmp / "py-vazio")
-    capture(r, "pytest -k NomeErrado", PYTEST_VAZIO, exit_code=0)
+    capture(r, "pytest -k NomeErrado", PYTEST_EMPTY, exit_code=0)
     s = state(r)
     check("pytest -k com '5 deselected' e nada passou → EMPTY",
           s is not None and s.get("status") == "EMPTY", str(s))
 
     r = make_repo(tmp / "py-exit5")
-    capture(r, "pytest -k NomeErrado", PYTEST_VAZIO, exit_code=5)
+    capture(r, "pytest -k NomeErrado", PYTEST_EMPTY, exit_code=5)
     s = state(r)
     check("pytest -k saindo 5 (nada coletado) nunca vira SUCCESS",
           s is not None and s.get("status") != "SUCCESS", str(s))
 
     r = make_repo(tmp / "py-ok")
-    capture(r, "pytest -k cpf", PYTEST_COM_TESTE, exit_code=0)
+    capture(r, "pytest -k cpf", PYTEST_WITH_TEST, exit_code=0)
     s = state(r)
     check("pytest -k com '2 passed' → SUCCESS",
           s is not None and s.get("status") == "SUCCESS" and s.get("tests_run") == 2, str(s))
 
     r = make_repo(tmp / "go-vazio")
-    capture(r, "go test ./... -run NomeErrado", GO_VAZIO, exit_code=0)
+    capture(r, "go test ./... -run NomeErrado", GO_EMPTY, exit_code=0)
     s = state(r)
     check("go test -run com '[no tests to run]' → EMPTY",
           s is not None and s.get("status") == "EMPTY", str(s))
 
     r = make_repo(tmp / "go-ok")
-    capture(r, "go test ./domain -run=TestCpf", GO_COM_TESTE, exit_code=0)
+    capture(r, "go test ./domain -run=TestCpf", GO_WITH_TEST, exit_code=0)
     s = state(r)
     check("go test -run= com 'ok pkg' sem '[no tests to run]' → SUCCESS",
           s is not None and s.get("status") == "SUCCESS", str(s))
 
     r = make_repo(tmp / "jest-vazio")
-    capture(r, "npm test -- -t NomeErrado", JEST_VAZIO, exit_code=0)
+    capture(r, "npm test -- -t NomeErrado", JEST_EMPTY, exit_code=0)
     s = state(r)
     check("jest -t com 'No tests found' → EMPTY",
           s is not None and s.get("status") == "EMPTY", str(s))
 
     r = make_repo(tmp / "jest-pulado")
-    capture(r, "npm test -- --testNamePattern=NomeErrado", JEST_TUDO_PULADO, exit_code=0)
+    capture(r, "npm test -- --testNamePattern=NomeErrado", JEST_ALL_SKIPPED, exit_code=0)
     s = state(r)
     check("jest --testNamePattern= com tudo 'skipped' → EMPTY",
           s is not None and s.get("status") == "EMPTY", str(s))
 
     r = make_repo(tmp / "jest-ok")
-    capture(r, "npm test -- -t cpf", JEST_COM_TESTE, exit_code=0)
+    capture(r, "npm test -- -t cpf", JEST_WITH_TEST, exit_code=0)
     s = state(r)
     check("jest -t com 'Tests: 2 passed' → SUCCESS",
           s is not None and s.get("status") == "SUCCESS" and s.get("tests_run") == 2, str(s))
@@ -305,7 +305,7 @@ with tempfile.TemporaryDirectory() as tmp:
     print("\n# critério de pronto — depois de um EMPTY, o commit não passa")
 
     r = make_repo(tmp / "e2e")
-    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_VAZIO)
+    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_EMPTY)
     g = run_hook(GATE, {
         "tool_name": "Bash",
         "tool_input": {"command": "git commit -m 'feat: card feito'"},
@@ -324,8 +324,8 @@ with tempfile.TemporaryDirectory() as tmp:
     })
     check("gate-advance BARRA git push com baseline EMPTY", g.returncode == 2, g.stderr[:200])
 
-    # Um verde de verdade depois limpa o bloqueio.
-    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_COM_TESTE)
+    # A real green afterwards clears the block.
+    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_WITH_TEST)
     g = run_hook(GATE, {
         "tool_name": "Bash",
         "tool_input": {"command": "git commit -m 'feat: card feito'"},
@@ -335,24 +335,24 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("\n# critério de pronto — depois de um EMPTY, o card não é declarado feito")
 
-    # Os dois lugares onde "feito" se declara: a transição do card no Jira
-    # (acceptance-gate) e o desfecho de item da fila (cepa-plan finish).
+    # The two places where "done" is declared: the card transition in Jira
+    # (acceptance-gate) and the queue item outcome (cepa-plan finish).
     r = make_repo(tmp / "e2e-feito")
     (r / "board-flow.yaml").write_text(BOARD_FLOW, encoding="utf-8")
     acc = r / ".claude" / "acceptance"
     acc.mkdir(parents=True)
-    # Artefato COMPLETO: o bloqueio tem de vir do build vazio, não da auditoria.
+    # COMPLETE artifact: the block must come from the empty build, not from the audit.
     (acc / f"{KEY}.yaml").write_text(f"key: {KEY}\nstatus: complete\n", encoding="utf-8")
-    itens = r / "itens.json"
-    itens.write_text(json.dumps([
+    items = r / "itens.json"
+    items.write_text(json.dumps([
         {"id": i, "title": f"item {i}", "why": f"porque {i}", "status": "pending",
          "blocked_by": [], "human_pending": None} for i in ("A", "B")
     ]), encoding="utf-8")
-    w = cepa_plan(r, "write", "fila", "--items", str(itens), "--source", "teste",
+    w = cepa_plan(r, "write", "fila", "--items", str(items), "--source", "teste",
                   "--quando", "2026-09-25", "--repo", ".")
     check("fila de teste gravada", w.returncode == 0, w.stderr[:300])
 
-    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_VAZIO)
+    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_EMPTY)
     check("pré-condição: baseline EMPTY", (state(r) or {}).get("status") == "EMPTY",
           str(state(r)))
 
@@ -385,8 +385,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("cepa-plan finish --status pending ACEITA com baseline EMPTY",
           f.returncode == 0, f.stderr[:300])
 
-    # Um verde de verdade depois libera as duas portas.
-    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_COM_TESTE)
+    # A real green afterwards releases both doors.
+    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_WITH_TEST)
     g = transition(r, "41")
     check("depois de verde com teste, acceptance-gate libera in_review",
           g.returncode == 0, g.stderr[:200])
@@ -397,69 +397,69 @@ with tempfile.TemporaryDirectory() as tmp:
 
     print("\n# worktree ligada — a baseline é a da worktree, não a do clone principal")
 
-    # A fila mora no clone principal (compartilhada entre worktrees); a
-    # baseline de build é de CADA worktree. Ler a do clone principal deixava
-    # `finish done` passar numa worktree ligada com build EMPTY, e barrava
-    # uma worktree verde pelo EMPTY de outra.
-    principal = make_repo(tmp / "wt-principal")
-    (principal / "board-flow.yaml").write_text(BOARD_FLOW, encoding="utf-8")
-    (principal / "sub").mkdir()
-    (principal / "sub" / "LEIAME").write_text("x\n", encoding="utf-8")
-    git(["add", "-A"], principal)
-    c = git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], principal)
+    # The queue lives in the main clone (shared between worktrees); the
+    # build baseline is of EACH worktree. Reading the main clone's one let
+    # `finish done` pass in a linked worktree with an EMPTY build, and blocked
+    # a green worktree because of another's EMPTY.
+    main_clone = make_repo(tmp / "wt-principal")
+    (main_clone / "board-flow.yaml").write_text(BOARD_FLOW, encoding="utf-8")
+    (main_clone / "sub").mkdir()
+    (main_clone / "sub" / "LEIAME").write_text("x\n", encoding="utf-8")
+    git(["add", "-A"], main_clone)
+    c = git(["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "base"], main_clone)
     check("pré-condição: commit no clone principal", c.returncode == 0, c.stderr[:200])
-    ligada = tmp / "wt-ligada"
-    a = git(["worktree", "add", "-q", str(ligada), "-b", "x"], principal)
+    linked = tmp / "wt-ligada"
+    a = git(["worktree", "add", "-q", str(linked), "-b", "x"], main_clone)
     check("pré-condição: worktree ligada criada", a.returncode == 0, a.stderr[:200])
 
-    w = cepa_plan(ligada, "write", "fila", "--items", str(itens), "--source", "teste",
-                  "--quando", "2026-09-25", "--repo", str(ligada))
+    w = cepa_plan(linked, "write", "fila", "--items", str(items), "--source", "teste",
+                  "--quando", "2026-09-25", "--repo", str(linked))
     check("fila gravada a partir da worktree ligada", w.returncode == 0, w.stderr[:300])
     check("…e mora no clone principal",
-          (principal / ".claude" / "queues" / "fila" / "queue.yaml").exists()
-          and not (ligada / ".claude" / "queues" / "fila" / "queue.yaml").exists(), "")
+          (main_clone / ".claude" / "queues" / "fila" / "queue.yaml").exists()
+          and not (linked / ".claude" / "queues" / "fila" / "queue.yaml").exists(), "")
 
-    capture(ligada, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest",
-            MAVEN_VAZIO)
+    capture(linked, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest",
+            MAVEN_EMPTY)
     check("pré-condição: EMPTY só na worktree ligada",
-          (state(ligada) or {}).get("status") == "EMPTY" and state(principal) is None,
-          f"ligada={state(ligada)} principal={state(principal)}")
-    f = cepa_plan(ligada, "finish", "fila", "A", "--status", "done",
-                  "--evidence", "commit abc", "--repo", str(ligada))
+          (state(linked) or {}).get("status") == "EMPTY" and state(main_clone) is None,
+          f"ligada={state(linked)} principal={state(main_clone)}")
+    f = cepa_plan(linked, "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", str(linked))
     check("finish done --repo <worktree ligada> RECUSA com EMPTY na worktree ligada",
           f.returncode == 2, f"exit={f.returncode} err={f.stderr[:300]}")
     check("…e a recusa cita o last-build.json da worktree ligada",
-          str(ligada / ".claude" / "last-build.json") in f.stderr
-          or str((ligada / ".claude" / "last-build.json").resolve()) in f.stderr,
+          str(linked / ".claude" / "last-build.json") in f.stderr
+          or str((linked / ".claude" / "last-build.json").resolve()) in f.stderr,
           f.stderr[:400])
-    f = cepa_plan(ligada / "sub", "finish", "fila", "A", "--status", "done",
-                  "--evidence", "commit abc", "--repo", str(ligada / "sub"))
+    f = cepa_plan(linked / "sub", "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", str(linked / "sub"))
     check("finish done --repo <subdir da worktree ligada> também RECUSA",
           f.returncode == 2, f"exit={f.returncode} err={f.stderr[:300]}")
 
-    (ligada / ".claude" / "acceptance").mkdir(parents=True, exist_ok=True)
-    (ligada / ".claude" / "acceptance" / f"{KEY}.yaml").write_text(
+    (linked / ".claude" / "acceptance").mkdir(parents=True, exist_ok=True)
+    (linked / ".claude" / "acceptance" / f"{KEY}.yaml").write_text(
         f"key: {KEY}\nstatus: complete\n", encoding="utf-8")
-    g = transition(ligada, "41")
+    g = transition(linked, "41")
     check("acceptance-gate BARRA in_review com EMPTY na worktree ligada (cwd = ela)",
           g.returncode == 2, f"exit={g.returncode} stderr={g.stderr[:300]}")
-    g = transition(ligada / "sub", "41")
+    g = transition(linked / "sub", "41")
     check("acceptance-gate BARRA in_review com cwd = subdir da worktree ligada",
           g.returncode == 2, f"exit={g.returncode} stderr={g.stderr[:300]}")
 
-    # O inverso: verde na worktree ligada, EMPTY só no clone principal.
-    capture(ligada, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_COM_TESTE)
-    capture(principal, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest",
-            MAVEN_VAZIO)
+    # The inverse: green in the linked worktree, EMPTY only in the main clone.
+    capture(linked, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_WITH_TEST)
+    capture(main_clone, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest",
+            MAVEN_EMPTY)
     check("pré-condição: SUCCESS na ligada, EMPTY só no principal",
-          (state(ligada) or {}).get("status") == "SUCCESS"
-          and (state(principal) or {}).get("status") == "EMPTY",
-          f"ligada={state(ligada)} principal={state(principal)}")
-    g = transition(ligada, "41")
+          (state(linked) or {}).get("status") == "SUCCESS"
+          and (state(main_clone) or {}).get("status") == "EMPTY",
+          f"ligada={state(linked)} principal={state(main_clone)}")
+    g = transition(linked, "41")
     check("acceptance-gate NÃO barra a worktree ligada verde pelo EMPTY do principal",
           g.returncode == 0, f"exit={g.returncode} stderr={g.stderr[:300]}")
-    f = cepa_plan(ligada, "finish", "fila", "A", "--status", "done",
-                  "--evidence", "commit abc", "--repo", str(ligada))
+    f = cepa_plan(linked, "finish", "fila", "A", "--status", "done",
+                  "--evidence", "commit abc", "--repo", str(linked))
     check("finish done --repo <worktree ligada> ACEITA com EMPTY só no clone principal",
           f.returncode == 0, f"exit={f.returncode} err={f.stderr[:300]}")
 
@@ -467,7 +467,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     MARK_STALE = HOOKS / "mark-build-stale.py"
 
-    def edita(repo, rel):
+    def edit(repo, rel):
         return run_hook(MARK_STALE, {
             "tool_name": "Edit",
             "tool_input": {"file_path": str(repo / rel)},
@@ -479,12 +479,12 @@ with tempfile.TemporaryDirectory() as tmp:
     acc = r / ".claude" / "acceptance"
     acc.mkdir(parents=True)
     (acc / f"{KEY}.yaml").write_text(f"key: {KEY}\nstatus: complete\n", encoding="utf-8")
-    w = cepa_plan(r, "write", "fila", "--items", str(itens), "--source", "teste",
+    w = cepa_plan(r, "write", "fila", "--items", str(items), "--source", "teste",
                   "--quando", "2026-09-25", "--repo", ".")
     check("fila de teste gravada (stale)", w.returncode == 0, w.stderr[:300])
 
-    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_VAZIO)
-    edita(r, "domain/src/main/java/Cpf.java")
+    capture(r, "./mvnw -pl domain -am test -Dtest=NaoExisteEmLugarNenhumTest", MAVEN_EMPTY)
+    edit(r, "domain/src/main/java/Cpf.java")
     s = state(r) or {}
     check("pré-condição: EMPTY + edição de fonte → STALE com last_known_status EMPTY",
           s.get("status") == "STALE" and s.get("last_known_status") == "EMPTY", str(s))
@@ -504,8 +504,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check("finish blocked ACEITA com STALE herdado de EMPTY",
           f.returncode == 0, f.stderr[:300])
 
-    # Uma segunda edição não pode apagar a linhagem (STALE → STALE).
-    edita(r, "domain/src/main/java/Rg.java")
+    # A second edit must not erase the lineage (STALE → STALE).
+    edit(r, "domain/src/main/java/Rg.java")
     s = state(r) or {}
     check("segunda edição mantém last_known_status EMPTY (não vira STALE)",
           s.get("status") == "STALE" and s.get("last_known_status") == "EMPTY", str(s))
@@ -517,10 +517,10 @@ with tempfile.TemporaryDirectory() as tmp:
     check("finish done RECUSA depois de duas edições sobre um EMPTY",
           f.returncode == 2, f"exit={f.returncode} err={f.stderr[:300]}")
 
-    # STALE comum (última execução real SUCCESS) não é assunto destas portas:
-    # quem cobra build novo antes do commit é o gate-advance.
-    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_COM_TESTE)
-    edita(r, "domain/src/main/java/Cpf.java")
+    # An ordinary STALE (last real run SUCCESS) is not the business of these doors:
+    # whoever charges for a new build before the commit is gate-advance.
+    capture(r, "./mvnw -pl domain -am test -Dtest=CpfTest", MAVEN_WITH_TEST)
+    edit(r, "domain/src/main/java/Cpf.java")
     s = state(r) or {}
     check("pré-condição: SUCCESS + edição → STALE com last_known_status SUCCESS",
           s.get("status") == "STALE" and s.get("last_known_status") == "SUCCESS", str(s))

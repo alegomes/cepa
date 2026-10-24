@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""Regression tests para a foto de versão que a sessão carrega no boot.
+"""Regression tests for the version snapshot that the session carries at boot.
 
-O harness ja sabia dizer "voce editou o repo e nao reinstalou" (_pluginver.scan
-compara REPO com CACHE). Ele nao sabia dizer o oposto, que e mais traicoeiro:
-voce reinstalou COM a sessao aberta — o cache fica novo, a sessao segue
-executando os hooks que leu na abertura, e nada na tela distingue os dois.
+The harness already knew how to say "you edited the repo and did not reinstall" (_pluginver.scan
+compares REPO with CACHE). It did not know how to say the opposite, which is more treacherous:
+you reinstalled WITH the session open — the cache becomes new, the session keeps
+executing the hooks it read at opening, and nothing on screen distinguishes the two.
 
-A foto (`plugin_versions` na entrada do registry) e o que torna a pergunta
-respondivel: comparando o que a sessao carregou com o que o cache tem AGORA.
+The snapshot (`plugin_versions` in the registry entry) is what makes the question
+answerable: comparing what the session loaded with what the cache has NOW.
 
-Contratos guardados aqui:
-  - sessao cuja foto bate com o cache → nada a dizer;
-  - sessao cuja foto ficou para tras → aparece, com as duas versoes;
-  - sessao SEM foto (aberta antes deste check existir) → silencio, nunca um
-    alarme inventado a partir de dado que nao existe;
-  - plugin que sumiu do cache nao vira alerta — some da comparacao;
-  - session-registry.py grava a foto no SessionStart.
+Contracts guarded here:
+  - a session whose snapshot matches the cache → nothing to say;
+  - a session whose snapshot fell behind → shows up, with the two versions;
+  - a session WITHOUT a snapshot (opened before this check existed) → silence, never an
+    alarm invented from data that does not exist;
+  - a plugin that vanished from the cache does not become an alert — it leaves the comparison;
+  - session-registry.py records the snapshot at SessionStart.
 
-Rode com `python3 tests/test_stale_session.py`.
+Run with `python3 tests/test_stale_session.py`.
 """
 
 import sys
@@ -27,9 +27,9 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _pluginver as V  # noqa: E402
 
-# Este teste cita hook emissor de telemetria. Hoje ele não chega a executá-lo,
-# mas citar e executar são um passo um do outro, e foi essa distância que
-# deixou 7 testes poluindo o ledger real por um mês. Ver
+# This test cites a telemetry emitter hook. Today it does not get to execute it,
+# but citing and executing are one step apart, and that distance is what
+# left 7 tests polluting the real ledger for a month. See
 # tests/_telemetria_isolada.py.
 from _telemetria_isolada import isola
 
@@ -47,15 +47,15 @@ def check(name, cond, detail=""):
         failures.append(name)
 
 
-def com_cache(mapa):
-    """Troca o cache real por um fixo, para o teste nao depender da maquina."""
+def with_cache(mapping):
+    """Swaps the real cache for a fixed one, so the test does not depend on the machine."""
     original = V.loaded_now
-    V.loaded_now = lambda: mapa
+    V.loaded_now = lambda: mapping
     return original
 
 
-def test_em_dia():
-    orig = com_cache({"common": "1.0.0", "board-flow": "0.15.0"})
+def test_up_to_date():
+    orig = with_cache({"common": "1.0.0", "board-flow": "0.15.0"})
     try:
         r = V.session_stale({"plugin_versions": {"common": "1.0.0",
                                                  "board-flow": "0.15.0"}})
@@ -64,8 +64,8 @@ def test_em_dia():
         V.loaded_now = orig
 
 
-def test_ficou_para_tras():
-    orig = com_cache({"common": "1.0.0", "board-flow": "0.15.0"})
+def test_fell_behind():
+    orig = with_cache({"common": "1.0.0", "board-flow": "0.15.0"})
     try:
         r = V.session_stale({"plugin_versions": {"common": "0.30.0",
                                                  "board-flow": "0.15.0"}})
@@ -76,8 +76,8 @@ def test_ficou_para_tras():
         V.loaded_now = orig
 
 
-def test_sem_foto_e_silencio():
-    orig = com_cache({"common": "1.0.0"})
+def test_without_snapshot_is_silence():
+    orig = with_cache({"common": "1.0.0"})
     try:
         check("sem chave: silêncio", V.session_stale({}) == [])
         check("foto vazia: silêncio", V.session_stale({"plugin_versions": {}}) == [])
@@ -86,8 +86,8 @@ def test_sem_foto_e_silencio():
         V.loaded_now = orig
 
 
-def test_plugin_sumido_do_cache():
-    orig = com_cache({"common": "1.0.0"})
+def test_plugin_missing_from_cache():
+    orig = with_cache({"common": "1.0.0"})
     try:
         r = V.session_stale({"plugin_versions": {"common": "1.0.0",
                                                  "extinto": "0.1.0"}})
@@ -96,15 +96,16 @@ def test_plugin_sumido_do_cache():
         V.loaded_now = orig
 
 
-def test_registry_grava_a_foto():
+def test_registry_records_the_snapshot():
     src = (REPO / "common" / "hooks" / "session-registry.py").read_text()
     check("session-registry grava plugin_versions",
           'entry.setdefault("plugin_versions", V.loaded_now())' in src)
 
 
-def test_loaded_now_nao_levanta():
-    """O contrato do módulo: nada aqui quebra quem chama. Um comparador que
-    derruba o boot da sessão seria desligado, e aí não protege ninguém."""
+def test_loaded_now_does_not_raise():
+    """The module's contract: nothing here breaks the caller. A comparator that
+    takes down the session boot would be switched off, and then it protects no one.
+    """
     try:
         r = V.loaded_now()
         check("loaded_now devolve um mapa", isinstance(r, dict), str(type(r)))
@@ -114,9 +115,9 @@ def test_loaded_now_nao_levanta():
 
 def main():
     print("test_stale_session")
-    for fn in (test_em_dia, test_ficou_para_tras, test_sem_foto_e_silencio,
-               test_plugin_sumido_do_cache, test_registry_grava_a_foto,
-               test_loaded_now_nao_levanta):
+    for fn in (test_up_to_date, test_fell_behind, test_without_snapshot_is_silence,
+               test_plugin_missing_from_cache, test_registry_records_the_snapshot,
+               test_loaded_now_does_not_raise):
         fn()
     if failures:
         print(f"\n{len(failures)} falha(s): {', '.join(failures)}")

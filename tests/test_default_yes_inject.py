@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""Regression tests do default-yes-inject.
+"""Regression tests for the default-yes-inject.
 
-A skill `default-yes` existe desde 18/08/2026 e diz o que fazer com uma
-recomendação: ação reversível, ou que só registra algo, com recomendação clara
-→ execute e preste contas no relatório; pergunte só o irreversível, e em lote
-nas pontas. Só que skill não se ativa sozinha — ela vale quando o comando que
-está rodando manda ativá-la, e em 22/08/2026 só 6 dos 56 comandos do repo a
-citavam.
+The `default-yes` skill has existed since 2026-08-18 and says what to do with a
+recommendation: a reversible action, or one that only records something, with a
+clear recommendation → execute and account for it in the report; ask only the
+irreversible, and in batches at the edges. But a skill does not activate itself —
+it applies when the running command orders it activated, and on 2026-08-22 only
+6 of the repo's 56 commands cited it.
 
-O buraco não era cosmético. `/board-flow:drain` cita a skill, mas chama
-`/board-flow:execute` por card, que despacha para `plan-build-validate` /
-`reproduce-fix-verify`, que chamam `prove` e `advance` — e nenhum desses citava.
-A política valia na largada (onde a pergunta é barata) e evaporava no meio do
-run (onde ela é cara).
+The hole was not cosmetic. `/board-flow:drain` cites the skill, but calls
+`/board-flow:execute` per card, which dispatches to `plan-build-validate` /
+`reproduce-fix-verify`, which call `prove` and `advance` — and none of those cited it.
+The policy held at the start (where asking is cheap) and evaporated in the middle
+of the run (where it is expensive).
 
-O que estes testes fixam:
-  - comando marcado `interaction: routine` injeta a política, e o texto diz que
-    ela vale para os comandos e subagentes invocados — que é o ponto todo;
-  - comando `conversational` (/common:spec) NÃO injeta: ali a skill
-    guided-interrogation suspende a default-yes de propósito, e reinjetá-la
-    reabriria a contradição que o session-routine-guard fecha;
-  - /common:session <rotina> segue o ALVO, não o invólucro;
-  - prompt que não é comando de plugin sai na hora, sem custo;
-  - tudo que o hook não entende → não injeta. Ele CONCEDE autonomia; na dúvida
-    não concede. E nunca bloqueia: exit 0 sempre.
+What these tests pin down:
+  - a command marked `interaction: routine` injects the policy, and the text says
+    it applies to the commands and subagents invoked — which is the whole point;
+  - a `conversational` command (/common:spec) does NOT inject: there the
+    guided-interrogation skill suspends default-yes on purpose, and re-injecting it
+    would reopen the contradiction that the session-routine-guard closes;
+  - /common:session <routine> follows the TARGET, not the wrapper;
+  - a prompt that is not a plugin command exits immediately, at no cost;
+  - anything the hook does not understand → does not inject. It GRANTS autonomy; when
+    in doubt it does not grant. And it never blocks: always exit 0.
 
 Run: python3 tests/test_default_yes_inject.py
 """
@@ -38,10 +38,10 @@ REPO = Path(__file__).resolve().parent.parent
 HOOK = REPO / "common" / "hooks" / "default-yes-inject.py"
 PLUGIN_ROOT = REPO / "common"
 
-# HOME vazio: sem installed_plugins.json o hook cai na varredura do repo, em vez
-# de ler o registro REAL da máquina de quem roda a suíte.
-_SEM_REGISTRO = tempfile.TemporaryDirectory()
-SEM_REGISTRO = Path(_SEM_REGISTRO.name)
+# Empty HOME: without installed_plugins.json the hook falls back to scanning the repo, instead
+# of reading the REAL registry of the machine of whoever runs the suite.
+_NO_REGISTRY = tempfile.TemporaryDirectory()
+NO_REGISTRY = Path(_NO_REGISTRY.name)
 
 FAILURES = []
 
@@ -55,7 +55,7 @@ def check(name, cond, detail=""):
 
 
 def run(prompt, plugin_root=PLUGIN_ROOT):
-    env = {"PATH": "/usr/bin:/bin", "HOME": str(SEM_REGISTRO)}
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(NO_REGISTRY)}
     if plugin_root is not None:
         env["CLAUDE_PLUGIN_ROOT"] = str(plugin_root)
     p = subprocess.run([sys.executable, str(HOOK)],
@@ -70,16 +70,16 @@ def run(prompt, plugin_root=PLUGIN_ROOT):
     return p.returncode, ctx
 
 
-def test_rotina_injeta():
-    for rotina in ("board-flow:prove-drain", "board-flow:drain", "common:doctor",
+def test_routine_injects():
+    for routine_name in ("board-flow:prove-drain", "board-flow:drain", "common:doctor",
                    "build-hex:plan-build-validate", "board-flow:advance"):
-        rc, ctx = run(f"/{rotina} --max 5")
-        check(f"{rotina} injeta", rc == 0 and "default-yes" in ctx,
+        rc, ctx = run(f"/{routine_name} --max 5")
+        check(f"{routine_name} injeta", rc == 0 and "default-yes" in ctx,
               f"rc={rc} ctx={ctx[:120]!r}")
 
 
-def test_texto_alcanca_o_meio_do_run():
-    """O que faltava não era a política, era o ALCANCE dela."""
+def test_text_reaches_the_middle_of_the_run():
+    """What was missing was not the policy, it was its REACH."""
     _, ctx = run("/board-flow:drain --max 3")
     check("diz que vale para o run inteiro", "run inteiro" in ctx, ctx[:200])
     check("nomeia subagentes/comandos invocados",
@@ -88,15 +88,15 @@ def test_texto_alcanca_o_meio_do_run():
     check("exige prestar contas no relatório", "relatório final" in ctx, ctx[:200])
 
 
-def test_conversacional_nao_injeta():
+def test_conversational_does_not_inject():
     rc, ctx = run("/common:spec preciso repensar o modelo de dados")
     check("spec não injeta", rc == 0 and ctx == "", f"rc={rc} ctx={ctx[:120]!r}")
     rc, ctx = run("/common:debrief")
     check("debrief não injeta", rc == 0 and ctx == "", f"rc={rc} ctx={ctx[:120]!r}")
 
 
-def test_session_segue_o_alvo():
-    # O invólucro é routine, mas quem manda na política é a rotina-alvo.
+def test_session_follows_the_target():
+    # The wrapper is routine, but whoever rules the policy is the target routine.
     rc, ctx = run("/common:session prove-drain --max 5")
     check("session + rotina injeta", rc == 0 and "board-flow:prove-drain" in ctx,
           f"rc={rc} ctx={ctx[:150]!r}")
@@ -108,7 +108,7 @@ def test_session_segue_o_alvo():
           f"rc={rc} ctx={ctx[:150]!r}")
 
 
-def test_prompt_alheio_sai_na_hora():
+def test_foreign_prompt_exits_immediately():
     for prompt in ("boa tarde", "rode /common:doctor depois", "/help", "",
                    "/clear", "e o /board-flow:drain?"):
         rc, ctx = run(prompt)
@@ -116,33 +116,34 @@ def test_prompt_alheio_sai_na_hora():
               f"rc={rc} ctx={ctx[:120]!r}")
 
 
-def test_na_duvida_nao_concede():
+def test_when_in_doubt_does_not_grant():
     rc, ctx = run("/naoexiste:comando")
     check("comando inexistente não injeta", rc == 0 and ctx == "", f"rc={rc}")
     rc, ctx = run("/common:doctor", plugin_root=None)
     check("sem CLAUDE_PLUGIN_ROOT não injeta", rc == 0 and ctx == "", f"rc={rc}")
-    # Raiz FORA do repo: a varredura de `bases()` não tem onde achar o comando.
-    # (Uma raiz inexistente DENTRO do repo, ao contrário, resolve — os irmãos
-    # do CLAUDE_PLUGIN_ROOT são justamente onde os plugins moram, e é assim que
-    # o session-routine-guard também acha. Isso é acerto, não vazamento.)
-    with tempfile.TemporaryDirectory() as fora:
-        rc, ctx = run("/common:doctor", plugin_root=Path(fora) / "common")
+    # Root OUTSIDE the repo: the `bases()` scan has nowhere to find the command.
+    # (A nonexistent root INSIDE the repo, on the contrary, resolves — the siblings
+    # of CLAUDE_PLUGIN_ROOT are exactly where the plugins live, and that is how
+    # the session-routine-guard finds it too. That is correct, not a leak.)
+    with tempfile.TemporaryDirectory() as outside:
+        rc, ctx = run("/common:doctor", plugin_root=Path(outside) / "common")
         check("raiz fora do repo não injeta", rc == 0 and ctx == "",
               f"rc={rc} ctx={ctx[:120]!r}")
 
 
-def test_todo_comando_declara_interaction():
-    """O hook só funciona sobre comandos marcados — um comando novo sem o campo
-    volta a interromper em silêncio, que é o defeito original."""
+def test_every_command_declares_interaction():
+    """The hook only works on marked commands — a new command without the field
+    goes back to interrupting in silence, which is the original defect.
+    """
     import re
     FM = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
-    faltando = []
+    missing = []
     for f in sorted(REPO.glob("*/commands/*.md")):
         m = FM.match(f.read_text(encoding="utf-8"))
         val = re.search(r"^interaction\s*:\s*(\S+)", m.group(1), re.M) if m else None
         if not val or val.group(1) not in ("routine", "conversational"):
-            faltando.append(str(f.relative_to(REPO)))
-    check("todo comando declara interaction válido", not faltando, str(faltando))
+            missing.append(str(f.relative_to(REPO)))
+    check("todo comando declara interaction válido", not missing, str(missing))
 
 
 for fn in list(globals().values()):

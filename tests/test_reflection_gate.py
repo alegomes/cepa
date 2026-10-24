@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """Regression tests for common/hooks/reflection-gate.py.
 
-A Reflexão fecha quando NENHUM achado ficou solto: cada um virou card ou foi
-descartado com motivo escrito (docs/modos-de-trabalho.md). Achado solto não
-some — volta como micro-ajuste no meio da próxima construção, que é o
-vazamento que os modos existem para impedir.
+The Reflection closes when NO finding was left loose: each one became a card or was
+discarded with a written reason (docs/modos-de-trabalho.md). A loose finding does not
+vanish — it comes back as a micro-adjustment in the middle of the next construction, which is the
+leak the modes exist to prevent.
 
-Contratos guardados aqui:
-  - `fechado: true` com achado sem destino nem descarte → bloqueia (rc=2);
-  - descarte com motivo decorativo ("n/a", "-", "ok") ou curto demais também
-    bloqueia — motivo simbólico é o mesmo que motivo nenhum, e passa a
-    impressão de que a triagem aconteceu;
-  - achado com destino, ou com descarte de motivo real, passa;
-  - `fechado: false` passa sempre — triagem em andamento não é violação;
-  - fail-open: arquivo fora de .claude/reflection/, YAML quebrado, conteúdo
-    ausente → deixa passar, nunca inventa bloqueio;
-  - CEPA_MODO=off desliga.
+Contracts guarded here:
+  - `fechado: true` with a finding without destination or discard → blocks (rc=2);
+  - a discard with a decorative reason ("n/a", "-", "ok") or too short also
+    blocks — a symbolic reason is the same as no reason, and gives the
+    impression that the triage happened;
+  - a finding with a destination, or with a discard of a real reason, passes;
+  - `fechado: false` always passes — triage in progress is not a violation;
+  - fail-open: a file outside .claude/reflection/, broken YAML, missing
+    content → lets it pass, never invents a block;
+  - CEPA_MODO=off turns it off.
 
-Sem deps além de PyYAML (que o hook já exige) — rode com
+No deps beyond PyYAML (which the hook already requires) — run with
 `python3 tests/test_reflection_gate.py`.
 """
 
@@ -42,7 +42,7 @@ def check(name, cond, detail=""):
         failures.append(name)
 
 
-def run(conteudo, path=".claude/reflection/fronteiras-2026-08-18.yaml", env=None):
+def run(content, path=".claude/reflection/fronteiras-2026-08-18.yaml", env=None):
     e = {**os.environ}
     e.update(env or {})
     with tempfile.TemporaryDirectory() as tmp:
@@ -50,26 +50,26 @@ def run(conteudo, path=".claude/reflection/fronteiras-2026-08-18.yaml", env=None
             [sys.executable, str(GATE)],
             input=json.dumps({"cwd": tmp, "tool_name": "Write",
                               "tool_input": {"file_path": path,
-                                             "content": conteudo}}),
+                                             "content": content}}),
             capture_output=True, text=True, timeout=15, env=e,
         )
 
 
-ABERTO = """recorte: fronteiras
+OPEN = """recorte: fronteiras
 lente: contrarian
 fechado: false
 achados:
   - o_que: "o resolver duplica a query"
 """
 
-SEM_DESTINO = """recorte: fronteiras
+WITHOUT_DESTINATION = """recorte: fronteiras
 fechado: true
 achados:
   - o_que: "o resolver duplica a query"
     onde: "ContactResolver.java:88"
 """
 
-COM_DESTINO = """recorte: fronteiras
+WITH_DESTINATION = """recorte: fronteiras
 fechado: true
 achados:
   - o_que: "o resolver duplica a query"
@@ -79,8 +79,8 @@ achados:
 """
 
 
-def test_bloqueia_achado_solto():
-    p = run(SEM_DESTINO)
+def test_blocks_loose_finding():
+    p = run(WITHOUT_DESTINATION)
     check("solto: bloqueia", p.returncode == 2, str(p.returncode))
     check("solto: nomeia o achado", "duplica a query" in p.stderr, p.stderr)
     check("solto: ensina as duas saídas",
@@ -88,36 +88,36 @@ def test_bloqueia_achado_solto():
     check("solto: oferece fechado: false", "fechado: false" in p.stderr, p.stderr)
 
 
-def test_bloqueia_motivo_decorativo():
-    for motivo in ('"n/a"', '"-"', '"ok"', '"tbd"', '"curto"'):
-        doc = SEM_DESTINO.rstrip() + f"\n    descartado: {motivo}\n"
+def test_blocks_decorative_reason():
+    for reason in ('"n/a"', '"-"', '"ok"', '"tbd"', '"curto"'):
+        doc = WITHOUT_DESTINATION.rstrip() + f"\n    descartado: {reason}\n"
         p = run(doc)
-        check(f"motivo decorativo {motivo}: bloqueia", p.returncode == 2,
+        check(f"motivo decorativo {reason}: bloqueia", p.returncode == 2,
               str(p.returncode))
-    doc = SEM_DESTINO.rstrip() + '\n    descartado: "ja existe o card WEGO-99 para isso"\n'
+    doc = WITHOUT_DESTINATION.rstrip() + '\n    descartado: "ja existe o card WEGO-99 para isso"\n'
     p = run(doc)
     check("motivo real: passa", p.returncode == 0, p.stderr)
 
 
-def test_passa_quando_tudo_tem_destino():
-    p = run(COM_DESTINO)
+def test_passes_when_everything_has_destination():
+    p = run(WITH_DESTINATION)
     check("todos com destino: passa", p.returncode == 0, p.stderr)
 
 
-def test_bloqueia_no_caminho_novo_e_no_legado():
-    p = run(SEM_DESTINO, path=".claude/reflection/x.yaml")
+def test_blocks_on_new_path_and_on_legacy():
+    p = run(WITHOUT_DESTINATION, path=".claude/reflection/x.yaml")
     check("caminho novo .claude/reflection/: bloqueia", p.returncode == 2, str(p.returncode))
-    p = run(SEM_DESTINO, path=".claude/reflexao/x.yaml")
+    p = run(WITHOUT_DESTINATION, path=".claude/reflexao/x.yaml")
     check("caminho legado .claude/reflexao/: bloqueia", p.returncode == 2, str(p.returncode))
 
 
-def test_aberto_passa():
-    p = run(ABERTO)
+def test_open_passes():
+    p = run(OPEN)
     check("fechado: false passa", p.returncode == 0, p.stderr)
 
 
 def test_fail_open():
-    p = run(SEM_DESTINO, path="docs/notas.yaml")
+    p = run(WITHOUT_DESTINATION, path="docs/notas.yaml")
     check("fora de .claude/reflection: passa", p.returncode == 0, p.stderr)
     p = run("isto: [não é: yaml válido\n  ::", )
     check("yaml quebrado: passa", p.returncode == 0, p.stderr)
@@ -126,15 +126,15 @@ def test_fail_open():
 
 
 def test_kill_switch():
-    p = run(SEM_DESTINO, env={"CEPA_MODO": "off"})
+    p = run(WITHOUT_DESTINATION, env={"CEPA_MODO": "off"})
     check("CEPA_MODO=off desliga", p.returncode == 0, p.stderr)
 
 
 def main():
     print("test_reflection_gate")
-    for fn in (test_bloqueia_achado_solto, test_bloqueia_motivo_decorativo,
-               test_passa_quando_tudo_tem_destino,
-               test_bloqueia_no_caminho_novo_e_no_legado, test_aberto_passa,
+    for fn in (test_blocks_loose_finding, test_blocks_decorative_reason,
+               test_passes_when_everything_has_destination,
+               test_blocks_on_new_path_and_on_legacy, test_open_passes,
                test_fail_open, test_kill_switch):
         fn()
     if failures:

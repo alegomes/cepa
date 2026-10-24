@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Testes do /common:queue-status e do `cepa-plan status` que ele chama.
+"""Tests of /common:queue-status and of the `cepa-plan status` it calls.
 
-Rode com `python3 tests/test_common_queue_status.py` (só precisa do PyYAML).
+Run with `python3 tests/test_common_queue_status.py` (it only needs PyYAML).
 
-A dor: em 2026-09-28 o dono perguntou qual comando lista a fila e não havia
-nenhum. O `queue` esconde o que fechou e para no primeiro travamento, e o
-/common:next aponta um passo só. Estes testes prendem as três promessas do
-comando novo: mostra TODOS os itens, na ordem gravada, e não toca no arquivo.
+The pain: on 2026-09-28 the owner asked which command lists the queue and there was
+none. `queue` hides what closed and stops at the first jam, and
+/common:next points to one step only. These tests hold the three promises of the
+new command: shows ALL the items, in the recorded order, and does not touch the file.
 """
 
 import json
@@ -41,8 +41,8 @@ def run(cwd, *args):
                           capture_output=True, text=True, cwd=str(cwd))
 
 
-def repo_git(base, nome):
-    d = Path(base) / nome
+def git_repo(base, given_name):
+    d = Path(base) / given_name
     d.mkdir(parents=True)
     subprocess.run(["git", "-C", str(d), "init", "-q"], check=True)
     subprocess.run(["git", "-C", str(d), "-c", "user.email=t@t", "-c",
@@ -58,16 +58,16 @@ def item(ident, **kw):
     return base
 
 
-def escreve_fila(d, itens, nome="fila"):
-    p = d / f"itens-{nome}.json"
-    p.write_text(json.dumps(itens, ensure_ascii=False), encoding="utf-8")
-    r = run(d, "write", nome, "--items", str(p), "--source", "teste",
+def write_queue(d, items, given_name="fila"):
+    p = d / f"itens-{given_name}.json"
+    p.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
+    r = run(d, "write", given_name, "--items", str(p), "--source", "teste",
             "--quando", "2026-09-28", "--repo", ".")
     assert r.returncode == 0, r.stderr
-    return d / ".claude" / "queues" / nome / "queue.yaml"
+    return d / ".claude" / "queues" / given_name / "queue.yaml"
 
 
-ITENS = [
+ITEMS = [
     item("a-feito", status="done", evidence="commit abc"),
     item("b-pendente"),
     item("c-travado", status="blocked",
@@ -83,9 +83,9 @@ def status_json(d, *extra):
     return r, (json.loads(r.stdout) if r.returncode == 0 else None)
 
 
-def test_lista_todos_os_itens_na_ordem_gravada(base):
-    d = repo_git(base, "todos")
-    escreve_fila(d, ITENS)
+def test_lists_all_items_in_recorded_order(base):
+    d = git_repo(base, "todos")
+    write_queue(d, ITEMS)
     r, out = status_json(d, "fila")
     check("sai com código 0", r.returncode == 0, r.stderr)
     ids = [i["id"] for i in out["items"]]
@@ -100,18 +100,18 @@ def test_lista_todos_os_itens_na_ordem_gravada(base):
     check("total bate", out["total"] == 5)
 
 
-def test_texto_agrupa_e_mostra_motivo_e_acao_humana(base):
-    d = repo_git(base, "texto")
-    escreve_fila(d, ITENS)
+def test_text_groups_and_shows_reason_and_human_action(base):
+    d = git_repo(base, "texto")
+    write_queue(d, ITEMS)
     r = run(d, "status", "fila", "--repo", ".")
     t = r.stdout
     check("cabeçalho com as contagens",
           "0 em andamento · 2 pendentes · 1 bloqueados · 1 concluídos · "
           "1 descartados · 5 no total" in t, t)
-    ordem = [t.find(g) for g in ("\npendentes (2)", "\nbloqueados (1)",
+    order = [t.find(g) for g in ("\npendentes (2)", "\nbloqueados (1)",
                                  "\nconcluídos (1)", "\ndescartados (1)")]
     check("grupos na ordem pendentes, bloqueados, concluídos, descartados",
-          all(x >= 0 for x in ordem) and ordem == sorted(ordem), ordem)
+          all(x >= 0 for x in order) and order == sorted(order), order)
     check("bloqueado mostra o motivo da evidência",
           "motivo: Condicao de fora: o dono precisa decidir X" in t, t)
     check("pendente mostra de quem depende", "espera: b-pendente" in t, t)
@@ -122,9 +122,9 @@ def test_texto_agrupa_e_mostra_motivo_e_acao_humana(base):
           "commit abc" not in t and "1. a-feito — item a-feito" in t, t)
 
 
-def test_filtro_por_status(base):
-    d = repo_git(base, "filtro")
-    escreve_fila(d, ITENS)
+def test_filter_by_status(base):
+    d = git_repo(base, "filtro")
+    write_queue(d, ITEMS)
     _, out = status_json(d, "fila", "--status", "pending")
     check("--status pending traz só os pendentes",
           [i["id"] for i in out["items"]] == ["b-pendente", "e-espera"])
@@ -133,45 +133,45 @@ def test_filtro_por_status(base):
     check("status desconhecido é recusado", r.returncode != 0)
 
 
-def test_nome_omitido(base):
-    d = repo_git(base, "uma")
-    escreve_fila(d, ITENS, "unica")
+def test_omitted_name(base):
+    d = git_repo(base, "uma")
+    write_queue(d, ITEMS, "unica")
     r, out = status_json(d)
     check("com uma fila só, usa ela", r.returncode == 0
           and out and out["program"] == "unica", r.stderr)
-    escreve_fila(d, ITENS[:1], "outra")
+    write_queue(d, ITEMS[:1], "outra")
     r, _ = status_json(d)
     check("com duas, recusa e nomeia as duas", r.returncode == 2
           and "outra" in r.stderr and "unica" in r.stderr, r.stderr)
-    vazio = repo_git(base, "vazio")
-    r, _ = status_json(vazio)
+    empty = git_repo(base, "vazio")
+    r, _ = status_json(empty)
     check("sem fila, recusa apontando o /common:queue", r.returncode == 2
           and "/common:queue" in r.stderr, r.stderr)
 
 
-def test_nao_toca_no_arquivo(base):
-    d = repo_git(base, "leitura")
-    alvo = escreve_fila(d, ITENS)
-    antes = (alvo.read_bytes(), alvo.stat().st_mtime_ns)
+def test_does_not_touch_the_file(base):
+    d = git_repo(base, "leitura")
+    target = write_queue(d, ITEMS)
+    before = (target.read_bytes(), target.stat().st_mtime_ns)
     run(d, "status", "fila", "--repo", ".")
     status_json(d, "fila")
     check("o plan.yaml sai byte a byte igual e sem ser tocado",
-          (alvo.read_bytes(), alvo.stat().st_mtime_ns) == antes)
+          (target.read_bytes(), target.stat().st_mtime_ns) == before)
 
 
-def test_recusa_plano_de_ondas(base):
-    d = repo_git(base, "ondas")
-    alvo = d / ".claude" / "programs" / "ondas" / "plan.yaml"
-    alvo.parent.mkdir(parents=True)
-    alvo.write_text(yaml.safe_dump({"schema_version": 2,
+def test_refuses_wave_plan(base):
+    d = git_repo(base, "ondas")
+    target = d / ".claude" / "programs" / "ondas" / "plan.yaml"
+    target.parent.mkdir(parents=True)
+    target.write_text(yaml.safe_dump({"schema_version": 2,
                                     "mode": "parallel-waves", "waves": []}))
     r, _ = status_json(d, "ondas")
     check("plano de ondas sai com código 3", r.returncode == 3, r.stderr)
 
 
-def test_de_dentro_de_uma_worktree_le_o_clone_principal(base):
-    d = repo_git(base, "principal")
-    escreve_fila(d, ITENS)
+def test_from_inside_a_worktree_reads_the_main_clone(base):
+    d = git_repo(base, "principal")
+    write_queue(d, ITEMS)
     wt = Path(base) / "wt-fila"
     subprocess.run(["git", "-C", str(d), "worktree", "add", "-q", "--detach",
                     str(wt)], check=True)
@@ -180,7 +180,7 @@ def test_de_dentro_de_uma_worktree_le_o_clone_principal(base):
           r.returncode == 0 and out and out["total"] == 5, r.stderr)
 
 
-def test_contrato_do_comando(_base):
+def test_command_contract(_base):
     t = CMD.read_text(encoding="utf-8")
     check("o comando chama o `cepa-plan status`",
           'bin/cepa-plan" status $ARGUMENTS' in t)
@@ -189,7 +189,7 @@ def test_contrato_do_comando(_base):
     check("o título é /common:queue-status", "# /common:queue-status" in t)
 
 
-def test_nome_antigo_fila_e_alias_deprecado(_base):
+def test_old_name_fila_is_deprecated_alias(_base):
     t = (REPO / "common" / "commands" / "fila.md").read_text(encoding="utf-8")
     check("/common:fila continua existindo como alias deprecado",
           "# /common:fila (deprecated)" in t)
@@ -200,15 +200,15 @@ def test_nome_antigo_fila_e_alias_deprecado(_base):
 
 def main():
     with tempfile.TemporaryDirectory() as base:
-        for fn in (test_lista_todos_os_itens_na_ordem_gravada,
-                   test_texto_agrupa_e_mostra_motivo_e_acao_humana,
-                   test_filtro_por_status,
-                   test_nome_omitido,
-                   test_nao_toca_no_arquivo,
-                   test_recusa_plano_de_ondas,
-                   test_de_dentro_de_uma_worktree_le_o_clone_principal,
-                   test_contrato_do_comando,
-                   test_nome_antigo_fila_e_alias_deprecado):
+        for fn in (test_lists_all_items_in_recorded_order,
+                   test_text_groups_and_shows_reason_and_human_action,
+                   test_filter_by_status,
+                   test_omitted_name,
+                   test_does_not_touch_the_file,
+                   test_refuses_wave_plan,
+                   test_from_inside_a_worktree_reads_the_main_clone,
+                   test_command_contract,
+                   test_old_name_fila_is_deprecated_alias):
             print(f"\n{fn.__name__}")
             fn(base)
     print()

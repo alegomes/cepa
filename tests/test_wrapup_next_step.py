@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-"""CS-4 (cepa-espiral-c1): o `/common:wrap-up` grava o próximo passo a partir do handoff.
+"""CS-4 (cepa-espiral-c1): `/common:wrap-up` records the next step from the handoff.
 
-O passo L7 do wrap-up chama `common/hooks/session-next.py` com o handoff e o
-session_id. Ele lê a zona NOTE, acha a linha `**Próximo:** repo=… mode=…
-comando=…` e escreve `<raiz>/.claude/sessions/<id>.next.json` com esses três
-campos e o brief igual ao parágrafo `## Próximo passo`.
+Step L7 of the wrap-up calls `common/hooks/session-next.py` with the handoff and the
+session_id. It reads the NOTE zone, finds the line `**Próximo:** repo=… mode=…
+comando=…` and writes `<root>/.claude/sessions/<id>.next.json` with those three
+fields and the brief equal to the paragraph `## Próximo passo`.
 
-Contratos guardados aqui:
-  - com a linha: o arquivo tem repo, modo, comando (com argumentos) e o brief
-    verbatim, sem a linha `**Próximo:**` dentro dele;
-  - sem a linha: nada é escrito, exit 0, e a saída diz que não gravou;
-  - a linha fora da zona NOTE (no AUTO) não conta;
-  - linha inutilizável (repo inexistente, modo desconhecido, reforma, campo
-    faltando, seção vazia): nada é escrito, exit 2, e a saída diz o motivo;
-  - com `**Intenção:**`, `**Meta:**` e `**Plano:** a | b`: o arquivo ganha
-    `intencao` e as três linhas não entram no brief; só parte delas: nada
-    escrito, exit 2; nenhuma: arquivo sem `intencao`;
-  - o arquivo escrito é aceito pelo encadeamento do launcher (session-chain.py,
-    CS-3): o cepa é reaberto em repo, com --mode e o brief, e com as flags da
-    intenção só quando ela existe;
-  - o wrap-up.md manda o L7 chamar o script e levar a saída ao relatório, e o
-    handoff.md documenta a linha.
+Contracts guarded here:
+  - with the line: the file has repo, mode, command (with arguments) and the brief
+    verbatim, without the `**Próximo:**` line inside it;
+  - without the line: nothing is written, exit 0, and the output says it did not record;
+  - the line outside the NOTE zone (in AUTO) does not count;
+  - an unusable line (nonexistent repo, unknown mode, reform, missing field,
+    empty section): nothing is written, exit 2, and the output states the reason;
+  - with `**Intenção:**`, `**Meta:**` and `**Plano:** a | b`: the file gains
+    `intencao` and the three lines do not enter the brief; only part of them: nothing
+    written, exit 2; none: a file without `intencao`;
+  - the written file is accepted by the launcher chaining (session-chain.py,
+    CS-3): cepa is reopened in the repo, with --mode and the brief, and with the intent
+    flags only when it exists;
+  - wrap-up.md orders L7 to call the script and carry the output to the report, and
+    handoff.md documents the line.
 
-Sem deps de terceiros — rode com `python3 tests/test_wrapup_next_step.py`.
+No third-party deps — run with `python3 tests/test_wrapup_next_step.py`.
 """
 
 import json
@@ -55,13 +55,13 @@ def check(name, cond, detail=""):
         failures.append(name)
 
 
-def handoff(linha, brief=BRIEF, auto_extra=""):
-    secao = f"## Próximo passo\n{brief}\n" if brief is not None else ""
-    lin = f"{linha}\n\n" if linha else ""
+def handoff(line, brief=BRIEF, auto_extra=""):
+    section = f"## Próximo passo\n{brief}\n" if brief is not None else ""
+    line_ = f"{line}\n\n" if line else ""
     return ("---\nbranch: session/x\n---\n\n<!-- HANDOFF:AUTO -->\n## Onde paramos\n"
             f"{auto_extra}\n<!-- /HANDOFF:AUTO -->\n\n<!-- HANDOFF:NOTE -->\n"
             "## Onde estamos\nCS-3 pronto.\n\n"
-            f"{secao}{lin}"
+            f"{section}{line_}"
             "## ⚠ Cuidados / pendências\n- nada\n<!-- /HANDOFF:NOTE -->\n")
 
 
@@ -71,8 +71,8 @@ class World:
         t = Path(self.tmp.name).resolve()
         self.root = t / "root"
         self.root.mkdir()
-        self.alvo = t / "wego-product"
-        self.alvo.mkdir()
+        self.target = t / "wego-product"
+        self.target.mkdir()
         self.hf = t / "handoff.md"
         self.sid = "sess-abc"
         self.nxt = self.root / ".claude" / "sessions" / f"{self.sid}.next.json"
@@ -81,25 +81,25 @@ class World:
     def __exit__(self, *a):
         self.tmp.cleanup()
 
-    def run(self, texto):
-        self.hf.write_text(texto, encoding="utf-8")
+    def run(self, text):
+        self.hf.write_text(text, encoding="utf-8")
         p = subprocess.run([sys.executable, str(NEXT), "--handoff", str(self.hf),
                             "--session-id", self.sid, "--root", str(self.root)],
                            capture_output=True, text=True)
         return p.returncode, p.stdout + p.stderr
 
 
-def linha(w, repo=None, modo="discovery", comando="/common:epic contratos-e-regras", chave="mode"):
-    return f"**Próximo:** repo={repo or w.alvo} {chave}={modo} comando={comando}"
+def line(w, repo=None, mode="discovery", command="/common:epic contratos-e-regras", key="mode"):
+    return f"**Próximo:** repo={repo or w.target} {key}={mode} comando={command}"
 
 
 print("com a linha: grava os três campos e o brief")
 with World() as w:
-    rc, out = w.run(handoff(linha(w)))
+    rc, out = w.run(handoff(line(w)))
     check("exit 0", rc == 0, out)
     check("arquivo existe", w.nxt.exists(), out)
     d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
-    check("repo", d.get("repo") == str(w.alvo), d)
+    check("repo", d.get("repo") == str(w.target), d)
     check("mode", d.get("mode") == "discovery" and "modo" not in d, d)
     check("comando com argumento", d.get("comando") == "/common:epic contratos-e-regras", d)
     check("brief = parágrafo Próximo passo", d.get("brief") == BRIEF, repr(d.get("brief")))
@@ -107,13 +107,13 @@ with World() as w:
     check("sem as linhas da intenção, nada de `intent`", "intent" not in d and "intencao" not in d, d)
     check("saída diz que vai sem intenção", "sem intenção" in out, out)
 
-INTENCAO_LINHAS = ("**Intenção:** Grelhar o dono no epic contratos-e-regras\n"
+INTENT_LINES = ("**Intenção:** Grelhar o dono no epic contratos-e-regras\n"
                    "**Meta:** cada ciclo com roteiro em tela e em backend\n"
                    "**Plano:** abrir o epic | grelhar ciclo a ciclo\n")
 
 print("com as três linhas: grava a intenção e tira as linhas do brief")
 with World() as w:
-    rc, out = w.run(handoff(linha(w), brief=f"{BRIEF}\n\n{INTENCAO_LINHAS}"))
+    rc, out = w.run(handoff(line(w), brief=f"{BRIEF}\n\n{INTENT_LINES}"))
     check("exit 0", rc == 0, out)
     d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
     check("intent", d.get("intent") == {
@@ -125,20 +125,20 @@ with World() as w:
 
 print("passo vazio entre barras é descartado")
 with World() as w:
-    rc, out = w.run(handoff(linha(w), brief=f"{BRIEF}\n\n**Intenção:** p\n**Meta:** m\n**Plano:** a | | b\n"))
+    rc, out = w.run(handoff(line(w), brief=f"{BRIEF}\n\n**Intenção:** p\n**Meta:** m\n**Plano:** a | | b\n"))
     d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
     check("plano sem o passo vazio", (d.get("intent") or {}).get("plan") == ["a", "b"], d)
 
 print("as três linhas sem texto contam como ausentes")
 with World() as w:
-    rc, out = w.run(handoff(linha(w), brief=f"{BRIEF}\n\n**Intenção:**\n**Meta:**   \n**Plano:**\n"))
+    rc, out = w.run(handoff(line(w), brief=f"{BRIEF}\n\n**Intenção:**\n**Meta:**   \n**Plano:**\n"))
     check("exit 0", rc == 0, f"rc={rc} {out}")
     d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
     check("arquivo sem `intent`", w.nxt.exists() and "intent" not in d, d)
 
 print("intenção pela metade: não escreve e diz o que falta")
 with World() as w:
-    rc, out = w.run(handoff(linha(w), brief=f"{BRIEF}\n\n**Intenção:** algo\n**Plano:** a\n"))
+    rc, out = w.run(handoff(line(w), brief=f"{BRIEF}\n\n**Intenção:** algo\n**Plano:** a\n"))
     check("exit 2", rc == 2, f"rc={rc} {out}")
     check("nada escrito", not w.nxt.exists())
     check("motivo cita a Meta", "não gravado" in out and "Meta" in out, out)
@@ -157,18 +157,18 @@ else:
 
 print("linha dentro da seção Próximo passo não vaza para o brief")
 with World() as w:
-    rc, out = w.run(handoff(None, brief=f"{BRIEF}\n\n{linha(w)}"))
+    rc, out = w.run(handoff(None, brief=f"{BRIEF}\n\n{line(w)}"))
     d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
     check("brief sem a linha", d.get("brief") == BRIEF, repr(d.get("brief")))
     check("campos lidos", d.get("mode") == "discovery", out)
 
 print("ordem das chaves trocada")
 with World() as w:
-    rc, out = w.run(handoff(f"**Próximo:** comando=/common:spec x y mode=design repo={w.alvo}"))
+    rc, out = w.run(handoff(f"**Próximo:** comando=/common:spec x y mode=design repo={w.target}"))
     d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
     check("comando até a próxima chave", d.get("comando") == "/common:spec x y", d)
     check("mode", d.get("mode") == "design", d)
-    check("repo", d.get("repo") == str(w.alvo), d)
+    check("repo", d.get("repo") == str(w.target), d)
 
 print("sem a linha: não escreve e diz")
 with World() as w:
@@ -179,32 +179,32 @@ with World() as w:
 
 print("linha só no AUTO não conta")
 with World() as w:
-    rc, out = w.run(handoff(None, auto_extra=linha(w)))
+    rc, out = w.run(handoff(None, auto_extra=line(w)))
     check("nada escrito", not w.nxt.exists(), out)
     check("exit 0", rc == 0, out)
 
-casos = [
-    ("repo inexistente", lambda w: linha(w, repo=str(w.alvo) + "-nao"), BRIEF, "não existe"),
-    ("modo desconhecido", lambda w: linha(w, modo="festa"), BRIEF, "festa"),
-    ("modo refactor", lambda w: linha(w, modo="refactor"), BRIEF, "budget"),
-    ("sem comando", lambda w: f"**Próximo:** repo={w.alvo} mode=discovery", BRIEF, "comando"),
-    ("sem modo", lambda w: f"**Próximo:** repo={w.alvo} comando=/x", BRIEF, "mode"),
+cases = [
+    ("repo inexistente", lambda w: line(w, repo=str(w.target) + "-nao"), BRIEF, "não existe"),
+    ("modo desconhecido", lambda w: line(w, mode="festa"), BRIEF, "festa"),
+    ("modo refactor", lambda w: line(w, mode="refactor"), BRIEF, "budget"),
+    ("sem comando", lambda w: f"**Próximo:** repo={w.target} mode=discovery", BRIEF, "comando"),
+    ("sem modo", lambda w: f"**Próximo:** repo={w.target} comando=/x", BRIEF, "mode"),
     ("sem repo", lambda w: "**Próximo:** mode=discovery comando=/x", BRIEF, "repo"),
-    ("seção vazia", lambda w: linha(w), "   ", "vazia"),
-    ("sem seção", lambda w: linha(w), None, "vazia"),
+    ("seção vazia", lambda w: line(w), "   ", "vazia"),
+    ("sem seção", lambda w: line(w), None, "vazia"),
 ]
-for nome, lf, brief, palavra in casos:
-    print(f"inutilizável: {nome}")
+for name, lf, brief, word in cases:
+    print(f"inutilizável: {name}")
     with World() as w:
         rc, out = w.run(handoff(lf(w), brief=brief))
-        check(f"{nome}: exit 2", rc == 2, f"rc={rc} {out}")
-        check(f"{nome}: nada escrito", not w.nxt.exists())
-        check(f"{nome}: motivo na saída", "não gravado" in out and palavra in out, out)
+        check(f"{name}: exit 2", rc == 2, f"rc={rc} {out}")
+        check(f"{name}: nada escrito", not w.nxt.exists())
+        check(f"{name}: motivo na saída", "não gravado" in out and word in out, out)
 
 print("o arquivo escrito é aceito pelo encadeamento do launcher (CS-3)")
 with World() as w:
     subprocess.run(["git", "init", "-q", "."], cwd=w.root, check=True)
-    rc, out = w.run(handoff(linha(w)))
+    rc, out = w.run(handoff(line(w)))
     sdir = w.root / ".claude" / "sessions"
     (sdir / "launch-1.launch").write_text(w.sid + "\n")
     log = Path(w.tmp.name) / "cepa.log"
@@ -216,14 +216,14 @@ with World() as w:
                        cwd=w.root, capture_output=True, text=True)
     got = json.loads(log.read_text()) if log.exists() else {}
     check("cepa reaberto", bool(got), p.stderr)
-    check("cwd = repo", got.get("cwd") == str(w.alvo), got)
+    check("cwd = repo", got.get("cwd") == str(w.target), got)
     check("--mode discovery + brief, sem intenção", got.get("args") == ["--mode", "discovery", BRIEF], got)
     check("arquivo consumido", not w.nxt.exists())
 
 print("com a intenção, o encadeamento passa as três flags ao cepa")
 with World() as w:
     subprocess.run(["git", "init", "-q", "."], cwd=w.root, check=True)
-    rc, out = w.run(handoff(linha(w), brief=f"{BRIEF}\n\n{INTENCAO_LINHAS}"))
+    rc, out = w.run(handoff(line(w), brief=f"{BRIEF}\n\n{INTENT_LINES}"))
     sdir = w.root / ".claude" / "sessions"
     (sdir / "launch-1.launch").write_text(w.sid + "\n")
     log = Path(w.tmp.name) / "cepa.log"
@@ -251,13 +251,13 @@ check("handoff.md documenta a intenção da sessão seguinte",
 
 print("nomes antigos: `modo=descoberta` na linha do handoff ainda é aceito")
 with World() as w:
-    rc, out = w.run(handoff(linha(w, modo="descoberta", chave="modo")))
+    rc, out = w.run(handoff(line(w, mode="descoberta", key="modo")))
     d = json.loads(w.nxt.read_text()) if w.nxt.exists() else {}
     check("antigo: exit 0 e arquivo escrito", rc == 0 and w.nxt.exists(), out)
     check("antigo: o arquivo sai com `mode: discovery` (só nomes novos)",
           d.get("mode") == "discovery" and "modo" not in d, d)
 with World() as w:
-    rc, out = w.run(handoff(linha(w, modo="reforma", chave="modo")))
+    rc, out = w.run(handoff(line(w, mode="reforma", key="modo")))
     check("antigo: modo=reforma recusa como refactor (exit 2, cita --budget)",
           rc == 2 and "refactor" in out and "budget" in out, out)
 
@@ -268,7 +268,7 @@ with World() as w:
     sdir.mkdir(parents=True, exist_ok=True)
     (sdir / "launch-1.launch").write_text(w.sid + "\n")
     (sdir / f"{w.sid}.next.json").write_text(json.dumps({
-        "repo": str(w.alvo), "modo": "descoberta", "comando": "/common:epic x", "brief": BRIEF,
+        "repo": str(w.target), "modo": "descoberta", "comando": "/common:epic x", "brief": BRIEF,
         "intencao": {"proposito": "p antigo", "para_quando": "q antigo", "plano": ["a", "b"]}}))
     log = Path(w.tmp.name) / "cepa.log"
     fake = Path(w.tmp.name) / "fakecepa"

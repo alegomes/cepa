@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """Regression tests for the `--mode` gate in common/bin/cepa (`--modo` still works).
 
-Toda sessão declara em qual dos sete modos de trabalho ela opera
-(docs/modos-de-trabalho.md). O modo é gravado em .claude/session-mode no
-diretório onde a sessão vai de fato rodar. Sem modo o cepa não sobe: um default
-silencioso reconstruiria exatamente o vazamento entre atividades que o modo
-existe para fechar.
+Every session declares in which of the seven work modes it operates
+(docs/modos-de-trabalho.md). The mode is recorded in .claude/session-mode in the
+directory where the session will actually run. Without a mode cepa does not start: a silent
+default would rebuild exactly the leak between activities that the mode
+exists to close.
 
-Contratos guardados aqui:
-  - modo válido grava o arquivo e repassa os demais args ao claude;
-  - modo desconhecido é erro (rc=2), nunca vira pergunta nem chute;
-  - sem modo e sem tty → recusa subir, e NÃO grava arquivo;
-  - CEPA_MODO=off desliga a exigência inteira (escape hatch);
-  - reforma sem orçamento é recusada — reforma sem escopo fechado não termina;
-  - a detecção de "há humano para perguntar" olha stdin, não só /dev/tty:
-    /dev/tty segue legível com stdin redirecionado, e sozinho ele deixaria um
-    script pipe-alimentado parar num menu interativo.
+Contracts guarded here:
+  - a valid mode writes the file and passes the remaining args to claude;
+  - an unknown mode is an error (rc=2), never becomes a question nor a guess;
+  - without a mode and without tty → refuses to start, and does NOT write a file;
+  - CEPA_MODO=off turns off the whole requirement (escape hatch);
+  - an overhaul without a budget is refused — an overhaul without a closed scope does not end;
+  - the detection of "there is a human to ask" looks at stdin, not only /dev/tty:
+    /dev/tty stays readable with redirected stdin, and alone it would let a
+    pipe-fed script stop at an interactive menu.
 
-Sem deps de terceiros — rode com `python3 tests/test_cepa_mode.py`.
+No third-party deps — run with `python3 tests/test_cepa_mode.py`.
 """
 
 import os
@@ -26,17 +26,17 @@ import sys
 import tempfile
 from pathlib import Path
 
-# O cepa lê CEPA_PROMPT/CEPA_PROMPT_MODO do ambiente. Herdadas do shell de quem
-# roda a suíte (o cepa-until roda com elas), viram um prompt que o teste não
-# pediu e quebram o "repassa só os args do usuário". Quem quer o prompt passa
-# no env= do próprio caso.
+# cepa reads CEPA_PROMPT/CEPA_PROMPT_MODO from the environment. Inherited from the shell of whoever
+# runs the suite (cepa-until runs with them), they become a prompt the test did not
+# ask for and break the "passes only the user's args". Whoever wants the prompt passes
+# it in the env= of the case itself.
 for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO"):
     os.environ.pop(_k, None)
 
-# Os casos de intenção escrevem o .claude/session-log.md que o session-mode lê,
-# e a varredura de tests/test_isolated_telemetry.py trata quem cita hook
-# emissor como emissor. Isolar aqui custa nada e mantém o ledger real limpo.
-# Ver tests/_telemetria_isolada.py.
+# The intent cases write the .claude/session-log.md that session-mode reads,
+# and the scan of tests/test_isolated_telemetry.py treats whoever cites an
+# emitting hook as an emitter. Isolating here costs nothing and keeps the real ledger clean.
+# See tests/_telemetria_isolada.py.
 from _telemetria_isolada import isola  # noqa: E402
 
 isola()
@@ -58,7 +58,7 @@ def check(name, cond, detail=""):
 
 
 class Repo:
-    """Um git repo descartável com um `claude` falso no lugar do de verdade."""
+    """A disposable git repo with a fake `claude` in place of the real one."""
 
     def __enter__(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -95,22 +95,22 @@ class Repo:
         return self.path / ".claude" / "session-mode"
 
 
-# Flags que o PRÓPRIO cepa acrescenta antes das suas: hoje só a de permissão
-# (toda sessão nasce em bypassPermissions). O contrato testado aqui é "não
-# engoliu o que você digitou", então elas saem da comparação.
-FLAGS_DO_CEPA = ("--dangerously-skip-permissions", "--permission-mode")
+# Flags that cepa ITSELF adds before yours: today only the permission one
+# (every session is born in bypassPermissions). The contract tested here is "did not
+# swallow what you typed", so they come out of the comparison.
+CEPA_FLAGS = ("--dangerously-skip-permissions", "--permission-mode")
 
 
 def claude_args(proc):
-    """Os args do usuário que chegaram ao claude falso."""
-    linha = ""
+    """The user args that reached the fake claude."""
+    line = ""
     for l in proc.stdout.splitlines():
         if l.startswith("CLAUDE_ARGS:"):
-            linha = l[len("CLAUDE_ARGS:"):]
-    return [x for x in linha.split() if x.split("=")[0] not in FLAGS_DO_CEPA]
+            line = l[len("CLAUDE_ARGS:"):]
+    return [x for x in line.split() if x.split("=")[0] not in CEPA_FLAGS]
 
 
-def test_modo_valido():
+def test_valid_mode():
     with Repo() as r:
         p = r.run("--mode", "construction", "--resume")
         check("modo válido: rc=0", p.returncode == 0, p.stderr)
@@ -121,7 +121,7 @@ def test_modo_valido():
               claude_args(p) == ["--resume"], p.stdout)
 
 
-def test_modo_invalido():
+def test_invalid_mode():
     with Repo() as r:
         p = r.run("--mode=xpto")
         check("modo inválido: rc=2", p.returncode == 2, str(p.returncode))
@@ -129,7 +129,7 @@ def test_modo_invalido():
         check("modo inválido: lista os válidos", "construction" in p.stderr, p.stderr)
 
 
-def test_sem_modo_sem_tty():
+def test_without_mode_without_tty():
     with Repo() as r:
         p = r.run()
         check("sem modo: recusa subir", p.returncode == 2, str(p.returncode))
@@ -148,7 +148,7 @@ def test_kill_switch():
               claude_args(p) == ["--resume"], p.stdout)
 
 
-def test_reforma_orcamento():
+def test_overhaul_budget():
     with Repo() as r:
         p = r.run("--mode", "refactor")
         check("reforma sem orçamento: recusa", p.returncode == 2, str(p.returncode))
@@ -161,14 +161,14 @@ def test_reforma_orcamento():
               'budget: "só o módulo de auth"' in body, body)
 
 
-# --- hook session-mode.py ---------------------------------------------------
+# --- session-mode.py hook ---------------------------------------------------
 HOOK = REPO / "common" / "hooks" / "session-mode.py"
 
 
 def run_hook(cwd, env=None, **payload):
-    """`payload` vira campos do JSON do hook (session_id, prompt). A marca do
-    cepa-until sai do ambiente: a suíte roda dentro dele, e com ela o hook
-    cala a intenção — quem quer testar isso passa no env= do caso."""
+    """`payload` becomes fields of the hook JSON (session_id, prompt). The cepa-until
+    mark comes out of the environment: the suite runs inside it, and with it the hook
+    silences the intent — whoever wants to test that passes it in the env= of the case."""
     import json as _json
     e = {k: v for k, v in os.environ.items() if k != "CEPA_UNTIL_RUN"}
     e.update(env or {})
@@ -179,7 +179,7 @@ def run_hook(cwd, env=None, **payload):
 
 
 def ctx(proc):
-    """O texto que o modelo de fato recebe — decodificado, não o JSON cru."""
+    """The text the model actually receives — decoded, not the raw JSON."""
     import json as _json
     if not proc.stdout.strip():
         return ""
@@ -192,7 +192,7 @@ def write_mode(repo, body):
     (d / "session-mode").write_text(body, encoding="utf-8")
 
 
-def test_hook_injeta_modo_e_saida():
+def test_hook_injects_mode_and_exit():
     with Repo() as r:
         write_mode(r, "mode: construction\nrotina: null\norcamento: null\n")
         p = run_hook(r.path)
@@ -204,7 +204,7 @@ def test_hook_injeta_modo_e_saida():
         check("hook: manda capturar o desvio", "off-mode-capture" in c, c)
 
 
-def test_hook_reforma_mostra_orcamento():
+def test_hook_overhaul_shows_budget():
     with Repo() as r:
         write_mode(r, 'mode: refactor\norcamento: "só o módulo de auth"\n')
         p = run_hook(r.path)
@@ -214,7 +214,7 @@ def test_hook_reforma_mostra_orcamento():
               "teste" in c and "externo" in c, c)
 
 
-def test_hook_silencioso_sem_modo():
+def test_hook_silent_without_mode():
     with Repo() as r:
         p = run_hook(r.path)
         check("hook: silencioso sem arquivo de modo", p.stdout.strip() == "",
@@ -222,14 +222,14 @@ def test_hook_silencioso_sem_modo():
         check("hook: rc=0 sem arquivo", p.returncode == 0, p.stderr)
 
 
-def test_hook_respeita_kill_switch():
+def test_hook_respects_kill_switch():
     with Repo() as r:
         write_mode(r, "mode: construction\n")
         p = run_hook(r.path, env={"CEPA_MODO": "off"})
         check("hook: CEPA_MODO=off silencia", p.stdout.strip() == "", repr(p.stdout))
 
 
-def test_hook_nunca_quebra_o_turno():
+def test_hook_never_breaks_the_turn():
     with Repo() as r:
         write_mode(r, "lixo que não é yaml\n:::\n")
         p = run_hook(r.path)
@@ -238,36 +238,36 @@ def test_hook_nunca_quebra_o_turno():
               p.stdout.strip() == "", repr(p.stdout))
 
 
-# --- intenção da sessão no hook (.claude/session-intent) ----------------------
-# Desenho: docs/estrategia-intencao-da-sessao.md. Três estados, teto de duas
-# linhas cada: vazio (os três primeiros prompts + pedido de gravar), intenção
-# de OUTRA sessão (pergunta, nunca exibida como atual) e normal (passo N/M, há
-# quantos turnos, próximo). Rodada do cepa-until não recebe intenção.
+# --- session intent in the hook (.claude/session-intent) ----------------------
+# Design: docs/estrategia-intencao-da-sessao.md. Three states, a ceiling of two
+# lines each: empty (the first three prompts + request to record), intent
+# of ANOTHER session (a question, never shown as current) and normal (step N/M, how many
+# turns ago, next). A cepa-until round does not receive intent.
 
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _modes as _M  # noqa: E402
 
-PLANO = ["levantar o que existe", "escrever o doc", "rodar advisors", "decidir"]
+PLAN_TEXT = ["levantar o que existe", "escrever o doc", "rodar advisors", "decidir"]
 SID = "209286bf-1111-2222-3333-444455556666"
 
 
-def write_intent(repo, **campos):
+def write_intent(repo, **fields):
     d = {"purpose": "institucionalizar as quatro perguntas",
-         "by_when": "doc decidido", "plan": PLANO, "step": 2,
+         "by_when": "doc decidido", "plan": PLAN_TEXT, "step": 2,
          "step_since": "2026-10-16T21:40:00Z", "session_id": SID[:8],
          "branch": "main", "opened_at": "2026-10-16T18:30:00Z"}
-    d.update(campos)
+    d.update(fields)
     (repo.path / ".claude").mkdir(exist_ok=True)
     (repo.path / ".claude" / "session-intent").write_text(_M.render_intent(d), encoding="utf-8")
 
 
-def write_log(repo, entradas):
-    """entradas: [("2026-10-16", "21:41:00", "prompt"), ...] no formato do session-log."""
-    out, dia = ["# Session log", ""], None
-    for d, h, t in entradas:
-        if d != dia:
+def write_log(repo, inputs):
+    """entries: [("2026-10-16", "21:41:00", "prompt"), ...] in the session-log format."""
+    out, day = ["# Session log", ""], None
+    for d, h, t in inputs:
+        if d != day:
             out += [f"## {d}", ""]
-            dia = d
+            day = d
         out += [f"### {h} UTC", "", t, ""]
     (repo.path / ".claude").mkdir(exist_ok=True)
     (repo.path / ".claude" / "session-log.md").write_text("\n".join(out), encoding="utf-8")
@@ -281,8 +281,8 @@ def register(repo, sid, started_at):
 
 
 def intent_lines(c):
-    """As linhas de intenção do contexto: a primeira começa em [intenção]; a do
-    modo é sempre uma linha só e vem antes."""
+    """The intent lines of the context: the first starts with [intenção]; the
+    mode one is always a single line and comes before."""
     ls = c.split("\n")
     for i, l in enumerate(ls):
         if l.startswith("[intenção]"):
@@ -290,7 +290,7 @@ def intent_lines(c):
     return []
 
 
-def test_intencao_vazia_traz_os_primeiros_prompts():
+def test_empty_intent_brings_the_first_prompts():
     with Repo() as r:
         write_mode(r, "mode: exploration\n")
         register(r, SID, "2026-10-16T18:00:00+00:00")
@@ -318,7 +318,7 @@ def test_intencao_vazia_traz_os_primeiros_prompts():
         check("intenção vazia: o modo continua lá", "[modo]" in c, c)
 
 
-def test_intencao_vazia_primeiro_turno_usa_o_prompt_atual():
+def test_empty_intent_first_turn_uses_the_current_prompt():
     with Repo() as r:
         write_mode(r, "mode: exploration\n")
         register(r, SID, "2026-10-16T18:00:00+00:00")
@@ -328,26 +328,26 @@ def test_intencao_vazia_primeiro_turno_usa_o_prompt_atual():
               '"quero um comando whereami"' in c, c)
 
 
-def test_intencao_vazia_sem_registro_cai_para_hoje():
+def test_empty_intent_without_record_falls_back_to_today():
     from datetime import datetime, timezone
-    hoje = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     with Repo() as r:
         write_mode(r, "mode: exploration\n")
         write_log(r, [("2020-01-01", "10:00:00", "prompt antigo"),
-                      (hoje, "00:00:01", "prompt de hoje")])
+                      (today, "00:00:01", "prompt de hoje")])
         c = ctx(run_hook(r.path, session_id="sem-registro", prompt="prompt de hoje"))
         check("sem registro: usa os prompts de hoje",
               "prompt de hoje" in c and "prompt antigo" not in c, c)
 
 
-def test_intencao_vazia_sem_modo_e_silenciosa():
+def test_empty_intent_without_mode_is_silent():
     with Repo() as r:
         p = run_hook(r.path, session_id=SID, prompt="oi")
         check("intenção vazia sem modo: silêncio (sessão não aberta pelo cepa)",
               p.stdout.strip() == "", repr(p.stdout))
 
 
-def test_intencao_normal_passo_idade_proximo():
+def test_intent_normal_step_age_next():
     with Repo() as r:
         write_mode(r, "mode: exploration\n")
         write_intent(r)
@@ -371,7 +371,7 @@ def test_intencao_normal_passo_idade_proximo():
         check("intenção normal: não pergunta sobre outra sessão", "outra sessão" not in c, c)
 
 
-def test_intencao_normal_um_turno_no_singular():
+def test_intent_normal_one_turn_in_the_singular():
     with Repo() as r:
         write_intent(r)
         write_log(r, [("2026-10-16", "21:41:00", "depois 1")])
@@ -379,7 +379,7 @@ def test_intencao_normal_um_turno_no_singular():
         check("intenção normal: '(há 1 turno)' no singular", "(há 1 turno)" in c, c)
 
 
-def test_intencao_corta_proposito_e_passo_longos():
+def test_intent_cuts_long_purpose_and_step():
     with Repo() as r:
         write_intent(r, purpose="p" * 500, plan=["a" * 300, "b"], step=1)
         write_log(r, [])
@@ -388,7 +388,7 @@ def test_intencao_corta_proposito_e_passo_longos():
         check("nome de passo longo é cortado no hook", "a" * 80 not in c and "a" * 70 in c, c)
 
 
-def test_intencao_vazia_prompt_do_turno_e_log_parcial():
+def test_empty_intent_turn_prompt_and_partial_log():
     with Repo() as r:
         write_mode(r, "mode: exploration\n")
         register(r, SID, "2026-10-16T18:00:00+00:00")
@@ -405,19 +405,19 @@ def test_intencao_vazia_prompt_do_turno_e_log_parcial():
         check("log vazio e prompt vazio: 'nenhum ainda'", "Primeiros prompts: nenhum ainda." in c, c)
 
 
-def test_intencao_vazia_corte_em_120():
+def test_empty_intent_cut_at_120():
     with Repo() as r:
         write_mode(r, "mode: exploration\n")
-        longo = "".join(chr(97 + i % 26) for i in range(125))
-        c = ctx(run_hook(r.path, session_id=SID, prompt=longo))
+        long_ = "".join(chr(97 + i % 26) for i in range(125))
+        c = ctx(run_hook(r.path, session_id=SID, prompt=long_))
         check("prompt cortado em 120 caracteres (119 + …)",
-              f'"{longo[:119]}…"' in c, c)
-        curto = "y" * 120
-        c = ctx(run_hook(r.path, session_id=SID, prompt=curto))
-        check("prompt de exatos 120 caracteres não é cortado", f'"{curto}"' in c, c)
+              f'"{long_[:119]}…"' in c, c)
+        short = "y" * 120
+        c = ctx(run_hook(r.path, session_id=SID, prompt=short))
+        check("prompt de exatos 120 caracteres não é cortado", f'"{short}"' in c, c)
 
 
-def test_intencao_vazia_log_multilinha_e_titulo():
+def test_empty_intent_multiline_log_and_title():
     with Repo() as r:
         write_mode(r, "mode: exploration\n")
         register(r, SID, "2026-10-16T18:00:00+00:00")
@@ -427,29 +427,29 @@ def test_intencao_vazia_log_multilinha_e_titulo():
               '"linha um # meu título linha dois"' in c and c.count("linha um") == 1, c)
 
 
-def test_intencao_vazia_registro_no_clone_principal():
-    """Numa worktree ligada, o log é da worktree e o registro é do clone principal."""
+def test_empty_intent_record_in_the_main_clone():
+    """In a linked worktree, the log is the worktree's and the record is the main clone's."""
     with Repo() as r:
         wt = Path(r.tmp.name) / "wt"
         subprocess.run(["git", "worktree", "add", "-q", "--detach", str(wt)],
                        cwd=r.path, check=True)
         (wt / ".claude").mkdir()
         (wt / ".claude" / "session-mode").write_text("mode: exploration\n")
-        register(r, SID, "2026-10-16T18:00:00+00:00")  # no clone principal
+        register(r, SID, "2026-10-16T18:00:00+00:00")  # in the main clone
         (wt / ".claude" / "session-log.md").write_text(
             "# Session log\n\n## 2026-10-15\n\n### 10:00:00 UTC\n\nvelho\n\n"
             "## 2026-10-16\n\n### 18:01:00 UTC\n\nda sessão\n\n")
-        # o prompt do turno é OUTRO: se o registro não for achado, o fallback
-        # (prompts de hoje) não vê nada do log, e só o prompt do turno sobra
+        # the turn's prompt is DIFFERENT: if the record is not found, the fallback
+        # (today's prompts) sees nothing from the log, and only the turn's prompt remains
         c = ctx(run_hook(wt, session_id=SID, prompt="o do turno"))
         check("worktree ligada: acha o início no registro do clone principal",
               '"da sessão" | "o do turno"' in c and "velho" not in c, c)
 
 
-def test_intencao_mesma_sessao_tolerante():
+def test_intent_same_session_tolerant():
     with Repo() as r:
         write_intent(r)
-        c = ctx(run_hook(r.path))  # payload sem session_id
+        c = ctx(run_hook(r.path))  # payload without session_id
         check("payload sem session_id: não acusa outra sessão",
               "Passo 2/4" in c and "outra sessão" not in c, c)
     with Repo() as r:
@@ -464,7 +464,7 @@ def test_intencao_mesma_sessao_tolerante():
               "Passo 2/4" in c and "outra sessão" not in c, c)
 
 
-def test_intencao_outra_sessao_detalhes():
+def test_intent_other_session_details():
     with Repo() as r:
         write_intent(r, session_id="aaaaaaaa")
         c = ctx(run_hook(r.path, session_id=SID))
@@ -478,14 +478,14 @@ def test_intencao_outra_sessao_detalhes():
         check("outra sessão sem aberto_em: 'data desconhecida'", "data desconhecida" in c, c)
 
 
-def test_intencao_passo_fora_do_plano_cai_no_1():
-    for valor in ("0", "6"):
+def test_intent_step_outside_the_plan_falls_to_1():
+    for value in ("0", "6"):
         with Repo() as r:
             write_intent(r)
             f = r.path / ".claude" / "session-intent"
-            f.write_text(f.read_text().replace("step: 2", f"step: {valor}"))
+            f.write_text(f.read_text().replace("step: 2", f"step: {value}"))
             c = ctx(run_hook(r.path, session_id=SID))
-            check(f"passo {valor} com plano de 4: cai no passo 1", "Passo 1/4" in c, c)
+            check(f"passo {value} com plano de 4: cai no passo 1", "Passo 1/4" in c, c)
     with Repo() as r:
         write_intent(r)
         f = r.path / ".claude" / "session-intent"
@@ -495,7 +495,7 @@ def test_intencao_passo_fora_do_plano_cai_no_1():
               "Plano cumprido (4/4)" in c, c)
 
 
-def test_intencao_idade_bordas():
+def test_intent_age_edges():
     with Repo() as r:
         write_intent(r, step_since="2026-10-16T21:40:00Z")
         write_log(r, [("2026-10-16", "21:39:59", "antes"),
@@ -508,13 +508,13 @@ def test_intencao_idade_bordas():
         c = ctx(run_hook(r.path, session_id=SID))
         check("nenhum prompt depois do cursor: '(há 0 turnos)'", "(há 0 turnos)" in c, c)
     with Repo() as r:
-        write_intent(r, step_since="2026-10-16T21:40:00")  # sem fuso: lido como UTC
+        write_intent(r, step_since="2026-10-16T21:40:00")  # no timezone: read as UTC
         write_log(r, [("2026-10-16", "21:41:00", "depois")])
         c = ctx(run_hook(r.path, session_id=SID))
         check("passo_desde sem fuso é lido como UTC", "(há 1 turno)" in c, c)
 
 
-def test_intencao_plano_cumprido_ponto_de_parada():
+def test_intent_plan_fulfilled_stopping_point():
     with Repo() as r:
         write_intent(r, step=5, by_when="q" * 400)
         c = ctx(run_hook(r.path, session_id=SID))
@@ -528,7 +528,7 @@ def test_intencao_plano_cumprido_ponto_de_parada():
               "ponto de parada" not in c and "Plano cumprido (4/4). Próximo" in c, c)
 
 
-def test_intencao_penultimo_passo_aponta_o_ultimo():
+def test_intent_penultimate_step_points_to_the_last():
     with Repo() as r:
         write_intent(r, step=3)
         c = ctx(run_hook(r.path, session_id=SID))
@@ -537,7 +537,7 @@ def test_intencao_penultimo_passo_aponta_o_ultimo():
               and "wrap-up" not in c, c)
 
 
-def test_intencao_idade_ignora_entrada_vazia_do_log():
+def test_intent_age_ignores_empty_log_entry():
     with Repo() as r:
         write_intent(r, step_since="2026-10-16T21:40:00Z")
         write_log(r, [("2026-10-16", "21:41:00", "   "),
@@ -546,7 +546,7 @@ def test_intencao_idade_ignora_entrada_vazia_do_log():
         check("entrada vazia do log não conta como turno", "(há 1 turno)" in c, c)
 
 
-def test_intencao_ultimo_passo_aponta_wrap_up():
+def test_intent_last_step_points_to_wrap_up():
     with Repo() as r:
         write_intent(r, step=4)
         c = ctx(run_hook(r.path, session_id=SID))
@@ -554,7 +554,7 @@ def test_intencao_ultimo_passo_aponta_wrap_up():
               "Passo 4/4: decidir" in c and "plano cumprido: hora de /common:wrap-up" in c, c)
 
 
-def test_intencao_plano_cumprido():
+def test_intent_plan_fulfilled():
     with Repo() as r:
         write_intent(r, step=5)
         c = ctx(run_hook(r.path, session_id=SID))
@@ -565,14 +565,14 @@ def test_intencao_plano_cumprido():
         check("plano cumprido: uma linha", len(il) == 1, il)
 
 
-def test_intencao_sem_modo_ainda_e_injetada():
+def test_intent_without_mode_is_still_injected():
     with Repo() as r:
         write_intent(r)
         c = ctx(run_hook(r.path, session_id=SID))
         check("intenção sem modo: injetada", "Passo 2/4" in c and "[modo]" not in c, c)
 
 
-def test_intencao_de_outra_sessao_vira_pergunta():
+def test_intent_from_another_session_becomes_a_question():
     with Repo() as r:
         write_mode(r, "mode: exploration\n")
         write_intent(r, session_id="aaaaaaaa")
@@ -589,8 +589,8 @@ def test_intencao_de_outra_sessao_vira_pergunta():
         check("outra sessão: teto de duas linhas", len(il) == 2, il)
 
 
-def test_intencao_continuar_resolve_a_pergunta():
-    """O `continuar` do escritor é o que faz a pergunta de D1 parar de voltar."""
+def test_intent_continue_resolves_the_question():
+    """The writer's `continuar` is what makes the D1 question stop coming back."""
     with Repo() as r:
         write_intent(r, session_id="aaaaaaaa")
         e = {**os.environ, "CLAUDE_CODE_SESSION_ID": SID}
@@ -602,7 +602,7 @@ def test_intencao_continuar_resolve_a_pergunta():
               (w.stderr, c))
 
 
-def test_intencao_calada_no_cepa_until():
+def test_intent_silent_in_cepa_until():
     with Repo() as r:
         write_mode(r, "mode: construction\n")
         write_intent(r, session_id="aaaaaaaa")
@@ -615,7 +615,7 @@ def test_intencao_calada_no_cepa_until():
         check("cepa-until sem modo: silêncio total", p.stdout.strip() == "", repr(p.stdout))
 
 
-def test_intencao_corrompida_nao_quebra():
+def test_corrupted_intent_does_not_break():
     with Repo() as r:
         write_mode(r, "mode: exploration\n")
         (r.path / ".claude" / "session-intent").write_text("::: lixo\n\x00passo: x\n")
@@ -634,45 +634,45 @@ def test_intencao_corrompida_nao_quebra():
               p.returncode == 0 and "Passo 1/4" in c and "(há" not in c, (p.stderr, c))
 
 
-def test_intencao_respeita_kill_switch():
+def test_intent_respects_kill_switch():
     with Repo() as r:
         write_intent(r)
         p = run_hook(r.path, env={"CEPA_MODO": "off"}, session_id=SID)
         check("CEPA_MODO=off: cala a intenção também", p.stdout.strip() == "", repr(p.stdout))
 
 
-# --- ajuda do menu de modos -------------------------------------------------
-# O menu do `cepa` listava os sete nomes e mais nada. Quem não lembra o que
-# "reforma" cobra escolhia pelo nome — e o modo, que é fronteira, virava rótulo.
-# A ajuda mostra o propósito de cada modo lido de _modes.py (fonte única), sem
-# abrir o doc de 307 linhas.
+# --- help of the mode menu --------------------------------------------------
+# The `cepa` menu listed the seven names and nothing else. Whoever does not remember what
+# "reforma" covers chose by the name — and the mode, which is a boundary, became a label.
+# The help shows the purpose of each mode read from _modes.py (single source), without
+# opening the 307-line doc.
 
-def test_ajuda_nao_interativa():
-    """`cepa --modo ajuda` imprime os propósitos e NÃO sobe sessão nenhuma."""
+def test_help_non_interactive():
+    """`cepa --modo ajuda` prints the purposes and does NOT start any session."""
     with Repo() as r:
         p = r.run("--mode", "help")
-        saida = p.stdout + p.stderr
-        check("ajuda: rc=0", p.returncode == 0, str(p.returncode) + saida)
+        output = p.stdout + p.stderr
+        check("ajuda: rc=0", p.returncode == 0, str(p.returncode) + output)
         check("ajuda: não lança o claude", "CLAUDE_ARGS" not in p.stdout, p.stdout)
         check("ajuda: não grava modo", not r.mode_file.exists())
         check("ajuda: nomeia os sete modos",
-              all(m in saida for m in
+              all(m in output for m in
                   ("exploration", "discovery", "design", "construction",
-                   "refactor", "reflection", "documentation")), saida)
+                   "refactor", "reflection", "documentation")), output)
         check("ajuda: diz o propósito, não só o nome",
-              "comportamento externo" in saida or "sem mudar nada que se veja" in saida,
-              saida)
+              "comportamento externo" in output or "sem mudar nada que se veja" in output,
+              output)
 
 
-def _pty_run(repo, teclado):
-    """Roda o cepa com um terminal de verdade e digita `teclado` nele.
+def _pty_run(repo, keyboard):
+    """Runs cepa with a real terminal and types `keyboard` into it.
 
-    O `cepa` lê de /dev/tty, então não basta um pipe: o processo precisa de um
-    terminal de controle próprio (setsid + TIOCSCTTY), senão /dev/tty apontaria
-    para o terminal de quem roda os testes.
+    `cepa` reads from /dev/tty, so a pipe is not enough: the process needs its
+    own controlling terminal (setsid + TIOCSCTTY), otherwise /dev/tty would point
+    to the terminal of whoever runs the tests.
     """
     import fcntl, pty, termios, time
-    mestre, escravo = pty.openpty()
+    master, slave = pty.openpty()
 
     def ctty():
         os.setsid()
@@ -682,54 +682,54 @@ def _pty_run(repo, teclado):
         [str(CEPA), "--resume"], cwd=repo.path,
         env={**os.environ, "CLAUDE_WT_CLAUDE_BIN": str(repo.fake),
              "CEPA_PREFLIGHT": "off"},
-        stdin=escravo, stdout=escravo, stderr=escravo,
+        stdin=slave, stdout=slave, stderr=slave,
         preexec_fn=ctty, close_fds=True,
     )
-    os.close(escravo)
-    for tecla in teclado:
+    os.close(slave)
+    for key in keyboard:
         time.sleep(0.4)
-        os.write(mestre, tecla.encode())
+        os.write(master, key.encode())
     buf = b""
-    fim = time.time() + 20
-    while time.time() < fim:
+    end = time.time() + 20
+    while time.time() < end:
         try:
-            pedaco = os.read(mestre, 65536)
+            piece = os.read(master, 65536)
         except OSError:
             break
-        if not pedaco:
+        if not piece:
             break
-        buf += pedaco
+        buf += piece
         if proc.poll() is not None and b"CLAUDE_ARGS" in buf:
             break
     try:
         proc.wait(timeout=10)
     except subprocess.TimeoutExpired:
         proc.kill()
-    os.close(mestre)
+    os.close(master)
     return proc.returncode, buf.decode("utf-8", "replace")
 
 
-def test_ajuda_no_menu_e_reapresenta():
-    """No menu, `?` mostra os propósitos e o menu volta — não é escolha inválida."""
+def test_help_in_the_menu_and_re_presents():
+    """In the menu, `?` shows the purposes and the menu comes back — it is not an invalid choice."""
     with Repo() as r:
-        rc, saida = _pty_run(r, ["?\n", "construction\n"])
-        check("menu: oferece a ajuda", "?" in saida and "ajuda" in saida, saida)
+        rc, output = _pty_run(r, ["?\n", "construction\n"])
+        check("menu: oferece a ajuda", "?" in output and "ajuda" in output, output)
         check("menu ?: mostra o propósito",
-              "comportamento externo" in saida or "sem mudar nada que se veja" in saida,
-              saida)
+              "comportamento externo" in output or "sem mudar nada que se veja" in output,
+              output)
         check("menu ?: não trata como modo desconhecido",
-              "modo desconhecido" not in saida, saida)
-        check("menu ?: pergunta de novo", saida.count("modo?") >= 2, saida)
-        check("menu ?: a escolha seguinte vale", rc == 0, str(rc) + saida)
+              "modo desconhecido" not in output, output)
+        check("menu ?: pergunta de novo", output.count("modo?") >= 2, output)
+        check("menu ?: a escolha seguinte vale", rc == 0, str(rc) + output)
         body = r.mode_file.read_text() if r.mode_file.exists() else ""
         check("menu ?: grava o modo escolhido", "mode: construction" in body, body)
 
 
-# --- nomes antigos (item interface-in-english) ----------------------------------
-# Os nomes pt-BR dos modos, das flags e das chaves continuam valendo na LEITURA;
-# o que o `cepa` escreve é sempre o nome novo.
+# --- old names (item interface-in-english) ----------------------------------
+# The pt-BR names of the modes, flags and keys remain valid on READING;
+# what `cepa` writes is always the new name.
 
-def test_nomes_antigos_do_cepa():
+def test_old_cepa_names():
     with Repo() as r:
         p = r.run("--modo", "construcao", "--resume")
         body = r.mode_file.read_text() if r.mode_file.exists() else ""
@@ -760,7 +760,7 @@ def test_nomes_antigos_do_cepa():
               p.stderr)
 
 
-def test_hook_le_session_mode_e_intent_antigos():
+def test_hook_reads_old_session_mode_and_intent():
     with Repo() as r:
         write_mode(r, "modo: construcao\nrotina: null\norcamento: null\naberto_em: 2026-08-18T19:40:00Z\n")
         (r.path / ".claude" / "session-intent").write_text(
@@ -782,34 +782,34 @@ def test_hook_le_session_mode_e_intent_antigos():
 
 def main():
     print("test_cepa_mode")
-    for fn in (test_modo_valido, test_modo_invalido, test_sem_modo_sem_tty,
-               test_nomes_antigos_do_cepa, test_hook_le_session_mode_e_intent_antigos,
-               test_kill_switch, test_reforma_orcamento,
-               test_ajuda_nao_interativa, test_ajuda_no_menu_e_reapresenta,
-               test_hook_injeta_modo_e_saida, test_hook_reforma_mostra_orcamento,
-               test_hook_silencioso_sem_modo, test_hook_respeita_kill_switch,
-               test_hook_nunca_quebra_o_turno,
-               test_intencao_vazia_traz_os_primeiros_prompts,
-               test_intencao_vazia_primeiro_turno_usa_o_prompt_atual,
-               test_intencao_vazia_sem_registro_cai_para_hoje,
-               test_intencao_vazia_sem_modo_e_silenciosa,
-               test_intencao_normal_passo_idade_proximo,
-               test_intencao_normal_um_turno_no_singular,
-               test_intencao_corta_proposito_e_passo_longos,
-               test_intencao_vazia_prompt_do_turno_e_log_parcial,
-               test_intencao_vazia_corte_em_120, test_intencao_vazia_log_multilinha_e_titulo,
-               test_intencao_vazia_registro_no_clone_principal,
-               test_intencao_mesma_sessao_tolerante, test_intencao_outra_sessao_detalhes,
-               test_intencao_passo_fora_do_plano_cai_no_1, test_intencao_idade_bordas,
-               test_intencao_plano_cumprido_ponto_de_parada,
-               test_intencao_penultimo_passo_aponta_o_ultimo,
-               test_intencao_idade_ignora_entrada_vazia_do_log,
-               test_intencao_ultimo_passo_aponta_wrap_up, test_intencao_plano_cumprido,
-               test_intencao_sem_modo_ainda_e_injetada,
-               test_intencao_de_outra_sessao_vira_pergunta,
-               test_intencao_continuar_resolve_a_pergunta,
-               test_intencao_calada_no_cepa_until, test_intencao_corrompida_nao_quebra,
-               test_intencao_respeita_kill_switch):
+    for fn in (test_valid_mode, test_invalid_mode, test_without_mode_without_tty,
+               test_old_cepa_names, test_hook_reads_old_session_mode_and_intent,
+               test_kill_switch, test_overhaul_budget,
+               test_help_non_interactive, test_help_in_the_menu_and_re_presents,
+               test_hook_injects_mode_and_exit, test_hook_overhaul_shows_budget,
+               test_hook_silent_without_mode, test_hook_respects_kill_switch,
+               test_hook_never_breaks_the_turn,
+               test_empty_intent_brings_the_first_prompts,
+               test_empty_intent_first_turn_uses_the_current_prompt,
+               test_empty_intent_without_record_falls_back_to_today,
+               test_empty_intent_without_mode_is_silent,
+               test_intent_normal_step_age_next,
+               test_intent_normal_one_turn_in_the_singular,
+               test_intent_cuts_long_purpose_and_step,
+               test_empty_intent_turn_prompt_and_partial_log,
+               test_empty_intent_cut_at_120, test_empty_intent_multiline_log_and_title,
+               test_empty_intent_record_in_the_main_clone,
+               test_intent_same_session_tolerant, test_intent_other_session_details,
+               test_intent_step_outside_the_plan_falls_to_1, test_intent_age_edges,
+               test_intent_plan_fulfilled_stopping_point,
+               test_intent_penultimate_step_points_to_the_last,
+               test_intent_age_ignores_empty_log_entry,
+               test_intent_last_step_points_to_wrap_up, test_intent_plan_fulfilled,
+               test_intent_without_mode_is_still_injected,
+               test_intent_from_another_session_becomes_a_question,
+               test_intent_continue_resolves_the_question,
+               test_intent_silent_in_cepa_until, test_corrupted_intent_does_not_break,
+               test_intent_respects_kill_switch):
         fn()
     if failures:
         print(f"\n{len(failures)} falha(s): {', '.join(failures)}")

@@ -1,26 +1,26 @@
 #!/usr/bin/env python3
-"""Os 4 agentes trancados por caminho dizem que o Auto Mode não vale para eles.
+"""The 4 path-locked agents say Auto Mode does not apply to them.
 
-Sem dependências — rode com `python3 tests/test_auto_mode_does_not_cover_path_lock.py`.
-Sai não-zero em falha.
+No dependencies — run with `python3 tests/test_auto_mode_does_not_cover_path_lock.py`.
+Exits non-zero on failure.
 
-## O furo que este arquivo trava
+## The hole this file locks
 
-O Auto Mode / modo bypass-permissions do Claude Code injeta na sessão a
-diretriz "faça o trabalho pelo Bash: edite com sed, heredocs ou scripts curtos
-em vez de Edit/Write". Os agentes domain-dev, api-dev, adapter-dev e
-qa-engineer são contidos por `path-lock.py` (olha Edit/Write por glob) e
-`bash-path-lock.py` (nega escrita por shell por padrão). Seguir a diretriz é
-driblar o cadeado: no drain de 2026-08-20 três agentes gastaram o relatório
-explicando por que desobedeceram e um qa-engineer driblou o cadeado com um
-heredoc python. A correção barata (frente 1 do BACKLOG) é o próprio prompt do
-agente dizer que a preferência não se aplica a ele.
+Claude Code's Auto Mode / bypass-permissions mode injects into the session the
+directive "do the work through Bash: edit with sed, heredocs or short scripts
+instead of Edit/Write". The agents domain-dev, api-dev, adapter-dev and
+qa-engineer are contained by `path-lock.py` (looks at Edit/Write by glob) and
+`bash-path-lock.py` (denies shell writes by default). Following the directive is
+getting around the lock: in the drain of 2026-08-20 three agents spent the report
+explaining why they disobeyed and a qa-engineer got around the lock with a python
+heredoc. The cheap fix (front 1 of the BACKLOG) is the agent's own prompt
+saying the preference does not apply to it.
 
-## Perturbação (como saber que este teste prova algo)
+## Perturbation (how to know this test proves something)
 
-Apague a bala "The Auto Mode preference for Bash does not apply to you" de um
-dos quatro arquivos em `build-hex/agents/`: o caso daquele arquivo fica
-vermelho e o script sai com código 1.
+Delete the bullet "The Auto Mode preference for Bash does not apply to you" from one
+of the four files in `build-hex/agents/`: that file's case turns
+red and the script exits with code 1.
 """
 
 import sys
@@ -29,8 +29,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 FAILURES = []
 
-FRASE = "The Auto Mode preference for Bash does not apply to you"
-AGENTES = ("domain-dev", "api-dev", "adapter-dev", "qa-engineer")
+SENTENCE = "The Auto Mode preference for Bash does not apply to you"
+AGENTS = ("domain-dev", "api-dev", "adapter-dev", "qa-engineer")
 
 
 def check(label, cond, detail=""):
@@ -41,16 +41,16 @@ def check(label, cond, detail=""):
         print(f"FAIL  {label}  {detail}")
 
 
-def test_agentes_trancados_dizem_que_auto_mode_nao_vale():
-    for nome in AGENTES:
-        rel = f"build-hex/agents/{nome}.md"
+def test_locked_agents_say_auto_mode_does_not_count():
+    for name in AGENTS:
+        rel = f"build-hex/agents/{name}.md"
         txt = (REPO / rel).read_text(encoding="utf-8")
         check(f"{rel} diz que a preferência do Auto Mode por Bash não se aplica",
-              FRASE in txt)
+              SENTENCE in txt)
 
 
 def main():
-    test_agentes_trancados_dizem_que_auto_mode_nao_vale()
+    test_locked_agents_say_auto_mode_does_not_count()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} falha(s)")

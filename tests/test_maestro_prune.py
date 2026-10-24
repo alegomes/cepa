@@ -1,40 +1,40 @@
 #!/usr/bin/env python3
-"""Contract test: `maestro-prune` remove Space + worktree só das slices que
-ATERRISSARAM (LANDED), nunca das outras — e nunca confia na palavra do herdr
-sem conferir pelo git.
+"""Contract test: `maestro-prune` removes the Space + worktree only of the slices that
+LANDED (LANDED), never of the others — and never trusts herdr's word
+without checking through git.
 
-## Por que este teste existe
+## Why this test exists
 
-O `/maestro:run` cria um Space do herdr por slice (`herdr worktree create`).
-Sem prune, cada onda deixa esse tanto de Space na barra lateral do herdr — em
-2026-08-24 havia 11 sobrando de duas ondas. `maestro-prune` é o comando que o
-passo 9 do `run.md` chama ao final da onda para tirar isso do caminho, SÓ das
-slices aterrissadas: DONE-não-aterrissada, FAIL, TIMEOUT, ESCALADA, pending e
-running continuam precisando do worktree (evidência ou re-fork).
+`/maestro:run` creates a herdr Space per slice (`herdr worktree create`).
+Without prune, each wave leaves that many Spaces in herdr's sidebar — on
+2026-08-24 there were 11 left over from two waves. `maestro-prune` is the command that step
+9 of `run.md` calls at the end of the wave to get that out of the way, ONLY for the
+landed slices: DONE-not-landed, FAIL, TIMEOUT, ESCALATED, pending and
+running still need the worktree (evidence or re-fork).
 
-## O que este teste segura (mecânico, com repo git real + herdr fake)
+## What this test holds (mechanical, with a real git repo + fake herdr)
 
-- worktree real criada com `git worktree add`, wave-state real escrito à mão;
-- um `herdr` FAKE (`MAESTRO_HERDR`) que implementa só o suficiente de
-  `worktree list --json` e `worktree remove --workspace ID --trust-repository`
-  para os casos abaixo — e loga cada chamada para conferência de argv;
-- LANDED com Space aberto -> remove via `--workspace <id>` (nunca `--force`);
-  o fake imita o herdr real e só lista o repo pedido em `--cwd` — sem ele,
-  devolve o repo do Space em foco, e o prune cairia no git puro deixando o
-  Space na barra lateral (o defeito que a primeira versão tinha e só o teste
-  ao vivo pegou);
-- DONE (não aterrissada) e FAIL continuam com o worktree no disco;
-- formato antigo `landed:` (lista solta) conta como aterrissado;
-- LANDED sem Space aberto (`open_workspace_id` ausente) -> cai para
-  `git worktree remove` puro;
-- LANDED com worktree suja -> falha (dirty_worktree_requires_force), nunca
-  força, o worktree continua lá;
-- herdr fake que devolve sucesso sem de fato remover -> falha (a conferência
-  pelo git é o que segura, não a palavra da ferramenta);
-- `--dry-run` não remove nada;
-- `run.md` cita `maestro-prune` no passo 9 e trocou a receita fantasma
-  `herdr worktree remove <path>` (forma posicional, inválida no herdr 0.9.1)
-  por `herdr worktree remove --workspace` no passo 6a.
+- a real worktree created with `git worktree add`, a real wave-state written by hand;
+- a FAKE `herdr` (`MAESTRO_HERDR`) that implements only enough of
+  `worktree list --json` and `worktree remove --workspace ID --trust-repository`
+  for the cases below — and logs every call for argv checking;
+- LANDED with an open Space -> removes via `--workspace <id>` (never `--force`);
+  the fake imitates the real herdr and only lists the repo requested in `--cwd` — without it,
+  it returns the repo of the focused Space, and the prune would fall back to plain git leaving the
+  Space in the sidebar (the defect the first version had and only the live
+  test caught);
+- DONE (not landed) and FAIL keep the worktree on disk;
+- the old `landed:` format (loose list) counts as landed;
+- LANDED without an open Space (`open_workspace_id` absent) -> falls back to plain
+  `git worktree remove`;
+- LANDED with a dirty worktree -> fails (dirty_worktree_requires_force), never
+  forces, the worktree stays there;
+- a fake herdr that returns success without actually removing -> fails (the check
+  through git is what holds, not the tool's word);
+- `--dry-run` removes nothing;
+- `run.md` cites `maestro-prune` in step 9 and swapped the phantom recipe
+  `herdr worktree remove <path>` (positional form, invalid in herdr 0.9.1)
+  for `herdr worktree remove --workspace` in step 6a.
 
 Run: python3 tests/test_maestro_prune.py
 """
@@ -199,7 +199,7 @@ def _fake_herdr_env(tmp, mapping, dirty=None, noop=None, repo=None):
     return env, logfile
 
 
-def test_landed_com_space_remove_via_workspace(tmp):
+def test_landed_with_space_removes_via_workspace(tmp):
     repo = _setup_repo(tmp)
     wt = _add_worktree(repo, "session/s1", "wt-s1")
     pd = Path(tmp) / "prog"
@@ -227,7 +227,7 @@ def git_paths(repo):
             for l in r.stdout.splitlines() if l.startswith("worktree ")}
 
 
-def test_done_e_fail_sao_mantidas(tmp):
+def test_done_and_fail_are_kept(tmp):
     repo = _setup_repo(tmp)
     wt_done = _add_worktree(repo, "session/s2", "wt-s2")
     wt_fail = _add_worktree(repo, "session/s3", "wt-s3")
@@ -255,7 +255,7 @@ def test_done_e_fail_sao_mantidas(tmp):
     check("worktree de S3 continua no git", os.path.realpath(wt_fail) in git_paths(repo))
 
 
-def test_landed_formato_antigo(tmp):
+def test_landed_old_format(tmp):
     repo = _setup_repo(tmp)
     wt = _add_worktree(repo, "session/s4", "wt-s4")
     pd = Path(tmp) / "prog"
@@ -271,12 +271,12 @@ def test_landed_formato_antigo(tmp):
     check("worktree do formato antigo saiu do git", os.path.realpath(wt) not in git_paths(repo))
 
 
-def test_landed_sem_space_cai_para_git(tmp):
+def test_landed_without_space_falls_back_to_git(tmp):
     repo = _setup_repo(tmp)
     wt = _add_worktree(repo, "session/s5", "wt-s5")
     pd = Path(tmp) / "prog"
     _wave_state(pd, {"S5": {"status": "LANDED", "worktree": str(wt)}})
-    mapping = {os.path.realpath(wt): None}  # sem Space aberto
+    mapping = {os.path.realpath(wt): None}  # no open Space
     env, logfile = _fake_herdr_env(tmp, mapping, repo=repo)
 
     r = sh([sys.executable, PRUNE, pd, "--repo", repo, "--json"], env=env)
@@ -290,7 +290,7 @@ def test_landed_sem_space_cai_para_git(tmp):
                   for l in logfile.read_text().splitlines() if l.strip()))
 
 
-def test_landed_suja_falha_sem_forcar(tmp):
+def test_landed_dirty_fails_without_forcing(tmp):
     repo = _setup_repo(tmp)
     wt = _add_worktree(repo, "session/s6", "wt-s6")
     (wt / "untracked.txt").write_text("oops")
@@ -310,7 +310,7 @@ def test_landed_suja_falha_sem_forcar(tmp):
           all("--force" not in c for c in calls), calls)
 
 
-def test_herdr_reporta_sucesso_sem_remover(tmp):
+def test_herdr_reports_success_without_removing(tmp):
     repo = _setup_repo(tmp)
     wt = _add_worktree(repo, "session/s7", "wt-s7")
     pd = Path(tmp) / "prog"
@@ -326,7 +326,7 @@ def test_herdr_reporta_sucesso_sem_remover(tmp):
     check("worktree ainda está lá de fato", os.path.realpath(wt) in git_paths(repo))
 
 
-def test_dry_run_nao_remove(tmp):
+def test_dry_run_does_not_remove(tmp):
     repo = _setup_repo(tmp)
     wt = _add_worktree(repo, "session/s8", "wt-s8")
     pd = Path(tmp) / "prog"
@@ -346,7 +346,7 @@ def test_dry_run_nao_remove(tmp):
                   for l in logfile.read_text().splitlines() if l.strip()))
 
 
-def test_run_md_cita_prune_e_troca_receita_fantasma():
+def test_run_md_cites_prune_and_swaps_phantom_recipe():
     run = RUN.read_text(encoding="utf-8")
     fr = flat(run)
     check("passo 9 nomeia `maestro-prune`", "maestro-prune" in fr)
@@ -361,20 +361,20 @@ def test_run_md_cita_prune_e_troca_receita_fantasma():
 
 def main():
     with tempfile.TemporaryDirectory() as tmp:
-        test_landed_com_space_remove_via_workspace(tmp)
+        test_landed_with_space_removes_via_workspace(tmp)
     with tempfile.TemporaryDirectory() as tmp:
-        test_done_e_fail_sao_mantidas(tmp)
+        test_done_and_fail_are_kept(tmp)
     with tempfile.TemporaryDirectory() as tmp:
-        test_landed_formato_antigo(tmp)
+        test_landed_old_format(tmp)
     with tempfile.TemporaryDirectory() as tmp:
-        test_landed_sem_space_cai_para_git(tmp)
+        test_landed_without_space_falls_back_to_git(tmp)
     with tempfile.TemporaryDirectory() as tmp:
-        test_landed_suja_falha_sem_forcar(tmp)
+        test_landed_dirty_fails_without_forcing(tmp)
     with tempfile.TemporaryDirectory() as tmp:
-        test_herdr_reporta_sucesso_sem_remover(tmp)
+        test_herdr_reports_success_without_removing(tmp)
     with tempfile.TemporaryDirectory() as tmp:
-        test_dry_run_nao_remove(tmp)
-    test_run_md_cita_prune_e_troca_receita_fantasma()
+        test_dry_run_does_not_remove(tmp)
+    test_run_md_cites_prune_and_swaps_phantom_recipe()
 
     print()
     if FAILURES:

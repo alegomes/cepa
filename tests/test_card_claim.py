@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Regressão da reserva de card (claim) em /board-flow:drain e :prove-drain.
+"""Regression of the card reservation (claim) in /board-flow:drain and :prove-drain.
 
-Por que existe: em 17/08/2026 duas sessões paralelas do mesmo usuário provaram
-os mesmos 4 cards da coluna Review — cerca de 40 minutos de revisão refeita. A
-lista de uma coluna é uma foto; o recurso disputado é a fila do board, e a
-reserva passou a ser feita lá, com um comentário `🔒 claim:` relido card a card.
+Why it exists: on 17/08/2026 two parallel sessions of the same user proved
+the same 4 cards in the Review column — about 40 minutes of redone review. A
+column's list is a snapshot; the contested resource is the board's queue, and the
+reservation is now made there, with a `🔒 claim:` comment re-read card by card.
 
-Dois contratos são checados aqui:
-  1. estrutural — os dois comandos mandam reservar ANTES de trabalhar o card,
-     com claim id por run, janela de expiração e liberação explícita;
-  2. funcional — o comentário de claim (e o de liberação) atravessa os dois
-     gates de comentário do harness. Se alguém reescrever o texto do claim como
-     "devolvendo o card", o bounce-reason-gate passa a bloquear a reserva e o
-     drain trava sem que nenhum teste estrutural perceba.
+Two contracts are checked here:
+  1. structural — both commands say to reserve BEFORE working the card,
+     with a claim id per run, an expiry window and explicit release;
+  2. functional — the claim comment (and the release one) crosses both
+     comment gates of the harness. If someone rewrites the claim text as
+     "returning the card", the bounce-reason-gate starts blocking the reservation and the
+     drain jams without any structural test noticing.
 
-Sem dependências — rode com `python3 tests/test_card_claim.py`.
+No dependencies — run with `python3 tests/test_card_claim.py`.
 """
 
 import json
@@ -51,36 +51,36 @@ def run_hook(hook, body):
     )
 
 
-# ── 1. estrutural ───────────────────────────────────────────────────────────
+# ── 1. structural ───────────────────────────────────────────────────────────
 
-def test_estrutura():
-    for nome in ("drain.md", "prove-drain.md"):
-        txt = (CMDS / nome).read_text(encoding="utf-8")
-        check(f"{nome}: seção de reserva", "## Card reservation" in txt)
-        check(f"{nome}: claim id por run", "The run's claim id" in txt)
-        check(f"{nome}: marcador de reserva", "🔒 claim:" in txt)
-        check(f"{nome}: liberação explícita", "🔓 claim" in txt)
-        check(f"{nome}: janela de expiração", "90 minutes" in txt)
-        check(f"{nome}: liberação em inglês", "released — <reason>" in txt and "liberado — <motivo>" not in txt)
-        check(f"{nome}: pula card fora da coluna", "SKIPPED" in txt)
-        # a reserva tem que ser o passo (a) do laço — reservar depois de
-        # construir não economiza nada, que é o defeito original.
-        laco = txt.split("### 4. Iterate", 1)[1] if "### 4. Iterate" in txt else ""
-        primeira = next(
-            (ln.strip() for ln in laco.splitlines() if re.match(r"\s*a\. ", ln)), ""
+def test_structure():
+    for given_name in ("drain.md", "prove-drain.md"):
+        txt = (CMDS / given_name).read_text(encoding="utf-8")
+        check(f"{given_name}: seção de reserva", "## Card reservation" in txt)
+        check(f"{given_name}: claim id por run", "The run's claim id" in txt)
+        check(f"{given_name}: marcador de reserva", "🔒 claim:" in txt)
+        check(f"{given_name}: liberação explícita", "🔓 claim" in txt)
+        check(f"{given_name}: janela de expiração", "90 minutes" in txt)
+        check(f"{given_name}: liberação em inglês", "released — <reason>" in txt and "liberado — <motivo>" not in txt)
+        check(f"{given_name}: pula card fora da coluna", "SKIPPED" in txt)
+        # the reservation has to be step (a) of the loop — reserving after
+        # building saves nothing, which is the original defect.
+        loop = txt.split("### 4. Iterate", 1)[1] if "### 4. Iterate" in txt else ""
+        first_ = next(
+            (ln.strip() for ln in loop.splitlines() if re.match(r"\s*a\. ", ln)), ""
         )
         check(
-            f"{nome}: reserva é o primeiro passo do laço",
-            primeira.startswith("a. **Reserve the card first**"),
-            f"achei: {primeira[:60]!r}",
+            f"{given_name}: reserva é o primeiro passo do laço",
+            first_.startswith("a. **Reserve the card first**"),
+            f"achei: {first_[:60]!r}",
         )
 
-    agente = AGENT.read_text(encoding="utf-8")
-    check("atlassian-expert: rotina de claim", "### Claim de card" in agente)
-    check("atlassian-expert: reporta ausência", "claim: none" in agente)
+    agent_text = AGENT.read_text(encoding="utf-8")
+    check("atlassian-expert: rotina de claim", "### Claim de card" in agent_text)
+    check("atlassian-expert: reporta ausência", "claim: none" in agent_text)
 
 
-# ── 2. funcional: o texto do claim passa pelos gates de comentário ──────────
+# ── 2. functional: the claim text passes through the comment gates ──────────
 
 CLAIM = (
     "🔒 claim: wego-acesso-backend-3f9a1c2d — /board-flow:prove-drain in progress "
@@ -88,7 +88,7 @@ CLAIM = (
     "The reservation expires in 90 minutes."
 )
 RELEASE = "🔓 claim wego-acesso-backend-3f9a1c2d released — ERROR: Docker down on the host."
-# Texto fixo antigo (pt-BR): os leitores continuam aceitando durante a transição.
+# Old fixed text (pt-BR): the readers keep accepting it during the transition.
 CLAIM_PTBR = (
     "🔒 claim: wego-acesso-backend-3f9a1c2d — /board-flow:prove-drain em andamento "
     "desde 2026-08-18 09:45. Outra sessão deve pular este card. "
@@ -98,17 +98,17 @@ RELEASE_PTBR = "🔓 claim wego-acesso-backend-3f9a1c2d liberado — ERROR: Dock
 
 
 def test_gates():
-    for rotulo, corpo in (("claim", CLAIM), ("liberação", RELEASE),
+    for label, body_text in (("claim", CLAIM), ("liberação", RELEASE),
                           ("claim pt-BR antigo", CLAIM_PTBR),
                           ("liberação pt-BR antiga", RELEASE_PTBR)):
-        r = run_hook(BOUNCE_HOOK, corpo)
-        check(f"bounce-reason-gate deixa passar a {rotulo}", r.returncode == 0, r.stderr.strip())
-        r = run_hook(NULLS_HOOK, corpo)
-        check(f"summary-nulls-gate deixa passar a {rotulo}", r.returncode == 0, r.stderr.strip())
+        r = run_hook(BOUNCE_HOOK, body_text)
+        check(f"bounce-reason-gate deixa passar a {label}", r.returncode == 0, r.stderr.strip())
+        r = run_hook(NULLS_HOOK, body_text)
+        check(f"summary-nulls-gate deixa passar a {label}", r.returncode == 0, r.stderr.strip())
 
 
 def main():
-    test_estrutura()
+    test_structure()
     test_gates()
     if FAILURES:
         print(f"\n{len(FAILURES)} failure(s): {', '.join(FAILURES)}")

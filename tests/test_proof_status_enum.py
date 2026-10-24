@@ -26,9 +26,9 @@ import sys
 import tempfile
 from pathlib import Path
 
-# Este teste executa hook que emite telemetria; sem isto os eventos cairiam
-# em ~/.claude/cepa-telemetry/ e entrariam no relatório do /common:metrics
-# como se fossem uso real. Ver tests/_telemetria_isolada.py.
+# This test executes a hook that emits telemetry; without this the events would fall
+# in ~/.claude/cepa-telemetry/ and enter the /common:metrics report
+# as if they were real use. See tests/_telemetria_isolada.py.
 from _telemetria_isolada import isola
 
 isola()
@@ -106,14 +106,14 @@ r = run(artifact(pit="      status: skipped\n"))
 check("proven + pit com status de outro nível → BLOQUEIA", r.returncode == 2,
       f"rc={r.returncode}")
 
-# ── n/a onde o esquema sempre ofereceu ─────────────────────────────────────
+# ── n/a where the schema always offered it ─────────────────────────────────
 r = run(artifact(pit="      status: n/a\n"))
 check("proven + pit n/a → PASSA (o esquema oferece)", r.returncode == 0, r.stderr[:300])
 
 r = run(artifact(regression="    status: n/a\n"))
 check("proven + regressão n/a → PASSA", r.returncode == 0, r.stderr[:300])
 
-# ── L4 n/a: legítimo com justificativa e diff compatível ───────────────────
+# ── L4 n/a: legitimate with a justification and a compatible diff ─────────
 GOOD_NA = ('    status: n/a\n'
            '    reason: "rodada só de teste; o diff não toca nada que leia entrada externa"\n')
 r = run(artifact(l4=GOOD_NA))
@@ -130,18 +130,18 @@ check("proven + L4 n/a com classe em api-rest → BLOQUEIA", r.returncode == 2,
 check("…e a mensagem nomeia a classe que contradiz o n/a",
       "AssinaturaController" in r.stderr, r.stderr[:400])
 
-# ── o fallback sem YAML não pode validar o n/a ─────────────────────────────
+# ── the YAML-less fallback cannot validate the n/a ─────────────────────────
 r = run("verdict: proven\nlevels:\n  l4_adversarial_input:\n"
         "    status: n/a\n  broken: [unclosed\n")
 check("n/a em artefato ilegível como YAML → BLOQUEIA", r.returncode == 2,
       f"rc={r.returncode}")
 
-# ── só um `proven` sobre-declarado é contradito ────────────────────────────
+# ── only an over-claimed `proven` is contradicted ──────────────────────────
 for v in ("unproven", "needs-human"):
     r = run(artifact(verdict=v, l4="    status: banana\n"))
     check(f"verdict {v} + status inventado → PASSA", r.returncode == 0, r.stderr[:200])
 
-# ── as regras antigas seguem valendo ───────────────────────────────────────
+# ── the old rules remain in force ──────────────────────────────────────────
 r = run(artifact(l4="    status: skipped\n"))
 check("regra antiga (skipped) segue bloqueando", r.returncode == 2, f"rc={r.returncode}")
 
@@ -153,13 +153,13 @@ r = run(artifact(), file_path=str(Path(tempfile.gettempdir()) / "notes.yaml"))
 check("arquivo fora de qualquer diretório de prova → PASSA", r.returncode == 0,
       r.stderr[:200])
 
-# ── docs/proof é o destino de escrita desde 22/08/2026 ─────────────────────
-# O proof-reviewer foi travado em docs/proof/ porque `.claude/` é gitignored e o
-# veredito morria com a worktree. Um guarda que só reconhecesse `.claude/proof/`
-# passaria a deixar TODO veredito novo escapar da checagem — o portão ficaria
-# mais fraco justamente na mudança que existia para preservar o artefato. Por
-# isso os dois diretórios contam, e o caminho velho segue reconhecido: é onde
-# está a base inteira que já existe no disco.
+# ── docs/proof is the write destination since 2026-08-22 ───────────────────
+# The proof-reviewer was locked to docs/proof/ because `.claude/` is gitignored and the
+# verdict died with the worktree. A guard that only recognized `.claude/proof/`
+# would let EVERY new verdict escape the check — the gate would become
+# weaker precisely in the change that existed to preserve the artifact. For
+# that reason both directories count, and the old path remains recognized: it is where
+# the entire base that already exists on disk is.
 DOCS_ART = str(Path(tempfile.gettempdir()) / "repo" / "docs" / "proof" / "WEGO-1.yaml")
 r = run(artifact(l4="    status: skipped\n"), file_path=DOCS_ART)
 check("proven sobre-declarado em docs/proof → BLOQUEIA", r.returncode == 2,
@@ -173,15 +173,15 @@ check("…e o caminho antigo segue bloqueando igual", r.returncode == 2,
 r = run(artifact(), file_path=DOCS_ART)
 check("proven consistente em docs/proof → PASSA", r.returncode == 0, r.stderr[:200])
 
-# --- nomes de nível: conjunto fechado (2026-08-03) --------------------------
-# Duas grafias para os mesmos níveis convivem no disco e fizeram o classificador
-# de motivos errar 7 de 33 cards. A antiga segue lida; escrever de novo bloqueia.
-antigo = artifact().replace("  l2_coverage:\n", "  l2_external_coverage:\n")
-r = run(antigo)
+# --- level names: closed set (2026-08-03) -----------------------------------
+# Two spellings for the same levels coexist on disk and made the reason classifier
+# get 7 of 33 cards wrong. The old one is still read; writing it again blocks.
+old = artifact().replace("  l2_coverage:\n", "  l2_external_coverage:\n")
+r = run(old)
 check("grafia antiga de nível → BLOQUEIA", r.returncode == 2, f"rc={r.returncode}")
 check("bloqueio diz a grafia canônica", "l2_coverage" in r.stderr, r.stderr[:200])
 
-r = run(antigo.replace("verdict: proven", "verdict: needs-human"))
+r = run(old.replace("verdict: proven", "verdict: needs-human"))
 check("grafia antiga bloqueia mesmo fora de proven", r.returncode == 2,
       f"rc={r.returncode}")
 

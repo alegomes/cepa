@@ -1,21 +1,21 @@
-"""Regressão do atalho `board-flow/bin/cepa-plan`.
+"""Regression of the `board-flow/bin/cepa-plan` shortcut.
 
-## Por que este arquivo existe
+## Why this file exists
 
-`common/bin/cepa-plan` é um caminho RELATIVO que só existe por acidente de
-layout dentro do próprio repo `cepa`. `/board-flow:capture`, `/drain` e
-`/triage` chamavam esse caminho direto — funcionava rodando de dentro do
-`cepa`, mas em qualquer projeto hospedeiro (WEGO, por exemplo) o arquivo não
-existe, o comando falha calado e o card nasce fora da fila sem nenhum aviso.
-Este shim existe para resolver o `cepa-plan` real do `common` (no repo ou no
-cache de plugins) e repassar tudo — argv e código de saída — sem que quem
-chama perceba a diferença.
+`common/bin/cepa-plan` is a RELATIVE path that only exists by accident of
+layout inside the `cepa` repo itself. `/board-flow:capture`, `/drain` and
+`/triage` called that path directly — it worked running from inside
+`cepa`, but in any host project (WEGO, for example) the file does not
+exist, the command fails silently and the card is born outside the queue with no warning.
+This shim exists to resolve the real `cepa-plan` of `common` (in the repo or in the
+plugin cache) and pass everything on — argv and exit code — without the
+caller noticing the difference.
 
-Os testes aqui usam layouts FALSOS em `tmp_path` com um `cepa-plan` fake (que
-só imprime o argv recebido e sai com um código escolhido), para provar a
-resolução de caminho sem depender do `cepa-plan` de verdade — mais um teste de
-integração real no fim, que roda o shim de verdade contra o `common` de
-verdade.
+The tests here use FAKE layouts in `tmp_path` with a fake `cepa-plan` (which
+only prints the argv received and exits with a chosen code), to prove the
+path resolution without depending on the real `cepa-plan` — plus one real
+integration test at the end, which runs the real shim against the real
+`common`.
 """
 import os
 import shutil
@@ -40,18 +40,18 @@ sys.exit({exit_code})
 """
 
 
-def _instala_shim(destino):
-    """Copia o shim de verdade para `destino` (um `.../bin/cepa-plan`), executável."""
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(SHIM_REAL, destino)
-    destino.chmod(destino.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+def _install_shim(destination):
+    """Copies the real shim to `destination` (a `.../bin/cepa-plan`), executable."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(SHIM_REAL, destination)
+    destination.chmod(destination.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def _instala_fake_cepa_plan(destino, exit_code):
-    """Escreve um `cepa-plan` fake em `destino` que só ecoa o argv e sai com `exit_code`."""
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    destino.write_text(FAKE_CEPA_PLAN.format(exit_code=exit_code), encoding="utf-8")
-    destino.chmod(destino.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+def _install_fake_cepa_plan(destination, exit_code):
+    """Writes a fake `cepa-plan` at `destination` that only echoes the argv and exits with `exit_code`."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(FAKE_CEPA_PLAN.format(exit_code=exit_code), encoding="utf-8")
+    destination.chmod(destination.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 
 def _run(shim, args, cwd, env=None, timeout=None):
@@ -61,29 +61,29 @@ def _run(shim, args, cwd, env=None, timeout=None):
     )
 
 
-def test_layout_de_repo_resolve_e_repassa_argv_e_exit(tmp_path):
+def test_repo_layout_resolves_and_passes_on_argv_and_exit(tmp_path):
     repo = tmp_path / "repo"
     shim = repo / "board-flow" / "bin" / "cepa-plan"
-    _instala_shim(shim)
-    _instala_fake_cepa_plan(repo / "common" / "bin" / "cepa-plan", exit_code=42)
+    _install_shim(shim)
+    _install_fake_cepa_plan(repo / "common" / "bin" / "cepa-plan", exit_code=42)
 
-    outro_cwd = tmp_path / "em-qualquer-lugar"
-    outro_cwd.mkdir()
+    other_cwd = tmp_path / "em-qualquer-lugar"
+    other_cwd.mkdir()
 
-    r = _run(shim, ["add", "WEGO", "WEGO-1", "--title", "x"], cwd=outro_cwd)
+    r = _run(shim, ["add", "WEGO", "WEGO-1", "--title", "x"], cwd=other_cwd)
 
     assert r.returncode == 42, r.stderr
     assert "ARGV:['add', 'WEGO', 'WEGO-1', '--title', 'x']" in r.stdout
 
 
-def test_layout_de_cache_pega_a_versao_mais_alta_do_common(tmp_path):
+def test_cache_layout_picks_the_highest_common_version(tmp_path):
     mkt = tmp_path / "cache" / "cepa"
     shim = mkt / "board-flow" / "0.25.1" / "bin" / "cepa-plan"
-    _instala_shim(shim)
-    # 2.9.0 sairia "na frente" de 2.10.0 numa comparação lexical de string —
-    # é exatamente o erro que a comparação numérica de tupla evita.
-    _instala_fake_cepa_plan(mkt / "common" / "2.9.0" / "bin" / "cepa-plan", exit_code=9)
-    _instala_fake_cepa_plan(mkt / "common" / "2.10.0" / "bin" / "cepa-plan", exit_code=10)
+    _install_shim(shim)
+    # 2.9.0 would come out "ahead" of 2.10.0 in a lexical string comparison —
+    # which is exactly the error the numeric tuple comparison avoids.
+    _install_fake_cepa_plan(mkt / "common" / "2.9.0" / "bin" / "cepa-plan", exit_code=9)
+    _install_fake_cepa_plan(mkt / "common" / "2.10.0" / "bin" / "cepa-plan", exit_code=10)
 
     r = _run(shim, ["ordena", "WEGO"], cwd=tmp_path)
 
@@ -91,14 +91,14 @@ def test_layout_de_cache_pega_a_versao_mais_alta_do_common(tmp_path):
     assert "ARGV:['ordena', 'WEGO']" in r.stdout
 
 
-def test_fallback_pro_path_quando_nenhum_layout_existe(tmp_path):
-    # Shim isolado, sem `common/` nem um irmão em posição de repo ou cache
-    # (mesma profundidade de `<repo>/board-flow/bin/`, só que sem `common/`).
+def test_fallback_to_path_when_no_layout_exists(tmp_path):
+    # Isolated shim, with no `common/` nor a sibling in repo or cache position
+    # (same depth as `<repo>/board-flow/bin/`, only without `common/`).
     shim = tmp_path / "solto" / "board-flow" / "bin" / "cepa-plan"
-    _instala_shim(shim)
+    _install_shim(shim)
 
     bin_no_path = tmp_path / "fake-path-bin"
-    _instala_fake_cepa_plan(bin_no_path / "cepa-plan", exit_code=7)
+    _install_fake_cepa_plan(bin_no_path / "cepa-plan", exit_code=7)
 
     env = dict(os.environ, PATH=f"{bin_no_path}:{os.environ.get('PATH', '')}")
     r = _run(shim, ["divergencia", "WEGO"], cwd=tmp_path, env=env)
@@ -107,30 +107,30 @@ def test_fallback_pro_path_quando_nenhum_layout_existe(tmp_path):
     assert "ARGV:['divergencia', 'WEGO']" in r.stdout
 
 
-def test_nenhum_candidato_sai_127_e_nomeia_os_caminhos_tentados(tmp_path):
+def test_no_candidate_exits_127_and_names_the_paths_tried(tmp_path):
     shim = tmp_path / "solto" / "board-flow" / "bin" / "cepa-plan"
-    _instala_shim(shim)
+    _install_shim(shim)
 
-    # PATH sem nenhum cepa-plan de verdade (nem o próprio shim, que não se
-    # chama "cepa-plan" no PATH aqui — só existe soltinho em tmp_path).
+    # PATH with no real cepa-plan at all (not even the shim itself, which is not
+    # called "cepa-plan" on the PATH here — it only exists loose in tmp_path).
     env = dict(os.environ, PATH="/usr/bin:/bin")
     r = _run(shim, ["add", "WEGO", "WEGO-1", "--title", "x"], cwd=tmp_path, env=env)
 
     assert r.returncode == 127
     assert "não encontrado" in r.stderr
-    # shim = .../solto/board-flow/bin/cepa-plan; a raiz do "repo" é `solto/`.
+    # shim = .../loose/board-flow/bin/cepa-plan; the "repo" root is `loose/`.
     assert str(shim.parent.parent.parent / "common" / "bin" / "cepa-plan") in r.stderr
     assert "instale o plugin" in r.stderr.lower()
 
 
-def test_ele_mesmo_no_path_nao_reexecuta_a_si_proprio(tmp_path):
-    """Se `_candidato_path` não pulasse este próprio arquivo, `shutil.which("cepa-plan")`
-    o acharia a si mesmo (instalado no PATH sob o nome `cepa-plan`, sem nenhum `common/`
-    em volta, nem layout de repo nem de cache) e o `os.execv` chamaria a si mesmo de novo
-    e de novo, travando até o timeout em vez de sair 127 com a mensagem de erro."""
+def test_itself_on_path_does_not_re_execute_itself(tmp_path):
+    """If `_candidato_path` did not skip this very file, `shutil.which("cepa-plan")`
+    would find it itself (installed on the PATH under the name `cepa-plan`, with no `common/`
+    around it, neither repo layout nor cache layout) and `os.execv` would call itself again
+    and again, hanging until the timeout instead of exiting 127 with the error message."""
     bin_no_path = tmp_path / "so-o-shim-no-path"
     shim_como_cepa_plan = bin_no_path / "cepa-plan"
-    _instala_shim(shim_como_cepa_plan)
+    _install_shim(shim_como_cepa_plan)
 
     env = dict(os.environ, PATH=f"{bin_no_path}:/usr/bin:/bin")
 
@@ -140,51 +140,51 @@ def test_ele_mesmo_no_path_nao_reexecuta_a_si_proprio(tmp_path):
     assert "não encontrado" in r.stderr
 
 
-def test_cwd_sem_common_ainda_resolve_pelo_layout_de_repo(tmp_path):
-    """O bug de verdade: um host como WEGO não tem `common/` na raiz. A
-    resolução tem que depender de onde o SHIM está, não do cwd de quem chama."""
+def test_cwd_without_common_still_resolves_by_repo_layout(tmp_path):
+    """The real bug: a host like WEGO has no `common/` at the root. The
+    resolution has to depend on where the SHIM is, not on the caller's cwd."""
     repo = tmp_path / "wego-like-repo"
     shim = repo / "board-flow" / "bin" / "cepa-plan"
-    _instala_shim(shim)
-    _instala_fake_cepa_plan(repo / "common" / "bin" / "cepa-plan", exit_code=0)
+    _install_shim(shim)
+    _install_fake_cepa_plan(repo / "common" / "bin" / "cepa-plan", exit_code=0)
 
-    cwd_do_host = tmp_path / "wego-like-repo"  # sem common/ na raiz do projeto do usuário
+    host_cwd = tmp_path / "wego-like-repo"  # no common/ at the root of the user's project
     assert not (tmp_path / "outro-projeto-sem-common").exists()
-    cwd_sem_common = tmp_path / "outro-projeto-sem-common"
-    cwd_sem_common.mkdir()
+    cwd_without_common = tmp_path / "outro-projeto-sem-common"
+    cwd_without_common.mkdir()
 
-    r = _run(shim, ["add", "WEGO", "WEGO-1", "--title", "x"], cwd=cwd_sem_common)
+    r = _run(shim, ["add", "WEGO", "WEGO-1", "--title", "x"], cwd=cwd_without_common)
 
     assert r.returncode == 0, r.stderr
     assert "ARGV:['add', 'WEGO', 'WEGO-1', '--title', 'x']" in r.stdout
 
 
-def test_nenhum_arquivo_do_board_flow_chama_o_caminho_relativo():
-    """Contrato: nada em `board-flow/{commands,skills,agents}` invoca
-    `python3 common/bin/cepa-plan` — o caminho que só existe dentro do repo
-    `cepa`. capture/drain/triage têm que chamar o shim via `${CLAUDE_PLUGIN_ROOT}`."""
-    alvo = "python3 common/bin/cepa-plan"
-    ofensores = []
+def test_no_board_flow_file_calls_the_relative_path():
+    """Contract: nothing in `board-flow/{commands,skills,agents}` invokes
+    `python3 common/bin/cepa-plan` — the path that only exists inside the `cepa`
+    repo. capture/drain/triage have to call the shim via `${CLAUDE_PLUGIN_ROOT}`."""
+    target = "python3 common/bin/cepa-plan"
+    offenders = []
     for sub in ("commands", "skills", "agents"):
         d = REPO / "board-flow" / sub
         if not d.is_dir():
             continue
         for f in d.rglob("*"):
-            if f.is_file() and alvo in f.read_text(encoding="utf-8", errors="ignore"):
-                ofensores.append(str(f))
-    assert ofensores == [], f"ainda chamam o caminho relativo: {ofensores}"
+            if f.is_file() and target in f.read_text(encoding="utf-8", errors="ignore"):
+                offenders.append(str(f))
+    assert offenders == [], f"ainda chamam o caminho relativo: {offenders}"
 
-    for nome in ("capture.md", "drain.md", "triage.md"):
-        f = REPO / "board-flow" / "commands" / nome
-        conteudo = f.read_text(encoding="utf-8")
-        assert '${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan' in conteudo, (
-            f"{nome} não chama o shim via CLAUDE_PLUGIN_ROOT")
+    for name in ("capture.md", "drain.md", "triage.md"):
+        f = REPO / "board-flow" / "commands" / name
+        content = f.read_text(encoding="utf-8")
+        assert '${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan' in content, (
+            f"{name} não chama o shim via CLAUDE_PLUGIN_ROOT")
 
 
-def test_integracao_real_chega_no_cepa_plan_de_verdade(tmp_path):
-    """Sem fakes: roda o `board-flow/bin/cepa-plan` de dentro do próprio repo
-    `cepa` (layout de repo de verdade) e confere que chegou no `cepa-plan`
-    real do `common` — não um shim que só finge sucesso."""
+def test_real_integration_reaches_the_real_cepa_plan(tmp_path):
+    """No fakes: runs `board-flow/bin/cepa-plan` from inside the `cepa` repo
+    itself (real repo layout) and checks that it reached the real `cepa-plan`
+    of `common` — not a shim that only pretends success."""
     r = _run(SHIM_REAL, ["--help"], cwd=tmp_path)
 
     assert r.returncode == 0, r.stderr

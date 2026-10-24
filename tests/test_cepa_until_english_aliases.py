@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Aliases da interface em inglês (item `interface-in-english`, fatia C).
+"""Aliases of the English interface (item `interface-in-english`, slice C).
 
-Os nomes fixos de `cepa-until`, `cepa-feedback`, `cepa-clock` e `cepa-tokens`
-foram para o inglês; os nomes antigos continuam aceitos. Cada caso roda o nome
-antigo e o novo e exige o mesmo resultado.
+The fixed names of `cepa-until`, `cepa-feedback`, `cepa-clock` and `cepa-tokens`
+moved to English; the old names are still accepted. Each case runs the old name
+and the new one and demands the same result.
 
-Rode com `python3 tests/test_cepa_until_english_aliases.py`.
+Run with `python3 tests/test_cepa_until_english_aliases.py`.
 """
 import os
 import re
@@ -15,9 +15,9 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-# `cepa-feedback` e `cepa-until` emitem telemetria, e cada caso os executa
-# como subprocesso: sem isolar, a suíte escreve no ledger de quem a roda
-# (tests/test_isolated_telemetry.py varre quem cita hook emissor).
+# `cepa-feedback` and `cepa-until` emit telemetry, and each case runs them
+# as a subprocess: without isolating, the suite writes to the ledger of whoever runs it
+# (tests/test_isolated_telemetry.py sweeps whoever cites an emitting hook).
 from _telemetria_isolada import isola  # noqa: E402
 
 isola()
@@ -39,14 +39,14 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def mascara(texto):
-    """Tira horas, durações e caminhos temporários, que variam entre rodadas."""
-    texto = re.sub(r"/[^\s`')]*tmp[^\s`')]*", "<tmp>", texto)
-    return re.sub(r"\d", "#", texto)
+def mask(plain_text):
+    """Removes hours, durations and temporary paths, which vary between rounds."""
+    plain_text = re.sub(r"/[^\s`')]*tmp[^\s`')]*", "<tmp>", plain_text)
+    return re.sub(r"\d", "#", plain_text)
 
 
-def test_until_flags_antigas_e_novas_dao_o_mesmo_plano():
-    pares = [("--sem-verify", "--no-verify"), ("--sem-analise", "--no-analysis"),
+def test_until_old_and_new_flags_give_the_same_plan():
+    pairs = [("--sem-verify", "--no-verify"), ("--sem-analise", "--no-analysis"),
              ("--sujo-ok", "--dirty-ok"), ("--titulo-inteiro", "--full-title"),
              ("--com-permissoes", "--with-permissions"),
              ("--max-falhas", "--max-failures", "4"),
@@ -54,42 +54,42 @@ def test_until_flags_antigas_e_novas_dao_o_mesmo_plano():
              ("--tentativas-por-item", "--attempts-per-item", "3"),
              ("--reserva-minima", "--min-reserve", "25m"),
              ("--folga", "--slack", "45m")]
-    saidas = {}
-    for lado in (0, 1):
+    outputs = {}
+    for side in (0, 1):
         with tempfile.TemporaryDirectory() as tmp:
-            raiz = tu.monta_repo(tmp, [tu.item("a1")])
+            root = tu.build_repo(tmp, [tu.item("a1")])
             binv = tu.fake_claude(tmp, "pass")
-            plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+            plan = root / ".claude" / "programs" / "fila" / "plan.yaml"
             args = ["--for", "2h", "--dry-run"]
-            for par in pares:
-                args += [par[lado]] + list(par[2:])
+            for pair in pairs:
+                args += [pair[side]] + list(pair[2:])
             env = dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
-                       FAKE_PLANO=str(plano), FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl"),
+                       FAKE_PLANO=str(plan), FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl"),
                        CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"))
             p = subprocess.run([sys.executable, str(tu.CEPA_UNTIL), "fila", "--repo",
-                                str(raiz)] + args, capture_output=True, text=True,
+                                str(root)] + args, capture_output=True, text=True,
                                env=env, timeout=120)
-            saidas[lado] = (p.returncode, mascara(p.stdout), mascara(p.stderr))
-    check("until: flags antigas aceitas (rc=0)", saidas[0][0] == 0, saidas[0])
-    check("until: flags novas aceitas (rc=0)", saidas[1][0] == 0, saidas[1])
+            outputs[side] = (p.returncode, mask(p.stdout), mask(p.stderr))
+    check("until: flags antigas aceitas (rc=0)", outputs[0][0] == 0, outputs[0])
+    check("until: flags novas aceitas (rc=0)", outputs[1][0] == 0, outputs[1])
     check("until: --dry-run com nomes antigos == com nomes novos",
-          saidas[0] == saidas[1], f"{saidas[0]}\n{saidas[1]}")
+          outputs[0] == outputs[1], f"{outputs[0]}\n{outputs[1]}")
 
 
-def test_until_decidir_e_decide_despacham_igual():
+def test_until_decidir_and_decide_dispatch_the_same():
     res = []
     for sub in ("decidir", "decide"):
         with tempfile.TemporaryDirectory() as tmp:
             p = subprocess.run([sys.executable, str(tu.CEPA_UNTIL), sub,
                                 "fila/inexistente", "--repo", tmp],
                                capture_output=True, text=True, timeout=60)
-            res.append((p.returncode, mascara(p.stdout), mascara(p.stderr)))
+            res.append((p.returncode, mask(p.stdout), mask(p.stderr)))
     check("until: `decidir` chega no decide (alvo ruim recusado, rc != 0)",
           res[0][0] != 0 and "cepa-until decide:" in res[0][2], res[0])
     check("until: `decidir` == `decide`", res[0] == res[1], res)
 
 
-def test_until_sim_e_yes_no_aterrissar_e_fecha_morto():
+def test_until_sim_and_yes_on_land_and_close_dead():
     for sub in ("aterrissar", "fecha-morto"):
         res = []
         for flag in ("--sim", "--yes"):
@@ -97,23 +97,23 @@ def test_until_sim_e_yes_no_aterrissar_e_fecha_morto():
                 p = subprocess.run([sys.executable, str(tu.CEPA_UNTIL), sub,
                                     "fila/x", "--repo", tmp, flag],
                                    capture_output=True, text=True, timeout=60)
-                res.append((p.returncode, mascara(p.stdout), mascara(p.stderr)))
+                res.append((p.returncode, mask(p.stdout), mask(p.stderr)))
         check(f"until {sub}: --sim == --yes", res[0] == res[1], res)
         check(f"until {sub}: --sim e --yes são entendidos pelo parser",
               "unrecognized" not in res[0][2] + res[1][2], res)
 
 
-def test_feedback_triar_igual_a_triage():
+def test_feedback_triar_same_as_triage():
     ev = {}
     for sub, d, n, q, t, o in (("triar", "--destino", "--nota", "--plano", "--alvo", "--origem"),
                                ("triage", "--destination", "--note", "--queue", "--target", "--origin")):
-        with tf.Caixa() as c:
+        with tf.Box() as c:
             p = c.cli("add", "o gate X barrou", t, "write-mode-gate", o, "skill")
             check(f"feedback add {t} {o}: rc=0", p.returncode == 0, p.stderr)
-            fid = c.linhas()[0]["id"]
+            fid = c.lines()[0]["id"]
             p = c.cli(sub, fid, d, "BACKLOG.md § X", n, "uma nota")
             check(f"feedback {sub}: rc=0", p.returncode == 0, p.stderr)
-            reg = c.linhas()
+            reg = c.lines()
             ev[sub] = (reg[0]["alvo"], reg[0]["origem"], reg[-1]["tipo"],
                        reg[-1]["destino"], reg[-1]["nota"])
             p = c.cli("list", "--status", "todos",
@@ -123,9 +123,9 @@ def test_feedback_triar_igual_a_triage():
           ev["triar"] == ev["triage"], ev)
 
 
-def test_tokens_e_clock_todas_arquivo():
+def test_tokens_and_clock_all_files():
     with tempfile.TemporaryDirectory() as tmp:
-        sess = tt.monta_sessao(Path(tmp), tmp)
+        sess = tt.build_session(Path(tmp), tmp)
         out = []
         for flag in ("--arquivo", "--file"):
             p = subprocess.run([sys.executable, str(BIN / "cepa-tokens"), flag,
@@ -135,24 +135,24 @@ def test_tokens_e_clock_todas_arquivo():
         home = Path(tmp) / "home"
         home.mkdir()
         env = dict(os.environ, HOME=str(home))
-        for nome in ("cepa-tokens", "cepa-clock"):
+        for given_name in ("cepa-tokens", "cepa-clock"):
             r = []
             for flag in ("--todas", "--all"):
-                p = subprocess.run([sys.executable, str(BIN / nome), flag, "--days", "1"],
+                p = subprocess.run([sys.executable, str(BIN / given_name), flag, "--days", "1"],
                                    capture_output=True, text=True, env=env)
                 r.append((p.returncode, p.stdout, p.stderr))
-            check(f"{nome}: --todas == --all", r[0] == r[1], r)
-            check(f"{nome}: --todas e --all são entendidos pelo parser",
+            check(f"{given_name}: --todas == --all", r[0] == r[1], r)
+            check(f"{given_name}: --todas e --all são entendidos pelo parser",
                   "unrecognized" not in r[0][2] + r[1][2], r)
 
 
 if __name__ == "__main__":
     print("aliases da interface em inglês (cepa-until/feedback/clock/tokens)\n")
-    test_until_flags_antigas_e_novas_dao_o_mesmo_plano()
-    test_until_decidir_e_decide_despacham_igual()
-    test_until_sim_e_yes_no_aterrissar_e_fecha_morto()
-    test_feedback_triar_igual_a_triage()
-    test_tokens_e_clock_todas_arquivo()
+    test_until_old_and_new_flags_give_the_same_plan()
+    test_until_decidir_and_decide_dispatch_the_same()
+    test_until_sim_and_yes_on_land_and_close_dead()
+    test_feedback_triar_same_as_triage()
+    test_tokens_and_clock_all_files()
     if FAILURES:
         print(f"\n{len(FAILURES)} falha(s): {FAILURES}")
         sys.exit(1)

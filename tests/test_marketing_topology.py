@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""A topologia marketing existe, está registrada e o path-lock funciona.
+"""The marketing topology exists, is registered and the path-lock works.
 
-Sem dependências — rode com `python3 tests/test_marketing_topology.py`.
-Sai não-zero na primeira leva de falhas.
+No dependencies — run with `python3 tests/test_marketing_topology.py`.
+Exits non-zero on the first batch of failures.
 
-Cobre comportamento, não só existência:
+Covers behavior, not just existence:
 
-  - `plugin.json` e a entrada no `marketplace.json` fazem parse e apontam
-    para o diretório certo;
-  - todo agente tem frontmatter válido; o lead tem `Task` nas tools, os
-    workers/gates não têm;
-  - o path-lock GERADO (`marketing/hooks/path-lock.py`) permite um agente da
-    topologia escrever `docs/marketing/x/pecas/a.md` e nega a mesma escrita
-    para fora da árvore, e.g. `common/hooks/x.py`.
+  - `plugin.json` and the entry in `marketplace.json` parse and point
+    to the right directory;
+  - every agent has valid frontmatter; the lead has `Task` in its tools, the
+    workers/gates do not;
+  - the GENERATED path-lock (`marketing/hooks/path-lock.py`) allows an agent of the
+    topology to write `docs/marketing/x/pecas/a.md` and denies the same write
+    outside the tree, e.g. `common/hooks/x.py`.
 
-Espelha o estilo de `tests/test_path_lock_out_of_root.py` (invoca o hook via
-subprocess com um payload JSON no stdin) e `tests/test_commands_catalog.py`
-(nome do plugin vem do manifest, não da pasta).
+Mirrors the style of `tests/test_path_lock_out_of_root.py` (invokes the hook via
+subprocess with a JSON payload on stdin) and `tests/test_commands_catalog.py`
+(the plugin name comes from the manifest, not from the folder).
 """
 
 import json
@@ -43,11 +43,11 @@ def check(label, cond, detail=""):
 # ── plugin.json + marketplace entry ─────────────────────────────────────────
 
 def test_plugin_json():
-    manifesto = PLUGIN_DIR / ".claude-plugin" / "plugin.json"
-    check("marketing/.claude-plugin/plugin.json existe", manifesto.is_file())
-    if not manifesto.is_file():
+    manifest = PLUGIN_DIR / ".claude-plugin" / "plugin.json"
+    check("marketing/.claude-plugin/plugin.json existe", manifest.is_file())
+    if not manifest.is_file():
         return
-    data = json.loads(manifesto.read_text(encoding="utf-8"))
+    data = json.loads(manifest.read_text(encoding="utf-8"))
     check("plugin.json: name == 'marketing'", data.get("name") == "marketing")
     check("plugin.json: description menciona os 5 agentes",
           all(a in data.get("description", "") for a in
@@ -67,16 +67,16 @@ def test_marketplace_entry():
     if not mp.is_file():
         return
     data = json.loads(mp.read_text(encoding="utf-8"))
-    entradas = [p for p in data.get("plugins", []) if p.get("name") == "marketing"]
+    entries = [p for p in data.get("plugins", []) if p.get("name") == "marketing"]
     check("marketplace.json tem exatamente uma entrada 'marketing'",
-          len(entradas) == 1, f"achei {len(entradas)}")
-    if len(entradas) == 1:
+          len(entries) == 1, f"achei {len(entries)}")
+    if len(entries) == 1:
         check("marketplace.json: source aponta para ./marketing",
-              entradas[0].get("source") == "./marketing",
-              entradas[0].get("source"))
+              entries[0].get("source") == "./marketing",
+              entries[0].get("source"))
 
 
-# ── agentes: frontmatter e tools ────────────────────────────────────────────
+# ── agents: frontmatter and tools ───────────────────────────────────────────
 
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
@@ -90,55 +90,55 @@ AGENTS = {
 
 
 def frontmatter_of(path: Path) -> dict:
-    texto = path.read_text(encoding="utf-8")
-    m = FRONTMATTER_RE.match(texto)
+    text = path.read_text(encoding="utf-8")
+    m = FRONTMATTER_RE.match(text)
     if not m:
         return {}
     out = {}
-    for linha in m.group(1).splitlines():
-        if ":" not in linha:
+    for line in m.group(1).splitlines():
+        if ":" not in line:
             continue
-        chave, _, valor = linha.partition(":")
-        out[chave.strip()] = valor.strip()
+        key, _, value = line.partition(":")
+        out[key.strip()] = value.strip()
     return out
 
 
-def test_agentes_frontmatter():
-    for nome, meta in AGENTS.items():
-        arq = PLUGIN_DIR / "agents" / f"{nome}.md"
-        check(f"{nome}.md existe", arq.is_file())
-        if not arq.is_file():
+def test_agents_frontmatter():
+    for name, meta in AGENTS.items():
+        file = PLUGIN_DIR / "agents" / f"{name}.md"
+        check(f"{name}.md existe", file.is_file())
+        if not file.is_file():
             continue
-        fm = frontmatter_of(arq)
-        check(f"{nome}: frontmatter declara name == {nome!r}",
-              fm.get("name") == nome, fm.get("name"))
-        check(f"{nome}: frontmatter declara description",
+        fm = frontmatter_of(file)
+        check(f"{name}: frontmatter declara name == {name!r}",
+              fm.get("name") == name, fm.get("name"))
+        check(f"{name}: frontmatter declara description",
               bool(fm.get("description")))
-        check(f"{nome}: frontmatter declara tools",
+        check(f"{name}: frontmatter declara tools",
               bool(fm.get("tools")))
         tools = fm.get("tools", "")
-        tem_task = "Task" in [t.strip() for t in tools.split(",")]
+        has_task = "Task" in [t.strip() for t in tools.split(",")]
         if meta["lead"]:
-            check(f"{nome} (lead): tools inclui Task", tem_task, tools)
+            check(f"{name} (lead): tools inclui Task", has_task, tools)
         else:
-            check(f"{nome} (worker/gate): tools NÃO inclui Task",
-                  not tem_task, tools)
-            check(f"{nome}: descrição diz que é worker sem delegar",
-                  "never delegates" in arq.read_text(encoding="utf-8"))
+            check(f"{name} (worker/gate): tools NÃO inclui Task",
+                  not has_task, tools)
+            check(f"{name}: descrição diz que é worker sem delegar",
+                  "never delegates" in file.read_text(encoding="utf-8"))
 
 
-def test_content_lead_nunca_produz():
-    """O lead delega; a única escrita permitida é a própria expertise."""
-    arq = PLUGIN_DIR / "agents" / "content-lead.md"
-    check("content-lead.md existe", arq.is_file())
-    if not arq.is_file():
+def test_content_lead_never_produces():
+    """The lead delegates; the only write allowed is its own expertise."""
+    file = PLUGIN_DIR / "agents" / "content-lead.md"
+    check("content-lead.md existe", file.is_file())
+    if not file.is_file():
         return
-    texto = arq.read_text(encoding="utf-8")
+    text = file.read_text(encoding="utf-8")
     check("content-lead: Writes declara 'nothing except own expertise'",
-          "nothing except own expertise" in texto)
+          "nothing except own expertise" in text)
 
 
-# ── path-lock: comportamento, não só presença ───────────────────────────────
+# ── path-lock: behavior, not just presence ──────────────────────────────────
 
 PATH_LOCK = PLUGIN_DIR / "hooks" / "path-lock.py"
 
@@ -157,21 +157,21 @@ def run_pathlock(agent_type, file_path, cwd):
     return p.returncode, p.stderr
 
 
-def test_pathlock_existe_e_e_valido_python():
+def test_pathlock_exists_and_is_valid_python():
     check("marketing/hooks/path-lock.py existe", PATH_LOCK.is_file())
     check("marketing/hooks/bash-path-lock.py existe",
           (PLUGIN_DIR / "hooks" / "bash-path-lock.py").is_file())
     if not PATH_LOCK.is_file():
         return
-    compilado = subprocess.run(
+    compiled = subprocess.run(
         [sys.executable, "-m", "py_compile", str(PATH_LOCK)],
         capture_output=True, text=True,
     )
-    check("marketing/hooks/path-lock.py compila", compilado.returncode == 0,
-          compilado.stderr)
+    check("marketing/hooks/path-lock.py compila", compiled.returncode == 0,
+          compiled.stderr)
 
 
-def test_pathlock_permite_peca_dentro_da_pista():
+def test_pathlock_allows_piece_inside_the_lane():
     if not PATH_LOCK.is_file():
         check("path-lock permite peça dentro da pista", False, "hook ausente")
         return
@@ -182,7 +182,7 @@ def test_pathlock_permite_peca_dentro_da_pista():
           rc == 0, err)
 
 
-def test_pathlock_nega_fora_da_arvore():
+def test_pathlock_denies_outside_the_tree():
     if not PATH_LOCK.is_file():
         check("path-lock nega escrita fora da árvore", False, "hook ausente")
         return
@@ -192,7 +192,7 @@ def test_pathlock_nega_fora_da_arvore():
     check("copywriter NÃO pode escrever common/hooks/x.py", rc == 2, err)
 
 
-def test_pathlock_content_strategist_e_o_unico_dono_do_brief():
+def test_pathlock_content_strategist_is_the_only_owner_of_the_brief():
     if not PATH_LOCK.is_file():
         check("só content-strategist escreve BRIEF.md", False, "hook ausente")
         return
@@ -201,28 +201,28 @@ def test_pathlock_content_strategist_e_o_unico_dono_do_brief():
         "marketing:content-strategist", proj / "docs/marketing/x/BRIEF.md", proj)
     check("content-strategist pode escrever BRIEF.md", rc_ok == 0, err_ok)
 
-    rc_bloq, err_bloq = run_pathlock(
+    rc_bloq, err_block = run_pathlock(
         "marketing:copywriter", proj / "docs/marketing/x/BRIEF.md", proj)
-    check("copywriter NÃO pode escrever BRIEF.md (só lê)", rc_bloq == 2, err_bloq)
+    check("copywriter NÃO pode escrever BRIEF.md (só lê)", rc_bloq == 2, err_block)
 
 
-def test_pathlock_gates_so_escrevem_reviews():
+def test_pathlock_gates_only_write_reviews():
     if not PATH_LOCK.is_file():
         check("gates só escrevem em reviews/", False, "hook ausente")
         return
     proj = Path(tempfile.mkdtemp(prefix="mkt-proj-"))
-    for agente in ("brand-style-critic", "fact-checker"):
+    for agent in ("brand-style-critic", "fact-checker"):
         rc_ok, err_ok = run_pathlock(
-            f"marketing:{agente}", proj / "docs/marketing/reviews/x-brand.md", proj)
-        check(f"{agente} pode escrever docs/marketing/reviews/**", rc_ok == 0, err_ok)
+            f"marketing:{agent}", proj / "docs/marketing/reviews/x-brand.md", proj)
+        check(f"{agent} pode escrever docs/marketing/reviews/**", rc_ok == 0, err_ok)
 
-        rc_bloq, err_bloq = run_pathlock(
-            f"marketing:{agente}", proj / "docs/marketing/x/pecas/a.md", proj)
-        check(f"{agente} NÃO pode escrever peças (é read-only sobre elas)",
-              rc_bloq == 2, err_bloq)
+        rc_bloq, err_block = run_pathlock(
+            f"marketing:{agent}", proj / "docs/marketing/x/pecas/a.md", proj)
+        check(f"{agent} NÃO pode escrever peças (é read-only sobre elas)",
+              rc_bloq == 2, err_block)
 
 
-def test_pathlock_lead_nao_produz_nada():
+def test_pathlock_lead_produces_nothing():
     if not PATH_LOCK.is_file():
         check("content-lead não escreve artefatos", False, "hook ausente")
         return
@@ -233,7 +233,7 @@ def test_pathlock_lead_nao_produz_nada():
           rc == 2, err)
 
 
-def test_pathlock_expertise_propria_sempre_liberada():
+def test_pathlock_own_expertise_always_allowed():
     if not PATH_LOCK.is_file():
         check("expertise própria é sempre liberada", False, "hook ausente")
         return
@@ -244,45 +244,45 @@ def test_pathlock_expertise_propria_sempre_liberada():
     check("copywriter pode sempre escrever a própria expertise", rc == 0, err)
 
 
-# ── comando ──────────────────────────────────────────────────────────────
+# ── command ──────────────────────────────────────────────────────────────
 
-def test_comando_brief_write_review():
+def test_command_brief_write_review():
     cmd = PLUGIN_DIR / "commands" / "brief-write-review.md"
     check("marketing/commands/brief-write-review.md existe", cmd.is_file())
     if not cmd.is_file():
         return
-    texto = cmd.read_text(encoding="utf-8")
+    text = cmd.read_text(encoding="utf-8")
     fm = frontmatter_of(cmd)
     check("comando declara interaction: routine ou conversational",
           fm.get("interaction") in ("routine", "conversational"),
           fm.get("interaction"))
     check("comando declara argument-hint", bool(fm.get("argument-hint")))
-    check("comando cita content-lead", "content-lead" in texto)
+    check("comando cita content-lead", "content-lead" in text)
     check("comando cita o teto de 2 rodadas de revise",
-          "2" in texto and "REVISE" in texto)
+          "2" in text and "REVISE" in text)
 
 
-def test_catalogo_cita_o_comando():
-    catalogo = (REPO / "docs" / "commands.md").read_text(encoding="utf-8")
+def test_catalog_cites_the_command():
+    catalog = (REPO / "docs" / "commands.md").read_text(encoding="utf-8")
     check("docs/commands.md tem a linha do /marketing:brief-write-review",
           bool(re.search(r"^\|\s*`/marketing:brief-write-review`\s*\|",
-                          catalogo, re.M)))
+                          catalog, re.M)))
 
 
 def main():
     test_plugin_json()
     test_marketplace_entry()
-    test_agentes_frontmatter()
-    test_content_lead_nunca_produz()
-    test_pathlock_existe_e_e_valido_python()
-    test_pathlock_permite_peca_dentro_da_pista()
-    test_pathlock_nega_fora_da_arvore()
-    test_pathlock_content_strategist_e_o_unico_dono_do_brief()
-    test_pathlock_gates_so_escrevem_reviews()
-    test_pathlock_lead_nao_produz_nada()
-    test_pathlock_expertise_propria_sempre_liberada()
-    test_comando_brief_write_review()
-    test_catalogo_cita_o_comando()
+    test_agents_frontmatter()
+    test_content_lead_never_produces()
+    test_pathlock_exists_and_is_valid_python()
+    test_pathlock_allows_piece_inside_the_lane()
+    test_pathlock_denies_outside_the_tree()
+    test_pathlock_content_strategist_is_the_only_owner_of_the_brief()
+    test_pathlock_gates_only_write_reviews()
+    test_pathlock_lead_produces_nothing()
+    test_pathlock_own_expertise_always_allowed()
+    test_command_brief_write_review()
+    test_catalog_cites_the_command()
 
     print()
     if FAILURES:

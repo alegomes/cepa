@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""O validation-lead grava o próprio veredito em docs/validation/, e só lá.
+"""The validation-lead writes its own verdict in docs/validation/, and only there.
 
 No third-party deps — run with `python3 tests/test_path_lock_validation_lead.py`.
 Exits non-zero on the first failure.
 
-O agente validation-lead (build-hex e build-team) tem a instrução de gravar
-`.claude/validation/<KEY>.yaml`, e o `cepa-plan finish --status done` recusa
-fechar item sem esse arquivo. Mas o ALLOWED_WRITES dele era `[]`: o path-lock
-barrava a escrita, e o orquestrador transcrevia o veredito à mão. Aconteceu nos
-3 itens entregues do run cepa-until 2026-09-27-0832 do wego-acessos-backend
-(WEGO-2323, 2324, 2325). O veredito gravado por outro agente deixa de ser
-independente de quem validou.
+The validation-lead agent (build-hex and build-team) has the instruction to write
+`.claude/validation/<KEY>.yaml`, and `cepa-plan finish --status done` refuses to
+close an item without that file. But its ALLOWED_WRITES was `[]`: the path-lock
+blocked the write, and the orchestrator transcribed the verdict by hand. It happened in the
+3 items delivered in the cepa-until run 2026-09-27-0832 of wego-acessos-backend
+(WEGO-2323, 2324, 2325). A verdict written by another agent stops being
+independent of whoever validated.
 
-O destino é docs/validation/ (27/09/2026), e não .claude/validation/: nos
-projetos que rodam o portão `.claude/*` é ignorado pelo git, então o veredito
-morria com a worktree descartável do run. É o mesmo motivo que levou o
-proof-reviewer para docs/proof/.
+The destination is docs/validation/ (2026-09-27), and not .claude/validation/: in the
+projects that run the gate `.claude/*` is ignored by git, so the verdict
+died with the run's disposable worktree. It is the same reason that took the
+proof-reviewer to docs/proof/.
 
-Dirige cada cópia do hook como subprocesso, como test_path_lock_out_of_root.
+Drives each copy of the hook as a subprocess, like test_path_lock_out_of_root.
 """
 
 import importlib.util

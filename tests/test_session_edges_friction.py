@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Testes das duas medidas de atrito das pontas da sessão.
+"""Tests of the two friction measures at the edges of the session.
 
-A queixa que originou isto ("gasto 15-20% do contexto só em preparação, e
-depois mais um vaivém até ter certeza de que acabou") era anedótica. Estas
-duas medidas existem para que a próxima conversa sobre atrito seja evidência
-contra evidência, e não memória contra memória:
+The complaint that originated this ("I spend 15-20% of the context only on preparation, and
+then one more back-and-forth until I am sure it is over") was anecdotal. These
+two measures exist so that the next conversation about friction is evidence
+against evidence, and not memory against memory:
 
-  - turnos ANTES do primeiro comando de rotina (preparação);
-  - turnos DEPOIS do último, até o /wrap-up ou /handoff (fechamento).
+  - turns BEFORE the first routine command (preparation);
+  - turns AFTER the last one, until /wrap-up or /handoff (closing).
 
-O que os testes fixam:
-  - o hook de prompt classifica rotina / fechamento / prosa / outro comando;
-  - o hook NUNCA grava o texto do prompt no ledger (só o nome do comando);
-  - a agregação conta o que uma pessoa contaria à mão, e ignora sessão sem
-    rotina (nela as medidas não significam nada);
-  - o próprio /wrap-up não conta como atrito — ele é o encerramento.
+What the tests pin down:
+  - the prompt hook classifies routine / closing / prose / other command;
+  - the hook NEVER records the prompt text in the ledger (only the command name);
+  - the aggregation counts what a person would count by hand, and ignores a session
+    without a routine (in it the measures mean nothing);
+  - /wrap-up itself does not count as friction — it is the closing.
 
 Run: python3 tests/test_session_edges_friction.py
 """
@@ -54,9 +54,9 @@ def load_hook():
     return mod
 
 
-def test_classificacao():
+def test_classification():
     h = load_hook()
-    casos = [
+    cases = [
         ("/board-flow:prove-drain --max 5", "rotina", "board-flow:prove-drain"),
         ("/common:session prove-drain", "rotina", "common:session"),
         ("/common:wrap-up", "fechamento", "common:wrap-up"),
@@ -64,12 +64,12 @@ def test_classificacao():
         ("por que o card travou?", "prosa", None),
         ("  /BOARD-FLOW:DRAIN", "rotina", "board-flow:drain"),
     ]
-    for prompt, kind, cmd in casos:
+    for prompt, kind, cmd in cases:
         k, c = h.classify(prompt)
         check(f"classifica {prompt[:28]!r} como {kind}", (k, c) == (kind, cmd), (k, c))
 
 
-def test_hook_nao_vaza_o_prompt():
+def test_hook_does_not_leak_the_prompt():
     with tempfile.TemporaryDirectory() as tmp:
         tel = Path(tmp) / "tel"
         env = dict(os.environ, CEPA_TELEMETRY_DIR=str(tel))
@@ -85,7 +85,7 @@ def test_hook_nao_vaza_o_prompt():
               "hunter2" not in blob and "WEGO-999" not in blob, blob)
 
 
-def test_agregacao():
+def test_aggregation():
     now = datetime.now(timezone.utc)
     with tempfile.TemporaryDirectory() as tmp:
         tel = Path(tmp) / "tel"
@@ -99,16 +99,16 @@ def test_agregacao():
                     "repo": "cepa", "event": "prompt",
                     "session": session, "kind": kind, "cmd": cmd}
 
-        # A: 3 de preparação → rotina → 2 de vaivém → wrap-up
+        # A: 3 of preparation → routine → 2 of back-and-forth → wrap-up
         for k in ("prosa", "comando", "prosa"):
             rows.append(ev("AAAA", k))
         rows.append(ev("AAAA", "rotina", "board-flow:prove-drain"))
         rows += [ev("AAAA", "prosa"), ev("AAAA", "prosa")]
         rows.append(ev("AAAA", "fechamento", "common:wrap-up"))
-        # B: rotina de cara, encerrou — o ideal, zero e zero
+        # B: routine right away, closed — the ideal, zero and zero
         rows.append(ev("BBBB", "rotina", "common:session"))
         rows.append(ev("BBBB", "fechamento", "common:wrap-up"))
-        # C: sessão sem rotina — não deve entrar na conta
+        # C: session without a routine — must not enter the count
         rows.append(ev("CCCC", "prosa"))
 
         (tel / f"events-{now:%Y-%m}.jsonl").write_text(
@@ -136,9 +136,9 @@ def test_agregacao():
 
 
 def main():
-    test_classificacao()
-    test_hook_nao_vaza_o_prompt()
-    test_agregacao()
+    test_classification()
+    test_hook_does_not_leak_the_prompt()
+    test_aggregation()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")

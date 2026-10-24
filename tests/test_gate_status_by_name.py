@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
-"""Regressão: `twg ... --transition-id "<NOME DO STATUS>"` nos gates de Jira.
+"""Regression: `twg ... --transition-id "<STATUS NAME>"` in the Jira gates.
 
-A CLI `twg` aceita o NOME do status no lugar do id da transição. O `_jiramut`
-só baixava a caixa do nome, então "In Review" chegava aos gates como
-`in review`, que não é chave lógica nenhuma. O `acceptance-gate` lia isso como
-movimento lateral e LIBERAVA um card de auditoria incompleta rumo a Review
-(reproduzido em 2026-09-19). O `merge-truth-gate` tinha o mesmo furo para
-qualquer nome de status de fechamento que não fosse literalmente "done"
-(ex.: "Concluído").
+The `twg` CLI accepts the status NAME in place of the transition id. `_jiramut`
+only lowercased the name, so "In Review" reached the gates as
+`in review`, which is no logical key at all. The `acceptance-gate` read that as a
+lateral move and RELEASED a card with an incomplete audit toward Review
+(reproduced on 2026-09-19). The `merge-truth-gate` had the same hole for
+any closing status name that was not literally "done"
+(e.g.: "Concluído").
 
-Contrato:
-  - o nome do status vira chave lógica pelo `status_map` do board-flow.yaml
-    (nome técnico → chave), ou pela forma normalizada (espaço/hífen → `_`);
-  - nome que não resolve para chave conhecida = alvo NÃO resolvido, e o
-    acceptance-gate barra por padrão (config ruim nunca abre gate).
+Contract:
+  - the status name becomes a logical key through the `status_map` of board-flow.yaml
+    (technical name → key), or through the normalized form (space/hyphen → `_`);
+  - a name that does not resolve to a known key = target NOT resolved, and the
+    acceptance-gate blocks by default (bad config never opens a gate).
 
-Rode com `python3 tests/test_gate_status_by_name.py`.
+Run with `python3 tests/test_gate_status_by_name.py`.
 """
 
 import json
@@ -48,7 +48,7 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
-def projeto(board_flow=None):
+def project(board_flow=None):
     d = Path(tempfile.mkdtemp(prefix="gate-nome-"))
     subprocess.run(["git", "init", "-q", str(d)], check=True)
     acc = d / ".claude" / "acceptance"
@@ -59,43 +59,43 @@ def projeto(board_flow=None):
     return d
 
 
-def roda(hook, cwd, nome):
-    cmd = f'twg jira workitem transition --id {KEY} --transition-id "{nome}"'
+def run_hook(hook, cwd, name):
+    cmd = f'twg jira workitem transition --id {KEY} --transition-id "{name}"'
     payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": str(cwd)})
     return subprocess.run([sys.executable, str(hook)], input=payload,
                           capture_output=True, text=True).returncode
 
 
-# ── sem board-flow.yaml: só a forma normalizada resolve ─────────────────────
-sem_mapa = projeto()
-for nome in ("In Review", "in review", "In-Review", "in_review", "Done", "DONE"):
-    check(f"sem mapa, auditoria incompleta, '{nome}' → BARRA",
-          roda(ACCEPT, sem_mapa, nome) == 2)
-for nome in ("In Progress", "To Do"):
-    check(f"sem mapa, '{nome}' (devolução) → PASSA", roda(ACCEPT, sem_mapa, nome) == 0)
+# ── without board-flow.yaml: only the normalized form resolves ──────────────
+without_map = project()
+for name in ("In Review", "in review", "In-Review", "in_review", "Done", "DONE"):
+    check(f"sem mapa, auditoria incompleta, '{name}' → BARRA",
+          run_hook(ACCEPT, without_map, name) == 2)
+for name in ("In Progress", "To Do"):
+    check(f"sem mapa, '{name}' (devolução) → PASSA", run_hook(ACCEPT, without_map, name) == 0)
 check("sem mapa, nome desconhecido 'Homologação' → BARRA (alvo não resolvido)",
-      roda(ACCEPT, sem_mapa, "Homologação") == 2)
+      run_hook(ACCEPT, without_map, "Homologação") == 2)
 
-# ── com status_map em português: o nome técnico resolve pela tabela ─────────
-com_mapa = projeto(BOARD_FLOW)
-for nome in ("Em Revisão", "em revisão", "Concluído"):
-    check(f"com mapa, '{nome}' → BARRA", roda(ACCEPT, com_mapa, nome) == 2)
-for nome in ("Em Andamento", "A Fazer", "Descartados"):
-    check(f"com mapa, '{nome}' (devolução) → PASSA", roda(ACCEPT, com_mapa, nome) == 0)
+# ── with a status_map in Portuguese: the technical name resolves through the table ──
+with_map = project(BOARD_FLOW)
+for name in ("Em Revisão", "em revisão", "Concluído"):
+    check(f"com mapa, '{name}' → BARRA", run_hook(ACCEPT, with_map, name) == 2)
+for name in ("Em Andamento", "A Fazer", "Descartados"):
+    check(f"com mapa, '{name}' (devolução) → PASSA", run_hook(ACCEPT, with_map, name) == 0)
 
-# ── merge-truth-gate: fechar por nome técnico conta como fechamento ─────────
-# Sem branch de integração o gate não tem o que conferir e sai 0 de qualquer
-# jeito; o que se verifica aqui é que o NOME chega resolvido como `done`, pela
-# função que os dois gates compartilham.
+# ── merge-truth-gate: closing by technical name counts as closing ───────────
+# Without an integration branch the gate has nothing to check and exits 0 anyway;
+# what is verified here is that the NAME arrives resolved as `done`, through the
+# function the two gates share.
 sys.path.insert(0, str(REPO / "common" / "hooks"))
 import _jiramut as J  # noqa: E402
 
 check("resolve 'Concluído' → done pelo status_map",
-      J.logical_status("Concluído", com_mapa) == "done")
+      J.logical_status("Concluído", with_map) == "done")
 check("resolve 'In Review' → in_review sem mapa",
-      J.logical_status("In Review", sem_mapa) == "in_review")
-check("nome desconhecido → None", J.logical_status("Homologação", sem_mapa) is None)
-check("None → None", J.logical_status(None, sem_mapa) is None)
+      J.logical_status("In Review", without_map) == "in_review")
+check("nome desconhecido → None", J.logical_status("Homologação", without_map) is None)
+check("None → None", J.logical_status(None, without_map) is None)
 
 print()
 if FAILURES:

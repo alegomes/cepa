@@ -1,29 +1,29 @@
 #!/usr/bin/env python3
-"""Regressão do modo `--sweep` de /maestro:program-plan (P1, CS-1).
+"""Regression of the `--sweep` mode of /maestro:program-plan (P1, CS-1).
 
 No third-party deps — run with `python3 tests/test_program_plan_sweep.py`.
 Exits non-zero on the first failure.
 
-`program-plan.md` é um comando conversacional (o passo-a-passo é seguido por um
-agente Claude, não executado por interpretador) — não há função Python para
-chamar. O que ESTE teste guarda é a regressão mais barata e real: que as
-instruções do modo sweep continuam no arquivo, nomeando as 5 peças que CS-1
-exige (docs/spec/planejador-de-lotes-paralelos.md):
-  1. varre a fonte INTEIRA, não só `--demandas`;
-  2. para nas próximas 2-3 ondas (não tenta particionar o backlog inteiro);
-  3. demanda com superfície indeterminável entra sozinha na própria onda;
-  4. sugere o teto de slices em vez de fixar 3;
-  5. grava `cartorios:` no plano a partir de `common/bin/cepa-hotspots`.
+`program-plan.md` is a conversational command (the step-by-step is followed by a
+Claude agent, not executed by an interpreter) — there is no Python function to
+call. What THIS test guards is the cheapest and most real regression: that the
+instructions of the sweep mode remain in the file, naming the 5 pieces that CS-1
+demands (docs/spec/planejador-de-lotes-paralelos.md):
+  1. sweeps the WHOLE source, not only `--demandas`;
+  2. stops at the next 2-3 waves (does not try to partition the whole backlog);
+  3. a demand with an undeterminable surface enters alone in its own wave;
+  4. suggests the slice ceiling instead of fixing 3;
+  5. writes `cartorios:` in the plan from `common/bin/cepa-hotspots`.
 
-A PROVA de que o mecanismo funciona (não só que a prosa existe) é o run real
-registrado em `.claude/programs/lotes-2026-08-23/plan.yaml` + o veredito do
-`cepa-dor --wave 1` sobre ele, documentado no commit desta mudança — este
-arquivo não repete essa prova, só impede a prosa de regredir calada.
+The PROOF that the mechanism works (not only that the prose exists) is the real run
+recorded in `.claude/programs/lotes-2026-08-23/plan.yaml` + the verdict of
+`cepa-dor --wave 1` over it, documented in this change's commit — this
+file does not repeat that proof, it only stops the prose from regressing silently.
 
-Cada `check()` abaixo tem o `id` do bloco `**[sweep:id]**` que ela cobre
-embutido no nome (`[sweep:id] ...`). É esse embutimento que
-`common/bin/cepa-promptcov` lê para cruzar contra os blocos do comando e
-apontar peça sem cobertura — ver docs/promptcov.md.
+Each `check()` below has the `id` of the `**[sweep:id]**` block it covers
+embedded in the name (`[sweep:id] ...`). It is this embedding that
+`common/bin/cepa-promptcov` reads to cross against the command's blocks and
+point out a piece without coverage — see docs/promptcov.md.
 """
 
 import sys

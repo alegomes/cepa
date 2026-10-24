@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""cepa-until — hook de plugin mudado na branch da noite só vale depois de
-aterrissar e reinstalar.
+"""cepa-until — a plugin hook changed on the night branch only takes effect after
+landing and reinstalling.
 
-No run 2026-09-28-1146 o item 2 consertou o `bash-path-lock` e o item 1 o
-`no-background-build`, e as 4 rodadas seguintes continuaram barradas pelas
-versões antigas: os hooks rodam do plugin instalado no cache (cópia do clone),
-não da branch da noite. Nenhuma rodada se perdeu, mas nada no run dizia isso.
+In run 2026-09-28-1146 item 2 fixed `bash-path-lock` and item 1 fixed
+`no-background-build`, and the 4 following rounds stayed blocked by the old
+versions: hooks run from the plugin installed in the cache (a copy of the clone),
+not from the night branch. No round was lost, but nothing in the run said so.
 
-Os casos abaixo fixam o aviso:
-  - o item que commita `<plugin>/hooks/...` ganha uma linha na tela, antes do
-    item seguinte começar, e um evento `hook_so_apos_reinstalar` no registro;
-  - o fim do run cobra o `bin/install.sh` em "Fica com você" e no estado;
-  - `hooks/` fora de plugin (sem `.claude-plugin/plugin.json`) não avisa;
-  - hook que saiu da branch com o build vermelho não é cobrado no fim.
+The cases below pin the warning:
+  - the item that commits `<plugin>/hooks/...` gets a line on the screen, before the
+    next item starts, and a `hook_so_apos_reinstalar` event in the record;
+  - the end of the run charges `bin/install.sh` in "Fica com você" and in the state;
+  - `hooks/` outside a plugin (without `.claude-plugin/plugin.json`) does not warn;
+  - a hook that left the branch with the red build is not charged at the end.
 """
 
 import json
@@ -23,27 +23,27 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_cepa_until import (  # noqa: E402
-    FAILURES, check, fake_claude, item, ledger_de, monta_repo, roda)
+    FAILURES, check, fake_claude, item, ledger_of, build_repo, run_until)
 
 
-def com_plugin(raiz):
-    """O repo de teste vira repo de plugin: `meuplug/` com plugin.json e um
-    hook, e `solto/hooks/` sem plugin.json."""
-    (raiz / "meuplug" / ".claude-plugin").mkdir(parents=True)
-    (raiz / "meuplug" / ".claude-plugin" / "plugin.json").write_text("{}")
-    (raiz / "meuplug" / "hooks").mkdir()
-    (raiz / "meuplug" / "hooks" / "trava.py").write_text("v1\n")
-    (raiz / "solto" / "hooks").mkdir(parents=True)
-    (raiz / "solto" / "hooks" / "x.py").write_text("v1\n")
-    subprocess.run(["git", "add", "-A"], cwd=raiz, check=True)
+def with_plugin(root):
+    """The test repo becomes a plugin repo: `meuplug/` with plugin.json and a
+    hook, and `solto/hooks/` without plugin.json."""
+    (root / "meuplug" / ".claude-plugin").mkdir(parents=True)
+    (root / "meuplug" / ".claude-plugin" / "plugin.json").write_text("{}")
+    (root / "meuplug" / "hooks").mkdir()
+    (root / "meuplug" / "hooks" / "trava.py").write_text("v1\n")
+    (root / "solto" / "hooks").mkdir(parents=True)
+    (root / "solto" / "hooks" / "x.py").write_text("v1\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
     subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
-                    "commit", "-qm", "plugin"], cwd=raiz, check=True)
-    return raiz
+                    "commit", "-qm", "plugin"], cwd=root, check=True)
+    return root
 
 
-# O `claude` falso commita o arquivo que FAKE_ARQUIVOS manda para o item
-# (`a1=meuplug/hooks/trava.py;a2=...`), ou só `<id>.txt`.
-TRABALHA = (
+# The fake `claude` commits the file that FAKE_ARQUIVOS assigns to the item
+# (`a1=meuplug/hooks/trava.py;a2=...`), or just `<id>.txt`.
+WORKS = (
     "import subprocess\n"
     "ident = primeiro_pendente()\n"
     "mapa = dict(p.split('=') for p in "
@@ -60,84 +60,84 @@ TRABALHA = (
 VERIFY = "test ! -f quebra.txt"
 
 
-def plano_de(raiz):
-    return raiz / ".claude" / "programs" / "fila" / "plan.yaml"
+def plan_of(root):
+    return root / ".claude" / "programs" / "fila" / "plan.yaml"
 
 
-def estado_de(raiz):
-    d = raiz / ".claude" / "programs" / "fila" / "until"
-    arqs = sorted(d.glob("*.estado.json"))
-    return json.loads(arqs[-1].read_text()) if arqs else {}
+def state_of(root):
+    d = root / ".claude" / "programs" / "fila" / "until"
+    files = sorted(d.glob("*.estado.json"))
+    return json.loads(files[-1].read_text()) if files else {}
 
 
-def avisos(raiz):
-    return [e for e in ledger_de(raiz)
+def warnings(root):
+    return [e for e in ledger_of(root)
             if e["evento"] == "hook_so_apos_reinstalar"]
 
 
-def test_item_que_muda_hook_de_plugin_e_avisado_na_hora_e_no_fim():
+def test_item_that_changes_plugin_hook_is_warned_at_once_and_at_the_end():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = com_plugin(monta_repo(tmp, [item("a1"), item("a2")]))
-        binv = fake_claude(tmp, TRABALHA)
-        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h"],
+        root = with_plugin(build_repo(tmp, [item("a1"), item("a2")]))
+        binv = fake_claude(tmp, WORKS)
+        p, _ = run_until(root, binv, plan_of(root), ["--for", "2h"],
                     extra_env={"FAKE_ARQUIVOS": "a1=meuplug/hooks/trava.py"})
-        ev = avisos(raiz)
+        ev = warnings(root)
         check("o registro ganha hook_so_apos_reinstalar do a1",
               len(ev) == 1 and ev[0]["id"] == "a1"
               and ev[0]["arquivos"] == ["meuplug/hooks/trava.py"], str(ev))
         out = p.stdout
-        i_aviso = out.find("a1 mudou hook de plugin (meuplug/hooks/trava.py)")
+        i_warning = out.find("a1 mudou hook de plugin (meuplug/hooks/trava.py)")
         i_a2 = out.find("] a2 — ")
         check("a tela avisa o hook logo depois do a1, antes do a2 começar",
-              0 <= i_aviso < i_a2, out[-1500:])
+              0 <= i_warning < i_a2, out[-1500:])
         check("...e o aviso diz o que fazer",
-              "bin/install.sh" in out[i_aviso:i_a2], out[i_aviso:i_a2])
-        fica = {f["id"]: f["texto"]
-                for f in estado_de(raiz).get("fica_com_voce", [])}
+              "bin/install.sh" in out[i_warning:i_a2], out[i_warning:i_a2])
+        stays = {f["id"]: f["texto"]
+                for f in state_of(root).get("fica_com_voce", [])}
         check("o estado do run cobra a reinstalação em fica_com_voce",
-              "reinstalar-plugin" in fica
-              and "meuplug/hooks/trava.py" in fica["reinstalar-plugin"],
-              str(fica))
+              "reinstalar-plugin" in stays
+              and "meuplug/hooks/trava.py" in stays["reinstalar-plugin"],
+              str(stays))
         check("o resumo do fim traz a reinstalação em Fica com você",
               "- reinstalar-plugin:" in out.split("── fim")[-1], out[-1200:])
 
 
-def test_hooks_fora_de_plugin_nao_avisa():
+def test_hooks_outside_plugin_does_not_warn():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = com_plugin(monta_repo(tmp, [item("a1")]))
-        binv = fake_claude(tmp, TRABALHA)
-        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h"],
+        root = with_plugin(build_repo(tmp, [item("a1")]))
+        binv = fake_claude(tmp, WORKS)
+        p, _ = run_until(root, binv, plan_of(root), ["--for", "2h"],
                     extra_env={"FAKE_ARQUIVOS": "a1=solto/hooks/x.py"})
         check("pasta hooks/ sem plugin.json não gera aviso",
-              not avisos(raiz) and "mudou hook" not in p.stdout,
+              not warnings(root) and "mudou hook" not in p.stdout,
               p.stdout[-800:])
         check("...nem cobrança no fim",
               "reinstalar-plugin" not in p.stdout
               and all(f["id"] != "reinstalar-plugin" for f in
-                      estado_de(raiz).get("fica_com_voce", [])),
+                      state_of(root).get("fica_com_voce", [])),
               p.stdout[-800:])
 
 
-def test_hook_que_saiu_com_o_build_vermelho_nao_e_cobrado_no_fim():
+def test_hook_that_left_with_the_red_build_is_not_charged_at_the_end():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = com_plugin(monta_repo(tmp, [item("a1"), item("a2")]))
-        binv = fake_claude(tmp, TRABALHA)
-        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h",
+        root = with_plugin(build_repo(tmp, [item("a1"), item("a2")]))
+        binv = fake_claude(tmp, WORKS)
+        p, _ = run_until(root, binv, plan_of(root), ["--for", "2h",
                                                  "--verify", VERIFY],
                     extra_env={"FAKE_ARQUIVOS": "a1=meuplug/hooks/trava.py",
                                "FAKE_QUEBRA": "a1"})
-        ev = avisos(raiz)
+        ev = warnings(root)
         check("o hook do item vermelho não fica na branch, então não avisa",
               not ev, str(ev))
         check("...e o fim não cobra reinstalação",
               "reinstalar-plugin" not in p.stdout, p.stdout[-1200:])
 
 
-# 1ª tentativa do a1: commita o hook e sai `pending` (commit é progresso, o
-# supervisor avisa o hook). 2ª: commita `quebra.txt` e fecha `done`; o build
-# vermelho leva os commits das DUAS tentativas para a lateral. Depois disso o
-# a1 sai `blocked` para o run acabar.
-AVISA_E_SAI = (
+# 1st attempt of a1: commits the hook and leaves `pending` (a commit is progress, the
+# supervisor warns about the hook). 2nd: commits `quebra.txt` and closes `done`; the red
+# build takes the commits of BOTH attempts to the side branch. After that
+# a1 leaves `blocked` so the run can end.
+WARNS_AND_EXITS = (
     "import subprocess\n"
     "ident = primeiro_pendente()\n"
     "cont = os.environ['FAKE_CHAMADAS'] + '.vez'\n"
@@ -157,28 +157,28 @@ AVISA_E_SAI = (
     "    marca(ident, status='blocked', evidence='fim do teste')\n")
 
 
-def test_hook_avisado_que_saiu_depois_nao_e_cobrado_no_fim():
+def test_warned_hook_that_left_later_is_not_charged_at_the_end():
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = com_plugin(monta_repo(tmp, [item("a1")]))
-        binv = fake_claude(tmp, AVISA_E_SAI)
-        p, _ = roda(raiz, binv, plano_de(raiz), ["--for", "2h",
+        root = with_plugin(build_repo(tmp, [item("a1")]))
+        binv = fake_claude(tmp, WARNS_AND_EXITS)
+        p, _ = run_until(root, binv, plan_of(root), ["--for", "2h",
                                                  "--verify", VERIFY])
         check("a 1ª tentativa deixou o hook na branch e a tela avisou",
-              len(avisos(raiz)) == 1, str(avisos(raiz)))
+              len(warnings(root)) == 1, str(warnings(root)))
         check("o build vermelho da 2ª levou o hook para a lateral",
               "vermelho-a1" in p.stdout, p.stdout[-1500:])
         check("o fim recalcula e não cobra o hook que saiu",
               "reinstalar-plugin" not in p.stdout
               and all(f["id"] != "reinstalar-plugin" for f in
-                      estado_de(raiz).get("fica_com_voce", [])),
+                      state_of(root).get("fica_com_voce", [])),
               p.stdout[-1500:])
 
 
-# Tentativas por item, como o TENTA de test_cepa_until_run_branch: a
-# tentativa n commita `<id>-t<n>.txt`; FAKE_HOOK1 põe o hook na 1ª tentativa,
-# FAKE_HOOK2 na 2ª; FAKE_QUEBRA quebra o build da 2ª em diante; FAKE_DUAS
-# deixa a 1ª `pending` (e FAKE_ADIA a joga para o fim da fila).
-TENTA = (
+# Attempts per item, like TRIES of test_cepa_until_run_branch: attempt
+# n commits `<id>-t<n>.txt`; FAKE_HOOK1 puts the hook in the 1st attempt,
+# FAKE_HOOK2 in the 2nd; FAKE_QUEBRA breaks the build from the 2nd on; FAKE_DUAS
+# leaves the 1st `pending` (and FAKE_ADIA throws it to the end of the queue).
+TRIES = (
     "import subprocess\n"
     "ident = primeiro_pendente()\n"
     "lista = lambda k: os.environ.get(k, '').split(',')\n"
@@ -201,57 +201,57 @@ TENTA = (
     "    grava(p)\n")
 
 
-def test_hook_do_item_que_encerra_o_run_por_dentro_do_laco_e_avisado():
-    """O aviso do topo do laço não vê o item que sai por um `break` no corpo.
-    Aqui o a1 muda o hook na 2ª tentativa, o build fica vermelho e o reset
-    apagaria o a2 do meio: o run para em `verify-vermelho` com o hook na
-    branch da noite, e só o aviso antes do `run_end` o pega."""
+def test_hook_of_the_item_that_ends_the_run_inside_the_loop_is_warned():
+    """The warning at the top of the loop does not see the item that leaves through a `break` in the body.
+    Here a1 changes the hook in the 2nd attempt, the build goes red and the reset
+    would erase a2 in the middle: the run stops at `verify-vermelho` with the hook on
+    the night branch, and only the warning before `run_end` catches it."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = com_plugin(monta_repo(tmp, [item("a1"), item("a2")]))
-        binv = fake_claude(tmp, TENTA)
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        root = with_plugin(build_repo(tmp, [item("a1"), item("a2")]))
+        binv = fake_claude(tmp, TRIES)
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
                     extra_env={"FAKE_DUAS": "a1", "FAKE_ADIA": "a1",
                                "FAKE_QUEBRA": "a1", "FAKE_HOOK2": "a1"})
-        fim = [e for e in ledger_de(raiz) if e["evento"] == "run_end"]
+        end = [e for e in ledger_of(root) if e["evento"] == "run_end"]
         check("o run para por dentro do laço (verify-vermelho)",
-              fim and fim[0]["motivo"] == "verify-vermelho", str(fim))
-        ev = avisos(raiz)
+              end and end[0]["motivo"] == "verify-vermelho", str(end))
+        ev = warnings(root)
         check("o registro ganha hook_so_apos_reinstalar do a1",
               [e["id"] for e in ev] == ["a1"], str(ev))
-        antes_do_fim = p.stdout.split("── fim")[0]
+        before_the_end = p.stdout.split("── fim")[0]
         check("a tela avisa antes do resumo do fim",
-              "a1 mudou hook de plugin" in antes_do_fim, antes_do_fim[-1200:])
+              "a1 mudou hook de plugin" in before_the_end, before_the_end[-1200:])
 
 
-def test_hook_avisado_que_saiu_nao_e_cobrado_num_run_com_o_que_aterrissar():
-    """Com `acoes` vazio a cobrança do fim já sai vazia, e o caso acima de
-    hook que saiu não distingue recalcular do diff de reaproveitar a lista de
-    avisos. Aqui o a0 fica na branch (há o que aterrissar) e o hook do a1,
-    avisado na 1ª tentativa, sai com o build vermelho da 2ª."""
+def test_warned_hook_that_left_is_not_charged_in_a_run_with_something_to_land():
+    """With `actions` empty the end charge already comes out empty, and the case above of a
+    hook that left does not tell recomputing from the diff apart from reusing the list of
+    warnings. Here a0 stays on the branch (there is something to land) and a1's hook,
+    warned in the 1st attempt, leaves with the 2nd attempt's red build."""
     with tempfile.TemporaryDirectory() as tmp:
-        raiz = com_plugin(monta_repo(tmp, [item("a0"), item("a1")]))
-        binv = fake_claude(tmp, TENTA)
-        p, _ = roda(raiz, binv, plano_de(raiz),
+        root = with_plugin(build_repo(tmp, [item("a0"), item("a1")]))
+        binv = fake_claude(tmp, TRIES)
+        p, _ = run_until(root, binv, plan_of(root),
                     ["--for", "2h", "--verify", VERIFY],
                     extra_env={"FAKE_DUAS": "a1", "FAKE_QUEBRA": "a1",
                                "FAKE_HOOK1": "a1"})
         check("o hook da 1ª tentativa do a1 foi avisado",
-              [e["id"] for e in avisos(raiz)] == ["a1"], str(avisos(raiz)))
+              [e["id"] for e in warnings(root)] == ["a1"], str(warnings(root)))
         check("há o que aterrissar (o a0 ficou na branch)",
               "aterrissar" in p.stdout.split("── fim")[-1], p.stdout[-1200:])
         check("o fim não cobra o hook que saiu",
               "reinstalar-plugin" not in p.stdout
               and all(f["id"] != "reinstalar-plugin" for f in
-                      estado_de(raiz).get("fica_com_voce", [])),
+                      state_of(root).get("fica_com_voce", [])),
               p.stdout[-1500:])
 
 
 def main():
     print("cepa-until — hook que só vale depois de reinstalar\n")
-    for nome, fn in sorted(globals().items()):
-        if nome.startswith("test_") and callable(fn):
-            print(f"{nome}:")
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            print(f"{name}:")
             fn()
     print()
     if FAILURES:

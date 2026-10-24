@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-"""Regression tests para `cepa-doctor --fix` — o lote de correções mecânicas.
+"""Regression tests for `cepa-doctor --fix` — the batch of mechanical corrections.
 
-O `--fix` existe para matar o ciclo "acha um problema → propõe → confirma →
-acha o próximo → propõe → confirma", que consumia mais atenção do dono do
-harness que a própria tarefa da sessão. O risco de um comando que muta sem
-perguntar é óbvio, então a fronteira é o que estes testes fixam:
+`--fix` exists to kill the cycle "finds a problem → proposes → confirms →
+finds the next → proposes → confirms", which consumed more of the harness
+owner's attention than the session's own task. The risk of a command that
+mutates without asking is obvious, so the boundary is what these tests pin down:
 
-  - aplica o que é MECÂNICO e REVERSÍVEL (arquivar handoff vencido — move,
-    não apaga; limpar registro de worktree cujo diretório sumiu);
-  - NUNCA aplica o que é uma decisão (descartar diretório órfão, editar
-    board-flow.yaml, escolher entre reinstalar e voltar versão) — esses saem
-    no bloco "Precisa de você";
-  - sem --fix, não muta nada e apenas anuncia o que seria corrigido;
-  - re-diagnostica depois de corrigir, para que o achado sumido some de fato.
+  - it applies what is MECHANICAL and REVERSIBLE (archiving an expired handoff —
+    moves, does not delete; cleaning the registry of a worktree whose directory
+    vanished);
+  - it NEVER applies what is a decision (discarding an orphan directory, editing
+    board-flow.yaml, choosing between reinstalling and rolling back a version) —
+    those come out in the "Needs you" block;
+  - without --fix, it mutates nothing and only announces what would be fixed;
+  - it re-diagnoses after fixing, so that the finding that vanished really vanishes.
 
 Run: python3 tests/test_doctor_fix.py
 """
@@ -42,7 +43,7 @@ def git(args, cwd):
 
 
 def make_repo(tmp: Path):
-    """Repo com um handoff vencido e uma worktree fantasma (dir removido)."""
+    """Repo with an expired handoff and a ghost worktree (removed dir)."""
     root = tmp / "proj"
     root.mkdir()
     git(["init", "-q", "."], root)
@@ -59,19 +60,19 @@ def make_repo(tmp: Path):
 
 def run_doctor(root: Path, *args, worktree_home=None):
     env = dict(os.environ)
-    # Nenhuma suíte reinstala os plugins da máquina — ver
+    # No suite reinstalls the machine's plugins — see
     # tests/test_doctor_install_guard.py.
     env["CEPA_DOCTOR_INSTALL"] = "off"
     if worktree_home:
         env["CEPA_WORKTREE_HOME"] = str(worktree_home)
-    # --projeto: o veredito da suíte não pode depender da instalação da máquina
-    # de quem roda (era isso que a reinstalação silenciosa "resolvia").
+    # --projeto: the suite's verdict cannot depend on the installation of the machine
+    # of whoever runs it (that is what the silent reinstall "solved").
     p = subprocess.run([sys.executable, str(DOCTOR), "--projeto", *args],
                        capture_output=True, text=True, cwd=str(root), env=env)
     return p.returncode, p.stdout + p.stderr
 
 
-def test_dry_run_nao_muta():
+def test_dry_run_does_not_mutate():
     with tempfile.TemporaryDirectory() as tmp:
         root = make_repo(Path(tmp))
         _rc, out = run_doctor(root)
@@ -83,7 +84,7 @@ def test_dry_run_nao_muta():
               "cepa-doctor --fix" in out, out)
 
 
-def test_fix_aplica_o_mecanico():
+def test_fix_applies_the_mechanical():
     with tempfile.TemporaryDirectory() as tmp:
         root = make_repo(Path(tmp))
         _rc, out = run_doctor(root, "--fix")
@@ -100,15 +101,15 @@ def test_fix_aplica_o_mecanico():
               "sem handoffs vencidos" in out, out)
 
 
-def test_fix_nao_toca_no_que_e_decisao():
-    """A fronteira: órfã, board-flow incompleto e baseline ausente ficam."""
+def test_fix_does_not_touch_what_is_a_decision():
+    """The boundary: orphan, incomplete board-flow and missing baseline stay."""
     with tempfile.TemporaryDirectory() as tmp:
         tmpp = Path(tmp)
         root = make_repo(tmpp)
-        (root / ".claude" / "no-build").unlink()          # baseline ausente
+        (root / ".claude" / "no-build").unlink()          # baseline missing
         (root / "board-flow.yaml").write_text("site: x\n", encoding="utf-8")
         wt_home = tmpp / "wts"
-        (wt_home / f"{root.name}-orfa").mkdir(parents=True)  # dir órfão
+        (wt_home / f"{root.name}-orfa").mkdir(parents=True)  # orphan dir
 
         _rc, out = run_doctor(root, "--fix", worktree_home=wt_home)
 
@@ -121,32 +122,32 @@ def test_fix_nao_toca_no_que_e_decisao():
               and "órfão" in out and "board-flow" in out and "baseline" in out, out)
 
 
-def test_exit_code_preservado():
+def test_exit_code_preserved():
     with tempfile.TemporaryDirectory() as tmp:
         root = make_repo(Path(tmp))
         rc, _out = run_doctor(root, "--fix")
         check("depois de corrigir tudo que era mecânico, exit 0", rc == 0)
 
 
-def test_preflight_do_wrapper():
-    """O preflight pendurado no `cepa`: barato, calado e nunca bloqueante."""
+def test_wrapper_preflight():
+    """The preflight hanging off `cepa`: cheap, quiet and never blocking."""
     wrapper = REPO / "common" / "bin" / "cepa"
     with tempfile.TemporaryDirectory() as tmp:
         tmpp = Path(tmp)
         root = make_repo(tmpp)
 
-        # 1ª chamada (carimbo inexistente = velho): corrige e fala
+        # 1st call (nonexistent stamp = old): fixes and speaks
         rc1, out1 = run_doctor(root, "--fix", "--brief", "--if-stale", "12")
         check("preflight corrige o mecânico e resume em poucas linhas",
               "arquivar handoff" in out1 and len(out1.strip().splitlines()) <= 4, out1)
         check("preflight não despeja o diagnóstico inteiro",
               "# cepa-doctor" not in out1, out1)
 
-        # 2ª chamada dentro da janela: silêncio total
+        # 2nd call within the window: total silence
         _rc2, out2 = run_doctor(root, "--fix", "--brief", "--if-stale", "12")
         check("dentro da janela, o preflight é MUDO", out2.strip() == "", repr(out2))
 
-        # o wrapper abre a sessão mesmo com o doctor quebrado
+        # the wrapper opens the session even with the doctor broken
         fake = tmpp / "fakeclaude"
         fake.write_text("#!/bin/sh\necho SESSAO-ABRIU\n", encoding="utf-8")
         fake.chmod(0o755)
@@ -155,8 +156,8 @@ def test_preflight_do_wrapper():
         (tmpp / "broken" / "hooks").mkdir()
         (bindir / "cepa-doctor").write_text("raise SystemExit('boom')\n", encoding="utf-8")
         (bindir / "cepa").write_text(wrapper.read_text(encoding="utf-8"), encoding="utf-8")
-        # --modo: desde common 1.0.0 nenhuma sessão sobe sem modo declarado, e
-        # sem tty o cepa não tem como perguntar.
+        # --modo: since common 1.0.0 no session starts without a declared mode, and
+        # without a tty cepa has no way to ask.
         env = dict(os.environ, CLAUDE_WT_CLAUDE_BIN=str(fake), CEPA_PREFLIGHT_TTL="0")
         p = subprocess.run(["sh", str(bindir / "cepa"), "--modo", "construcao"],
                            capture_output=True, text=True, cwd=str(root), env=env)
@@ -172,11 +173,11 @@ def test_preflight_do_wrapper():
 
 
 def main():
-    test_dry_run_nao_muta()
-    test_fix_aplica_o_mecanico()
-    test_fix_nao_toca_no_que_e_decisao()
-    test_exit_code_preservado()
-    test_preflight_do_wrapper()
+    test_dry_run_does_not_mutate()
+    test_fix_applies_the_mechanical()
+    test_fix_does_not_touch_what_is_a_decision()
+    test_exit_code_preserved()
+    test_wrapper_preflight()
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")
