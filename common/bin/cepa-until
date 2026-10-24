@@ -241,6 +241,57 @@ VERIFY_POR_ARQUIVO = [
     ("tests/run-all.sh", "tests/run-all.sh"),
 ]
 
+# Repo JavaScript: o `package.json` diz o build e a suíte pelos `scripts`, e o
+# arquivo de lock diz o gerenciador. O comando começa pela instalação porque a
+# worktree da noite nasce sem `node_modules`: no wego-digitacao-demo, em
+# 2026-10-24, `npm run build` numa worktree nova falhou com `next: command not
+# found`. A instalação travada no lock também falha se o lock ficou para trás.
+JS_POR_LOCK = [
+    ("pnpm-lock.yaml", "pnpm install --frozen-lockfile", "pnpm"),
+    ("yarn.lock", "yarn install --frozen-lockfile", "yarn"),
+    ("package-lock.json", "npm ci", "npm"),
+]
+JS_SEM_LOCK = ("npm install", "npm")
+# O `test` que o `npm init` escreve não é suíte: só falha.
+JS_TESTE_DE_MENTIRA = "no test specified"
+
+
+def verify_de_javascript(repo):
+    """(comando, origem) pelo `package.json` da raiz, ou None se ele não tem
+    `build` nem `test` de verdade (aí o repo continua sem build conhecido)."""
+    pj = repo / "package.json"
+    if not pj.exists():
+        return None
+    try:
+        scripts = json.loads(pj.read_text()).get("scripts") or {}
+    except (ValueError, AttributeError):
+        return None
+    if not isinstance(scripts, dict):
+        return None
+    tem_build = bool(scripts.get("build"))
+    teste = scripts.get("test") or ""
+    tem_teste = bool(teste) and JS_TESTE_DE_MENTIRA not in teste
+    if not (tem_build or tem_teste):
+        return None
+    instala, pm, lock = None, None, None
+    for arquivo, cmd, gerenciador in JS_POR_LOCK:
+        if (repo / arquivo).exists():
+            instala, pm, lock = cmd, gerenciador, arquivo
+            break
+    if instala is None:
+        instala, pm = JS_SEM_LOCK
+    passos = [instala]
+    if tem_build:
+        passos.append(f"{pm} run build")
+    if tem_teste:
+        passos.append(f"{pm} test")
+    scripts_vistos = " e ".join(n for n, t in (("build", tem_build),
+                                               ("test", tem_teste)) if t)
+    origem = (f"achei `package.json` com {scripts_vistos}"
+              + (f" e `{lock}`" if lock else ", sem arquivo de lock"))
+    return " && ".join(passos), origem
+
+
 # A suíte de um repo que não compila nada (o próprio cepa). O `.claude/no-build`
 # dispensa o baseline do `gate-advance` porque não há build; não quer dizer que
 # não há suíte. Com os dois no repo, a suíte roda: no run 2026-09-26-2203 o
@@ -1396,6 +1447,9 @@ def comando_de_verify(repo, explicito, dispensado):
     for arquivo, comando in VERIFY_POR_ARQUIVO:
         if (repo / arquivo).exists():
             return comando, f"achei `{arquivo}` na raiz"
+    js = verify_de_javascript(repo)
+    if js:
+        return js
     return "", None
 
 
@@ -2900,7 +2954,7 @@ def main(argv=None):
     ap.add_argument("--verify", metavar="CMD",
                     help="o build completo que roda na branch da noite depois "
                          "de cada item `done` (default: pelo mvnw/gradlew da "
-                         "raiz)")
+                         "raiz, ou pelos scripts do package.json)")
     ap.add_argument("--sem-verify", action="store_true", dest="sem_verify",
                     help="não roda build completo depois dos itens — só para "
                          "repo sem build")
@@ -2999,7 +3053,8 @@ def main(argv=None):
     verify, origem_verify = comando_de_verify(repo, a.verify, a.sem_verify)
     if verify == "":
         print("cepa-until: não sei o build completo deste repo (não há `mvnw` "
-              "nem `gradlew` na raiz, nem `tests/run-all.sh`). Passe `--verify '<comando>'`, ou "
+              "nem `gradlew` na raiz, nem `tests/run-all.sh`, nem `package.json` com "
+              "script `build` ou `test`). Passe `--verify '<comando>'`, ou "
               "`--sem-verify` se o repo não tem build — sem isso um card pode "
               "fechar `done` com o build vermelho e o próximo começar em cima "
               "dele.", file=sys.stderr)

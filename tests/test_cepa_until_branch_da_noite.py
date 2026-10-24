@@ -943,6 +943,108 @@ def test_1_heranca_com_outro_item_aberto_para_em_vez_de_resetar():
               "a2-t1" in noite_b, str(noite_b))
 
 
+def _banner_com(tmp, arquivos):
+    """Repo com os `arquivos` commitados; devolve o processo do --dry-run sem
+    `--verify`, para ver o build que o `cepa-until` escolheu sozinho."""
+    raiz = monta_repo(tmp, [item("a1")])
+    for nome, conteudo in arquivos.items():
+        alvo = raiz / nome
+        alvo.parent.mkdir(parents=True, exist_ok=True)
+        alvo.write_text(conteudo)
+        if nome.endswith(".sh"):
+            alvo.chmod(0o755)
+    _commita(raiz, "arquivos do repo")
+    binv = fake_claude(tmp, TRABALHA)
+    return subprocess.run(
+        [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
+                             / "bin" / "cepa-until"),
+         "fila", "--repo", str(raiz), "--for", "2h", "--dry-run"],
+        capture_output=True, text=True, timeout=60,
+        env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
+                 FAKE_PLANO="x", FAKE_CHAMADAS=str(Path(tmp) / "c.jsonl"),
+                 CEPA_WORKTREE_HOME=str(Path(tmp) / "worktrees"),
+                 CEPA_TELEMETRY_DIR=str(Path(tmp) / "telemetria")))
+
+
+def _pj(scripts):
+    return json.dumps({"name": "x", "scripts": scripts})
+
+
+def test_package_json_com_build_e_test_vira_o_build_padrao():
+    # O wego-digitacao-demo (Next.js) em 2026-10-24: sem mvnw, o cepa-until
+    # recusava e o dono tinha de passar `--verify 'npm run build'` à mão.
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _banner_com(tmp, {
+            "package.json": _pj({"build": "next build",
+                                 "test": "playwright test"}),
+            "package-lock.json": "{}"})
+        check("package.json + package-lock: instala, builda e testa",
+              p.returncode == 0
+              and "npm ci && npm run build && npm test" in p.stdout,
+              f"saiu {p.returncode}: {p.stdout[-400:]} {p.stderr[-300:]}")
+
+
+def test_package_json_so_com_build_nao_inventa_teste():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _banner_com(tmp, {
+            "package.json": _pj({"build": "tsc"}),
+            "package-lock.json": "{}"})
+        check("só build: npm ci && npm run build, sem npm test",
+              p.returncode == 0 and "npm ci && npm run build" in p.stdout
+              and "npm test" not in p.stdout,
+              f"saiu {p.returncode}: {p.stdout[-400:]} {p.stderr[-300:]}")
+
+
+def test_teste_do_npm_init_nao_conta_como_suite():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _banner_com(tmp, {
+            "package.json": _pj({
+                "build": "tsc",
+                "test": 'echo "Error: no test specified" && exit 1'}),
+            "package-lock.json": "{}"})
+        check("o test do npm init fica de fora",
+              p.returncode == 0 and "npm ci && npm run build" in p.stdout
+              and "npm test" not in p.stdout,
+              f"saiu {p.returncode}: {p.stdout[-400:]} {p.stderr[-300:]}")
+
+
+def test_lock_do_pnpm_e_do_yarn_escolhe_o_gerenciador():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _banner_com(tmp, {
+            "package.json": _pj({"build": "vite build", "test": "vitest run"}),
+            "pnpm-lock.yaml": "lockfileVersion: 9\n"})
+        check("pnpm-lock.yaml: pnpm com lock travado",
+              "pnpm install --frozen-lockfile && pnpm run build && pnpm test"
+              in p.stdout, f"{p.stdout[-400:]} {p.stderr[-300:]}")
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _banner_com(tmp, {
+            "package.json": _pj({"build": "vite build"}),
+            "yarn.lock": "# yarn\n"})
+        check("yarn.lock: yarn com lock travado",
+              "yarn install --frozen-lockfile && yarn run build" in p.stdout,
+              f"{p.stdout[-400:]} {p.stderr[-300:]}")
+
+
+def test_package_json_sem_build_nem_test_continua_recusando():
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _banner_com(tmp, {"package.json": _pj({"dev": "next dev"})})
+        check("package.json sem build nem test: recusa como antes",
+              p.returncode == 2 and "package.json" in p.stderr,
+              f"saiu {p.returncode}: {p.stderr[-300:]}")
+
+
+def test_suite_do_repo_ganha_do_package_json():
+    # Quem escreveu tests/run-all.sh disse qual é a suíte: ela manda.
+    with tempfile.TemporaryDirectory() as tmp:
+        p = _banner_com(tmp, {
+            "package.json": _pj({"build": "next build"}),
+            "tests/run-all.sh": "#!/bin/sh\nexit 0\n"})
+        check("tests/run-all.sh ganha do package.json",
+              p.returncode == 0 and "tests/run-all.sh" in p.stdout
+              and "npm run build" not in p.stdout,
+              f"saiu {p.returncode}: {p.stdout[-400:]} {p.stderr[-300:]}")
+
+
 def main():
     print("cepa-until — branch da noite\n")
     for nome, fn in sorted(globals().items()):
