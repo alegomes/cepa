@@ -1,0 +1,63 @@
+key: code-names-in-english
+status: incomplete
+auditor: completion-auditor
+pass: 3 (re-audit)
+note: >
+  "mensagem" lida como texto interno (log, debug, comentario, docstring);
+  texto impresso ao dono permanece pt-BR (regra permanente do dono).
+criteria:
+  - id: AC1
+    text: nomes de funcao/variavel de scripts e hooks em ingles
+    altitude: domain
+    surface: common/bin, common/hooks (+_templates), board-flow/bin, maestro/bin, */hooks/*.py, compass/hooks/*.ts(x), tests/*.py
+    test: varredura ast propria (defs, classes, args, Names; lista de tokens pt) + tests/test_lock_copies_drift.py, test_path_lock_out_of_root.py, test_cepa_until_network.py, compass plugin test, test_waivers.py
+    layer: varredura + testes
+    evidence: verified
+    run: "varredura: unico Name/def/arg com token pt-like restante e DECIDE_ANSWER (decide e verbo ingles); demais acertos sao kwargs/placeholders de dados (erro=, desvios=, modo=, alvo/origem, fonte/quando/arquivo no HEADER.format) = chaves de dado/telemetria. compass: 'modo','proposito','rascunho','travado' so em strings/chaves de dado/texto ao dono. Os 4 residuos da passada 2 (sem_redir, topo/ref_topo, ate, WG_AMBOS) sumiram em 582f2fd"
+    status: complete
+    classified_residue_ok:
+      - "APELIDOS em session-routine-guard.py"
+      - "a.aguardando_merge em maestro"
+      - "chaves/valores pt-BR em dict/YAML/JSON/JSONL e kwargs de telemetria"
+      - "modulo waivers; shims cepa-modos/cepa-intencao"
+      - "testes que citam aliases legados / chaves YAML; titulos de teste do compass"
+      - "mensagens _deny/f-strings pt-BR (texto ao dono)"
+    nota_menor: "cepa-plan HEADER.format(fonte=, quando=, arquivo=) usa placeholders pt num cabecalho de arquivo pt-BR; nao e nome de funcao/variavel, nao bloqueia"
+  - id: AC2
+    text: arquivos de hook nomeados traduzidos
+    altitude: domain
+    surface: common/hooks/_modes.py, write-mode-gate.py, reflection-gate.py, refactor-gate.py, compass/hooks/queues.ts, mode.ts
+    test: git ls-files
+    evidence: verified
+    run: "git ls-files common/hooks compass/hooks | grep -iE 'modos|modo-|reflexao|reforma|filas' -> vazio; compass/hooks: build,epics,gate,intent,mode,queues,register,until"
+    status: complete
+  - id: AC3
+    text: arquivos de estado .claude/deviations.md e .claude/reflection/
+    altitude: persistence
+    surface: .claude/
+    test: ls .claude + git ls-files .claude
+    evidence: verified
+    run: "ls .claude mostra deviations.md e reflection; git ls-files .claude | grep -E 'desvios|reflexao' -> vazio"
+    status: complete
+  - id: AC4
+    text: nomes de teste (arquivos e funcoes) em ingles
+    altitude: domain
+    surface: tests/
+    evidence: verified
+    run: "nenhum arquivo de teste com nome pt; varredura de def test_ so encontra test_decidir_as_process_with_and_without_terminal, test_decidir_s_and_n_on_terminal_reach_the_plan (aceitos pelo orquestrador: decidir = subcomando legado), test_old_name_fila_is_deprecated_alias, test_until_decidir_and_decide_dispatch_the_same (aliases legados)"
+    status: complete
+  - id: AC5
+    text: um diretorio por commit, suite verde a cada commit
+    altitude: domain
+    surface: git log 84fde4d..HEAD
+    evidence: assumed
+    run: "HEAD (582f2fd): test_lock_copies_drift.py 'all green'; test_path_lock_out_of_root.py 'All checks passed across 6 hook copies'; test_cepa_until_network.py 'todos passaram'; claude plugin test compass '102 pass, 0 fail'; pytest tests/test_waivers.py '26 passed'. Commits intermediarios nao checados; prova fica com o supervisor (suite completa)"
+    status: incomplete
+    gap:
+      - "greenness por commit intermediario: assumed (assumed nunca vira complete); depende da run completa do supervisor"
+      - "commits alem de 'um diretorio + chamadores/copias forcados': 4238a28 (rename de estado tocando 8 plugins + README + compass), 7090560 (maestro + 6 plugins de hooks + _shellscan + bin/gen-locks), 9335007 (template + 6 copias geradas + common), 46c3ce2 (common + compass + tests), 6d6f584 (board-flow + build-hex + common), 546fdfc e 1bbe48a (board-flow + common). Copias regeneradas e chamadores explicam a maioria; 46c3ce2 e 4238a28 sao o desvio mais largo. Julgamento do dono."
+  - id: AC6
+    text: leitura de 'mensagem' (texto ao dono permanece pt-BR)
+    status: complete
+    evidence: verified
+    run: "inalterado desde a passada 2 (273b6a0 so trocou interpolacoes de identificador; 582f2fd so renomeia locais/constante de teste)"
