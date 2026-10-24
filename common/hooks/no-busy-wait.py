@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""PreToolUse hook (common) — espera ativa no Bash é o maior custo de relógio do
-harness. Bloqueia.
+"""PreToolUse hook (common): busy-waiting in Bash is the harness's biggest
+wall-clock cost. Blocks it.
 
 WHY THIS EXISTS
 ---------------
-Medição de 2026-08-26 sobre os transcripts gravados em ~/.claude/projects/:
+Measurement of 2026-08-26 over the transcripts recorded in ~/.claude/projects/:
 
-| run                          | relógio | espera ativa | onde                    |
+| run                          | clock   | busy wait    | where                   |
 |------------------------------|---------|--------------|-------------------------|
 | session/drain-plan-0840      |  299min |  155min (52%)| engineering-lead 149min |
 | session/exec-17081128        |  636min |  146min (23%)| engineering-lead 114min |
@@ -14,11 +14,12 @@ Medição de 2026-08-26 sobre os transcripts gravados em ~/.claude/projects/:
 | session/todo-1413            | 1098min |  241min (22%)| engineering-lead 232min |
 | session/todo-22081827        |  913min |  176min (19%)| engineering-lead 161min |
 
-Nos mesmos runs, o build Maven — que todo mundo supunha ser o gargalo — ficou
-entre 3% e 17%. Runs que não usam lead (prove-drain puro) têm espera ZERO, o que
-localiza o defeito: é o lead que espera, não a topologia.
+In the same runs, the Maven build, which everyone assumed to be the bottleneck,
+stayed between 3% and 17%. Runs that do not use a lead (pure prove-drain) have
+ZERO waiting, which pins down the defect: it is the lead that waits, not the
+topology.
 
-O padrão, verbatim do transcript do drain-plan-0840:
+The pattern, verbatim from the drain-plan-0840 transcript:
 
     until grep -q "CredenciaisDoFuncionarioE2ETest" .claude/last-build.json; do sleep 20; done   601s
     until ls bootstrap/src/test/java/.../ | grep -q "Credenciais"; do sleep 10; done             543s
@@ -26,48 +27,47 @@ O padrão, verbatim do transcript do drain-plan-0840:
     until [ -f /dev/null ]; do sleep 5; done; echo aguardando                                    120s
     for i in $(seq 1 6000); do git log --all --stat >/dev/null 2>&1; done; date                  590s  (x2)
 
-Duas patologias distintas, as duas caras:
+Two distinct pathologies, both expensive:
 
-1. **Sondar o disco esperando o worker.** O lead delega e depois fica olhando o
-   arquivo aparecer, em blocos de 5 a 10 minutos. A raiz é que a chamada `Agent`
-   é assíncrona — devolve `Async agent launched successfully`, não o resultado —
-   e as specs dos leads são SILENCIOSAS sobre isso: nenhuma das 10 menciona
-   assincronia, notificação ou fim de turno, e todas descrevem delegar → ler o
-   resultado → sintetizar como um fluxo contínuo. Sem um passo dizendo "seu
-   turno acaba aqui", o lead preenche o silêncio com sondagem. (O que está
-   verificado é o silêncio e o fluxo contínuo; o que o autor original acreditava
-   não dá para saber.) O conserto da causa está
-   na seção "Delegation is asynchronous" das 10 specs que delegam; este hook é a
-   rede. `until [ -f /dev/null ]` é o caso
-   extremo: espera por condição que já era verdadeira, ou seja, o agente já não
-   sabia o que estava esperando.
-2. **Laço de queima como `sleep` improvisado.** `sleep` em primeiro plano é
-   bloqueado pelo harness; o agente contorna com um laço que roda `git log` seis
-   mil vezes. Gasta CPU para não fazer nada. Isso é o padrão que a memória
-   `gate-por-nome-de-ferramenta-falha-aberto` descreve: barrar um MECANISMO faz
-   nascer o próximo. Por isso este hook barra o EFEITO — bloquear a sessão sem
-   trabalho — e não uma lista de comandos.
+1. **Probing the disk waiting for the worker.** The lead delegates and then
+   watches the file appear, in blocks of 5 to 10 minutes. The root is that the
+   `Agent` call is asynchronous (it returns `Async agent launched successfully`,
+   not the result) and the leads' specs are SILENT about that: none of the 10
+   mentions asynchrony, notification or end of turn, and all describe delegate
+   -> read the result -> synthesize as a continuous flow. Without a step saying
+   "your turn ends here", the lead fills the silence with probing. (What is
+   verified is the silence and the continuous flow; what the original author
+   believed cannot be known.) The fix for the cause is in the "Delegation is
+   asynchronous" section of the 10 specs that delegate; this hook is the net.
+   `until [ -f /dev/null ]` is the extreme case: waiting for a condition that
+   was already true, that is, the agent no longer knew what it was waiting for.
+2. **Burn loop as an improvised `sleep`.** A foreground `sleep` is blocked by
+   the harness; the agent works around it with a loop that runs `git log` six
+   thousand times. It spends CPU to do nothing. That is the pattern the memory
+   `gate-por-nome-de-ferramenta-falha-aberto` describes: blocking one MECHANISM
+   gives birth to the next. That is why this hook blocks the EFFECT (holding
+   the session without work) and not a list of commands.
 
-ESCOPO — bloqueia quando o comando, fora de aspas, tem qualquer destes:
-  1. laço (`until`/`while`/`for`) cujo corpo chama `sleep` (a sondagem —
-     inclui `for i in $(seq 1 60); do ...; sleep 10; done`, que é a mesma
-     coisa escrita com contador em vez de condição);
-  2. `sleep N` com N >= 30 (a espera longa sem laço);
-  3. laço de repetição sem trabalho real: `while true`, ou `for ... $(seq 1 N)`
-     com N >= 200 (a queima).
+SCOPE: blocks when the command, outside quotes, has any of these:
+  1. a loop (`until`/`while`/`for`) whose body calls `sleep` (the probing;
+     includes `for i in $(seq 1 60); do ...; sleep 10; done`, which is the same
+     thing written with a counter instead of a condition);
+  2. `sleep N` with N >= 30 (the long wait without a loop);
+  3. a repetition loop without real work: `while true`, or `for ... $(seq 1 N)`
+     with N >= 200 (the burn).
 
-O que NÃO bloqueia: `sleep 2` curto, laço pequeno, `until` sem `sleep` (que
-termina por conta própria), e qualquer comando cujo `until`/`sleep` esteja
-dentro de aspas — texto citado não é shell (WEGO-2087).
+What does NOT block: a short `sleep 2`, a small loop, `until` without `sleep`
+(which ends on its own), and any command whose `until`/`sleep` is inside quotes:
+quoted text is not shell (WEGO-2087).
 
-ESCAPE HATCH: `# espera-ok` no comando. Existe para o caso real de sondar estado
-EXTERNO que o harness não notifica (um pipeline remoto, uma fila de terceiro).
-Usar por reflexo, para se livrar do bloqueio, devolve exatamente os 150 minutos
-que este guard existe para cortar.
+ESCAPE HATCH: `# espera-ok` in the command. It exists for the real case of
+probing EXTERNAL state the harness does not notify (a remote pipeline, a
+third-party queue). Using it by reflex, to get rid of the block, returns
+exactly the 150 minutes this guard exists to cut.
 
 Exit codes:
-  0 — liberado
-  2 — bloqueado: espera ativa
+  0 - allowed
+  2 - blocked: busy wait
 """
 
 import json
@@ -78,7 +78,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     import _telemetry as T
-except Exception:  # telemetria nunca pode quebrar o gate
+except Exception:  # telemetry must never break the gate
 
     class T:  # type: ignore
         @staticmethod
@@ -90,7 +90,7 @@ try:
     import _shellscan as S
 
     _unquoted_view = S._unquoted_view
-except Exception:  # sem o motor compartilhado, analisa a linha crua
+except Exception:  # without the shared engine, analyzes the raw line
 
     def _unquoted_view(c):
         return c
@@ -98,19 +98,19 @@ except Exception:  # sem o motor compartilhado, analisa a linha crua
 
 _ESCAPE = "espera-ok"
 
-# `sleep` com número (ou variável) dentro de um corpo de laço
+# `sleep` with a number (or variable) inside a loop body
 _SLEEP = re.compile(r"\bsleep\s+[\d.$]")
 _LOOP = re.compile(r"\b(until|while|for)\b")
 _WHILE_TRUE = re.compile(r"\bwhile\s+(true|:)\b")
 _SEQ = re.compile(r"\bseq\s+1\s+(\d+)")
-_SLEEP_LONGO = re.compile(r"\bsleep\s+(\d+(?:\.\d+)?)")
+_SLEEP_LONG = re.compile(r"\bsleep\s+(\d+(?:\.\d+)?)")
 
-TETO_SEQ = 200
-TETO_SLEEP = 30
+SEQ_CEILING = 200
+SLEEP_CEILING = 30
 
 
-def motivo(command: str):
-    """Devolve (rótulo, trecho) do primeiro padrão de espera ativa, ou None."""
+def reason_for(command: str):
+    """Returns (label, excerpt) of the first busy-wait pattern, or None."""
     v = _unquoted_view(command)
 
     if _LOOP.search(v) and _SLEEP.search(v):
@@ -122,25 +122,26 @@ def motivo(command: str):
         return ("laço infinito", v[m.start() : m.start() + 90].strip())
 
     m = _SEQ.search(v)
-    if m and int(m.group(1)) >= TETO_SEQ:
+    if m and int(m.group(1)) >= SEQ_CEILING:
         return ("laço de queima", v[max(0, m.start() - 20) : m.start() + 90].strip())
 
-    for m in _SLEEP_LONGO.finditer(v):
-        if float(m.group(1)) >= TETO_SLEEP:
+    for m in _SLEEP_LONG.finditer(v):
+        if float(m.group(1)) >= SLEEP_CEILING:
             return ("espera longa", v[max(0, m.start() - 30) : m.end() + 20].strip())
 
     return None
 
 
-def bloqueia(command: str):
-    """A decisão completa sobre um comando: (rótulo, trecho) ou None.
+def blocks(command: str):
+    """The complete decision about a command: (label, excerpt) or None.
 
-    Separada de `motivo` porque o escape hatch faz parte da decisão, e um teste
-    que só exercitasse `motivo` daria por bom um hook que ignora o `espera-ok`.
+    Separate from `reason_for` because the escape hatch is part of the decision,
+    and a test that only exercised `reason_for` would pass a hook that ignores
+    `espera-ok`.
     """
     if not command or _ESCAPE in command:
         return None
-    return motivo(command)
+    return reason_for(command)
 
 
 def main():
@@ -155,15 +156,15 @@ def main():
         sys.exit(0)
 
     command = (payload.get("tool_input") or {}).get("command", "") or ""
-    achado = bloqueia(command)
-    if not achado:
+    hit = blocks(command)
+    if not hit:
         sys.exit(0)
 
-    rotulo, trecho = achado
-    T.emit("busy_wait_block", reason=rotulo)
+    label, excerpt = hit
+    T.emit("busy_wait_block", reason=label)
     print(
-        f"[no-busy-wait] BLOQUEADO: espera ativa ({rotulo}).\n"
-        f"  Trecho: {trecho}\n\n"
+        f"[no-busy-wait] BLOQUEADO: espera ativa ({label}).\n"
+        f"  Trecho: {excerpt}\n\n"
         "  Um comando que fica bloqueado sem trabalhar é o maior custo de relógio\n"
         "  medido neste harness: 19% a 52% do tempo de 5 runs, quase tudo em lead\n"
         "  sondando arquivo de worker (medição de 2026-08-26).\n\n"

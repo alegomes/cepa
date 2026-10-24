@@ -56,9 +56,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
-    from _cmdmeta import CONVERSATIONAL, acha_comando, interaction
+    from _cmdmeta import CONVERSATIONAL, find_command, interaction
 except Exception:  # noqa: BLE001 — sem o helper este gate não sabe nada, e
-    CONVERSATIONAL = acha_comando = interaction = None  # não saber não barra.
+    CONVERSATIONAL = find_command = interaction = None  # não saber não barra.
 
 # Os apelidos que o passo 1 do session.md mapeia para comandos reais.
 APELIDOS = {
@@ -82,7 +82,7 @@ def main():
     except json.JSONDecodeError:
         sys.exit(0)
 
-    if acha_comando is None:
+    if find_command is None:
         sys.exit(0)          # helper ausente: não sabe, não barra
 
     prompt = payload.get("prompt") or ""
@@ -96,7 +96,7 @@ def main():
         sys.exit(0)          # rotina desconhecida é problema do session, não deste gate
 
     plugin, _, cmd = alvo.partition(":")
-    cmd_file = acha_comando(plugin, cmd)
+    cmd_file = find_command(plugin, cmd)
     if cmd_file is None:
         sys.exit(0)          # não achou o arquivo: não sabe, não barra
 

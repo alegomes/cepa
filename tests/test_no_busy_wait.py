@@ -72,11 +72,11 @@ def main():
     falhas = []
 
     for rotulo, cmd in BLOQUEIA:
-        if mod.bloqueia(cmd) is None:
+        if mod.blocks(cmd) is None:
             falhas.append(f"DEVIA BLOQUEAR ({rotulo}): {cmd[:70]!r}")
 
     for rotulo, cmd in LIBERA:
-        r = mod.bloqueia(cmd)
+        r = mod.blocks(cmd)
         if r is not None:
             falhas.append(f"DEVIA LIBERAR ({rotulo}): {cmd[:70]!r} — pegou {r[0]}")
 

@@ -89,8 +89,8 @@ def main():
         check(f"servidor local desligado (O0/O3): {prefixo}", prefixo not in ferramentas)
     sys.path.insert(0, str(REPO / "common" / "hooks"))
     import _jiramut
-    check(f"versão verificada da twg igual à do _jiramut ({_jiramut.TWG_VERIFICADA})",
-          f"verified version: **{_jiramut.TWG_VERIFICADA}**" in texto)
+    check(f"versão verificada da twg igual à do _jiramut ({_jiramut.TWG_VERIFIED})",
+          f"verified version: **{_jiramut.TWG_VERIFIED}**" in texto)
     print()
     if FAILURES:
         print(f"{len(FAILURES)} failure(s): {FAILURES}")

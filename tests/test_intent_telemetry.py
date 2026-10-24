@@ -55,9 +55,9 @@ MISSES = ["", "   ", "o próximo passo do deploy exige revisar o pipeline inteir
           "o que estamos fazendo de errado nesse teste que falha toda vez que eu rodo a suíte inteira no CI?",
           "/common:next", "/common:wrap-up", "oi"]
 for h in HITS:
-    check(f"casa: {h!r}", SL.pergunta_onde_estamos(h))
+    check(f"casa: {h!r}", SL.asks_where_we_are(h))
 for m in MISSES:
-    check(f"não casa: {m[:40]!r}", not SL.pergunta_onde_estamos(m))
+    check(f"não casa: {m[:40]!r}", not SL.asks_where_we_are(m))
 
 
 # ── 2. o hook emite intent.asked ────────────────────────────────────────────

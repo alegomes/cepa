@@ -36,43 +36,43 @@ import _wtlib as L  # noqa: E402
 
 try:
     import _telemetry as T
-except Exception:  # noqa: BLE001 — telemetria nunca quebra o hook
+except Exception:  # noqa: BLE001 — telemetry never breaks the hook
     T = None
 
-# As rotinas: os comandos pelos quais uma sessão existe. Tudo que o usuário
-# digita ANTES da primeira delas é preparação; tudo depois da última é
-# fechamento. Medir esses dois números é o que permite dizer, com evidência,
-# se o atrito das pontas caiu — em vez de memória contra memória.
-ROTINAS = {
+# The routines: the commands a session exists for. Everything the user types
+# BEFORE the first of them is preparation; everything after the last is
+# closing. Measuring those two numbers is what allows saying, with evidence,
+# whether the friction at the ends dropped, instead of memory against memory.
+ROUTINES = {
     "board-flow:drain", "board-flow:prove-drain", "board-flow:triage",
     "board-flow:execute", "board-flow:fix", "board-flow:prove",
     "board-flow:decide", "board-flow:plan-track-build-validate",
     "common:autonomous-start", "common:autonomous-resume", "common:session",
     "docs:survey", "docs:author", "maestro:run", "review-gate:review",
 }
-FECHAMENTO = {"common:wrap-up", "common:handoff"}
+CLOSING = {"common:wrap-up", "common:handoff"}
 
 
 def classify(prompt: str):
-    """(kind, cmd) do prompt. Só o NOME do comando vai para a telemetria —
-    nunca o texto do prompt, que carregaria conteúdo do usuário."""
+    """(kind, cmd) of the prompt. Only the command NAME goes to telemetry,
+    never the prompt text, which would carry user content."""
     m = re.match(r"\s*/([a-z0-9:_-]+)", prompt, re.I)
     if not m:
         return "prosa", None
     cmd = m.group(1).lower()
-    if cmd in ROTINAS:
+    if cmd in ROUTINES:
         return "rotina", cmd
-    if cmd in FECHAMENTO:
+    if cmd in CLOSING:
         return "fechamento", cmd
     return "comando", cmd
 
 
-# "Onde estamos / o que estamos fazendo / qual o próximo passo": as perguntas
-# pelas quais o dono re-orienta a sessão. Cada ocorrência é um sinal de que a
-# intenção gravada não estava à vista (telemetria `intent.asked`). Estrito de
-# propósito: casa a pergunta curta e típica, não qualquer prosa que contenha
-# "próximo passo" no meio de outro assunto.
-_PERGUNTA_ONDE_ESTAMOS = re.compile(
+# "Where are we / what are we doing / what is the next step": the questions the
+# owner uses to re-orient the session. Each occurrence is a sign that the
+# recorded intent was not in view (telemetry `intent.asked`). Strict on
+# purpose: matches the short, typical question, not any prose that contains
+# "próximo passo" in the middle of another subject.
+_WHERE_ARE_WE_QUESTION = re.compile(
     r"""^\s*(?:
         /common:whereami
       | (?:e\s+)?(?:ent[aã]o[,\s]+)?
@@ -90,12 +90,12 @@ _PERGUNTA_ONDE_ESTAMOS = re.compile(
     re.I | re.X)
 
 
-def pergunta_onde_estamos(prompt: str) -> bool:
-    """O prompt é uma pergunta curta de "onde estamos / próximo passo"?
-    Frase inteira (até 80 caracteres), não trecho: "o próximo passo do deploy
-    exige X" é outra coisa."""
+def asks_where_we_are(prompt: str) -> bool:
+    """Is the prompt a short "where are we / next step" question?
+    The whole sentence (up to 80 characters), not an excerpt: "o próximo passo
+    do deploy exige X" is something else."""
     p = (prompt or "").strip()
-    return 0 < len(p) <= 80 and bool(_PERGUNTA_ONDE_ESTAMOS.match(p))
+    return 0 < len(p) <= 80 and bool(_WHERE_ARE_WE_QUESTION.match(p))
 
 
 def now() -> tuple[str, str]:
@@ -153,9 +153,9 @@ def main():
     if not prompt.strip():
         sys.exit(0)
 
-    # RAIZ da worktree, não o diretório corrente: o cwd do Bash persiste
-    # entre chamadas, e um `cd subdir` desviaria o estado desta sessão
-    # para `subdir/.claude/` pelo resto dela (ver _wtlib.session_root).
+    # The worktree ROOT, not the current directory: Bash's cwd persists
+    # between calls, and a `cd subdir` would divert this session's state to
+    # `subdir/.claude/` for the rest of it (see _wtlib.session_root).
     cwd = Path(L.session_root(payload.get("cwd") or os.getcwd())).resolve()
     log_path = cwd / ".claude" / "session-log.md"
 
@@ -169,10 +169,10 @@ def main():
             kind, cmd = classify(prompt)
             T.emit("prompt", cwd=str(cwd), kind=kind, cmd=cmd or "",
                    session=str(payload.get("session_id") or "")[:8])
-            if pergunta_onde_estamos(prompt):
+            if asks_where_we_are(prompt):
                 T.emit("intent.asked", cwd=str(cwd),
                        session=str(payload.get("session_id") or "")[:8])
-        except Exception:  # noqa: BLE001 — telemetria nunca quebra o hook
+        except Exception:  # noqa: BLE001 — telemetry never breaks the hook
             pass
 
     sys.exit(0)

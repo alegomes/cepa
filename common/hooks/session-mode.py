@@ -1,36 +1,38 @@
 #!/usr/bin/env python3
-"""Injeta o modo de trabalho ativo no contexto, a cada turno.
+"""Injects the active work mode into the context, every turn.
 
-O modo é declarado no `cepa --mode <x>` e gravado em .claude/session-mode. Ele é
-um ESTADO que dura a sessão inteira — diferente da rotina, que é uma tarefa que
-acaba. Desenho completo: docs/modos-de-trabalho.md.
+The mode is declared in `cepa --mode <x>` and recorded in .claude/session-mode.
+It is a STATE that lasts the whole session, unlike the routine, which is a task
+that ends. Full design: docs/modos-de-trabalho.md.
 
-Por que UserPromptSubmit e não SessionStart: a fronteira precisa estar presente
-no turno em que o desvio aparece. Injetado só na abertura, o modo some do
-contexto útil justamente nas sessões longas, que são onde o vazamento entre
-atividades acontece.
+Why UserPromptSubmit and not SessionStart: the boundary has to be present in the
+turn where the deviation appears. Injected only at opening, the mode vanishes
+from the useful context precisely in long sessions, which are where leakage
+between activities happens.
 
-Saída enxuta de propósito (cabe em poucas linhas): ela paga pedágio em todo
-turno. Diz o modo, a condição de saída dele e a regra do desvio — nada mais.
+Lean output on purpose (fits in a few lines): it pays a toll on every turn. It
+says the mode, its exit condition and the deviation rule, nothing more.
 
-Junto do modo vai a INTENÇÃO da sessão (`.claude/session-intent`, escrita só
-pelo `cepa-intent`; desenho em docs/estrategia-intencao-da-sessao.md), com
-teto de duas linhas, num de três estados:
+Along with the mode goes the session's INTENT (`.claude/session-intent`,
+written only by `cepa-intent`; design in docs/estrategia-intencao-da-sessao.md),
+capped at two lines, in one of three states:
 
-  - sem intenção gravada (e sessão aberta pelo `cepa`, isto é, com modo): os
-    três primeiros prompts da sessão e o pedido de propor e gravar. Os prompts
-    são a intenção na voz do dono antes de qualquer desvio (caminho C4);
-  - intenção gravada por OUTRA sessão: a data e a pergunta "continuo ou abro
-    nova?", em vez de exibi-la como atual (decisão D1);
-  - intenção desta sessão: propósito, passo N/M com há quantos turnos o cursor
-    está parado, e o próximo passo. A idade é o que denuncia o cursor que o
-    agente esqueceu de avançar (decisão D2); o plano inteiro fica no whereami.
+  - no recorded intent (and a session opened by `cepa`, that is, with a mode):
+    the session's first three prompts and the request to propose and record.
+    The prompts are the intent in the owner's voice before any deviation (path
+    C4);
+  - intent recorded by ANOTHER session: the date and the question "do I
+    continue or open a new one?", instead of displaying it as current
+    (decision D1);
+  - this session's intent: purpose, step N/M with how many turns the cursor has
+    been stalled, and the next step. The age is what gives away the cursor the
+    agent forgot to advance (decision D2); the whole plan stays in whereami.
 
-Rodada do `cepa-until` (`CEPA_UNTIL_RUN`) não recebe intenção nenhuma: ali a
-intenção é o item do plan.yaml, e um arquivo herdado de outra sessão viraria
-uma pergunta que ninguém está lá para responder.
+A `cepa-until` run (`CEPA_UNTIL_RUN`) gets no intent at all: there the intent is
+the plan.yaml item, and a file inherited from another session would become a
+question nobody is there to answer.
 
-Nunca bloqueia nada. Sem modo e sem intenção, é silencioso.
+Never blocks anything. With no mode and no intent, it is silent.
 """
 
 import json
@@ -40,13 +42,13 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 
-# Condição de saída de cada modo — o que precisa ser verdade para ele fechar.
-# Sem isso o modo é rótulo, não fronteira. A tabela mora em `_modes.py` (fonte
-# única, compartilhada com o `cepa-modes`); aqui só se lê.
+# Exit condition of each mode: what has to be true for it to close.
+# Without it the mode is a label, not a boundary. The table lives in `_modes.py`
+# (single source, shared with `cepa-modes`); here it is only read.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from _modes import EXIT
-except Exception:  # noqa: BLE001 — o hook roda todo turno; nunca pode quebrar
+except Exception:  # noqa: BLE001 — the hook runs every turn; it must never break
     EXIT = {}
 try:
     from _modes import read_intent, same_session, other_session_question
@@ -57,17 +59,17 @@ try:
 except Exception:  # noqa: BLE001
     parse_session_mode = None
 
-# A marca que o `cepa-until` exporta em cada rodada (mesma do session-registry).
-ENV_JANELA = "CEPA_UNTIL_RUN"
+# The mark `cepa-until` exports on each run (same as session-registry).
+ENV_WINDOW = "CEPA_UNTIL_RUN"
 
-# Quantos prompts do log entram no estado vazio, e o corte de cada um: são
-# pista da intenção, não transcrição, e pagam pedágio todo turno.
-PRIMEIROS = 3
-CORTE_PROMPT = 120
-# O mesmo pedágio vale para o propósito e o nome do passo: o escritor não
-# limita o tamanho deles, e o hook repete os dois em todo turno.
-CORTE_PROPOSITO = 160
-CORTE_PASSO = 80
+# How many log prompts enter the empty state, and the cut of each: they are a
+# hint of the intent, not a transcript, and they pay a toll every turn.
+FIRST_N = 3
+PROMPT_CUT = 120
+# The same toll applies to the purpose and the step name: the writer does not
+# limit their size, and the hook repeats both on every turn.
+PURPOSE_CUT = 160
+STEP_CUT = 80
 
 
 def repo_root(cwd):
@@ -82,25 +84,25 @@ def repo_root(cwd):
 
 
 def read_mode(root):
-    """Lê o .claude/session-mode. Formato raso o bastante para não exigir PyYAML
-    (o hook roda em todo turno; importar yaml aqui seria pedágio à toa)."""
+    """Reads .claude/session-mode. A format shallow enough not to require PyYAML
+    (the hook runs every turn; importing yaml here would be a pointless toll)."""
     path = os.path.join(root, ".claude", "session-mode")
     if not os.path.isfile(path):
         return None
     try:
         with open(path, encoding="utf-8") as fh:
-            texto = fh.read()
+            text = fh.read()
     except Exception:  # noqa: BLE001
         return None
     if parse_session_mode is None:
         return None
-    # chaves novas (mode, budget, ...) mesmo se o arquivo é do `cepa` antigo
-    data = parse_session_mode(texto)
+    # new keys (mode, budget, ...) even if the file is from the old `cepa`
+    data = parse_session_mode(text)
     return data if data.get("mode") else None
 
 
 def _iso(stamp):
-    """`2026-10-16T21:40:00Z` (ou com offset) -> datetime UTC; None se não der."""
+    """`2026-10-16T21:40:00Z` (or with offset) -> UTC datetime; None if impossible."""
     try:
         d = datetime.fromisoformat(str(stamp).strip().replace("Z", "+00:00"))
     except (ValueError, TypeError):
@@ -109,101 +111,101 @@ def _iso(stamp):
 
 
 def log_prompts(root):
-    """`.claude/session-log.md` -> [(datetime UTC, prompt em uma linha)].
+    """`.claude/session-log.md` -> [(UTC datetime, prompt on one line)].
 
-    O formato é o do `session-log.py`: `## AAAA-MM-DD` agrupa o dia e
-    `### HH:MM:SS UTC` abre cada prompt."""
+    The format is that of `session-log.py`: `## YYYY-MM-DD` groups the day and
+    `### HH:MM:SS UTC` opens each prompt."""
     path = os.path.join(root, ".claude", "session-log.md")
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
-            texto = fh.read()
+            text = fh.read()
     except OSError:
         return []
-    out, dia, quando, corpo = [], None, None, []
+    out, day, when, body = [], None, None, []
 
-    def fecha():
-        t = " ".join(" ".join(corpo).split())
-        if quando is not None and t:
-            out.append((quando, t))
+    def close():
+        t = " ".join(" ".join(body).split())
+        if when is not None and t:
+            out.append((when, t))
 
-    for linha in texto.splitlines():
-        m = re.match(r"^## (\d{4}-\d{2}-\d{2})\s*$", linha)
+    for line in text.splitlines():
+        m = re.match(r"^## (\d{4}-\d{2}-\d{2})\s*$", line)
         if m:
-            fecha()
-            dia, quando, corpo = m.group(1), None, []
+            close()
+            day, when, body = m.group(1), None, []
             continue
-        m = re.match(r"^### (\d{2}:\d{2}:\d{2}) UTC\s*$", linha)
+        m = re.match(r"^### (\d{2}:\d{2}:\d{2}) UTC\s*$", line)
         if m:
-            fecha()
-            quando, corpo = _iso(f"{dia}T{m.group(1)}Z") if dia else None, []
+            close()
+            when, body = _iso(f"{day}T{m.group(1)}Z") if day else None, []
             continue
-        # o `# Session log` do topo cai aqui antes do 1º `###` e é descartado
-        # pelo `fecha()`; dentro de um prompt, `# título` é texto do dono
-        corpo.append(linha)
-    fecha()
+        # the top `# Session log` falls here before the 1st `###` and is
+        # discarded by `close()`; inside a prompt, `# title` is the owner's text
+        body.append(line)
+    close()
     return out
 
 
-def inicio_da_sessao(root, session_id):
-    """Quando ESTA sessão começou, pelo registro de sessões (clone principal).
+def session_start(root, session_id):
+    """When THIS session began, from the session registry (main clone).
 
-    O log de prompts é por worktree e atravessa sessões; sem o início, "os
-    primeiros prompts" seriam os de uma sessão de semanas atrás."""
+    The prompt log is per worktree and spans sessions; without the start, "the
+    first prompts" would be those of a session from weeks ago."""
     if not session_id:
         return None
     try:
         import _wtlib as L
-        entrada = L.find_entry(L.main_root(root), session_id) or {}
+        entry = L.find_entry(L.main_root(root), session_id) or {}
     except Exception:  # noqa: BLE001
         return None
-    return _iso(entrada.get("started_at", ""))
+    return _iso(entry.get("started_at", ""))
 
 
-def primeiros_prompts(root, session_id, prompt_atual):
-    """Os PRIMEIROS prompts desta sessão, cortados. Sem o início registrado,
-    cai para os prompts de hoje (UTC). O prompt do turno entra se o log ainda
-    não o tem: os hooks do mesmo evento não têm ordem garantida."""
+def first_prompts(root, session_id, current_prompt):
+    """The FIRST prompts of this session, cut. Without a recorded start, falls
+    back to today's prompts (UTC). The turn's prompt is included if the log does
+    not have it yet: hooks of the same event have no guaranteed order."""
     prompts = log_prompts(root)
-    inicio = inicio_da_sessao(root, session_id)
-    if inicio is not None:
-        prompts = [t for q, t in prompts if q >= inicio]
+    start = session_start(root, session_id)
+    if start is not None:
+        prompts = [t for q, t in prompts if q >= start]
     else:
-        hoje = datetime.now(timezone.utc).date()
-        prompts = [t for q, t in prompts if q.date() == hoje]
-    atual = " ".join(str(prompt_atual or "").split())
-    if atual and (not prompts or prompts[-1] != atual):
-        prompts.append(atual)
-    return [corta(t, CORTE_PROMPT) for t in prompts[:PRIMEIROS]]
+        today = datetime.now(timezone.utc).date()
+        prompts = [t for q, t in prompts if q.date() == today]
+    current = " ".join(str(current_prompt or "").split())
+    if current and (not prompts or prompts[-1] != current):
+        prompts.append(current)
+    return [cut(t, PROMPT_CUT) for t in prompts[:FIRST_N]]
 
 
-def corta(texto, n):
-    t = " ".join(str(texto or "").split())
+def cut(text, n):
+    t = " ".join(str(text or "").split())
     return t if len(t) <= n else t[:n - 1] + "…"
 
 
-def turnos_desde(root, stamp):
-    """Prompts do log a partir de `stamp`: há quantos turnos o cursor parou."""
-    desde = _iso(stamp)
-    if desde is None:
+def turns_since(root, stamp):
+    """Log prompts from `stamp` on: for how many turns the cursor has stalled."""
+    since = _iso(stamp)
+    if since is None:
         return None
-    return sum(1 for q, _ in log_prompts(root) if q >= desde)
+    return sum(1 for q, _ in log_prompts(root) if q >= since)
 
 
-def linhas_intencao(root, payload, tem_modo):
-    """As até duas linhas de intenção deste turno, ou [] (silêncio)."""
+def intent_lines(root, payload, has_mode):
+    """The up-to-two intent lines of this turn, or [] (silence)."""
     if read_intent is None:
         return []
     intent = read_intent(root)
-    plano = (intent or {}).get("plan")
-    if not intent or not intent.get("purpose") or not isinstance(plano, list) or not plano:
-        if not tem_modo:
+    plan = (intent or {}).get("plan")
+    if not intent or not intent.get("purpose") or not isinstance(plan, list) or not plan:
+        if not has_mode:
             return []
-        prompts = primeiros_prompts(root, payload.get("session_id"),
-                                    payload.get("prompt"))
-        lista = " | ".join(f'"{t}"' for t in prompts) or "nenhum ainda"
+        prompts = first_prompts(root, payload.get("session_id"),
+                                payload.get("prompt"))
+        listing = " | ".join(f'"{t}"' for t in prompts) or "nenhum ainda"
         return [
             "[intenção] Esta sessão ainda não tem intenção gravada. "
-            f"Primeiros prompts: {lista}.",
+            f"Primeiros prompts: {listing}.",
             "Se este prompt tem conteúdo, proponha em três linhas (propósito, para "
             "quando, plano numerado), grave com `cepa-intent write --purpose "
             '"..." --by-when "..." --plan "passo 1" "passo 2"`, e feche com: a '
@@ -211,27 +213,27 @@ def linhas_intencao(root, payload, tem_modo):
             "trivial ou um comando de abertura, não proponha ainda.",
         ]
 
-    prop = corta(intent["purpose"], CORTE_PROPOSITO)
+    prop = cut(intent["purpose"], PURPOSE_CUT)
     if not same_session(intent.get("session_id"), payload.get("session_id")):
         return other_session_question(intent, prop)
 
-    m = len(plano)
-    passo = intent.get("step")
-    if not isinstance(passo, int) or not 1 <= passo <= m + 1:
-        passo = 1
-    if passo > m:
-        para = corta(intent.get("by_when"), CORTE_PROPOSITO)
+    m = len(plan)
+    step = intent.get("step")
+    if not isinstance(step, int) or not 1 <= step <= m + 1:
+        step = 1
+    if step > m:
+        stop = cut(intent.get("by_when"), PURPOSE_CUT)
         return [f"[intenção] {prop}. Plano cumprido ({m}/{m})"
-                + (f"; ponto de parada: {para}" if para else "")
+                + (f"; ponto de parada: {stop}" if stop else "")
                 + ". Próximo: hora de /common:wrap-up."]
-    k = turnos_desde(root, intent.get("step_since"))
-    idade = f" (há {k} turno{'s' if k != 1 else ''})" if k is not None else ""
-    nome = corta(plano[passo - 1], CORTE_PASSO)
-    prox = (corta(plano[passo], CORTE_PASSO) if passo < m
-            else "plano cumprido: hora de /common:wrap-up")
+    k = turns_since(root, intent.get("step_since"))
+    age = f" (há {k} turno{'s' if k != 1 else ''})" if k is not None else ""
+    name = cut(plan[step - 1], STEP_CUT)
+    nxt = (cut(plan[step], STEP_CUT) if step < m
+           else "plano cumprido: hora de /common:wrap-up")
     return [
-        f"[intenção] {prop}. Passo {passo}/{m}: {nome}{idade}. Próximo: {prox}.",
-        f"Ao concluir o passo, rode `cepa-intent --step {passo + 1}`.",
+        f"[intenção] {prop}. Passo {step}/{m}: {name}{age}. Próximo: {nxt}.",
+        f"Ao concluir o passo, rode `cepa-intent --step {step + 1}`.",
     ]
 
 
@@ -249,32 +251,32 @@ def main():
         root = repo_root(cwd)
         mode = read_mode(root)
 
-        blocos = []
+        blocks = []
         if mode:
-            nome = mode["mode"]
-            linhas = [f"[modo] Esta sessão opera em **{nome}**."]
+            name = mode["mode"]
+            lines = [f"[modo] Esta sessão opera em **{name}**."]
             if mode.get("budget"):
-                linhas.append(f"Orçamento declarado: {mode['budget']}.")
-            if nome in EXIT:
-                linhas.append(f"Fecha quando: {EXIT[nome]}.")
-            linhas.append(
+                lines.append(f"Orçamento declarado: {mode['budget']}.")
+            if name in EXIT:
+                lines.append(f"Fecha quando: {EXIT[name]}.")
+            lines.append(
                 "Ação fora deste modo NÃO vira pergunta e NÃO vira trabalho agora: "
                 "registre pelo skill `off-mode-capture` e siga. As capturas entram "
                 "no relatório final."
             )
-            blocos.append(" ".join(linhas))
+            blocks.append(" ".join(lines))
 
-        if not os.environ.get(ENV_JANELA):
+        if not os.environ.get(ENV_WINDOW):
             try:
-                blocos += linhas_intencao(root, payload, bool(mode))
-            except Exception as e:  # noqa: BLE001 — intenção nunca derruba o modo
+                blocks += intent_lines(root, payload, bool(mode))
+            except Exception as e:  # noqa: BLE001 — intent never takes the mode down
                 print(f"[session-mode] intenção: {e}", file=sys.stderr)
 
-        if not blocos:
+        if not blocks:
             sys.exit(0)
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
-            "additionalContext": "\n".join(blocos),
+            "additionalContext": "\n".join(blocks),
         }}))
     except Exception as e:  # noqa: BLE001
         print(f"[session-mode] {e}", file=sys.stderr)
