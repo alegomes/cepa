@@ -27,9 +27,9 @@ HOOKS = REPO / "common" / "hooks"
 sys.path.insert(0, str(HOOKS))
 sys.path.insert(0, str(REPO / "tests"))
 
-from _telemetria_isolada import isola  # noqa: E402
+from _isolated_telemetry import isolate  # noqa: E402
 
-isola()
+isolate()
 
 import _handoff as H  # noqa: E402
 import _wtlib as L  # noqa: E402

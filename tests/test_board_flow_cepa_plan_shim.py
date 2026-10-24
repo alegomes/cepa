@@ -26,9 +26,9 @@ from pathlib import Path
 
 import pytest
 
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 SHIM_REAL = REPO / "board-flow" / "bin" / "cepa-plan"

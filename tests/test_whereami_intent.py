@@ -23,8 +23,8 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from _telemetria_isolada import isola
-isola()
+from _isolated_telemetry import isolate
+isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 PLUGIN_ROOT = REPO / "common"

@@ -34,9 +34,9 @@ HOOKS = REPO / "common" / "hooks"
 sys.path.insert(0, str(HOOKS))
 import _wtlib as L  # noqa: E402
 
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 failures = []
 

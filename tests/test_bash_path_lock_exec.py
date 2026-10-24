@@ -44,9 +44,9 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 HOOKS = sorted(REPO.glob("*/hooks/bash-path-lock.py"))
@@ -501,7 +501,7 @@ def test_hint_unresolved_directory():
     stays (the lock cannot guess the destination); what changes is that it
     names the variable and offers a literal path or `git -C`, which pass.
 
-    Perturbation: remove the call to `_dica_dir_desconhecido` from `_mensagem` in the
+    Perturbation: remove the call to `_dica_dir_desconhecido` from `_build_message` in the
     template and regenerate; the "names the variable" cases turn red.
     """
     var = "$CEPA_WT_NAO_EXISTE"

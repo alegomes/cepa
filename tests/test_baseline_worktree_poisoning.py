@@ -29,10 +29,10 @@ from pathlib import Path
 
 # This test runs a hook that emits telemetry; without this the events would land
 # in ~/.claude/cepa-telemetry/ and enter the /common:metrics report
-# as if they were real use. See tests/_telemetria_isolada.py.
-from _telemetria_isolada import isola
+# as if they were real use. See tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 
 REPO = Path(__file__).resolve().parent.parent

@@ -7,9 +7,9 @@ from pathlib import Path
 # telemetry through conftest.py. The explicit request is here because
 # tests/test_isolated_telemetry.py requires that EVERY test that cites an
 # emitting hook isolate on its own: citing and executing are one commit apart.
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 spec = importlib.util.spec_from_file_location(
     "capture_build_result", Path(__file__).resolve().parents[1] / "common" / "hooks" / "capture-build-result.py")

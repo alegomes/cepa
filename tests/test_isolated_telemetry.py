@@ -12,7 +12,7 @@ What is proven here, and why this way:
 
   - the proof runs the REAL tests that emit telemetry, each with HOME
     pointed at a disposable directory, and demands that this HOME stay
-    untouched. A double that only called `isola()` would prove the function, not the
+    untouched. A double that only called `isolate()` would prove the function, not the
     suite — and the defect was the suite, not the function;
   - the same test, with CEPA_TELEMETRY_DIR already defined, must respect the
     requested destination: several tests check what they wrote in their own tmpdir, and
@@ -21,7 +21,7 @@ What is proven here, and why this way:
     executes an emitter hook must isolate. Without it, the fix holds for today's 7
     and the 8th goes back to polluting quietly — which is exactly how the defect was born.
 
-Expected red without the fix: removing the call to `isola()` from any of the
+Expected red without the fix: removing the call to `isolate()` from any of the
 emitters makes the first case write to <HOME>/.claude/cepa-telemetry/.
 """
 
@@ -62,7 +62,7 @@ def isolates_somehow(text: str) -> bool:
     """The test sends the telemetry away from the real ledger, in one of the two accepted
     ways: the shared call, or its own destination in the env.
     """
-    return "isola()" in text or "CEPA_TELEMETRY_DIR" in text
+    return "isolate()" in text or "CEPA_TELEMETRY_DIR" in text
 
 FAILURES = []
 
@@ -134,8 +134,8 @@ check("…sem atropelar um destino já escolhido por quem chamou",
 
 # ── 4. the pytest family also isolates ─────────────────────────────────────
 conf = (REPO / "tests" / "conftest.py")
-check("tests/conftest.py chama isola() (a família pytest não roda pelo caminho "
-      "de script)", "isola()" in conf.read_text(encoding="utf-8"))
+check("tests/conftest.py chama isolate() (a família pytest não roda pelo caminho "
+      "de script)", "isolate()" in conf.read_text(encoding="utf-8"))
 
 # ── 5. the next polluter does not pass silently ────────────────────────────
 # Static sweep: whoever CITES an emitter hook must isolate. The rule is

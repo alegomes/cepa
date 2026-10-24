@@ -25,9 +25,9 @@ import tempfile
 import time
 from pathlib import Path
 
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 TOKENS = REPO / "common" / "bin" / "cepa-tokens"

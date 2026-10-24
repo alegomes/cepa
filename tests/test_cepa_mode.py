@@ -36,10 +36,10 @@ for _k in ("CEPA_PROMPT", "CEPA_PROMPT_MODO"):
 # The intent cases write the .claude/session-log.md that session-mode reads,
 # and the scan of tests/test_isolated_telemetry.py treats whoever cites an
 # emitting hook as an emitter. Isolating here costs nothing and keeps the real ledger clean.
-# See tests/_telemetria_isolada.py.
-from _telemetria_isolada import isola  # noqa: E402
+# See tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate  # noqa: E402
 
-isola()
+isolate()
 
 REPO =Path(__file__).resolve().parent.parent
 CEPA = REPO / "common" / "bin" / "cepa"

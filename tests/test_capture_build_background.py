@@ -47,9 +47,9 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 CAPTURE = REPO / "common" / "hooks" / "capture-build-result.py"

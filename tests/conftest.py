@@ -14,12 +14,12 @@ import tempfile
 
 import pytest
 
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
 # A família pytest não passa pelo tests/sitecustomize.py (quando o interpretador
 # arranca, `tests/` ainda não está no sys.path), então o isolamento da
-# telemetria precisa ser pedido aqui também. Ver tests/_telemetria_isolada.py.
-isola()
+# telemetria precisa ser pedido aqui também. Ver tests/_isolated_telemetry.py.
+isolate()
 
 # Os subdiretórios que o main() de test_maestro_run_colors.py cria antes de
 # chamar as funções: cada cenário de poll precisa do seu, senão um vaza no outro.

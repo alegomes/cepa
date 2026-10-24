@@ -22,8 +22,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from _telemetria_isolada import isola
-isola()
+from _isolated_telemetry import isolate
+isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 BIN = REPO / "common" / "bin" / "cepa-intent"

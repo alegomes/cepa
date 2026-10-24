@@ -34,9 +34,9 @@ HOOKS = REPO / "common" / "hooks"
 sys.path.insert(0, str(HOOKS))
 sys.path.insert(0, str(REPO / "tests"))
 
-from _telemetria_isolada import isola  # noqa: E402
+from _isolated_telemetry import isolate  # noqa: E402
 
-isola()
+isolate()
 # Run inside a cepa-until round, the window's mark turns off the
 # resume (see test_until_does_not_inherit_handoff.py); here the normal session is tested.
 os.environ.pop("CEPA_UNTIL_RUN", None)

@@ -10,9 +10,9 @@ from pathlib import Path
 
 # Explicit isolation request: tests/test_isolated_telemetry.py requires that every
 # test that cites an emitting hook isolate the telemetry on its own.
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 HOOK = Path(__file__).resolve().parents[1] / "common" / "hooks" / "capture-build-result.py"
 spec = importlib.util.spec_from_file_location("capture_build_result", HOOK)

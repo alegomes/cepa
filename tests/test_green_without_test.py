@@ -38,10 +38,10 @@ import sys
 import tempfile
 from pathlib import Path
 
-# This test executes hooks that emit telemetry. See tests/_telemetria_isolada.py.
-from _telemetria_isolada import isola
+# This test executes hooks that emit telemetry. See tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 HOOKS = REPO / "common" / "hooks"

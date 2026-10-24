@@ -18,9 +18,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # `cepa-feedback` and `cepa-until` emit telemetry, and each case runs them
 # as a subprocess: without isolating, the suite writes to the ledger of whoever runs it
 # (tests/test_isolated_telemetry.py sweeps whoever cites an emitting hook).
-from _telemetria_isolada import isola  # noqa: E402
+from _isolated_telemetry import isolate  # noqa: E402
 
-isola()
+isolate()
 
 import test_cepa_until as tu  # noqa: E402
 import test_cepa_feedback as tf  # noqa: E402

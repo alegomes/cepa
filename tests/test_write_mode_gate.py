@@ -41,9 +41,9 @@ from pathlib import Path
 
 # The hook emits `modo_escrita_indecidivel`, and this suite executes it: without isolating, the
 # rehearsal becomes a line in the /common:metrics report of whoever runs the tests.
-from _telemetria_isolada import isola
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 REPO = Path(__file__).resolve().parent.parent
 GATE = REPO / "common" / "hooks" / "write-mode-gate.py"

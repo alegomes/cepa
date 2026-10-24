@@ -45,10 +45,10 @@ from pathlib import Path
 # This test cites a telemetry emitter hook. Today it does not get to execute it,
 # but citing and executing are one step apart, and that distance is what
 # left 7 tests polluting the real ledger for a month. See
-# tests/_telemetria_isolada.py.
-from _telemetria_isolada import isola
+# tests/_isolated_telemetry.py.
+from _isolated_telemetry import isolate
 
-isola()
+isolate()
 
 
 REPO = Path(__file__).resolve().parent.parent
