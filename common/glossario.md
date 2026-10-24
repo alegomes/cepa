@@ -5,7 +5,7 @@ Este arquivo tem duas funções:
 1. **Dar ao `report-style-lint.py` listas concretas** do que contar como
    desvio. O hook lê três seções: "Traduzir sempre" (só na abertura),
    "Abstrações a evitar" (no texto inteiro) e "Higiene (não relatar)" (na
-   abertura e no `Pra você:`). "Aceitos sem tradução" ele nunca lê.
+   abertura e no `For you:`). "Aceitos sem tradução" ele nunca lê.
 2. **Ser o lugar onde termo é aposentado.** Hoje o vocabulário só cresce: cada
    sessão inventa dois termos e nenhum morre. Termo que ninguém mais usa sai
    daqui; termo que virou senso comum entre o usuário e o harness desce para a
@@ -90,7 +90,7 @@ para ele.
 Regra: se a resposta a *"e daí?"* é "e daí que está tudo normal", corte a
 frase. Se falhou, ou se exige uma ação sua, aí sim vira o assunto.
 
-Isto vale na **abertura e no `Pra você:`** — no detalhe técnico, uma oração
+Isto vale na **abertura e no `For you:`** — no detalhe técnico, uma oração
 basta ("commit `8827471`"), nunca um parágrafo.
 
 - **memória atualizada / memória gravada / atualizei a memória**

@@ -73,9 +73,9 @@ def test_sem_sim_so_mostra_o_plano():
         run_id, branch, _ = noite(raiz)
         antes = git(raiz, "rev-parse", "HEAD")
         p = aterrissa(raiz, run_id)
-        check("sem --sim sai 0", p.returncode == 0, p.stderr + p.stdout)
+        check("sem --yes sai 0", p.returncode == 0, p.stderr + p.stdout)
         check("...mostra o efeito e como confirmar",
-              "--sim" in p.stdout and branch in p.stdout, p.stdout)
+              "--yes" in p.stdout and branch in p.stdout, p.stdout)
         check("...e não mexe na main", git(raiz, "rev-parse", "HEAD") == antes)
 
 
@@ -85,7 +85,7 @@ def test_aterrissa_constroi_faz_push_e_limpa():
         remoto = com_origin(raiz)
         run_id, branch, arvore = noite(raiz)
         antes = git(raiz, "rev-parse", "HEAD")
-        p = aterrissa(raiz, run_id, "--sim")
+        p = aterrissa(raiz, run_id, "--yes")
         check("aterrissa com saída 0", p.returncode == 0, p.stderr + p.stdout)
         log = git(raiz, "log", "--format=%s", "HEAD").splitlines()
         check("o commit do item está na main", "a1" in log, str(log))
@@ -115,7 +115,7 @@ def test_build_vermelho_depois_do_merge_volta_ao_retorno_sem_push():
         commit(raiz, "quebra.txt", "x", "main andou")
         git(raiz, "push", "-q")
         retorno = git(raiz, "rev-parse", "HEAD")
-        p = aterrissa(raiz, run_id, "--sim")
+        p = aterrissa(raiz, run_id, "--yes")
         check("sai com erro", p.returncode != 0, p.stdout)
         check("a main volta ao ponto de retorno",
               git(raiz, "rev-parse", "HEAD") == retorno)
@@ -138,7 +138,7 @@ def test_conflito_para_e_rodar_de_novo_retoma():
         raiz = monta_repo(tmp, [item("a1")])
         run_id, branch, arvore = noite(raiz)
         commit(raiz, "a1.txt", "outro conteudo", "main mexeu no a1.txt")
-        p = aterrissa(raiz, run_id, "--sim")
+        p = aterrissa(raiz, run_id, "--yes")
         check("o conflito para com erro", p.returncode != 0, p.stdout)
         check("...e nomeia o arquivo", "a1.txt" in p.stdout, p.stdout)
         check("...deixando o conflito para o dono",
@@ -148,7 +148,7 @@ def test_conflito_para_e_rodar_de_novo_retoma():
         git(raiz, "add", "a1.txt")
         git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
             "resolve")
-        p = aterrissa(raiz, run_id, "--sim")
+        p = aterrissa(raiz, run_id, "--yes")
         check("rodar de novo retoma do build e termina",
               p.returncode == 0 and estado(raiz).get("estado") == "aterrissado",
               p.stdout + p.stderr)
@@ -171,7 +171,7 @@ def test_dono_vivo_na_branch_da_noite_recusa():
             "hostname": socket.gethostname(), "cwd": arvore,
             "branch": branch, "started_at": agora, "last_seen": agora}))
         antes = git(raiz, "rev-parse", "HEAD")
-        p = aterrissa(raiz, run_id, "--sim")
+        p = aterrissa(raiz, run_id, "--yes")
         check("recusa com sessão viva na branch da noite",
               p.returncode != 0 and git(raiz, "rev-parse", "HEAD") == antes,
               p.stdout + p.stderr)
@@ -185,7 +185,7 @@ def test_branch_da_noite_que_mudou_depois_da_proposta_recusa():
         run_id, branch, arvore = noite(raiz)
         commit(Path(arvore), "tarde.txt", "x", "commit depois do fim do run")
         antes = git(raiz, "rev-parse", "HEAD")
-        p = aterrissa(raiz, run_id, "--sim")
+        p = aterrissa(raiz, run_id, "--yes")
         check("recusa quando a branch da noite andou depois da proposta",
               p.returncode != 0 and git(raiz, "rev-parse", "HEAD") == antes,
               p.stdout + p.stderr)
@@ -199,7 +199,7 @@ def test_clone_com_mudanca_nao_commitada_recusa():
         run_id, _, _ = noite(raiz)
         (raiz / "rascunho.txt").write_text("x")
         antes = git(raiz, "rev-parse", "HEAD")
-        p = aterrissa(raiz, run_id, "--sim")
+        p = aterrissa(raiz, run_id, "--yes")
         check("recusa com o clone sujo",
               p.returncode != 0 and git(raiz, "rev-parse", "HEAD") == antes,
               p.stdout + p.stderr)
@@ -239,7 +239,7 @@ def test_5_pendentes_lista_o_run_esperando_e_some_depois_de_aterrissar():
               p.returncode == 0
               and f"cepa-until aterrissar fila/{run_id}" in p.stdout,
               p.stdout + p.stderr)
-        aterrissa(raiz, run_id, "--sim")
+        aterrissa(raiz, run_id, "--yes")
         check("...e some depois de aterrissado",
               run_id not in pendentes(raiz).stdout, pendentes(raiz).stdout)
 

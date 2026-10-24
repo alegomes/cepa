@@ -36,8 +36,8 @@ diz quantos tokens cada resultado custou.
 
 Uso:
     cepa-tokens                       # a sessão mais recente deste repo
-    cepa-tokens --arquivo <x.jsonl>   # uma sessão nomeada
-    cepa-tokens --todas --days 30     # todas as sessões do período
+    cepa-tokens --file <x.jsonl>   # uma sessão nomeada
+    cepa-tokens --all --days 30     # todas as sessões do período
     cepa-tokens --emit                # grava no ledger (evento token_usage)
     cepa-tokens --json
 """
@@ -206,8 +206,8 @@ def emitir(r):
 
 def main():
     ap = argparse.ArgumentParser(description="Quanto token uma sessão gastou, e com quem.")
-    ap.add_argument("--arquivo", help="o .jsonl da sessão principal")
-    ap.add_argument("--todas", action="store_true", help="todas as sessões, não só a última")
+    ap.add_argument("--file", "--arquivo", dest="arquivo", help="o .jsonl da sessão principal")
+    ap.add_argument("--all", "--todas", dest="todas", action="store_true", help="todas as sessões, não só a última")
     ap.add_argument("--days", type=int, default=30)
     ap.add_argument("--emit", action="store_true", help="grava no ledger da telemetria")
     ap.add_argument("--json", action="store_true", dest="as_json")

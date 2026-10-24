@@ -35,18 +35,20 @@ what leaks.**
 
 ## What counts as a detour, by mode
 
-The mode names are the literal keys the hook uses, so they stay in Portuguese
-(English meaning in parentheses).
+The mode names are the literal values the hook uses (`mode:` in
+`.claude/session-mode`). They are English; the old Portuguese names
+(`exploracao`, `descoberta`, `construcao`, `reforma`, `reflexao`, `documentacao`)
+are still accepted when read.
 
 | Active mode | Typical detour |
 |---|---|
-| exploração (exploration) | starting to specify acceptance criteria, opening code to "just check" |
-| descoberta (discovery) | implementing, refactoring, writing documentation |
-| design (design) | implementing the design; touching the design system beyond what the feature uses |
-| construção (construction) | micro-adjustment outside the criterion, opportunistic refactoring, documentation |
-| reforma (reform) | anything outside the declared budget; changing observable behavior |
-| reflexão (reflection) | **fixing** what you found (the finding becomes a card, not a patch) |
-| documentação (documentation) | fixing the code that the documentation revealed to be crooked |
+| exploration | starting to specify acceptance criteria, opening code to "just check" |
+| discovery | implementing, refactoring, writing documentation |
+| design | implementing the design; touching the design system beyond what the feature uses |
+| construction | micro-adjustment outside the criterion, opportunistic refactoring, documentation |
+| refactor | anything outside the declared budget; changing observable behavior |
+| reflection | **fixing** what you found (the finding becomes a card, not a patch) |
+| documentation | fixing the code that the documentation revealed to be crooked |
 
 ## What is NOT a detour
 
@@ -69,7 +71,7 @@ Destination, in this order:
    not exist). The line below is written in the user's language (Portuguese example):
 
 ```markdown
-- [ ] 2026-08-18 · modo: construcao · o resolver de contatos duplica a query N vezes; vi ao passar por ContactResolver.java:88
+- [ ] 2026-08-18 · modo: construction · o resolver de contatos duplica a query N vezes; vi ao passar por ContactResolver.java:88
 ```
 
 Each line says **what**, **where I saw it** and **which mode I was in**. No

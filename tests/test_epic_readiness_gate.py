@@ -163,7 +163,7 @@ def test_pronta_sem_roteiro_bloqueia():
         "| O operador carrega o PDF do contrato e vê as 3 respostas. |", "| - |")
     rc, err = write(epic(escada=escada))
     check("ciclo sem roteiro bloqueia", rc == 2, err)
-    check("a mensagem nomeia o roteiro", "roteiro" in err.lower(), err)
+    check("a mensagem nomeia o roteiro", "script" in err.lower(), err)
 
 
 def test_pronta_sem_colunas_de_efeito_bloqueia():
@@ -178,7 +178,7 @@ def test_pronta_sem_colunas_de_efeito_bloqueia():
     rc, err = write(epic(escada=escada))
     check("escada sem colunas de tela e backend bloqueia", rc == 2, err)
     check("a mensagem diz as colunas que faltam",
-          "Efeito em tela" in err and "Efeito em backend" in err, err)
+          "Effect on screen" in err and "Effect in backend" in err, err)
 
 
 def test_pronta_sem_ciclo_bloqueia():
@@ -191,7 +191,7 @@ def test_pronta_sem_ciclo_bloqueia():
     check("escada com zero ciclos bloqueia", rc == 2, err)
     rc, err = write(epic(escada=""))
     check("sem seção Escada de valor bloqueia", rc == 2, err)
-    check("a mensagem nomeia a escada", "escada" in err.lower(), err)
+    check("a mensagem nomeia a escada", "value ladder" in err.lower(), err)
 
 
 def test_pronta_sem_invariante_bloqueia():
@@ -215,7 +215,7 @@ def test_invariante_em_outra_secao_nao_conta():
 def test_pronta_sem_decidido_bloqueia():
     rc, err = write(epic(decidido=""))
     check("sem seção Decidido sem perguntar bloqueia", rc == 2, err)
-    check("a mensagem nomeia a seção", "Decidido sem perguntar" in err, err)
+    check("a mensagem nomeia a seção", "Decided without asking" in err, err)
 
 
 def test_pronta_com_pergunta_aberta_bloqueia():
@@ -330,7 +330,7 @@ def test_comando_existe_e_e_grill_me():
     check("carrega guided-interrogation", "guided-interrogation" in texto)
     check("fecha pelo spec-readiness-gate", "spec-readiness-gate" in texto)
     check("formato traz as colunas de efeito",
-          "Efeito em tela" in texto and "Efeito em backend" in texto)
+          "Effect on screen" in texto and "Effect in backend" in texto)
 
 
 def test_comando_no_catalogo():
@@ -557,7 +557,7 @@ def test_prosa_da_intencao_e_do_fechamento():
     # S15 e S16: as duas regras da prosa que a transcrição exercita.
     check("intenção em dois turnos", "**Intent**, in two turns" in texto)
     check("grava pronta no mesmo turno em que a última lacuna fecha",
-          "write `pronta` in the same turn" in texto)
+          "write `ready` in the same turn" in texto)
     # S17: a linha de e0c7d05, que levou o turno 1 a 10 de 10 na rodada 7.
     check("com a intenção no argumento, turno 1 pergunta só o que se faz hoje",
           "If the intent came in the argument" in texto
@@ -572,10 +572,60 @@ def test_textos_descritivos():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     check("o gate da descoberta cita docs/epics",
-          "docs/epics" in mod.MODOS["descoberta"]["gate"])
+          "docs/epics" in (mod.MODOS.get("discovery") or mod.MODOS["descoberta"])["gate"])
     cat = (REPO / "docs" / "commands.md").read_text()
     check("o cenário 'ideia vaga' do catálogo cita /common:epic",
           re.search(r"^- `/common:epic <nome>`", cat, re.M) is not None)
+
+
+# ── nomes em inglês (2026-10-23): o gate aceita os dois idiomas ──────────────
+ESCADA_EN = (ESCADA_OK.replace("## Escada de valor", "## Value ladder")
+             .replace("| Ciclo | Roteiro de demonstração | Efeito em tela | Efeito em backend | O que atravessa | Quando |",
+                      "| Cycle | Script | Effect on screen | Effect in backend | What it crosses | When |"))
+INVARIANTES_EN = INVARIANTES_OK.replace("## Invariantes (nunca regridem)",
+                                        "## Invariants (never regress)")
+DECIDIDO_EN = DECIDIDO_OK.replace("## Decidido sem perguntar (vete aqui)",
+                                  "## Decided without asking (veto here)")
+
+
+def epic_en(status="ready", escada=ESCADA_EN, invariantes=INVARIANTES_EN,
+            decidido=DECIDIDO_EN, **kw):
+    return epic(status=status, escada=escada, invariantes=invariantes,
+                decidido=decidido, **kw)
+
+
+def test_ingles_completo_passa_e_antigo_completo_passa():
+    rc, err = write(epic_en())
+    check("Epic `Status: ready` + `## Value ladder` completo passa", rc == 0, err)
+    rc, err = write(epic(status="pronta"))
+    check("Epic `Status: pronta` + `## Escada de valor` completo passa", rc == 0, err)
+    rc, err = write(epic_en(status="ready-to-build"))
+    check("Epic `ready-to-build` completo passa", rc == 0, err)
+
+
+def test_ingles_furado_bloqueia_e_a_mensagem_diz_os_nomes_novos():
+    rc, err = write(epic_en(escada=ESCADA_EN.replace(
+        "| a conta aparece com a glosa e o motivo |", "|  |")))
+    check("ready: ciclo sem Effect on screen bloqueia", rc == 2, err)
+    check("...nomeando a coluna nova", "Effect on screen" in err, err)
+    rc, err = write(epic_en(invariantes=""))
+    check("ready sem `## Invariants` bloqueia, nomeando a seção nova",
+          rc == 2 and "## Invariants" in err, err)
+    rc, err = write(epic_en(decidido=""))
+    check("ready sem `## Decided without asking` bloqueia, nomeando a seção nova",
+          rc == 2 and "## Decided without asking" in err, err)
+    rc, err = write(epic_en(escada=""))
+    check("ready sem `## Value ladder` bloqueia, nomeando a seção nova",
+          rc == 2 and "## Value ladder" in err, err)
+    rc, err = write(epic_en(perguntas="## Perguntas em aberto\n- [ ] quem?\n"))
+    check("ready com pergunta aberta bloqueia, e diz `draft`",
+          rc == 2 and "`draft`" in err, err)
+
+
+def test_draft_nunca_bloqueia():
+    rc, err = write(epic_en(status="draft", escada="## Value ladder\n",
+                            invariantes="", decidido=""))
+    check("Epic `Status: draft` todo furado passa", rc == 0, err)
 
 
 def main():

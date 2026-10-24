@@ -1,6 +1,6 @@
 ---
-description: Records, at any point in the session, feedback about Cepa itself — the command that asked too much, the gate that blocked what it shouldn't, the unreadable report, the agent that did what nobody asked. The record is GLOBAL (~/.claude/cepa-feedback/), because the annoyance happens in the client's repo and the target is the harness; the session's repo, branch and mode are filled in automatically. With no argument, lists what is open. With --triar, and only inside the Cepa repo, turns the open ones into BACKLOG.md items and marks each with its destination. Fixes nothing and does not interrupt the turn's work.
-argument-hint: [<feedback text>] | [--alvo X] | [--listar [--todos]] | [--triar]
+description: Records, at any point in the session, feedback about Cepa itself — the command that asked too much, the gate that blocked what it shouldn't, the unreadable report, the agent that did what nobody asked. The record is GLOBAL (~/.claude/cepa-feedback/), because the annoyance happens in the client's repo and the target is the harness; the session's repo, branch and mode are filled in automatically. With no argument, lists what is open. With --triage, and only inside the Cepa repo, turns the open ones into BACKLOG.md items and marks each with its destination. Fixes nothing and does not interrupt the turn's work.
+argument-hint: [<feedback text>] | [--target X] | [--list [--all]] | [--triage]
 interaction: routine
 ---
 
@@ -24,9 +24,9 @@ makes it reconstructible months later (repo, branch, session mode, target).
 
 - `$ARGUMENTS` — one of four forms:
   - **text** → records the feedback (default form).
-  - **empty** or `--listar` → lists the open feedback (`--todos` includes the already triaged ones).
-  - `--alvo <x>` → goes with the text; names the responsible command/hook/agent.
-  - `--triar` → turns the open ones into `BACKLOG.md` items. Only makes sense in the Cepa repo.
+  - **empty** or `--list` → lists the open feedback (`--all` includes the already triaged ones).
+  - `--target <x>` → goes with the text; names the responsible command/hook/agent.
+  - `--triage` → turns the open ones into `BACKLOG.md` items. Only makes sense in the Cepa repo.
 
 ## Where the record lives
 
@@ -48,7 +48,7 @@ When `$ARGUMENTS` carries text:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" add \
-  "<owner's text, verbatim>" --alvo <target if any> --origem comando
+  "<owner's text, verbatim>" --target <target if any> --origin comando
 ```
 
 **Verbatim.** Do not summarize, do not rewrite, do not "improve" the owner's
@@ -56,7 +56,7 @@ wording. If they wrote four lines of irritation, the four lines go in. A summary
 swaps the complaint for your reading of it — and your reading is usually the
 problem.
 
-You fill `--alvo` from the turn's context when it is clear (the command that just
+You fill `--target` from the turn's context when it is clear (the command that just
 ran, the hook that just blocked, the agent that just returned the report). Do not
 invent: with no evident target, record without it.
 
@@ -69,18 +69,18 @@ ask for the full sentence — without turning it into an interrogation.
 
 ### 2. List
 
-With no argument, or with `--listar`:
+With no argument, or with `--list`:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --sem-cor
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --status todos --sem-cor   # with --todos
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --no-color
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" list --status todos --no-color   # with --all
 ```
 
 Pass the list on as it came, grouped by target when there are more than five
 items. Do not classify, do not prioritize, do not propose a fix: here you are a
 shop window.
 
-### 3. Triage (`--triar`) — only in the Cepa repo
+### 3. Triage (`--triage`) — only in the Cepa repo
 
 Triage is what keeps the ledger from becoming a dead archive: each open feedback
 leaves it with a named destination.
@@ -104,8 +104,8 @@ leaves it with a named destination.
      triage.
 4. Mark each one:
    ```bash
-   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" triar <id> \
-     --destino "BACKLOG.md § <title>" --nota "<one line, if it helps>"
+   python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" triage <id> \
+     --destination "BACKLOG.md § <title>" --note "<one line, if it helps>"
    ```
    The bin refuses an empty destination, a nonexistent id and re-triage — a
    second triage would silently erase the first decision.

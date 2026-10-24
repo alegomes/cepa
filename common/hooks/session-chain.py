@@ -5,12 +5,13 @@ Roda DEPOIS que o `claude` lançado pelo `cepa` sai. Se a sessão que acabou de
 sair deixou o próximo passo gravado em
 `<raiz-principal>/.claude/sessions/<session_id>.next.json`:
 
-    {"repo": "/abs/path", "modo": "descoberta", "brief": "<texto>"}
+    {"repo": "/abs/path", "mode": "discovery", "brief": "<texto>"}
 
 este script apaga o arquivo, entra em `repo` e substitui o próprio processo
-pelo `cepa` de novo, com `--modo <modo>` e o brief como prompt inicial. Se o
-arquivo traz `intencao` ({proposito, para_quando, plano}), vão também
-`--proposito`, `--para-quando` e `--plano` (o cepa grava a intenção da sessão);
+pelo `cepa` de novo, com `--mode <modo>` e o brief como prompt inicial. Se o
+arquivo traz `intent` ({purpose, by_when, plan}; o antigo `intencao` com
+proposito/para_quando/plano também vale), vão também `--purpose`, `--by-when`
+e `--plan` (o cepa grava a intenção da sessão);
 sem ela, a sessão seguinte nasce sem intenção, nunca com o brief no lugar. A
 sessão seguinte abre no repo e no modo certos sem o dono digitar nada. Sem o
 arquivo, sai com o código que recebeu e nada acontece.
@@ -33,6 +34,11 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _wtlib as L  # noqa: E402
+try:
+    from _modos import normalize_mode as _normaliza_modo
+except Exception:  # noqa: BLE001 — o encadeamento nunca quebra por causa da tabela
+    def _normaliza_modo(v):
+        return v
 
 
 def breadcrumb_path(root: str, launch_id: str):
@@ -77,7 +83,10 @@ def main() -> int:
         print(f"✗ cepa: próximo passo ilegível em {nxt} ({e}); não encadeei", file=sys.stderr)
         return rc
     repo = spec.get("repo") if isinstance(spec, dict) else None
-    modo = spec.get("modo") if isinstance(spec, dict) else None
+    # `mode` (ou o antigo `modo`); o valor antigo (`descoberta`) vira o novo
+    modo = (spec.get("mode") or spec.get("modo")) if isinstance(spec, dict) else None
+    if isinstance(modo, str):
+        modo = _normaliza_modo(modo)
     brief = spec.get("brief") if isinstance(spec, dict) else None
     if not (isinstance(repo, str) and os.path.isdir(repo)
             and isinstance(modo, str) and modo
@@ -102,7 +111,7 @@ def main() -> int:
     print(f"↻ cepa: próxima sessão em {repo} (modo {modo}) — CEPA_ENCADEAR=off desliga",
           file=sys.stderr)
     os.chdir(repo)
-    os.execv(cepa, [cepa, "--modo", modo, *intencao_args(spec.get("intencao"), nxt), brief])
+    os.execv(cepa, [cepa, "--mode", modo, *intencao_args(spec.get("intent") or spec.get("intencao"), nxt), brief])
     return rc  # unreachable
 
 
@@ -111,15 +120,16 @@ def intencao_args(it, nxt) -> list:
     partes escritas para ela; o brief fala da sessão que saiu e não vira propósito."""
     if it is None:
         return []
-    plano = it.get("plano") if isinstance(it, dict) else None
-    textos = [it.get(k) for k in ("proposito", "para_quando")] if isinstance(it, dict) else []
+    plano = (it.get("plan") or it.get("plano")) if isinstance(it, dict) else None
+    textos = ([it.get("purpose") or it.get("proposito"), it.get("by_when") or it.get("para_quando")]
+              if isinstance(it, dict) else [])
     if not (len(textos) == 2 and all(isinstance(t, str) and t.strip() for t in textos)
             and isinstance(plano, list) and plano
             and all(isinstance(i, str) and i.strip() and "\n" not in i for i in plano)):
         print(f"⚠ cepa: intenção inválida em {nxt}; a sessão seguinte abre sem ela",
               file=sys.stderr)
         return []
-    return ["--proposito", textos[0], "--para-quando", textos[1], "--plano", "\n".join(plano)]
+    return ["--purpose", textos[0], "--by-when", textos[1], "--plan", "\n".join(plano)]
 
 
 if __name__ == "__main__":

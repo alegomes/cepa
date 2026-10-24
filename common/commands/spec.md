@@ -85,9 +85,9 @@ subject in kebab-case.
   ask whether to continue that one. Two specifications of the same subject
   diverging silently is worse than none.
 
-Write the skeleton with `**Status:** rascunho` (draft) (the format is in step
+Write the skeleton with `**Status:** draft` (the format is in step
 6). The `spec-readiness-gate` gate never bothers you while the status is
-`rascunho`.
+`draft`.
 
 ### 2. Read before asking
 
@@ -103,13 +103,13 @@ after reading.
 ### 3. Interrogate, in rounds
 
 **At most four questions per turn**, with a recommendation on each
-(`Recomendo X, porque Y` — I recommend X, because Y), ordered by the cost of
+(`I recommend X, because Y`), ordered by the cost of
 getting it wrong: scope boundary and contract before edge case. Use
 `AskUserQuestion` when the answers are closed choices; prose when it is open.
 
 The test for whether something becomes a question: **do two different answers
 here produce different code?** If not, decide alone and record the decision
-in the "Decidido sem perguntar" (decided without asking) section — the owner
+in the "Decided without asking" section — the owner
 vetoes there if he wants.
 
 Cover, over the rounds, what is always missing and always costs a lot:
@@ -138,13 +138,13 @@ is how `--continuar` knows where it stopped.
 
 ### 5. Close by the sieve, never by fatigue
 
-The specification becomes `**Status:** pronta-para-construir` (ready to build)
+The specification becomes `**Status:** ready-to-build`
 when, and only when:
 
-- every criterion has `**Superfície:**` (surface) from the closed vocabulary —
+- every criterion has `**Surface:**` from the closed vocabulary —
   `http`, `cli`, `ui`, `event`, `domain`, `application` — the outermost layer
   where the criterion is observable;
-- every criterion has `**Teste vermelho:**` (red test): the sentence of the
+- every criterion has `**Red test:**`: the sentence of the
   test that **today** would fail on that surface and will pass when the thing
   exists;
 - no `- [ ]` is left.
@@ -154,11 +154,11 @@ other side of the wall decides whether a card can go to review. Using the same
 one at both ends is the point: the specification is born measured by the gate
 that would judge it at the end.
 
-The `spec-readiness-gate` hook blocks writing `Status: pronta-para-construir`
+The `spec-readiness-gate` hook blocks writing `Status: ready-to-build`
 while any of them is missing. If it blocks, **the right response is to go back
 to asking**, never to soften the field until it passes.
 
-The field is called **Superfície** and not *Altitude* on purpose: `Altitude`
+The field is called **Surface** and not *Altitude* on purpose: `Altitude`
 is already a field of the decision block, with another closed vocabulary
 (`strategic`/`tactical`/`implementation`) and its own gate on write. Two
 homonymous fields with different vocabularies is how one learns to ignore
@@ -167,14 +167,16 @@ both.
 ### 6. The file format
 
 The document is written in pt-BR. Keep the headings and the `**Status:**`,
-`**Aberta em:**`, `**Fechada em:**`, `### CS-<n>:`, `**Superfície:**` and
-`**Teste vermelho:**` labels verbatim: `spec-readiness-gate` and
-`cepa-plan --from-spec` parse them. Only the placeholders below are in English.
+`**Aberta em:**`, `**Fechada em:**`, `### CS-<n>:`, `**Surface:**` and
+`**Red test:**` labels verbatim: `spec-readiness-gate` and
+`cepa-plan --from-spec` parse them (the old pt-BR `pronta-para-construir`,
+`rascunho`, `Superfície`, `Teste vermelho` still read in older specs, but you
+write only the new ones). Only the placeholders below are in English.
 
 ```markdown
 # Especificação: <subject>
 
-**Status:** rascunho
+**Status:** draft
 **Aberta em:** <date>            **Fechada em:** <date or ->
 
 ## Problema
@@ -193,14 +195,14 @@ The document is written in pt-BR. Keep the headings and the `**Status:**`,
 ## Critérios de sucesso
 
 ### CS-1: <the criterion in observable terms>
-**Superfície:** http
-**Teste vermelho:** <the sentence of the test that would fail today>
+**Surface:** http
+**Red test:** <the sentence of the test that would fail today>
 
 ## Perguntas em aberto
 - [x] <question> — <owner's answer>
 - [ ] <question still without an answer>
 
-## Decidido sem perguntar
+## Decided without asking
 - <decision> — <why>. Vete aqui se discordar.
 
 ## Riscos e o que ficou de fora desta especificação

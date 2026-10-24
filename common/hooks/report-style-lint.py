@@ -37,7 +37,7 @@ formato plain-report, e a pergunta virou item numerado com "Recomendo sim",
 que é o menu que a entrevista proíbe. O turno é poupado quando TODA escrita
 dele foi em `docs/epics/<nome>.md`, não houve commit, o último parágrafo da
 fala tem uma pergunta e a fala não traz nenhuma marca do relatório
-(`**Pra você:**`, "Detalhe técnico", "Decisões e próximos passos"). O
+(`**For you:**`, "Technical detail", "Decisions and next steps", ou os rótulos pt-BR antigos). O
 relatório de fechamento tem essas marcas e termina em pergunta numerada, então
 continua medido. O `/common:spec` fica fora da exceção: o turno dele pergunta
 em rodadas de até quatro, e poupá-lo é outra decisão.
@@ -88,23 +88,29 @@ MAX_PALAVRAS_ANTES_DO_TECNICO = 200
 MIN_PALAVRAS_PARA_MEDIR = 80   # abaixo disso não é relatório, é recado
 MAX_PASSIVAS = 3               # densidade, não caça: uma passiva é normal
 
-MARCADOR_TECNICO = re.compile(r"^\s{0,3}#{1,6}\s*detalhe\s+t[ée]cnico", re.I | re.M)
-MARCADOR_PRA_VOCE = re.compile(r"(^\s{0,3}#{1,6}\s*pra\s+voc[êe]|\*\*\s*pra\s+voc[êe]\s*:?\s*\*\*)",
-                               re.I | re.M)
+# Rótulos canônicos em inglês (interface-in-english, 2026-10-23); os rótulos
+# pt-BR continuam aceitos durante a transição.
+MARCADOR_TECNICO = re.compile(
+    r"^\s{0,3}#{1,6}\s*(?:technical\s+detail|detalhe\s+t[ée]cnico)", re.I | re.M)
+MARCADOR_PRA_VOCE = re.compile(
+    r"(^\s{0,3}#{1,6}\s*(?:for\s+you|pra\s+voc[êe])"
+    r"|\*\*\s*(?:for\s+you|pra\s+voc[êe])\s*:?\s*\*\*)", re.I | re.M)
 # A lista do fim (pedido do usuário, 03/08/2026). Aceita "Próximos passos",
 # "Decisões" ou as duas juntas — o título canônico da skill é o terceiro.
 MARCADOR_PASSOS = re.compile(
-    r"^\s{0,3}#{1,6}\s*(decis(?:ões|oes)(?:\s+e\s+pr[óo]ximos\s+passos)?|"
+    r"^\s{0,3}#{1,6}\s*(decisions(?:\s+and\s+next\s+steps)?|next\s+steps|"
+    r"decis(?:ões|oes)(?:\s+e\s+pr[óo]ximos\s+passos)?|"
     r"pr[óo]ximos\s+passos)\s*$", re.I | re.M)
 CABECALHO = re.compile(r"^\s{0,3}#{1,6}\s+\S", re.M)
 ITEM_DE_LISTA = re.compile(r"^\s{0,3}([-*+]|\d+[.)])\s+\S", re.M)
 # Item numerado: o usuário responde "1 sim, 2 não, 3 vamos falar" sem ter de
 # copiar o texto de volta. Marcador solto ("- ") não dá número para citar.
 ITEM_NUMERADO = re.compile(r"^\s{0,3}\d+[.)]\s+\S", re.M)
-RECOMENDACAO = re.compile(r"recomendo\b", re.I)
+RECOMENDACAO = re.compile(r"recomendo\b|i\s+recommend\b", re.I)
 # Item de tarefa do dono: a pergunta começa por "Você ..." (2026-10-15).
-ITEM_VOCE = re.compile(r"^\s*\d+[.)]\s+\**\s*voc[êe]\b", re.I)
-PRONTO_QUANDO = re.compile(r"pronto\s+quando", re.I)
+ITEM_VOCE = re.compile(r"^\s*\d+[.)]\s+\**\s*(?:voc[êe]|you)\b", re.I)
+NADA_PENDENTE = re.compile(r"nada\s+pendente|nothing\s+pending", re.I)
+PRONTO_QUANDO = re.compile(r"pronto\s+quando|done\s+when", re.I)
 # Caminho de arquivo: começa por / ~/ ./ ../ ; ou tem 2+ trechos ASCII
 # separados por barra ("docs/lgpd"); ou é nome com extensão ("ripd.md").
 # Trecho com acento não conta, para "sim/não" não passar por caminho.
@@ -433,7 +439,7 @@ def medir_itens(cauda: str) -> list:
     entender todo o contexto, para poder elaborar uma próxima instrução"*. Ele
     quer responder "1 sim, 2 não, 3 vamos falar".
     """
-    if "nada pendente" in cauda.lower():
+    if NADA_PENDENTE.search(cauda):
         return []
     if not ITEM_DE_LISTA.search(cauda):
         return []          # a falta de itens já virou desvio em quem chamou
@@ -457,7 +463,7 @@ def medir_itens(cauda: str) -> list:
     if sem_reco:
         desvios.append(("item-sem-recomendacao",
                         f"{len(sem_reco)} de {len(itens)} itens não trazem "
-                        f"\"Recomendo sim/não\" — decisão crua sem recomendação "
+                        f"\"I recommend yes/no\" — decisão crua sem recomendação "
                         f"devolve o trabalho para o usuário"))
 
     tarefas = [i for i in itens if ITEM_VOCE.match(i)]
@@ -470,7 +476,7 @@ def medir_itens(cauda: str) -> list:
         if sem_comando:
             falta.append("comando ou arquivo")
         if sem_pronto:
-            falta.append("a linha 'Pronto quando:'")
+            falta.append("a linha 'Done when:'")
         desvios.append(("tarefa-sem-passo",
                         f"{len(ruins)} de {len(tarefas)} itens de tarefa sua "
                         f"(\"Você ...\") não trazem o passo a passo — falta "
@@ -493,7 +499,7 @@ def pra_voce_anuncia(texto: str) -> bool:
     limpo = re.sub(r"^[\W_]+", "", texto)
     if not limpo:
         return False
-    return not limpo.lower().startswith("nada")
+    return not limpo.lower().startswith(("nada", "nothing"))
 
 
 def desvio_pos_wrap_up(relatorio: str):
@@ -511,9 +517,9 @@ def desvio_pos_wrap_up(relatorio: str):
     return ("pergunta-pos-wrap-up",
             "a sessão já foi encerrada pelo wrap-up (\"Safe to exit\"): o "
             "relatório não abre frente nova: nenhuma pergunta fechada na "
-            "lista do fim, e `Pra você:` diz \"nada\"; o que sobrou você "
+            "lista do fim, e `For you:` diz \"nothing\"; o que sobrou você "
             "registra (seção no BACKLOG.md, item de fila ou `cepa-feedback "
-            "add`) e a lista diz \"Nada pendente. Próxima sessão começa por "
+            "add`) e a lista diz \"Nothing pending. Próxima sessão começa por "
             "<o Próximo do handoff>.\"")
 
 
@@ -548,23 +554,23 @@ def medir(relatorio: str, jargao: list, abstracoes: list = (),
 
     if not MARCADOR_PRA_VOCE.search(cabeca):
         desvios.append(("sem-pra-voce",
-                        "falta a linha `**Pra você:**` — mesmo que seja "
-                        "\"nada pra decidir\""))
+                        "falta a linha `**For you:**` — mesmo que seja "
+                        "\"nothing to decide\""))
 
     # A lista do fim: existe, é a última seção, e traz itens de verdade.
     mp = MARCADOR_PASSOS.search(relatorio)
     if not mp:
         desvios.append(("sem-proximos-passos",
-                        "falta a seção final `### Decisões e próximos passos` — "
+                        "falta a seção final `### Decisions and next steps` — "
                         "uma linha por ação (Decidir / Você faz / Eu faço), ou "
-                        "\"Nada pendente.\" quando não há nenhuma"))
+                        "\"Nothing pending.\" quando não há nenhuma"))
     else:
         cauda = relatorio[mp.end():]
         if CABECALHO.search(cauda):
             desvios.append(("passos-nao-sao-o-fim",
-                            "`### Decisões e próximos passos` não é a última seção — "
+                            "`### Decisions and next steps` não é a última seção — "
                             "nada vem depois dela"))
-        if not ITEM_DE_LISTA.search(cauda) and "nada pendente" not in cauda.lower():
+        if not ITEM_DE_LISTA.search(cauda) and not NADA_PENDENTE.search(cauda):
             desvios.append(("passos-em-prosa",
                             "a seção final não tem itens de lista — cada ação em "
                             "uma linha começando por verbo, não em prosa"))
@@ -573,12 +579,12 @@ def medir(relatorio: str, jargao: list, abstracoes: list = (),
         if (pra_voce_anuncia(topo) and not ITEM_NUMERADO.search(cauda)
                 and not encerrada):
             desvios.append(("pra-voce-sem-lista",
-                            f"`Pra você:` diz que algo espera pelo usuário "
+                            f"`For you:` diz que algo espera pelo usuário "
                             f"({topo[:60].strip()}), e a lista do fim não tem "
                             f"item numerado nenhum — cada tarefa dele é um item "
-                            f"numerado com Onde, Comando (ou arquivo) e Pronto "
-                            f"quando; só quando o Pra você diz \"nada\" a lista "
-                            f"pode dizer \"Nada pendente.\""))
+                            f"numerado com Onde, Comando (ou arquivo) e Done "
+                            f"when; só quando o For you diz \"nothing\" a lista "
+                            f"pode dizer \"Nothing pending.\""))
 
     if encerrada:
         d = desvio_pos_wrap_up(relatorio)
@@ -590,7 +596,7 @@ def medir(relatorio: str, jargao: list, abstracoes: list = (),
         desvios.append(("acima-do-teto",
                         f"{palavras} palavras antes do detalhe técnico "
                         f"(teto {MAX_PALAVRAS_ANTES_DO_TECNICO}) — o resto desce "
-                        f"para `### Detalhe técnico`"))
+                        f"para `### Technical detail`"))
 
     # Higiene: só no topo (abertura + `Pra você:`). No detalhe técnico "commit
     # 8827471" é informação barata e útil; aqui em cima ela empurra para fora a
@@ -695,9 +701,9 @@ def on_stop(payload):
 
 
 FORMATO_ENCERRADA = (
-    "abertura de até 3 frases sem jargão → **Pra você:** nada → "
-    "### Detalhe técnico → ### Decisões e próximos passos contendo só "
-    "\"Nada pendente. Próxima sessão começa por <o Próximo do handoff>.\", "
+    "abertura de até 3 frases sem jargão → **For you:** nothing → "
+    "### Technical detail → ### Decisions and next steps contendo só "
+    "\"Nothing pending. Próxima sessão começa por <o Próximo do handoff>.\", "
     "sem item numerado e sem pergunta. O que sobrou vai para registro "
     "(BACKLOG.md, item de fila ou `cepa-feedback add`) e o relatório diz onde.")
 
@@ -708,12 +714,12 @@ def motivo_bloqueio(desvios, encerrada: bool = False) -> str:
                "turno: " + FORMATO_ENCERRADA + " ")
     else:
         fim = ("Reescreva o relatório inteiro nesta ordem, antes de encerrar o "
-               "turno: abertura de até 3 frases sem jargão → **Pra você:** → "
-               "### Detalhe técnico → ### Decisões e próximos passos (lista "
+               "turno: abertura de até 3 frases sem jargão → **For you:** → "
+               "### Technical detail → ### Decisions and next steps (lista "
                "numerada, uma pergunta fechada por item, cada uma com "
-               "\"Recomendo sim/não\" e o porquê em uma linha; tarefa sua com "
-               "Onde, Comando (ou arquivo) e Pronto quando; \"Nada pendente.\" "
-               "só se o Pra você disser nada). ")
+               "\"I recommend yes/no\" e o porquê em uma linha; tarefa sua com "
+               "Onde, Comando (ou arquivo) e Done when; \"Nothing pending.\" "
+               "só se o For you disser nothing). ")
     return ("Seu relatório final saiu do formato `plain-report`:\n" +
             "".join(f"  - {d}\n" for d in desvios) + fim +
             "Não peça desculpa e não explique a reescrita \u2014 entregue o "
@@ -737,10 +743,10 @@ def on_prompt(payload) -> None:
           "`plain-report`:\n" +
           "".join(f"  - {d}\n" for d in desvios) +
           "  Formato: " + (FORMATO_ENCERRADA + " " if encerrada else
-          "abertura de até 3 frases sem jargão → **Pra você:** → "
-          "### Detalhe técnico → ### Decisões e próximos passos (numerada, uma "
-          "pergunta fechada por item, cada uma com \"Recomendo sim/não\"; tarefa "
-          "sua com Onde, Comando e Pronto quando). ") +
+          "abertura de até 3 frases sem jargão → **For you:** → "
+          "### Technical detail → ### Decisions and next steps (numerada, uma "
+          "pergunta fechada por item, cada uma com \"I recommend yes/no\"; tarefa "
+          "sua com Onde, Comando e Done when). ") +
           "Este é o caminho de aviso — o relatório anterior já tinha sido "
           "bloqueado uma vez e a reescrita ainda desviou. Aplique no próximo "
           "relatório em vez de reescrever o anterior.")

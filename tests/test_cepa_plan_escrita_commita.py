@@ -70,8 +70,8 @@ def plan(raiz, *args, env=None):
 
 
 def responde(raiz, ident, texto, *extra):
-    return em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila", ident,
-                   "--resposta", texto, "--repo", str(raiz)] + list(extra),
+    return em_tty([sys.executable, str(CEPA_PLAN), "answer", "fila", ident,
+                   "--answer", texto, "--repo", str(raiz)] + list(extra),
                   str(raiz), env=ENV)
 
 
@@ -139,8 +139,8 @@ def test_responde_recusa_texto_que_nao_responde_a_rota():
             check(f"...dizendo o motivo ({motivo})", motivo in out, out)
             check("...e mostrando a pergunta da rota",
                   "a rota pergunta: Fecho o card como medir" in out, out)
-            check("...e apontando o --forca para o caso raro",
-                  "--forca" in out, out)
+            check("...e apontando o --force para o caso raro",
+                  "--force" in out, out)
         a1 = itens_de(raiz)["a1"]
         check("nada foi gravado: o item segue blocked", a1["status"] == "blocked")
         check("...com a evidência intacta",
@@ -153,8 +153,8 @@ def test_responde_forca_grava_o_texto_recusado():
         travado = item("a1", status="blocked")
         travado["owner_question"] = "Fecho o card?"
         raiz = monta_repo(tmp, [travado])
-        rc, out = responde(raiz, "a1", "não entendi, mas pode seguir?", "--forca")
-        check("--forca grava", rc == 0, out)
+        rc, out = responde(raiz, "a1", "não entendi, mas pode seguir?", "--force")
+        check("--force grava", rc == 0, out)
         check("...com o texto na evidência",
               "não entendi, mas pode seguir?" in itens_de(raiz)["a1"]["evidence"])
         check("...e commitado como qualquer resposta", status(raiz) == "",
@@ -171,8 +171,8 @@ def test_resposta_do_decidir_passa_mesmo_citando_a_pergunta():
         raiz = monta_repo(tmp, [travado, rota])
         rc, out = responde(raiz, "a1",
                            "não: Libero a onda, o que quer dizer rodar sem "
-                           "acompanhar?", "--mantem")
-        check("'não: <pergunta>?' com --mantem passa", rc == 0, out)
+                           "acompanhar?", "--keep")
+        check("'não: <pergunta>?' com --keep passa", rc == 0, out)
         check("...e o item segue blocked", itens_de(raiz)["a1"]["status"] == "blocked")
         rc, out = responde(raiz, "a2", "sim: valide na UI. Instrução: refaça o login")
         check("'sim: <pergunta>' passa", rc == 0, out)
@@ -222,14 +222,14 @@ def test_add_commita_e_no_commit_avisa():
         raiz = monta_repo(tmp, [item("a1")])
         p = plan(raiz, "add", "fila", "novo", "--title", "um item novo")
         check("add sai 0", p.returncode == 0, p.stderr)
-        check("add commita a fila", ultimo_commit(raiz) == "fila fila: add novo",
+        check("add commita a fila", ultimo_commit(raiz) == "queue fila: add novo",
               ultimo_commit(raiz))
         check("...e deixa a árvore limpa", status(raiz) == "", status(raiz))
         p = plan(raiz, "add", "fila", "outro", "--title", "mais um", "--no-commit")
         check("add --no-commit sai 0", p.returncode == 0, p.stderr)
         check("...grava sem commit", "plan.yaml" in status(raiz), status(raiz))
         check("...e diz que falta commitar", "Falta commitar" in p.stdout, p.stdout)
-        check("...sem commit novo", ultimo_commit(raiz) == "fila fila: add novo",
+        check("...sem commit novo", ultimo_commit(raiz) == "queue fila: add novo",
               ultimo_commit(raiz))
 
 
@@ -245,7 +245,7 @@ def test_start_e_finish_avisam_que_falta_commitar_e_commit_commita():
         p = plan(raiz, "finish", "fila", "a1", "--status", "blocked",
                  "--evidence", "condição de fora", "--commit")
         check("finish --commit sai 0", p.returncode == 0, p.stderr)
-        check("...commita a fila", ultimo_commit(raiz) == "fila fila: a1 -> blocked",
+        check("...commita a fila", ultimo_commit(raiz) == "queue fila: a1 -> blocked",
               ultimo_commit(raiz))
         check("...e deixa a árvore limpa", status(raiz) == "", status(raiz))
         env = dict(ENV, CEPA_UNTIL_RUN="1")
@@ -257,7 +257,7 @@ def test_start_e_finish_avisam_que_falta_commitar_e_commit_commita():
                  "--evidence", "voltou", env=env)
         check("...e finish também", "de propósito" in p.stdout, p.stdout)
         check("...sem commit nenhum",
-              ultimo_commit(raiz) == "fila fila: a1 -> blocked")
+              ultimo_commit(raiz) == "queue fila: a1 -> blocked")
 
 
 def test_commit_que_falha_vira_aviso_e_nao_muda_o_exit():
@@ -275,6 +275,71 @@ def test_commit_que_falha_vira_aviso_e_nao_muda_o_exit():
         check("add com fila ignorada sai 0", p.returncode == 0, p.stderr)
         check("...gravou o item", "novo" in itens_de(raiz), itens_de(raiz).keys())
         check("...e avisa que NÃO commitou", "NÃO commitada" in p.stdout, p.stdout)
+
+
+def responde_antigo(raiz, ident, texto, *extra):
+    """O nome de antes de 2026-10-23: subcomando `responde` e flag `--resposta`."""
+    return em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila", ident,
+                   "--resposta", texto, "--repo", str(raiz)] + list(extra),
+                  str(raiz), env=ENV)
+
+
+def test_nomes_antigos_seguem_valendo_e_o_commit_diz_queue():
+    """`cepa-plan responde --resposta` (e --forca/--mantem/--autor) faz o mesmo
+    que `answer --answer` (--force/--keep/--author); o commit da fila começa com
+    `queue <nome>:`."""
+    resultados = []
+    for fn in (responde, responde_antigo):
+        with tempfile.TemporaryDirectory() as tmp:
+            travado = item("a1", status="blocked")
+            travado["owner_question"] = "Fecho o card?"
+            raiz = monta_repo(tmp, [travado])
+            rc, out = fn(raiz, "a1", "sim: pode seguir")
+            a1 = itens_de(raiz)["a1"]
+            resultados.append((rc, a1["status"], a1["human_pending"],
+                               "pode seguir" in str(a1["evidence"]),
+                               ultimo_commit(raiz), status(raiz)))
+            check(f"{fn.__name__} sai 0", rc == 0, out)
+            check(f"{fn.__name__}: o commit começa com `queue fila:`",
+                  ultimo_commit(raiz).startswith("queue fila: "),
+                  ultimo_commit(raiz))
+    check("answer --answer e responde --resposta dão o mesmo resultado",
+          resultados[0] == resultados[1], resultados)
+    with tempfile.TemporaryDirectory() as tmp:
+        travado = item("a1", status="blocked")
+        travado["owner_question"] = "Fecho o card?"
+        raiz = monta_repo(tmp, [travado])
+        rc, out = responde_antigo(raiz, "a1", "não entendi, mas pode seguir?",
+                                  "--forca")
+        check("responde --forca (antigo) grava o texto recusado", rc == 0, out)
+        raiz2 = monta_repo(tmp + "/b", [item("a1", status="blocked")])
+        rc, out = responde_antigo(raiz2, "a1", "mantenha travado", "--mantem")
+        check("responde --mantem (antigo) segue blocked", rc == 0
+              and itens_de(raiz2)["a1"]["status"] == "blocked", out)
+
+
+def test_order_divergence_e_add_before_com_nomes_novos_e_antigos():
+    with tempfile.TemporaryDirectory() as tmp:
+        raiz = monta_repo(tmp, [item("a1"), item("a2")])
+        for novo, antigo in (("order", "ordena"),):
+            n = plan(raiz, novo, "fila", "--keys", "X-1,X-2", "--json")
+            o = plan(raiz, antigo, "fila", "--keys", "X-1,X-2", "--json")
+            check(f"`{novo}` e `{antigo}` saem iguais",
+                  n.returncode == 0 == o.returncode and n.stdout == o.stdout != "",
+                  (n.stderr, o.stderr))
+        n = plan(raiz, "divergence", "fila", "--json")
+        o = plan(raiz, "divergencia", "fila", "--json")
+        check("`divergence` e `divergencia` saem iguais",
+              n.returncode == 0 == o.returncode and n.stdout == o.stdout != "",
+              (n.stdout, n.stderr, o.stderr))
+        p = plan(raiz, "add", "fila", "n1", "--title", "novo", "--before", "a2",
+                 "--why", "porque sim", "--no-commit")
+        check("add --before sai 0", p.returncode == 0, p.stderr)
+        p = plan(raiz, "add", "fila", "n2", "--title", "novo2", "--antes-de", "a2",
+                 "--why", "porque sim", "--no-commit")
+        check("add --antes-de (antigo) sai 0", p.returncode == 0, p.stderr)
+        ordem = list(itens_de(raiz))
+        check("os dois entram antes do a2", ordem == ["a1", "n1", "n2", "a2"], ordem)
 
 
 def main():

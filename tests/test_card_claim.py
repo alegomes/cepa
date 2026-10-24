@@ -60,7 +60,8 @@ def test_estrutura():
         check(f"{nome}: claim id por run", "The run's claim id" in txt)
         check(f"{nome}: marcador de reserva", "🔒 claim:" in txt)
         check(f"{nome}: liberação explícita", "🔓 claim" in txt)
-        check(f"{nome}: janela de expiração", "90 minutos" in txt)
+        check(f"{nome}: janela de expiração", "90 minutes" in txt)
+        check(f"{nome}: liberação em inglês", "released — <reason>" in txt and "liberado — <motivo>" not in txt)
         check(f"{nome}: pula card fora da coluna", "SKIPPED" in txt)
         # a reserva tem que ser o passo (a) do laço — reservar depois de
         # construir não economiza nada, que é o defeito original.
@@ -82,15 +83,24 @@ def test_estrutura():
 # ── 2. funcional: o texto do claim passa pelos gates de comentário ──────────
 
 CLAIM = (
+    "🔒 claim: wego-acesso-backend-3f9a1c2d — /board-flow:prove-drain in progress "
+    "since 2026-08-18 09:45. Another session must skip this card. "
+    "The reservation expires in 90 minutes."
+)
+RELEASE = "🔓 claim wego-acesso-backend-3f9a1c2d released — ERROR: Docker down on the host."
+# Texto fixo antigo (pt-BR): os leitores continuam aceitando durante a transição.
+CLAIM_PTBR = (
     "🔒 claim: wego-acesso-backend-3f9a1c2d — /board-flow:prove-drain em andamento "
     "desde 2026-08-18 09:45. Outra sessão deve pular este card. "
     "A reserva expira em 90 minutos."
 )
-RELEASE = "🔓 claim wego-acesso-backend-3f9a1c2d liberado — ERROR: Docker fora no host."
+RELEASE_PTBR = "🔓 claim wego-acesso-backend-3f9a1c2d liberado — ERROR: Docker fora no host."
 
 
 def test_gates():
-    for rotulo, corpo in (("claim", CLAIM), ("liberação", RELEASE)):
+    for rotulo, corpo in (("claim", CLAIM), ("liberação", RELEASE),
+                          ("claim pt-BR antigo", CLAIM_PTBR),
+                          ("liberação pt-BR antiga", RELEASE_PTBR)):
         r = run_hook(BOUNCE_HOOK, corpo)
         check(f"bounce-reason-gate deixa passar a {rotulo}", r.returncode == 0, r.stderr.strip())
         r = run_hook(NULLS_HOOK, corpo)

@@ -4,16 +4,16 @@
 Quem chama é o passo L7 do `/common:wrap-up`. Lê a zona NOTE do handoff
 (`<!-- HANDOFF:NOTE -->…<!-- /HANDOFF:NOTE -->`) e procura a linha
 
-    **Próximo:** repo=<caminho> modo=<modo> comando=<comando e argumentos>
+    **Próximo:** repo=<caminho> mode=<mode> comando=<comando e argumentos>
 
 Achou: escreve `<raiz-principal>/.claude/sessions/<session_id>.next.json` com
-`repo`, `modo`, `comando` e `brief`, onde o brief é o parágrafo da seção
+`repo`, `mode`, `comando` e `brief`, onde o brief é o parágrafo da seção
 `## Próximo passo` da mesma zona. É o arquivo que o launcher `cepa` lê quando
 a sessão sai (`session-chain.py`, CS-3) para abrir a seguinte sem o dono digitar.
 
 A intenção da sessão seguinte vem de três linhas opcionais da mesma seção,
 escritas na voz dela: `**Intenção:**`, `**Meta:**` e `**Plano:** a | b | c`.
-Com as três, o arquivo ganha `intencao` ({proposito, para_quando, plano}) e o
+Com as três, o arquivo ganha `intent` ({purpose, by_when, plan}) e o
 `cepa` a grava antes do primeiro turno. Sem nenhuma, a sessão seguinte nasce sem
 intenção: o brief fala da sessão que saiu e não serve de propósito para a outra.
 Só parte delas é linha inutilizável.
@@ -40,7 +40,7 @@ import _wtlib as L  # noqa: E402
 
 NOTE_RE = re.compile(r"<!-- HANDOFF:NOTE -->(.*?)<!-- /HANDOFF:NOTE -->", re.S)
 LINHA_RE = re.compile(r"^\s*\*\*Próximo:\*\*\s*(.*)$", re.M)
-CHAVE_RE = re.compile(r"(?:^|\s)(repo|modo|comando)=")
+CHAVE_RE = re.compile(r"(?:^|\s)(repo|mode|modo|comando)=")
 SECAO_RE = re.compile(r"^##\s+Próximo passo\s*$", re.M)
 INTENCAO_RE = {campo: re.compile(rf"^[ \t]*\*\*{rotulo}:\*\*[ \t]*(.*)$", re.M)
                for campo, rotulo in (("proposito", "Intenção"), ("para_quando", "Meta"),
@@ -114,20 +114,22 @@ def main() -> int:
         return 0
 
     campos = parse_linha(m.group(1))
-    repo, modo, comando = campos.get("repo", ""), campos.get("modo", ""), campos.get("comando", "")
+    # `mode=` (ou o antigo `modo=`); o valor, antigo ou novo, vira o nome novo
+    repo, comando = campos.get("repo", ""), campos.get("comando", "")
+    modo = _modos.normalize_mode(campos.get("mode") or campos.get("modo") or "")
     brief = brief_da_secao(note)
     intencao = intencao_da_secao(note)
     faltam_intencao = [r for c, r in (("proposito", "Intenção"), ("para_quando", "Meta"),
                                       ("plano", "Plano")) if not intencao.get(c)]
-    faltas = [k for k, v in (("repo", repo), ("modo", modo), ("comando", comando)) if not v]
+    faltas = [k for k, v in (("repo", repo), ("mode", modo), ("comando", comando)) if not v]
     if faltas:
         motivo = f"a linha `**Próximo:**` não traz {', '.join(faltas)}"
     elif not os.path.isdir(repo):
         motivo = f"repo {repo} não existe"
     elif modo not in _modos.MODOS:
         motivo = f"modo {modo} não é um dos modos ({' '.join(_modos.MODOS)})"
-    elif modo == "reforma":
-        motivo = "modo reforma exige --orcamento, que o encadeamento não passa"
+    elif modo == "refactor":
+        motivo = "modo refactor exige --budget, que o encadeamento não passa"
     elif not brief:
         motivo = "a seção `## Próximo passo` está vazia ou não existe"
     elif intencao and faltam_intencao:
@@ -146,9 +148,11 @@ def main() -> int:
     d = L.sessions_dir(root)
     d.mkdir(parents=True, exist_ok=True)
     alvo = d / f"{a.session_id}.next.json"
-    spec = {"repo": repo, "modo": modo, "comando": comando, "brief": brief}
+    spec = {"repo": repo, "mode": modo, "comando": comando, "brief": brief}
     if intencao:
-        spec["intencao"] = intencao
+        spec["intent"] = {"purpose": intencao.get("proposito"),
+                          "by_when": intencao.get("para_quando"),
+                          "plan": intencao.get("plano")}
     alvo.write_text(json.dumps(spec, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     sobre = (f"com a intenção \"{intencao['proposito']}\"" if intencao
              else "sem intenção (o handoff não tem `**Intenção:**`)")

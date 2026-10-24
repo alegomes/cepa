@@ -1,5 +1,5 @@
 ---
-description: Interviews the owner "grill me" style until a package of work becomes an Epic demonstrable in cycles, and writes `docs/epics/<name>.md`. One question per turn, in prose, with no list of options; the agent proposes the answer, the owner corrects it, and each answer is challenged once ("quem vê isso e onde?" — who sees this and where?; "o que quebra se faltar?" — what breaks if it is missing?) before being accepted and written down in the same turn. Only declares `Status: pronta` when every cycle of the ladder has a script with an observable effect on screen and in the backend, there is at least one invariant and the "Decidido sem perguntar" section exists; the `spec-readiness-gate` blocks the rest. Writes no code. Resumable: running it again on the same name continues where it stopped.
+description: Interviews the owner "grill me" style until a package of work becomes an Epic demonstrable in cycles, and writes `docs/epics/<name>.md`. One question per turn, in prose, with no list of options; the agent proposes the answer, the owner corrects it, and each answer is challenged once ("quem vê isso e onde?" — who sees this and where?; "o que quebra se faltar?" — what breaks if it is missing?) before being accepted and written down in the same turn. Only declares `Status: ready` when every cycle of the ladder has a script with an observable effect on screen and in the backend, there is at least one invariant and the "Decided without asking" section exists; the `spec-readiness-gate` blocks the rest. Writes no code. Resumable: running it again on the same name continues where it stopped.
 argument-hint: <name> [the intent in prose]
 interaction: conversational
 ---
@@ -21,7 +21,7 @@ strategy in `docs/estrategia-cepa-proximo-nivel.md`).
 
 That is why it is a command of its own and not a flag of spec: spec closes
 with criteria, epic closes with scripts. After it, `/common:queue --from-epic
-docs/epics/<name>.md --ciclo N` turns one cycle into a queue.
+docs/epics/<name>.md --cycle N` turns one cycle into a queue.
 
 **Grill me** is the owner's request for this command (2026-10-08), and it
 means five things, which are below as rules: one question per turn, in prose,
@@ -56,7 +56,7 @@ what the repo already answers, yes.
 **Do not delegate to a subagent.** A subagent does not talk to the owner, and
 the question would come back as an assumption.
 
-**Run in a session in `descoberta` mode.** It is the mode that produces this
+**Run in a session in `discovery` mode.** It is the mode that produces this
 document: `modo-escrita-gate` allows `docs/epics/**` in it. `/common:session`
 refuses this command (`session-routine-guard` reads the
 `interaction: conversational` above), because each answer decides the next
@@ -69,8 +69,8 @@ question and none of that can be anticipated.
 If `docs/epics/<name>.md` exists, read it whole and resume from the first gap
 (step 3 gives the order): do not start over, and do not ask again a question
 that already has `- [x]`. If it does not exist, create it with the skeleton of
-step 6 and `**Status:** rascunho` (draft) before the first question. The gate
-never bothers you while the status is `rascunho`.
+step 6 and `**Status:** draft` before the first question. The gate
+never bothers you while the status is `draft`.
 
 ### 2. Read before asking
 
@@ -93,12 +93,12 @@ The order of the gaps:
    the question of the following turn.
 2. **Invariants** — what must never regress while the cycles move.
 3. **The ladder** — how many cycles and the name of each; then, cycle by cycle:
-   **Roteiro** (script: what the owner sees working at the end of the cycle),
-   **Efeito em tela** (screen effect: where, on screen, someone sees that it
-   happened), **Efeito em backend** (backend effect: the record, endpoint or
-   event that proves it really happened, not only on screen), **O que
-   atravessa** (what cuts across: the pieces that change, one sentence per
-   piece) and **Quando** (when).
+   **Script** (what the owner sees working at the end of the cycle),
+   **Effect on screen** (where, on screen, someone sees that it
+   happened), **Effect in backend** (the record, endpoint or
+   event that proves it really happened, not only on screen), **What it
+   crosses** (the pieces that change, one sentence per
+   piece) and **When**.
 4. **Open questions** that the conversation itself raised.
 
 Each turn has exactly **one question**, written in **prose**, ending with `?`,
@@ -119,8 +119,8 @@ everything looks urgent at the start; the transcripts of 2026-10-08 showed the
 double question in turn 1 of two consecutive rounds.
 
 **An interview turn is conversation, not a work report.** Writing to the file every turn does not turn the turn into a
-report: do not use the `plain-report` format here (no `**Pra você:**`, no
-"Detalhe técnico", no numbered list of decisions with "Recomendo sim"). The
+report: do not use the `plain-report` format here (no `**For you:**`, no
+"Technical detail", no numbered list of decisions with "I recommend yes"). The
 turn has, at most, one line saying what was written, and ends on the question.
 A numbered closed question is a menu in other clothes. The report in the
 `plain-report` format comes once, at closing (step 5).
@@ -135,8 +135,7 @@ agent understood.
 
 The test for whether something becomes a question is still the skill's: **do
 two different answers here change what will be built or how it will be
-demonstrated?** If not, decide and record it in "Decidido sem perguntar"
-(decided without asking).
+demonstrated?** If not, decide and record it in "Decided without asking".
 
 ### 4. Challenge once, accept, write down in the same turn
 
@@ -167,59 +166,62 @@ same turn" means throughout this command.
 
 ### 5. Close by the sieve, never by fatigue
 
-The Epic becomes `**Status:** pronta` (ready) when, and only when:
+The Epic becomes `**Status:** ready` when, and only when:
 
-- the `## Escada de valor` table has at least one cycle, and each cycle fills
-  in **Roteiro**, **Efeito em tela** and **Efeito em backend**;
-- `## Invariantes` has at least one item;
-- the `## Decidido sem perguntar` section exists (empty of decisions is
+- the `## Value ladder` table has at least one cycle, and each cycle fills
+  in **Script**, **Effect on screen** and **Effect in backend**;
+- `## Invariants` has at least one item;
+- the `## Decided without asking` section exists (empty of decisions is
   acceptable; missing, no);
 - no `- [ ]` is left in "Perguntas em aberto".
 
 The `spec-readiness-gate` hook applies this sieve to every file in
 `docs/epics/*.md` and to every document that opens with `# Epic:`, and blocks
-writing `Status: pronta` while any item is missing, saying which cycle and
+writing `Status: ready` while any item is missing, saying which cycle and
 which column. If it blocks, **the right response is to go back to asking**,
 never to fill the cell until it passes.
 
-**When the owner asks for `pronta` before the sieve passes,
+**When the owner asks for `ready` before the sieve passes,
 refuse out loud.** Say in one sentence what is still missing (which cycle,
 which column, which section) and ask that gap's question. Not marking it and
 saying nothing leaves the owner thinking he was served. Other than that, when
-the last gap closes, the sieve passes and you write `pronta` in the same turn,
+the last gap closes, the sieve passes and you write `ready` in the same turn,
 without waiting for the owner to ask.
 
 On closing, tell the owner the file path and the next step: `/common:queue
-<name>-c1 --from-epic docs/epics/<name>.md --ciclo 1` derives the queue of the
+<name>-c1 --from-epic docs/epics/<name>.md --cycle 1` derives the queue of the
 first cycle.
 
 ### 6. The file format
 
-The document is written in pt-BR. Keep the headings, the `**Status:**`,
-`**Aberto em:**` and `**Origem:**` labels and the ladder column names verbatim:
-`spec-readiness-gate` and `cepa-plan --from-epic` parse them. Only the
-placeholders below are in English.
+The document is written in pt-BR. Keep the `## Value ladder`, `## Invariants` and `## Decided without asking`
+headings, the `**Status:**` label and the ladder column names verbatim:
+`spec-readiness-gate` and `cepa-plan --from-epic` parse them (they also still
+read the old pt-BR names `pronta`, `rascunho`, `Escada de valor`,
+`Invariantes`, `Decidido sem perguntar`, `Roteiro`, `Efeito em tela`, `Efeito em
+backend` in Epics written before 2026-10-23, but you write only the new ones).
+Only the placeholders below are in English.
 
 ```markdown
 # Epic: <subject>
 
-**Status:** rascunho · **Aberto em:** <date> · **Origem:** <where the request came from>
+**Status:** draft · **Aberto em:** <date> · **Origem:** <where the request came from>
 
 ## Intenção
 
 <what the owner wants and what hurts today, in their voice>
 
-## Invariantes (nunca regridem)
+## Invariants (never regress)
 
 - <what must never regress while the cycles move>
 
-## Escada de valor
+## Value ladder
 
-| Ciclo | Roteiro de demonstração (o que o dono vê) | Efeito em tela | Efeito em backend | O que atravessa | Quando |
+| Cycle | Script (what the owner sees) | Effect on screen | Effect in backend | What it crosses | When |
 |---|---|---|---|---|---|
 | 1. <name> | <what the owner sees working> | <where, on screen> | <record, endpoint or event> | <one sentence per piece that changes.> | <when> |
 
-## Decidido sem perguntar (vete aqui)
+## Decided without asking (veto here)
 
 - <decision> — <why>.
 
@@ -233,7 +235,7 @@ placeholders below are in English.
 - <disagreement left over from a challenge, or a risk the conversation raised>
 ```
 
-`Status` accepts `rascunho | pronta`. The "O que atravessa" column is written
+`Status` accepts `draft | ready`. The "What it crosses" column is written
 in short sentences ending in a period, one per piece, because `/common:queue`'s
 `--from-epic` turns each sentence into an item of that cycle's queue.
 
@@ -245,7 +247,7 @@ in short sentences ending in a period, one per piece, because `/common:queue`'s
 - **Each answer is challenged exactly once** before being accepted.
 - **The accepted answer is written down in the same turn**, before the next
   question.
-- **Never declares `pronta` what the sieve refuses.** If the gate blocks, go
+- **Never declares `ready` what the sieve refuses.** If the gate blocks, go
   back to asking.
 - **Only writes `docs/epics/<name>.md`.** Neither code nor queue: the queue
   belongs to `/common:queue --from-epic`.

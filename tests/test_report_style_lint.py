@@ -156,7 +156,7 @@ check("relatório com jargão na abertura → cobra o formato",
       "plain-report" in aviso, repr(aviso[:200]))
 check("…e nomeia os termos que precisam de tradução",
       "portão" in aviso and "falha fechado" in aviso, repr(aviso[:400]))
-check("…e cobra a linha Pra você", "Pra você" in aviso, repr(aviso[:400]))
+check("…e cobra a linha For you", "For you" in aviso, repr(aviso[:400]))
 
 # ── o mesmo conteúdo, dentro do formato ────────────────────────────────────
 aviso = ciclo(BOM)
@@ -184,7 +184,7 @@ check("abertura com 5 frases → avisa", "frases" in aviso, repr(aviso[:300]))
 # ── falta o Pra você ───────────────────────────────────────────────────────
 aviso = ciclo("Resultado dito de forma clara e sem termo interno nenhum, "
               "em uma frase só.\n\n### Detalhe técnico\n" + "x " * 90)
-check("sem a linha Pra você → avisa", "Pra você" in aviso, repr(aviso[:300]))
+check("sem a linha For you → avisa", "For you" in aviso, repr(aviso[:300]))
 
 # ── teto de palavras antes do técnico ──────────────────────────────────────
 aviso = ciclo("Resultado em uma frase clara.\n\n**Pra você:** nada.\n\n" +
@@ -253,7 +253,7 @@ CORPO = ("Resultado dito de forma clara em uma frase.\n\n"
          "### Detalhe técnico\n" + "detalhe " * 90)
 
 aviso = ciclo(CORPO)
-check("sem a seção final → avisa", "Decisões e próximos passos" in aviso,
+check("sem a seção final → avisa", "Decisions and next steps" in aviso,
       repr(aviso[:300]))
 
 aviso = ciclo(CORPO + PASSOS +
@@ -294,7 +294,7 @@ check("item que nomeia o assunto sem perguntar → avisa",
 aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
               "1. **Mantenho no WEGO-1631 o critério que recusa pedido sem "
               "tipo de documento?** Ele passa a barrar os pedidos legados.\n")
-check("pergunta sem recomendação → avisa", "Recomendo" in aviso,
+check("pergunta sem recomendação → avisa", "I recommend" in aviso,
       repr(aviso[:400]))
 
 aviso = ciclo(CORPO + "\n\n### Decisões e próximos passos\n"
@@ -324,7 +324,7 @@ TOPO_14_10 = ("Resultado dito de forma clara em uma frase.\n\n"
               "### Detalhe técnico\n" + "detalhe " * 90)
 aviso = ciclo(TOPO_14_10 + "\n\n### Decisões e próximos passos\n\nNada pendente.\n")
 check("14/10: Pra você com categorias + \"Nada pendente.\" → avisa",
-      "Pra você" in aviso and "item numerado" in aviso, repr(aviso[:400]))
+      "For you" in aviso and "item numerado" in aviso, repr(aviso[:400]))
 
 aviso = ciclo(CORPO.replace("um passo manual — lista no fim.", "nada pra decidir.")
               + "\n\n### Decisões e próximos passos\nNada pendente.\n")
@@ -385,7 +385,7 @@ check("tarefa sem comando nem arquivo, com Pronto quando → avisa \"comando ou 
 
 aviso = ciclo(CABECA_T + "1. **Você roda `bin/x.sh`?** Recomendo **sim** — destrava.\n")
 check("tarefa com comando mas sem Pronto quando → avisa",
-      "Pronto quando" in aviso, repr(aviso[:400]))
+      "Done when" in aviso, repr(aviso[:400]))
 
 aviso = ciclo(CABECA_T + "1. **Mantenho o critério X?** Recomendo **sim** — "
               "é a sua regra de entrada.\n")
@@ -474,7 +474,7 @@ check("(a) wrap-up + Safe to exit + metrics sem Edit com pergunta → bloqueia "
       repr(r.stdout[:300]))
 motivo_a = motivo_do_bloqueio(r.stdout)
 check("(a) o bloqueio pós-wrap-up manda \"Nada pendente\", sem pedir pergunta",
-      "Nada pendente" in motivo_a
+      "Nothing pending" in motivo_a
       and "uma pergunta fechada por item" not in motivo_a, repr(motivo_a[-300:]))
 
 r = run("Stop", multi_turno("comando", FIM_WRAP, BOM), session="s-wrap-aw",
@@ -483,7 +483,7 @@ check("(a2) Stop com stop_hook_active em sessão encerrada → não bloqueia",
       motivo_do_bloqueio(r.stdout) == "", repr(r.stdout[:300]))
 r2 = run("UserPromptSubmit", session="s-wrap-aw")
 check("(a2) aviso do turno seguinte usa o formato de sessão encerrada",
-      "Nada pendente" in r2.stdout
+      "Nothing pending" in r2.stdout
       and "uma pergunta fechada por item" not in r2.stdout, repr(r2.stdout[:400]))
 
 r = run("Stop", multi_turno("comando", FIM_WRAP, SEM_PERGUNTA), session="s-wrap-b")
@@ -576,8 +576,8 @@ def ler(rel):
 pr = ler("common/skills/plain-report/SKILL.md")
 check("spec: plain-report tem o título \"Depois do wrap-up\"",
       any(l.startswith("#") and "Depois do wrap-up" in l for l in pr.splitlines()))
-check("spec: plain-report manda \"Nada pendente. Próxima sessão começa por\"",
-      "Nada pendente. Próxima sessão começa por" in pr)
+check("spec: plain-report manda \"Nothing pending. Próxima sessão começa por\"",
+      "Nothing pending. Próxima sessão começa por" in pr)
 
 mt = ler("common/commands/metrics.md")
 check("spec: metrics.md trata \"sessão já encerrada\" e cita pergunta-pos-wrap-up",
@@ -592,6 +592,59 @@ dy = ler("common/skills/default-yes/SKILL.md")
 sec = dy.split("## Keep the thread of the session", 1)[-1].split("\n## ", 1)[0]
 check("spec: default-yes, seção \"Keep the thread of the session\" tem \"After the wrap-up\"",
       "## Keep the thread of the session" in dy and "After the wrap-up" in sec)
+
+# ── rótulos em inglês (interface-in-english, 2026-10-23) ────────────────────
+# O lint aceita os rótulos novos e os antigos; a mensagem manda escrever os novos.
+PASSOS_EN = ("\n\n### Decisions and next steps\n"
+             "*Answer by number: yes, no, or \"let's talk\".*\n"
+             "1. **Do you run `bin/install.sh --clean` now?**\n"
+             "   Where: root of the cepa clone.\n"
+             "   Command:\n"
+             "   ```\n"
+             "   bin/install.sh --clean\n"
+             "   ```\n"
+             "   Done when: the terminal prints `installed`.\n"
+             "   I recommend **yes** — without it the change does not apply.\n")
+BOM_EN = BOM.replace(PASSOS, PASSOS_EN).replace(
+    "**Pra você:**", "**For you:**").replace("### Detalhe técnico", "### Technical detail")
+check("EN: relatório com For you / Technical detail / Decisions and next steps / "
+      "I recommend yes → nenhum aviso", ciclo(BOM_EN).strip() == "", ciclo(BOM_EN)[:300])
+check("EN: BOM_EN não tem nenhum rótulo pt-BR (o teste prova a leitura em inglês)",
+      not any(x in BOM_EN for x in ("Pra você", "Detalhe técnico", "Decisões", "Recomendo")))
+# misto (rótulo antigo no topo, novo no fim) também passa
+MISTO = BOM.replace(PASSOS, PASSOS_EN)
+check("EN+pt-BR misto → nenhum aviso", ciclo(MISTO).strip() == "", ciclo(MISTO)[:300])
+check("pt-BR antigo continua passando → nenhum aviso", ciclo(BOM).strip() == "",
+      ciclo(BOM)[:300])
+
+aviso = ciclo(BOM_EN.replace("**For you:**", "Resumo:"))
+check("EN: sem a linha For you → avisa citando o rótulo novo",
+      "`**For you:**`" in aviso, repr(aviso[:300]))
+aviso = ciclo(BOM_EN.replace(PASSOS_EN, ""))
+check("EN: sem a seção final → avisa citando Decisions and next steps",
+      "### Decisions and next steps" in aviso, repr(aviso[:300]))
+aviso = ciclo(BOM_EN.replace("   I recommend **yes** — without it the change does not apply.\n", ""))
+check("EN: item sem I recommend → avisa (RECOMENDACAO lê o inglês)",
+      "I recommend yes/no" in aviso and "item-sem-recomendacao" not in aviso
+      and "não trazem" in aviso, repr(aviso[:300]))
+aviso = ciclo(BOM_EN.replace("Do you run", "You run").replace(
+    "   Done when: the terminal prints `installed`.\n", ""))
+check("EN: tarefa \"You ...\" sem Done when → avisa (ITEM_VOCE lê o inglês)",
+      "Done when" in aviso, repr(aviso[:300]))
+aviso = ciclo(BOM_EN.replace("Do you run", "Run").replace(
+    "   Done when: the terminal prints `installed`.\n", ""))
+check("EN: item que não é \"You ...\" não exige Done when", "Done when" not in aviso,
+      repr(aviso[:300]))
+check("EN: For you \"nothing\" + \"Nothing pending.\" → nenhum aviso",
+      ciclo(BOM_EN.replace("nada pra decidir agora; precisa reinstalar pra valer.",
+                           "nothing to decide.")
+            .replace(PASSOS_EN, "\n\n### Decisions and next steps\nNothing pending.\n")
+            ).strip() == "")
+aviso = ciclo(BOM_EN.replace("nada pra decidir agora; precisa reinstalar pra valer.",
+                             "one manual step.").replace(
+    PASSOS_EN, "\n\n### Decisions and next steps\nNothing pending.\n"))
+check("EN: For you anunciando + Nothing pending. → pra-voce-sem-lista",
+      "item numerado" in aviso and "For you" in aviso, repr(aviso[:400]))
 
 # ── entrada corrompida não derruba o turno ─────────────────────────────────
 r = run("Stop", str(TMP / "nao-existe.jsonl"))

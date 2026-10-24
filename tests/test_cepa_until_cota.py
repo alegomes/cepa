@@ -108,7 +108,7 @@ def test_bateu_o_teto_espera_o_reset_e_retoma_o_mesmo_item():
         # isso só dá certo se a tentativa cortada pelo teto NÃO contou: senão a
         # falha da 2ª já seria a última vez e o a1 viraria `blocked`.
         p, chamadas = roda(raiz, binv, plano_de(raiz),
-                           ["--for", "2h", "--tentativas-por-item", "2"],
+                           ["--for", "2h", "--attempts-per-item", "2"],
                            extra_env=MARGEM)
         gasto = time.monotonic() - inicio
         starts = [e["id"] for e in ledger_de(raiz) if e.get("evento") == "item_start"]

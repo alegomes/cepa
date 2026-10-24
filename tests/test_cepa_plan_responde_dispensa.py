@@ -77,8 +77,8 @@ def monta(tmp, ident="a1", fila_da_proposta="fila", item_da_proposta=None):
 
 
 def responde(raiz, ident, texto, *extra):
-    return em_tty([sys.executable, str(CEPA_PLAN), "responde", "fila", ident,
-                   "--resposta", texto, "--repo", str(raiz)] + list(extra),
+    return em_tty([sys.executable, str(CEPA_PLAN), "answer", "fila", ident,
+                   "--answer", texto, "--repo", str(raiz)] + list(extra),
                   str(raiz), env=ENV)
 
 
@@ -113,9 +113,9 @@ def test_sim_converte_a_proposta_em_dispensa():
 def test_sim_com_autor_explicito():
     with tempfile.TemporaryDirectory() as tmp:
         raiz, path = monta(tmp)
-        rc, out = responde(raiz, "a1", "Sim: aceito", "--autor", "alegomes")
+        rc, out = responde(raiz, "a1", "Sim: aceito", "--author", "alegomes")
         check("responde sai 0 (Sim maiúsculo)", rc == 0, out)
-        check("--autor vence o git config", yaml.safe_load(path.read_text()).get("autor") == "alegomes")
+        check("--author vence o git config", yaml.safe_load(path.read_text()).get("autor") == "alegomes")
 
 
 def test_nao_recusa_a_proposta():
@@ -134,8 +134,8 @@ def test_nao_recusa_a_proposta():
 def test_mantem_e_resposta_sem_sim_nem_nao_deixam_a_proposta():
     with tempfile.TemporaryDirectory() as tmp:
         raiz, path = monta(tmp)
-        rc, out = responde(raiz, "a1", "sim: depois eu vejo", "--mantem")
-        check("--mantem sai 0", rc == 0, out)
+        rc, out = responde(raiz, "a1", "sim: depois eu vejo", "--keep")
+        check("--keep sai 0", rc == 0, out)
         check("...a proposta segue proposta",
               yaml.safe_load(path.read_text()).get("status") == "proposta")
         check("...e a saída diz quantas seguem pendentes", "1 dispensa(s) proposta(s) seguem" in out, out)

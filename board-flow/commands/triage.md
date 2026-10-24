@@ -277,7 +277,7 @@ it also works from a host project like WEGO):
 ```
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-plan" write <project_key> \
   --from-triage <queues>/<project_key>/triagem-<YYYY-MM-DD>.json \
-  --quando <YYYY-MM-DD> --repo .
+  --when <YYYY-MM-DD> --repo .
 ```
 
 It merges with whatever is on disk (items already `done` keep their status and

@@ -52,7 +52,7 @@ tested:
 
 1. **The source is the queue on disk**, not the board column. The queue keeps the order and
    the reason for it, and does not depend on Jira being up at 3 a.m.
-2. **Circuit breaker at 3 failures in a row** (`--max-falhas`). Below that it is bad luck.
+2. **Circuit breaker at 3 failures in a row** (`--max-failures`). Below that it is bad luck.
    Above it, the window is being burned on a systemic problem.
 3. **One commit per item, on a single branch.** No merge train, no pile of branches waiting
    for someone to notice. This is a guard, not an intention: the starting branch is recorded
@@ -62,7 +62,7 @@ tested:
    and carries on; if that fails the run ends as `git-quebrado`, with git's own error.
 4. **`--dangerously-skip-permissions` is on by default.** Without it the subprocess hangs at
    the first permission prompt and the night dies silently. It is printed in the banner and
-   can be turned off with `--com-permissoes`, which only makes sense with someone watching.
+   can be turned off with `--with-permissions`, which only makes sense with someone watching.
 
 ## Where the cut happens
 
@@ -71,9 +71,9 @@ dangling reservation. Two margins control it:
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--reserva-minima` | 25m | Do not **start** an item if less than this remains. An item that does not fit is wasted work. |
-| `--folga` | 60m | How far past the deadline an item **already running** may go before being killed. Past that it is a timeout, recorded, and the orphaned reservation returns to the queue on the next run. |
-| `--tentativas-por-item` | 2 | Subprocesses the same window spends on the same item before marking it `blocked` and moving on. |
+| `--min-reserve` | 25m | Do not **start** an item if less than this remains. An item that does not fit is wasted work. |
+| `--slack` | 60m | How far past the deadline an item **already running** may go before being killed. Past that it is a timeout, recorded, and the orphaned reservation returns to the queue on the next run. |
+| `--attempts-per-item` | 2 | Subprocesses the same window spends on the same item before marking it `blocked` and moving on. |
 
 ## The account's 5-hour usage cap
 
@@ -99,7 +99,7 @@ At the first of: deadline reached, no runnable item in the queue (`fim-da-fila`,
 `bloqueado-antes`, as reported by `cepa-plan queue`), circuit breaker, a stuck queue, or a
 usage cap whose wait does not fit in the window.
 
-A **stuck queue** (`fila-travada`) is N items in a row that ended `blocked` (`--max-travados`,
+A **stuck queue** (`fila-travada`) is N items in a row that ended `blocked` (`--max-blocked`,
 default 3). `blocked` counts as progress, so the circuit breaker never sees it: the item left
 the queue with a reason. But a queue where every item blocks on the same outside cause burns
 the window rediscovering it. On 2026-09-23 that was 20 rounds and US$ 14.30; on 2026-09-15,
@@ -112,14 +112,14 @@ The end-of-run summary only counts. Right after it, when the run is attached to 
 `cepa-until` asks the owner, one at a time, about everything that waits on them: whether to
 land the night branch (`aterrissar`), and every deferred item that only the owner unblocks
 (`blocked` from an outside condition, open `human_pending` route). Each item shows the closed
-question the agent recorded with `cepa-plan finish --pergunta` (or the one the
+question the agent recorded with `cepa-plan finish --question` (or the one the
 `/common:until-review` analysis wrote in its `cepa-decisoes` block), with the recommendation.
 Each item is one block, with the full title, then labelled lines: why it stopped, the task left
 to the owner, the analysis' `contexto` (lay words), the question, and `instrucao` (the technical
 instruction the next run receives if the answer is yes, recorded together with the yes). A
 question over 25 words or carrying a branch, test class or file name is shown anyway, with a
 warning that the analysis broke the rules.
-An answer is applied on the spot by `cepa-plan responde`: a `blocked` item goes back to
+An answer is applied on the spot by `cepa-plan answer`: a `blocked` item goes back to
 `pending` and an open route closes, with the owner's answer in the item's evidence, where the
 next run reads it. `m` records the answer and keeps the item as it was (still `blocked`,
 route still open), for answers like "keep it blocked". Enter leaves an item for later; `q`
@@ -130,20 +130,20 @@ close a human route in the owner's place. It also refuses a text that does not a
 question (a "não entendi", a question back), showing the route's question, and it commits the
 `queue.yaml` in the same step, so the queue is never left dirty for the next run's guard
 (`--no-commit` writes without committing and says so). Without a terminal (`nohup`, cron) the run prints
-the same list and the command to come back: `cepa-until decidir <fila>/<run>`.
+the same list and the command to come back: `cepa-until decide <fila>/<run>`.
 
 ## Before you leave it running
 
 - **The tree must be clean.** It refuses a dirty working tree, because otherwise nothing
   separates what the run did from what was already there. `/common:doctor` warns about this
-  when you open the session, so you don't find out at 11 p.m. `--sujo-ok` overrides it. If
+  when you open the session, so you don't find out at 11 p.m. `--dirty-ok` overrides it. If
   files show as deleted and you did not delete them, find out why before overriding.
 - **Permissions are off by default** (decision 4 above). The gates still apply inside each
   subprocess: red build blocks commit, cards need acceptance evidence, verdicts are computed.
 - **Use `--dry-run` first.** It prints the schedule of the run and exits.
 - **On a terminal the output is decorated**: colour, one block per item with a bar of the
   window spent so far, a line that redraws every 30 s while the `claude` subprocess runs, and
-  the item title cut to the terminal width (`--titulo-inteiro` keeps it whole; the `.jsonl`
+  the item title cut to the terminal width (`--full-title` keeps it whole; the `.jsonl`
   always has it). Off a terminal (`nohup`, a file, `NO_COLOR`) the output is byte for byte
   the plain one; `CEPA_UNTIL_COR=sempre|nunca` forces either way.
 

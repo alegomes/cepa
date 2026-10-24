@@ -98,7 +98,7 @@ When the flow finishes (all Tasks APPROVED, integration merged, validation done)
 
 ### 7. Never write a waiver.
 
-A dispensa (waiver) asserts "the owner accepted no proof" — the one decision you cannot take for them. In autonomous mode it is a **proposal plus a human route on the queue item**: `waivers.gravar` writes `status: proposta` (autor null) instead of a waiver, and you open `cepa-plan finish ... --human-pending ... --pergunta "Aceito a dispensa de X por Y?"`. Only the owner's `cepa-plan responde ... "sim: ..."` converts it. An agent wrote `autor: alegomes` on its own in an unattended run (fb-20261014-3).
+A dispensa (waiver) asserts "the owner accepted no proof" — the one decision you cannot take for them. In autonomous mode it is a **proposal plus a human route on the queue item**: `waivers.gravar` writes `status: proposta` (autor null) instead of a waiver, and you open `cepa-plan finish ... --human-pending ... --question "Aceito a dispensa de X por Y?"`. Only the owner's `cepa-plan answer ... "sim: ..."` converts it. An agent wrote `autor: alegomes` on its own in an unattended run (fb-20261014-3).
 
 ## What this skill does NOT change
 

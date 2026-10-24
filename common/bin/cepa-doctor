@@ -661,7 +661,7 @@ def check_arvore_suja(root: Path):
          f"árvore com {len(suja)} arquivo(s) pendente(s) e a fila `{fila}` com "
          f"item a executar — o `cepa-until` RECUSA largar assim (é como ele "
          f"separa o que o run fez do que já estava aqui). Commite, limpe, ou "
-         f"largue com --sujo-ok. Achar isso na hora de dormir custa a janela")
+         f"largue com --dirty-ok. Achar isso na hora de dormir custa a janela")
 
 
 def check_env_manifest(root: Path):
@@ -766,7 +766,7 @@ def check_twg_version(root: Path):
 #
 # Reporta, nunca corrige: fechar um card órfão ou inventar um `**Plano:**` no
 # BACKLOG.md é decisão do dono, não do doctor. Delega o cálculo inteiro ao
-# `cepa-plan divergencia`, que é quem sabe comparar fila × BACKLOG (a leitura
+# `cepa-plan divergence`, que é quem sabe comparar fila × BACKLOG (a leitura
 # viva do Jira, cards_sem_item/itens_com_card_done, entra no passo `--live`
 # do /common:doctor, que passa `--board`).
 
@@ -930,14 +930,14 @@ def check_until_esperando(root: Path):
                       + (f"o build completo que faltou: {m['comando']}"
                          if m.get("comando") else
                          "o run não tinha build completo")
-                      + (f"; {m['fechar']} mostra o plano, com --sim roda o "
+                      + (f"; {m['fechar']} mostra o plano, com --yes roda o "
                          "build e deixa o run pronto para aterrissar"
                          if m.get("fechar") else ""))
     for r in runs:
         warn("until", f"fila `{r['fila']}`: o run {r['run']} deixou "
                       f"`{r['branch']}` esperando aterrissagem em "
                       f"`{r['destino']}` — {r['comando']} mostra o plano, "
-                      "com --sim executa")
+                      "com --yes executa")
 
 
 # ── Correções em lote (--fix) ───────────────────────────────────────────

@@ -122,7 +122,7 @@ def novos_runs(ev):
 # ── 1. commit é progresso ───────────────────────────────────────────────────
 
 def test_item_que_commitou_sem_fechar_conta_como_progresso():
-    """Com `--tentativas-por-item 1`, a tentativa que commitou e saiu sem
+    """Com `--attempts-per-item 1`, a tentativa que commitou e saiu sem
     desfecho marcava o item `blocked` pelo teto. Andou: a vez seguinte fecha."""
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1")])
@@ -137,8 +137,8 @@ def test_item_que_commitou_sem_fechar_conta_como_progresso():
             "    marca('a1', status='done', evidence='ok')\n")
         binv = fake_claude(tmp, corpo)
         p, chamadas = roda(raiz, binv, plano_de(raiz),
-                           ["--for", "2h", "--tentativas-por-item", "1",
-                            "--max-falhas", "1"])
+                           ["--for", "2h", "--attempts-per-item", "1",
+                            "--max-failures", "1"])
         fins = [e for e in ledger_de(raiz) if e["evento"] == "item_end"]
         check("a 1ª tentativa sai com commit e sem desfecho",
               fins and fins[0]["commits"] == 1
@@ -160,8 +160,8 @@ def test_item_sem_commit_e_sem_desfecho_continua_sem_progresso():
         raiz = monta_repo(tmp, [item("a1")])
         binv = fake_claude(tmp, "pass")
         p, _ = roda(raiz, binv, plano_de(raiz),
-                    ["--for", "2h", "--tentativas-por-item", "1",
-                     "--max-falhas", "1"])
+                    ["--for", "2h", "--attempts-per-item", "1",
+                     "--max-failures", "1"])
         fins = [e for e in ledger_de(raiz) if e["evento"] == "item_end"]
         check("sem commit, o registro segue dizendo sem progresso",
               fins and fins[0]["progresso"] is False

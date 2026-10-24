@@ -11,7 +11,7 @@ Contratos guardados aqui:
   - teste INTERNO (unidade) segue livre — renomear classe obriga a mexer nele,
     e isso é reforma legítima;
   - código de produção segue livre;
-  - fora do modo reforma o gate é mudo, mesmo mexendo em teste externo;
+  - fora do modo refactor o gate é mudo, mesmo mexendo em teste externo;
   - Bash não é rota de fuga: `>`, `>>`, `sed -i` e `tee` no alvo bloqueiam
     igual — bloquear só Write já deixou agentes escaparem por sed/cat neste
     repo antes;
@@ -56,8 +56,8 @@ class Repo:
         self.tmp.cleanup()
 
     def modo(self, nome, orcamento=None):
-        body = f"modo: {nome}\n"
-        body += f'orcamento: "{orcamento}"\n' if orcamento else "orcamento: null\n"
+        body = f"mode: {nome}\n"
+        body += f'budget: "{orcamento}"\n' if orcamento else "budget: null\n"
         (self.path / ".claude" / "session-mode").write_text(body, encoding="utf-8")
 
     def externos(self, *globs):
@@ -83,7 +83,7 @@ class Repo:
 
 def test_bloqueia_teste_externo():
     with Repo() as r:
-        r.modo("reforma", "só o módulo de auth")
+        r.modo("refactor", "só o módulo de auth")
         p = r.edit("src/test/java/com/x/AuthResourceIT.java")
         check("reforma: bloqueia teste externo", p.returncode == 2, str(p.returncode))
         check("reforma: explica que virou construção",
@@ -95,7 +95,7 @@ def test_bloqueia_teste_externo():
 
 def test_libera_teste_interno_e_producao():
     with Repo() as r:
-        r.modo("reforma")
+        r.modo("refactor")
         for alvo in ("src/test/java/com/x/AuthServiceTest.java",
                      "src/main/java/com/x/AuthService.java",
                      "tests/test_parser.py"):
@@ -104,9 +104,23 @@ def test_libera_teste_interno_e_producao():
                   p.returncode == 0, p.stderr)
 
 
+def test_session_mode_no_formato_antigo_vale():
+    """`modo: reforma` + `orcamento:` (o `cepa` antigo) ainda ativam o gate."""
+    with Repo() as r:
+        (r.path / ".claude" / "session-mode").write_text(
+            'modo: reforma\nrotina: null\norcamento: "só o módulo de auth"\n', encoding="utf-8")
+        p = r.edit("src/test/java/com/x/FooIT.java")
+        check("antigo: modo: reforma bloqueia teste externo", p.returncode == 2, p.stderr)
+        check("antigo: orcamento: aparece como orçamento", "só o módulo de auth" in p.stderr, p.stderr)
+    with Repo() as r:
+        (r.path / ".claude" / "session-mode").write_text("modo: construcao\n", encoding="utf-8")
+        p = r.edit("src/test/java/com/x/FooIT.java")
+        check("antigo: modo: construcao deixa o gate mudo", p.returncode == 0, p.stderr)
+
+
 def test_mudo_fora_do_modo():
     with Repo() as r:
-        r.modo("construcao")
+        r.modo("construction")
         p = r.edit("src/test/java/com/x/AuthResourceIT.java")
         check("fora de reforma: gate é mudo", p.returncode == 0, p.stderr)
     with Repo() as r:
@@ -116,7 +130,7 @@ def test_mudo_fora_do_modo():
 
 def test_bash_nao_e_rota_de_fuga():
     with Repo() as r:
-        r.modo("reforma")
+        r.modo("refactor")
         for cmd in ('echo x > e2e/checkout.spec.ts',
                     'cat foo >> tests/e2e/login.py',
                     "sed -i '' 's/a/b/' src/test/java/AuthResourceIT.java",
@@ -127,7 +141,7 @@ def test_bash_nao_e_rota_de_fuga():
 
 def test_ge_nao_e_redirecionamento():
     with Repo() as r:
-        r.modo("reforma")
+        r.modo("refactor")
         p = r.bash('if [ "$n" >= 3 ]; then echo e2e; fi')
         check(">= não vira redirecionamento", p.returncode == 0, p.stderr)
 
@@ -137,7 +151,7 @@ def test_diretorio_na_raiz():
     raiz. Um gate que pega alguns casos e parece cobrir todos é pior que gate
     nenhum — foi assim que este aqui passou verde na primeira rodada."""
     with Repo() as r:
-        r.modo("reforma")
+        r.modo("refactor")
         for alvo in ("cypress/specs/pay.cy.js", "app/cypress/specs/pay.cy.js",
                      "e2e/checkout.spec.ts", "sub/e2e/checkout.spec.ts",
                      "integration/pay_test.go"):
@@ -147,7 +161,7 @@ def test_diretorio_na_raiz():
 
 def test_override_do_repo():
     with Repo() as r:
-        r.modo("reforma")
+        r.modo("refactor")
         r.externos("*/contract/*")
         p = r.edit("src/contract/PayContract.java")
         check("override: bloqueia o que o repo declarou", p.returncode == 2, p.stderr)
@@ -157,7 +171,7 @@ def test_override_do_repo():
 
 def test_kill_switch():
     with Repo() as r:
-        r.modo("reforma")
+        r.modo("refactor")
         p = r.edit("e2e/checkout.spec.ts", env={"CEPA_MODO": "off"})
         check("CEPA_MODO=off desliga o gate", p.returncode == 0, p.stderr)
 
@@ -165,7 +179,7 @@ def test_kill_switch():
 def main():
     print("test_reforma_gate")
     for fn in (test_bloqueia_teste_externo, test_libera_teste_interno_e_producao,
-               test_mudo_fora_do_modo, test_bash_nao_e_rota_de_fuga,
+               test_session_mode_no_formato_antigo_vale, test_mudo_fora_do_modo, test_bash_nao_e_rota_de_fuga,
                test_ge_nao_e_redirecionamento, test_diretorio_na_raiz,
                test_override_do_repo,
                test_kill_switch):

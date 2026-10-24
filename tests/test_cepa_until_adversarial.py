@@ -84,9 +84,9 @@ def test_disjuntor_invalido_e_recusado():
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
         for ruim in ("0", "-1"):
             p, chamadas = roda(raiz, binv, plano,
-                               ["--for", "2h", "--max-falhas", ruim])
-            sem_traceback(p, f"--max-falhas {ruim}")
-            check(f"--max-falhas {ruim} é recusado", p.returncode == 2,
+                               ["--for", "2h", "--max-failures", ruim])
+            sem_traceback(p, f"--max-failures {ruim}")
+            check(f"--max-failures {ruim} é recusado", p.returncode == 2,
                   f"saiu {p.returncode}")
             check("...e nada foi disparado", not chamadas, str(chamadas))
 
@@ -169,7 +169,7 @@ def test_claude_corrompido_no_meio_e_falha_contada_nao_traceback():
         # o execvp seguir procurando e achar o `claude` DE VERDADE — o teste
         # rodou o agente real por 87s antes de eu perceber. Um teste que invoca
         # o binário real não mede nada e ainda gasta a sessão de quem o roda.
-        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "2"],
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-failures", "2"],
                            extra_env={"FAKE_BIN": str(binv),
                                       "PATH": "/usr/bin:/bin"})
         sem_traceback(p, "claude corrompido")

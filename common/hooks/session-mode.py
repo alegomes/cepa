@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Injeta o modo de trabalho ativo no contexto, a cada turno.
 
-O modo é declarado no `cepa --modo <x>` e gravado em .claude/session-mode. Ele é
+O modo é declarado no `cepa --mode <x>` e gravado em .claude/session-mode. Ele é
 um ESTADO que dura a sessão inteira — diferente da rotina, que é uma tarefa que
 acaba. Desenho completo: docs/modos-de-trabalho.md.
 
@@ -14,7 +14,7 @@ Saída enxuta de propósito (cabe em poucas linhas): ela paga pedágio em todo
 turno. Diz o modo, a condição de saída dele e a regra do desvio — nada mais.
 
 Junto do modo vai a INTENÇÃO da sessão (`.claude/session-intent`, escrita só
-pelo `cepa-intencao`; desenho em docs/estrategia-intencao-da-sessao.md), com
+pelo `cepa-intent`; desenho em docs/estrategia-intencao-da-sessao.md), com
 teto de duas linhas, num de três estados:
 
   - sem intenção gravada (e sessão aberta pelo `cepa`, isto é, com modo): os
@@ -42,7 +42,7 @@ from datetime import datetime, timezone
 
 # Condição de saída de cada modo — o que precisa ser verdade para ele fechar.
 # Sem isso o modo é rótulo, não fronteira. A tabela mora em `_modos.py` (fonte
-# única, compartilhada com o `cepa-modos`); aqui só se lê.
+# única, compartilhada com o `cepa-modes`); aqui só se lê.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 try:
     from _modos import SAIDA
@@ -52,6 +52,10 @@ try:
     from _modos import read_intent, mesma_sessao, pergunta_outra_sessao
 except Exception:  # noqa: BLE001
     read_intent = None
+try:
+    from _modos import parse_session_mode
+except Exception:  # noqa: BLE001
+    parse_session_mode = None
 
 # A marca que o `cepa-until` exporta em cada rodada (mesma do session-registry).
 ENV_JANELA = "CEPA_UNTIL_RUN"
@@ -83,18 +87,16 @@ def read_mode(root):
     path = os.path.join(root, ".claude", "session-mode")
     if not os.path.isfile(path):
         return None
-    data = {}
     try:
         with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                if ":" not in line:
-                    continue
-                k, _, v = line.partition(":")
-                v = v.strip().strip('"')
-                data[k.strip()] = None if v in ("null", "") else v
+            texto = fh.read()
     except Exception:  # noqa: BLE001
         return None
-    return data if data.get("modo") else None
+    if parse_session_mode is None:
+        return None
+    # chaves novas (mode, budget, ...) mesmo se o arquivo é do `cepa` antigo
+    data = parse_session_mode(texto)
+    return data if data.get("mode") else None
 
 
 def _iso(stamp):
@@ -192,8 +194,8 @@ def linhas_intencao(root, payload, tem_modo):
     if read_intent is None:
         return []
     intent = read_intent(root)
-    plano = (intent or {}).get("plano")
-    if not intent or not intent.get("proposito") or not isinstance(plano, list) or not plano:
+    plano = (intent or {}).get("plan")
+    if not intent or not intent.get("purpose") or not isinstance(plano, list) or not plano:
         if not tem_modo:
             return []
         prompts = primeiros_prompts(root, payload.get("session_id"),
@@ -203,33 +205,33 @@ def linhas_intencao(root, payload, tem_modo):
             "[intenção] Esta sessão ainda não tem intenção gravada. "
             f"Primeiros prompts: {lista}.",
             "Se este prompt tem conteúdo, proponha em três linhas (propósito, para "
-            "quando, plano numerado), grave com `cepa-intencao gravar --proposito "
-            '"..." --para-quando "..." --plano "passo 1" "passo 2"`, e feche com: a '
+            "quando, plano numerado), grave com `cepa-intent write --purpose "
+            '"..." --by-when "..." --plan "passo 1" "passo 2"`, e feche com: a '
             "qualquer momento `/common:whereami` mostra onde estamos. Se o prompt é "
             "trivial ou um comando de abertura, não proponha ainda.",
         ]
 
-    prop = corta(intent["proposito"], CORTE_PROPOSITO)
+    prop = corta(intent["purpose"], CORTE_PROPOSITO)
     if not mesma_sessao(intent.get("session_id"), payload.get("session_id")):
         return pergunta_outra_sessao(intent, prop)
 
     m = len(plano)
-    passo = intent.get("passo")
+    passo = intent.get("step")
     if not isinstance(passo, int) or not 1 <= passo <= m + 1:
         passo = 1
     if passo > m:
-        para = corta(intent.get("para_quando"), CORTE_PROPOSITO)
+        para = corta(intent.get("by_when"), CORTE_PROPOSITO)
         return [f"[intenção] {prop}. Plano cumprido ({m}/{m})"
                 + (f"; ponto de parada: {para}" if para else "")
                 + ". Próximo: hora de /common:wrap-up."]
-    k = turnos_desde(root, intent.get("passo_desde"))
+    k = turnos_desde(root, intent.get("step_since"))
     idade = f" (há {k} turno{'s' if k != 1 else ''})" if k is not None else ""
     nome = corta(plano[passo - 1], CORTE_PASSO)
     prox = (corta(plano[passo], CORTE_PASSO) if passo < m
             else "plano cumprido: hora de /common:wrap-up")
     return [
         f"[intenção] {prop}. Passo {passo}/{m}: {nome}{idade}. Próximo: {prox}.",
-        f"Ao concluir o passo, rode `cepa-intencao --passo {passo + 1}`.",
+        f"Ao concluir o passo, rode `cepa-intent --step {passo + 1}`.",
     ]
 
 
@@ -249,10 +251,10 @@ def main():
 
         blocos = []
         if mode:
-            nome = mode["modo"]
+            nome = mode["mode"]
             linhas = [f"[modo] Esta sessão opera em **{nome}**."]
-            if mode.get("orcamento"):
-                linhas.append(f"Orçamento declarado: {mode['orcamento']}.")
+            if mode.get("budget"):
+                linhas.append(f"Orçamento declarado: {mode['budget']}.")
             if nome in SAIDA:
                 linhas.append(f"Fecha quando: {SAIDA[nome]}.")
             linhas.append(

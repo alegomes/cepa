@@ -90,7 +90,7 @@ POLITICA = (
     "force-push, publicar para fora), para custo real (rodar N provas caras) e "
     "para bifurcação de preferência sem default defensável — e vai para uma "
     "das pontas: na largada, se a resposta muda o plano inteiro, ou no "
-    "relatório final, em lista numerada com `Recomendo sim/não`. "
+    "relatório final, em lista numerada com `I recommend yes/no`. "
     "Nunca no meio da execução. "
     "Toda decisão que você tomar sozinho é NOMEADA no relatório final — é isso "
     "que torna a autonomia revisável em vez de temerária."

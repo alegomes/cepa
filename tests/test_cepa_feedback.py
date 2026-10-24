@@ -96,7 +96,7 @@ class Caixa:
 def test_add_grava_verbatim_com_contexto():
     with Caixa() as c:
         texto = "o gate barrou meu commit legítimo e eu tive que desligar o modo"
-        p = c.cli("add", texto, "--alvo", "modo-escrita-gate", "--origem", "skill")
+        p = c.cli("add", texto, "--target", "modo-escrita-gate", "--origin", "skill")
         check("add: rc=0", p.returncode == 0, p.stderr)
         evs = c.linhas()
         check("add: uma linha no ledger", len(evs) == 1, evs)
@@ -147,7 +147,7 @@ def test_triar_marca_e_recusa_repeticao():
     with Caixa() as c:
         c.cli("add", "o comando pergunta três vezes a mesma coisa")
         fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "BACKLOG.md § Atrito de decisão")
+        p = c.cli("triage", fid, "--destination", "BACKLOG.md § Atrito de decisão")
         check("triar: rc=0", p.returncode == 0, p.stderr)
         ev = c.linhas()[-1]
         check("triar: grava linha de triagem", ev["tipo"] == "triagem", ev)
@@ -155,7 +155,7 @@ def test_triar_marca_e_recusa_repeticao():
         check("triar: registro original intacto",
               c.linhas()[0]["texto"] == "o comando pergunta três vezes a mesma coisa",
               c.linhas()[0])
-        p = c.cli("triar", fid, "--destino", "outro lugar")
+        p = c.cli("triage", fid, "--destination", "outro lugar")
         check("triar: re-triagem recusada (rc=4)", p.returncode == 4, p.returncode)
         check("triar: recusa nomeia o destino anterior",
               "Atrito de decisão" in p.stderr, p.stderr)
@@ -184,7 +184,7 @@ def test_triar_com_plano_acrescenta_a_fila():
         texto = "o relatório final do drain não nomeia o card que travou, custou 20min"
         c.cli("add", texto)
         fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "fila WEGO", "--plano", "WEGO",
+        p = c.cli("triage", fid, "--destination", "fila WEGO", "--queue", "WEGO",
                   "--why", "achado real de sessão")
         check("triar --plano: rc=0", p.returncode == 0, p.stderr)
         check("triar --plano: confirma a entrada na fila",
@@ -204,7 +204,7 @@ def test_triar_com_plano_ja_na_fila_nao_e_erro():
             plano_com_item, encoding="utf-8")
         c.cli("add", "queixa qualquer que já tem item homônimo na fila")
         fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "fila WEGO", "--plano", "WEGO")
+        p = c.cli("triage", fid, "--destination", "fila WEGO", "--queue", "WEGO")
         check("triar --plano: id já na fila não é erro (rc=0)",
               p.returncode == 0, p.stderr)
         check("triar --plano: avisa sem alarde", "já estava na fila" in p.stdout,
@@ -228,7 +228,7 @@ def test_triar_com_plano_erro_real_nao_desfaz_a_triagem():
             plano_ondas, encoding="utf-8")
         c.cli("add", "queixa que precisa sobreviver a um erro real do add")
         fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "fila WEGO", "--plano", "WEGO")
+        p = c.cli("triage", fid, "--destination", "fila WEGO", "--queue", "WEGO")
         check("triar com erro real do add: rc=0 (a triagem em si teve sucesso)",
               p.returncode == 0, p.stderr)
         check("triar com erro real do add: avisa que NÃO entrou na fila",
@@ -248,7 +248,7 @@ def test_triar_sem_plano_nao_toca_em_fila_nenhuma():
             PLANO, encoding="utf-8")
         c.cli("add", "queixa comum, sem pedir fila nenhuma desta vez")
         fid = f"fb-{HOJE}-1"
-        p = c.cli("triar", fid, "--destino", "BACKLOG.md § X")
+        p = c.cli("triage", fid, "--destination", "BACKLOG.md § X")
         check("triar sem --plano: rc=0", p.returncode == 0, p.stderr)
         fila = (c.repo / ".claude" / "programs" / "WEGO" / "plan.yaml").read_text(
             encoding="utf-8")
@@ -258,9 +258,9 @@ def test_triar_sem_plano_nao_toca_em_fila_nenhuma():
 def test_triar_recusa_id_inexistente_e_destino_vazio():
     with Caixa() as c:
         c.cli("add", "alguma queixa suficientemente longa aqui")
-        p = c.cli("triar", "fb-19700101-9", "--destino", "x")
+        p = c.cli("triage", "fb-19700101-9", "--destination", "x")
         check("triar: id inexistente (rc=3)", p.returncode == 3, p.returncode)
-        p = c.cli("triar", f"fb-{HOJE}-1", "--destino", "   ")
+        p = c.cli("triage", f"fb-{HOJE}-1", "--destination", "   ")
         check("triar: destino vazio (rc=2)", p.returncode == 2, p.returncode)
 
 
@@ -270,7 +270,7 @@ def test_list_replay_do_ledger():
     with Caixa() as c:
         c.cli("add", "primeira queixa longa o suficiente para passar")
         c.cli("add", "segunda queixa longa o suficiente para passar")
-        c.cli("triar", f"fb-{HOJE}-1", "--destino", "BACKLOG.md § X")
+        c.cli("triage", f"fb-{HOJE}-1", "--destination", "BACKLOG.md § X")
         p = c.cli("list", "--json")
         abertos = json.loads(p.stdout)
         check("list: default só os abertos", [r["id"] for r in abertos] == [f"fb-{HOJE}-2"],
@@ -298,7 +298,7 @@ def test_linha_corrompida_nao_derruba_o_resto():
 
 def test_list_sem_nada_registrado():
     with Caixa() as c:
-        p = c.cli("list", "--sem-cor")
+        p = c.cli("list", "--no-color")
         check("list: ledger vazio não é erro", p.returncode == 0, p.stderr)
         check("list: ledger vazio diz que está vazio",
               "Nenhum feedback" in p.stdout, p.stdout)

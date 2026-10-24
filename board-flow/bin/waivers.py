@@ -21,7 +21,7 @@ existe dono na frente do agente. Uma dispensa gravada ali é o agente dispensand
 prova em nome do dono (fb-20261014-3: um run gravou `autor: alegomes` sozinho).
 Por isso, nesse modo `gravar` vira `propor`: o arquivo nasce como PROPOSTA
 (`status: proposta`, `autor: null`), `carregar` não a enxerga, e só o
-`cepa-plan responde` do dono, num terminal, a converte em dispensa
+`cepa-plan answer` do dono, num terminal, a converte em dispensa
 (`converter`). Gêmeo inline da conversão: `common/bin/cepa-plan` (`cmd_responde`).
 """
 from __future__ import annotations
@@ -266,7 +266,7 @@ def gravar(repo: str, motivo: str, escopo: str, razao: str, autor: str,
     na frente; uma dispensa gravada ali é o agente dispensando prova em nome do
     dono (fb-20261014-3, `autor: alegomes` escrito sozinho). Não há parâmetro que
     force a dispensa real nesse modo — de propósito. `fila`/`item` amarram a
-    proposta ao item da fila para o `cepa-plan responde` achá-la."""
+    proposta ao item da fila para o `cepa-plan answer` achá-la."""
     if em_run_autonomo():
         for n, v in (("razao", razao), ("autor", autor),
                      ("revisit_trigger", revisit_trigger),

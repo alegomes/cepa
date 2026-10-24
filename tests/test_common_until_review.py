@@ -44,12 +44,12 @@ def main():
     check("não numera as ações por conta própria",
           "with no numbering of your own" in limpo)
     check("repete o bloco 'fica com você'", "fica com você" in limpo)
-    check("tarefa do dono traz 'Pronto quando'", "pronto quando" in limpo)
+    check("tarefa do dono traz 'Done when'", "done when" in limpo)
     j = limpo.find("fica com você")
-    check("'Fica com você' manda escrever o cepa-plan responde colável",
-          "cepa-plan responde" in limpo[j:j + 2500], limpo[j:j + 200])
+    check("'Fica com você' manda escrever o cepa-plan answer colável",
+          "cepa-plan answer" in limpo[j:j + 2500], limpo[j:j + 200])
     check("fecha com perguntas fechadas com recomendação",
-          "closed questions" in limpo and "recomendo sim/não" in limpo)
+          "closed questions" in limpo and "i recommend yes/no" in limpo)
     print()
     if FAILURES:
         print(f"✗ {len(FAILURES)} falha(s): {', '.join(FAILURES)}")

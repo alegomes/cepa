@@ -29,22 +29,28 @@ seria pior que o problema.
 ````
 <Abertura: até 3 frases, zero jargão. O resultado, não o mecanismo.>
 
-**Pra você:** <quantas decisões e quantos passos esperam por você — ou "nada">
+**For you:** <quantas decisões e quantos passos esperam por você — ou "nada">
 
-### Detalhe técnico
+### Technical detail
 <livre: arquivos, nomes, evidência, mecanismo>
 
-### Decisões e próximos passos
+### Decisions and next steps
 *Responda por número: sim, não, ou "vamos falar".*
 1. **<A pergunta fechada, respondível sem abrir nada.>**
-   Recomendo **sim/não** — <o porquê em uma linha>.
+   I recommend **yes/no** — <o porquê em uma linha>.
    Se **<a outra resposta>**: <o que acontece então>.
 2. **Você <faz a coisa que só você faz>?**
    Onde: <repo ou diretório, e o arquivo quando há>.
    Comando: <em bloco de código — ou "Abra <arquivo>" e o que preencher>.
-   Pronto quando: <o que você vê ao terminar>. Me diga "<frase>" e eu fecho a rota.
-   Recomendo **sim/não** — <o porquê em uma linha>.
+   Done when: <o que você vê ao terminar>. Me diga "<frase>" e eu fecho a rota.
+   I recommend **yes/no** — <o porquê em uma linha>.
 ````
+
+Os rótulos canônicos são os em inglês (`**For you:**`, `### Technical detail`,
+`### Decisions and next steps`, `I recommend yes/no`, `Nothing pending.`, `Done when:`).
+Durante a transição o `report-style-lint.py` ainda aceita os rótulos antigos em pt-BR
+(`**Pra você:**`, `### Detalhe técnico`, `### Decisões e próximos passos`, `Recomendo sim/não`,
+`Nada pendente.`, `Pronto quando:`). O texto em volta continua no idioma do usuário.
 
 Regras duras:
 
@@ -52,11 +58,11 @@ Regras duras:
   `common/glossario.md`.** Se você não consegue escrever a abertura sem um
   desses termos, você não entendeu o que fez — o termo está fazendo o trabalho
   que o entendimento deveria fazer.
-- **`Pra você:` sempre presente**, mesmo quando a resposta é "nada pra
+- **`For you:` sempre presente**, mesmo quando a resposta é "nada pra
   decidir". O usuário precisa saber que pode parar de ler ali.
-- **`### Decisões e próximos passos` sempre presente, e sempre por último.**
+- **`### Decisions and next steps` sempre presente, e sempre por último.**
   Nada vem depois dela — é o lugar onde o usuário volta quando terminou de ler.
-- **Teto de 200 palavras** somando abertura e `Pra você:`. O detalhe técnico é
+- **Teto de 200 palavras** somando abertura e `For you:`. O detalhe técnico é
   livre — quem não quer, para no cabeçalho.
 - **Ordem: resultado antes de mecanismo.** Nunca abra por como funciona.
 - **Abertura diz o que mudou, não o que eu fiz.** Lista de passos executados
@@ -65,13 +71,12 @@ Regras duras:
 ## A lista do fim
 
 Pedido do usuário em 03/08/2026: *"ao final de cada report, uma lista objetiva
-de decisões a serem tomadas ou próximos passos a serem seguidos"*. O `Pra
-você:` do topo respondia *se* existe algo pendente; ele não respondia *o que
+de decisões a serem tomadas ou próximos passos a serem seguidos"*. O `For you:` do topo respondia *se* existe algo pendente; ele não respondia *o que
 fazer agora*, e estava em prosa no meio de um parágrafo.
 
 Os dois convivem sem repetir: **o topo dá a contagem, o fim dá a lista.**
 
-> **Pra você:** duas perguntas e um passo manual — lista no fim.
+> **For you:** duas perguntas e um passo manual — lista no fim.
 
 ### Todo item é uma pergunta fechada
 
@@ -92,7 +97,7 @@ resolver. O mesmo item mastigado:
 
 > 3. **Mantenho no WEGO-1631 o critério que recusa pedido sem tipo de
 >    documento, mesmo que isso passe a barrar os pedidos legados?**
->    Recomendo **sim** — é a sua regra "sem tipo, não emite", e o critério só
+>    I recommend **yes** — é a sua regra "sem tipo, não emite", e o critério só
 >    vale na entrada nova.
 >    Se **não**: tiro o critério 6 do card e os pedidos sem tipo seguem
 >    passando como hoje.
@@ -107,7 +112,7 @@ Regras da lista:
 - **Respondível sem abrir nada.** O fato que a resposta exige (o critério em
   português, o número, o arquivo) vem dentro do item. Se responder obriga a
   abrir o card, o item está incompleto.
-- **Sempre com `Recomendo sim` ou `Recomendo não`**, e o porquê em uma linha.
+- **Sempre com `I recommend yes` ou `I recommend no`**, e o porquê em uma linha.
   Vale para os três tipos de item — inclusive "rodo o prove-drain?".
 - **"Vamos falar" é sempre a terceira resposta**, dita uma vez no cabeçalho da
   seção, nunca repetida item a item.
@@ -115,19 +120,19 @@ Regras da lista:
   antes", "vale checar" não são recomendações: são o meu trabalho voltando pra
   ele. Ou eu recomendo, ou o item vira uma pergunta sobre investigar
   ("Investigo o volume de linhas legadas antes de decidir?").
-- **Nunca vazia.** Sem nada pendente, escreva uma linha só: *Nada pendente.*
+- **Nunca vazia.** Sem nada pendente, escreva uma linha só: *Nothing pending.*
 - **Ordenada por quem trava o quê:** o que bloqueia os outros vem primeiro.
 - **Fora do teto de 200 palavras** — o teto vale só até o detalhe técnico. Mas
   lista de mais de 5 itens é sinal de que o turno fez coisa demais junto.
-- **Tudo que o `Pra você:` conta aparece na lista, um item por tarefa**, e
-  tarefa do dono traz Onde / Comando / Pronto quando (seção seguinte).
+- **Tudo que o `For you:` conta aparece na lista, um item por tarefa**, e
+  tarefa do dono traz Onde / Comando / Done when (seção seguinte).
 
 Os três tipos continuam existindo; agora eles só mudam **o verbo da pergunta**:
 
 | Tipo | A pergunta soa assim |
 |---|---|
 | escolha de mérito | "Mantenho o critério X?" · "Troco Y por Z?" |
-| ação que só ele faz | "Você roda `bin/install.sh --clean` agora?" — e o item traz **Onde / Comando / Pronto quando** (ver a seção seguinte) e o que quebra se não rodar |
+| ação que só ele faz | "Você roda `bin/install.sh --clean` agora?" — e o item traz **Onde / Comando / Done when** (ver a seção seguinte) e o que quebra se não rodar |
 | trabalho meu esperando o "vai" | "Rodo o `/board-flow:prove-drain` nos dois cards de In Review?" — e o item diz o custo |
 
 ## Tarefa sua vem com o passo a passo
@@ -137,13 +142,13 @@ O dono reprovou isso três vezes em dez dias. Em 06/10/2026, no relatório do
 devem ser tomadas"*. Em 14/10/2026, no repo `wego-product`, depois de um
 relatório que fechava assim:
 
-> **Pra você:** fechar as duas rotas humanas no `wego-digitacao-backend` (o
+> **For you:** fechar as duas rotas humanas no `wego-digitacao-backend` (o
 > comando do S3-port e a conferência dos 50 documentos) e os sete buracos do
 > RIPD. Nada mais pendente comigo nesta sessão.
 > [...]
-> ### Decisões e próximos passos
+> ### Decisions and next steps
 >
-> Nada pendente.
+> Nothing pending.
 
 *"Essa é mais uma instrução que fala muito e não fala nada. **O que, afinal,
 que eu tenho que fazer? Dê-me o passo a passo.** É extremamente frustrante
@@ -156,9 +161,9 @@ O defeito: o topo dava a **categoria** das tarefas ("as duas rotas humanas",
 pendente.". As tarefas dele só existiam como resumo. O mesmo relatório, certo:
 
 ````
-**Pra você:** três tarefas, nenhuma decisão — lista no fim.
+**For you:** três tarefas, nenhuma decisão — lista no fim.
 
-### Decisões e próximos passos
+### Decisions and next steps
 *Responda por número: sim, não, ou "vamos falar".*
 1. **Você roda o comando do S3-port agora?**
    Onde: `wego-digitacao-backend`, na raiz do clone.
@@ -166,17 +171,17 @@ pendente.". As tarefas dele só existiam como resumo. O mesmo relatório, certo:
    ```
    bin/ler-lote.sh --porta s3 inob/282243
    ```
-   Pronto quando: o terminal imprime `20 lotes lidos` e aparece a pasta `saida/inob-282243/`.
-   Recomendo **sim** — é o único passo que destrava o S5.
+   Done when: o terminal imprime `20 lotes lidos` e aparece a pasta `saida/inob-282243/`.
+   I recommend **yes** — é o único passo que destrava o S5.
 2. **Você confere os 50 documentos da amostra?**
    Onde: `/tmp/s5-saida/inob-282243/amostra-50-conferencia.csv` (fora do git).
    Como: abra o CSV e preencha as quatro colunas vazias (classe real, tipo real, guia-pai real, observação); os PDFs estão em `Shared drives/Projetos/wego-faturamento/captura de guias/dataset/inob/282243/`.
-   Pronto quando: as 50 linhas têm "classe real" preenchida. Me diga "amostra conferida" e eu fecho a rota.
-   Recomendo **sim** — sem ela a medida de acerto do S5 não existe.
+   Done when: as 50 linhas têm "classe real" preenchida. Me diga "amostra conferida" e eu fecho a rota.
+   I recommend **yes** — sem ela a medida de acerto do S5 não existe.
 3. **Você preenche os sete campos `[[PREENCHER]]` do RIPD?**
    Onde: `docs/lgpd/ripd-leitura-de-guias-fase-0.md` no `wego-product`, seção 9.
-   Pronto quando: `grep -c PREENCHER docs/lgpd/ripd-leitura-de-guias-fase-0.md` devolve 0.
-   Recomendo **sim** — dois deles só você sabe (a frase do termo da PoC e quem montou a PoC).
+   Done when: `grep -c PREENCHER docs/lgpd/ripd-leitura-de-guias-fase-0.md` devolve 0.
+   I recommend **yes** — dois deles só você sabe (a frase do termo da PoC e quem montou a PoC).
 ````
 
 (RIPD é o relatório de impacto à proteção de dados; S3-port e S5 são etapas do
@@ -184,13 +189,13 @@ projeto de leitura de guias, citadas aqui só porque estavam no relatório real.
 
 Regras duras:
 
-1. **Tudo que o `Pra você:` conta aparece na lista do fim, um item por
-   tarefa.** "Nada pendente." só é válido quando o `Pra você:` diz "nada".
-   `Pra você:` que nomeia uma categoria ("as duas rotas humanas", "os sete
+1. **Tudo que o `For you:` conta aparece na lista do fim, um item por
+   tarefa.** "Nothing pending." só é válido quando o `For you:` diz "nada".
+   `For you:` que nomeia uma categoria ("as duas rotas humanas", "os sete
    buracos", "as pendências") sem a tarefa na lista é o erro de 14/10.
 2. **Item de tarefa do dono (a pergunta começa por "Você ...") traz três
    linhas:** `Onde:` (repo ou diretório, e o arquivo quando há), o `Comando:`
-   em bloco de código ou o arquivo a abrir, e `Pronto quando:` (o que ele vê
+   em bloco de código ou o arquivo a abrir, e `Done when:` (o que ele vê
    quando terminou, e o que me diz para eu fechar a rota). Sem comando nem
    arquivo, o item é categoria, não passo.
 3. **Se eu posso executar, não é tarefa dele.** Passo a passo de comandos para
@@ -242,7 +247,7 @@ destas três, e cada uma tem um destino:
 |---|---|
 | "e daí que agora você pode X" / "e daí que Y deixou de ser risco" | escreva **isso** — é a frase que faltava |
 | "e daí que está tudo normal" | corte a frase (ver "Higiene (não relatar)" no glossário) |
-| "e daí que preciso que você decida" | é `Pra você:`, não abertura |
+| "e daí que preciso que você decida" | é `For you:`, não abertura |
 
 Os três jeitos de errar, todos no mesmo relatório:
 
@@ -276,13 +281,13 @@ A mesma coisa dentro do formato:
 > lista de proibidas — um erro de digitação virava aprovação. Agora ele só
 > aceita as palavras previstas.
 >
-> **Pra você:** nada pra decidir, um passo manual — lista no fim.
+> **For you:** nada pra decidir, um passo manual — lista no fim.
 >
 > [...]
 >
-> ### Decisões e próximos passos
+> ### Decisions and next steps
 > *Responda por número: sim, não, ou "vamos falar".*
-> 1. **Você roda `bin/install.sh --clean` agora?** Recomendo **sim** — sem
+> 1. **Você roda `bin/install.sh --clean` agora?** I recommend **yes** — sem
 >    isso a correção não vale na sessão de amanhã. Se **não**: o verificador
 >    segue aceitando erro de digitação como aprovação."
 
@@ -290,8 +295,8 @@ A mesma coisa dentro do formato:
 
 Depois que o `/common:wrap-up` disse "Safe to exit", a sessão está fechada. A
 lista do fim de qualquer relatório seguinte (o do `/common:metrics`, por
-exemplo) não pergunta nada: diz "Nada pendente. Próxima sessão começa por X.", e
-o `Pra você:` diz "nada". O que sobrou é registrado (seção no BACKLOG.md, item
+exemplo) não pergunta nada: diz "Nothing pending. Próxima sessão começa por X.", e
+o `For you:` diz "nada". O que sobrou é registrado (seção no BACKLOG.md, item
 de fila, `cepa-feedback add`), não oferecido. O dono, em 2026-10-16: "é nessas
 horas que eu me perco em meio à árvore de forks que vai se criando."
 
@@ -308,16 +313,16 @@ reescrito ali mesmo, antes de você ler. Ele passou de aviso a bloqueio em
 padrão em um mês de aviso. Bloqueia uma vez por relatório: se a reescrita ainda
 desviar, o desvio vira aviso no turno seguinte em vez de prender a sessão.
 
-O hook também bloqueia quando o `Pra você:` anuncia algo e a lista do fim diz
-"Nada pendente." (ou não tem item numerado), e quando um item "Você ..." não
-traz comando, caminho de arquivo nem a linha "Pronto quando". Ele confere a
+O hook também bloqueia quando o `For you:` anuncia algo e a lista do fim diz
+"Nothing pending." (ou não tem item numerado), e quando um item "Você ..." não
+traz comando, caminho de arquivo nem a linha "Done when". Ele confere a
 forma do item, não se o comando está certo: isso é meu. A linha `Onde:` o hook
-não mede (só confere comando ou arquivo e "Pronto quando"); mantê-la é comigo.
+não mede (só confere comando ou arquivo e "Done when"); mantê-la é comigo.
 Depois do "Safe to exit" do wrap-up, o hook também bloqueia pergunta fechada na
-lista do fim e `Pra você:` que anuncia algo (categoria `pergunta-pos-wrap-up`).
+lista do fim e `For you:` que anuncia algo (categoria `pergunta-pos-wrap-up`).
 
 O que ele consegue medir do "e daí?" é só a parte literal: as frases de higiene
-da lista do glossário, e apenas na abertura e no `Pra você:`. Distinguir
+da lista do glossário, e apenas na abertura e no `For you:`. Distinguir
 "reexecutei o portão nos três cards" (procedimento) de "os três cards presos
 passaram" (efeito) exige entender o assunto, e nenhuma regex faz isso — essa
 parte é minha, não do hook.

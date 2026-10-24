@@ -15,7 +15,7 @@
 #                        #   completion which Warp's own engine ignores
 #   cepa --resume        # any other args pass straight through to claude
 #
-#   cepa --modo ajuda    # o propósito de cada modo, e sai (não abre sessão);
+#   cepa --mode help     # o propósito de cada modo, e sai (não abre sessão);
 #                        #   no menu interativo, `?` faz o mesmo e reapresenta
 #
 #   cepa --prompt smartass            # anexa um system prompt customizado
@@ -39,20 +39,20 @@
 # (intervalo: CEPA_PREFLIGHT_TTL, em horas).
 #
 # Encadeamento: quando o claude sai, se a sessão deixou o próximo passo em
-# <raiz-principal>/.claude/sessions/<session_id>.next.json ({"repo", "modo",
+# <raiz-principal>/.claude/sessions/<session_id>.next.json ({"repo", "mode",
 # "brief"}), o cepa apaga o arquivo e abre a sessão seguinte em `repo`, com
-# `--modo <modo>` e o brief como prompt inicial. Sem o arquivo, sai como antes.
+# `--mode <modo>` e o brief como prompt inicial. Sem o arquivo, sai como antes.
 # Desligue com CEPA_ENCADEAR=off. Detalhe em common/hooks/session-chain.py.
 #
-#   cepa --proposito "<texto>"   # grava o texto como propósito da sessão
-#   cepa --proposito "<p>" --para-quando "<meta>" --plano "<passo 1>
+#   cepa --purpose "<texto>"     # grava o texto como propósito da sessão
+#   cepa --purpose "<p>" --by-when "<meta>" --plan "<passo 1>
 #   <passo 2>"                   # grava a intenção inteira (um passo por linha)
 #
 # O encadeamento passa as três quando o handoff da sessão anterior escreveu a
 # intenção da seguinte (linhas `**Intenção:**`, `**Meta:**` e `**Plano:**`), e
 # nenhuma quando não escreveu: o brief fala da sessão que saiu e não vira
-# propósito. A gravação é antes do primeiro turno, via cepa-intencao, o único
-# escritor de .claude/session-intent. Só `--proposito` grava ponto de parada e
+# propósito. A gravação é antes do primeiro turno, via cepa-intent, o único
+# escritor de .claude/session-intent. Só `--purpose` grava ponto de parada e
 # plano genéricos. Os valores não vão para o claude. Falha ao gravar avisa e a sessão abre do mesmo jeito.
 #
 # Toda sessão nasce em bypassPermissions, porque o modo `auto` do Claude Code
@@ -87,8 +87,8 @@ LAUNCH_PY="$SCRIPT_DIR/../hooks/session-launch.py"
 CHAIN_PY="$SCRIPT_DIR/../hooks/session-chain.py"
 CEPA_SELF="$SCRIPT_DIR/$(basename "$SELF")"
 DOCTOR="$SCRIPT_DIR/cepa-doctor"
-MODOS_BIN="$SCRIPT_DIR/cepa-modos"
-INTENCAO_BIN="$SCRIPT_DIR/cepa-intencao"
+MODOS_BIN="$SCRIPT_DIR/cepa-modes"
+INTENCAO_BIN="$SCRIPT_DIR/cepa-intent"
 
 # Preflight: deixa o harness pronto ANTES da sessão começar, em vez de o
 # usuário descobrir no meio da tarefa que o plugin instalado não é o do repo.
@@ -114,7 +114,20 @@ preflight() {
 # Sem modo o cepa NÃO sobe: um default silencioso reconstrói exatamente o
 # vazamento entre atividades que o modo existe para fechar. Escape:
 # CEPA_MODO=off (não grava, não pergunta, cepa se comporta como antes).
-MODOS="exploracao descoberta design construcao reforma reflexao documentacao"
+MODOS="exploration discovery design construction refactor reflection documentation"
+
+# Os nomes antigos (pt-BR) continuam aceitos em --mode/--modo e viram o novo.
+modo_normaliza() {
+  case "$1" in
+    exploracao) echo exploration ;;
+    descoberta) echo discovery ;;
+    construcao) echo construction ;;
+    reforma) echo refactor ;;
+    reflexao) echo reflection ;;
+    documentacao) echo documentation ;;
+    *) echo "$1" ;;
+  esac
+}
 
 modo_valido() {
   for _m in $MODOS; do [ "$_m" = "$1" ] && return 0; done
@@ -124,13 +137,13 @@ modo_valido() {
 # Pergunta o modo em /dev/tty. Sem tty, não há como perguntar → falha com a
 # instrução, em vez de assumir um modo por você.
 # O propósito de cada modo, uma linha por modo, lido da fonte única
-# (common/hooks/_modos.py) pelo cepa-modos. O menu listava só os sete nomes, e
+# (common/hooks/_modos.py) pelo cepa-modes. O menu listava só os sete nomes, e
 # quem não lembra o que "reforma" cobra escolhia pelo nome — o modo, que é
 # fronteira, virava rótulo. Sem python3 ou sem o script, a ajuda degrada para os
 # nomes e o caminho do documento; ela nunca some calada.
 mostra_propositos() {
   if command -v python3 >/dev/null 2>&1 && [ -f "$MODOS_BIN" ]; then
-    python3 "$MODOS_BIN" --propositos --sem-cor >&2 2>/dev/null && return 0
+    python3 "$MODOS_BIN" --purposes --no-color >&2 2>/dev/null && return 0
   fi
   printf 'modos: %s\n' "$MODOS" >&2
   printf 'o propósito de cada um está em docs/modos-de-trabalho.md\n' >&2
@@ -140,8 +153,8 @@ mostra_propositos() {
 ask_modo() {
   if [ ! -t 0 ] || [ ! -r /dev/tty ]; then
     printf '✗ cepa: nenhuma sessão sobe sem modo declarado.\n' >&2
-    printf '  Use: cepa --modo <%s>\n' "$(printf '%s' "$MODOS" | tr ' ' '|')" >&2
-    printf '  Veja o propósito de cada um: cepa --modo ajuda\n' >&2
+    printf '  Use: cepa --mode <%s>\n' "$(printf '%s' "$MODOS" | tr ' ' '|')" >&2
+    printf '  Veja o propósito de cada um: cepa --mode help\n' >&2
     printf '  Ou desligue a exigência com CEPA_MODO=off\n' >&2
     return 1
   fi
@@ -168,7 +181,7 @@ ask_modo() {
 # é a lista fechada do que será reformado; ele É a condição de saída do modo.
 ask_orcamento() {
   if [ ! -t 0 ] || [ ! -r /dev/tty ]; then
-    printf '✗ cepa: modo reforma exige --orcamento "<escopo fechado>"\n' >&2
+    printf '✗ cepa: modo refactor exige --budget "<escopo fechado>"\n' >&2
     return 1
   fi
   printf 'Orçamento da reforma (o que exatamente será reformado): ' >&2
@@ -260,41 +273,41 @@ write_modo() {
   [ -n "$MODO" ] || return 0
   mkdir -p "$1/.claude" 2>/dev/null || return 0
   {
-    printf 'modo: %s\n' "$MODO"
-    printf 'rotina: null\n'
+    printf 'mode: %s\n' "$MODO"
+    printf 'routine: null\n'
     if [ -n "$ORCAMENTO" ]; then
-      printf 'orcamento: "%s"\n' "$(printf '%s' "$ORCAMENTO" | sed 's/"/\\"/g')"
+      printf 'budget: "%s"\n' "$(printf '%s' "$ORCAMENTO" | sed 's/"/\\"/g')"
     else
-      printf 'orcamento: null\n'
+      printf 'budget: null\n'
     fi
-    printf 'aberto_em: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'opened_at: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   } > "$1/.claude/session-mode" 2>/dev/null || return 0
   printf '◆ modo: %s\n' "$MODO" >&2
   return 0
 }
 
-# Grava o propósito da sessão (--proposito) no diretório onde ela de fato roda,
-# pelo cepa-intencao, o único escritor do .claude/session-intent. Independe do
-# CEPA_MODO: intenção não é modo. O --motivo faz sobrescrever uma intenção
+# Grava o propósito da sessão (--purpose) no diretório onde ela de fato roda,
+# pelo cepa-intent, o único escritor do .claude/session-intent. Independe do
+# CEPA_MODO: intenção não é modo. O --reason faz sobrescrever uma intenção
 # deixada por sessão anterior nesta árvore (ela vai para o histórico; sem
-# intenção anterior o --motivo é ignorado). Falha NUNCA impede a sessão de abrir.
+# intenção anterior o --reason é ignorado). Falha NUNCA impede a sessão de abrir.
 write_intencao() {
   [ -n "$PROPOSITO" ] || return 0
   command -v python3 >/dev/null 2>&1 || return 0
   [ -f "$INTENCAO_BIN" ] || return 0
   _idir=$1
-  # Um passo do plano por linha vira um argumento de --plano; sem glob.
+  # Um passo do plano por linha vira um argumento de --plan; sem glob.
   set -f
   _ifs=$IFS; IFS='
 '
   set -- ${PLANO:-cumprir o próximo passo deixado pela sessão anterior}
   IFS=$_ifs; set +f
   _ierr=$(mktemp 2>/dev/null) || _ierr=/dev/null
-  if _ires=$(cd "$_idir" && python3 "$INTENCAO_BIN" gravar \
-      --proposito "$PROPOSITO" \
-      --para-quando "${PARA_QUANDO:-o próximo passo deixado pela sessão anterior cumprido}" \
-      --motivo "sessão aberta pelo cepa com a intenção na linha de comando" \
-      --plano "$@" \
+  if _ires=$(cd "$_idir" && python3 "$INTENCAO_BIN" write \
+      --purpose "$PROPOSITO" \
+      --by-when "${PARA_QUANDO:-o próximo passo deixado pela sessão anterior cumprido}" \
+      --reason "sessão aberta pelo cepa com a intenção na linha de comando" \
+      --plan "$@" \
       2>"$_ierr"); then
     printf '◆ intenção: %s\n' "$_ires" >&2
   else
@@ -361,25 +374,30 @@ PROMPT_REF="${CEPA_PROMPT:-}"
 PROMPT_MODO="${CEPA_PROMPT_MODO:-append}"
 while [ $# -gt 0 ]; do
   case "$1" in
-    -m|--modo)
-      [ $# -ge 2 ] || { printf '✗ cepa: --modo exige um valor\n' >&2; exit 2; }
+    -m|--mode|--modo)
+      [ $# -ge 2 ] || { printf '✗ cepa: %s exige um valor\n' "$1" >&2; exit 2; }
       MODO="$2"; shift 2 ;;
+    --mode=*)  MODO="${1#--mode=}"; shift ;;
     --modo=*)  MODO="${1#--modo=}"; shift ;;
-    --orcamento)
-      [ $# -ge 2 ] || { printf '✗ cepa: --orcamento exige um valor\n' >&2; exit 2; }
+    --budget|--orcamento)
+      [ $# -ge 2 ] || { printf '✗ cepa: %s exige um valor\n' "$1" >&2; exit 2; }
       ORCAMENTO="$2"; shift 2 ;;
+    --budget=*) ORCAMENTO="${1#--budget=}"; shift ;;
     --orcamento=*) ORCAMENTO="${1#--orcamento=}"; shift ;;
-    --proposito)
-      [ $# -ge 2 ] || { printf '✗ cepa: --proposito exige um valor\n' >&2; exit 2; }
+    --purpose|--proposito)
+      [ $# -ge 2 ] || { printf '✗ cepa: %s exige um valor\n' "$1" >&2; exit 2; }
       PROPOSITO="$2"; shift 2 ;;
+    --purpose=*) PROPOSITO="${1#--purpose=}"; shift ;;
     --proposito=*) PROPOSITO="${1#--proposito=}"; shift ;;
-    --para-quando)
-      [ $# -ge 2 ] || { printf '✗ cepa: --para-quando exige um valor\n' >&2; exit 2; }
+    --by-when|--para-quando)
+      [ $# -ge 2 ] || { printf '✗ cepa: %s exige um valor\n' "$1" >&2; exit 2; }
       PARA_QUANDO="$2"; shift 2 ;;
+    --by-when=*) PARA_QUANDO="${1#--by-when=}"; shift ;;
     --para-quando=*) PARA_QUANDO="${1#--para-quando=}"; shift ;;
-    --plano)
-      [ $# -ge 2 ] || { printf '✗ cepa: --plano exige um valor\n' >&2; exit 2; }
+    --plan|--plano)
+      [ $# -ge 2 ] || { printf '✗ cepa: %s exige um valor\n' "$1" >&2; exit 2; }
       PLANO="$2"; shift 2 ;;
+    --plan=*) PLANO="${1#--plan=}"; shift ;;
     --plano=*) PLANO="${1#--plano=}"; shift ;;
     --prompt)
       [ $# -ge 2 ] || { printf '✗ cepa: --prompt exige um valor\n' >&2; exit 2; }
@@ -403,7 +421,9 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# `cepa --modo ajuda` é consulta, não abertura de sessão: imprime o propósito de
+MODO=$(modo_normaliza "$MODO")
+
+# `cepa --mode help` é consulta, não abertura de sessão: imprime o propósito de
 # cada modo e sai, sem tocar em worktree, preflight ou claude.
 case "$MODO" in
   ajuda|help|"?") mostra_propositos; exit 0 ;;
@@ -471,12 +491,13 @@ if [ "${CEPA_MODO:-on}" != "off" ]; then
   fi
   if [ -z "$MODO" ]; then
     MODO=$(ask_modo) || exit 2
+    MODO=$(modo_normaliza "$MODO")
     modo_valido "$MODO" || {
       printf '✗ cepa: modo desconhecido: %s\n  válidos: %s\n' "$MODO" "$MODOS" >&2
       exit 2
     }
   fi
-  if [ "$MODO" = "reforma" ] && [ -z "$ORCAMENTO" ]; then
+  if [ "$MODO" = "refactor" ] && [ -z "$ORCAMENTO" ]; then
     ORCAMENTO=$(ask_orcamento) || exit 2
   fi
 fi

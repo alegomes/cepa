@@ -5,13 +5,13 @@ construir enquanto algum critério de sucesso não tem superfície e teste verme
 O `/common:spec` conduz um interrogatório: o agente pergunta, o dono responde, e
 a especificação cresce. O risco não é o interrogatório ficar curto — é ele
 TERMINAR por cansaço. O agente decide que já está bom, escreve `Status:
-pronta-para-construir`, e o que sai é uma especificação plausível cujos
+ready-to-build (ou o antigo pronta-para-construir)`, e o que sai é uma especificação plausível cujos
 critérios são frases de intenção ("o sistema deve validar o cadastro") sem
 nenhuma superfície observável onde alguém possa provar que aconteceu. Isso não
 falha na especificação: falha três semanas depois, na construção, quando o
 critério é interpretado por outra pessoa de outro jeito.
 
-Por isso o encerramento é mecânico e não editorial. `Status: rascunho` nunca
+Por isso o encerramento é mecânico e não editorial. `Status: draft (ou rascunho)` nunca
 bloqueia nada — o interrogatório precisa poder escrever livremente enquanto
 corre. O que é gateado é exclusivamente a AFIRMAÇÃO de que acabou.
 
@@ -29,11 +29,11 @@ Mecanismo:
     `old_string` não bate, ou bate mais de uma vez sem `replace_all`, libera (a
     própria ferramenta vai falhar por conta própria). Sem `file_path`, mantém
     o comportamento antigo: julga só os fragmentos (`new_string`).
-  - Status diferente de "pronta-para-construir" → libera, sem olhar mais nada.
+  - Status diferente de "ready-to-build (ou o antigo pronta-para-construir)" → libera, sem olhar mais nada.
   - Declarou pronta, então exige, em cada bloco `### CS-<n>`:
-      · **Superfície:** com valor do vocabulário fechado (o mesmo da skill
+      · **Surface:** (ou Superfície:) com valor do vocabulário fechado (o mesmo da skill
         acceptance-completeness: http, cli, ui, event, domain, application);
-      · **Teste vermelho:** com texto que não seja placeholder.
+      · **Red test:** (ou Teste vermelho:) com texto que não seja placeholder.
   - Exige pelo menos um critério: especificação pronta com zero critérios é o
     caso mais silencioso de todos.
   - Exige que nenhuma pergunta em aberto (`- [ ]`) tenha sobrado.
@@ -42,17 +42,17 @@ Mecanismo:
 
 Crivo de Epic (`/common:epic`, CS-5 do ciclo 1 do Epic Cepa em espiral):
   - Um Epic fecha por roteiro, não por critério. É Epic o documento em
-    `docs/epics/*.md` ou o que abre com `# Epic:`; nele, `Status: pronta` (ou
-    `pronta-para-construir`) é a afirmação gateada, e o crivo é outro:
-      · a tabela de `## Escada de valor` tem pelo menos um ciclo, e as colunas
-        "Roteiro", "Efeito em tela" e "Efeito em backend";
+    `docs/epics/*.md` ou o que abre com `# Epic:`; nele, `Status: ready` (ou
+    `ready-to-build`; os antigos `pronta`/`pronta-para-construir` valem) é a afirmação gateada, e o crivo é outro:
+      · a tabela de `## Value ladder (ou Escada de valor)` tem pelo menos um ciclo, e as colunas
+        "Script", "Effect on screen" e "Effect in backend" (ou os antigos Roteiro, Efeito em tela, Efeito em backend);
       · cada linha de ciclo preenche as três, sem placeholder: o roteiro é o
         que o dono vê, e tela e backend são onde alguém observa que aconteceu;
-      · `## Invariantes` tem pelo menos um item de lista que não é placeholder;
-      · a seção `## Decidido sem perguntar` existe;
+      · `## Invariants` (ou Invariantes) tem pelo menos um item de lista que não é placeholder;
+      · a seção `## Decided without asking` (ou Decidido sem perguntar) existe;
       · nenhuma pergunta em aberto (`- [ ]`) sobrou.
   - Documento que não é Epic segue com a régua de antes: `Status: pronta` nele
-    não é gateado, só `pronta-para-construir`.
+    não é gateado, só `ready-to-build (ou o antigo pronta-para-construir)`.
 
 Exit codes:
   0 — liberado
@@ -68,7 +68,11 @@ GATED_TOOLS = ("Write", "Edit", "MultiEdit")
 
 SUPERFICIES = ("http", "cli", "ui", "event", "domain", "application")
 
-PRONTA = "pronta-para-construir"
+# Nomes em inglês (2026-10-23, item interface-in-english) e os antigos: o gate
+# aceita os dois; as mensagens mandam escrever os novos.
+PRONTA = "ready-to-build"
+PRONTA_ANTIGO = "pronta-para-construir"
+PRONTAS_SPEC = (PRONTA, PRONTA_ANTIGO)
 
 MARKER = r"(?:\*\*|__|#{1,6}\s*|h[1-6]\.\s*|[-*+]\s+)"
 
@@ -83,11 +87,11 @@ CS_RE = re.compile(r"^#{2,6}\s*(CS-[0-9A-Za-z]+)\s*:?\s*(.*)$", re.MULTILINE)
 
 CAMPO_RE = {
     "superficie": re.compile(
-        rf"^{MARKER}?\s*Superf[íi]cie\s*(?:\*\*|__)?\s*:\s*{MARKER}?\s*(.+)$",
+        rf"^{MARKER}?\s*(?:Superf[íi]cie|Surface)\s*(?:\*\*|__)?\s*:\s*{MARKER}?\s*(.+)$",
         re.MULTILINE | re.IGNORECASE,
     ),
     "teste": re.compile(
-        rf"^{MARKER}?\s*Teste vermelho\s*(?:\*\*|__)?\s*:\s*{MARKER}?\s*(.+)$",
+        rf"^{MARKER}?\s*(?:Teste vermelho|Red test)\s*(?:\*\*|__)?\s*:\s*{MARKER}?\s*(.+)$",
         re.MULTILINE | re.IGNORECASE,
     ),
 }
@@ -97,7 +101,7 @@ ABERTA_RE = re.compile(r"^\s*[-*+]\s*\[\s\]\s*(.+)$", re.MULTILINE)
 
 # Epic: o status que ele afirma ao fechar. `pronta-para-construir` também vale,
 # senão um Epic que use a palavra da especificação escapa do crivo dele.
-EPIC_PRONTA = ("pronta", PRONTA)
+EPIC_PRONTA = ("ready", "pronta", PRONTA, PRONTA_ANTIGO)
 
 EPIC_TITULO_RE = re.compile(r"^#\s+Epic\s*:", re.MULTILINE | re.IGNORECASE)
 EPIC_CAMINHO_RE = re.compile(r"(^|/)docs/epics/[^/]+\.md$")
@@ -106,9 +110,11 @@ SECAO_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 
 # Colunas da escada que o crivo exige, achadas pelo cabeçalho da tabela.
 COLUNAS_EPIC = (
-    ("roteiro", "Roteiro", "o que o dono vê funcionando no fim do ciclo"),
-    ("efeito em tela", "Efeito em tela", "onde, na tela, alguém vê que aconteceu"),
-    ("efeito em backend", "Efeito em backend",
+    (("script", "roteiro"), "Script",
+     "o que o dono vê funcionando no fim do ciclo"),
+    (("effect on screen", "efeito em tela"), "Effect on screen",
+     "onde, na tela, alguém vê que aconteceu"),
+    (("effect in backend", "efeito em backend"), "Effect in backend",
      "o registro, endpoint ou evento que prova que aconteceu de verdade"),
 )
 
@@ -232,9 +238,12 @@ def secoes(content: str):
 
 
 def secao(content: str, prefixo: str):
-    """O corpo da primeira seção `## <prefixo>...`, ou None se não existe."""
+    """O corpo da primeira seção `## <prefixo>...`, ou None se não existe.
+    `prefixo` pode ser uma tupla: o nome novo e o antigo valem."""
+    if isinstance(prefixo, str):
+        prefixo = (prefixo,)
     for titulo, corpo in secoes(content).items():
-        if titulo.startswith(prefixo):
+        if titulo.startswith(tuple(prefixo)):
             return corpo
     return None
 
@@ -258,10 +267,10 @@ VAZIO_EPIC = ("—", "–", "nenhum", "nenhuma", "n/d", "nd", "-/-")
 def problemas_do_epic(content: str):
     problemas = []
 
-    escada = secao(content, "escada de valor")
+    escada = secao(content, ("value ladder", "escada de valor"))
     if escada is None:
         problemas.append(
-            "falta a seção `## Escada de valor` — um Epic pronto sem ciclo "
+            "falta a seção `## Value ladder` — um Epic pronto sem ciclo "
             "não tem o que demonstrar"
         )
     else:
@@ -274,13 +283,13 @@ def problemas_do_epic(content: str):
                 idx[chave] = pos[0]
             else:
                 problemas.append(
-                    f'Escada de valor: falta a coluna "{nome}"'
+                    f'Value ladder: falta a coluna "{nome}"'
                 )
         ciclos = [l for l in linhas[1:]
                   if not re.fullmatch(r"[\s|:\-]*", l)]
         if not ciclos:
             problemas.append(
-                "Escada de valor: nenhum ciclo — a tabela precisa de pelo menos "
+                "Value ladder: nenhum ciclo — a tabela precisa de pelo menos "
                 "uma linha"
             )
         if len(idx) == len(COLUNAS_EPIC):
@@ -295,20 +304,20 @@ def problemas_do_epic(content: str):
                             f'ciclo "{nome_ciclo}": falta "{nome}"'
                         )
 
-    invariantes = secao(content, "invariantes")
+    invariantes = secao(content, ("invariants", "invariantes"))
     if invariantes is None:
-        problemas.append("falta a seção `## Invariantes`")
+        problemas.append("falta a seção `## Invariants`")
     else:
         itens = [v for v in ITEM_RE.findall(invariantes) if not e_vazio(v)]
         if not itens:
             problemas.append(
-                "Invariantes: a lista está vazia — diga o que nunca pode "
+                "Invariants: a lista está vazia — diga o que nunca pode "
                 "regredir enquanto os ciclos andam"
             )
 
-    if secao(content, "decidido sem perguntar") is None:
+    if secao(content, ("decided without asking", "decidido sem perguntar")) is None:
         problemas.append(
-            "falta a seção `## Decidido sem perguntar` — é onde o dono veta o "
+            "falta a seção `## Decided without asking` — é onde o dono veta o "
             "que você decidiu sozinho"
         )
 
@@ -325,14 +334,14 @@ def bloqueia_epic(problemas):
     linhas = "\n".join(f"   · {p}" for p in problemas)
     colunas = "\n".join(f'   · "{nome}": {o_que}' for _, nome, o_que in COLUNAS_EPIC)
     print(
-        "[spec-readiness-gate] BLOQUEADO: o Epic se declara `Status: pronta` "
+        "[spec-readiness-gate] BLOQUEADO: o Epic se declara `Status: ready` "
         "mas ainda não passa no crivo.\n"
         f"{linhas}\n"
         "  O que o crivo exige de CADA ciclo da escada:\n"
         f"{colunas}\n"
-        "  E do documento: pelo menos um invariante, a seção \"Decidido sem "
-        "perguntar\" e nenhuma pergunta em aberto.\n"
-        "  Enquanto faltar qualquer um, o Status correto é `rascunho` — e a "
+        "  E do documento: pelo menos um invariante, a seção \"Decided without "
+        "asking\" e nenhuma pergunta em aberto.\n"
+        "  Enquanto faltar qualquer um, o Status correto é `draft` — e a "
         "resposta certa é voltar a perguntar ao dono, não relaxar o campo.",
         file=sys.stderr,
     )
@@ -382,7 +391,7 @@ def main():
             bloqueia_epic(problemas)
         sys.exit(0)
 
-    if not any(s == PRONTA for s in status):
+    if not any(s in PRONTAS_SPEC for s in status):
         sys.exit(0)          # rascunho corre livre; só a afirmação é gateada
 
     problemas = []
@@ -398,18 +407,18 @@ def main():
         sup = [v for v in CAMPO_RE["superficie"].findall(corpo)
                if not e_linha_modelo(v)]
         if not sup:
-            problemas.append(f"{cid}: falta **Superfície:**")
+            problemas.append(f"{cid}: falta **Surface:**")
         else:
             for v in sup:
                 if limpa(v).lower() not in SUPERFICIES:
                     problemas.append(
-                        f'{cid}: Superfície "{limpa(v)}" fora do vocabulário'
+                        f'{cid}: Surface "{limpa(v)}" fora do vocabulário'
                     )
 
         teste = [v for v in CAMPO_RE["teste"].findall(corpo) if not e_vazio(v)]
         if not teste:
             problemas.append(
-                f"{cid}: falta **Teste vermelho:** — a frase do teste que hoje "
+                f"{cid}: falta **Red test:** — a frase do teste que hoje "
                 "falharia"
             )
 
@@ -428,12 +437,12 @@ def main():
         f"`Status: {PRONTA}` mas ainda não passa no crivo.\n"
         f"{linhas}\n"
         "  O que o crivo exige de CADA critério de sucesso:\n"
-        "   · **Superfície:** a camada mais externa que o critério nomeia — "
+        "   · **Surface:** a camada mais externa que o critério nomeia — "
         f"{', '.join(SUPERFICIES)}. Não é o assunto do critério, é onde ele é "
         "observável.\n"
-        "   · **Teste vermelho:** a frase do teste que HOJE falharia naquela "
+        "   · **Red test:** a frase do teste que HOJE falharia naquela "
         "superfície e passará quando a coisa existir.\n"
-        "  Enquanto faltar qualquer um, o Status correto é `rascunho` — e a "
+        "  Enquanto faltar qualquer um, o Status correto é `draft` — e a "
         "resposta certa é continuar o interrogatório, não relaxar o campo.",
         file=sys.stderr,
     )

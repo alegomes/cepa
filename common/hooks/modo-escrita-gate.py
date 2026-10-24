@@ -32,7 +32,7 @@ regra é uma lista branca de DESTINOS por modo — o que aquele modo produz — 
 mora em `_modos.py`, junto com o resto da tabela, e não aqui: uma segunda tabela
 de modos é a doença que aquele arquivo trata.
 
-`construcao` e `reforma` declaram `"tudo"`. Isso não é ausência de cobrança: na
+`construction` e `refactor` declaram `"tudo"`. Isso não é ausência de cobrança: na
 construção quem cobra são o completion-auditor e o proof-reviewer, e na reforma
 o `reforma-gate.py`.
 
@@ -66,7 +66,7 @@ Quatro decisões que vieram de estrago já pago neste repo:
    desligar o gate, e aí o buraco só mudou de lugar.
 
 5. **Alvo que o gate não resolve não é veredito sobre o modo.** Em 02/09/2026,
-   três bloqueios numa sessão de `exploracao` culparam o modo por erro de
+   três bloqueios numa sessão de `exploration` culparam o modo por erro de
    leitura: uma variável atribuída no próprio comando (`D=...; cat > "$D/x"`)
    chegava ao gate como o literal `$D/x`, que não casa lista nenhuma. A
    mensagem mandava encerrar o modo, e quem a lê acredita. Agora a atribuição
@@ -101,18 +101,11 @@ _TOOLS_ARQUIVO = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 
 def modo_ativo(root):
     """O modo declarado desta sessão, ou None."""
-    path = os.path.join(root, ".claude", "session-mode")
-    if not os.path.isfile(path):
-        return None
     try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                k, _, v = line.partition(":")
-                if k.strip() == "modo":
-                    return v.strip().strip('"') or None
+        # `mode:` (ou o antigo `modo:`), já com o nome novo do modo
+        return (_modos.read_session_mode(root) or {}).get("mode")
     except Exception:  # noqa: BLE001
         return None
-    return None
 
 
 def alvos(tool, inp):

@@ -377,7 +377,7 @@ def main():
             f"veredito computado: needs-human.\n"
             f"  Grave `verdict: needs-human` e deixe o `waiver_proposto` "
             f"apontando para o arquivo em `.claude/waivers/`. Só o "
-            f"`cepa-plan responde` do dono converte a proposta em dispensa.",
+            f"`cepa-plan answer` do dono converte a proposta em dispensa.",
             file=sys.stderr,
         )
         _t_emit("proof_verdict", cwd=hook_cwd, card=card, verdict="proven",

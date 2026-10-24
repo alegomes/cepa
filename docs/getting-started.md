@@ -50,7 +50,7 @@ not slash commands, so this is where you learn they exist):
 - `cepa` (`common/bin/cepa`): a launcher to use instead of `claude`. It
   isolates a session into its own git worktree when another live session
   shares the tree, and asks which work mode the session is in
-  (`cepa --modo ajuda` lists the modes).
+  (`cepa --mode help` lists the modes).
 - `cepa-until` (`common/bin/cepa-until`): runs the repo's work queue for
   a time window (`--for 12h` or `--until 07:00`) instead of item by item.
   See [`cepa-until.md`](cepa-until.md).

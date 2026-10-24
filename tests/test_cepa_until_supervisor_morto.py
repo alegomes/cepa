@@ -90,7 +90,7 @@ def larga(raiz, binv, plano, args, **popen):
     env["CEPA_WORKTREE_HOME"] = str(raiz.parent / "worktrees")
     return subprocess.Popen(
         [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz)] + args
-        + ["--sem-analise"], env=env, stdin=subprocess.DEVNULL, **popen)
+        + ["--no-analysis"], env=env, stdin=subprocess.DEVNULL, **popen)
 
 
 # ── 1. SIGHUP ───────────────────────────────────────────────────────────────
@@ -408,8 +408,8 @@ def test_fecha_morto_sem_sim_so_mostra_o_plano():
     with tempfile.TemporaryDirectory() as tmp:
         raiz, inicio = noite_que_morreu(tmp)
         p = fecha(raiz, run_de(inicio))
-        check("sem --sim sai 0 e diz como confirmar",
-              p.returncode == 0 and "--sim" in p.stdout, p.stdout + p.stderr)
+        check("sem --yes sai 0 e diz como confirmar",
+              p.returncode == 0 and "--yes" in p.stdout, p.stdout + p.stderr)
         check("...e não mexe no estado", estado(raiz)["estado"] == "rodando",
               str(estado(raiz)))
         n = sum(1 for e in ledger_de(raiz) if e["evento"] == "verify")
@@ -420,8 +420,8 @@ def test_fecha_morto_verde_deixa_o_run_pronto_para_aterrissar():
     with tempfile.TemporaryDirectory() as tmp:
         raiz, inicio = noite_que_morreu(tmp)
         run_id = run_de(inicio)
-        p = fecha(raiz, run_id, "--sim")
-        check("fecha-morto --sim sai 0 com o build verde", p.returncode == 0,
+        p = fecha(raiz, run_id, "--yes")
+        check("fecha-morto --yes sai 0 com o build verde", p.returncode == 0,
               p.stdout + p.stderr)
         ev = ledger_de(raiz)
         check("...grava o build no registro, marcado como fechamento",
@@ -437,7 +437,7 @@ def test_fecha_morto_verde_deixa_o_run_pronto_para_aterrissar():
               str(est))
         env = dict(os.environ, CEPA_WORKTREE_HOME=str(raiz.parent / "worktrees"))
         a = subprocess.run([sys.executable, str(CEPA_UNTIL), "aterrissar",
-                            f"fila/{run_id}", "--repo", str(raiz), "--sim"],
+                            f"fila/{run_id}", "--repo", str(raiz), "--yes"],
                            capture_output=True, text=True, cwd=str(raiz),
                            env=env, timeout=120)
         check("...e o aterrissar aceita o run", a.returncode == 0,
@@ -454,7 +454,7 @@ def test_fecha_morto_vermelho_nao_muda_o_estado():
         subprocess.run(["git", "add", "-A"], cwd=arvore, check=True)
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t",
                         "commit", "-qm", "quebra"], cwd=arvore, check=True)
-        p = fecha(raiz, run_de(inicio), "--sim")
+        p = fecha(raiz, run_de(inicio), "--yes")
         check("build vermelho sai com erro", p.returncode != 0,
               p.stdout + p.stderr)
         check("...o registro guarda o vermelho",
@@ -472,7 +472,7 @@ def test_fecha_morto_recusa_supervisor_vivo():
                                   "import time; time.sleep(60)", "cepa-until"])
         try:
             raiz, inicio = noite_que_morreu(tmp, pid=vivo_.pid)
-            p = fecha(raiz, run_de(inicio), "--sim")
+            p = fecha(raiz, run_de(inicio), "--yes")
             check("fecha-morto recusa run com o supervisor vivo",
                   p.returncode != 0 and str(vivo_.pid) in p.stderr,
                   p.stdout + p.stderr)
@@ -489,7 +489,7 @@ def test_fecha_morto_aceita_run_interrompido():
         check("run interrompido também aparece em `mortos`",
               len(pendentes(raiz).get("mortos") or []) == 1,
               str(pendentes(raiz)))
-        p = fecha(raiz, run_de(inicio), "--sim")
+        p = fecha(raiz, run_de(inicio), "--yes")
         check("...e o fecha-morto o fecha",
               p.returncode == 0
               and estado(raiz)["estado"] == "esperando-dono",

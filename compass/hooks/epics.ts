@@ -30,9 +30,9 @@ export const parseEpic = (arquivo: string, texto: string): Epic | null => {
     padraoFila: padrao.split('/').find(p => p.includes('<N>')) ?? '',
     ciclos: [],
   }
-  // A escada é a primeira tabela depois de `## Escada de valor`; a primeira coluna
+  // A escada é a primeira tabela depois de `## Value ladder` (ou o antigo `## Escada de valor`); a primeira coluna
   // é o ciclo (`1. Encadear`). Linhas de cabeçalho e de separador ficam de fora.
-  const i = texto.search(/^##\s+Escada de valor\s*$/m)
+  const i = texto.search(/^##\s+(?:Value ladder|Escada de valor)\s*$/m)
   if (i < 0) return epic
   const corpo = texto.slice(i).split('\n').slice(1)
   for (const linha of corpo) {
@@ -51,7 +51,7 @@ export const parseEpic = (arquivo: string, texto: string): Epic | null => {
 // e `ciclo N`, que é o que `/common:plan --from-epic` escreve; (2) o nome da fila
 // casa com o padrão da linha Construção com `<N>` trocado; (3) `<arquivo>-c<N>`.
 export const filaDoCiclo = (epic: Epic, ciclo: number, filas: readonly Fila[]): Fila | null => {
-  const cita = new RegExp(`\\bciclo\\s+${ciclo}\\b`)
+  const cita = new RegExp(`\\b(?:ciclo|cycle)\\s+${ciclo}\\b`)
   const porFonte = filas.find(f => f.fonte.includes(`docs/epics/${epic.arquivo}.md`) && cita.test(f.fonte))
   if (porFonte) return porFonte
   const porPadrao = epic.padraoFila === '' ? null : filas.find(f => f.nome === epic.padraoFila.replace('<N>', String(ciclo)))

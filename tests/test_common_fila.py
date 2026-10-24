@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Testes do /common:fila e do `cepa-plan status` que ele chama.
+"""Testes do /common:queue-status e do `cepa-plan status` que ele chama.
 
 Rode com `python3 tests/test_common_fila.py` (só precisa do PyYAML).
 
@@ -23,7 +23,7 @@ except ImportError:
 
 REPO = Path(__file__).resolve().parent.parent
 CEPA_PLAN = REPO / "common" / "bin" / "cepa-plan"
-CMD = REPO / "common" / "commands" / "fila.md"
+CMD = REPO / "common" / "commands" / "queue-status.md"
 
 FAILURES = []
 
@@ -186,6 +186,16 @@ def test_contrato_do_comando(_base):
           'bin/cepa-plan" status $ARGUMENTS' in t)
     check("manda mostrar a saída na íntegra", "**in full**" in t)
     check("declara que só lê", "**Read-only.**" in t)
+    check("o título é /common:queue-status", "# /common:queue-status" in t)
+
+
+def test_nome_antigo_fila_e_alias_deprecado(_base):
+    t = (REPO / "common" / "commands" / "fila.md").read_text(encoding="utf-8")
+    check("/common:fila continua existindo como alias deprecado",
+          "# /common:fila (deprecated)" in t)
+    check("...e manda rodar /common:queue-status com os mesmos argumentos",
+          "/common:queue-status" in t and "$ARGUMENTS" in t)
+    check("...sem manter segunda cópia dos passos", "cepa-plan" not in t)
 
 
 def main():
@@ -197,7 +207,8 @@ def main():
                    test_nao_toca_no_arquivo,
                    test_recusa_plano_de_ondas,
                    test_de_dentro_de_uma_worktree_le_o_clone_principal,
-                   test_contrato_do_comando):
+                   test_contrato_do_comando,
+                   test_nome_antigo_fila_e_alias_deprecado):
             print(f"\n{fn.__name__}")
             fn(base)
     print()

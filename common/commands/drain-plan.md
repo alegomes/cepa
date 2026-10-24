@@ -391,11 +391,11 @@ For each item of the batch, in order:
      **A waiver produced in the item is a proposal, not a waiver.** If a waiver
      came out during the item (`waivers.gravar` in an autonomous run records
      `status: proposta`, with `fila=`/`item=`), open it as `--human-pending
-     "Aceitar ou recusar a dispensa de <escopo> (<motivo>)"` with `--pergunta
+     "Aceitar ou recusar a dispensa de <escopo> (<motivo>)"` with `--question
      "Aceito a dispensa de <escopo> por <razão>? Recomendo <sim/não>: <porquê>"`
      (both owner-facing, in pt-BR: "Accept or refuse the waiver of <scope>
      (<reason>)" / "Do I accept the waiver of <scope> for <reason>? I recommend
-     <yes/no>: <why>"). The owner's `cepa-plan responde ... "sim: ..."` turns
+     <yes/no>: <why>"). The owner's `cepa-plan answer ... "sim: ..."` turns
      the proposal into a waiver (fb-20261014-3); the agent never records a waiver
      on the owner's behalf.
 
@@ -424,15 +424,15 @@ For each item of the batch, in order:
      where the reservation put it. Never leave it in `to_do`: the board would say
      no one touched a card that has finished code.
 
-     Along with it, record `--pergunta "<the closed question that unblocks the
+     Along with it, record `--question "<the closed question that unblocks the
      item, with your recommendation>"`, and do the same when opening a
      `--human-pending`. The question is shown to the owner, so write it in pt-BR.
-     E.g.: `--pergunta "Fecho o card como 'medir depois do go-live' ou movo a
+     E.g.: `--question "Fecho o card como 'medir depois do go-live' ou movo a
      medição para o checklist do primeiro deploy? Recomendo o checklist: a
      pergunta sobrevive sem travar a fila"` (Do I close the card as "measure
      after go-live" or move the measurement to the first-deploy checklist? I
      recommend the checklist: the question survives without blocking the queue).
-     It is what `cepa-until decidir` shows the owner at the end of the night, in
+     It is what `cepa-until decide` shows the owner at the end of the night, in
      a fixed menu where **yes = the item goes back to the queue with this
      answer** and **no = it stays as it is**: write the question so that "yes"
      means that. Up to 25 words, without a branch name, test class name or file
@@ -440,7 +440,7 @@ For each item of the batch, in order:
      a question, the terminal asks the default one ("destravo o item e devolvo
      para a fila?" — do I unblock the item and return it to the queue?) and the
      owner decides without the context only you have. Their answer comes back
-     through the item's evidence (`cepa-plan responde`), and the next run reads
+     through the item's evidence (`cepa-plan answer`), and the next run reads
      it there.
 
 ### 4. Terminal outcome — no item leaves the batch without a name

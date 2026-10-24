@@ -22,11 +22,11 @@ Desenho, e o porquê de cada escolha:
     você disse; grava verbatim.
 
 Uso:
-    cepa-feedback add "o gate X barrou o commit legítimo" --alvo modo-escrita-gate
+    cepa-feedback add "o gate X barrou o commit legítimo" --target modo-escrita-gate
     cepa-feedback list                     # os abertos
     cepa-feedback list --status todos --json
-    cepa-feedback triar fb-20260826-1 --destino "BACKLOG.md § Gate de escrita"
-    cepa-feedback triar fb-20260826-1 --destino "fila WEGO" --plano WEGO --why "..."
+    cepa-feedback triage fb-20260826-1 --destination "BACKLOG.md § Gate de escrita"
+    cepa-feedback triage fb-20260826-1 --destination "queue WEGO" --queue WEGO --why "..."
 
 Saídas: 0 ok · 2 uso inválido · 3 id inexistente · 4 já triado.
 """
@@ -83,7 +83,7 @@ def contexto(cwd):
         try:
             for linha in arq.read_text(encoding="utf-8", errors="replace").splitlines():
                 k, _, v = linha.partition(":")
-                if k.strip() == "modo":
+                if k.strip() in ("mode", "modo"):  # `modo` = arquivo de um cepa antigo
                     v = v.strip().strip('"')
                     modo = v if v and v != "null" else None
         except OSError:
@@ -264,7 +264,7 @@ def cmd_triar(args):
             pass
     print(f"✔ {args.id} → {destino}")
 
-    # A1: --plano acrescenta o item à fila single-track no MESMO passo em que
+    # A1: --queue acrescenta o item à fila single-track no MESMO passo em que
     # a triagem fecha, para o feedback não sumir num destino em prosa que
     # ninguém revisita. A triagem já está gravada acima — uma falha daqui em
     # diante é "não entrou na fila", nunca "a triagem não aconteceu".
@@ -302,8 +302,8 @@ def main(argv=None):
 
     a = sub.add_parser("add", help="registra um feedback (texto verbatim)")
     a.add_argument("texto", nargs="+")
-    a.add_argument("--alvo", help="comando/hook/agente que causou o incômodo")
-    a.add_argument("--origem", default="manual", choices=ORIGENS)
+    a.add_argument("--target", "--alvo", dest="alvo", help="comando/hook/agente que causou o incômodo")
+    a.add_argument("--origin", "--origem", dest="origem", default="manual", choices=ORIGENS)
     a.add_argument("--repo", help="diretório de onde tirar repo/branch/modo (default: cwd)")
     a.add_argument("--json", action="store_true", dest="as_json")
     a.set_defaults(func=cmd_add)
@@ -313,14 +313,14 @@ def main(argv=None):
     l.add_argument("--repo", dest="repo_nome", help="filtra pelo nome do repo")
     l.add_argument("--max", type=int, help="só os N mais recentes")
     l.add_argument("--json", action="store_true", dest="as_json")
-    l.add_argument("--sem-cor", action="store_true")
+    l.add_argument("--no-color", "--sem-cor", dest="sem_cor", action="store_true")
     l.set_defaults(func=cmd_list)
 
-    t = sub.add_parser("triar", help="marca um feedback como triado, com destino")
+    t = sub.add_parser("triage", aliases=["triar"], help="marca um feedback como triado, com destino")
     t.add_argument("id")
-    t.add_argument("--destino", required=True, help="onde o item foi parar")
-    t.add_argument("--nota")
-    t.add_argument("--plano", metavar="FILA",
+    t.add_argument("--destination", "--destino", dest="destino", required=True, help="onde o item foi parar")
+    t.add_argument("--note", "--nota", dest="nota")
+    t.add_argument("--queue", "--plano", dest="plano", metavar="FILA",
                    help="acrescenta o feedback à fila single-track FILA via "
                         "`cepa-plan add` (título = os ~100 primeiros "
                         "caracteres do texto do feedback). Exit 4 do add "
@@ -328,9 +328,9 @@ def main(argv=None):
                         "add não desfaz a triagem, só avisa que o item ficou "
                         "de fora da fila")
     t.add_argument("--why", help="`--why` repassado ao `cepa-plan add`, "
-                                 "quando --plano é usado")
+                                 "quando --queue é usado")
     t.add_argument("--repo", default=".",
-                   help="repo onde mora a fila de --plano (default: cwd)")
+                   help="repo onde mora a fila de --queue (default: cwd)")
     t.set_defaults(func=cmd_triar)
 
     args = ap.parse_args(argv)

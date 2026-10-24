@@ -113,10 +113,10 @@ async function observaGate($: EngineInterface, comando: string, r: { isError?: t
 // A tabela dos modos não muda durante a sessão; lida uma vez.
 async function releiaSaidas($: EngineInterface) {
   try {
-    const r = await $.process.run(['cepa-modos', '--json'])
+    const r = await $.process.run(['cepa-modes', '--json'])
     if (r.exitCode === 0) await update($, saidas, () => leSaidas(r.stdout))
   } catch {
-    // cepa-modos fora do PATH: o cartão mostra o modo sem a condição de saída
+    // cepa-modes fora do PATH: o cartão mostra o modo sem a condição de saída
   }
 }
 
@@ -384,7 +384,7 @@ export const register: Register = on => {
             'sem intenção',
             <Box flexDirection="column" marginTop={1}>
               <Text dimColor>Esta sessão ainda não tem intenção gravada.</Text>
-              <Text dimColor>Grave com cepa-intencao gravar.</Text>
+              <Text dimColor>Grave com cepa-intent write.</Text>
             </Box>,
           )}
           {nivelModo}

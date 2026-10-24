@@ -92,7 +92,7 @@ def test_suja_com_fila_pendente_avisa():
               "[execucao]" in out and "⚠" in out, out[-600:])
         check("...e nomeia o comando que vai recusar",
               "cepa-until" in out, out[-600:])
-        check("...e nomeia o escape", "--sujo-ok" in out, out[-600:])
+        check("...e nomeia o escape", "--dirty-ok" in out, out[-600:])
         check("...e nomeia a fila", "`fila`" in out, out[-600:])
 
 

@@ -501,6 +501,37 @@ def test_from_spec_avisa_rascunho_e_recusa_vazia(base):
     check("e diz o que faltou", "CS-" in r.stderr, r.stderr)
 
 
+def test_from_spec_le_os_nomes_novos_e_os_antigos(base):
+    """`ready-to-build`/`Surface`/`Red test` e `pronta-para-construir`/
+    `Superfície`/`Teste vermelho` produzem a mesma fila, sem aviso."""
+    d = repo_git(base, "spec-idiomas")
+    novo = (SPEC_FIXTURE.replace("pronta-para-construir", "ready-to-build")
+            .replace("**Superfície:**", "**Surface:**")
+            .replace("**Teste vermelho:**", "**Red test:**"))
+    (d / "antiga.md").write_text(SPEC_FIXTURE, encoding="utf-8")
+    (d / "nova.md").write_text(novo, encoding="utf-8")
+    a = run(d, "from-spec", str(d / "antiga.md"))
+    n = run(d, "from-spec", str(d / "nova.md"))
+    check("from-spec lê a spec nos dois idiomas sem aviso",
+          a.returncode == 0 == n.returncode and a.stderr.strip() == ""
+          and n.stderr.strip() == "", (a.stderr, n.stderr))
+    ia, inn = json.loads(a.stdout), json.loads(n.stdout)
+    check("...e os itens são os mesmos (id, título, why)",
+          [(i["id"], i["title"], i["why"]) for i in ia]
+          == [(i["id"], i["title"], i["why"]) for i in inn] and len(ia) == 2,
+          (ia, inn))
+    check("...com a superfície e o teste vermelho no why",
+          "superfície onde se observa: http" in inn[0]["why"]
+          and "teste vermelho declarado:" in inn[0]["why"], inn[0]["why"])
+    r = run(d, "from-spec", str(d / "nova.md"))
+    draft = novo.replace("ready-to-build", "draft")
+    (d / "draft.md").write_text(draft, encoding="utf-8")
+    r = run(d, "from-spec", str(d / "draft.md"))
+    check("Status: draft vira aviso que nomeia `ready-to-build`",
+          r.returncode == 0 and "Status: draft" in r.stderr
+          and "`ready-to-build`" in r.stderr, r.stderr)
+
+
 # ── contrato de prosa do comando ─────────────────────────────────────────────
 
 def flat(txt):
@@ -939,6 +970,7 @@ def main():
                    test_raiz_e_a_do_clone_principal, test_dry_run_nao_grava,
                    test_validate_recusa_plano_de_ondas, test_from_spec_le_os_criterios,
                    test_from_spec_avisa_rascunho_e_recusa_vazia,
+                   test_from_spec_le_os_nomes_novos_e_os_antigos,
                    test_from_spec_le_depois_do_cs_como_blocked_by,
                    test_from_triage_so_ready_vira_item,
                    test_from_triage_recusa_o_que_a_prosa_so_pedia,

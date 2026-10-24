@@ -7,7 +7,7 @@ conciso", "nunca use a palavra X"), papel, ou qualquer coisa que você repetiria
 em todo turno se não estivesse ali.
 
 ```
-cepa --modo construcao --prompt smartass
+cepa --mode construction --prompt smartass
 ```
 
 ## As duas flags, e por que são duas

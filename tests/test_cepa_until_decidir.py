@@ -139,7 +139,7 @@ def test_decide_no_terminal_desenha_um_cartao_por_pergunta():
     check("fecho com placar e o comando de volta",
           "── fecho ─" in texto and "respondido agora 2" in texto
           and "para depois 1" in texto
-          and "cepa-until decidir fila/run1" in texto, texto)
+          and "cepa-until decide fila/run1" in texto, texto)
     gatilhos = ("Aterrisso agora? [s/N/q] ", "[t] escrevo a resposta",
                 "Quer acrescentar algo, numa linha? [Enter pula] ")
     tudo = bruto + "\n".join(prompts)
@@ -375,7 +375,7 @@ def test_decide_pergunta_e_aplica_cada_resposta():
     check("cascata não vira pergunta, só aparece como não sendo do dono",
           "W-4 (depende de um item adiado" in texto, texto)
     check("o fecho diz como voltar",
-          "cepa-until decidir fila/run1" in texto, texto)
+          "cepa-until decide fila/run1" in texto, texto)
     check("aplicados listam aterrissar e W-1",
           aplicados == ["aterrissar", "W-1: W-1 ok"], aplicados)
 
@@ -553,7 +553,7 @@ def test_run_sem_terminal_lista_as_pendencias_e_o_comando():
               "Fecho o card como medir depois do go-live?" in p.stdout,
               p.stdout[-1500:])
         check("...e o comando para responder",
-              "cepa-until decidir fila/" in p.stdout, p.stdout[-800:])
+              "cepa-until decide fila/" in p.stdout, p.stdout[-800:])
 
 
 def test_run_no_terminal_termina_perguntando_e_aplica():
@@ -567,7 +567,7 @@ def test_run_no_terminal_termina_perguntando_e_aplica():
         env["CEPA_WORKTREE_HOME"] = str(Path(tmp) / "worktrees")
         rc, out = em_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz),
-             "--for", "2h", "--sem-verify", "--sem-analise"], str(raiz),
+             "--for", "2h", "--no-verify", "--no-analysis"], str(raiz),
             entradas=[("[t] escrevo a resposta", "t"),
                       ("Sua resposta", "vira item do checklist"),
                       ("Devolvo o item para a fila", "s")], env=env)
@@ -599,7 +599,7 @@ def test_run_no_terminal_pergunta_aterrissar_e_aterrissa_com_s():
         binv = fake_claude(tmp, TRABALHA)
         rc, out = em_tty(
             [sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz),
-             "--for", "2h", "--verify", VERIFY, "--sem-analise"], str(raiz),
+             "--for", "2h", "--verify", VERIFY, "--no-analysis"], str(raiz),
             entradas=[("Aterrisso agora?", "s")],
             env=env_do_run(tmp, raiz, binv), timeout=240)
         check("o run sai 0", rc == 0, out[-1500:])
@@ -643,7 +643,7 @@ def test_decidir_como_processo_com_e_sem_terminal():
         roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
         run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
                         .glob("*.estado.json"))[-1].name.split(".")[0]
-        cmd = [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
                "--repo", str(raiz)]
         p = subprocess.run(cmd, capture_output=True, text=True,
                            stdin=subprocess.DEVNULL, timeout=60)
@@ -677,8 +677,8 @@ def test_instrucoes_dos_agentes_pedem_a_pergunta():
           "deferred" in review and "cepa-plan queue" in review, "")
     check("...e diz que as ações vêm da lista fechada",
           "closed list" in review, "")
-    check("drain-plan manda gravar --pergunta ao travar",
-          "--pergunta" in drain, "")
+    check("drain-plan manda gravar --question ao travar",
+          "--question" in drain, "")
     p = subprocess.run([sys.executable, str(CEPA_UNTIL.parent / "cepa-plan"),
                         "finish", "--help"], capture_output=True, text=True,
                        timeout=30)
@@ -831,7 +831,7 @@ def test_entrada_hostil_nao_corrompe_a_fila_nem_sai_da_pasta():
         (raiz / ".claude" / "programs" / "fila" / "until").mkdir()
         for alvo in ("../../etc/passwd", "semBarra", "fila/../../x",
                      "fila/../x", "../fila/x"):
-            p_ = subprocess.run([sys.executable, str(CEPA_UNTIL), "decidir",
+            p_ = subprocess.run([sys.executable, str(CEPA_UNTIL), "decide",
                                  alvo, "--repo", str(raiz)],
                                 capture_output=True, text=True,
                                 stdin=subprocess.DEVNULL, timeout=60)
@@ -873,7 +873,7 @@ def test_decidir_s_e_n_no_terminal_chegam_ao_plano():
         roda(raiz, binv, plano_de(raiz), ["--for", "2h"])
         run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
                         .glob("*.estado.json"))[-1].name.split(".")[0]
-        cmd = [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
+        cmd = [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
                "--repo", str(raiz)]
         rc, out = em_tty(cmd, str(raiz), entradas=[
             ("[t] escrevo a resposta", "n"), ("Quer acrescentar algo", ""),
@@ -909,7 +909,7 @@ def test_byte_invalido_no_terminal_nao_derruba_o_decidir():
         run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
                         .glob("*.estado.json"))[-1].name.split(".")[0]
         rc, out = em_tty(
-            [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(raiz)], str(raiz), entradas=[
                 ("[t] escrevo a resposta", b"n\xcb\xc3\xa3o"),
                 ("digite de novo", "t"),
@@ -956,7 +956,7 @@ def test_texto_solto_no_terminal_avisa_e_ainda_grava():
         run_id = sorted((raiz / ".claude" / "programs" / "fila" / "until")
                         .glob("*.estado.json"))[-1].name.split(".")[0]
         rc, out = em_tty(
-            [sys.executable, str(CEPA_UNTIL), "decidir", f"fila/{run_id}",
+            [sys.executable, str(CEPA_UNTIL), "decide", f"fila/{run_id}",
              "--repo", str(raiz)], str(raiz), entradas=[
                 ("[t] escrevo a resposta", "eu não faço ideia"),
                 ("digite t primeiro", "t"),

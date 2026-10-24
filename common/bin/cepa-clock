@@ -38,7 +38,7 @@ o percentual só é comparável entre runs não-interativos.
 Uso:
     cepa-clock                      # a sessão mais recente deste repo
     cepa-clock --slug <slug>        # uma sessão nomeada
-    cepa-clock --todas --days 7     # todas as sessões da última semana
+    cepa-clock --all --days 7     # todas as sessões da última semana
     cepa-clock --emit               # grava no ledger da telemetria
     cepa-clock --json
 """
@@ -204,7 +204,7 @@ def relatorio(r):
 def main():
     ap = argparse.ArgumentParser(description="Para onde foi o relógio de uma sessão.")
     ap.add_argument("--slug", help="diretório em ~/.claude/projects (default: o deste repo)")
-    ap.add_argument("--todas", action="store_true", help="todas as sessões, não só a última")
+    ap.add_argument("--all", "--todas", dest="todas", action="store_true", help="todas as sessões, não só a última")
     ap.add_argument("--days", type=int, default=30)
     ap.add_argument("--emit", action="store_true", help="grava no ledger da telemetria")
     ap.add_argument("--json", action="store_true", dest="as_json")
@@ -212,7 +212,7 @@ def main():
 
     arqs = sessoes(args.slug, args.todas, args.days)
     if not arqs:
-        print("Nenhum transcript encontrado. Passe --slug, ou --todas para varrer tudo.",
+        print("Nenhum transcript encontrado. Passe --slug, ou --all para varrer tudo.",
               file=sys.stderr)
         return 2
 

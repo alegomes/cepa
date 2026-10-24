@@ -79,7 +79,7 @@ end:
   (a run with no pid counts as dead 3h after the deadline; an `interrompido`
   run is also on the list). If the run is there, the first question of the
   report is to close it with the command in the `fechar` field
-  (`cepa-until fecha-morto <fila>/<run> --sim`): it runs the missing full build
+  (`cepa-until fecha-morto <fila>/<run> --yes`): it runs the missing full build
   in the night worktree and, if green, writes the `run_end` and leaves the run
   `esperando-dono` with the `aterrissar` action. The in-flight item with status
   `done` is in the queue without that build. If it is not on the list, the run
@@ -126,9 +126,9 @@ A question with no finding does not go into the report.
 ### 3. Report
 
 In the `plain-report` format, written in Brazilian Portuguese (pt-BR): an
-opening of up to 3 sentences without jargon, `**Pra você:**` with the count of
-decisions, `### Detalhe técnico` and, last, `### Decisões e próximos passos` as
-a numbered list of closed questions, each with `Recomendo sim/não`
+opening of up to 3 sentences without jargon, `**For you:**` with the count of
+decisions, `### Technical detail` and, last, `### Decisions and next steps` as
+a numbered list of closed questions, each with `I recommend yes/no`
 and the why in one line. Every number comes with its arithmetic. Every term is
 explained on first mention.
 
@@ -149,15 +149,15 @@ pt-BR:
 
 - `Onde:` (where) the repo or directory, and the file when there is one;
 - `Comando:` (command) in a code block, or the file to open and what to fill in;
-- `Pronto quando:` (done when) what the owner sees on finishing, and what they
+- `Done when:` what the owner sees on finishing, and what they
   tell me.
 
 For every `human_pending` route, also write, ready to paste, the command the
-owner runs when the task is done (`cepa-plan responde` closes the route or
-returns the item to the queue; with `--mantem` it only records the answer):
+owner runs when the task is done (`cepa-plan answer` closes the route or
+returns the item to the queue; with `--keep` it only records the answer):
 
 ```
-python3 common/bin/cepa-plan responde <fila> <id> --resposta "<what you saw>" --repo <raiz-principal>
+python3 common/bin/cepa-plan answer <fila> <id> --answer "<what you saw>" --repo <raiz-principal>
 ```
 
 The report never lists a category ("the human routes", "the pending items") in
@@ -171,11 +171,11 @@ into "Fica com você".
 
 After the report, and only at the end of the file, write a fenced block
 ```` ```json cepa-decisoes ```` that `cepa-until` reads to ask the owner, one at
-a time, in the terminal (`cepa-until decidir`). The block does NOT decide what
+a time, in the terminal (`cepa-until decide`). The block does NOT decide what
 gets executed: the actions come from a closed list in
-`cepa-until` (aterrissar, and `cepa-plan responde`, which returns a `blocked`
+`cepa-until` (aterrissar, and `cepa-plan answer`, which returns a `blocked`
 item to the queue or closes the human route with the owner's answer, or, with
-`--mantem`, only records the answer and leaves the item stuck). It only
+`--keep`, only records the answer and leaves the item stuck). It only
 provides the wording of the question and your recommendation.
 
 Cover **all deferred items of the queue**, not only this run's: run
@@ -183,7 +183,7 @@ Cover **all deferred items of the queue**, not only this run's: run
 take the `deferred` list. Those with reason `bloqueado-antes` and
 `human_pending` go in; `reservado` and `depende-de-adiado` are not the owner's
 and stay out. An item that already has a `question` (the question the agent
-recorded with `finish --pergunta`) needs no line, unless you recommend
+recorded with `finish --question`) needs no line, unless you recommend
 something else.
 
 The string values of the block are shown to the owner and are written in

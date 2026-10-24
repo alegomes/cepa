@@ -131,7 +131,7 @@ O veredito é lido pelo dono do produto, não por outro engenheiro. O reply sai
    falha que esta regra existe para impedir.
 2. **Recomendação default** — o que você faria, marcado explicitamente ("se
    você não tiver opinião: aceite e crie follow-up" / "bloqueie até corrigir").
-3. **Detalhe técnico** — `file:line`, evidência, comando — por último.
+3. **Technical detail** — `file:line`, evidência, comando — por último.
 
 Um `READY-WITH-CAVEATS` cujos caveats o dono não consegue julgar é
 funcionalmente um veredito fuzzy — o mesmo desperdício de turno que a regra

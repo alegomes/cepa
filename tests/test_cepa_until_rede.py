@@ -126,7 +126,7 @@ def test_queda_de_rede_espera_a_volta_e_retoma_o_mesmo_item():
         # Teto de UMA tentativa por item: se a queda contasse como tentativa,
         # o a1 viraria `blocked` na hora e nunca seria retomado.
         p, _ = roda(raiz, binv, plano_de(raiz),
-                    ["--for", "2h", "--tentativas-por-item", "1"],
+                    ["--for", "2h", "--attempts-per-item", "1"],
                     extra_env=ambiente(porta))
         gasto = time.monotonic() - inicio
         ev = ledger_de(raiz)
@@ -167,7 +167,7 @@ def test_queda_de_rede_nao_conta_no_teto_por_item():
         escuta_depois(porta, 0)
         time.sleep(0.3)
         p, chamadas = roda(raiz, binv, plano_de(raiz),
-                           ["--for", "2h", "--tentativas-por-item", "2"],
+                           ["--for", "2h", "--attempts-per-item", "2"],
                            extra_env=ambiente(porta))
         check("3 chamadas: queda, falha real, fechou",
               len(chamadas) == 3, str(len(chamadas)))
@@ -190,8 +190,8 @@ def test_tres_quedas_seguidas_param_o_run_sem_culpar_o_item():
         escuta_depois(porta, 0)  # a sonda sempre vê rede
         time.sleep(0.3)
         p, chamadas = roda(raiz, binv, plano_de(raiz),
-                           ["--for", "2h", "--tentativas-por-item", "2",
-                            "--max-falhas", "2"],
+                           ["--for", "2h", "--attempts-per-item", "2",
+                            "--max-failures", "2"],
                            extra_env=ambiente(porta))
         fim = run_end(raiz)
         check("3 quedas e parou com motivo `sem-rede`",
@@ -220,7 +220,7 @@ def test_rede_que_nao_volta_dentro_da_janela_para_o_run():
         inicio = time.monotonic()
         # Janela de 12s com reserva de 3s: a espera vai até ~9s da largada.
         p, chamadas = roda(raiz, binv, plano_de(raiz),
-                           ["--for", "0.2m", "--reserva-minima", "0.05m"],
+                           ["--for", "0.2m", "--min-reserve", "0.05m"],
                            extra_env=ambiente(porta))
         gasto = time.monotonic() - inicio
         fim = run_end(raiz)
@@ -249,7 +249,7 @@ def test_queda_perto_do_fim_da_janela_para_sem_sondar():
         porta = porta_livre()  # ninguém escuta
         inicio = time.monotonic()
         p, chamadas = roda(raiz, binv, plano_de(raiz),
-                           ["--for", "0.2m", "--reserva-minima", "0.15m"],
+                           ["--for", "0.2m", "--min-reserve", "0.15m"],
                            extra_env=ambiente(porta))
         gasto = time.monotonic() - inicio
         fim = run_end(raiz)

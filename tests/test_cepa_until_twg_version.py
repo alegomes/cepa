@@ -134,10 +134,10 @@ def roda(raiz, binv, plano, args, timeout=120, extra_env=None, path=None):
     chamadas = Path(raiz).parent / "chamadas.jsonl"
     env["FAKE_CHAMADAS"] = str(chamadas)
     args = list(args)
-    if "--verify" not in args and "--sem-verify" not in args:
-        args.append("--sem-verify")
-    if "--sem-analise" not in args:
-        args.append("--sem-analise")
+    if "--verify" not in args and "--no-verify" not in args:
+        args.append("--no-verify")
+    if "--no-analysis" not in args:
+        args.append("--no-analysis")
     p = subprocess.run([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz)]
                        + args, capture_output=True, text=True, env=env,
                        timeout=timeout)

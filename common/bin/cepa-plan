@@ -49,7 +49,7 @@ Subcomandos:
       card READY sem `why`, card OBSOLETE sem motivo e card ainda parado em
       `needs-decision` (grelha inacabada). Exit 2 = recusado, com o motivo.
 
-  cepa-plan promote <nome> [--repo DIR] [--json] [--quando AAAA-MM-DD]
+  cepa-plan promote <nome> [--repo DIR] [--json] [--when AAAA-MM-DD]
       As demandas que a fila entrega ao `/maestro:program-plan --from-plan` —
       a promoção fila → ondas, que até aqui era manual por não ter caminho.
       Não escreve nada, não decide superfície nem aceite (isso é a conversa do
@@ -114,24 +114,24 @@ Subcomandos:
       com `verdict: READY-TO-SHIP` ou
       `READY-WITH-CAVEATS`: sem ele o item fecha sem a revisão de segurança.
 
-  cepa-plan add <nome> <id> --title T [--why W] [--antes-de <id>]
+  cepa-plan add <nome> <id> --title T [--why W] [--before <id>]
                 [--blocked-by id1,id2] [--repo DIR]
       A1 de "Fila única" (BACKLOG.md): acrescenta UM item a uma fila que já
       existe, sem reescrever os outros — ao contrário do `write`, que
       substitui a lista inteira. É o que `/board-flow:capture`, o
-      `cepa-feedback triar` (quando o destino é o cepa) e a mão do dono
+      `cepa-feedback triage` (quando o destino é o cepa) e a mão do dono
       chamam para um card novo não ficar só no Jira ou só no BACKLOG.md.
-      Sem `--antes-de`, o item entra no FIM da fila e o `why` carrega a
+      Sem `--before`, o item entra no FIM da fila e o `why` carrega a
       frase "ainda não priorizado" (regra R2: toda porta de entrada cria o
-      item no mesmo passo, mesmo sem saber a posição). Com `--antes-de`,
+      item no mesmo passo, mesmo sem saber a posição). Com `--before`,
       `--why` é OBRIGATÓRIO — uma posição escolhida sem o motivo de ela vir
       antes das outras é exatamente o que a fila existe para impedir.
-      Exit 2 = fila inexistente, `--antes-de` ou `--blocked-by` apontando
+      Exit 2 = fila inexistente, `--before` ou `--blocked-by` apontando
       para id que não está nesta fila, ou o resultado não passa em
       `valida_plano`; 3 = plano de ondas; 4 = id já existe (a mensagem diz
       o status dele, para quem chama duas vezes distinguir).
 
-  cepa-plan ordena <nome> --keys K1,K2,... [--json] [--repo DIR]
+  cepa-plan order <nome> --keys K1,K2,... [--json] [--repo DIR]
       A2: dá ao `/board-flow:drain` a ordem da fila para uma lista de chaves
       do Jira. As que são item do plano vêm primeiro, na ordem da fila; as
       que não são vêm depois, na ordem em que chegaram (a do Jira), marcadas
@@ -139,7 +139,7 @@ Subcomandos:
       só ordena e diz o status de cada chave ao lado. Exit 2 = fila
       inexistente (quem chama cai de volta para a ordem do Jira).
 
-  cepa-plan divergencia <nome> [--board ARQUIVO] [--backlog ARQUIVO]
+  cepa-plan divergence <nome> [--board ARQUIVO] [--backlog ARQUIVO]
                         [--json] [--repo DIR]
       A3: o que o `/common:doctor` lista sem corrigir nada — read-only, de
       propósito, porque decidir por conta própria (fechar um card órfão,
@@ -631,8 +631,12 @@ RE_CRITERIO = re.compile(r"^###\s+(CS-\d+)\s*:\s*(.+?)\s*$", re.M)
 # texto completo. Vai até a próxima linha que abre outro campo, um heading, ou
 # a linha em branco que fecha o parágrafo.
 RE_CAMPO = re.compile(
-    r"^\*\*(Superfície|Teste vermelho)[:]?\*\*[:]?[ \t]*(.*?)"
+    r"^\*\*(Superfície|Surface|Teste vermelho|Red test)[:]?\*\*[:]?[ \t]*(.*?)"
     r"(?=\n[ \t]*\n|\n\*\*|\n#{2,}|\Z)", re.M | re.S)
+
+# Os campos em inglês (Surface, Red test) e os antigos valem; `campos` guarda
+# sempre o nome antigo, que é a chave do `why` já gravado nas filas.
+CAMPO_CANONICO = {"Surface": "Superfície", "Red test": "Teste vermelho"}
 
 # A dependência que a PRÓPRIA spec declara em prosa ("Depois do CS-1, ..."). É
 # a única que se lê do texto sem deduzir: dois critérios tocarem o mesmo
@@ -655,9 +659,9 @@ def itens_de_spec(texto):
     avisos = []
     m = re.search(r"^\*\*Status:\*\*\s*(\S+)", texto, re.M)
     status = m.group(1) if m else None
-    if status != "pronta-para-construir":
+    if status not in ("ready-to-build", "pronta-para-construir"):
         avisos.append(f"a especificação está com `Status: {status}` — só "
-                      "`pronta-para-construir` passou pelo crivo do /common:spec "
+                      "`ready-to-build` passou pelo crivo do /common:spec "
                       "(toda superfície observável e todo teste vermelho "
                       "declarados)")
     abertas = len(re.findall(r"^-\s+\[ \]", texto, re.M))
@@ -682,14 +686,15 @@ def itens_de_spec(texto):
                                   "fora do `blocked_by`")
                     continue
                 depende.append(alvo)
-        campos = {k: " ".join(v.split()) for k, v in RE_CAMPO.findall(corpo)}
+        campos = {CAMPO_CANONICO.get(k, k): " ".join(v.split())
+                  for k, v in RE_CAMPO.findall(corpo)}
         pedacos = [HERDADO]
         if campos.get("Superfície"):
             pedacos.append(f"superfície onde se observa: {campos['Superfície']}")
         if campos.get("Teste vermelho"):
             pedacos.append(f"teste vermelho declarado: {campos['Teste vermelho']}")
         else:
-            avisos.append(f"{m.group(1)} não declara **Teste vermelho:** — o "
+            avisos.append(f"{m.group(1)} não declara **Red test:** — o "
                           "item nasce sem a frase que diz quando ele terminou")
         itens.append({
             "id": m.group(1),
@@ -720,7 +725,7 @@ def cmd_from_spec(caminho, como_json=True):
 
 # ── leitura de um ciclo de um Epic do /common:epic ───────────────────────────
 
-HERDADO_EPIC = ("herdado da ordem do texto da coluna \"O que atravessa\"; "
+HERDADO_EPIC = ("herdado da ordem do texto da coluna \"What it crosses\"; "
                 "ninguém priorizou as peças entre si")
 
 # As colunas da escada que a fila usa, pelo começo do cabeçalho em minúsculas
@@ -728,11 +733,17 @@ HERDADO_EPIC = ("herdado da ordem do texto da coluna \"O que atravessa\"; "
 # "Efeito em backend" são opcionais AQUI: o Epic escrito à mão antes do
 # /common:epic (docs/epics/cepa-em-espiral.md) não as tem, e recusá-lo deixaria
 # o primeiro Epic do harness sem fila.
-COLUNAS_DA_FILA = (("ciclo", "Ciclo"), ("roteiro", "Roteiro de demonstração"),
-                   ("efeito em tela", "Efeito em tela"),
-                   ("efeito em backend", "Efeito em backend"),
-                   ("o que atravessa", "O que atravessa"))
-OBRIGATORIAS_DA_FILA = ("ciclo", "roteiro", "o que atravessa")
+# Cada coluna vale com o nome em inglês (novo) e o antigo em português.
+COLUNAS_DA_FILA = ((("cycle", "ciclo"), "Cycle"),
+                   (("script", "roteiro"), "Script"),
+                   (("effect on screen", "efeito em tela"), "Effect on screen"),
+                   (("effect in backend", "efeito em backend"),
+                    "Effect in backend"),
+                   (("what it crosses", "what crosses", "o que atravessa"),
+                    "What it crosses"))
+OBRIGATORIAS_DA_FILA = ("ciclo", "roteiro", "o que atravessa")  # chaves canônicas
+# A chave pela qual o resto da função fala de cada coluna (a antiga).
+CANONICA_DA_COLUNA = {c[0]: c[0][-1] for c in COLUNAS_DA_FILA}
 VAZIO_DE_CELULA = ("", "—", "–", "-", "nenhum", "nenhuma", "n/d", "nd")
 
 RE_SECAO = re.compile(r"^##\s+(.+?)\s*$", re.M)
@@ -781,8 +792,8 @@ def itens_de_epic(texto, ciclo, caminho):
     avisos = []
     m = re.search(r"^\*\*Status:\*\*\s*([^\s·*]+)", texto, re.M)
     status = m.group(1) if m else None
-    if status != "pronta":
-        avisos.append(f"o Epic está com `Status: {status}` — só `pronta` passou "
+    if status not in ("ready", "pronta", "ready-to-build", "pronta-para-construir"):
+        avisos.append(f"o Epic está com `Status: {status}` — só `ready` passou "
                       "pelo crivo do /common:epic (todo ciclo com roteiro e "
                       "efeito observável em tela e em backend)")
     abertas = len(re.findall(r"^-\s+\[ \]", texto, re.M))
@@ -792,27 +803,29 @@ def itens_de_epic(texto, ciclo, caminho):
     marcas = list(RE_SECAO.finditer(texto))
     escada = None
     for i, s in enumerate(marcas):
-        if s.group(1).strip().lower().startswith("escada de valor"):
+        if s.group(1).strip().lower().startswith(("value ladder",
+                                                  "escada de valor")):
             fim = marcas[i + 1].start() if i + 1 < len(marcas) else len(texto)
             escada = texto[s.end():fim]
             break
     if escada is None:
-        return None, [], avisos, (f"{caminho} não tem a seção `## Escada de "
-                                  "valor` — sem ciclo não há fila a derivar")
+        return None, [], avisos, (f"{caminho} não tem a seção `## Value "
+                                  "ladder` — sem ciclo não há fila a derivar")
     linhas = [l for l in escada.splitlines() if l.strip().startswith("|")]
     if not linhas:
-        return None, [], avisos, ("a `## Escada de valor` não tem tabela — "
+        return None, [], avisos, ("a `## Value ladder` não tem tabela — "
                                   "sem ciclo não há fila a derivar")
     cab = [c.lower() for c in celulas_da_linha(linhas[0])]
     idx = {}
-    for chave, _ in COLUNAS_DA_FILA:
-        pos = [i for i, c in enumerate(cab) if c.startswith(chave)]
+    for chaves, _ in COLUNAS_DA_FILA:
+        pos = [i for i, c in enumerate(cab) if c.startswith(chaves)]
         if pos:
-            idx[chave] = pos[0]
-    faltam = [nome for chave, nome in COLUNAS_DA_FILA
-              if chave in OBRIGATORIAS_DA_FILA and chave not in idx]
+            idx[CANONICA_DA_COLUNA[chaves]] = pos[0]
+    faltam = [nome for chaves, nome in COLUNAS_DA_FILA
+              if CANONICA_DA_COLUNA[chaves] in OBRIGATORIAS_DA_FILA
+              and CANONICA_DA_COLUNA[chaves] not in idx]
     if faltam:
-        return None, [], avisos, ("a `## Escada de valor` não tem a(s) "
+        return None, [], avisos, ("a `## Value ladder` não tem a(s) "
                                   f"coluna(s) {', '.join(faltam)}")
 
     linha_do_ciclo, nomes = None, []
@@ -842,8 +855,8 @@ def itens_de_epic(texto, ciclo, caminho):
                                   "demonstração — a fila não teria o que demonstrar")
     frases = frases_de(valor("o que atravessa"))
     if not frases:
-        return None, [], avisos, (f"o ciclo \"{rotulo}\" tem a coluna \"O que "
-                                  "atravessa\" vazia — não há peça a virar item")
+        return None, [], avisos, (f"o ciclo \"{rotulo}\" tem a coluna \"What it "
+                                  "crosses\" vazia — não há peça a virar item")
 
     tela, backend = valor("efeito em tela"), valor("efeito em backend")
     if tela or backend:
@@ -851,11 +864,11 @@ def itens_de_epic(texto, ciclo, caminho):
             f"tela: {tela}" if tela else "", f"backend: {backend}" if backend else "")
             if p)
     else:
-        superficie = ("não declarada no Epic (a escada não tem \"Efeito em "
-                      "tela\" nem \"Efeito em backend\" para este ciclo; quem "
+        superficie = ("não declarada no Epic (a escada não tem \"Effect on "
+                      "screen\" nem \"Effect in backend\" para este ciclo; quem "
                       "pergunta é o /common:epic)")
-        avisos.append(f"o ciclo \"{rotulo}\" não declara \"Efeito em tela\" nem "
-                      "\"Efeito em backend\" — cada item nasce com a superfície "
+        avisos.append(f"o ciclo \"{rotulo}\" não declara \"Effect on screen\" nem "
+                      "\"Effect in backend\" — cada item nasce com a superfície "
                       "\"não declarada\"")
 
     itens = []
@@ -1801,7 +1814,7 @@ def cabecalho_do_arquivo(texto):
     """Os comentários do topo, verbatim.
 
     Reescrever o arquivo inteiro pelo `serializa` regeneraria o cabeçalho a
-    partir de um `--quando` que a marcação não tem — e datar o documento com a
+    partir de um `--when` que a marcação não tem — e datar o documento com a
     data de HOJE toda vez que um item fecha apaga quando a fila foi escrita.
     """
     linhas = []
@@ -1972,7 +1985,7 @@ def cmd_start(raiz, nome, ident, cwd=".", commit=False):
         print("  evidence anterior (leia antes de começar):")
         for linha in anterior.splitlines():
             print(f"    {linha}")
-    fecha_escrita(raiz, alvo, f"fila {nome}: start {ident}", commit)
+    fecha_escrita(raiz, alvo, f"queue {nome}: start {ident}", commit)
     return 0
 
 
@@ -2125,7 +2138,7 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo=".",
     print(f"{ident} → `{status}` em {alvo}")
     if human_pending:
         print(f"  rota aberta para você: {human_pending}")
-    fecha_escrita(raiz, alvo, f"fila {nome}: {ident} -> {status}", commit)
+    fecha_escrita(raiz, alvo, f"queue {nome}: {ident} -> {status}", commit)
     return 0
 
 
@@ -2137,7 +2150,7 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo=".",
 # e por isso exige um terminal: o `claude -p` de um run não tem TTY, então um
 # agente não consegue fechar a rota no lugar do humano por este caminho.
 #
-# `--mantem` grava a resposta sem mexer em status nem rota. Sem ele, toda
+# `--keep` grava a resposta sem mexer em status nem rota. Sem ele, toda
 # resposta destravava: em 2026-09-30 o dono respondeu "mantenha travado" ao
 # WEGO-2337 e "não liguei" ao WEGO-1933, e os dois voltaram para `pending`,
 # prontos para o próximo run executar o que o dono mandou segurar.
@@ -2147,9 +2160,9 @@ def cmd_finish(raiz, nome, ident, status, evidencia, human_pending, repo=".",
 # S5-nivel-atendimento como "Resposta do dono", e precisou de commit
 # corretivo: o `responde` gravava o que recebia. Agora ele mostra a pergunta
 # da rota e recusa (exit 6) o texto que pede esclarecimento ou que é ele
-# mesmo uma pergunta. A resposta montada pelo `cepa-until decidir` começa com
+# mesmo uma pergunta. A resposta montada pelo `cepa-until decide` começa com
 # "sim: " / "não: " seguido da pergunta redigida, e por isso passa direto:
-# a pergunta ali é citação, não dúvida. `--forca` grava mesmo assim.
+# a pergunta ali é citação, não dúvida. `--force` grava mesmo assim.
 PEDE_ESCLARECIMENTO = re.compile(
     r"\b(n[aã]o|nem|nunca)\s+(entendi|compreendi|captei|ficou\s+claro|"
     r"sei\s+(o\s+que|do\s+que|qual|a\s+que)|sei\s+responder)\b"
@@ -2223,7 +2236,7 @@ def decide_dispensas(propostas, resposta, mantem, hoje, autor):
         return saida, frases
     if mantem:
         saida.append(f"  {len(propostas)} dispensa(s) proposta(s) seguem "
-                     "pendente(s): --mantem não decide dispensa")
+                     "pendente(s): --keep não decide dispensa")
         return saida, [f"Dispensa {d.get('motivo')} em {d.get('escopo')}: "
                        "segue proposta." for _, d in propostas]
     if re.match(r"^sim\b", resposta, re.IGNORECASE):
@@ -2258,7 +2271,7 @@ def decide_dispensas(propostas, resposta, mantem, hoje, autor):
 def cmd_responde(raiz, nome, ident, resposta, mantem=False, forca=False,
                  commit=True, repo=".", autor=None):
     if not sys.stdin.isatty():
-        print("`responde` é a resposta do dono e só roda num terminal: sem "
+        print("`answer` é a resposta do dono e só roda num terminal: sem "
               "TTY, quem chama é um agente, e só o humano fecha uma rota "
               "`human_pending` ou destrava um `blocked`.", file=sys.stderr)
         return 2
@@ -2290,7 +2303,7 @@ def cmd_responde(raiz, nome, ident, resposta, mantem=False, forca=False,
                 print(f"  a rota pergunta: {pergunta_da_rota}", file=sys.stderr)
             print("  responda a essa pergunta (sim/não e o porquê, numa "
                   "linha). Se o texto é mesmo a sua resposta, repita com "
-                  "--forca.", file=sys.stderr)
+                  "--force.", file=sys.stderr)
             return 6
     hoje = datetime.now().strftime("%Y-%m-%d")
     anterior = " ".join(str(it.get("evidence") or "").split())
@@ -2330,7 +2343,7 @@ def cmd_responde(raiz, nome, ident, resposta, mantem=False, forca=False,
               + (" · rota humana fechada" if rota is not None else ""))
     for linha in linhas_dispensa:
         print(linha)
-    fecha_escrita(raiz, alvo, f"fila {nome}: resposta do dono a {ident} "
+    fecha_escrita(raiz, alvo, f"queue {nome}: resposta do dono a {ident} "
                   f"({status_de(it)})", commit,
                   extras=[p for p, _ in propostas])
     return 0
@@ -2340,7 +2353,7 @@ def cmd_responde(raiz, nome, ident, resposta, mantem=False, forca=False,
 #
 # A1 de "Fila única, BACKLOG.md e plan.yaml convergem no plan.yaml" (decisão
 # do dono, 2026-09-25, regra R2): toda porta de entrada — /board-flow:capture,
-# `cepa-feedback triar`, ou a mão do dono — cria o item no plano NO MESMO
+# `cepa-feedback triage`, ou a mão do dono — cria o item no plano NO MESMO
 # PASSO em que o card nasce, no fim da fila com "ainda não priorizado" se
 # ninguém disse onde ele entra. Diferente do `write`, que reescreve a lista
 # inteira e por isso serve para REPLANEJAR, o `add` toca só o item novo — os
@@ -2368,7 +2381,7 @@ def cmd_add(raiz, nome, ident, a):
     pos = len(itens)
     if a.antes_de:
         if str(a.antes_de) not in por_id:
-            print(f"`--antes-de` aponta para '{a.antes_de}', que não existe "
+            print(f"`--before` aponta para '{a.antes_de}', que não existe "
                   f"na fila {nome}", file=sys.stderr)
             return 2
         if not str(a.why or "").strip():
@@ -2410,7 +2423,7 @@ def cmd_add(raiz, nome, ident, a):
 
     grava_corpo(alvo, plan, novos_itens)
     print(f"{ident} inserido na posição {pos + 1} de {len(novos_itens)} em {alvo}")
-    fecha_escrita(raiz, alvo, f"fila {nome}: add {ident}",
+    fecha_escrita(raiz, alvo, f"queue {nome}: add {ident}",
                   not getattr(a, "no_commit", False))
     return 0
 
@@ -3251,7 +3264,7 @@ def migra_uma(raiz, nome, dry_run):
     msg = f"{nome}: movida para {rel_novo}/{qp.NEW_FILE}"
     if rastreado:
         _git(raiz, "add", "-A", "--", rel_velho, rel_novo)
-        mensagem = f"fila {nome}: .claude/programs → .claude/queues (cepa-plan migrate)"
+        mensagem = f"queue {nome}: .claude/programs → .claude/queues (cepa-plan migrate)"
         rc, _, err = _git(raiz, "commit", "-q", "-m", mensagem, "--",
                           rel_velho, rel_novo)
         if rc == 0:
@@ -3328,7 +3341,7 @@ def main(argv=None):
                        help="extrai a fila de um ciclo de um Epic (JSON com "
                             "`demonstra` e `items`); só lê")
     e.add_argument("epic")
-    e.add_argument("--ciclo", type=int, required=True, metavar="N",
+    e.add_argument("--cycle", "--ciclo", dest="ciclo", type=int, required=True, metavar="N",
                    help="o ciclo da escada de valor que vira fila")
 
     t = sub.add_parser("from-triage",
@@ -3369,7 +3382,7 @@ def main(argv=None):
     pr.add_argument("nome")
     pr.add_argument("--repo", default=".")
     pr.add_argument("--json", action="store_true", dest="como_json")
-    pr.add_argument("--quando", help="data a registrar na linha `source` do "
+    pr.add_argument("--when", "--quando", dest="quando", help="data a registrar na linha `source` do "
                                      "plano de ondas (AAAA-MM-DD)")
 
     st = sub.add_parser("start",
@@ -3395,12 +3408,12 @@ def main(argv=None):
     fi.add_argument("--human-pending", dest="human_pending",
                     help="ABRE uma rota que só o humano fecha (validar à mão, "
                          "aprovar PR). Nunca fecha uma: só o humano faz isso")
-    fi.add_argument("--pergunta",
+    fi.add_argument("--question", "--pergunta", dest="pergunta",
                     help="a pergunta FECHADA que destrava o item, até 25 "
                          "palavras, sem nome de branch, classe ou arquivo, "
                          "com a sua recomendação (\"Fecho o card como 'medir "
                          "depois do go-live' e devolvo à fila? Recomendo sim: "
-                         "...\"). O `cepa-until decidir` a mostra num menu "
+                         "...\"). O `cepa-until decide` a mostra num menu "
                          "fixo: sim = o item volta para a fila com esta "
                          "resposta, não = fica como está. Use com `blocked` "
                          "e com `--human-pending`")
@@ -3409,26 +3422,26 @@ def main(argv=None):
                          "saída diz que falta commitar")
     fi.add_argument("--repo", default=".")
 
-    rs = sub.add_parser("responde",
+    rs = sub.add_parser("answer", aliases=["responde"],
                         help="o DONO responde a um item adiado: `blocked` volta "
                              "para `pending` com a resposta, e a rota "
                              "`human_pending` fecha. Só num terminal")
     rs.add_argument("nome")
     rs.add_argument("id")
-    rs.add_argument("--resposta", required=True,
+    rs.add_argument("--answer", "--resposta", dest="resposta", required=True,
                     help="a resposta do dono, verbatim; o próximo run a lê "
                          "na evidência do item")
-    rs.add_argument("--mantem", action="store_true",
+    rs.add_argument("--keep", "--mantem", dest="mantem", action="store_true",
                     help="grava a resposta e deixa o item como está: o "
                          "`blocked` segue travado e a rota segue aberta")
-    rs.add_argument("--forca", action="store_true",
+    rs.add_argument("--force", "--forca", dest="forca", action="store_true",
                     help="grava mesmo um texto que parece não responder à "
                          "rota (pedido de esclarecimento, pergunta)")
-    rs.add_argument("--autor", default=None,
+    rs.add_argument("--author", "--autor", dest="autor", default=None,
                     help="quem assina a dispensa que a resposta \"sim\" aceita "
                          "(default: `git config user.name`, depois $USER)")
     rs.add_argument("--no-commit", action="store_true", dest="no_commit",
-                    help="grava a fila sem commitar (por default o `responde` "
+                    help="grava a fila sem commitar (por default o `answer` "
                          "commita só a fila no mesmo passo)")
     rs.add_argument("--repo", default=".")
 
@@ -3454,10 +3467,10 @@ def main(argv=None):
     ad.add_argument("nome")
     ad.add_argument("id")
     ad.add_argument("--title", required=True)
-    ad.add_argument("--why", help="obrigatório com --antes-de; sem "
-                                  "--antes-de, vira o `why` do item com a "
+    ad.add_argument("--why", help="obrigatório com --before; sem "
+                                  "--before, vira o `why` do item com a "
                                   "frase 'ainda não priorizado' anexada")
-    ad.add_argument("--antes-de", dest="antes_de", metavar="ID",
+    ad.add_argument("--before", "--antes-de", dest="antes_de", metavar="ID",
                     help="insere imediatamente antes deste id (exige --why)")
     ad.add_argument("--blocked-by", dest="blocked_by", metavar="ID,ID",
                     help="ids desta MESMA fila que bloqueiam o item novo")
@@ -3466,7 +3479,7 @@ def main(argv=None):
                          "commita só a fila no mesmo passo)")
     ad.add_argument("--repo", default=".")
 
-    od = sub.add_parser("ordena",
+    od = sub.add_parser("order", aliases=["ordena"],
                         help="ordena uma lista de chaves do Jira pela ordem "
                              "da fila")
     od.add_argument("nome")
@@ -3477,7 +3490,7 @@ def main(argv=None):
     od.add_argument("--repo", default=".")
     od.add_argument("--json", action="store_true", dest="como_json")
 
-    dv = sub.add_parser("divergencia",
+    dv = sub.add_parser("divergence", aliases=["divergencia"],
                         help="lista (sem corrigir) a fila × o quadro × o "
                              "BACKLOG.md")
     dv.add_argument("nome")
@@ -3502,11 +3515,11 @@ def main(argv=None):
                         "/board-flow:triage, na ordem que ela classificou")
     w.add_argument("--from-epic", metavar="ARQUIVO",
                    help="lê os itens de um ciclo de um Epic do /common:epic, "
-                        "um por frase de \"O que atravessa\"; pede --ciclo")
-    w.add_argument("--ciclo", type=int, metavar="N",
+                        "um por frase de \"What it crosses\"; pede --cycle")
+    w.add_argument("--cycle", "--ciclo", dest="ciclo", type=int, metavar="N",
                    help="o ciclo da escada de valor que vira fila (com --from-epic)")
     w.add_argument("--source", help="de onde as demandas vieram")
-    w.add_argument("--quando", help="data a registrar no cabeçalho (YYYY-MM-DD)")
+    w.add_argument("--when", "--quando", dest="quando", help="data a registrar no cabeçalho (YYYY-MM-DD)")
     w.add_argument("--repo", default=".")
     w.add_argument("--on-missing", choices=("refuse", "keep", "drop"),
                    default="refuse",
@@ -3515,6 +3528,8 @@ def main(argv=None):
                    help="imprime o arquivo que seria gravado, sem gravar")
 
     a = ap.parse_args(argv)
+    a.cmd = {"responde": "answer", "ordena": "order",
+             "divergencia": "divergence"}.get(a.cmd, a.cmd)
 
     if a.cmd == "validate":
         return cmd_validate(a.plano)
@@ -3529,7 +3544,7 @@ def main(argv=None):
         ap.error("write precisa de --items, --from-spec, --from-triage ou "
                  "--from-epic")
     if a.cmd == "write" and bool(a.from_epic) != (a.ciclo is not None):
-        ap.error("--from-epic e --ciclo andam juntos: o Epic tem vários ciclos "
+        ap.error("--from-epic e --cycle andam juntos: o Epic tem vários ciclos "
                  "e a fila é de um só")
 
     raiz = raiz_principal(a.repo)
@@ -3543,10 +3558,10 @@ def main(argv=None):
         return cmd_check_name(raiz, a.nome)
     if a.cmd == "add":
         return cmd_add(raiz, a.nome, a.id, a)
-    if a.cmd == "ordena":
+    if a.cmd == "order":
         chaves = [k.strip() for k in a.keys.split(",") if k.strip()]
         return cmd_ordena(raiz, a.nome, chaves, a.como_json)
-    if a.cmd == "divergencia":
+    if a.cmd == "divergence":
         return cmd_divergencia(raiz, a.nome, a.board, a.backlog, a.como_json)
     if a.cmd == "status":
         return cmd_status(raiz, a.nome, a.filtro, a.como_json)
@@ -3564,7 +3579,7 @@ def main(argv=None):
     if a.cmd == "finish":
         return cmd_finish(raiz, a.nome, a.id, a.status, a.evidence,
                           a.human_pending, a.repo, a.pergunta, a.commit)
-    if a.cmd == "responde":
+    if a.cmd == "answer":
         return cmd_responde(raiz, a.nome, a.id, a.resposta, a.mantem,
                             a.forca, not a.no_commit, a.repo, a.autor)
     return cmd_write(raiz, a)

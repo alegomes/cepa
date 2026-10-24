@@ -480,7 +480,7 @@ def main():
             import subprocess
             tokens = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                   "bin", "cepa-tokens")
-            subprocess.Popen([sys.executable, tokens, "--arquivo", transcript, "--emit"],
+            subprocess.Popen([sys.executable, tokens, "--file", transcript, "--emit"],
                              cwd=cwd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, start_new_session=True)
         except Exception:

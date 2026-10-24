@@ -48,7 +48,7 @@ When something is left that requires the user:
    cards, what to do with whatever gets stuck). Ask ALL of them at once, including
    the ones the routine would only find midway.
 2. **In the final report**, for the rest: a numbered list, one closed question per
-   item, each with `Recomendo sim/não` (`plain-report` format).
+   item, each with `I recommend yes/no` (`plain-report` format).
 
 Never in the middle of execution: a question that interrupts a drain at card 3 of
 5 forces the user to reload the entire context in order to answer.

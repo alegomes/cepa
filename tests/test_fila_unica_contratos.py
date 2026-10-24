@@ -62,8 +62,8 @@ def test_capture_add():
 
 def test_drain_ordena():
     f = ler("board-flow/commands/drain.md")
-    check("chama cepa-plan ordena <project_key> --keys",
-          "cepa-plan\" ordena <project_key> --keys" in f,
+    check("chama cepa-plan order <project_key> --keys",
+          "cepa-plan\" order <project_key> --keys" in f,
           "sem o comando exato, o drain volta a ordenar só pelo rank do Jira")
     check("pede a coluna inteira ao Jira quando a fila existe",
           "the whole column, no limit, if the single-track queue exists" in f,
@@ -84,10 +84,10 @@ def test_drain_ordena():
 
 def test_doctor_live():
     f = ler("common/commands/doctor.md")
-    check("passa o board lido pelo atlassian-expert ao cepa-plan divergencia",
-          "cepa-plan\" divergencia <fila>" in f and "--board <arquivo-temporário>" in f,
+    check("passa o board lido pelo atlassian-expert ao cepa-plan divergence",
+          "cepa-plan\" divergence <fila>" in f and "--board <arquivo-temporário>" in f,
           "sem o --board, cards_sem_item e itens_com_card_done saem vazios "
-          "(o próprio cepa-plan divergencia se recusa a inferi-los sem quadro)")
+          "(o próprio cepa-plan divergence se recusa a inferi-los sem quadro)")
     check("lista cards_sem_item e itens_com_card_done",
           "cards_sem_item" in f and "itens_com_card_done" in f,
           "sem nomear os dois campos, o passo --live não diz o que a fila "

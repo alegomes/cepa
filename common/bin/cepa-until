@@ -73,16 +73,16 @@ Este arquivo é a fiação em volta disso: relógio, disjuntor e registro.
 
 4. **`--dangerously-skip-permissions` ligado.** Sem isso o subprocesso trava no
    primeiro pedido de permissão e a noite morre em silêncio. Fica explícito no
-   banner e desligável por `--com-permissoes`.
+   banner e desligável por `--with-permissions`.
 
 ## Onde o corte acontece
 
 Entre itens, NUNCA no meio de um. Matar um item pela metade deixa árvore suja e
 reserva pendurada. Duas folgas controlam isso:
 
-  - `--reserva-minima` (default 45min): não COMEÇA um item se sobra menos que
+  - `--min-reserve` (default 45min): não COMEÇA um item se sobra menos que
     isso. Um item que não cabe na janela é trabalho jogado fora.
-  - `--folga` (default 60min): quanto um item JÁ RODANDO pode passar do prazo
+  - `--slack` (default 60min): quanto um item JÁ RODANDO pode passar do prazo
     antes de ser morto. Passou disso, é morte por timeout — registrada, e a
     reserva órfã volta para a fila no próximo run.
 
@@ -170,7 +170,7 @@ do terminal, o `claude` roda em sessão própria e sobrevive, o supervisor não.
   - **SIGTERM e Ctrl+C encerram o filho** (o grupo do `claude` ou do build):
     seguindo sozinho, ele mudaria o card sem ninguém para rodar o build
     depois. Morto, a reserva vira órfã e o próximo run retoma o item.
-  - `cepa-until fecha-morto <fila>/<run> --sim` roda o build que faltou e,
+  - `cepa-until fecha-morto <fila>/<run> --yes` roda o build que faltou e,
     verde, fecha o registro e deixa o run pronto para o `aterrissar`.
 
 ## Hook que só vale depois de reinstalar
@@ -189,14 +189,14 @@ de `bin/install.sh`.
 Com o run encerrado, um último `claude -p "/common:until-review <run>"` lê o
 registro e a saída dos subprocessos e grava `<run>.review.md` ao lado deles: o
 que o dono precisa fazer, em perguntas fechadas. Não roda quando o run parou
-pela cota (a análise bateria no mesmo teto) nem com `--sem-analise`; nos dois
+pela cota (a análise bateria no mesmo teto) nem com `--no-analysis`; nos dois
 casos o comando roda à mão depois.
 
 Uso:
     cepa-until minha-fila --for 12h
     cepa-until minha-fila --until 07:00
     cepa-until minha-fila --for 3h --dry-run     # o plano do run, sem executar
-    cepa-until fecha-morto minha-fila/<run> --sim  # fecha run de supervisor morto
+    cepa-until fecha-morto minha-fila/<run> --yes  # fecha run de supervisor morto
 """
 
 import argparse
@@ -232,7 +232,7 @@ ENV_CASA_WORKTREES = "CEPA_WORKTREE_HOME"
 
 # O build completo que o supervisor roda depois de cada item `done`, pelo
 # arquivo que o repo tem. Repo sem nenhum deles precisa dizer o comando
-# (`--verify`) ou dispensá-lo (`--sem-verify`, ou `.claude/no-build` commitado
+# (`--verify`) ou dispensá-lo (`--no-verify`, ou `.claude/no-build` commitado
 # sem `tests/run-all.sh`): uma noite sem build completo é o buraco que a 2308
 # mostrou.
 VERIFY_POR_ARQUIVO = [
@@ -348,7 +348,7 @@ ENV_JANELA = "CEPA_UNTIL_RUN"
 #
 # `0` é o valor que a própria mensagem do harness indica para esperar sem teto.
 # Esperar sem teto aqui é seguro porque o teto REAL é o relógio deste supervisor:
-# `--limite-item` mata o subprocesso e o `--folga` mata o item que passa do
+# `--limite-item` mata o subprocesso e o `--slack` mata o item que passa do
 # prazo. Trocamos um corte cego de 10 min por um corte que conhece a janela.
 #
 # Isso só é seguro junto com o `no-background-build`, que barra na mesma janela
@@ -449,8 +449,8 @@ def parse_duracao(texto, flag="--for"):
     """'12h' / '90m' → timedelta. Sem unidade não passa: '12' é ambíguo e a
     ambiguidade aqui custa uma noite inteira na unidade errada.
 
-    `flag` existe porque três opções passam por aqui (--for, --reserva-minima,
-    --folga) e uma recusa que nomeia a flag errada manda você conferir o
+    `flag` existe porque três opções passam por aqui (--for, --min-reserve,
+    --slack) e uma recusa que nomeia a flag errada manda você conferir o
     argumento certo — foi o que uma perturbação flagrou em 2026-08-30.
     """
     m = _DUR.match(texto.strip())
@@ -525,7 +525,7 @@ class Tela:
 
     def corta(self, texto, folga=0):
         """Corta na largura do terminal, com reticências. Fora do terminal,
-        ou com --titulo-inteiro, devolve inteiro."""
+        ou com --full-title, devolve inteiro."""
         if not self.ligada or self.titulo_inteiro:
             return texto
         n = max(self.largura() - folga, 20)
@@ -1152,7 +1152,7 @@ def sumidos_do_disco(repo):
 def delecoes_fantasma(repo, fila):
     """Arquivo commitado que sumiu do disco e que o último run não tocou. Em
     14/09 o Insync apagou 9 arquivos commitados do clone principal com nenhum
-    processo do Claude rodando; a recusa culpou o run e sugeriu `--sujo-ok`,
+    processo do Claude rodando; a recusa culpou o run e sugeriu `--dirty-ok`,
     que deixaria o próximo item rodar por cima da pasta ausente."""
     sumidos = sumidos_do_disco(repo)
     if not sumidos:
@@ -1385,7 +1385,7 @@ def guarda_sobra(arvore, run_id, ident):
 def comando_de_verify(repo, explicito, dispensado):
     """(comando, origem). Comando None = dispensado; '' = não sei qual é."""
     if dispensado:
-        return None, "--sem-verify"
+        return None, "--no-verify"
     if explicito:
         return explicito, "--verify"
     if (repo / ".claude" / "no-build").exists():
@@ -1601,7 +1601,7 @@ WTLIB = AQUI.parent / "hooks" / "_wtlib.py"
 
 
 def cmd_aterrissar(argv):
-    """`cepa-until aterrissar <fila>/<run> [--sim]` — passo 3 do
+    """`cepa-until aterrissar <fila>/<run> [--yes]` — passo 3 do
     until-fim-sem-dono.
 
     O run não toca a branch principal (decisão 3 do dono, 26/09): quem dispara
@@ -1610,13 +1610,13 @@ def cmd_aterrissar(argv):
     `worktree-guard.py`, parar no conflito, nunca fazer push com build
     vermelho, gravar o ponto de retorno e recusar se a branch da noite andou
     depois da proposta. Rodar de novo retoma de onde parou: com o merge já
-    feito, segue do build. Sem `--sim`, só mostra o plano."""
+    feito, segue do build. Sem `--yes`, só mostra o plano."""
     ap = argparse.ArgumentParser(
         prog="cepa-until aterrissar",
         description="leva a branch da noite de um run para a branch do clone")
     ap.add_argument("alvo", help="<fila>/<run>, como o resumo do run imprime")
     ap.add_argument("--repo", default=".")
-    ap.add_argument("--sim", action="store_true",
+    ap.add_argument("--yes", "--sim", dest="sim", action="store_true",
                     help="executa; sem ele, só mostra o plano")
     a = ap.parse_args(argv)
     if "/" not in a.alvo:
@@ -1692,7 +1692,7 @@ def cmd_aterrissar(argv):
         print("  merge  : já feito; retomo do build")
     if not a.sim:
         print(f"\nnada foi feito. Para executar: cepa-until aterrissar "
-              f"{a.alvo} --sim")
+              f"{a.alvo} --yes")
         return 0
 
     # Dono único (o mesmo guarda do /common:worktree-merge). Antes da checagem
@@ -1740,7 +1740,7 @@ def cmd_aterrissar(argv):
                 for c in conflitos:
                     print(f"  {c}")
                 print("resolva, `git add`, `git commit` para concluir o merge, "
-                      f"e rode `cepa-until aterrissar {a.alvo} --sim` de novo: "
+                      f"e rode `cepa-until aterrissar {a.alvo} --yes` de novo: "
                       "ele retoma do build")
                 return 4
             git(["merge", "--abort"], repo)
@@ -1780,7 +1780,7 @@ def cmd_aterrissar(argv):
             ater["parou"] = "push"
             grava(aterrissagem=ater)
             print(f"o push falhou ({saida}); o merge e o build verde ficam. "
-                  f"Rode `cepa-until aterrissar {a.alvo} --sim` de novo")
+                  f"Rode `cepa-until aterrissar {a.alvo} --yes` de novo")
             return 6
         ater["push"] = True
         print("push feito")
@@ -1812,8 +1812,8 @@ def acao_aterrissar(repo, arvore, fila, run_id, n):
         "frase": (f"leva os {n} commit(s) da branch da noite para a "
                   f"`{branch_atual(repo)}` do clone; só você dispara, porque "
                   "mexe na branch principal"),
-        "comando": (f"cepa-until aterrissar {fila}/{run_id} (sem --sim só "
-                    "mostra o plano; com --sim faz merge, build completo e "
+        "comando": (f"cepa-until aterrissar {fila}/{run_id} (sem --yes só "
+                    "mostra o plano; com --yes faz merge, build completo e "
                     "push)"),
         "sha": cabeca(arvore), "destino": branch_atual(repo),
         "arvore": str(arvore)}
@@ -1827,7 +1827,7 @@ def acao_aterrissar(repo, arvore, fila, run_id, n):
 # destrava vira uma pergunta, uma por vez, e a resposta é aplicada na hora.
 #
 # As AÇÕES continuam de uma lista fechada (R2 de
-# docs/estrategia-fim-do-cepa-until.md): aterrissar, e `cepa-plan responde`,
+# docs/estrategia-fim-do-cepa-until.md): aterrissar, e `cepa-plan answer`,
 # que devolve um `blocked` para a fila ou fecha a rota humana com a resposta do
 # dono. O texto da pergunta pode vir da análise do modelo, mas só é mostrado:
 # nenhuma redação decide o que é executado.
@@ -2186,15 +2186,15 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
     if responde is None:
         def responde(ident, texto, mantem=False):
             p = subprocess.run(
-                [sys.executable, str(CEPA_PLAN), "responde", fila, ident,
-                 "--resposta", texto, "--repo", str(repo)]
-                + (["--mantem"] if mantem else []),
+                [sys.executable, str(CEPA_PLAN), "answer", fila, ident,
+                 "--answer", texto, "--repo", str(repo)]
+                + (["--keep"] if mantem else []),
                 capture_output=True, text=True, timeout=60)
             return p.returncode, (p.stdout or p.stderr).strip()
     if aterrissa is None:
         def aterrissa():
             return cmd_aterrissar([f"{fila}/{run_id}", "--repo", str(repo),
-                                   "--sim"])
+                                   "--yes"])
     tela = Painel(TELA, saida)
     aplicados, para_depois = [], []
     do_dono = [ad for ad in adiados if ad.get("reason") in MOTIVO_DO_DONO]
@@ -2221,7 +2221,7 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
                                 f" (parou com código {rc}; a saída está acima)"))
         if not eh_sim(r):
             para_depois.append(f"aterrissar: cepa-until aterrissar "
-                               f"{fila}/{run_id} --sim")
+                               f"{fila}/{run_id} --yes")
         tela.fim()
 
     for i, ad in enumerate(do_dono, 1):
@@ -2331,7 +2331,7 @@ def decide(repo, fila, run_id, est, adiados, analise, pergunta=None,
 
     tela.fecho([f"{ad.get('id')} ({MOTIVO_SEM_DONO[ad['reason']]})"
                 for ad in sem_dono], aplicados, para_depois,
-               f"cepa-until decidir {fila}/{run_id}")
+               f"cepa-until decide {fila}/{run_id}")
     return aplicados, para_depois
 
 
@@ -2352,12 +2352,12 @@ def pendencias_em_texto(fila, run_id, est, adiados, analise, saida=print):
         q = ad.get("question") or d.get("pergunta") or ad.get("human_pending") \
             or resume_motivo(ad.get("evidence") or "")
         saida(f"   - {ad.get('id')} ({MOTIVO_DO_DONO[ad['reason']]}): {q}")
-    saida(f"   Para responder uma por uma, num terminal: cepa-until decidir "
+    saida(f"   Para responder uma por uma, num terminal: cepa-until decide "
           f"{fila}/{run_id}")
 
 
 def fecha_com_o_dono(repo, fila, run_id, est, revisao=None, interativo=None):
-    """O fecho do run e do `cepa-until decidir`: consulta a fila de novo (o
+    """O fecho do run e do `cepa-until decide`: consulta a fila de novo (o
     estado dela agora, não o da largada) e pergunta, ou lista sem terminal."""
     dados, erro = consulta_fila(fila, repo)
     if erro:
@@ -2380,23 +2380,23 @@ def fecha_com_o_dono(repo, fila, run_id, est, revisao=None, interativo=None):
     try:
         decide(repo, fila, run_id, est, adiados, analise)
     except (EOFError, KeyboardInterrupt):
-        print(f"\n   perguntas interrompidas; volte com: cepa-until decidir "
+        print(f"\n   perguntas interrompidas; volte com: cepa-until decide "
               f"{fila}/{run_id}")
     return 0
 
 
 def cmd_decidir(argv):
-    """`cepa-until decidir <fila>/<run>`: as perguntas do fim do run, de novo,
+    """`cepa-until decide <fila>/<run>`: as perguntas do fim do run, de novo,
     para quando o dono não estava lá ou deixou alguma para depois."""
     ap = argparse.ArgumentParser(
-        prog="cepa-until decidir",
+        prog="cepa-until decide",
         description="pergunta, uma por vez, o que um run deixou para o dono: "
                     "aterrissar e cada item adiado que só ele destrava")
     ap.add_argument("alvo", help="<fila>/<run>, como o resumo do run imprime")
     ap.add_argument("--repo", default=".")
     a = ap.parse_args(argv)
     if "/" not in a.alvo:
-        print("cepa-until decidir: o alvo é <fila>/<run> (ex.: "
+        print("cepa-until decide: o alvo é <fila>/<run> (ex.: "
               "WEGO/2026-09-29-2059)", file=sys.stderr)
         return 2
     fila, run_id = a.alvo.split("/", 1)
@@ -2404,7 +2404,7 @@ def cmd_decidir(argv):
     # estado de fora da pasta do run e perguntaria sobre ele.
     if not all(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", x) and ".." not in x
                for x in (fila, run_id)):
-        print(f"cepa-until decidir: alvo inválido {a.alvo!r}; é <fila>/<run>, "
+        print(f"cepa-until decide: alvo inválido {a.alvo!r}; é <fila>/<run>, "
               "sem barras nem `..` dentro de cada parte", file=sys.stderr)
         return 2
     repo = Path(a.repo).resolve()
@@ -2413,7 +2413,7 @@ def cmd_decidir(argv):
         est = json.loads((pasta / f"{run_id}.estado.json").read_text(
             encoding="utf-8"))
     except (OSError, ValueError) as e:
-        print(f"cepa-until decidir: não li o estado do run em {pasta} ({e})",
+        print(f"cepa-until decide: não li o estado do run em {pasta} ({e})",
               file=sys.stderr)
         return 2
     revisao = pasta / f"{run_id}.review.md"
@@ -2422,7 +2422,7 @@ def cmd_decidir(argv):
 
 
 def cmd_fecha_morto(argv):
-    """`cepa-until fecha-morto <fila>/<run> [--sim]` — fecha o run cujo
+    """`cepa-until fecha-morto <fila>/<run> [--yes]` — fecha o run cujo
     supervisor morreu (ou foi interrompido) antes do fim.
 
     O run WEGO 2026-09-28-2003 parou em `item_start`: o card fechou `done`
@@ -2431,13 +2431,13 @@ def cmd_fecha_morto(argv):
     `esperando-dono`. Este comando faz o que o supervisor não fez: roda o
     build completo na worktree da noite e, verde, grava o `run_end` e deixa o
     run `esperando-dono` com a ação `aterrissar`. Vermelho, não muda o estado:
-    o `cepa-doctor` segue apontando o run. Sem `--sim`, só mostra o plano."""
+    o `cepa-doctor` segue apontando o run. Sem `--yes`, só mostra o plano."""
     ap = argparse.ArgumentParser(
         prog="cepa-until fecha-morto",
         description="roda o build que faltou num run cujo supervisor morreu")
     ap.add_argument("alvo", help="<fila>/<run>, como o doctor imprime")
     ap.add_argument("--repo", default=".")
-    ap.add_argument("--sim", action="store_true",
+    ap.add_argument("--yes", "--sim", dest="sim", action="store_true",
                     help="executa; sem ele, só mostra o plano")
     a = ap.parse_args(argv)
 
@@ -2500,7 +2500,7 @@ def cmd_fecha_morto(argv):
     print("  vermelho   : não muda nada; o doctor segue apontando o run")
     if not a.sim:
         print(f"\nnada foi feito. Para executar: cepa-until fecha-morto "
-              f"{a.alvo} --sim")
+              f"{a.alvo} --yes")
         return 0
 
     if recria:
@@ -2801,7 +2801,7 @@ def frase_do_morto(m):
             f"do run ({m['como']}) e o registro ficou sem `run_end`{item}. "
             f"A branch da noite `{m['branch']}` está como ele deixou"
             + oferta + f". Para rodar o build e deixar o run pronto para "
-            f"aterrissar: {m['fechar']} (sem --sim só mostra o plano)")
+            f"aterrissar: {m['fechar']} (sem --yes só mostra o plano)")
 
 
 def cmd_pendentes(argv):
@@ -2841,7 +2841,7 @@ def main(argv=None):
         return cmd_pendentes(argv[1:])
     if argv and argv[0] == "fecha-morto":
         return cmd_fecha_morto(argv[1:])
-    if argv and argv[0] == "decidir":
+    if argv and argv[0] in ("decide", "decidir"):
         return cmd_decidir(argv[1:])
     ap = argparse.ArgumentParser(
         description="executa a fila single-track do repo por uma janela de tempo",
@@ -2852,13 +2852,13 @@ def main(argv=None):
             "subcomandos (cada um com o próprio --help):\n"
             "  cepa-until pendentes [--repo R] [--json]\n"
             "      runs esperando o dono e runs cujo supervisor morreu\n"
-            "  cepa-until aterrissar <fila>/<run> [--sim]\n"
+            "  cepa-until aterrissar <fila>/<run> [--yes]\n"
             "      leva a branch da noite para a branch do clone (merge,\n"
-            "      build completo e push); sem --sim só mostra o plano\n"
-            "  cepa-until fecha-morto <fila>/<run> [--sim]\n"
+            "      build completo e push); sem --yes só mostra o plano\n"
+            "  cepa-until fecha-morto <fila>/<run> [--yes]\n"
             "      roda o build que faltou num run cujo supervisor morreu ou\n"
             "      foi interrompido e o deixa pronto para o aterrissar\n"
-            "  cepa-until decidir <fila>/<run>\n"
+            "  cepa-until decide <fila>/<run>\n"
             "      pergunta, uma por vez, o que o run deixou para você:\n"
             "      aterrissar e cada item adiado que só você destrava"))
     ap.add_argument("fila", help="nome da fila em .claude/queues/<nome>/queue.yaml")
@@ -2868,32 +2868,32 @@ def main(argv=None):
     janela.add_argument("--until", dest="ate", metavar="07:00",
                         help="até que horas rodar (próximo HH:MM)")
     ap.add_argument("--repo", default=".")
-    ap.add_argument("--max-falhas", type=int, default=MAX_FALHAS_PADRAO,
+    ap.add_argument("--max-failures", "--max-falhas", type=int, default=MAX_FALHAS_PADRAO,
                     dest="max_falhas",
                     help=f"disjuntor: falhas SEGUIDAS que encerram o run "
                          f"(default {MAX_FALHAS_PADRAO})")
-    ap.add_argument("--max-travados", type=int, default=MAX_TRAVADOS_PADRAO,
+    ap.add_argument("--max-blocked", "--max-travados", type=int, default=MAX_TRAVADOS_PADRAO,
                     dest="max_travados",
                     help=f"itens `blocked` SEGUIDOS que encerram o run: a fila "
                          f"está travando por uma causa de fora, e seguir só "
                          f"redescobre a causa (default {MAX_TRAVADOS_PADRAO})")
-    ap.add_argument("--tentativas-por-item", type=int,
+    ap.add_argument("--attempts-per-item", "--tentativas-por-item", type=int,
                     default=TENTATIVAS_POR_ITEM_PADRAO, dest="tentativas_item",
                     help=f"quantos subprocessos a mesma janela gasta no mesmo "
                          f"item antes de marcá-lo `blocked` e seguir para o "
                          f"próximo (default {TENTATIVAS_POR_ITEM_PADRAO})")
-    ap.add_argument("--reserva-minima", default=RESERVA_MINIMA_PADRAO,
+    ap.add_argument("--min-reserve", "--reserva-minima", default=RESERVA_MINIMA_PADRAO,
                     dest="reserva",
                     help=f"não começa item se sobra menos que isso "
                          f"(default {RESERVA_MINIMA_PADRAO})")
-    ap.add_argument("--folga", default=FOLGA_PADRAO,
+    ap.add_argument("--slack", "--folga", dest="folga", default=FOLGA_PADRAO,
                     help=f"quanto um item já rodando pode passar do prazo antes "
                          f"de ser morto (default {FOLGA_PADRAO})")
-    ap.add_argument("--com-permissoes", action="store_true", dest="permissoes",
+    ap.add_argument("--with-permissions", "--com-permissoes", action="store_true", dest="permissoes",
                     help="NÃO passa --dangerously-skip-permissions. O "
                          "subprocesso vai travar no primeiro pedido de "
                          "permissão — só use com alguém olhando")
-    ap.add_argument("--sujo-ok", action="store_true", dest="sujo_ok",
+    ap.add_argument("--dirty-ok", "--sujo-ok", action="store_true", dest="sujo_ok",
                     help="começa mesmo com a árvore suja (por default recusa: "
                          "sem isso não dá para separar o que o run fez do que "
                          "já estava lá)")
@@ -2901,12 +2901,12 @@ def main(argv=None):
                     help="o build completo que roda na branch da noite depois "
                          "de cada item `done` (default: pelo mvnw/gradlew da "
                          "raiz)")
-    ap.add_argument("--sem-verify", action="store_true", dest="sem_verify",
+    ap.add_argument("--no-verify", "--sem-verify", action="store_true", dest="sem_verify",
                     help="não roda build completo depois dos itens — só para "
                          "repo sem build")
-    ap.add_argument("--sem-analise", action="store_true", dest="sem_analise",
+    ap.add_argument("--no-analysis", "--sem-analise", action="store_true", dest="sem_analise",
                     help="não roda o /common:until-review no fim do run")
-    ap.add_argument("--titulo-inteiro", action="store_true", dest="titulo_inteiro",
+    ap.add_argument("--full-title", "--titulo-inteiro", action="store_true", dest="titulo_inteiro",
                     help="no terminal, não corta o título do item na largura "
                          "da tela (o `.jsonl` sempre guarda o inteiro)")
     ap.add_argument("--dry-run", action="store_true", dest="dry",
@@ -2919,20 +2919,20 @@ def main(argv=None):
     try:
         prazo = (agora + parse_duracao(a.duracao)) if a.duracao \
             else parse_ate(a.ate, agora)
-        reserva = parse_duracao(a.reserva, "--reserva-minima")
-        folga = parse_duracao(a.folga, "--folga")
+        reserva = parse_duracao(a.reserva, "--min-reserve")
+        folga = parse_duracao(a.folga, "--slack")
     except ValueError as e:
         print(f"cepa-until: {e}", file=sys.stderr)
         return 2
 
     if a.max_falhas < 1:
-        print("cepa-until: --max-falhas precisa ser >= 1", file=sys.stderr)
+        print("cepa-until: --max-failures precisa ser >= 1", file=sys.stderr)
         return 2
     if a.max_travados < 1:
-        print("cepa-until: --max-travados precisa ser >= 1", file=sys.stderr)
+        print("cepa-until: --max-blocked precisa ser >= 1", file=sys.stderr)
         return 2
     if a.tentativas_item < 1:
-        print("cepa-until: --tentativas-por-item precisa ser >= 1 — com 0 o run "
+        print("cepa-until: --attempts-per-item precisa ser >= 1 — com 0 o run "
               "marcaria `blocked` todo item antes de tentar", file=sys.stderr)
         return 2
     if not shutil.which("claude"):
@@ -2946,7 +2946,7 @@ def main(argv=None):
               file=sys.stderr)
         return 2
 
-    # Antes do guarda de sujeira, e sem `--sujo-ok` na mensagem nem como
+    # Antes do guarda de sujeira, e sem `--dirty-ok` na mensagem nem como
     # saída: dois supervisores na mesma fila é a falha. Em 2026-10-15 19:08 a
     # recusa saiu como "árvore suja" (o `plan.yaml` que o run vivo escrevia) e
     # sugeriu o escape errado (fb-20261015-4).
@@ -2966,7 +2966,7 @@ def main(argv=None):
     sujeira = arvore_suja(repo, run_vivo_ok=True)
     fantasmas = delecoes_fantasma(repo, a.fila) if sujeira else []
     if fantasmas and not a.sujo_ok:
-        # Sem `--sujo-ok` na mensagem de propósito: com ele o próximo item roda
+        # Sem `--dirty-ok` na mensagem de propósito: com ele o próximo item roda
         # sem a pasta, e um commit amplo vira a deleção fantasma em deleção de
         # verdade.
         print(f"cepa-until: {len(fantasmas)} arquivo(s) commitado(s) sumiram "
@@ -2990,7 +2990,7 @@ def main(argv=None):
     if sujeira and not a.sujo_ok:
         print(f"cepa-until: a árvore tem {len(sujeira)} arquivo(s) modificado(s). "
               "Commite ou limpe antes — de manhã não dá para separar o que o run "
-              "fez do que já estava aqui. (--sujo-ok ignora este guarda.)",
+              "fez do que já estava aqui. (--dirty-ok ignora este guarda.)",
               file=sys.stderr)
         for l in sujeira[:10]:
             print(f"    {l}", file=sys.stderr)
@@ -3000,7 +3000,7 @@ def main(argv=None):
     if verify == "":
         print("cepa-until: não sei o build completo deste repo (não há `mvnw` "
               "nem `gradlew` na raiz, nem `tests/run-all.sh`). Passe `--verify '<comando>'`, ou "
-              "`--sem-verify` se o repo não tem build — sem isso um card pode "
+              "`--no-verify` se o repo não tem build — sem isso um card pode "
               "fechar `done` com o build vermelho e o próximo começar em cima "
               "dele.", file=sys.stderr)
         return 2

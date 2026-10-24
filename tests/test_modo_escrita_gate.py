@@ -13,7 +13,7 @@ aplicada em Edit/Write/MultiEdit/NotebookEdit e também em Bash.
 Contratos guardados aqui:
   - modo com lista branca: destino fora dela bloqueia (rc=2) com o motivo;
   - destino dentro da lista passa;
-  - `construcao` e `reforma` são mudos — quem cobra ali são o
+  - `construction` e `refactor` são mudos — quem cobra ali são o
     completion-auditor/proof-reviewer e o reforma-gate;
   - sem modo declarado, mudo;
   - Bash não é rota de fuga: `>`, `>>`, `sed -i`, `tee` e `git mv` bloqueiam
@@ -72,7 +72,7 @@ class Repo:
 
     def modo(self, nome):
         (self.path / ".claude" / "session-mode").write_text(
-            f"modo: {nome}\norcamento: null\n", encoding="utf-8")
+            f"mode: {nome}\nbudget: null\n", encoding="utf-8")
 
     def call(self, tool, tool_input, env=None):
         e = {**os.environ}
@@ -93,23 +93,23 @@ class Repo:
 
 # Um caso por modo: o que ele PRODUZ (passa) e o que ele não produz (bloqueia).
 PERMITIDO = {
-    "exploracao": ["docs/estrategia-x.md", ".claude/programs/p/plan.yaml",
+    "exploration": ["docs/estrategia-x.md", ".claude/programs/p/plan.yaml",
                    "BACKLOG.md"],
-    "descoberta": ["docs/discovery/c/framing.md", "docs/spec/x.md",
+    "discovery": ["docs/discovery/c/framing.md", "docs/spec/x.md",
                    ".claude/acceptance/x.yaml", "BACKLOG.md"],
     "design": ["docs/design/fluxos.md", ".claude/x", "BACKLOG.md"],
-    "reflexao": [".claude/reflexao/r.md", "docs/qualquer.md", "BACKLOG.md"],
-    "documentacao": ["docs/tutorial/primeiro-dia.md", "docs/reference/api.md",
+    "reflection": [".claude/reflexao/r.md", "docs/qualquer.md", "BACKLOG.md"],
+    "documentation": ["docs/tutorial/primeiro-dia.md", "docs/reference/api.md",
                      ".claude/x", "BACKLOG.md"],
 }
 BLOQUEADO = {
-    "exploracao": ["common/hooks/novo.py", "common/commands/x.md",
+    "exploration": ["common/hooks/novo.py", "common/commands/x.md",
                    "tests/test_x.py", "common/agents/lead.md", "src/App.java"],
-    "descoberta": ["docs/estrategia-x.md", "common/hooks/novo.py",
+    "discovery": ["docs/estrategia-x.md", "common/hooks/novo.py",
                    "tests/test_x.py"],
     "design": ["docs/how-to/x.md", "common/hooks/novo.py"],
-    "reflexao": ["common/hooks/novo.py", "tests/test_x.py"],
-    "documentacao": ["common/hooks/novo.py", "tests/test_x.py",
+    "reflection": ["common/hooks/novo.py", "tests/test_x.py"],
+    "documentation": ["common/hooks/novo.py", "tests/test_x.py",
                      "common/commands/x.md"],
 }
 
@@ -130,7 +130,7 @@ def test_lista_branca_por_modo():
 
 
 def test_modos_sem_lista_sao_mudos():
-    for modo in ("construcao", "reforma"):
+    for modo in ("construction", "refactor"):
         with Repo() as r:
             r.modo(modo)
             for alvo in ("common/hooks/novo.py", "tests/test_x.py",
@@ -138,6 +138,27 @@ def test_modos_sem_lista_sao_mudos():
                 p = r.edit(alvo)
                 check(f"{modo}: gate é mudo em {alvo}", p.returncode == 0,
                       p.stderr[:160])
+
+
+def test_session_mode_no_formato_antigo_vale():
+    """`modo: exploracao` (o `cepa` antigo) ainda é lido como `exploration`."""
+    for velho, novo in (("exploracao", "exploration"), ("descoberta", "discovery"),
+                        ("documentacao", "documentation"), ("reflexao", "reflection")):
+        with Repo() as r:
+            (r.path / ".claude" / "session-mode").write_text(
+                f"modo: {velho}\nrotina: null\norcamento: null\naberto_em: 2026-10-19T13:46:36Z\n",
+                encoding="utf-8")
+            p = r.edit("src/App.java")
+            check(f"antigo: modo: {velho} bloqueia como {novo}",
+                  p.returncode == 2 and f"modo {novo}" in p.stderr, p.stderr[:200])
+    with Repo() as r:
+        (r.path / ".claude" / "session-mode").write_text("modo: construcao\n", encoding="utf-8")
+        p = r.edit("src/App.java")
+        check("antigo: modo: construcao é mudo (como construction)", p.returncode == 0, p.stderr[:200])
+    with Repo() as r:
+        (r.path / ".claude" / "session-mode").write_text("modo: exploracao\n", encoding="utf-8")
+        p = r.edit("docs/estrategia-x.md")
+        check("antigo: modo: exploracao libera docs/**", p.returncode == 0, p.stderr[:200])
 
 
 def test_sem_modo_e_mudo():
@@ -148,17 +169,17 @@ def test_sem_modo_e_mudo():
 
 def test_todas_as_ferramentas_de_escrita():
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         for tool, ti in (("Write", {"file_path": "common/hooks/n.py"}),
                          ("MultiEdit", {"file_path": "common/hooks/n.py"}),
                          ("NotebookEdit", {"notebook_path": "analise/n.ipynb"})):
             p = r.call(tool, ti)
-            check(f"exploracao: {tool} bloqueado", p.returncode == 2, p.stderr[:120])
+            check(f"exploration: {tool} bloqueado", p.returncode == 2, p.stderr[:120])
 
 
 def test_bash_nao_e_rota_de_fuga():
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         for cmd in ('echo x > common/hooks/novo.py',
                     'cat foo >> common/commands/run.md',
                     "sed -i '' 's/a/b/' common/bin/cepa",
@@ -180,7 +201,7 @@ def test_bash_nao_e_rota_de_fuga():
 
 def test_bash_libera_o_que_o_modo_produz():
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         for cmd in ('echo x > docs/estrategia.md',
                     'git commit -m "docs(estrategia): dois caminhos\n\nA -> B"',
                     'grep -rn "modo" common/hooks/',
@@ -207,7 +228,7 @@ def test_construcao_indecidivel_avisa_sem_barrar():
     barra todo `python3 - <<PY` é um modo que ninguém usa.
     """
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         for cmd in ('python3 -c "open(\'common/hooks/evil.py\',\'w\').write(1)"',
                     'patch common/bin/cepa < /tmp/p.diff',
                     "python3 - <<'PY'\nprint(1)\nPY"):
@@ -223,7 +244,7 @@ def test_construcao_indecidivel_avisa_sem_barrar():
 def test_comando_legivel_nao_avisa():
     """O aviso só vale se ele for raro — um que grita sempre ensina a ignorá-lo."""
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         for cmd in ('echo x > docs/estrategia.md', 'grep -rn modo common/'):
             p = r.bash(cmd)
             check(f"sem aviso em comando legível: {cmd[:24]}",
@@ -232,16 +253,16 @@ def test_comando_legivel_nao_avisa():
 
 def test_indecidivel_e_mudo_em_modo_sem_lista():
     with Repo() as r:
-        r.modo("construcao")
+        r.modo("construction")
         p = r.bash('python3 -c "open(\'x.py\',\'w\')"')
-        check("construcao: nem aviso", p.returncode == 0 and "AVISO" not in p.stderr,
+        check("construction: nem aviso", p.returncode == 0 and "AVISO" not in p.stderr,
               p.stderr[:160])
 
 
 def test_indecidivel_nao_engole_bloqueio():
     """Alvo legível fora da lista barra mesmo quando a linha também é opaca."""
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         p = r.bash('echo x > common/hooks/n.py && python3 -c "pass"')
         check("alvo legível fora da lista ainda barra", p.returncode == 2,
               p.stderr[:160])
@@ -249,7 +270,7 @@ def test_indecidivel_nao_engole_bloqueio():
 
 def test_ge_nao_e_redirecionamento():
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         p = r.bash('if [ "$n" >= 3 ]; then echo common/hooks/x.py; fi')
         check(">= não vira redirecionamento", p.returncode == 0, p.stderr[:160])
 
@@ -262,7 +283,7 @@ def test_fora_da_raiz_passa():
     NEEDS-HUMAN. Aqui o modo governa o repo da sessão, e só ele.
     """
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         for alvo in ("/tmp/perturba/App.java", "/tmp/scratch/nota.py"):
             p = r.edit(alvo)
             check(f"fora da raiz passa: {alvo}", p.returncode == 0, p.stderr[:160])
@@ -270,9 +291,9 @@ def test_fora_da_raiz_passa():
 
 def test_mensagem_diz_o_que_fazer():
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         p = r.edit("common/hooks/novo.py")
-        check("mensagem nomeia o modo ativo", "exploracao" in p.stderr, p.stderr[:200])
+        check("mensagem nomeia o modo ativo", "exploration" in p.stderr, p.stderr[:200])
         check("mensagem nomeia o alvo", "common/hooks/novo.py" in p.stderr,
               p.stderr[:200])
         check("mensagem oferece a captura do desvio",
@@ -285,7 +306,7 @@ def test_mensagem_diz_o_que_fazer():
 
 def test_kill_switch():
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         p = r.edit("common/hooks/novo.py", env={"CEPA_MODO": "off"})
         check("CEPA_MODO=off desliga o gate", p.returncode == 0, p.stderr[:160])
 
@@ -313,7 +334,7 @@ def test_corpo_do_heredoc_nao_e_alvo():
     descrevia o defeito foi barrada por ele. O corpo é dado, não comando.
     """
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         casos = {
             "crase no corpo":
                 f"cat > {r.path}/docs/nota.md <<'EOF'\n"
@@ -346,7 +367,7 @@ def test_variavel_do_proprio_comando_e_expandida():
     passava. A atribuição simples está na linha: dá para ler sem executar.
     """
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         for cmd in (f'D={r.path}/.claude/notas; cat > "$D/x.md" <<EOF\noi\nEOF',
                     f'D={r.path}/.claude/notas && echo oi > ${{D}}/x.md',
                     f'export D="{r.path}/docs"; echo oi >> $D/y.md',
@@ -371,7 +392,7 @@ def test_alvo_nao_resolvivel_nao_culpa_o_modo():
     por substituição de comando) é alvo não resolvido, não veredito.
     """
     with Repo() as r:
-        r.modo("exploracao")
+        r.modo("exploration")
         for cmd in ('echo x > "$DESTINO_QUE_NINGUEM_DEFINIU/a.md"',
                     'D=$(pwd)/docs; echo x > $D/a.md',
                     'echo x > "${D:-docs}/a.md"'):
@@ -406,6 +427,7 @@ def main():
         print(f"  FAIL hook ausente: {GATE}")
         return 1
     for fn in (test_lista_branca_por_modo, test_modos_sem_lista_sao_mudos,
+               test_session_mode_no_formato_antigo_vale,
                test_sem_modo_e_mudo, test_todas_as_ferramentas_de_escrita,
                test_bash_nao_e_rota_de_fuga, test_bash_libera_o_que_o_modo_produz,
                test_construcao_indecidivel_avisa_sem_barrar,

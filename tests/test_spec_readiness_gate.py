@@ -105,7 +105,7 @@ def test_falta_teste_vermelho():
                     if not l.startswith("**Teste vermelho:**"))
     rc, err = write(doc)
     check("falta Teste vermelho bloqueia", rc == 2, f"rc={rc}")
-    check("mensagem cita Teste vermelho", "Teste vermelho" in err, err[:200])
+    check("mensagem cita Red test", "Red test" in err, err[:200])
 
 
 def test_superficie_fora_do_vocabulario():
@@ -242,7 +242,7 @@ def test_edit_com_file_path_le_o_arquivo_resultante():
         })
         check("Edit que remove Teste vermelho numa spec pronta bloqueia",
               rc == 2, f"rc={rc}")
-        check("mensagem cita Teste vermelho", "Teste vermelho" in err, err[:300])
+        check("mensagem cita Red test", "Red test" in err, err[:300])
     finally:
         caminho.unlink(missing_ok=True)
 
@@ -470,6 +470,32 @@ def test_nunca_bloqueia_o_que_nao_ve():
 
     rc, _ = write("# Um markdown qualquer sem campo Status nenhum.")
     check("documento sem Status passa", rc == 0, f"rc={rc}")
+
+
+PRONTA_EN = (PRONTA_OK.replace("pronta-para-construir", "ready-to-build")
+             .replace("**Superfície:**", "**Surface:**")
+             .replace("**Teste vermelho:**", "**Red test:**"))
+
+
+def test_nomes_em_ingles_e_antigos_valem():
+    rc, err = write(PRONTA_EN)
+    check("ready-to-build + Surface + Red test completo passa", rc == 0, err[:200])
+    rc, err = write(PRONTA_EN.replace("**Surface:** http\n", ""))
+    check("ready-to-build sem Surface bloqueia, nomeando o campo novo",
+          rc == 2 and "**Surface:**" in err, err[:300])
+    rc, err = write("\n".join(l for l in PRONTA_EN.splitlines()
+                              if not l.startswith("**Red test:**")))
+    check("ready-to-build sem Red test bloqueia, nomeando o campo novo",
+          rc == 2 and "**Red test:**" in err and "`draft`" in err, err[:300])
+    rc, err = write(PRONTA_EN.replace("**Surface:** http", "**Surface:** banana"))
+    check("Surface fora do vocabulário bloqueia", rc == 2 and "Surface" in err, err[:300])
+    rc, err = write(PRONTA_EN.replace("ready-to-build", "draft")
+                    .replace("**Red test:**", "**x:**"))
+    check("Status: draft furado não bloqueia", rc == 0, err[:200])
+    rc, err = write(PRONTA_OK)
+    check("o formato antigo (pronta-para-construir) segue passando", rc == 0, err[:200])
+    rc, err = write(PRONTA_OK.replace("**Superfície:** http\n", ""))
+    check("...e segue bloqueando", rc == 2, err[:200])
 
 
 def main():

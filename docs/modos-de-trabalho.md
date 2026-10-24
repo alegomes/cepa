@@ -2,10 +2,10 @@
 
 > Status (conferido em 2026-09-19): **construído em parte.** Desenho escrito em 2026-08-18.
 >
-> No ar: a declaração do modo (`cepa --modo <nome>`, gravada em `.claude/session-mode`), o
+> No ar: a declaração do modo (`cepa --mode <nome>`, gravada em `.claude/session-mode`), o
 > hook `session-mode.py` que lembra o modo a cada turno, a captura de desvio (skill
 > `off-mode-capture`), a trava de destino de escrita por modo (`modo-escrita-gate.py`), a
-> trava da Reforma (`reforma-gate.py`) e a da Reflexão (`reflexao-gate.py`). `/common:modos`
+> trava da Reforma (`reforma-gate.py`) e a da Reflexão (`reflexao-gate.py`). `/common:modes`
 > mostra a tabela e o modo da sessão.
 >
 > Falta: o veredito de saída da Exploração, o resto da cobrança do critério de aceite na
@@ -259,8 +259,8 @@ parte: hoje só a Reforma e a Reflexão têm gate de saída.
 
 ### Peça 1 — o modo é declarado no launcher, não num comando
 
-`cepa --modo <modo> [rotina]` grava o modo em `.claude/session-mode` **antes** do
-`claude` subir. Sem `--modo`, o `cepa` pergunta e não sobe sem resposta.
+`cepa --mode <modo> [rotina]` grava o modo em `.claude/session-mode` **antes** do
+`claude` subir. Sem `--mode`, o `cepa` pergunta e não sobe sem resposta.
 
 O lugar importa: se a declaração morasse num comando de barra, a fronteira
 dependeria de você lembrar de rodá-lo. No launcher, ela é a porta de entrada.
@@ -274,10 +274,10 @@ executar, relatar) continuam no comando.
 Conteúdo do arquivo:
 
 ```yaml
-modo: construcao
-rotina: board-flow:execute        # opcional
-orcamento: null                   # obrigatório se modo == reforma
-aberto_em: 2026-08-18T19:40:00Z
+mode: construction
+routine: board-flow:execute       # opcional
+budget: null                      # obrigatório se mode == refactor
+opened_at: 2026-08-18T19:40:00Z
 ```
 
 ### Peça 2 — desvio é capturado sozinho e reportado no fim
@@ -310,13 +310,13 @@ DESTINOS por modo — o que aquele modo produz — declarada em
 
 | modo | pode escrever |
 |---|---|
-| `exploracao` | `docs/**`, `.claude/**`, `BACKLOG.md` |
-| `descoberta` | `docs/discovery/**`, `docs/spec/**`, `docs/epics/**`, `.claude/**`, `BACKLOG.md` |
+| `exploration` | `docs/**`, `.claude/**`, `BACKLOG.md` |
+| `discovery` | `docs/discovery/**`, `docs/spec/**`, `docs/epics/**`, `.claude/**`, `BACKLOG.md` |
 | `design` | `docs/design/**`, `.claude/**`, `BACKLOG.md` |
-| `reflexao` | `.claude/reflexao/**`, `docs/**`, `BACKLOG.md` |
-| `documentacao` | `docs/**`, `.claude/**`, `BACKLOG.md` |
-| `construcao` | tudo — quem cobra são o `completion-auditor` e o `proof-reviewer` |
-| `reforma` | tudo menos teste externo — quem cobra é o `reforma-gate` |
+| `reflection` | `.claude/reflexao/**`, `docs/**`, `BACKLOG.md` |
+| `documentation` | `docs/**`, `.claude/**`, `BACKLOG.md` |
+| `construction` | tudo — quem cobra são o `completion-auditor` e o `proof-reviewer` |
+| `refactor` | tudo menos teste externo — quem cobra é o `reforma-gate` |
 
 `BACKLOG.md` está em todas as listas porque é onde este repo registra card, e a
 condição de saída da Reflexão é literalmente "nenhum achado sem destino": sem
@@ -358,7 +358,7 @@ decisão sua e fica registrada como tal.
 
 Em ordem:
 
-1. ~~**`.claude/session-mode` + `cepa --modo`**~~ — feito: `common/bin/cepa` grava o
+1. ~~**`.claude/session-mode` + `cepa --mode`**~~ — feito: `common/bin/cepa` grava o
    arquivo e `common/hooks/session-mode.py` o lê a cada turno.
 2. ~~**A captura automática**~~ — feito: skill `common/skills/off-mode-capture`.
 2b. ~~**Lista branca de destinos por modo**~~ — feito:
@@ -369,7 +369,7 @@ Em ordem:
 6. **Cobrança do critério de aceite na saída da Descoberta / entrada da
    Construção** — a peça que dá dente ao `completion-auditor`. **Em parte:** o
    `/common:spec` e o hook `common/hooks/spec-readiness-gate.py` barram uma
-   especificação marcada `pronta-para-construir` enquanto algum critério
+   especificação marcada `ready-to-build` (antes `pronta-para-construir`) enquanto algum critério
    (`### CS-<n>`) não tiver uma superfície do vocabulário fechado (http, cli, ui,
    event, domain, application) e uma frase de **Teste vermelho** que não seja
    placeholder. Falta: o gate confere só o texto declarado, não um teste escrito

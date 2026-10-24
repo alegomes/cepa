@@ -63,7 +63,7 @@ def escreve_fila(d, itens, nome="fila"):
     p = d / "itens.json"
     p.write_text(json.dumps(itens, ensure_ascii=False), encoding="utf-8")
     r = run(d, "write", nome, "--items", str(p), "--source", "teste",
-            "--quando", "2026-09-25", "--repo", ".")
+            "--when", "2026-09-25", "--repo", ".")
     assert r.returncode == 0, r.stderr
     return d / ".claude" / "queues" / nome / "queue.yaml"
 
@@ -132,8 +132,8 @@ def test_add_com_why_no_fim_preserva_o_why_e_anexa_a_frase(base):
 def test_add_antes_de_exige_why(base):
     d = repo_git(base, "add-antes-sem-why")
     alvo = escreve_fila(d, [item("A"), item("B")])
-    r = run(d, "add", "fila", "C", "--title", "c", "--antes-de", "B", "--repo", ".")
-    check("recusa `--antes-de` sem `--why`", r.returncode == 2, r.stdout)
+    r = run(d, "add", "fila", "C", "--title", "c", "--before", "B", "--repo", ".")
+    check("recusa `--before` sem `--why`", r.returncode == 2, r.stdout)
     check("a recusa nomeia o motivo (posição sem porquê)",
           "why" in r.stderr, r.stderr)
     check("nada foi gravado", [i["id"] for i in plano_de(alvo)["items"]] == ["A", "B"])
@@ -142,7 +142,7 @@ def test_add_antes_de_exige_why(base):
 def test_add_antes_de_insere_na_posicao(base):
     d = repo_git(base, "add-antes")
     alvo = escreve_fila(d, [item("A"), item("B"), item("C")])
-    r = run(d, "add", "fila", "X", "--title", "x", "--antes-de", "B",
+    r = run(d, "add", "fila", "X", "--title", "x", "--before", "B",
             "--why", "decisão do dono", "--repo", ".")
     check("grava", r.returncode == 0, r.stderr)
     check("diz a posição 2 de 4", "posição 2 de 4" in r.stdout, r.stdout)
@@ -156,9 +156,9 @@ def test_add_antes_de_insere_na_posicao(base):
 def test_add_recusa_antes_de_inexistente(base):
     d = repo_git(base, "add-antes-fantasma")
     alvo = escreve_fila(d, [item("A")])
-    r = run(d, "add", "fila", "X", "--title", "x", "--antes-de", "ZZZ",
+    r = run(d, "add", "fila", "X", "--title", "x", "--before", "ZZZ",
             "--why", "w", "--repo", ".")
-    check("recusa `--antes-de` para id que não existe", r.returncode == 2, r.stdout)
+    check("recusa `--before` para id que não existe", r.returncode == 2, r.stdout)
     check("nomeia o id", "ZZZ" in r.stderr, r.stderr)
     check("nada foi gravado", [i["id"] for i in plano_de(alvo)["items"]] == ["A"])
 
@@ -239,7 +239,7 @@ def test_add_recusa_quando_resultado_falha_na_validacao(base):
 
 def test_ordena_recusa_fila_inexistente(base):
     d = repo_git(base, "ordena-sem-fila")
-    r = run(d, "ordena", "fila", "--keys", "A,B", "--repo", ".")
+    r = run(d, "order", "fila", "--keys", "A,B", "--repo", ".")
     check("recusa: fila não existe (quem chama cai para a ordem do Jira)",
           r.returncode == 2, r.stdout)
 
@@ -248,7 +248,7 @@ def test_ordena_mistura_dentro_e_fora_do_plano(base):
     d = repo_git(base, "ordena")
     escreve_fila(d, [item("A"), item("B"), item("C", status="done")])
     # ordem do Jira: C, ZZZ, A, B (nada a ver com a ordem da fila)
-    r = run(d, "ordena", "fila", "--keys", "C,ZZZ,A,B", "--json", "--repo", ".")
+    r = run(d, "order", "fila", "--keys", "C,ZZZ,A,B", "--json", "--repo", ".")
     check("ordena", r.returncode == 0, r.stderr)
     out = json.loads(r.stdout)
     chaves = [o["key"] for o in out["ordem"]]
@@ -293,7 +293,7 @@ def board(d, cards, missing=(), nome="board.json"):
 def test_divergencia_sem_board_nem_backlog_so_avisa(base):
     d = repo_git(base, "div-vazio")
     escreve_fila(d, [item("A")])
-    r = run(d, "divergencia", "fila", "--json", "--repo", ".")
+    r = run(d, "divergence", "fila", "--json", "--repo", ".")
     check("exit 0 mesmo sem nenhuma das duas entradas", r.returncode == 0, r.stderr)
     out = json.loads(r.stdout)
     check("cards_sem_item vazio, sem --board", out["cards_sem_item"] == [])
@@ -310,7 +310,7 @@ def test_divergencia_cards_sem_item(base):
     arq = board(d, [{"key": "A", "status": "To Do"},
                     {"key": "NOVO", "status": "Doing"},
                     {"key": "FECHADO-SEM-ITEM", "status": "Concluido"}])
-    r = run(d, "divergencia", "fila", "--board", arq, "--json", "--repo", ".")
+    r = run(d, "divergence", "fila", "--board", arq, "--json", "--repo", ".")
     check("roda", r.returncode == 0, r.stderr)
     out = json.loads(r.stdout)
     chaves = [c["key"] for c in out["cards_sem_item"]]
@@ -328,7 +328,7 @@ def test_divergencia_itens_com_card_done(base):
     arq = board(d, [{"key": "A", "status": "Concluido"},
                     {"key": "B", "status": "Concluido"},
                     {"key": "C", "status": "Concluido"}])
-    r = run(d, "divergencia", "fila", "--board", arq, "--json", "--repo", ".")
+    r = run(d, "divergence", "fila", "--board", arq, "--json", "--repo", ".")
     out = json.loads(r.stdout)
     ids = [i["id"] for i in out["itens_com_card_done"]]
     check("item não fechado cujo card já é done aparece",
@@ -342,7 +342,7 @@ def test_divergencia_status_desconhecido_vira_aviso_nao_chute(base):
     com_quadro(d)
     escreve_fila(d, [item("A")])
     arq = board(d, [{"key": "NOVO", "status": "Em Homologação"}])
-    r = run(d, "divergencia", "fila", "--board", arq, "--json", "--repo", ".")
+    r = run(d, "divergence", "fila", "--board", arq, "--json", "--repo", ".")
     out = json.loads(r.stdout)
     check("não classifica um status que o status_map não conhece",
           out["cards_sem_item"] == [], out)
@@ -364,7 +364,7 @@ def test_divergencia_secoes_sem_plano_e_plano_inexistente(base):
         "## Está isenta de propósito\n"
         "**Plano:** fora da fila (concluído)\n",
         encoding="utf-8")
-    r = run(d, "divergencia", "fila", "--backlog", str(backlog), "--json",
+    r = run(d, "divergence", "fila", "--backlog", str(backlog), "--json",
             "--repo", ".")
     check("roda", r.returncode == 0, r.stderr)
     out = json.loads(r.stdout)
@@ -401,7 +401,7 @@ def test_divergencia_plano_no_meio_da_linha_nao_e_falso_positivo(base):
         "`common/hooks/acceptance-gate.py` · **Origem:** feedback "
         "`fb-20260919-1`, diagnosticado no card WEGO-2287\n",
         encoding="utf-8")
-    r = run(d, "divergencia", "cepa", "--backlog", str(backlog), "--json",
+    r = run(d, "divergence", "cepa", "--backlog", str(backlog), "--json",
             "--repo", ".")
     check("roda", r.returncode == 0, r.stderr)
     out = json.loads(r.stdout)
@@ -427,7 +427,7 @@ def test_divergencia_id_com_texto_apos_a_crase_de_fechamento(base):
         "**Status:** pendente · **Lar:** `algum arquivo qualquer` "
         "(+ possivelmente outros)\n",
         encoding="utf-8")
-    r = run(d, "divergencia", "cepa", "--backlog", str(backlog), "--json",
+    r = run(d, "divergence", "cepa", "--backlog", str(backlog), "--json",
             "--repo", ".")
     check("roda", r.returncode == 0, r.stderr)
     out = json.loads(r.stdout)
@@ -438,7 +438,7 @@ def test_divergencia_id_com_texto_apos_a_crase_de_fechamento(base):
 def test_divergencia_ilegivel_recusa(base):
     d = repo_git(base, "div-ilegivel")
     escreve_fila(d, [item("A")])
-    r = run(d, "divergencia", "fila", "--board", "/nao/existe.json", "--repo", ".")
+    r = run(d, "divergence", "fila", "--board", "/nao/existe.json", "--repo", ".")
     check("exit 2 quando o --board não existe (entrada ilegível, não relatório)",
           r.returncode == 2, r.stdout)
 

@@ -2,7 +2,7 @@
 """Telemetria `intent.*` do ciclo 1 da intenção da sessão (C1-6).
 
 Cobre: o casador de "onde estamos / próximo passo" (acerta e erra), o hook
-session-log emitindo `intent.asked`, o `cepa-intencao encerrar` emitindo
+session-log emitindo `intent.asked`, o `cepa-intent close` emitindo
 `intent.finished_at_last_step` só com o cursor no último passo, o campo
 `session` nos eventos do escritor e a seção "Intenção da sessão" do
 cepa-metrics sobre um ledger sintético contado à mão.
@@ -23,7 +23,7 @@ from _telemetria_isolada import isola
 isola()
 
 REPO = Path(__file__).resolve().parent.parent
-BIN = REPO / "common" / "bin" / "cepa-intencao"
+BIN = REPO / "common" / "bin" / "cepa-intent"
 METRICS = REPO / "common" / "bin" / "cepa-metrics"
 HOOK = REPO / "common" / "hooks" / "session-log.py"
 
@@ -91,7 +91,7 @@ roda_hook("refatore o módulo de pagamento", tel2)
 check("prompt comum não emite intent.asked",
       not [e for e in ledger(tel2) if e["event"] == "intent.asked"])
 
-# ── 3. encerrar e o campo session ───────────────────────────────────────────
+# ── 3. close (antes `encerrar`) e o campo session ───────────────────────────────────────────
 tel3 = TMP / "tel-bin"
 
 
@@ -114,33 +114,50 @@ def finais():
 
 
 repo = novo_repo("r-enc")
-r = cli(repo, "encerrar")
-check("encerrar sem intenção: sai 0 e não emite", r.returncode == 0 and not finais(), r.stdout + r.stderr)
-cli(repo, "gravar", "--proposito", "p", "--para-quando", "q", "--plano", "a", "b", "c")
+r = cli(repo, "close")
+check("close sem intenção: sai 0 e não emite", r.returncode == 0 and not finais(), r.stdout + r.stderr)
+cli(repo, "write", "--purpose", "p", "--by-when", "q", "--plan", "a", "b", "c")
 w = [e for e in ledger(tel3) if e["event"] == "intent.written"]
 check("intent.written leva session de 8 chars", len(w) == 1 and w[0].get("session") == "sess-123", str(w))
-cli(repo, "encerrar")
+cli(repo, "close")
 check("cursor no passo 1 de 3: não emite", not finais())
-cli(repo, "--passo", "2")
-cli(repo, "encerrar")
+cli(repo, "--step", "2")
+cli(repo, "close")
 check("cursor no passo 2 de 3: não emite", not finais())
 adv = [e for e in ledger(tel3) if e["event"] == "intent.cursor_advanced"]
 check("intent.cursor_advanced leva session", adv and adv[0].get("session") == "sess-123", str(adv))
-cli(repo, "--passo", "3")
-r = cli(repo, "encerrar")
+cli(repo, "--step", "3")
+r = cli(repo, "close")
 f = finais()
 check("cursor no último passo (3 de 3): emite 1", len(f) == 1 and r.returncode == 0, str(f))
 check("evento leva passo, passos e session",
       f and f[0].get("passo") == 3 and f[0].get("passos") == 3 and f[0].get("session") == "sess-123", str(f))
-cli(repo, "--passo", "4")
-cli(repo, "encerrar")
+cli(repo, "--step", "4")
+cli(repo, "close")
 check("plano cumprido (4 de 3): emite", len(finais()) == 2, str(finais()))
 check("plano cumprido: o evento guarda passo == 4 (não M)",
       finais()[-1].get("passo") == 4 and finais()[-1].get("passos") == 3, str(finais()[-1]))
-r = cli(repo, "encerrar", sid="outra-sessao-zzz")
+r = cli(repo, "close", sid="outra-sessao-zzz")
 check("intenção de outra sessão: não emite", len(finais()) == 2 and r.returncode == 0, r.stdout)
-r = cli(repo, "encerrar", "--passo", "1")
-check("encerrar recusa opções de escrita", r.returncode == 2, str(r.returncode))
+r = cli(repo, "close", "--step", "1")
+check("close recusa opções de escrita", r.returncode == 2, str(r.returncode))
+
+# nomes antigos: `encerrar`, `gravar --proposito ...`, `--passo` e o atalho `cepa-intencao`
+# emitem os mesmos eventos
+repo_a = novo_repo("r-antigo")
+BIN_ANTIGO = REPO / "common" / "bin" / "cepa-intencao"
+env_a = {**os.environ, "CEPA_TELEMETRY_DIR": str(tel3), "CLAUDE_CODE_SESSION_ID": "sess-1234-abcd"}
+env_a.pop("CEPA_UNTIL_RUN", None)
+def cli_antigo(repo, *args):
+    return subprocess.run([sys.executable, str(BIN_ANTIGO), *args], cwd=repo, env=env_a,
+                          capture_output=True, text=True)
+antes_n = len(finais())
+r = cli_antigo(repo_a, "gravar", "--proposito", "p", "--para-quando", "q", "--plano", "a", "b")
+check("antigo: `cepa-intencao gravar --proposito ...` grava", r.returncode == 0, r.stderr)
+cli_antigo(repo_a, "--passo", "2")
+r = cli_antigo(repo_a, "encerrar")
+check("antigo: `encerrar` emite intent.finished_at_last_step no último passo",
+      r.returncode == 0 and len(finais()) == antes_n + 1, r.stdout + r.stderr)
 
 # ── 4. o cepa-metrics imprime a linha, com a conta ──────────────────────────
 tel4 = TMP / "tel-metrics"
@@ -250,17 +267,17 @@ check("sem session: aviso com N=3", "(3 evento(s) intent.* sem session, fora das
 check("sem session: não infla as sessões gravadas", "sessões com intenção gravada: 2" in o, o)
 check("sem session: não infla 'último passo'", "cursor em M ou M+1): 0 de 2" in o, o)
 
-# `encerrar` é palavra reservada: item de plano com esse nome é recusado
+# `close` é palavra reservada: item de plano com esse nome é recusado
 # (o subcomando consome o argumento; ver a guarda no topo de main()).
 rr = novo_repo("r-reservada")
-r = cli(rr, "gravar", "--proposito", "p", "--para-quando", "q", "--plano", "levantar", "encerrar")
-check("item de plano `encerrar` é recusado (sai 2, nada escrito)",
+r = cli(rr, "write", "--purpose", "p", "--by-when", "q", "--plan", "levantar", "close")
+check("item de plano `close` é recusado (sai 2, nada escrito)",
       r.returncode == 2 and not (rr / ".claude" / "session-intent").exists(), r.stdout + r.stderr)
 
 # ── 5. contrato do wrap-up.md: a prosa que chama o comando ──────────────────
 WRAP = (REPO / "common" / "commands" / "wrap-up.md").read_text(encoding="utf-8")
-check("wrap-up.md manda rodar `cepa-intencao` `encerrar`",
-      'bin/cepa-intencao" encerrar' in WRAP, "frase do comando sumiu")
+check("wrap-up.md manda rodar `cepa-intent` `close`",
+      'bin/cepa-intent" close' in WRAP, "frase do comando sumiu")
 check("wrap-up.md nomeia o evento intent.finished_at_last_step",
       "intent.finished_at_last_step" in WRAP)
 check("wrap-up.md pula o encerrar no --discard",

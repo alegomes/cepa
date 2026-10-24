@@ -197,7 +197,7 @@ def test_repo_sem_build_conhecido_nao_comeca_sem_dizer_qual():
         p = subprocess.run(
             [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
                                  / "bin" / "cepa-until"),
-             "fila", "--repo", str(raiz), "--for", "2h", "--sem-analise"],
+             "fila", "--repo", str(raiz), "--for", "2h", "--no-analysis"],
             capture_output=True, text=True, timeout=60,
             env={**env, "FAKE_PLANO": str(plano_de(raiz)),
                  "FAKE_CHAMADAS": str(Path(tmp) / "chamadas.jsonl"),
@@ -205,7 +205,7 @@ def test_repo_sem_build_conhecido_nao_comeca_sem_dizer_qual():
         check("sem mvnw/gradlew e sem flag, recusa", p.returncode == 2,
               f"saiu {p.returncode}: {p.stderr[-300:]}")
         check("...e diz as duas saídas",
-              "--verify" in p.stderr and "--sem-verify" in p.stderr, p.stderr)
+              "--verify" in p.stderr and "--no-verify" in p.stderr, p.stderr)
         check("...e nomeia a suíte que teria bastado",
               "tests/run-all.sh" in p.stderr, p.stderr)
         check("...sem ter criado branch", not git(raiz, "branch", "--list",
@@ -242,7 +242,7 @@ def _roda_sem_flag_de_verify(tmp, raiz, binv):
     return subprocess.run(
         [sys.executable, str(Path(__file__).resolve().parents[1] / "common"
                              / "bin" / "cepa-until"),
-         "fila", "--repo", str(raiz), "--for", "2h", "--sem-analise"],
+         "fila", "--repo", str(raiz), "--for", "2h", "--no-analysis"],
         capture_output=True, text=True, timeout=120,
         env=dict(os.environ, PATH=f"{binv}:{os.environ['PATH']}",
                  FAKE_PLANO=str(plano_de(raiz)),
@@ -610,7 +610,7 @@ def test_4b_volta_vermelha_devolve_o_item_a_pending_com_recado():
         binv = fake_claude(tmp, TRABALHA_E_LE)
         p, _ = roda(raiz, binv, plano_de(raiz),
                     ["--for", "2h", "--verify", SEMPRE_VERMELHO,
-                     "--max-falhas", "5"])
+                     "--max-failures", "5"])
         ev = ledger_de(raiz)
         branch = [e for e in ev if e["evento"] == "run_start"][0]["branch"]
         vistos = recados(raiz)
@@ -677,7 +677,7 @@ def test_4e_cada_volta_conta_no_disjuntor():
         raiz = monta_repo(tmp, [item("a1"), item("a2"), item("a3")])
         binv = fake_claude(tmp, TRABALHA)
         roda(raiz, binv, plano_de(raiz),
-             ["--for", "2h", "--verify", SEMPRE_VERMELHO, "--max-falhas", "2"])
+             ["--for", "2h", "--verify", SEMPRE_VERMELHO, "--max-failures", "2"])
         fim = [e for e in ledger_de(raiz) if e["evento"] == "run_end"][0]
         check("o run para pelo disjuntor", fim["motivo"] == "disjuntor", str(fim))
         check("...sem nenhum item done",

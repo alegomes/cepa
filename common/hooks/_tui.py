@@ -211,9 +211,9 @@ TELA = Tela()
 
 def instalar():
     """Decora o stdout do comando quando ele é um terminal. Saída em JSON
-    (`--json`) e pedido explícito de texto puro (`--sem-cor`) nunca são
+    (`--json`) e pedido explícito de texto puro (`--no-color`, ou o antigo `--sem-cor`) nunca são
     tocados."""
     if (not TELA.ligada or isinstance(sys.stdout, Filtro)
-            or {"--json", "--sem-cor"} & set(sys.argv)):
+            or {"--json", "--no-color", "--sem-cor"} & set(sys.argv)):
         return
     sys.stdout = Filtro(sys.stdout, TELA)

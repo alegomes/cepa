@@ -208,26 +208,22 @@ And decide, mechanically:
   without the `🔓` release** → another session is on it right now. **Skip** it,
   record `SKIPPED (reserved by <claim-id> at <hh:mm>)` and move on.
 - **Otherwise** → reserve it, publishing the comment via `atlassian-expert`. The
-  comment body is posted verbatim, in pt-BR (`atlassian-expert` looks for the
-  `🔒 claim:` / `🔓 claim` prefixes):
+  comment body is posted verbatim, in English (`atlassian-expert` looks for the
+  `🔒 claim:` / `🔓 claim` prefixes; claims written earlier in pt-BR, with
+  `em andamento desde` / `liberado`, are still recognized):
 
-  > `🔒 claim: <claim-id> — <nome do comando> em andamento desde <timestamp>.`
-  > `Outra sessão deve pular este card. A reserva expira em 90 minutos.`
-
-  ("claim: <claim-id> — <command name> in progress since <timestamp>. Another
-  session must skip this card. The reservation expires in 90 minutes.")
+  > `🔒 claim: <claim-id> — <command name> in progress since <timestamp>.`
+  > `Another session must skip this card. The reservation expires in 90 minutes.`
 
   Only after that comment exists may the card be worked.
 
 **Release.** The card's verdict ends the reservation — the result comment
 (proof, bounce with `**Reason:**`, implementation summary) is already the signal
 that the reservation is over. When the card ends WITHOUT a verdict (`ERROR`,
-interruption, run abort), publish the explicit release (verbatim, pt-BR),
+interruption, run abort), publish the explicit release (verbatim, English),
 otherwise the card stays untouchable for 90 min:
 
-> `🔓 claim <claim-id> liberado — <motivo>.`
-
-("claim <claim-id> released — <reason>.")
+> `🔓 claim <claim-id> released — <reason>.`
 
 **Why 90 minutes and not a permanent lock:** a session that dies midway must not
 freeze the queue. The window is longer than one card's time (the proof takes

@@ -99,7 +99,7 @@ def monta_sessao(raiz: Path, cwd: str) -> Path:
 def test_medicao():
     with tempfile.TemporaryDirectory() as tmp:
         sess = monta_sessao(Path(tmp), tmp)
-        p = subprocess.run([sys.executable, str(TOKENS), "--arquivo", str(sess), "--json"],
+        p = subprocess.run([sys.executable, str(TOKENS), "--file", str(sess), "--json"],
                            capture_output=True, text=True)
         check("roda sem erro", p.returncode == 0, p.stderr)
         r = json.loads(p.stdout)[0]
@@ -121,7 +121,7 @@ def test_medicao():
 
         tel = Path(tmp) / "tel"
         env = dict(os.environ, CEPA_TELEMETRY_DIR=str(tel))
-        subprocess.run([sys.executable, str(TOKENS), "--arquivo", str(sess), "--emit"],
+        subprocess.run([sys.executable, str(TOKENS), "--file", str(sess), "--emit"],
                        capture_output=True, text=True, env=env)
         arq = tel / "events-2026-07.jsonl"
         check("evento cai no mês em que a sessão acabou", arq.exists(),
@@ -138,7 +138,7 @@ def test_metrics_dedupe():
         tel = Path(tmp) / "tel"
         env = dict(os.environ, CEPA_TELEMETRY_DIR=str(tel))
         for _ in range(2):   # fim automático + varredura manual
-            subprocess.run([sys.executable, str(TOKENS), "--arquivo", str(sess), "--emit"],
+            subprocess.run([sys.executable, str(TOKENS), "--file", str(sess), "--emit"],
                            capture_output=True, text=True, env=env)
         p = subprocess.run([sys.executable, str(METRICS), "--month", "2026-07", "--json"],
                            capture_output=True, text=True, env=env)

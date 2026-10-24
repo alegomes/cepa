@@ -1,7 +1,18 @@
 // Lê o modo da sessão (`.claude/session-mode`) e os desvios (`.claude/desvios.md`).
-// O modo é gravado pelo `cepa` com `chave: valor` raso; `null` e vazio são ausência,
+// O modo é gravado pelo `cepa` com `chave: valor` raso (`mode`, `routine`, `budget`,
+// `opened_at`; as chaves e os nomes de modo antigos em pt-BR ainda são lidos); `null` e vazio são ausência,
 // como no `read_mode` do common/hooks/session-mode.py. Os desvios são as linhas
 // `- [ ]` (aberto) e `- [x]` (resolvido) que o skill off-mode-capture acrescenta.
+
+// Nome antigo (pt-BR) do modo -> o novo; `cepa-modes --json` só conhece os novos.
+const MODOS_ANTIGOS: Record<string, string> = {
+  exploracao: 'exploration',
+  descoberta: 'discovery',
+  construcao: 'construction',
+  reforma: 'refactor',
+  reflexao: 'reflection',
+  documentacao: 'documentation',
+}
 
 export type Modo = { nome: string; orcamento: string; abertoEm: string }
 
@@ -15,8 +26,13 @@ export const parseModo = (text: string): Modo | null => {
     const v = linha.slice(i + 1).trim().replace(/^"|"$/g, '')
     if (v !== '' && v !== 'null') campos[linha.slice(0, i).trim()] = v
   }
-  if (!campos.modo) return null
-  return { nome: campos.modo, orcamento: campos.orcamento ?? '', abertoEm: campos.aberto_em ?? '' }
+  const nome = campos.mode ?? campos.modo
+  if (!nome) return null
+  return {
+    nome: MODOS_ANTIGOS[nome] ?? nome,
+    orcamento: campos.budget ?? campos.orcamento ?? '',
+    abertoEm: campos.opened_at ?? campos.aberto_em ?? '',
+  }
 }
 
 export const contaDesvios = (text: string): Desvios => {
@@ -33,7 +49,7 @@ export const contaDesvios = (text: string): Desvios => {
   return d
 }
 
-// A condição de saída mora em common/hooks/_modos.py; `cepa-modos --json` a expõe.
+// A condição de saída mora em common/hooks/_modos.py; `cepa-modes --json` a expõe.
 export const leSaidas = (json: string): Record<string, string> => {
   try {
     const tabela = JSON.parse(json) as Record<string, { saida?: string }>

@@ -8,7 +8,25 @@ import { leBloqueio, leGuarda } from './gate'
 import { contaFila } from './filas'
 import { estadoDoCiclo, filaDoCiclo, linhaDoCiclo, parseEpic } from './epics'
 
-const ARQUIVO = `proposito: "Construir o M1, painel da intenção"
+const ARQUIVO = `purpose: "Construir o M1, painel da intenção"
+by_when: "painel aparece no terminal"
+plan:
+  - "guardar M2-M6 na fila mods"
+  - "ler exemplos e tipos do mod"
+  - "escrever o mod e testes"
+step: 2
+step_since: "2026-10-19T10:00:00Z"
+session_id: "sessao-a"
+branch: "session/oncoto"
+opened_at: "2026-10-18T20:03:58Z"
+summary: "passo 2/3 · ler exemplos e tipos do mod · Construir o M1"
+history:
+  - at: "2026-10-18T20:03:58Z"
+    purpose: "Outra coisa"
+`
+
+// O mesmo arquivo como o `cepa-intencao` antigo o gravava (chaves em pt-BR).
+const ARQUIVO_ANTIGO = `proposito: "Construir o M1, painel da intenção"
 para_quando: "painel aparece no terminal"
 plano:
   - "guardar M2-M6 na fila mods"
@@ -37,7 +55,13 @@ test('lê propósito, plano e passo e ignora o histórico', async () => {
   expect(intent?.sessionId).toBe('sessao-a')
 })
 
+test('intenção gravada com as chaves antigas (pt-BR) ainda é lida', async () => {
+  expect(parseIntent(ARQUIVO_ANTIGO)).toEqual(parseIntent(ARQUIVO))
+  expect(parseIntent(ARQUIVO_ANTIGO)?.passo).toBe(2)
+})
+
 test('arquivo sem propósito não é intenção', async () => {
+  expect(parseIntent('step: 1\n')).toBe(null)
   expect(parseIntent('passo: 1\n')).toBe(null)
 })
 
@@ -101,8 +125,8 @@ const prepara = async ($: any, on: any, sessao: string, texto: string | null, ex
     }
   })
   on('process.run', async ($: any, e: any) => ({
-    value: e.argv[0] === 'cepa-modos'
-      ? { exitCode: 0, stdout: e.argv.join(' ') === 'cepa-modos --json' ? MODOS_JSON : 'tabela em texto', stderr: '' }
+    value: e.argv[0] === 'cepa-modes'
+      ? { exitCode: 0, stdout: e.argv.join(' ') === 'cepa-modes --json' ? MODOS_JSON : 'tabela em texto', stderr: '' }
       : { exitCode: 0, stdout: '/repo/.git\n', stderr: '' },
   }))
   on('session.id', async () => ({ value: sessao }))
@@ -134,11 +158,13 @@ const sobe = async ($: any, on: any, sessao: string, texto: string | null, extra
 }
 
 const MODOS_JSON = JSON.stringify({
-  construcao: { saida: 'completion-auditor COMPLETE e proof-reviewer PROVEN', gate: 'x' },
-  reforma: { saida: 'o orçamento declarado exaurido' },
+  construction: { saida: 'completion-auditor COMPLETE e proof-reviewer PROVEN', gate: 'x' },
+  refactor: { saida: 'o orçamento declarado exaurido' },
 })
 
-const MODO = 'modo: construcao\nrotina: null\norcamento: null\naberto_em: 2026-10-19T13:46:36Z\n'
+const MODO = 'mode: construction\nroutine: null\nbudget: null\nopened_at: 2026-10-19T13:46:36Z\n'
+// O mesmo arquivo como o `cepa` antigo o gravava.
+const MODO_ANTIGO = 'modo: construcao\nrotina: null\norcamento: null\naberto_em: 2026-10-19T13:46:36Z\n'
 
 const DESVIOS = `# Desvios capturados
 
@@ -151,8 +177,16 @@ Texto de abertura com - [ ] no meio da linha, que não conta.
 `
 
 test('lê o modo e trata null como ausência', async () => {
-  expect(parseModo(MODO)).toEqual({ nome: 'construcao', orcamento: '', abertoEm: '2026-10-19T13:46:36Z' })
-  expect(parseModo('modo: reforma\norcamento: "só o filas.ts"\n')?.orcamento).toBe('só o filas.ts')
+  expect(parseModo(MODO)).toEqual({ nome: 'construction', orcamento: '', abertoEm: '2026-10-19T13:46:36Z' })
+  expect(parseModo('mode: refactor\nbudget: "só o filas.ts"\n')?.orcamento).toBe('só o filas.ts')
+  expect(parseModo('mode: null\n')).toBe(null)
+})
+
+test('session-mode antigo (modo: construcao) ainda é lido como construction', async () => {
+  expect(parseModo(MODO_ANTIGO)).toEqual(parseModo(MODO))
+  expect(parseModo('modo: reforma\norcamento: "só o filas.ts"\n')).toEqual({
+    nome: 'refactor', orcamento: 'só o filas.ts', abertoEm: '',
+  })
   expect(parseModo('modo: null\n')).toBe(null)
 })
 
@@ -162,14 +196,14 @@ test('conta desvios abertos e resolvidos e guarda o quê do último', async () =
   expect(contaDesvios('- [X] 2026-10-19 · modo: reforma · marcado em maiúscula\n').resolvidos).toBe(1)
 })
 
-test('saídas vêm do cepa-modos --json; json quebrado não derruba', async () => {
-  expect(leSaidas(MODOS_JSON).construcao).toBe('completion-auditor COMPLETE e proof-reviewer PROVEN')
+test('saídas vêm do cepa-modes --json; json quebrado não derruba', async () => {
+  expect(leSaidas(MODOS_JSON).construction).toBe('completion-auditor COMPLETE e proof-reviewer PROVEN')
   expect(leSaidas('não é json')).toEqual({})
 })
 
 test('nível 3: modo, condição de saída e desvios, depois do nível 2', async ($, on) => {
   const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': MODO, '.claude/desvios.md': DESVIOS })
-  expect(await ui.find({ type: 'Text', text: 'construcao' })).toBeTruthy()
+  expect(await ui.find({ type: 'Text', text: 'construction' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'fecha quando: completion-auditor COMPLETE e proof-reviewer PROVEN' })).toBeTruthy()
   expect((await ui.find({ type: 'Text', text: '2 desvios abertos' }))?.props?.color).toBe('yellow')
   expect(await ui.find({ type: 'Text', text: ' · 1 resolvido' })).toBeTruthy()
@@ -178,7 +212,7 @@ test('nível 3: modo, condição de saída e desvios, depois do nível 2', async
 })
 
 test('nível 3 mostra o orçamento da reforma', async ($, on) => {
-  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': 'modo: reforma\norcamento: "só o filas.ts"\n' })
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO, { '.claude/session-mode': 'mode: refactor\nbudget: "só o filas.ts"\n' })
   expect(await ui.find({ type: 'Text', text: 'fecha quando: o orçamento declarado exaurido' })).toBeTruthy()
   expect(await ui.find({ type: 'Text', text: 'orçamento: só o filas.ts' })).toBeTruthy()
 })
@@ -299,12 +333,12 @@ test('sem arquivo, diz que não há intenção', async ($, on) => {
 })
 
 test('plano cumprido aponta o wrap-up', async ($, on) => {
-  const ui = await sobe($, on, 'sessao-a', ARQUIVO.replace('passo: 2', 'passo: 4'))
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO.replace('step: 2', 'step: 4'))
   expect(await ui.find({ type: 'Text', text: /Plano cumprido/ })).toBeTruthy()
 })
 
 test('no último passo o plano ainda não está cumprido', async ($, on) => {
-  const ui = await sobe($, on, 'sessao-a', ARQUIVO.replace('passo: 2', 'passo: 3'))
+  const ui = await sobe($, on, 'sessao-a', ARQUIVO.replace('step: 2', 'step: 3'))
   expect(await ui.findAll({ type: 'Text', text: /Plano cumprido/ })).toEqual([])
 })
 

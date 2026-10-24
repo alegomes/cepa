@@ -1,0 +1,384 @@
+#!/usr/bin/env python3
+"""cepa-intent — o único escritor do `.claude/session-intent`.
+
+O problema que ele resolve: a sessão deriva. Duas horas depois ninguém (nem o
+dono, nem o agente) diz com precisão o que se queria, em que passo se está e
+quando parar. A intenção da sessão (propósito, ponto de parada, plano, cursor)
+vive num arquivo por worktree; este comando é a única mão que o escreve.
+
+Por que um escritor só, e não o agente editando o YAML:
+  - o `summary:` (uma linha pronta para statusline e hook) precisa ser
+    re-renderizado a cada escrita, e o agente esqueceria;
+  - as regras (plano de 1 a 6 itens, item sem dois-pontos) só valem se há um
+    portão; o leitor em `common/hooks/_modos.py` é tolerante de propósito e
+    não as impõe;
+  - o histórico (propósito e plano anteriores, com hora e motivo) só é
+    confiável se ninguém o reescreve à mão.
+Formato, leitor e serializador moram em `_modos.py`; aqui não há segundo parser.
+
+As ações e opções antigas (gravar/mostrar/continuar/estado/encerrar,
+--proposito/--para-quando/--plano/--passo/--motivo) continuam aceitas.
+
+Uso:
+    cepa-intent write --purpose "..." --by-when "..." \
+                      --plan "levantar" "escrever" "decidir"
+    cepa-intent --step 2            # concluí o 1, o 2 está em andamento
+    cepa-intent --step 4            # com plano de 3 itens: plano cumprido
+    cepa-intent --purpose "novo" --reason "o dono reformulou"
+    cepa-intent --plan "a" "b" [--reason "..."]
+    # com `write`, o subcomando vem SEMPRE antes de `--plan` (que consome tudo
+    # até a próxima opção): `--plan a b write` seria o item "write".
+    cepa-intent [show]            # imprime a intenção atual
+    cepa-intent continue          # adota nesta sessão a intenção de outra
+    cepa-intent state             # só leitura: classifica e imprime (whereami)
+    cepa-intent close             # o /common:wrap-up roda: telemetria de fim de sessão
+
+Regras:
+  - `step` é o passo EM ANDAMENTO (1-based). `--step N` aceita 1..M, e M+1,
+    que significa "plano cumprido" (nenhum passo em andamento): o `summary`
+    passa a "plano cumprido M/M · ..." e o hook sugere /common:wrap-up.
+  - `write` sobre intenção existente exige `--reason`; o propósito e o plano
+    anteriores vão para o `history` (hora da troca em `at:`).
+  - `--purpose` exige `--reason`. `--plan` zera o cursor (passo 1) e guarda o
+    plano anterior no histórico (`previous_plan`, itens separados por " | ").
+  - Itens do plano não contêm ':'; plano tem 1 a PLANO_MAX itens (mais que isso
+    é programa: `plan.yaml` / `/common:plan`). Recusa = nada é escrito.
+  - `continue` é a resposta "continuo" à pergunta que o hook `session-mode.py`
+    faz quando a intenção foi gravada por outra sessão (decisão D1): troca só
+    `session_id` e `branch` pelos atuais. Propósito, plano, cursor e a idade
+    do cursor (`step_since`) ficam como estavam.
+  - Escrita atômica (tmp + os.replace); cria `.claude/` se faltar.
+  - Telemetria (fail-silent, sem texto do propósito): `intent.written`
+    (acao=gravar|proposito|plano, passos=M), `intent.cursor_advanced`
+    (de=, para=, passos=) e `intent.finished_at_last_step` (passo=, passos=;
+    ver `close`). Todos levam `session=` (8 primeiros caracteres do id da
+    sessão, como o evento `prompt`), para o /common:metrics contar SESSÕES e
+    não eventos. `intent.asked` nasce no hook `session-log.py`, não aqui.
+  - `close` é o que o /common:wrap-up roda (passo 0): só lê e sai 0 sempre.
+    Emite `intent.finished_at_last_step` se a intenção é desta sessão e o
+    cursor está no último passo em andamento (passo == M) OU com o plano
+    cumprido (passo == M+1): nos dois casos nada sobrou a fazer além do
+    fechamento. Cursor antes do último passo, intenção de outra sessão ou
+    ausente: não emite. Não há evento "terminou sem avançar": o /common:metrics
+    deriva isso de `intent.written` sem nenhum `intent.cursor_advanced` na
+    mesma sessão.
+
+  - `state` é a leitura que o /common:whereami, o /common:next (fallback) e o
+    /common:recap (linha de abertura) rodam. Nunca escreve e sai 0 em todos os
+    estados. A primeira linha é `state: empty|normal|fulfilled|other-session`;
+    a regra de "outra sessão" é a do hook (`_modos.mesma_sessao`). Numa rodada
+    do `cepa-until` (`CEPA_UNTIL_RUN`) o estado é sempre `empty` com a linha
+    `delegate: /common:next`: ali a intenção é o item do plan.yaml. A segunda
+    linha, `opening:`, é a do recap ("propósito / passo N de M"), ausente nos
+    estados empty e other-session.
+
+Saídas: 0 ok · 2 uso inválido ou regra do escritor recusada · 3 sem intenção
+gravada (para --step/--purpose/--plan/show) · 4 já há intenção e falta
+--reason para regravar.
+"""
+
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "hooks"))
+import _tui  # noqa: E402
+import _modos as M  # noqa: E402
+
+try:
+    import _telemetry as T
+except Exception:  # noqa: BLE001 — telemetria nunca decide se a escrita acontece
+    T = None
+
+
+def agora():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def git(args, cwd):
+    try:
+        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True,
+                           text=True, timeout=10)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def recusa(msg, codigo=2):
+    print(f"cepa-intent: {msg}", file=sys.stderr)
+    sys.exit(codigo)
+
+
+def valida_plano(itens):
+    itens = [i.strip() for i in itens]
+    if not 1 <= len(itens) <= M.PLANO_MAX:
+        recusa(f"o plano tem {len(itens)} itens; aceito de 1 a {M.PLANO_MAX}. "
+               "Mais que isso é programa: use plan.yaml (/common:plan).")
+    for i in itens:
+        if not i:
+            recusa("item de plano vazio.")
+        if ":" in i:
+            recusa(f"item de plano com ':' ({i!r}); reescreva sem dois-pontos.")
+    return itens
+
+
+def resumo(d):
+    """Uma linha só: espaços em branco (inclui quebra de linha) viram um espaço,
+    para o que se imprime ser idêntico ao que o arquivo guarda."""
+    plano, passo = d["plan"], d["step"]
+    m = len(plano)
+    prop = " ".join(d["purpose"].split())
+    if passo > m:
+        return f"plano cumprido {m}/{m} · {prop}"
+    return f"passo {passo}/{m} · {' '.join(plano[passo - 1].split())} · {prop}"
+
+
+def escreve(root, d):
+    d["summary"] = resumo(d)
+    alvo = Path(root) / M.INTENT_FILE
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=alvo.parent, prefix=".session-intent.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(M.render_intent(d))
+        os.replace(tmp, alvo)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def emite(root, evento, **campos):
+    if T is not None:
+        T.emit(evento, cwd=str(root), session=sessao_atual()[:8], **campos)
+
+
+def sessao_atual():
+    return (os.environ.get("CLAUDE_CODE_SESSION_ID")
+            or os.environ.get("CLAUDE_SESSION_ID") or "")
+
+
+def branch_atual(root):
+    return (git(["rev-parse", "--abbrev-ref", "HEAD"], root)
+            or git(["symbolic-ref", "--short", "HEAD"], root))  # repo sem commit
+
+
+def mostrar(d):
+    print(d.get("summary") or "(sem resumo)")
+    print(f"propósito: {d.get('purpose', '')}")
+    print(f"para quando: {d.get('by_when', '')}")
+    for n, item in enumerate(d.get("plan", []), 1):
+        marca = ">" if n == d.get("step") else " "
+        print(f"  {marca} {n}. {item}")
+    print(f"passo desde {d.get('step_since', '?')} · aberto em {d.get('opened_at', '?')}")
+
+
+ENV_JANELA = "CEPA_UNTIL_RUN"  # a marca que o cepa-until exporta em cada rodada
+
+
+def idade(stamp):
+    """`passo_desde` -> "2h05" / "12 min" / "agora"; "?" se não der para ler."""
+    d = M.iso_utc(stamp)
+    if d is None:
+        return "?"
+    mins = max(0, int((datetime.now(timezone.utc) - d).total_seconds() // 60))
+    if mins < 1:
+        return "agora"
+    return f"{mins} min" if mins < 60 else f"{mins // 60}h{mins % 60:02d}"
+
+
+def estado(root, atual):
+    """Classifica a intenção e imprime a resposta pronta. Só leitura."""
+    plano = (atual or {}).get("plan")
+    if os.environ.get(ENV_JANELA):
+        print("state: empty")
+        print("delegate: /common:next")
+        print("Rodada do cepa-until: a intenção é o item do plan.yaml; "
+              "rode /common:next.")
+        return
+    if not (atual and atual.get("purpose") and isinstance(plano, list) and plano):
+        print("state: empty")
+        print("Esta sessão não tem intenção gravada. Diga o propósito e eu "
+              "proponho o plano.")
+        return
+    prop = " ".join(atual["purpose"].split())
+    if not M.mesma_sessao(atual.get("session_id"), sessao_atual()):
+        print("state: other-session")
+        print("\n".join(M.pergunta_outra_sessao(atual, prop)))
+        return
+    m = len(plano)
+    passo = atual.get("step")
+    if not isinstance(passo, int) or not 1 <= passo <= m + 1:
+        passo = 1
+    para = " ".join(str(atual.get("by_when") or "").split())
+    if passo > m:
+        print("state: fulfilled")
+        print(f"opening: {prop} / plano cumprido {m}/{m}")
+        print(f"Os {m} passos estão feitos. Ponto de parada: {para}. "
+              "Próximo: `/common:wrap-up`.")
+        return
+    print("state: normal")
+    print(f"opening: {prop} / passo {passo} de {m}")
+    print(f"propósito: {prop}")
+    print(f"para quando: {para}")
+    print("plano:")
+    for n, item in enumerate(plano, 1):
+        marca = ">" if n == passo else " "
+        print(f"  {marca} {n}. {' '.join(item.split())}")
+    print(f"passo atual: {passo} de {m}, há {idade(atual.get('step_since'))} "
+          f"(desde {atual.get('step_since', '?')})")
+
+
+def encerrar(root, atual):
+    """Telemetria do fim da sessão. Só lê; nunca falha o wrap-up."""
+    plano = (atual or {}).get("plan")
+    if not (atual and atual.get("purpose") and isinstance(plano, list) and plano):
+        print("encerrar: sem intenção gravada.")
+        return
+    if not M.mesma_sessao(atual.get("session_id"), sessao_atual()):
+        print("encerrar: a intenção é de outra sessão; nada a registrar.")
+        return
+    m, passo = len(plano), atual.get("step")
+    if isinstance(passo, int) and passo >= m:
+        try:
+            emite(root, "intent.finished_at_last_step", passo=passo, passos=m)
+        except Exception:  # noqa: BLE001 — telemetria nunca falha o wrap-up
+            pass
+        print(f"encerrar: cursor no último passo ({min(passo, m)}/{m}); registrado.")
+    else:
+        print(f"encerrar: cursor no passo {passo} de {m}; fora do último, nada registrado.")
+
+
+# Ações: a antiga (pt-BR) -> a nova. O nome antigo continua aceito e é mapeado
+# logo depois do parse.
+ACOES = {"gravar": "write", "mostrar": "show", "continuar": "continue",
+         "estado": "state", "encerrar": "close"}
+NOMES_DE_ACAO = tuple(ACOES) + tuple(ACOES.values())
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="cepa-intent", description=__doc__.split("\n")[0])
+    ap.add_argument("action", nargs="?", choices=NOMES_DE_ACAO)
+    ap.add_argument("--purpose", "--proposito", dest="purpose")
+    ap.add_argument("--by-when", "--para-quando", dest="by_when")
+    ap.add_argument("--plan", "--plano", nargs="+", dest="plan")
+    ap.add_argument("--step", "--passo", type=int, dest="step")
+    ap.add_argument("--reason", "--motivo", dest="reason")
+    a = ap.parse_args()
+    a.action = ACOES.get(a.action, a.action)  # o nome antigo vira o novo
+
+    if a.plan and any(i.strip() in NOMES_DE_ACAO for i in a.plan):
+        recusa("um item do plano é exatamente um subcomando: o subcomando "
+               "vai ANTES de --plan (`cepa-intent write --plan a b ...`).")
+    root = git(["rev-parse", "--show-toplevel"], os.getcwd())
+    if not root:
+        recusa("não estou num repositório git; a intenção vive em <repo>/.claude/.")
+    atual = M.read_intent(root)
+    existe = bool(atual) and bool(atual.get("purpose")) and bool(atual.get("plan"))
+    edita = a.step is not None or (a.action is None and (a.purpose or a.plan))
+
+    if a.action == "state":
+        if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
+            recusa("state só lê; não aceita outras opções.")
+        estado(root, atual)
+        return
+
+    if a.action == "close":
+        if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
+            recusa("close só lê; não aceita outras opções.")
+        encerrar(root, atual)
+        return
+
+    if a.action == "write":
+        if a.step is not None:
+            recusa("--step não combina com write.")
+        if not (a.purpose and a.by_when and a.plan):
+            recusa("write exige --purpose, --by-when e --plan.")
+        plano = valida_plano(a.plan)
+        hist = list((atual or {}).get("history") or [])  # preserva mesmo em arquivo parcial
+        if existe:
+            if not a.reason:
+                recusa("já há uma intenção gravada; para regravar diga o porquê com "
+                       "--reason (o anterior vai para o histórico).", 4)
+            hist.append({"at": agora(), "purpose": atual["purpose"],
+                         "previous_plan": " | ".join(atual["plan"]),
+                         "change_reason": a.reason})
+        t = agora()
+        d = {"purpose": a.purpose.strip(), "by_when": a.by_when.strip(),
+             "plan": plano, "step": 1, "step_since": t,
+             "session_id": sessao_atual(), "branch": branch_atual(root),
+             "opened_at": t, "history": hist}
+        escreve(root, d)
+        emite(root, "intent.written", acao="gravar", passos=len(plano))
+        print(d["summary"])
+        return
+
+    if a.action == "continue":
+        if not existe:
+            recusa("não há intenção gravada nesta worktree para continuar.", 3)
+        if a.step is not None or a.purpose or a.plan or a.by_when or a.reason:
+            recusa("continue não aceita outras opções; para mudar algo, rode depois.")
+        if not sessao_atual():
+            recusa("não sei o id desta sessão (CLAUDE_CODE_SESSION_ID vazio); "
+                   "sem ele não há o que adotar.")
+        d = dict(atual)
+        d["session_id"], d["branch"] = sessao_atual(), branch_atual(root)
+        escreve(root, d)
+        print(d["summary"])
+        return
+
+    if a.action == "show" or not edita:
+        if not existe:
+            recusa("não há intenção gravada nesta worktree.", 3)
+        mostrar(atual)
+        return
+
+    if not existe:
+        recusa("não há intenção gravada nesta worktree; comece com "
+               "`cepa-intent write --purpose ... --by-when ... --plan ...`.", 3)
+    if a.step is not None and (a.purpose or a.plan):
+        recusa("--step não combina com --purpose/--plan; rode em dois comandos.")
+
+    d = dict(atual)
+    d["history"] = list(atual.get("history", []))
+    m = len(d["plan"])
+
+    if a.step is not None:
+        if not 1 <= a.step <= m + 1:
+            recusa(f"passo {a.step} fora do plano; aceito de 1 a {m} "
+                   f"({m + 1} = plano cumprido).")
+        de = d.get("step")
+        d["step"], d["step_since"] = a.step, agora()
+        escreve(root, d)
+        emite(root, "intent.cursor_advanced", de=de, para=a.step, passos=m)
+        print(d["summary"])
+        return
+
+    if a.purpose:
+        if not a.reason:
+            recusa("--purpose exige --reason (o propósito anterior vai para o histórico).")
+        d["history"].append({"at": agora(), "purpose": atual["purpose"],
+                             "change_reason": a.reason})
+        d["purpose"] = a.purpose.strip()
+    if a.plan:
+        plano = valida_plano(a.plan)
+        d["history"].append({"at": agora(), "previous_plan": " | ".join(atual["plan"]),
+                             "change_reason": a.reason or "plano substituído"})
+        d["plan"], d["step"], d["step_since"] = plano, 1, agora()
+    escreve(root, d)
+    if a.purpose:
+        emite(root, "intent.written", acao="proposito", passos=len(d["plan"]))
+    if a.plan:
+        emite(root, "intent.written", acao="plano", passos=len(d["plan"]))
+    print(d["summary"])
+
+
+if __name__ == "__main__":
+    _tui.instalar()
+    main()

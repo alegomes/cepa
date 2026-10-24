@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate do modo Reforma: bloqueia editar teste EXTERNO enquanto a reforma corre.
+"""Gate do modo Reforma (`refactor`): bloqueia editar teste EXTERNO enquanto a reforma corre.
 
 A condição de saída da Reforma tem três partes (docs/modos-de-trabalho.md):
 o orçamento declarado exaurido, build verde, e nenhum teste externo editado.
@@ -19,7 +19,7 @@ Teste INTERNO segue livre: renomear uma classe obriga a mexer no teste de
 unidade dela, e isso é reforma legítima. A distinção mora nos padrões abaixo,
 sobrescritíveis por repo em `.claude/external-tests` (um glob por linha).
 
-Silencioso fora do modo reforma. Desliga com CEPA_MODO=off.
+Silencioso fora do modo refactor. Desliga com CEPA_MODO=off.
 """
 
 import fnmatch
@@ -28,6 +28,9 @@ import os
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _modos  # noqa: E402
 
 # Testes que asseguram comportamento observável de fora. Um repo com outro
 # arranjo sobrescreve a lista em .claude/external-tests.
@@ -61,19 +64,14 @@ def modo_ativo(root):
     path = os.path.join(root, ".claude", "session-mode")
     if not os.path.isfile(path):
         return None, None
-    modo = orc = None
     try:
         with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                k, _, v = line.partition(":")
-                v = v.strip().strip('"')
-                if k.strip() == "modo":
-                    modo = v or None
-                elif k.strip() == "orcamento" and v not in ("null", ""):
-                    orc = v
+            dados = _modos.parse_session_mode(fh.read())
     except Exception:  # noqa: BLE001
         return None, None
-    return modo, orc
+    # chaves `mode`/`budget` (ou as antigas `modo`/`orcamento`); o valor do
+    # modo já vem com o nome novo (`reforma` -> `refactor`)
+    return dados.get("mode"), dados.get("budget")
 
 
 def padroes(root):
@@ -132,7 +130,7 @@ def main():
         cwd = payload.get("cwd") or os.getcwd()
         root = repo_root(cwd)
         modo, orc = modo_ativo(root)
-        if modo != "reforma":
+        if modo != "refactor":
             sys.exit(0)
 
         pats = padroes(root)
@@ -142,7 +140,7 @@ def main():
             if not pat:
                 continue
             print(
-                f"[reforma-gate] BLOQUEADO: esta sessão está em modo reforma e "
+                f"[reforma-gate] BLOQUEADO: esta sessão está em modo refactor e "
                 f"você ia editar um teste externo.\n"
                 f"  Alvo: {alvo}   (casou com o padrão {pat!r})\n"
                 + (f"  Orçamento da reforma: {orc}\n" if orc else "")

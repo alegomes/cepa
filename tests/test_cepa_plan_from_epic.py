@@ -137,13 +137,13 @@ def test_epic_real_ciclo_2(base):
         check(f"{i.get('id')}: `why` traz a superfície onde se observa",
               "superfície onde se observa:" in why, why)
         check(f"{i.get('id')}: `why` diz que a ordem foi herdada do texto",
-              'herdado da ordem do texto da coluna "O que atravessa"; '
+              'herdado da ordem do texto da coluna "What it crosses"; '
               "ninguém priorizou as peças entre si" in why, why)
         check(f"{i.get('id')}: nasce pending, sem dependência deduzida",
               i.get("status") == "pending" and i.get("blocked_by") == [], repr(i))
     check("sem as colunas de efeito, a superfície é \"não declarada\", e é dito",
           all("não declarada no Epic" in (i.get("why") or "") for i in itens)
-          and "não declara \"Efeito em tela\"" in r.stderr, r.stderr)
+          and "não declara \"Effect on screen\"" in r.stderr, r.stderr)
     check("Epic em rascunho vira aviso, não recusa",
           "Status: rascunho" in r.stderr, r.stderr)
     check("a linha `source` diz de que Epic e de que ciclo veio",
@@ -184,6 +184,65 @@ def test_formato_do_epic_command(base):
     t2 = [i["title"] for i in json.loads(r2.stdout)["items"]] if r2.returncode == 0 else r2.stderr
     check("outro ciclo, outra fila: só as peças do ciclo 2",
           t2 == ["O comparador de versões 2.0"], repr(t2))
+
+
+EPIC_EN = (EPIC_NOVO
+           .replace("**Status:** pronta", "**Status:** ready")
+           .replace("## Invariantes (nunca regridem)", "## Invariants (never regress)")
+           .replace("## Escada de valor", "## Value ladder")
+           .replace("| Ciclo | Roteiro de demonstração (o que o dono vê) | Efeito em tela "
+                    "| Efeito em backend | O que atravessa | Quando |",
+                    "| Cycle | Script (what the owner sees) | Effect on screen "
+                    "| Effect in backend | What it crosses | When |")
+           .replace("## Decidido sem perguntar (vete aqui)",
+                    "## Decided without asking (veto here)"))
+
+
+def test_nomes_novos_e_antigos_do_epic(base):
+    """O Epic com os nomes em português (`pronta`, `Escada de valor`, ...) e o
+    com os novos (`ready`, `Value ladder`, ...) alimentam `--from-epic --cycle`
+    do mesmo jeito; `--cycle` e `--ciclo` são a mesma flag."""
+    d = repo_git(base, "dois-idiomas")
+    (d / "antigo.md").write_text(EPIC_NOVO, encoding="utf-8")
+    (d / "novo.md").write_text(EPIC_EN, encoding="utf-8")
+    check("o fixture novo não tem mais nenhum nome antigo",
+          not any(w in EPIC_EN for w in ("Escada de valor", "Roteiro",
+                                         "Efeito em", "O que atravessa",
+                                         "Status:** pronta")), EPIC_EN)
+    saidas = {}
+    for arq, flag in (("antigo.md", "--ciclo"), ("antigo.md", "--cycle"),
+                      ("novo.md", "--cycle"), ("novo.md", "--ciclo")):
+        r = run(d, "from-epic", arq, flag, "1")
+        check(f"{arq} {flag} 1: sai 0 e sem aviso", r.returncode == 0
+              and r.stderr.strip() == "", r.stderr)
+        saidas[(arq, flag)] = r.stdout
+    check("os quatro caminhos entregam o mesmo ciclo (mesmos itens)",
+          len({json.dumps([(i["id"], i["title"]) for i in json.loads(v)["items"]])
+               for v in saidas.values()}) == 1,
+          repr(list(saidas.values())))
+    check("...e o mesmo `demonstra`",
+          len({json.loads(v)["demonstra"] for v in saidas.values()}) == 1)
+    w = run(d, "write", "fx-en", "--from-epic", "novo.md", "--cycle", "1",
+            "--when", "2026-10-23", "--repo", ".")
+    check("write --from-epic novo.md --cycle 1 --when grava", w.returncode == 0,
+          w.stderr)
+    w2 = run(d, "write", "fx-pt", "--from-epic", "antigo.md", "--ciclo", "1",
+             "--quando", "2026-10-23", "--repo", ".")
+    check("write --from-epic antigo.md --ciclo 1 --quando grava", w2.returncode == 0,
+          w2.stderr)
+    if w.returncode == 0 and w2.returncode == 0:
+        a = yaml.safe_load(plano_de(d, "fx-en").read_text(encoding="utf-8"))
+        b = yaml.safe_load(plano_de(d, "fx-pt").read_text(encoding="utf-8"))
+        check("as duas filas gravadas têm os mesmos itens e `demonstra`",
+              [i["title"] for i in a["items"]] == [i["title"] for i in b["items"]]
+              and a["demonstra"] == b["demonstra"])
+    rascunho = d / "rascunho.md"
+    rascunho.write_text(EPIC_EN.replace("**Status:** ready", "**Status:** draft"),
+                        encoding="utf-8")
+    r = run(d, "from-epic", str(rascunho), "--cycle", "1")
+    check("Status: draft vira aviso que nomeia `ready`",
+          r.returncode == 0 and "Status: draft" in r.stderr
+          and "só `ready`" in r.stderr, r.stderr)
 
 
 def test_grava_e_reescreve(base):
@@ -227,7 +286,7 @@ def test_recusas(base):
     r = run(d, "write", "x", "--from-epic", str(EPIC_REAL), "--dry-run",
             "--repo", ".")
     check("--from-epic sem --ciclo é recusa",
-          r.returncode != 0 and "--ciclo" in r.stderr, r.stderr)
+          r.returncode != 0 and "--cycle" in r.stderr, r.stderr)
     r = run(d, "write", "x", "--items", "-", "--ciclo", "2", "--dry-run",
             "--repo", ".")
     check("--ciclo sem --from-epic é recusa",
@@ -236,13 +295,13 @@ def test_recusas(base):
     sem.write_text("# Epic: sem escada\n\n## Intenção\n\nnada\n", encoding="utf-8")
     r = run(d, "from-epic", str(sem), "--ciclo", "1")
     check("Epic sem `## Escada de valor` é recusa",
-          r.returncode == 2 and "Escada de valor" in r.stderr, r.stderr)
+          r.returncode == 2 and "Value ladder" in r.stderr, r.stderr)
     vazio = d / "vazio.md"
     vazio.write_text(EPIC_NOVO.replace("O comparador de versões 2.0.", "—"),
                      encoding="utf-8")
     r = run(d, "from-epic", str(vazio), "--ciclo", "2")
     check("ciclo com \"O que atravessa\" vazio é recusa",
-          r.returncode == 2 and "O que atravessa" in r.stderr, r.stderr)
+          r.returncode == 2 and "What it crosses" in r.stderr, r.stderr)
     sem_roteiro = d / "semroteiro.md"
     sem_roteiro.write_text(EPIC_NOVO.replace(
         "O operador vê a diferença entre duas versões.", "—"), encoding="utf-8")
@@ -263,8 +322,8 @@ def test_avisos_e_recusas_de_epic_malformado(base):
           r.returncode == 0 and "1 pergunta(s) ainda em aberto" in r.stderr,
           r.stderr)
 
-    for coluna, cabecalho in (("O que atravessa", "O que atravessa"),
-                              ("Roteiro de demonstração", "Roteiro de demonstração (o que o dono vê)")):
+    for coluna, cabecalho in (("What it crosses", "O que atravessa"),
+                              ("Script", "Roteiro de demonstração (o que o dono vê)")):
         sem = d / f"sem-{coluna[:7].replace(' ', '')}.md"
         sem.write_text(EPIC_NOVO.replace(f"| {cabecalho} |", "| Outra |"),
                        encoding="utf-8")
@@ -282,7 +341,7 @@ def test_avisos_e_recusas_de_epic_malformado(base):
 
     r = run(d, "from-epic", str(aberta))
     check("o subcomando from-epic sem --ciclo é recusa",
-          r.returncode != 0 and "--ciclo" in r.stderr, r.stderr)
+          r.returncode != 0 and "--cycle" in r.stderr, r.stderr)
 
     # A coluna "O que atravessa" por último, sem o `|` de fechamento: o `\|`
     # no fim da linha é barra escapada da célula, não o divisor.
@@ -300,14 +359,15 @@ def test_contrato_de_prosa():
     f = CMD.read_text(encoding="utf-8")
     check("plan.md manda a leitura do Epic passar pelo `from-epic`",
           "cepa-plan from-epic" in f)
-    check("plan.md declara --from-epic e --ciclo no argument-hint",
-          "--from-epic docs/epics/<name>.md --ciclo N" in f.split("\n---", 1)[0])
+    check("plan.md declara --from-epic e --cycle no argument-hint",
+          "--from-epic docs/epics/<name>.md --cycle N" in f.split("\n---", 1)[0])
 
 
 def main():
     with tempfile.TemporaryDirectory() as base:
         test_epic_real_ciclo_2(base)
         test_formato_do_epic_command(base)
+        test_nomes_novos_e_antigos_do_epic(base)
         test_grava_e_reescreve(base)
         test_recusas(base)
         test_avisos_e_recusas_de_epic_malformado(base)

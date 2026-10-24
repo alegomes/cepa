@@ -145,7 +145,7 @@ Right after the answers to the start (or after announcing the defaults, when
 there was nothing to ask), and **never on the `--help` path**, record the intent:
 
 ```
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" gravar --proposito "<a rotina e o que ela vai entregar, com os parâmetros decididos na largada>" --para-quando "relatório único entregue e wrap-up oferecido" --plano "executar a rotina com os parâmetros da largada" "entregar o relatório único" "oferecer o wrap-up"
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" write --purpose "<a rotina e o que ela vai entregar, com os parâmetros decididos na largada>" --by-when "relatório único entregue e wrap-up oferecido" --plan "executar a rotina com os parâmetros da largada" "entregar o relatório único" "oferecer o wrap-up"
 ```
 
 (The values are pt-BR on purpose: the intent is shown to the owner. The
@@ -157,10 +157,10 @@ parameters decided at the start".)
   the plan.
 - Exit code 4 means there is already an intent in this tree (the chaining
   recorded the brief, or another session did): run the same command adding
-  `--motivo "aberta por /common:session <rotina>"`.
+  `--reason "aberta por /common:session <rotina>"`.
 - Advance the cursor with
-  `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" --passo 2` before building
-  the report and with `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intencao" --passo 3` when offering
+  `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" --step 2` before building
+  the report and with `python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-intent" --step 3` when offering
   the wrap-up.
 - This replaces the "propose it in three lines" that the `session-mode` hook
   asks for when there is no intent: do not propose it separately, it would be
@@ -195,7 +195,7 @@ Portuguese (pt-BR):
   deliberately did not pull, each on one line (they are the agenda for the next
   session, not this one);
 - the closed questions left over (irreversible), numbered, with
-  `Recomendo sim/não`;
+  `I recommend yes/no`;
 - the last line offers the close: `/common:wrap-up` (commit + handoff +
   merge) — and say it is the next and last step.
 

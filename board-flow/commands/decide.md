@@ -149,9 +149,9 @@ What the answer changes:
 - **`executa_e_reporta`** (reversible: run a build, local commit, create a
   non-terminal card, comment on a card, re-run the proof, aggregated infra card)
   → do it, and what was done becomes an **information line** in the report's
-  `### Detalhe técnico` ("Re-ran the proof of 3 cards with Docker down; created
+  `### Technical detail` ("Re-ran the proof of 3 cards with Docker down; created
   WEGO-2004 aggregating 11 cards without PIT"). **Never** a numbered item of
-  `### Decisões e próximos passos`: in the session of 2026-08-03 to 08-10, ~10 of the ~20
+  `### Decisions and next steps`: in the session of 2026-08-03 to 08-10, ~10 of the ~20
   interruptions were questions in this band that the owner just rubber-stamped
   with "sim". If the answer carries `precondicao`, check it before acting (e.g.:
   delete a branch only if `git merge-base --is-ancestor` says it's contained);
@@ -217,8 +217,8 @@ Per accepted group:
   **proposal** (`status: proposta`, `autor: null`), not a waiver. Pass
   `fila=`/`item=` and open the human route on the item: `cepa-plan finish <fila> <id> --status
   blocked|pending --human-pending "Aceitar ou recusar a dispensa de <escopo>
-  (<motivo>)" --pergunta "Aceito a dispensa de <escopo> por <razão>? Recomendo
-  <sim/não>: <porquê>"`. Only the owner's `cepa-plan responde <fila> <id> --resposta "sim:
+  (<motivo>)" --question "Aceito a dispensa de <escopo> por <razão>? Recomendo
+  <sim/não>: <porquê>"`. Only the owner's `cepa-plan answer <fila> <id> --answer "sim:
   ..."`, in a terminal, converts the proposal into a waiver (fb-20261014-3).
 - **don't accept** → create the card for the missing test (one per real gap,
   not one per stuck card) and send the cards back with `**Reason:**` **per
@@ -255,7 +255,7 @@ how many questions are left, and it only means anything next to what was cut.
   a question, and the question proposes the id. Promoting an action to the
   automatic band is a diff in `common/autonomy.yaml`, never a decision in the turn.
 - **In an autonomous run, never record a waiver:** `waivers.gravar` becomes a
-  proposal and the item gets a human route; the owner's `cepa-plan responde` is
+  proposal and the item gets a human route; the owner's `cepa-plan answer` is
   what converts it.
 - `atlassian-expert` is the only write path to Jira.
 - **One question per group, never per card** — the cost this command attacks is

@@ -41,7 +41,7 @@ One call, then carry on with the turn's work:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/bin/cepa-feedback" add \
-  "<the owner's text, verbatim>" --alvo <comando|hook|agente> --origem skill
+  "<the owner's text, verbatim>" --target <comando|hook|agente> --origin skill
 ```
 
 (Outside a session with the plugin loaded, the path is `common/bin/cepa-feedback`
@@ -53,7 +53,7 @@ Three rules about the text:
    swaps the complaint for your reading of the complaint, and your reading is the
    part that tends to be wrong: if you had understood, the annoyance would not
    have happened.
-2. **`--alvo` whenever possible.** `modo-escrita-gate`, `board-flow:drain`,
+2. **`--target` whenever possible.** `modo-escrita-gate`, `board-flow:drain`,
    `proof-reviewer`. It is what turns "the harness gets in the way" into
    something someone can open. With no identifiable target, record it anyway:
    feedback without a target is still a signal; unrecorded feedback is nothing.

@@ -3,9 +3,9 @@
 anterior deixou o próximo passo gravado.
 
 A sessão que sai deixa `<raiz-principal>/.claude/sessions/<session_id>.next.json`
-com `{"repo", "modo", "brief"}`. O `cepa` não faz mais `exec` do claude: quando
+com `{"repo", "mode", "brief"}`. O `cepa` não faz mais `exec` do claude: quando
 ele sai, o launcher lê o arquivo, apaga, entra em `repo` e abre a sessão
-seguinte com `--modo <modo>` e o brief como prompt inicial.
+seguinte com `--mode <modo>` e o brief como prompt inicial.
 
 O `claude` aqui é um stub que registra argumentos, cwd e o modo gravado. Na
 primeira chamada ele faz o papel da sessão inteira: roda o hook REAL
@@ -155,7 +155,7 @@ class World:
         if nxt is not None:
             e["STUB_NEXT"] = nxt if isinstance(nxt, str) else json.dumps(nxt)
         e.update(env or {})
-        return subprocess.run([str(CEPA), "--modo", "construcao", *(args or [])],
+        return subprocess.run([str(CEPA), "--mode", "construction", *(args or [])],
                               cwd=self.a, env=e,
                               capture_output=True, text=True, timeout=60,
                               stdin=subprocess.DEVNULL)
@@ -173,18 +173,18 @@ def same(a, b):
 def t_encadeia():
     print("com o próximo passo gravado, a sessão seguinte abre sozinha")
     with World() as w:
-        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF})
+        r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF})
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
         if len(c) == 2:
             check("a primeira rodou no repo de origem", same(c[0]["cwd"], w.a), c[0]["cwd"])
             check("a segunda rodou com cwd = repo do arquivo", same(c[1]["cwd"], w.b), c[1]["cwd"])
-            check("a segunda abriu em modo descoberta",
-                  "modo: descoberta" in c[1]["mode"], repr(c[1]["mode"]))
+            check("a segunda abriu em modo discovery",
+                  "mode: discovery" in c[1]["mode"], repr(c[1]["mode"]))
             check("o brief é o prompt inicial, verbatim", c[1]["args"][-1:] == [BRIEF],
                   repr(c[1]["args"]))
             check("o args do primeiro claude não vazam para o segundo",
-                  "construcao" not in c[1]["args"], repr(c[1]["args"]))
+                  "construction" not in c[1]["args"], repr(c[1]["args"]))
             check("cada abertura tem o próprio CEPA_LAUNCH_ID",
                   c[0]["launch_id"] and c[1]["launch_id"]
                   and c[0]["launch_id"] != c[1]["launch_id"], repr(c))
@@ -201,40 +201,43 @@ def t_encadeia():
         check("sai 0", r.returncode == 0, f"rc={r.returncode}")
 
 
-INTENCAO = {"proposito": "Grelhar o dono no epic contratos-e-regras",
-            "para_quando": "cada ciclo com roteiro em tela e em backend",
-            "plano": ["abrir o epic", "grelhar ciclo a ciclo"]}
+INTENCAO = {"purpose": "Grelhar o dono no epic contratos-e-regras",
+            "by_when": "cada ciclo com roteiro em tela e em backend",
+            "plan": ["abrir o epic", "grelhar ciclo a ciclo"]}
+# O mesmo conteúdo no formato ANTIGO do .next.json (chaves em pt-BR).
+INTENCAO_ANTIGA = {"proposito": INTENCAO["purpose"], "para_quando": INTENCAO["by_when"],
+                   "plano": INTENCAO["plan"]}
 
 
 def t_encadeia_com_intencao():
     print("com `intencao` no arquivo, a sessão seguinte nasce com ela, não com o brief")
     with World() as w:
-        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF, "intencao": INTENCAO})
+        r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "intent": INTENCAO})
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
         if len(c) == 2:
             it = _modos.parse_intent(c[1]["intent"])
-            check("o propósito é o da intenção", it.get("proposito") == INTENCAO["proposito"],
-                  repr(it.get("proposito")))
-            check("a meta é a da intenção", it.get("para_quando") == INTENCAO["para_quando"],
-                  repr(it.get("para_quando")))
-            check("o plano tem os dois passos, em ordem", it.get("plano") == INTENCAO["plano"],
-                  repr(it.get("plano")))
-            check("o passo é 1", it.get("passo") == 1, repr(it.get("passo")))
+            check("o propósito é o da intenção", it.get("purpose") == INTENCAO["purpose"],
+                  repr(it.get("purpose")))
+            check("a meta é a da intenção", it.get("by_when") == INTENCAO["by_when"],
+                  repr(it.get("by_when")))
+            check("o plano tem os dois passos, em ordem", it.get("plan") == INTENCAO["plan"],
+                  repr(it.get("plan")))
+            check("o passo é 1", it.get("step") == 1, repr(it.get("step")))
             check("o brief continua o prompt inicial", c[1]["args"][-1:] == [BRIEF], repr(c[1]["args"]))
             check("as flags da intenção não vazam para o claude",
-                  not {"--proposito", "--para-quando", "--plano"} & set(c[1]["args"]), repr(c[1]["args"]))
+                  not {"--purpose", "--by-when", "--plan", "--proposito", "--para-quando", "--plano"} & set(c[1]["args"]), repr(c[1]["args"]))
         check("o cepa diz a intenção gravada", "◆ intenção:" in r.stderr, r.stderr)
 
 
 def t_intencao_invalida_abre_sem():
-    casos = [("meta vazia", {"proposito": "x", "para_quando": "", "plano": ["a"]}),
-             ("plano vazio", {"proposito": "x", "para_quando": "m", "plano": []}),
-             ("passo com quebra de linha", {"proposito": "x", "para_quando": "m", "plano": ["a\nb"]})]
+    casos = [("meta vazia", {"purpose": "x", "by_when": "", "plan": ["a"]}),
+             ("plano vazio", {"purpose": "x", "by_when": "m", "plan": []}),
+             ("passo com quebra de linha", {"purpose": "x", "by_when": "m", "plan": ["a\nb"]})]
     for nome, it in casos:
         print(f"`intencao` inválida ({nome}): avisa e a sessão seguinte abre sem intenção")
         with World() as w:
-            r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF, "intencao": it})
+            r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "intent": it})
             c = w.calls()
             check(f"{nome}: o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; stderr={r.stderr!r}")
             if len(c) == 2:
@@ -245,53 +248,53 @@ def t_intencao_invalida_abre_sem():
 def t_intencao_anterior_vai_para_historico():
     print("repo de destino já tinha intenção: a nova a substitui e a antiga vai ao histórico")
     with World() as w:
-        antiga = {"proposito": "antigo", "para_quando": "x", "plano": ["a"], "passo": 1,
-                  "passo_desde": "2026-01-01T00:00:00Z", "session_id": "", "branch": "master",
-                  "aberto_em": "2026-01-01T00:00:00Z", "resumo": "passo 1/1 · a · antigo",
-                  "historico": []}
+        antiga = {"purpose": "antigo", "by_when": "x", "plan": ["a"], "step": 1,
+                  "step_since": "2026-01-01T00:00:00Z", "session_id": "", "branch": "master",
+                  "opened_at": "2026-01-01T00:00:00Z", "summary": "passo 1/1 · a · antigo",
+                  "history": []}
         (w.b / ".claude").mkdir()
         (w.b / ".claude" / "session-intent").write_text(_modos.render_intent(antiga))
-        w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF, "intencao": INTENCAO})
+        w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF, "intent": INTENCAO})
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"{len(c)}")
         if len(c) == 2:
             it = _modos.parse_intent(c[1]["intent"])
-            check("o propósito agora é o da intenção", it.get("proposito") == INTENCAO["proposito"],
-                  repr(it.get("proposito")))
-            hist = it.get("historico") or []
+            check("o propósito agora é o da intenção", it.get("purpose") == INTENCAO["purpose"],
+                  repr(it.get("purpose")))
+            hist = it.get("history") or []
             check("o histórico guarda o propósito antigo",
-                  any(h.get("proposito") == "antigo" for h in hist), repr(hist))
+                  any(h.get("purpose") == "antigo" for h in hist), repr(hist))
 
 
 def t_intencao_inteira_na_linha_de_comando():
-    print("--para-quando=/--plano= valem como a forma com espaço; passo com * fica literal")
+    print("--by-when=/--plan= valem como a forma com espaço; passo com * fica literal")
     with World() as w:
         (w.a / "LEIAME").write_text("x")
-        r = w.run(args=["--proposito=p", "--para-quando=meta m", "--plano=*\nsegundo passo"])
+        r = w.run(args=["--purpose=p", "--by-when=meta m", "--plan=*\nsegundo passo"])
         c = w.calls()
         check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
         if c:
             it = _modos.parse_intent(c[0]["intent"])
-            check("a meta veio do --para-quando=", it.get("para_quando") == "meta m", repr(it))
+            check("a meta veio do --by-when=", it.get("by_when") == "meta m", repr(it))
             check("o plano veio do --plano=, um passo por linha, * sem virar nome de arquivo",
-                  it.get("plano") == ["*", "segundo passo"], repr(it.get("plano")))
+                  it.get("plan") == ["*", "segundo passo"], repr(it.get("plan")))
             check("as formas com = não vazam para o claude",
-                  not any(x.startswith(("--para-quando", "--plano")) for x in c[0]["args"]),
+                  not any(x.startswith(("--by-when", "--plan")) for x in c[0]["args"]),
                   repr(c[0]["args"]))
 
 
 def t_proposito_direto_na_worktree():
-    print("cepa --proposito dentro da worktree isolada: a intenção mora lá, não na raiz")
+    print("cepa --purpose dentro da worktree isolada: a intenção mora lá, não na raiz")
     with World() as w:
-        r = w.run(args=["-s", "fatia", "--proposito", "x y"])
+        r = w.run(args=["-s", "fatia", "--purpose", "x y"])
         c = w.calls()
         check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
         if c:
             check("rodou numa worktree", Path(c[0]["cwd"]).resolve().is_relative_to(w.wt_home.resolve()),
                   c[0]["cwd"])
             it = _modos.parse_intent(c[0]["intent"])
-            check("a intenção na worktree é 'x y'", it.get("proposito") == "x y", repr(it))
-            check("--proposito não vaza para o claude", "--proposito" not in c[0]["args"],
+            check("a intenção na worktree é 'x y'", it.get("purpose") == "x y", repr(it))
+            check("--proposito não vaza para o claude", "--purpose" not in c[0]["args"],
                   repr(c[0]["args"]))
         check("a raiz não ganhou intenção", not (w.a / ".claude" / "session-intent").exists())
 
@@ -300,38 +303,38 @@ def t_proposito_em_branch_session():
     print("já numa branch session/* (caminho launch_here): a intenção é gravada ali")
     with World() as w:
         subprocess.run(["git", "checkout", "-q", "-b", "session/ja-isolada"], cwd=w.a, check=True)
-        r = w.run(args=["--proposito", "x y"])
+        r = w.run(args=["--purpose", "x y"])
         c = w.calls()
         check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
         if c:
             check("rodou no próprio repo, sem nova worktree", same(c[0]["cwd"], w.a), c[0]["cwd"])
             it = _modos.parse_intent(c[0]["intent"])
             check("a intenção existe antes do 1o turno, com 'x y'",
-                  it.get("proposito") == "x y", repr(it))
-            check("--proposito não vaza para o claude", "--proposito" not in c[0]["args"],
+                  it.get("purpose") == "x y", repr(it))
+            check("--proposito não vaza para o claude", "--purpose" not in c[0]["args"],
                   repr(c[0]["args"]))
 
 
 def t_proposito_forma_com_igual():
-    print("--proposito=<texto> vale como --proposito <texto>; sem valor é erro")
+    print("--purpose=<texto> vale como --purpose <texto>; sem valor é erro")
     with World() as w:
-        r = w.run(args=["--proposito=a b"])
+        r = w.run(args=["--purpose=a b"])
         c = w.calls()
         check("o stub rodou uma vez", len(c) == 1, f"{len(c)}; stderr={r.stderr!r}")
         if c:
             it = _modos.parse_intent(c[0]["intent"])
-            check("a intenção é 'a b'", it.get("proposito") == "a b", repr(it))
+            check("a intenção é 'a b'", it.get("purpose") == "a b", repr(it))
             check("a forma com = não vaza para o claude",
-                  not any(x.startswith("--proposito") for x in c[0]["args"]), repr(c[0]["args"]))
+                  not any(x.startswith("--purpose") for x in c[0]["args"]), repr(c[0]["args"]))
     with World() as w:
-        r = w.run(args=["--proposito"])
+        r = w.run(args=["--purpose"])
         check("sem valor: o claude não abre", len(w.calls()) == 0, f"{len(w.calls())}")
-        check("sem valor: sai 2 e diz", r.returncode == 2 and "--proposito exige um valor" in r.stderr,
+        check("sem valor: sai 2 e diz", r.returncode == 2 and "--purpose exige um valor" in r.stderr,
               f"rc={r.returncode} {r.stderr!r}")
 
 
 def t_sem_proposito_sem_intencao():
-    print("cepa sem --proposito não grava intenção")
+    print("cepa sem --purpose não grava intenção")
     with World() as w:
         r = w.run()
         c = w.calls()
@@ -341,10 +344,10 @@ def t_sem_proposito_sem_intencao():
 
 
 def t_falha_do_escritor_nao_impede():
-    print("cepa-intencao recusa: a sessão abre mesmo assim e o cepa avisa")
+    print("cepa-intent recusa: a sessão abre mesmo assim e o cepa avisa")
     with World() as w:
         (w.a / ".claude" / "session-intent").mkdir(parents=True)
-        r = w.run(args=["--proposito", "x y"])
+        r = w.run(args=["--purpose", "x y"])
         check("o stub rodou (sessão abriu)", len(w.calls()) == 1, f"{len(w.calls())}; {r.stderr!r}")
         check("o cepa avisa que não gravou", "não gravei a intenção" in r.stderr, r.stderr)
         check("sai 0", r.returncode == 0, f"rc={r.returncode}")
@@ -362,7 +365,7 @@ def t_sem_arquivo():
 def t_desligado():
     print("CEPA_ENCADEAR=off: não encadeia e o arquivo fica")
     with World() as w:
-        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF},
+        r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF},
                   env={"CEPA_ENCADEAR": "off", "STUB_RC": "7"})
         check("o stub rodou uma vez", len(w.calls()) == 1, f"{len(w.calls())}")
         check("o arquivo continua lá", (w.sessions / "sess-1.next.json").exists())
@@ -372,7 +375,7 @@ def t_desligado():
 def t_invalido():
     print("próximo passo com repo inexistente: não encadeia, avisa, deixa o arquivo")
     with World() as w:
-        r = w.run(nxt={"repo": str(w.b / "nao-existe"), "modo": "descoberta", "brief": BRIEF})
+        r = w.run(nxt={"repo": str(w.b / "nao-existe"), "mode": "discovery", "brief": BRIEF})
         check("o stub rodou uma vez", len(w.calls()) == 1, f"{len(w.calls())}")
         check("o arquivo continua lá", (w.sessions / "sess-1.next.json").exists())
         check("o cepa diz que é inválido", "inválido" in r.stderr, r.stderr)
@@ -385,9 +388,9 @@ def t_invalido():
 def t_campos_vazios():
     print("brief ou modo vazio, ou brief que não é texto: não encadeia, avisa, deixa o arquivo")
     casos = {
-        "brief em branco": {"modo": "descoberta", "brief": "   \n"},
-        "brief não-texto": {"modo": "descoberta", "brief": 42},
-        "modo vazio": {"modo": "", "brief": BRIEF},
+        "brief em branco": {"mode": "discovery", "brief": "   \n"},
+        "brief não-texto": {"mode": "discovery", "brief": 42},
+        "modo vazio": {"mode": "", "brief": BRIEF},
     }
     for nome, campos in casos.items():
         with World() as w:
@@ -400,8 +403,8 @@ def t_campos_vazios():
 def t_mais_recente_vence():
     print("duas sessões na mesma abertura (/clear): vale o próximo passo da mais recente")
     with World() as w:
-        w.run(nxt={"repo": str(w.a), "modo": "descoberta", "brief": "da primeira"},
-              env={"STUB_NEXT2": json.dumps({"repo": str(w.b), "modo": "descoberta",
+        w.run(nxt={"repo": str(w.a), "mode": "discovery", "brief": "da primeira"},
+              env={"STUB_NEXT2": json.dumps({"repo": str(w.b), "mode": "discovery",
                                              "brief": "da segunda"})})
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"{len(c)}")
@@ -415,7 +418,7 @@ def t_mais_recente_vence():
 def t_sem_session_end():
     print("sem o SessionEnd, o registro da sessão que saiu não isola a seguinte")
     with World() as w:
-        w.run(nxt={"repo": str(w.a), "modo": "descoberta", "brief": BRIEF},
+        w.run(nxt={"repo": str(w.a), "mode": "discovery", "brief": BRIEF},
               env={"STUB_SKIP_END": "1"})
         c = w.calls()
         check("o stub rodou duas vezes", len(c) == 2, f"{len(c)}")
@@ -427,7 +430,7 @@ def t_sem_session_end():
 def t_worktree_apagada():
     print("a sessão apagou a própria worktree (wrap-up): encadeia mesmo assim, sem ruído")
     with World() as w:
-        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF},
+        r = w.run(nxt={"repo": str(w.b), "mode": "discovery", "brief": BRIEF},
                   env={"STUB_RMCWD": "1"}, args=["-s", "fatia"])
         c = w.calls()
         check("a primeira rodou numa worktree", len(c) >= 1
@@ -452,9 +455,48 @@ def t_registro_ignora_next():
         check("só a sessão de verdade aparece", stems == ["s.json"], repr(stems))
 
 
+def t_nomes_antigos():
+    print("nomes antigos: .next.json com modo/intencao, e as flags --modo/--proposito/--para-quando/--plano")
+    with World() as w:  # .next.json no formato ANTIGO (modo + intencao em pt-BR)
+        r = w.run(nxt={"repo": str(w.b), "modo": "descoberta", "brief": BRIEF,
+                       "intencao": INTENCAO_ANTIGA})
+        c = w.calls()
+        check("antigo: o stub rodou duas vezes", len(c) == 2, f"rodou {len(c)}; {r.stderr!r}")
+        if len(c) == 2:
+            check("antigo: a segunda abriu em `mode: discovery`", "mode: discovery" in c[1]["mode"],
+                  repr(c[1]["mode"]))
+            it = _modos.parse_intent(c[1]["intent"])
+            check("antigo: a intenção do arquivo antigo foi gravada",
+                  it.get("purpose") == INTENCAO["purpose"] and it.get("plan") == INTENCAO["plan"], repr(it))
+    with World() as w:  # as flags antigas do próprio cepa
+        r = w.run(args=["--proposito=p", "--para-quando=meta m", "--plano=um\ndois"])
+        c = w.calls()
+        if c:
+            it = _modos.parse_intent(c[0]["intent"])
+            check("antigo: --proposito=/--para-quando=/--plano= gravam a intenção",
+                  (it.get("purpose"), it.get("by_when"), it.get("plan")) == ("p", "meta m", ["um", "dois"]),
+                  repr(it))
+            check("antigo: as flags antigas não vazam para o claude",
+                  not any(x.startswith(("--proposito", "--para-quando", "--plano")) for x in c[0]["args"]),
+                  repr(c[0]["args"]))
+        else:
+            check("antigo: o stub rodou", False, r.stderr)
+    with World() as w:
+        r = w.run(args=["--proposito", "x y", "--para-quando", "q", "--plano", "a"])
+        c = w.calls()
+        it = _modos.parse_intent(c[0]["intent"]) if c else {}
+        check("antigo: forma com espaço (--proposito x --para-quando q --plano a)",
+              it.get("purpose") == "x y" and it.get("by_when") == "q" and it.get("plan") == ["a"], r.stderr)
+    with World() as w:
+        r = w.run(args=["--proposito"])
+        check("antigo: --proposito sem valor sai 2 e diz", r.returncode == 2
+              and "--proposito exige um valor" in r.stderr, r.stderr)
+
+
 if __name__ == "__main__":
     t_encadeia()
     t_encadeia_com_intencao()
+    t_nomes_antigos()
     t_intencao_invalida_abre_sem()
     t_intencao_anterior_vai_para_historico()
     t_intencao_inteira_na_linha_de_comando()

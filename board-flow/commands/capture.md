@@ -81,7 +81,7 @@ card born outside it starts already out of the queue that drives execution.
   `cepa` repo itself — in any host project this shim finds the real
   `cepa-plan` from `common`, in the repo or the plugin cache.)
 
-  No `--antes-de`, so the card lands at the end of the queue, marked "ainda
+  No `--before`, so the card lands at the end of the queue, marked "ainda
   não priorizado" (not yet prioritized) — capture doesn't decide priority, it only makes sure the
   card isn't invisible to the queue. Exit 4 (id already in the queue) is fine,
   not an error — report it as already-queued.

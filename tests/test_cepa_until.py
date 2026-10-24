@@ -140,12 +140,12 @@ def roda(raiz, binv, plano, args, timeout=120, extra_env=None):
     chamadas = Path(raiz).parent / "chamadas.jsonl"
     env["FAKE_CHAMADAS"] = str(chamadas)
     args = list(args)
-    if "--verify" not in args and "--sem-verify" not in args:
-        args.append("--sem-verify")
+    if "--verify" not in args and "--no-verify" not in args:
+        args.append("--no-verify")
     if "--com-analise" in args:
         args.remove("--com-analise")
-    elif "--sem-analise" not in args:
-        args.append("--sem-analise")
+    elif "--no-analysis" not in args:
+        args.append("--no-analysis")
     p = subprocess.run([sys.executable, str(CEPA_UNTIL), "fila", "--repo", str(raiz)]
                        + args, capture_output=True, text=True, env=env,
                        timeout=timeout)
@@ -175,7 +175,7 @@ def test_duracao_sem_unidade_e_recusada():
               f"saiu {p.returncode}")
         # A recusa tem de nomear a FLAG e o VALOR recusados. Só exigir "saiu 2"
         # e "o texto cita 12h/90m" deixa passar uma versão que aceita `--for 12`
-        # e morre depois no --reserva-minima: mesmo código de saída, mensagem
+        # e morre depois no --min-reserve: mesmo código de saída, mensagem
         # mandando você conferir o argumento errado. (Perturbação, 2026-08-30.)
         check("...e a recusa nomeia --for e o valor recusado",
               "--for '12'" in p.stderr, p.stderr[:300])
@@ -185,13 +185,13 @@ def test_duracao_sem_unidade_e_recusada():
 
 
 def test_recusa_nomeia_a_flag_certa_entre_as_tres_duracoes():
-    """--for, --reserva-minima e --folga passam pelo mesmo parser. Uma recusa
+    """--for, --min-reserve e --slack passam pelo mesmo parser. Uma recusa
     que nomeia sempre `--for` manda você conferir o argumento errado."""
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1")])
         binv = fake_claude(tmp, "pass")
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
-        for flag, valor in (("--reserva-minima", "25"), ("--folga", "30")):
+        for flag, valor in (("--min-reserve", "25"), ("--slack", "30")):
             p, chamadas = roda(raiz, binv, plano, ["--for", "2h", flag, valor])
             check(f"{flag} inválida é recusada", p.returncode == 2,
                   f"saiu {p.returncode}")
@@ -208,7 +208,7 @@ def test_reserva_minima_impede_comecar_item_que_nao_cabe():
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
         p, chamadas = roda(raiz, binv, plano,
-                           ["--for", "10m", "--reserva-minima", "25m"])
+                           ["--for", "10m", "--min-reserve", "25m"])
         check("janela menor que a reserva não dispara item", not chamadas,
               f"disparou {len(chamadas)}x")
         check("...e o run termina por `prazo`",
@@ -293,7 +293,7 @@ def test_disjuntor_para_depois_de_n_falhas_seguidas():
         raiz = monta_repo(tmp, [item("a1"), item("a2")])
         binv = fake_claude(tmp, "sys.exit(0)")
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
-        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "3"])
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-failures", "3"])
         check("para na 3ª falha seguida", len(chamadas) == 3,
               f"disparou {len(chamadas)}x")
         fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
@@ -306,7 +306,7 @@ def test_progresso_zera_o_disjuntor():
     """Duas falhas, um sucesso, duas falhas: com o teto em 3, isso NÃO pode
     parar o run — senão azar espalhado encerra uma noite saudável.
 
-    `--tentativas-por-item 6` desliga o OUTRO teto, o de tentativas no mesmo
+    `--attempts-per-item 6` desliga o OUTRO teto, o de tentativas no mesmo
     item, que senão tiraria o a1 da frente na 2ª falha e o caso mediria o teto
     errado. São dois cortes independentes: este mede o disjuntor, que conta
     falhas seguidas entre itens QUAISQUER.
@@ -320,8 +320,8 @@ def test_progresso_zera_o_disjuntor():
         binv = fake_claude(tmp, corpo)
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
         p, chamadas = roda(raiz, binv, plano,
-                           ["--for", "2h", "--max-falhas", "3",
-                            "--tentativas-por-item", "6"])
+                           ["--for", "2h", "--max-failures", "3",
+                            "--attempts-per-item", "6"])
         check("o sucesso do meio zerou a contagem", len(chamadas) == 6,
               f"disparou {len(chamadas)}x (esperado 2 falhas + 1 ok + 3 falhas)")
         fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
@@ -337,7 +337,7 @@ def test_human_pending_e_progresso_e_nao_falha():
         binv = fake_claude(
             tmp, "marca(primeiro_pendente(), human_pending='valide o deploy à mão')")
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
-        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "3"])
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-failures", "3"])
         check("três adiamentos NÃO disparam o disjuntor", len(chamadas) == 3,
               f"disparou {len(chamadas)}x")
         fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
@@ -476,11 +476,11 @@ def test_max_travados_configuravel_e_validado():
         binv = fake_claude(
             tmp, "marca(primeiro_pendente(), status='blocked', evidence='x')")
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
-        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-travados", "0"])
-        check("--max-travados 0 é recusado antes de disparar",
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-blocked", "0"])
+        check("--max-blocked 0 é recusado antes de disparar",
               p.returncode == 2 and not chamadas, f"{p.returncode} {chamadas}")
-        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-travados", "2"])
-        check("--max-travados 2 para no 2º", len(chamadas) == 2,
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-blocked", "2"])
+        check("--max-blocked 2 para no 2º", len(chamadas) == 2,
               f"disparou {len(chamadas)}x")
         check("o banner mostra o teto escolhido",
               "2 itens `blocked` seguidos (fila travada)" in p.stdout,
@@ -501,10 +501,10 @@ def test_arvore_suja_recusa_o_run():
         p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
         check("árvore suja recusa", p.returncode == 2, f"saiu {p.returncode}")
         check("...e nada foi disparado", not chamadas, str(chamadas))
-        check("...e a recusa nomeia o escape --sujo-ok",
-              "--sujo-ok" in p.stderr, p.stderr[:300])
-        p2, chamadas2 = roda(raiz, binv, plano, ["--for", "2h", "--sujo-ok"])
-        check("--sujo-ok deixa passar", len(chamadas2) == 1,
+        check("...e a recusa nomeia o escape --dirty-ok",
+              "--dirty-ok" in p.stderr, p.stderr[:300])
+        p2, chamadas2 = roda(raiz, binv, plano, ["--for", "2h", "--dirty-ok"])
+        check("--dirty-ok deixa passar", len(chamadas2) == 1,
               f"saiu {p2.returncode}, disparou {len(chamadas2)}x")
 
 
@@ -617,7 +617,7 @@ def _commita(raiz, msg):
 def test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok():
     """Em 14/09 o Insync apagou `docs/tasks/wego-2229-.../` (9 arquivos
     commitados) do clone principal uma hora e meia depois de o run parar. A
-    recusa culpou o run e sugeriu `--sujo-ok`, que faria o próximo item rodar
+    recusa culpou o run e sugeriu `--dirty-ok`, que faria o próximo item rodar
     por cima da pasta ausente. Deleção de arquivo commitado que o último run
     não tocou é outra coisa, e a saída é `git restore`."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -630,7 +630,7 @@ def test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok():
         binv = fake_claude(
             tmp, "marca(primeiro_pendente(), status='done')\nsys.exit(0)")
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
-        p1, _ = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "1"])
+        p1, _ = roda(raiz, binv, plano, ["--for", "2h", "--max-failures", "1"])
         subprocess.run(["git", "checkout", "-q", "--", str(plano)], cwd=raiz,
                        check=True)
         for f in pasta.iterdir():
@@ -648,7 +648,7 @@ def test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok():
         check("...e mandando restaurar a pasta com git restore",
               "    git restore -- docs/tasks/wego-2229-remoção\n" in p.stderr,
               p.stderr[:600])
-        check("...sem sugerir --sujo-ok", "--sujo-ok" not in p.stderr,
+        check("...sem sugerir --dirty-ok", "--dirty-ok" not in p.stderr,
               p.stderr[:600])
 
         # Fantasma e sujeira de verdade juntos: a sujeira vai para a lista de
@@ -669,7 +669,7 @@ def test_arquivo_commitado_que_sumiu_fora_do_run_nao_sugere_sujo_ok():
 def test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje():
     """O contraponto: arquivo que o run anterior tocou e está diferente no
     disco é mudança que se confunde com a do run. A mensagem continua a de
-    antes, com o escape `--sujo-ok`. Inclui a deleção: se o último item
+    antes, com o escape `--dirty-ok`. Inclui a deleção: se o último item
     commitou o arquivo, ele sumir não é fantasma. O nome acentuado é de
     propósito: o git escapa `relatório.txt` no `status` e no `diff`, e a
     primeira versão comparava os escapes e chamava o arquivo de fantasma."""
@@ -688,7 +688,7 @@ def test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje():
             "'commit','-qam','item'])\n"
             "marca(primeiro_pendente(), status='done')")
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
-        p1, _ = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "1"])
+        p1, _ = roda(raiz, binv, plano, ["--for", "2h", "--max-failures", "1"])
         largada = [e for e in ledger_de(raiz) if e.get("evento") == "run_start"]
         check("o run anterior deixou branch e base no registro",
               largada and largada[-1].get("base") and largada[-1].get("branch"),
@@ -701,8 +701,8 @@ def test_mudanca_em_arquivo_que_o_ultimo_item_tocou_mantem_a_recusa_de_hoje():
         p, chamadas = roda(raiz, binv, plano, ["--for", "2h"])
         check("mudança em arquivo tocado recusa",
               p.returncode == 2 and not chamadas, f"saiu {p.returncode}")
-        check("...com a mensagem de hoje, que nomeia --sujo-ok",
-              "modificado(s)" in p.stderr and "--sujo-ok" in p.stderr,
+        check("...com a mensagem de hoje, que nomeia --dirty-ok",
+              "modificado(s)" in p.stderr and "--dirty-ok" in p.stderr,
               p.stderr[:600])
         check("...e não chama a deleção de arquivo tocado de fantasma",
               "sumiram do disco" not in p.stderr, p.stderr[:600])
@@ -759,8 +759,8 @@ def test_permissoes_liberadas_por_default_e_desligaveis():
 
         raiz2 = monta_repo(tempfile.mkdtemp(), [item("a1")])
         plano2 = raiz2 / ".claude" / "programs" / "fila" / "plan.yaml"
-        p2, chamadas2 = roda(raiz2, binv, plano2, ["--for", "2h", "--com-permissoes"])
-        check("--com-permissoes tira a flag",
+        p2, chamadas2 = roda(raiz2, binv, plano2, ["--for", "2h", "--with-permissions"])
+        check("--with-permissions tira a flag",
               chamadas2 and "--dangerously-skip-permissions" not in chamadas2[-1],
               str(chamadas2))
 
@@ -854,8 +854,8 @@ def test_item_que_estoura_a_folga_e_morto_com_o_grupo_todo():
         binv = fake_claude(tmp, corpo)
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
         p, chamadas = roda(raiz, binv, plano,
-                           ["--for", "0.2m", "--reserva-minima", "0.05m",
-                            "--folga", "0.05m"],
+                           ["--for", "0.2m", "--min-reserve", "0.05m",
+                            "--slack", "0.05m"],
                            timeout=180, extra_env={"FAKE_FILHO": str(marca)})
         check("o item foi disparado", len(chamadas) == 1, str(chamadas))
         fins = [e for e in ledger_de(raiz) if e.get("evento") == "item_end"]
@@ -903,8 +903,8 @@ def test_processo_que_ignora_sigterm_e_morto_no_sigkill():
         binv = fake_claude(tmp, corpo)
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
         p, chamadas = roda(raiz, binv, plano,
-                           ["--for", "0.2m", "--reserva-minima", "0.05m",
-                            "--folga", "0.05m"],
+                           ["--for", "0.2m", "--min-reserve", "0.05m",
+                            "--slack", "0.05m"],
                            timeout=200,
                            extra_env={"FAKE_FILHO": str(marca),
                                       "CEPA_UNTIL_GRACA_SIGTERM": "2"})
@@ -1045,7 +1045,7 @@ def test_limite_no_meio_de_uma_saida_longa_nao_para_o_run():
                  "print('relatorio: ' + 'x' * 4000)\n")
         binv = fake_claude(tmp, corpo)
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
-        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-falhas", "3"])
+        p, chamadas = roda(raiz, binv, plano, ["--for", "2h", "--max-failures", "3"])
         fim = [e for e in ledger_de(raiz) if e.get("evento") == "run_end"][0]
         check("a citação no meio não vira teto de uso",
               fim["limite_de_uso"] == 0, str(fim))
@@ -1119,8 +1119,8 @@ def test_tentativas_por_item_invalido_e_recusado():
         binv = fake_claude(tmp, "pass")
         plano = raiz / ".claude" / "programs" / "fila" / "plan.yaml"
         p, chamadas = roda(raiz, binv, plano,
-                           ["--for", "2h", "--tentativas-por-item", "0"])
-        check("--tentativas-por-item 0 é recusado", p.returncode == 2,
+                           ["--for", "2h", "--attempts-per-item", "0"])
+        check("--attempts-per-item 0 é recusado", p.returncode == 2,
               f"saiu {p.returncode}")
         check("...e nada foi disparado", not chamadas, str(chamadas))
 
@@ -1167,7 +1167,7 @@ def _processo_cepa_until():
 
 def test_run_vivo_da_mesma_fila_recusa_a_largada():
     """fb-20261015-4: lançar `cepa-until` com um run da mesma fila de pé
-    recusava como "árvore suja" e sugeria `--sujo-ok`. Dois supervisores na
+    recusava como "árvore suja" e sugeria `--dirty-ok`. Dois supervisores na
     mesma fila é a falha: recusa antes do guarda de sujeira, sem escape."""
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1")])
@@ -1176,7 +1176,7 @@ def test_run_vivo_da_mesma_fila_recusa_a_largada():
         vivo = _processo_cepa_until()
         try:
             _supervisor_falso(raiz, "fila", vivo.pid)
-            for extra in ([], ["--sujo-ok"]):
+            for extra in ([], ["--dirty-ok"]):
                 p, chamadas = roda(raiz, binv, plano, ["--for", "2h"] + extra)
                 check(f"run vivo recusa a largada {extra}",
                       p.returncode == 2 and not chamadas,
@@ -1184,8 +1184,8 @@ def test_run_vivo_da_mesma_fila_recusa_a_largada():
                 check("...a mensagem diz que já há um run, com o pid",
                       "já há um run desta fila" in p.stderr
                       and f"pid {vivo.pid}" in p.stderr, p.stderr[:300])
-                check("...e não oferece --sujo-ok",
-                      "--sujo-ok" not in p.stderr, p.stderr[:300])
+                check("...e não oferece --dirty-ok",
+                      "--dirty-ok" not in p.stderr, p.stderr[:300])
             # pid morto: o mesmo estado.json deixa de barrar
             vivo.kill()
             vivo.wait()
@@ -1274,7 +1274,7 @@ def test_plan_de_outra_fila_sujo_pelo_run_vivo_nao_e_sujeira():
 def test_run_vivo_recusa_antes_do_guarda_de_sujeira():
     """A recusa do run vivo vem ANTES do guarda de sujeira: com um run da
     fila de pé e sujeira real na árvore, a mensagem é a do run vivo, sem
-    `--sujo-ok` e sem a contagem de arquivos modificados."""
+    `--dirty-ok` e sem a contagem de arquivos modificados."""
     with tempfile.TemporaryDirectory() as tmp:
         raiz = monta_repo(tmp, [item("a1")])
         binv = fake_claude(tmp, "marca(primeiro_pendente(), status='done')")
@@ -1290,7 +1290,7 @@ def test_run_vivo_recusa_antes_do_guarda_de_sujeira():
             check("...a mensagem é a do run vivo",
                   "já há um run desta fila" in p.stderr, p.stderr[:300])
             check("...e não a da árvore suja",
-                  "--sujo-ok" not in p.stderr
+                  "--dirty-ok" not in p.stderr
                   and "modificado(s)" not in p.stderr, p.stderr[:300])
         finally:
             vivo.kill()

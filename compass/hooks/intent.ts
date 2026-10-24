@@ -1,6 +1,7 @@
-// Lê o subconjunto de YAML que o `cepa-intencao` grava em `.claude/session-intent`.
-// O escritor é único (common/bin/cepa-intencao) e só emite `chave: "valor"`,
-// `passo: N` e a lista `plano:` de itens entre aspas; `historico:` é ignorado.
+// Lê o subconjunto de YAML que o `cepa-intent` grava em `.claude/session-intent`.
+// O escritor é único (common/bin/cepa-intent) e só emite `chave: "valor"`,
+// `step: N` e a lista `plan:` de itens entre aspas; `history:` é ignorado.
+// As chaves antigas (proposito, para_quando, plano, passo, ...) ainda são lidas.
 
 export type Intent = {
   proposito: string
@@ -30,7 +31,7 @@ export const parseIntent = (text: string): Intent | null => {
   let bloco = ''
   for (const linha of text.split('\n')) {
     if (linha.startsWith('  - ')) {
-      if (bloco === 'plano') plano.push(unquote(linha.slice(4)))
+      if (bloco === 'plan' || bloco === 'plano') plano.push(unquote(linha.slice(4)))
       continue
     }
     if (linha.startsWith(' ') || linha.trim() === '') continue
@@ -39,15 +40,16 @@ export const parseIntent = (text: string): Intent | null => {
     bloco = linha.slice(0, i)
     campos[bloco] = unquote(linha.slice(i + 1))
   }
-  if (!campos.proposito) return null
+  const proposito = campos.purpose ?? campos.proposito
+  if (!proposito) return null
   return {
-    proposito: campos.proposito,
-    paraQuando: campos.para_quando ?? '',
+    proposito,
+    paraQuando: campos.by_when ?? campos.para_quando ?? '',
     plano,
-    passo: Number(campos.passo ?? '1') || 1,
-    passoDesde: campos.passo_desde ?? '',
+    passo: Number(campos.step ?? campos.passo ?? '1') || 1,
+    passoDesde: campos.step_since ?? campos.passo_desde ?? '',
     sessionId: campos.session_id ?? '',
-    abertoEm: campos.aberto_em ?? '',
+    abertoEm: campos.opened_at ?? campos.aberto_em ?? '',
   }
 }
 

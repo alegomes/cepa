@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regression tests for the `--modo` gate in common/bin/cepa.
+"""Regression tests for the `--mode` gate in common/bin/cepa (`--modo` still works).
 
 Toda sessão declara em qual dos sete modos de trabalho ela opera
 (docs/modos-de-trabalho.md). O modo é gravado em .claude/session-mode no
@@ -112,21 +112,21 @@ def claude_args(proc):
 
 def test_modo_valido():
     with Repo() as r:
-        p = r.run("--modo", "construcao", "--resume")
+        p = r.run("--mode", "construction", "--resume")
         check("modo válido: rc=0", p.returncode == 0, p.stderr)
         check("modo válido: grava o arquivo", r.mode_file.exists())
         body = r.mode_file.read_text() if r.mode_file.exists() else ""
-        check("modo válido: registra o modo", "modo: construcao" in body, body)
+        check("modo válido: registra o modo", "mode: construction" in body, body)
         check("modo válido: repassa os args ao claude",
               claude_args(p) == ["--resume"], p.stdout)
 
 
 def test_modo_invalido():
     with Repo() as r:
-        p = r.run("--modo=xpto")
+        p = r.run("--mode=xpto")
         check("modo inválido: rc=2", p.returncode == 2, str(p.returncode))
         check("modo inválido: não grava", not r.mode_file.exists())
-        check("modo inválido: lista os válidos", "construcao" in p.stderr, p.stderr)
+        check("modo inválido: lista os válidos", "construction" in p.stderr, p.stderr)
 
 
 def test_sem_modo_sem_tty():
@@ -150,15 +150,15 @@ def test_kill_switch():
 
 def test_reforma_orcamento():
     with Repo() as r:
-        p = r.run("--modo", "reforma")
+        p = r.run("--mode", "refactor")
         check("reforma sem orçamento: recusa", p.returncode == 2, str(p.returncode))
         check("reforma sem orçamento: não grava", not r.mode_file.exists())
     with Repo() as r:
-        p = r.run("--modo", "reforma", "--orcamento", "só o módulo de auth")
+        p = r.run("--mode", "refactor", "--budget", "só o módulo de auth")
         check("reforma com orçamento: rc=0", p.returncode == 0, p.stderr)
         body = r.mode_file.read_text() if r.mode_file.exists() else ""
         check("reforma com orçamento: registra o escopo",
-              'orcamento: "só o módulo de auth"' in body, body)
+              'budget: "só o módulo de auth"' in body, body)
 
 
 # --- hook session-mode.py ---------------------------------------------------
@@ -194,11 +194,11 @@ def write_mode(repo, body):
 
 def test_hook_injeta_modo_e_saida():
     with Repo() as r:
-        write_mode(r, "modo: construcao\nrotina: null\norcamento: null\n")
+        write_mode(r, "mode: construction\nrotina: null\norcamento: null\n")
         p = run_hook(r.path)
         check("hook: rc=0", p.returncode == 0, p.stderr)
         c = ctx(p)
-        check("hook: nomeia o modo", "construcao" in c, c)
+        check("hook: nomeia o modo", "construction" in c, c)
         check("hook: dá a condição de saída",
               "completion-auditor" in c and "PROVEN" in c, c)
         check("hook: manda capturar o desvio", "off-mode-capture" in c, c)
@@ -206,7 +206,7 @@ def test_hook_injeta_modo_e_saida():
 
 def test_hook_reforma_mostra_orcamento():
     with Repo() as r:
-        write_mode(r, 'modo: reforma\norcamento: "só o módulo de auth"\n')
+        write_mode(r, 'mode: refactor\norcamento: "só o módulo de auth"\n')
         p = run_hook(r.path)
         c = ctx(p)
         check("hook reforma: mostra o orçamento", "só o módulo de auth" in c, c)
@@ -224,7 +224,7 @@ def test_hook_silencioso_sem_modo():
 
 def test_hook_respeita_kill_switch():
     with Repo() as r:
-        write_mode(r, "modo: construcao\n")
+        write_mode(r, "mode: construction\n")
         p = run_hook(r.path, env={"CEPA_MODO": "off"})
         check("hook: CEPA_MODO=off silencia", p.stdout.strip() == "", repr(p.stdout))
 
@@ -252,10 +252,10 @@ SID = "209286bf-1111-2222-3333-444455556666"
 
 
 def write_intent(repo, **campos):
-    d = {"proposito": "institucionalizar as quatro perguntas",
-         "para_quando": "doc decidido", "plano": PLANO, "passo": 2,
-         "passo_desde": "2026-10-16T21:40:00Z", "session_id": SID[:8],
-         "branch": "main", "aberto_em": "2026-10-16T18:30:00Z"}
+    d = {"purpose": "institucionalizar as quatro perguntas",
+         "by_when": "doc decidido", "plan": PLANO, "step": 2,
+         "step_since": "2026-10-16T21:40:00Z", "session_id": SID[:8],
+         "branch": "main", "opened_at": "2026-10-16T18:30:00Z"}
     d.update(campos)
     (repo.path / ".claude").mkdir(exist_ok=True)
     (repo.path / ".claude" / "session-intent").write_text(_M.render_intent(d), encoding="utf-8")
@@ -292,7 +292,7 @@ def intent_lines(c):
 
 def test_intencao_vazia_traz_os_primeiros_prompts():
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         register(r, SID, "2026-10-16T18:00:00+00:00")
         write_log(r, [("2026-10-15", "10:00:00", "prompt de outra sessão"),
                       ("2026-10-16", "18:01:00", "quero institucionalizar as perguntas"),
@@ -311,8 +311,8 @@ def test_intencao_vazia_traz_os_primeiros_prompts():
               "outra sessão" not in c, c)
         check("intenção vazia: o quarto prompt fica de fora", "quarto prompt" not in c, c)
         check("intenção vazia: prompt longo é cortado", "x" * 200 not in c and "…" in c, c)
-        check("intenção vazia: pede para gravar com cepa-intencao e ensina o whereami",
-              "cepa-intencao gravar" in c and "/common:whereami" in c, c)
+        check("intenção vazia: pede para gravar com cepa-intent e ensina o whereami",
+              "cepa-intent write" in c and "/common:whereami" in c, c)
         check("intenção vazia: manda não propor em prompt trivial", "trivial" in c, c)
         check("intenção vazia: teto de duas linhas", 1 <= len(il) <= 2, il)
         check("intenção vazia: o modo continua lá", "[modo]" in c, c)
@@ -320,7 +320,7 @@ def test_intencao_vazia_traz_os_primeiros_prompts():
 
 def test_intencao_vazia_primeiro_turno_usa_o_prompt_atual():
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         register(r, SID, "2026-10-16T18:00:00+00:00")
         p = run_hook(r.path, session_id=SID, prompt="  quero   um comando whereami ")
         c = ctx(p)
@@ -332,7 +332,7 @@ def test_intencao_vazia_sem_registro_cai_para_hoje():
     from datetime import datetime, timezone
     hoje = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         write_log(r, [("2020-01-01", "10:00:00", "prompt antigo"),
                       (hoje, "00:00:01", "prompt de hoje")])
         c = ctx(run_hook(r.path, session_id="sem-registro", prompt="prompt de hoje"))
@@ -349,7 +349,7 @@ def test_intencao_vazia_sem_modo_e_silenciosa():
 
 def test_intencao_normal_passo_idade_proximo():
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         write_intent(r)
         write_log(r, [("2026-10-16", "21:30:00", "antes do cursor"),
                       ("2026-10-16", "21:41:00", "depois 1"),
@@ -364,7 +364,7 @@ def test_intencao_normal_passo_idade_proximo():
               "(há 2 turnos)" in c, c)
         check("intenção normal: próximo passo", "Próximo: rodar advisors." in c, c)
         check("intenção normal: ensina a avançar o cursor",
-              "Ao concluir o passo, rode `cepa-intencao --passo 3`." in c, c)
+              "Ao concluir o passo, rode `cepa-intent --step 3`." in c, c)
         check("intenção normal: não despeja o plano inteiro",
               "levantar o que existe" not in c and "decidir" not in c, c)
         check("intenção normal: teto de duas linhas", len(il) == 2, il)
@@ -381,7 +381,7 @@ def test_intencao_normal_um_turno_no_singular():
 
 def test_intencao_corta_proposito_e_passo_longos():
     with Repo() as r:
-        write_intent(r, proposito="p" * 500, plano=["a" * 300, "b"], passo=1)
+        write_intent(r, purpose="p" * 500, plan=["a" * 300, "b"], step=1)
         write_log(r, [])
         c = ctx(run_hook(r.path, session_id=SID))
         check("propósito longo é cortado no hook", "p" * 160 not in c and "p" * 150 in c, c)
@@ -390,7 +390,7 @@ def test_intencao_corta_proposito_e_passo_longos():
 
 def test_intencao_vazia_prompt_do_turno_e_log_parcial():
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         register(r, SID, "2026-10-16T18:00:00+00:00")
         write_log(r, [("2026-10-16", "18:01:00", "primeiro do log")])
         c = ctx(run_hook(r.path, session_id=SID, prompt="segundo, o do turno"))
@@ -400,14 +400,14 @@ def test_intencao_vazia_prompt_do_turno_e_log_parcial():
         check("prompt do turno já no log: não duplica",
               c.count("primeiro do log") == 1, c)
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         c = ctx(run_hook(r.path, session_id=SID, prompt=""))
         check("log vazio e prompt vazio: 'nenhum ainda'", "Primeiros prompts: nenhum ainda." in c, c)
 
 
 def test_intencao_vazia_corte_em_120():
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         longo = "".join(chr(97 + i % 26) for i in range(125))
         c = ctx(run_hook(r.path, session_id=SID, prompt=longo))
         check("prompt cortado em 120 caracteres (119 + …)",
@@ -419,7 +419,7 @@ def test_intencao_vazia_corte_em_120():
 
 def test_intencao_vazia_log_multilinha_e_titulo():
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         register(r, SID, "2026-10-16T18:00:00+00:00")
         write_log(r, [("2026-10-16", "18:01:00", "linha um\n# meu título\nlinha dois")])
         c = ctx(run_hook(r.path, session_id=SID, prompt="linha um # meu título linha dois"))
@@ -434,7 +434,7 @@ def test_intencao_vazia_registro_no_clone_principal():
         subprocess.run(["git", "worktree", "add", "-q", "--detach", str(wt)],
                        cwd=r.path, check=True)
         (wt / ".claude").mkdir()
-        (wt / ".claude" / "session-mode").write_text("modo: exploracao\n")
+        (wt / ".claude" / "session-mode").write_text("mode: exploration\n")
         register(r, SID, "2026-10-16T18:00:00+00:00")  # no clone principal
         (wt / ".claude" / "session-log.md").write_text(
             "# Session log\n\n## 2026-10-15\n\n### 10:00:00 UTC\n\nvelho\n\n"
@@ -473,7 +473,7 @@ def test_intencao_outra_sessao_detalhes():
         check("outra sessão: mostra o propósito gravado",
               '"institucionalizar as quatro perguntas"' in c, c)
     with Repo() as r:
-        write_intent(r, session_id="aaaaaaaa", aberto_em="")
+        write_intent(r, session_id="aaaaaaaa", opened_at="")
         c = ctx(run_hook(r.path, session_id=SID))
         check("outra sessão sem aberto_em: 'data desconhecida'", "data desconhecida" in c, c)
 
@@ -483,13 +483,13 @@ def test_intencao_passo_fora_do_plano_cai_no_1():
         with Repo() as r:
             write_intent(r)
             f = r.path / ".claude" / "session-intent"
-            f.write_text(f.read_text().replace("passo: 2", f"passo: {valor}"))
+            f.write_text(f.read_text().replace("step: 2", f"step: {valor}"))
             c = ctx(run_hook(r.path, session_id=SID))
             check(f"passo {valor} com plano de 4: cai no passo 1", "Passo 1/4" in c, c)
     with Repo() as r:
         write_intent(r)
         f = r.path / ".claude" / "session-intent"
-        f.write_text(f.read_text().replace("passo: 2", "passo: 5"))
+        f.write_text(f.read_text().replace("step: 2", "step: 5"))
         c = ctx(run_hook(r.path, session_id=SID))
         check("passo M+1 (5 com plano de 4) é plano cumprido, não passo 1",
               "Plano cumprido (4/4)" in c, c)
@@ -497,18 +497,18 @@ def test_intencao_passo_fora_do_plano_cai_no_1():
 
 def test_intencao_idade_bordas():
     with Repo() as r:
-        write_intent(r, passo_desde="2026-10-16T21:40:00Z")
+        write_intent(r, step_since="2026-10-16T21:40:00Z")
         write_log(r, [("2026-10-16", "21:39:59", "antes"),
                       ("2026-10-16", "21:40:00", "no mesmo segundo")])
         c = ctx(run_hook(r.path, session_id=SID))
         check("prompt no mesmo segundo do passo_desde conta", "(há 1 turno)" in c, c)
     with Repo() as r:
-        write_intent(r, passo_desde="2026-10-16T21:40:00Z")
+        write_intent(r, step_since="2026-10-16T21:40:00Z")
         write_log(r, [("2026-10-16", "21:39:00", "antes")])
         c = ctx(run_hook(r.path, session_id=SID))
         check("nenhum prompt depois do cursor: '(há 0 turnos)'", "(há 0 turnos)" in c, c)
     with Repo() as r:
-        write_intent(r, passo_desde="2026-10-16T21:40:00")  # sem fuso: lido como UTC
+        write_intent(r, step_since="2026-10-16T21:40:00")  # sem fuso: lido como UTC
         write_log(r, [("2026-10-16", "21:41:00", "depois")])
         c = ctx(run_hook(r.path, session_id=SID))
         check("passo_desde sem fuso é lido como UTC", "(há 1 turno)" in c, c)
@@ -516,13 +516,13 @@ def test_intencao_idade_bordas():
 
 def test_intencao_plano_cumprido_ponto_de_parada():
     with Repo() as r:
-        write_intent(r, passo=5, para_quando="q" * 400)
+        write_intent(r, step=5, by_when="q" * 400)
         c = ctx(run_hook(r.path, session_id=SID))
         check("plano cumprido: rótulo 'ponto de parada:'", "; ponto de parada: q" in c, c)
         check("plano cumprido: ponto de parada cortado em 160",
               "q" * 160 not in c and "q" * 159 + "…" in c, c)
     with Repo() as r:
-        write_intent(r, passo=5, para_quando="")
+        write_intent(r, step=5, by_when="")
         c = ctx(run_hook(r.path, session_id=SID))
         check("plano cumprido sem ponto de parada: sem o rótulo",
               "ponto de parada" not in c and "Plano cumprido (4/4). Próximo" in c, c)
@@ -530,7 +530,7 @@ def test_intencao_plano_cumprido_ponto_de_parada():
 
 def test_intencao_penultimo_passo_aponta_o_ultimo():
     with Repo() as r:
-        write_intent(r, passo=3)
+        write_intent(r, step=3)
         c = ctx(run_hook(r.path, session_id=SID))
         check("penúltimo passo: próximo é o último passo, não o wrap-up",
               "Passo 3/4: rodar advisors" in c and "Próximo: decidir." in c
@@ -539,7 +539,7 @@ def test_intencao_penultimo_passo_aponta_o_ultimo():
 
 def test_intencao_idade_ignora_entrada_vazia_do_log():
     with Repo() as r:
-        write_intent(r, passo_desde="2026-10-16T21:40:00Z")
+        write_intent(r, step_since="2026-10-16T21:40:00Z")
         write_log(r, [("2026-10-16", "21:41:00", "   "),
                       ("2026-10-16", "21:42:00", "de verdade")])
         c = ctx(run_hook(r.path, session_id=SID))
@@ -548,7 +548,7 @@ def test_intencao_idade_ignora_entrada_vazia_do_log():
 
 def test_intencao_ultimo_passo_aponta_wrap_up():
     with Repo() as r:
-        write_intent(r, passo=4)
+        write_intent(r, step=4)
         c = ctx(run_hook(r.path, session_id=SID))
         check("último passo: próximo é o wrap-up",
               "Passo 4/4: decidir" in c and "plano cumprido: hora de /common:wrap-up" in c, c)
@@ -556,7 +556,7 @@ def test_intencao_ultimo_passo_aponta_wrap_up():
 
 def test_intencao_plano_cumprido():
     with Repo() as r:
-        write_intent(r, passo=5)
+        write_intent(r, step=5)
         c = ctx(run_hook(r.path, session_id=SID))
         il = intent_lines(c)
         check("plano cumprido: diz que cumpriu M/M e aponta wrap-up",
@@ -574,7 +574,7 @@ def test_intencao_sem_modo_ainda_e_injetada():
 
 def test_intencao_de_outra_sessao_vira_pergunta():
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         write_intent(r, session_id="aaaaaaaa")
         p = run_hook(r.path, session_id=SID)
         c = ctx(p)
@@ -583,8 +583,8 @@ def test_intencao_de_outra_sessao_vira_pergunta():
               "outra sessão" in c and "2026-10-16" in c, c)
         check("outra sessão: pergunta continuo ou abro nova",
               "continuo ou abro nova" in c, c)
-        check("outra sessão: diz como responder (continuar / gravar)",
-              "cepa-intencao continuar" in c and "--motivo" in c, c)
+        check("outra sessão: diz como responder (continue / write)",
+              "cepa-intent continue" in c and "--reason" in c, c)
         check("outra sessão: NÃO exibe o passo como atual", "Passo 2/4" not in c, c)
         check("outra sessão: teto de duas linhas", len(il) == 2, il)
 
@@ -594,8 +594,8 @@ def test_intencao_continuar_resolve_a_pergunta():
     with Repo() as r:
         write_intent(r, session_id="aaaaaaaa")
         e = {**os.environ, "CLAUDE_CODE_SESSION_ID": SID}
-        w = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-intencao"),
-                            "continuar"], cwd=r.path, env=e, capture_output=True, text=True)
+        w = subprocess.run([sys.executable, str(REPO / "common" / "bin" / "cepa-intent"),
+                            "continue"], cwd=r.path, env=e, capture_output=True, text=True)
         c = ctx(run_hook(r.path, session_id=SID))
         check("continuar: o hook volta a exibir a intenção como atual",
               w.returncode == 0 and "Passo 2/4" in c and "outra sessão" not in c,
@@ -604,7 +604,7 @@ def test_intencao_continuar_resolve_a_pergunta():
 
 def test_intencao_calada_no_cepa_until():
     with Repo() as r:
-        write_mode(r, "modo: construcao\n")
+        write_mode(r, "mode: construction\n")
         write_intent(r, session_id="aaaaaaaa")
         c = ctx(run_hook(r.path, env={"CEPA_UNTIL_RUN": "1"}, session_id=SID))
         check("cepa-until: sem intenção no contexto", "[intenção]" not in c, c)
@@ -617,7 +617,7 @@ def test_intencao_calada_no_cepa_until():
 
 def test_intencao_corrompida_nao_quebra():
     with Repo() as r:
-        write_mode(r, "modo: exploracao\n")
+        write_mode(r, "mode: exploration\n")
         (r.path / ".claude" / "session-intent").write_text("::: lixo\n\x00passo: x\n")
         p = run_hook(r.path, session_id=SID)
         c = ctx(p)
@@ -625,9 +625,9 @@ def test_intencao_corrompida_nao_quebra():
         check("intenção corrompida: tratada como vazia",
               "ainda não tem intenção gravada" in c, c)
     with Repo() as r:
-        write_intent(r, passo_desde="ontem")
+        write_intent(r, step_since="ontem")
         f = r.path / ".claude" / "session-intent"
-        f.write_text(f.read_text().replace("passo: 2", "passo: abc"))
+        f.write_text(f.read_text().replace("step: 2", "step: abc"))
         p = run_hook(r.path, session_id=SID)
         c = ctx(p)
         check("passo e passo_desde inválidos: rc=0, cai no passo 1 sem idade",
@@ -650,15 +650,15 @@ def test_intencao_respeita_kill_switch():
 def test_ajuda_nao_interativa():
     """`cepa --modo ajuda` imprime os propósitos e NÃO sobe sessão nenhuma."""
     with Repo() as r:
-        p = r.run("--modo", "ajuda")
+        p = r.run("--mode", "help")
         saida = p.stdout + p.stderr
         check("ajuda: rc=0", p.returncode == 0, str(p.returncode) + saida)
         check("ajuda: não lança o claude", "CLAUDE_ARGS" not in p.stdout, p.stdout)
         check("ajuda: não grava modo", not r.mode_file.exists())
         check("ajuda: nomeia os sete modos",
               all(m in saida for m in
-                  ("exploracao", "descoberta", "design", "construcao",
-                   "reforma", "reflexao", "documentacao")), saida)
+                  ("exploration", "discovery", "design", "construction",
+                   "refactor", "reflection", "documentation")), saida)
         check("ajuda: diz o propósito, não só o nome",
               "comportamento externo" in saida or "sem mudar nada que se veja" in saida,
               saida)
@@ -712,7 +712,7 @@ def _pty_run(repo, teclado):
 def test_ajuda_no_menu_e_reapresenta():
     """No menu, `?` mostra os propósitos e o menu volta — não é escolha inválida."""
     with Repo() as r:
-        rc, saida = _pty_run(r, ["?\n", "construcao\n"])
+        rc, saida = _pty_run(r, ["?\n", "construction\n"])
         check("menu: oferece a ajuda", "?" in saida and "ajuda" in saida, saida)
         check("menu ?: mostra o propósito",
               "comportamento externo" in saida or "sem mudar nada que se veja" in saida,
@@ -722,12 +722,68 @@ def test_ajuda_no_menu_e_reapresenta():
         check("menu ?: pergunta de novo", saida.count("modo?") >= 2, saida)
         check("menu ?: a escolha seguinte vale", rc == 0, str(rc) + saida)
         body = r.mode_file.read_text() if r.mode_file.exists() else ""
-        check("menu ?: grava o modo escolhido", "modo: construcao" in body, body)
+        check("menu ?: grava o modo escolhido", "mode: construction" in body, body)
+
+
+# --- nomes antigos (item interface-in-english) ----------------------------------
+# Os nomes pt-BR dos modos, das flags e das chaves continuam valendo na LEITURA;
+# o que o `cepa` escreve é sempre o nome novo.
+
+def test_nomes_antigos_do_cepa():
+    with Repo() as r:
+        p = r.run("--modo", "construcao", "--resume")
+        body = r.mode_file.read_text() if r.mode_file.exists() else ""
+        check("antigo: `--modo construcao` sobe", p.returncode == 0, p.stderr)
+        check("antigo: grava SÓ o nome novo (`mode: construction`, chaves novas)",
+              "mode: construction" in body and "routine: null" in body and "budget: null" in body
+              and "opened_at:" in body and "modo:" not in body and "orcamento" not in body
+              and "aberto_em" not in body, body)
+    with Repo() as r:
+        p = r.run("--modo=reforma", "--orcamento", "só o módulo de auth")
+        body = r.mode_file.read_text() if r.mode_file.exists() else ""
+        check("antigo: `--modo=reforma --orcamento X` sobe como refactor",
+              p.returncode == 0 and "mode: refactor" in body
+              and 'budget: "só o módulo de auth"' in body, (p.stderr, body))
+    with Repo() as r:
+        p = r.run("--modo", "reforma")
+        check("antigo: `--modo reforma` sem orçamento recusa", p.returncode == 2 and not r.mode_file.exists(),
+              p.stderr)
+    with Repo() as r:
+        p = r.run("--mode=exploracao", "--resume")
+        body = r.mode_file.read_text() if r.mode_file.exists() else ""
+        check("antigo: `--mode exploracao` (nome antigo, flag nova) vira exploration",
+              p.returncode == 0 and "mode: exploration" in body, (p.stderr, body))
+    with Repo() as r:
+        p = r.run("--modo", "ajuda")
+        check("antigo: `--modo ajuda` ainda mostra os propósitos e não sobe",
+              p.returncode == 0 and "exploration" in p.stdout + p.stderr and not r.mode_file.exists(),
+              p.stderr)
+
+
+def test_hook_le_session_mode_e_intent_antigos():
+    with Repo() as r:
+        write_mode(r, "modo: construcao\nrotina: null\norcamento: null\naberto_em: 2026-08-18T19:40:00Z\n")
+        (r.path / ".claude" / "session-intent").write_text(
+            'proposito: "institucionalizar as quatro perguntas"\npara_quando: "doc decidido"\n'
+            'plano:\n  - "levantar"\n  - "escrever"\n  - "decidir"\npasso: 2\n'
+            f'passo_desde: "2026-10-16T21:40:00Z"\nsession_id: "{SID[:8]}"\nbranch: "main"\n'
+            'aberto_em: "2026-10-16T18:30:00Z"\n')
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("antigo: `modo: construcao` é lido como construction no hook",
+              "**construction**" in c and "completion-auditor COMPLETE" in c, c)
+        check("antigo: session-intent com chaves pt-BR é lido (Passo 2/3, próximo, comando novo)",
+              "Passo 2/3: escrever" in c and "Próximo: decidir" in c and "cepa-intent --step 3" in c, c)
+    with Repo() as r:
+        write_mode(r, 'modo: reforma\norcamento: "só o módulo de auth"\n')
+        c = ctx(run_hook(r.path, session_id=SID))
+        check("antigo: `orcamento:` aparece como orçamento no hook",
+              "**refactor**" in c and "só o módulo de auth" in c, c)
 
 
 def main():
     print("test_cepa_modo")
     for fn in (test_modo_valido, test_modo_invalido, test_sem_modo_sem_tty,
+               test_nomes_antigos_do_cepa, test_hook_le_session_mode_e_intent_antigos,
                test_kill_switch, test_reforma_orcamento,
                test_ajuda_nao_interativa, test_ajuda_no_menu_e_reapresenta,
                test_hook_injeta_modo_e_saida, test_hook_reforma_mostra_orcamento,

@@ -60,7 +60,7 @@ below literally (`session-next.py` parses `## Próximo passo`, `**Próximo:**`,
 
 ## Próximo passo
 <the SINGLE most important thing to do next — concrete, actionable>
-**Próximo:** repo=<absolute path> modo=<mode> comando=<command and arguments>   ← optional
+**Próximo:** repo=<absolute path> mode=<mode> comando=<command and arguments>   ← optional
 **Intenção:** <purpose of the next session, in its voice>   ← optional, with Meta and Plano
 **Meta:** <when the next session may stop>
 **Plano:** <step 1> | <step 2> | …
@@ -76,7 +76,7 @@ Rules:
 - **The `**Próximo:**` line is optional and is what chains the next session.**
   Write it only when the next step is a new session with a known repo, mode and
   command (e.g. `**Próximo:** repo=/Users/alegomes/coding/wego/wego-product
-  modo=descoberta comando=/common:epic contratos-e-regras`). `/common:wrap-up`
+  mode=discovery comando=/common:epic contratos-e-regras`). `/common:wrap-up`
   turns it into the `.next.json` that the `cepa` launcher reads on `exit`, and
   the `## Próximo passo` paragraph becomes that session's brief. Without the
   line, nothing chains.
