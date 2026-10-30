@@ -36,5 +36,5 @@ Os dois Epics andam intercalados. O ciclo 1 do Contratos começa com a ferrament
 
 ## Perguntas em aberto
 
-- [ ] Quantos contratos de operadora existem em mãos além do Cassi 2004 e dos instrumentos de 2022? Decide se o mapa de cobertura é possível no ciclo 1 do Contratos.
+- [x] Quantos contratos de operadora existem em mãos além do Cassi 2004 e dos instrumentos de 2022? Respondido em 2026-10-30: o corpus inteiro está em `wego-product/docs/evidencia/contratos/corpus-biocardios-originais/` (fora do git): 62 operadoras na coleção principal, 4.066 arquivos únicos por hash (2.313 + 360 + 2 + 1.391), 198 linhas do índice citam Cassi. O mapa de cobertura é possível no ciclo 1 do Contratos.
 - [ ] Quem escreve o roteiro de demonstração do ciclo 1 do Contratos: o dono em prosa, para o harness derivar os itens. Isso exige uma sessão com o dono; o ciclo 1 deste Epic faz o harness abri-la.
