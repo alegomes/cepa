@@ -4556,3 +4556,43 @@ branches em ciano, verde/vermelho do build, pergunta em negrito. Sem mudar o tex
 testes de `tests/test_cepa_until_aterrissar.py` e `tests/test_cepa_until_decidir.py` leem
 sem terminal.
 
+
+## `cepa-until aterrissar` apaga a worktree que o local-prod usa, e a chave do cofre vai junto
+
+**Status:** pendente · **Lar:** `common` (`common/bin/cepa-until`, `cmd_land`) · **Origem:**
+2026-10-30, pouso dos runs WEGOP1/2026-10-27-2013 e WEGO/2026-10-29-2017 no
+`wego-acessos-backend`. O relatório da run de 27/10 já tinha previsto o problema ("quando o
+worktree for removido no pouso, o compose perde o diretório de origem") sem ter como evitá-lo.
+
+### Problema
+
+Uma run do `cepa-until` que sobe o `local-prod` (`bin/run-local-prod.sh up`) a partir da
+worktree da noite deixa três coisas apontando para essa worktree: o `working_dir` do compose,
+o `.env.local-prod` que o script gera ali com uma chave AES aleatória do cofre, e o volume do
+Postgres cifrado com essa chave. O `aterrissar` remove a worktree ao fim do pouso e a chave
+desaparece com ela. Na vez seguinte em que o dono sobe o `local-prod` pelo clone, o container
+usa a chave do clone e todo GET que decifra responde 500 (`Falha ao decifrar (chave incorreta
+ou dado adulterado)`); o `preparar` da CLI para na primeira conferência. Em 2026-10-30 custou
+um `down -v` (banco zerado), seed de novo e três rodadas da suíte da CLI até entender a causa.
+
+### Esboço de solução
+
+Antes de `git worktree remove` no `cmd_land`:
+
+1. Se existe `<worktree>/.env.local-prod` e ele difere do `<clone>/.env.local-prod` (ou o do
+   clone não existe), resgatar o arquivo para `.claude/rescued/<run>/` junto com os outros
+   artefatos, e avisar na saída do `aterrissar`: "a chave do cofre do local-prod ficou em
+   `.claude/rescued/...`; o banco local só abre com ela".
+2. Se `docker compose ls` (ou `docker inspect` do container `*-local-prod-app-1`) mostra um
+   stack cujo `working_dir` está dentro da worktree, avisar que o stack vai perder a origem e
+   sugerir `bin/run-local-prod.sh down` antes, ou o `up` a partir do clone depois.
+3. Alternativa mais ampla, a decidir: `run-local-prod.sh` ler a chave sempre do clone
+   principal (`git rev-parse --git-common-dir`), e não da worktree, para que worktrees nunca
+   gerem chave própria.
+
+### Teste que falta
+
+Em `tests/test_cepa_until_aterrissar.py`: fixture com worktree contendo `.env.local-prod`
+distinto do clone; depois do pouso o arquivo existe em `.claude/rescued/<run>/` e a saída
+contém o aviso. Sem Docker: o passo 2 se testa com um `docker` falso no PATH que devolve um
+`working_dir` dentro da worktree.
